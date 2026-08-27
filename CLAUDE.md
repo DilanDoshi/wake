@@ -10,6 +10,38 @@ disagree, the spec wins and this file gets fixed.
 > The long design rationale (every ruling, every recorded failure) lives in `docs/notes/decisions.md`
 > and in the file headers themselves. This file is the operating manual, not the archive.
 
+## Public repository hygiene
+
+Wake is a **public** repository sitting directly beside Anthropic's own product. Two habits are
+load-bearing, and both nearly went wrong before the first cut — treat them as non-negotiable:
+
+- **Never reproduce Claude Code's binary in this tree.** Do not run `strings` on the Claude binary,
+  do not paste verbatim minified source (`function M6i(e,t){…}`), do not cite byte offsets, do not
+  write "read out of the binary". Anthropic's terms forbid reducing the product to human-readable
+  form, and reproducing its compiled source is a copyright problem. Document **behaviour** — what a
+  value is, how the CLI acts — never the extraction. A value that matches Claude Code is "matched
+  against Claude Code, maintained by hand", not "extracted from the binary".
+- **Never paste a raw Claude frame into a doc or comment.** The `init` frame is an environment dump —
+  installed skills, plugins, socket paths, the home directory. Cite a fixture and a line instead.
+
+**Recordings.** Capture into a sterile `HOME` (or one holding only credentials, with empty `skills/`
+and `commands/`), then run `scripts/scrub-fixtures.py`. `internal/core/corpus_test.go` is the guard:
+it fails CI on a home-shaped path, a machine environment key, or a `slash_commands` entry that is not
+a Claude built-in, a public plugin, a Wake verb, or a registered placeholder — so an operator's own
+command names cannot slip into the corpus. Fix a failure by running the scrubber, never by editing
+the guard or the allowlist.
+
+**Attribution.** Wake is not affiliated with Anthropic; `README.md` and `NOTICE` say so. No Anthropic
+logo, no Clawd, no `claude-*` project name. Keep the disclaimer.
+
+**Gate and flow.** `make ci` exit 0 is the only gate (no CI release/PR automation). A feature
+branches and gets a PR; a docs-only change may go straight to `main`. Run the suite from a normal
+checkout **under your home directory** — the screen tests (`cmd/wake/*_unix_test.go`) render the
+working directory and assume a sane path, so they fail under `/tmp` or a 100-character temp path.
+
+**Releasing is manual** — `goreleaser release --clean`, on your command. See
+[docs/RELEASING.md](docs/RELEASING.md).
+
 ## Project overview
 
 Wake is a terminal app for developers running 15–30 Claude Code sessions at once. It turns the fleet
