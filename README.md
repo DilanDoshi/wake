@@ -79,20 +79,6 @@ slash commands are `/resume`, `/name`, `/task`, `/adopt`, `/mcp`, `/manager`, `/
 `/board`; `/effort` and `/model` configure the session they are addressed to. Everything else you
 type is passed to the agent byte for byte.
 
-## Status
-
-**Phases 1–3 are built and merged.** The daemon, the room, both sidebars, DMs at Claude Code
-fidelity, `@name` routing, answerable permission/plan/question cards, `!cmd`, the last-read marker,
-fork, park/wake, import, fleets, the manager session and its MCP tools, and starting, naming and
-renaming an agent from inside the room. Phase 4 is next — see [docs/goals.md](docs/goals.md) for the
-phase map and every original requirement traced to built or not-built.
-
-It has been run by a person at a real terminal, and that is where several of the bugs in
-[docs/notes/bugs.md](docs/notes/bugs.md) came from — a suite of thousands of tests had never looked
-at a rendered screen. [docs/live-testing.md](docs/live-testing.md) is the list of what still only a
-person can check: a real font, a real mouse, a window manager, and a `claude` binary that costs
-money to run.
-
 ## Development
 
 ```sh
