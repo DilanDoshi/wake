@@ -163,6 +163,32 @@ validate (`core.ValidBudget`, `core.ValidFallbackModel`; the spawn frame carries
 *Blocks:* spend discipline at fleet scale, from the surface that matters.
 
 ---
+## OWNER REQUEST, 2026-08-26 — expand a room response in place, the way ⌃E expands a folded block in a DM
+
+**Asked for in this version.** In the group chat, be able to expand an agent's response inline — the
+same gesture that opens a collapsed tool call or other folded block in a DM (`⌃E`).
+
+**The room and a DM fold differently, and that is the whole of the ask.** A DM draws an agent's turn
+at Claude Code fidelity: tool calls and results are rendered blocks, foldable and expanded with `⌃E`
+(`App.key`'s expand case over `internal/ui/dm_blocks.go`). The room is not that surface — it is one
+filtered line per broadcast, tuned so thirty agents do not bury each other (`internal/ui/chat.go`, the
+`Room` view), so a long response reads as a summary rather than the full rendered block. There is
+today no way to say "show me *that* one in full" without opening the agent's DM.
+
+**What this needs is a per-line expand in the room**, and the design questions are where the DM's
+answers do not carry over: the room interleaves many speakers, so an expanded block must make clear
+whose it is and must re-collapse (a room full of expanded turns is the wall of text the filter exists
+to prevent); the room's line is derived, not the transcript, so expanding one means reaching back to
+the agent's actual turn (`Room.raw` / the history machinery already holds it) and rendering it in
+place; and the key need not fight the DM's `⌃E` if the room simply routes `⌃E` to the line under the
+cursor, which is the cheap answer worth trying first. It is the room learning one of the DM's
+affordances, bounded so it does not become the DM.
+
+*Blocks:* nothing yet; a room-fidelity request — the group chat gaining a way to see a full response
+without leaving it.
+
+---
+
 ## OWNER REQUEST, 2026-08-16 — teams: a named tag on an agent, and a group that is not a directory
 
 **Asked for in this version.** Agents carry a team tag so the fleet can be grouped by hand, rather
