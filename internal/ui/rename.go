@@ -88,6 +88,18 @@ const (
 	noSuchAgent = "no live agent answers to that handle"
 )
 
+// renameTo reports the ask on the keypress and writes the rename for one agent
+// to a one-word name its caller has already resolved and validated.
+//
+// The shared tail of `/name` and the `/rename` mirror in slash.go: the two
+// resolve differently - an `@who` handle or the conversation you are in - and
+// write the same frame, so a second copy would be one that goes stale the day
+// rpc.FrameRename changes.
+func (a App) renameTo(agent Agent, name string) tea.Cmd {
+	notice.Report(renameAsked, agentPrefix, agent.Name)
+	return a.write(renameFailed, rpc.Frame{Kind: rpc.FrameRename, SessionID: agent.ID, Text: name})
+}
+
 // renameAgent changes what one agent is called.
 func (a App) renameAgent(arg string) (App, tea.Cmd) {
 	agent, to, ok := a.displayTarget(arg, nameUsage, noNameTarget)
@@ -103,8 +115,7 @@ func (a App) renameAgent(arg string) (App, tea.Cmd) {
 		return a, nil
 	}
 	a = a.clearDraft()
-	notice.Report(renameAsked, agentPrefix, agent.Name)
-	return a, a.write(renameFailed, rpc.Frame{Kind: rpc.FrameRename, SessionID: agent.ID, Text: to})
+	return a, a.renameTo(agent, to)
 }
 
 // labelAgent says what one agent is working on.
