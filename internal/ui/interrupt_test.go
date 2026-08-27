@@ -46,6 +46,98 @@ func TestEscSendsAnInterruptToTheDaemon(t *testing.T) {
 	}
 }
 
+// A pending AskUserQuestion is not withdrawn by an interrupt the way a
+// permission is. The CLI cancels a pending permission on a
+// control_cancel_request the moment esc lands (interrupt-permission-findings),
+// so its card clears; a question is preserved instead (question-findings.md §9,
+// tengu_auq_park_preserved_at_shutdown), so the ask stays open and its card
+// never clears - the reported bug. So esc on a question settles it with a deny,
+// the same frame [d] writes, which unblocks the agent and takes the card down.
+func TestEscOnAQuestionDeniesItInsteadOfInterrupting(t *testing.T) {
+	a, _ := asking(t, 200)
+
+	card, ok := a.cards.For("s1")
+	if !ok {
+		t.Fatal("the question is not open, so this test asserts nothing")
+	}
+	if card.Shape() != ShapeQuestion {
+		t.Fatalf("the fixture ask is a %v, not a question: this test is not exercising the bug", card.Shape())
+	}
+
+	m, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+
+	f := escFrame(t, m, cmd)
+	if f.Kind != rpc.FrameDeny {
+		t.Errorf("esc on a question sent %q, want %q - an interrupt does not withdraw a question", f.Kind, rpc.FrameDeny)
+	}
+	if f.SessionID != "s1" {
+		t.Errorf("the deny is addressed to %q, want s1", f.SessionID)
+	}
+	if f.RequestID != card.RequestID {
+		t.Errorf("the deny names request %q, want %q - the daemon matches the ask on this", f.RequestID, card.RequestID)
+	}
+	if f.Reason == "" {
+		t.Error("the deny carries no reason, so the model is told a tool failed for nothing")
+	}
+	if _, ok := m.cards.For("s1"); ok {
+		t.Error("the card is still open after esc denied it - it should be settled locally too, or the next report re-draws a question nobody is waiting on")
+	}
+}
+
+// A permission is the case esc must NOT change: the CLI genuinely withdraws it
+// on the interrupt (interrupt-permission-findings), so esc stays an interrupt
+// and the daemon's own control_cancel_request clears the card. Denying it
+// instead would tell the model "the operator refused this tool" about a tool
+// the operator only wanted to stop.
+func TestEscOnAPermissionStillInterrupts(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withAgents("john")
+	a = pick(a, "s1").openDMWith("s1", "john").applyGeometry()
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &core.Event{
+		Kind: core.KindPermissionRequest, RequestID: "r1", Ask: core.AskPermission,
+		Tool: &core.ToolCall{Name: "Bash", Display: "ls"},
+	}})
+
+	if card, ok := a.cards.For("s1"); !ok || card.Shape() != ShapePermission {
+		t.Fatal("the permission ask is not open as a permission, so this test asserts nothing")
+	}
+	m, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+
+	f := escFrame(t, m, cmd)
+	if f.Kind != rpc.FrameInterrupt {
+		t.Errorf("esc on a permission sent %q, want %q - the CLI withdraws a permission on the interrupt", f.Kind, rpc.FrameInterrupt)
+	}
+}
+
+// escFrame runs the command esc produces and returns the one action frame that
+// reached the daemon. escape batches its write with the pending history ask a
+// freshly opened conversation carries, so the single-run sentFrame helper - which
+// calls the command once and reads the recorder - never sees the write, and a
+// history ask riding alongside it is not what esc is about.
+func escFrame(t *testing.T, a App, cmd tea.Cmd) rpc.Frame {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("esc produced no command, so nothing was sent")
+	}
+	if batch, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c != nil {
+				c()
+			}
+		}
+	}
+	var acted []rpc.Frame
+	for _, f := range recorderOf(t, a).taken(t) {
+		if f.Kind == rpc.FrameHistory || f.Kind == rpc.FrameRoomHistory {
+			continue
+		}
+		acted = append(acted, f)
+	}
+	if len(acted) != 1 {
+		t.Fatalf("%d action frames reached the daemon, want exactly 1: %+v", len(acted), acted)
+	}
+	return acted[0]
+}
+
 // Esc is not a cancel-the-message key and must not behave like one. A person
 // who is halfway through typing while the agent runs off in the wrong
 // direction presses this exactly then, and losing the draft would be a second
