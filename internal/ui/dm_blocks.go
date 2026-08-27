@@ -209,6 +209,13 @@ func (d DM) renderEvent(ev core.Event) block {
 // other one is drawn as itself.
 func (d DM) eventBlock(ev core.Event) string {
 	w := d.blockWidth()
+	// This conversation's own checklist draws nothing here: it is the board pinned
+	// above the composer (checklistpin.go), folded into d.checklist. isChecklistOp
+	// is false for a subagent's op, so its list still draws below, inline in its
+	// own forwarded transcript where it has no board of its own.
+	if d.isChecklistOp(ev) {
+		return ""
+	}
 	if ev.Subagent == nil {
 		return d.kindBlock(ev, w)
 	}

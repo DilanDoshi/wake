@@ -10,8 +10,8 @@ import "strings"
 // agent's stderr, by way of the daemon's error frames. A space keeps words
 // apart where a line break used to be.
 //
-// The second class of caller is a **dispatch's name** (taskrows.go's Task.name,
-// rostersubs.go's subagentName), which is a description a model wrote. There the
+// The second class of caller is a **dispatch's name** (rostersubs.go's
+// subagentName), which is a description a model wrote. There the
 // newline is the one that bites rather than the escape: lipgloss measures and
 // clips per line, so a name carrying one draws two physical rows out of a value
 // the height oracle counted as one - a pane taller than its terminal, which

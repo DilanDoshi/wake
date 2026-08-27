@@ -103,6 +103,29 @@ at once.
 
 ---
 
+## KNOWN GAP, 2026-08-26 — a subagent's checklist commingles into the parent's Fleet fold
+
+**Surfaced by the task-board PR (`feat/todos-replace-dispatch-list`), pre-existing, not caused by it.**
+`internal/ui/checklist.go`'s `Fleet.foldChecklist` keys purely on `sessionID` and does **not** check
+`ev.Subagent`, unlike its DM-level twin `DM.foldChecklist`, which excludes a subagent's op. So if a
+subagent ever emits `TaskCreate`/`TaskUpdate`, its op folds into the *parent session's*
+`f.checklists[sessionID]`: the snapshot the Fleet fold attaches to `ev.Tool.Todos` (which the subagent's
+forwarded view renders inline via `todoBlock`) is then the parent's commingled list, and the parent's
+roster working-line `activeForm` can reflect a subagent's item.
+
+**Why it is not fixed here.** The board pinned above the composer reads `DM.checklist`, which already
+excludes subagents, so the board is correct. The commingling only touches the working line and the
+subagent's *inline* forwarded list. A one-line `ev.Subagent == nil` guard in `Fleet.foldChecklist`
+would stop the pollution but also blank the subagent's inline list (its `Todos` comes from that very
+fold), so a real fix is a **per-subagent checklist** rather than a guard — new machinery, out of the
+board PR's scope. **Unverified whether subagents emit these ops at all** (no corpus fixture does), so
+this is latent until one is recorded.
+
+*Blocks:* nothing; correctness of a subagent's own inline checklist and the parent's working line, if
+subagents turn out to author task lists.
+
+---
+
 ## OWNER REQUEST, 2026-08-26 — `/color`: a per-agent status bar and name-tag colour
 
 **Asked for in this version.** A `/color` command to change an agent's status bar colour and its

@@ -108,30 +108,6 @@ type DM struct {
 	subs    map[string]chunked[core.Event]
 	viewing string
 
-	// tasks is this conversation's dispatches, and taskCursor is where the keys
-	// are in it - 1-based, taskCursorNone when nothing is selected.
-	//
-	// **Copied from the Fleet's fold rather than folded here**, at the two
-	// moments it can change: a lifecycle frame arriving for a conversation this
-	// App holds, and the conversation being opened. The fold itself is the
-	// Fleet's, because the sidebar draws a row for an agent nobody has opened
-	// and App.dms holds only the opened ones - see fleettasks.go.
-	//
-	// **Held rather than projected per draw**, which is where DM.Agent and this
-	// part company and the reason is chromeHeight: it counts these rows, and
-	// DM.chrome memoizes what it last returned. A copy set only for the draw
-	// leaves that memo permanently disagreeing with what View measures, so View
-	// re-sizes - re-wrapping the whole transcript - on *every frame* for the
-	// life of any conversation that has ever dispatched anything. Agent is
-	// affordable that way because its own contribution to the chrome is one row
-	// that comes and goes with a turn; a dispatch list never goes away.
-	//
-	// The cursor is the opposite of both: genuinely owned here, because each
-	// conversation has its own place in its own list and a cursor on the App
-	// would move under somebody when the focus changed panes.
-	tasks      Tasks
-	taskCursor int
-
 	// checklist is this conversation's own accumulation of TaskCreate/TaskUpdate
 	// ops, so a list built before this client attached comes back off disk and
 	// the live half continues from it - the Fleet fold only ever saw what
@@ -362,9 +338,16 @@ func (d DM) Append(ev core.Event) DM {
 	// used to sit beside this moved to Fleet - see fleettasks.go - so the rows
 	// exist for agents nobody has opened.
 	//
-	// The checklist fold is the DM's own, so the accumulated list rides the call
-	// into the transcript and Before can re-derive it on a restore off disk.
+	// The checklist fold is the DM's own, so the board pinned over the composer
+	// (checklistpin.go) comes back on a restore off disk and the live half
+	// continues from it. A create/delete moves the board's height, so re-settle
+	// the chrome once here, off the draw path: View compares chromeHeight against
+	// DM.chrome, and a board that grew a row after the last resize leaves that
+	// memo stale, so View re-sizes the pane on a throwaway copy every frame.
 	d, ev = d.foldChecklist(ev)
+	if ev.Tool != nil && ev.Tool.Checklist != nil && ev.Subagent == nil {
+		d = d.resettleBoard()
+	}
 	d = d.observedTool(ev).settled(ev)
 
 	// The preview, which is the one event kind that never reaches the
@@ -405,14 +388,14 @@ func (d DM) Append(ev core.Event) DM {
 	fold := isToolUse(ev) || (d.isToolBlock(ev) && d.runKey != "" && !breaksRun)
 	var b block
 	if !fold {
-		// The newest checklist event draws off d.checklist, which foldChecklist
-		// has already folded this op into; every other event passes through. The
-		// snapshot is rebuilt for the draw, never stored - see checklist.go.
-		b = d.renderEvent(d.checklist.withSnapshot(ev))
-		if b.text == "" {
-			return d // invisible, or an emptied stray: not stored, marker not consumed
+		b = d.renderEvent(ev)
+		// A checklist op renders nothing but is stored all the same, so a restore
+		// off disk can re-derive the board from it - the one invisible event this
+		// path keeps. Every other empty render is a stray that consumes no slot.
+		if b.text == "" && !d.isChecklistOp(ev) {
+			return d
 		}
-		d.runKey, d.runTally = "", nil // a visible non-tool block, or a stray, ends the run
+		d.runKey, d.runTally = "", nil // a non-tool block, a checklist op or a stray ends the run
 	}
 
 	// Whether this pane is drawing the conversation at all. While a subagent is
@@ -444,7 +427,9 @@ func (d DM) Append(ev core.Event) DM {
 	}
 	if fold {
 		d = d.drawFold(ev)
-	} else {
+	} else if b.text != "" {
+		// A checklist op stored above draws no line: it is the board pinned over
+		// the composer, not a block. Everything else that reaches here draws.
 		d.tr = d.tr.add(b)
 	}
 	if following {
@@ -572,12 +557,12 @@ func (d DM) View(width, height int) string {
 		rows = append(rows, beat)
 	}
 	// Above the composer with the heartbeat, because both answer "what is
-	// happening now" - the heartbeat for this agent, these rows for what it
-	// dispatched. Below the transcript rather than above it, which is also what
+	// happening now" - the heartbeat for this agent, this board for the tasks it
+	// set itself. Below the transcript rather than above it, which is also what
 	// keeps mouse.go's startSelection correct: it measures the rows *above* a
 	// transcript, and these are not among them.
-	if list := d.taskView(w); list != "" {
-		rows = append(rows, list)
+	if board := d.checklistPin(w); board != "" {
+		rows = append(rows, board)
 	}
 	// Last before the composer: the card, picker or completion menu is answered
 	// by typing, so it belongs at the query bar. Clipped to the same count
@@ -683,7 +668,11 @@ func (d DM) Before(earlier []core.Event) DM {
 		d.runKey, d.runTally = "", nil
 	}
 	d.tr = d.tr.replace(renderTranscript(d)).toBottom()
-	return d
+	// The restored ops may have grown the board, which is chrome the transcript's
+	// height is taken out of. Re-settle so the viewport is sized for it - the same
+	// thing Append does after a live checklist op, and the reason the old code did
+	// not need it is that the checklist was drawn in the transcript, not pinned.
+	return d.resettleBoard()
 }
 
 // ScrollUp moves the reader lines back through the conversation, or forward
@@ -772,9 +761,9 @@ func (d DM) baseChrome() int {
 	if d.bar != "" {
 		h++
 	}
-	// The dispatch list. Counted rather than drawn, for the same reason: a row
-	// costs a truncation per column and this runs on every re-lay.
-	h += d.taskRowCount()
+	// The task board. Counted rather than drawn, for the same reason: rendering
+	// it costs a truncation per row and this runs on every re-lay.
+	h += d.checklistRows()
 	return h
 }
 

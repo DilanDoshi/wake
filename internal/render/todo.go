@@ -102,6 +102,22 @@ func TodoList(todos []Todo, width int) string {
 	return strings.TrimRight(b.String(), "\n")
 }
 
+// TodoRows is how many lines TodoList draws for these todos, without drawing
+// them. It is what a caller pinning the list reserves in its own chrome, and it
+// does not take a width because every item is one truncated line and the
+// overflow note is one more - the count is a function of the list alone.
+func TodoRows(todos []Todo) int {
+	if len(todos) == 0 {
+		return 0
+	}
+	shown, hidden := budget(todos)
+	n := len(shown)
+	if hidden > 0 {
+		n++
+	}
+	return n
+}
+
 // glyphFor is the box a status is drawn with. An unrecognised status gets
 // pending's: the set is Claude's and can grow, and an item nobody has ruled on
 // is one still to do rather than one to hide.

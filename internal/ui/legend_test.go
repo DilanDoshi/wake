@@ -215,7 +215,7 @@ func teaKeyName(expr ast.Expr) string {
 // key net. Then 231 until the grid's keys merged in beside them, and 311 until
 // `⌥↑↓ prompt history` arrived beside `⌃N⌃P dispatches` - the entry is 18 cells
 // and the separator in front of it is 3.
-const narrowLegendWidth = 335
+const narrowLegendWidth = 317
 
 // What a legend too long for its pane loses, and in what order.
 //
@@ -305,7 +305,7 @@ func TestAWideLegendShowsEverything(t *testing.T) {
 // The constant is not therefore pointless: it is what
 // TestAWideLegendShowsEverything renders at, so the truncation test above is
 // measuring a cut rather than a legend that never had a mode.
-const fullLegendWidth = 352
+const fullLegendWidth = 334
 
 func TestTheLegendFitsInTheWidthItClaims(t *testing.T) {
 	if got := len([]rune(hintLine(spawnedMode))) + hintIndentWidth; got != fullLegendWidth {

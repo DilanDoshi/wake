@@ -67,10 +67,6 @@ func (d DM) renderAll() []block {
 	blocks = append(blocks, dmBanner(d.Agent, d.blockWidth()))
 
 	runStart := -1 // the open run's first event, or -1 for none
-	// Rebuilds each checklist op's snapshot as we walk - never stored, so a re-wrap
-	// redraws it (see checklist.go). Fold-exempt events never join a run, so every
-	// one reaches the per-event render below, which keeps this fold complete.
-	var cl checklist
 	flush := func(end int) {
 		if runStart < 0 {
 			return
@@ -100,14 +96,10 @@ func (d DM) renderAll() []block {
 			}
 		}
 		// A non-tool block, or a stray result with no open run: it ends any run
-		// above it and draws itself if it draws anything.
+		// above it and draws itself if it draws anything. A checklist op draws
+		// nothing (toolblocks.go) - it is the board pinned over the composer, not
+		// a block - so it lands here and is skipped, folded already into the board.
 		flush(i)
-		// A subagent's op stays out of the parent's list here too (foldChecklist's
-		// rule), so a restored forwarded op cannot fold in where the live path did not.
-		if ev.Subagent == nil && ev.Tool != nil && ev.Tool.Checklist != nil {
-			cl = cl.apply(ev.Tool.Checklist)
-			ev = cl.withSnapshot(ev)
-		}
 		if b := d.renderEvent(ev); b.text != "" {
 			blocks = append(blocks, b)
 		}

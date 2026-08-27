@@ -20,7 +20,7 @@ func TestAFleetFoldsDispatchesForASessionNobodyHasOpened(t *testing.T) {
 		f, _ = f.Observe(ev, "sess-1")
 	}
 
-	rows := f.Tasks("sess-1").Rows()
+	rows := f.tasks["sess-1"].Rows()
 	if len(rows) != 1 {
 		t.Fatalf("got %d rows, want 1 - no DM was ever opened for this session: %+v", len(rows), rows)
 	}
@@ -39,13 +39,13 @@ func TestOneSessionsDispatchesDoNotReachAnother(t *testing.T) {
 	f, _ = f.Observe(started("a1", "toolu_1", "Auditing", "code-reviewer", core.TaskAgent), "sess-1")
 	f, _ = f.Observe(started("b1", "toolu_2", "Searching", "general-purpose", core.TaskAgent), "sess-2")
 
-	if got := len(f.Tasks("sess-1").Rows()); got != 1 {
+	if got := len(f.tasks["sess-1"].Rows()); got != 1 {
 		t.Errorf("sess-1 has %d rows, want its own one", got)
 	}
-	if got := len(f.Tasks("sess-2").Rows()); got != 1 {
+	if got := len(f.tasks["sess-2"].Rows()); got != 1 {
 		t.Errorf("sess-2 has %d rows, want its own one", got)
 	}
-	if f.Tasks("sess-1").Rows()[0].Type != "code-reviewer" {
+	if f.tasks["sess-1"].Rows()[0].Type != "code-reviewer" {
 		t.Error("sess-1 got the wrong session's dispatch")
 	}
 }
@@ -67,7 +67,7 @@ func TestATaskFrameLandsEvenWhenItChangesNothingAboutTheAgent(t *testing.T) {
 	if before != after {
 		t.Fatalf("the agent moved, so this test no longer exercises the early return: %+v -> %+v", before, after)
 	}
-	rows := f.Tasks("sess-1").Rows()
+	rows := f.tasks["sess-1"].Rows()
 	if len(rows) != 1 {
 		t.Fatalf("got %d rows, want 1", len(rows))
 	}
@@ -85,10 +85,10 @@ func TestAnOlderFleetKeepsTheDispatchesItHad(t *testing.T) {
 	older := f
 	f, _ = f.Observe(started("a2", "toolu_2", "Linting", "general-purpose", core.TaskAgent), "sess-1")
 
-	if got := len(older.Tasks("sess-1").Rows()); got != 1 {
+	if got := len(older.tasks["sess-1"].Rows()); got != 1 {
 		t.Errorf("the older fleet has %d rows, want the 1 it was holding", got)
 	}
-	if got := len(f.Tasks("sess-1").Rows()); got != 2 {
+	if got := len(f.tasks["sess-1"].Rows()); got != 2 {
 		t.Errorf("the newer fleet has %d rows, want 2", got)
 	}
 }
@@ -96,7 +96,7 @@ func TestAnOlderFleetKeepsTheDispatchesItHad(t *testing.T) {
 // A session that has dispatched nothing answers an empty list rather than
 // anything a caller has to guard against.
 func TestASessionWithNoDispatchesAnswersAnEmptyList(t *testing.T) {
-	if got := NewFleet().Tasks("nobody").Rows(); len(got) != 0 {
+	if got := NewFleet().tasks["nobody"].Rows(); len(got) != 0 {
 		t.Errorf("got %d rows for a session that has dispatched nothing, want none", len(got))
 	}
 }

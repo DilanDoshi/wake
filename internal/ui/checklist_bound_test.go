@@ -73,10 +73,11 @@ func TestChecklistEventsDoNotPinAListPerOp(t *testing.T) {
 	}
 }
 
-// A representative sequence renders identically whether drawn incrementally
-// (Append) or rebuilt whole (renderAll, forced by a width round-trip). This is
-// the byte-identical guarantee the fix rests on: the snapshot each historical
-// op draws is reconstructed, not stored, so a re-wrap must reproduce it exactly.
+// A representative sequence draws the same pane whether built incrementally
+// (Append) or rebuilt whole (renderAll, forced by a width round-trip). The
+// checklist ops draw nothing in the transcript - they are the board pinned above
+// the composer - and the board is a fold of d.checklist, so both paths must
+// arrive at the same board and the same (empty of checklist) transcript.
 func TestChecklistRenderIsIdenticalIncrementalAndRebuilt(t *testing.T) {
 	fresh(t)
 	ops := []core.Event{
@@ -86,8 +87,7 @@ func TestChecklistRenderIsIdenticalIncrementalAndRebuilt(t *testing.T) {
 		taskUpdateID("u1", "1", core.TodoDone),
 		taskUpdateID("u2", "2", core.TodoActive),
 		taskCreateID("c4", "delete me", "Deleting"),
-		// A delete: id 4 removed, so the final block must not show "delete me"
-		// while the block that created it still must.
+		// A delete: id 4 removed, so the final board must not show "delete me".
 		{Kind: core.KindToolUse, Tool: &core.ToolCall{
 			ID: "u3", Name: "TaskUpdate",
 			Checklist: &core.ChecklistOp{Update: true, ID: "4", Deleted: true},
@@ -104,18 +104,25 @@ func TestChecklistRenderIsIdenticalIncrementalAndRebuilt(t *testing.T) {
 	rebuilt := d.SetSize(120, 40).SetSize(80, 40).View(80, 40)
 
 	if incremental != rebuilt {
-		t.Errorf("incremental and rebuilt transcripts differ:\n--- incremental ---\n%s\n--- rebuilt ---\n%s",
+		t.Errorf("incremental and rebuilt views differ:\n--- incremental ---\n%s\n--- rebuilt ---\n%s",
 			stripANSI(incremental), stripANSI(rebuilt))
 	}
 
-	// And the historical snapshots are the real ones, not the latest smeared
-	// backwards: the final list ends first-done/second-active/third-pending, and
-	// the deleted item still appears in the block that created it.
-	view := stripANSI(incremental)
-	for _, want := range []string{"☑ explore the code", "■ write the patch", "☐ run the tests", "delete me"} {
-		if !strings.Contains(view, want) {
-			t.Errorf("the transcript is missing %q:\n%s", want, view)
+	// The board carries the final list - first-done/second-active/third-pending -
+	// and never the deleted item. It is the one place the checklist shows.
+	board := stripANSI(d.checklistPin(80))
+	for _, want := range []string{"☑ explore the code", "■ write the patch", "☐ run the tests"} {
+		if !strings.Contains(board, want) {
+			t.Errorf("the board is missing %q:\n%s", want, board)
 		}
+	}
+	if strings.Contains(board, "delete me") {
+		t.Errorf("the board shows a deleted item:\n%s", board)
+	}
+
+	// And the transcript itself holds none of it: the ops draw nothing there.
+	if region := stripANSI(conversationRegion(t, d, 80, 40)); strings.Contains(region, "explore the code") {
+		t.Errorf("a checklist op drew a block in the transcript instead of vanishing:\n%s", region)
 	}
 }
 

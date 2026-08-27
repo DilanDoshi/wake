@@ -21,10 +21,6 @@ package ui
 
 import "github.com/DilanDoshi/wake/internal/core"
 
-// Tasks is what one session has dispatched, and an empty list for a session
-// that has dispatched nothing.
-func (f Fleet) Tasks(sessionID string) Tasks { return f.tasks[sessionID] }
-
 // foldTask folds a dispatch frame into one session's list, reporting whether
 // there was one to fold.
 //
