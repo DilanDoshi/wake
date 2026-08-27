@@ -2,6 +2,8 @@
 
 A terminal app for developers running many Claude Code sessions at once.
 
+**Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
+
 Wake turns your fleet into a room. A group chat is the primary surface: `@name` an individual,
 or broadcast to everyone. Agents stay quiet unless they're blocked or have something to report.
 A roster ranks every agent by whether it needs you. Any agent opens as a full 1:1 conversation
