@@ -189,6 +189,34 @@ without leaving it.
 
 ---
 
+## OWNER REQUEST, 2026-08-26 — ⌃Q should arm before it parks-and-quits, so a stray press does not empty the screen
+
+**Asked for in this version.** Make ⌃Q a two-step gesture — a first ⌃Q that arms, a second press that
+confirms — so nobody parks the whole fleet and closes the window by accident and then has to work out
+how to get back.
+
+**What ⌃Q does today is recoverable, but it is instant.** ⌃Q parks every agent and exits the window on
+one press (`internal/ui/park.go`'s `parkAll`, then the hangup route). Nothing is lost — parking writes
+`parked.json` and the fleet reopens — but "instant" is the problem the request names: the screen empties
+on a single keystroke, and the way back is a command the operator now has to remember, especially in a
+**named fleet**, where plain `wake` opens a *different* one and `wake --fleet <name>` is the actual
+return (`wake fleets` lists them). A stray ⌃Q is not a lost fleet, but it is a jarring one.
+
+**The shape it wants is `detach.go`'s, not a literal same-key double-tap.** ⌃QQ as the same key twice
+runs straight into the ruling `internal/ui/detach.go` already paid for: two ⌃-presses sharing one read
+arrive as **two plain messages** (`keyprobe_test.go`), so an accidental ⌃Q and the reflexive second
+press that follows "nothing happened" are the *same bytes* as intent — which is exactly why the detach
+arm is confirmed by a **different** key (↵), not a second ⌃O. So this most likely wants ⌃Q to **arm**
+(swap the legend to `↵ quit & park all` / `⌃Q cancel`, drawn like the detach arm), ↵ confirming and any
+other input disarming — the four-call-site `App.disarmed` pattern the card keys and the escape-clear
+already use. A held ⌃Q or a modal is heavier and buys nothing the arm does not. Note ⌃Q already waits
+for the daemon to confirm the park (`park.go`'s `parkAllTaken`); this adds the *human* confirmation in
+front of it, not a second machine round-trip.
+
+*Blocks:* nothing yet; a safety/undo-affordance request for the one keystroke that clears the room.
+
+---
+
 ## OWNER REQUEST, 2026-08-16 — teams: a named tag on an agent, and a group that is not a directory
 
 **Asked for in this version.** Agents carry a team tag so the fleet can be grouped by hand, rather
