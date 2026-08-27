@@ -1,0 +1,110 @@
+{
+  "model": "claude-opus-5",
+  "slash_commands": [
+    "compact",
+    "clear",
+    "context",
+    "cost",
+    "model",
+    "effort",
+    "review",
+    "limits",
+    "bench",
+    "changelog"
+  ],
+  "opening": {
+    "tokens": 380,
+    "steps": [
+      {
+        "after": 0.4,
+        "text": "Ready. I have `api/` \u2014 middleware, quota, and the key context."
+      }
+    ]
+  },
+  "turns": [
+    {
+      "match": "rate limiting",
+      "tokens": 3120,
+      "steps": [
+        {
+          "after": 0.9,
+          "text": "Taking the middleware. Reading what's already there first."
+        },
+        {
+          "after": 0.7,
+          "tool": {
+            "name": "Read",
+            "input": {
+              "file_path": "api/quota.ts"
+            },
+            "result": "1\u2192 /** What a key is allowed to spend. */\n2\u2192 export type Plan = {\n3\u2192   name: string\n4\u2192   perMinute: number\n5\u2192   burst: number\n6\u2192   resetAfterMs: number\n7\u2192 }",
+            "takes": 0.8
+          }
+        },
+        {
+          "after": 1.1,
+          "text": "`plans` already carries `perMinute` and `burst`, so the bucket can key straight off the plan. Writing `api/limit.ts`."
+        },
+        {
+          "after": 0.9,
+          "tool": {
+            "name": "Write",
+            "input": {
+              "file_path": "api/limit.ts"
+            },
+            "result": "Created api/limit.ts (48 lines)",
+            "takes": 1.0
+          }
+        },
+        {
+          "after": 0.8,
+          "text": "Done. `withRateLimit` sits after `withAuth` \u2014 it needs `req.ctx.key`, so the order matters. A refill is lazy rather than on a timer: thirty gateways on a ticker is thirty wakeups a second doing nothing.\n\nIt returns **429** with `Retry-After` in seconds. @omar that's the header you want for the client state."
+        }
+      ]
+    },
+    {
+      "match": "granularity",
+      "tokens": 640,
+      "steps": [
+        {
+          "after": 0.8,
+          "text": "Per key, not per IP \u2014 an IP is shared and a key is the thing being billed. The window is the plan's `resetAfterMs`, so `free` and `team` get the same code and different numbers."
+        }
+      ]
+    },
+    {
+      "match": "metrics",
+      "tokens": 890,
+      "steps": [
+        {
+          "after": 0.7,
+          "text": "Adding a counter on the reject path."
+        },
+        {
+          "after": 0.8,
+          "tool": {
+            "name": "Edit",
+            "input": {
+              "file_path": "api/limit.ts"
+            },
+            "result": "Applied 1 edit to api/limit.ts",
+            "takes": 0.7
+          }
+        },
+        {
+          "after": 0.6,
+          "text": "`harbor_ratelimit_rejected_total`, labelled by plan. Cheap \u2014 one increment on the path that was already returning early."
+        }
+      ]
+    }
+  ],
+  "default": {
+    "tokens": 410,
+    "steps": [
+      {
+        "after": 0.7,
+        "text": "Noted \u2014 folding that into the middleware work."
+      }
+    ]
+  }
+}

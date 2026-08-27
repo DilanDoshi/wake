@@ -1,0 +1,29 @@
+{
+  "_conflicts": {},
+  "_script": "n/a - maintained by hand",
+  "_source": "2.1.233",
+  "bindings": {
+    "app:toggleTerminal": "meta+j",
+    "app:toggleTodos": "ctrl+t",
+    "app:toggleTranscript": "ctrl+o",
+    "chat:clearInput": "ctrl+l",
+    "chat:clearScreen": "cmd+k",
+    "chat:cycleMode": "shift+tab",
+    "chat:externalEditor": "ctrl+g",
+    "chat:fastMode": "alt+o",
+    "chat:imagePaste": "ctrl+v",
+    "chat:modelPicker": "alt+p",
+    "chat:stash": "ctrl+s",
+    "chat:thinkingToggle": "alt+t",
+    "chat:undo": "ctrl+_",
+    "chat:workflowKeywordToggle": "alt+w",
+    "confirm:cycleMode": "shift+tab",
+    "confirm:toggleExplanation": "ctrl+e",
+    "history:search": "ctrl+r",
+    "historySearch:cycleScope": "ctrl+s",
+    "task:background": "ctrl+b",
+    "theme:editCustom": "ctrl+e",
+    "theme:toggleSyntaxHighlighting": "ctrl+t",
+    "transcript:toggleShowAll": "ctrl+e"
+  }
+}

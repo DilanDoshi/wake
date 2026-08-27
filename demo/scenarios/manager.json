@@ -1,0 +1,40 @@
+{
+  "model": "claude-opus-5",
+  "opening": {
+    "tokens": 260,
+    "steps": [
+      { "after": 0.5, "text": "Manager up. I can see the fleet, send to an agent, interrupt one, and start one — that's the whole list." }
+    ]
+  },
+  "turns": [
+    {
+      "match": "outstanding",
+      "tokens": 1240,
+      "steps": [
+        { "after": 0.8, "tool": { "name": "roll_up", "input": {}, "takes": 0.9,
+            "result": "6 agents · 3 working · 1 blocked · 2 idle" } },
+        { "after": 0.9, "text": "**Working** — maya on the limiter middleware, nora on its tests, alex benchmarking the hot path.\n**Blocked** — omar, on a write to `web/errors.ts`.\n**Done** — priya landed `--rate-limit`; luca has the changelog and is holding the limits page until the header names settle.\n\nThe one thing waiting on you is omar." }
+      ]
+    },
+    {
+      "match": "api",
+      "tokens": 1610,
+      "steps": [
+        { "after": 0.7, "text": "Finding who's in `api/`." },
+        { "after": 0.5, "fanout": {
+            "where": "api",
+            "exclude": ["manager"],
+            "message": "Add a metrics counter on the rate-limit reject path, labelled by plan.",
+            "pace": 0.8,
+            "say": "Sent to {who} — everyone working in `api/`. It's a turn each, so you'll see them pick it up in the room."
+        } }
+      ]
+    }
+  ],
+  "default": {
+    "tokens": 420,
+    "steps": [
+      { "after": 0.8, "text": "I can list the fleet, send to one agent, interrupt one, or start one. Anything past that is yours to do." }
+    ]
+  }
+}

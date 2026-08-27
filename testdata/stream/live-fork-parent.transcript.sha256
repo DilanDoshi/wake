@@ -1,0 +1,30 @@
+# [disk] measurements behind 2026-08-10-live-fork-findings.md §5, §8 and §9.
+#
+# These are NOT stream fixtures and nothing decodes them. They are the only
+# durable record of the single strongest claim in that note - that a fork does
+# not write to its parent's transcript - because the transcripts themselves are
+# ~/.claude/projects state, are not this project's to commit, and are gone the
+# moment that directory is cleaned. Without this file "byte-identical before and
+# after" is a sentence nobody can ever re-check.
+#
+# Named for live-fork-parent because §5's parent pair is the headline claim; the
+# F pair is the same claim one generation down (§8) and belongs beside it rather
+# than in a second file.
+#
+# Source: ~/.claude/projects/-private-tmp-claude-501--Users-dev-Documents-\
+#         b428db43-0dfa-4bc9-8a0e-0610222aa668-scratchpad-lf-cwd/<uuid>.jsonl
+# Taken by the recording driver at the named moments on 2026-08-10.
+# Format: sha256  bytes  lines  what
+#
+# The two facts to read off it:
+#   P before == P after   -> a fork did not touch its live parent's file  (§5)
+#   F before == F after   -> nor did a fork of a fork touch its parent's  (§8)
+# and P.final differs from both only by appending P's own later turn.
+
+878d5b595b50b8d90ac91b2393440f60ae876be078d726fc82230b0d89cd4fb7   53346   15  P 2ca1b3a0-0319-4eb4-904c-9c6563985736  immediately BEFORE the fork process was started
+878d5b595b50b8d90ac91b2393440f60ae876be078d726fc82230b0d89cd4fb7   53346   15  P 2ca1b3a0-0319-4eb4-904c-9c6563985736  immediately AFTER the fork process was reaped
+f811832f3008e1a21ff75fd255a751f107291798976768d73b41a48a60489946   56973   21  P 2ca1b3a0-0319-4eb4-904c-9c6563985736  after P's own turn 2, at the end of the run
+bba4575083322aae5a8668ddae72a81818d60b6310668026e25ff0c24285daa6   69064   31  F 37f6e67d-99f1-4d58-8309-be14ef0693ae  immediately BEFORE the second-generation fork started
+bba4575083322aae5a8668ddae72a81818d60b6310668026e25ff0c24285daa6   69064   31  F 37f6e67d-99f1-4d58-8309-be14ef0693ae  immediately AFTER the second-generation fork was reaped
+c38c2e03e92d0f72c688f68818a0c1fa51856404c102a79ba843492bf265956b   69292   30  G 94a6165c-29be-43f8-95c2-ccedde5c722a  at the end of the run
+dccdba6984ba63de80786658739e586641004feb6890f2b947b00c99c5d32cab   53460   16  N 634d4233-2efc-46bd-a2c7-2c8b83300f3d  the Q3 run, an ordinary fresh root (§9)

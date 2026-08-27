@@ -1,0 +1,37 @@
+{
+  "_note": "Fallback scripts for agents with no file of their own. Picked by name, so a take is repeatable. Exists because the board draws each agent's last line, and twenty rows of 'Ready.' would look staged.",
+  "variants": [
+    {
+      "opening": { "tokens": 300, "steps": [{ "after": 0.6, "text": "Auditing the key-rotation path for anything that assumes a single active key." }] },
+      "default": { "tokens": 340, "steps": [{ "after": 0.9, "text": "Folding that in." }] }
+    },
+    {
+      "opening": { "tokens": 280, "steps": [{ "after": 0.7, "text": "Tracing where usage records are written twice under a retry." }] },
+      "default": { "tokens": 320, "steps": [{ "after": 0.8, "text": "On it." }] }
+    },
+    {
+      "opening": { "tokens": 310, "steps": [{ "after": 0.5, "text": "Backfilling types for the billing webhook payloads." }] },
+      "default": { "tokens": 300, "steps": [{ "after": 0.9, "text": "Adding that to the sweep." }] }
+    },
+    {
+      "opening": { "tokens": 290, "steps": [{ "after": 0.8, "text": "Reading the gateway's timeout budget end to end before touching it." }] },
+      "default": { "tokens": 330, "steps": [{ "after": 0.8, "text": "Understood." }] }
+    },
+    {
+      "opening": { "tokens": 320, "steps": [{ "after": 0.6, "text": "Splitting the dashboard's usage query — it fans out per key and doesn't need to." }] },
+      "default": { "tokens": 310, "steps": [{ "after": 0.9, "text": "Queued." }] }
+    },
+    {
+      "opening": { "tokens": 270, "steps": [{ "after": 0.7, "text": "Checking that every 4xx the gateway returns has a documented code." }] },
+      "default": { "tokens": 340, "steps": [{ "after": 0.8, "text": "Will do." }] }
+    },
+    {
+      "opening": { "tokens": 300, "steps": [{ "after": 0.9, "text": "Reproducing the flake in the key-expiry suite before changing anything." }] },
+      "default": { "tokens": 320, "steps": [{ "after": 0.8, "text": "Noted." }] }
+    },
+    {
+      "opening": { "tokens": 290, "steps": [{ "after": 0.6, "text": "Drafting the migration that adds the per-plan ceiling column." }] },
+      "default": { "tokens": 300, "steps": [{ "after": 0.9, "text": "Adding it." }] }
+    }
+  ]
+}

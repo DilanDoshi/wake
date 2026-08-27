@@ -1,0 +1,17 @@
+{
+  "_source": "testdata/stream at 47 turns of >=50 output tokens, 131 assistant text blocks",
+  "_script": "scripts/measure-stream-rate.py",
+  "turns": 47,
+  "tokens_per_second": {
+    "min": 2.1,
+    "median": 43.5,
+    "p90": 76.0,
+    "max": 93.9
+  },
+  "blocks": 131,
+  "block_chars": {
+    "median": 48,
+    "mean": 252,
+    "max": 13499
+  }
+}

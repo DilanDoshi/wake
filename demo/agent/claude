@@ -1,0 +1,581 @@
+#!/usr/bin/env python3
+"""A scripted stand-in for `claude`, for recording the demo film.
+
+Wake spawns whatever `claude` is on PATH and reads stream-json off its stdout.
+This speaks that wire well enough to drive a real Wake: init, assistant text,
+tool calls, permission asks, subagent dispatches, interrupts and per-turn
+results. It deliberately does **not** emit a `TodoWrite` checklist: that tool
+is retired upstream and no fixture calls it, so emitting one would put a shape
+on camera that current Claude Code does not produce.
+
+**The frame shapes are copied from `testdata/stream/`** — the words are
+authored, the protocol is not. Anything this emits that the corpus does not
+carry is a bug in this file.
+
+Python rather than Go on purpose: `internal/core/argv_test.go` and
+`airlock_test.go` walk every non-test .go file in the tree and fail the build
+on one that spells `--session-id` or Claude's wire vocabulary outside the
+airlock. Those guards are right, and a demo prop is not a reason to widen them.
+
+Driven by `demo/scenarios/<role>.json`, selected with WAKE_DEMO_ROLE.
+"""
+
+import json
+import os
+import queue
+import random
+import sys
+import threading
+import time
+
+SCENARIO_DIR = os.environ.get(
+    "WAKE_DEMO_SCENARIOS",
+    os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", "scenarios"),
+)
+
+
+# --- the wire ---------------------------------------------------------------
+
+def emit(obj):
+    """One frame, one line, flushed. Wake reads this pipe line by line."""
+    sys.stdout.write(json.dumps(obj) + "\n")
+    sys.stdout.flush()
+    journal(obj)
+
+
+def journal(obj):
+    """Also persist assistant and user frames the way claude does.
+
+    Wake keeps no transcripts of its own — it reads them back off disk when a
+    conversation opens, and the room re-derives what was said the same way.
+    A fake that only wrote to stdout left an empty room on every reattach, so
+    the one beat about leaving and coming back had nothing to come back to.
+
+    The on-disk shape is the stdout frame plus a `timestamp`
+    (`DecodeTranscriptLine` reads `type`, `isSidechain` and that field, then
+    hands the rest to the same decoder). Located by filename, so the project
+    directory's name does not matter.
+    """
+    if obj.get("type") not in ("assistant", "user") or not TRANSCRIPT:
+        return
+    line = dict(obj)
+    line["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z"
+    line["sessionId"] = SID
+    try:
+        with open(TRANSCRIPT, "a") as fh:
+            fh.write(json.dumps(line) + "\n")
+    except OSError:
+        pass  # A demo prop that cannot journal still has to keep talking.
+
+
+def arg(name, default=""):
+    """Read a flag off the command line the daemon built.
+
+    The session id is the one thing this has to agree with Wake about: it
+    stamps every frame, and a daemon routing by anything else shows up as a
+    conversation that never fills.
+    """
+    argv = sys.argv
+    for i, a in enumerate(argv):
+        if a == name and i + 1 < len(argv):
+            return argv[i + 1]
+        if a.startswith(name + "="):
+            return a[len(name) + 1:]
+    return default
+
+
+SID = arg("--session-id")
+
+# The role comes off `--name`, which Wake puts on every argv. The daemon
+# spawns every agent from one environment, so an env var would give the whole
+# cast the same script — the command line is the only thing that differs per
+# session.
+ROLE = arg("--name") or os.environ.get("WAKE_DEMO_ROLE", "echo")
+
+
+def transcript_path():
+    """Where claude would have persisted this conversation.
+
+    `$HOME` is a scratch directory for the whole recording, so nothing here
+    can reach — or appear alongside — the operator's real Claude data.
+    """
+    if not SID:
+        return ""
+    home = os.path.expanduser("~")
+    d = os.path.join(home, ".claude", "projects", "harbor")
+    try:
+        os.makedirs(d, exist_ok=True)
+    except OSError:
+        return ""
+    return os.path.join(d, SID + ".jsonl")
+
+
+TRANSCRIPT = transcript_path()
+
+
+def say_init(sc):
+    """The environment dump every session opens with.
+
+    `slash_commands` is what the composer's completion menu offers under a
+    `/`, and `model` is what the conversation's status bar draws — so a demo
+    that skipped this frame would have an empty status bar in every pane.
+    """
+    emit({
+        "type": "system",
+        "subtype": "init",
+        "cwd": os.getcwd(),
+        "session_id": SID,
+        "model": sc.get("model", "claude-opus-5"),
+        "permissionMode": "auto",
+        "apiKeySource": "none",
+        "output_style": "default",
+        "tools": sc.get("tools", [
+            "Task", "Bash", "Glob", "Grep", "Read", "Edit", "Write",
+            "WebFetch", "TaskCreate", "TaskUpdate", "WebSearch", "EnterWorktree",
+        ]),
+        "slash_commands": sc.get("slash_commands", [
+            "compact", "clear", "context", "cost", "init", "model",
+            "effort", "review", "pr-comments", "release-notes",
+        ]),
+        "mcp_servers": [],
+    })
+
+
+def say_text(text):
+    emit({
+        "type": "assistant",
+        "session_id": SID,
+        "message": {"role": "assistant", "content": [{"type": "text", "text": text}]},
+    })
+
+
+def say_tool(name, tool_input, tool_id=None):
+    emit({
+        "type": "assistant",
+        "session_id": SID,
+        "message": {
+            "role": "assistant",
+            "content": [{
+                "type": "tool_use",
+                "id": tool_id or ("toolu_%08x" % random.getrandbits(32)),
+                "name": name,
+                "input": tool_input,
+            }],
+        },
+    })
+
+
+def say_tool_result(tool_id, content):
+    emit({
+        "type": "user",
+        "session_id": SID,
+        "message": {
+            "role": "user",
+            "content": [{
+                "type": "tool_result",
+                "tool_use_id": tool_id,
+                "content": content,
+            }],
+        },
+    })
+
+
+def say_result(output_tokens=1180):
+    """End a turn. Per-turn, never per-process — one session emits many."""
+    emit({
+        "type": "result",
+        "subtype": "success",
+        "is_error": False,
+        "session_id": SID,
+        "result": "done",
+        "usage": {
+            "input_tokens": 0,
+            "cache_creation_input_tokens": 0,
+            "cache_read_input_tokens": 0,
+            "output_tokens": output_tokens,
+        },
+    })
+
+
+def say_aborted_result():
+    """How an interrupted turn ends: no `result` key, is_error true."""
+    emit({
+        "type": "result",
+        "subtype": "error_during_execution",
+        "is_error": True,
+        "session_id": SID,
+        "errors": [],
+    })
+
+
+def say_user(text):
+    emit({
+        "type": "user",
+        "session_id": SID,
+        "message": {"role": "user", "content": [{"type": "text", "text": text}]},
+    })
+
+
+def say_ask(request_id, tool, tool_input):
+    """Block the turn on a permission request.
+
+    Names no session — the recordings show the correlator is the request id.
+    """
+    emit({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": {
+            "subtype": "can_use_tool",
+            "tool_name": tool,
+            "input": tool_input,
+            "tool_use_id": "toolu_ask",
+        },
+    })
+
+
+def say_question(request_id, payload):
+    """An interactive ask. `requires_user_interaction` is what makes it a
+    question rather than a permission — the tool's name is not."""
+    emit({
+        "type": "control_request",
+        "request_id": request_id,
+        "request": {
+            "subtype": "can_use_tool",
+            "tool_name": "AskUserQuestion",
+            "requires_user_interaction": True,
+            "tool_use_id": "toolu_q",
+            "input": payload,
+        },
+    })
+
+
+def say_receipt(request_id, response=None):
+    emit({
+        "type": "control_response",
+        "response": {
+            "subtype": "success",
+            "request_id": request_id,
+            "response": response if response is not None else {"still_queued": []},
+        },
+    })
+
+
+# --- subagent dispatch ------------------------------------------------------
+
+def say_dispatch(d):
+    tool = d.get("tool_use_id", "toolu_dispatch1")
+    task = d.get("task_id", "a1b2c3d4e5f60718")
+    kind = d.get("subagent_type", "general-purpose")
+    label = d["label"]
+
+    say_tool("Agent", {"description": label}, tool_id=tool)
+    emit({
+        "type": "system", "subtype": "task_started",
+        "task_id": task, "tool_use_id": tool, "description": label,
+        "subagent_type": kind, "task_type": "local_agent", "session_id": SID,
+    })
+    for line in d.get("says", []):
+        time.sleep(d.get("pace", 0.6))
+        emit({
+            "type": "assistant", "session_id": SID,
+            "message": {"role": "assistant", "content": [{"type": "text", "text": line}]},
+            "parent_tool_use_id": tool, "subagent_type": kind,
+            "task_description": label,
+        })
+    emit({
+        "type": "system", "subtype": "task_progress",
+        "task_id": task, "tool_use_id": tool,
+        "description": d.get("doing", label), "subagent_type": kind,
+        "usage": {"total_tokens": 27000, "tool_uses": 3, "duration_ms": 4100},
+        "last_tool_name": "Read", "session_id": SID,
+    })
+    if d.get("ends", True):
+        time.sleep(d.get("pace", 0.6))
+        emit({
+            "type": "system", "subtype": "task_updated", "task_id": task,
+            "patch": {"status": "completed", "end_time": 1786272221002},
+            "session_id": SID,
+        })
+        emit({
+            "type": "system", "subtype": "task_notification",
+            "task_id": task, "tool_use_id": tool, "status": "completed",
+            "output_file": "/dev/null", "summary": d.get("summary", label),
+            "usage": {"total_tokens": 29000, "tool_uses": 3, "duration_ms": 5000},
+            "session_id": SID,
+        })
+
+
+# --- reading what Wake writes ------------------------------------------------
+#
+# Decoded through the nesting rather than grepped: a control_request keeps its
+# subtype under "request" and its id on the envelope, and a frame with either
+# at the wrong depth carries every byte a substring check looks for while
+# meaning nothing.
+
+def user_text(f):
+    if f.get("type") != "user":
+        return None
+    parts = []
+    for c in f.get("message", {}).get("content", []) or []:
+        if isinstance(c, dict) and c.get("text"):
+            parts.append(c["text"])
+    return "".join(parts)
+
+
+def control(f):
+    if f.get("type") != "control_request":
+        return None, None
+    return f.get("request", {}).get("subtype"), f.get("request_id")
+
+
+def answered(f):
+    if f.get("type") != "control_response":
+        return None
+    return f.get("response", {}).get("request_id")
+
+
+# --- the loop ---------------------------------------------------------------
+
+inbox = queue.Queue()
+interrupted = threading.Event()
+
+
+def reader():
+    """Stdin on its own thread. A fake that reads in the foreground of
+    whatever else it is doing stops reading the moment it is busy."""
+    for line in sys.stdin:
+        line = line.strip()
+        if not line:
+            continue
+        try:
+            f = json.loads(line)
+        except ValueError:
+            continue
+        sub, rid = control(f)
+        if sub == "interrupt":
+            interrupted.set()
+            inbox.put(("interrupt", rid))
+            continue
+        if sub == "set_permission_mode":
+            # The receipt is the authority the label moves on, so it echoes
+            # the mode actually taken rather than the one requested.
+            say_receipt(rid, {"mode": f.get("request", {}).get("mode", "default")})
+            continue
+        rid = answered(f)
+        if rid:
+            inbox.put(("answer", f))
+            continue
+        text = user_text(f)
+        if text is not None:
+            inbox.put(("turn", text))
+    inbox.put(("eof", None))
+
+
+def nap(seconds):
+    """Sleep, but stay interruptible — an agent that ignored ⎋ mid-step is the
+    runaway the key exists for."""
+    end = time.time() + seconds
+    while time.time() < end:
+        if interrupted.is_set():
+            return False
+        time.sleep(0.03)
+    return True
+
+
+def wait_for_answer(request_id):
+    """Block until this ask is answered or the turn is interrupted."""
+    while True:
+        kind, payload = inbox.get()
+        if kind == "interrupt":
+            return None
+        if kind == "answer" and answered(payload) == request_id:
+            return payload
+        if kind == "eof":
+            return None
+
+
+def run_steps(steps):
+    """Play one turn. Returns False if it was interrupted."""
+    for step in steps:
+        if interrupted.is_set():
+            return False
+        if not nap(step.get("after", 0.5)):
+            return False
+
+        if "text" in step:
+            say_text(step["text"])
+        elif "tool" in step:
+            t = step["tool"]
+            tid = "toolu_%08x" % random.getrandbits(32)
+            say_tool(t["name"], t.get("input", {}), tool_id=tid)
+            if "result" in t:
+                if not nap(t.get("takes", 0.7)):
+                    return False
+                say_tool_result(tid, t["result"])
+        elif "ask" in step:
+            a = step["ask"]
+            rid = "req-%08x" % random.getrandbits(32)
+            say_ask(rid, a["tool"], a.get("input", {}))
+            if wait_for_answer(rid) is None:
+                return False
+        elif "question" in step:
+            rid = "req-%08x" % random.getrandbits(32)
+            say_question(rid, step["question"])
+            if wait_for_answer(rid) is None:
+                return False
+        elif "dispatch" in step:
+            say_dispatch(step["dispatch"])
+        elif "fanout" in step:
+            if not fanout(step["fanout"]):
+                return False
+        elif "sleep" in step:
+            if not nap(step["sleep"]):
+                return False
+    return True
+
+
+def fanout(spec):
+    """"Tell the agents working on X to do Y" — the manager's own verbs.
+
+    There is no bulk send: `send_to_agent` addresses one agent by id, so the
+    fan-out is the manager listing the fleet, deciding which rows match, and
+    sending to each. That is exactly what happens here, over the real server,
+    so the roster rows this lights up are lit by the tool call above them.
+    """
+    cfg = arg("--mcp-config")
+    if not cfg:
+        return True
+
+    sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+    import wakemcp
+
+    server = wakemcp.Server(cfg)
+    try:
+        say_tool("list_agents", {}, tool_id="toolu_list")
+        listing = server.call("list_agents")
+        if not nap(0.6):
+            return False
+
+        picked = wakemcp.agents_matching(
+            listing, spec["where"], exclude=spec.get("exclude", ())
+        )
+        if not picked:
+            say_text("Nobody is working on `%s` right now." % spec["where"])
+            return True
+
+        names = []
+        for agent_id, name in picked:
+            if interrupted.is_set():
+                return False
+            say_tool("send_to_agent", {
+                "agent_id": agent_id, "message": spec["message"],
+            })
+            server.call("send_to_agent", {
+                "agent_id": agent_id, "message": spec["message"],
+            })
+            names.append(name)
+            if not nap(spec.get("pace", 0.7)):
+                return False
+
+        if spec.get("say"):
+            who = names[0] if len(names) == 1 else \
+                ", ".join(names[:-1]) + " and " + names[-1]
+            say_text(spec["say"].replace("{who}", who))
+    finally:
+        server.close()
+    return True
+
+
+def finish(ok, tokens):
+    if ok:
+        say_result(tokens)
+        return
+    # Claude's own account of an abort arrives as an ordinary user frame; the
+    # text is the only thing identifying it.
+    say_user("[Request interrupted by user]")
+    say_aborted_result()
+
+
+def load_scenario():
+    path = os.path.join(SCENARIO_DIR, ROLE + ".json")
+    if os.path.exists(path):
+        with open(path) as fh:
+            return json.load(fh)
+
+    # An agent with no script of its own still has to be doing something
+    # specific: the board draws each row's last prose line, so a fleet of
+    # twenty agents all saying "ready" would make the scale shot look fake.
+    # The variant is chosen by name so it is stable across takes.
+    pool = os.path.join(SCENARIO_DIR, "_pool.json")
+    if os.path.exists(pool):
+        with open(pool) as fh:
+            variants = json.load(fh)["variants"]
+        return variants[sum(ord(c) for c in ROLE) % len(variants)]
+
+    return {"turns": [], "default": {"steps": [{"text": "Ready.", "after": 0.3}]}}
+
+
+def pick_turn(sc, text, used):
+    """Match on what was said when a turn names itself; otherwise take the
+    next unplayed one in order, which is what keeps a recording deterministic."""
+    low = (text or "").lower()
+    for i, t in enumerate(sc.get("turns", [])):
+        if i in used:
+            continue
+        m = t.get("match")
+        if m and m.lower() in low:
+            used.add(i)
+            return t
+    for i, t in enumerate(sc.get("turns", [])):
+        if i not in used and not t.get("match"):
+            used.add(i)
+            return t
+    return sc.get("default", {"steps": [{"text": "done.", "after": 0.4}]})
+
+
+def main():
+    sc = load_scenario()
+    say_init(sc)
+
+    threading.Thread(target=reader, daemon=True).start()
+
+    # The opening turn, so a pane is never empty when it first opens.
+    opening = sc.get("opening")
+    if opening:
+        ok = run_steps(opening.get("steps", []))
+        finish(ok, opening.get("tokens", 420))
+        interrupted.clear()
+
+    # Work started with nobody typing — what makes the room look alive in a
+    # cold open. Idle agents are what a fleet is most of the time, so this is
+    # opt-in per scenario rather than the default.
+    auto = sc.get("autostart")
+    if auto:
+        threading.Thread(
+            target=lambda: (nap(auto.get("at", 1.0)),
+                            finish(run_steps(auto.get("steps", [])),
+                                   auto.get("tokens", 2400))),
+            daemon=True,
+        ).start()
+
+    used = set()
+    while True:
+        kind, payload = inbox.get()
+        if kind == "eof":
+            return 0
+        if kind == "interrupt":
+            say_receipt(payload)
+            continue
+        if kind != "turn":
+            continue
+        interrupted.clear()
+        t = pick_turn(sc, payload, used)
+        ok = run_steps(t.get("steps", []))
+        finish(ok, t.get("tokens", 1180))
+
+
+if __name__ == "__main__":
+    try:
+        sys.exit(main())
+    except (BrokenPipeError, KeyboardInterrupt):
+        sys.exit(0)

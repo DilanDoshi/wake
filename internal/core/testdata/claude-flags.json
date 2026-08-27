@@ -1,0 +1,16 @@
+{
+  "_script": "scripts/extract-claude-flags.py",
+  "claude_code_version": "2.1.232",
+  "effort_levels": [
+    "low",
+    "medium",
+    "high",
+    "xhigh",
+    "max"
+  ],
+  "model_alias_examples": [
+    "fable",
+    "opus",
+    "sonnet"
+  ]
+}

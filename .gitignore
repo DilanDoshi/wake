@@ -1,0 +1,48 @@
+# Build output
+/bin/
+/dist/
+# Anchored. An unanchored `wake` matches any path component with that name, so
+# it silently excluded the whole of cmd/wake - the entrypoint - from every
+# commit. This is only the binary a bare `go build` drops in the root.
+/wake
+
+# Go
+*.test
+*.out
+coverage.html
+vendor/
+
+# Local config and runtime state
+/.wake/
+*.sock
+*.log
+
+# Recorded fixtures may contain real paths or prompts — commit deliberately,
+# never by accident.
+/testdata/scratch/
+
+# macOS
+.DS_Store
+
+# Editors
+.idea/
+.vscode/
+*.swp
+
+# SDD scratch (ledger, briefs, review packages)
+/.superpowers/
+
+# Parallel subagent worktrees
+/.worktrees/
+
+# Scratch only. The working notes that matter - deferrals, rulings, the v1 list and the
+# handoff - live in docs/notes/ and are tracked, because a subagent in a worktree cannot
+# read an ignored file and a review finding written into one does not travel with a branch.
+/notes/
+
+# Worktrees and local session scratch this harness creates in-tree.
+.claude/
+
+# Python bytecode from scripts/
+__pycache__/
+*.pyc

@@ -1,0 +1,94 @@
+# Lint configuration. `make lint` is `golangci-lint run`, and CI runs that same
+# command rather than a second list of flags - the Makefile is the contract.
+#
+# Validate every edit with `golangci-lint config verify`. `golangci-lint run`
+# accepts an unknown key in silence: the config this file replaces used
+# `issues.exclude-rules`, the v1 spelling of `linters.exclusions.rules`, and
+# `run` reported "0 issues" with the exclusion doing nothing at all while
+# `config verify` rejected the file outright. CI runs the verify.
+version: "2"
+
+run:
+  # The soak lives behind a build tag, and without it named here golangci-lint
+  # never parses those files at all. internal/core/soak_test.go,
+  # internal/core/soakmeasure_test.go and internal/daemon/soak_test.go are ~37KB
+  # of Go that would lint clean because nothing ever looks at it. Measured: a
+  # file under //go:build soak carrying three planted violations reports 0
+  # issues without this stanza and all three with it.
+  #
+  # The //go:build !unix stubs are still invisible here - GOOS decides those,
+  # not a tag, and lint runs on darwin. Lint is not what covers them: CI has a
+  # `GOOS=windows go build ./...` step for that, which reaches the four
+  # non-test stubs. procgroup_other_test.go is reached by neither, because
+  # `go build` does not compile test files.
+  build-tags:
+    - soak
+
+linters:
+  # Nothing is on unless it is named below.
+  #
+  # Listing the five defaults explicitly protects against a linter being
+  # *removed* from `standard`, but not against one being *added* to it - and an
+  # addition is the same failure as pinning golangci-lint to `latest`: the build
+  # goes red on an upgrade nobody in this repository asked for. `none` makes the
+  # enable list the whole answer in both directions.
+  default: none
+
+  # errcheck, govet, ineffassign, staticcheck and unused are golangci-lint's
+  # own `standard` set, reproduced here by hand now that `default: none` means
+  # nothing arrives on its own.
+  #
+  # Every linter below was mutation-verified against a planted violation before
+  # being enabled - a linter that is on but reports nothing it should is the
+  # same defect as a test that cannot fail.
+  enable:
+    - errcheck
+    - govet
+    - ineffassign
+    - staticcheck
+    - unused
+    # Wake makes no HTTP request today, so bodyclose has nothing to check yet.
+    # It is on because the first one somebody adds is exactly the moment nobody
+    # is looking for an unclosed body.
+    - bodyclose
+    - misspell
+    # forbidigo carries exactly one rule, and it is a rule CLAUDE.md already
+    # states in prose: a client writes to a socket through rpc.WriteFrameTo.
+    # rpc.WriteFrame holds the process-wide writeMu across the write with no
+    # bound, so one stalled peer parks every write in the process. The rpc tests
+    # prove WriteFrameTo works; this is what proves anybody calls it - reverting
+    # any of the three call sites was green in both packages before it existed.
+    - forbidigo
+
+  settings:
+    forbidigo:
+      forbid:
+        - pattern: ^rpc\.WriteFrame$
+          msg: >-
+            writes to a socket unbounded, holding rpc's process-wide write lock.
+            Use rpc.WriteFrameTo, which sets a deadline first. WriteFrame is for
+            writing a frame into a buffer, which is internal/daemon's business.
+
+  exclusions:
+    rules:
+      # internal/daemon is the one place WriteFrame is correct: client.go
+      # encodes into a private buffer and does its own bounded socket write -
+      # deliberately outside the lock - and daemon.go's status probe sets
+      # conn.SetDeadline itself. Its tests speak for the daemon too.
+      #
+      # There is no _test.go exclusion here, on this file's standing terms: the
+      # tests elsewhere that stand in for a socket peer were changed to
+      # WriteFrameTo rather than excused.
+      - path: internal/daemon/
+        linters:
+          - forbidigo
+
+# There is deliberately no exclusion for _test.go.
+#
+# The obvious one to add is errcheck, on the theory that tests may ignore
+# errors. This suite does not: it closes with `if err := conn.Close(); err !=
+# nil { t.Errorf(...) }` and cleans up with a checked RemoveAll, and errcheck
+# reports zero issues across every test file in the tree as it stands. An
+# exclusion here would suppress nothing today and license that discipline to rot
+# tomorrow, which is the wrong trade for a suite whose helpers spawn real
+# processes and bind real sockets.

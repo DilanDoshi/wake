@@ -1,0 +1,172 @@
+# CI for Wake.
+#
+# Everything here runs a Makefile target rather than an inlined command. The
+# Makefile is the contract: `make test` runs the suite twice, with and without
+# `-race`, because the detector has twice hidden a real bug in this project, and
+# a workflow that spelled out `go test -race` on its own would silently halve
+# that. If a step here stops matching a target, the target is what to fix.
+#
+# macos-latest, not ubuntu. The daemon is unix socket semantics, flock, process
+# groups and the output of `ps`, and all four differ across platforms. Wake is
+# macOS-first, so the platform CI proves is the platform it ships on. The
+# //go:build !unix files are never *exercised* here - that is known and
+# accepted, and reap_other.go documents that it always refuses - but they are at
+# least compiled, by the cross-compile step below. Nothing compiled them before
+# it, on any platform, which is a different and worse thing than untested code.
+#
+# `make soak` is deliberately not a job. It has two phases: 20 fake sessions
+# churning whole lifecycles, which a runner could do, and a growth check, which
+# it could not. CLAUDE.md records that the growth check "needs a quiet machine
+# and a long session, and an earlier draft that had neither passed the quadratic
+# it was written to catch" - a 30s run on a shared CI VM is that draft's exact
+# configuration, so half of what such a job reported green would be a green that
+# cannot go red. That is the same defect `make soak`'s own guard exists to
+# prevent, and adding it here would be reintroducing it one level up. The
+# configuration that would mean something, SOAK_DURATION=1h on an idle machine,
+# is an hour of a ten-times-billed macOS runner per run and belongs on a
+# schedule with its own runner. Until then the soak is what a human runs before
+# merging a change to lifecycles, and its guard fails loudly if it would run
+# nothing.
+
+name: ci
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+# A macOS runner minute bills at ten times a Linux one and the test job runs the
+# suite three times, so a superseded pull request should stop paying for itself.
+#
+# Pull requests only. Cancelling on `push: main` would let a commit land on main
+# with no completed CI at all, just because another landed behind it - which is
+# the one branch where the result has to exist.
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  test:
+    runs-on: macos-latest
+    # Two of the defects this project has found failed by hanging rather than by
+    # failing, which reports nothing at all - cmd/wake/main_test.go says so where
+    # it defines testTimeout. The default job timeout is six hours of that.
+    # Locally the three suite runs take about 100s; 30 minutes is headroom for a
+    # slower runner, not a budget anything should approach.
+    timeout-minutes: 30
+
+    steps:
+      - uses: actions/checkout@v7
+
+      # go.mod pins 1.26.5, and reading it from there is the pin. Naming the
+      # version here too would be a second copy that can disagree with the
+      # first, and the disagreement would not even be loud: Go downloads and
+      # switches to the toolchain go.mod asks for, so a workflow pinned to an
+      # older release would quietly build with the newer one anyway.
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # $TMPDIR is where every socket in the suite is bound, and sun_path is a
+      # fixed 104-byte field on darwin - so a temp root longer than the author's
+      # fails tests that pass locally, as a bare `bind: invalid argument` that
+      # reads like a daemon that never started. $RUNNER_TEMP is short
+      # (/Users/runner/work/_temp, 24 bytes) and exists before any step runs.
+      #
+      # Whether it is short *enough* is deliberately not decided here. That is
+      # internal/daemon's TestEverySocketPathThisSuiteBuildsFitsInSunPath, which
+      # measures the paths the suite really builds instead of doing arithmetic
+      # about them - so it protects every machine rather than this one, and it
+      # cannot be calibrated wrong. The first version of this step did that
+      # arithmetic in bash and was wrong by 17 bytes, passing green across a
+      # window where the suite fails.
+      - name: Pin TMPDIR
+        run: |
+          set -euo pipefail
+          root=${RUNNER_TEMP%/}
+          if [ -z "$root" ]; then
+            echo "::error::RUNNER_TEMP is empty, so this step would export an empty TMPDIR" >&2
+            echo "and Go would silently fall back to /tmp instead of the root chosen here." >&2
+            exit 1
+          fi
+          echo "TMPDIR=$root (${#root} bytes)"
+          echo "TMPDIR=$root" >> "$GITHUB_ENV"
+
+      # Before the tests, because the tests do not build cmd/wake and would not
+      # notice it was broken. .gitignore once excluded that whole directory, so
+      # a commit could look complete with the entrypoint missing.
+      - name: Build
+        run: make build
+
+      # The four non-test //go:build !unix files - core/procgroup_other.go and
+      # daemon's reap_other.go, detach_other.go and lock_other.go - are compiled
+      # by nothing else. `make build` and the whole suite run on darwin, where
+      # GOOS excludes them, so a type error in one of them ships. Seconds to
+      # check, and it goes red the day somebody edits a stub.
+      #
+      # `build` and not `vet`: vet includes test files, and this package's tests
+      # are unix-only by design, so `GOOS=windows go vet ./...` fails on
+      # test-only symbols that are supposed to be absent.
+      #
+      # The fifth such file, daemon/procgroup_other_test.go, is therefore
+      # covered by neither and is compiled on no platform at all - measured, a
+      # type error planted in it leaves this step exiting 0. Fixing that means
+      # making the unix-only test files build under a non-unix GOOS, which is a
+      # change to the test suite rather than to CI.
+      - name: Cross-compile the non-unix stubs
+        run: GOOS=windows go build ./...
+
+      # Both lanes. See the header.
+      - name: Test
+        run: make test
+
+      # A third full run, with -race and a coverage profile, gated at 80%.
+      - name: Coverage gate
+        run: make cover
+
+  lint:
+    runs-on: macos-latest
+    # Same platform as the test job on purpose: build constraints mean lint
+    # analyses a different set of files per GOOS, and a CI that disagreed with a
+    # developer's `make lint` would be reporting on code they cannot reproduce.
+    timeout-minutes: 15
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+          cache: true
+
+      # install-only, so the next step runs `make lint` - the same command a
+      # developer runs - rather than the action's own invocation.
+      #
+      # The version is pinned rather than `latest` because `latest` is a check
+      # that can turn red without anybody changing this repository, and a red
+      # that nobody caused is a red people learn to ignore. Bumping it is a pull
+      # request, which is where a new linter's findings should show up.
+      - uses: golangci/golangci-lint-action@v9
+        with:
+          version: v2.12.2
+          install-only: true
+
+      # `run` tolerates an unknown key in silence, so a stanza in .golangci.yml
+      # can be inert without saying so - the config this task started from
+      # carried a test-file exclusion under a v1 key, and `run` reported
+      # "0 issues" while it excluded nothing. verify is what reads the schema.
+      - name: Verify lint config
+        run: golangci-lint config verify
+
+      - name: Lint
+        run: make lint
+
+      # go.mod once carried github.com/google/uuid as `// indirect` while a
+      # non-test file imported it, and five Charm dependencies were mislabelled.
+      # Review caught that; nothing automated did. This is the automation.
+      - name: go.mod is tidy
+        run: go mod tidy -diff

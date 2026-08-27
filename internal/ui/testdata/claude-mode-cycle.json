@@ -1,0 +1,17 @@
+{
+  "_source": "chat:cycleMode's own switch from Claude Code 2.1.233, transcribed by hand. See docs/superpowers/notes/2026-08-16-mode-cycle-findings.md for the verbatim switch.",
+  "claude_code_version": "2.1.233",
+  "conditions": {
+    "isBypassPermissionsModeAvailable": false,
+    "canCycleToAuto": true
+  },
+  "next": {
+    "default": "acceptEdits",
+    "acceptEdits": "plan",
+    "plan": "auto",
+    "auto": "default",
+    "dontAsk": "default",
+    "bypassPermissions": "auto"
+  },
+  "unreachable_in_wake": ["bypassPermissions"]
+}

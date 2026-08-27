@@ -1,0 +1,12 @@
+{
+  "model": "claude-opus-5",
+  "opening": { "tokens": 300, "steps": [ { "after": 0.6, "text": "Ready. `cli/` — harborctl." } ] },
+  "turns": [
+    { "match": "rate limiting", "tokens": 1980, "steps": [
+      { "after": 1.9, "text": "Taking the flag. `--rate-limit` on `harborctl keys set`, so a plan's ceiling can be changed without a dashboard round trip." },
+      { "after": 1.2, "tool": { "name": "Edit", "input": { "file_path": "cli/root.ts" }, "result": "Applied 2 edits to cli/root.ts", "takes": 0.9 } },
+      { "after": 1.0, "text": "Parsed and validated. It refuses a value above the plan's own ceiling rather than silently clamping — a clamp reads as success and isn't." }
+    ] }
+  ],
+  "default": { "tokens": 320, "steps": [ { "after": 0.9, "text": "Noted." } ] }
+}

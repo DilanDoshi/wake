@@ -1,0 +1,19 @@
+{
+  "model": "claude-opus-5",
+  "opening": { "tokens": 310, "steps": [ { "after": 0.6, "text": "Ready — working in an isolated worktree so the test run can't collide with anyone's edits." } ] },
+  "turns": [
+    { "match": "rate limiting", "tokens": 2240, "steps": [
+      { "after": 1.3, "text": "Writing the limiter tests. The one that matters is the boundary: the request that exactly hits the ceiling has to pass, and the next one has to fail." },
+      { "after": 1.4, "dispatch": {
+        "label": "Enumerate limiter edge cases",
+        "subagent_type": "general-purpose",
+        "doing": "Reading api/quota.ts",
+        "summary": "7 cases: boundary, burst drain, clock skew, missing key",
+        "says": ["Burst and steady-state refill interact at the boundary — worth a case of its own."],
+        "pace": 0.7
+      } },
+      { "after": 0.9, "text": "Seven cases, four of them ones I'd have missed writing straight through." }
+    ] }
+  ],
+  "default": { "tokens": 300, "steps": [ { "after": 0.9, "text": "Adding a case for that." } ] }
+}

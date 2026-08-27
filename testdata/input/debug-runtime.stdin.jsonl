@@ -1,0 +1,4 @@
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "/debug api"}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "/add-dir /private/tmp/claude-501/-Users-dev-Documents-wake/c59c422c-e0c0-430c-9816-120529e3f71e/scratchpad/probe16/outside"}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "Read the file probe.txt in your working directory and reply with only the word it contains."}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "Now read /private/tmp/claude-501/-Users-dev-Documents-wake/c59c422c-e0c0-430c-9816-120529e3f71e/scratchpad/probe16/outside/secret.txt and reply with only the word it contains."}]}}

@@ -1,0 +1,12 @@
+Wake
+Copyright 2026 Dilan Doshi
+
+This product includes software developed for Wake
+(https://github.com/DilanDoshi/wake).
+
+This product bundles a patched fork of github.com/muesli/reflow in
+third_party/reflow/, under the MIT License; see third_party/reflow/LICENSE
+for the original copyright and terms.
+
+Wake is not affiliated with, endorsed by, or sponsored by Anthropic.
+Claude and Claude Code are trademarks of Anthropic.

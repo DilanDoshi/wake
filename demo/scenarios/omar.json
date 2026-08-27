@@ -1,0 +1,46 @@
+{
+  "model": "claude-opus-5",
+  "opening": {
+    "tokens": 340,
+    "steps": [
+      { "after": 0.5, "text": "Ready. `web/` — the dashboard and the API client." }
+    ]
+  },
+  "turns": [
+    {
+      "match": "rate limiting",
+      "tokens": 2870,
+      "steps": [
+        { "after": 1.4, "text": "On the 429 state. The client has no branch for it yet — `messageFor` falls through to the raw message, which for a rate limit reads like an outage." },
+        { "after": 0.9, "tool": {
+            "name": "Read",
+            "input": { "file_path": "web/errors.ts" },
+            "result": "1→ export type ApiError = {\n2→   status: number\n3→   code: string\n4→   message: string\n5→ }",
+            "takes": 0.9
+        } },
+        { "after": 1.6, "text": "Adding a 429 case that reads `Retry-After` and says when to come back, rather than asking them to try again into a wall." },
+        { "after": 0.8, "ask": {
+            "tool": "Write",
+            "input": {
+              "file_path": "web/errors.ts",
+              "content": "case 429: {\n  const wait = Number(err.retryAfter ?? 0)\n  return wait\n    ? `Rate limit reached. Try again in ${wait}s.`\n    : \"Rate limit reached. Try again shortly.\"\n}"
+            }
+        } },
+        { "after": 0.6, "text": "Written. It degrades to \"try again shortly\" when the header is missing, so a proxy that strips it doesn't produce `Try again in 0s`." }
+      ]
+    },
+    {
+      "match": "metrics",
+      "tokens": 720,
+      "steps": [
+        { "after": 0.9, "text": "Nothing for me — the counter is server side. I'll surface it on the usage panel once maya's emitting it." }
+      ]
+    }
+  ],
+  "default": {
+    "tokens": 380,
+    "steps": [
+      { "after": 0.8, "text": "Got it — queued behind the 429 work." }
+    ]
+  }
+}

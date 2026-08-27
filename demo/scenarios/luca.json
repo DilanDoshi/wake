@@ -1,0 +1,11 @@
+{
+  "model": "claude-sonnet-5",
+  "opening": { "tokens": 260, "steps": [ { "after": 0.7, "text": "Ready. `docs/`." } ] },
+  "turns": [
+    { "match": "rate limiting", "tokens": 890, "steps": [
+      { "after": 1.1, "text": "Changelog entry drafted. I'll hold the limits page until the header names are settled — documenting `Retry-After` before it ships is how docs start lying." },
+      { "after": 1.0, "tool": { "name": "Edit", "input": { "file_path": "docs/CHANGELOG.md" }, "result": "Applied 1 edit to docs/CHANGELOG.md", "takes": 0.6 } }
+    ] }
+  ],
+  "default": { "tokens": 280, "steps": [ { "after": 0.8, "text": "Will fold that into the release notes." } ] }
+}
