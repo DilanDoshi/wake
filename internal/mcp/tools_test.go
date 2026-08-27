@@ -402,9 +402,10 @@ var notInTheStatusReport = map[string]string{
 	"RequestIDs": "the *fact* of a blocked ask is reported and the ids are not, because no tool answers a permission request: only a human can. An id a model cannot use is an id it will try to use",
 	"ParentID":   "which session this one was forked from. There is no fork verb on this surface, so lineage is context a manager cannot act on, and the manager-legible form of it is the parent's *name* rather than a UUID. Resolving that name is a loop over the report agentStatus already holds - cheap, and deliberately not done here: the task that gives the manager a fork tool is the one that knows what it should say",
 	"Budget":     "the spend ceiling this session was started under, and it is the one field here that is misleading rather than merely useless. Nothing reports spend-to-date on this surface, so a cap with no progress beside it tells a model that an agent *may stop* without telling it whether that is imminent or nowhere near - and a manager holding send_to_agent acts on what it is told. There is no budget verb here either, so it is not a fact this surface could do anything with. What would reopen it: a spend-to-date on the report, at which point the pair is a measurement rather than a ceiling",
+	"Commands":   "the slash commands a session advertised, which is the operator's completion menu and nothing this surface can act on: there is no command-typing verb here, and the list is the agent's own (it grows when an agent writes a .claude/commands file), so it is somebody else's words with nothing for a manager to do with them. It rides the report only so a reattached *client* can draw the menu",
 }
 
-const notInTheStatusReportCount = 5
+const notInTheStatusReportCount = 6
 
 // agent_status is the daemon's facts, and which facts is a decision that
 // should fail loudly when rpc.SessionStatus grows a field.

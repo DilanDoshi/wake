@@ -271,6 +271,9 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		}
 		a.Name, a.Label, a.Cwd, a.ParentID = s.Name, s.Label, runningIn(s), s.ParentID
 		a.Effort, a.Budget = s.Effort, s.Budget
+		// The report is the only route to these for a client that attached after
+		// the init event carried them - see rpc.SessionStatus.Commands.
+		a = a.withCommands(s.Commands)
 
 		// Stamped on the way *into* working, so the heartbeat measures the turn
 		// rather than the report: reports fire on a state change, but an agent
@@ -390,11 +393,7 @@ func (a Agent) withFacts(f *core.SessionFacts) Agent {
 	if len(f.MCPServers) > 0 {
 		a.MCPNeedsAuth = needsAuth(f.MCPServers)
 	}
-	// Same guard, and one more reason: the pointer is kept when the words have
-	// not changed, so an unchanged set compares equal and costs no copy.
-	if len(f.SlashCommands) > 0 && !a.advertised.same(f.SlashCommands) {
-		a.advertised = &commandSet{names: slices.Clone(f.SlashCommands)}
-	}
+	a = a.withCommands(f.SlashCommands)
 	// Summed, not replaced: every result reports its own turn's output.
 	a.Tokens += f.OutputTokens
 	// **Replaced within a message and summed across them**, which is the one
@@ -405,6 +404,19 @@ func (a Agent) withFacts(f *core.SessionFacts) Agent {
 	if f.TurnOutputTokens > 0 {
 		a.turnCur = max(a.turnCur, f.TurnOutputTokens)
 		a.TurnTokens = a.turnDone + a.turnCur
+	}
+	return a
+}
+
+// withCommands replaces the advertised set when a frame or a report names a new
+// one, and keeps the pointer when the words have not changed so an unchanging
+// init costs no copy. Shared by withFacts, off the live init event, and by
+// WithStatus, off the report - which is the only route a client that attached
+// late has to them, so folding it in both is what keeps the completion menu from
+// emptying on a reattach. See rpc.SessionStatus.Commands.
+func (a Agent) withCommands(names []string) Agent {
+	if len(names) > 0 && !a.advertised.same(names) {
+		a.advertised = &commandSet{names: slices.Clone(names)}
 	}
 	return a
 }

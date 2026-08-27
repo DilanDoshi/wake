@@ -133,6 +133,12 @@ type agent struct {
 	budget   string
 	fallback string
 
+	// commands is the slash commands the last init advertised, kept so they
+	// reach a client that attached after that init - the completion menu's, and
+	// the report is the only route to them for such a client. Display only, like
+	// cwd, and updated on the receipt the same way. See rpc.SessionStatus.Commands.
+	commands []string
+
 	// parent is the session this one was forked from, or empty. Immutable
 	// after newAgent and display only, exactly like label: nothing addresses an
 	// agent by it and nothing here reads it.
@@ -284,6 +290,14 @@ func (a *agent) observe(ev core.Event) {
 	// (maySpawn). See core.SessionFacts.Dir.
 	if ev.Session != nil && filepath.IsAbs(ev.Session.Dir) {
 		a.cwd = ev.Session.Dir
+	}
+
+	// The completion menu's, kept for the report so a client that attached after
+	// this init still learns them. Only when a frame names some: a result frame
+	// carries none, and blanking the set once a turn would empty the menu the
+	// same way withFacts guards against. See rpc.SessionStatus.Commands.
+	if ev.Session != nil && len(ev.Session.SlashCommands) > 0 {
+		a.commands = ev.Session.SlashCommands
 	}
 
 	switch ev.Kind {
@@ -647,6 +661,7 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		ToolArg:    a.toolArg,
 		Effort:     a.effort,
 		Budget:     a.budget,
+		Commands:   a.commands,
 		State:      a.stateLocked(time.Now()),
 		RequestIDs: a.pendingIDsLocked(),
 		PID:        a.sess.Pgid(),

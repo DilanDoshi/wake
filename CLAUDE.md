@@ -614,7 +614,10 @@ to one file; a surface that must build a command takes `configureVerb` instead.
 carries `slash_commands` — the session's own commands and the operator's `.claude/commands` files
 together, 133 across the corpus — and the airlock dropped the key until now. Decoded onto
 `core.SessionFacts` and folded onto `ui.Agent`, it is what the composer offers under a draft that
-begins a `/command` or an `@`. **It cannot decide routing** for `slash.go`'s own reason: the list is
+begins a `/command` or an `@`. **It rides the fleet report as well as the init event**
+(`rpc.SessionStatus.Commands`, folded by `withCommands`): the event alone leaves a client that
+attached after an agent's init with an empty menu for it, so the report carries it too — the only
+route to a late attach, the same one `Effort` and `Budget` take. **It cannot decide routing** for `slash.go`'s own reason: the list is
 per session and arrives after the first frame, while a draft is judged per keystroke — a menu may be
 wrong about a machine that has started nothing, a fence may not. The keys are `⇥` to complete and
 `⌃N`/`⌃P` to walk, read above `App.key`'s switch the way `cardKey` and `pickerKey` are, so they take

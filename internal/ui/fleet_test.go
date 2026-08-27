@@ -283,6 +283,7 @@ var notCarriedOntoAnAgent = map[string]string{
 	"PID":        "the process group a later daemon reaps. Not a display field, and the UI never touches a process",
 	"Dir":        "where the session was *started*. It is the daemon's own business - park writes it down, unpark launches from it, a fork runs in it - because claude locates a transcript by it. No surface here wants it: every reader of Agent.Cwd wants where the agent is now, which is what runningIn folds",
 	"RequestIDs": "the asks a blocked session owes. Cards owns these, seeded from the permission-request events and reconciled against this same report - the agent record keeps no ask id, so there is nothing on Agent for a second copy to go stale against",
+	"Commands":   "the slash commands a session advertised. Carried, but folded into Agent.advertised (a *commandSet the completion menu reads) via withCommands rather than a same-named field, the way Dir folds into Cwd - the report is the only route to them for a client that attached after the init event carried them",
 }
 
 // A fleet report is folded onto an Agent field by field, and this derives that
@@ -346,8 +347,8 @@ func everyFieldSet(t *testing.T) rpc.SessionStatus {
 		case reflect.Int, reflect.Int64:
 			f.SetInt(int64(i) + 1)
 		case reflect.Slice:
-			// Only []string today (RequestIDs). A zero slice compares equal on
-			// both sides, so fill it for the same reason the strings are filled.
+			// []string fields today (RequestIDs, Commands). A zero slice compares
+			// equal on both sides, so fill it for the same reason the strings are.
 			if f.Type().Elem().Kind() != reflect.String {
 				t.Fatalf("rpc.SessionStatus.%s is a slice of %s and this helper only knows []string", rt.Field(i).Name, f.Type().Elem().Kind())
 			}
