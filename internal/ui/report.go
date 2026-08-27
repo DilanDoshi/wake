@@ -42,6 +42,11 @@ func (a App) applyStatus(st *rpc.Status) App {
 	// names that this client never saw arrived while it was detached. See
 	// Cards.Reconcile.
 	a.cards = a.cards.Reconcile(st)
+	// A report is exactly when this session's state can have moved out from
+	// under an open rewind picker too - Cards.Reconcile's own reason, one
+	// picker over. See rewind.go's reconcileRewind, and the adversarial
+	// review CRITICAL finding it closes, 2026-08-26.
+	a = a.reconcileRewind()
 	return a.renamed(st).startArrived(st).parkArrived(st).wakeArrived(st).noteEnding(st).refreshedAgents().retarget().recompleted()
 }
 

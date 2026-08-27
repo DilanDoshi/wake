@@ -131,11 +131,14 @@ const (
 	// matches on it to swap the label.
 	escGlyph = "esc"
 
-	// escInterruptLabel is what the legend calls ⎋ ordinarily, and
-	// escClearLabel is what it calls ⎋ while the next press would clear the
-	// draft instead. See escape.go.
+	// escInterruptLabel is what the legend calls ⎋ ordinarily, escClearLabel is
+	// what it calls ⎋ while the next press would clear the draft instead, and
+	// escRewindLabel is what it calls ⎋ while the next press would open the
+	// rewind picker instead - an idle, empty conversation's second press, which
+	// has no draft for escClearLabel to describe. See escape.go and rewind.go.
 	escInterruptLabel = "interrupt"
 	escClearLabel     = "clear draft"
+	escRewindLabel    = "rewind"
 
 	// The two glyphs a live ⌃O arm re-labels, and what it calls them.
 	//
@@ -221,9 +224,12 @@ const hintSep = "   "
 // rather than a bool per arm: a second parameter per arm is how the swap ends
 // up spelled differently in the two places that render it.
 //
-// At most one is ever set - arming either goes through App.disarmed first - so
-// the legend never has two swapped labels at once.
-type legendArms struct{ esc, detach bool }
+// At most one is ever set - arming any of them goes through App.disarmed
+// first, and esc/rewind are themselves split from the same escArmed bit by
+// rewindArmable (armsFor), which is mutually exclusive with clearsOnEscape by
+// construction - so the legend never has two swapped labels at once. See
+// escape.go and rewind.go.
+type legendArms struct{ esc, rewind, detach bool }
 
 // hintLine renders the legend for one permission mode.
 func hintLine(mode string) string {
@@ -250,6 +256,8 @@ func hintParts(mode string, arms legendArms) []string {
 		switch {
 		case arms.esc && e.glyph == escGlyph:
 			e.what = escClearLabel
+		case arms.rewind && e.glyph == escGlyph:
+			e.what = escRewindLabel
 		case arms.detach && e.glyph == sendGlyph:
 			e.what = armedSendLabel
 		case arms.detach && e.glyph == detachGlyph:

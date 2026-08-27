@@ -608,7 +608,7 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		s.fork(ctx, c, f)
 	case rpc.FrameImport:
 		s.importSession(ctx, c, f)
-	case rpc.FrameSend, rpc.FrameAllow, rpc.FrameAnswer, rpc.FrameDeny, rpc.FrameInterrupt, rpc.FrameMode, rpc.FrameStop, rpc.FramePark:
+	case rpc.FrameSend, rpc.FrameAllow, rpc.FrameAnswer, rpc.FrameDeny, rpc.FrameInterrupt, rpc.FrameMode, rpc.FrameRewind, rpc.FrameStop, rpc.FramePark:
 		s.submit(c, f)
 	case rpc.FrameWake:
 		s.unpark(ctx, c, f)
@@ -641,6 +641,10 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		// The room's ask, on its own goroutine for the reason above and
 		// answered under its own kind for rpc.FrameRoomHistory's.
 		s.start(func() { s.sendRoomHistory(c, f.SessionID) })
+	case rpc.FrameRewindTargets:
+		// The same file read as FrameHistory, on its own goroutine for the
+		// same reason, answered under its own kind for FrameRewindTargets'.
+		s.start(func() { s.sendRewindTargets(c, f.SessionID) })
 	default:
 		// Unrecognized rather than guessed at. The whole reason stop, kill
 		// and quit are separate kinds is that no default is safe.

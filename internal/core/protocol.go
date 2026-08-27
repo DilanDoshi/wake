@@ -210,6 +210,52 @@ func DecodeTranscriptLine(line []byte) ([]Event, error) {
 	return events, nil
 }
 
+// TranscriptNode is one on-disk transcript line's place in the tree - its own
+// identity and its parent's - or, for a last-prompt line, the rewind marker
+// it carries instead. It holds no message content; DecodeTranscriptLine
+// still reads that for the lines the active-branch walk in daemon/history.go
+// keeps.
+type TranscriptNode struct {
+	UUID, ParentUUID string
+	Kind             string // "user" | "assistant" | "last-prompt" | other
+	Rewound          bool   // true only on a last-prompt rewind marker
+	LeafUUID         string // the active leaf, on a last-prompt marker
+}
+
+// DecodeTranscriptNode reads only the tree structure of one on-disk
+// transcript line - identity and rewind markers - for the active-branch
+// reconstruction in daemon/history.go. It decodes no message content;
+// DecodeTranscriptLine still does that for the lines the walk keeps. ok is
+// false for a line that carries no uuid and is not a rewind marker - a
+// queue-operation, a latch, and the rest of the on-disk-only records that
+// are neither - and for a sidechain line, the same as DecodeTranscriptLine
+// and for the same reason: a subagent's line is not the tree the operator's
+// conversation lives on, and letting one in could make the walk pick a
+// subagent leaf as the active one.
+func DecodeTranscriptNode(line []byte) (TranscriptNode, bool) {
+	var f struct {
+		Type       string `json:"type"`
+		UUID       string `json:"uuid"`
+		ParentUUID string `json:"parentUuid"`
+		Rewound    bool   `json:"rewound"`
+		LeafUUID   string `json:"leafUuid"`
+		Sidechain  bool   `json:"isSidechain"`
+	}
+	if err := json.Unmarshal(line, &f); err != nil {
+		return TranscriptNode{}, false
+	}
+	if f.Sidechain {
+		return TranscriptNode{}, false
+	}
+	if f.Type == "last-prompt" {
+		return TranscriptNode{Kind: f.Type, Rewound: f.Rewound, LeafUUID: f.LeafUUID}, f.Rewound
+	}
+	if f.UUID == "" {
+		return TranscriptNode{}, false
+	}
+	return TranscriptNode{UUID: f.UUID, ParentUUID: f.ParentUUID, Kind: f.Type}, true
+}
+
 func one(ev Event) []Event { return []Event{ev} }
 
 // systemEvent is lifecycle chatter and the few frames inside it a reader
@@ -464,11 +510,11 @@ func controlRequestEvent(f wireFrame, raw json.RawMessage) Event {
 }
 
 // controlResponseEvent decodes the receipt for a control_request Wake sent -
-// an interrupt, in everything recorded so far. Mirrors controlRequestEvent,
-// including its ruling on an absent body: everything that identifies a
-// receipt is nested, so one with no body is not a degraded receipt but an
-// empty frame - no subtype to name it, no request_id to attribute it, and
-// nothing to report.
+// an interrupt, a set_permission_mode, or a rewind_conversation. Mirrors
+// controlRequestEvent, including its ruling on an absent body: everything
+// that identifies a receipt is nested, so one with no body is not a degraded
+// receipt but an empty frame - no subtype to name it, no request_id to
+// attribute it, and nothing to report.
 //
 // Any other subtype still decodes to a receipt. A receipt Wake cannot
 // interpret is not a receipt Wake can afford to drop: the request it answers
@@ -483,8 +529,24 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 	if f.Response == nil {
 		return ev
 	}
-	ev.Kind = KindControlReceipt
 	ev.RequestID = f.Response.RequestID
+	// A rewind receipt is discriminated by Rewound's *presence*, not its
+	// truth: it always carries the key, true or false, and a
+	// set_permission_mode receipt never does. Checked before the mode/generic
+	// path so a rewind never falls through to it.
+	if b := f.Response.Response.Rewound; b != nil {
+		ev.Kind = KindRewindReceipt
+		ev.Text = f.Response.Subtype
+		ev.Rewind = &RewindResult{
+			Rewound:                *b,
+			TargetMessageUUID:      f.Response.Response.TargetMessageUUID,
+			PrefillText:            f.Response.Response.PrefillText,
+			PrecedingAssistantUUID: f.Response.Response.PrecedingAssistantUUID,
+			Error:                  f.Response.Response.Error,
+		}
+		return ev
+	}
+	ev.Kind = KindControlReceipt
 	ev.Text = f.Response.Subtype
 	// The mode a set_permission_mode landed on, doubly nested like the rest of
 	// the payload. Empty on every other receipt and on a refusal, which moved

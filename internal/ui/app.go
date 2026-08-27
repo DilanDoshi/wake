@@ -158,10 +158,10 @@ type App struct {
 	groups Groups
 
 	// picker is the menu Wake draws for a bare /effort or /model, and the zero
-	// value is "there is not one". Beside cards rather than in them: a picker
-	// is Wake's own and appears in no fleet report, so Cards.Reconcile would
-	// delete it on the next status push. See picker.go.
+	// value is "there is not one". Beside cards rather than in them: it is
+	// Wake's own and appears in no fleet report. See picker.go.
 	picker Picker
+	rewind RewindPicker // esc esc's own picker, on an idle empty conversation; see rewind.go
 
 	// completion is the menu under the focused draft: what could finish the
 	// word at the cursor. Rebuilt per keystroke, never per frame, and its `@`
@@ -340,8 +340,8 @@ type App struct {
 	// leaving takes two, and App.disarmed takes this back with the card's arm.
 	detachArmed bool
 
-	// escArmed is whether the next ⎋ clears the focused conversation's draft
-	// rather than stopping its turn again. See escape.go.
+	// escArmed is whether the next ⎋ clears the draft or opens the rewind
+	// picker, rather than stopping the turn again. See escape.go.
 	escArmed bool
 
 	// roomAsk is the room's own history ledger, which is not the DM's. See
@@ -556,7 +556,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The board goes with them: a rune is somebody typing, and boardKey's
 		// own close on this path is discarded with the rest of the not-handled
 		// model - the disarm comment above is about exactly that.
-		a = a.disarmed().closePicker().closeBoard()
+		a = a.disarmed().closePicker().closeBoard().closeRewind()
 	}
 
 	// Whatever the App did not take goes to the pane that has the focus.
@@ -639,9 +639,10 @@ func (a App) apply(f rpc.Frame) App {
 
 	case rpc.FrameHistoryReply:
 		return a.historyArrived(f)
-
 	case rpc.FrameRoomHistoryReply:
 		return a.roomHistoryArrived(f)
+	case rpc.FrameRewindTargetsReply:
+		return a.rewindTargetsArrived(f)
 
 	case rpc.FrameError:
 		// A refused spawn arrives this way rather than as a dropped
@@ -683,20 +684,6 @@ func (a App) apply(f rpc.Frame) App {
 	}
 }
 
-// errorText says which agent an error is about, when this client knows.
-//
-// A bare "exit status 1" on a notice row was answerable while a window held one
-// conversation. At fifteen agents it is a sentence about nobody, and the name
-// is the whole of what makes it actionable. An agent no report has named yet
-// gets the text alone rather than an empty handle.
-func (a App) errorText(f rpc.Frame) string {
-	agent, ok := a.fleet.Agent(f.SessionID)
-	if !ok || agent.Name == "" {
-		return f.Text
-	}
-	return agentPrefix + agent.Name + ": " + f.Text
-}
-
 // observe folds one agent's event: what it does to the fleet, what the room
 // draws for it, and what an open DM gets whether the room wanted it or not.
 //
@@ -715,6 +702,8 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	// neither is drawn as one. Folded here rather than beside a renderer so a
 	// receipt this client is not showing still corrects the belief.
 	a = a.observedMode(sessionID, ev)
+	// A rewind receipt is the same non-decision, one kind over. See rewind.go.
+	a = a.noteRewind(sessionID, ev)
 
 	var forRoom []core.Event
 	a.fleet, forRoom = a.fleet.Observe(ev, sessionID)

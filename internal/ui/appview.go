@@ -248,8 +248,16 @@ func (a App) dmFor(id string) DM {
 // belongs to every pane**, because it is one arm over the whole window and ↵
 // finishes it wherever the keys are - a legend that withheld it would be a pane
 // still advertising `↵ send` while ↵ closes the workspace.
+//
+// esc and rewind split the one escArmed bit by rewindArmable: an idle, empty
+// conversation's second ⎋ opens the rewind picker rather than clearing a
+// draft, and the two are mutually exclusive by construction (rewindArmable
+// needs an empty composer, clearsOnEscape needs a non-empty one), so exactly
+// one of the two is ever true here. See rewind.go and escape.go.
 func (a App) armsFor(id string) legendArms {
-	return legendArms{esc: a.escArmed && a.focus == id, detach: a.detachArmed}
+	focused := a.escArmed && a.focus == id
+	rewind := focused && a.rewindArmable()
+	return legendArms{esc: focused && !rewind, rewind: rewind, detach: a.detachArmed}
 }
 
 // cardBlock is the card this pane draws, or "" for a pane with no ask to put.
@@ -336,14 +344,15 @@ func (a App) roomPane(width, height int) string {
 
 // menuBlock is everything a pane pins between its transcript and its composer,
 // in the order it is stacked: the ask that pane is putting, then the picker,
-// then the completion menu. "" is a pane with none of them up.
+// then the rewind picker, then the completion menu. "" is a pane with none of
+// them up.
 //
-// All three are things waiting on a keypress, and all three belong at the query
+// All four are things waiting on a keypress, and all belong at the query
 // bar - the completion menu follows the word being typed, the picker was opened
-// by the draft, and the card is answered by typing an option's digit. Pinning
-// them above the *transcript* instead put them rows away from where they are
-// acted on, which is what "the /effort menu appears at the top instead of the
-// query bar" reported.
+// by the draft, the rewind picker by esc esc, and the card is answered by
+// typing an option's digit. Pinning them above the *transcript* instead put
+// them rows away from where they are acted on, which is what "the /effort menu
+// appears at the top instead of the query bar" reported.
 //
 // The card is first, so it is the row the pane keeps when there is not room for
 // all of it - DM.menuRows clips from the bottom - and its keys are the last row
@@ -356,7 +365,8 @@ func (a App) roomPane(width, height int) string {
 // `top`: a screen row is a transcript line with nothing to offset it by.
 func (a App) menuBlock(id string, width int) (string, bool) {
 	card := a.cardBlock(id, width)
-	return above(above(card, a.pickerView(width, id)), a.completionView(width, id)), card != ""
+	stack := above(above(card, a.pickerView(width, id)), a.rewindView(width, id))
+	return above(stack, a.completionView(width, id)), card != ""
 }
 
 // pickerView is the menu if it belongs to this pane, and "" otherwise.
@@ -369,6 +379,18 @@ func (a App) pickerView(width int, id string) string {
 		return ""
 	}
 	return a.picker.View(width)
+}
+
+// rewindView is the rewind picker if it belongs to this pane, and ""
+// otherwise - pickerView's own reason, matched on Session rather than on
+// focus: the reply that opens it can arrive after the operator has moved on,
+// and it is drawn only in the conversation it answered for. See
+// rewindTargetsArrived.
+func (a App) rewindView(width int, id string) string {
+	if !a.rewind.Open() || a.rewind.Session != id {
+		return ""
+	}
+	return a.rewind.View(width, a.agentName(a.rewind.Session))
 }
 
 // above joins two blocks, either of which may be absent. lipgloss.JoinVertical

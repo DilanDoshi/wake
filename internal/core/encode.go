@@ -476,6 +476,45 @@ func EncodeSetMode(requestID, mode string) ([]byte, error) {
 	}, "encode set mode")
 }
 
+// outRewindRequest rewinds a running session's conversation to an earlier user
+// message. Both uuids are mandatory: last_seen_user_message_uuid is the
+// optimistic-concurrency guard, and omitting it returns "stale target"
+// (2026-08-25 rewind spike). interrupt_if_running is a constant false — Wake
+// rewinds only an idle session (the esc-esc gate), and only that shape is
+// recorded.
+type outRewindRequest struct {
+	Subtype            string `json:"subtype"`
+	TargetMessageUUID  string `json:"target_message_uuid"`
+	LastSeenUUID       string `json:"last_seen_user_message_uuid"`
+	InterruptIfRunning bool   `json:"interrupt_if_running"`
+}
+
+// EncodeRewind asks the session to rewind its conversation to targetUUID,
+// declaring lastSeenUUID as the tip it is rewinding from. It returns the
+// request_id its receipt will carry. The receipt is the authority on whether it
+// rewound (Event.Rewind); a refusal comes back there, not as an error here.
+// The empty checks are EncodeSetMode's: a blank request id makes the receipt
+// unattributable across 15-30 sessions, and a blank uuid is refused rather than
+// sent for the CLI to reject as "stale target"/"target not found".
+func EncodeRewind(requestID, targetUUID, lastSeenUUID string) ([]byte, error) {
+	if requestID == "" {
+		return nil, fmt.Errorf("%w: encode rewind: empty request id", ErrNotWritten)
+	}
+	if targetUUID == "" || lastSeenUUID == "" {
+		return nil, fmt.Errorf("%w: encode rewind: empty target or last-seen uuid", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request: outRewindRequest{
+			Subtype:            "rewind_conversation",
+			TargetMessageUUID:  targetUUID,
+			LastSeenUUID:       lastSeenUUID,
+			InterruptIfRunning: false,
+		},
+	}, "encode rewind")
+}
+
 // marshalLine renders one outbound frame as a single newline-terminated
 // line, because stdin is newline-delimited JSON in exactly the way stdout
 // is. json.Marshal escapes embedded newlines and quotes, which is what keeps

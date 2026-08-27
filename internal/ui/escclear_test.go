@@ -110,10 +110,13 @@ func TestAFastDoubleEscBothStopsTheTurnAndClearsTheDraft(t *testing.T) {
 	}
 }
 
-// And with nothing to clear it is exactly one interrupt, not an interrupt and
-// a swallowed second meaning.
+// And with nothing to clear and a turn running, it is exactly one interrupt,
+// not an interrupt and a swallowed second meaning. Put into StateWorking
+// explicitly - openedRoom's agent is idle by default, and rewind.go gives
+// that combination (nothing to clear, nothing owed) a third meaning of its
+// own; see TestEscEscOpensRewindOnlyWhenIdleAndEmpty for that case.
 func TestAFastDoubleEscWithNoDraftJustInterrupts(t *testing.T) {
-	a := openedRoom(t)
+	a := openedRoom(t).applyFrame(workingAgentFrame("s1", "sydney"))
 
 	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEsc, Alt: true})
 	if f := sentFrame(t, a, cmd); f.Kind != rpc.FrameInterrupt {
@@ -121,10 +124,13 @@ func TestAFastDoubleEscWithNoDraftJustInterrupts(t *testing.T) {
 	}
 }
 
-// Mashing ⎋ at a runaway agent has to keep stopping it. With nothing to clear
-// there is no second meaning to take, so every press is an interrupt.
+// Mashing ⎋ at a runaway agent has to keep stopping it - the invariant
+// rewind.go's own picker may never break. Put into StateWorking explicitly,
+// for TestAFastDoubleEscWithNoDraftJustInterrupts's reason: an idle agent
+// with nothing to clear now opens the rewind picker instead, and this test is
+// about the case that must never do that.
 func TestEscWithNoDraftInterruptsEveryTime(t *testing.T) {
-	a := openedRoom(t)
+	a := openedRoom(t).applyFrame(workingAgentFrame("s1", "sydney"))
 
 	for i := range 3 {
 		var cmd tea.Cmd
@@ -168,6 +174,48 @@ func TestAnArmedPaneSaysTheNextEscClears(t *testing.T) {
 	if !strings.Contains(after, escClearLabel) {
 		t.Errorf("an armed pane does not say the next ⎋ clears the draft:\n%s", after)
 	}
+}
+
+// escArmed carries two different second-press meanings - clear the draft, or
+// open the rewind picker - and the legend has to name whichever one is live.
+// An idle, empty conversation has nothing for a second ⎋ to clear, so the arm
+// there means "rewind" and must not say "clear draft": there is nothing to
+// clear, and the second press does not clear anything. See rewind.go and
+// escape.go's rewindable case.
+func TestAnArmedEscLabelMatchesWhatTheSecondPressActuallyDoes(t *testing.T) {
+	t.Run("idle and empty: the arm says rewind, not clear draft", func(t *testing.T) {
+		a := openedRoom(t)
+
+		a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+		sentFrame(t, a, cmd)
+
+		after := shown(a)
+		if strings.Contains(after, escGlyph+" "+escClearLabel) {
+			t.Errorf("an armed pane with an empty composer says the next ⎋ clears a draft, but there is nothing to clear:\n%s", after)
+		}
+		// The full "esc rewind" entry rather than a bare "rewind": this
+		// worktree's own directory is named rewind and the pane draws its cwd
+		// in the header, so a bare substring check would pass for the wrong
+		// reason.
+		if !strings.Contains(after, escGlyph+" "+escRewindLabel) {
+			t.Errorf("an armed pane with nothing to clear does not say the next ⎋ opens the rewind picker:\n%s", after)
+		}
+	})
+
+	t.Run("a draft in progress: the arm still says clear draft, not rewind", func(t *testing.T) {
+		a := openedRoom(t).withDraft("keep me")
+
+		a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+		sentFrame(t, a, cmd)
+
+		after := shown(a)
+		if !strings.Contains(after, escGlyph+" "+escClearLabel) {
+			t.Errorf("an armed pane with a draft does not say the next ⎋ clears it:\n%s", after)
+		}
+		if strings.Contains(after, escGlyph+" "+escRewindLabel) {
+			t.Errorf("an armed pane with a draft to clear also advertises rewind, which the next ⎋ will not do:\n%s", after)
+		}
+	})
 }
 
 // A click is an input too, and it is the one that does not go through App.key.

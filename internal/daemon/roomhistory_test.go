@@ -10,6 +10,7 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -68,6 +69,64 @@ func TestTheDaemonAnswersARoomHistoryFrameWithNoTranscript(t *testing.T) {
 	})
 	if len(f.Events) != 0 {
 		t.Errorf("a session with no transcript was answered with %d events", len(f.Events))
+	}
+}
+
+// A rewound branch is dropped from the room's own reply exactly as it is
+// dropped from the conversation pane's (TestHistoryDropsTheRewoundBranch,
+// history_test.go) - both kinds are answerHistory's one call to History(),
+// and this drives sendRoomHistory's dispatch (server.go's FrameRoomHistory
+// case) over the real socket rather than calling History() directly, so a
+// future change that gives the room a second, unfiltered read of its own
+// fails here even if History() itself stayed correct.
+//
+// Planted under two session ids to stand in for a broadcast two agents both
+// received: the daemon answers one session per FrameRoomHistory ask, so
+// every participant's own reply has to drop the rewound branch on its own.
+func TestTheRoomHistoryReplyDropsARewoundBroadcast(t *testing.T) {
+	fakeClaudeOnPath(t, "")
+	projects := t.TempDir()
+	t.Setenv("WAKE_PROJECTS", projects)
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "transcript", "rewind-tree.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+
+	dir := filepath.Join(projects, "-repo")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	first, second := uuid.NewString(), uuid.NewString()
+	for _, id := range []string{first, second} {
+		if err := os.WriteFile(filepath.Join(dir, id+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+			t.Fatalf("write transcript: %v", err)
+		}
+	}
+
+	for _, id := range []string{first, second} {
+		c.send(rpc.Frame{Kind: rpc.FrameRoomHistory, SessionID: id})
+		f := c.await("the room history reply for "+id, func(f rpc.Frame) bool {
+			return f.Kind == rpc.FrameRoomHistoryReply && f.SessionID == id
+		})
+		var text strings.Builder
+		for _, ev := range f.Events {
+			text.WriteString(ev.Text)
+			text.WriteByte('\n')
+		}
+		got := text.String()
+		if strings.Contains(got, "7,42") {
+			t.Errorf("session %s: the rewound answer '7,42' reached the room reply:\n%s", id, got)
+		}
+		if strings.Contains(got, "Now also remember the number 42") {
+			t.Errorf("session %s: the rewound question reached the room reply:\n%s", id, got)
+		}
+		if !strings.Contains(got, "List every number") {
+			t.Errorf("session %s: the post-rewind question is missing from the room reply:\n%s", id, got)
+		}
 	}
 }
 

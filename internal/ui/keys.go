@@ -99,6 +99,11 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if next, cmd, handled := a.pickerKey(m); handled {
 		return next, cmd, true
 	}
+	// pickerKey's own placement and reason: a rewind picker claims ↑↓ and ↵
+	// while it is up, which mean something else once it closes. See rewind.go.
+	if next, cmd, handled := a.rewindKey(m); handled {
+		return next, cmd, true
+	}
 	// Read before the disarm below takes it, because the disarm is what makes
 	// "every other key takes the arm back" true without a call site per key.
 	// See escape.go.

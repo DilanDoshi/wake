@@ -104,6 +104,9 @@ const (
 	// which is why Wake must always send one.
 	KindControlReceipt EventKind = "control_receipt"
 
+	// KindRewindReceipt is Claude's rewind_conversation receipt. See Event.Rewind.
+	KindRewindReceipt EventKind = "rewind_receipt"
+
 	// KindRequestWithdrawn is Claude retiring a control_request it sent -
 	// today, in every recording, the permission ask an interrupt landed on.
 	// RequestID names the dead request and is the whole payload: the frame
@@ -690,8 +693,10 @@ type Event struct {
 	Task *TaskUpdate `json:"task,omitempty"`
 
 	// Control is the payload of a KindControlReceipt, nil on every other
-	// kind - the same pointer-payload shape Tool uses.
+	// kind - the same pointer-payload shape Tool uses. Rewind is that shape
+	// again for KindRewindReceipt; see RewindResult.
 	Control *ControlResult `json:"control,omitempty"`
+	Rewind  *RewindResult  `json:"rewind,omitempty"`
 
 	// Raw is the whole stream-json line this event was decoded from, kept
 	// for in-process debugging. It is excluded from JSON on purpose, so it

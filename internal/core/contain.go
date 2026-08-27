@@ -122,6 +122,7 @@ func (e Event) contained() Event {
 	e.Subagent = containedSubagent(e.Subagent)
 	e.Task = containedTask(e.Task)
 	e.Control = containedControl(e.Control)
+	e.Rewind = containedRewind(e.Rewind)
 	e.Session = containedFacts(e.Session)
 	return e
 }
@@ -213,6 +214,22 @@ func containedControl(r *ControlResult) *ControlResult {
 	c := *r
 	c.Error = Contained(c.Error)
 	c.StillQueued, c.Cancelled = containedAll(c.StillQueued), containedAll(c.Cancelled)
+	return &c
+}
+
+// containedRewind is containedControl's own shape: like StillQueued and
+// Cancelled, the two uuids here are receipt payload rather than a key Wake
+// matches on - RequestID already does that job for this receipt - so they are
+// contained rather than excused.
+func containedRewind(r *RewindResult) *RewindResult {
+	if r == nil {
+		return nil
+	}
+	c := *r
+	c.TargetMessageUUID = Contained(c.TargetMessageUUID)
+	c.PrefillText = Contained(c.PrefillText)
+	c.PrecedingAssistantUUID = Contained(c.PrecedingAssistantUUID)
+	c.Error = Contained(c.Error)
 	return &c
 }
 

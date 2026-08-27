@@ -464,6 +464,13 @@ func (a App) drawn() []string {
 // nothing binds. Every pane is accented, not just the two that used to exist:
 // with a grid the unfocused ones are the majority.
 func (a App) withFocus(f string) App {
+	if a.rewind.Session != "" && a.rewind.Session != f {
+		// Hygiene rather than a second gate - rewindKey already refuses to
+		// act on a picker whose Session is not a.focus. Without this, tabbing
+		// back to the conversation it was opened for would silently
+		// resurrect it rather than asking fresh. See rewind.go.
+		a = a.closeRewind()
+	}
 	a.focus = f
 	a.room = a.room.WithComposer(a.room.Composer().Focused(f == ""))
 	for _, id := range a.grid.Panes() {

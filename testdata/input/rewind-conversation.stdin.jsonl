@@ -1,0 +1,1 @@
+{"type":"control_request","request_id":"rewind-4d35d1d3","request":{"subtype":"rewind_conversation","target_message_uuid":"209bcbe6-f911-4de6-8316-f8c4a7b2cfbb","last_seen_user_message_uuid":"83767235-9760-449c-a942-5c30a6681dd6","interrupt_if_running":false}}

@@ -19,6 +19,7 @@ package core
 
 import (
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -509,14 +510,19 @@ func TestSessionResetDoesNotNameItsSuccessor(t *testing.T) {
 // rather than hardcoded, so re-recording the corpus cannot turn it into a
 // no-op and adding a fixture does not redden it.
 func TestInterruptFrameTypesMapOneToOneOntoTheirKinds(t *testing.T) {
-	want := map[string]EventKind{
-		"command_lifecycle":      KindMessageState,
-		"control_response":       KindControlReceipt,
-		"control_cancel_request": KindRequestWithdrawn,
+	// control_response forks into two kinds, discriminated by payload rather
+	// than by wire type - see controlResponseEvent's Rewound branch. The
+	// other two wire types here still own exactly one kind each.
+	want := map[string][]EventKind{
+		"command_lifecycle":      {KindMessageState},
+		"control_response":       {KindControlReceipt, KindRewindReceipt},
+		"control_cancel_request": {KindRequestWithdrawn},
 	}
 	owned := map[EventKind]string{}
-	for wire, kind := range want {
-		owned[kind] = wire
+	for wire, ks := range want {
+		for _, k := range ks {
+			owned[k] = wire
+		}
 	}
 
 	seen := map[string]int{}
@@ -527,10 +533,10 @@ func TestInterruptFrameTypesMapOneToOneOntoTheirKinds(t *testing.T) {
 			if err != nil {
 				t.Fatalf("%s:%d failed to decode: %v", path, n+1, err)
 			}
-			if kind, ok := want[wire]; ok {
+			if ks, ok := want[wire]; ok {
 				seen[wire]++
-				if len(evs) != 1 || evs[0].Kind != kind {
-					t.Errorf("%s:%d is a %s frame but decoded to %+v, want one %s", path, n+1, wire, kinds(evs), kind)
+				if len(evs) != 1 || !slices.Contains(ks, evs[0].Kind) {
+					t.Errorf("%s:%d is a %s frame but decoded to %+v, want one of %v", path, n+1, wire, kinds(evs), ks)
 				}
 				continue
 			}
