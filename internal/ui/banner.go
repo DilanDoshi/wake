@@ -37,10 +37,10 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// Version is what the banner claims to be. A constant rather than a build
-// stamp: there is no release process to derive one from yet, and a version that
-// is a lie about a commit is worse than one that is honestly a name.
-const Version = "0.1.0"
+// Version is what the banner claims to be. A var, not a const, so a release
+// build stamps it from the git tag with -ldflags -X (see .goreleaser.yaml); the
+// "0.1.0" default is what a plain `go build`/`go install` reports off a tag.
+var Version = "0.1.0"
 
 const (
 	// bannerName is the product, and the one word in the banner set in Text.

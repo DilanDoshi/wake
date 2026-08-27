@@ -1,0 +1,51 @@
+# GoReleaser config — https://goreleaser.com
+# Releases are cut MANUALLY: `goreleaser release --clean` (GitHub Actions is not used).
+# Nothing publishes until that command is run by hand.
+version: 2
+
+project_name: wake
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: wake
+    main: ./cmd/wake
+    binary: wake
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - darwin
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/DilanDoshi/wake/internal/ui.Version={{ .Version }}
+
+archives:
+  - id: wake
+    formats:
+      - tar.gz
+    name_template: "{{ .ProjectName }}_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  use: github
+  sort: asc
+
+release:
+  github:
+    owner: DilanDoshi
+    name: wake
+  draft: false
+  prerelease: auto
+
+# TODO (fast follow): Homebrew tap via `homebrew_casks` -> DilanDoshi/homebrew-tap,
+# so `brew install DilanDoshi/tap/wake` works. Needs the tap repo to exist and a
+# note on macOS Gatekeeper for the unsigned binary. Kept out of v0.1.0 so the
+# first release ships clean GitHub binaries + `go install` without new deps.
