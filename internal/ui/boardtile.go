@@ -158,10 +158,13 @@ func (a App) tile(ag Agent, width int, cursored bool) string {
 // Without that, a tail wrapped to multiple lines was one `lines` element
 // holding several rows, and padRows padded the *element* count back up to
 // tileBodyRows on top of them - overshooting tileHeight() and growing the
-// whole tile row, since titledBox never constrains height.
+// whole tile row, since titledBox never constrains height. The state line and
+// the subagent-count line are truncated to `inner` for the same reason: each
+// is one `lines` element, and titledBox's Width(edge) word-wraps either one
+// into a second physical row the moment it is wider than the tile's edge.
 func (a App) tileBody(ag Agent, width int) string {
 	inner := max(width-boxFrameWidth, 1)
-	lines := []string{HintStyle.Render(labelOf(ag.State))}
+	lines := []string{HintStyle.Render(ansi.Truncate(labelOf(ag.State), inner, ellipsis))}
 
 	if ag.State == rpc.StateWorking {
 		if tail := a.tails[ag.ID].sized(inner); tail.text != "" {
@@ -178,7 +181,7 @@ func (a App) tileBody(ag Agent, width int) string {
 	if subs == 1 {
 		word = "subagent"
 	}
-	lines = append(lines, fmt.Sprintf("⤷ %d %s", subs, word))
+	lines = append(lines, ansi.Truncate(fmt.Sprintf("⤷ %d %s", subs, word), inner, ellipsis))
 	return strings.Join(padRows(lines, tileBodyRows), "\n")
 }
 

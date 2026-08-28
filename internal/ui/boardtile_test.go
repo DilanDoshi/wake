@@ -1,10 +1,12 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -168,6 +170,41 @@ func TestTileHeightIsExactlyTileHeightAtNarrowWidthBelowTheWrapFloor(t *testing.
 	out := a.tile(ag, cellW, false)
 	if got := strings.Count(out, "\n") + 1; got != tileHeight() {
 		t.Fatalf("the tile drew %d rows at a narrow width, want exactly tileHeight()=%d:\n%s", got, tileHeight(), out)
+	}
+}
+
+// The subagent-count line ("⤷ 1 subagent") is appended to the tile body
+// without truncation, unlike the tail and boardDetail lines beside it.
+// titledBox's Width(edge) word-wraps it into a second physical row the
+// moment inner drops below that line's own display width - a row padRows
+// (element-count based) cannot claw back, overshooting tileHeight(). The
+// existing narrow-width test (width 20, inner 18) never reaches that floor;
+// this one picks a width that does, at 13 (inner 11).
+func TestTileHeightIsExactlyTileHeightWhenTheSubagentLineWraps(t *testing.T) {
+	a := boardApp(t)
+	a.board.Tiled = true
+	a = a.withSize(13, 30).applyGeometry() // single column: cellW=13, inner=11
+	working, ok := a.fleet.ByName("alex")
+	if !ok || working.State != rpc.StateWorking {
+		t.Fatal("precondition: boardApp does not seat alex as the working agent")
+	}
+	cols := tileColumns(a.layout.Width)
+	cellW := tileCellWidth(a.layout.Width, cols)
+	inner := max(cellW-boxFrameWidth, 1)
+
+	ag, _ := a.fleet.Agent(working.ID)
+	subs := len(a.fleet.RunningTasks(ag.ID))
+	if subs != 1 {
+		t.Fatalf("precondition: alex must have exactly one running subagent, got %d", subs)
+	}
+	line := fmt.Sprintf("⤷ %d subagent", subs)
+	if ansi.StringWidth(line) <= inner {
+		t.Fatalf("precondition: %q (width %d) must be wider than inner=%d to reach the wrap point", line, ansi.StringWidth(line), inner)
+	}
+
+	out := a.tile(ag, cellW, false)
+	if got := strings.Count(out, "\n") + 1; got != tileHeight() {
+		t.Fatalf("the tile drew %d rows at inner=%d with the subagent line present, want exactly tileHeight()=%d:\n%s", got, inner, tileHeight(), out)
 	}
 }
 
