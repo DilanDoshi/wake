@@ -4603,8 +4603,15 @@ replacement. `internal/ui/send.go`'s `roomRoute` already resolves what `@john` m
 is the natural source of "what is the current mention target" if the filter is meant to track the
 composer live rather than be set as a separate query.
 
-*Blocks:* nothing today — no code exists for this yet. *Closes with:* a ruling on the two open
-questions above, then a plan.
+*Closed* by `feat/room-view-filter` (2026-08-27). The three open questions were ruled on (owner):
+**trigger** is a live query off the composer target — a resolved lone direct `@name` narrows, and it
+widens the moment the target changes or the draft clears (no key, no mode); **scope** is the focused
+agent's own lines + the manager's + every broadcast + the operator's messages addressed to that agent
+(open mode is a broadcast and does not narrow); **history** is included, and needs no reconstruction
+because room history holds only broadcasts and public prose, which the predicate reads by kind and
+session id. Design: `docs/superpowers/specs/2026-08-27-room-view-filter-design.md`; predicate in
+`internal/ui/roomfocus.go`, wired through `retarget`. A hidden line stays in `said` at `rows == 0`
+(the §5 render refinement over the spec's separate-backing sketch).
 
 ## 2026-08-26 — feature idea: a second board view, tiled rather than rows
 
