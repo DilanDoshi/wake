@@ -244,7 +244,16 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 	// said it to, chips included, while the agents get r.Text - already routed
 	// off the chip-stripped draft above, so it carries the images' words and not
 	// their markers.
-	a = a.withRoom(a.room.Append(core.Event{Kind: core.KindUserText, Text: text}, Agent{}))
+	//
+	// The echo is stamped with the one agent a lone direct @name addressed, so
+	// the view filter can tell it from a broadcast and from a turn aimed
+	// elsewhere. Open mode, @all, @manager and an unaddressed draft are all
+	// broadcasts (to == "") - open mode widens the message, not the view.
+	to := ""
+	if r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0 {
+		to = r.Targets[0]
+	}
+	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
 	a = a.echoToRouted(r.Targets, text)
 	return a, a.write(sendFailed, sendFrames(r.Targets, r.Text, images)...)
 }
@@ -300,9 +309,14 @@ func (a App) clearDraft() App {
 // Only the room's. A DM has one recipient and its header names them.
 func (a App) retarget() App {
 	draft := a.room.Composer().Value()
+	prev := a.room.focus
+	managerID := ""
+	if m, ok := a.fleet.manager(); ok {
+		managerID = m.ID
+	}
 	if strings.TrimSpace(draft) == "" {
-		a.room = a.room.WithComposer(a.room.Composer().WithTarget(roomRoute{}, 0))
-		return a
+		a.room = a.room.WithComposer(a.room.Composer().WithTarget(roomRoute{}, 0)).WithFocus("", "", managerID)
+		return a.clearedSelOnFocusChange(prev)
 	}
 	// Routed on the chip-stripped text so the preview matches sendRoom: a leading
 	// chip must not hide the `@name` behind it. The empty check stays on the raw
@@ -310,6 +324,28 @@ func (a App) retarget() App {
 	// addressee rather than reading as nothing typed.
 	r := a.route(a.room.Composer().WireText(draft))
 	a.room = a.room.WithComposer(a.room.Composer().WithTarget(r, len(r.Targets)))
+	// A lone direct @name narrows the view to that agent. Open mode is a
+	// broadcast (it widens the message, not the view), and @all/@manager/no
+	// mention resolve mentioned == false - none of them narrow.
+	focusID, focusName := "", ""
+	if r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0 {
+		if ag, ok := a.fleet.Agent(r.Targets[0]); ok {
+			focusID, focusName = ag.ID, ag.Name
+		}
+	}
+	a.room = a.room.WithFocus(focusID, focusName, managerID)
+	return a.clearedSelOnFocusChange(prev)
+}
+
+// clearedSelOnFocusChange drops the room's text selection when the focus id
+// changed, because WithFocus re-rendered and renumbered the lines it is anchored
+// to - a width change's own rule (CLAUDE.md). Scoped to the room's own selection
+// (pane == ""): a focus change re-renders only the room, so a selection held in
+// a DM pane is untouched, unlike a width change which re-wraps every pane.
+func (a App) clearedSelOnFocusChange(prev string) App {
+	if a.room.focus != prev && a.sel.pane == "" {
+		a.sel, a.selecting = selection{}, false
+	}
 	return a
 }
 
