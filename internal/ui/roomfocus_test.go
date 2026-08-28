@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/DilanDoshi/wake/internal/core"
 )
 
@@ -93,5 +95,38 @@ func TestRoomViewNarrowsToFocus(t *testing.T) {
 	back := r.View(80, 24)
 	if !strings.Contains(back, "still building") || !strings.Contains(back, "hurry") {
 		t.Fatalf("unfocus did not restore hidden lines")
+	}
+}
+
+func TestTypingAtNameNarrowsTheRoom(t *testing.T) {
+	base := newRoomApp(t).withSize(200, 40).withAgents("john", "iris")
+	john := idOfAgentNamed(t, base, "john")
+	iris := idOfAgentNamed(t, base, "iris")
+
+	if got := base.withDraft("@john ").room.focus; got != john {
+		t.Fatalf("@john did not focus john: room.focus = %q, want %q", got, john)
+	}
+	if got := base.withDraft("@iris ").room.focus; got != iris {
+		t.Fatalf("@iris did not focus iris: room.focus = %q, want %q", got, iris)
+	}
+	if got := base.withDraft("hello team").room.focus; got != "" {
+		t.Fatalf("an unaddressed draft focused %q, want none", got)
+	}
+	if got := base.withDraft("@all ship").room.focus; got != "" {
+		t.Fatalf("@all (a broadcast) focused %q, want none", got)
+	}
+
+	// Open mode widens the message, not the view: @john under open mode is a
+	// broadcast, so it must not narrow.
+	openApp := base
+	openApp.mention = MentionOpen
+	if got := openApp.withDraft("@john ").room.focus; got != "" {
+		t.Fatalf("@john in open mode focused %q, want none", got)
+	}
+
+	// Clearing the draft widens the room again.
+	cleared, _ := pressKey(base.withDraft("@john "), tea.KeyMsg{Type: tea.KeyEsc})
+	if got := cleared.room.focus; got != "" {
+		t.Fatalf("clearing the draft left focus = %q, want none", got)
 	}
 }
