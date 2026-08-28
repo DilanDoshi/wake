@@ -226,20 +226,24 @@ func (r Room) SetSize(w, h int) Room {
 }
 
 // WithFocus narrows the room to one agent's thread, or widens it when focus is
-// "". A change re-renders the filtered subset and jumps to bottom - a width
-// change's own semantics (SetSize sets following=true), and the natural read
-// when you enter a focus. managerID and focusName ride along; a change in the
-// focused agent or the manager re-filters, everything else is a no-op so idle
-// typing after the name resolves costs nothing. The caller clears any text
-// selection on a focus change (App.retarget), because a re-render renumbers the
-// lines a selection is anchored to - the reason a width change clears it too.
+// "". A focus-id change re-renders the filtered subset and jumps to bottom - a
+// width change's own semantics (SetSize sets following=true), and the natural
+// read when you enter a focus. managerID and focusName ride on the struct for
+// the predicate and the header to read, but a change in managerID *alone* does
+// not re-render: while unfocused it changes nothing on screen, and at a manager
+// start there are no past manager lines to reveal - the manager's own lines
+// arrive later through Append with the id already updated here. So a fleet
+// report that starts the manager never yanks a scrolled reader to the bottom.
+// The caller clears any text selection on a focus change (App.retarget), because
+// the re-render renumbers the lines a selection is anchored to - the reason a
+// width change clears it too.
 func (r Room) WithFocus(focus, focusName, managerID string) Room {
 	r.focusName = focusName
-	if r.focus == focus && r.managerID == managerID {
+	r.managerID = managerID
+	if r.focus == focus {
 		return r
 	}
 	r.focus = focus
-	r.managerID = managerID
 	lines := r.said.slice(r.said.first(), r.said.len())
 	blocks := renderRoom(r, lines)
 	first := r.said.first()

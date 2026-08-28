@@ -337,11 +337,13 @@ func (a App) retarget() App {
 	return a.clearedSelOnFocusChange(prev)
 }
 
-// clearedSelOnFocusChange drops any room text selection when the focus id
-// changed, because WithFocus re-rendered and renumbered the lines the selection
-// is anchored to - a width change's own rule (CLAUDE.md).
+// clearedSelOnFocusChange drops the room's text selection when the focus id
+// changed, because WithFocus re-rendered and renumbered the lines it is anchored
+// to - a width change's own rule (CLAUDE.md). Scoped to the room's own selection
+// (pane == ""): a focus change re-renders only the room, so a selection held in
+// a DM pane is untouched, unlike a width change which re-wraps every pane.
 func (a App) clearedSelOnFocusChange(prev string) App {
-	if a.room.focus != prev {
+	if a.room.focus != prev && a.sel.pane == "" {
 		a.sel, a.selecting = selection{}, false
 	}
 	return a
