@@ -4634,3 +4634,49 @@ elsewhere in this tree, not a new modal.
 *Blocks:* nothing today — the row-only board (`feat/board`) is what shipped. *Closes with:* an
 owner ruling on whether a tile counts as "panes" under §2c, and if so, whether a board-scoped
 exception is worth having ready before a fleet that has actually felt too tall as a list.
+
+## 2026-08-27 — feature idea, owner's ask: several group chats inside one fleet, not one room per fleet
+
+**The ask:** more than one group chat within a single Wake instance — separate room surfaces the
+operator can switch between, rather than the single room a fleet has today.
+
+**Today there is exactly one room per fleet, and that is a non-negotiable, not an omission.** The
+room is `Cols[0]` and cannot be closed — "the group chat is the product; the panes are substrate"
+(`internal/ui/grid.go`, and the non-negotiables table in `CLAUDE.md`). Several group chats exist
+only as several **fleets**: each fleet is its own directory under `~/.wake/fleets/<name>` with its
+own socket and its own single room, reached with `wake --fleet <name>` (`wake fleets` lists them).
+That is multiple *instances*, not multiple rooms in one instance. **`internal/ui/groups.go` is not a
+second chat** — its own header calls it "the v1 stand-in for spec §11's configured groups," and it
+is only the left **sidebar** (one row per workspace/directory, derived and unnamed); it groups the
+roster, it does not draw a room.
+
+**The spec wanted this, and the vehicle for it was killed.** §11 (`Group = project, agents = repos`)
+and §12 (the manager "holds a permanent seat in **every group**") both read for multiple groups per
+instance, to be delivered by **profiles**. Profiles were **explicitly ruled out by the owner on
+2026-08-20** ("the flag-bundle reading solves a problem this workflow does not have"; see the budget
+entry above), so the spec's multi-group-per-instance vision is cancelled in its original form rather
+than pending — which is exactly why this wants a fresh ruling before anyone builds it.
+
+**Two things already deferred are adjacent, and neither is a second room:**
+- **Teams** (2026-08-16, above): named tags + `@team` fan-out + sidebar grouping. Even its cheap
+  first cut groups the roster and routes — **the room stays one**.
+- **`@john` as a room view filter** (2026-08-25, above): narrows what the *one* room *shows* to a
+  thread. A filtered view of the single room, not a second room surface.
+
+If the ask is satisfied by "a filtered view per team over the one room," it is those two entries
+composed (teams supplies the membership; the `@john` filter supplies the narrowing) and needs no new
+surface. A genuine *second room* — a second `Cols[0]`-like uncloseable chat the grid switches
+between — is **new scope that brushes the bounded-grid rule directly** (spec §8's "columns, each
+optionally split once. Not a pane tree", and the §2c phase-4 scope call), the same wall the tiled
+board runs into: it should not be built without an owner ruling on whether a second room counts as
+the multiplexer the non-negotiables refuse.
+
+**Where it would hook in, if ruled in:** the filtered-view reading lands in
+`internal/ui/chat.go`'s `Room.Before` and `internal/ui/roomhistory.go` (a second predicate composed
+with the room's existing filter, the same place the `@john` entry names). The genuine-second-room
+reading is a `grid.go` change to allow more than one uncloseable column, which is the part §2c has to
+approve first.
+
+*Blocks:* nothing today — no code exists for this. *Closes with:* an owner ruling on which of the two
+readings is meant (a filtered view over the one room, which reduces to teams + the `@john` filter; or
+a second room surface, which needs a §2c scope decision), then a plan.
