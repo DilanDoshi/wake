@@ -54,6 +54,7 @@ var frameKinds = map[string]string{
 	"FrameStatusPush":         FrameStatusPush,
 	"FrameRename":             FrameRename,
 	"FrameLabel":              FrameLabel,
+	"FrameColor":              FrameColor,
 	"FrameMode":               FrameMode,
 	"FrameRewind":             FrameRewind,
 }

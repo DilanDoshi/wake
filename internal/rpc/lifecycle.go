@@ -262,6 +262,13 @@ type SessionStatus struct {
 	// renders as a bare name, which is what it was before this field existed.
 	Label string `json:"label,omitempty"`
 
+	// Color is this session's identity hue - the name from rpc.ColorNames its
+	// name-tag, status bar and roster row are drawn in. Client-chosen (only the
+	// operator knows how they want the fleet grouped by eye), so unlike Name it is
+	// a display string a client sets rather than the daemon derives. Empty means
+	// no colour, which is every session before /color touches it.
+	Color string `json:"color,omitempty"`
+
 	// Dir is the absolute directory this session runs in, and it is the
 	// workspace identity the room's left sidebar groups by.
 	//

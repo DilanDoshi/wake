@@ -49,6 +49,40 @@ var (
 	LastRead = lipgloss.AdaptiveColor{Light: "#8700ff", Dark: "#af87ff"} // effortUltra
 )
 
+// identityColors are the hues /color paints an agent in, and they are **Wake's
+// own decision rather than Claude's** - LastRead's footing, and for a related
+// reason. Claude's palette carries a `rainbow_*` family, but those are pastel
+// mid-tones tuned to sit *behind* text; an identity colour is the foreground of
+// a name read at a glance across thirty of them, so these are deliberately
+// bolder and more saturated than the rainbow set. Each is a light/dark pair
+// picked to stay legible on both grounds - yellow is a dark gold on the light
+// theme, because a bright yellow name is unreadable on white.
+//
+// They are not in claude-palette.json and palette_test.go does not cover them,
+// which is the whole point: a value matched against Claude is held to that file,
+// and a value Wake chose is not. The keys are rpc.ColorNames, held there by
+// TestIdentityColorsAreABijectionWithTheFence.
+var identityColors = map[string]lipgloss.AdaptiveColor{
+	"blue":   {Light: "#1f6feb", Dark: "#58a6ff"},
+	"green":  {Light: "#1a7f37", Dark: "#3fb950"},
+	"indigo": {Light: "#4f46e5", Dark: "#818cf8"},
+	"orange": {Light: "#d4572a", Dark: "#ff8c42"},
+	"red":    {Light: "#cf222e", Dark: "#ff7b72"},
+	"violet": {Light: "#a21caf", Dark: "#e879f9"},
+	"yellow": {Light: "#9a6700", Dark: "#f2cc60"},
+}
+
+// identityStyle is the foreground style for an agent's colour, and false when it
+// has none or names a hue this build does not have. The caller draws its own
+// default on false, so an unknown colour never draws a wrong one.
+func identityStyle(name string) (lipgloss.Style, bool) {
+	c, ok := identityColors[name]
+	if !ok {
+		return lipgloss.Style{}, false
+	}
+	return lipgloss.NewStyle().Foreground(c), true
+}
+
 var (
 	// BoxStyle frames a pane: rounded border, one column of side padding.
 	BoxStyle = lipgloss.NewStyle().

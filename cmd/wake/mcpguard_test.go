@@ -204,6 +204,11 @@ var managerVerbs = map[string]verdict{
 			{kind: tuiCommand, name: "task", why: "assigning a label is a TUI command, so the text in that column is the operator's or is derived from .git/HEAD"},
 		}},
 
+	rpc.FrameColor: {why: "the third display verb, refused with rename and label for the reason that binds all three: an agent's colour is the operator's own categorisation of the fleet by eye - which agents they have decided to see as one group - and nothing in the fleet can derive it. A manager that set one would be the model overwriting a human's visual grouping across the three surfaces it paints at once: the room name-tag, the status bar and the roster row. It is visible, unlike a mode, so it fails no looking-test; it is refused for authorship, like label - a colour the manager chose is the fleet painting the chrome the operator reads as their own. The value is bounded to rpc.ColorNames, so this is a whose-decision refusal rather than an injection one",
+		rests: []referent{
+			{kind: tuiCommand, name: "color", why: "setting a colour is a TUI command, a keystroke from a human who can see the whole fleet - so the hue is the operator's own choice. If a shell verb or a tool ever offers it, `only a human colours` has to be re-argued"},
+		}},
+
 	rpc.FrameImport: {why: "a fork whose source is **outside the fleet**, and that is a different refusal from FrameFork's rather than the same one again. Every other verb on this surface acts on a session list_agents already offered, so the manager's world and the manager's reach are the same set. An import reaches ~/.claude/projects - on the recording machine 83 project directories and 428 transcripts, every conversation this user has had with claude on any repository - and there is nothing on this surface to address one with, so a tool would need a second listing whose reader is a model and whose rows are other people's work. It also carries FrameSpawn's cost with none of the cap: a name, a process and somebody's money per call. And what it adopts is a conversation whose contents nobody re-read, into a session the manager can then message",
 		rests: []referent{
 			{kind: sourceDeclares, name: liveCapDecl, why: "the cap bounds how many sessions an import can create; without it this refusal's cost clause is load-bearing again"},

@@ -69,6 +69,13 @@ type Agent struct {
 	Name  string
 	Label string
 
+	// Color is this agent's identity hue - one of rpc.ColorNames, or empty for
+	// none - chosen by /color and reported by the daemon. It heads the agent's
+	// turns in the room, tints its status bar and its roster row. A string rather
+	// than a resolved style so the field stays comparable for Observe; theme.go's
+	// identityStyle maps it to a hue at draw time.
+	Color string
+
 	// Cwd is where this session is running now, which is not where it was
 	// started once an agent has used EnterWorktree. Every surface here wants
 	// the first; the startup directory is the daemon's business - park, unpark
@@ -269,7 +276,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 			a.ID = s.ID
 			f.order = append(f.order, s.ID)
 		}
-		a.Name, a.Label, a.Cwd, a.ParentID = s.Name, s.Label, runningIn(s), s.ParentID
+		a.Name, a.Label, a.Color, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, runningIn(s), s.ParentID
 		a.Effort, a.Budget = s.Effort, s.Budget
 		// The report is the only route to these for a client that attached after
 		// the init event carried them - see rpc.SessionStatus.Commands.
@@ -306,7 +313,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 	f.parked = nil
 	for _, s := range st.Parked {
 		f.parked = append(f.parked, Agent{
-			ID: s.ID, Name: s.Name, Label: s.Label, Cwd: runningIn(s),
+			ID: s.ID, Name: s.Name, Label: s.Label, Color: s.Color, Cwd: runningIn(s),
 			Effort: s.Effort, State: s.State,
 		})
 	}

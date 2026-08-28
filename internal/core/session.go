@@ -144,6 +144,14 @@ type Config struct {
 	MaxBudgetUSD  string
 	FallbackModel string
 
+	// Color is this session's identity hue, carried so a woken session comes back
+	// the colour it was set to. Display only and **never an argv word** - like
+	// Launcher it is a field the daemon reads and buildArgs does not, because the
+	// colour is Wake's own rather than something claude is told. See
+	// daemon/color.go and the argv-path guard in argvguard_test.go, which permits
+	// a Config field buildArgs never reads.
+	Color string
+
 	// AddDir are directories outside Dir that this session's tools may reach,
 	// each fenced by rpc.ValidAddDir before it gets here because they reach the
 	// argv as written. Debug is a category filter for this session's logging

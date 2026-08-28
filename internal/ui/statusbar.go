@@ -49,6 +49,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/gitref"
@@ -141,7 +142,18 @@ func statusBar(a Agent, mode string, width int) string {
 			line = oneRow(strings.Join(kept, statusSep))
 		}
 	}
-	return HintStyle.Render(ansi.Truncate(line, width, ellipsis))
+	return barStyle(a).Render(ansi.Truncate(line, width, ellipsis))
+}
+
+// barStyle is the colour a conversation's status bar is drawn in: the agent's
+// identity hue if /color gave it one, the muted grey every bar has otherwise.
+// The bar recedes by default (HintStyle), and a colour is the operator asking
+// for this one to be found at a glance among thirty.
+func barStyle(a Agent) lipgloss.Style {
+	if style, ok := identityStyle(a.Color); ok {
+		return style
+	}
+	return HintStyle
 }
 
 // permissionSegment is the mode this pane's session is in, spelled the way the

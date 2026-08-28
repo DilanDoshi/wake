@@ -115,6 +115,14 @@ type parkedRecord struct {
 	// build's own spawn path admitted.
 	MaxBudgetUSD  string `json:"max_budget_usd,omitempty"`
 	FallbackModel string `json:"fallback_model,omitempty"`
+
+	// Color is the identity hue this session was set to, here for the display
+	// halves' reason rather than the configuration ones: a colour an operator
+	// chose is operator intent, and a wake that dropped it would bring the session
+	// back grey with nothing saying why. Unlike a rename it may be rewritten here,
+	// because it is only ever written *by the park* - a running session's /color
+	// is refused once it is parked (see color.go), so the record is the one writer.
+	Color string `json:"color,omitempty"`
 }
 
 // parkBook is the on-disk record, rewritten whole through a temp file and a
@@ -399,6 +407,7 @@ func parkedStatus(rec parkedRecord) rpc.SessionStatus {
 		ID:     rec.ID,
 		Name:   rec.Name,
 		Label:  rec.Label,
+		Color:  rec.Color,
 		Dir:    rec.Dir,
 		Effort: rec.Effort,
 		State:  rpc.StateParked,

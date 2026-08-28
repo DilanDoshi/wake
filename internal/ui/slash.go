@@ -229,6 +229,14 @@ const (
 // that reached claude but moved nothing Wake showed was the reported confusion.
 const renameCommand = "rename"
 
+// colorCommand sets an agent's identity hue. **The word is claude's own theme
+// command** (advertised on 71 recorded `init` frames), so this file's corpus
+// rule refuses it the way it refused `rename` and `import`; it is claimed anyway
+// on the owner's 2026-08-27 override, recorded with the full argument in
+// slashguard_test.go's ownerClaimedCommands and docs/notes/deferred.md.
+const colorCommand = "color"
+const colorVerb = SlashPrefix + colorCommand // for resumeVerb's reason
+
 // managerCommand is the switch for the one session that has tools over the
 // fleet: on when it is off, off when it is on.
 //
@@ -304,6 +312,15 @@ const (
 	noTaskTarget = "which one? " + taskUsage
 )
 
+// colorUsage names the colours because the set is closed and small - a guessed
+// hue reads the seven that exist rather than round-tripping a refusal.
+// noColorTarget is noNameTarget's: the room does not guess a target.
+var (
+	colorUsage = colorVerb + " <colour>, or " + colorVerb + " " + agentPrefix + "<who> <colour>" +
+		"; colours: " + strings.Join(rpc.ColorNames, " ") + " (or " + rpc.ColorNone + " to clear)"
+	noColorTarget = "which one? " + colorUsage
+)
+
 // commands is every slash command Wake owns. **Closed on purpose**: anything
 // not here is a message, which is what keeps claude's own commands working.
 //
@@ -314,6 +331,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	newCommand:         App.newAgent,
 	nameCommand:        App.renameAgent,
 	taskCommand:        App.labelAgent,
+	colorCommand:       App.colorAgent,
 	adoptCommand:       App.adopt,
 	mcpCommand:         App.mcp,
 	managerCommand:     App.manager,
@@ -455,7 +473,7 @@ func (a App) configure(targets []string, text string) (App, tea.Cmd, bool) {
 //
 // Named for its half of the overload rather than `commandCount`, which this
 // package's tests already use for how many goroutines one tea.Cmd costs.
-const wakeCommandCount = 9
+const wakeCommandCount = 10
 
 // slash routes one draft, reporting whether Wake took it.
 //

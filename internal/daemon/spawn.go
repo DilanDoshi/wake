@@ -291,6 +291,7 @@ func (s *server) launch(c *client, cfg core.Config, parent string, replaces *age
 	a.model = cfg.Model
 	a.budget = cfg.MaxBudgetUSD
 	a.fallback = cfg.FallbackModel
+	a.color = cfg.Color // display only, empty on a fresh spawn; set for the wake paths
 
 	// Read before admit takes it, so a launch that fails can put it back. See
 	// withdraw.

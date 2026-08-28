@@ -220,6 +220,7 @@ type barKey struct {
 	model  string
 	mode   string
 	state  string
+	color  string
 	used   int
 	window int
 }
@@ -235,7 +236,7 @@ func (d DM) withBar(width int) DM {
 	mode := d.composer.Mode()
 	key := barKey{
 		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, mode: mode, state: d.Agent.State,
-		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
+		color: d.Agent.Color, used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
 	}
 	if key == d.barFrom {
 		return d

@@ -160,6 +160,12 @@ func TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising(t *testing.T) 
 		if _, exempt := redirectOnlyCommands[word]; exempt {
 			continue
 		}
+		if _, claimed := ownerClaimedCommands[word]; claimed {
+			// A word claude advertises that Wake claims anyway, on the owner's
+			// explicit instruction rather than on this file's usual evidence. The
+			// exception is recorded and checked below, not a hole in the loop.
+			continue
+		}
 		if where, has := seen[word]; has {
 			t.Errorf("Wake owns %q and %s records claude advertising it. Taking it here replaces a "+
 				"working command with a refusal, and the operator's only symptom is that the command "+
@@ -1017,6 +1023,44 @@ func TestEveryRedirectOnlyCommandNamesARecordingThatShowsTheRedirect(t *testing.
 		if !strings.Contains(string(raw), "in the terminal") {
 			t.Errorf("%s does not show claude redirecting to a terminal, so it does not earn %q the "+
 				"exemption it is named for. The recording is the whole weight of this rule", fixture, word)
+		}
+	}
+}
+
+// ownerClaimedCommands are words claude advertises that Wake claims anyway, on
+// the owner's explicit instruction rather than on this file's usual evidence.
+//
+// It is the weakest of the three exemptions and the only one not backed by a
+// recording, so it is the one a reviewer should be most suspicious of - which is
+// why it is a named map with a dated reason rather than a word slipped past the
+// loop. `color` is claude's own theme command (advertised on 71 of the recorded
+// inits), and the disciplined path to claim it is redirectOnlyCommands, backed
+// by a recording of claude's headless /color showing an inert or redirect
+// answer. No such recording exists in this session, and the owner ruled on
+// 2026-08-27 that the shadowing is acceptable: Wake renders in its own palette,
+// so an agent's per-session claude theme is irrelevant inside Wake. If a
+// recording later shows the headless form is a redirect, this entry moves to
+// redirectOnlyCommands and the exception is retired. See docs/notes/deferred.md.
+var ownerClaimedCommands = map[string]string{
+	colorCommand: "owner ruling 2026-08-27; no headless recording yet",
+}
+
+// The owner exemption is not a hole: every word in it is one Wake actually owns
+// and one claude actually advertises, or the exemption is covering nothing.
+func TestEveryOwnerClaimedCommandIsOwnedAndAdvertised(t *testing.T) {
+	seen := recordedClaudeCommands(t)
+	for word, reason := range ownerClaimedCommands {
+		if _, mine := commands[word]; !mine {
+			t.Errorf("%q is owner-claimed and Wake does not own it: an exemption for a word nobody took "+
+				"is a rule with a hole in it", word)
+		}
+		if _, has := seen[word]; !has {
+			t.Errorf("%q is owner-claimed and the corpus does not show claude advertising it, so it needs "+
+				"no exemption: a word claude does not have belongs in %s with the rest", word, commandsVar)
+		}
+		if reason == "" {
+			t.Errorf("%q is owner-claimed with no reason recorded, which is exemption by assertion - the "+
+				"whole point of this map is that the exception is written down", word)
 		}
 	}
 }

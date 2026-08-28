@@ -172,6 +172,18 @@ const (
 	FrameRename = "rename" // client → daemon: call this session something else
 	FrameLabel  = "label"  // client → daemon: say what this session is working on
 
+	// FrameColor sets a session's identity colour: the hue its name-tag, status
+	// bar and roster row are drawn in, so thirty agents' turns in the room are
+	// told apart by more than name text. Display only, and it never reaches an
+	// argv - the colour is Wake's, not something claude is told about.
+	//
+	// It carries Text (a colour name, or rpc.ColorNone to clear) and SessionID,
+	// and is refused for a parked or ended session for FrameRename's reason: a
+	// parked session's display halves live in the park book, and the colour rides
+	// with them rather than being rewritten there out of band. The value is fenced
+	// by NormalizeColor on both sides.
+	FrameColor = "color" // client → daemon: set a session's identity colour
+
 	// FrameMode changes the permission mode of a session already running - the
 	// mechanism behind ⇧⇥, and the thing that was missing while the composer
 	// showed a mode it could not set.
