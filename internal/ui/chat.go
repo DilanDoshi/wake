@@ -226,7 +226,14 @@ func (r Room) SetSize(w, h int) Room {
 // that yanks them to the newest line every time anybody speaks is worse than
 // one with no scrollback at all. Sampling that before the content changes is
 // what makes it true.
-func (r Room) Append(ev core.Event, by Agent) Room {
+func (r Room) Append(ev core.Event, by Agent) Room { return r.appendLine(ev, by, "") }
+
+// appendUser draws the operator's own room echo, stamped with the agent it was
+// addressed to (or "" for a broadcast). Only this path carries a recipient - an
+// agent's own lines are told apart by session id, not by "to".
+func (r Room) appendUser(ev core.Event, to string) Room { return r.appendLine(ev, Agent{}, to) }
+
+func (r Room) appendLine(ev core.Event, by Agent, to string) Room {
 	b := renderRoomBlock(ev, by, r.blockWidth())
 	if b.text == "" {
 		return r
@@ -237,7 +244,7 @@ func (r Room) Append(ev core.Event, by Agent) Room {
 	r.nextLineID++
 	var rows int
 	r.tr, rows = r.tr.addMeasured(b)
-	r.said = r.said.append(roomLine{ev: ev, by: by, id: r.nextLineID, rows: rows})
+	r.said = r.said.append(roomLine{ev: ev, by: by, to: to, id: r.nextLineID, rows: rows})
 	if drop := r.said.count() - roomRetentionEvents; drop > 0 {
 		r = r.reclaimOldest(drop)
 	}

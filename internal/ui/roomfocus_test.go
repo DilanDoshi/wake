@@ -39,3 +39,15 @@ func TestFocusAdmits(t *testing.T) {
 		})
 	}
 }
+
+func TestRoomEchoCarriesAddressee(t *testing.T) {
+	r := NewRoom().SetSize(80, 24)
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@iris rebase"}, "iris-id")
+	lines := r.said.slice(r.said.first(), r.said.len())
+	if len(lines) == 0 {
+		t.Fatal("expected one room line")
+	}
+	if got := lines[len(lines)-1].to; got != "iris-id" {
+		t.Fatalf("room echo to = %q, want %q", got, "iris-id")
+	}
+}

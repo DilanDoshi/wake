@@ -244,7 +244,16 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 	// said it to, chips included, while the agents get r.Text - already routed
 	// off the chip-stripped draft above, so it carries the images' words and not
 	// their markers.
-	a = a.withRoom(a.room.Append(core.Event{Kind: core.KindUserText, Text: text}, Agent{}))
+	//
+	// The echo is stamped with the one agent a lone direct @name addressed, so
+	// the view filter can tell it from a broadcast and from a turn aimed
+	// elsewhere. Open mode, @all, @manager and an unaddressed draft are all
+	// broadcasts (to == "") - open mode widens the message, not the view.
+	to := ""
+	if r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0 {
+		to = r.Targets[0]
+	}
+	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
 	a = a.echoToRouted(r.Targets, text)
 	return a, a.write(sendFailed, sendFrames(r.Targets, r.Text, images)...)
 }
