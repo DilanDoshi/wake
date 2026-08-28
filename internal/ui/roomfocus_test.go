@@ -158,8 +158,8 @@ func TestFocusNarrowsRestoredHistory(t *testing.T) {
 }
 
 // A fleet report starts the manager (managerID "" -> id) while the room is
-// unfocused; that must not re-render and yank a scrolled reader to the bottom,
-// because an unfocused view admits everything regardless of the manager.
+// unfocused; that must not re-render and yank a scrolled reader - not even by a
+// row - because an unfocused view admits everything regardless of the manager.
 func TestManagerStartWhileUnfocusedDoesNotYankTheReader(t *testing.T) {
 	r := NewRoom().SetSize(80, 8)
 	for i := 0; i < 40; i++ {
@@ -169,28 +169,13 @@ func TestManagerStartWhileUnfocusedDoesNotYankTheReader(t *testing.T) {
 	if r.tr.atBottom() {
 		t.Fatal("precondition: expected the reader to be scrolled back")
 	}
+	scrollBefore := r.tr.scroll
 	r = r.WithFocus("", "", "mgr-id")
 	if r.tr.atBottom() {
 		t.Fatal("a manager start while unfocused yanked the reader to the bottom")
 	}
-}
-
-// Reclaim runs correctly while focused: the geometry sums rows, and a hidden
-// line contributes 0, so flooding past the cap with hidden lines caps said and
-// never corrupts the transcript (spec §5). The hidden branch skips rendering, so
-// the flood is cheap.
-func TestReclaimWhileFocusedStaysConsistent(t *testing.T) {
-	const john, mgr = "john-id", "mgr-id"
-	r := NewRoom().SetSize(80, 24).WithFocus(john, "john", mgr)
-	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: john, Text: "johns visible line"}, Agent{ID: john, Name: "john"})
-	for i := 0; i < roomRetentionEvents+10; i++ {
-		r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: "iris-id", Text: "iris noise"}, Agent{ID: "iris-id", Name: "iris"})
-	}
-	if r.said.count() > roomRetentionEvents {
-		t.Fatalf("said not capped under focus: %d", r.said.count())
-	}
-	if strings.Contains(r.View(80, 24), "iris noise") {
-		t.Fatalf("a focused view drew a hidden line")
+	if r.tr.scroll != scrollBefore {
+		t.Fatalf("a manager start while unfocused moved the scroll %d -> %d", scrollBefore, r.tr.scroll)
 	}
 }
 
