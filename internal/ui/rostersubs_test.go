@@ -426,18 +426,6 @@ func TestARowIsOneRowWhateverTheDispatchIsCalled(t *testing.T) {
 	}
 }
 
-// The pane's own list has the same exposure, from the same field, and a row too
-// tall there is the alt-screen scroll CLAUDE.md names: the rows are chrome, and
-// taskRowCount budgets them as one line each.
-func TestThePaneRowIsAlsoOneRowWhateverTheDispatchIsCalled(t *testing.T) {
-	d := listing(started("c1", "toolu_3", "count\nlines", "gen\neral", core.TaskAgent))
-
-	out := d.taskView(90)
-	if got, want := len(strings.Split(out, "\n")), d.taskRowCount(); got != want {
-		t.Errorf("taskView drew %d rows and taskRowCount budgeted %d - the pane is taller than it was given", got, want)
-	}
-}
-
 // A background shell is not a subagent and does not get a row.
 //
 // Two reasons, and the second is the one that matters. It is not what this
@@ -520,26 +508,5 @@ func TestADispatchFinishingUnderTheCursorLeavesItOnItsAgent(t *testing.T) {
 	}
 	if got := stale.Move(agents, gone, 1); got.Selected != "s0" {
 		t.Errorf("one step down landed on %+v, want the row after alex's - not a reset to the top", got)
-	}
-}
-
-// A conversation that has dispatched something must not re-size on every draw.
-//
-// DM.chrome memoizes what chromeHeight returned when the transcript was last
-// sized, and View re-sizes when the two disagree - which is how a heartbeat row
-// appearing mid-turn is caught. chromeHeight counts the dispatch rows too, so a
-// task list the *stored* DM does not carry leaves that memo permanently wrong:
-// View re-sizes, and re-wraps the whole transcript, on every frame for the life
-// of any conversation that has ever dispatched anything. A per-agent cost on
-// the draw path is what the first non-negotiable is about.
-func TestAConversationWithDispatchesDoesNotReSizeOnEveryDraw(t *testing.T) {
-	a := dispatching(t)
-
-	d := a.dmFor("s1")
-	if d.taskRowCount() == 0 {
-		t.Fatal("no dispatch rows, so this test is measuring nothing")
-	}
-	if got, want := d.chromeHeight(), d.chrome; got != want {
-		t.Errorf("chromeHeight = %d but the sized chrome is %d, so View re-sizes on every frame", got, want)
 	}
 }

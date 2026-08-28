@@ -127,26 +127,24 @@ func (f Fleet) foldChecklist(sessionID string, ev core.Event) (Fleet, core.Event
 	return f, ev
 }
 
-// foldChecklist is the DM's own accumulation, so a checklist survives a restore
+// foldChecklist is the DM's own accumulation, so the board survives a restore
 // off disk and continues across the attach boundary. It folds one op into the
 // conversation's running list and returns the event with its whole-list snapshot
 // stripped, so the event stored in d.events (and the *ToolCall d.calls shares
 // with it) carries only the compact op.
 //
-// The snapshot the renderer draws is rebuilt from those ops at render time -
-// off d.checklist for the newest event live (withSnapshot in dm.go's Append) and
-// off a running list on a re-wrap or a restore (renderAll) - never stored on the
-// event. Storing a fresh copy of the whole list on every op was O(ops x items):
-// a run of 400 updates over 40 items pinned 16,820 Todos (BUG-26). The Fleet
-// fold set Todos upstream for the working line and it has already been read, so
-// clearing it here loses nothing.
+// The board is drawn from d.checklist off the composer (checklistpin.go), never
+// from the stored event, which is why the snapshot is cleared here. Storing a
+// fresh copy of the whole list on every op was O(ops x items): a run of 400
+// updates over 40 items pinned 16,820 Todos (BUG-26). The Fleet fold set Todos
+// upstream for the working line and it has already been read, so clearing it
+// here loses nothing.
 func (d DM) foldChecklist(ev core.Event) (DM, core.Event) {
 	// A subagent's checklist op is its own board, not this conversation's: it is
 	// routed to d.subs rather than d.events (see forwardedTo), so folding it into
-	// d.checklist would commingle it into the parent's list and make the live
-	// render diverge from renderAll's rebuild, which walks only d.events. Left
-	// untouched, it keeps the snapshot the Fleet fold gave it and draws in its
-	// dispatch's own transcript.
+	// d.checklist would commingle it into the parent's list. Left untouched, it
+	// keeps the snapshot the Fleet fold gave it and draws in its dispatch's own
+	// transcript.
 	if ev.Tool == nil || ev.Tool.Checklist == nil || ev.Subagent != nil {
 		return d, ev
 	}
@@ -159,19 +157,24 @@ func (d DM) foldChecklist(ev core.Event) (DM, core.Event) {
 	return d, ev
 }
 
-// withSnapshot attaches c's current list to a TaskCreate/TaskUpdate event for
-// rendering, and passes every other event through unchanged - a TodoWrite, which
-// carries its own whole list, included. c must already hold this event's op:
-// d.checklist does after foldChecklist, and renderAll folds it in as it walks.
+// isChecklistOp reports whether an event is a TaskCreate/TaskUpdate op or its
+// result. Both are folded into the board and drawn nowhere in the transcript -
+// the use carries the op, and the result carries only an id, so it is recognised
+// through the use this pane already recorded in d.calls.
 //
-// The list is a fresh copy the caller draws and drops; it is never stored, which
-// is the whole of the fix - N ops no longer pin N copies of the list.
-func (c checklist) withSnapshot(ev core.Event) core.Event {
-	if ev.Tool == nil || ev.Tool.Checklist == nil {
-		return ev
+// A subagent's op is not one of these: it is the subagent's own board, routed to
+// d.subs, and forwardedTo keeps it out of this conversation's fold entirely.
+func (d DM) isChecklistOp(ev core.Event) bool {
+	if ev.Subagent != nil || ev.Tool == nil {
+		return false
 	}
-	tool := *ev.Tool
-	tool.Todos = c.snapshot()
-	ev.Tool = &tool
-	return ev
+	if ev.Tool.Checklist != nil {
+		return true
+	}
+	if ev.Kind == core.KindToolResult {
+		if use, ok := d.calls[ev.Tool.ID]; ok {
+			return use.Checklist != nil
+		}
+	}
+	return false
 }

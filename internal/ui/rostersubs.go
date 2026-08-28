@@ -65,8 +65,8 @@ func subagentRow(t Task, width int) string {
 // task_updated and on task_notification, and is unverified for any type other
 // than general-purpose - core.TaskUpdate.Type says so and says a consumer
 // tolerates "". So the description stands in, and the pane's own word for a
-// dispatch with neither stands in after that. One vocabulary with taskrows.go,
-// which resolves the same three cases in the same order for the same reason.
+// dispatch with neither stands in after that - the same three cases in the same
+// order the transcript's ending line resolves them (taskline.go).
 // Flattened through oneLine for the reason its own header gives: these are
 // strings a model wrote, and a newline in one draws a second physical row out
 // of a value rowsFor counted as one.
@@ -83,35 +83,13 @@ func subagentName(t Task) string {
 	}
 }
 
-// withTasks is this conversation's copy of the Fleet's fold, re-settled if
-// taking it moved the chrome. See DM.tasks for why it is held rather than set
-// for the draw.
-//
-// The re-settle is the half that keeps SetSize off the draw path. DM.chrome is
-// the memo View compares against, and it is only ever written by SetSize - so a
-// dispatch list arriving after the last resize leaves it stale, View sees the
-// mismatch on every frame, and the resize it performs is discarded with the
-// copy it drew from. Doing it here makes that once per change.
-//
-// A width that has not moved costs no re-wrap: SetSize re-wraps on `w !=
-// d.width` alone, so this re-measures the bar, the composer and the chrome and
-// leaves the transcript as it is. A pane with no size yet is left alone - the
-// geometry pass that gives it one will size it.
-func (d DM) withTasks(t Tasks) DM {
-	d.tasks = t
-	if d.width <= 0 || d.height <= 0 || d.chromeHeight() == d.chrome {
-		return d
-	}
-	return d.SetSize(d.width, d.height)
-}
-
 // viewingPicked puts a conversation that has just been opened inside the
 // subagent the sidebar cursor is on, and leaves it on the conversation itself
 // when the cursor is on an agent's own row.
 //
 // It is the whole of what "toggle into them" costs, because the surface already
-// exists: Viewing is the same call ↵ makes on a dispatch row in the pane (see
-// openTask), so the sidebar reaches that transcript rather than a second one.
+// exists: DM.Viewing swaps the pane's transcript onto one dispatch's forwarded
+// frames, so the sidebar reaches that transcript rather than a second one.
 //
 // Guarded on the id, so a cursor left on one agent's subagent cannot put a
 // different agent's conversation inside a dispatch it does not have - which is
@@ -119,10 +97,10 @@ func (d DM) withTasks(t Tasks) DM {
 // the roster has no selection at all.
 // **An empty SelectedTask is an instruction, not a reason to do nothing.** It
 // means the cursor is on the agent's own row, and `Viewing("")` is how the
-// pane is told to show the conversation - the same call ↵ on the conversation's
-// own row makes in openTask. Returning early there left a pane that had been
-// sent into a subagent stuck in it: walking the cursor back up and pressing ⌃D
-// again is what this promises as the way back, and it did nothing.
+// pane is told to show the conversation itself. Returning early there left a
+// pane that had been sent into a subagent stuck in it: walking the cursor back
+// up and pressing ⌃D again is what this promises as the way back, and it did
+// nothing.
 func (a App) viewingPicked(id string) App {
 	if a.roster.Selected != id {
 		return a

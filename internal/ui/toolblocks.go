@@ -171,35 +171,6 @@ func (d DM) openTool(line int) (DM, bool) {
 	return d, true
 }
 
-// todoBlock renders the task list a TodoWrite carries, and "" for every other
-// call. The conversion is a copy rather than a shared type: internal/render
-// takes plain values and never imports core.
-func todoBlock(todos []core.Todo, width int) string {
-	if len(todos) == 0 {
-		return ""
-	}
-	items := make([]render.Todo, len(todos))
-	for i, t := range todos {
-		items[i] = render.Todo{Text: t.Text, Status: todoState(t.Status)}
-	}
-	return render.TodoList(items, width)
-}
-
-// todoState maps core's vocabulary onto render's. Two enumerations rather than
-// a shared one because internal/render imports no Wake package by design; a
-// status core grows is a compile error here, which is where the decision
-// belongs.
-func todoState(s core.TodoStatus) render.TodoState {
-	switch s {
-	case core.TodoActive:
-		return render.TodoActive
-	case core.TodoDone:
-		return render.TodoDone
-	default:
-		return render.TodoPending
-	}
-}
-
 // diffBlock renders the before and after an edit carries in its own input.
 // Nil for a call that carries neither - Bash, Read, Write - which degrades to
 // the header rather than guessing.
@@ -216,4 +187,23 @@ func diffBlock(diff *core.ToolDiff, width int) string {
 		return body
 	}
 	return HintStyle.Render(summary) + "\n" + body
+}
+
+// todoBlock renders the task list a call carries under it, and "" for every
+// other call. It draws in one place now: a *subagent's* checklist, in its own
+// forwarded transcript. A subagent has no board pinned over the composer, so its
+// list is drawn inline there the way every dispatch's frames are - the parent's
+// own checklist is the board (checklistpin.go) and never reaches here, dropped
+// by eventBlock's isChecklistOp guard. A legacy TodoWrite, which carries its
+// whole list on one call, is drawn here too. The conversion is a copy rather than
+// a shared type: internal/render takes plain values and never imports core.
+func todoBlock(todos []core.Todo, width int) string {
+	if len(todos) == 0 {
+		return ""
+	}
+	items := make([]render.Todo, len(todos))
+	for i, t := range todos {
+		items[i] = render.Todo{Text: t.Text, Status: todoState(t.Status)}
+	}
+	return render.TodoList(items, width)
 }

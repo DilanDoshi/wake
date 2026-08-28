@@ -256,24 +256,3 @@ func TestAQuestionCardWinsTheConfirmAndTakesTheArmBack(t *testing.T) {
 		t.Errorf("the legend still draws %q after the card took the confirm:\n%s", armedSend, out)
 	}
 }
-
-// A dispatch cursor does not win ↵, and the discriminator is what is drawn.
-//
-// A card puts its own key line on screen reading `↵ choose`, so there are two
-// statements about the key and the nearer one wins. The dispatch list draws no
-// key line, so the legend's `↵ detach` is the only statement there is - and a
-// cursor set minutes ago by ⌃N may not quietly outrank an arm set one keystroke
-// ago by a chord.
-func TestADispatchCursorDoesNotSwallowTheDetachConfirm(t *testing.T) {
-	a := dispatching(t)
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlN})
-	if cursorOf(t, a, "s1") == taskCursorNone {
-		t.Fatal("⌃N set no cursor, so this test is not measuring the collision it names")
-	}
-	a, _ = pressKey(a, ctrlO)
-
-	if _, cmd := pressKey(a, confirm); !quits(cmd) {
-		t.Error("↵ opened a dispatch instead of confirming the armed detach, while every legend on " +
-			"screen read `↵ detach`. The list draws no key line of its own to say otherwise")
-	}
-}

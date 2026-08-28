@@ -767,7 +767,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 		// are carried across in the same write rather than a second one, and
 		// held rather than projected per draw: chromeHeight counts them, so a
 		// stored DM that does not have them re-sizes on every frame.
-		a = a.withDM(sessionID, dm.withTasks(a.fleet.Tasks(sessionID)).Append(a.fleet.named(sessionID, ev)))
+		a = a.withDM(sessionID, dm.Append(a.fleet.named(sessionID, ev)))
 	}
 	return a
 }

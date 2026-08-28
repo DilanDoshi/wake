@@ -52,12 +52,12 @@ func isToolUse(ev core.Event) bool {
 	return ev.Subagent == nil && ev.Tool != nil && ev.Kind == core.KindToolUse && !foldExempt(ev.Tool)
 }
 
-// exempt reports whether an event is a fold-exempt tool call - a TodoWrite,
-// whose checklist stays drawn whole. A use carries the todos that mark it; a
-// result carries none of its own (protocol.go builds it from just the id and the
-// error flag), so it inherits its use's exemption through the stored call.
-// Without that a TodoWrite's result could fold into an unrelated live run while
-// its use drew a checklist - the two halves of one call on two surfaces.
+// exempt reports whether an event is a fold-exempt tool call - a checklist, whose
+// list is live status rather than activity. A use carries what marks it; a result
+// carries none of its own (protocol.go builds it from just the id and the error
+// flag), so it inherits its use's exemption through the stored call. Without that
+// a checklist result could fold into an unrelated live run while its use was
+// drawn apart - the two halves of one call on two surfaces.
 func (d DM) exempt(ev core.Event) bool {
 	if foldExempt(ev.Tool) {
 		return true
@@ -70,17 +70,16 @@ func (d DM) exempt(ev core.Event) bool {
 	return false
 }
 
-// foldExempt marks a tool call the rollup leaves drawn whole rather than folding
-// it into a count. A TodoWrite carries the checklist Claude Code keeps on screen
-// as a task board - live status, not the activity the fold exists to hide - so a
-// call carrying one breaks the run around it and draws as itself. Recognised by
-// the todos it carries rather than its name: a result carries no name, and the
-// checklist is the thing worth keeping either way.
+// foldExempt marks a tool call the rollup keeps out of a run rather than folding
+// into a count, because its list is live status, not the activity the fold hides.
+// Two shapes carry a list: a legacy TodoWrite carries its whole list as
+// `Todos`, and it still draws that list whole as its own block; a
+// TaskCreate/TaskUpdate carries the op as `Checklist`, and it is the board pinned
+// above the composer, drawing nothing in the transcript (eventBlock). Both break
+// the run around them either way. A TaskCreate/TaskUpdate is exempt on the op
+// alone - a restored one arrives with no snapshot - and its result carries no op,
+// so it inherits this through the stored call (see exempt).
 func foldExempt(tool *core.ToolCall) bool {
-	// A TaskCreate/TaskUpdate is live status too, so it is exempt on the op
-	// alone - not only once a snapshot has been folded onto it. A restored one
-	// carries the op with no snapshot yet, and folding it into a count would be
-	// the same activity-not-status mistake TodoWrite's exemption exists to stop.
 	return len(tool.Todos) > 0 || tool.Checklist != nil
 }
 
@@ -111,6 +110,12 @@ func (d DM) storable(events []core.Event) []core.Event {
 // card-only ask - is checked against the renderer, and those are few.
 func (d DM) drawsSomething(ev core.Event) bool {
 	if d.isToolBlock(ev) {
+		return true
+	}
+	// A checklist op draws nothing but is state, not activity: storable keeps it
+	// so a restore off disk can re-derive the board from d.events. See
+	// DM.isChecklistOp and DM.foldChecklist.
+	if d.isChecklistOp(ev) {
 		return true
 	}
 	switch ev.Kind {

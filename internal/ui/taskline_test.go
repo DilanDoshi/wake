@@ -21,27 +21,22 @@ func finished(dispatch, label string, kind core.TaskKind, status core.TaskStatus
 }
 
 // ingested folds events the way App.observe does: through the Fleet, which owns
-// the dispatch list, then into the conversation with the ending named from the
-// row the fold now holds - and the list projected on for the draw, which is
-// App.dmFor's job.
-//
-// The two halves are what makes this the real seam rather than a convenience:
-// naming an ending needs the fold to have already seen the frame, and drawing
-// the rows needs the projection. A test that appended straight to the DM
-// exercised neither once the fold moved off it.
+// the dispatch fold, then into the conversation with the ending named from the
+// row the fold now holds. Naming an ending needs the fold to have already seen
+// the frame, which is what makes this the real seam rather than a convenience -
+// a test that appended straight to the DM would name no ending.
 func ingested(d DM, evs ...core.Event) DM {
 	f := NewFleet()
 	for _, ev := range evs {
 		f, _ = f.Observe(ev, "s1")
 		d = d.Append(f.named("s1", ev))
 	}
-	d.tasks = f.Tasks("s1")
 	return d
 }
 
-// conversationRegion is the conversation itself, without the dispatch rows or
-// the composer under it. The rows carry the same labels, so a test about what
-// the *transcript* holds has to cut them off or it asserts nothing.
+// conversationRegion is the conversation itself, without the task board or the
+// composer under it. The board sits between the two, so a test about what the
+// *transcript* holds has to cut it off or it asserts nothing.
 func conversationRegion(t *testing.T, d DM, w, h int) string {
 	t.Helper()
 	lines := strings.Split(visible(d, w, h), "\n")
@@ -55,9 +50,9 @@ func conversationRegion(t *testing.T, d DM, w, h int) string {
 	if box < 0 {
 		t.Fatalf("no composer box on screen, so the transcript cannot be bounded:\n%s", visible(d, w, h))
 	}
-	end := box - d.taskRowCount()
+	end := box - d.checklistRows()
 	if end < 0 {
-		t.Fatalf("the rows do not fit above the composer: box at %d, %d rows", box, d.taskRowCount())
+		t.Fatalf("the board does not fit above the composer: box at %d, %d rows", box, d.checklistRows())
 	}
 	return strings.Join(lines[:end], "\n")
 }
@@ -296,19 +291,6 @@ func TestTheEndingLineNamesTheDispatchNotTheLastThingItWasDoing(t *testing.T) {
 	}
 	if strings.Contains(out, "Reading beta.txt") {
 		t.Errorf("the ending line names the last progress status instead of the dispatch:\n%s", out)
-	}
-}
-
-// The row keeps the live status, which is the other half of the same rule: two
-// surfaces, two questions. The row answers "what is it doing", the line answers
-// "what was it for".
-func TestTheRowStillShowsTheLiveStatus(t *testing.T) {
-	d := ingested(conversation(t),
-		started("a1", "toolu_1", "Count lines in alpha.txt and beta.txt", "general-purpose", core.TaskAgent),
-		progressed("a1", "toolu_1", "Reading beta.txt", "Read", 100, 4*time.Second))
-
-	if out := stripANSI(d.taskView(90)); !strings.Contains(out, "Reading beta.txt") {
-		t.Errorf("the row froze at the dispatch description:\n%s", out)
 	}
 }
 

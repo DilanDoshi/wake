@@ -271,7 +271,6 @@ func (a App) show(sessionID, name string, place func(Grid) Grid) App {
 	// the seed. docs/notes/bugs.md BUG-5.
 	a = a.withDM(sessionID, a.dms[sessionID].
 		WithParentName(a.parentName(sessionID)).
-		withTasks(a.fleet.Tasks(sessionID)).
 		withAgent(a.fleet).
 		Resume())
 	// Reading a DM is reading its arrivals: Focus clears what accumulated for

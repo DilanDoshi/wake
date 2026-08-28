@@ -161,7 +161,6 @@ var legendEntries = []legendEntry{
 	{"⇥", "next chat"},
 	{"⇧⇥", "permissions"},
 	{"⌃X", "next blocked"},
-	{"⌃N⌃P", "dispatches"},
 	{"↑↓", "pick agent"},
 	// Beside the bare arrows rather than with the other composer keys: it is the
 	// same two keys under a modifier, and a legend that separated them would

@@ -397,28 +397,6 @@ func TestAnInvisibleEventDoesNotSplitARunLiveOrRestored(t *testing.T) {
 	}
 }
 
-// A TodoWrite's result carries no todos of its own, so without inheriting its
-// use's exemption it would fold into a neighbouring run and draw nothing - its
-// checklist on screen, its result silently gone. The result must draw.
-func TestATodoWriteResultInheritsItsUsesExemption(t *testing.T) {
-	todoUse := core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{
-		ID: "todo1", Name: "TodoWrite", Todos: []core.Todo{{Text: "step one", Status: core.TodoActive}},
-	}}
-	d := NewDM("s1", "alex").SetSize(80, 30).
-		Append(prose("go")).
-		Append(todoUse).        // exempt: draws its checklist, not a rollup
-		Append(bashCall("b1")). // a fresh run is now live
-		Append(result("todo1", "Todos have been updated", false))
-
-	out := visible(d, 80, 30)
-	if !strings.Contains(out, "Todos have been updated") {
-		t.Errorf("a TodoWrite result was absorbed into a run instead of drawn:\n%s", out)
-	}
-	if !strings.Contains(out, "step one") {
-		t.Errorf("the TodoWrite checklist did not draw whole:\n%s", out)
-	}
-}
-
 // Codex second pass: a boundary breaks the run before the fold is classified.
 // Leaving mid-run, then an empty result of that run, used to be folded (its
 // classification computed against the old runKey), so drawFold appended an empty
@@ -440,5 +418,29 @@ func TestAnEmptyResultAfterLeavingMidRunAddsNoLine(t *testing.T) {
 	// runTally must not be left populated while runKey is empty.
 	if d.runKey == "" && len(d.runTally) != 0 {
 		t.Errorf("runTally is %v while runKey is empty - a stale tally", d.runTally)
+	}
+}
+
+// A TodoWrite's result carries no todos of its own, so without inheriting its
+// use's exemption it would fold into a neighbouring run and draw nothing - its
+// checklist on screen, its result silently gone. The result must draw. (A
+// TaskCreate/TaskUpdate is the other exempt shape; it pins its board and draws
+// no block - see checklistpin_test.go.)
+func TestATodoWriteResultInheritsItsUsesExemption(t *testing.T) {
+	todoUse := core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{
+		ID: "todo1", Name: "TodoWrite", Todos: []core.Todo{{Text: "step one", Status: core.TodoActive}},
+	}}
+	d := NewDM("s1", "alex").SetSize(80, 30).
+		Append(prose("go")).
+		Append(todoUse).        // exempt: draws its checklist, not a rollup
+		Append(bashCall("b1")). // a fresh run is now live
+		Append(result("todo1", "Todos have been updated", false))
+
+	out := visible(d, 80, 30)
+	if !strings.Contains(out, "Todos have been updated") {
+		t.Errorf("a TodoWrite result was absorbed into a run instead of drawn:\n%s", out)
+	}
+	if !strings.Contains(out, "step one") {
+		t.Errorf("the TodoWrite checklist did not draw whole:\n%s", out)
 	}
 }

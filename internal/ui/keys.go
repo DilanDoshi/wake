@@ -129,13 +129,9 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// produces. See detach.go.
 		return a.armDetach(detachArmed)
 	case tea.KeyEsc:
-		// Clears the dispatch cursor *and* interrupts, which is the rule a text
-		// selection already keeps: nothing decorative may swallow the key that
-		// stops a runaway agent. See clearTaskCursor.
-		//
 		// m.Alt is ⎋⎋ that shared one read, which is what a double press
 		// actually looks like. See escape.go.
-		return a.clearTaskCursor().escape(escArmed, m.Alt)
+		return a.escape(escArmed, m.Alt)
 	case tea.KeyEnter:
 		// **⌥↵ is a newline and not a send**, so it goes on to the composer.
 		//
@@ -163,20 +159,10 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// From inside a conversation as well as from the room: the cursor only
 		// counts while the sidebar holding it is drawn, so this fires exactly
 		// when somebody is looking at the list they are moving through.
-		// From a conversation as well as from the room: the cursor is only ever
-		// a target while the activity sidebar is drawn, and somebody who has
-		// opened it and is walking it is choosing where to go next.
 		// submit already returns unchanged on a blank draft, so this claims a
 		// key that was doing nothing rather than taking one from the composer.
 		// A card takes ↵ before this; see cardKey.
 		if a.composerEmpty() {
-			// The dispatch list first: it is drawn inside the focused pane and
-			// its cursor is only ever set by somebody walking it, where the
-			// roster's is set by anything that opens the sidebar. Between two
-			// cursors, the one the operator just moved is the one they mean.
-			if next, opened := a.openTask(); opened {
-				return next, nil, true
-			}
 			if agent, ok := a.pickedAgent(); ok {
 				return a.openDMWith(agent.ID, agent.Name), nil, true
 			}
@@ -244,13 +230,6 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return a.cycleMode()
 	case tea.KeyCtrlX:
 		return a.nextBlocked(), nil, true
-	// The dispatch list, on the keys Claude Code binds for its own - see
-	// taskkeys.go for why not ↑↓, and why they are taken even where there is
-	// nothing to walk.
-	case tea.KeyCtrlN:
-		return a.walkTasks(1), nil, true
-	case tea.KeyCtrlP:
-		return a.walkTasks(-1), nil, true
 	case tea.KeyCtrlT:
 		return a.flipMention()
 	case tea.KeyPgUp:
