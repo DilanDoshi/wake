@@ -102,7 +102,7 @@ func TestTileShowsTheLiveTailOfAWorkingAgent(t *testing.T) {
 func TestTileShowsSubagentCount(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
-	if !strings.Contains(a.View(), "⤷ 1 subagents") {
+	if !strings.Contains(a.View(), "⤷ 1 subagent") {
 		t.Fatalf("the tile did not state alex's subagent count.\n%s", a.View())
 	}
 }
@@ -135,6 +135,39 @@ func TestTileHeightIsExactlyTileHeightEvenWhenTheTailWraps(t *testing.T) {
 	out := a.tile(ag, cellW, false)
 	if got := strings.Count(out, "\n") + 1; got != tileHeight() {
 		t.Fatalf("the tile drew %d rows with a 3-line tail, want exactly tileHeight()=%d:\n%s", got, tileHeight(), out)
+	}
+}
+
+// At a narrow single-column width, a tile's inner width falls below
+// minBlockWidth (20) - the floor partial.wrapped() itself wraps at
+// (max(p.width, minBlockWidth)) - so a tail line can come back wider than the
+// tile it must fit in. titledBox's Width(edge) then word-wraps that
+// over-width line, growing the tile past tileHeight() and misaligning
+// boardHit's click math. tailLines must truncate each physical line to the
+// tile's own inner width regardless of what floor the tail wrapped at.
+func TestTileHeightIsExactlyTileHeightAtNarrowWidthBelowTheWrapFloor(t *testing.T) {
+	a := boardApp(t)
+	a.board.Tiled = true
+	a = a.withSize(20, 30).applyGeometry() // single column: cellW=20, inner=18 < minBlockWidth(20)
+	working, ok := a.fleet.ByName("alex")
+	if !ok || working.State != rpc.StateWorking {
+		t.Fatal("precondition: boardApp does not seat alex as the working agent")
+	}
+	cols := tileColumns(a.layout.Width)
+	cellW := tileCellWidth(a.layout.Width, cols)
+	inner := max(cellW-boxFrameWidth, 1)
+	if inner >= minBlockWidth {
+		t.Fatalf("precondition: inner=%d is not below minBlockWidth(%d)", inner, minBlockWidth)
+	}
+
+	// An unbroken run of characters, so the tail wraps at the wrap floor
+	// (minBlockWidth=20) with no word boundary to fall short of it - every
+	// physical line comes back exactly 20 columns wide, wider than inner(18).
+	a = a.foldTail(working.ID, partialEv(strings.Repeat("x", 80)))
+	ag, _ := a.fleet.Agent(working.ID)
+	out := a.tile(ag, cellW, false)
+	if got := strings.Count(out, "\n") + 1; got != tileHeight() {
+		t.Fatalf("the tile drew %d rows at a narrow width, want exactly tileHeight()=%d:\n%s", got, tileHeight(), out)
 	}
 }
 

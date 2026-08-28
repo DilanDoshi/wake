@@ -165,7 +165,7 @@ func (a App) tileBody(ag Agent, width int) string {
 
 	if ag.State == rpc.StateWorking {
 		if tail := a.tails[ag.ID].sized(inner); tail.text != "" {
-			lines = append(lines, tailLines(tail.view)...)
+			lines = append(lines, tailLines(tail.view, inner)...)
 		} else if d := boardDetail(ag); d != "" {
 			lines = append(lines, ansi.Truncate(oneLine(d), inner, ellipsis))
 		}
@@ -174,7 +174,11 @@ func (a App) tileBody(ag Agent, width int) string {
 	}
 
 	subs := len(a.fleet.RunningTasks(ag.ID))
-	lines = append(lines, fmt.Sprintf("⤷ %d subagents", subs))
+	word := "subagents"
+	if subs == 1 {
+		word = "subagent"
+	}
+	lines = append(lines, fmt.Sprintf("⤷ %d %s", subs, word))
 	return strings.Join(padRows(lines, tileBodyRows), "\n")
 }
 
@@ -182,11 +186,17 @@ func (a App) tileBody(ag Agent, width int) string {
 // hardens each one. oneLine strips "\n" as a control byte along with every
 // other one, so the split has to happen first - running oneLine on the whole
 // view before splitting would collapse a multi-row wrap into a single row.
-func tailLines(view string) []string {
+//
+// The tail wraps at max(inner, minBlockWidth) (partial.wrapped), so at a
+// tile narrower than minBlockWidth its lines come back wider than inner - the
+// same boardDetail lines beside them are already truncated to. Each line is
+// truncated here too, or titledBox's Width(edge) word-wraps the overrun into
+// extra physical rows and grows the tile past tileHeight().
+func tailLines(view string, inner int) []string {
 	rows := strings.Split(view, "\n")
 	out := make([]string, len(rows))
 	for i, r := range rows {
-		out[i] = oneLine(r)
+		out[i] = ansi.Truncate(oneLine(r), inner, ellipsis)
 	}
 	return out
 }

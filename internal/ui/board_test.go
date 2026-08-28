@@ -134,6 +134,11 @@ func TestSlashBoardRefusesAnArgument(t *testing.T) {
 
 // In tiles, → and ← walk the 2-D grid rather than the row list - tileNav's
 // own geometry, driven off the frame width the tiles are laid out at.
+//
+// Guards a gross regression only, not the openHere→openRight change; it
+// would still pass against the old single-column behavior. See
+// TestEnterAddsANewColumnWithoutReplacingTheOneAlreadyOpen for the real
+// discriminator on the add-column behavior.
 func TestTiledCursorMovesInTwoDimensions(t *testing.T) {
 	a := boardApp(t) // 3 agents
 	a.board.Tiled = true
@@ -149,6 +154,12 @@ func TestTiledCursorMovesInTwoDimensions(t *testing.T) {
 
 // ↵ opens the cursored agent beside the room as a new column - the room is
 // never replaced, and the board still closes on the way.
+//
+// Guards a gross regression only, not the openHere→openRight change; a
+// fresh, DM-less board has nothing already open for ↵ to wrongly replace, so
+// this passes against the old openHere behavior too. See
+// TestEnterAddsANewColumnWithoutReplacingTheOneAlreadyOpen for the real
+// discriminator on the add-column behavior.
 func TestEnterOpensAsANewColumnKeepingTheRoom(t *testing.T) {
 	a := boardApp(t)
 	roster := a.fleet.OnRoster()
@@ -196,6 +207,10 @@ func TestEnterAddsANewColumnWithoutReplacingTheOneAlreadyOpen(t *testing.T) {
 }
 
 // ⌃D still opens into the focused pane - ↵'s old placement, now its own key.
+//
+// Guards a gross regression only, not the openHere→openRight change: ⌃D is
+// deliberately still openHere, so it cannot discriminate ↵'s new placement.
+// See TestEnterAddsANewColumnWithoutReplacingTheOneAlreadyOpen for that.
 func TestCtrlDOpensIntoTheFocusedPane(t *testing.T) {
 	a := boardApp(t)
 	roster := a.fleet.OnRoster()

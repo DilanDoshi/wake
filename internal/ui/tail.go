@@ -25,6 +25,13 @@ func (a App) withTail(id string, p partial) App {
 // up, and clears it when the block lands or the turn ends - the DM preview's
 // own triggers (dm.go), off the same partial type. Gated: when the wall is
 // down or in rows, this is a no-op and App.tails stays empty.
+//
+// Spec §6's "the clear is not gated" is about the DM preview (partial.go),
+// which must clear on leave so a reopened pane never shows a stale sentence.
+// Gating the clear here too is safe for a narrower reason: the tail map is
+// dropped whole on every leave path (closeBoard, ⇥-to-rows), and tileBody
+// only draws a tail while State == StateWorking - so a stale entry can never
+// reach the screen even if this returned early before clearing it.
 func (a App) foldTail(sessionID string, ev core.Event) App {
 	if !a.board.Up || !a.board.Tiled {
 		return a
