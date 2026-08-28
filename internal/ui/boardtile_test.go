@@ -105,6 +105,60 @@ func TestTileShowsSubagentCount(t *testing.T) {
 	}
 }
 
+// A working tile's live tail can wrap to multiple physical lines. The tile
+// must still draw exactly tileHeight() rows - titledBox never constrains
+// height, so an overshoot here grows the whole tile row and shifts every row
+// below it, breaking the grid's fixed-height invariant a later task's click
+// math depends on. Measured on a.tile directly, since tiles sit side by side
+// in a row (lipgloss.JoinHorizontal) and a single tile's row count is not
+// separable from the joined row once assembled into the whole board.
+func TestTileHeightIsExactlyTileHeightEvenWhenTheTailWraps(t *testing.T) {
+	a := boardApp(t)
+	a.board.Tiled = true
+	working, ok := a.fleet.ByName("alex")
+	if !ok || working.State != rpc.StateWorking {
+		t.Fatal("precondition: boardApp does not seat alex as the working agent")
+	}
+	cols := tileColumns(a.layout.Width)
+	cellW := tileCellWidth(a.layout.Width, cols)
+	inner := max(cellW-boxFrameWidth, 1)
+
+	a = a.foldTail(working.ID, partialEv(strings.Repeat("wiring the auth guard ", 20)))
+	if got := strings.Count(a.tails[working.ID].sized(inner).view, "\n") + 1; got != maxPreviewRows {
+		t.Fatalf("precondition: tail wrapped to %d lines, want %d (maxPreviewRows)", got, maxPreviewRows)
+	}
+	_ = a.View() // exercises the tiled render path end to end
+
+	ag, _ := a.fleet.Agent(working.ID)
+	out := a.tile(ag, cellW, false)
+	if got := strings.Count(out, "\n") + 1; got != tileHeight() {
+		t.Fatalf("the tile drew %d rows with a 3-line tail, want exactly tileHeight()=%d:\n%s", got, tileHeight(), out)
+	}
+}
+
+// A control byte in the live tail must not reach the drawn tile: tiles sit
+// side by side (lipgloss.JoinHorizontal), so a raw CR or an escape sequence
+// in one agent's streamed text could redraw or forge a neighbouring tile -
+// boardRow's oneLine rule, one surface over. The check is for the specific
+// injected bytes rather than "\x1b" broadly, since lipgloss's own styling
+// legitimately emits unrelated SGR escapes for every tile's border and text.
+func TestTileTailControlBytesCannotForgeANeighbouringTile(t *testing.T) {
+	a := boardApp(t)
+	a.board.Tiled = true
+	working, ok := a.fleet.ByName("alex")
+	if !ok || working.State != rpc.StateWorking {
+		t.Fatal("precondition: boardApp does not seat alex as the working agent")
+	}
+	a = a.foldTail(working.ID, partialEv("done\rFORGED\x1b[2Jred"))
+	out := a.View()
+	if strings.Contains(out, "\r") {
+		t.Errorf("a raw carriage return from the live tail reached the tiled board:\n%q", out)
+	}
+	if strings.Contains(out, "\x1b[2J") {
+		t.Errorf("a raw clear-screen escape from the live tail reached the tiled board:\n%q", out)
+	}
+}
+
 // benchTiledApp is a fleet of n working agents with the tiled board up, built
 // the way streamingApp (partial_bench_test.go) builds the streaming fleet -
 // the same fixture, aimed at the tiled draw instead of the grid.

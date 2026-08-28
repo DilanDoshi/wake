@@ -144,18 +144,26 @@ func (a App) tile(ag Agent, width int, cursored bool) string {
 // tileBody is the tile's inner rows: the state word, then what the agent is on
 // (a live tail while it works, the ask while it is blocked, its last line when
 // idle), then the subagent count - boardDetail's by-state logic, one field
-// richer for the live tail. The state word and boardDetail's output are
-// agent-authored and go through oneLine; the live tail does not, matching
-// dm.go's own preview line (d.partial.view), which draws the same partial
-// unsanitized - a gap this task does not close, since fixing it means
-// changing partial.go's wrap, out of scope here.
+// richer for the live tail. Every line is agent-authored or derived from
+// agent-authored text, and every line goes through oneLine before it joins
+// `lines` - the live tail included, by way of tailLines, since a raw CR or
+// escape in a streamed token could otherwise redraw or forge the tile beside
+// it (tiles sit side by side via lipgloss.JoinHorizontal).
+//
+// `lines` holds one PHYSICAL row per element - tailLines flattens the tail's
+// own "\n"s into separate elements before this returns - so padRows pads and
+// truncates by row count, not by how many pieces the body was assembled from.
+// Without that, a tail wrapped to multiple lines was one `lines` element
+// holding several rows, and padRows padded the *element* count back up to
+// tileBodyRows on top of them - overshooting tileHeight() and growing the
+// whole tile row, since titledBox never constrains height.
 func (a App) tileBody(ag Agent, width int) string {
 	inner := max(width-boxFrameWidth, 1)
 	lines := []string{HintStyle.Render(labelOf(ag.State))}
 
 	if ag.State == rpc.StateWorking {
 		if tail := a.tails[ag.ID].sized(inner); tail.text != "" {
-			lines = append(lines, tail.view)
+			lines = append(lines, tailLines(tail.view)...)
 		} else if d := boardDetail(ag); d != "" {
 			lines = append(lines, ansi.Truncate(oneLine(d), inner, ellipsis))
 		}
@@ -166,6 +174,19 @@ func (a App) tileBody(ag Agent, width int) string {
 	subs := len(a.fleet.RunningTasks(ag.ID))
 	lines = append(lines, fmt.Sprintf("⤷ %d subagents", subs))
 	return strings.Join(padRows(lines, tileBodyRows), "\n")
+}
+
+// tailLines splits a live tail's wrapped view into its physical rows and
+// hardens each one. oneLine strips "\n" as a control byte along with every
+// other one, so the split has to happen first - running oneLine on the whole
+// view before splitting would collapse a multi-row wrap into a single row.
+func tailLines(view string) []string {
+	rows := strings.Split(view, "\n")
+	out := make([]string, len(rows))
+	for i, r := range rows {
+		out[i] = oneLine(r)
+	}
+	return out
 }
 
 // interleave puts `sep` between every pair of items and returns the flat slice.
