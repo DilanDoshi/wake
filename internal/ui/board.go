@@ -26,6 +26,32 @@ package ui
 // be. Every key it does not claim closes it and then does its own job, the
 // selection rule's shape: nothing decorative may swallow a keystroke, and the
 // key that matters most - ⎋ at a runaway agent - is one pane-focus away.
+//
+// # A second render path narrows the ruling, rather than breaking it
+//
+// The owner's 2026-08-27 ruling on deferred.md's tiled-board idea: what §2c
+// actually refuses is panes you operate inside - transcripts you scroll and
+// stdin you type - not the visual shape of a cell. So "an overview, not
+// panes" narrows to an overview, not panes you *operate*, and Board grows a
+// second render path rather than a second modal: a Tiled bool on this same
+// model, boardView branching to a tile renderer (tileView, boardtile.go),
+// toggled by ⇥ while the board is up. Four guardrails hold the narrower line
+// - cross any of them and this is the multiplexer the non-negotiables
+// already refuse:
+//
+//  1. View-only. No keystroke reaches an agent's stdin from a tile; keys
+//     drive the board itself (move, jump in, park, close).
+//  2. Bounded live tail, no scrollback. A tile shows at most maxPreviewRows
+//     of live text and nothing you can scroll back through - the tail lives
+//     in App.tails (tail.go), gated on Tiled so a closed or row-mode board
+//     holds none of it.
+//  3. Fixed grid, no per-tile resize, no pane tree. Equal cells, no divider
+//     to drag, no split, no nesting.
+//  4. Act from it, never in it. ↵ and click leave the wall for the agent's
+//     real DM rather than working inside the tile.
+//
+// Full argument: docs/superpowers/specs/2026-08-27-tiled-board-design.md
+// §§1-2.
 
 import (
 	"fmt"
