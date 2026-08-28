@@ -70,6 +70,9 @@ var boardTakesNoArgument = boardVerb + " opens the fleet overview. It takes no a
 type Board struct {
 	Up       bool
 	Selected string
+	// Tiled draws the fleet as a grid of live tiles rather than one row per
+	// agent. The row view is the default; ⇥ toggles (Task 3).
+	Tiled bool
 }
 
 // openBoard is /board: it opens the overview over the whole frame.
@@ -85,6 +88,7 @@ func (a App) openBoard(arg string) (App, tea.Cmd) {
 
 func (a App) closeBoard() App {
 	a.board = Board{}
+	a.tails = nil
 	return a
 }
 
