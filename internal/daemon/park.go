@@ -255,7 +255,7 @@ func recordFor(a *agent) parkedRecord {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return parkedRecord{
-		ID: a.id, Name: a.name, Label: a.label, Dir: a.dir,
+		ID: a.id, Name: a.name, Label: a.label, Color: a.color, Dir: a.dir,
 		Effort: a.effort, Model: a.model,
 		MaxBudgetUSD: a.budget, FallbackModel: a.fallback,
 		Parked: time.Now(),
@@ -452,6 +452,9 @@ func (s *server) unpark(ctx context.Context, c *client, f rpc.Frame) {
 		// moved either since.
 		MaxBudgetUSD:  budget,
 		FallbackModel: fallback,
+		// The identity hue travels with the session, from the live agent this
+		// wake is bringing back. Display only, so it needs no narrowing.
+		Color: a.color,
 	}, a.parent, a, s.parkLaunchOutcome(rec, reserved))
 }
 
@@ -545,6 +548,10 @@ func (s *server) unparkRecord(c *client, id string) {
 		Model:          rec.Model,
 		MaxBudgetUSD:   budget,
 		FallbackModel:  chain,
+		// From the record this time rather than a live agent - the book is the
+		// only thing that carried the colour across the daemon restart. Display
+		// only, so it is taken as written, like the name.
+		Color: rec.Color,
 	}, "", nil, s.parkLaunchOutcome(rec, true))
 }
 

@@ -106,6 +106,12 @@ type agent struct {
 	// here reads it.
 	label string
 
+	// color is this session's identity hue, chosen by an operator's /color and
+	// carried onto the snapshot and into the park book. Display only and never an
+	// argv word: it is Wake's own, not something claude is told. One of
+	// rpc.ColorNames, or empty for none. See color.go.
+	color string
+
 	// dir is where this session was **started**, and it never moves. park
 	// writes it down, unpark launches from it and a fork runs in it, because
 	// claude locates a transcript by the directory the process started in even
@@ -654,6 +660,7 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		ID:         a.id,
 		Name:       a.name,
 		Label:      a.label,
+		Color:      a.color,
 		Dir:        a.dir,
 		Cwd:        a.runningIn(),
 		ParentID:   a.parent,

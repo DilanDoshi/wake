@@ -616,6 +616,8 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		s.renameSession(c, f)
 	case rpc.FrameLabel:
 		s.relabelSession(c, f)
+	case rpc.FrameColor:
+		s.colorSession(c, f)
 	case rpc.FrameKill:
 		s.withAgent(c, f, func(a *agent) error { a.kill(); return nil })
 	case rpc.FrameQuit:

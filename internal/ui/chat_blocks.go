@@ -13,6 +13,7 @@ import (
 	"regexp"
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -150,7 +151,7 @@ func roomBlock(ev core.Event, a Agent, width int) block {
 // exactly the case glamour's process-global mutex makes expensive, so it is
 // never put through it twice.
 func agentSaid(text string, a Agent, width int) string {
-	head := accentLine(speaker(a), width)
+	head := speakerStyle(a).MaxWidth(width).Render(speaker(a))
 	body := strings.TrimSpace(text)
 	rendered := render.Markdown(body, width)
 	if renderedRows(rendered) <= roomInlineRows {
@@ -277,6 +278,17 @@ func colourMention(line string) string {
 // collapseWhitespaceOneLine flattens a multi-line string to one row, for the
 // surfaces that genuinely have one: a collapsed tool line, a notice.
 func collapseWhitespaceOneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+
+// speakerStyle is the colour an agent's name is drawn in when it heads a turn in
+// the room: its own identity hue if /color gave it one, the shared Accent
+// otherwise. Only the ordinary turn header takes it - the finished marker stays
+// muted and an ask stays warn, because those are state rather than identity.
+func speakerStyle(a Agent) lipgloss.Style {
+	if style, ok := identityStyle(a.Color); ok {
+		return style
+	}
+	return AccentStyle
+}
 
 // speaker is who is talking: the name, and what they are on.
 func speaker(a Agent) string {

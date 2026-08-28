@@ -147,7 +147,34 @@ subagents turn out to author task lists.
 
 ---
 
-## OWNER REQUEST, 2026-08-26 — `/color`: a per-agent status bar and name-tag colour
+## ~~OWNER REQUEST, 2026-08-26 — `/color`: a per-agent status bar and name-tag colour~~ CLOSED, `feat/color-per-agent` (2026-08-27)
+
+**Built exactly as the four answers below predicted, plus one the entry did not foresee.** `/color`
+sets an agent's identity hue; it heads the agent's turns in the room, tints its conversation status
+bar and its roster row. The four answers, resolved with the owner: **(1) where it lives** — a new
+`Color` field, client-chosen, a third display string beside name and label (`rpc.SessionStatus.Color`,
+`ui.Agent.Color`, `daemon.agent.color`); **(2) session vs client-local** — a *session attribute*, on
+the wire and shared, because it reuses the `/name` round-trip with zero new state stores where a
+client-local one would need a per-session-id prefs subsystem that does not exist; **(3) survives a
+park** — yes, a `Color` field in `parkedRecord`, captured at park and restored at wake, the move
+`Label` and `Effort` already make; **(4) value space** — a *named subset*, not free hex, but **Wake's
+own bolder identity set** (`ui.identityColors`, seven contrast-tuned light/dark pairs) rather than
+Claude's exact palette, on the owner's "do Claude but a little bolder" ruling — deliberately not bound
+to `claude-palette.json`, the `LastRead` precedent. The manager is refused `FrameColor` (a third
+display verb beside rename and label) and `agent_status` does not report the hue (operator chrome, not
+a fact about what an agent is doing).
+
+**The one the entry missed: `color` is Claude's own command.** It is advertised on 71 of the recorded
+`init` frames (Claude's theme command), so the corpus rule refuses the word the way it refused
+`rename` and `import`. The disciplined path to claim it is `redirectOnlyCommands`, backed by a
+recording of Claude's headless `/color` showing an inert or redirect answer — which this session could
+not make. The owner ruled on 2026-08-27 to claim `/color` anyway (Wake renders in its own palette, so
+an agent's per-session Claude theme is irrelevant inside Wake): recorded as the
+`ownerClaimedCommands` exception in `slashguard_test.go`, greppable and dated. **If a recording later
+shows Claude's headless `/color` is a redirect, move the entry to `redirectOnlyCommands` and retire the
+override.** That recording is the one loose end this leaves.
+
+The original request:
 
 **Asked for in this version.** A `/color` command to change an agent's status bar colour and its
 name-tag colour as shown in the main group chat.

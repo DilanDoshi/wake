@@ -56,6 +56,13 @@ func rosterPath(socket string) string {
 // That is why adding a name pool did not change what this file means: Label is
 // one more optional key on a shape that already carried a name, and a roster
 // written by an older build decodes without it.
+// Color is deliberately **not** here, though it is a third display string
+// beside Name and Label everywhere else. This file's one display reader is
+// `wake status` on a dead-daemon machine, which prints text and no colour - so a
+// colour written here would be a field nothing ever reads for display, which the
+// conventions call a defect. The park book keeps it (parkedRecord.Color) because
+// a wake rebuilds a live agent from that record and the TUI draws it; an orphan
+// is never rebuilt, so its hue has no surface. A daemon-death orphan row is grey.
 type record struct {
 	ID    string `json:"id"`
 	Name  string `json:"name,omitempty"`

@@ -73,6 +73,11 @@ import (
 // arrives on the spawn frame, is checked by core.ValidBudget, and is written
 // once at launch - there is no runtime command for it, so unlike effort there
 // is no second path by which anything an agent typed could become this value.
+//
+// Color is the operator's, and the narrowest of all: it is one of seven words
+// from rpc.ColorNames, folded and checked by rpc.NormalizeColor on both sides of
+// the socket, and set only by /color - a TUI command a human types. An agent
+// has no path to it at all, so nothing it wrote can become this value.
 var agentAuthored = map[string]bool{
 	"Tool":    true,
 	"ToolArg": true,
@@ -89,6 +94,7 @@ var agentAuthored = map[string]bool{
 	"QuietMS":    false,
 	"Effort":     false,
 	"Budget":     false,
+	"Color":      false,
 
 	// Cwd is the agent's, and it is the sharpest case in this table: an agent
 	// calls EnterWorktree and picks the directory itself. Dir stays false
