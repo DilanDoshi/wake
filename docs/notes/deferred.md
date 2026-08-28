@@ -36,6 +36,27 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## 2026-08-26 — record what ⎋ and `[d]` do to an `AskUserQuestion`, the spike §9 named
+
+`fix/interrupt-question-stale-card` shipped ⎋-on-a-question as a **deny** (it was a no-op interrupt
+that left the card stuck forever — see `decisions.md`, *"⎋ on a question is a deny"*). Both the
+premise and the remedy lean on `[binary]` readings `question-findings.md` §9 explicitly leaves
+unrecorded, so the fix is a UI-correctness change on unproven ground until the spike §9 calls "the
+obvious next" is recorded:
+
+1. **Interrupt a session with an `AskUserQuestion` outstanding.** Confirm the CLI does *not* emit a
+   `control_cancel_request` / turn-end for it the way it does for a permission
+   (`interrupt-permission-findings.md`) — i.e. that the interrupt genuinely leaves the question
+   stuck, which is the whole reason ⎋ had to become a deny.
+2. **Deny an `AskUserQuestion`.** Confirm an explicit `behavior:"deny"` control-response actually
+   unblocks claude (not "cancel + deny skipped", `tengu_auq_park_preserved_at_shutdown`) and that
+   the model does **not** immediately re-ask — a re-ask would turn ⎋ into a new card rather than an
+   exit.
+
+Both are cheap (one `AskUserQuestion` turn each, real `HOME`, scrub) and would either retire the two
+residual risks in the ruling or send someone back to the daemon. Until then ⎋ adds no *new*
+unrecorded dependency beyond the one `[d]` already carried, which is why it shipped.
+
 ## OWNER REQUEST, 2026-08-26 — a triage pass before the room, so not every agent utterance becomes a broadcast
 
 **Asked for in this version.** A lightweight agent (haiku-class, cheap and fast) — or some other

@@ -35,13 +35,20 @@ func askKinds(t *testing.T) map[string]string {
 // nothing, and a two-press ⎋ was rejected for urgency - so the card draws the
 // key beside the keys that answer it, spelled the way the legend spells it.
 func TestTheCardOffersTheInterruptBesideItsKeys(t *testing.T) {
-	spelled := escGlyph + " " + escInterruptLabel
 	for name, value := range askKinds(t) {
 		card := answerableCard(core.AskKind(value))
+		// A question's ⎋ settles the ask with a deny rather than interrupting a
+		// turn (see send.go's interrupt), so its label is the shape's - the one
+		// place "the legend never lies" reaches a card. Every other shape keeps
+		// the interrupt.
+		spelled := cardInterruptHint
+		if card.Shape() == ShapeQuestion {
+			spelled = cardDismissHint
+		}
 		line := oneCard(card).keyLine(card, wideRoom, false)
-		// The suffix, not merely present: the interrupt is the line's last
-		// clause because it is the first dropped, and a reordering that put it
-		// mid-line survived every Contains in this file.
+		// The suffix, not merely present: the key is the line's last clause
+		// because it is the first dropped, and a reordering that put it mid-line
+		// survived every Contains in this file.
 		if !strings.HasSuffix(line, spelled) {
 			t.Errorf("core.%s draws %q: the key that destroys this ask is not the last clause beside the keys that answer it", name, line)
 		}
@@ -72,10 +79,13 @@ func TestTheInterruptIsDroppedBeforeTheKeysThatAnswer(t *testing.T) {
 	tight := ansi.StringWidth(keys + cardDot + cardConfirmHint)
 	got := oneCard(q).keyLine(q, tight, false)
 	if !strings.Contains(got, cardMoveKeys) {
-		t.Errorf("at %d columns the question line %q dropped its move keys to admit the interrupt", tight, got)
+		t.Errorf("at %d columns the question line %q dropped its move keys to admit the dismiss", tight, got)
 	}
-	if strings.Contains(got, cardInterruptHint) {
-		t.Errorf("at %d columns the question line %q carries the interrupt beyond the width that fits it", tight, got)
+	// The question's own ⎋ clause is cardDismissHint, not the interrupt - that
+	// is the one it drops first, and asserting the interrupt here would pass
+	// against a question line that never carried it.
+	if strings.Contains(got, cardDismissHint) {
+		t.Errorf("at %d columns the question line %q carries the dismiss beyond the width that fits it", tight, got)
 	}
 }
 

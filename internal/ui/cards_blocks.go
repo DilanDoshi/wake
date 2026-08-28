@@ -118,6 +118,14 @@ const (
 	// so the bijection guard reads no rune out of it.
 	cardInterruptHint = escGlyph + " " + escInterruptLabel
 
+	// cardDismissHint is ⎋'s label on a question, where it is not an interrupt.
+	// A pending permission is withdrawn by the interrupt itself, but a question
+	// is not (see send.go's interrupt), so ⎋ settles it with a deny instead -
+	// and the label has to say the thing the key does, which is this project's
+	// "the legend never lies" rule reaching a surface the legend guard cannot
+	// see. "dismiss" rather than "interrupt": the ask is refused, not the turn.
+	cardDismissHint = escGlyph + " dismiss"
+
 	// cardKeysPaused replaces the key line while the composer holds a draft,
 	// when cardKey reads no rune at all - a line still advertising [a]llow
 	// would be the legend rule broken on the one surface the legend guard
@@ -249,11 +257,16 @@ func (cs Cards) keyLine(top Card, width int, typing bool) string {
 			hint = cardDot + cardConfirmHint
 		}
 		line := top.keys(max(width-ansi.StringWidth(hint), 0)) + hint
-		// The interrupt is appended only after the answer keys have taken
-		// their room, so it is the first clause dropped: the legend carries
-		// `esc interrupt` on every pane, where the digits and the refusal
-		// exist nowhere else.
-		if esc := cardDot + cardInterruptHint; ansi.StringWidth(line+esc) <= width {
+		// ⎋ is appended only after the answer keys have taken their room, so it
+		// is the first clause dropped: the legend carries an ⎋ label on every
+		// pane, where the digits and the refusal exist nowhere else. Its word is
+		// the shape's: a question is dismissed with a deny, everything else has
+		// its turn interrupted - see cardDismissHint.
+		escHint := cardInterruptHint
+		if top.Shape() == ShapeQuestion {
+			escHint = cardDismissHint
+		}
+		if esc := cardDot + escHint; ansi.StringWidth(line+esc) <= width {
 			return line + esc
 		}
 		return line

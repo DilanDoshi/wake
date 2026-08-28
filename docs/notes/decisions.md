@@ -2827,3 +2827,43 @@ merged somebody else's half-finished work into an unrelated branch, which is
 **Rebase a docs commit without touching the stash at all:** commit first, then rebase. There is
 nothing to stash if there is nothing uncommitted, and a docs-only change is one commit by
 definition. If a stash is genuinely needed, `git stash list` first and read whose it is.
+
+## Ruling: ⎋ on a question is a deny, not an interrupt
+
+**The bug, watched:** an agent asks an `AskUserQuestion`, its card is drawn in the DM, the operator
+presses ⎋ to get out of it, and the card never goes away. Reported off a build where the room still
+drew that card (it now draws none — `Cards.For` only), but the root cause is the same on `main`.
+
+**Why ⎋ did nothing.** ⎋ wrote a `FrameInterrupt`, and the daemon's interrupt handler
+(`apply.go`) deliberately does **not** clear `a.pending` — it leans on the CLI withdrawing the ask.
+For a *permission* the CLI does exactly that: `interrupt-permission-findings.md` records the
+`control_cancel_request` arriving the moment ⎋ lands, so the card clears. For an `AskUserQuestion`
+it is **unrecorded** whether the interrupt withdraws it at all (`question-findings.md` §9), and the
+binary carries `tengu_auq_park_preserved_at_shutdown` — *"cancel + deny skipped; park stays
+answerable"* — which reads as *the question is preserved*. So `a.pending` never cleared, every fleet
+report kept naming the ask, and `Cards.Reconcile` re-pinned the card forever.
+
+**The fix:** ⎋ on a `ShapeQuestion` card sends a **deny** (settles it), the same frame `[d]` writes,
+rather than an interrupt. A deny *does* clear `a.pending` — `DenyTool` writes to stdin, and on that
+succeeding `noteAnswered` clears it — so the report drops the ask and the card comes down for good.
+`internal/ui/send.go`'s `interrupt`. Scoped to the focused pane and to a card whose shape is *known*
+to be a question: a card rebuilt from a report on reattach carries no `Ask`, reads as a permission,
+and keeps the interrupt (right for the permission it usually is; `[d]` remains the way to clear the
+rarer report-only question). The card's ⎋ label becomes `dismiss` on a question
+(`cardDismissHint`), because "the legend never lies" reaches the card too and ⎋ no longer interrupts
+there.
+
+**What is still unrecorded, and why we shipped anyway.** The *remedy* leans on unrecorded behaviour
+as much as the premise did: `question-findings.md` §9 also has *"denying a question … whether the
+agent re-asks, is unrecorded."* Two residual risks — (1) if a preserved question also skips an
+explicit deny, Wake clears `pending` (reads the agent unblocked) while claude may still be blocked;
+(2) a denied question that makes the model re-ask turns ⎋ into a new card rather than an exit. Both
+already ride on `[d]`; ⎋ adds **no new** unrecorded dependency, only a second key onto the same one,
+and when a question card is up there is no turn to interrupt anyway — answering or denying is the
+only real way out. The owner chose to ship on that basis rather than block on a recording.
+
+**The follow-up that would retire the risk** is the spike §9 names as "the obvious next" — see
+`deferred.md`: record (a) interrupting a session with an `AskUserQuestion` outstanding, to confirm
+it stays stuck (the bug), and (b) denying an `AskUserQuestion`, to confirm the deny unblocks claude
+without a re-ask. Until then this is a UI-correctness fix built on a `[binary]` reading, and it is
+labelled as one here and in the code.

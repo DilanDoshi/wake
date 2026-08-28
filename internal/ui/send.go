@@ -30,6 +30,12 @@ const (
 	interruptFailed = "interrupting that turn"
 	answerFailed    = "answering that request"
 
+	// escDismissReason is what the model is told when esc dismisses a question.
+	// esc on a question is a deny rather than an interrupt (see interrupt), so
+	// this reaches the model verbatim as the tool result the way any refusal
+	// does - a blank one reads as a tool that failed for no reason.
+	escDismissReason = "the operator dismissed this question without answering"
+
 	// NoAddressee is what the room says about a draft addressed to nobody. It
 	// is a refusal rather than a guess: with thirty agents listening, inventing
 	// a recipient is the misroute core.Route.Resolved exists to prevent.
@@ -431,6 +437,28 @@ func (a App) interrupt() (tea.Model, tea.Cmd, bool) {
 	}
 	if a.endedAgent(id) {
 		return a, nil, true
+	}
+	// A question is not withdrawn by an interrupt the way a permission is. The
+	// CLI cancels a pending permission on a control_cancel_request the moment
+	// esc lands, so its card clears; an AskUserQuestion is preserved instead
+	// (question-findings.md §9, still unrecorded), so the ask stays open and
+	// the card never clears. So esc on a question settles it with a deny - the
+	// same frame [d] writes, adding no unrecorded dependency [d] does not
+	// already carry - which unblocks the agent and takes the card down here,
+	// the way commitAnswer does.
+	//
+	// Only the focused pane's card, which is the one surface a card is drawn on
+	// at all. And only a card whose shape is *known* to be a question: one
+	// rebuilt from a fleet report on reattach carries no Ask and reads as a
+	// permission, so esc interrupts it - which is right for the permission it
+	// usually is, and leaves [d] as the way to clear the rarer report-only
+	// question. cardOf is what the pane actually draws, so the card denied is
+	// the one on screen.
+	if a.focus != "" {
+		if card, ok := a.cardOf(a.focus); ok && card.Shape() == ShapeQuestion {
+			a.cards = a.cards.Settle(card.AgentID, card.RequestID)
+			return a, a.write(answerFailed, card.Deny(escDismissReason)), true
+		}
 	}
 	if a.focus == "" {
 		notice.Report(interruptedFormat, agentPrefix, a.agentName(id))
