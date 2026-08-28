@@ -318,10 +318,10 @@ func (a App) endSelection() (App, tea.Cmd) {
 	return a, copyToClipboard(selectedText(lines, first, m))
 }
 
-// clickedTool opens or folds what a click landed on: a folded run's rollup
-// line, or one tool result, whichever the line held. It leaves everything alone
-// when the line held neither - which is every line in the room, where no tool
-// block is drawn at all.
+// clickedTool opens or folds what a click landed on: in a conversation, a
+// folded run's rollup line or one tool result; in the room, a response the room
+// collapsed into a pointer. It leaves everything alone when the line held none
+// of those.
 //
 // A run is tried first because its rollup and a result are never on the same
 // line - a folded run draws no results, an expanded one draws no rollup - so the
@@ -333,6 +333,15 @@ func (a App) clickedTool() App {
 	// expanded whatever run sat under the cursor, and that opened state persists,
 	// so the pane came back expanded every time. See selection.refocused.
 	if a.sel.refocused {
+		return a
+	}
+	// The room folds responses rather than tool blocks, so its click resolves a
+	// line to a collapsed reply and toggles that one - the per-line half of the
+	// ask, where ⌃E is the expand-all half.
+	if a.sel.pane == "" {
+		if next, hit := a.room.toggleLine(a.sel.anchor.line); hit {
+			return a.withRoom(next)
+		}
 		return a
 	}
 	dm, ok := a.dms[a.sel.pane]

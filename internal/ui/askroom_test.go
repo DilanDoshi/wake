@@ -51,7 +51,7 @@ func TestTheRoomNamesWhatAPermissionAskWants(t *testing.T) {
 		Kind: core.KindPermissionRequest, RequestID: "r1",
 		Tool: &core.ToolCall{Name: "Bash", Display: "rm -rf build/"},
 	}
-	got := ansi.Strip(roomBlock(ev, Agent{Name: "sydney"}, roomWidth).text)
+	got := ansi.Strip(roomBlock(ev, Agent{Name: "sydney"}, roomWidth, false).text)
 	if !strings.Contains(got, "Bash") {
 		t.Errorf("a permission ask in the room does not name the tool: %q", got)
 	}

@@ -207,7 +207,20 @@ validate (`core.ValidBudget`, `core.ValidFallbackModel`; the spawn frame carries
 *Blocks:* spend discipline at fleet scale, from the surface that matters.
 
 ---
-## OWNER REQUEST, 2026-08-26 — expand a room response in place, the way ⌃E expands a folded block in a DM
+## ~~OWNER REQUEST, 2026-08-26 — expand a room response in place, the way ⌃E expands a folded block in a DM~~ CLOSED, `feat/room-expand-response` (2026-08-27)
+
+Closed as the entry's own "cheapest try" plus the owner's chosen split: a **click** on a folded
+response toggles that one (`clickedTool`'s room branch → `Room.toggleLine`), and **`⌃E`** expands or
+folds **all** of the room's collapsed responses at once (`Room.toggleExpandAll`), the room learning
+the DM's `⌃E` rather than inventing a line cursor the room does not have. The full render is the one
+`agentSaid` already computed and discarded past `roomInlineRows`; expanding keeps it, and the
+speaker head keeps "whose it is". The default stays folded, so the room does not become the wall of
+text the fold prevents. Expand state is `Room.expanded` (per-line, id-keyed, copied on write) plus
+`Room.expandAll`, both bounded on reclaim/merge (`forgetExpanded`/`keptExpanded`) so they cannot
+outgrow the retention cap. `⌃E`'s target being "the line under the cursor" from the note below was
+dropped deliberately: every keystroke clears the selection (`App.cleared`) before `⌃E` runs, so a
+mouse-anchor target would need sticky state against that rule — the click already gives per-line
+precision. Tests in `internal/ui/roomexpand_test.go`.
 
 **Asked for in this version.** In the group chat, be able to expand an agent's response inline — the
 same gesture that opens a collapsed tool call or other folded block in a DM (`⌃E`).

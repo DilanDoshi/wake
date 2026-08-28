@@ -120,7 +120,7 @@ func TestNoRecordedReplyCostsMoreThanThePointerAllows(t *testing.T) {
 			}
 			past++
 			tallest = max(tallest, rows)
-			b := roomBlock(core.Event{Kind: core.KindAssistantText, Text: text}, Agent{Name: "sydney", Label: "auth-fix"}, w)
+			b := roomBlock(core.Event{Kind: core.KindAssistantText, Text: text}, Agent{Name: "sydney", Label: "auth-fix"}, w, false)
 			if got := strings.Count(b.text, "\n") + 1; got > wantRows {
 				t.Errorf("width %d: a reply rendering %d rows drew a %d-row pointer, want at most %d. Past the cap a reply is a pointer, so its cost stops depending on its height",
 					w, rows, got, wantRows)
