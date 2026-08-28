@@ -135,10 +135,18 @@ func (a App) submit() (tea.Model, tea.Cmd) {
 	if a, cmd, ok := a.slash(text); ok {
 		return a, cmd
 	}
+	// A `/rename bob` is claude's own word, so the router above leaves it a
+	// message - and Wake mirrors it onto its own handle in the same keystroke,
+	// so the roster and claude's title do not drift, which was the reported
+	// confusion. mirror is nil for every other draft, so an ordinary send is
+	// still one command. See renameMirror.
+	mirror := a.renameMirror(text)
 	if a.focus != "" {
-		return a.sendDM(text, images)
+		model, cmd := a.sendDM(text, images)
+		return model, tea.Batch(mirror, cmd)
 	}
-	return a.sendRoom(text, images)
+	model, cmd := a.sendRoom(text, images)
+	return model, tea.Batch(mirror, cmd)
 }
 
 // sendDM writes one message to the one agent a DM is with. There is nothing to

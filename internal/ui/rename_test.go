@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -275,4 +277,111 @@ func TestEveryOpenConversationCarriesTheNameAndParentTheReportDoes(t *testing.T)
 				"*parent* leaves the same stale handle on a child, one surface down", s.ID, dm.ParentName, want)
 		}
 	}
+}
+
+// `/rename` is claude's own word - the recorded corpus shows it advertised, so
+// the router leaves it a message and it still reaches the agent - and Wake
+// mirrors it onto its own handle in the same keystroke, so the roster and
+// claude's title do not drift. One `/rename bob` in a conversation therefore
+// both renames s1 in Wake and sends the draft on to claude.
+//
+// The two halves are one action but two writes, because they are as independent
+// as /name is from a message: the rename is the daemon's to accept or refuse,
+// and the send keeps its own refusals. This asserts both frames go out.
+func TestRenameMirrorsOntoWakesHandleWhileStillReachingClaude(t *testing.T) {
+	fresh(t)
+	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
+
+	_, cmd := typeAndSubmit(a, "/rename bob")
+	frames := batchFrames(t, a, cmd)
+
+	var renamed, passed bool
+	for _, f := range frames {
+		if f.Kind == rpc.FrameRename && f.SessionID == "s1" && f.Text == "bob" {
+			renamed = true
+		}
+		if f.Kind == rpc.FrameSend && f.SessionID == "s1" && strings.Contains(f.Text, "rename bob") {
+			passed = true
+		}
+	}
+	if !renamed {
+		t.Errorf("/rename bob wrote no FrameRename for s1, so Wake's own handle did not move - the reported bug. frames=%+v", frames)
+	}
+	if !passed {
+		t.Errorf("/rename bob did not still reach claude as a message, so claude's own /rename stopped working. frames=%+v", frames)
+	}
+}
+
+// A bare `/rename` with no new name is left entirely alone: nothing to mirror,
+// and the draft passes through to claude the way it always did.
+func TestBareRenameIsJustAMessage(t *testing.T) {
+	fresh(t)
+	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
+
+	_, cmd := typeAndSubmit(a, "/rename")
+	for _, f := range batchFrames(t, a, cmd) {
+		if f.Kind == rpc.FrameRename {
+			t.Errorf("bare /rename wrote a FrameRename with no name to give: %+v", f)
+		}
+	}
+}
+
+// The mirror follows claude's grammar, not `/name`'s, and every place they
+// differ it declines **silently** - no FrameRename, and no `/name`-flavoured
+// refusal leaking over a passthrough that worked.
+//
+// claude's `/rename` renames the session it is typed in: it has no `@who` (so a
+// leading one is just a word claude reads, not a Wake target - the reported
+// footgun was `/rename @sydney bob` in alex's DM renaming sydney in Wake while
+// claude renamed alex), it is a one-word name (Wake cannot hold two), it is the
+// exact advertised word (not `/RENAME`), and it is a conversation (the room is
+// not one session). Each is left to the passthrough rather than mirrored wrong.
+func TestRenameMirrorDeclinesSilentlyWhenItIsNotClaudesGrammar(t *testing.T) {
+	for _, tc := range []struct {
+		name, draft string
+		room        bool
+	}{
+		{name: "a leading @who is not a target", draft: "/rename @sydney bob"},
+		{name: "a multi-word name Wake cannot hold", draft: "/rename bob smith"},
+		{name: "the exact word, not a folded one", draft: "/RENAME bob"},
+		{name: "the room is not one conversation", draft: "/rename bob", room: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fresh(t)
+			a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(200, 40)
+			if tc.room {
+				a = a.showRoom()
+			}
+
+			_, cmd := typeAndSubmit(a, tc.draft)
+			if cmd != nil {
+				for _, f := range batchFrames(t, a, cmd) {
+					if f.Kind == rpc.FrameRename {
+						t.Errorf("%q wrote a FrameRename %+v; the mirror follows only claude's own grammar", tc.draft, f)
+					}
+				}
+			}
+			if got := shown(a); strings.Contains(got, nameUsage) || strings.Contains(got, noNameTarget) {
+				t.Errorf("%q leaked a /name refusal over a /rename that just passes through:\n%s", tc.draft, got)
+			}
+		})
+	}
+}
+
+// batchFrames runs a command - each member of a tea.Batch in turn - and returns
+// every frame it wrote to the recorder. sentFrames cannot: it runs the batch
+// once and reads before the members it holds have run.
+func batchFrames(t *testing.T, a App, cmd tea.Cmd) []rpc.Frame {
+	t.Helper()
+	if cmd == nil {
+		t.Fatal("no command: nothing was sent")
+	}
+	if batch, ok := cmd().(tea.BatchMsg); ok {
+		for _, c := range batch {
+			if c != nil {
+				c()
+			}
+		}
+	}
+	return recorderOf(t, a).taken(t)
 }

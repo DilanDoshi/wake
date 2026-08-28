@@ -221,6 +221,14 @@ const (
 	taskCommand = "task"
 )
 
+// renameCommand is claude's own word for what `/name` does, and Wake does not
+// own it: the corpus shows it advertised, so the router leaves it a message and
+// it still reaches the agent (see nameCommand above and
+// TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising). It is spelled
+// here only so renameMirror can recognise the draft it mirrors - a `/rename bob`
+// that reached claude but moved nothing Wake showed was the reported confusion.
+const renameCommand = "rename"
+
 // managerCommand is the switch for the one session that has tools over the
 // fleet: on when it is off, off when it is on.
 //
@@ -475,6 +483,43 @@ func (a App) slash(text string) (App, tea.Cmd, bool) {
 	// answer "Wake took this" is the lookup that just said so.
 	next, cmd := run(a, strings.TrimSpace(arg))
 	return next, cmd, mine
+}
+
+// renameMirror is Wake's half of a `/rename bob` draft: the write that moves
+// this conversation's own handle for its agent, so the roster and claude's
+// title do not drift - or nil for any draft that is not one.
+//
+// It is here, not in send.go, because recognising the draft means knowing what
+// a leading slash means, which is this file's alone
+// (TestNothingButTheRouterKnowsWhatASlashMeans). It is deliberately not a
+// commands entry: `rename` is a word claude advertises, so slash leaves the
+// draft a message and it still reaches the agent - submit writes this *beside*
+// the send, never instead of it, so claude's own rename keeps working.
+//
+// It mirrors claude's grammar rather than `/name`'s, and the difference is the
+// whole correctness of it. Claude's `/rename` renames the session it is typed
+// in, so this moves the *focused conversation's* agent and fires **only in a
+// conversation** - never an `@who`, which is `/name`'s alone and would rename
+// one agent in Wake while claude renamed the one the DM is actually with. Matched
+// exact-case, like the word claude advertises, and only for a one-word name Wake
+// can hold: anything else - a second word, a different case, the room - is left
+// to the passthrough, so Wake declines silently rather than renaming to
+// something claude will not, or reporting a `/name` refusal for a `/rename`.
+func (a App) renameMirror(text string) tea.Cmd {
+	body, ok := strings.CutPrefix(strings.TrimSpace(text), SlashPrefix)
+	if !ok {
+		return nil
+	}
+	word, name, _ := strings.Cut(body, " ")
+	name = strings.TrimSpace(name)
+	if word != renameCommand || a.focus == "" || name == "" || len(strings.Fields(name)) != 1 {
+		return nil
+	}
+	agent, ok := a.fleet.Agent(a.focus)
+	if !ok {
+		return nil
+	}
+	return a.renameTo(agent, name)
 }
 
 const (
