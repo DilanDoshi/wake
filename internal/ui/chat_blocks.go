@@ -108,16 +108,18 @@ const (
 var renderRoomBlock = roomBlock
 
 // roomBlock renders one event for the room, or an empty block for one with no
-// room representation.
+// room representation. expanded draws an over-cap response in full rather than
+// as a pointer - ⌃E and a click reach it through the Room's expand state; every
+// other kind ignores it, since only an agent's reply collapses.
 //
 // It never returns a line wider than width. The room is one column of a
 // three-region layout and lipgloss joins columns on their widest line, so an
 // over-wide line here shoves both sidebars out of place.
-func roomBlock(ev core.Event, a Agent, width int) block {
+func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 	w := max(width, minBlockWidth)
 	switch ev.Kind {
 	case core.KindAssistantText:
-		return block{text: agentSaid(ev.Text, a, w)}
+		return block{text: agentSaid(ev.Text, a, w, expanded)}
 	case core.KindUserText:
 		return block{text: youSaid(ev.Text, w)}
 	case core.KindTurnEnd:
@@ -150,14 +152,28 @@ func roomBlock(ev core.Event, a Agent, width int) block {
 // height decision and the collapsed preview are taken from: a long message is
 // exactly the case glamour's process-global mutex makes expensive, so it is
 // never put through it twice.
-func agentSaid(text string, a Agent, width int) string {
+func agentSaid(text string, a Agent, width int, expanded bool) string {
 	head := speakerStyle(a).MaxWidth(width).Render(speaker(a))
 	body := strings.TrimSpace(text)
 	rendered := render.Markdown(body, width)
-	if renderedRows(rendered) <= roomInlineRows {
+	if expanded || renderedRows(rendered) <= roomInlineRows {
 		return joinBlock(head, rendered)
 	}
 	return joinBlock(head, collapsed(rendered, words(body), width, roomCollapseLines))
+}
+
+// roomCollapsible reports whether an event draws as a pointer at this width -
+// i.e. whether there is anything for ⌃E or a click to expand. Only an agent's
+// reply collapses; your own turn wraps whole and every marker is one line. It
+// mirrors agentSaid's own boundary so the two cannot disagree about which lines
+// are expandable, and it renders once, which is affordable on a user gesture
+// and never on a frame.
+func roomCollapsible(ev core.Event, width int) bool {
+	if ev.Kind != core.KindAssistantText {
+		return false
+	}
+	rendered := render.Markdown(strings.TrimSpace(ev.Text), max(width, minBlockWidth))
+	return renderedRows(rendered) > roomInlineRows
 }
 
 // renderedRows is how many rows a rendered block occupies with its blank edges

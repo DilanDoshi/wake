@@ -138,19 +138,44 @@ func TestExpandingOneConversationLeavesTheOthersCollapsed(t *testing.T) {
 	}
 }
 
-// The room draws no tool results at all - it shows what is addressed to you,
-// what is blocked, and closing words - so there is nothing there for this key
-// to act on. It says so rather than doing nothing, which is ⌃F's answer to the
-// same shape.
-func TestCtrlEInTheRoomIsRefusedByName(t *testing.T) {
+// The room folds a long reply into a pointer rather than a tool result, so ⌃E
+// here expands what the room folded - every collapsed response at once, the
+// room learning the DM's ⌃E. It used to refuse by name; that was before the
+// room could show a full response without opening the agent's DM.
+func TestCtrlEInTheRoomExpandsEveryCollapsedResponse(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40).withAgents("sydney")
 	if a.focus != "" {
 		t.Fatalf("focus is %q, want the room", a.focus)
 	}
+	a = a.applyFrame(rpc.Frame{
+		Kind: rpc.FrameEvent, SessionID: "s1",
+		Event: &core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: longRoomReply("TAIL_OF_THE_REPLY")},
+	})
+	if !strings.Contains(shown(a), openDMHint) {
+		t.Fatalf("the reply is not collapsed to begin with:\n%s", shown(a))
+	}
 
 	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlE})
 
-	if got := latestNotice(t); !strings.Contains(got, "⌃E") {
-		t.Errorf("the refusal does not name the key that was pressed: %q", got)
+	if !strings.Contains(shown(a), "TAIL_OF_THE_REPLY") {
+		t.Errorf("⌃E did not expand the collapsed response in the room:\n%s", shown(a))
 	}
+	if strings.Contains(shown(a), openDMHint) {
+		t.Errorf("⌃E left the pointer up beside the expanded body:\n%s", shown(a))
+	}
+
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlE})
+
+	if strings.Contains(shown(a), "TAIL_OF_THE_REPLY") {
+		t.Errorf("a second ⌃E did not re-collapse the room:\n%s", shown(a))
+	}
+}
+
+// longRoomReply is an agent reply whose rendered height is well past the room's
+// inline cap, so it collapses to a pointer. The tail marker rides at the end,
+// out of the collapsed preview's opening lines, so a test can name the row that
+// is hidden until the reply is expanded.
+func longRoomReply(tail string) string {
+	return "OPENING of the reply.\n\n" +
+		strings.Repeat("more of the reply's reasoning.\n\n", roomInlineRows+5) + tail
 }

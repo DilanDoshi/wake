@@ -79,6 +79,23 @@ type Room struct {
 	// order the replies happen to arrive in.
 	raw []roomLine
 
+	// expandAll is ⌃E's global toggle: while it is set, every response the room
+	// would collapse into a pointer draws its full render instead. It is the
+	// room learning the DM's ⌃E - expand-everything, then a second press
+	// hides-everything, which is why toggling it off also drops the per-line
+	// opens below (see toggleExpandAll). A bool rather than the DM's key, and it
+	// survives a Before rebuild because it is not keyed on a block id.
+	expandAll bool
+
+	// expanded is the set of collapsed responses a click has opened one at a
+	// time, keyed on roomLine.id. A line draws full while expandAll is set or
+	// its id is here; a click flips one entry (toggleLine). Copied on write, so
+	// a Room handed around by value cannot mutate a copy's opens. Keyed on the
+	// block id rather than a position so it is stable across a re-wrap; a Before
+	// that re-derives ids may drop an entry, which re-collapses that one line -
+	// rare, and never wrong, the way the DM's per-item opens are transient.
+	expanded map[uint64]bool
+
 	composer Composer
 	width    int
 	height   int
@@ -281,7 +298,10 @@ func (r Room) appendLine(ev core.Event, by Agent, to string) Room {
 	hidden := r.focus != "" && !focusAdmits(line, r.focus, r.managerID)
 	var b block
 	if !hidden {
-		b = renderRoomBlock(ev, by, r.blockWidth())
+		// A new event carries no per-line open of its own, but expandAll is a
+		// standing choice: while it is set, a long reply arriving lands expanded
+		// too, so ⌃E's "show everything" keeps meaning everything.
+		b = renderRoomBlock(ev, by, r.blockWidth(), r.expandAll)
 		if b.text == "" {
 			return r
 		}
@@ -355,6 +375,12 @@ func (r Room) Before(earlier []roomLine) Room {
 	combined = append([]roomLine(nil), combined[drop:]...)
 	r.hist = max(len(hist)-drop, 0)
 	r.reclaimed = r.reclaimed || drop > 0
+	// A merge both drops the oldest lines and re-derives history ids, so an open
+	// kept on a line that left - or whose id changed - would linger. Keep only
+	// opens whose block is still in the room, which bounds the set to what is
+	// retained. On the rebuild path, not the per-event one, so its cost rides
+	// with the render already happening here.
+	r.expanded = keptExpanded(r.expanded, combined)
 	blocks := renderRoom(r, combined)
 
 	base := 0
@@ -391,6 +417,7 @@ func (r Room) reclaimOldest(drop int) Room {
 	}
 	oldFirst := r.tr.first()
 	evicted := r.said.slice(r.said.first(), r.said.first()+drop)
+	r = r.forgetExpanded(evicted)
 	cut := r.tr.lines.first() + roomRenderedLines(evicted)
 	if !r.reclaimed {
 		cut += len(blockLines(roomBanner(r.blockWidth()), true))
@@ -654,7 +681,7 @@ func (r Room) renderAll(lines []roomLine) []block {
 		if r.focus != "" && !focusAdmits(lines[i], r.focus, r.managerID) {
 			continue
 		}
-		b := renderRoomBlock(lines[i].ev, lines[i].by, r.blockWidth())
+		b := renderRoomBlock(lines[i].ev, lines[i].by, r.blockWidth(), r.expandAll || r.expanded[lines[i].id])
 		if b.text != "" {
 			b.laidOut = blockLines(b, false)
 			lines[i].rows = len(b.laidOut)

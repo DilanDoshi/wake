@@ -1004,7 +1004,7 @@ func roomAllocatedBytes(f func()) uint64 {
 // the 20,000-event cap. The renderer is fenced to isolate Room's own storage.
 func TestRoomBeforeMetadataAllocationStaysBoundedAtTheCap(t *testing.T) {
 	original := renderRoomBlock
-	renderRoomBlock = func(ev core.Event, a Agent, width int) block {
+	renderRoomBlock = func(ev core.Event, a Agent, width int, expanded bool) block {
 		return block{text: "assistant markdown"}
 	}
 	t.Cleanup(func() { renderRoomBlock = original })
@@ -1031,7 +1031,7 @@ func TestRoomBeforeMetadataAllocationStaysBoundedAtTheCap(t *testing.T) {
 func TestRoomBeforeRendersEachRetainedAssistantExactlyOnce(t *testing.T) {
 	original := renderRoomBlock
 	renders := 0
-	renderRoomBlock = func(ev core.Event, a Agent, width int) block {
+	renderRoomBlock = func(ev core.Event, a Agent, width int, expanded bool) block {
 		if ev.Kind != core.KindAssistantText || ev.Text != "**retained markdown**" {
 			t.Fatalf("unexpected event reached room rendering: kind=%v text=%q", ev.Kind, ev.Text)
 		}

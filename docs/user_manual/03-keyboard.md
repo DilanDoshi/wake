@@ -17,13 +17,18 @@ sends it is [chapter 7](07-troubleshooting.md) and `docs/live-testing.md`.
 | `⌥↵` `⌃J` | A newline in the draft, rather than sending it |
 | `⎋⎋` | Clear a conversation's draft. The first `⎋` interrupts *and* arms; the second clears |
 | `⇞` `⇟` | Scroll the pane with the keys |
-| `⌃E` | Expand the tool results in the conversation with the keys, and collapse them again |
+| `⌃E` | Expand what the pane folded — a conversation's tool results, or the room's folded responses — and collapse it again |
 
 A long tool result is cut to its first ten lines with a `… +N lines` footer, so an agent that read a
 300-line file shows you thirty of them. `⌃E` shows the whole of every result in that conversation,
 and a second press puts them back. It acts on the **pane with the keys** rather than the roster's
-pick, because expanding is about what you are reading — and in the room it is refused by name, since
-the room draws no tool results at all.
+pick, because expanding is about what you are reading.
+
+**In the room** `⌃E` does the same for the responses the room folds into a `⤷ … ⌃D open DM` pointer:
+it opens every folded response at once, and a second press folds them back. A long response is a
+summary in the room by design — the group chat is a hub, not a place for deep reading — so the
+default stays folded and `⌃E` is the way to see them all in full without leaving the room. To open
+just one, **click** its folded pointer.
 
 Expanding returns you to the newest line. That is the same thing a width change does, for the same
 reason: the lines a scroll position points at have renumbered underneath it.
@@ -95,7 +100,9 @@ and `⌃P` are how you move between the lines of a multi-line draft.
 ## The mouse
 
 Wheel scrolls the pane you are over. Clicking a pane gives it the keys. The divider between the
-room and a conversation can be grabbed and dragged.
+room and a conversation can be grabbed and dragged. Clicking a folded block opens just that one — a
+tool result or a run's rollup in a conversation, or a folded response in the room — where `⌃E`
+opens all of them.
 
 Mouse reporting is on, which may mean your terminal needs a modifier (often `⌥` or `⇧`) to select
 text for copying.

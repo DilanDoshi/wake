@@ -16,29 +16,23 @@ package ui
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
-
-	"github.com/DilanDoshi/wake/internal/notice"
 )
 
-// noExpandTarget is ⌃E with no conversation in front of it. The room draws no
-// tool results at all - it carries what is addressed to you, what is blocked,
-// and closing words - so there is nothing there to expand. Named rather than
-// silent, for noPaneAdvice's reason.
-const noExpandTarget = "⌃E expands the tool results in one conversation, and the room shows none. ⌃D opens one"
-
-// toggleExpanded flips whether the focused conversation shows its tool results
-// whole, and refuses by name when there is no conversation on the keys.
+// toggleExpanded is ⌃E on the pane with the keys: a conversation shows its tool
+// results whole, and the room shows every response it had collapsed into a
+// pointer. Two surfaces fold different things, so ⌃E expands what each one
+// folded - the room learning the DM's affordance, spelled as expand-all so it
+// needs no line cursor the room does not have and no mouse anchor a keystroke
+// would already have cleared.
 //
 // The focused pane and not the roster's pick, which is what ⌃D, ⌃Y and ⌃B read:
 // expanding is about what is being *read*, and the cursor names an agent that
-// may have no pane on screen.
+// may have no pane on screen. A focus that names no conversation is the room.
 func (a App) toggleExpanded() (tea.Model, tea.Cmd, bool) {
-	dm, ok := a.dms[a.focus]
-	if !ok {
-		notice.Report("%s", noExpandTarget)
-		return a, nil, true
+	if dm, ok := a.dms[a.focus]; ok {
+		return a.withDM(a.focus, dm.toggleExpanded()), nil, true
 	}
-	return a.withDM(a.focus, dm.toggleExpanded()), nil, true
+	return a.withRoom(a.room.toggleExpandAll()), nil, true
 }
 
 // toggleExpanded flips the flag and re-renders, which is the whole of it: the
