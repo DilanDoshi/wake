@@ -26,6 +26,32 @@ package ui
 // be. Every key it does not claim closes it and then does its own job, the
 // selection rule's shape: nothing decorative may swallow a keystroke, and the
 // key that matters most - ⎋ at a runaway agent - is one pane-focus away.
+//
+// # A second render path narrows the ruling, rather than breaking it
+//
+// The owner's 2026-08-27 ruling on deferred.md's tiled-board idea: what §2c
+// actually refuses is panes you operate inside - transcripts you scroll and
+// stdin you type - not the visual shape of a cell. So "an overview, not
+// panes" narrows to an overview, not panes you *operate*, and Board grows a
+// second render path rather than a second modal: a Tiled bool on this same
+// model, boardView branching to a tile renderer (tileView, boardtile.go),
+// toggled by ⇥ while the board is up. Four guardrails hold the narrower line
+// - cross any of them and this is the multiplexer the non-negotiables
+// already refuse:
+//
+//  1. View-only. No keystroke reaches an agent's stdin from a tile; keys
+//     drive the board itself (move, jump in, park, close).
+//  2. Bounded live tail, no scrollback. A tile shows at most maxPreviewRows
+//     of live text and nothing you can scroll back through - the tail lives
+//     in App.tails (tail.go), gated on Tiled so a closed or row-mode board
+//     holds none of it.
+//  3. Fixed grid, no per-tile resize, no pane tree. Equal cells, no divider
+//     to drag, no split, no nesting.
+//  4. Act from it, never in it. ↵ and click leave the wall for the agent's
+//     real DM rather than working inside the tile.
+//
+// Full argument: docs/superpowers/specs/2026-08-27-tiled-board-design.md
+// §§1-2.
 
 import (
 	"fmt"
@@ -44,10 +70,19 @@ const (
 	// so a window showing fewer rows is not silently the fleet.
 	boardTitle = "BOARD"
 
-	// boardKeyLine is the board's own legend, the card's rule: an affordance
-	// that exists only while a surface is up belongs on the surface. It
-	// brackets nothing, so the card-key bijection guard reads no rune from it.
-	boardKeyLine = "↑↓ move  ↵ open  ⌃Y column  ⌃B below  ⌃C park  esc close"
+	// boardKeyLineRows and boardKeyLineTiles are the board's own legend, one
+	// per geometry - the card's rule, that an affordance existing only while a
+	// surface is up belongs on the surface, plus "the legend names only keys
+	// that work" one surface over: rows have no working ←→ (boardKey's ←/→
+	// cases fall through to close the board there), so the row line must not
+	// claim it, where tiles' is real (tileNav). Neither brackets anything, so
+	// the card-key bijection guard reads no rune from either - which makes the
+	// rest a judgment call, held to the same rule: never name a key that is
+	// not bound. Leaving, opening and parking lead; ⌃Y is folded into ↵'s
+	// entry rather than repeated, since openBoardRow now binds them to the
+	// same placement (open beside the room's own focus, a new column).
+	boardKeyLineRows  = "esc close  ↵/⌃Y column  ⌃D open here  ⌃B below  ⌃C park  ↑↓ move  ⇥ rows/tiles"
+	boardKeyLineTiles = "esc close  ↵/⌃Y column  ⌃D open here  ⌃B below  ⌃C park  ↑↓←→ move  ⇥ rows/tiles"
 
 	// boardChromeRows is what sits above the first row - the title - and the
 	// mouse's row arithmetic reads it too: the draw and the mouse measure one
@@ -70,6 +105,9 @@ var boardTakesNoArgument = boardVerb + " opens the fleet overview. It takes no a
 type Board struct {
 	Up       bool
 	Selected string
+	// Tiled draws the fleet as a grid of live tiles rather than one row per
+	// agent. The row view is the default; ⇥ toggles (Task 3).
+	Tiled bool
 }
 
 // openBoard is /board: it opens the overview over the whole frame.
@@ -85,6 +123,7 @@ func (a App) openBoard(arg string) (App, tea.Cmd) {
 
 func (a App) closeBoard() App {
 	a.board = Board{}
+	a.tails = nil
 	return a
 }
 
@@ -106,21 +145,40 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a.closeBoard(), nil, false
 	}
 	switch m.Type {
+	case tea.KeyTab:
+		a.board.Tiled = !a.board.Tiled
+		if !a.board.Tiled {
+			a.tails = nil // rows draw no tails; drop what the wall accumulated
+		}
+		return a, nil, true
 	case tea.KeyUp:
-		return a.moveBoard(-1), nil, true
+		return a.stepBoard(tileUp), nil, true
 	case tea.KeyDown:
-		return a.moveBoard(1), nil, true
+		return a.stepBoard(tileDown), nil, true
+	case tea.KeyLeft:
+		if !a.board.Tiled {
+			break // rows have no horizontal axis; close and let ← do its job
+		}
+		return a.stepBoard(tileLeft), nil, true
+	case tea.KeyRight:
+		if !a.board.Tiled {
+			break
+		}
+		return a.stepBoard(tileRight), nil, true
 	case tea.KeyEsc:
 		// Close and nothing else. The modal was opened by the operator, so ⎋
 		// here is "put it away" - pickerKey's meaning - and must not reach an
 		// agent as an interrupt nobody aimed.
 		return a.closeBoard(), nil, true
 	case tea.KeyEnter:
-		return a.openBoardRow(App.openHere)
+		// Beside the room, keeping it - the room's own ⌃Y placement, per the
+		// spec's table. Unclaimed it would fall through to the roster's pick -
+		// a different agent from the row the cursor is on, which is the
+		// surprise every one of these cases closes.
+		return a.openBoardRow(App.openRight)
 	case tea.KeyCtrlD:
-		// The room's own open key, as a synonym of ↵. Unclaimed it would fall
-		// through to the roster's pick - a different agent from the row the
-		// cursor is on, which is the surprise the next two cases close too.
+		// The room's own "open into the focused pane" - ↵'s old placement,
+		// now its own key rather than a duplicate of it.
 		return a.openBoardRow(App.openHere)
 	case tea.KeyCtrlY:
 		return a.openBoardRow(App.openRight)
@@ -134,44 +192,90 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	return a.closeBoard(), nil, false
 }
 
-// boardMouse is the wheel walking the cursor and a click opening the row it
-// lands on - the roster's own meaning for both. Everything else the mouse
-// does belongs to surfaces the board is not drawing.
-func (a App) boardMouse(m tea.MouseMsg) (App, tea.Cmd) {
-	switch {
-	case m.Button == tea.MouseButtonWheelUp:
-		return a.moveBoard(-1), nil
-	case m.Button == tea.MouseButtonWheelDown:
-		return a.moveBoard(1), nil
-	case m.Action == tea.MouseActionPress && m.Button == tea.MouseButtonLeft:
-		// Bounded to the drawn window before the offset is added - Roster.At's
-		// rule. Without the upper bound a click on the key line, the strip or
-		// the notice row resolved to a valid index past the window and opened
-		// an agent that was never on screen.
-		line := m.Y - boardChromeRows
-		if line < 0 || line >= a.boardRowsVisible() {
-			return a, nil
-		}
-		agents := a.fleet.OnRoster()
-		row := boardWindowStart(a.boardCursor(agents), len(agents), a.boardRowsVisible()) + line
-		if row >= len(agents) {
-			return a, nil
-		}
-		return a.closeBoard().openDMWith(agents[row].ID, agents[row].Name), nil
-	}
-	return a, nil
-}
-
-// moveBoard walks the cursor without wrapping, the picker's rule, and holds
-// it as the id it landed on.
-func (a App) moveBoard(by int) App {
+// stepBoard walks the cursor one step. In rows it is ↑↓ by one; in tiles it is
+// the 2-D walk, cols derived from the frame width the tiles are laid out at.
+func (a App) stepBoard(dir tileDir) App {
 	agents := a.fleet.OnRoster()
 	if len(agents) == 0 {
 		return a
 	}
-	at := clamp(a.boardCursor(agents)+by, 0, len(agents)-1)
+	cur := a.boardCursor(agents)
+	var at int
+	if a.board.Tiled {
+		at = tileNav(cur, tileColumns(a.layout.Width), len(agents), dir)
+	} else {
+		switch dir {
+		case tileUp:
+			at = clamp(cur-1, 0, len(agents)-1)
+		case tileDown:
+			at = clamp(cur+1, 0, len(agents)-1)
+		default:
+			at = cur
+		}
+	}
 	a.board.Selected = agents[at].ID
 	return a
+}
+
+// boardMouse is the wheel walking the cursor and a click opening the tile or
+// row it lands on - the roster's own meaning for both, in whichever geometry
+// is drawn. Everything else the mouse does belongs to surfaces the board is
+// not drawing.
+func (a App) boardMouse(m tea.MouseMsg) (App, tea.Cmd) {
+	switch {
+	case m.Button == tea.MouseButtonWheelUp:
+		return a.stepBoard(tileUp), nil
+	case m.Button == tea.MouseButtonWheelDown:
+		return a.stepBoard(tileDown), nil
+	case m.Action == tea.MouseActionPress && m.Button == tea.MouseButtonLeft:
+		agents := a.fleet.OnRoster()
+		i := a.boardHit(m.X, m.Y, agents)
+		if i < 0 || i >= len(agents) {
+			return a, nil
+		}
+		return a.closeBoard().openRight(agents[i].ID, agents[i].Name), nil
+	}
+	return a, nil
+}
+
+// boardHit is the agent index a click lands on, or -1. It reads the same
+// geometry the draw used, so a click and a tile cannot disagree - the row
+// view's boardChromeRows rule, in two dimensions.
+func (a App) boardHit(x, y int, agents []Agent) int {
+	if a.board.Tiled {
+		cols := tileColumns(a.layout.Width)
+		cellW := tileCellWidth(a.layout.Width, cols)
+		rowsVisible := max((a.paneHeight()-boardChromeRows-1)/tileHeight(), 1)
+		start := tileWindowStart(a.boardCursor(agents), len(agents), cols, rowsVisible)
+		// The row view's own line < 0 check, taken before the division: Go
+		// truncates integer division toward zero rather than flooring, so
+		// (y-boardChromeRows)/tileHeight() on the title row (y==0) computes 0
+		// rather than a negative row, and a click there would have resolved to
+		// the first tile instead of nothing.
+		line := y - boardChromeRows
+		if line < 0 {
+			return -1
+		}
+		r := line / tileHeight()
+		c := x / (cellW + tileGap)
+		if r < 0 || r >= rowsVisible || c < 0 || c >= cols {
+			return -1
+		}
+		return start + r*cols + c
+	}
+	// Row view: bounded to the drawn window before the offset is added -
+	// Roster.At's rule. Without the upper bound a click on the key line, the
+	// strip or the notice row under it resolved to a valid index past the
+	// window and opened an agent that was never on screen.
+	line := y - boardChromeRows
+	if line < 0 || line >= a.boardRowsVisible() {
+		return -1
+	}
+	row := boardWindowStart(a.boardCursor(agents), len(agents), a.boardRowsVisible()) + line
+	if row >= len(agents) {
+		return -1
+	}
+	return row
 }
 
 // boardCursor is the cursored row's index in this draw's order: the selected
@@ -187,11 +291,11 @@ func (a App) boardCursor(agents []Agent) int {
 }
 
 // openBoardRow is the jump the dashboard exists for, with the room's own
-// placement keys: ↵ and ⌃D open into the default pane, ⌃Y a new column, ⌃B
-// below the focused pane. The board closes on the way - the destination is a
-// conversation, and a modal left up over it would take the keys the
-// conversation needs. All three act on the *cursored* row: unclaimed, these
-// keys fell through to the roster's pick, a different agent entirely.
+// placement keys: ↵ and ⌃Y a new column beside the room's own focus, ⌃D into
+// the focused pane, ⌃B below it. The board closes on the way - the
+// destination is a conversation, and a modal left up over it would take the
+// keys the conversation needs. All four act on the *cursored* row: unclaimed,
+// these keys fell through to the roster's pick, a different agent entirely.
 func (a App) openBoardRow(open func(App, string, string) App) (App, tea.Cmd, bool) {
 	agents := a.fleet.OnRoster()
 	if len(agents) == 0 {
@@ -201,7 +305,8 @@ func (a App) openBoardRow(open func(App, string, string) App) (App, tea.Cmd, boo
 	return open(a.closeBoard(), ag.ID, ag.Name), nil, true
 }
 
-// openHere is ↵'s placement, named so the three open keys share one shape.
+// openHere is ⌃D's placement - ↵'s old one - named so the open keys share one
+// shape.
 func (a App) openHere(sessionID, name string) App { return a.openDMWith(sessionID, name) }
 
 // parkBoardRow is ⌃C on the cursored row, through parkTarget so a blocked
@@ -241,6 +346,9 @@ func boardWindowStart(cursor, total, visible int) int {
 // boardView is the whole frame's worth of overview: title, one row per agent
 // in attention order, the key line.
 func (a App) boardView(agents []Agent, width int) string {
+	if a.board.Tiled {
+		return a.tileView(agents, width)
+	}
 	visible := a.boardRowsVisible()
 	cursor := a.boardCursor(agents)
 	start := boardWindowStart(cursor, len(agents), visible)
@@ -256,7 +364,7 @@ func (a App) boardView(agents []Agent, width int) string {
 	for len(rows) < visible+boardChromeRows {
 		rows = append(rows, "")
 	}
-	rows = append(rows, mutedLine(boardKeyLine, width))
+	rows = append(rows, mutedLine(boardKeyLineRows, width))
 	return strings.Join(rows, "\n")
 }
 

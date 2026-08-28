@@ -177,6 +177,13 @@ type App struct {
 	// write. Keyed on *DM: a write replaces the pointer, never mutating a value.
 	dms map[string]*DM
 
+	// tails is each agent's live output tail while the tiled board is up,
+	// keyed by session id and holding the same partial preview a DM shows.
+	// On App (not Fleet) so a streamed token never triggers a fleet-sized
+	// copy - App.wants' own reason, one surface over. Empty when the wall is
+	// down: foldTail is gated and closeBoard drops it.
+	tails map[string]partial
+
 	// askedHistory is which sessions this client has already asked for a
 	// transcript, and pendingHistory is the asks Update has not yet written.
 	// Both are copied on write for dms' reason. See history.go.
@@ -758,6 +765,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 		// stored DM that does not have them re-sizes on every frame.
 		a = a.withDM(sessionID, dm.Append(a.fleet.named(sessionID, ev)))
 	}
+	a = a.foldTail(sessionID, ev)
 	return a
 }
 

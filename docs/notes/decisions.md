@@ -2927,3 +2927,17 @@ turn does not stay in view on the next look, so an agent that could trigger a re
 to make its own prior turns disappear from the operator's read with no receipt on any surface
 `list_agents` or `roll_up` exposes. `cmd/wake/mcpguard_test.go`'s `managerVerbs` carries both reasons
 against the actual `FrameRewind`/`FrameRewindTargets` dispatch, not asserted in the abstract.
+
+---
+
+## Ruling: §2c narrows to "not panes you *operate*", 2026-08-27 — the tiled board
+
+`board.go`'s header and the 2026-08-12 phase-4 scope call (§2c) said the board is "an overview, not
+panes." The tiled-board idea (`deferred.md`, 2026-08-26) needed a ruling before it could ship, because
+a tile showing live output is a small transcript. **The owner's ruling:** what §2c actually refuses is
+panes you operate inside — transcripts you scroll and stdin you type — not the visual shape of a
+cell, so the wording narrows from "an overview, not panes" to "an overview, not panes you
+*operate*". The tiled board is view-only under four guardrails: view-only (no key reaches an agent's
+stdin from a tile), bounded live tail with no scrollback, a fixed grid with no per-tile resize or pane
+tree, and act-from-not-in (`↵`/click jump into the real DM to work). See
+`docs/superpowers/specs/2026-08-27-tiled-board-design.md` for the full argument.

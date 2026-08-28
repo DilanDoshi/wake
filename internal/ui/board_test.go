@@ -16,6 +16,10 @@ import (
 
 // boardApp is a room over three agents in three states, with the board up.
 // Attention order puts the blocked one first, which is the board's own point.
+//
+// alex (s1) is given one running subagent before the board opens, so the
+// tiled board (Task 3) has a real count to state rather than the zero every
+// tile would otherwise show.
 func boardApp(t *testing.T) App {
 	t.Helper()
 	a := newRoomApp(t).withSize(120, 30).withRoster(
@@ -23,8 +27,71 @@ func boardApp(t *testing.T) App {
 		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateBlocked, Dir: "/repos/two"},
 		rpc.SessionStatus{ID: "s3", Name: "robin", State: rpc.StateIdle, Dir: "/repos/three"},
 	)
+	sub := started("t1", "d1", "counting lines", "general-purpose", core.TaskAgent)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &sub})
 	m, _ := typeAndSubmit(a, boardVerb)
 	return m.(App)
+}
+
+// ⇥ is the board's own toggle between rows and tiles, claimed above the
+// roster's arrows the way every other board key is.
+func TestTabTogglesRowsAndTiles(t *testing.T) {
+	a := boardApp(t)
+	if a.board.Tiled {
+		t.Fatal("the board opened in tiles; rows are the default")
+	}
+	next, _, handled := a.boardKey(tea.KeyMsg{Type: tea.KeyTab})
+	if !handled {
+		t.Fatal("⇥ was not claimed by the board")
+	}
+	if !next.board.Tiled {
+		t.Fatal("⇥ did not switch the board to tiles")
+	}
+	back, _, _ := next.boardKey(tea.KeyMsg{Type: tea.KeyTab})
+	if back.board.Tiled {
+		t.Fatal("a second ⇥ did not switch back to rows")
+	}
+}
+
+// Rows have no horizontal axis: ←→ are unclaimed there, so the unclaimed-key
+// rule applies and they close the board rather than moving a cursor rows do
+// not have. Documents the fallthrough and covers the row-mode ←→ branch,
+// which TestTiledCursorMovesInTwoDimensions does not - that test is tiled.
+func TestArrowsCloseTheBoardInRowMode(t *testing.T) {
+	a := boardApp(t)
+	if a.board.Tiled {
+		t.Fatal("precondition: the board opened in tiles; rows are the default")
+	}
+	right, _, handled := a.boardKey(tea.KeyMsg{Type: tea.KeyRight})
+	if handled {
+		t.Error("→ was claimed by the board in row mode")
+	}
+	if right.board.Up {
+		t.Error("→ in row mode should close the board rather than move a cursor rows do not have")
+	}
+	left, _, handled := a.boardKey(tea.KeyMsg{Type: tea.KeyLeft})
+	if handled {
+		t.Error("← was claimed by the board in row mode")
+	}
+	if left.board.Up {
+		t.Error("← in row mode should close the board")
+	}
+}
+
+// boardKeyLine must never name a key that does not work in the geometry it is
+// drawn under - "the legend names only keys that work", one surface over. Row
+// mode has no working ←→ (the case above), so its key line must not claim it;
+// tile mode's ←→ is real (tileNav), so its key line must.
+func TestBoardKeyLineAdvertisesArrowsOnlyInTileMode(t *testing.T) {
+	a := boardApp(t) // rows by default
+	if strings.Contains(shown(a), "←→") {
+		t.Errorf("the row-mode board advertises ←→, which closes the board there instead of moving the cursor:\n%s", shown(a))
+	}
+
+	a.board.Tiled = true
+	if !strings.Contains(shown(a), "←→") {
+		t.Errorf("the tile-mode board does not advertise ←→, which tileNav binds there:\n%s", shown(a))
+	}
 }
 
 func TestSlashBoardOpensTheOverview(t *testing.T) {
@@ -45,7 +112,8 @@ func TestSlashBoardOpensTheOverview(t *testing.T) {
 	}
 	// The board advertises its own keys on itself, the card's rule: an
 	// affordance that comes and goes belongs on the thing that came and went.
-	if !strings.Contains(out, boardKeyLine) {
+	// Rows by default here, so the row-mode line.
+	if !strings.Contains(out, boardKeyLineRows) {
 		t.Errorf("the board does not advertise its keys:\n%s", out)
 	}
 	// And it is an overview, not panes: the pane legend is not on screen.
@@ -61,6 +129,98 @@ func TestSlashBoardRefusesAnArgument(t *testing.T) {
 	m, _ := typeAndSubmit(a, boardVerb+" all")
 	if m.(App).board.Up {
 		t.Fatal("/board with an argument opened the board anyway")
+	}
+}
+
+// In tiles, → and ← walk the 2-D grid rather than the row list - tileNav's
+// own geometry, driven off the frame width the tiles are laid out at.
+//
+// Guards a gross regression only, not the openHere→openRight change; it
+// would still pass against the old single-column behavior. See
+// TestEnterAddsANewColumnWithoutReplacingTheOneAlreadyOpen for the real
+// discriminator on the add-column behavior.
+func TestTiledCursorMovesInTwoDimensions(t *testing.T) {
+	a := boardApp(t) // 3 agents
+	a.board.Tiled = true
+	a.layout.Width = 120 // wide enough for multiple columns
+	roster := a.fleet.OnRoster()
+	a.board.Selected = roster[0].ID
+
+	right, _, _ := a.boardKey(tea.KeyMsg{Type: tea.KeyRight})
+	if right.board.Selected == roster[0].ID {
+		t.Fatal("→ did not move the cursor to the next tile")
+	}
+}
+
+// ↵ opens the cursored agent beside the room as a new column - the room is
+// never replaced, and the board still closes on the way.
+//
+// Guards a gross regression only, not the openHere→openRight change; a
+// fresh, DM-less board has nothing already open for ↵ to wrongly replace, so
+// this passes against the old openHere behavior too. See
+// TestEnterAddsANewColumnWithoutReplacingTheOneAlreadyOpen for the real
+// discriminator on the add-column behavior.
+func TestEnterOpensAsANewColumnKeepingTheRoom(t *testing.T) {
+	a := boardApp(t)
+	roster := a.fleet.OnRoster()
+	a.board.Selected = roster[0].ID
+	next, _, _ := a.boardKey(tea.KeyMsg{Type: tea.KeyEnter})
+	na := next
+	if na.board.Up {
+		t.Fatal("↵ left the board up over the conversation")
+	}
+	if na.grid.Cols[0].Top != "" {
+		t.Fatal("the room is no longer Cols[0]; ↵ replaced it instead of opening beside it")
+	}
+	if !na.grid.Has(roster[0].ID) {
+		t.Fatal("↵ did not open the cursored agent's DM as a column")
+	}
+}
+
+// ↵ opens beside the room's own focus rather than replacing a conversation
+// that is already on screen - the difference between openHere and openRight
+// that a fresh, DM-less board cannot show, since the two happen to agree
+// there. Robin is opened and the keys returned to the room before the board
+// is opened, so ↵ on a different cursored agent has something to displace.
+func TestEnterAddsANewColumnWithoutReplacingTheOneAlreadyOpen(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 30).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateWorking, Dir: "/repos/one"},
+		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateBlocked, Dir: "/repos/two"},
+		rpc.SessionStatus{ID: "s3", Name: "robin", State: rpc.StateIdle, Dir: "/repos/three"},
+	)
+	a = a.openDMWith("s3", "robin") // robin's DM beside the room, focused
+	a = a.showRoom()                // keys back on the room; robin stays open
+	m, _ := typeAndSubmit(a, boardVerb)
+	b := m.(App)
+	b.board.Selected = "s1" // cursor on alex
+
+	next, _, _ := b.boardKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if !next.grid.Has("s3") {
+		t.Fatal("↵ replaced the already-open conversation instead of opening beside it")
+	}
+	if !next.grid.Has("s1") {
+		t.Fatal("↵ did not open the cursored agent")
+	}
+	if len(next.grid.Cols) != 3 {
+		t.Errorf("want the room plus two conversations as three columns, got %+v", next.grid.Cols)
+	}
+}
+
+// ⌃D still opens into the focused pane - ↵'s old placement, now its own key.
+//
+// Guards a gross regression only, not the openHere→openRight change: ⌃D is
+// deliberately still openHere, so it cannot discriminate ↵'s new placement.
+// See TestEnterAddsANewColumnWithoutReplacingTheOneAlreadyOpen for that.
+func TestCtrlDOpensIntoTheFocusedPane(t *testing.T) {
+	a := boardApp(t)
+	roster := a.fleet.OnRoster()
+	a.board.Selected = roster[0].ID
+	next, _, _ := a.boardKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	if next.board.Up {
+		t.Fatal("⌃D left the board up")
+	}
+	if !next.grid.Has(roster[0].ID) {
+		t.Fatal("⌃D did not open the cursored agent")
 	}
 }
 

@@ -4682,6 +4682,16 @@ elsewhere in this tree, not a new modal.
 owner ruling on whether a tile counts as "panes" under §2c, and if so, whether a board-scoped
 exception is worth having ready before a fleet that has actually felt too tall as a list.
 
+**BUILT, 2026-08-27.** The owner ruled: a tile counts as "panes" only in the sense of transcripts
+you scroll and stdin you type, not in the sense of a cell's shape — so §2c narrows from "an
+overview, not panes" to "an overview, not panes you *operate*", under four guardrails (view-only,
+bounded live tail with no scrollback, fixed grid with no per-tile resize or pane tree, act-from-not-in)
+that keep it a status wall rather than the multiplexer the non-negotiables refuse. `⇥` toggles rows
+⇄ tiles while the board is up; the toggle is not persisted. See
+`docs/superpowers/specs/2026-08-27-tiled-board-design.md` for the ruling and the design, and
+`docs/superpowers/plans/2026-08-27-tiled-board.md` for the implementation plan. The narrowed ruling
+itself is also recorded in `docs/notes/decisions.md` and in `internal/ui/board.go`'s header.
+
 ## 2026-08-27 — feature idea, owner's ask: several group chats inside one fleet, not one room per fleet
 
 **The ask:** more than one group chat within a single Wake instance — separate room surfaces the
