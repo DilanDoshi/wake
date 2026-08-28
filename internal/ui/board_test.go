@@ -16,6 +16,10 @@ import (
 
 // boardApp is a room over three agents in three states, with the board up.
 // Attention order puts the blocked one first, which is the board's own point.
+//
+// alex (s1) is given one running subagent before the board opens, so the
+// tiled board (Task 3) has a real count to state rather than the zero every
+// tile would otherwise show.
 func boardApp(t *testing.T) App {
 	t.Helper()
 	a := newRoomApp(t).withSize(120, 30).withRoster(
@@ -23,8 +27,30 @@ func boardApp(t *testing.T) App {
 		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateBlocked, Dir: "/repos/two"},
 		rpc.SessionStatus{ID: "s3", Name: "robin", State: rpc.StateIdle, Dir: "/repos/three"},
 	)
+	sub := started("t1", "d1", "counting lines", "general-purpose", core.TaskAgent)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &sub})
 	m, _ := typeAndSubmit(a, boardVerb)
 	return m.(App)
+}
+
+// ⇥ is the board's own toggle between rows and tiles, claimed above the
+// roster's arrows the way every other board key is.
+func TestTabTogglesRowsAndTiles(t *testing.T) {
+	a := boardApp(t)
+	if a.board.Tiled {
+		t.Fatal("the board opened in tiles; rows are the default")
+	}
+	next, _, handled := a.boardKey(tea.KeyMsg{Type: tea.KeyTab})
+	if !handled {
+		t.Fatal("⇥ was not claimed by the board")
+	}
+	if !next.board.Tiled {
+		t.Fatal("⇥ did not switch the board to tiles")
+	}
+	back, _, _ := next.boardKey(tea.KeyMsg{Type: tea.KeyTab})
+	if back.board.Tiled {
+		t.Fatal("a second ⇥ did not switch back to rows")
+	}
 }
 
 func TestSlashBoardOpensTheOverview(t *testing.T) {

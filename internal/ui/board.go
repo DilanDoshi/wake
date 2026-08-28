@@ -47,7 +47,7 @@ const (
 	// boardKeyLine is the board's own legend, the card's rule: an affordance
 	// that exists only while a surface is up belongs on the surface. It
 	// brackets nothing, so the card-key bijection guard reads no rune from it.
-	boardKeyLine = "↑↓ move  ↵ open  ⌃Y column  ⌃B below  ⌃C park  esc close"
+	boardKeyLine = "↑↓←→ move  ⇥ rows/tiles  ↵ open  ⌃Y column  ⌃C park  esc close"
 
 	// boardChromeRows is what sits above the first row - the title - and the
 	// mouse's row arithmetic reads it too: the draw and the mouse measure one
@@ -110,6 +110,12 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a.closeBoard(), nil, false
 	}
 	switch m.Type {
+	case tea.KeyTab:
+		a.board.Tiled = !a.board.Tiled
+		if !a.board.Tiled {
+			a.tails = nil // rows draw no tails; drop what the wall accumulated
+		}
+		return a, nil, true
 	case tea.KeyUp:
 		return a.moveBoard(-1), nil, true
 	case tea.KeyDown:
@@ -245,6 +251,9 @@ func boardWindowStart(cursor, total, visible int) int {
 // boardView is the whole frame's worth of overview: title, one row per agent
 // in attention order, the key line.
 func (a App) boardView(agents []Agent, width int) string {
+	if a.board.Tiled {
+		return a.tileView(agents, width)
+	}
 	visible := a.boardRowsVisible()
 	cursor := a.boardCursor(agents)
 	start := boardWindowStart(cursor, len(agents), visible)
