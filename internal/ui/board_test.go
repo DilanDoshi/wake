@@ -90,6 +90,83 @@ func TestSlashBoardRefusesAnArgument(t *testing.T) {
 	}
 }
 
+// In tiles, → and ← walk the 2-D grid rather than the row list - tileNav's
+// own geometry, driven off the frame width the tiles are laid out at.
+func TestTiledCursorMovesInTwoDimensions(t *testing.T) {
+	a := boardApp(t) // 3 agents
+	a.board.Tiled = true
+	a.layout.Width = 120 // wide enough for multiple columns
+	roster := a.fleet.OnRoster()
+	a.board.Selected = roster[0].ID
+
+	right, _, _ := a.boardKey(tea.KeyMsg{Type: tea.KeyRight})
+	if right.board.Selected == roster[0].ID {
+		t.Fatal("→ did not move the cursor to the next tile")
+	}
+}
+
+// ↵ opens the cursored agent beside the room as a new column - the room is
+// never replaced, and the board still closes on the way.
+func TestEnterOpensAsANewColumnKeepingTheRoom(t *testing.T) {
+	a := boardApp(t)
+	roster := a.fleet.OnRoster()
+	a.board.Selected = roster[0].ID
+	next, _, _ := a.boardKey(tea.KeyMsg{Type: tea.KeyEnter})
+	na := next
+	if na.board.Up {
+		t.Fatal("↵ left the board up over the conversation")
+	}
+	if na.grid.Cols[0].Top != "" {
+		t.Fatal("the room is no longer Cols[0]; ↵ replaced it instead of opening beside it")
+	}
+	if !na.grid.Has(roster[0].ID) {
+		t.Fatal("↵ did not open the cursored agent's DM as a column")
+	}
+}
+
+// ↵ opens beside the room's own focus rather than replacing a conversation
+// that is already on screen - the difference between openHere and openRight
+// that a fresh, DM-less board cannot show, since the two happen to agree
+// there. Robin is opened and the keys returned to the room before the board
+// is opened, so ↵ on a different cursored agent has something to displace.
+func TestEnterAddsANewColumnWithoutReplacingTheOneAlreadyOpen(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 30).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateWorking, Dir: "/repos/one"},
+		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateBlocked, Dir: "/repos/two"},
+		rpc.SessionStatus{ID: "s3", Name: "robin", State: rpc.StateIdle, Dir: "/repos/three"},
+	)
+	a = a.openDMWith("s3", "robin") // robin's DM beside the room, focused
+	a = a.showRoom()                // keys back on the room; robin stays open
+	m, _ := typeAndSubmit(a, boardVerb)
+	b := m.(App)
+	b.board.Selected = "s1" // cursor on alex
+
+	next, _, _ := b.boardKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if !next.grid.Has("s3") {
+		t.Fatal("↵ replaced the already-open conversation instead of opening beside it")
+	}
+	if !next.grid.Has("s1") {
+		t.Fatal("↵ did not open the cursored agent")
+	}
+	if len(next.grid.Cols) != 3 {
+		t.Errorf("want the room plus two conversations as three columns, got %+v", next.grid.Cols)
+	}
+}
+
+// ⌃D still opens into the focused pane - ↵'s old placement, now its own key.
+func TestCtrlDOpensIntoTheFocusedPane(t *testing.T) {
+	a := boardApp(t)
+	roster := a.fleet.OnRoster()
+	a.board.Selected = roster[0].ID
+	next, _, _ := a.boardKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	if next.board.Up {
+		t.Fatal("⌃D left the board up")
+	}
+	if !next.grid.Has(roster[0].ID) {
+		t.Fatal("⌃D did not open the cursored agent")
+	}
+}
+
 // ↑↓ walk the rows and ↵ opens the cursored agent's conversation, closing the
 // board - the jump is the dashboard's whole verb.
 func TestTheBoardCursorMovesAndEnterOpens(t *testing.T) {

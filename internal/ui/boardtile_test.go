@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
+
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -156,6 +158,67 @@ func TestTileTailControlBytesCannotForgeANeighbouringTile(t *testing.T) {
 	}
 	if strings.Contains(out, "\x1b[2J") {
 		t.Errorf("a raw clear-screen escape from the live tail reached the tiled board:\n%q", out)
+	}
+}
+
+// boardHit in tiles reads the same geometry the draw used: cols, cell width
+// and the window start, so a click and a tile cannot disagree.
+func TestBoardHitInTiledModeReadsTheDrawnGeometry(t *testing.T) {
+	a := boardApp(t) // 3 agents, width 120, height 30 (boardApp's own fixture)
+	a.board.Tiled = true
+	agents := a.fleet.OnRoster()
+
+	cols := tileColumns(a.layout.Width)
+	cellW := tileCellWidth(a.layout.Width, cols)
+	rowsVisible := max((a.paneHeight()-boardChromeRows-1)/tileHeight(), 1)
+
+	// A click inside the second tile (row 0, col 1) lands on agents[1].
+	x := cellW + tileGap + 1 // one column in, one cell past the gap
+	y := boardChromeRows + 1 // inside the first tile row's body
+	if got := a.boardHit(x, y, agents); got != 1 {
+		t.Errorf("boardHit(%d,%d) = %d, want 1 (row 0, col 1)", x, y, got)
+	}
+
+	// A click on the key line, past every tile row, opens nothing.
+	pastRow := boardChromeRows + rowsVisible*tileHeight()
+	if got := a.boardHit(2, pastRow, agents); got != -1 {
+		t.Errorf("a click past the last tile row resolved to %d, want -1", got)
+	}
+
+	// A click past the last column opens nothing.
+	pastCol := cols * (cellW + tileGap)
+	if got := a.boardHit(pastCol, boardChromeRows+1, agents); got != -1 {
+		t.Errorf("a click past the last column resolved to %d, want -1", got)
+	}
+
+	// A click above the title row opens nothing.
+	if got := a.boardHit(2, 0, agents); got != -1 {
+		t.Errorf("a click on the title row resolved to %d, want -1", got)
+	}
+}
+
+// A left-press on a tile opens that agent as a new column and closes the
+// board - the same placement the row view's click and ↵ now share.
+func TestATileClickOpensTheAgentAsANewColumn(t *testing.T) {
+	a := boardApp(t)
+	a.board.Tiled = true
+	agents := a.fleet.OnRoster() // [sydney, alex, robin] in attention order
+
+	cellW := tileCellWidth(a.layout.Width, tileColumns(a.layout.Width))
+	x := cellW + tileGap + 1 // second tile: agents[1], alex (s1)
+	y := boardChromeRows + 1
+
+	next, _ := a.boardMouse(tea.MouseMsg{
+		Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: x, Y: y,
+	})
+	if next.board.Up {
+		t.Fatal("a tile click left the board up over the conversation it opened")
+	}
+	if !next.grid.Has(agents[1].ID) {
+		t.Fatalf("a click on the second tile did not open %s", agents[1].Name)
+	}
+	if next.grid.Cols[0].Top != "" {
+		t.Fatal("the room is no longer Cols[0]; the tile click replaced it")
 	}
 }
 
