@@ -23,6 +23,7 @@ package core
 
 import (
 	"encoding/json"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -865,6 +866,53 @@ func TestDecodeToolResultWithNoTextBlocksYieldsNoProse(t *testing.T) {
 	}
 }
 
+// The recorded rewind fixture (testdata/transcript/rewind-tree.jsonl, Task 0)
+// proves both halves DecodeTranscriptNode reads: several user nodes carrying
+// their own uuid and their parent's, and the rewind marker's own leaf.
+func TestDecodeTranscriptNodeReadsTheTree(t *testing.T) {
+	lines := readLines(t, "testdata/transcript/rewind-tree.jsonl")
+	var users, markers int
+	var leaf string
+	for _, l := range lines {
+		n, ok := DecodeTranscriptNode(l)
+		if !ok {
+			continue
+		}
+		if n.Kind == "user" && n.UUID != "" && n.ParentUUID != "" {
+			users++
+		}
+		if n.Kind == "last-prompt" && n.Rewound {
+			markers++
+			leaf = n.LeafUUID
+		}
+	}
+	if users < 2 {
+		t.Fatalf("expected multiple user nodes, got %d", users)
+	}
+	if markers < 1 || leaf == "" {
+		t.Fatalf("expected a rewind marker with a leaf, got markers=%d leaf=%q", markers, leaf)
+	}
+}
+
+// A subagent's line is not the tree the operator's conversation lives on -
+// the same rule DecodeTranscriptLine applies (TestASidechainLineIsDropped),
+// and for the same reason: a disjoint-root sidechain node (parentUuid:null)
+// written last could otherwise be mistaken by the active-branch walk for the
+// real conversation's leaf.
+func TestDecodeTranscriptNodeDropsASidechainLine(t *testing.T) {
+	const line = `{"type":"user","isSidechain":true,"uuid":"s1","parentUuid":null}`
+	if _, ok := DecodeTranscriptNode([]byte(line)); ok {
+		t.Error("a sidechain line produced a tree node: a subagent's turn is not the operator's conversation")
+	}
+
+	// And the same line without the flag is kept, so the test above is about
+	// the flag rather than about the shape.
+	without := strings.Replace(line, `"isSidechain":true,`, "", 1)
+	if n, ok := DecodeTranscriptNode([]byte(without)); !ok || n.UUID != "s1" {
+		t.Errorf("the same line without isSidechain produced ok=%v n=%+v", ok, n)
+	}
+}
+
 // --- helpers ---------------------------------------------------------------
 
 // onlyEvent decodes a line that must yield exactly one event. n is the
@@ -879,4 +927,18 @@ func onlyEvent(t *testing.T, line string, n int) Event {
 		t.Fatalf("line %d produced %d events, want 1: %+v", n, len(evs), evs)
 	}
 	return evs[0]
+}
+
+// readLines is fixtureLines by a path relative to the repository root
+// (repoRoot, airlock_test.go's own constant) and as [][]byte rather than
+// []string - what a decoder taking the wire's own type wants, not a string
+// comparison.
+func readLines(t *testing.T, path string) [][]byte {
+	t.Helper()
+	lines := fixtureLines(t, filepath.Join(repoRoot, path))
+	out := make([][]byte, len(lines))
+	for i, l := range lines {
+		out[i] = []byte(l)
+	}
+	return out
 }

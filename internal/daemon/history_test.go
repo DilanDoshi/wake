@@ -389,6 +389,39 @@ func TestTheDaemonReportsATranscriptItCannotRead(t *testing.T) {
 	}
 }
 
+// A rewound conversation comes back as its live branch, not the turns rewound
+// away. The recorded fixture rewinds past a "remember 42" turn and its "7,42"
+// answer; History must drop both and keep the branch written after the rewind.
+// See core.ActiveBranch.
+func TestHistoryDropsTheRewoundBranch(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "transcript", "rewind-tree.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	lines := strings.Split(strings.TrimRight(string(data), "\n"), "\n")
+	plantTranscript(t, histID, lines...)
+
+	events, err := History(histID)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	var text strings.Builder
+	for _, ev := range events {
+		text.WriteString(ev.Text)
+		text.WriteByte('\n')
+	}
+	got := text.String()
+	if strings.Contains(got, "7,42") {
+		t.Errorf("the rewound answer '7,42' came back on reopen:\n%s", got)
+	}
+	if strings.Contains(got, "Now also remember the number 42") {
+		t.Errorf("the rewound question came back on reopen:\n%s", got)
+	}
+	if !strings.Contains(got, "List every number") {
+		t.Errorf("the post-rewind question is missing from the reopened conversation:\n%s", got)
+	}
+}
+
 // After a /clear, the transcript read is the one claude is writing now.
 //
 // /clear mints a new claude session id and leaves the old transcript under the

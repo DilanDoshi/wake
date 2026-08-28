@@ -155,6 +155,15 @@ var claudeWireVocabulary = wordSet([]string{
 	// a turn happened by reading Claude's on-disk format.
 	"isSidechain", "timestamp",
 
+	// The rest of the on-disk tree, read by DecodeTranscriptNode rather than
+	// DecodeTranscriptLine: a line's own identity, its parent's, and the
+	// last-prompt marker a rewind leaves behind, naming the leaf it rewound
+	// to. Policed for "isSidechain" and "timestamp"'s own reason, and the same
+	// check was run rather than assumed: none of the four is named outside
+	// this package. They reach a reader as core.TranscriptNode's fields,
+	// which are Wake's words for them.
+	"uuid", "parentUuid", "leafUuid", "last-prompt",
+
 	// system subtypes.
 	"compact_boundary", "permission_denied", "hook_started",
 	"hook_response", "thinking_tokens", "task_started",
@@ -196,6 +205,19 @@ var claudeWireVocabulary = wordSet([]string{
 	// is really in. A file outside the airlock naming either is a file deciding
 	// what a frame means by reading Claude's English.
 	"set_permission_mode", "permissionMode",
+
+	// The rewind_conversation control_request, and its fields. Rewinding a
+	// session's conversation to an earlier point in its transcript.
+	"rewind_conversation", "target_message_uuid", "last_seen_user_message_uuid",
+	"interrupt_if_running",
+
+	// The rewind_conversation control_response - the receipt for the request
+	// above. Claude spells its own fields differently across the two frames:
+	// the request's target_message_uuid comes back camelCase as
+	// targetMessageUuid, and prefillText/precedingAssistantUuid have no
+	// snake_case counterpart at all, since nothing Wake sends carries them.
+	// rewound is the discriminator itself - see wireControlBody.Rewound.
+	"rewound", "targetMessageUuid", "prefillText", "precedingAssistantUuid",
 
 	// Two of the five permission modes, and the two that are *not* in
 	// deliberatelyGeneric with "auto" and "default". The argument there was that
@@ -472,7 +494,7 @@ var notNamedByTheAirlock = map[string]string{
 // vocabulary - a word added, a word removed - has to update it, which is what
 // makes a deletion a three-place edit (the word, its excuse, this number)
 // rather than something that can happen by accident in a rebase.
-const policedWordCount = 137
+const policedWordCount = 149
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -499,6 +521,9 @@ var notWireVocabulary = wordSet([]string{
 	"encode set mode",
 	"%w: encode set mode: empty request id",
 	"%w: encode set mode: empty mode",
+	"encode rewind",
+	"%w: encode rewind: empty request id",
+	"%w: encode rewind: empty target or last-seen uuid",
 	defaultDenyReason,
 
 	// EncodeAnswer's refusals: Wake's own English, telling whoever gave an
@@ -547,6 +572,14 @@ var allowed = map[string]map[string]bool{
 	"internal/core/event.go": {
 		"tool_use": true, "tool_result": true, "thinking": true,
 		"system": true, "still_queued": true,
+	},
+	// RewindResult's own json tags, still_queued's case one file over: a
+	// direct, uninterpreted restatement of the rewind_conversation receipt's
+	// four fields, reusing the receipt's own spelling rather than inventing a
+	// second one for the same concept.
+	"internal/core/rewind.go": {
+		"rewound": true, "targetMessageUuid": true, "prefillText": true,
+		"precedingAssistantUuid": true,
 	},
 	// The daemon's fleet report and its frame kind - Wake's own protocol,
 	// unrelated to Claude's system/status frame and never decoded from one.
@@ -642,7 +675,7 @@ var allowed = map[string]map[string]bool{
 // growing the exemption list is a deliberate two-place edit rather than
 // something that happens quietly in a rebase. CLAUDE.md quotes the same
 // figures and has to change with it.
-const allowlistPairCount = 16
+const allowlistPairCount = 20
 
 func TestTheAllowlistDoesNotGrowQuietly(t *testing.T) {
 	pairs := 0
@@ -741,12 +774,16 @@ var notInTheCorpus = map[string]string{
 	// Outbound. Wake writes these and never reads them, so no recording of
 	// stdout can contain them - encode.go's header says the same, and says
 	// why that makes them the least trustworthy shapes in the airlock.
-	"updatedInput":        "outbound only; a recording of stdout cannot contain it",
-	"cancel_queued":       "outbound only; a recording of stdout cannot contain it",
-	"interrupt":           "outbound only; a recording of stdout cannot contain it",
-	"set_permission_mode": "outbound only; the corpus holds its receipts, not the requests",
-	"allow":               "outbound only; the behavior value Wake writes",
-	"deny":                "outbound only; the behavior value Wake writes",
+	"updatedInput":                "outbound only; a recording of stdout cannot contain it",
+	"cancel_queued":               "outbound only; a recording of stdout cannot contain it",
+	"interrupt":                   "outbound only; a recording of stdout cannot contain it",
+	"set_permission_mode":         "outbound only; the corpus holds its receipts, not the requests",
+	"allow":                       "outbound only; the behavior value Wake writes",
+	"deny":                        "outbound only; the behavior value Wake writes",
+	"rewind_conversation":         "outbound only; a recording of stdout cannot contain it",
+	"target_message_uuid":         "outbound only; rewind request field Wake writes",
+	"last_seen_user_message_uuid": "outbound only; rewind request field Wake writes",
+	"interrupt_if_running":        "outbound only; rewind request field Wake writes",
 }
 
 // embeddedMarkers never appear as a JSON key or as a whole value: they are

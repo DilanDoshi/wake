@@ -476,6 +476,20 @@ func (a App) agentName(sessionID string) string {
 	return sessionID
 }
 
+// errorText says which agent an error is about, when this client knows.
+//
+// A bare "exit status 1" on a notice row was answerable while a window held one
+// conversation. At fifteen agents it is a sentence about nobody, and the name
+// is the whole of what makes it actionable. An agent no report has named yet
+// gets the text alone rather than an empty handle.
+func (a App) errorText(f rpc.Frame) string {
+	agent, ok := a.fleet.Agent(f.SessionID)
+	if !ok || agent.Name == "" {
+		return f.Text
+	}
+	return agentPrefix + agent.Name + ": " + f.Text
+}
+
 // interruptTarget is the one agent ⎋ stops, and ⌃C parks: the conversation the
 // operator is looking at.
 //

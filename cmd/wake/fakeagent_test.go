@@ -69,6 +69,14 @@ const scriptPlans = "plans"
 // screen test of the mode needs an agent that sends one.
 const scriptModes = "modes"
 
+// scriptRewinds answers a rewind_conversation control request with a
+// rewound:true receipt, the way scriptModes answers set_permission_mode. The
+// default echo fake drops every non-user line, so a FrameRewind's control
+// request reaches it and nothing comes back - and the label a receipt moves is
+// only allowed to move on one, so a screen test of the picker needs an agent
+// that sends one.
+const scriptRewinds = "rewinds"
+
 // scriptQuestions blocks on an ask that puts a *question* rather than a
 // yes/no - the interactive shape, carrying requires_user_interaction and a
 // questions payload. It is a different script from scriptAsks because the two
@@ -169,6 +177,8 @@ func runFakeAgent() int {
 		return fakeAgentQuestions(sid)
 	case scriptModes:
 		return fakeAgentModes(sid)
+	case scriptRewinds:
+		return fakeAgentRewinds(sid)
 	case scriptPlans:
 		return fakeAgentPlans(sid)
 	case scriptDispatches:
@@ -453,6 +463,57 @@ func modeRequested(line string) (id, mode string, ok bool) {
 		return "", "", false
 	}
 	return f.RequestID, f.Request.Mode, true
+}
+
+// fakeAgentRewinds is the echo agent plus the one control request a rewind
+// picker sends: it answers rewind_conversation with a fixed rewound:true
+// receipt carrying the *target* uuid inside prefillText, so a screen test can
+// tell which option was actually picked apart from proving a receipt arrived
+// at all.
+func fakeAgentRewinds(sid string) int {
+	sayText(sid, "ready")
+	sayResult(sid)
+	for line := range agentStdin() {
+		if id, target, ok := rewindRequested(line); ok {
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,`+
+				`"response":{"rewound":true,"targetMessageUuid":%q,"prefillText":%q,`+
+				`"precedingAssistantUuid":"fake-leaf"}}}`+"\n",
+				id, target, rewindPrefillPrefix+target)
+			continue
+		}
+		text, ok := userTextOf(line)
+		if !ok {
+			continue
+		}
+		sayText(sid, heardPrefix+text)
+		sayResult(sid)
+	}
+	return 0
+}
+
+// rewindPrefillPrefix is what fakeAgentRewinds' receipt puts in front of the
+// target uuid it was asked to rewind to.
+const rewindPrefillPrefix = "rewound to "
+
+// rewindRequested reads the target uuid out of a rewind_conversation control
+// request, one level down beside its subtype - modeRequested's own nesting,
+// one subtype over.
+func rewindRequested(line string) (id, target string, ok bool) {
+	var f struct {
+		Type      string `json:"type"`
+		RequestID string `json:"request_id"`
+		Request   struct {
+			Subtype           string `json:"subtype"`
+			TargetMessageUUID string `json:"target_message_uuid"`
+		} `json:"request"`
+	}
+	if err := json.Unmarshal([]byte(line), &f); err != nil {
+		return "", "", false
+	}
+	if f.Type != "control_request" || f.Request.Subtype != "rewind_conversation" {
+		return "", "", false
+	}
+	return f.RequestID, f.Request.TargetMessageUUID, true
 }
 
 // fakeAgentInterruptible starts a turn and does not finish it until it is

@@ -219,10 +219,14 @@ var managerVerbs = map[string]verdict{
 			{kind: sourceDeclares, name: "internal/mcp/rollup.go#rollUpMaxBytes", why: "the digest is the bounded answer to the question a transcript would answer without a bound, and it is the alternative both history refusals leave in place"},
 		}},
 
+	rpc.FrameRewindTargets: {why: "the operator's own words again, narrowed to one slice of what FrameHistory already refuses rather than a new reason: every active-branch user prompt in a session's conversation, verbatim, unbounded. It exists to aim a FrameRewind, which the cell below refuses the manager on two grounds that both still hold here - nothing on this surface can address one, since no message uuid reaches it any other way, and nothing can learn whether one landed. Allowing this would hand the manager exactly the address FrameRewind's own refusal says it lacks, for a verb it would still be refused for"},
+
 	rpc.FrameMode: {why: "it is the permission system itself, one level up. FrameAllow is refused because a manager that could answer an ask would be the fleet approving its own tool calls; a manager that could set a mode would be the fleet deciding it will not be asked at all - `dontAsk` and `acceptEdits` are both in the CLI's accepted set, and reaching either ends the human's turn in every *future* decision that session makes rather than one. That is the escalation this whole list exists to prevent, arriving by the shortest path on it.\n\nAnd it fails the test send and interrupt pass - undoable by *looking*, which the cell above notes is the property spawn already does not have. A mode is a property of a running process that appears in no row this surface returns, so a manager that loosened one would leave nothing for the operator to notice at all: not a row, not a line in the room, not a thing to park. The composer's indicator is per-agent and lives beside the conversation - a fleet of thirty has twenty-nine of them off screen.\n\nbypassPermissions is the one position it could not reach, and that is the CLI's doing rather than this table's: it is refused unless the process was launched with --dangerously-skip-permissions, which nothing in this tree passes (2026-08-12-permission-mode-findings.md §7). A floor, not a fence - it stops the worst position and none of the others",
 		rests: []referent{
 			{kind: recording, name: "docs/superpowers/notes/2026-08-12-permission-mode-findings.md", why: "the recording that says bypassPermissions is refused for a session not launched dangerously. If a Wake session is ever spawned with --dangerously-skip-permissions, the floor this cell leans on is gone and the refusal has to stand on the first two paragraphs alone"},
 		}},
+
+	rpc.FrameRewind: {why: "moves which turns of a conversation are there to read, not merely how a session behaves going forward - a step past FrameMode's own refusal rather than the same argument again. A rewound turn does not stay in view on the next look: a reopened conversation reconstructs only the surviving branch and a reopened room drops a rewound broadcast, so the operator's own read of an agent can lose turns between one look and the next - exactly the shape of cover an injected instruction would want, on the hop this file's own header already describes. It fails FrameMode's test a second way too: the receipt is a KindRewindReceipt on the event stream, in no row list_agents or roll_up returns, so a manager that triggered one has no way to learn whether it took. And there is nothing here to aim it at - RewindTarget and RewindLastSeen are a transcript message's own uuid, which core.Event never carries onto this socket, and neither reading tool carries one either. A manager cannot address a verb whose whole argument is an id nothing on this surface has ever handed it"},
 
 	rpc.FrameAllow:  {why: permissionsAreAHumans},
 	rpc.FrameDeny:   {why: permissionsAreAHumans},
@@ -239,13 +243,14 @@ const permissionsAreAHumans = "answering a permission request. --permission-prom
 // with the direction that is the reason. They have no verdict above because
 // there is nothing for a manager to be allowed to do with them.
 var notAClientVerb = map[string]string{
-	rpc.FrameEvent:            "daemon to client: one session event",
-	rpc.FrameHello:            "daemon to client: the handshake on connect",
-	rpc.FrameError:            "daemon to client in practice - every writer of one is on the daemon's side of the socket",
-	rpc.FrameStatusReply:      "daemon to client: the answer to a status request",
-	rpc.FrameStatusPush:       "daemon to client: a state change nobody asked about",
-	rpc.FrameHistoryReply:     "daemon to client: the conversation a session already had",
-	rpc.FrameRoomHistoryReply: "daemon to client: the same conversation, answered for the room",
+	rpc.FrameEvent:              "daemon to client: one session event",
+	rpc.FrameHello:              "daemon to client: the handshake on connect",
+	rpc.FrameError:              "daemon to client in practice - every writer of one is on the daemon's side of the socket",
+	rpc.FrameStatusReply:        "daemon to client: the answer to a status request",
+	rpc.FrameStatusPush:         "daemon to client: a state change nobody asked about",
+	rpc.FrameHistoryReply:       "daemon to client: the conversation a session already had",
+	rpc.FrameRoomHistoryReply:   "daemon to client: the same conversation, answered for the room",
+	rpc.FrameRewindTargetsReply: "daemon to client: what could this session be rewound to",
 }
 
 // The verbs the daemon serves are the ones dispatch names, and every one of

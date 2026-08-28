@@ -122,6 +122,19 @@ func (a *agent) apply(p pending) {
 		// real one. A remembered mode here would be a second answer that could
 		// go stale, on the one question this feature exists to stop lying about.
 		_, err = a.sess.SetMode(p.frame.Mode)
+	case rpc.FrameRewind:
+		// Refused while an ask is outstanding, on FrameMode's own guard and
+		// for the same reason: this agent is holding the ask, so it needs to
+		// ask nobody, and the operator is mid-decision on a card a rewind
+		// would pull the rug out from under.
+		if a.blockedOnAsk() {
+			a.refuse(p, errors.New("this session is stopped on a permission request; answer or withdraw it before rewinding"))
+			return
+		}
+		// The minted request_id is discarded for FrameMode's reason: the
+		// receipt reaches every attached client on the event stream carrying
+		// that id, and a client that wants to correlate one has it.
+		_, err = a.sess.Rewind(p.frame.RewindTarget, p.frame.RewindLastSeen)
 	case rpc.FrameStop:
 		// Here rather than on the connection's goroutine so it lands behind
 		// the messages already queued for this agent - see dispatch.

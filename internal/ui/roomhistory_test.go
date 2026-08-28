@@ -123,6 +123,66 @@ func TestABroadcastFoundInTwoTranscriptsIsOneRoomLine(t *testing.T) {
 	}
 }
 
+// A rewound broadcast never reaches this pipeline at all: internal/daemon's
+// History() is tree-aware (internal/daemon/history.go) and drops a rewound
+// turn before it is ever encoded into the FrameRoomHistoryReply this
+// function's caller reads f.Events from - see roomHistoryArrived. So the
+// batches below are shaped the way the daemon would actually deliver them
+// for two agents that both received a broadcast, had it rewound, and were
+// then given a different continuation: the rewound turn's text never
+// appears in either batch, the same way it never appears in what History()
+// hands back.
+//
+// This pins that the merge and the broadcast rule - the only things between
+// a restored batch and the screen - do not need the rewound turn kept out of
+// their own input a second time: given only what the daemon actually sends,
+// they show the surviving continuation as one broadcast line and nothing of
+// what was rewound away. A daemon-side regression that started handing this
+// path an unfiltered transcript is caught in internal/daemon, not here; see
+// TestTheRoomHistoryReplyDropsARewoundBroadcast.
+func TestARoomRestoreOverAlreadyFilteredHistoryShowsThePostRewindBroadcast(t *testing.T) {
+	r := restored(
+		[]core.Event{
+			opener("s1", base),
+			heard("s1", "s1 carrying on", base.Add(time.Second)),
+			// Stands in for the daemon's post-rewind reply: s1's transcript
+			// was rewound past "@all abort the deploy" and its reply, so
+			// History() never hands either back, and neither is written here.
+			// What follows is the turn the operator sent after the rewind.
+			typed("s1", "@all resume the deploy", base.Add(2*time.Second)),
+			heard("s1", "s1 resuming", base.Add(3*time.Second)),
+		},
+		[]core.Event{
+			opener("s2", base.Add(40*time.Millisecond)),
+			heard("s2", "s2 carrying on", base.Add(time.Second+40*time.Millisecond)),
+			typed("s2", "@all resume the deploy", base.Add(2*time.Second+40*time.Millisecond)),
+			heard("s2", "s2 resuming", base.Add(3*time.Second+40*time.Millisecond)),
+		},
+	)
+
+	got := texts(r)
+	want := []string{
+		openerText, "s1 carrying on", "s2 carrying on",
+		"@all resume the deploy", "s1 resuming", "s2 resuming",
+	}
+	if strings.Join(got, "|") != strings.Join(want, "|") {
+		t.Fatalf("the room restored %v, want %v", got, want)
+	}
+	for _, text := range got {
+		if strings.Contains(text, "abort the deploy") {
+			t.Errorf("the rewound broadcast reached the room: %q", text)
+		}
+	}
+
+	// Both broadcasts are the operator's own turn, the way
+	// TestABroadcastFoundInTwoTranscriptsIsOneRoomLine checks for one.
+	for _, l := range r.said.slice(0, r.said.len()) {
+		if (l.ev.Text == openerText || l.ev.Text == "@all resume the deploy") && l.by.Name != "" {
+			t.Errorf("%q is attributed to %q, want the operator's own turn", l.ev.Text, l.by.Name)
+		}
+	}
+}
+
 // A turn in one transcript is indistinguishable from one typed privately into
 // that conversation, and a DM is private. It errs toward silence.
 func TestAUserTurnInOneTranscriptDoesNotReachTheRoom(t *testing.T) {

@@ -62,6 +62,25 @@ import (
 // The two speeds end in the same place deliberately: a collapsed press stops
 // the turn *and* clears the draft, because that is what the slow one does
 // across its two presses.
+//
+// # The third case: an idle, empty conversation opens the rewind picker
+//
+// A non-empty composer's second press has a draft to clear; an idle agent's
+// empty one has neither a draft nor a turn worth a second interrupt, so its
+// second press means "show me what to rewind to" instead. rewindArmable is
+// what recognises the case, and it is mutually exclusive with clearsOnEscape
+// by construction - one requires an empty composer and the other a non-empty
+// one - which is what lets escArmed's second-press meaning be read off
+// composer state alone, with no third field to keep in step. The **first**
+// press still interrupts, harmlessly, on an agent already idle: arming and
+// interrupting together is the move clearsOnEscape's own first press already
+// makes, and this reuses it rather than adding a second arm. A **collapsed**
+// press is the same two presses arriving as one message, so it interrupts
+// too, alongside the ask - the two speeds agreeing is the rule two paragraphs
+// up, and this is that rule's own case. rewindArmable is read fresh on both
+// presses, so a status push that starts a turn between them is seen: the
+// second press then falls through to a genuine interrupt instead of opening a
+// picker on stale idleness. See rewind.go.
 func (a App) escape(armed, collapsed bool) (tea.Model, tea.Cmd, bool) {
 	// A draft being written as an answer is abandoned, and the agent's turn is
 	// left alone: the operator is dropping a sentence, not the work. Checked
@@ -78,8 +97,25 @@ func (a App) escape(armed, collapsed bool) (tea.Model, tea.Cmd, bool) {
 		// about a turn that is already being torn down says nothing.
 		return a.clearDraft(), nil, true
 	}
-	if clears {
-		// Nothing to arm when both presses have already happened.
+	rewindable := a.rewindArmable()
+	if rewindable && (armed || collapsed) {
+		model, cmd, handled := a.askRewindTargets()
+		if next, ok := model.(App); ok && collapsed {
+			// A collapsed press is both presses landing in one message, and
+			// the slow path's first press still interrupts here - harmlessly,
+			// on an agent already idle, clearsOnEscape's own reason a few
+			// lines up. Without this the two speeds disagree about whether
+			// ⎋ interrupts, which is the one thing every path through this
+			// function has to agree on.
+			_, interruptCmd, _ := next.interrupt()
+			cmd = tea.Batch(cmd, interruptCmd)
+		}
+		return model, cmd, handled
+	}
+	if clears || rewindable {
+		// Nothing to arm when both presses have already happened. Reached with
+		// collapsed true only from the clears side - a collapsed press while
+		// rewindable already returned above.
 		a.escArmed = !collapsed
 	}
 	model, cmd, handled := a.interrupt()

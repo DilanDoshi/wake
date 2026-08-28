@@ -66,7 +66,7 @@ An agent is a headless `claude` process in stream-json mode with a Wake-assigned
 | `--debug-file <name>` · `--debug <categories>` | Per-session debug logging, so one agent of thirty can be diagnosed. **The wire carries a name and the daemon owns the directory** — `filepath.Dir(socket)/debug/<name>.log`, beside `mcp.json` and `parked.json` — because a path on the wire is a file anything that can dial the socket could choose. `--debug` only narrows the categories and is refused without a file: on its own it writes no log anywhere that can be read |
 | `wake status` · `wake stop` | What is running; end everything (irreversible) |
 | `wake fleets` · `--fleet <name>` | The fleets, and which one a verb is addressed to. `--fleet default` is the reserved word for the **unnamed** fleet at `~/.wake` - every fleet that existed before fleets did is that one, so without it a whole existing Wake would be reachable only through `$WAKE_SOCKET`. Only a bare `wake` makes a new fleet; every other verb with no `--fleet` still means the unnamed one. **Several fleets can run in one directory** — each is a directory under `~/.wake/fleets/` holding its own socket, and every other per-fleet file is `filepath.Dir(socket)` plus a name, so isolation is the layout rather than a rule anything enforces. A bare `wake` is the unnamed fleet at `~/.wake/`, unchanged. `$WAKE_SOCKET` still wins, and naming a fleet beside it is refused rather than one being ignored |
-| Room keys | `↵` send, open the picked agent, or confirm an armed detach · `esc` interrupt (clears the draft in the room; leaves answer mode while a card is taking one) · `esc esc` clear a conversation's draft · `↑↓` pick agent · `⌥↑↓` walk this pane's prompt history · `⌃O` arm detach — `↵` leaves, a second `⌃O` cancels · `⌃C` park focused · `⌃Q` park all & quit · **`⌃C⌃C` or `⌃Q⌃Q` emergency quit** — read off the tty *before* Bubble Tea, so it is the one exit that still works when the window has stopped drawing · `⇥` focus · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→↑↓` move the keys to the pane that way · `⌥↵`/`⌃J` newline · `⌃F` fork · `⌃D` open here · `⌃Y` open in a new column · `⌃B` open below · `⌃W` close pane · `⌃E` expand tool results |
+| Room keys | `↵` send, open the picked agent, or confirm an armed detach · `esc` interrupt (clears the draft in the room; leaves answer mode while a card is taking one) · `esc esc` clear a conversation's draft, or — idle and empty — open a rewind picker to an earlier prompt · `↑↓` pick agent · `⌥↑↓` walk this pane's prompt history · `⌃O` arm detach — `↵` leaves, a second `⌃O` cancels · `⌃C` park focused · `⌃Q` park all & quit · **`⌃C⌃C` or `⌃Q⌃Q` emergency quit** — read off the tty *before* Bubble Tea, so it is the one exit that still works when the window has stopped drawing · `⇥` focus · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→↑↓` move the keys to the pane that way · `⌥↵`/`⌃J` newline · `⌃F` fork · `⌃D` open here · `⌃Y` open in a new column · `⌃B` open below · `⌃W` close pane · `⌃E` expand tool results |
 | Slash commands | `/resume`, `/new` (optionally `--worktree <name>`, `--add-dir <dir>`, `--debug-file <name>`, `--debug <categories>`, `--max-budget-usd <usd>`, `--fallback-model <m,m>`), `/name`, `/task`, `/adopt`, `/mcp`, `/manager`, `/manager-stop`, `/board` — everything else is passed to the agent byte for byte |
 | `/manager` | The switch: starts one when there is none, wakes a parked one, parks a running one. A command rather than a key — see `internal/ui/slash.go` for why every remaining chord is worse than a legend slot |
 | `/manager-stop` | The ending, where `/manager` only parks: `rpc.FrameStop`, so the name goes back to the pool and the next `/manager` starts a fresh one. Refuses a **parked** manager (a stop reaches only a session with a process) and refuses when there is none |
@@ -257,6 +257,40 @@ when there is something to clear, so mashing `⎋` at a runaway agent still stop
 finger. It adds **no legend glyph**, because it adds no `tea.Key…` case and the bijection guard would
 refuse one; the armed pane swaps `⎋`'s label to `clear draft` instead. Full argument:
 `internal/ui/escape.go`.
+
+**`esc esc`'s idle case sends `rewind_conversation`, a `control_request` on the same stdin channel as
+`interrupt` and `set_permission_mode` — Claude Code's own mechanism, read off the wire rather than
+invented.** The request carries `target_message_uuid` and `last_seen_user_message_uuid`, both
+mandatory — omitting the second is exactly what a `"stale target"` refusal means — and the receipt is
+a `control_response` whose nested payload is `{rewound, targetMessageUuid, prefillText,
+precedingAssistantUuid, error}`, the same "success is not a verdict" shape the permission and interrupt
+receipts already have. **`session_id` never changes** — no `init`, no `conversation_reset` — so Wake
+never re-keys the session over a rewind.
+
+**On disk the transcript is an append-only tree, and a rewind does not delete.** Claude's lines carry
+`uuid`/`parentUuid`; rewinding appends a `last-prompt{rewound,leafUuid}` marker and repoints the active
+leaf, but the rewound turns stay in the file as a dead branch. So **the transcript reader had to become
+tree-aware**: `core.ActiveBranch` (`internal/core/activebranch.go`) walks `parentUuid` from the live
+leaf to the root, resolving every fork as "newest branch wins" — the child written after the latest
+rewind marker. `internal/daemon/history.go` is the one caller for both a DM and the room
+(`sendHistory`/`sendRoomHistory` share `answerHistory`), and `internal/daemon/rewindtargets.go`'s
+`RewindTargets` reuses the same reconstruction to answer the picker's own options and its `last_seen`
+tip — one reconstruction, so a reopened DM, a reattached pane and a restored room can never disagree
+about which turns are gone.
+
+**The trigger is gated to idle + empty, scoped to the focused pane, and adds no legend glyph.**
+`App.rewindArmable` (`internal/ui/rewind.go`) is read fresh on every `esc` rather than cached, the same
+way a card is read through `a.cardOf(a.focus)` and never `Cards.Top`: a running agent always eats `esc`
+as interrupt, so mashing it at a runaway agent still stops it, and a picker left open on a conversation
+the operator tabbed away from claims no keys at all. `internal/ui/escape.go`'s `escape` is what re-runs
+the gate on both the slow and the collapsed press rather than trusting a stale arm. It is still
+`tea.KeyEsc` — no new case, no legend entry — `⎋⎋` clear-draft's own reason. On `rewound:true`,
+`noteRewind` (`internal/ui/rewind.go`) makes the pane **re-read itself tree-aware** — the same
+`askHistory` a reopen already takes — and drops `prefillText` into the composer; this is deliberately
+the *only* mechanism, so a live prune and a reopen can never disagree. The manager is refused both
+`FrameRewind` and `FrameRewindTargets`, on `FrameMode`'s own grounds plus one of its own: nothing on
+that surface can address a message uuid, and a rewound turn does not stay in view on the manager's own
+read either (`cmd/wake/mcpguard_test.go`).
 
 **The room comes back with what was said, re-derived from claude's transcripts rather than kept.**
 `⌃Q` then `wake` then `/resume all` used to be a working fleet above an empty group chat. The room
@@ -741,7 +775,8 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | The manager switch, and what a fleet with none needs | `internal/ui/service.go` — `ManagerFrames` (pure, both callers) · `Fleet.manager` · `App.manager` · `App.managerStop` |
 | Claude JSON airlock | `internal/core/protocol.go` (decode) · `wire.go` · `vocabulary.go` · `encode.go` — start at `protocol.go` |
 | Airlock tests | `internal/core/protocol*_test.go`, `fixtures*_test.go`, `encode_test.go`, `airlock_test.go` |
-| One agent: spawn · send · events · interrupt · stop | `internal/core/session.go` |
+| One agent: spawn · events · lifecycle · stop | `internal/core/session.go` |
+| One agent's write path: send · permission answers · interrupt · mode · rewind | `internal/core/write.go` — split from session.go once `Rewind` crossed the 800-line hard max |
 | How a session names itself on the command line | `internal/core/argv.go` — `identityArgs`, `SessionArgvMarkers` |
 | How a session ends | `internal/core/ending.go` |
 | Asks: kind, payload, answers | `internal/core/vocabulary.go` · `event.go` · `encode.go` |
@@ -765,6 +800,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Reading a conversation back off claude's disk | `internal/daemon/history.go` — `History`, `transcriptPath` (found by filename, never built from a slug), `answerHistory` behind two verbs · `internal/core/protocol.go` — `DecodeTranscriptLine`, a filter in front of `DecodeLine` rather than a second decoder, and the one on-disk key it reads · `internal/ui/history.go` — the ask and the fold |
 | Reading the **room** back off the same disk | `internal/ui/roomhistory.go` — `roomHistoryLines` (the merge, the filter, the broadcast rule), `roomAsk` (the room's own ledger) · `internal/ui/chat.go` — `Room.Before` |
 | ⎋, and the second one | `internal/ui/escape.go` — `escape`, `clearsOnEscape` (+ `escprobe_test.go` for what two escapes in one read actually are) |
+| The rewind picker: trigger, tree-aware read, receipt | `internal/ui/rewind.go` — `rewindArmable`, `RewindPicker`, `noteRewind` (the receipt fold and re-read) · `internal/core/activebranch.go` — `ActiveBranch`, the tree walk · `internal/daemon/rewindtargets.go` — `RewindTargets`, the daemon's own query behind `FrameRewindTargets` |
 | The manager's config and scope | `internal/daemon/manager.go` |
 | What a session thinks with | `internal/core/effort.go` (two vocabularies) · `internal/core/model.go` · `internal/daemon/effort.go` — `noteEffort`, `argvEffort` |
 | What a session may spend, and what it falls back to | `internal/core/spend.go` — `ValidBudget`, `ValidFallbackModel`, and what neither of them confirms · `internal/daemon/spawnconfig.go` — `configRefusal`, the checks a spawn frame passes before a name is claimed, and `launchRefusal`, the last door before the argv for every caller |
@@ -1075,7 +1111,7 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/app.go` at 799 and `internal/daemon/spawn.go` at 798 — that sentence is derived by
+  `internal/core/event.go` at 800 and `internal/daemon/spawn.go` at 798 — that sentence is derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
   message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**

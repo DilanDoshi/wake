@@ -331,6 +331,17 @@ type wireControlBody struct {
 	StillQueued []string `json:"still_queued"`
 	Cancelled   []string `json:"cancelled"`
 	Mode        string   `json:"mode"`
+
+	// Rewind receipt payload. Rewound is a pointer so its *presence* - not its
+	// truth - is the discriminator: a rewind receipt always carries the key
+	// (true or false), a set_permission_mode receipt never does. Error here is
+	// the rewind failure reason and sits at this innermost level, unlike a mode
+	// refusal whose error is one level up on wireControlResp.
+	Rewound                *bool  `json:"rewound"`
+	TargetMessageUUID      string `json:"targetMessageUuid"`
+	PrefillText            string `json:"prefillText"`
+	PrecedingAssistantUUID string `json:"precedingAssistantUuid"`
+	Error                  string `json:"error"`
 }
 
 // wireRateLimit is rate_limit_info. The frame also carries resetsAt (Unix

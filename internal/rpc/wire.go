@@ -28,32 +28,13 @@ import (
 const (
 	FrameEvent = "event" // daemon → client: one session event
 
-	// FrameHistory asks for the conversation a session already had, and
-	// FrameHistoryReply answers with it. Two kinds for FrameStatusReply's
-	// reason: a client that could not tell an answer from an announcement
-	// would seed a conversation from whichever arrived first.
-	//
-	// The reply carries events rather than transcript lines, so nothing above
-	// internal/core sees claude's on-disk format - which is a different format
-	// from the stream, and the one internal/daemon/discover.go already fences.
-	FrameHistory      = "history"       // client → daemon: what did this session say
-	FrameHistoryReply = "history_reply" // daemon → client: what it said
+	// FrameHistory, FrameRoomHistory and FrameRewindTargets - the read
+	// queries a client can ask about a session's transcript - and their
+	// reply kinds and payload type are history.go, split out for the reason
+	// its own header gives.
 
-	// FrameRoomHistory is the same question asked for the room, and
-	// FrameRoomHistoryReply answers it. The daemon reads the same file with the
-	// same function; two kinds exist because the *client* keeps a ledger per
-	// surface.
-	//
-	// A conversation is asked about once per session per client, or a second
-	// fold would draw it twice. If the room shared that ledger, then opening a
-	// conversation for a session the room had already asked about would find
-	// the ask spent and leave the pane empty - which is the bug history.go was
-	// written to remove, arriving through the feature that reuses it. Two
-	// questions about one file, for two surfaces, with two answers.
-	FrameRoomHistory      = "room_history"       // client → daemon: what did this session say, for the room
-	FrameRoomHistoryReply = "room_history_reply" // daemon → client: what it said
-	FrameSend             = "send"               // client → daemon: user text for a session
-	FrameSpawn            = "spawn"              // client → daemon: start a session
+	FrameSend  = "send"  // client → daemon: user text for a session
+	FrameSpawn = "spawn" // client → daemon: start a session
 
 	// FrameFork branches an existing session: a new agent that inherits the
 	// named parent's conversation as of the moment it is taken.
@@ -226,6 +207,16 @@ const (
 	// --dangerously-skip-permissions - which nothing in this tree passes, so
 	// that mode is unreachable by construction rather than by a check here.
 	FrameMode = "mode" // client → daemon: change a running session's permission mode
+
+	// FrameRewind asks a running session to rewind its conversation to an
+	// earlier user turn - RewindTarget and RewindLastSeen below. It travels the
+	// same control-write path as FrameSend / FrameInterrupt / FrameMode: a line
+	// on the stdin of a process that already exists, behind whatever was
+	// already queued for that agent. And it answers the way FrameMode does -
+	// no FrameRewindReply, only a control_response on the event stream,
+	// arriving as a core.KindRewindReceipt, which is the only authority on
+	// whether it rewound.
+	FrameRewind = "rewind" // client → daemon: rewind a running session's conversation
 )
 
 // RoleManager marks the one session that gets Wake's own tools.
@@ -330,6 +321,11 @@ type Frame struct {
 	// answer to one question: a client folding it has to know when the past
 	// ends and the present begins, and N frames make that a guess.
 	Events []core.Event `json:"events,omitempty"`
+
+	// RewindTargets is a session's active-branch user prompts, on
+	// FrameRewindTargetsReply and nowhere else. See Events, just above, and
+	// history.go's RewindTarget.
+	RewindTargets []RewindTarget `json:"rewind_targets,omitempty"`
 
 	// Dir is the directory a spawned session runs in, and it must be
 	// absolute. **Spawn only, and that is a rule about FrameFork rather than
@@ -472,6 +468,15 @@ type Frame struct {
 	// same as the receipt's key so a second client reading both sees one word
 	// for one thing - Answers' case exactly.
 	Mode string `json:"mode,omitempty"`
+
+	// RewindTarget is the message uuid a FrameRewind asks the session to
+	// rewind to, and RewindLastSeen is the uuid it declares as the tip -
+	// Claude's own optimistic-concurrency guard, so a rewind aimed at a
+	// conversation that moved on since is refused rather than landing
+	// somewhere nobody asked for. Both required, on Mode's own argument: core.
+	// EncodeRewind refuses an empty one rather than guessing what it means.
+	RewindTarget   string `json:"rewind_target,omitempty"`
+	RewindLastSeen string `json:"rewind_last_seen,omitempty"`
 
 	// Role marks a spawn as something other than an ordinary agent. Empty is
 	// an agent, which is what every existing client sends and what every

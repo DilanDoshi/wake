@@ -2867,3 +2867,63 @@ only real way out. The owner chose to ship on that basis rather than block on a 
 it stays stuck (the bug), and (b) denying an `AskUserQuestion`, to confirm the deny unblocks claude
 without a re-ask. Until then this is a UI-correctness fix built on a `[binary]` reading, and it is
 labelled as one here and in the code.
+
+---
+
+## Ruling: the transcript reader became tree-aware for conversation rewind, and the trigger stays inside `esc`'s existing job
+
+**2026-08-25**, landing `feat/conversation-rewind`. Claude Code's `rewind_conversation` does not
+delete: it appends a `last-prompt{rewound,leafUuid}` marker and repoints the active leaf, leaving the
+rewound turns physically in the transcript as a dead branch. Wake's reader
+(`internal/daemon/history.go`) was linear — file order, top to bottom — which is exactly wrong the
+moment a rewind has happened: reopening a pane, or restoring the room, replayed the dead branch and
+resurrected exactly what the operator rewound away.
+
+**Two alternatives were considered and rejected before the tree walk.** A *linear marker-replay* —
+apply each `last-prompt{rewound}` as a truncation while streaming the file forward — is a fragile
+subset of the same idea: it breaks at the tail-window edge (a marker outside the kept ring prunes
+nothing) and cannot express a **stacked** rewind, where which node to prune depends on which of several
+markers is newest. A *daemon rewind-ledger* — Wake records which rewinds it performed and prunes its
+own state accordingly — loses on the project's own non-negotiable, "Wake owns almost no state," and it
+is blind to a rewind performed in a native `claude` session Wake later imports: there is no ledger
+entry for a rewind Wake never sent.
+
+**So the transcript on disk became the single source of truth, read by walking it rather than by
+remembering what happened to it.** `core.ActiveBranch` (`internal/core/activebranch.go`) takes a tree
+of `{uuid, parentUuid, rewound, leafUuid}` nodes and returns the live uuid set: start at the latest
+marker's leaf (or the last node written, with no rewind), and at every fork take the child written
+*after* that marker — "newest branch wins." It is pure — nodes in, a uuid set out — which is what lets
+it be table-tested against hand-authored trees (no rewind, one rewind, one rewind plus continuation,
+stacked rewinds) with no transcript file and no daemon in the loop.
+
+**One function serves the DM, the room and the picker, deliberately.** `internal/daemon/history.go`'s
+`History` is the only reconstruction a DM or a room ever sees — `sendHistory`/`sendRoomHistory` both
+go through its `answerHistory` — and `internal/daemon/rewindtargets.go`'s `RewindTargets` reuses the
+identical walk to answer the picker's own prompts. A second implementation of "which turns are live"
+was the exact risk the ledger alternative above would have introduced under a different name: two
+readers is two chances to disagree about the same fact.
+
+**On a successful receipt, the pane re-reads itself rather than patching its own transcript in place,
+because patching is the linear-replay mistake arriving through a different door.** `noteRewind` throws
+away the pane's live events and re-asks `FrameHistory` — the identical path a reopen or a reattach
+already takes. That is what makes "the pane after a rewind" and "the pane after closing and reopening
+it" the same code path rather than two that have to be kept in agreement by hand, and it is why a
+receipt arriving late is cosmetic rather than a lost turn: presentation state, not the transcript.
+
+**The `esc esc` gate is idle + empty, scoped to the focused pane, because the invariant it must not
+break predates the feature.** Wake's rule since `⎋⎋` shipped is that mashing `esc` at a runaway agent
+always interrupts; a rewind picker is a second meaning for a key that already carries one, so it may
+only claim the press when neither existing meaning has anything to do — a non-empty composer still
+clears its draft, and a running agent still eats the press as an interrupt. `App.rewindArmable`
+re-derives both conditions on every press rather than caching them, for the reason `rewindKey` also
+checks `a.rewind.Session == a.focus` rather than trusting an open picker: a status push landing between
+two presses, or the operator tabbing to a different conversation with a picker still open behind them,
+must not let a stale gate answer a question the current moment would answer differently.
+
+**The manager is refused both `FrameRewind` and `FrameRewindTargets`, for a sharper reason than
+`FrameMode`'s.** It fails the ordinary manager test — nothing on that surface can address a message
+uuid, since `core.Event` carries none onto the MCP path — and it fails a second, newer one: a rewound
+turn does not stay in view on the next look, so an agent that could trigger a rewind would have a way
+to make its own prior turns disappear from the operator's read with no receipt on any surface
+`list_agents` or `roll_up` exposes. `cmd/wake/mcpguard_test.go`'s `managerVerbs` carries both reasons
+against the actual `FrameRewind`/`FrameRewindTargets` dispatch, not asserted in the abstract.

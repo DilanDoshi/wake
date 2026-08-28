@@ -685,3 +685,56 @@ func TestEncodeSetModeRejectsAnEmptyMode(t *testing.T) {
 		t.Errorf("got %q alongside the error, want no line at all", got)
 	}
 }
+
+// --- rewind_conversation ------------------------------------------------
+
+// The encoded shape matches the recorded fixture Wake would write -
+// TestEncodeUserMessageMatchesRecordedInput's own pattern, one control
+// request over. The ids come from the fixture rather than being retyped
+// here, so a drifted field is caught rather than a coincidence confirmed:
+// hardcoded literals could agree with EncodeRewind by construction even
+// after the wire shape moved.
+func TestEncodeRewindMatchesTheRecordedRequest(t *testing.T) {
+	raw, err := os.ReadFile("../../testdata/input/rewind-conversation.stdin.jsonl")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var want bytes.Buffer
+	if err := json.Compact(&want, raw); err != nil {
+		t.Fatalf("compact fixture: %v", err)
+	}
+	var wf struct {
+		Type      string `json:"type"`
+		RequestID string `json:"request_id"`
+		Request   struct {
+			Subtype            string `json:"subtype"`
+			TargetMessageUUID  string `json:"target_message_uuid"`
+			LastSeenUUID       string `json:"last_seen_user_message_uuid"`
+			InterruptIfRunning bool   `json:"interrupt_if_running"`
+		} `json:"request"`
+	}
+	if err := json.Unmarshal(want.Bytes(), &wf); err != nil {
+		t.Fatalf("fixture is not valid JSON: %v", err)
+	}
+	if wf.Type != "control_request" || wf.Request.Subtype != "rewind_conversation" || wf.Request.InterruptIfRunning {
+		t.Fatalf("fixture is not the envelope this test claims to guard: %+v", wf)
+	}
+
+	got, err := EncodeRewind(wf.RequestID, wf.Request.TargetMessageUUID, wf.Request.LastSeenUUID)
+	if err != nil {
+		t.Fatalf("EncodeRewind: %v", err)
+	}
+	if !bytes.Equal(bytes.TrimSuffix(got, []byte("\n")), want.Bytes()) {
+		t.Errorf("encoded frame does not match the recorded input fixture\n got: %s\nwant: %s", got, want.Bytes())
+	}
+}
+
+func TestEncodeRewindRefusesEmptyIdsAndUuids(t *testing.T) {
+	for _, c := range []struct{ id, target, seen string }{
+		{"", "a", "b"}, {"id", "", "b"}, {"id", "a", ""},
+	} {
+		if _, err := EncodeRewind(c.id, c.target, c.seen); err == nil {
+			t.Fatalf("expected refusal for %+v", c)
+		}
+	}
+}

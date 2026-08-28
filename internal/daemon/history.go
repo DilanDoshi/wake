@@ -48,12 +48,19 @@ const historyEvents = 400
 // own envelope and for the events still arriving beside it.
 const historyBytes = 4 << 20
 
-// History is the conversation on disk for one session, oldest last-400 first.
+// History is the conversation on disk for one session, oldest last-400 first,
+// as its live branch - a rewind's dead turns are on disk and dropped here.
 //
 // An id with no transcript is not an error: a session that has never taken a
 // turn has no file yet, and neither does one somebody started outside a
 // directory claude tracks. The caller draws nothing, which is what it would
 // have drawn anyway.
+//
+// Two passes over the file. The first reads only the tree - one small node per
+// line, no content - and reconstructs which uuids are live; the second emits
+// the events of the live lines, tail-bounded. Two passes rather than holding
+// the file so that memory stays proportional to the node index plus the tail
+// ring, never the whole file's content.
 func History(id string) ([]core.Event, error) {
 	path, ok := transcriptPath(id)
 	if !ok {
@@ -65,6 +72,45 @@ func History(id string) ([]core.Event, error) {
 	}
 	defer func() { _ = f.Close() }()
 
+	active, err := activeBranchOf(f)
+	if err != nil {
+		return nil, err
+	}
+	if _, err := f.Seek(0, io.SeekStart); err != nil {
+		return nil, err
+	}
+	return liveHistory(f, id, active)
+}
+
+// activeBranchOf reads a transcript's tree - identity and rewind markers, no
+// content - and returns the uuids on its live branch. Memory is one small node
+// per line, never the line itself, which is the whole reason History reads the
+// file twice rather than once into events. See core.ActiveBranch.
+func activeBranchOf(r io.Reader) (map[string]bool, error) {
+	br := bufio.NewReaderSize(r, 64*1024)
+	var nodes []core.TranscriptNode
+	for {
+		line, err := readTranscriptLine(br)
+		if len(line) > 0 {
+			if n, ok := core.DecodeTranscriptNode(line); ok {
+				nodes = append(nodes, n)
+			}
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return core.ActiveBranch(nodes), nil
+			}
+			return nil, err
+		}
+	}
+}
+
+// liveHistory emits the events of the live branch's lines, tail-bounded. A line
+// whose node uuid is not in active is a rewound dead-branch turn: it is skipped
+// whole and its content is never decoded. A line with no tree node - the
+// on-disk chatter, and the rewind markers themselves - is not a branch node and
+// passes through as before.
+func liveHistory(r io.Reader, id string, active map[string]bool) ([]core.Event, error) {
 	// A ring rather than everything-then-slice. A transcript carries whole file
 	// contents inside attachment records, so "read it all and keep the last
 	// 400" is memory proportional to the file - and the tail's backing array
@@ -92,17 +138,21 @@ func History(id string) ([]core.Event, error) {
 	// bufio.Reader rather than Scanner: a Scanner *stops* on a line longer than
 	// its buffer, so one oversized attachment would mean no history at all for
 	// that conversation. This reads the long line in pieces and drops it.
-	br := bufio.NewReaderSize(f, 64*1024)
+	br := bufio.NewReaderSize(r, 64*1024)
 	for {
 		line, err := readTranscriptLine(br)
 		if len(line) > 0 {
-			events, decErr := core.DecodeTranscriptLine(line)
-			if decErr != nil {
-				// One unreadable line is not an unreadable conversation.
-				logf("wake: session %s has a transcript line that could not be decoded: %v", id, decErr)
-			}
-			for _, ev := range events {
-				keep(ev)
+			// Skip only a line that carries a uuid the reconstruction ruled
+			// dead; everything else - live nodes, chatter, markers - is kept.
+			if node, ok := core.DecodeTranscriptNode(line); !ok || node.UUID == "" || active[node.UUID] {
+				events, decErr := core.DecodeTranscriptLine(line)
+				if decErr != nil {
+					// One unreadable line is not an unreadable conversation.
+					logf("wake: session %s has a transcript line that could not be decoded: %v", id, decErr)
+				}
+				for _, ev := range events {
+					keep(ev)
+				}
 			}
 		}
 		if err != nil {

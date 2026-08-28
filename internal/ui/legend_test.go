@@ -578,8 +578,12 @@ func TestEveryLegendEntryHasItsOwnLabel(t *testing.T) {
 // `↵ send` to `↵ detach` and `⌃O detach` to `⌃O cancel` - and a build that
 // swapped only the first would draw `detach` twice, on the key that does it and
 // on the key that no longer does. See detach.go.
+//
+// {rewind: true} is here for the same reason as {esc: true}: both swap the
+// same ⎋ glyph, and a build that only ever checked the esc case would not
+// notice escRewindLabel colliding with some other entry's label. See rewind.go.
 func TestEveryArmedLegendEntryHasItsOwnLabelToo(t *testing.T) {
-	for _, arms := range []legendArms{{esc: true}, {detach: true}} {
+	for _, arms := range []legendArms{{esc: true}, {rewind: true}, {detach: true}} {
 		whole := map[string]bool{}
 		for _, part := range hintParts(spawnedMode, arms) {
 			if whole[part] {

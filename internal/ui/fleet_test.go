@@ -67,6 +67,10 @@ func roomCases() []roomCase {
 		{"a tool result", core.Event{Kind: core.KindToolResult, Text: "ok"}, false},
 		{"system chatter", core.Event{Kind: core.KindSystem, Text: "lifecycle"}, false},
 		{"a control receipt", core.Event{Kind: core.KindControlReceipt}, false},
+		// Claude's answer to a rewind_conversation request - Control's own
+		// receipt, one kind over, and the same non-decision: it is Wake
+		// acknowledging its own request rather than conversation content.
+		{"a rewind receipt", core.Event{Kind: core.KindRewindReceipt}, false},
 		{"the fate of a message Wake sent", core.Event{Kind: core.KindMessageState, MessageID: "m1"}, false},
 		{"a quota report", core.Event{Kind: core.KindRateLimit, Text: "fine"}, false},
 		{"a session id dying", core.Event{Kind: core.KindSessionReset, SessionID: "s1"}, false},
