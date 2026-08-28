@@ -53,6 +53,47 @@ func TestTabTogglesRowsAndTiles(t *testing.T) {
 	}
 }
 
+// Rows have no horizontal axis: ←→ are unclaimed there, so the unclaimed-key
+// rule applies and they close the board rather than moving a cursor rows do
+// not have. Documents the fallthrough and covers the row-mode ←→ branch,
+// which TestTiledCursorMovesInTwoDimensions does not - that test is tiled.
+func TestArrowsCloseTheBoardInRowMode(t *testing.T) {
+	a := boardApp(t)
+	if a.board.Tiled {
+		t.Fatal("precondition: the board opened in tiles; rows are the default")
+	}
+	right, _, handled := a.boardKey(tea.KeyMsg{Type: tea.KeyRight})
+	if handled {
+		t.Error("→ was claimed by the board in row mode")
+	}
+	if right.board.Up {
+		t.Error("→ in row mode should close the board rather than move a cursor rows do not have")
+	}
+	left, _, handled := a.boardKey(tea.KeyMsg{Type: tea.KeyLeft})
+	if handled {
+		t.Error("← was claimed by the board in row mode")
+	}
+	if left.board.Up {
+		t.Error("← in row mode should close the board")
+	}
+}
+
+// boardKeyLine must never name a key that does not work in the geometry it is
+// drawn under - "the legend names only keys that work", one surface over. Row
+// mode has no working ←→ (the case above), so its key line must not claim it;
+// tile mode's ←→ is real (tileNav), so its key line must.
+func TestBoardKeyLineAdvertisesArrowsOnlyInTileMode(t *testing.T) {
+	a := boardApp(t) // rows by default
+	if strings.Contains(shown(a), "←→") {
+		t.Errorf("the row-mode board advertises ←→, which closes the board there instead of moving the cursor:\n%s", shown(a))
+	}
+
+	a.board.Tiled = true
+	if !strings.Contains(shown(a), "←→") {
+		t.Errorf("the tile-mode board does not advertise ←→, which tileNav binds there:\n%s", shown(a))
+	}
+}
+
 func TestSlashBoardOpensTheOverview(t *testing.T) {
 	a := boardApp(t)
 	if !a.board.Up {
@@ -71,7 +112,8 @@ func TestSlashBoardOpensTheOverview(t *testing.T) {
 	}
 	// The board advertises its own keys on itself, the card's rule: an
 	// affordance that comes and goes belongs on the thing that came and went.
-	if !strings.Contains(out, boardKeyLine) {
+	// Rows by default here, so the row-mode line.
+	if !strings.Contains(out, boardKeyLineRows) {
 		t.Errorf("the board does not advertise its keys:\n%s", out)
 	}
 	// And it is an overview, not panes: the pane legend is not on screen.

@@ -44,14 +44,19 @@ const (
 	// so a window showing fewer rows is not silently the fleet.
 	boardTitle = "BOARD"
 
-	// boardKeyLine is the board's own legend, the card's rule: an affordance
-	// that exists only while a surface is up belongs on the surface. It
-	// brackets nothing, so the card-key bijection guard reads no rune from it -
-	// which makes it a judgment call, held to one rule: never name a key that
-	// is not bound. Leaving, opening and parking lead; ⌃Y is folded into ↵'s
-	// entry rather than repeated, since openBoardRow now binds them to the same
-	// placement (open beside the room's own focus, a new column).
-	boardKeyLine = "esc close  ↵/⌃Y column  ⌃D open here  ⌃B below  ⌃C park  ↑↓←→ move  ⇥ rows/tiles"
+	// boardKeyLineRows and boardKeyLineTiles are the board's own legend, one
+	// per geometry - the card's rule, that an affordance existing only while a
+	// surface is up belongs on the surface, plus "the legend names only keys
+	// that work" one surface over: rows have no working ←→ (boardKey's ←/→
+	// cases fall through to close the board there), so the row line must not
+	// claim it, where tiles' is real (tileNav). Neither brackets anything, so
+	// the card-key bijection guard reads no rune from either - which makes the
+	// rest a judgment call, held to the same rule: never name a key that is
+	// not bound. Leaving, opening and parking lead; ⌃Y is folded into ↵'s
+	// entry rather than repeated, since openBoardRow now binds them to the
+	// same placement (open beside the room's own focus, a new column).
+	boardKeyLineRows  = "esc close  ↵/⌃Y column  ⌃D open here  ⌃B below  ⌃C park  ↑↓ move  ⇥ rows/tiles"
+	boardKeyLineTiles = "esc close  ↵/⌃Y column  ⌃D open here  ⌃B below  ⌃C park  ↑↓←→ move  ⇥ rows/tiles"
 
 	// boardChromeRows is what sits above the first row - the title - and the
 	// mouse's row arithmetic reads it too: the draw and the mouse measure one
@@ -333,7 +338,7 @@ func (a App) boardView(agents []Agent, width int) string {
 	for len(rows) < visible+boardChromeRows {
 		rows = append(rows, "")
 	}
-	rows = append(rows, mutedLine(boardKeyLine, width))
+	rows = append(rows, mutedLine(boardKeyLineRows, width))
 	return strings.Join(rows, "\n")
 }
 

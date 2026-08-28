@@ -92,8 +92,10 @@ func tileWindowStart(cursor, total, cols, visibleRows int) int {
 	return startRow * cols
 }
 
-// tileView is the whole frame as a grid of tiles: the same title and key line
-// the row view draws, with tiles between them in attention order.
+// tileView is the whole frame as a grid of tiles: the same title the row view
+// draws, tiles between them in attention order, and its own key line -
+// boardKeyLineTiles rather than the row view's, since ←→ really move the
+// cursor here.
 func (a App) tileView(agents []Agent, width int) string {
 	cols := tileColumns(width)
 	cellW := tileCellWidth(width, cols)
@@ -116,7 +118,7 @@ func (a App) tileView(agents []Agent, width int) string {
 		}
 		body = append(body, joinTilesRow(cells))
 	}
-	key := mutedLine(boardKeyLine, width)
+	key := mutedLine(boardKeyLineTiles, width)
 	return head + "\n" + strings.Join(body, "\n") + "\n" + key
 }
 
