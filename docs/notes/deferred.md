@@ -273,31 +273,16 @@ without leaving it.
 
 ---
 
-## OWNER REQUEST, 2026-08-26 — ⌃Q should arm before it parks-and-quits, so a stray press does not empty the screen
+## ~~OWNER REQUEST, 2026-08-26 — ⌃Q should arm before it parks-and-quits, so a stray press does not empty the screen~~ WON'T DO (owner, 2026-08-28)
 
-**Asked for in this version.** Make ⌃Q a two-step gesture — a first ⌃Q that arms, a second press that
-confirms — so nobody parks the whole fleet and closes the window by accident and then has to work out
-how to get back.
-
-**What ⌃Q does today is recoverable, but it is instant.** ⌃Q parks every agent and exits the window on
-one press (`internal/ui/park.go`'s `parkAll`, then the hangup route). Nothing is lost — parking writes
-`parked.json` and the fleet reopens — but "instant" is the problem the request names: the screen empties
-on a single keystroke, and the way back is a command the operator now has to remember, especially in a
-**named fleet**, where plain `wake` opens a *different* one and `wake --fleet <name>` is the actual
-return (`wake fleets` lists them). A stray ⌃Q is not a lost fleet, but it is a jarring one.
-
-**The shape it wants is `detach.go`'s, not a literal same-key double-tap.** ⌃QQ as the same key twice
-runs straight into the ruling `internal/ui/detach.go` already paid for: two ⌃-presses sharing one read
-arrive as **two plain messages** (`keyprobe_test.go`), so an accidental ⌃Q and the reflexive second
-press that follows "nothing happened" are the *same bytes* as intent — which is exactly why the detach
-arm is confirmed by a **different** key (↵), not a second ⌃O. So this most likely wants ⌃Q to **arm**
-(swap the legend to `↵ quit & park all` / `⌃Q cancel`, drawn like the detach arm), ↵ confirming and any
-other input disarming — the four-call-site `App.disarmed` pattern the card keys and the escape-clear
-already use. A held ⌃Q or a modal is heavier and buys nothing the arm does not. Note ⌃Q already waits
-for the daemon to confirm the park (`park.go`'s `parkAllTaken`); this adds the *human* confirmation in
-front of it, not a second machine round-trip.
-
-*Blocks:* nothing yet; a safety/undo-affordance request for the one keystroke that clears the room.
+**Owner's ruling, 2026-08-28: not wanted — dropped ahead of the first release.** The ask was to make
+⌃Q a two-step arm/confirm (a first ⌃Q that arms, `↵` that confirms) so a stray press could not park
+the fleet and close the window by accident. On review the owner decided the safety affordance is not
+worth the extra gesture: a stray ⌃Q is recoverable (parking writes `parked.json`; `wake` — or
+`wake --fleet <name>` for a named fleet — reopens it), nothing is lost, and the emergency path already
+distinct from it (`⌃Q⌃Q` reads the tty before Bubble Tea, `cmd/wake/killswitch.go`) covers the wedged
+case. Kept here as a struck-through record rather than deleted so the idea is not re-proposed as new:
+it was considered and declined, not forgotten.
 
 ---
 
