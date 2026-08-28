@@ -97,6 +97,13 @@ var agentAuthored = map[string]bool{
 	// many words. Following the cwd into Dir would have let an agent widen the
 	// set of directories a manager may spawn into, by moving itself.
 	"Cwd": true,
+
+	// Commands is the agent's, on Label's footing: the advertised set grows when
+	// an agent writes a `.claude/commands` file in a directory it can reach, so
+	// what a *later* init advertises is a value an agent decided. It is never
+	// rendered on this surface (notInTheStatusReport) - the verdict is here
+	// because every field needs one, not because a tool prints it.
+	"Commands": true,
 }
 
 // Every field of the report has a provenance verdict.

@@ -227,8 +227,8 @@ func filledSessionStatus(t *testing.T) SessionStatus {
 		case reflect.Int, reflect.Int64:
 			v.Field(i).SetInt(int64(i) + 1)
 		case reflect.Slice:
-			// Only []string today (RequestIDs). Distinct per field for the same
-			// reason the string case is, so a mis-wired field is a failure.
+			// []string fields today (RequestIDs, Commands). Distinct per field for
+			// the same reason the string case is, so a mis-wired field is a failure.
 			if v.Field(i).Type().Elem().Kind() != reflect.String {
 				t.Fatalf("SessionStatus.%s is a slice of %s and this filler only knows []string: teach it that element kind", f.Name, v.Field(i).Type().Elem().Kind())
 			}

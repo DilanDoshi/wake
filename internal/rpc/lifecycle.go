@@ -366,6 +366,16 @@ type SessionStatus struct {
 	// that already says what is in use.
 	Budget string `json:"budget,omitempty"`
 
+	// Commands is every slash command this session advertised on its init - what
+	// the completion menu offers. Here for Effort's reason and by the same route:
+	// it rides the init *event*, which keeps a connected client current but tells
+	// a client that attached late nothing, since no event is replayed. The report
+	// is the only route by which such a client learns it, so a reattach used to
+	// leave the menu empty for every agent. The daemon's own memory of the last
+	// init it decoded; the word is Wake's ("commands"), never claude's wire
+	// `slash_commands`, which only the airlock may name.
+	Commands []string `json:"commands,omitempty"`
+
 	// State is one of the State constants above.
 	State string `json:"state"`
 
