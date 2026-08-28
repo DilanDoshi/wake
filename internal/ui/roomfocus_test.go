@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -128,5 +129,47 @@ func TestTypingAtNameNarrowsTheRoom(t *testing.T) {
 	cleared, _ := pressKey(base.withDraft("@john "), tea.KeyMsg{Type: tea.KeyEsc})
 	if got := cleared.room.focus; got != "" {
 		t.Fatalf("clearing the draft left focus = %q, want none", got)
+	}
+}
+
+// Focus narrows restored history with no reconstruction: history holds only
+// broadcasts and public prose, and the predicate reads them by kind and session
+// id. Built the way the daemon delivers it (one transcript per batch; a
+// broadcast in several transcripts is what makes a turn public), so
+// collapseBroadcasts keeps the broadcast once and opens each session's prose.
+func TestFocusNarrowsRestoredHistory(t *testing.T) {
+	const john, iris, mgr = "john", "iris", "mgr"
+	r := restored(
+		[]core.Event{typed(john, "@all status?", base), heard(john, "john green", base.Add(time.Second))},
+		[]core.Event{typed(iris, "@all status?", base.Add(80*time.Millisecond)), heard(iris, "iris building", base.Add(time.Second+80*time.Millisecond))},
+		[]core.Event{typed(mgr, "@all status?", base.Add(120*time.Millisecond)), heard(mgr, "mgr coordinating", base.Add(time.Second+120*time.Millisecond))},
+	)
+	r = r.WithFocus(john, "john", mgr)
+	got := r.View(80, 24)
+	for _, want := range []string{"status?", "john green", "mgr coordinating"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("focused history missing %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "iris building") {
+		t.Fatalf("focused history still shows iris's restored prose:\n%s", got)
+	}
+}
+
+// A width change re-wraps through renderAll and must re-apply the filter, not
+// re-admit hidden lines - the one real risk of the subset render (spec §5).
+func TestReWrapUnderFocusKeepsHiddenLinesHidden(t *testing.T) {
+	const john, iris, mgr = "john-id", "iris-id", "mgr-id"
+	r := NewRoom().SetSize(80, 24)
+	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: john, Text: "john green"}, Agent{ID: john, Name: "john"})
+	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: iris, Text: "iris building"}, Agent{ID: iris, Name: "iris"})
+	r = r.WithFocus(john, "john", mgr)
+	r = r.SetSize(60, 24)
+	got := r.View(60, 24)
+	if !strings.Contains(got, "john green") {
+		t.Fatalf("re-wrap dropped the focused agent's line:\n%s", got)
+	}
+	if strings.Contains(got, "iris building") {
+		t.Fatalf("re-wrap re-admitted a hidden line:\n%s", got)
 	}
 }
