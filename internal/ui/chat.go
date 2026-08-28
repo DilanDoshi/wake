@@ -93,6 +93,16 @@ type Room struct {
 	// and the room has no roster of its own. See roomWorkingLine.
 	beat string
 
+	// focus narrows the transcript to one agent's thread; "" is the unfocused
+	// room. managerID and focusName ride with it - the predicate needs the
+	// manager's id, the header needs the focused agent's name. Persistent, not
+	// draw-only: every render path (a width re-wrap, a history merge) must apply
+	// the same filter, and a hidden line stays in said at rows == 0. See
+	// roomfocus.go and WithFocus.
+	focus     string
+	managerID string
+	focusName string
+
 	// menu is everything pinned between the transcript and the composer - the
 	// card, the picker and the completion menu (App.menuBlock) - handed over
 	// whole by App.roomPane and clipped here (see menuRows).
@@ -215,6 +225,30 @@ func (r Room) SetSize(w, h int) Room {
 	return r
 }
 
+// WithFocus narrows the room to one agent's thread, or widens it when focus is
+// "". A change re-renders the filtered subset and jumps to bottom - a width
+// change's own semantics (SetSize sets following=true), and the natural read
+// when you enter a focus. managerID and focusName ride along; a change in the
+// focused agent or the manager re-filters, everything else is a no-op so idle
+// typing after the name resolves costs nothing. The caller clears any text
+// selection on a focus change (App.retarget), because a re-render renumbers the
+// lines a selection is anchored to - the reason a width change clears it too.
+func (r Room) WithFocus(focus, focusName, managerID string) Room {
+	r.focusName = focusName
+	if r.focus == focus && r.managerID == managerID {
+		return r
+	}
+	r.focus = focus
+	r.managerID = managerID
+	lines := r.said.slice(r.said.first(), r.said.len())
+	blocks := renderRoom(r, lines)
+	first := r.said.first()
+	r.said = chunked[roomLine]{base: first, n: first}.append(lines...)
+	r.tr = r.tr.replace(blocks)
+	r.tr = r.tr.toBottom()
+	return r
+}
+
 // Append draws one event, attributed to the agent that produced it.
 //
 // Nothing here costs what the conversation so far cost, and at 30 agents that
@@ -234,17 +268,33 @@ func (r Room) Append(ev core.Event, by Agent) Room { return r.appendLine(ev, by,
 func (r Room) appendUser(ev core.Event, to string) Room { return r.appendLine(ev, Agent{}, to) }
 
 func (r Room) appendLine(ev core.Event, by Agent, to string) Room {
-	b := renderRoomBlock(ev, by, r.blockWidth())
-	if b.text == "" {
-		return r
+	line := roomLine{ev: ev, by: by, to: to}
+	// A room-worthy line the current focus hides is kept in said (canonical, so
+	// unfocus restores it) at rows == 0 with no rendered block - and its render
+	// is skipped, not done and dropped. A shown line renders as before; the
+	// empty-block guard stays on that path (fold pre-drops blanks, so it is
+	// defensive) and runs before an id is spent.
+	hidden := r.focus != "" && !focusAdmits(line, r.focus, r.managerID)
+	var b block
+	if !hidden {
+		b = renderRoomBlock(ev, by, r.blockWidth())
+		if b.text == "" {
+			return r
+		}
 	}
 	following := r.tr.atBottom()
 	r.lineMoves = nil
 
 	r.nextLineID++
-	var rows int
-	r.tr, rows = r.tr.addMeasured(b)
-	r.said = r.said.append(roomLine{ev: ev, by: by, to: to, id: r.nextLineID, rows: rows})
+	line.id = r.nextLineID
+	if hidden {
+		r.said = r.said.append(line)
+	} else {
+		var rows int
+		r.tr, rows = r.tr.addMeasured(b)
+		line.rows = rows
+		r.said = r.said.append(line)
+	}
 	if drop := r.said.count() - roomRetentionEvents; drop > 0 {
 		r = r.reclaimOldest(drop)
 	}
@@ -484,7 +534,13 @@ func (r Room) View(width, height int) string {
 	if menu := firstRows(r.menu, r.menuRows()); menu != "" {
 		rows = append(rows, menu)
 	}
-	return strings.Join(append(rows, r.composer.WithTitle(cmp.Or(r.writing, roomTitle)).View(w)), "\n")
+	// The pane names the focused agent so the narrowing is discoverable; the
+	// composer's own target line is the secondary tell.
+	title := roomTitle
+	if r.focus != "" && r.focusName != "" {
+		title = roomTitle + " › @" + r.focusName
+	}
+	return strings.Join(append(rows, r.composer.WithTitle(cmp.Or(r.writing, title)).View(w)), "\n")
 }
 
 // ScrollUp moves the reader lines back, or forward for a negative count.
@@ -587,8 +643,14 @@ func (r Room) renderAll(lines []roomLine) []block {
 		blocks = append(blocks, banner)
 	}
 	for i := range lines {
-		b := renderRoomBlock(lines[i].ev, lines[i].by, r.blockWidth())
 		lines[i].rows = 0
+		// A line the current focus hides keeps rows == 0 and contributes no
+		// block, so the geometry (which sums rows) needs no notion of "shown vs
+		// exists" - and its glamour render is skipped, not rendered then dropped.
+		if r.focus != "" && !focusAdmits(lines[i], r.focus, r.managerID) {
+			continue
+		}
+		b := renderRoomBlock(lines[i].ev, lines[i].by, r.blockWidth())
 		if b.text != "" {
 			b.laidOut = blockLines(b, false)
 			lines[i].rows = len(b.laidOut)

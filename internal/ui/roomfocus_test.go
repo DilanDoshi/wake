@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -49,5 +50,48 @@ func TestRoomEchoCarriesAddressee(t *testing.T) {
 	}
 	if got := lines[len(lines)-1].to; got != "iris-id" {
 		t.Fatalf("room echo to = %q, want %q", got, "iris-id")
+	}
+}
+
+func TestRoomViewNarrowsToFocus(t *testing.T) {
+	const john, iris, mgr = "john-id", "iris-id", "mgr-id"
+	johnA := Agent{ID: john, Name: "john"}
+	irisA := Agent{ID: iris, Name: "iris"}
+	mgrA := Agent{ID: mgr, Name: core.ManagerName}
+
+	r := NewRoom().SetSize(80, 24)
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "everyone: status?"}, "")
+	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: john, Text: "john here, all green"}, johnA)
+	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: iris, Text: "iris here, still building"}, irisA)
+	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: mgr, Text: "manager coordinating"}, mgrA)
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@iris hurry"}, iris)
+
+	full := r.View(80, 24)
+	for _, want := range []string{"all green", "still building", "manager coordinating", "hurry"} {
+		if !strings.Contains(full, want) {
+			t.Fatalf("unfocused room missing %q", want)
+		}
+	}
+
+	r = r.WithFocus(john, "john", mgr)
+	got := r.View(80, 24)
+	for _, want := range []string{"status?", "all green", "manager coordinating"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("focused room missing %q, want it kept", want)
+		}
+	}
+	for _, gone := range []string{"still building", "hurry"} {
+		if strings.Contains(got, gone) {
+			t.Fatalf("focused room still shows %q, want it hidden", gone)
+		}
+	}
+	if !strings.Contains(got, "› @john") {
+		t.Fatalf("focused room header missing the affordance:\n%s", got)
+	}
+
+	r = r.WithFocus("", "", mgr)
+	back := r.View(80, 24)
+	if !strings.Contains(back, "still building") || !strings.Contains(back, "hurry") {
+		t.Fatalf("unfocus did not restore hidden lines")
 	}
 }
