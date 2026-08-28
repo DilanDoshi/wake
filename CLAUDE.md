@@ -1194,6 +1194,11 @@ Side project — branch, commit, PR, merge freely.
 
 Conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`, `ci:`.
 
+**A branch takes the same type as a prefix:** `<type>/<short-kebab-description>` — the commit type
+above, a slash, then what the branch is (`feat/conversation-rewind`, `fix/commands-on-report`,
+`refactor/…`, `docs/…`). It is the type verbatim, not a synonym — `fix/`, never `bugfix/` — and a
+slash rather than a colon, because a colon is not a legal git ref character.
+
 **Never add Claude attribution** — no `Co-Authored-By`, no generated-with footer, in commits, PR
 titles, or PR bodies.
 
