@@ -157,8 +157,13 @@ func (r Room) WithMenu(menu string) Room {
 // physical copy so replies can be reordered without changing the block already
 // on screen while that cluster remains retained.
 type roomLine struct {
-	ev          core.Event
-	by          Agent
+	ev core.Event
+	by Agent
+	// to is the agent id this user line was addressed to; "" is a broadcast or a
+	// line that is not the operator's own. UI-only, set at creation (never on
+	// core.Event) - the view filter reads it to tell "you → @iris" from a
+	// broadcast and from "you → @john". See roomfocus.go.
+	to          string
 	id          uint64
 	broadcastID uint64
 	rows        int
