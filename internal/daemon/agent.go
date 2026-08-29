@@ -134,6 +134,15 @@ type agent struct {
 	// Not written to the park book: a woken session re-probes and re-confirms.
 	confirmedEffort string
 
+	// probing is set while an effort probe's /model is outstanding; fanOut uses
+	// it to swallow the reply. swallowTurnEnd carries the window one frame past
+	// the reply so the probe turn's end is swallowed too - see absorbProbe.
+	// probed is set once the first probe has been fired, so a per-turn init does
+	// not re-probe on every turn.
+	probing        bool
+	swallowTurnEnd bool
+	probed         bool
+
 	// model is what this session runs as, or "" for none. Display and the park
 	// book only, like effort. Read through currentModel: launch writes it and
 	// park reads it from another goroutine.
@@ -728,4 +737,11 @@ func (a *agent) changed() bool {
 	}
 	a.reported = state
 	return true
+}
+
+// setProbing opens or closes the effort-probe suppression window.
+func (a *agent) setProbing(v bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.probing = v
 }

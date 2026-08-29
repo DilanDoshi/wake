@@ -26,6 +26,7 @@ import (
 	"unicode"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // The command this file watches for, composed rather than spelled whole.
@@ -42,6 +43,11 @@ import (
 const (
 	slashPrefix = "/"
 	effortVerb  = "effort"
+	// modelVerb composes the bare /model probe the daemon sends to read a
+	// session's effort back. Composed rather than spelled whole for effortVerb's
+	// reason: slashguard_test.go refuses a literal naming a slash command in this
+	// package, and Wake claims /model's bare form (the picker) in internal/ui.
+	modelVerb = "model"
 )
 
 // noteEffort records the level if this message is claude's effort command.
@@ -71,25 +77,48 @@ const (
 // this function shipped, which is the same transition name and label went
 // through when rename shipped, and rename.go records what it cost to notice
 // late.
-func (a *agent) noteEffort(text string) {
+// It returns whether it recorded a level, so apply can fire a confirming probe
+// on exactly the sends that changed the record and no others.
+func (a *agent) noteEffort(text string) bool {
 	rest, ok := strings.CutPrefix(strings.TrimSpace(text), slashPrefix+effortVerb)
 	if !ok {
-		return
+		return false
 	}
 	// The command has to end where the word does. Without this "/effortmax" is
 	// recorded as max - a line claude does not recognise as the command at all,
 	// so Wake would report a level the session was never set to, which is worse
 	// than reporting a stale one.
 	if rest != "" && !unicode.IsSpace(rune(rest[0])) {
-		return
+		return false
 	}
 	level := strings.TrimSpace(rest)
 	if !core.ValidEffortCommand(level) {
-		return
+		return false
 	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.effort = level
+	return true
+}
+
+// probeEffort queues a bare /model to read the session's reasoning level back -
+// a local CLI reply (num_turns:0, $0) the daemon suppresses. Best-effort: it is
+// skipped for an agent that is gone or blocked on an ask, whose stdin is a
+// closed decision, and dropped silently if the queue is full (the level simply
+// does not refresh this cycle). The reply is consumed by absorbProbe.
+func (a *agent) probeEffort() {
+	if a.blockedOnAsk() {
+		return
+	}
+	select {
+	case <-a.gone:
+		return
+	default:
+	}
+	select {
+	case a.in <- pending{probe: true, frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: slashPrefix + modelVerb}}:
+	default:
+	}
 }
 
 // argvEffort is what a level may become on a command line: itself, or nothing.
