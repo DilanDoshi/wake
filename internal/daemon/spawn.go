@@ -693,6 +693,13 @@ func (s *server) fanOut(a *agent) {
 		if a.changed() {
 			s.broadcast(s.statusPush())
 		}
+
+		// The session's init arrives before any input, so it is where the
+		// startup effort probe belongs - the one place Wake can read a level it
+		// never chose. Fires once; the /effort re-probe is in apply.
+		if a.firstInit(ev) {
+			a.probeEffort()
+		}
 	}
 }
 

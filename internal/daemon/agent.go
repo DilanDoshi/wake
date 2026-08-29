@@ -774,3 +774,20 @@ func (a *agent) absorbProbe(ev core.Event) (suppress, publish bool) {
 		return false, false
 	}
 }
+
+// firstInit reports whether ev is this session's init and no probe has fired
+// yet, marking it fired. The init is the one frame that arrives before any
+// input, so it is where the startup effort probe belongs; every later turn
+// carries its own init, which this ignores.
+func (a *agent) firstInit(ev core.Event) bool {
+	if ev.Kind != core.KindSystem || ev.Session == nil {
+		return false
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.probed {
+		return false
+	}
+	a.probed = true
+	return true
+}

@@ -104,3 +104,50 @@ func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 		t.Fatal("frames after the probe window are still suppressed")
 	}
 }
+
+// The startup probe fires on the session's init and only once, so a per-turn
+// init does not re-probe on every turn.
+func TestFirstInitFiresOnce(t *testing.T) {
+	a := effortAgent(t)
+	initEv := core.Event{Kind: core.KindSystem, Session: &core.SessionFacts{Model: "claude-opus-5"}}
+	if !a.firstInit(initEv) {
+		t.Fatal("the first init did not trigger the probe")
+	}
+	if a.firstInit(initEv) {
+		t.Fatal("a second init re-triggered the probe")
+	}
+	b := effortAgent(t)
+	if b.firstInit(core.Event{Kind: core.KindSystem}) {
+		t.Fatal("a system frame carrying no facts (a hook) triggered the probe")
+	}
+}
+
+// The whole round trip over a real process: the startup probe confirms the
+// level a default-effort session is actually at, the reply never reaches a
+// client, and a runtime /effort re-probes and re-confirms.
+func TestTheProbeConfirmsEffortInvisibly(t *testing.T) {
+	fakeClaudeOnPath(t, "probe")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+
+	c.spawn(idAlpha, "sydney")
+
+	// The startup probe reads back the level the fake reports, though the spawn
+	// asked for none.
+	c.await("effort confirmed as max", func(f rpc.Frame) bool {
+		return f.Status != nil && sessionRow(*f.Status, idAlpha).Effort == core.EffortMax
+	})
+
+	// And the reply was suppressed: nothing a client saw carries it.
+	for _, f := range c.seen {
+		if f.Kind == rpc.FrameEvent && f.Event != nil && core.IsModelReply(f.Event.Text) {
+			t.Fatalf("the probe reply leaked to a client: %q", f.Event.Text)
+		}
+	}
+
+	// A runtime /effort re-probes, so the confirmed level follows the change.
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/effort low"})
+	c.await("effort re-confirmed as low", func(f rpc.Frame) bool {
+		return f.Status != nil && sessionRow(*f.Status, idAlpha).Effort == core.EffortLow
+	})
+}
