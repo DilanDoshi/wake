@@ -193,6 +193,21 @@ disappears on your theme.
       if you use light mode, check there too.
 - [ ] **Nothing is unreadable** — low-contrast grey on grey, an accent that vanishes.
 
+`/color` (`/color blue`, `/color @who blue`, or `@who /color blue` from the room) tints an agent.
+The suite proves each style-picker returns the hue and that the status bar does *not*; it cannot see
+whether the hue reads.
+
+- [ ] **`/color blue` tints the composer and the roster row, not the status bar.** The box you type
+      into — its border and its `@name` title — should turn blue, its room name-tag should turn blue,
+      and its sidebar row should turn blue. The bottom **status bar stays grey**; if it takes the hue,
+      `barStyle`'s removal regressed.
+- [ ] **The roster row keeps its hue while it is the open/selected one**, drawn **bold** rather than
+      reverting to the orange cursor — open the coloured agent's pane and confirm the sidebar row does
+      not fall back to orange. A **blocked** coloured agent's row still turns warn, cursor or not.
+- [ ] **`@thea /color green` from the room** colours thea, the same as `/color @thea green`.
+- [ ] **The hue reads on both light and dark themes** — the identity colours are `AdaptiveColor` pairs
+      Wake chose, not Claude's; check contrast in your mode.
+
 ## 3. Glyphs — a font problem is a layout problem
 
 Wake draws `⊘ ⇞ ⇟ ⌃ ⇧ ⇥ ↵ ⎋ ›` and box-drawing characters. If any renders as a tofu box, a
