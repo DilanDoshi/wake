@@ -712,6 +712,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	a = a.observedMode(sessionID, ev)
 	// A rewind receipt is the same non-decision, one kind over. See rewind.go.
 	a = a.noteRewind(sessionID, ev)
+	a = a.forgetHistoryOnReset(sessionID, ev)
 
 	var forRoom []core.Event
 	a.fleet, forRoom = a.fleet.Observe(ev, sessionID)

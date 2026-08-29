@@ -340,6 +340,12 @@ func (d DM) SetSize(w, h int) DM {
 // is worse than having no scrollback at all. Sampling that before the content
 // changes is what makes it true.
 func (d DM) Append(ev core.Event) DM {
+	// A /clear blanks the pane rather than adding to it, before the folds below
+	// because nothing of the gone conversation has anywhere to land. See clear.go.
+	if ev.Kind == core.KindSessionReset {
+		return d.clearedBySessionReset()
+	}
+
 	// Before the guards below, because a tool result with an empty body draws
 	// nothing and still settles the call above it, so a bullet left dim by an
 	// early return is a call that never finishes on screen. A command that

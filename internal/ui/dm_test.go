@@ -643,19 +643,6 @@ func TestPermissionRequestIsVisible(t *testing.T) {
 	assertShows(t, d, 60, 20, "permission")
 }
 
-// The event is built the way the decoder actually produces one: SessionID is
-// the id that died and there is no Text, because the reset frame names no
-// successor. The previous version of this test passed a Text the decoder can
-// no longer emit and asserted the view showed it, so it went on passing
-// while the view rendered an arrow pointing at nothing.
-func TestSessionResetIsVisible(t *testing.T) {
-	d := NewDM("s1", "alex").SetSize(60, 20).
-		Append(core.Event{Kind: core.KindSessionReset, SessionID: "old-id"})
-
-	assertShows(t, d, 60, 20, "session reset")
-	assertHides(t, d, 60, 20, "→")
-}
-
 // The only rate-limit status ever recorded is "allowed", once per process.
 // Drawing that on every DM is chrome; anything else is the reason the agent
 // stalled.
