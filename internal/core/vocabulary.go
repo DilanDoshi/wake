@@ -22,6 +22,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"regexp"
 	"strings"
 )
 
@@ -413,6 +414,40 @@ func interruptNotice(kind EventKind, text string) Notice {
 		return NoticeTurnInterrupted
 	}
 	return ""
+}
+
+// A bare /model reply names the session's model and reasoning level:
+//
+//	Current model: Opus 5 (1M context) (effort: xhigh)
+//
+// It is the one place a session's effort is reported back at all
+// (testdata/stream/bare-model.jsonl) - nothing Wake receives unasked carries
+// it - so the daemon sends the bare command and reads the level out of this
+// line to confirm the effort it asked for. Recognised here because it is
+// Claude's rendered output shape, which is exactly what the airlock quarantines.
+const modelReplyPrefix = "Current model:"
+
+// effortClause matches the parenthesised level in a /model reply.
+var effortClause = regexp.MustCompile(`\(effort:\s*([a-zA-Z]+)\)`)
+
+// IsModelReply reports whether text is a bare /model reply. Used to suppress the
+// probe's own frames and to filter its line out of a restored transcript.
+func IsModelReply(text string) bool {
+	return strings.HasPrefix(strings.TrimSpace(text), modelReplyPrefix)
+}
+
+// EffortFromModelReply reads the reasoning level out of a /model reply, or
+// reports false when there is no clause or the level is not one /effort takes.
+func EffortFromModelReply(text string) (string, bool) {
+	m := effortClause.FindStringSubmatch(text)
+	if m == nil {
+		return "", false
+	}
+	level := strings.ToLower(m[1])
+	if !ValidEffortCommand(level) {
+		return "", false
+	}
+	return level, true
 }
 
 // toolCall builds the ToolCall for an invocation, resolving the display
