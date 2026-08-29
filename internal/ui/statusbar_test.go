@@ -96,6 +96,20 @@ func TestTheBarDropsSegmentsItDoesNotKnow(t *testing.T) {
 	}
 }
 
+// Effort is the level a /model probe confirmed (or the one Wake asked for until
+// then), shown once known and dropped when neither exists - never guessed.
+func TestTheBarShowsEffortWhenKnown(t *testing.T) {
+	bar := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", Effort: "xhigh"}, modeAuto, 200))
+	if !strings.Contains(bar, effortLabel+"xhigh") {
+		t.Errorf("bar %q has no effort segment", bar)
+	}
+
+	bare := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, modeAuto, 200))
+	if strings.Contains(bare, effortLabel) {
+		t.Errorf("bar %q drew an effort with none known", bare)
+	}
+}
+
 func TestTheBarIsEmptyWhenNothingIsKnown(t *testing.T) {
 	if got := statusBar(Agent{}, "", 80); got != "" {
 		t.Errorf("an unknown agent drew %q, want no bar at all", got)

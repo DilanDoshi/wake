@@ -8,6 +8,57 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-08-29 — the effort probe, and why an invisible turn is the honest one
+
+Effort is on no frame Claude sends unasked, so for a long time the status bar could only repeat the
+level Wake **asked for**. The one way to read the real level back is the bare `/model` reply
+(`Current model: … (effort: xhigh)`), which the CLI answers locally — `num_turns:0`, `$0`,
+`duration_ms:11`, no model inference. So the daemon sends one and reads the level out of it. Three
+rulings make that safe rather than a leak.
+
+**It counts as no turn.** The probe send skips `noteSent`, so the agent is never marked owed and
+never looks busy; at fleet scale a probe that flipped thirty agents to *working* on startup would be
+noise the operator has to learn to ignore. The `/effort` re-probe rides `noteEffort` returning
+whether it recorded a level, so it fires only on a send that actually changed the record.
+
+**The reply reaches no client, suppression is keyed on the reply — not on a flag — and it counts.**
+`absorbProbe` (`internal/daemon/agent.go`) swallows the probe's assistant line and its following turn
+end at `fanOut`, before `observe` and before the broadcast, so the agent's state never moves and no
+transcript or room ever sees it. The window is keyed on the reply's own shape (`core.IsModelReply` on
+an assistant frame), not on a bare in-flight flag: the flag is armed on the serveInput goroutine while
+a previous turn's frames may still be draining on the fanOut goroutine, and a blanket "suppress while
+armed" would eat that turn's real end and clear the window early, leaking the probe. Keying on the
+reply text is race-safe because a real turn's frames do not carry it. And the arm is a **counter**
+(`pendingProbes`), not a bool: two probes can be in flight at once — two quick `/effort` changes, or a
+change racing the startup probe — and a bool cleared by the first reply let the second leak
+(caught by the adversarial review; `TestAbsorbProbeSuppressesBothOfTwoOverlappingProbes`). The
+per-turn `init` a mid-session `/model` emits is not suppressed and does not need to be — it draws no
+transcript line and moves no state — so the guarantee is precisely about **the reply**, not the whole
+exchange.
+
+**The on-disk reply is filtered, because suppression is live-only.** Claude writes the `/model` command
+and its `Current model:` reply to the transcript regardless, so `liveHistory` drops them on the way
+back (both the DM and the room read through it). The drop is keyed on the **reply**
+(`IsModelReply` on an assistant line), not on the command line above it: the on-disk form of a slash
+command is pinned by no transcript fixture — Claude may wrap it — so matching the command is
+best-effort, but the reply is Claude's own rendered line and only a `/model` produces one. An
+operator's `/model` is intercepted by `internal/ui` and never sent, so any such line on disk is a
+Wake probe's (an imported session that ran `/model` by hand is the one edge, and dropping a bare
+model-info line from it is harmless). The transcript fixture this still owes is in
+`docs/live-testing.md`.
+
+**The parse stays behind the airlock.** Reading a level out of assistant prose is exactly the
+JSON-vs-English boundary the airlock exists for, so `IsModelReply`/`EffortFromModelReply` live in
+`vocabulary.go`, asserted against `testdata/stream/bare-model.jsonl`. Display prefers `confirmedEffort`
+over the asked-for level; **park does not** — it relaunches from `currentEffort`, the level `--effort`
+accepts, so a probed `auto`/`ultracode` never reaches an argv. `parkedRecord` gains nothing; a woken
+session re-probes.
+
+One visible consequence, accepted: the room's composer now carries a target line *and* an info bar,
+where a DM carries only a bar, so with both on screen the room's input box sits one row above the
+conversation's. Their info bars and legends still align, which is what the eye follows;
+`cmd/wake/gridscreen_unix_test.go`'s `paneEdges` was taught the two box tops no longer share a row.
+
 ## 2026-08-28 — the completion menu offers the session's own commands and skills first, Wake's verbs after
 
 Reported by the owner: typing `/` in a conversation, or `@thea /` in the room, did not surface the

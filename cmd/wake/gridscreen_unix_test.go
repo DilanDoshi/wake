@@ -272,19 +272,33 @@ func TestShiftArrowsMoveTheKeysBetweenPanesOnScreen(t *testing.T) {
 
 // paneEdges is the screen column each composer's box starts at, left to right.
 //
-// The last row carrying more than one ╭, because that is the composers' top
-// border: a transcript can draw a box of its own higher up, and the pane
-// boundary this is after is the one beside the input.
+// The composer boxes are the bottom-most boxes on screen - a transcript can draw
+// one higher up - but they no longer share a row: the room carries a target line
+// the DM does not, so its box sits one row above the conversation's while their
+// info bars and legends still align. So the edges are gathered from the two
+// bottom-most rows that carry a ╭, which between them hold every pane's left
+// edge, scanned by column so the result stays left to right.
 func paneEdges(s *screen) []int {
-	var out []int
-	for _, line := range s.lines() {
-		if strings.Count(line, "╭") < 2 {
-			continue
+	lines := s.lines()
+	var rows []string
+	for i := len(lines) - 1; i >= 0 && len(rows) < 2; i-- {
+		if strings.ContainsRune(lines[i], '╭') {
+			rows = append(rows, lines[i])
 		}
-		out = nil
-		for i, r := range []rune(line) {
-			if r == '╭' {
-				out = append(out, i)
+	}
+	width := 0
+	for _, r := range rows {
+		if n := len([]rune(r)); n > width {
+			width = n
+		}
+	}
+	var out []int
+	for col := 0; col < width; col++ {
+		for _, r := range rows {
+			rr := []rune(r)
+			if col < len(rr) && rr[col] == '╭' {
+				out = append(out, col)
+				break
 			}
 		}
 	}

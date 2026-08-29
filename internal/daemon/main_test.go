@@ -286,6 +286,8 @@ func runFakeClaude() int {
 		return fakeInterruptible(sid)
 	case "mode":
 		return fakeMode(sid)
+	case "probe":
+		return fakeModelProbe(sid)
 	case "tool":
 		return fakeTool(sid)
 	case "name":
@@ -842,6 +844,52 @@ const floodSettle = 300 * time.Millisecond
 
 func emitText(sid, text string) {
 	fmt.Printf(`{"type":"assistant","session_id":%q,"message":{"role":"assistant","content":[{"type":"text","text":%q}]}}`+"\n", sid, text)
+}
+
+// emitInit emits a system/init frame - the frame real claude sends before any
+// input, which initFacts decodes to a SessionFacts and firstInit probes on.
+func emitInit(sid string) {
+	fmt.Printf(`{"type":"system","subtype":"init","session_id":%q,"model":"claude-opus-5","cwd":"/tmp/repo","permissionMode":"default"}`+"\n", sid)
+}
+
+// fakeModelProbe answers a bare /model with a "Current model: … (effort: X)"
+// line the way 2.1.232 does, reporting whatever level the last /effort set, so
+// the daemon's startup probe and its re-probe after /effort can both be seen to
+// confirm the level end to end. Everything else it echoes like fakeTurns.
+func fakeModelProbe(sid string) int {
+	emitInit(sid)
+	emitText(sid, "ready")
+	emitResult(sid)
+	effort := "max"
+	for line := range stdinLines() {
+		switch {
+		case strings.Contains(line, `"text":"/model"`):
+			emitText(sid, "Current model: Opus 5 (1M context) (effort: "+effort+")")
+			emitResult(sid)
+		case strings.Contains(line, `"text":"/effort `):
+			effort = effortAskedIn(line)
+			emitText(sid, "echo: "+line)
+			emitResult(sid)
+		default:
+			emitText(sid, "echo: "+line)
+			emitResult(sid)
+		}
+	}
+	return 0
+}
+
+// effortAskedIn pulls the level out of a "text":"/effort <level>" user line.
+func effortAskedIn(line string) string {
+	const marker = `"text":"/effort `
+	i := strings.Index(line, marker)
+	if i < 0 {
+		return ""
+	}
+	rest := line[i+len(marker):]
+	if j := strings.IndexByte(rest, '"'); j >= 0 {
+		return strings.TrimSpace(rest[:j])
+	}
+	return ""
 }
 
 func emitResult(sid string) {

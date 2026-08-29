@@ -328,7 +328,7 @@ func (a App) retarget() App {
 	}
 	if strings.TrimSpace(draft) == "" {
 		a.room = a.room.WithComposer(a.room.Composer().WithTarget(roomRoute{}, 0)).WithFocus("", "", managerID)
-		return a.clearedSelOnFocusChange(prev)
+		return a.withRoomBar().clearedSelOnFocusChange(prev)
 	}
 	// Routed on the chip-stripped text so the preview matches sendRoom: a leading
 	// chip must not hide the `@name` behind it. The empty check stays on the raw
@@ -346,7 +346,25 @@ func (a App) retarget() App {
 		}
 	}
 	a.room = a.room.WithFocus(focusID, focusName, managerID)
-	return a.clearedSelOnFocusChange(prev)
+	return a.withRoomBar().clearedSelOnFocusChange(prev)
+}
+
+// withRoomBar refreshes the room's info bar for the agent the composer is
+// addressing: the lone @name it has narrowed to (room.focus), or the manager
+// when it has narrowed to none. A zero Agent - no manager, or a focus that no
+// longer resolves - draws no bar, which is how an empty room is spelled. Cached
+// on the room via Room.withBar, so calling it on every retarget and resize is a
+// key comparison rather than a filesystem read.
+func (a App) withRoomBar() App {
+	id := a.room.focus
+	if id == "" {
+		if m, ok := a.fleet.manager(); ok {
+			id = m.ID
+		}
+	}
+	agent, _ := a.fleet.Agent(id)
+	a.room = a.room.withBar(agent, a.modeOf(id), a.room.width)
+	return a
 }
 
 // clearedSelOnFocusChange drops the room's text selection when the focus id

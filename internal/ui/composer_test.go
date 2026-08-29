@@ -19,6 +19,42 @@ func typeInto(t *testing.T, c Composer, s string) Composer {
 	return c
 }
 
+// The info bar the composer carries sits above the legend - the info row over
+// the keys row, the order the operator asked for. The composer only places the
+// pre-rendered line; the pane builds it (it reads the filesystem).
+func TestComposerDrawsBarAboveLegend(t *testing.T) {
+	c := NewComposer().WithBar("~/repo  main  Opus 5  effort:xhigh")
+	out := c.View(120)
+	lines := strings.Split(out, "\n")
+	barAt, hintAt := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "effort:xhigh") {
+			barAt = i
+		}
+		if strings.Contains(l, "send") {
+			hintAt = i
+		}
+	}
+	if barAt < 0 {
+		t.Fatalf("the bar was not drawn:\n%s", out)
+	}
+	if hintAt < 0 {
+		t.Fatalf("the legend was not drawn:\n%s", out)
+	}
+	if barAt > hintAt {
+		t.Fatalf("the bar (row %d) must sit above the legend (row %d):\n%s", barAt, hintAt, out)
+	}
+}
+
+// An empty bar draws no line, the way an empty target does.
+func TestComposerWithNoBarDrawsNone(t *testing.T) {
+	before := len(strings.Split(NewComposer().View(120), "\n"))
+	after := len(strings.Split(NewComposer().WithBar("").View(120), "\n"))
+	if before != after {
+		t.Errorf("an empty bar changed the row count from %d to %d", before, after)
+	}
+}
+
 // The ui.Mode enum is gone, and its two tests with it. A mode is now one of
 // core's PermissionMode constants end to end - the word is Claude's, it travels
 // as JSON in a set_permission_mode request, and a second representation here

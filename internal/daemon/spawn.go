@@ -652,41 +652,6 @@ func (s *server) register(a *agent) bool {
 	return true
 }
 
-// fanOut carries one session's events to every attached client, so a
-// reattaching TUI joins the same stream.
-//
-// The frame is addressed by the id Wake spawned under, not by the id on the
-// event. Those differ after a /clear, which mints a new session id mid-process
-// - and a client keyed on the frame would watch its session vanish and a
-// stranger appear. The event keeps whatever core stamped it with, so nothing
-// is lost: re-keying the roster is the registry's job (Phase 3) and this is
-// the id every client already holds.
-func (s *server) fanOut(a *agent) {
-	defer s.retire(a)
-	for ev := range a.sess.Events() {
-		a.observe(ev)
-		// One Event, one pointer, shared by every client's copy of the
-		// frame. Nothing mutates an Event after the airlock decodes it, and
-		// at 30 sessions a copy per client per event is the difference
-		// between fan-out being free and being the bottleneck.
-		s.broadcast(rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev})
-
-		// An ask, an answer and a turn end each change what the roster draws
-		// and what ⇧⇥ can find. Left to watchLiveness, that took up to one
-		// 30-second tick, so an agent blocked on a permission request read as
-		// idle and "next blocked" said nothing was waiting on anybody.
-		//
-		// After the event, never before it: the report names the ask by id and
-		// the event is what carries what it is asking.
-		//
-		// changed() records the state it announces, so the watchdog does not
-		// repeat this, and it broadcasts on a transition rather than per event.
-		if a.changed() {
-			s.broadcast(s.statusPush())
-		}
-	}
-}
-
 // retire records how a session ended and takes it out of the roster.
 //
 // Err() is read before anything else: core writes it as the events channel

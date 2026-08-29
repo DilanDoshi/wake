@@ -1,9 +1,11 @@
 package ui
 
 // The line under the composer: where this session is, what it is running as,
-// and how much room it has left.
+// and how much room it has left. Drawn above the legend rather than below it,
+// so the info row sits over the keys - what this session is, then what a key
+// would do.
 //
-//	~/Documents/wake  feat/fidelity  Sonnet 5 (1M context)  ctx:74%  permissions: auto
+//	~/Documents/wake  feat/fidelity  Sonnet 5 (1M context)  ctx:74%  effort:xhigh  permissions: auto
 //
 // The permission mode is the newest segment and it arrived as a repair:
 // docs/notes/bugs.md BUG-1 records ⇧⇥ moving the belief with no surface a
@@ -20,23 +22,16 @@ package ui
 // legend's own ordering read once more: the path is what this line is most read
 // for.
 //
-// Effort is the one thing still missing, and the reason is worth stating
-// exactly, because half of it looks built:
-// core.Config.Effort exists and argv.go emits --effort from it, but nothing
-// anywhere sets that field, so every session runs at Claude's default. And no
-// frame reports the level back - "effort" appears in the recorded corpus only
-// as an entry in init.slash_commands, never as a value - so even a session
-// spawned with one could only be described by Wake remembering what it passed,
-// the way CLAUDE.md says permissionMode has to be tracked.
-//
-// So there is nothing to read and nothing to report. Inventing a default would
-// be Wake claiming to know a setting it never chose.
-//
-// **And the mode segment is not an argument for an effort one beside it**,
-// which is the reading BUG-1 warns this change invites. A mode has two
-// observables behind it - a receipt, and every turn's init - so what is drawn
-// here is a fact the session reported. An effort segment would be Wake
-// repeating what it asked for, with nothing able to contradict it.
+// Effort is here now, and it was not for a long time. No frame Claude sends
+// unasked carries the level - "effort" appears in the recorded corpus only as
+// an entry in init.slash_commands, never as a value - so the bar could once
+// only have repeated what Wake asked for, with nothing able to contradict it.
+// What changed is the probe: the daemon sends a bare /model, whose reply names
+// the level (`Current model: … (effort: xhigh)`), reads it back, and carries it
+// on the report as a confirmed fact. So the segment shows the confirmed level,
+// or the asked-for one until the probe answers, or nothing when Wake chose none
+// and no probe has returned. See internal/daemon/effort.go and the airlock's
+// EffortFromModelReply.
 //
 // Every segment is dropped rather than guessed when its fact is unknown, and
 // the whole bar is dropped when none of them are - a row of separators with
@@ -62,6 +57,10 @@ const (
 	// ctxLabel prefixes the remaining-context percentage.
 	ctxLabel = "ctx:"
 
+	// effortLabel prefixes the reasoning level, the way ctxLabel prefixes the
+	// context figure - so a bare level like `xhigh` is not read as a model name.
+	effortLabel = "effort:"
+
 	// homeGlyph replaces the operator's home directory in a path.
 	homeGlyph = "~"
 )
@@ -77,6 +76,7 @@ func statusBar(a Agent, mode string, width int) string {
 		gitref.Of(a.Cwd).Name(),
 		modelName(a.Model, a.ContextWindow),
 		contextLeft(a.ContextTokens, a.ContextWindow),
+		effortSegment(a.Effort),
 	}
 	kept := segments[:0]
 	for _, s := range segments {
@@ -248,4 +248,15 @@ func contextLeft(used, window int) string {
 	}
 	left := max((window-used)*100/window, 0)
 	return ctxLabel + fmt.Sprintf("%d%%", left)
+}
+
+// effortSegment is the reasoning level this session runs at: the one a bare
+// /model probe read back, or the one Wake asked for until the probe answers.
+// Empty when neither is known - a session Wake chose nothing for, whose probe
+// has not returned - and dropped rather than guessed, like every segment here.
+func effortSegment(level string) string {
+	if level == "" {
+		return ""
+	}
+	return effortLabel + level
 }
