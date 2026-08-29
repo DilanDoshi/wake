@@ -36,6 +36,63 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿`
+
+**Asked for in this version.** When an agent's question is answered, the yellow `● ‹agent› › has a
+question` line the room pins should not simply vanish — it should **turn purple** and **show the
+answer beneath it**, drawn with the small `⎿` ("L") continuation line, the answer indented and
+slightly darker grey, exactly the way a tool-use result renders in a DM pane.
+
+**What exists today, and why the current transition is "yellow → gone."** While an agent is blocked
+the room pins a compact card above the composer: `internal/ui/cards_blocks.go`'s `View` draws
+`cardLead + speaker(by) + markerSep + card.headline()` — headline `cardHasQuestion` = "has a
+question" — through `titledBox(..., warnStyle, HintStyle)`, so the yellow is `theme.go`'s `Warn`
+(`#ffc107`), and `chat.go`'s `SetSize` is where "a card is pinned above the room whenever an agent is
+blocked" is accounted for. **That pin is a live card, not a record**: `Cards.Reconcile` rebuilds the
+open set from every fleet report and drops what is absent, so the moment the ask is answered the card
+leaves the report and the pin disappears with it, leaving nothing behind. So "recolour the pin" is the
+wrong mental model — there is no pin left to recolour once it is answered.
+
+**Which means the answered state is a *record*, and belongs in the room transcript, not the pin.** The
+resolution is a thing that happened; it should be a line in `Room`'s `said`/transcript (drawn once,
+persists, scrolls with the conversation), styled to read as resolved — the purple headline plus the
+answer as a `⎿` body. The building blocks are all present:
+- **The `⎿` / indented / dim-grey body already exists and is shared.** `internal/render/tool.go` has
+  `resultBullet = "  ⎿  "` and `ToolResult` (the folded, dimmed body under a tool call), which is
+  precisely the DM look the request points at (`internal/ui/toolblocks.go` draws it). Reuse it for the
+  answer body rather than inventing a second indented style — `render/tool.go` owns that layout and
+  takes its palette from the caller.
+- **A purple already lives in the theme.** `theme.go` carries `violet` (`#e879f9`) and Claude's
+  effortUltra purple; the recoloured headline should take one of those, not a new colour — `theme.go`
+  is the one place a colour is written down (`palette_test.go` guards it).
+- **The answer text is in hand.** For an `AskUserQuestion` the chosen answer is a label (`Card.answers`
+  in `cardanswer.go`; on the wire it rides in `updatedInput.answers`), short and room-appropriate; a
+  free-text `Other…` answer is just as short.
+
+**The tension worth stating.** This puts answered-question content into the room, which brushes the
+"an ask belongs to its agent's conversation, and the room draws none" ruling and the room-noise
+concern behind the 2026-08-26 triage request. The defense is that a **one-line resolved marker** (a
+purple `● iris answered › <answer>` with a single `⎿` body) is a *record of something that happened*,
+not the live question card that ruling rejected for interleaving thirty agents and showing `+N more
+waiting` — it is closer to the `● Subagent "…" finished` line a dispatch already leaves. Keep it to
+one line plus the answer; do not let it grow back into the card.
+
+**Open questions:**
+- **Scope.** `ShapeQuestion` only (the request's framing), or also permission allow/deny and plan
+  approve/deny? Those "answers" are verbs, not chosen labels — a different shape, probably out of a
+  first cut.
+- **Persistence.** Does the resolved line survive a park and a room re-derivation off disk
+  (`roomhistory.go`)? Both the question (`tool_use`) and its answer (`tool_result` /
+  `updatedInput.answers`) are in claude's transcript, so in principle it can be re-derived — but a
+  live-only marker is far cheaper and may be enough.
+- **Multiple questions in one `AskUserQuestion`.** One `⎿` per answer, or a single summarised line?
+- **Relationship to the room-HIL brainstorm below.** If answering from the room ever lands, this is its
+  natural completion — the room both takes the answer and then shows it resolved in place.
+
+*Related:* the room-HIL brainstorm and the notification-ping entry below. *Blocks:* nothing broken;
+this is a legibility improvement so the room shows a question was resolved instead of silently dropping
+the pin.
+
 ## BRAINSTORM (owner request), 2026-08-28 — answering an agent's question from inside the room, without becoming a multiplexer
 
 **Asked for in this version — as a brainstorm, not a defined build.** Explore how to handle question
