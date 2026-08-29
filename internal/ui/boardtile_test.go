@@ -258,6 +258,29 @@ func TestATileNeverOvershootsWhenTheSubagentLineWraps(t *testing.T) {
 	}
 }
 
+// At a small cell the tile body has room for the state line, one middle line
+// and the subagent count - no more. The subagent count, appended last, must
+// survive: it used to be the row padRows dropped whenever a detail line was
+// present, because the detail line ignored the row budget the tail respected.
+func TestATinyTileKeepsTheSubagentCount(t *testing.T) {
+	a := boardApp(t)
+	a.board.Tiled = true
+	// A working agent with a last line has a non-empty detail - the case that
+	// used to push the subagent count out of a two-row body.
+	ag := Agent{ID: "solo", Name: "solo", State: rpc.StateWorking, LastLine: "compiling the parser"}
+	if boardDetail(ag) == "" {
+		t.Fatal("precondition: this agent has no detail line to crowd the body")
+	}
+
+	out := a.tileBody(ag, 40, 2) // a two-row body: state, then one framing line
+	if !strings.Contains(out, "subagent") {
+		t.Fatalf("a two-row tile body dropped the subagent count:\n%s", out)
+	}
+	if got := strings.Count(out, "\n") + 1; got != 2 {
+		t.Fatalf("the tile body drew %d rows, want exactly 2:\n%s", got, out)
+	}
+}
+
 // A control byte in the live tail must not reach the drawn tile: tiles sit
 // side by side (lipgloss.JoinHorizontal), so a raw CR or an escape sequence
 // in one agent's streamed text could redraw or forge a neighbouring tile -
