@@ -33,12 +33,15 @@ multiplexer §17 lists as Out.
 
 1. **View-only.** No keystroke ever reaches an agent's stdin from a tile. Keys drive the board —
    move the cursor, jump in, park, close. `↵` is how you leave the wall *into* a real DM to work.
-2. **Bounded live tail, no scrollback.** A tile shows at most the last few rows of live text
-   (`maxPreviewRows`, the DM preview's own bound) and nothing you can scroll back through. A
-   `tail -f` snippet, not a conversation.
-3. **Fixed grid, no per-tile resize, no pane tree.** Equal cells. No divider to drag inside the
-   board, no split, no nesting. The bounded grid of the real panes is elsewhere; this is a
-   dashboard.
+2. **Bounded live tail, no scrollback.** A tile shows live text bounded to its own body and
+   nothing you can scroll back through. The 2026-08-28 fill-the-window change narrowed this from
+   the DM preview's fixed three-row bound (`maxPreviewRows`) to *the cell's own height*: a big
+   cell fills with output, kept to `maxTileTailRows` per agent so the retention stays bounded and
+   the per-token work flat. Still a `tail -f` snippet, never a conversation — no history, no scroll.
+3. **Fixed grid, no per-tile resize, no pane tree.** Equal cells, sized to fill the frame — a
+   near-square grid that auto-resizes with the window rather than a wall of fixed tiny tiles. No
+   divider to drag inside the board, no split, no nesting. The bounded grid of the real panes is
+   elsewhere; this is a dashboard.
 4. **Act from it, never in it.** `↵`/click jumps into the agent's DM in the real grid; `⌃C` parks;
    `esc` closes. The tile is a preview you leave.
 
