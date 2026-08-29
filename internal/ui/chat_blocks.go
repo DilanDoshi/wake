@@ -270,6 +270,11 @@ func youSaid(text string, width int) string {
 	if body == "" {
 		return ""
 	}
+	// A slash command the operator typed is a called command here too, not a
+	// line of the room's prose. See commandecho.go.
+	if _, ok := commandInvocation(body); ok {
+		return commandLine(body, width)
+	}
 	// MaxWidth is deliberately not set beside Width. Width wraps to the pane;
 	// MaxWidth would *cut* whatever the wrap could not place, which is the
 	// behaviour this function is losing - and on an unbreakable token (a URL, a
