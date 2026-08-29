@@ -13,6 +13,7 @@ package main
 import (
 	"strings"
 	"testing"
+	"time"
 )
 
 // closeRoster presses ⌃R, which these need because they are about the composer
@@ -81,6 +82,43 @@ func TestTheComposerGrowsToHoldAMultiLineDraft(t *testing.T) {
 	}
 	if got := boxRows(s); got <= before {
 		t.Errorf("the box is %d rows and was %d empty, so it did not grow.\n%s", got, before, s.dump())
+	}
+}
+
+// The first line of a soft-wrapping draft stays on screen as the box grows.
+//
+// The owner's report - "when I get to the second line, sometimes the first line
+// disappears" - and the whole difficulty was that word. Typing an unbroken run
+// one character at a time crosses a row edge exactly, leaving the cursor on the
+// phantom next wrapped row; the box was sized to the content rows, so its
+// viewport scrolled the first line off to reach the cursor and never scrolled
+// back. Only that exact landing triggered it, which is why a space-separated
+// sentence usually stepped over it and a run of letters did not.
+//
+// One byte at a time with a pause between, so each is its own keystroke: a burst
+// arriving in a single read is coalesced into one multi-rune KeyMsg, which the
+// composer inserts whole and sweeps no intermediate column - so it never sits on
+// the phantom edge and a batched paste would not reach the state.
+func TestTheFirstLineOfAWrappingDraftStaysVisible(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWakeInAConversation(t, 100, 30)
+	s.await("ready")
+	s.send("\x17") // ⌃W: back to the room, where the reported draft goes
+	s.await("group chat")
+	s.settle()
+
+	const head = "HEADSTART"
+	draft := head + strings.Repeat("qwertyuiop", 12) // unbroken, wraps char by char
+	for i := 0; i < len(draft); i++ {
+		s.send(draft[i : i+1])
+		time.Sleep(12 * time.Millisecond) // separate reads, a frame between each
+	}
+	s.settle()
+
+	if !strings.Contains(s.text(), head) {
+		t.Fatalf("the start of the draft %q is off screen: the box scrolled the first line away as it wrapped and never brought it back.\n%s", head, s.dump())
 	}
 }
 

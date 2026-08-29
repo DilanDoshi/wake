@@ -312,6 +312,20 @@ func (c Composer) Update(msg tea.Msg) (Composer, tea.Cmd) {
 // So it is run after the fit, from one seam, for both. The message matches
 // nothing in the type switch; repositionView is unconditional at the end of it.
 //
+// **The reposition runs at the bound, not at the fitted height.** fit sizes the
+// box to the draft's *content* rows, but a cursor sitting at the end of a row
+// the draft exactly filled is on the phantom next wrapped row - one past the
+// content. Repositioning against the fitted height then reads that phantom row
+// as below the box and scrolls the first line off to reach it, and because the
+// cursor then sits at the top of the scrolled view nothing ever scrolls back:
+// the first line was gone for good, intermittently, whenever a soft-wrap landed
+// exactly on the edge. Standing at the bound while repositionView runs keeps the
+// phantom row inside the box for any draft that fits, so it never scrolls; the
+// height is restored after, so the box still draws at its fitted size. This is
+// the grow-to-bound the typed-rune path skips before Update, moved to the one
+// seam both paths share. Above the bound - the cap - the tail still wins, which
+// is what keeps what is being typed on screen.
+//
 // **The render first is not redundant.** bubbles scrolls its viewport through
 // ScrollDown, which returns without doing anything while the viewport holds no
 // lines - and the lines are only ever set by rendering. So a reposition with
@@ -320,8 +334,11 @@ func (c Composer) Update(msg tea.Msg) (Composer, tea.Cmd) {
 // render per keystroke, which is work per change; View renders it again per
 // frame either way.
 func (c Composer) reposition() Composer {
+	fitted := c.ta.Height()
+	c.ta.SetHeight(c.bound())
 	_ = c.ta.View()
 	c.ta, _ = c.ta.Update(nil)
+	c.ta.SetHeight(fitted)
 	return c
 }
 

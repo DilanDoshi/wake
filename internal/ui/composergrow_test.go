@@ -142,3 +142,42 @@ func TestAnEmptyComposerIsStillOneRow(t *testing.T) {
 		t.Errorf("an empty composer draws %d rows, want %d", got, 1+boxBorderRows)
 	}
 }
+
+// The first line stays on screen when a soft-wrap lands exactly on a row edge.
+//
+// The reported bug, and the whole of it is that it was intermittent: typing an
+// unbroken run that fills a wrapped row *exactly* leaves the cursor on the
+// phantom next row, one past the content. fit sizes the box to the content
+// rows, so reposition against that height read the phantom row as below the box
+// and scrolled the first line off to reach it - and the cursor then sat at the
+// top of the scrolled view, so nothing ever scrolled back.
+//
+// What makes it intermittent is that only a *character-by-character* sweep lands
+// on the edge exactly: each keystroke steps the cursor one column, so an
+// unbroken run passes through the row-full-cursor-on-the-phantom state on its
+// way to wrapping. A word-wrapped sentence jumps the whole word to the next row
+// at a space and steps over that state, and a run pasted as one multi-rune
+// KeyMsg inserts the whole string in a single shot (Composer.Update's
+// InsertString path) and sweeps no intermediate column at all. The existing box
+// tests use sentences or set the draft whole, so none had this shape - it is one
+// key at a time, unbroken.
+func TestTheFirstLineSurvivesAWrapOnTheRowEdge(t *testing.T) {
+	const head = "HEAD>"
+	// An unbroken run wraps character by character, so it lands on the row edge
+	// at every width rather than jumping there at a word boundary.
+	body := head + strings.Repeat("qwertyuiop", 20)
+
+	for _, w := range []int{40, 50, 60, 70, 80, 100} {
+		a := newRoomApp(t).withSize(w, 40)
+		var m tea.Model = a
+		for i := 0; i < len(body); i++ {
+			m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{rune(body[i])}})
+			// Rendered per keystroke, the way Bubble Tea runs the loop; the box is
+			// read back off the frame rather than any model.
+			frame := stripANSI(m.(App).View())
+			if i >= len(head) && !strings.Contains(frame, head) {
+				t.Fatalf("w=%d: the start of the draft %q vanished after char %d - the box scrolled the first line off and never brought it back:\n%s", w, head, i, frame)
+			}
+		}
+	}
+}
