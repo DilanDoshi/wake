@@ -745,3 +745,32 @@ func (a *agent) setProbing(v bool) {
 	defer a.mu.Unlock()
 	a.probing = v
 }
+
+// absorbProbe consumes a /model probe's reply so it never reaches a client, and
+// reports whether the caller should publish the newly confirmed effort.
+//
+// The window opens on the probe's own reply - an assistant frame carrying the
+// /model text - not on the probing flag alone. Keying on the reply's shape is
+// what makes it safe to set probing on another goroutine: a previous turn's
+// frames still draining here do not match, so they pass through untouched. The
+// reply records the level and closes the window; swallowTurnEnd then carries it
+// one frame further so the probe turn's end is swallowed too, and the agent's
+// state never moves for a question the operator did not ask.
+func (a *agent) absorbProbe(ev core.Event) (suppress, publish bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	switch {
+	case a.probing && ev.Kind == core.KindAssistantText && core.IsModelReply(ev.Text):
+		if lvl, ok := core.EffortFromModelReply(ev.Text); ok {
+			a.confirmedEffort = lvl
+		}
+		a.probing = false
+		a.swallowTurnEnd = true
+		return true, true
+	case a.swallowTurnEnd && ev.Kind == core.KindTurnEnd:
+		a.swallowTurnEnd = false
+		return true, false
+	default:
+		return false, false
+	}
+}

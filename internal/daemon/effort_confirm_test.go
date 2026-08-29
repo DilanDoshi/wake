@@ -71,3 +71,36 @@ func TestProbeSkipsABlockedOrGoneAgent(t *testing.T) {
 		t.Error("a gone agent was probed")
 	}
 }
+
+// absorbProbe swallows the probe's reply and its turn end, records the level,
+// and asks for one status push - while letting every other frame through, so a
+// real turn draining on the same goroutine is untouched.
+func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
+	a := effortAgent(t)
+	a.setProbing(true)
+
+	// A real assistant frame that is not a /model reply passes through, even
+	// mid-window: suppression is keyed on the reply's shape, not the flag alone.
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "echo: hi"}); suppress {
+		t.Fatal("a non-reply frame was suppressed during the probe window")
+	}
+
+	// The reply: suppressed, level recorded, one publish.
+	suppress, publish := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)"})
+	if !suppress || !publish {
+		t.Fatalf("the reply must be suppressed and publish the effort: suppress=%v publish=%v", suppress, publish)
+	}
+	if a.confirmedEffort != core.EffortMax {
+		t.Fatalf("effort not recorded: %q", a.confirmedEffort)
+	}
+
+	// The probe turn's end: suppressed, no second publish, window closed.
+	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); !suppress || publish {
+		t.Fatalf("the probe turn end: suppress=%v publish=%v, want true/false", suppress, publish)
+	}
+
+	// After the window, an ordinary turn end passes through.
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); suppress {
+		t.Fatal("frames after the probe window are still suppressed")
+	}
+}

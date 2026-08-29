@@ -664,6 +664,15 @@ func (s *server) register(a *agent) bool {
 func (s *server) fanOut(a *agent) {
 	defer s.retire(a)
 	for ev := range a.sess.Events() {
+		// An effort probe's reply is consumed here, before observe and before
+		// the broadcast, so it never touches this agent's state and never
+		// reaches a client. The one push it earns carries the confirmed level.
+		if suppress, publish := a.absorbProbe(ev); suppress {
+			if publish {
+				s.broadcast(s.statusPush())
+			}
+			continue
+		}
 		a.observe(ev)
 		// One Event, one pointer, shared by every client's copy of the
 		// frame. Nothing mutates an Event after the airlock decodes it, and
