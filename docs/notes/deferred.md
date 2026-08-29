@@ -36,6 +36,56 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## CI MEMORY, 2026-08-29 — `make ci` OOMs on the fleet machine because unfunded Actions makes all gating local
+
+**Seen while merging PRs #10–#17 into `main` on a machine also running a ~12-agent fleet.** `make ci`
+was run four times; the pattern, not any one run, is the finding:
+- Runs 1–2: the full `go test ./... -race` step passed **every package** (with the fleet up), and the
+  *non-race* step failed once each on a different `cmd/wake` pty test —
+  `TestTheWholeLifecycleComposesFromAKeyboard`, then `TestRoomNarrowsToAtNameOnScreen`. Each passed
+  **3/3 in isolation**: starvation flakes, not regressions.
+- Runs 3–4: the `-race` step itself was **`signal: killed`** on four heavy packages at once
+  (`cmd/wake`, `core`, `daemon`, `ui`) — first at ~137s, then at ~46s as killed runs leaked orphaned
+  `*.test` children that piled onto the next attempt.
+- A serial **`go test ./... -race -p 1`** (then non-race `-p 1`) passed clean end to end — `race=0
+  norace=0`, no flakes, no OOM. So the code is fine; the failures were purely **memory/CPU contention**.
+
+**Root cause, and it starts upstream of the Makefile.** GitHub Actions is out of funds (`CLAUDE.md`:
+"`make ci` on this machine is the only gate there is"), so there is **no remote CI** — every gate run
+is a human or agent typing `make ci` **locally**, on the same box as the working fleet. Onto that land
+three amplifiers: (a) `make test` runs `go test ./... -race` with the race detector (~5–10× memory)
+across **all packages in parallel** (`-p` defaults to `GOMAXPROCS`); (b) the live fleet holds standing
+RAM; (c) **multiple concurrent `make ci`/`make cover` runs** from parallel worktrees/agents — three
+overlapping `go test -race` invocations were observed at once during this session. Past a threshold
+macOS kills the test processes, and SIGKILL bypasses the harness's own reapers, leaking children that
+make the next run worse.
+
+**Mitigations, for as long as CI has to share the machine (smallest first):**
+1. **Bound test parallelism in the `Makefile`.** A configurable `-p` with a memory-safe default
+   (`TEST_P ?= 4`; `go test ./... -race -p $(TEST_P)`). Caps concurrent heavy packages, changes no
+   test. **Must update `internal/core/citarget_test.go` in the same change** — it pins `make ci` to the
+   workflow.
+2. **Serialize just the heavy packages.** Run the fast ones parallel but `cmd/wake` + `internal/daemon`
+   (pty/process-heavy) at `-p 1`, optionally with `-parallel N` to cap `t.Parallel()` inside them.
+3. **A machine-wide single-run lock.** Wrap `make ci`/`make test` in an `flock` so parallel
+   worktrees/agents queue instead of dogpiling — this is the fix for the "three overlapping runs"
+   amplifier.
+4. **Orphan reaping.** A `make clean-test-procs` (sweep `TMPDIR/go-build*/*.test` and `waket*`
+   children) before/after the suite, so a SIGKILL'd run cannot degrade the next.
+
+**#5 is the real fix, and it is what this entry defers: move the `-race` suite off the fleet machine.**
+Not serialization — *relocation*. Either fund GitHub Actions again, or stand up **one self-hosted
+runner on a separate box** (a spare laptop/mini-PC/VM; the runner dials out to GitHub and needs no
+inbound access; free apart from the hardware — with the usual public-repo caveat that untrusted PR
+code should be fenced to own-branch runs). With the memory-heavy suite on other hardware, #1–#4 become
+mostly unnecessary. **Deferred because there is no budget to fund Actions right now** (owner,
+2026-08-29); the mitigations are the interim answer, and #1+#3 are the recommended first cut when
+someone picks this up.
+
+*Related:* the `flaky-lifecycle-test` note (the lifecycle flake is one instance of the contention this
+entry names). *Blocks:* nothing in the product — but it makes the project's **only gate** (`make ci`
+exit 0) unreliable on a loaded machine, which is why it is written down rather than left as folklore.
+
 ## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿`
 
 **Asked for in this version.** When an agent's question is answered, the yellow `● ‹agent› › has a
