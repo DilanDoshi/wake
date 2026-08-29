@@ -36,6 +36,35 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)
+
+**Shipped:** `fix/markdown-list-hanging-indent` hang-indents a wrapped **bullet** item's
+continuation lines under the item text (`internal/render/markdown.go`, `hangIndentLists`), matching
+Claude Code. glamour v1.0.0 dropped them back to the list margin (under the bullet). The pass is a
+post-glamour line transform that runs **before** `fitToWidth` — for an ordinary continuation the
+shift only spends the trailing padding glamour already left, but an unbreakable token (a long URL,
+identifier, CJK) glamour could not wrap overruns width when shifted, so `fitToWidth` runs last and is
+the width authority that re-wraps it. Single-level and nested `•` bullets are done; fenced code,
+tables, blockquotes and paragraphs-after-a-list are provably untouched, and a `•`-looking line inside
+a code block is told from a real marker by its colour escape (each with a guard test in
+`listindent_test.go`, including an unbreakable-token width sweep and the code-bullet case an
+adversarial review caught).
+
+**Deferred:** ordered lists (`1.`/`2.`/`N.`) and task/checkbox items (`[ ] …`). Ordered: glamour
+wraps an enumeration's continuation text a cell or two **wider** than the enumerator is (its
+ordered-continuation budget is not the hang budget), so shifting those lines right by the marker width
+overruns `width` at *every* width when the text fills glamour's budget. A correct fix needs a real
+reflow of the item text at the hang indent (rejoining glamour's already-wrapped, already-styled
+fragments and re-wrapping them), which is the fragile ANSI-reflow work
+`third_party/reflow/WAKE-PATCH.md` warns about, and out of scope for a surgical change. Task items:
+glamour's `Task` style draws `[ ] text` with no bullet, so `bulletMarker` never fires. Both are left
+at glamour's margin, unchanged — pinned by `TestOrderedListContinuationIsLeftAtGlamoursMargin` and
+`TestTaskListContinuationIsLeftAtGlamoursMargin`.
+
+*Blocks:* nothing — ordered and task continuations render exactly as before. *Closes with:* a
+per-item hang-indent reflow that is width-safe for enumerators, or a glamour release that
+hang-indents lists itself.
+
 ## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance
 
 **Asked for in this version.** A "done" indicator in the right sidebar (the roster) so the operator

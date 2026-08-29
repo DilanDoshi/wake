@@ -94,7 +94,10 @@ func Markdown(src string, width int) string {
 	if err != nil {
 		return degraded("rendering markdown failed", src, width, err)
 	}
-	return strings.TrimRight(trimOpeningScaffold(fitToWidth(stylingOnly(out), width)), "\n")
+	// fitToWidth runs last, so the hard width bound is the final word: it re-wraps
+	// anything hangIndentLists shifted past width (an unbreakable token in a
+	// bullet), which is the one case the shift cannot keep within width itself.
+	return strings.TrimRight(trimOpeningScaffold(fitToWidth(hangIndentLists(stylingOnly(out)), width)), "\n")
 }
 
 // stylingOnly keeps the escape sequences this renderer produced and neutralises
@@ -314,6 +317,96 @@ func fitToWidth(s string, width int) string {
 		fitted = append(fitted, strings.Split(ansi.Hardwrap(line, width, false), "\n")...)
 	}
 	return strings.Join(fitted, "\n")
+}
+
+// hangIndentLists moves a wrapped bullet item's continuation lines under the
+// item text — the hanging indent Claude Code draws and glamour v1.0.0 does not.
+//
+// glamour wraps each bullet's text to the hang-indent budget but then lays the
+// continuation lines at the list margin (under the bullet) instead of under the
+// text. An ordinary continuation is therefore already narrow enough to shift
+// right by the bullet's two columns without exceeding width — the shift only
+// spends trailing padding the line already carried. The one exception is an
+// unbreakable token (a long URL, an identifier, CJK) that glamour could not wrap
+// at all: shifting it right overruns width, so this must run **before**
+// fitToWidth, which re-wraps whatever it left too wide. fitToWidth is the width
+// authority; this pass never promises the bound on its own.
+//
+// It works on the rendered lines, so an item is recognised by its bullet: a line
+// whose text (after the margin) begins with `• ` opens an item and fixes the
+// hang column. A continuation is the next line at the same margin with no blank
+// row between. A blank row, a deeper indent (a fenced block inside the item), or
+// any other line — a table, or a paragraph after the list, which glamour
+// separates with a blank — leaves the block and is never touched.
+//
+// **Code is safe two ways.** A fenced block inside an item is laid deeper than
+// the item margin, so lead != margin and the pass skips it. And a `• ` that is
+// *itself* a line of code (a standalone fence whose text opens with a bullet) is
+// not a marker: glamour paints code with a colour, so its bullet carries a
+// leading escape, whereas a real list marker is unstyled — `bulletMarker` is
+// that discriminator, and without it a code block's later lines were reindented.
+//
+// Ordered lists are deferred: glamour wraps an enumeration's continuation text a
+// cell or two wider than the enumerator, so a pure post-indent would overrun
+// width. An `N. ` marker therefore ends any bullet run and is left at glamour's
+// margin. Task items (`[ ] …`) are the same no-op — glamour's Task style draws
+// no bullet, so bulletMarker never fires (docs/notes/deferred.md).
+func hangIndentLists(s string) string {
+	lines := strings.Split(s, "\n")
+	out := make([]string, len(lines))
+	margin, hang := -1, 0 // margin < 0: not inside a bullet item
+	sawBlank := false
+	for i, line := range lines {
+		plain := ansi.Strip(line)
+		head := strings.TrimLeft(plain, " ")
+		lead := len(plain) - len(head)
+		switch {
+		case strings.TrimSpace(plain) == "":
+			out[i], sawBlank = line, true
+		case bulletMarker(line, lead):
+			margin, hang, sawBlank = lead, lead+ansi.StringWidth(bullet), false
+			out[i] = line
+		case margin >= 0 && !sawBlank && lead == margin && !isEnumerated(head):
+			out[i] = hangIndent(line, hang-margin)
+		default:
+			margin, out[i] = -1, line // enumeration, or any non-continuation, ends the block
+		}
+	}
+	return strings.Join(out, "\n")
+}
+
+// bulletMarker reports whether the rendered line opens a bullet item: the bullet
+// must sit at the margin unstyled. glamour draws a real list marker with no
+// colour, so the raw line carries the `• ` literally after its leading spaces;
+// a `• ` inside a fenced block is painted with the code foreground, so an escape
+// precedes it and this returns false — which is what keeps the pass off code.
+func bulletMarker(raw string, lead int) bool {
+	return strings.HasPrefix(raw, strings.Repeat(" ", lead)+bullet)
+}
+
+// isEnumerated reports whether s begins with an `N. ` ordered-list marker.
+func isEnumerated(s string) bool {
+	n := 0
+	for n < len(s) && s[n] >= '0' && s[n] <= '9' {
+		n++
+	}
+	return n > 0 && strings.HasPrefix(s[n:], ". ")
+}
+
+// hangIndent shifts a continuation line right by add columns, reclaiming the
+// trailing padding glamour left so the line's display width does not grow. The
+// padding is always at least add wide (glamour wrapped the text to the narrower
+// hang budget), so the shift stays within the width the render was built for.
+func hangIndent(line string, add int) string {
+	if add <= 0 {
+		return line
+	}
+	orig := ansi.StringWidth(line)
+	shifted := strings.TrimRight(strings.Repeat(" ", add)+line, " ")
+	if pad := orig - ansi.StringWidth(shifted); pad > 0 {
+		return shifted + strings.Repeat(" ", pad)
+	}
+	return shifted
 }
 
 // lockAndRender acquires mu and renders through the shared renderer. Callers
