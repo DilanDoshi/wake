@@ -164,9 +164,10 @@ for it, so it never changes what enter does — and it is about the word **under
 moving off that word closes it and hands `⌃N`/`⌃P` back to the draft as line keys.
 
 **The `/` list is real, not a guess.** Every `claude` session tells Wake its whole command set when a
-turn starts — its own, and every `.md` file in your `.claude/commands/` — so the menu shows what
-*that agent* actually answers to, with Wake's own commands first. An agent that has not taken a turn
-yet has told Wake nothing, so you get Wake's commands and no more until it does.
+turn starts — its own, every `.md` file in your `.claude/commands/`, and your Claude Code **skills**
+(they ride in the same list) — so the menu shows what *that agent* actually answers to, with the
+session's own commands and skills **first** and Wake's own commands after. An agent that has not taken
+a turn yet has told Wake nothing, so you get Wake's commands and no more until it does.
 
 **The `@` list is names first, then paths**, which is the same order the router reads them in: a live
 agent wins, and anything else is a file. Paths are relative to the session's own directory, one
