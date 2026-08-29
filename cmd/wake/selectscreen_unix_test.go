@@ -13,6 +13,7 @@ package main
 
 import (
 	"fmt"
+	"strings"
 	"testing"
 
 	"github.com/hinshun/vt10x"
@@ -124,10 +125,70 @@ func (s *screen) highlightedCells() int {
 	return n
 }
 
-// A drag across the query bar takes nothing: the composer is chrome under the
-// transcript, not a row of the conversation. On a real screen the anchor used
-// to clamp into a transcript line, so dragging across what was being typed put
-// a highlight on the answer above it.
+// colOf is the column a substring starts at on one screen row, or -1.
+func (s *screen) colOf(y int, text string) int {
+	if y < 0 || y >= s.rows {
+		return -1
+	}
+	return strings.Index(s.lines()[y], text)
+}
+
+// A drag across text typed into the query box highlights exactly those cells,
+// the way it does in the transcript. The box was unselectable before; now the
+// words you typed can be copied back out.
+func TestADragOverQueryBoxTextPutsAHighlightOnIt(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWakeInAConversation(t, 100, 30)
+	s.await("ready")
+	s.settle()
+
+	s.send("hello selection")
+	s.await("hello selection")
+	s.settle()
+
+	row := s.rowOf("hello selection")
+	x := s.colOf(row, "hello")
+	if row < 0 || x < 0 {
+		t.Fatalf("the typed draft is not on screen to select.\n%s", s.dump())
+	}
+	// The focused composer already fills its interior with a background, so
+	// counting cells that carry one cannot see the selection - it only swaps one
+	// background for another. Compare each dragged cell's own background before
+	// and after instead.
+	bgBefore := s.rowBackgrounds(row)
+	s.drag(x, x+4, row) // across "hello"
+	s.settle()
+	bgAfter := s.rowBackgrounds(row)
+
+	changed := 0
+	for cx := x; cx <= x+4; cx++ {
+		if bgBefore[cx] != bgAfter[cx] {
+			changed++
+		}
+	}
+	if changed == 0 {
+		t.Errorf("a drag over %d cells of the query box changed no cell's background: "+
+			"the box's own text is not being highlighted.\n%s", 5, s.dump())
+	}
+}
+
+// rowBackgrounds is the background colour of every cell on one screen row.
+func (s *screen) rowBackgrounds(y int) []vt10x.Color {
+	s.term.Lock()
+	defer s.term.Unlock()
+	bg := make([]vt10x.Color, s.cols)
+	for x := range s.cols {
+		bg[x] = s.term.Cell(x, y).BG
+	}
+	return bg
+}
+
+// An empty query box has nothing to select: a drag across its blank interior
+// takes no highlight, the same as the chrome above it. On a real screen the
+// anchor used to clamp into a transcript line, so dragging across the box put a
+// highlight on the answer above it; now it lands on the box and finds no text.
 func TestADragOnTheQueryBarLeavesNoHighlight(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))

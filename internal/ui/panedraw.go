@@ -34,6 +34,12 @@ func (d DM) WithSelection(m marked) DM {
 	return d
 }
 
+// WithComposerSelection is the query-box selection this pane draws.
+func (d DM) WithComposerSelection(m marked) DM {
+	d.csel = m
+	return d
+}
+
 // WithMenu is the menu block this pane draws. See DM.menu.
 func (d DM) WithMenu(menu string) DM {
 	d.menu = menu

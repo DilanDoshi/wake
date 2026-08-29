@@ -80,7 +80,7 @@ An agent is a headless `claude` process in stream-json mode with a Wake-assigned
 | An answer being written | A conversation shows the block as it is generated, under the transcript and above the working line. A preview, never a record — the completed block replaces it |
 | The task board | The `TaskCreate`/`TaskUpdate` checklist an agent keeps for itself — its steps, with the one in flight marked — is **pinned above the composer** where Claude Code draws it, folded live from the ops. The ops draw nothing in the transcript: the board is the one place the list shows, and it shrinks when items are deleted. A subagent's own list draws inline in its dispatch transcript, since a subagent has no board of its own |
 | `!cmd` | A bounded shell line whose output lands in the conversation |
-| The mouse | Wheel scrolls the pane under the pointer · click focuses · drag a divider to resize · **drag across text to select it, and the release copies it** · **click a folded tool result to open that one**, which is the gesture Claude Code spends the same way · **click a run's rollup line to open that whole run** |
+| The mouse | Wheel scrolls the pane under the pointer · click focuses · drag a divider to resize · **drag across text to select it, and the release copies it** — in the transcript *and* in the query box, where a drag over what you typed highlights and copies it · **click a folded tool result to open that one**, which is the gesture Claude Code spends the same way · **click a run's rollup line to open that whole run** |
 | A folded tool run | A message's tool calls draw as one dimmed line — `28 tool uses · 24 bash · 1 read · 3 linear-server` — the way Claude Code shows a turn's activity rather than every ⏺ and ⎿. `⌃E` opens every run in the conversation; a **click** on one rollup opens that run alone, and `⌃E` folds everything back. A `TaskCreate`/`TaskUpdate` draws nothing in the transcript at all — its checklist is live status, not activity, so it is the **task board pinned above the composer** rather than a block or a count |
 
 ## Non-negotiables
@@ -182,6 +182,18 @@ layered `pbcopy` → `tmux load-buffer` → OSC 52 (DCS-wrapped under tmux, one 
 screen), and it reaches the terminal through the **one writer Bubble Tea draws through** — which
 must embed `*os.File`, or termenv stops recognising a terminal and the whole app silently loses its
 colour. `cmd/wake/selectscreen_unix_test.go` is the only thing that can see that happen.
+
+**The query box is selectable too, and it is the transcript's own rule one surface over.** A drag on
+a draft row highlights the typed characters and the release copies them; the border, the `> ` prompt
+and lipgloss's trailing pad are all stripped off, so only what you typed reaches the clipboard. The
+geometry is fixed by `theme.BoxStyle` and the prompt rather than measured — text starts
+`composerTextLeft` columns in and stops `composerRightInset` short of the far edge — and it is
+**gated to the text**: an empty box, the blank past a short line, and the chrome above the box (the
+menu, the preview, the working line, the borders) all take nothing, which is what preserves the old
+fence that a query-bar drag must never clamp into a transcript line. Unlike the transcript it does
+not scroll under a drag — the box is a handful of rows, all on screen. `internal/ui/composersel.go`
+is the whole of it; the highlight is drawn by `DM`/`Room.View` through `highlightComposerBlock`, and
+`cmd/wake/selectscreen_unix_test.go` proves a real drag lands a background on the typed cells.
 
 **The grid keys are letters because two prior answers were unpressable, in two different ways.**
 `⇧↵` and `⌃⇧↵` are what was asked for and bubbletea v1.3.10 names neither — probed in both the Kitty
@@ -536,7 +548,9 @@ landing further from the pointer the further back the reader had scrolled, becau
 reads those same rows as "the drag has left the bottom edge" and scrolls one line per motion message.
 `App.transcriptRows` sizes the menu-carrying copy through the draw's own `SetSize` and reads the
 height back, so the two cannot disagree; `startSelection` fences the anchor on it and keeps it as
-`App.selRows`. Two rulings hold it together. **The anchor is taken before the keys move** — `refocus`
+`App.selRows`. Below that fence a press now falls to `startComposerSelection` rather than being
+discarded — the query box's own draft rows take a selection, the chrome around them does not (see
+`composersel.go`). Two rulings hold it together. **The anchor is taken before the keys move** — `refocus`
 re-sizes the panes and a picker belongs to whichever pane holds them, so a measurement after it
 measures a frame nobody clicked. And **a drag's edge stays the window it was taken in**, which is
 `selTop`'s own rule: a motion message arrives per cell crossed, and re-rendering a pane's chrome on
@@ -821,7 +835,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Which conversations are on screen and where | `internal/ui/grid.go` — bounded: columns, each split once |
 | Pane focus, placement, and the DM ring | `internal/ui/panes.go` |
 | Frame layout, breakpoints, divider, mouse | `internal/ui/layout.go` · `appview.go` · `geometry.go` · `mouse.go` |
-| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) |
+| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) · `internal/ui/composersel.go` (the same, over the query box's own draft rows) |
 | The clipboard, in three layers | `internal/ui/clipboard.go` · `cmd/wake/output.go` — the writer Bubble Tea draws through, which **must** embed `*os.File` |
 | Sending: routes, echoes, one command per draft | `internal/ui/send.go` |
 | Dropping an image into the composer | `internal/ui/imagedrop.go` — `droppedImage` (the paste hijack, read at the top of `App.key`), `imageDropPaths` (shape only, no I/O), `readDroppedImages` (the off-goroutine read, sniff, base64), `imageDropped` (fold to a chip, or path back on failure) · `internal/ui/composerimage.go` — `Attach`, `Images` (only the chips still in the draft), `stripImageChips`. The wire shape is `core.ImageBlock` → `rpc.Frame.Images` → `EncodeUserMessage` (images first, text last) |
