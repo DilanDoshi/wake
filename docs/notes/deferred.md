@@ -36,6 +36,48 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## OWNER REQUEST, 2026-08-28 — `⇧↵` for a newline in the composer
+
+**Asked for in this version.** Shift+Enter to insert a newline in the draft — the reflex an operator
+brings from Claude Code and most chat UIs.
+
+**It already works — exactly when it works in Claude Code, and by the same mechanism — but not on a
+bare terminal.** Newline in the composer is `⌥↵` / `⌃J` (`internal/ui/composer.go`, `InsertNewline`
+→ `key.WithKeys("alt+enter", "ctrl+j")`). `⇧↵` is deliberately **not** in that list, because it
+cannot be: `keyprobe_test.go` has the chord producing **no `KeyMsg` at all** under either keyboard
+protocol bubbletea v1.3.10 speaks (Kitty CSI-u and xterm `modifyOtherKeys`), and a terminal with no
+protocol sends `⇧↵` as the byte for `↵` — which `App.key` claims for **send** before the composer
+ever sees it. Claude Code does not bind `⇧↵` either: its `/terminal-setup` configures the *terminal*
+to emit `ESC CR` for the chord, which bubbletea names `alt+enter` — the sequence Wake already binds.
+So an operator who has run Claude Code's `/terminal-setup` (or bound Shift+Enter → `\x1b\r`
+themselves) already has `⇧↵` working in Wake, and `⌃J` is the fallback that needs no configuration at
+all. `docs/live-testing.md` documents this as the one key that needs the operator's own setup.
+
+**So the deferred piece is not "bind `⇧↵`" — that is a dead end that fails silently** (it produces no
+message, so a binding for it can never fire, and `keyprobe_test.go` is the guard that says so). What
+is actually unbuilt is one of two things:
+
+1. **A Wake-owned terminal-setup helper**, the equivalent of Claude Code's `/terminal-setup`, that
+   writes the iTerm2 / VSCode / Ghostty keymap so `⇧↵` emits `ESC CR` without the operator having to
+   have run Claude Code's first. This is the same *behaviour* Claude Code ships and would make `⇧↵`
+   work out of the box — but it edits the operator's terminal config, which is a side effect on the
+   machine Wake otherwise never has, and it is per-terminal-emulator surface to maintain.
+2. **A bubbletea version that decodes the chord natively.** The v2 line speaks the Kitty keyboard
+   protocol and, on a terminal that has it enabled (Ghostty, Kitty, WezTerm), could deliver `⇧↵` as a
+   distinct `KeyMsg` — at which point Wake binds it directly: no terminal setup, no `ESC CR`
+   round-trip. `keyprobe_test.go` is exactly the guard that would flip on such an upgrade and tell the
+   next person the chord is now reachable; until it does, the finding it holds stands.
+
+**The tension worth stating.** Option 1 is the only one that helps the operator on a terminal with no
+keyboard protocol — but it is a config-writing side effect on the host, a category of thing Wake
+avoids, and it duplicates work Claude Code already does for the operator who ran it. Option 2 is clean
+but gated on a dependency upgrade nobody has scheduled, and it never reaches a bare terminal (no
+protocol, no distinct chord). Neither is broken today: `⌃J` sends a newline everywhere with nothing
+configured, and `⇧↵` works through the shared terminal setup.
+
+*Blocks:* nothing. `⌃J` is the universal fallback and `⇧↵` already works via terminal setup; this is
+about making the reflex work with zero operator configuration.
+
 ## OWNER REQUEST, 2026-08-28 — a ping other platforms can pick up when an agent needs the operator
 
 **Asked for in this version.** A notification/ping — something cmux, tmux, iTerm2 or any host terminal
