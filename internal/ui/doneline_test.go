@@ -82,18 +82,21 @@ func TestDoneLineDropsTheDoneTimeBeforeCuttingTheWord(t *testing.T) {
 	}
 }
 
+// report is one status push carrying a single session in one state.
+func report(id, name, state string) *rpc.Status {
+	return &rpc.Status{Sessions: []rpc.SessionStatus{{ID: id, Name: name, State: state}}}
+}
+
 func TestATurnEndRecordsTheDoneTimeAndDuration(t *testing.T) {
 	start := time.Date(2026, 8, 28, 18, 46, 1, 0, time.Local)
 	clock = func() time.Time { return start }
 	defer func() { clock = time.Now }()
 
-	f := NewFleet().WithStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
-		{ID: "s1", Name: "alex", State: rpc.StateWorking},
-	}})
+	// Seen idle, then a start this client watches, then the end 1m59s later.
+	f := NewFleet().WithStatus(report("s1", "alex", rpc.StateIdle))
+	f = f.WithStatus(report("s1", "alex", rpc.StateWorking))
 	clock = func() time.Time { return start.Add(1*time.Minute + 59*time.Second) }
-	f = f.WithStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
-		{ID: "s1", Name: "alex", State: rpc.StateIdle},
-	}})
+	f = f.WithStatus(report("s1", "alex", rpc.StateIdle))
 
 	a, ok := f.Agent("s1")
 	if !ok {
@@ -107,15 +110,63 @@ func TestATurnEndRecordsTheDoneTimeAndDuration(t *testing.T) {
 	}
 }
 
-// An agent already working when this client attached has a zero startedAt, so
-// there is no duration to report and it gets no done line rather than one dated
-// to the zero time.
+// A turn that ran through a permission (blocked) before finishing still records
+// a done time: turnInFlight covers blocked, and the start is the one this client
+// watched, so the duration spans the whole turn.
+func TestABlockedTurnStillRecordsADoneTime(t *testing.T) {
+	start := time.Date(2026, 8, 28, 18, 46, 1, 0, time.Local)
+	clock = func() time.Time { return start }
+	defer func() { clock = time.Now }()
+
+	f := NewFleet().WithStatus(report("s1", "alex", rpc.StateIdle))
+	f = f.WithStatus(report("s1", "alex", rpc.StateWorking))
+	f = f.WithStatus(report("s1", "alex", rpc.StateBlocked))
+	clock = func() time.Time { return start.Add(30 * time.Second) }
+	f = f.WithStatus(report("s1", "alex", rpc.StateIdle))
+
+	if a, _ := f.Agent("s1"); a.doneAt.IsZero() || a.turnDur != 30*time.Second {
+		t.Errorf("blocked→idle recorded doneAt=%v turnDur=%v, want a 30s turn", !a.doneAt.IsZero(), a.turnDur)
+	}
+}
+
+// An agent already working when this client attached - its first report is
+// working - has an unwatched start, so it gets no done line rather than one
+// whose duration is really just the time since attachment.
+func TestAnAgentWorkingAtAttachGetsNoDoneLine(t *testing.T) {
+	f := NewFleet().WithStatus(report("s1", "alex", rpc.StateWorking)) // first ever report
+	f = f.WithStatus(report("s1", "alex", rpc.StateIdle))
+	if a, _ := f.Agent("s1"); !a.doneAt.IsZero() {
+		t.Error("a turn already in flight at attach produced a done line with a fabricated duration")
+	}
+}
+
 func TestAnAgentIdleWithNoWatchedTurnRecordsNoDoneTime(t *testing.T) {
-	f := NewFleet().WithStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
-		{ID: "s1", Name: "alex", State: rpc.StateIdle},
-	}})
+	f := NewFleet().WithStatus(report("s1", "alex", rpc.StateIdle))
 	if a, _ := f.Agent("s1"); !a.doneAt.IsZero() {
 		t.Error("an agent seen only idle recorded a done time")
+	}
+}
+
+// A park forgets the finished turn: a resumed session reports idle directly
+// (parked→idle, no working in between), so without clearing on the park the
+// stale summary would reappear the moment the pane reopened.
+func TestAParkForgetsTheDoneLine(t *testing.T) {
+	start := time.Date(2026, 8, 28, 18, 46, 1, 0, time.Local)
+	clock = func() time.Time { return start }
+	defer func() { clock = time.Now }()
+
+	f := NewFleet().WithStatus(report("s1", "alex", rpc.StateIdle))
+	f = f.WithStatus(report("s1", "alex", rpc.StateWorking))
+	clock = func() time.Time { return start.Add(time.Minute) }
+	f = f.WithStatus(report("s1", "alex", rpc.StateIdle))
+	if a, _ := f.Agent("s1"); a.doneAt.IsZero() {
+		t.Fatal("no done time to forget")
+	}
+
+	f = f.WithStatus(report("s1", "alex", rpc.StateParked)) // ⌃C
+	f = f.WithStatus(report("s1", "alex", rpc.StateIdle))   // /resume → idle directly
+	if a, _ := f.Agent("s1"); !a.doneAt.IsZero() {
+		t.Error("a woken session shows the pre-park turn's done line")
 	}
 }
 

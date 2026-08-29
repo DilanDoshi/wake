@@ -347,10 +347,14 @@ again) or a park, an end or a gap that forgets it. **DM only**: the room is the 
 agents, so a per-agent done line there is noise. The word pool is Wake's own past-tense list
 (`internal/ui/donewords.go`), authored for the same reason `heartbeatwords.go` argues and shorter for
 the reason it is longer — the done line is one agent's own in its DM, never thirty side by side. The
-duration and the done time are **captured at the working→idle edge** in `applyStatus` onto
-`Agent.doneAt`/`turnDur`, not derived live: an agent already working when this client attached has a
-zero `startedAt` and gets no line rather than one dated to the zero time, and a gap clears them with
-`ForgetTurns`. `DM.hasBeat` is the one predicate `baseChrome` and `SetSize` both count the row by —
+duration and the done time are **captured at the working→idle edge** in `Fleet.WithStatus` onto
+`Agent.doneAt`/`turnDur`, not derived live, and gated on `Agent.watchedStart`: an agent whose *first*
+report was already working began its turn before this client attached, so the start is unknown and it
+gets no line rather than one whose duration is really only the time since attach. **A park, an end and
+a gap each forget it** — the first two in `WithStatus`, the gap in `ForgetTurns` — because a woken
+session reports idle directly, with no working report in between, so the pre-park summary would
+otherwise reappear the instant the pane reopened. `DM.hasBeat` is the one predicate `baseChrome` and
+`SetSize` both count the row by —
 it is the working line's row that stays occupied through the done line, so the transition costs no
 height change, the alt-screen hazard `DM.chrome` exists for.
 
