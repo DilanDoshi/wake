@@ -1240,6 +1240,17 @@ above, a slash, then what the branch is (`feat/conversation-rewind`, `fix/comman
 `refactor/…`, `docs/…`). It is the type verbatim, not a synonym — `fix/`, never `bugfix/` — and a
 slash rather than a colon, because a colon is not a legal git ref character.
 
+**A development worktree lives *inside* the repo, under `.worktrees/<name>`, never in `$HOME`,
+`~/Documents`, `/tmp`, or beside the repo.** Owner's rule, 2026-08-29, after worktrees for this
+project had scattered across the home directory, `~/Documents` and the project root — impossible to
+find, and clutter nobody could tell stale from live. `.gitignore` already reserves `/.worktrees/`
+for exactly this ("Parallel subagent worktrees"), so a worktree there is organized *and* uncommittable
+by construction; put every `git worktree add` for working on Wake under it (`git worktree add
+.worktrees/<name>`). This is **not** Wake's own `--worktree` feature, which is a product path
+(`<repo>/.wake/worktrees/<name>`, `internal/daemon/worktree.go`) and unchanged. Remove a dev worktree
+with `git worktree remove` when its branch has merged; the branch survives the removal, so nothing is
+lost.
+
 **Never add Claude attribution** — no `Co-Authored-By`, no generated-with footer, in commits, PR
 titles, or PR bodies.
 
