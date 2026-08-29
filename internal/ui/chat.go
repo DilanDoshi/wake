@@ -100,6 +100,15 @@ type Room struct {
 	width    int
 	height   int
 
+	// bar is the info line drawn between the box and the legend, and barFrom is
+	// what it was last rendered from. Unlike a DM's, the room has no agent of
+	// its own - App.withRoomBar resolves the one the composer is addressing (the
+	// manager, or a lone @name) and hands it here, cached so the filesystem read
+	// statusBar does stays off the draw loop. Empty draws no bar - an empty room
+	// has nobody to draw one for.
+	bar     string
+	barFrom barKey
+
 	// sel is the selection the room is being drawn with, set for the draw by
 	// App.roomPane and not held - App owns the one selection, and a copy kept
 	// here would go stale against it.
@@ -571,12 +580,28 @@ func (r Room) View(width, height int) string {
 	if r.focus != "" && r.focusName != "" {
 		title = roomTitle + " › @" + r.focusName
 	}
-	return strings.Join(append(rows, r.composer.WithTitle(cmp.Or(r.writing, title)).View(w)), "\n")
+	return strings.Join(append(rows, r.composer.WithBar(r.bar).WithTitle(cmp.Or(r.writing, title)).View(w)), "\n")
 }
 
 // ScrollUp moves the reader lines back, or forward for a negative count.
 func (r Room) ScrollUp(lines int) Room {
 	r.tr = r.tr.scrolledUp(lines)
+	return r
+}
+
+// withBar re-renders the room's info bar if the agent it draws, its mode, or
+// the width has moved, and returns the receiver untouched otherwise. The agent
+// is whoever the composer is addressing - App.withRoomBar resolves it - so a
+// zero Agent draws no bar, which is how an empty room is spelled.
+func (r Room) withBar(agent Agent, mode string, width int) Room {
+	key := barKey{
+		width: width, dir: agent.Cwd, model: agent.Model, mode: mode, state: agent.State,
+		color: agent.Color, used: agent.ContextTokens, window: agent.ContextWindow,
+	}
+	if key == r.barFrom {
+		return r
+	}
+	r.bar, r.barFrom = drawStatusBar(agent, mode, width), key
 	return r
 }
 
@@ -619,6 +644,12 @@ func (r Room) chromeHeight() int { return r.baseChrome() + r.menuRows() }
 func (r Room) baseChrome() int {
 	rows := lipgloss.Height(r.composer.View(max(r.width, minComposerWidth)))
 	if r.beat != "" {
+		rows++
+	}
+	// The info bar's row. Counted separately because the composer measured here
+	// carries no bar - WithBar is a draw-time overlay, like the DM's, so the
+	// stored composer's height is bar-less and the row is added back here.
+	if r.bar != "" {
 		rows++
 	}
 	return rows
