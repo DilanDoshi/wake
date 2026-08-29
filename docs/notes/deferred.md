@@ -378,7 +378,7 @@ report and the park book both read it and are correct by construction. Two thing
 
 ---
 
-## IMAGE PASTE, 2026-08-15 — transport proved; image *drop* shipped 2026-08-22, clipboard paste still deferred
+## IMAGE PASTE, 2026-08-15 — transport proved; image *drop* shipped 2026-08-22, and ⌃V paste works through it on macOS (tested 2026-08-28)
 
 **The wire question is closed and recorded.** A headless session accepts an image block on stdin and
 reads it: `testdata/stream/image-block.stdin.jsonl` is the line Wake would write, `image-block.jsonl`
@@ -398,12 +398,19 @@ never sends a block it could not sniff as a real PNG/JPEG/GIF/WebP. Inbound deco
 `blockEvent` turns an image block read off a transcript into a `[Image]` placeholder, so a reopened
 or imported conversation shows the image was there rather than nothing.
 
-**What is still deferred is clipboard paste (`⌃V`), and it is the pasteboard half:**
+**Clipboard paste (`⌃V`) already works on macOS — through the drop path, tested 2026-08-28.** A
+macOS terminal answers ⌃V on an image by writing it to a temp file and pasting the *path* (e.g.
+`…/TemporaryItems/NSIRD_screencaptureui_…/Screenshot….png`), which is a bracketed paste `droppedImage`
+already hijacks: `imageDropPaths` accepts it because it is an absolute image path, and `splitDropPaths`
+handles the spaces in the name. No `KeyCtrlV` case and no pasteboard read were needed — the OS did the
+read and handed over a path, which is exactly the half the drop path already solved. So for the common
+case there is nothing to build; this is why a grep for `KeyCtrlV` finds nothing yet ⌃V works.
 
-- **`internal/ui/clipboard.go` is write-only by design** — three layers of *copy*, no read. Getting
-  image bytes off the macOS pasteboard needs more than `pbpaste`, and that is the whole of what the
-  drop path did not have to solve.
-- It is outside spec §17's "in" list.
+**What is genuinely still deferred is the raw-bytes case, if it ever matters:** a terminal or OS that
+delivers image *bytes* on paste rather than a temp-file path. That is the only thing
+`internal/ui/clipboard.go` being write-only (three layers of *copy*, no read) actually blocks, and
+getting bytes off the pasteboard needs more than `pbpaste`. It is outside spec §17's "in" list, and no
+recorded terminal needs it — so it stays a note, not a task.
 
 **One thing that still holds:** an image claude cannot decode or shrink becomes a *text block* the
 model reads, on a turn that ends `success`, invisibly. The drop path narrows the window by refusing
