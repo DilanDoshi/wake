@@ -136,22 +136,26 @@ func liveHistory(r io.Reader, id string, active map[string]bool) ([]core.Event, 
 		}
 	}
 
-	// The effort probe leaves a /model command and its "Current model:" reply on
-	// disk; Wake suppresses them live and drops them here on the way back, so a
-	// reopened conversation never shows the question Wake asked on its own. The
-	// reply is the line after the command, so one line of lookahead closes it.
-	// Safe because an operator's bare /model is intercepted by internal/ui and
-	// never sent, so any /model on disk is Wake's probe.
-	dropReply := false
+	// The effort probe leaves a /model command and its "Current model: … (effort:
+	// …)" reply on disk; Wake suppresses them live and drops them here on the way
+	// back, so a reopened conversation never shows the question Wake asked on its
+	// own. The harmful half - the reply, which reads as an agent turn and names
+	// the level - is dropped on the reply's own shape, not on the command line
+	// above it: the on-disk form of a slash command is not pinned by any
+	// transcript fixture (Claude may wrap it), so matching the command is
+	// best-effort, but the reply is Claude's own rendered line and only a /model
+	// produces it. An operator's /model is intercepted by internal/ui and never
+	// sent, so any such line on disk is a Wake probe's. See docs/live-testing.md
+	// for the fixture this still owes.
 	keepFiltered := func(ev core.Event) {
-		if dropReply {
-			dropReply = false
-			if ev.Kind == core.KindAssistantText && core.IsModelReply(ev.Text) {
+		if ev.Kind == core.KindAssistantText && core.IsModelReply(ev.Text) {
+			// Prefix and effort clause both, so a coincidental "Current model:"
+			// line an agent wrote is not mistaken for the probe's reply.
+			if _, ok := core.EffortFromModelReply(ev.Text); ok {
 				return
 			}
 		}
 		if ev.Kind == core.KindUserText && strings.TrimSpace(ev.Text) == slashPrefix+modelVerb {
-			dropReply = true
 			return
 		}
 		keep(ev)

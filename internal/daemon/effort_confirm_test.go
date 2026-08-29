@@ -24,7 +24,7 @@ func TestSnapshotPrefersConfirmedEffort(t *testing.T) {
 	if got := a.snapshot().Effort; got != core.EffortHigh {
 		t.Fatalf("asked-for should show when nothing is confirmed: %q", got)
 	}
-	a.setConfirmedEffort(core.EffortXHigh)
+	a.confirmedEffort = core.EffortXHigh
 	if got := a.snapshot().Effort; got != core.EffortXHigh {
 		t.Fatalf("confirmed should win over asked-for: %q", got)
 	}
@@ -77,7 +77,7 @@ func TestProbeSkipsABlockedOrGoneAgent(t *testing.T) {
 // real turn draining on the same goroutine is untouched.
 func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 	a := effortAgent(t)
-	a.setProbing(true)
+	a.incProbe()
 
 	// A real assistant frame that is not a /model reply passes through, even
 	// mid-window: suppression is keyed on the reply's shape, not the flag alone.
@@ -102,6 +102,34 @@ func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 	// After the window, an ordinary turn end passes through.
 	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); suppress {
 		t.Fatal("frames after the probe window are still suppressed")
+	}
+}
+
+// Two probes in flight suppress two replies, not one. A bool cleared by the
+// first reply let the second - the response to a later /effort - leak into the
+// transcript; the counter closes that.
+func TestAbsorbProbeSuppressesBothOfTwoOverlappingProbes(t *testing.T) {
+	a := effortAgent(t)
+	a.incProbe()
+	a.incProbe() // two /model sends went out before either answered
+
+	reply := func(level string) {
+		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: " + level + ")"}); !suppress {
+			t.Fatalf("a probe reply (effort %s) leaked to clients", level)
+		}
+		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); !suppress {
+			t.Fatalf("a probe turn end (effort %s) leaked to clients", level)
+		}
+	}
+	reply("high") // first probe's turn
+	reply("max")  // second probe's turn - must still be suppressed
+
+	if a.confirmedEffort != core.EffortMax {
+		t.Fatalf("the later probe's level did not win: confirmedEffort = %q", a.confirmedEffort)
+	}
+	// The window is closed: an ordinary turn now passes through.
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); suppress {
+		t.Fatal("the probe window did not close after both replies")
 	}
 }
 

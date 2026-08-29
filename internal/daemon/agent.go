@@ -134,12 +134,15 @@ type agent struct {
 	// Not written to the park book: a woken session re-probes and re-confirms.
 	confirmedEffort string
 
-	// probing is set while an effort probe's /model is outstanding; fanOut uses
-	// it to swallow the reply. swallowTurnEnd carries the window one frame past
-	// the reply so the probe turn's end is swallowed too - see absorbProbe.
-	// probed is set once the first probe has been fired, so a per-turn init does
-	// not re-probe on every turn.
-	probing        bool
+	// pendingProbes counts effort-probe /model replies still expected; fanOut
+	// swallows a reply while it is positive. A counter rather than a bool
+	// because two probes can be in flight at once - two quick /effort changes,
+	// or a change racing the startup probe - and a bool cleared by the first
+	// reply would let the second leak. swallowTurnEnd carries the window one
+	// frame past each reply so the probe turn's end is swallowed too, and
+	// decrements the counter - see absorbProbe. probed is set once the first
+	// probe has fired, so a per-turn init does not re-probe on every turn.
+	pendingProbes  int
 	swallowTurnEnd bool
 	probed         bool
 
@@ -736,58 +739,5 @@ func (a *agent) changed() bool {
 		return false
 	}
 	a.reported = state
-	return true
-}
-
-// setProbing opens or closes the effort-probe suppression window.
-func (a *agent) setProbing(v bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.probing = v
-}
-
-// absorbProbe consumes a /model probe's reply so it never reaches a client, and
-// reports whether the caller should publish the newly confirmed effort.
-//
-// The window opens on the probe's own reply - an assistant frame carrying the
-// /model text - not on the probing flag alone. Keying on the reply's shape is
-// what makes it safe to set probing on another goroutine: a previous turn's
-// frames still draining here do not match, so they pass through untouched. The
-// reply records the level and closes the window; swallowTurnEnd then carries it
-// one frame further so the probe turn's end is swallowed too, and the agent's
-// state never moves for a question the operator did not ask.
-func (a *agent) absorbProbe(ev core.Event) (suppress, publish bool) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	switch {
-	case a.probing && ev.Kind == core.KindAssistantText && core.IsModelReply(ev.Text):
-		if lvl, ok := core.EffortFromModelReply(ev.Text); ok {
-			a.confirmedEffort = lvl
-		}
-		a.probing = false
-		a.swallowTurnEnd = true
-		return true, true
-	case a.swallowTurnEnd && ev.Kind == core.KindTurnEnd:
-		a.swallowTurnEnd = false
-		return true, false
-	default:
-		return false, false
-	}
-}
-
-// firstInit reports whether ev is this session's init and no probe has fired
-// yet, marking it fired. The init is the one frame that arrives before any
-// input, so it is where the startup effort probe belongs; every later turn
-// carries its own init, which this ignores.
-func (a *agent) firstInit(ev core.Event) bool {
-	if ev.Kind != core.KindSystem || ev.Session == nil {
-		return false
-	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.probed {
-		return false
-	}
-	a.probed = true
 	return true
 }

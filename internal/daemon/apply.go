@@ -78,11 +78,11 @@ func (a *agent) apply(p pending) {
 		if p.probe {
 			// A probe is not an operator turn: no noteSent (so the agent is not
 			// marked owed and never looks busy), no noteEffort, and no client to
-			// report a failure to. setProbing before the write opens the window
+			// report a failure to. incProbe before the write opens the window
 			// fanOut uses to swallow the reply; a failed write closes it again.
-			a.setProbing(true)
+			a.incProbe()
 			if err := a.sess.Send(p.frame.Text, nil); err != nil {
-				a.setProbing(false)
+				a.decProbe()
 				logf("wake: session %s: effort probe not sent: %v", a.id, err)
 			}
 			return

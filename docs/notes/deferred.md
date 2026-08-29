@@ -4270,8 +4270,10 @@ carries it — `Current model: Opus 5 (1M context) (effort: xhigh)` — and §1 
 `$0`. The two reasons this was deferred are both answered rather than dodged. Wake claims the bare
 `/model` for its own picker, so a probe *is* a turn the operator did not type — so the daemon sends it
 without `noteSent` (it counts as no turn and never marks the agent owed) and `absorbProbe` swallows
-the reply at `fanOut` before it reaches any client, while `history.go` drops the on-disk
-`/model`+`Current model:` pair on the way back, so it appears in no transcript. And the level is
+the reply at `fanOut` before it reaches any client — a **counter**, so two probes in flight suppress
+two replies — while `history.go` drops the reply on its own `Current model:` shape on the way back
+(the command line only best-effort; the on-disk slash-command form is a fixture still owed, see
+`docs/live-testing.md`), so the level appears in no transcript. And the level is
 parsed out of **English an assistant wrote**, which stays behind the airlock: `core.IsModelReply` and
 `core.EffortFromModelReply` live in `vocabulary.go`, asserted against `testdata/stream/bare-model.jsonl`.
 The confirmed level lands on `agent.confirmedEffort`, published as `SessionStatus.Effort` (preferred

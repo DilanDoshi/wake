@@ -26,7 +26,6 @@ import (
 	"unicode"
 
 	"github.com/DilanDoshi/wake/internal/core"
-	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // The command this file watches for, composed rather than spelled whole.
@@ -101,26 +100,6 @@ func (a *agent) noteEffort(text string) bool {
 	return true
 }
 
-// probeEffort queues a bare /model to read the session's reasoning level back -
-// a local CLI reply (num_turns:0, $0) the daemon suppresses. Best-effort: it is
-// skipped for an agent that is gone or blocked on an ask, whose stdin is a
-// closed decision, and dropped silently if the queue is full (the level simply
-// does not refresh this cycle). The reply is consumed by absorbProbe.
-func (a *agent) probeEffort() {
-	if a.blockedOnAsk() {
-		return
-	}
-	select {
-	case <-a.gone:
-		return
-	default:
-	}
-	select {
-	case a.in <- pending{probe: true, frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: slashPrefix + modelVerb}}:
-	default:
-	}
-}
-
 // argvEffort is what a level may become on a command line: itself, or nothing.
 //
 // The two sets are why this exists. `/effort` takes seven levels and `--effort`
@@ -140,16 +119,6 @@ func argvEffort(level, id string) string {
 	}
 	logf("wake: session %s is at effort %q, which --effort does not take, so it is starting without one", id, level)
 	return ""
-}
-
-// setConfirmedEffort records the level a bare /model probe read back. Display
-// prefers it over the asked-for level (snapshot), but park still relaunches
-// from currentEffort - the level --effort accepts - so a probed level like
-// ultracode or auto never reaches an argv.
-func (a *agent) setConfirmedEffort(level string) {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	a.confirmedEffort = level
 }
 
 // currentEffort is the level under the agent's own lock.

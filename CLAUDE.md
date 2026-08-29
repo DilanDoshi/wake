@@ -748,10 +748,11 @@ The fix is a probe: the daemon sends a bare `/model`, whose reply names the leve
 (`Current model: … (effort: xhigh)`, `num_turns:0`/`$0`), reads it back, and carries it on the report
 as `confirmedEffort`. The status bar prefers the confirmed level, falls back to the asked-for one
 until the probe answers, and shows nothing when Wake chose none and no probe has returned. The reply
-is **suppressed** at `fanOut` (`internal/daemon/fanout.go` — `absorbProbe`) so it reaches no client,
-and its on-disk `/model`+`Current model:` pair is **filtered** out of restored history
-(`internal/daemon/history.go`). The parse lives in the airlock (`core.EffortFromModelReply`). The
-probe fires once on `init` and again after an `/effort` change. See `internal/daemon/effort.go` and
+is **suppressed** at `fanOut` (`internal/daemon/fanout.go` — `absorbProbe`, a counter so overlapping
+probes both suppress) so it reaches no client, and the on-disk reply is **filtered** out of restored
+history on its own `Current model:` shape (`internal/daemon/history.go`). The parse lives in the
+airlock (`core.EffortFromModelReply`). The probe fires once on `init` and again after an `/effort`
+change. See `internal/daemon/effort.go` and
 `docs/notes/decisions.md`.
 
 **Discovery verifies a directory; it never decodes one.** The project-dir slug is lossy, so
@@ -873,7 +874,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, and the permission mode; cached on `DM.bar`, drawn per change, and drawn **above** the legend (info row over the keys). Effort is the level `confirmedEffort` reads back, or the asked-for one until then. The mode is **drawn whole or dropped**, never right-cut into `permissions: …` |
 | The room's info bar | `internal/ui/chat.go` — `Room.bar`/`Room.withBar` · `internal/ui/send.go` — `App.withRoomBar`, which draws it for the agent the composer is addressing (a lone `@name`, else the manager) and nothing for an empty room. Cached like a DM's; the room *banner* stays fact-free (`banner_test.go`) — this is a different row |
 | The composer's info line and legend | `internal/ui/composer.go` — `WithBar` places a pre-rendered bar between the box and the legend; the pane builds the bar (it reads the filesystem) |
-| The effort probe | `internal/daemon/effort.go` — `probeEffort`, `noteEffort` (returns whether it recorded), the `/model` compose · `internal/daemon/agent.go` — `confirmedEffort`, `absorbProbe`, `firstInit`, `setProbing` · `internal/daemon/fanout.go` — the fan-out loop that consumes the reply · `internal/core/vocabulary.go` — `IsModelReply`, `EffortFromModelReply` (asserted against `testdata/stream/bare-model.jsonl`) · `internal/daemon/history.go` — the disk filter |
+| The effort probe | `internal/daemon/probe.go` — `probeEffort`, `absorbProbe` (a `pendingProbes` counter), `firstInit`, `incProbe`/`decProbe` · `internal/daemon/effort.go` — `noteEffort` (returns whether it recorded), the `/model` compose · `internal/daemon/agent.go` — the `confirmedEffort`/`pendingProbes` fields · `internal/daemon/fanout.go` — the fan-out loop that consumes the reply · `internal/core/vocabulary.go` — `IsModelReply`, `EffortFromModelReply` (asserted against `testdata/stream/bare-model.jsonl`) · `internal/daemon/history.go` — the disk filter |
 | Which branch a directory is on | `internal/gitref/` — one implementation, shared by the daemon's label and the status bar |
 | What a session runs as, and how full it is | `internal/core/protocol.go` — `initFacts`, `resultFacts` → `core.SessionFacts` → `ui.Agent.withFacts`. `initFacts` also carries `slash_commands`, which is what the completion menu offers |
 | Markdown · diffs · tool blocks · task lists | `internal/render/` — `todo.go` for the checklist · `tool.go` owns the layout and takes its palette from the caller, so `theme.go` stays the one place a colour is written down |

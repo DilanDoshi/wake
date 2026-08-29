@@ -21,19 +21,31 @@ never looks busy; at fleet scale a probe that flipped thirty agents to *working*
 noise the operator has to learn to ignore. The `/effort` re-probe rides `noteEffort` returning
 whether it recorded a level, so it fires only on a send that actually changed the record.
 
-**The reply reaches no client, and suppression is keyed on the reply — not on a flag.** `absorbProbe`
-(`internal/daemon/agent.go`) swallows the probe's assistant line and its following turn end at
-`fanOut`, before `observe` and before the broadcast, so the agent's state never moves and no
-transcript or room ever sees it. The window opens on the reply's own shape (`core.IsModelReply` on an
-assistant frame), not on the `probing` flag alone: `probing` is set on the serveInput goroutine while
+**The reply reaches no client, suppression is keyed on the reply — not on a flag — and it counts.**
+`absorbProbe` (`internal/daemon/agent.go`) swallows the probe's assistant line and its following turn
+end at `fanOut`, before `observe` and before the broadcast, so the agent's state never moves and no
+transcript or room ever sees it. The window is keyed on the reply's own shape (`core.IsModelReply` on
+an assistant frame), not on a bare in-flight flag: the flag is armed on the serveInput goroutine while
 a previous turn's frames may still be draining on the fanOut goroutine, and a blanket "suppress while
-probing" would eat that turn's real end and clear the window early, leaking the probe. Keying on the
-reply text is race-safe because a real turn's frames do not carry it.
+armed" would eat that turn's real end and clear the window early, leaking the probe. Keying on the
+reply text is race-safe because a real turn's frames do not carry it. And the arm is a **counter**
+(`pendingProbes`), not a bool: two probes can be in flight at once — two quick `/effort` changes, or a
+change racing the startup probe — and a bool cleared by the first reply let the second leak
+(caught by the adversarial review; `TestAbsorbProbeSuppressesBothOfTwoOverlappingProbes`). The
+per-turn `init` a mid-session `/model` emits is not suppressed and does not need to be — it draws no
+transcript line and moves no state — so the guarantee is precisely about **the reply**, not the whole
+exchange.
 
-**The on-disk pair is filtered, because suppression is live-only.** Claude writes the `/model` command
-and its `Current model:` reply to the transcript regardless, so `liveHistory` drops the pair on the
-way back (both the DM and the room read through it). Safe because `internal/ui` intercepts an
-operator's bare `/model` (the picker) and never sends it, so any `/model` on disk is Wake's probe.
+**The on-disk reply is filtered, because suppression is live-only.** Claude writes the `/model` command
+and its `Current model:` reply to the transcript regardless, so `liveHistory` drops them on the way
+back (both the DM and the room read through it). The drop is keyed on the **reply**
+(`IsModelReply` on an assistant line), not on the command line above it: the on-disk form of a slash
+command is pinned by no transcript fixture — Claude may wrap it — so matching the command is
+best-effort, but the reply is Claude's own rendered line and only a `/model` produces one. An
+operator's `/model` is intercepted by `internal/ui` and never sent, so any such line on disk is a
+Wake probe's (an imported session that ran `/model` by hand is the one edge, and dropping a bare
+model-info line from it is harmless). The transcript fixture this still owes is in
+`docs/live-testing.md`.
 
 **The parse stays behind the airlock.** Reading a level out of assistant prose is exactly the
 JSON-vs-English boundary the airlock exists for, so `IsModelReply`/`EffortFromModelReply` live in
