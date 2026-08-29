@@ -353,7 +353,7 @@ func (r Roster) headStyle(a Agent) lipgloss.Style {
 		// The identity hue lives in the default arm alone: the cursor's accent and
 		// a blocked agent's warn are state, and state has to win - a coloured row
 		// nobody can see is selected, or is blocked, is worse than a grey one.
-		if style, ok := identityStyle(a.Color); ok {
+		if style, ok := identityStyleFor(a); ok {
 			return style
 		}
 		return TextStyle

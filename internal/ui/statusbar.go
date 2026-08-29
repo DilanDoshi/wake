@@ -150,7 +150,7 @@ func statusBar(a Agent, mode string, width int) string {
 // The bar recedes by default (HintStyle), and a colour is the operator asking
 // for this one to be found at a glance among thirty.
 func barStyle(a Agent) lipgloss.Style {
-	if style, ok := identityStyle(a.Color); ok {
+	if style, ok := identityStyleFor(a); ok {
 		return style
 	}
 	return HintStyle

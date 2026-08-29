@@ -588,13 +588,36 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		base.Kind, base.Text = KindUnknown, f.Type
 		return one(base)
 	}
-	return blockEvents(f, raws, raw)
+	return blockEvents(f, raws, raw, messageUsage(m.Usage))
 }
 
-func blockEvents(f wireFrame, raws []json.RawMessage, raw json.RawMessage) []Event {
+// messageUsage decodes an assistant message's own usage tolerantly: a malformed
+// one yields no usage rather than an error, so it can never cost the prose the
+// message carried beside it. See wireMessage.Usage for the hazard.
+func messageUsage(raw json.RawMessage) *wireUsage {
+	if len(raw) == 0 {
+		return nil
+	}
+	var u wireUsage
+	if err := json.Unmarshal(raw, &u); err != nil {
+		return nil
+	}
+	return &u
+}
+
+func blockEvents(f wireFrame, raws []json.RawMessage, raw json.RawMessage, usage *wireUsage) []Event {
 	evs := make([]Event, 0, len(raws))
+	// The message's output-token count belongs to the message, not to each of
+	// its blocks, so it is attached to the first text block and to that one
+	// alone: two text blocks must never each claim the whole message's tokens.
+	tokensLeft := usage != nil && usage.OutputTokens > 0
 	for _, rb := range raws {
-		evs = append(evs, blockEvent(f, rb, raw))
+		ev := blockEvent(f, rb, raw)
+		if tokensLeft && ev.Kind == KindAssistantText {
+			ev.OutputTokens = usage.OutputTokens
+			tokensLeft = false
+		}
+		evs = append(evs, ev)
 	}
 	return evs
 }

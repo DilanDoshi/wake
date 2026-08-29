@@ -2,7 +2,11 @@
 // draws them; it never touches a process.
 package ui
 
-import "github.com/charmbracelet/lipgloss"
+import (
+	"github.com/charmbracelet/lipgloss"
+
+	"github.com/DilanDoshi/wake/internal/core"
+)
 
 // Claude Code's own palette. §8's "full Claude Code fidelity" is a standard
 // about colour as much as features: an agent answering in a DM should look
@@ -81,6 +85,30 @@ func identityStyle(name string) (lipgloss.Style, bool) {
 		return lipgloss.Style{}, false
 	}
 	return lipgloss.NewStyle().Foreground(c), true
+}
+
+// defaultManagerColor is the hue the manager wears when the owner has not set
+// one with /color: yellow, so the fleet's coordinator stands apart from the
+// shared Accent the ordinary agents default to. An explicit /color still wins.
+const defaultManagerColor = "yellow"
+
+// identityStyleFor resolves an agent's identity style: its /color hue when it
+// has one, else the manager's yellow default, else none - and a false return
+// lets each caller draw its own default (Accent in the room, grey on a bar).
+// The three identity surfaces - speakerStyle, barStyle, headStyle - all read
+// through here so the manager's default is one decision, not three.
+//
+// The manager's empty colour is its default, not "no hue": /color none on the
+// manager returns it to yellow rather than to grey, because "" is both "never
+// set" and "cleared" on one Color field and the default wins it. An explicit
+// /color <hue> still overrides. The manager is the one session that cannot be
+// made hueless, which is the point of giving it a default the fleet does not
+// share.
+func identityStyleFor(a Agent) (lipgloss.Style, bool) {
+	if a.Color == "" && a.Name == core.ManagerName {
+		return identityStyle(defaultManagerColor)
+	}
+	return identityStyle(a.Color)
 }
 
 var (
