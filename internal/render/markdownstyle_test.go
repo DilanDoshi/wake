@@ -108,6 +108,34 @@ func TestHeadingsAreBoldAndUncoloured(t *testing.T) {
 	}
 }
 
+// A rendered heading is the heading text, not literal hashes.
+//
+// Claude Code strips the `#`/`##`/`###` markers and styles the text bold;
+// glamour's own default strips them too. Wake had added them back through the
+// heading style's Prefix, so a `## Section heading` came out reading `##
+// Section heading` on screen (owner observation, 2026-08-29). This renders one
+// through Markdown and asserts the marker is gone while the words remain.
+func TestARenderedHeadingHasNoLiteralHashes(t *testing.T) {
+	for _, tc := range []struct{ name, src string }{
+		{"h1", "# Section heading\n\nbody"},
+		{"h2", "## Section heading\n\nbody"},
+		{"h3", "### Section heading\n\nbody"},
+		{"h4", "#### Section heading\n\nbody"},
+		{"h5", "##### Section heading\n\nbody"},
+		{"h6", "###### Section heading\n\nbody"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			out := stripANSI(Markdown(tc.src, 56))
+			if !strings.Contains(out, "Section heading") {
+				t.Errorf("render lost the heading text:\n%s", out)
+			}
+			if strings.Contains(out, "#") {
+				t.Errorf("a literal hash marker reached the render:\n%s", out)
+			}
+		})
+	}
+}
+
 // Inline code carries no background, and the document keeps glamour's margin.
 //
 // The 236 block behind every code span was a default nobody chose: at the
