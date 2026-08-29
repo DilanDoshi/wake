@@ -36,6 +36,75 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## BRAINSTORM (owner request), 2026-08-28 — answering an agent's question from inside the room, without becoming a multiplexer
+
+**Asked for in this version — as a brainstorm, not a defined build.** Explore how to handle question
+HIL (human-in-the-loop) *from the main room*, so the operator does not have to leave the room and open
+a pane every time an agent blocks on a question. The stated constraint is the whole point: reduce the
+pane round-trips **without** turning the room into a thing you operate panes from — which is the
+project's named failure mode ("the group chat is the product; the panes are substrate," and "not a
+terminal emulator or multiplexer").
+
+**Why this is a brainstorm and not a ticket: the obvious version was already built and deliberately
+reversed.** `CLAUDE.md`'s "an ask belongs to its agent's conversation, and the room draws none" ruling
+is exactly this ground. The room *used to* draw the oldest ask whose agent had no pane on screen;
+`Cards.For` now returns nothing for `id == ""`. The owner reversed it for two reasons any new design
+has to solve rather than re-hit:
+1. **One card's worth of rows.** A fleet with several agents blocked at once — the case this build
+   exists for — saw one of them and `+N more waiting`. The room cannot become a queue of full cards.
+2. **Stripped of context.** The room interleaves thirty agents, so a question arrived without the turn
+   that raised it, which is most of what makes a question answerable safely. Answering blind is worse
+   than walking to the pane.
+So "put the card back in the room" is the rejected design; the brainstorm is what is *different* from
+that.
+
+**Threads already in the tree to pull on (candidate directions, none decided):**
+- **Lean on the `@name` room-focus filter.** A lone `@name` already narrows the room to one agent's
+  thread (`internal/ui/roomfocus.go`, `Room.focus`/`WithFocus`, `retarget`). Narrowed, the room is
+  *one agent, one thread* — which defuses both objections above at once (no interleave, no queue). So
+  the first thing to explore is: when the room is narrowed to `@iris` and iris is blocked, draw iris's
+  ask **there**, reusing the existing focus mechanism rather than reintroducing the "oldest ask, no
+  pane" rule that was removed. This keeps the invariant honest — the ask still belongs to a single
+  resolved conversation, the room is just the surface it borrows.
+- **Answer through the composer, not a card.** The room's composer already routes by `@name`, and the
+  question path already has a free-text answer mode (`internal/ui/cardanswer.go`, the `Other…` row).
+  Worth exploring whether a reply addressed to a blocked agent while a question is outstanding can map
+  to its answer without ever drawing a full card — e.g. a digit or a short line, routed like any other
+  room message.
+- **Preview-to-decide, jump-to-answer.** A middle path: the room shows just enough of the ask to
+  decide *whether* to jump (not enough to answer blind), and the jump stays one cheap key (`⌃X`
+  already walks to the next blocked agent). This keeps "an ask belongs to its conversation" fully
+  intact and only lowers the cost of the round-trip rather than removing it.
+- **A triage surface that is neither the room nor a pane.** `/board` is the precedent — an overview
+  you look at, not panes you operate. A blocked-agents triage view could be the place several
+  simultaneous asks are dispatched from, keeping the room itself clean.
+
+**Invariants any answer must not break (the brainstorm's fences):**
+- **`AskUserQuestion` needs a real answer, never a bare allow.** The answer rides in
+  `updatedInput.answers`; a bare allow tells the model "the user did not answer" on a turn that still
+  ends `success` (`CLAUDE.md` traps). Any room quick-answer must produce the payload, and must degrade
+  to "open the pane" for the multi-question / complex-options case the wizard (`cardsteps.go`) exists
+  for.
+- **The room stays a view, not a mode**, and grows no arbitrary panes — the line that separates this
+  from a multiplexer.
+- **Cheap to leave open** — whatever is drawn is edge-triggered, not per-frame.
+
+**Open questions for the brainstorm:**
+- Scope: only `AskUserQuestion`, or also permission asks and plan approvals? They are different shapes
+  (permission is allow/deny; a question carries a payload), and mixing them in one room affordance may
+  be what makes it feel like a control panel.
+- Should room HIL be *gated to the narrowed (`@name`) room* on purpose, so the "one agent, one thread"
+  precondition is structural rather than hoped for?
+- Multiple blocked agents at once: cycle with `⌃X`, a small queue, or push everyone to the triage
+  view — without the `+N more waiting` failure that sank the first attempt?
+- How much of the raising turn has to travel with the ask for answering-from-the-room to be safe
+  rather than blind?
+
+*Related:* the notification-ping entry below (being *told* to look is the other half of not having to
+watch), the `@name` room view filter, and the 2026-08-26 "triage pass before the room" request (both
+are about keeping the room legible at fleet scale). *Blocks:* nothing broken — this is an
+ergonomics-at-scale design question, explicitly to be brainstormed before any build.
+
 ## OWNER REQUEST, 2026-08-28 — `⇧↵` for a newline in the composer
 
 **Asked for in this version.** Shift+Enter to insert a newline in the draft — the reflex an operator
