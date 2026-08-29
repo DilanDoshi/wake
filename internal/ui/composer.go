@@ -169,6 +169,12 @@ type Composer struct {
 	// Claude Code labels its own input. Empty draws an unlabelled border.
 	title string
 
+	// color is the identity hue /color gave this composer's agent, drawn into
+	// the border and the @name title so the box you type into is told apart by
+	// more than the name text. Set by the DM pane, which is one agent; empty for
+	// the room and for an uncoloured agent, both of which keep the accent.
+	color string
+
 	// taWidth is the width handed to the text area, kept because measuring the
 	// draft needs a second text area laid out identically and Model.Width
 	// reports the content width rather than the one SetWidth was given.
@@ -364,8 +370,20 @@ func (c Composer) box(width int) string {
 	if c.title != "" && edge > titleMinBorder {
 		lead = edge - lipgloss.Width(" "+ansi.Truncate(c.title, edge-titleMinBorder, ellipsis)+" ") - titleInset
 	}
-	top := titledEdge(b.TopLeft, b.Top, b.TopRight, c.title, edge, lead, rule, headerStyle)
+	top := titledEdge(b.TopLeft, b.Top, b.TopRight, c.title, edge, lead, rule, c.titleStyle())
 	return lipgloss.JoinVertical(lipgloss.Left, top, body)
+}
+
+// titleStyle draws the pane's @name in the top edge: its agent's identity hue
+// when /color gave it one, headerStyle's accent otherwise. Bold either way, the
+// way Claude Code labels its own input. Unlike the border below, it is not
+// dropped on blur - the title has always been drawn bold whether the pane holds
+// the keys or not, so a blurred coloured pane still names its agent in colour.
+func (c Composer) titleStyle() lipgloss.Style {
+	if style, ok := identityStyle(c.color); ok {
+		return style.Bold(true)
+	}
+	return headerStyle
 }
 
 // SetWidth lays the draft out for a pane this wide.
@@ -482,6 +500,11 @@ func (c Composer) draftRows(bound int) int {
 // WithTitle names the pane this composer belongs to.
 func (c Composer) WithTitle(t string) Composer { c.title = t; return c }
 
+// WithColor gives this composer its agent's identity hue, so the border and the
+// @name title draw in it. The DM pane sets it; the room does not, because the
+// room is not one agent. An empty or unknown name keeps the accent.
+func (c Composer) WithColor(name string) Composer { c.color = name; return c }
+
 // Focused says whether this composer is the one keystrokes reach.
 //
 // It changes how the box is drawn: the accent border, and the caret. Where a
@@ -508,11 +531,17 @@ func (c Composer) Focused(yes bool) Composer {
 	return c
 }
 
-// boxStyle is the border this composer draws: the accent when it has the keys,
-// and the ordinary pane border when another one does.
+// boxStyle is the border this composer draws: the receding pane border when
+// another pane has the keys, the agent's identity hue when /color gave it one,
+// and the shared accent otherwise. The hue is dropped on blur with the accent -
+// the border's whole job is answering "where do I type", and a blurred box is
+// not the answer whatever its colour.
 func (c Composer) boxStyle() lipgloss.Style {
 	if c.blurred {
 		return BoxStyle
+	}
+	if hue, ok := identityColor(c.color); ok {
+		return ComposerStyle.BorderForeground(hue)
 	}
 	return ComposerStyle
 }
