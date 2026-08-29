@@ -113,6 +113,16 @@ func argvEffort(level, id string) string {
 	return ""
 }
 
+// setConfirmedEffort records the level a bare /model probe read back. Display
+// prefers it over the asked-for level (snapshot), but park still relaunches
+// from currentEffort - the level --effort accepts - so a probed level like
+// ultracode or auto never reaches an argv.
+func (a *agent) setConfirmedEffort(level string) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.confirmedEffort = level
+}
+
 // currentEffort is the level under the agent's own lock.
 //
 // Every read goes through this. noteEffort writes from the agent's queue

@@ -51,6 +51,7 @@
 package daemon
 
 import (
+	"cmp"
 	"context"
 	"path/filepath"
 	"sync"
@@ -126,6 +127,12 @@ type agent struct {
 	// effort is the reasoning level this session was started at, or "" for
 	// none. Display and the park book only; nothing here re-reads it.
 	effort string
+
+	// confirmedEffort is the level a bare /model probe read back, or "" before
+	// one has answered. Display prefers it over effort - it is the level the
+	// session is genuinely at, where effort is only the level Wake asked for.
+	// Not written to the park book: a woken session re-probes and re-confirms.
+	confirmedEffort string
 
 	// model is what this session runs as, or "" for none. Display and the park
 	// book only, like effort. Read through currentModel: launch writes it and
@@ -666,7 +673,7 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		ParentID:   a.parent,
 		Tool:       a.tool,
 		ToolArg:    a.toolArg,
-		Effort:     a.effort,
+		Effort:     cmp.Or(a.confirmedEffort, a.effort),
 		Budget:     a.budget,
 		Commands:   a.commands,
 		State:      a.stateLocked(time.Now()),
