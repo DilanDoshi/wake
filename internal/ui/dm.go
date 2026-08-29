@@ -303,7 +303,7 @@ func (d DM) SetSize(w, h int) DM {
 	// width would size the pane against rows that no longer exist.
 	d.partial = d.partial.sized(d.blockWidth())
 	extra := d.partial.rows()
-	if d.Agent.State == rpc.StateWorking {
+	if d.hasBeat() {
 		extra++
 	}
 	if d.bar != "" {
@@ -590,12 +590,6 @@ func (d DM) View(width, height int) string {
 	return strings.Join(rows, "\n")
 }
 
-// heartbeat is the working line for this conversation's agent, or "" between
-// turns. Drawn at the transcript's width so it lines up with the prose above it.
-func (d DM) heartbeat() string {
-	return workingLine(d.SessionID, d.Agent.State, d.Agent.Doing, d.Agent.startedAt, d.Agent.TurnTokens, d.blockWidth())
-}
-
 // standing is what the title says about an agent that is not running: nothing
 // for a live one, because the ordinary case is not worth a word.
 func (d DM) standing() string {
@@ -761,10 +755,11 @@ func (d DM) baseChrome() int {
 	// re-wrapped here, for the reason the bar below is read from its cache:
 	// this runs inside SetSize and on every View.
 	h += d.partial.rows()
-	// The heartbeat's row, on the same condition workingLine draws one. Asked
-	// as the predicate rather than by rendering it: this runs inside SetSize,
-	// and the line costs a shimmer across its own width to produce.
-	if d.Agent.State == rpc.StateWorking {
+	// The heartbeat's row, on the same condition heartbeat() draws one - the
+	// working line or the done line. Asked as the predicate rather than by
+	// rendering it: this runs inside SetSize, and the line costs a shimmer across
+	// its own width to produce.
+	if d.hasBeat() {
 		h++
 	}
 	// The status bar's row. Read from the cache rather than rendered: this runs

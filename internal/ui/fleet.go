@@ -100,6 +100,18 @@ type Agent struct {
 	// backdating it to the zero time.
 	startedAt time.Time
 
+	// doneAt and turnDur are when the last turn finished and how long it ran, for a
+	// DM's done line - `✻ Cooked for 1m 59s · done 6:48 PM`. Zero until a witnessed
+	// turn finishes; a park, an end and a gap each forget them. See DM.heartbeat.
+	doneAt  time.Time
+	turnDur time.Duration
+
+	// watchedStart is whether the current turn's start was observed - false when
+	// the agent's first report was already working, a turn begun before this client
+	// attached. It gates the capture, so an unwatched turn earns no line rather than
+	// one dated to attach time.
+	watchedStart bool
+
 	Tool    string
 	ToolArg string
 
@@ -287,6 +299,9 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		// stays working across ten tool calls and several of them.
 		if s.State == rpc.StateWorking && !turnInFlight(a.State) {
 			a.startedAt = clock()
+			// A Working *first* report (empty prior state) is a turn already in
+			// flight at attach, whose start we did not see - so it earns no done line.
+			a.watchedStart = a.State != ""
 			// A new turn owns the count as well as the clock, and clearing it
 			// *here* is what covers the ends fold cannot see. Every `result`
 			// frame reaches KindTurnEnd, interrupted ones included - but a turn
@@ -295,6 +310,16 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 			// record. Clearing only at the end carried the parked turn's figure
 			// into it and every turn after.
 			a.TurnTokens, a.turnDone, a.turnCur = 0, 0, 0
+		}
+		// The working→idle edge of a witnessed turn: record when and for how long,
+		// what the DM's done line reads. watchedStart implies a non-zero startedAt.
+		if s.State == rpc.StateIdle && turnInFlight(a.State) && a.watchedStart {
+			a.doneAt, a.turnDur = clock(), clock().Sub(a.startedAt)
+		}
+		// A park or an end forgets it: a wake starts fresh and reports idle directly
+		// (no working report between), so the pre-park summary must not reappear.
+		if s.State == rpc.StateParked || s.State == rpc.StateEnded {
+			a.doneAt, a.turnDur, a.watchedStart = time.Time{}, 0, false
 		}
 		a.State, a.QuietMS = s.State, s.QuietMS
 		// Only when the report has one. The event stream is the fresher
@@ -576,6 +601,7 @@ func (f Fleet) ForgetTurns() Fleet {
 	for id, a := range f.agents {
 		a.Tool, a.ToolArg, a.Doing = "", "", ""
 		a.TurnTokens, a.turnDone, a.turnCur, a.startedAt = 0, 0, 0, time.Time{}
+		a.doneAt, a.turnDur, a.watchedStart = time.Time{}, 0, false
 		f.agents[id] = a
 	}
 	return f
