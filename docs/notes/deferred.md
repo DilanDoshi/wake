@@ -255,10 +255,24 @@ watch), the `@name` room view filter, and the 2026-08-26 "triage pass before the
 are about keeping the room legible at fleet scale). *Blocks:* nothing broken — this is an
 ergonomics-at-scale design question, explicitly to be brainstormed before any build.
 
-## OWNER REQUEST, 2026-08-28 — `⇧↵` for a newline in the composer
+## OWNER REQUEST, 2026-08-28 — `⇧↵` for a newline in the composer — Option 1 shipped 2026-08-29
 
 **Asked for in this version.** Shift+Enter to insert a newline in the draft — the reflex an operator
 brings from Claude Code and most chat UIs.
+
+**Option 1 below is now built: `wake setup-terminal` and `internal/termsetup`.** It detects the host
+terminal from the environment (`TERM_PROGRAM` first, then Kitty/Alacritty/WezTerm's own variables),
+shows the exact line it would add, and — for Ghostty, Kitty and Alacritty only — appends it after a
+confirmation (`--yes` skips the prompt, `--undo` removes exactly what was added, both idempotent and
+backed up before the first write). iTerm2, VS Code, WezTerm and Terminal.app get precise manual steps
+instead: those are structured formats (a plist, JSONC, Lua) this package refuses to parse and rewrite,
+on the same "never corrupt what it cannot safely round-trip" ruling the append-only three are held to.
+A one-time notice on first opening the room offers the fix through `internal/notice` — no new chrome,
+no key, gated on `$XDG_CONFIG_HOME/wake/terminal-setup-prompted` so it fires once ever per machine.
+Getting the snippets right needed real verification, not the naive reading: Alacritty's TOML and VS
+Code's JSON have no `\x` escape at all, only `\u`, which is the exact bug recorded against Claude
+Code's own `/terminal-setup` for Alacritty (upstream issues #14793, #19288, #24714, #25411) — this
+build's own knowledge base is tested against that failure by name so it cannot regress into it.
 
 **It already works — exactly when it works in Claude Code, and by the same mechanism — but not on a
 bare terminal.** Newline in the composer is `⌥↵` / `⌃J` (`internal/ui/composer.go`, `InsertNewline`
@@ -272,30 +286,28 @@ So an operator who has run Claude Code's `/terminal-setup` (or bound Shift+Enter
 themselves) already has `⇧↵` working in Wake, and `⌃J` is the fallback that needs no configuration at
 all. `docs/live-testing.md` documents this as the one key that needs the operator's own setup.
 
-**So the deferred piece is not "bind `⇧↵`" — that is a dead end that fails silently** (it produces no
-message, so a binding for it can never fire, and `keyprobe_test.go` is the guard that says so). What
-is actually unbuilt is one of two things:
+**So the deferred piece was never "bind `⇧↵`" — that is a dead end that fails silently** (it produces
+no message, so a binding for it can never fire, and `keyprobe_test.go` is the guard that says so).
+What was actually unbuilt was one of two things:
 
 1. **A Wake-owned terminal-setup helper**, the equivalent of Claude Code's `/terminal-setup`, that
    writes the iTerm2 / VSCode / Ghostty keymap so `⇧↵` emits `ESC CR` without the operator having to
-   have run Claude Code's first. This is the same *behaviour* Claude Code ships and would make `⇧↵`
-   work out of the box — but it edits the operator's terminal config, which is a side effect on the
-   machine Wake otherwise never has, and it is per-terminal-emulator surface to maintain.
+   have run Claude Code's first. **Built 2026-08-29** as `wake setup-terminal` / `internal/termsetup` —
+   see the paragraph above. It edits the operator's terminal config, which is a side effect on the
+   machine Wake otherwise never has; the mitigation is the same one every other file-writing path in
+   this project takes — append-only, idempotent, backed up, and refused outright for any format this
+   package cannot safely round-trip — rather than not building it.
 2. **A bubbletea version that decodes the chord natively.** The v2 line speaks the Kitty keyboard
    protocol and, on a terminal that has it enabled (Ghostty, Kitty, WezTerm), could deliver `⇧↵` as a
    distinct `KeyMsg` — at which point Wake binds it directly: no terminal setup, no `ESC CR`
-   round-trip. `keyprobe_test.go` is exactly the guard that would flip on such an upgrade and tell the
-   next person the chord is now reachable; until it does, the finding it holds stands.
+   round-trip. **Still open.** `keyprobe_test.go` is exactly the guard that would flip on such an
+   upgrade and tell the next person the chord is now reachable; until it does, the finding it holds
+   stands, and it would make `wake setup-terminal` unnecessary for the terminals it reaches rather than
+   wrong — the two are not in tension.
 
-**The tension worth stating.** Option 1 is the only one that helps the operator on a terminal with no
-keyboard protocol — but it is a config-writing side effect on the host, a category of thing Wake
-avoids, and it duplicates work Claude Code already does for the operator who ran it. Option 2 is clean
-but gated on a dependency upgrade nobody has scheduled, and it never reaches a bare terminal (no
-protocol, no distinct chord). Neither is broken today: `⌃J` sends a newline everywhere with nothing
-configured, and `⇧↵` works through the shared terminal setup.
-
-*Blocks:* nothing. `⌃J` is the universal fallback and `⇧↵` already works via terminal setup; this is
-about making the reflex work with zero operator configuration.
+*Blocks:* nothing. `⌃J` is the universal fallback and `⇧↵` now works either through Claude Code's own
+`/terminal-setup` (as before) or through Wake's own, with no dependency on the operator having run the
+other one first.
 
 ## OWNER REQUEST, 2026-08-28 — a ping other platforms can pick up when an agent needs the operator
 
