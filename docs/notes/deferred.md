@@ -4826,6 +4826,35 @@ typed answer in flight. The second is new with answer mode and is the same shape
 is client state, so detaching mid-answer drops the draft. That is the right default — an answer
 half-written is not an answer — but nothing tells the operator it happened.
 
+**2026-08-28 — owner's ask: a manager tool to *read an agent's whole conversation*, token-aware.**
+The five tools let the manager see the fleet's *shape* — `list_agents`, `agent_status`, `roll_up`
+(the rollup in `internal/mcp/rollup.go`) — but nothing lets it read one agent's actual transcript,
+turn by turn. A true orchestrator (the section above) needs that: to notice three agents are stuck on
+the same thing, or that a five-agent refactor has drifted, it has to be able to *read* what an agent
+has been saying, not just its state line. So this is a sixth bounded tool — call it
+`read_conversation` — that returns an agent's transcript, sourced the way a DM already reads one
+(`internal/daemon/history.go`'s `History`, `core.ActiveBranch` for the live branch), scoped to one
+session id the manager names.
+
+**The load-bearing half is the token budget, not the read.** A 30-agent fleet's transcripts are far
+more than a manager's context can hold, so the tool cannot just dump one — a single
+`read_conversation` on a long session would blow the manager's own window and is the opposite of the
+`roll_up` discipline that already exists. So it needs to be token-aware: **measure the transcript
+first, and if it is over a budget the tool owns, return a compressed form** (a summary, the last N
+turns, or a `roll_up`-style digest) **plus an honest count of how much was elided** — never a silent
+truncation, which is the same "success is not a verdict" trap the CLI-surface traps section warns
+about. The manager should be told "this conversation is ~40k tokens; here is a digest and the last 6
+turns" rather than handed a slice it cannot tell is a slice.
+
+Open questions before it is buildable: where the budget lives and what it is (a constant, or derived
+from the manager's model context); whether "compress" is a cheap mechanical digest (drop tool bodies,
+keep prose and asks) or a model call (which reintroduces the cost the `roll_up` design avoided);
+whether it counts real tokens or estimates from bytes; and whether it is a read-only reach that needs
+no new guard beyond `managerScope`, or whether reading every agent's words is itself a power worth a
+recorded bound. It owes the same discipline the rest of the manager was held to — a bounded verb, a
+guard (`cmd/wake/mcpguard_test.go`), a recorded reason — not just a longer prompt. *Blocks:* the
+orchestrator above; it cannot judge what it cannot read.
+
 ---
 
 ## 2026-08-25 — feature idea, owner's ask: `@john` as a room *view* filter, not only a route
