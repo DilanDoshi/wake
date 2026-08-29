@@ -21,6 +21,38 @@ var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func stripANSI(s string) string { return ansiPattern.ReplaceAllString(s, "") }
 
+// The conversation's info bar sits above the legend - the info row over the
+// keys - and the pane stays within its height with the bar in its new place.
+func TestDMDrawsTheBarAboveTheLegend(t *testing.T) {
+	d := NewDM("s1", "alex")
+	d.Agent = Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", Effort: "xhigh"}
+	d = d.SetSize(120, 24)
+
+	out := stripANSI(d.View(120, 24))
+	lines := strings.Split(out, "\n")
+	if len(lines) > 24 {
+		t.Fatalf("the pane drew %d rows into 24 - the bar's new row was double-counted:\n%s", len(lines), out)
+	}
+	barAt, hintAt := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, effortLabel+"xhigh") {
+			barAt = i
+		}
+		if strings.Contains(l, "send") {
+			hintAt = i
+		}
+	}
+	if barAt < 0 {
+		t.Fatalf("the status bar was not drawn:\n%s", out)
+	}
+	if hintAt < 0 {
+		t.Fatalf("the legend was not drawn:\n%s", out)
+	}
+	if barAt > hintAt {
+		t.Fatalf("the bar (row %d) must sit above the legend (row %d):\n%s", barAt, hintAt, out)
+	}
+}
+
 // expandedDM is a conversation whose tool runs are drawn whole - every call as
 // its own ⏺ block with its result open - the ⌃E view. A run of tool calls folds
 // to one rollup line by default (see rollup.go), so the tests about how one call

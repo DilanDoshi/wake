@@ -571,12 +571,14 @@ func (d DM) View(width, height int) string {
 	if menu := firstRows(d.menu, d.menuRows()); menu != "" {
 		rows = append(rows, menu)
 	}
-	rows = append(rows, d.composer.WithTitle(cmp.Or(d.writing, agentPrefix+d.Name+d.ancestry()+d.standing())).View(w))
-	// Under the composer, where Claude Code puts it: the least urgent thing on
-	// screen, and the only one that is about the session rather than the turn.
-	if d.bar != "" {
-		rows = append(rows, d.bar)
-	}
+	// The bar rides inside the composer, drawn between the box and the legend -
+	// the info row over the keys row. baseChrome still counts it separately,
+	// because the composer it measures carries no bar (this WithBar is a draw-
+	// time overlay, like WithTitle), so the height stays right.
+	rows = append(rows, d.composer.
+		WithBar(d.bar).
+		WithTitle(cmp.Or(d.writing, agentPrefix+d.Name+d.ancestry()+d.standing())).
+		View(w))
 	return strings.Join(rows, "\n")
 }
 
