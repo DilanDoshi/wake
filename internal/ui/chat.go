@@ -105,6 +105,10 @@ type Room struct {
 	// here would go stale against it.
 	sel marked
 
+	// csel is a selection taken inside the query box rather than the transcript,
+	// set for the draw the same way. At most one of sel and csel is non-empty.
+	csel marked
+
 	// beat is the working line for the fleet, set for the draw by App.roomFor
 	// the way sel and the composer's mode are: it is a fact about the *fleet*
 	// and the room has no roster of its own. See roomWorkingLine.
@@ -170,6 +174,12 @@ func (r Room) WithWorking(agents []Agent) Room {
 // WithSelection is the selection this pane draws, for the draw only.
 func (r Room) WithSelection(m marked) Room {
 	r.sel = m
+	return r
+}
+
+// WithComposerSelection is the query-box selection this pane draws.
+func (r Room) WithComposerSelection(m marked) Room {
+	r.csel = m
 	return r
 }
 
@@ -571,7 +581,9 @@ func (r Room) View(width, height int) string {
 	if r.focus != "" && r.focusName != "" {
 		title = roomTitle + " › @" + r.focusName
 	}
-	return strings.Join(append(rows, r.composer.WithTitle(cmp.Or(r.writing, title)).View(w)), "\n")
+	comp := r.composer.WithTitle(cmp.Or(r.writing, title)).View(w)
+	comp = highlightComposerBlock(comp, r.csel, composerTextLeft, w-composerRightInset)
+	return strings.Join(append(rows, comp), "\n")
 }
 
 // ScrollUp moves the reader lines back, or forward for a negative count.

@@ -334,7 +334,7 @@ func (a App) roomPane(width, height int) string {
 	// The selection is set for the draw and not held, the same way the mode is -
 	// App owns the one selection, and it changes what a row looks like rather
 	// than how many rows there are, so paneFloor does not ask for it.
-	room := a.roomFor().WithSelection(a.selectionIn(""))
+	room := a.roomFor().WithSelection(a.selectionIn("")).WithComposerSelection(a.composerSelectionIn(""))
 
 	// Handed over whole: the pane clips it, because only the pane knows what is
 	// left after the rest of its chrome. See Room.menuRows.
@@ -415,8 +415,8 @@ func above(top, bottom string) string {
 func (a App) dmPane(id string, width, height int) string {
 	// Handed over whole, for roomPane's reason. See DM.menuRows.
 	menu, ask := a.menuBlock(id, width)
-	return a.dmFor(id).WithSelection(a.selectionIn(id)).WithMenu(menu).WithAsk(ask).
-		WithWriting(a.answerTitle(id)).View(width, height)
+	return a.dmFor(id).WithSelection(a.selectionIn(id)).WithComposerSelection(a.composerSelectionIn(id)).
+		WithMenu(menu).WithAsk(ask).WithWriting(a.answerTitle(id)).View(width, height)
 }
 
 // transcriptRows is how many of a pane's rows are conversation, measured the

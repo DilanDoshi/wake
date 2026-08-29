@@ -172,6 +172,11 @@ type DM struct {
 	// here would go stale against it.
 	sel marked
 
+	// csel is a selection taken inside the query box rather than the transcript,
+	// set for the draw the same way. At most one of sel and csel is non-empty:
+	// the one drag the app holds is in one surface or the other.
+	csel marked
+
 	// bar is the rendered status bar, and barFrom is what it was rendered
 	// from. It is cached because it is the one thing in this pane that reads
 	// the *filesystem* - gitref walks for a .git and reads HEAD - and
@@ -571,7 +576,9 @@ func (d DM) View(width, height int) string {
 	if menu := firstRows(d.menu, d.menuRows()); menu != "" {
 		rows = append(rows, menu)
 	}
-	rows = append(rows, d.composer.WithTitle(cmp.Or(d.writing, agentPrefix+d.Name+d.ancestry()+d.standing())).View(w))
+	comp := d.composer.WithTitle(cmp.Or(d.writing, agentPrefix+d.Name+d.ancestry()+d.standing())).View(w)
+	comp = highlightComposerBlock(comp, d.csel, composerTextLeft, w-composerRightInset)
+	rows = append(rows, comp)
 	// Under the composer, where Claude Code puts it: the least urgent thing on
 	// screen, and the only one that is about the session rather than the turn.
 	if d.bar != "" {

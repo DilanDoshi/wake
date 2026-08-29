@@ -233,7 +233,7 @@ func (a App) transcriptIn(id string) transcript {
 // This is the whole of what a pane knows about selection, which is what keeps
 // transcript a pure value that has never heard of a pane or an id.
 func (a App) selectionIn(id string) marked {
-	if a.sel.empty() || a.sel.pane != id {
+	if a.sel.empty() || a.sel.inComposer || a.sel.pane != id {
 		return marked{}
 	}
 	return a.sel.marked()
@@ -249,19 +249,22 @@ func (a App) selectionIn(id string) marked {
 //
 // It is the transcript's *rows* that are text, though, and a pane is a whole
 // column. pointIn clamps a row under the transcript - the working line, the
-// menu, the composer - into a real line, so a drag across the query bar
-// highlighted and copied an answer nobody dragged over, and the further back
-// the reader had scrolled the further from the pointer it landed. A press
-// there takes no anchor; the pane still focuses, and the highlight goes the way
-// it does on every other input.
+// menu, the composer - into a real line, so a drag across the query bar once
+// highlighted and copied an answer nobody dragged over, the further back the
+// reader had scrolled the further from the pointer it landed. So a press below
+// the transcript no longer clamps into it: the query box's own draft rows take
+// a composer selection (see startComposerSelection), and the chrome around them
+// - the menu, the preview, the working line, the borders - still takes nothing.
 //
 // The count is App.transcriptRows rather than the transcript's own height,
 // which a card or a completion menu shortens without resizing.
 func (a App) startSelection(id string, col, top, height, x, y int, r Regions, refocused bool) App {
 	rows := a.transcriptRows(id, r.Cols[col], height)
 	if y >= top+rows {
-		a.sel, a.selecting = selection{}, false
-		return a
+		// Below the transcript is chrome and the query box. The box's own draft
+		// rows are text you typed and select like the transcript; the menu, the
+		// preview, the working line and the borders around them are not.
+		return a.startComposerSelection(id, col, top, height, x, y, r, refocused)
 	}
 	a.selTop, a.selRows = top, rows
 	p := a.pointIn(id, x-a.layout.PaneLeft(r, col), y)
@@ -279,6 +282,9 @@ func (a App) startSelection(id string, col, top, height, x, y int, r Regions, re
 // row) leaves the edge a row or two out for the rest of that drag, which is
 // where the stored height it used to read was already.
 func (a App) extendSelection(x, y int) App {
+	if a.sel.inComposer {
+		return a.extendComposerSelection(x, y)
+	}
 	r := a.regions()
 	col := a.columnOf(a.sel.pane)
 	if col >= len(r.Cols) || r.Cols[col] <= 0 {
@@ -302,6 +308,15 @@ func (a App) endSelection() (App, tea.Cmd) {
 		return a, nil
 	}
 	a.selecting = false
+	if a.sel.inComposer {
+		// A drag in the query box copies its own text; a click there took none,
+		// and there is no folded tool under a composer to open the way there is
+		// under a transcript.
+		if a.sel.empty() {
+			return a, nil
+		}
+		return a, copyToClipboard(a.composerSelectedText())
+	}
 	if a.sel.empty() {
 		// A click took no text, and Claude Code spends that same gesture on
 		// opening a folded tool result - "click to expand collapsed tool
