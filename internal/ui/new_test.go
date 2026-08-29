@@ -75,6 +75,15 @@ func TestSlashNewCarriesTheNameAndTheDirectoryThatWereTyped(t *testing.T) {
 		// the agent `agent` on the exact string the product was asked for in.
 		{draft: "/new agent in " + dir, dir: dir},
 		{draft: "/new session in " + dir, dir: dir},
+		// Multiple words are one name joined with a hyphen: `/new john doe`
+		// asks for `john-doe`, a token normalizeName accepts and `@john-doe`
+		// routes to. There is no way to type a space into a name, by design.
+		{draft: "/new john doe", name: "john-doe"},
+		{draft: "/new john doe in " + dir, name: "john-doe", dir: dir},
+		{draft: "/new one two in " + dir, name: "one-two", dir: dir},
+		// A noun is skipped only when it stands alone. `/new agent smith` is a
+		// name somebody chose, so the multi-word reading wins over the shortcut.
+		{draft: "/new agent smith", name: "agent-smith"},
 	} {
 		t.Run(tc.draft, func(t *testing.T) {
 			fresh(t)
@@ -100,7 +109,7 @@ func TestSlashNewCarriesTheNameAndTheDirectoryThatWereTyped(t *testing.T) {
 // wrong answers are both silent - start in the default directory, which is the
 // one thing they said they did not want, or send `in` as the name.
 func TestSlashNewRefusesAnUnfinishedDirectory(t *testing.T) {
-	for _, draft := range []string{"/new in", "/new sydney in", "/new one two in " + t.TempDir()} {
+	for _, draft := range []string{"/new in", "/new sydney in", "/new one two in"} {
 		t.Run(draft, func(t *testing.T) {
 			fresh(t)
 			a := newRoomApp(t).withSize(200, 40)

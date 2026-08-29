@@ -190,12 +190,6 @@ func parseNew(arg string) (newRequest, error) {
 			break
 		}
 	}
-	// A name is one word by construction - normalizeName admits no whitespace -
-	// so two words in front of the keyword is a shape this does not read rather
-	// than a name the daemon would refuse with a better sentence.
-	if len(before) > 1 {
-		return newRequest{}, errUsage()
-	}
 	// An `in` with nothing after it is a sentence somebody did not finish, and
 	// both available guesses are silent: start in the default directory, which
 	// is the one thing they said they did not want, or send `in` as a name.
@@ -203,8 +197,14 @@ func parseNew(arg string) (newRequest, error) {
 		return newRequest{}, errUsage()
 	}
 	req := newRequest{newFlags: flags}
-	if len(before) == 1 && !isNoun(before[0]) {
-		req.Name = before[0]
+	// The words before `in` are the requested name, hyphen-joined: `/new john
+	// doe` asks for `john-doe`, one token normalizeName accepts and `@john-doe`
+	// routes to. strings.Fields dropped empty tokens, so there are no double
+	// hyphens, and an over-length join is the daemon's refusal to make. The lone
+	// founding noun - `/new agent in <dir>` - names nothing and draws from the
+	// pool; a noun with words after it (`/new agent smith`) is a chosen name.
+	if len(before) != 1 || !isNoun(before[0]) {
+		req.Name = strings.Join(before, "-")
 	}
 	// Joined rather than taken as one field: a directory may hold spaces, and
 	// the operator typing one has no way to quote it into a composer.
