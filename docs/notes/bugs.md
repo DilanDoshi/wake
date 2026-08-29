@@ -355,6 +355,40 @@ and it is what would prove the entry.
 
 ---
 
+## BUG-32 — `⌘←` / `⌘→` do nothing in the composer, where macOS puts line-start / line-end
+
+**Observed 2026-08-28** typing into the query/composer: `⌘←` and `⌘→` — the macOS reflex for
+jump-to-line-start and jump-to-line-end — move the cursor nowhere.
+
+**Most of this is a ruling, not a mechanism that failed, and it is the same ruling the pane keys
+turn on.** No macOS terminal transmits `⌘` to a tty, and bubbletea v1.3.10 names *nothing* for
+`⌘`+arrow: its arrow table knows modifier params 2–8, `⌘` is bit 8, so `⌘→` is param 9 and falls off
+the end. That is the measured reason moving the keys between panes is `⇧`+arrow and not the `⌘`+arrow
+that was asked for — `TestNoKeyIsACtrlArrow`, `keyprobe_test.go`, and the write-up in
+`decisions.md`. So the bytes never reach Wake: there is no `App.key` case or composer binding that
+*could* act on `⌘←`, and adding one would bind a key that is never delivered — the exact trap that
+once shipped the grid keys as unpressable chords.
+
+**What works instead, and the one part that is a genuine casualty.** The composer overrides only
+`InsertNewline`; everything else is the bubbles textarea's default keymap, so `⌃A` and `Home` reach
+it as line-start, `End` as line-end (where the terminal sends them), and `⌥←` / `⌥→` are word
+movement (needs Option→Meta, e.g. iTerm2's *"Esc+"*). **The exception is `⌃E`**: the textarea binds
+it to line-end by default, but `App.key` takes `tea.KeyCtrlE` for expand (the documented ⌃E
+collision) before the composer sees it — so the readline line-end chord is shadowed, and `End` is the
+only line-end that fires.
+
+**Which part is a decision.** The `⌘`-never-arrives half is settled and not fixable in Wake's key
+layer, identical to the pane keys. The residual worth a ruling is the `⌃E` shadow, which leaves
+line-end with no chord where the terminal sends no `End` key (a bare MacBook keyboard: `End` is
+`Fn+→`).
+
+**What would settle it:** either (a) accept it and document that macOS line-movement in the composer
+is `⌃A` / `Home` / `End` / `⌥←→` (a `live-testing.md` note, since no `go test` has a `⌘` to press),
+or (b) a Wake terminal-setup that remaps `⌘←/→` to deliverable `ESC`-prefixed sequences — the same
+terminal-config side effect the `⇧↵` entry in `deferred.md` weighs and does not reach for.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
