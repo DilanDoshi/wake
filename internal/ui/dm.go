@@ -219,13 +219,16 @@ var drawStatusBar = statusBar
 
 // barKey is everything statusBar reads. A value type so "has anything changed"
 // is one comparison rather than a list somebody has to keep in step.
+//
+// The identity colour is deliberately absent: the bar recedes in the muted grey
+// every bar wears and does not take the hue (see statusBar), so a /color change
+// moves nothing here and belongs in no key that would redraw for it.
 type barKey struct {
 	width  int
 	dir    string
 	model  string
 	mode   string
 	state  string
-	color  string
 	used   int
 	window int
 }
@@ -241,7 +244,7 @@ func (d DM) withBar(width int) DM {
 	mode := d.composer.Mode()
 	key := barKey{
 		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, mode: mode, state: d.Agent.State,
-		color: d.Agent.Color, used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
+		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
 	}
 	if key == d.barFrom {
 		return d
@@ -576,7 +579,7 @@ func (d DM) View(width, height int) string {
 	if menu := firstRows(d.menu, d.menuRows()); menu != "" {
 		rows = append(rows, menu)
 	}
-	comp := d.composer.WithTitle(cmp.Or(d.writing, agentPrefix+d.Name+d.ancestry()+d.standing())).View(w)
+	comp := d.composer.WithTitle(cmp.Or(d.writing, agentPrefix+d.Name+d.ancestry()+d.standing())).WithColor(d.Agent.Color).View(w)
 	comp = highlightComposerBlock(comp, d.csel, composerTextLeft, w-composerRightInset)
 	rows = append(rows, comp)
 	// Under the composer, where Claude Code puts it: the least urgent thing on

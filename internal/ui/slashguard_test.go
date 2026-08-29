@@ -70,6 +70,8 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 const (
@@ -254,6 +256,46 @@ func TestABareOnlyCommandIsOnlyTakenBare(t *testing.T) {
 				t.Errorf("/%s%s was swallowed; only the bare form is Wake's", word, arg)
 			}
 		}
+	}
+}
+
+// roomTargetCommands is a subset of commands and holds exactly the three that
+// take an @who. A word here that commands does not have would dispatch through a
+// nil function on `@who /that`; the count is the vocabulary's own guard, so a
+// fourth cannot be added without this rule being looked at - the same reason
+// wakeCommandCount and bareOnlyCommandCount carry one.
+func TestRoomTargetCommandsAreASubsetOfCommands(t *testing.T) {
+	const roomTargetCommandCount = 3
+	if len(roomTargetCommands) != roomTargetCommandCount {
+		t.Errorf("roomTargetCommands has %d entries, want %d: a change to the set of @who commands has to be "+
+			"looked at, not slipped in", len(roomTargetCommands), roomTargetCommandCount)
+	}
+	for word := range roomTargetCommands {
+		if _, ok := commands[word]; !ok {
+			t.Errorf("roomTargetCommands has %q and commands does not, so `@who /%s` dispatches through a nil "+
+				"function", word, word)
+		}
+	}
+}
+
+// A mention in front of one of claude's own commands still reaches the agent: it
+// is not a Wake target-command, so mentionCommand declines and the draft is sent
+// as a message. `@sydney /clear` clearing claude's context is the case this
+// keeps working while `@sydney /color` is claimed.
+func TestAMentionedClaudeCommandStillReachesTheAgent(t *testing.T) {
+	fresh(t)
+	conn, sent := pipeClient(t)
+	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(160, 30).showRoom()
+
+	_, cmd := typeAndSubmit(a, "@sydney /clear")
+	go func() { _ = runCmdQuietly(cmd) }()
+	f := awaitFrame(t, sent)
+
+	if f.Kind != rpc.FrameSend {
+		t.Fatalf("@sydney /clear wrote a %q frame, want a send: claude's own /clear must reach the agent", f.Kind)
+	}
+	if f.SessionID != "s2" || f.Text != "/clear" {
+		t.Errorf("@sydney /clear reached %q with %q, want sydney (s2) with %q", f.SessionID, f.Text, "/clear")
 	}
 }
 

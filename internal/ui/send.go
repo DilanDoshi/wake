@@ -236,6 +236,18 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 			return next, cmd
 		}
 	}
+	// A room mention can also aim a Wake target-command: `@thea /color green` is
+	// `/color @thea green`. Gated on r.mentioned - a leading @name that resolved
+	// to a live fleet member, the one route mention mode decides - so it fires for
+	// exactly the single agent the command can act on. @all is a broadcast and the
+	// manager is the service rather than a mention, so both fall through to an
+	// ordinary send. The direct reading (configureRoute) so that in open mode the
+	// command still aims at the one named rather than widening a knob.
+	if r.mentioned {
+		if next, cmd, ok := a.mentionCommand(r.Resolved, r.configureRoute().Text); ok {
+			return next, cmd
+		}
+	}
 	a = a.clearDraft()
 	for _, id := range r.Targets {
 		a.fleet = a.fleet.sending(id, false)
