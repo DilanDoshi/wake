@@ -169,6 +169,14 @@ type Composer struct {
 	// Claude Code labels its own input. Empty draws an unlabelled border.
 	title string
 
+	// bar is the pre-rendered info line drawn between the target and the legend
+	// - where this session is, what it runs as, how full it is. The composer
+	// only places it: the pane builds it, because it reads the filesystem and a
+	// draw-loop read is what geometry.go exists to keep off this path. Empty
+	// draws no line, like target. Already styled and width-clipped by statusBar,
+	// so it is placed verbatim rather than re-measured here.
+	bar string
+
 	// taWidth is the width handed to the text area, kept because measuring the
 	// draft needs a second text area laid out identically and Model.Width
 	// reports the content width rather than the one SetWidth was given.
@@ -331,6 +339,12 @@ func (c Composer) View(width int) string {
 	if c.target != "" {
 		rows = append(rows, " "+AccentStyle.MaxWidth(width-hintIndentWidth).Render(c.target))
 	}
+	// The info bar above the legend: what this session is, over what a key does.
+	// Placed flush-left and verbatim - statusBar already truncated it to width,
+	// so it fits, and it carries its own SGR that a second measure would cut.
+	if c.bar != "" {
+		rows = append(rows, c.bar)
+	}
 	// The mode is withheld from a blurred pane: it is the one legend entry that
 	// reads as a claim about the pane rather than about the keys, and the keys
 	// are somewhere else. See modeFormat.
@@ -481,6 +495,9 @@ func (c Composer) draftRows(bound int) int {
 
 // WithTitle names the pane this composer belongs to.
 func (c Composer) WithTitle(t string) Composer { c.title = t; return c }
+
+// WithBar sets the pre-rendered info line drawn between the box and the legend.
+func (c Composer) WithBar(bar string) Composer { c.bar = bar; return c }
 
 // Focused says whether this composer is the one keystrokes reach.
 //
