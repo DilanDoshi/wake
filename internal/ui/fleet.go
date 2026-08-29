@@ -100,6 +100,14 @@ type Agent struct {
 	// backdating it to the zero time.
 	startedAt time.Time
 
+	// doneAt and turnDur are when the last turn finished and how long it ran,
+	// captured at the working→idle edge so a DM can draw its done line - `✻ Cooked
+	// for 1m 59s · done 6:48 PM` - once the agent is idle. Zero until a turn this
+	// client saw start has finished; a gap forgets them with the rest. See
+	// doneLine and DM.heartbeat.
+	doneAt  time.Time
+	turnDur time.Duration
+
 	Tool    string
 	ToolArg string
 
@@ -295,6 +303,13 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 			// record. Clearing only at the end carried the parked turn's figure
 			// into it and every turn after.
 			a.TurnTokens, a.turnDone, a.turnCur = 0, 0, 0
+		}
+		// The working→idle edge: a turn this client watched start has finished, so
+		// record when and for how long - what the DM's done line reads. Only with a
+		// start to measure from; an agent already working when we attached has a
+		// zero startedAt and gets no done line rather than one dated to 0001.
+		if s.State == rpc.StateIdle && turnInFlight(a.State) && !a.startedAt.IsZero() {
+			a.doneAt, a.turnDur = clock(), clock().Sub(a.startedAt)
 		}
 		a.State, a.QuietMS = s.State, s.QuietMS
 		// Only when the report has one. The event stream is the fresher
@@ -576,6 +591,7 @@ func (f Fleet) ForgetTurns() Fleet {
 	for id, a := range f.agents {
 		a.Tool, a.ToolArg, a.Doing = "", "", ""
 		a.TurnTokens, a.turnDone, a.turnCur, a.startedAt = 0, 0, 0, time.Time{}
+		a.doneAt, a.turnDur = time.Time{}, 0
 		f.agents[id] = a
 	}
 	return f

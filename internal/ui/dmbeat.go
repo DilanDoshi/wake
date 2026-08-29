@@ -1,0 +1,37 @@
+package ui
+
+// The line a DM draws above its composer: the working spinner while a turn is in
+// flight, and the done summary once it has finished. Split from dm.go, which was
+// a handful of lines under the hard maximum when the done line arrived - the same
+// subject-split panedraw.go took. The line itself is beat.go's workingLine and
+// doneLine; this is only which of them a DM shows, and the one row that costs.
+
+import "github.com/DilanDoshi/wake/internal/rpc"
+
+// heartbeat is the line above the composer: the working line while a turn is in
+// flight, the done line once it has finished, or "" for an agent that has done
+// nothing this client saw. Drawn at the transcript's width so it lines up with
+// the prose above it.
+func (d DM) heartbeat() string {
+	if d.Agent.State == rpc.StateWorking {
+		return workingLine(d.SessionID, d.Agent.State, d.Agent.Doing, d.Agent.startedAt, d.Agent.TurnTokens, d.blockWidth())
+	}
+	if d.showsDone() {
+		return doneLine(d.SessionID, d.Agent.startedAt, d.Agent.doneAt, d.Agent.turnDur, d.blockWidth())
+	}
+	return ""
+}
+
+// showsDone is whether the idle agent has a finished turn to summarise. Gated to
+// idle: a parked or ended agent's standing is in the title, and a blocked one is
+// still owed a turn.
+func (d DM) showsDone() bool {
+	return d.Agent.State == rpc.StateIdle && !d.Agent.doneAt.IsZero()
+}
+
+// hasBeat is whether the pane draws the line above the composer at all - the one
+// row baseChrome and SetSize must both account for, or the pane is sized a row
+// out and the alt screen scrolls on every draw.
+func (d DM) hasBeat() bool {
+	return d.Agent.State == rpc.StateWorking || d.showsDone()
+}

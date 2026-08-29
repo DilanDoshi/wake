@@ -160,3 +160,39 @@ func workingLine(id, state, doing string, started time.Time, tokens, width int) 
 	}
 	return heartbeatLine(word, turnAge(state, started), tokens, width)
 }
+
+const (
+	// doneGlyph opens the done line: the settled asterisk, static, because the
+	// turn is over and nothing about it is animating.
+	doneGlyph = "✻"
+
+	// doneClock is how the done time is written - Claude Code's own "6:48 PM".
+	doneClock = "3:04 PM"
+
+	// doneFor is what sits between the word and the elapsed clause.
+	doneFor = " for "
+
+	// doneMeta heads the done time, the working line's own separator.
+	doneMeta = metaSep + "done "
+)
+
+// doneLine is the line a DM shows once a turn has finished: `✻ Cooked for 1m 59s
+// · done 6:48 PM`, dim and static. "" when nothing has finished (doneAt zero).
+//
+// The word is held for the finished turn by seeding on its start, the way the
+// working word is - so it does not change while the line stands. The elapsed
+// clause is kept and the done-time dropped when the width is tight, which is
+// boundedShimmerLine's rule without the shimmer: the turn is not alive, so
+// nothing here pulses, and the whole line recedes as chrome about a past turn.
+func doneLine(id string, started, doneAt time.Time, dur time.Duration, width int) string {
+	if doneAt.IsZero() || width < 1 {
+		return ""
+	}
+	head := doneGlyph + " " + doneWord(turnSeed(id, started)) + doneFor + elapsedText(dur)
+	meta := doneMeta + doneAt.Format(doneClock)
+	head = ansi.Truncate(head, width, ellipsis)
+	if width-ansi.StringWidth(head) < ansi.StringWidth(meta) {
+		meta = ""
+	}
+	return HintStyle.Render(head + meta)
+}

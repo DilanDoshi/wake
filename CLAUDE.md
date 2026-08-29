@@ -339,6 +339,21 @@ the glance, so it leans on the word and drops the tokens; the words are Wake's o
 pool in `internal/ui/roomwords.go`, short because the room shows exactly one at a time. The head
 still shimmers; `roomWorkingWord` keeps an agent's own `activeForm` when it wrote one.
 
+**A DM's working line becomes a done line rather than vanishing.** When a turn finishes the row above
+the composer stops being the spinner and reads `✻ Cooked for 1m 59s · done 6:48 PM` — a past-tense
+word, the turn's duration, and the wall-clock time it landed — static and dim, because the turn is
+not alive and nothing about it animates. It stands until the next turn (which shows the spinner
+again) or a park, an end or a gap that forgets it. **DM only**: the room is the glance and draws many
+agents, so a per-agent done line there is noise. The word pool is Wake's own past-tense list
+(`internal/ui/donewords.go`), authored for the same reason `heartbeatwords.go` argues and shorter for
+the reason it is longer — the done line is one agent's own in its DM, never thirty side by side. The
+duration and the done time are **captured at the working→idle edge** in `applyStatus` onto
+`Agent.doneAt`/`turnDur`, not derived live: an agent already working when this client attached has a
+zero `startedAt` and gets no line rather than one dated to the zero time, and a gap clears them with
+`ForgetTurns`. `DM.hasBeat` is the one predicate `baseChrome` and `SetSize` both count the row by —
+it is the working line's row that stays occupied through the done line, so the transition costs no
+height change, the alt-screen hazard `DM.chrome` exists for.
+
 **Every ordinary exit is a key the Update loop reads, so the emergency one is a byte read before it.**
 ⌃Q parks the fleet and quits, ⌃O then ↵ detaches, ⌃C parks one agent — all three are `tea.KeyMsg`,
 and all three are gone the moment the loop is what has stopped. It can be: `Update` calls `View`,
@@ -855,6 +870,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | What the turn in flight has produced | `internal/core/protocol.go` — `turnTokensEvent`, off `message_delta`'s usage · `internal/ui/fleet.go` — `Agent.TurnTokens`, summed as the turn runs and cleared when it ends. **Never added to `Agent.Tokens`**, which is every *completed* turn: the result frame restates the same tokens |
 | The palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json`, maintained by hand (asserted by `palette_test.go`) |
 | The working line, and the one ticker | `internal/ui/heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `beat.go` — start at `beat.go` for the cost argument, and for `roomWorkingLine`, the same line for a surface with many agents on it · `roomwords.go` — the room's own minimal `✻ Sailed for 49s` (`roomHeartbeatLine`) and its past-tense nautical-and-dawn pool, drawn without the DM's token clause |
+| The DM's done line, once a turn finishes | `internal/ui/beat.go` — `doneLine` (`✻ Cooked for 1m 59s · done 6:48 PM`, static and dim) · `internal/ui/donewords.go` — the Wake-authored past-tense pool · `internal/ui/dmbeat.go` — `DM.heartbeat` (working line or done line), `showsDone`, `hasBeat` (the one row `baseChrome`/`SetSize` count) · `internal/ui/fleet.go` — `Agent.doneAt`/`turnDur`, captured at the working→idle edge |
 | An answer as it is written | `internal/core/protocol.go` — `partialEvent` · `wire.go` — `wireStreamEvent` · `internal/ui/partial.go` — start there for the cost argument, and `partial_bench_test.go` for the numbers |
 | A dispatch's lifecycle, decoded | `internal/core/task.go` (Wake's vocabulary) · `protocol.go` — `taskUpdate` · `vocabulary.go` — `taskPhases`, `taskKinds`, `taskStatuses` |
 | What a conversation has dispatched | `internal/ui/tasks.go` — the fold, pure, and `named` (the ending frame does not say what ended) · `taskline.go` — the line an ending leaves in the transcript. The running subagents are drawn in the **right sidebar** (`rostersubs.go`), not a list under the pane — the pane space is the task board (`checklistpin.go`) |
