@@ -33,12 +33,8 @@ const (
 	thinkingLabel   = "✻ thinking"
 	permissionLabel = "⚠ permission request"
 	rateLimitLabel  = "⚠ rate limit:"
-	// No arrow: a KindSessionReset names no successor, so there is nothing
-	// for one to point at. It used to point at new_conversation_id, which
-	// was never the id the session continued under.
-	sessionResetLabel = "⟲ session reset"
-	compactedLabel    = "⟲ context compacted"
-	deniedLabel       = "⊘ permission denied"
+	compactedLabel  = "⟲ context compacted"
+	deniedLabel     = "⊘ permission denied"
 
 	// interruptedLabel replaces Claude's own abort wording, which arrives on a
 	// frame indistinguishable from a user turn. It is muted rather than warned
@@ -358,8 +354,6 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		// did until now: leave an ask on screen that nobody will ever
 		// answer.
 		return mutedLine(withdrawnLabel, w)
-	case core.KindSessionReset:
-		return mutedLine(sessionResetLabel, w)
 	case core.KindRateLimit:
 		return noticeBlock(ev, w)
 	case core.KindSystem:

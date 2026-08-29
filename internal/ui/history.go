@@ -75,12 +75,20 @@ func (a App) takeHistoryAsks() (App, tea.Cmd) {
 //
 // Also dropped if the conversation has gone: ⌃W keeps the transcript, so this
 // is a DM that was never opened, or one whose client reattached mid-flight.
+//
+// And dropped if the ask was invalidated - a /clear blanks the pane and drops
+// its ask (observe), so a pre-clear reply still in flight lands with the DM
+// back at the empty count the ask recorded at open. The count alone would then
+// read "nothing arrived since" and prepend the pre-clear transcript, resurrecting
+// history the model no longer has. Membership, not the count, is what tells the
+// two apart, so the drop is keyed on whether the ask still stands. See clear.go.
 func (a App) historyArrived(f rpc.Frame) App {
 	dm, ok := a.dms[f.SessionID]
 	if !ok || len(f.Events) == 0 {
 		return a
 	}
-	if dm.events.len() != a.askedHistory[f.SessionID] {
+	held, asked := a.askedHistory[f.SessionID]
+	if !asked || dm.events.len() != held {
 		// Forgotten as well as dropped, so the next open asks again. Without
 		// this the drop is permanent: opening a conversation with a working
 		// agent is the ordinary case at 15-30 agents, and any single event in
