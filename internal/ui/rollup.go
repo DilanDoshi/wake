@@ -71,16 +71,25 @@ func (d DM) exempt(ev core.Event) bool {
 }
 
 // foldExempt marks a tool call the rollup keeps out of a run rather than folding
-// into a count, because its list is live status, not the activity the fold hides.
-// Two shapes carry a list: a legacy TodoWrite carries its whole list as
-// `Todos`, and it still draws that list whole as its own block; a
-// TaskCreate/TaskUpdate carries the op as `Checklist`, and it is the board pinned
-// above the composer, drawing nothing in the transcript (eventBlock). Both break
-// the run around them either way. A TaskCreate/TaskUpdate is exempt on the op
-// alone - a restored one arrives with no snapshot - and its result carries no op,
-// so it inherits this through the stored call (see exempt).
+// into a count. Two reasons, not one.
+//
+// **Live status.** A legacy TodoWrite carries its whole list as `Todos` and
+// still draws that list whole as its own block; a TaskCreate/TaskUpdate carries
+// the op as `Checklist`, and it is the board pinned above the composer, drawing
+// nothing in the transcript (eventBlock).
+//
+// **The change itself.** An edit carries its before/after as `Diff`, and the
+// diff is the point of the edit - folding it into `1 tool use · 1 edit` hides
+// exactly what changed, on the DM, the surface §9 promises "full +/-" diffs in.
+// So an edit draws whole by default rather than only under ⌃E or a click (owner's
+// 2026-08-28 request). A no-op edit carries a `Diff` too and draws its bare
+// header, which is rare and harmless.
+//
+// All three break the run around them either way. A checklist op and a diff are
+// carried by the *use*; a result carries neither of its own, so it inherits this
+// through the stored call (see exempt).
 func foldExempt(tool *core.ToolCall) bool {
-	return len(tool.Todos) > 0 || tool.Checklist != nil
+	return len(tool.Todos) > 0 || tool.Checklist != nil || tool.Diff != nil
 }
 
 // expandedRun reports whether a run is drawn as its per-call blocks: either the

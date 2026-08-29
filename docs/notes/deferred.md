@@ -36,6 +36,25 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment
+
+`feat/dm-diff-rendering` made an `Edit`/`Update` draw its diff whole in the DM pane rather than fold
+into a `1 tool use · 1 edit` rollup (see `decisions.md`, 2026-08-28). It keys on `core.ToolDiff`,
+which `core.toolDiff` builds from a **top-level** `old_string`/`new_string`. `MultiEdit` carries
+neither at the top level — its hunks are nested in an `edits` array — so its `Diff` is nil, it stays
+folded, and none of the feature reaches it: no diff, no confirmation suppression. This is pre-existing
+(the diff change did not touch `toolDiff`), but `MultiEdit` is the common multi-hunk tool and Claude
+Code does render its diff, so it is worth closing.
+
+**The work** is representing several hunks as a diff. A `MultiEdit` applies its edits sequentially to
+one file, so the honest rendering is one diff block **per hunk** (each `edits[i].old_string` →
+`edits[i].new_string`) under one `⏺ MultiEdit(path)` header, not a single `ToolDiff{Old,New}` — which
+means `core` growing a `[]ToolDiff` (or the airlock unwrapping the array) and `toolblocks.go` drawing
+each. Bounded by `render.MaxDiffLines` across all hunks, the way one edit already is. No recording is
+needed — the input shape is the documented `MultiEdit` schema — but a fixture would earn the decode.
+
+---
+
 ## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿`
 
 **Asked for in this version.** When an agent's question is answered, the yellow `● ‹agent› › has a
