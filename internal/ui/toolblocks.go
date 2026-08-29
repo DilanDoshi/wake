@@ -50,11 +50,20 @@ func toolHeadline(tool *core.ToolCall, bullet lipgloss.Style, width int) string 
 // result answers, or nil for one whose call this pane never saw - which
 // degrades to a plain fold rather than guessing at a receipt.
 func toolResultBlock(ev core.Event, call *core.ToolCall, expanded bool, width int) string {
+	failed := ev.Tool != nil && ev.Tool.IsError
+	// A successful edit's result is pure confirmation - "the file has been
+	// updated" - and the diff drawn above it (foldExempt) with the ⏺ now green
+	// already say so. Drawing it is the boilerplate Claude Code omits. Append
+	// settles the bullet before an empty body returns (dm.go), so this loses
+	// nothing. A *failed* edit's result is the error and must show.
+	if call != nil && call.Diff != nil && !failed {
+		return ""
+	}
 	r := render.Result{
 		Body:      ev.Text,
 		Collapsed: !expanded,
 		Expand:    expandKey,
-		Failed:    ev.Tool != nil && ev.Tool.IsError,
+		Failed:    failed,
 	}
 	if call != nil {
 		r.Receipt = call.Receipt

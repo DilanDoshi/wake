@@ -484,6 +484,56 @@ func TestEditToolRendersADiff(t *testing.T) {
 	assertHides(t, d, 60, 20, "- alpha") // unchanged lines stay out of the diff
 }
 
+// An edit shows its diff by default, without ⌃E or a click. The diff is the
+// point of the edit, and folding it into a `1 tool use · 1 edit` count hides
+// exactly what changed - so a diff-carrying call draws whole the way a checklist
+// does, out of the run rather than into its tally. Owner's 2026-08-28 request.
+func TestEditShowsItsDiffWithoutExpanding(t *testing.T) {
+	d := NewDM("s1", "alex").SetSize(60, 20).
+		Append(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{
+			ID:      "t1",
+			Name:    "Edit",
+			Display: "auth.go",
+			Diff:    &core.ToolDiff{Old: "alpha\nbravo\ncharlie", New: "alpha\nBRAVO\ncharlie"},
+		}})
+
+	assertShows(t, d, 60, 20, "- bravo")
+	assertShows(t, d, 60, 20, "+ BRAVO")
+	// And it is not hidden behind a folded rollup count.
+	assertHides(t, d, 60, 20, "1 tool use")
+}
+
+// A successful edit's result is pure confirmation - "the file has been updated" -
+// which the diff and the green ⏺ already carry, so it is not drawn, the way
+// Claude Code omits it. A *failed* edit still shows its result, because that is
+// the error the operator has to read.
+func TestASuccessfulEditHidesItsConfirmationResult(t *testing.T) {
+	forceColour(t)
+	updated := "The file auth.go has been updated successfully. (file state is current in your context — no need to Read it back)"
+	d := NewDM("s1", "alex").SetSize(70, 20).
+		Append(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{
+			ID: "t1", Name: "Edit", Display: "auth.go",
+			Diff: &core.ToolDiff{Old: "alpha\nbravo", New: "alpha\nBRAVO"},
+		}}).
+		Append(result("t1", updated, false))
+
+	assertShows(t, d, 70, 20, "+ BRAVO")          // the diff still shows
+	assertHides(t, d, 70, 20, "has been updated") // the confirmation does not
+	// The bullet still settles green even though its result drew nothing.
+	if head := headerRow(t, d); !strings.Contains(head, escFor(t, Success)) {
+		t.Errorf("a successful edit whose result was suppressed never settled: %q", head)
+	}
+
+	// A failed edit shows its result - that is the error.
+	f := NewDM("s2", "bob").SetSize(70, 20).
+		Append(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{
+			ID: "t2", Name: "Edit", Display: "auth.go",
+			Diff: &core.ToolDiff{Old: "alpha\nbravo", New: "alpha\nBRAVO"},
+		}}).
+		Append(result("t2", "String to replace not found in file.", true))
+	assertShows(t, f, 70, 20, "String to replace not found")
+}
+
 // render.Diff has no cap of its own, and its prefix/suffix trim turns two
 // scattered edits in a large file into a hunk spanning everything between them
 // — here, 1582 styled lines for a change of two.

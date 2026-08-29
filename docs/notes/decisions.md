@@ -70,6 +70,55 @@ the arrows to walk the menu; nothing here touches that.) `internal/ui/completion
 
 ---
 
+## 2026-08-28 — an edit shows its diff by default, and its "updated" confirmation is dropped
+
+Owner, comparing the DM pane to Claude Code: when an agent updates a file, the diff should be
+visible without pressing ⌃E or clicking, the way Claude Code shows it.
+
+**The diff was already correct; it was hidden.** Wake renders an edit's diff from the tool's own
+input (`old_string`/`new_string` → `core.ToolDiff` → `render.Diff`), with no file read — the diff is
+free, off the wire. But a lone tool call folds into a `1 tool use · 1 edit` rollup by default, so the
+diff sat behind an expand. The fix is one predicate: `foldExempt` (rollup.go) now returns true for a
+call carrying a `Diff`, so an edit breaks the run and draws whole — the exact mechanism a
+`TaskCreate`/`TaskUpdate` checklist already used, for the same reason (the block is the point, not the
+count). A run's other tools (reads, bashes) still fold around it.
+
+**And a successful edit's result is dropped.** The exempt edit surfaced its result body — `The file X
+has been updated successfully. (file state is current in your context — no need to Read it back)` —
+which is pure confirmation the diff and the now-green ⏺ already carry, and which Claude Code omits. So
+`toolResultBlock` returns "" for a result whose call carries a `Diff` **and did not fail**; `Append`
+settles the bullet before an empty body returns (dm.go), so nothing is lost. A **failed** edit still
+shows its result, because that is the error the operator has to read. The suppression is not stored —
+the empty block is dropped from `d.events` — so it is **irreversible**: even ⌃E does not bring the
+confirmation back. That is a small tension with ⌃E's "reveal what was folded" contract and the right
+call anyway, because the line it hides is boilerplate nobody expands to read.
+
+**Two things were deliberately left out.** *Line numbers* — the 382/383 gutter in Claude Code's own
+diff — are **not on the wire**: the edit input carries only the before/after text (no file position),
+and the result is the bare "updated" line above (no `cat -n` snippet; Claude Code's UI numbers from
+file state it keeps, which Wake by design does not). Showing them would mean reading the edited file
+from disk at draw time, which the "cheap to leave open / owns almost no state" non-negotiables push
+against and which is fragile (later edits shift the lines). Owner chose to leave them out.
+*Renaming `Edit` → `Update`* (Claude Code's display label) was also left out: it is core's tool
+vocabulary, "Edit" is not wrong, and doing it right means verifying Claude Code's whole display
+mapping (Edit/Write/MultiEdit) against a recording rather than guessing.
+
+**`MultiEdit` gets none of this today, and that is a recorded gap rather than a decision.**
+`core.toolDiff` reads a *top-level* `old_string`/`new_string`, which `Edit` and `Update` carry;
+`MultiEdit` nests its hunks in an `edits` array and carries neither at the top level, so its `Diff`
+is nil, `foldExempt` is false, and a `MultiEdit` still folds into `1 tool use · 1 multiedit` — and
+because `diffBlock(nil)` is "", it shows **no diff even when expanded**, which is the sharper half of
+the gap. So after this change a single `Edit` shows a rich inline diff by default while `MultiEdit`,
+the common multi-hunk tool, shows a folded count with nothing behind it — a visible asymmetry, stated
+here so it reads as a known limit rather than an oversight. (`Write` carries no before/after either,
+so it too draws no diff — correctly, a created file has no "before".) Pre-existing (this change did
+not touch `toolDiff`); representing several hunks as a diff is the work, and `deferred.md` carries it.
+`internal/ui/rollup.go`'s `foldExempt`, `internal/ui/toolblocks.go`'s `toolResultBlock` (which the
+subagent-forwarded transcript shares, so a subagent's own successful edit is suppressed there too),
+`dm_test.go`.
+
+---
+
 ## 2026-08-16 — the emergency quit, and why no key could have been one
 
 Reported by the owner: Wake froze inside **cmux**, the screen went completely static, and neither a
