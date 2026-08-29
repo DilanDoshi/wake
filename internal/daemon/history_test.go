@@ -51,6 +51,44 @@ func assistantLine(text string) string {
 }
 
 // The conversation comes back, in order, with both sides of it.
+// A restored conversation must not show the effort probe. Wake issues a bare
+// /model itself and suppresses the reply live, but both lines are on disk, so
+// the reader drops the pair - the command and the "Current model:" answer -
+// leaving every real turn. Safe because an operator's bare /model is
+// intercepted by internal/ui and never sent, so any /model on disk is a probe.
+func TestHistoryDropsTheEffortProbePair(t *testing.T) {
+	plantTranscript(t, histID,
+		userLine("run the tests"),
+		assistantLine("the tests"),
+		userLine("/model"),
+		assistantLine("Current model: Opus 5 (1M context) (effort: xhigh)"),
+		userLine("what next"),
+		assistantLine("done"),
+	)
+
+	events, err := History(histID)
+	if err != nil {
+		t.Fatalf("History: %v", err)
+	}
+	for _, ev := range events {
+		if strings.TrimSpace(ev.Text) == "/model" {
+			t.Error("the probe command survived into the restored transcript")
+		}
+		if core.IsModelReply(ev.Text) {
+			t.Error("the probe reply survived into the restored transcript")
+		}
+	}
+	want := []string{"run the tests", "the tests", "what next", "done"}
+	if len(events) != len(want) {
+		t.Fatalf("read %d events, want %d (a real turn was dropped with the probe): %+v", len(events), len(want), events)
+	}
+	for i, w := range want {
+		if events[i].Text != w {
+			t.Errorf("event %d is %q, want %q", i, events[i].Text, w)
+		}
+	}
+}
+
 func TestHistoryReadsTheConversationInOrder(t *testing.T) {
 	plantTranscript(t, histID,
 		userLine("what is left"),
