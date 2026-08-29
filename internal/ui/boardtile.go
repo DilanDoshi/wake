@@ -186,10 +186,7 @@ func joinTilesRow(cells []string) string {
 // edge, its state and what it is doing (or saying) in the body, and its
 // subagent count. The body is built to exactly height-2 rows - the border owns
 // the other two - so the box is exactly `height` tall and the grid stays
-// regular; titledBox itself never constrains height. This holds for height >= 3
-// (the box's own minimum: two borders and a row); a shorter cell only occurs on
-// a terminal too small to use the board, where View's firstRows clips the frame
-// so an oversize tile cannot scroll the alt screen.
+// regular; titledBox itself never constrains height.
 func (a App) tile(ag Agent, width, height int, cursored bool) string {
 	boxStyle := TextStyle
 	switch {
@@ -223,38 +220,34 @@ func (a App) tile(ag Agent, width, height int, cursored bool) string {
 // one `lines` element, and titledBox's Width(edge) word-wraps either one into a
 // second physical row the moment it is wider than the tile's edge.
 //
-// The state line and the subagent count are the two framing lines; the middle
-// - a live tail while the agent works, else a fallback detail line - fills only
-// `mid`, the rows left between them. Budgeting the middle rather than only the
-// tail is what keeps the subagent count, appended last, off the row padRows
-// drops: at a small cell the detail line used to ignore the budget and crowd it
-// out. `lines` holds one physical row per element, so padRows sizes by rows.
+// The tail fills the rows between the state line and the subagent count. It is
+// cut to that budget here - the newest rows kept - so the subagent line, which
+// is appended last, is never the row padRows drops when a big tail overruns.
 func (a App) tileBody(ag Agent, width, rows int) string {
 	inner := max(width-boxFrameWidth, 1)
 	lines := []string{HintStyle.Render(ansi.Truncate(labelOf(ag.State), inner, ellipsis))}
 
-	if mid := max(rows-2, 0); mid > 0 {
-		if t := a.tails[ag.ID].sized(inner); ag.State == rpc.StateWorking && t.text != "" {
-			tl := tailLines(t.view, inner)
-			if len(tl) > mid {
-				tl = tl[len(tl)-mid:] // the newest rows that fit
+	tailRows := max(rows-2, 0) // the rows left once the state and subagent lines are placed
+	if ag.State == rpc.StateWorking {
+		if tail := a.tails[ag.ID].sized(inner); tail.text != "" {
+			tl := tailLines(tail.view, inner)
+			if len(tl) > tailRows {
+				tl = tl[len(tl)-tailRows:]
 			}
 			lines = append(lines, tl...)
 		} else if d := boardDetail(ag); d != "" {
 			lines = append(lines, ansi.Truncate(oneLine(d), inner, ellipsis))
 		}
+	} else if d := boardDetail(ag); d != "" {
+		lines = append(lines, ansi.Truncate(oneLine(d), inner, ellipsis))
 	}
 
-	// The subagent count fits whenever the cell has room for a second framing
-	// line; below that (a one-row body) only the state line is drawn.
-	if rows >= 2 {
-		subs := len(a.fleet.RunningTasks(ag.ID))
-		word := "subagents"
-		if subs == 1 {
-			word = "subagent"
-		}
-		lines = append(lines, ansi.Truncate(fmt.Sprintf("⤷ %d %s", subs, word), inner, ellipsis))
+	subs := len(a.fleet.RunningTasks(ag.ID))
+	word := "subagents"
+	if subs == 1 {
+		word = "subagent"
 	}
+	lines = append(lines, ansi.Truncate(fmt.Sprintf("⤷ %d %s", subs, word), inner, ellipsis))
 	return strings.Join(padRows(lines, rows), "\n")
 }
 
