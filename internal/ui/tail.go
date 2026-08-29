@@ -38,11 +38,7 @@ func (a App) foldTail(sessionID string, ev core.Event) App {
 	}
 	switch ev.Kind {
 	case core.KindPartialText:
-		// The tile tail retains up to maxTileTailRows so a big cell fills with
-		// output, where the DM preview keeps maxPreviewRows.
-		p := a.tails[sessionID]
-		p.rowCap = maxTileTailRows
-		return a.withTail(sessionID, p.add(ev.Text))
+		return a.withTail(sessionID, a.tails[sessionID].add(ev.Text))
 	case core.KindAssistantText, core.KindTurnEnd:
 		if a.tails[sessionID].text == "" {
 			return a

@@ -4910,13 +4910,6 @@ that keep it a status wall rather than the multiplexer the non-negotiables refus
 `docs/superpowers/plans/2026-08-27-tiled-board.md` for the implementation plan. The narrowed ruling
 itself is also recorded in `docs/notes/decisions.md` and in `internal/ui/board.go`'s header.
 
-**Extended, 2026-08-28 — the grid fills the window.** The first cut drew a fixed grid of tiny
-seven-row tiles, so a big terminal showed many small boxes rather than a few big ones. `tileGridFor`
-now picks a near-square grid and stretches each cell to fill both axes, paging a fleet too big to
-fit at the minimum cell size; guardrail 2's live-tail cap was relaxed from the DM preview's three
-rows to the cell's own body (bounded to `maxTileTailRows`), with the owner's approval. See the
-2026-08-28 amendment in `decisions.md` and the guardrail rewrite in the design spec.
-
 ## 2026-08-27 — feature idea, owner's ask: several group chats inside one fleet, not one room per fleet
 
 **The ask:** more than one group chat within a single Wake instance — separate room surfaces the

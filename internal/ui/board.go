@@ -41,12 +41,12 @@ package ui
 //
 //  1. View-only. No keystroke reaches an agent's stdin from a tile; keys
 //     drive the board itself (move, jump in, park, close).
-//  2. Bounded live tail, no scrollback. A tile shows live text bounded to its
-//     own body (at most maxTileTailRows kept per agent) and nothing you can
-//     scroll back through - the tail lives in App.tails (tail.go), gated on
-//     Tiled so a closed or row-mode board holds none of it.
-//  3. Fixed grid, no per-tile resize, no pane tree. Equal cells sized to fill
-//     the frame, no divider to drag, no split, no nesting.
+//  2. Bounded live tail, no scrollback. A tile shows at most maxPreviewRows
+//     of live text and nothing you can scroll back through - the tail lives
+//     in App.tails (tail.go), gated on Tiled so a closed or row-mode board
+//     holds none of it.
+//  3. Fixed grid, no per-tile resize, no pane tree. Equal cells, no divider
+//     to drag, no split, no nesting.
 //  4. Act from it, never in it. ↵ and click leave the wall for the agent's
 //     real DM rather than working inside the tile.
 //
@@ -202,7 +202,7 @@ func (a App) stepBoard(dir tileDir) App {
 	cur := a.boardCursor(agents)
 	var at int
 	if a.board.Tiled {
-		at = tileNav(cur, a.boardTileGrid(len(agents)).cols, len(agents), dir)
+		at = tileNav(cur, tileColumns(a.layout.Width), len(agents), dir)
 	} else {
 		switch dir {
 		case tileUp:
@@ -243,23 +243,25 @@ func (a App) boardMouse(m tea.MouseMsg) (App, tea.Cmd) {
 // view's boardChromeRows rule, in two dimensions.
 func (a App) boardHit(x, y int, agents []Agent) int {
 	if a.board.Tiled {
-		g := a.boardTileGrid(len(agents))
-		start := tileWindowStart(a.boardCursor(agents), len(agents), g.cols, g.rows)
+		cols := tileColumns(a.layout.Width)
+		cellW := tileCellWidth(a.layout.Width, cols)
+		rowsVisible := max((a.paneHeight()-boardChromeRows-1)/tileHeight(), 1)
+		start := tileWindowStart(a.boardCursor(agents), len(agents), cols, rowsVisible)
 		// The row view's own line < 0 check, taken before the division: Go
 		// truncates integer division toward zero rather than flooring, so
-		// (y-boardChromeRows)/g.cellH on the title row (y==0) computes 0 rather
-		// than a negative row, and a click there would have resolved to the
-		// first tile instead of nothing.
+		// (y-boardChromeRows)/tileHeight() on the title row (y==0) computes 0
+		// rather than a negative row, and a click there would have resolved to
+		// the first tile instead of nothing.
 		line := y - boardChromeRows
 		if line < 0 {
 			return -1
 		}
-		r := line / g.cellH
-		c := x / (g.cellW + tileGap)
-		if r < 0 || r >= g.rows || c < 0 || c >= g.cols {
+		r := line / tileHeight()
+		c := x / (cellW + tileGap)
+		if r < 0 || r >= rowsVisible || c < 0 || c >= cols {
 			return -1
 		}
-		return start + r*g.cols + c
+		return start + r*cols + c
 	}
 	// Row view: bounded to the drawn window before the offset is added -
 	// Roster.At's rule. Without the upper bound a click on the key line, the
