@@ -33,8 +33,9 @@ just one, **click** its folded pointer.
 Expanding returns you to the newest line. That is the same thing a width change does, for the same
 reason: the lines a scroll position points at have renumbered underneath it.
 
-`↑↓` are Claude Code's prompt-history keys and Wake's roster keys, and Wake's do not move — so the
-history is on the same two arrows with `⌥` held. A conversation's history is the conversation:
+`↑↓` are Claude Code's prompt-history keys; here they move the query cursor when the draft you are
+typing is multi-line, and the roster cursor otherwise (an empty or single-line query). So prompt
+history is on the same two arrows with `⌥` held, where it never collides with either. A conversation's history is the conversation:
 Wake keeps no prompt file, it reads the user turns already in the pane, and a pane filled from
 claude's own transcript has a history the first time you open it. The room's history is what you
 typed into the room, mention and all.
@@ -46,7 +47,7 @@ typed into the room, mention and all.
 | `⇥` | Move the keys between the room and the conversations open beside it |
 | `⇧⇥` | Cycle the permission mode of the agent the roster has selected: `default` → `acceptEdits` → `plan` → `auto`, the same four Claude Code walks |
 | `⌃X` | Jump to the next blocked agent |
-| `↑↓` | Move the roster cursor — which is what the three open keys below read |
+| `↑↓` | Move the query cursor when the draft is multi-line; otherwise move the roster cursor — which is what the three open keys below read |
 | `⌃D` | Open the selected agent **into the focused pane** |
 | `⌃Y` | Open the selected agent in a **new column** |
 | `⌃B` | Open the selected agent **below** the focused pane |
@@ -85,7 +86,8 @@ is why they are not in the legend under the composer. The menu names them itself
 | `⇥` | Take the highlighted completion — otherwise `⇥` moves the keys between panes as usual |
 | `⌃N` `⌃P` | Move down and up the list |
 
-`↑↓` and `↵` are **not** among them: the arrows stay the roster's, and enter stays send.
+`↑↓` and `↵` are **not** among them: the menu never claims the arrows or enter — they keep their
+usual jobs (the roster or, in a multi-line draft, the query cursor; enter still sends).
 
 Move the cursor off that word — or type a space — and all three go back to the text area, where `⌃N`
 and `⌃P` are how you move between the lines of a multi-line draft.
@@ -146,7 +148,7 @@ of the shipped `claude` binary — one nobody has ruled on is a build failure ra
 | `⌃B` | Background the running task | Open the picked agent below the focused pane — `⌃W` closes it |
 | `⌃E` | Show the whole transcript / edit a custom theme / expand a confirmation's explanation | Expand this conversation's tool results. The first of those is the same meaning on both sides, reached by accident |
 | `⇧⇥` | Cycle the permission mode | Cycle the permission mode of the agent the roster has selected. The closest thing here to an alignment |
-| `⌃N` `⌃P` | Walk its own footer list | Walk the dispatch list, or the completion menu while one is open — **the same job on both sides.** Claude Code binds `up`/`⌃P` and `down`/`⌃N` for it; Wake can have the second pair and not the first, because `↑↓` are the roster's and open the sidebar as they move |
+| `⌃N` `⌃P` | Walk its own footer list | Walk the dispatch list, or the completion menu while one is open — **the same job on both sides.** Claude Code binds `up`/`⌃P` and `down`/`⌃N` for it; Wake can have the second pair and not the first, because `↑↓` are the roster's — except when they move the query cursor in a multi-line draft — and open the sidebar as they move |
 
 ## Shadowed keys
 

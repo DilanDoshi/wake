@@ -175,7 +175,8 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		model, cmd := a.submit()
 		return model, cmd, true
 	case tea.KeyUp:
-		// **⌥↑ walks the prompt history and the bare arrow moves the roster.**
+		// **⌥↑ walks the prompt history, and the bare arrow is the query cursor
+		// or the roster.**
 		//
 		// Same trap as ⌥↵ below: this switch is on m.Type alone and bubbletea
 		// reports ⌥↑ as KeyUp with Alt set, so without this arm the roster
@@ -184,10 +185,20 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if m.Alt {
 			return a.walkPrompts(1)
 		}
+		// The composer takes ↑ when the draft has a row above the cursor to
+		// move into; only an empty, single-line, or top-of-draft cursor falls
+		// through to the roster. Returning not-taken lets Update feed the key to
+		// the focused composer and rebuild the menu after. See Composer.CanCursorUp.
+		if a.composer().CanCursorUp() {
+			return a, nil, false
+		}
 		return a.pickAgent(-1), nil, true
 	case tea.KeyDown:
 		if m.Alt {
 			return a.walkPrompts(-1)
+		}
+		if a.composer().CanCursorDown() {
+			return a, nil, false
 		}
 		return a.pickAgent(1), nil, true
 	case tea.KeyCtrlD:
