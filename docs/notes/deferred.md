@@ -36,6 +36,49 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance
+
+**Asked for in this version.** A "done" indicator in the right sidebar (the roster) so the operator
+scanning a fleet can see which agents have **finished the requested task**, distinct from ones still
+working or merely between turns.
+
+**The hard part is that "done" is not a thing Claude Code's wire says.** Wake's states are derived in
+`internal/daemon/agent.go`'s `stateLocked` — `idle`, `working`, `blocked`, `silent`, `ended`,
+`parked`, `orphaned` — drawn by `roster.go`'s `stateGlyph` (`● ◐ ○ ◌ · ! ▪`, a bijection with the
+`rpc` states, test-guarded) and counted by `awareness.go`'s `stateLabel`. **`idle` already means
+"turn finished, nothing owed"** (`!a.owed`), but that is *not* "done with the task": an agent goes
+idle between turns of a long job exactly as it does when genuinely finished, and no `result`/turn-end
+frame distinguishes the two. So "done" cannot be read off a turn ending — the naive version would just
+relabel `idle`, which is wrong the moment a task takes more than one turn.
+
+**The one real "done" signal already in the tree is the task checklist.** `TaskCreate`/`TaskUpdate`
+items going all-`completed` is the agent's *own* declaration that its self-tracked plan is finished —
+a semantic signal, per-agent, already decoded (`internal/ui/checklist.go`; `status` is
+`pending|in_progress|completed`). An "all items completed" derivation (which `checklist.go` does not
+expose yet) is the strongest driver for a done glyph. Caveat: not every agent keeps a checklist (it is
+off unless `CLAUDE_CODE_ENABLE_TASKS`), so it is a signal *when present*, not a universal one.
+
+**Candidate approaches (none decided):**
+- **Derive "done" client-side from the checklist** — all items `completed` → a "done" annotation on the
+  roster row (and an `N done` segment in the awareness strip). Lightest: no new `rpc.State`, so it does
+  not ripple through the state machine or the totality guards (`parkStates`, `forkParentStates`, …)
+  that derive their domain from `stateLocked`.
+- **A real `done` daemon state** — "more real," but a new state is a build failure until every guard
+  and both glyph/label maps rule on it; and it still needs a *source* of truth, which lands back on the
+  checklist (or a turn-end, which is the ambiguous signal above). Probably not worth the ripple for a
+  display judgment.
+- **Operator-marked done** — a manual toggle the operator flips once they have reviewed an agent's
+  output. Unambiguous and cheap, but manual; best as a complement, not the primary signal.
+
+**Design decision to make first:** is "done" a **lifecycle state** (heavy: touches `stateLocked`, the
+glyph bijection, the awareness counts, and the fork/park/rename totality guards) or a **client-side
+roster annotation** derived from the checklist (light: no wire change)? Lean annotation — "done" is a
+display judgment over signals Wake already has, not a new thing an agent's process *is*.
+
+*Related:* the awareness strip's `N need you` (the same at-a-glance surface, other end of the
+lifecycle), the notification-ping entry (being *told* when an agent needs you or finishes), and the
+attention ranking. *Blocks:* nothing broken; a legibility improvement for the fleet operator.
+
 ## CI MEMORY, 2026-08-29 — `make ci` OOMs on the fleet machine because unfunded Actions makes all gating local
 
 **Seen while merging PRs #10–#17 into `main` on a machine also running a ~12-agent fleet.** `make ci`
