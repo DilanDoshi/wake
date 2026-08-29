@@ -273,6 +273,11 @@ func TestAFreshlyOpenedConversationCanBeSelectedAtOnce(t *testing.T) {
 // while the stored transcript keeps the height the last geometry gave it. So
 // the fence is measured off the draw - a menu's own rows are chrome, and a
 // press on one of them used to anchor a card's height into the conversation.
+//
+// The composer's own draft row is in this loop too, and takes nothing here only
+// because the drag (x 10..30) lands on the blank past the three-character "/re"
+// - the box's typed text *is* selectable with a menu open, which
+// TestAComposerSelectionWorksWhileAMenuIsPinnedAboveIt covers.
 func TestADragOnAMenuPinnedOverTheComposerTakesNothing(t *testing.T) {
 	a := splitApp(t, 200, 40, 40).withDraft("/re")
 	if !a.completionUp() {

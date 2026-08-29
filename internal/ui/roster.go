@@ -329,7 +329,7 @@ func (r Roster) subStyle(agentID string, t Task) lipgloss.Style {
 }
 
 // headStyle is the whole of what a row says in colour: where the cursor is,
-// and who is stopped waiting for you.
+// who is stopped waiting for you, and which agent this is when /color named one.
 //
 // Everything else is ordinary text. A sidebar in which every row is emphasised
 // has emphasised nothing, and the states that are not blocked are already
@@ -343,17 +343,36 @@ func (r Roster) subStyle(agentID string, t Task) lipgloss.Style {
 // while the cursor is on one of its subagents - which is what ⌃C and ⎋ read -
 // so without that clause both rows wear the accent and the sidebar shows two
 // selections with nothing saying which one a key is about.
+//
+// # Blocked wins, then the cursor keeps the identity hue it used to hide
+//
+// Opening a conversation makes its agent the selected row (panes.go), so a
+// coloured agent's row spent most of its life under the cursor - and the cursor
+// used to win outright, drawing the accent and hiding the hue the operator set.
+// So a coloured row keeps its hue under the cursor and shows the selection as
+// **bold** instead; an uncoloured row still takes the accent, which is the whole
+// cursor tell it ever had.
+//
+// Blocked is checked first, so a "waiting for you" is never painted over - by
+// the accent, as it was before this reorder, or by an identity hue that reads
+// far less urgent than warn. The selection rides along as bold when the blocked
+// row is also the cursor, so nothing is lost by giving warn the top slot.
 func (r Roster) headStyle(a Agent) lipgloss.Style {
+	style, colored := identityStyle(a.Color)
+	selected := r.Selected != "" && a.ID == r.Selected && r.SelectedTask == ""
 	switch {
-	case r.Selected != "" && a.ID == r.Selected && r.SelectedTask == "":
-		return AccentStyle
 	case a.State == rpc.StateBlocked:
+		if selected {
+			return warnStyle.Bold(true)
+		}
 		return warnStyle
+	case selected:
+		if colored {
+			return style.Bold(true)
+		}
+		return AccentStyle
 	default:
-		// The identity hue lives in the default arm alone: the cursor's accent and
-		// a blocked agent's warn are state, and state has to win - a coloured row
-		// nobody can see is selected, or is blocked, is worse than a grey one.
-		if style, ok := identityStyle(a.Color); ok {
+		if colored {
 			return style
 		}
 		return TextStyle

@@ -66,12 +66,12 @@ An agent is a headless `claude` process in stream-json mode with a Wake-assigned
 | `--debug-file <name>` · `--debug <categories>` | Per-session debug logging, so one agent of thirty can be diagnosed. **The wire carries a name and the daemon owns the directory** — `filepath.Dir(socket)/debug/<name>.log`, beside `mcp.json` and `parked.json` — because a path on the wire is a file anything that can dial the socket could choose. `--debug` only narrows the categories and is refused without a file: on its own it writes no log anywhere that can be read |
 | `wake status` · `wake stop` | What is running; end everything (irreversible) |
 | `wake fleets` · `--fleet <name>` | The fleets, and which one a verb is addressed to. `--fleet default` is the reserved word for the **unnamed** fleet at `~/.wake` - every fleet that existed before fleets did is that one, so without it a whole existing Wake would be reachable only through `$WAKE_SOCKET`. Only a bare `wake` makes a new fleet; every other verb with no `--fleet` still means the unnamed one. **Several fleets can run in one directory** — each is a directory under `~/.wake/fleets/` holding its own socket, and every other per-fleet file is `filepath.Dir(socket)` plus a name, so isolation is the layout rather than a rule anything enforces. A bare `wake` is the unnamed fleet at `~/.wake/`, unchanged. `$WAKE_SOCKET` still wins, and naming a fleet beside it is refused rather than one being ignored |
-| Room keys | `↵` send, open the picked agent, or confirm an armed detach · `esc` interrupt (clears the draft in the room; leaves answer mode while a card is taking one) · `esc esc` clear a conversation's draft, or — idle and empty — open a rewind picker to an earlier prompt · `↑↓` pick agent · `⌥↑↓` walk this pane's prompt history · `⌃O` arm detach — `↵` leaves, a second `⌃O` cancels · `⌃C` park focused · `⌃Q` park all & quit · **`⌃C⌃C` or `⌃Q⌃Q` emergency quit** — read off the tty *before* Bubble Tea, so it is the one exit that still works when the window has stopped drawing · `⇥` focus · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→↑↓` move the keys to the pane that way · `⌥↵`/`⌃J` newline · `⌃F` fork · `⌃D` open here · `⌃Y` open in a new column · `⌃B` open below · `⌃W` close pane · `⌃E` expand tool results, or the room's folded responses (a click opens one) |
+| Room keys | `↵` send, open the picked agent, or confirm an armed detach · `esc` interrupt (clears the draft in the room; leaves answer mode while a card is taking one) · `esc esc` clear a conversation's draft, or — idle and empty — open a rewind picker to an earlier prompt · `↑↓` move the query cursor when the draft has a row to move into, else pick agent · `⌥↑↓` walk this pane's prompt history · `⌃O` arm detach — `↵` leaves, a second `⌃O` cancels · `⌃C` park focused · `⌃Q` park all & quit · **`⌃C⌃C` or `⌃Q⌃Q` emergency quit** — read off the tty *before* Bubble Tea, so it is the one exit that still works when the window has stopped drawing · `⇥` focus · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→↑↓` move the keys to the pane that way · `⌥↵`/`⌃J` newline · `⌃F` fork · `⌃D` open here · `⌃Y` open in a new column · `⌃B` open below · `⌃W` close pane · `⌃E` expand tool results, or the room's folded responses (a click opens one) |
 | Slash commands | `/resume`, `/new` (optionally `--worktree <name>`, `--add-dir <dir>`, `--debug-file <name>`, `--debug <categories>`, `--max-budget-usd <usd>`, `--fallback-model <m,m>`), `/name`, `/task`, `/color`, `/adopt`, `/mcp`, `/manager`, `/manager-stop`, `/board` (`⇥` toggles a tiled live wall, view-only, while the board is up) — everything else is passed to the agent byte for byte |
-| `/color` | Sets an agent's identity hue — one of seven named colours — so its turns in the room, its status bar and its roster row are told apart by more than name text. `/color <colour>` or `/color @who <colour>`; `/color none` clears. A session attribute that survives a park. **The word is Claude's own** (its theme command, advertised on 71 corpus inits); Wake claims it on the owner's 2026-08-27 override rather than the corpus rule — `slashguard_test.go`'s `ownerClaimedCommands`, retired if a recording ever shows Claude's headless `/color` is a redirect |
+| `/color` | Sets an agent's identity hue — one of seven named colours — so its turns in the room, the composer it types into, and its roster row are told apart by more than name text. **The status bar deliberately does not take the hue** — it recedes as chrome. `/color <colour>` or `/color @who <colour>` — and **`@who /color <colour>` from the room** works too, since the mention is the target (the same bridge `/name` and `/task` take). `/color none` clears. In the roster the hue **survives the cursor**: an open agent's row is the selected one, so the selection shows as bold rather than the accent hiding the colour. A session attribute that survives a park. **The word is Claude's own** (its theme command, advertised on 71 corpus inits); Wake claims it on the owner's 2026-08-27 override rather than the corpus rule — `slashguard_test.go`'s `ownerClaimedCommands`, retired if a recording ever shows Claude's headless `/color` is a redirect |
 | `/manager` | The switch: starts one when there is none, wakes a parked one, parks a running one. A command rather than a key — see `internal/ui/slash.go` for why every remaining chord is worse than a legend slot |
 | `/manager-stop` | The ending, where `/manager` only parks: `rpc.FrameStop`, so the name goes back to the pool and the next `/manager` starts a fresh one. Refuses a **parked** manager (a stop reaches only a session with a process) and refuses when there is none |
-| Inline completion | A draft whose word **at the cursor** starts a `/command` or an `@` offers what could finish it: Wake's own commands, then the ones the target session advertised on its `init`, then live agent names and paths under that session's directory. **Behind a resolved lone `@name`, only that agent's own commands** — Wake's fleet verbs are not the addressed agent's, and now number the whole bound, so leaving them in would push the agent's below the fold. `⇥` completes · `⌃N`/`⌃P` walk · `↵` still sends. Move the cursor off that word and all three go back to the text area |
+| Inline completion | A draft whose word **at the cursor** starts a `/command` or an `@` offers what could finish it: the target session's own commands **and skills** (both ride in `init.slash_commands`), then Wake's own commands, then live agent names and paths under that session's directory. **The session's come first** (owner's 2026-08-28 override): Wake's twelve verbs filling the bound first was a bare `/` that never showed the operator's own Claude Code skills — they sat in the "N more" overflow. Wake's follow, still reached by their first letters and shown whole whenever the session advertises fewer than the bound. **Behind a resolved lone `@name`, only that agent's own** — Wake's fleet verbs are not the addressed agent's. `⇥` completes · `⌃N`/`⌃P` walk · `↵` still sends. Move the cursor off that word and all three go back to the text area |
 | A lone `@name` in the room | **narrows the group chat to that agent's thread** — their lines, the manager's, every broadcast, and your own messages to them — for as long as it is the composer's target, widening again when the target changes or the draft clears. A *view* filter over the room's own, not a route or a mode: it adds no key, `@john hi` still routes and `@john /effort` still configures, open mode does not narrow (it widens the message, not the view), and the pane header reads `group chat › @john` |
 | Bare `/effort` · `/model` | Wake draws the menu claude cannot draw headless; with an argument they pass through untouched |
 | A dispatch ending | Leaves one line in the conversation — `● Subagent "Counting lines" finished · 24s` — coloured by outcome. The `⏺ Agent(…)` tool call above it is the start marker, so there is no started line |
@@ -80,7 +80,7 @@ An agent is a headless `claude` process in stream-json mode with a Wake-assigned
 | An answer being written | A conversation shows the block as it is generated, under the transcript and above the working line. A preview, never a record — the completed block replaces it |
 | The task board | The `TaskCreate`/`TaskUpdate` checklist an agent keeps for itself — its steps, with the one in flight marked — is **pinned above the composer** where Claude Code draws it, folded live from the ops. The ops draw nothing in the transcript: the board is the one place the list shows, and it shrinks when items are deleted. A subagent's own list draws inline in its dispatch transcript, since a subagent has no board of its own |
 | `!cmd` | A bounded shell line whose output lands in the conversation |
-| The mouse | Wheel scrolls the pane under the pointer · click focuses · drag a divider to resize · **drag across text to select it, and the release copies it** · **click a folded tool result to open that one**, which is the gesture Claude Code spends the same way · **click a run's rollup line to open that whole run** |
+| The mouse | Wheel scrolls the pane under the pointer · click focuses · drag a divider to resize · **drag across text to select it, and the release copies it** — in the transcript *and* in the query box, where a drag over what you typed highlights and copies it · **click a folded tool result to open that one**, which is the gesture Claude Code spends the same way · **click a run's rollup line to open that whole run** |
 | A folded tool run | A message's tool calls draw as one dimmed line — `28 tool uses · 24 bash · 1 read · 3 linear-server` — the way Claude Code shows a turn's activity rather than every ⏺ and ⎿. `⌃E` opens every run in the conversation; a **click** on one rollup opens that run alone, and `⌃E` folds everything back. A `TaskCreate`/`TaskUpdate` draws nothing in the transcript at all — its checklist is live status, not activity, so it is the **task board pinned above the composer** rather than a block or a count |
 
 ## Non-negotiables
@@ -183,6 +183,18 @@ screen), and it reaches the terminal through the **one writer Bubble Tea draws t
 must embed `*os.File`, or termenv stops recognising a terminal and the whole app silently loses its
 colour. `cmd/wake/selectscreen_unix_test.go` is the only thing that can see that happen.
 
+**The query box is selectable too, and it is the transcript's own rule one surface over.** A drag on
+a draft row highlights the typed characters and the release copies them; the border, the `> ` prompt
+and lipgloss's trailing pad are all stripped off, so only what you typed reaches the clipboard. The
+geometry is fixed by `theme.BoxStyle` and the prompt rather than measured — text starts
+`composerTextLeft` columns in and stops `composerRightInset` short of the far edge — and it is
+**gated to the text**: an empty box, the blank past a short line, and the chrome above the box (the
+menu, the preview, the working line, the borders) all take nothing, which is what preserves the old
+fence that a query-bar drag must never clamp into a transcript line. Unlike the transcript it does
+not scroll under a drag — the box is a handful of rows, all on screen. `internal/ui/composersel.go`
+is the whole of it; the highlight is drawn by `DM`/`Room.View` through `highlightComposerBlock`, and
+`cmd/wake/selectscreen_unix_test.go` proves a real drag lands a background on the typed cells.
+
 **The grid keys are letters because two prior answers were unpressable, in two different ways.**
 `⇧↵` and `⌃⇧↵` are what was asked for and bubbletea v1.3.10 names neither — probed in both the Kitty
 CSI-u and xterm `modifyOtherKeys` encodings, and neither produces a `KeyMsg` — while a terminal with
@@ -206,6 +218,26 @@ that is the whole difference from `⇥`, which walks the chat ring and will open
 is off screen, and it is why a direction with no pane in it names `⇥` instead of wrapping. A wrap in
 a two-pane grid makes `⇧←` and `⇧→` the same key. `ui.Grid.Toward` is the pure half and returns
 `(id, ok)` because `""` is both the room and "nothing that way".
+
+**Plain `↑↓` move the query cursor when the draft can take it, and the roster otherwise.** `←→` have
+always reached the text area; `↑↓` were the roster's unconditionally, so a multi-line draft had no
+way to move the cursor between its own lines. Now `App.key` asks the focused composer first:
+`Composer.CanCursorUp`/`CanCursorDown` run bubbles' own `CursorUp`/`CursorDown` on a *copy* of the
+text area and report whether the cursor actually moved — the same move `App.key` delegates to, so the
+two can never disagree. It is a simulated move rather than a row count on purpose: bubbles' `wrap`
+adds a synthetic trailing row at exact wrap width (its `>=`) that `LineInfo.Height` counts but the
+cursor cannot occupy, so a count-based predicate reported a move `CursorDown` never makes and
+**swallowed `↓`** — moving neither the cursor nor the roster (found by the Codex adversarial pass;
+pinned by `TestCanCursorMatchesRealMovementAcrossWidths`, which sweeps widths and lengths across the
+exact-width boundary). When the cursor has somewhere to go the arrow falls through to the composer
+(Update rebuilds the completion menu after, `App.recompleted`); only an empty, single-line, or
+top/bottom-edge cursor reaches `pickAgent`, which is why an empty or single-line query keeps its
+roster nav and the common case is unchanged. **The roster stays on plain `↑↓`, not a new chord**, because there is no free arrow family
+for it: on macOS `⌃`+arrow and `⌃⇧`+arrow never arrive (the rule above), `⌥↑↓` is prompt history and
+`⌥←→` is word-movement, and `⇧`+arrow is *pane* movement — which is why panes did **not** move onto
+`⌃⇧`+arrow when this was asked for. The legend keeps `{"↑↓","pick agent"}`: the label is still true in
+the empty/single-line case and cursor movement is a composer fall-through the legend never advertises,
+so the bijection guard is untouched. `internal/ui/keys.go`, `internal/ui/composer.go`.
 
 **Wake shares a keyboard with Claude Code, and nothing of Wake's moves for it.** An operator arrives
 with Claude Code's reflexes, and several chords mean something else here.
@@ -236,7 +268,7 @@ the press aimed at *detach*, decided by socket timing. So the legend swaps `↵ 
 that survives every truncation. It adds **no legend glyph**, for `escape.go`'s reason. A drawn
 *question* card still wins ↵ and takes the arm back, which is the cheap way round: `chooseCursored`
 writes no frame. Full argument: `internal/ui/detach.go`. **Prompt history is
-`⌥↑↓`** rather than `↑↓`, which stay the roster's: the history is *derived* from the pane's own
+`⌥↑↓`** rather than `↑↓`, which are the query cursor or the roster: the history is *derived* from the pane's own
 events, so it works on a reattach and on a conversation this client has never opened, and the room's
 is what was typed into the room. `⌥`+letter was measured and rejected — it vanishes under a Kitty
 keyboard protocol (`keyprobe_test.go`).
@@ -536,7 +568,9 @@ landing further from the pointer the further back the reader had scrolled, becau
 reads those same rows as "the drag has left the bottom edge" and scrolls one line per motion message.
 `App.transcriptRows` sizes the menu-carrying copy through the draw's own `SetSize` and reads the
 height back, so the two cannot disagree; `startSelection` fences the anchor on it and keeps it as
-`App.selRows`. Two rulings hold it together. **The anchor is taken before the keys move** — `refocus`
+`App.selRows`. Below that fence a press now falls to `startComposerSelection` rather than being
+discarded — the query box's own draft rows take a selection, the chrome around them does not (see
+`composersel.go`). Two rulings hold it together. **The anchor is taken before the keys move** — `refocus`
 re-sizes the panes and a picker belongs to whichever pane holds them, so a measurement after it
 measures a frame nobody clicked. And **a drag's edge stays the window it was taken in**, which is
 `selTop`'s own rule: a motion message arrives per cell crossed, and re-rendering a pane's chrome on
@@ -658,17 +692,19 @@ route to a late attach, the same one `Effort` and `Budget` take. **It cannot dec
 per session and arrives after the first frame, while a draft is judged per keystroke — a menu may be
 wrong about a machine that has started nothing, a fence may not. The keys are `⇥` to complete and
 `⌃N`/`⌃P` to walk, read above `App.key`'s switch the way `cardKey` and `pickerKey` are, so they take
-no legend entry and the menu advertises them on itself. `↑↓` stay the roster's and `↵` stays send:
+no legend entry and the menu advertises them on itself. The menu never takes `↑↓` or `↵`:
 the menu arrives while somebody types rather than because they asked, so it may not give the one
 irreversible key a second meaning. It is rebuilt on a keystroke and on a fleet report and never per
 frame.
 
 **The menu belongs to a cursor and to a pane, and its directory read is not on the goroutine that
 draws.** All three were the trailing token of a string. **The cursor:** `⌃N`/`⌃P` shadow the text
-area's line keys and `↑↓` are unconditionally the roster's, so those two are the *only* vertical
-movement inside a multi-line draft — and a menu claimed by an `@` at the end of the buffer took them
-from every cursor position in it. A menu exists only while the cursor is at the end of the word it
-describes (`Composer.AtEnd`), which is what the "it costs one space" trade always claimed.
+area's line keys, so a menu claimed by an `@` at the end of the buffer would take them from every
+cursor position in it. A menu exists only while the cursor is at the end of the word it
+describes (`Composer.AtEnd`), which is what the "it costs one space" trade always claimed. Plain `↑↓`
+are the roster's only when the cursor cannot move within the draft (see below); because a menu is only
+up while the cursor is already at the end, `↑` there moves the cursor up — off the trailing token,
+closing the menu on the rebuild — while `↓` has nowhere to go and stays the roster's.
 **The pane:** `completion.pane` is the conversation it was built for, because two panes holding the
 same characters are not holding the same menu — two repositories with a `README.md` each completed
 one from the other, and that reference *resolves*. **The read:** `pathScanMax` bounds the entry count
@@ -822,7 +858,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | The two lists, extracted rather than typed | `scripts/extract-claude-flags.py` → `internal/core/testdata/claude-flags.json` · `testdata/stream/bare-model.jsonl` is the authority for the models |
 | Names, labels, roster, reaping, locking | `internal/daemon/names.go` · `label.go` · `roster.go` · `reap*.go` · `lock*.go` |
 | Rename and re-label | `internal/daemon/rename.go` · `internal/ui/rename.go` |
-| A per-agent identity colour | `internal/rpc/color.go` — `ColorNames`, `NormalizeColor` (the fence both sides apply) · `internal/daemon/color.go` — `setColor`, `colorSession` · `internal/ui/color.go` — `App.colorAgent` · `internal/ui/theme.go` — `identityColors`/`identityStyle` (Wake's own bolder set, not in `claude-palette.json`). Rendered by `speakerStyle` (room), `barStyle` (status bar) and `Roster.headStyle` (roster row). Survives a park via `parkedRecord.Color` |
+| A per-agent identity colour | `internal/rpc/color.go` — `ColorNames`, `NormalizeColor` (the fence both sides apply) · `internal/daemon/color.go` — `setColor`, `colorSession` · `internal/ui/color.go` — `App.colorAgent` · `internal/ui/theme.go` — `identityColors`/`identityStyle`/`identityColor` (Wake's own bolder set, not in `claude-palette.json`). Rendered by `speakerStyle` (room name-tag), `Composer.boxStyle`/`titleStyle` (the composer border and @name, set by the DM pane via `WithColor`) and `Roster.headStyle` (roster row, bold under the cursor). **The status bar does not take it** — `statusBar` recedes to `HintStyle` and `barKey` omits the colour. `@who /color` routing is the `mentionCommand` bridge in `internal/ui/slash.go`, dispatched from `sendRoom`. Survives a park via `parkedRecord.Color` |
 | MCP server exposed to the manager | `internal/mcp/` — `tools.go` (six tools, held to `managerScope` in both directions), `rollup.go`, `fleet.go`, `stateguard_test.go` |
 | Bubble Tea root model | `internal/ui/app.go` — start at `apply` |
 | What a fleet report does to the model | `internal/ui/report.go` — `applyStatus`, `noteEnding` |
@@ -831,7 +867,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Which conversations are on screen and where | `internal/ui/grid.go` — bounded: columns, each split once |
 | Pane focus, placement, and the DM ring | `internal/ui/panes.go` |
 | Frame layout, breakpoints, divider, mouse | `internal/ui/layout.go` · `appview.go` · `geometry.go` · `mouse.go` |
-| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) |
+| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) · `internal/ui/composersel.go` (the same, over the query box's own draft rows) |
 | The clipboard, in three layers | `internal/ui/clipboard.go` · `cmd/wake/output.go` — the writer Bubble Tea draws through, which **must** embed `*os.File` |
 | Sending: routes, echoes, one command per draft | `internal/ui/send.go` |
 | Dropping an image into the composer | `internal/ui/imagedrop.go` — `droppedImage` (the paste hijack, read at the top of `App.key`), `imageDropPaths` (shape only, no I/O), `readDroppedImages` (the off-goroutine read, sniff, base64), `imageDropped` (fold to a chip, or path back on failure) · `internal/ui/composerimage.go` — `Attach`, `Images` (only the chips still in the draft), `stripImageChips`. The wire shape is `core.ImageBlock` → `rpc.Frame.Images` → `EncodeUserMessage` (images first, text last) |
@@ -850,8 +886,8 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Walking back through what you typed | `internal/ui/prompts.go` — `⌥↑↓`, derived from the pane's own events |
 | Where Wake's keyboard collides with Claude Code's | `internal/ui/testdata/claude-keymap.json`, maintained by hand (asserted by `keymap_test.go`, which holds the eight accepted collisions and fails on a ninth) |
 | `⇧⇥`, the cycle, and the label | `internal/ui/mode.go` |
-| Fork · park · slash · new · starts · last-read | `internal/ui/fork.go` · `park.go` · `slash.go` · `new.go` · `starts.go` · `lastread.go` |
-| The two command kinds, and the fence | `internal/ui/slash.go` — `slash` (Wake-addressed) · `configure` (session-addressed) · `bareOnlyCommands` (+ `slashguard_test.go`) |
+| Fork · park · resume · slash · new · starts · last-read | `internal/ui/fork.go` · `park.go` · `resume.go` (`/resume` and the wake bookkeeping, split out when `slash.go` hit the 800 line max) · `slash.go` · `new.go` · `starts.go` · `lastread.go` |
+| The command kinds, and the fence | `internal/ui/slash.go` — `slash` (Wake-addressed) · `configure` (session-addressed, bare) · `mentionCommand`/`roomTargetCommands` (a room mention aiming a target-command, `@who /color`) · `bareOnlyCommands` (+ `slashguard_test.go`) |
 | The menu Wake draws | `internal/ui/picker.go` — drawn through `cards_blocks.go`'s `optionRow` |
 | The board: the fleet as one row per agent, or a tiled live wall | `internal/ui/board.go` — `/board`, an overview and never panes you *operate* (the owner's 2026-08-12 ruling, narrowed 2026-08-27 for the tile view); drawn instead of the grid, closed by any key it does not claim · `internal/ui/boardtile.go` — the tile render and grid geometry, toggled by `⇥` |
 | The tiled board's live tail | `internal/ui/tail.go` — `App.tails`, `withTail`, `foldTail`; one `partial` preview per agent, accumulated only while the board is up and tiled (`board.go`'s guardrail 2) |

@@ -177,6 +177,12 @@ type Composer struct {
 	// so it is placed verbatim rather than re-measured here.
 	bar string
 
+	// color is the identity hue /color gave this composer's agent, drawn into
+	// the border and the @name title so the box you type into is told apart by
+	// more than the name text. Set by the DM pane, which is one agent; empty for
+	// the room and for an uncoloured agent, both of which keep the accent.
+	color string
+
 	// taWidth is the width handed to the text area, kept because measuring the
 	// draft needs a second text area laid out identically and Model.Width
 	// reports the content width rather than the one SetWidth was given.
@@ -314,6 +320,20 @@ func (c Composer) Update(msg tea.Msg) (Composer, tea.Cmd) {
 // So it is run after the fit, from one seam, for both. The message matches
 // nothing in the type switch; repositionView is unconditional at the end of it.
 //
+// **The reposition runs at the bound, not at the fitted height.** fit sizes the
+// box to the draft's *content* rows, but a cursor sitting at the end of a row
+// the draft exactly filled is on the phantom next wrapped row - one past the
+// content. Repositioning against the fitted height then reads that phantom row
+// as below the box and scrolls the first line off to reach it, and because the
+// cursor then sits at the top of the scrolled view nothing ever scrolls back:
+// the first line was gone for good, intermittently, whenever a soft-wrap landed
+// exactly on the edge. Standing at the bound while repositionView runs keeps the
+// phantom row inside the box for any draft that fits, so it never scrolls; the
+// height is restored after, so the box still draws at its fitted size. This is
+// the grow-to-bound the typed-rune path skips before Update, moved to the one
+// seam both paths share. Above the bound - the cap - the tail still wins, which
+// is what keeps what is being typed on screen.
+//
 // **The render first is not redundant.** bubbles scrolls its viewport through
 // ScrollDown, which returns without doing anything while the viewport holds no
 // lines - and the lines are only ever set by rendering. So a reposition with
@@ -322,8 +342,11 @@ func (c Composer) Update(msg tea.Msg) (Composer, tea.Cmd) {
 // render per keystroke, which is work per change; View renders it again per
 // frame either way.
 func (c Composer) reposition() Composer {
+	fitted := c.ta.Height()
+	c.ta.SetHeight(c.bound())
 	_ = c.ta.View()
 	c.ta, _ = c.ta.Update(nil)
+	c.ta.SetHeight(fitted)
 	return c
 }
 
@@ -378,8 +401,20 @@ func (c Composer) box(width int) string {
 	if c.title != "" && edge > titleMinBorder {
 		lead = edge - lipgloss.Width(" "+ansi.Truncate(c.title, edge-titleMinBorder, ellipsis)+" ") - titleInset
 	}
-	top := titledEdge(b.TopLeft, b.Top, b.TopRight, c.title, edge, lead, rule, headerStyle)
+	top := titledEdge(b.TopLeft, b.Top, b.TopRight, c.title, edge, lead, rule, c.titleStyle())
 	return lipgloss.JoinVertical(lipgloss.Left, top, body)
+}
+
+// titleStyle draws the pane's @name in the top edge: its agent's identity hue
+// when /color gave it one, headerStyle's accent otherwise. Bold either way, the
+// way Claude Code labels its own input. Unlike the border below, it is not
+// dropped on blur - the title has always been drawn bold whether the pane holds
+// the keys or not, so a blurred coloured pane still names its agent in colour.
+func (c Composer) titleStyle() lipgloss.Style {
+	if style, ok := identityStyle(c.color); ok {
+		return style.Bold(true)
+	}
+	return headerStyle
 }
 
 // SetWidth lays the draft out for a pane this wide.
@@ -499,6 +534,11 @@ func (c Composer) WithTitle(t string) Composer { c.title = t; return c }
 // WithBar sets the pre-rendered info line drawn between the box and the legend.
 func (c Composer) WithBar(bar string) Composer { c.bar = bar; return c }
 
+// WithColor gives this composer its agent's identity hue, so the border and the
+// @name title draw in it. The DM pane sets it; the room does not, because the
+// room is not one agent. An empty or unknown name keeps the accent.
+func (c Composer) WithColor(name string) Composer { c.color = name; return c }
+
 // Focused says whether this composer is the one keystrokes reach.
 //
 // It changes how the box is drawn: the accent border, and the caret. Where a
@@ -525,11 +565,17 @@ func (c Composer) Focused(yes bool) Composer {
 	return c
 }
 
-// boxStyle is the border this composer draws: the accent when it has the keys,
-// and the ordinary pane border when another one does.
+// boxStyle is the border this composer draws: the receding pane border when
+// another pane has the keys, the agent's identity hue when /color gave it one,
+// and the shared accent otherwise. The hue is dropped on blur with the accent -
+// the border's whole job is answering "where do I type", and a blurred box is
+// not the answer whatever its colour.
 func (c Composer) boxStyle() lipgloss.Style {
 	if c.blurred {
 		return BoxStyle
+	}
+	if hue, ok := identityColor(c.color); ok {
+		return ComposerStyle.BorderForeground(hue)
 	}
 	return ComposerStyle
 }
@@ -554,6 +600,48 @@ func (c Composer) AtEnd() bool {
 	}
 	info := c.ta.LineInfo()
 	return info.StartColumn+info.ColumnOffset >= len([]rune(rows[last]))
+}
+
+// CanCursorUp reports whether ↑ would actually move the text cursor within the
+// draft, which is when App.key gives the arrow to the composer rather than the
+// roster. False for an empty or single-line draft, and false at the top row of
+// a multi-line or soft-wrapped one.
+//
+// It runs the move on a copy and compares the position rather than trusting
+// LineInfo's row count: bubbles' wrap adds a synthetic trailing row when a
+// line's width is exactly the wrap width (its `>=`), which Height counts but the
+// cursor cannot land on - so a count alone reports a move CursorUp does not make,
+// which swallows the arrow (moving neither the cursor nor the roster). Because
+// this is exactly the move App.key delegates to, the two can never disagree.
+func (c Composer) CanCursorUp() bool {
+	return c.cursorMoves((*textarea.Model).CursorUp)
+}
+
+// CanCursorDown is CanCursorUp's mirror for ↓.
+func (c Composer) CanCursorDown() bool {
+	return c.cursorMoves((*textarea.Model).CursorDown)
+}
+
+// cursorMoves applies a vertical move to a copy of the text area and reports
+// whether the cursor changed rows. The copy shares the read-only draft buffer
+// and the idempotent wrap cache by pointer but owns its own row and column, so
+// the probe never disturbs the live draft.
+func (c Composer) cursorMoves(move func(*textarea.Model)) bool {
+	probe := c.ta
+	before := cursorRow(probe)
+	move(&probe)
+	return cursorRow(probe) != before
+}
+
+// cursorRow is the cursor's vertical position: its logical line and the wrapped
+// row within that line. Deliberately not the column - at an edge bubbles'
+// CursorUp/CursorDown shuffles the column *within* a multi-rune grapheme (a
+// combining accent, a wide ZWJ sequence) without changing the row, and reading
+// that as a move would nudge the cursor into the middle of the glyph rather than
+// moving the roster. Vertical movement is exactly a change of row.
+func cursorRow(ta textarea.Model) [2]int {
+	info := ta.LineInfo()
+	return [2]int{ta.Line(), info.RowOffset}
 }
 
 // Mode is the permission mode this composer's legend names.

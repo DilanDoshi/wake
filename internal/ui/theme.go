@@ -76,11 +76,19 @@ var identityColors = map[string]lipgloss.AdaptiveColor{
 // has none or names a hue this build does not have. The caller draws its own
 // default on false, so an unknown colour never draws a wrong one.
 func identityStyle(name string) (lipgloss.Style, bool) {
-	c, ok := identityColors[name]
+	c, ok := identityColor(name)
 	if !ok {
 		return lipgloss.Style{}, false
 	}
 	return lipgloss.NewStyle().Foreground(c), true
+}
+
+// identityColor is the raw hue, for the one caller that wants the colour rather
+// than a foreground style: the composer paints it into a border, not text. Same
+// false as identityStyle, so an unknown colour falls back to the accent.
+func identityColor(name string) (lipgloss.AdaptiveColor, bool) {
+	c, ok := identityColors[name]
+	return c, ok
 }
 
 var (

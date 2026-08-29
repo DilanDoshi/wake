@@ -59,6 +59,68 @@ where a DM carries only a bar, so with both on screen the room's input box sits 
 conversation's. Their info bars and legends still align, which is what the eye follows;
 `cmd/wake/gridscreen_unix_test.go`'s `paneEdges` was taught the two box tops no longer share a row.
 
+## 2026-08-28 — the completion menu offers the session's own commands and skills first, Wake's verbs after
+
+Reported by the owner: typing `/` in a conversation, or `@thea /` in the room, did not surface the
+skills configured in Claude Code — "the /menu does not show the skills that I have configured in
+claude code."
+
+**The wire was never the problem, and that is the finding worth keeping.** An operator's skills ride
+in **`init.slash_commands`** — verified against a live init frame (v2.1.251, captured with a bare
+`/model` so `num_turns` was `0` and it cost nothing;
+`docs/superpowers/notes/2026-08-28-skills-in-slash-commands-findings.md`): a skill's name is in
+`slash_commands` beside the `.claude/commands` files, and it is *also* in a separate `skills` array —
+which in the probe was a **subset** of `slash_commands`. Wake already decodes `slash_commands` end to
+end (airlock → `SessionFacts.SlashCommands` → daemon report → `Agent.advertised`). So nothing had to
+be plumbed; **`skills` must *not* be decoded** — not merely because it is redundant, but because
+`slash_commands` is the list of what `/` actually invokes, and the `skills` array can hold names that
+are model-invoked only. Offering those from a `/` menu would be a lying completion. Trust the
+`/`-invocable list; the names are already in it.
+
+**What was actually wrong was the ordering, and the bound made it total.** `commandMenu` added
+Wake's twelve verbs *first*, then the session's advertised set, and `completionRows` is
+`max(8, len(wakeVerbs())) == 12`. So at a bare `/` the twelve Wake verbs filled the whole menu and
+**every** advertised command and skill was pushed into the "N more — keep typing" overflow, reachable
+only by typing past Wake's set. The reported symptom exactly: a menu of Wake's own verbs and no
+skills.
+
+**The ruling (owner's override of the old "Wake first" decision):** the session's own commands and
+skills come first, Wake's verbs after. The old order was defended as "a Wake command sorted among
+claude's is one nobody scrolls to" — but the menu does not scroll, it narrows by typing, and the cost
+of that defence was that the operator's own skills were the ones nobody ever saw at a bare slash.
+Wake's verbs follow, so a bare `/` shows them only while the session advertises fewer than the bound;
+past that they are an overflow away, and narrowing the draft brings a verb back once fewer than a
+menu's worth of commands still match what has been typed (`/re` drops the skills that do not start
+with those letters). This is what the lone-`@name` branch already did for the agent it addresses
+(`@iris /` shows only iris's own); it is now the rule on every path.
+
+**The accepted cost, stated plainly:** a session that advertises a full menu's worth (12+) now buries
+*all* of Wake's verbs in the "N more" overflow at a bare `/` — including `/new` and `/resume`, which
+claude's own CLI can never advertise and so have no discovery path *but* this menu. This is the mirror
+of the bug being fixed (the operator's skills were the invisible ones before; Wake's verbs can be now),
+and it is the deliberate call: the menu narrows by typing rather than scrolling, so `/n` and `/re`
+still reach them, and the operator who owns the fleet knows its own verbs where a new user would not
+know their skills were hidden. If it bites, the fix is a reserved floor for Wake's verbs or a taller
+bound — both considered and declined here in favour of the surgical reorder the owner asked for.
+The lone-`@name` branch is unchanged — it still shows only the addressed agent's own and no Wake
+verbs, because `@thea /command` is a command *for thea* and Wake's fleet verbs are not thea's.
+
+**The `@thea /` "doesn't pop up" half is the same cause seen from the other side, and it is
+expected.** That branch shows only thea's advertised set, which is `nil` until thea's first `init`
+(the list rides every turn's init, so a just-spawned agent that has taken no turn advertises nothing).
+Owner confirmed it is empty only when just-spawned; once thea takes a turn its skills appear. Left as
+is — a fallback to Wake's verbs there would re-introduce exactly the fleet verbs the branch exists to
+keep out of a command addressed to one agent.
+
+`completionRows` stays `max(8, len(wakeVerbs()))`: with Wake's verbs last the bound no longer
+guarantees they are all seen when a session advertises a menu's worth, but it still guarantees they
+fit when a session advertises none — the empty-menu case where the menu is only Wake's. The keys are
+untouched: `⇥` completes, `⌃N`/`⌃P` walk, `↑↓` stay the roster's. (The owner is separately remapping
+the arrows to walk the menu; nothing here touches that.) `internal/ui/completion.go`,
+`completion_test.go`'s `TestTheSessionsCommandsComeBeforeWakes`.
+
+---
+
 ## 2026-08-16 — the emergency quit, and why no key could have been one
 
 Reported by the owner: Wake froze inside **cmux**, the screen went completely static, and neither a

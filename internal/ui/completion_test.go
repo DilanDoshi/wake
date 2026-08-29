@@ -129,25 +129,52 @@ func TestOpenMentionModeStillCompletesTheOneAddressedAgent(t *testing.T) {
 	}
 }
 
-// And they come first, for the reason they have to be there at all: with 133
-// advertised commands behind them, a Wake command sorted in among claude's is a
-// Wake command nobody scrolls to.
-func TestWakesOwnCommandsComeBeforeClaudes(t *testing.T) {
+// The session's own commands and skills come first, so a bare `/` surfaces what
+// the operator configured in Claude Code - their skills and `.claude/commands` -
+// rather than burying every one of them behind Wake's twelve verbs. Owner's
+// 2026-08-28 override of the old "Wake first" ordering: skills ride in
+// `slash_commands`, so a menu that Wake's own verbs fill to the bound is a menu
+// in which the operator's skills are never seen at a bare slash.
+func TestTheSessionsCommandsComeBeforeWakes(t *testing.T) {
+	fresh(t)
+	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
+	// More advertised commands than the bound, so if Wake's verbs came first
+	// they would push every one of these into the overflow.
+	skills := []string{"deep-research", "dataviz", "code-review", "simplify",
+		"verify", "debug", "commit-push", "graphify", "learn", "plan",
+		"review", "test", "market-research", "product-lens"}
+	a = a.advertising("s1", skills...).withDraft("/")
+
+	got := a.completion.offers
+	if len(got) == 0 {
+		t.Fatal("`/` offered nothing at all")
+	}
+	if slices.Contains(wakeVerbs(), got[0]) {
+		t.Errorf("`/` offers Wake's %q first: the session's own skills must come first so a bare slash "+
+			"surfaces the operator's Claude Code skills rather than Wake's verbs. offers=%q", got[0], got)
+	}
+	if !slices.Contains(got, "/deep-research") {
+		t.Errorf("`/deep-research` is not visible at a bare slash: %q (%d more) - a skill the session "+
+			"advertised was pushed into the overflow behind Wake's verbs", got, a.completion.more)
+	}
+}
+
+// A word both Wake and the session advertise is offered once, whichever comes
+// first: `/effort`, `/model` and `/mcp` are claude's words Wake also claims, and
+// two identical rows is a menu the operator cannot choose between. The dedup
+// outlived the ordering reversal above.
+func TestAWordBothSidesAdvertiseIsOfferedOnce(t *testing.T) {
 	fresh(t)
 	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
 	a = a.advertising("s1", "model", "moo", "monkey").withDraft("/mo")
 
 	got := a.completion.offers
-	if len(got) == 0 {
-		t.Fatal("`/mo` offered nothing at all")
-	}
-	if got[0] != configureVerb(modelCommand) {
-		t.Errorf("`/mo` offers %q first, want %q: Wake claims the bare form of that word and the "+
-			"menu is where somebody learns it", got[0], configureVerb(modelCommand))
+	if !slices.Contains(got, configureVerb(modelCommand)) {
+		t.Errorf("`/mo` did not offer %q at all: %q", configureVerb(modelCommand), got)
 	}
 	if n := strings.Count(strings.Join(got, " "), configureVerb(modelCommand)+" "); n > 1 {
-		t.Errorf("%q offers the same word twice: claude advertises it too, and a menu with two "+
-			"identical rows is one the operator cannot choose between", got)
+		t.Errorf("%q offers the same word twice: claude advertises it and Wake claims its bare form, "+
+			"and a menu with two identical rows is one the operator cannot choose between", got)
 	}
 }
 

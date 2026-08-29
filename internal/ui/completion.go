@@ -15,20 +15,22 @@ package ui
 // frame is a comparison against the pane and the draft it was built for, which
 // is also what closes it.
 //
-// **`↑↓` stay the roster's and `↵` stays send.** ⇥ completes and ⌃N/⌃P walk,
-// all three read above App.key's switch the way cardKey and pickerKey are - so
-// they take no legend entry, and the menu advertises them on itself. The menu
-// arrives while somebody types rather than because they asked, so it may not
-// give the one irreversible key a second meaning.
+// **The menu never takes `↵`, and it never takes `↑↓`.** ⇥ completes and
+// ⌃N/⌃P walk, all three read above App.key's switch the way cardKey and
+// pickerKey are - so they take no legend entry, and the menu advertises them on
+// itself. The menu arrives while somebody types rather than because they asked,
+// so it may not give the one irreversible key a second meaning.
 //
 // ⌃N/⌃P shadow the text area's own line keys, and that shadow is why the menu
-// is scoped to the **cursor** rather than to the trailing token. ↑↓ are
-// unconditionally the roster's, so ⌃N/⌃P are the only way to move between the
-// lines of a multi-line draft - and a menu claimed by a `@` at the end of the
-// buffer took them from every cursor position in it, which is a draft with no
-// vertical movement at all. So a menu exists only while the cursor is at the
-// end of the word it describes: it costs one space - which closes the menu -
-// and it buys back both the arrows and the lines.
+// is scoped to the **cursor** rather than to the trailing token: a menu claimed
+// by a `@` at the end of the buffer would take ⌃N/⌃P from every cursor position
+// in it. So a menu exists only while the cursor is at the end of the word it
+// describes: it costs one space - which closes the menu - and it buys back the
+// walk keys and the text area's own line movement. Plain ↑↓ are the roster's
+// only when the cursor cannot move within the draft (keys.go). Because a menu is
+// only up while the cursor is already at the end of the draft, ↑ there moves the
+// cursor up - off the trailing token, closing the menu on the next rebuild -
+// while ↓ has nowhere to go and stays the roster's.
 
 import (
 	"fmt"
@@ -67,12 +69,12 @@ const (
 // number of commands Wake owns, whichever is larger.
 //
 // **Derived rather than picked, because the two are not independent.** The bound
-// is a layout fact and Wake's own verb count is a product fact, and they met when
-// the dispatch verbs landed: nine Wake commands into an eight-row menu cut one,
-// and the one cut was `/task`. A Wake command is the only kind claude cannot
-// advertise, so the menu is the only place it exists to be seen - which is the
-// same argument that already puts them first. A cut list is fine; a cut list that
-// loses them is not.
+// is a layout fact and Wake's own verb count is a product fact. Wake's verbs now
+// come *last* (commandMenu), so the bound no longer guarantees they are seen when
+// a session advertises a menu's worth of its own - but it still guarantees they
+// all fit when a session advertises none, which is the empty-menu floor and the
+// case where the menu is only Wake's. A cut list is fine; a cut list that is
+// nothing but a cut is not, which is why 133 matching commands is bounded at all.
 var completionRows = max(minCompletionRows, len(wakeVerbs()))
 
 // commandSet is one session's advertised commands, held behind a pointer so
@@ -113,8 +115,8 @@ type completion struct {
 	// Empty for a command, which is the whole draft by definition.
 	head string
 
-	// names is the half this goroutine can answer: Wake's own commands, the
-	// session's advertised ones, and the fleet's live names.
+	// names is the half this goroutine can answer: the session's advertised
+	// commands and skills, Wake's own commands, and the fleet's live names.
 	names []string
 
 	// paths is the `@` half, which is a directory read and so is not this
@@ -229,14 +231,24 @@ func (a App) addressees(typed string) []string {
 	return out
 }
 
-// commandMenu is Wake's own commands and then the session's advertised ones.
+// commandMenu is the session's advertised commands and skills, and then Wake's
+// own verbs.
 //
-// **Wake's come first**, and that is the ordering decision rather than an
-// artefact of the loop: `/resume` and `/new` are the commands claude cannot
-// advertise, so behind 133 of claude's they would be the only ones nobody ever
-// sees. Duplicates are dropped in that order too - `/effort`, `/model` and
-// `/mcp` are words claude advertises and Wake claims, and two identical rows is
-// a menu the operator cannot choose between.
+// **The session's come first**, owner's 2026-08-28 override of the old "Wake
+// first" ordering. An operator's skills ride in `slash_commands` - the list that
+// is what `/` actually invokes - beside their `.claude/commands`
+// (docs/superpowers/notes/2026-08-28-skills-in-slash-commands-findings.md), so
+// Wake's twelve verbs filling the bound first was a bare `/` that never showed
+// the operator's own Claude Code skills: they sat in the "N more" overflow,
+// reachable only by typing past Wake's set. The session's come first so a bare
+// slash surfaces them; Wake's verbs follow, so a bare `/` shows them only while
+// the session advertises fewer than the bound - past that they are an overflow
+// away, and narrowing the draft (`/re`) drops the advertised commands that do not
+// share the prefix, so a verb returns once fewer than a menu's worth still match.
+// This is what the lone-`@name` branch below has always done for the agent it
+// addresses - now the rule for every path. Duplicates are dropped in this order
+// too - `/effort`, `/model` and `/mcp` are words claude advertises and Wake
+// claims, and two identical rows is a menu the operator cannot choose between.
 func (a App) commandMenu(draft, head, word string) completion {
 	typed := strings.ToLower(configureVerb(word))
 	matched := make([]string, 0, completionRows+1)
@@ -260,11 +272,11 @@ func (a App) commandMenu(draft, head, word string) completion {
 		}
 		return completion{pane: a.focus, draft: draft, head: head, names: matched}
 	}
-	for _, verb := range wakeVerbs() {
-		add(verb)
-	}
 	for _, name := range a.completionAgent().advertised.words() {
 		add(configureVerb(name))
+	}
+	for _, verb := range wakeVerbs() {
+		add(verb)
 	}
 	return completion{pane: a.focus, draft: draft, head: head, names: matched}
 }

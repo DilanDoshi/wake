@@ -29,6 +29,13 @@ type selection struct {
 	// Without it, clicking a pane to read it expanded whatever run sat under the
 	// cursor - see clickedTool.
 	refocused bool
+
+	// inComposer marks a selection taken inside a pane's query box rather than
+	// its transcript. Its point.line is a draft-row index and point.col is a
+	// column into the typed text (0 is the first character after the "> "
+	// prompt), so the same marked/covers/selectedText machinery reads it. See
+	// composersel.go.
+	inComposer bool
 }
 
 // marked is a selection with its ends ordered, half-open in both axes.

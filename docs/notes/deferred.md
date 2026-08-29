@@ -36,6 +36,99 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance
+
+**Asked for in this version.** A "done" indicator in the right sidebar (the roster) so the operator
+scanning a fleet can see which agents have **finished the requested task**, distinct from ones still
+working or merely between turns.
+
+**The hard part is that "done" is not a thing Claude Code's wire says.** Wake's states are derived in
+`internal/daemon/agent.go`'s `stateLocked` — `idle`, `working`, `blocked`, `silent`, `ended`,
+`parked`, `orphaned` — drawn by `roster.go`'s `stateGlyph` (`● ◐ ○ ◌ · ! ▪`, a bijection with the
+`rpc` states, test-guarded) and counted by `awareness.go`'s `stateLabel`. **`idle` already means
+"turn finished, nothing owed"** (`!a.owed`), but that is *not* "done with the task": an agent goes
+idle between turns of a long job exactly as it does when genuinely finished, and no `result`/turn-end
+frame distinguishes the two. So "done" cannot be read off a turn ending — the naive version would just
+relabel `idle`, which is wrong the moment a task takes more than one turn.
+
+**The one real "done" signal already in the tree is the task checklist.** `TaskCreate`/`TaskUpdate`
+items going all-`completed` is the agent's *own* declaration that its self-tracked plan is finished —
+a semantic signal, per-agent, already decoded (`internal/ui/checklist.go`; `status` is
+`pending|in_progress|completed`). An "all items completed" derivation (which `checklist.go` does not
+expose yet) is the strongest driver for a done glyph. Caveat: not every agent keeps a checklist (it is
+off unless `CLAUDE_CODE_ENABLE_TASKS`), so it is a signal *when present*, not a universal one.
+
+**Candidate approaches (none decided):**
+- **Derive "done" client-side from the checklist** — all items `completed` → a "done" annotation on the
+  roster row (and an `N done` segment in the awareness strip). Lightest: no new `rpc.State`, so it does
+  not ripple through the state machine or the totality guards (`parkStates`, `forkParentStates`, …)
+  that derive their domain from `stateLocked`.
+- **A real `done` daemon state** — "more real," but a new state is a build failure until every guard
+  and both glyph/label maps rule on it; and it still needs a *source* of truth, which lands back on the
+  checklist (or a turn-end, which is the ambiguous signal above). Probably not worth the ripple for a
+  display judgment.
+- **Operator-marked done** — a manual toggle the operator flips once they have reviewed an agent's
+  output. Unambiguous and cheap, but manual; best as a complement, not the primary signal.
+
+**Design decision to make first:** is "done" a **lifecycle state** (heavy: touches `stateLocked`, the
+glyph bijection, the awareness counts, and the fork/park/rename totality guards) or a **client-side
+roster annotation** derived from the checklist (light: no wire change)? Lean annotation — "done" is a
+display judgment over signals Wake already has, not a new thing an agent's process *is*.
+
+*Related:* the awareness strip's `N need you` (the same at-a-glance surface, other end of the
+lifecycle), the notification-ping entry (being *told* when an agent needs you or finishes), and the
+attention ranking. *Blocks:* nothing broken; a legibility improvement for the fleet operator.
+
+## CI MEMORY, 2026-08-29 — `make ci` OOMs on the fleet machine because unfunded Actions makes all gating local
+
+**Seen while merging PRs #10–#17 into `main` on a machine also running a ~12-agent fleet.** `make ci`
+was run four times; the pattern, not any one run, is the finding:
+- Runs 1–2: the full `go test ./... -race` step passed **every package** (with the fleet up), and the
+  *non-race* step failed once each on a different `cmd/wake` pty test —
+  `TestTheWholeLifecycleComposesFromAKeyboard`, then `TestRoomNarrowsToAtNameOnScreen`. Each passed
+  **3/3 in isolation**: starvation flakes, not regressions.
+- Runs 3–4: the `-race` step itself was **`signal: killed`** on four heavy packages at once
+  (`cmd/wake`, `core`, `daemon`, `ui`) — first at ~137s, then at ~46s as killed runs leaked orphaned
+  `*.test` children that piled onto the next attempt.
+- A serial **`go test ./... -race -p 1`** (then non-race `-p 1`) passed clean end to end — `race=0
+  norace=0`, no flakes, no OOM. So the code is fine; the failures were purely **memory/CPU contention**.
+
+**Root cause, and it starts upstream of the Makefile.** GitHub Actions is out of funds (`CLAUDE.md`:
+"`make ci` on this machine is the only gate there is"), so there is **no remote CI** — every gate run
+is a human or agent typing `make ci` **locally**, on the same box as the working fleet. Onto that land
+three amplifiers: (a) `make test` runs `go test ./... -race` with the race detector (~5–10× memory)
+across **all packages in parallel** (`-p` defaults to `GOMAXPROCS`); (b) the live fleet holds standing
+RAM; (c) **multiple concurrent `make ci`/`make cover` runs** from parallel worktrees/agents — three
+overlapping `go test -race` invocations were observed at once during this session. Past a threshold
+macOS kills the test processes, and SIGKILL bypasses the harness's own reapers, leaking children that
+make the next run worse.
+
+**Mitigations, for as long as CI has to share the machine (smallest first):**
+1. **Bound test parallelism in the `Makefile`.** A configurable `-p` with a memory-safe default
+   (`TEST_P ?= 4`; `go test ./... -race -p $(TEST_P)`). Caps concurrent heavy packages, changes no
+   test. **Must update `internal/core/citarget_test.go` in the same change** — it pins `make ci` to the
+   workflow.
+2. **Serialize just the heavy packages.** Run the fast ones parallel but `cmd/wake` + `internal/daemon`
+   (pty/process-heavy) at `-p 1`, optionally with `-parallel N` to cap `t.Parallel()` inside them.
+3. **A machine-wide single-run lock.** Wrap `make ci`/`make test` in an `flock` so parallel
+   worktrees/agents queue instead of dogpiling — this is the fix for the "three overlapping runs"
+   amplifier.
+4. **Orphan reaping.** A `make clean-test-procs` (sweep `TMPDIR/go-build*/*.test` and `waket*`
+   children) before/after the suite, so a SIGKILL'd run cannot degrade the next.
+
+**#5 is the real fix, and it is what this entry defers: move the `-race` suite off the fleet machine.**
+Not serialization — *relocation*. Either fund GitHub Actions again, or stand up **one self-hosted
+runner on a separate box** (a spare laptop/mini-PC/VM; the runner dials out to GitHub and needs no
+inbound access; free apart from the hardware — with the usual public-repo caveat that untrusted PR
+code should be fenced to own-branch runs). With the memory-heavy suite on other hardware, #1–#4 become
+mostly unnecessary. **Deferred because there is no budget to fund Actions right now** (owner,
+2026-08-29); the mitigations are the interim answer, and #1+#3 are the recommended first cut when
+someone picks this up.
+
+*Related:* the `flaky-lifecycle-test` note (the lifecycle flake is one instance of the contention this
+entry names). *Blocks:* nothing in the product — but it makes the project's **only gate** (`make ci`
+exit 0) unreliable on a loaded machine, which is why it is written down rather than left as folklore.
+
 ## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿`
 
 **Asked for in this version.** When an agent's question is answered, the yellow `● ‹agent› › has a
@@ -4829,6 +4922,35 @@ what it draws. The richer card is ~130µs of the 910; the rest predates it.
 typed answer in flight. The second is new with answer mode and is the same shape: `Cards.writing`
 is client state, so detaching mid-answer drops the draft. That is the right default — an answer
 half-written is not an answer — but nothing tells the operator it happened.
+
+**2026-08-28 — owner's ask: a manager tool to *read an agent's whole conversation*, token-aware.**
+The five tools let the manager see the fleet's *shape* — `list_agents`, `agent_status`, `roll_up`
+(the rollup in `internal/mcp/rollup.go`) — but nothing lets it read one agent's actual transcript,
+turn by turn. A true orchestrator (the section above) needs that: to notice three agents are stuck on
+the same thing, or that a five-agent refactor has drifted, it has to be able to *read* what an agent
+has been saying, not just its state line. So this is a sixth bounded tool — call it
+`read_conversation` — that returns an agent's transcript, sourced the way a DM already reads one
+(`internal/daemon/history.go`'s `History`, `core.ActiveBranch` for the live branch), scoped to one
+session id the manager names.
+
+**The load-bearing half is the token budget, not the read.** A 30-agent fleet's transcripts are far
+more than a manager's context can hold, so the tool cannot just dump one — a single
+`read_conversation` on a long session would blow the manager's own window and is the opposite of the
+`roll_up` discipline that already exists. So it needs to be token-aware: **measure the transcript
+first, and if it is over a budget the tool owns, return a compressed form** (a summary, the last N
+turns, or a `roll_up`-style digest) **plus an honest count of how much was elided** — never a silent
+truncation, which is the same "success is not a verdict" trap the CLI-surface traps section warns
+about. The manager should be told "this conversation is ~40k tokens; here is a digest and the last 6
+turns" rather than handed a slice it cannot tell is a slice.
+
+Open questions before it is buildable: where the budget lives and what it is (a constant, or derived
+from the manager's model context); whether "compress" is a cheap mechanical digest (drop tool bodies,
+keep prose and asks) or a model call (which reintroduces the cost the `roll_up` design avoided);
+whether it counts real tokens or estimates from bytes; and whether it is a read-only reach that needs
+no new guard beyond `managerScope`, or whether reading every agent's words is itself a power worth a
+recorded bound. It owes the same discipline the rest of the manager was held to — a bounded verb, a
+guard (`cmd/wake/mcpguard_test.go`), a recorded reason — not just a longer prompt. *Blocks:* the
+orchestrator above; it cannot judge what it cannot read.
 
 ---
 

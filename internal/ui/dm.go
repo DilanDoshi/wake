@@ -172,6 +172,11 @@ type DM struct {
 	// here would go stale against it.
 	sel marked
 
+	// csel is a selection taken inside the query box rather than the transcript,
+	// set for the draw the same way. At most one of sel and csel is non-empty:
+	// the one drag the app holds is in one surface or the other.
+	csel marked
+
 	// bar is the rendered status bar, and barFrom is what it was rendered
 	// from. It is cached because it is the one thing in this pane that reads
 	// the *filesystem* - gitref walks for a .git and reads HEAD - and
@@ -214,13 +219,16 @@ var drawStatusBar = statusBar
 
 // barKey is everything statusBar reads. A value type so "has anything changed"
 // is one comparison rather than a list somebody has to keep in step.
+//
+// The identity colour is deliberately absent: the bar recedes in the muted grey
+// every bar wears and does not take the hue (see statusBar), so a /color change
+// moves nothing here and belongs in no key that would redraw for it.
 type barKey struct {
 	width  int
 	dir    string
 	model  string
 	mode   string
 	state  string
-	color  string
 	used   int
 	window int
 }
@@ -236,7 +244,7 @@ func (d DM) withBar(width int) DM {
 	mode := d.composer.Mode()
 	key := barKey{
 		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, mode: mode, state: d.Agent.State,
-		color: d.Agent.Color, used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
+		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
 	}
 	if key == d.barFrom {
 		return d
@@ -574,11 +582,14 @@ func (d DM) View(width, height int) string {
 	// The bar rides inside the composer, drawn between the box and the legend -
 	// the info row over the keys row. baseChrome still counts it separately,
 	// because the composer it measures carries no bar (this WithBar is a draw-
-	// time overlay, like WithTitle), so the height stays right.
-	rows = append(rows, d.composer.
+	// time overlay, like WithTitle and WithColor), so the height stays right.
+	comp := d.composer.
 		WithBar(d.bar).
+		WithColor(d.Agent.Color).
 		WithTitle(cmp.Or(d.writing, agentPrefix+d.Name+d.ancestry()+d.standing())).
-		View(w))
+		View(w)
+	comp = highlightComposerBlock(comp, d.csel, composerTextLeft, w-composerRightInset)
+	rows = append(rows, comp)
 	return strings.Join(rows, "\n")
 }
 
