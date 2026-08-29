@@ -33,13 +33,18 @@ import (
 // and its interior is the box top border down.
 func (a App) composerRegion(id string, width, top, height int) (draftTop, draftRows, boxWidth int, rows []string, ok bool) {
 	w := max(width, minComposerWidth)
-	c, below := a.drawnComposer(id, w, height)
+	c, below, minH := a.drawnComposer(id, w, height)
+	// Too short to draw the composer inside its allocation: the pane overflows
+	// and App.View clips it from the bottom, so the bottom-up placement below
+	// would point at rows the frame never drew. Take no selection there.
+	if height < minH {
+		return 0, 0, 0, nil, false
+	}
 	draftRows = c.ta.Height()
 	if draftRows <= 0 {
 		return 0, 0, 0, nil, false
 	}
-	view := c.View(w)
-	block := strings.Split(view, "\n")
+	block := strings.Split(c.View(w), "\n")
 	// The box's draft rows: its top border down, for draftRows of them.
 	if len(block) < 1+draftRows {
 		return 0, 0, 0, nil, false
@@ -53,19 +58,20 @@ func (a App) composerRegion(id string, width, top, height int) (draftTop, draftR
 }
 
 // drawnComposer is a pane's composer as it is drawn - sized the same way View
-// sizes it, through the same menu block - and how many rows the pane draws below
-// it (a DM's status bar, and nothing for the room).
-func (a App) drawnComposer(id string, width, height int) (Composer, int) {
+// sizes it, through the same menu block - how many rows the pane draws below it
+// (a DM's status bar, and nothing for the room), and the pane's minimum height,
+// which is what says whether the composer fits inside its allocation.
+func (a App) drawnComposer(id string, width, height int) (c Composer, below, minH int) {
 	menu, _ := a.menuBlock(id, width)
 	if id == "" {
-		return a.roomFor().WithMenu(menu).SetSize(width, height).composer, 0
+		room := a.roomFor().WithMenu(menu).SetSize(width, height)
+		return room.composer, 0, room.minHeight()
 	}
 	d := a.dmFor(id).WithMenu(menu).SetSize(width, height)
-	below := 0
 	if d.bar != "" {
 		below = 1
 	}
-	return d.composer, below
+	return d.composer, below, d.minHeight()
 }
 
 // composerSelectionIn is the composer selection resolved for one pane: nothing
@@ -84,18 +90,27 @@ func (a App) composerSelectionIn(id string) marked {
 // space past a short line. The press must land on a row's own characters; a drag
 // off their end still extends into the blank and copies only what it trims to,
 // the way it does in the transcript.
-func (a App) startComposerSelection(id string, col, top, height, x, y int, r Regions, refocused bool) App {
+func (a App) startComposerSelection(id string, col, top, height, x, y int, r Regions) App {
 	draftTop, draftRows, boxWidth, rows, ok := a.composerRegion(id, r.Cols[col], top, height)
 	miss := func() App { a.sel, a.selecting = selection{}, false; return a }
 	if !ok || y < draftTop || y >= draftTop+draftRows {
 		return miss()
 	}
-	a.cdrag = composerDrag{draftTop, draftRows, a.layout.PaneLeft(r, col), boxWidth, rows}
-	p := a.composerPoint(x, y)
-	if p.col >= composerRowTextLen(rows[p.line], boxWidth) {
+	paneLeft := a.layout.PaneLeft(r, col)
+	// Gate on the raw press column, not the clamped one: composerPoint pulls a
+	// press on the border, the "> " prompt or the padding into text column 0, so
+	// clamping first would let a drag begun on that chrome copy the row's text.
+	// The press must land on the row's own characters, [composerTextLeft, +len).
+	rawCol := x - paneLeft
+	textLen := composerRowTextLen(rows[min(max(y-draftTop, 0), draftRows-1)], boxWidth)
+	if rawCol < composerTextLeft || rawCol >= composerTextLeft+textLen {
 		return miss()
 	}
-	a.sel = selection{pane: id, anchor: p, head: p, refocused: refocused, inComposer: true}
+	a.cdrag = composerDrag{draftTop, draftRows, paneLeft, boxWidth, rows}
+	p := a.composerPoint(x, y)
+	// refocused is unset here: it exists only for clickedTool, which the composer
+	// branch of endSelection never reaches - a query box has no folded tool.
+	a.sel = selection{pane: id, anchor: p, head: p, inComposer: true}
 	a.selecting = true
 	return a
 }
@@ -127,6 +142,14 @@ func (a App) composerPoint(x, y int) point {
 
 // composerSelectedText is what the current query-box drag covers, off the rows
 // captured when it began.
+//
+// A snapshot rather than a live read - which is where the transcript reads off
+// the scrollback at release - because the draft cannot change under a live
+// composer drag: the only thing that edits it is a keystroke, and App.cleared
+// drops the selection on every KeyMsg before the key does its job. So the rows
+// captured at press are the rows on screen at release, and the copy matches the
+// highlight. The transcript reads live for the opposite reason: events append to
+// it while the button is held.
 func (a App) composerSelectedText() string {
 	return composerText(a.cdrag.rows, a.sel.marked(), composerTextLeft, a.cdrag.boxWidth-composerRightInset)
 }

@@ -264,7 +264,7 @@ func (a App) startSelection(id string, col, top, height, x, y int, r Regions, re
 		// Below the transcript is chrome and the query box. The box's own draft
 		// rows are text you typed and select like the transcript; the menu, the
 		// preview, the working line and the borders around them are not.
-		return a.startComposerSelection(id, col, top, height, x, y, r, refocused)
+		return a.startComposerSelection(id, col, top, height, x, y, r)
 	}
 	a.selTop, a.selRows = top, rows
 	p := a.pointIn(id, x-a.layout.PaneLeft(r, col), y)
