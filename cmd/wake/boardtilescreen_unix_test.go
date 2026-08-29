@@ -41,3 +41,39 @@ func TestTheTiledBoardDrawsAndClicksOnAScreen(t *testing.T) {
 		t.Fatalf("the click opened a conversation but left the board drawn.\n%s", s.dump())
 	}
 }
+
+// A tile fills the frame rather than sitting at a fixed small height: with one
+// agent on a tall terminal the box's top and bottom borders are far apart, so
+// the wall scales with the window instead of drawing a tiny cell in a big
+// screen. This is the whole point of the fill-the-window grid.
+func TestATiledBoardCellFillsTheWindowHeight(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWake(t, 100, 40)
+	s.await("ready")
+	s.send("/board\r")
+	s.await("BOARD")
+	s.send("\t") // ⇥ to tiles
+	s.await("╭")
+	s.settle()
+
+	lines := strings.Split(s.text(), "\n")
+	top, bottom := -1, -1
+	for i, ln := range lines {
+		if strings.Contains(ln, "╭") {
+			top = i
+		}
+		if strings.Contains(ln, "╰") {
+			bottom = i
+		}
+	}
+	if top < 0 || bottom < 0 {
+		t.Fatalf("the tiled board drew no complete box (top=%d bottom=%d).\n%s", top, bottom, s.dump())
+	}
+	// The old fixed cell was seven rows tall; a filled cell in a 40-row
+	// terminal is far taller, so a generous floor separates the two.
+	if span := bottom - top + 1; span <= 12 {
+		t.Fatalf("the single tile spanned only %d rows in a 40-row terminal; it should fill the frame.\n%s", span, s.dump())
+	}
+}

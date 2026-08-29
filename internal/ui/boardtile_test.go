@@ -11,16 +11,42 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-func TestTileColumns(t *testing.T) {
-	cases := []struct{ width, want int }{
-		{0, 1},  // never zero columns
-		{30, 1}, // one tile plus slack
-		{60, 2},
-		{120, 4},
+// tileGridFor chooses a near-square grid that fills the whole frame: a few
+// agents get big cells stretched across both axes, many agents pack down to
+// the minimum-size cells that fit and page the rest. One function, so the
+// draw, the mouse and the cursor all measure the same grid.
+func TestTileGridFillsTheWindow(t *testing.T) {
+	cases := []struct {
+		name                string
+		width, availH, n    int
+		cols, rows          int
+		cellW, cellH        int
+	}{
+		// One agent fills the whole board.
+		{"one agent, whole frame", 120, 24, 1, 1, 1, 120, 24},
+		// Four agents on a roomy frame: a 2x2 of big cells, each half the
+		// width and half the height.
+		{"four agents, 2x2", 120, 24, 4, 2, 2, 59, 12},
+		// Nine agents: a 3x3, still one screen, cells shrink but stay big.
+		{"nine agents, 3x3", 120, 24, 9, 3, 3, 39, 8},
+		// More agents than fit at the minimum cell size: the grid caps at the
+		// max that fits (4x3=12 here) and the rest page.
+		{"twenty agents, capped grid", 120, 24, 20, 4, 3, 29, 8},
+		// A short wide frame forces a single flat row even for four agents -
+		// only one row of tiles fits vertically.
+		{"short frame forces one row", 200, 6, 4, 4, 1, 49, 6},
+		// A taller frame stretches the cells: same agents, double the height,
+		// double the cell height.
+		{"taller frame, taller cells", 120, 48, 4, 2, 2, 59, 24},
+		// No agents: a safe single cell rather than a divide-by-zero.
+		{"no agents", 120, 24, 0, 1, 1, 120, 24},
 	}
 	for _, tc := range cases {
-		if got := tileColumns(tc.width); got != tc.want {
-			t.Errorf("tileColumns(%d) = %d, want %d", tc.width, got, tc.want)
+		g := tileGridFor(tc.width, tc.availH, tc.n)
+		if g.cols != tc.cols || g.rows != tc.rows || g.cellW != tc.cellW || g.cellH != tc.cellH {
+			t.Errorf("%s: tileGridFor(%d,%d,%d) = {cols:%d rows:%d cellW:%d cellH:%d}, want {cols:%d rows:%d cellW:%d cellH:%d}",
+				tc.name, tc.width, tc.availH, tc.n,
+				g.cols, g.rows, g.cellW, g.cellH, tc.cols, tc.rows, tc.cellW, tc.cellH)
 		}
 	}
 }
@@ -109,34 +135,60 @@ func TestTileShowsSubagentCount(t *testing.T) {
 	}
 }
 
-// A working tile's live tail can wrap to multiple physical lines. The tile
-// must still draw exactly tileHeight() rows - titledBox never constrains
-// height, so an overshoot here grows the whole tile row and shifts every row
-// below it, breaking the grid's fixed-height invariant a later task's click
-// math depends on. Measured on a.tile directly, since tiles sit side by side
-// in a row (lipgloss.JoinHorizontal) and a single tile's row count is not
-// separable from the joined row once assembled into the whole board.
-func TestTileHeightIsExactlyTileHeightEvenWhenTheTailWraps(t *testing.T) {
+// A working tile's live tail can wrap to more rows than its cell has. The tile
+// must still draw exactly its cell height - titledBox never constrains height,
+// so an overshoot here grows the whole tile row and shifts every row below it,
+// breaking the grid's fixed-height invariant boardHit's click math depends on.
+// Measured on a.tile directly, since tiles sit side by side in a row
+// (lipgloss.JoinHorizontal) and a single tile's row count is not separable from
+// the joined row once assembled into the whole board.
+func TestATileNeverOvershootsItsCellHeightWhenTheTailWraps(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
 	working, ok := a.fleet.ByName("alex")
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	cols := tileColumns(a.layout.Width)
-	cellW := tileCellWidth(a.layout.Width, cols)
-	inner := max(cellW-boxFrameWidth, 1)
+	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	inner := max(g.cellW-boxFrameWidth, 1)
 
-	a = a.foldTail(working.ID, partialEv(strings.Repeat("wiring the auth guard ", 20)))
-	if got := strings.Count(a.tails[working.ID].sized(inner).view, "\n") + 1; got != maxPreviewRows {
-		t.Fatalf("precondition: tail wrapped to %d lines, want %d (maxPreviewRows)", got, maxPreviewRows)
+	// A tail long enough to wrap to many rows and fill the cell's tail budget.
+	a = a.foldTail(working.ID, partialEv(strings.Repeat("wiring the auth guard ", 80)))
+	if got := strings.Count(a.tails[working.ID].sized(inner).view, "\n") + 1; got < 2 {
+		t.Fatalf("precondition: tail wrapped to %d row(s), want multiple rows to exercise the fill/truncate path", got)
 	}
 	_ = a.View() // exercises the tiled render path end to end
 
 	ag, _ := a.fleet.Agent(working.ID)
-	out := a.tile(ag, cellW, false)
-	if got := strings.Count(out, "\n") + 1; got != tileHeight() {
-		t.Fatalf("the tile drew %d rows with a 3-line tail, want exactly tileHeight()=%d:\n%s", got, tileHeight(), out)
+	out := a.tile(ag, g.cellW, g.cellH, false)
+	if got := strings.Count(out, "\n") + 1; got != g.cellH {
+		t.Fatalf("the tile drew %d rows with an overflowing tail, want exactly the cell height %d:\n%s", got, g.cellH, out)
+	}
+}
+
+// The tiled wall relaxes the DM preview's three-row cap (maxPreviewRows): a big
+// cell retains up to maxTileTailRows of live tail so it fills with output
+// rather than stopping at three rows - the board's narrowed guardrail 2,
+// bounded and with no scrollback. The DM preview and the inbox fold keep the
+// three-row cap; only the tile tail is raised.
+func TestABigTileFillsWithMoreTailThanTheDMPreviewCap(t *testing.T) {
+	a := boardApp(t)
+	a.board.Tiled = true
+	working, ok := a.fleet.ByName("alex")
+	if !ok || working.State != rpc.StateWorking {
+		t.Fatal("precondition: boardApp does not seat alex as the working agent")
+	}
+	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	inner := max(g.cellW-boxFrameWidth, 1)
+
+	// Many wrapped rows of output, well past the three-row DM cap.
+	a = a.foldTail(working.ID, partialEv(strings.Repeat("streamed line of output ", 80)))
+	rows := strings.Count(a.tails[working.ID].sized(inner).view, "\n") + 1
+	if rows <= maxPreviewRows {
+		t.Fatalf("the tile tail retained %d rows, want more than the DM cap of %d", rows, maxPreviewRows)
+	}
+	if rows > maxTileTailRows {
+		t.Fatalf("the tile tail retained %d rows, past its own cap of %d", rows, maxTileTailRows)
 	}
 }
 
@@ -144,20 +196,19 @@ func TestTileHeightIsExactlyTileHeightEvenWhenTheTailWraps(t *testing.T) {
 // minBlockWidth (20) - the floor partial.wrapped() itself wraps at
 // (max(p.width, minBlockWidth)) - so a tail line can come back wider than the
 // tile it must fit in. titledBox's Width(edge) then word-wraps that
-// over-width line, growing the tile past tileHeight() and misaligning
+// over-width line, growing the tile past its cell height and misaligning
 // boardHit's click math. tailLines must truncate each physical line to the
 // tile's own inner width regardless of what floor the tail wrapped at.
-func TestTileHeightIsExactlyTileHeightAtNarrowWidthBelowTheWrapFloor(t *testing.T) {
+func TestATileNeverOvershootsAtNarrowWidthBelowTheWrapFloor(t *testing.T) {
 	a := boardApp(t)
-	a.board.Tiled = true
 	a = a.withSize(20, 30).applyGeometry() // single column: cellW=20, inner=18 < minBlockWidth(20)
+	a.board.Tiled = true
 	working, ok := a.fleet.ByName("alex")
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	cols := tileColumns(a.layout.Width)
-	cellW := tileCellWidth(a.layout.Width, cols)
-	inner := max(cellW-boxFrameWidth, 1)
+	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	inner := max(g.cellW-boxFrameWidth, 1)
 	if inner >= minBlockWidth {
 		t.Fatalf("precondition: inner=%d is not below minBlockWidth(%d)", inner, minBlockWidth)
 	}
@@ -165,11 +216,11 @@ func TestTileHeightIsExactlyTileHeightAtNarrowWidthBelowTheWrapFloor(t *testing.
 	// An unbroken run of characters, so the tail wraps at the wrap floor
 	// (minBlockWidth=20) with no word boundary to fall short of it - every
 	// physical line comes back exactly 20 columns wide, wider than inner(18).
-	a = a.foldTail(working.ID, partialEv(strings.Repeat("x", 80)))
+	a = a.foldTail(working.ID, partialEv(strings.Repeat("x", 400)))
 	ag, _ := a.fleet.Agent(working.ID)
-	out := a.tile(ag, cellW, false)
-	if got := strings.Count(out, "\n") + 1; got != tileHeight() {
-		t.Fatalf("the tile drew %d rows at a narrow width, want exactly tileHeight()=%d:\n%s", got, tileHeight(), out)
+	out := a.tile(ag, g.cellW, g.cellH, false)
+	if got := strings.Count(out, "\n") + 1; got != g.cellH {
+		t.Fatalf("the tile drew %d rows at a narrow width, want exactly the cell height %d:\n%s", got, g.cellH, out)
 	}
 }
 
@@ -177,20 +228,19 @@ func TestTileHeightIsExactlyTileHeightAtNarrowWidthBelowTheWrapFloor(t *testing.
 // without truncation, unlike the tail and boardDetail lines beside it.
 // titledBox's Width(edge) word-wraps it into a second physical row the
 // moment inner drops below that line's own display width - a row padRows
-// (element-count based) cannot claw back, overshooting tileHeight(). The
-// existing narrow-width test (width 20, inner 18) never reaches that floor;
-// this one picks a width that does, at 13 (inner 11).
-func TestTileHeightIsExactlyTileHeightWhenTheSubagentLineWraps(t *testing.T) {
+// (element-count based) cannot claw back, overshooting the cell height. The
+// narrow-width test (width 20, inner 18) never reaches that floor; this one
+// picks a width that does, at 13 (inner 11).
+func TestATileNeverOvershootsWhenTheSubagentLineWraps(t *testing.T) {
 	a := boardApp(t)
-	a.board.Tiled = true
 	a = a.withSize(13, 30).applyGeometry() // single column: cellW=13, inner=11
+	a.board.Tiled = true
 	working, ok := a.fleet.ByName("alex")
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	cols := tileColumns(a.layout.Width)
-	cellW := tileCellWidth(a.layout.Width, cols)
-	inner := max(cellW-boxFrameWidth, 1)
+	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	inner := max(g.cellW-boxFrameWidth, 1)
 
 	ag, _ := a.fleet.Agent(working.ID)
 	subs := len(a.fleet.RunningTasks(ag.ID))
@@ -202,9 +252,9 @@ func TestTileHeightIsExactlyTileHeightWhenTheSubagentLineWraps(t *testing.T) {
 		t.Fatalf("precondition: %q (width %d) must be wider than inner=%d to reach the wrap point", line, ansi.StringWidth(line), inner)
 	}
 
-	out := a.tile(ag, cellW, false)
-	if got := strings.Count(out, "\n") + 1; got != tileHeight() {
-		t.Fatalf("the tile drew %d rows at inner=%d with the subagent line present, want exactly tileHeight()=%d:\n%s", got, inner, tileHeight(), out)
+	out := a.tile(ag, g.cellW, g.cellH, false)
+	if got := strings.Count(out, "\n") + 1; got != g.cellH {
+		t.Fatalf("the tile drew %d rows at inner=%d with the subagent line present, want exactly the cell height %d:\n%s", got, inner, g.cellH, out)
 	}
 }
 
@@ -231,32 +281,33 @@ func TestTileTailControlBytesCannotForgeANeighbouringTile(t *testing.T) {
 	}
 }
 
-// boardHit in tiles reads the same geometry the draw used: cols, cell width
-// and the window start, so a click and a tile cannot disagree.
+// boardHit in tiles reads the same geometry the draw used: cols, rows, the
+// cell size and the window start, so a click and a tile cannot disagree.
 func TestBoardHitInTiledModeReadsTheDrawnGeometry(t *testing.T) {
 	a := boardApp(t) // 3 agents, width 120, height 30 (boardApp's own fixture)
 	a.board.Tiled = true
 	agents := a.fleet.OnRoster()
 
-	cols := tileColumns(a.layout.Width)
-	cellW := tileCellWidth(a.layout.Width, cols)
-	rowsVisible := max((a.paneHeight()-boardChromeRows-1)/tileHeight(), 1)
+	g := a.boardTileGrid(len(agents))
+	if g.cols < 2 {
+		t.Fatalf("precondition: this fixture must lay out at least two columns, got %d", g.cols)
+	}
 
 	// A click inside the second tile (row 0, col 1) lands on agents[1].
-	x := cellW + tileGap + 1 // one column in, one cell past the gap
-	y := boardChromeRows + 1 // inside the first tile row's body
+	x := g.cellW + tileGap + 1 // one column in, one cell past the gap
+	y := boardChromeRows + 1   // inside the first tile row's body
 	if got := a.boardHit(x, y, agents); got != 1 {
 		t.Errorf("boardHit(%d,%d) = %d, want 1 (row 0, col 1)", x, y, got)
 	}
 
 	// A click on the key line, past every tile row, opens nothing.
-	pastRow := boardChromeRows + rowsVisible*tileHeight()
+	pastRow := boardChromeRows + g.rows*g.cellH
 	if got := a.boardHit(2, pastRow, agents); got != -1 {
 		t.Errorf("a click past the last tile row resolved to %d, want -1", got)
 	}
 
 	// A click past the last column opens nothing.
-	pastCol := cols * (cellW + tileGap)
+	pastCol := g.cols * (g.cellW + tileGap)
 	if got := a.boardHit(pastCol, boardChromeRows+1, agents); got != -1 {
 		t.Errorf("a click past the last column resolved to %d, want -1", got)
 	}
@@ -274,8 +325,8 @@ func TestATileClickOpensTheAgentAsANewColumn(t *testing.T) {
 	a.board.Tiled = true
 	agents := a.fleet.OnRoster() // [sydney, alex, robin] in attention order
 
-	cellW := tileCellWidth(a.layout.Width, tileColumns(a.layout.Width))
-	x := cellW + tileGap + 1 // second tile: agents[1], alex (s1)
+	g := a.boardTileGrid(len(agents))
+	x := g.cellW + tileGap + 1 // second tile: agents[1], alex (s1)
 	y := boardChromeRows + 1
 
 	next, _ := a.boardMouse(tea.MouseMsg{

@@ -2941,3 +2941,17 @@ cell, so the wording narrows from "an overview, not panes" to "an overview, not 
 stdin from a tile), bounded live tail with no scrollback, a fixed grid with no per-tile resize or pane
 tree, and act-from-not-in (`↵`/click jump into the real DM to work). See
 `docs/superpowers/specs/2026-08-27-tiled-board-design.md` for the full argument.
+
+**Amendment, 2026-08-28 — the grid fills the window.** The first cut packed as many *minimum-size*
+tiles as fit (`minTileWidth`) at a *fixed* seven-row height, so a big terminal drew many tiny boxes
+rather than a few big ones — "too small, doesn't show enough." `tileGridFor` (`boardtile.go`) now
+chooses a near-square grid for the agent count and stretches each cell to fill *both* axes (the
+rows fill the height the way the columns already filled the width); a fleet larger than fits at the
+minimum cell size pages through the existing cursor window. **Guardrail 2 was relaxed, deliberately
+and with the owner's yes:** the live tail was capped at `maxPreviewRows` (3, the DM preview's bound);
+it is now bounded to the *cell's own body* — a big cell fills with output — with retention capped at
+`maxTileTailRows` per agent so the per-token work stays flat. Still view-only, still no scrollback,
+still a fixed equal-cell grid with no dividers or splits (guardrails 1, 3, 4 untouched). The cap is a
+tile-only field on `partial` (`rowCap`); the DM preview and the inbox fold keep the three-row bound.
+`tileGridFor` is one function read by the draw, the mouse (`boardHit`) and the cursor (`stepBoard`),
+so a click and a tile cannot disagree.
