@@ -36,6 +36,64 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## OWNER REQUEST, 2026-08-28 — a ping other platforms can pick up when an agent needs the operator
+
+**Asked for in this version.** A notification/ping — something cmux, tmux, iTerm2 or any host terminal
+already knows how to surface — emitted when an agent needs the operator: it asked a question, hit a
+permission it cannot answer itself, or otherwise blocked with `N need you`. The operator running a
+30-agent fleet is not staring at the awareness strip, and the whole point is to be told when to look.
+
+**What exists today is on-screen only, and it is load-bearing because nothing on the wire times out.**
+A blocked agent is announced three ways, all *inside* Wake's own window: the roster row, the awareness
+strip's `N need you` (`internal/ui/awareness.go`, `stateLabel`), and `⌃X` walking to the next blocked
+one. The room deliberately draws **no card** for an agent blocked with its conversation closed —
+`CLAUDE.md`'s "an ask belongs to its agent's conversation, and the room draws none" ruling — so those
+three tells *are* it. And they matter more than decoration: nothing on the permission wire times out
+(the corpus records one ask blocked **342 seconds with zero bytes out**), so an operator who has
+tabbed away, detached with `⌃O`, or moved focus to another cmux pane has no signal at all that a
+session is waiting. That detached/unfocused case is exactly what this request is about and exactly the
+one the current tells cannot reach.
+
+**The likely right layer is a signal, not a notification daemon** — which is also what keeps it inside
+the non-negotiables. "Not a terminal emulator or multiplexer" means Wake should not grow its own
+notify subsystem or learn which pane is focused; the host already owns that policy. The standard
+vocabulary a TUI has here is the terminal's own activity/bell protocol: a plain `BEL` (which cmux and
+tmux already treat as pane activity), or OSC 9 / OSC 777 for a desktop notification carrying a short
+message on the terminals that honour it (iTerm2, kitty, WezTerm). Wake emits the *signal on the
+transition into "needs you"*; cmux / the terminal decides whether to raise it and — crucially —
+suppresses it for the focused pane, which is the one thing Wake cannot cheaply know and the host
+trivially can. That division is the same "that's the host terminal's job" argument the non-negotiables
+already make.
+
+**It fits "cheap to leave open" only if it is strictly edge-triggered.** The emit hangs off the
+*transition* an agent makes into a blocked/needs-you state — the same derivation `attention.go` and
+`awareness.go` already compute — never a poll and never work per frame. Two hazards to design against,
+both from fleet scale:
+1. **A bell storm.** Fifteen agents crossing into blocked at once must not be fifteen bells. The unit
+   is probably the fleet crossing `0 → ≥1 need you` (one ping), or a per-agent ping under a rate
+   limit — not one per transition.
+2. **Where the bytes go.** Bubble Tea draws through the one `*os.File` writer (`cmd/wake/output.go`);
+   an OSC/BEL has to reach the tty without corrupting the alt-screen frame or being swallowed by the
+   renderer. This wants the same care the clipboard's layered write already takes, and is the part
+   most likely to be fiddly.
+
+**Open questions:**
+- **Which signal, and configurable?** `BEL` is the most portable (cmux/tmux activity) but carries no
+  text; OSC 9/777 carries "iris needs you" but only some terminals honour it. Likely: bell by
+  default, a richer notification where detected, and an off switch for operators whose terminal
+  already bells noisily.
+- **Which states ping?** Only "blocked / needs an answer" (question + permission), or also "turn
+  finished, your move" — the latter is far noisier at fleet scale and probably out.
+- **Content crossing a boundary.** A desktop notification leaves Wake's window; naming the agent
+  ("iris") is fine, but anything richer (the question text itself) is content crossing to an external
+  surface and should be opt-in at most.
+- **Suppress when attached-and-focused?** Delegating that to the host (emit the bell, let the host's
+  own unfocused-only policy decide) is cleaner than Wake reading CSI focus events, and keeps Wake out
+  of the focus-tracking business entirely.
+
+*Blocks:* nothing broken; this is an enhancement for the detached / not-watching operator, the one
+case the awareness strip and roster tells structurally cannot cover.
+
 ## 2026-08-26 — record what ⎋ and `[d]` do to an `AskUserQuestion`, the spike §9 named
 
 `fix/interrupt-question-stale-card` shipped ⎋-on-a-question as a **deny** (it was a no-op interrupt
