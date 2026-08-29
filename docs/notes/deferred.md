@@ -466,142 +466,18 @@ subagents turn out to author task lists.
 
 ---
 
-## ~~OWNER REQUEST, 2026-08-26 — `/color`: a per-agent status bar and name-tag colour~~ CLOSED, `feat/color-per-agent` (2026-08-27)
-
-**Built exactly as the four answers below predicted, plus one the entry did not foresee.** `/color`
-sets an agent's identity hue; it heads the agent's turns in the room, tints its conversation status
-bar and its roster row. The four answers, resolved with the owner: **(1) where it lives** — a new
-`Color` field, client-chosen, a third display string beside name and label (`rpc.SessionStatus.Color`,
-`ui.Agent.Color`, `daemon.agent.color`); **(2) session vs client-local** — a *session attribute*, on
-the wire and shared, because it reuses the `/name` round-trip with zero new state stores where a
-client-local one would need a per-session-id prefs subsystem that does not exist; **(3) survives a
-park** — yes, a `Color` field in `parkedRecord`, captured at park and restored at wake, the move
-`Label` and `Effort` already make; **(4) value space** — a *named subset*, not free hex, but **Wake's
-own bolder identity set** (`ui.identityColors`, seven contrast-tuned light/dark pairs) rather than
-Claude's exact palette, on the owner's "do Claude but a little bolder" ruling — deliberately not bound
-to `claude-palette.json`, the `LastRead` precedent. The manager is refused `FrameColor` (a third
-display verb beside rename and label) and `agent_status` does not report the hue (operator chrome, not
-a fact about what an agent is doing).
-
-**The one the entry missed: `color` is Claude's own command.** It is advertised on 71 of the recorded
-`init` frames (Claude's theme command), so the corpus rule refuses the word the way it refused
-`rename` and `import`. The disciplined path to claim it is `redirectOnlyCommands`, backed by a
-recording of Claude's headless `/color` showing an inert or redirect answer — which this session could
-not make. The owner ruled on 2026-08-27 to claim `/color` anyway (Wake renders in its own palette, so
-an agent's per-session Claude theme is irrelevant inside Wake): recorded as the
-`ownerClaimedCommands` exception in `slashguard_test.go`, greppable and dated. **If a recording later
-shows Claude's headless `/color` is a redirect, move the entry to `redirectOnlyCommands` and retire the
-override.** That recording is the one loose end this leaves.
-
-The original request:
-
-**Asked for in this version.** A `/color` command to change an agent's status bar colour and its
-name-tag colour as shown in the main group chat.
-
-**Nothing today lets one agent look different from another.** `internal/ui/theme.go`'s palette is one
-process-global set matched against Claude Code, used for state glyphs and chrome — not a per-session attribute. There is no field on `Agent` or
-`rpc.SessionStatus` for a chosen colour, and the room's speaker labels (`userBlock` et al. in
-`internal/ui/dm_blocks.go`) carry no per-agent identity styling today — thirty agents' turns are
-distinguished by name text alone, not colour.
-
-**This is the same shape of question this file's team-tags entry already worked through, and
-probably wants the same four answers:** where the value lives (a new field, since `label` is the git
-branch and `name` is daemon-assigned — colour would be a third, client-chosen string much like a team
-tag); whether it is a session attribute or a client-local preference (a colour picked by one
-operator's `/color` has no obvious reason to be visible to a second operator attached to the same
-fleet, which team tags did not have to consider); whether it survives a park (`parked.json` again, and
-the same "operator intent vs. process state" argument that favoured teams applies here); and what the
-value space is — free RGB risks fighting the extracted palette's contrast guarantees in both light and
-dark, so bounding `/color` to a named subset of the existing palette is worth considering over an
-arbitrary hex.
-
-*Blocks:* nothing yet; a legibility/personalisation request for the room at fleet scale.
+## `/color` — a per-agent status-bar, name-tag and roster colour — DONE (`feat/color-per-agent`, 2026-08-27)
 
 ---
 
-## ~~2026-08-20 — the room's spawn path cannot set a spend ceiling~~ CLOSED, `feat/new-budget-flags` (2026-08-21)
-
-Closed by exactly the entry's own prescription: `--max-budget-usd` and `--fallback-model` are two
-rows in `takeNewFlags`' table, validated by `core.ValidBudget`/`core.ValidFallbackModel` before a
-socket is dialled, threaded onto the spawn frame where `configRefusal` already fences them.
-`TestEveryNewFlagReachesTheSpawnFrame` derives the set from `newFlags`' fields, so the silent-drop
-hop this entry worried about is a build failure. One knock-on: `newUsage` moved to bracket
-notation — with six flags the four enumerated grammar shapes no longer fit the notice row at 200
-columns, and a usage the operator cannot read to its end teaches nothing. The **bare** line fits;
-a refusal that prefixes it (`--x needs a value: …`) still truncates on narrower terminals, and
-nothing asserts the on-screen fit — the adversarial pass measured it rather than the suite. The
-original entry:
-
-Surfaced while the owner was deciding profiles' fate (they are skipped — the flag-bundle reading
-solves a problem this workflow does not have). What fell out of that conversation is a real hole:
-
-**`/new` is the ordinary way an agent is spawned, and it cannot say a budget.** `takeNewFlags`'
-table (`internal/ui/newflags.go`) is `--worktree`, `--add-dir` and the two debug flags — nothing
-else. `--max-budget-usd` and `--fallback-model` exist only on the two shell verbs (`wake new`,
-`wake manager`), and **there is no runtime command for either** — which is the very property the
-budget's park-survival argument rests on ("nothing can restore it afterwards"). Model and effort
-have the same spawn gap and do not matter: `/model` and `/effort` fix them one turn later. Budget
-and fallback have no later. So every agent spawned from inside the room — the ordinary path — is
-unbudgeted for its whole life, and the two flags added for fleet-scale discipline are unreachable
-from the surface the fleet is actually run from.
-
-*What closes it:* two rows in `takeNewFlags`' table, validated where the shell verbs already
-validate (`core.ValidBudget`, `core.ValidFallbackModel`; the spawn frame carries both fields and
-`configRefusal` already fences them daemon-side). The profile detour is explicitly **not** the fix
-— owner, 2026-08-20.
-
-*Blocks:* spend discipline at fleet scale, from the surface that matters.
+## Spend ceiling on the room's spawn path — `--max-budget-usd`/`--fallback-model` on `/new` — DONE (`feat/new-budget-flags`, 2026-08-21)
 
 ---
-## ~~OWNER REQUEST, 2026-08-26 — expand a room response in place, the way ⌃E expands a folded block in a DM~~ CLOSED, `feat/room-expand-response` (2026-08-27)
-
-Closed as the entry's own "cheapest try" plus the owner's chosen split: a **click** on a folded
-response toggles that one (`clickedTool`'s room branch → `Room.toggleLine`), and **`⌃E`** expands or
-folds **all** of the room's collapsed responses at once (`Room.toggleExpandAll`), the room learning
-the DM's `⌃E` rather than inventing a line cursor the room does not have. The full render is the one
-`agentSaid` already computed and discarded past `roomInlineRows`; expanding keeps it, and the
-speaker head keeps "whose it is". The default stays folded, so the room does not become the wall of
-text the fold prevents. Expand state is `Room.expanded` (per-line, id-keyed, copied on write) plus
-`Room.expandAll`, both bounded on reclaim/merge (`forgetExpanded`/`keptExpanded`) so they cannot
-outgrow the retention cap. `⌃E`'s target being "the line under the cursor" from the note below was
-dropped deliberately: every keystroke clears the selection (`App.cleared`) before `⌃E` runs, so a
-mouse-anchor target would need sticky state against that rule — the click already gives per-line
-precision. Tests in `internal/ui/roomexpand_test.go`.
-
-**Asked for in this version.** In the group chat, be able to expand an agent's response inline — the
-same gesture that opens a collapsed tool call or other folded block in a DM (`⌃E`).
-
-**The room and a DM fold differently, and that is the whole of the ask.** A DM draws an agent's turn
-at Claude Code fidelity: tool calls and results are rendered blocks, foldable and expanded with `⌃E`
-(`App.key`'s expand case over `internal/ui/dm_blocks.go`). The room is not that surface — it is one
-filtered line per broadcast, tuned so thirty agents do not bury each other (`internal/ui/chat.go`, the
-`Room` view), so a long response reads as a summary rather than the full rendered block. There is
-today no way to say "show me *that* one in full" without opening the agent's DM.
-
-**What this needs is a per-line expand in the room**, and the design questions are where the DM's
-answers do not carry over: the room interleaves many speakers, so an expanded block must make clear
-whose it is and must re-collapse (a room full of expanded turns is the wall of text the filter exists
-to prevent); the room's line is derived, not the transcript, so expanding one means reaching back to
-the agent's actual turn (`Room.raw` / the history machinery already holds it) and rendering it in
-place; and the key need not fight the DM's `⌃E` if the room simply routes `⌃E` to the line under the
-cursor, which is the cheap answer worth trying first. It is the room learning one of the DM's
-affordances, bounded so it does not become the DM.
-
-*Blocks:* nothing yet; a room-fidelity request — the group chat gaining a way to see a full response
-without leaving it.
+## Expand a room response in place (⌃E all, click one) — DONE (`feat/room-expand-response`, 2026-08-27)
 
 ---
 
-## ~~OWNER REQUEST, 2026-08-26 — ⌃Q should arm before it parks-and-quits, so a stray press does not empty the screen~~ WON'T DO (owner, 2026-08-28)
-
-**Owner's ruling, 2026-08-28: not wanted — dropped ahead of the first release.** The ask was to make
-⌃Q a two-step arm/confirm (a first ⌃Q that arms, `↵` that confirms) so a stray press could not park
-the fleet and close the window by accident. On review the owner decided the safety affordance is not
-worth the extra gesture: a stray ⌃Q is recoverable (parking writes `parked.json`; `wake` — or
-`wake --fleet <name>` for a named fleet — reopens it), nothing is lost, and the emergency path already
-distinct from it (`⌃Q⌃Q` reads the tty before Bubble Tea, `cmd/wake/killswitch.go`) covers the wedged
-case. Kept here as a struck-through record rather than deleted so the idea is not re-proposed as new:
-it was considered and declined, not forgotten.
+## ⌃Q arm-before-quit — WON'T DO (owner, 2026-08-28; a stray ⌃Q is recoverable and ⌃Q⌃Q already covers the wedged case)
 
 ---
 
@@ -860,50 +736,9 @@ walk. Raised by Tasks 3, 5 and 7 independently; Task 5's review notes the one-fr
 not work"*, because by the time the verb is sent the fleet is already parked — a real phase needs a
 live fleet at shutdown and inverts the lane's closing assertion.
 
-### 3. ~~`⌃C` and `⌃Q` report success on the keypress, before any write is confirmed~~ **CLOSED 2026-08-12**
+### 3. ⌃C and ⌃Q report success on the keypress before any write is confirmed — DONE (2026-08-12)
 
-**Important, pre-existing, raised as M12 by Task 7's review and left.** Both halves are now fixed;
-the entry is kept rather than deleted, and the third clause below is **still open** and re-ranked.
-
-`park` says *"parking @alex — /resume alex brings it back"* before the frame lands; if the daemon
-refuses, the refusal arrives afterwards and contradicts it. **`⌃Q`'s version is worse and is why
-this is still here:** the window is already closing, so a refused write's error frame has **nowhere
-to land at all**. The hedge in `parkingFleet` covers the grace, not the write.
-
-Related and separate: a park the daemon could not *write down* (`parked.add` failing) reaches only
-the daemon log, while every client is still attached — Task 5's m1, addressed to the ⌃Q task and
-not taken. Whoever gives the notice row a pending state should take all three.
-
-**`⌃C` closed 2026-08-11** (`015cd1c`) — the press names the ask, `parkArrived` makes the promise on
-the first report that says parked. **`⌃Q` closed 2026-08-12**, branch `fix/park-confirm`; the
-argument, the measurement and what is still owed are under the dated heading at the end of this
-file. **The `parked.add` clause is untouched and is now its own item** — see there.
-
-### 4. ~~A fresh spawn admitted after `takeAgents` starts a process `shutdown` never sees~~ **CLOSED 2026-08-20**
-
-**Closed on branch `fix/daemon-review`, by the prescribed fix:** `takeAgents` sets `taken`
-under `s.mu` in the same locked step as the snapshot, and `register` and `replaceParked` refuse
-while it is set. `TestAdmissionIsRefusedOnceTheFleetIsTaken` drives launch with the fleet taken and
-was red before. One residual, found by the adversarial review of that branch: an `unparkRecord`
-raced by shutdown now loses its park book entry - the record is removed before launch, the taken
-door refuses, and `bookParked` books only snapshotted agents - so the raced wake loses the *offer*
-across the restart (the transcript itself is still on claude's disk, and `wake import` reaches it).
-That is `unparkRecord`'s own documented trade for every failed launch, strictly better than the
-leaked process it replaces, and it is written here rather than fixed because putting the record
-back is a decision about what a book entry means. The history below is kept, struck where the
-close made it false.
-
-~~**Important. Half-closed; the original sub-case is untouched.**~~
-
-Task 7's review found and closed the *second* sub-case this branch created — a stop consumed on an
-unstarted session which then exec'd anyway, which under `⌃Q` would have dropped that session from
-the park book, the one outcome park exists to prevent. ~~The original is unchanged: `stopping` and
-`register` are not one step, so a spawn landing between them leaks a `claude` past the grace, the
-kill and the roster clear.~~
-
-~~Not attempted deliberately — it is a shutdown-path change with `beginQuit`, `waitForAgents` and
-every restart test in its blast radius.~~ **The prescribed fix** — a flag written under `s.mu` in
-`takeAgents`, read by `admit` — **is what closed it**, above.
+### 4. A fresh spawn admitted after `takeAgents` starts a process `shutdown` never sees — DONE (2026-08-20)
 
 ### 5. `⌃Q` may never reach the program on a real terminal
 
@@ -3187,50 +3022,9 @@ A second session took the outstanding-bug list while another took Phase 2's
 manager. Entries here are appended rather than edited into the list above, so
 the two lanes cannot conflict in a file they both want.
 
-### CLOSED — #1, a woken session answering from the conversation it parked with
+### #1 — a woken session answering from the conversation it parked with — DONE
 
-`a7087dd`. A fake `claude` that keeps a transcript keyed by session id and reads
-it back on `--resume`, plus two tests: park and wake in one daemon, and the shape
-an operator actually produces — `⌃Q`, the daemon exits, a **second** daemon
-restores from the park book, `/resume`. Separate tests because they fail for
-different reasons, and one covering both would report the wrong cause half the
-time.
-
-The passphrase is told before the park and asked for after the wake **in a
-message that does not contain it**. An echoing fake, a fake reading the wrong
-file, and a fake starting empty on resume each produce an answer without it.
-
-The mutation that makes them evidence rather than decoration: removing
-`ResumeFrom` from `unpark`, so a wake spawns fresh instead of resuming, turns
-both red in 0.08s. That is a **product** mutation — a test that only caught bugs
-in its own fake would prove nothing about Wake.
-
-### FOUND AND FIXED — two test binaries failed each other, and it was never about two people
-
-`199d662`. The fixture session ids were three fixed UUID constants, so any two
-`internal/daemon` or `cmd/wake` test binaries running at once each saw the
-other's fake agent holding the id, and `resumeSafe` correctly refused every
-wake. The failure message accuses the code under test:
-
-    a process is still running under session a11a0000-...-00000000a11a,
-    so resuming it would put two processes on one transcript
-
-**`go test ./...` runs packages in parallel by default**, and both packages spawn
-agents under those ids — so this was one `make test` away from biting a single
-developer on a quiet machine, and it would have looked exactly like a flake in
-whatever wake test ran second.
-
-Now per-process: the node field carries a nonce, the tag stays at both ends so a
-failure still reads `a11a…a11a`, and only the last field moves so the id stays
-the valid v4 UUID `mintedByWake` requires. Two concurrent `./internal/daemon/`
-runs failed 3/3 before and pass after; two concurrent `go test ./...` runs both
-pass.
-
-*Also decoupled:* the park book's format anchor compared hand-written bytes
-against `idAlpha`. Those bytes are what **another build** wrote, so nothing about
-them may move when this build's fixtures do — an anchor that followed the
-fixture would assert only that this build can read what it just generated, which
-is the round trip three lines above it.
+### Two test binaries failed each other, and it was never about two people — DONE
 
 ### The lesson, one level up from the one already recorded
 
@@ -3248,117 +3042,15 @@ failing too, which is the tell that the cause is environmental rather than in th
 diff; and running the base commit, which passed 3/3 and located the problem in
 twenty seconds after an hour of not thinking to.
 
-### CLOSED — #2, neither soak lane parks or wakes
+### #2 — neither soak lane parks or wakes — DONE
 
-Its entry was partly stale: Task 5 had already added the park phase. What was
-missing was **waking** and **⌃Q**.
+### #8 — the legend truncated mid-entry — DONE
 
-The lane now parks the fleet, wakes half and leaves half parked — the woken half
-is a live fleet at shutdown (the churn phase drains everything before that
-point, so it is the only thing making the daemon stop real processes on the way
-out), and the parked half keeps the book non-empty when the quit arrives, which
-is what makes the existing "stop clears the book" assertion about anything.
+### #3 — ⌃C reported success before the write was confirmed — DONE
 
-**The sequential wake phase was not enough, and mutation is how that was found.**
-Waking each id once from one connection walks the path and no part of the hazard
-it guards: gutting `replaceParked`'s pointer-identity check left the lane green.
-`raceWake` asks two connections for the same id at once — the shape that matters,
-because each connection is dispatched on its own goroutine — and with the check
-gone the lane now reports *"11 processes still running after the daemon exited,
-up from 1"*. That was `CLAUDE.md`'s own prediction about that check, asserted
-nowhere until now.
+### #9 — a woken conversation opened with no account of itself — DONE
 
-`TestSoakParkAllLeavesAFleetToComeBackTo` covers ⌃Q at fleet scale, separately,
-because the two quit verbs disagree about exactly one thing and folding it in
-would invert the lane's closing assertion. Its header states what it does **not**
-discriminate: gutting `bookParked` leaves it green, because `completePark`
-writes the same records from each fan-out goroutine. What it kills is
-`FrameParkAll` dispatched to `quitStop` — the book holds 0 of 20.
-
-*Still open from that entry:* nothing exercises `admitRefusal`'s wake sentence
-or `withdraw`'s wake arm **by their text** under load; the race phase reaches
-both paths but asserts on the process count rather than on what the loser was
-told. Low value — both have unit coverage — but it is the honest remainder.
-
-### CLOSED — #8, the legend truncated mid-entry
-
-`hintFitting` drops an entry that does not fit rather than slicing it. At 80
-columns the line now ends cleanly at `⇧⇥ next blocked` instead of a bare `⌃D`.
-
-Both halves of the entry go together: the ragged cut, and a cut landing inside a
-label so what remains reads as a **different key's** whole label. `⌃Q`'s
-`quit & park all` ordering is now belt-and-braces rather than load-bearing.
-
-*The guard walks every width*, which is the lesson from the defect before it
-rather than thoroughness: that one shipped **because** its guard sampled, and at
-the sampled width the glyph survived while the label was cut. It splits on the
-separator and requires each part to be a whole entry — exact where
-`strings.Contains` is not, since `⇥` is a substring of `⇧⇥`.
-
-**It made an older guard's premise false, and that guard's own vacuity floor
-caught it.** `TestNoWidthCutsALegendEntryIntoADifferentKeysLabel` scanned for
-entries the cell cut had shortened; there are none now. Strictly subsumed — if
-no fragment is drawn, none can read as anything — so the truncation half is gone
-and the half that never depended on truncation remains as
-`TestEveryLegendEntryHasItsOwnLabel`. Rung 7 arriving inside my own change.
-
-*Not closed, and it is the other half of the entry:* with a DM open the last six
-entries are invisible on every terminal up to ~300 columns. That is the legend
-being longer than any pane, not a truncation defect — it wants either fewer
-entries or a second row, and both are design calls rather than fixes.
-
-### CLOSED — #3, ⌃C reported success before the write was confirmed
-
-The keypress now names the ask (`parking @alex…`) and `parkArrived` says
-`@alex is parked - /resume alex brings it back` when the first fleet report
-names it. That is ⌃F's rule one key over, and `CLAUDE.md` already states it:
-**the report is the confirmation and the keypress is not.**
-
-Reports once per *transition*, not once per report — every report names a parked
-session for as long as it stays parked — and says nothing about sessions this
-client did not ask to park, because a fleet is shared.
-
-**⌃Q's half needed no change, and the entry was right about why.** `parkingFleet`
-already names the ask rather than the outcome. What remains there is *inherent*:
-the window is already closing, so a refused write has nowhere to land. Anyone
-giving the notice row a pending state should reconsider it then; it cannot be
-fixed by wording.
-
-*Still open, and it is the third of the three that entry named:* a park the
-daemon could not **write down** (`parked.add` failing) reaches only the daemon
-log while every client is still attached. Task 5's m1. Untouched here.
-
-*Note for whoever owns `CLAUDE.md`:* one derived number moved with this —
-`internal/ui/app.go` 731 → 735, the field this adds. Its guard failed loudly
-with the correction in its own message.
-
-### CLOSED — #9, a woken conversation opened with no account of itself
-
-`ui.TranscriptNotice` is the sentence, said by `wake attach` and now by a wake
-too — **one copy**, where `cmd/wake` had it inline. `wakeArrived` says it when a
-report first shows a session this client asked to wake as running again, which
-is `parkArrived`'s shape and `⌃F`'s rule before it: the keypress names the ask,
-the report earns the sentence.
-
-*Second derived-number correction in two commits* — `internal/ui/app.go` 735 →
-738 for the `waking` field, after 731 → 735 for `parking`. The guard failed both
-times with the right number in its own message, which is the strongest argument
-for that sentence being derived rather than trusted.
-
-### CLOSED — #10, no test read a park book written by an older build
-
-Five hand-written historical shapes: before `parked`, before `label`, before
-`dir`, a build carrying fields this one has never heard of, and an empty book.
-The property is one sentence — **a book from another build loses only what it
-does not carry** — because `loadParkBook` returning nil is exactly how a
-silently dropped fleet would look.
-
-It went green immediately, which the entry predicted, so both mutations were run
-to show it discriminates: strict decoding kills the unknown-field row, dropping
-dir-less records kills the pre-`dir` row, and each kills only its own.
-
-Task 4's honest note still stands: the first *real* instance exists the day a
-second version ships. This is the machinery, checked.
+### #10 — no test read a park book written by an older build — DONE
 
 ---
 
@@ -3386,40 +3078,7 @@ create or name them from inside itself."* `/new`, `/name` and `/task` close the
 create half and the name half. What is closed, what is refused, and what is
 deferred — each with what would reopen it.
 
-### CLOSED — item 14, `/add-<agent-name>` cannot route as spelled
-
-**Refused as spelled, and not approximated.** The choice item 14 stated was
-*change the syntax to `/add <name>`, or reopen the guard*. Neither was taken,
-and the third answer is the one the evidence supports. Three arguments, in
-`internal/ui/slash.go`'s header, and the first is new:
-
-- **A `<verb>-<suffix>` rule claims an operator's whole command set.** Item 14
-  named the near-miss as *"claude ships `/add-dir`"*. The recorded corpus is
-  worse: of the **133** commands claude advertised on `init` frames across
-  `testdata/stream`, most are hyphenated and **eight begin `new-`** —
-  `/new-oscar`, `/new-victor`, `/new-sierra` and the rest, which are this
-  repository owner's own. The rule that reaches `add-sydney` eats all of them.
-- **It is not decidable from the draft.** `/add-dir` and `/add-sydney` are the
-  same shape; separating them means asking the fleet, so the set of drafts Wake
-  claims would change between keystrokes and an operator would lose `/add-dir`
-  for as long as some agent was called `dir`. The rule is *resolve against a
-  closed set Wake owns*, and the fleet is closed but not **stable**.
-- **There is nothing for it to do.** The verb adds a live agent to the group
-  chat, and in this build every live agent is already in it — `Fleet.Observe`
-  folds every session and `App.apply` filters none. It becomes a real verb the
-  day a group has membership (`internal/ui/groups.go`), and whoever builds that
-  can spell it then.
-
-`/add <name>` was **not** shipped in its place for the third reason: a command
-that does nothing is the lying feature the legend rule exists to prevent.
-
-The ruling is guarded rather than only written down. `/add-dir ~/project` and
-`/new-oscar` are in `TestAnOperatorsOwnCommandStillReachesTheAgent`, and the
-realistic mutant — `word, _, _ = strings.Cut(word, "-")` in the router — is
-killed three ways: the behavioural test on `/new-oscar`, the second write to
-`word`, and the `"-"` literal.
-
-**What would reopen it:** group membership. Whoever builds it owns the spelling.
+### item 14 — `/add-<agent-name>` cannot route as spelled — DONE
 
 ### The passthrough list is no longer five words, and it found something
 
@@ -3750,14 +3409,7 @@ this build has no way to raise, which is a much larger finding.
 *Do not remove the qualifier without that recording.* It was unqualified for one commit and pinned as
 a test, so the assertion had a guard defending it.
 
-### An import has no TUI surface — **CLOSED 2026-08-12 by `/adopt`**
-
-It is `/adopt` rather than `/import`, and the word is the finding: `import` is in the recorded
-corpus of what claude advertises on its `init` frame, in 45 of the 45 files that carry the key, so
-this entry's own proposed spelling would have replaced a working command with a refusal. The cap
-this entry predicted was needed and is `cmd/wake`'s `adoptRows` (10), with the true total and
-`wake import` named for the rest. See `docs/notes/decisions.md` and
-`.superpowers/sdd/import-command-report.md`.
+### An import has no TUI surface — DONE (`/adopt`, 2026-08-12)
 
 ### One at a time — and the founding ask was about **selection**, not about `--all`
 
@@ -4536,65 +4188,9 @@ streaming agents — with or without every conversation open, which took a secon
 gate (`App.wants`) to make true. **The cost was bounded, so it shipped.** What follows is what the
 measurement did not reach.
 
-### 1. ~~The schema has no recording behind it~~ — **CLOSED 2026-08-21**, by the one turn it asked for
+### 1. The schema has no recording behind it — DONE (2026-08-21)
 
-`testdata/stream/partial-turn.jsonl` (2.1.238, `test/partial-messages-fixture`). Every claim below
-held: the envelope as transcribed, the text delta as read, and — the load-bearing one — partials
-arrive *in addition to* the completed `assistant` frame, byte-identical to it. The five
-`notInTheCorpus` excuses are deleted and the vocabulary guard holds the words to bytes. The
-multi-message token fold was recorded the same day (`debug-runtime.jsonl`, three messages summing
-exactly to the result's figure); findings and provenance:
-`docs/superpowers/notes/2026-08-21-partial-messages-findings.md` and
-`2026-08-21-runtime-command-findings.md`. The original entry:
-
-**The highest-value item here, and it is a recording rather than code.**
-
-`wireStreamEvent` is transcribed by hand from claude 2.1.233's own zod schema — the standing this project
-already gives the `TodoWrite` vocabulary — stronger than documentation, weaker than a frame — but it
-makes `stream_event` the **one inbound shape in the airlock with nothing recorded behind it**, which
-is a first. `airlock_test.go`'s `notInTheCorpus` carries the three words with that reason, so the
-excuse is visible rather than implied.
-
-`partialEvent` is written to survive being wrong: every shape it does not recognise yields **no
-event at all**, so a moved schema costs the preview and never the transcript. That covers the field
-names. It does **not** cover the assumption the whole design rests on:
-
-> **Partials arrive *in addition to* the completed `assistant` frame, not instead of it.**
-
-If that is false, a streamed turn is missing from the transcript entirely and the design has to be
-rethought rather than tuned. The bundle says it is true — the SDK adapter maps `stream_event` and
-`assistant` through separate arms and the consumer handles both — and no recording says anything.
-`docs/live-testing.md` §15 asks for the turn, in those words, and its first check is this one.
-
-### 2. The inbox's margin roughly halves, and its drop notice starts lying — **CLOSED 2026-08-16**
-
-**Closed by `fix/partials-and-the-drop-notice`, to this entry's own prescription and one rule
-further.** The finding below is left standing because it is the argument; what changed is:
-
-- **A partial folds** into its session's unconsumed one in the ring rather than taking a slot
-  (`inbox.folds`, a per-session index under `b.mu`, exactly as prescribed). A frame of any other
-  kind for that session closes the fold, or the next block's first tokens would be appended to a
-  preview that block is about to clear. Occupancy no longer depends on the token rate:
-  `TestOneSessionsTokensShareOneSlot` streams 4,096 tokens into one slot.
-- **A partial never evicts.** The fold alone does not say that — a session with no fold open,
-  arriving into a full ring, still dropped the oldest — so one that finds no room is dropped where
-  it stands. `TestAFloodOfTokensCannotEvictAnAsk` is the reproduction: before the fix, a permission
-  request behind four ring-fulls of tokens was gone and 6,145 frames were reported dropped.
-- **`dropped` counts the record and nothing else**, at both ends of that, which is the notice half
-  this entry says goes with the buffer half.
-- **`internal/daemon/client.go` got the same rule**, since its `flush` tells the same lie for the
-  same reason. `partialCeiling = clientQueue / 2` reserves half the queue for the record and a
-  dropped preview is not confessed. It is a ceiling rather than a fold because the daemon sends into
-  a channel and cannot reach the far end of it — this file's own §3 and `client.go`'s header both
-  say so.
-- **Measured, not asserted.** `BenchmarkInboxStall` prices the fold at ~100ns and ~350 bytes a
-  token: 161–192µs per fleet-second of tokens against 54–62µs for the same frames as record, which
-  is ~2% of the 7.4–8.3ms that fleet-second costs through the real Update and View.
-  `BenchmarkClientEnqueue` says a preview on a full queue is 4.4ns against a record's 8.9ns, both
-  allocation-free.
-
-What is **not** closed by it is §3 below, narrowed: the daemon's per-frame *encode and write* cost is
-still unpriced, and the soak still does not stream.
+### 2. The inbox's margin roughly halves, and its drop notice starts lying — DONE (2026-08-16)
 
 ---
 
