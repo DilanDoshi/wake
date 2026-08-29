@@ -21,22 +21,79 @@ const (
 	// draws a single column. Tuned against the pty harness (spec §9).
 	minTileWidth = 26
 
+	// minTileHeight is the shortest a tile can be and still frame a name, a
+	// state word and a row of live tail. It floors how many tile rows fit in a
+	// frame; the cells then stretch to fill whatever height is left, so a big
+	// window grows the cells rather than the count.
+	minTileHeight = 7
+
 	// tileGap is the blank column between neighbouring tiles.
 	tileGap = 1
 
-	// tileBodyRows is the fixed inner height every tile pads to, so a wall of
-	// tiles is a regular grid: a state line, up to maxPreviewRows of live tail,
-	// and the subagent count. Tuned against the pty harness.
-	tileBodyRows = maxPreviewRows + 2
+	// maxTileTailRows bounds the live tail a tile retains. It relaxes the DM
+	// preview's maxPreviewRows cap (partial.go) so a big cell fills with output
+	// rather than stopping at three rows - the board's narrowed guardrail 2:
+	// bounded to the tile body, still no scrollback. A render draws only the
+	// rows its own cell has; this is the ceiling on what is kept per token.
+	maxTileTailRows = 10
 )
 
-// tileHeight is the rows one tile occupies: its body plus the rounded border's
-// top and bottom.
-func tileHeight() int { return tileBodyRows + 2 }
+// tileGrid is the tiled board's geometry for one frame: how many columns and
+// rows of tiles, and the width and height of each cell. One value, computed
+// once by tileGridFor, so the draw, the mouse and the cursor all measure the
+// same grid - the board's own "draw and mouse measure one number" invariant.
+type tileGrid struct {
+	cols, rows   int
+	cellW, cellH int
+}
 
-// tileColumns is how many tiles fit across a width, at least one.
-func tileColumns(width int) int {
-	return max((width+tileGap)/(minTileWidth+tileGap), 1)
+// tileGridFor chooses a near-square grid that fills the frame. A few agents get
+// big cells stretched across both axes; once there are more agents than fit at
+// the minimum cell size, the grid caps at that maximum and the overflow pages
+// through the cursor window. cellW keeps the fill-width split; cellH is the new
+// half - the rows stretch to fill the height the way the columns already fill
+// the width, so the wall auto-resizes with the window.
+func tileGridFor(width, availH, n int) tileGrid {
+	maxCols := max((width+tileGap)/(minTileWidth+tileGap), 1)
+	maxRows := max(availH/minTileHeight, 1)
+	cols, rows := 1, 1
+	switch {
+	case n <= 0:
+		// A degenerate but safe single cell rather than a divide-by-zero.
+	case n <= maxCols*maxRows:
+		cols = clamp(ceilSqrt(n), 1, maxCols)
+		rows = ceilDiv(n, cols)
+		if rows > maxRows { // a short frame forces a flatter grid
+			rows = maxRows
+			cols = min(ceilDiv(n, rows), maxCols)
+		}
+	default: // more agents than fit at min size: cap and page the rest
+		cols, rows = maxCols, maxRows
+	}
+	return tileGrid{cols: cols, rows: rows, cellW: tileCellWidth(width, cols), cellH: max(availH/rows, 1)}
+}
+
+// ceilSqrt is the smallest c with c*c >= n, the near-square column count for n
+// tiles. Zero for a non-positive n.
+func ceilSqrt(n int) int {
+	c := 0
+	for c*c < n {
+		c++
+	}
+	return c
+}
+
+// ceilDiv is a/b rounded up, for a >= 0 and b >= 1.
+func ceilDiv(a, b int) int { return (a + b - 1) / b }
+
+// boardTileGrid is the frame's tile geometry, computed from the width and the
+// available height the tiled board draws at - the pane less the title and the
+// key line. The draw, the mouse and the cursor all read this one grid, so a
+// click and a tile cannot disagree: the board's "measure one number" invariant,
+// in two dimensions.
+func (a App) boardTileGrid(n int) tileGrid {
+	availH := max(a.paneHeight()-boardChromeRows-1, 1)
+	return tileGridFor(a.layout.Width, availH, n)
 }
 
 // tileCellWidth is each tile's width once the column count is chosen: the frame
@@ -97,24 +154,21 @@ func tileWindowStart(cursor, total, cols, visibleRows int) int {
 // boardKeyLineTiles rather than the row view's, since ←→ really move the
 // cursor here.
 func (a App) tileView(agents []Agent, width int) string {
-	cols := tileColumns(width)
-	cellW := tileCellWidth(width, cols)
-	rowsVisible := max((a.paneHeight()-boardChromeRows-1)/tileHeight(), 1)
+	g := a.boardTileGrid(len(agents))
 	cursor := a.boardCursor(agents)
-	start := tileWindowStart(cursor, len(agents), cols, rowsVisible)
+	start := tileWindowStart(cursor, len(agents), g.cols, g.rows)
 
 	head := mutedLine(fmt.Sprintf("%s — %d agents", boardTitle, len(agents)), width)
-	body := make([]string, 0, rowsVisible)
-	for r := 0; r < rowsVisible; r++ {
-		cells := make([]string, 0, cols)
-		for c := 0; c < cols; c++ {
-			i := start + r*cols + c
+	body := make([]string, 0, g.rows)
+	for r := 0; r < g.rows; r++ {
+		cells := make([]string, 0, g.cols)
+		for c := 0; c < g.cols; c++ {
+			i := start + r*g.cols + c
 			if i >= len(agents) {
-				cells = append(cells, strings.Repeat(" ", cellW))
+				cells = append(cells, strings.Repeat(" ", g.cellW))
 				continue
 			}
-			ag := agents[i]
-			cells = append(cells, a.tile(ag, cellW, i == cursor))
+			cells = append(cells, a.tile(agents[i], g.cellW, g.cellH, i == cursor))
 		}
 		body = append(body, joinTilesRow(cells))
 	}
@@ -128,9 +182,15 @@ func joinTilesRow(cells []string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, interleave(cells, gap)...)
 }
 
-// tile is one agent as a rounded box: the name in the top edge, its state and
-// what it is doing (or saying) in the body, and its subagent count.
-func (a App) tile(ag Agent, width int, cursored bool) string {
+// tile is one agent as a rounded box of a fixed cell size: the name in the top
+// edge, its state and what it is doing (or saying) in the body, and its
+// subagent count. The body is built to exactly height-2 rows - the border owns
+// the other two - so the box is exactly `height` tall and the grid stays
+// regular; titledBox itself never constrains height. This holds for height >= 3
+// (the box's own minimum: two borders and a row); a shorter cell only occurs on
+// a terminal too small to use the board, where View's firstRows clips the frame
+// so an oversize tile cannot scroll the alt screen.
+func (a App) tile(ag Agent, width, height int, cursored bool) string {
 	boxStyle := TextStyle
 	switch {
 	case cursored:
@@ -139,7 +199,7 @@ func (a App) tile(ag Agent, width int, cursored bool) string {
 		boxStyle = warnStyle
 	}
 	head := rowGlyph(ag) + " " + ag.Name
-	body := a.tileBody(ag, width)
+	body := a.tileBody(ag, width, max(height-2, 1))
 	return titledBox(body, width, boxStyle, oneLine(head), "", boxStyle, boxStyle)
 }
 
@@ -157,32 +217,45 @@ func (a App) tile(ag Agent, width int, cursored bool) string {
 // truncates by row count, not by how many pieces the body was assembled from.
 // Without that, a tail wrapped to multiple lines was one `lines` element
 // holding several rows, and padRows padded the *element* count back up to
-// tileBodyRows on top of them - overshooting tileHeight() and growing the
-// whole tile row, since titledBox never constrains height. The state line and
-// the subagent-count line are truncated to `inner` for the same reason: each
-// is one `lines` element, and titledBox's Width(edge) word-wraps either one
-// into a second physical row the moment it is wider than the tile's edge.
-func (a App) tileBody(ag Agent, width int) string {
+// `rows` on top of them - overshooting the cell height and growing the whole
+// tile row, since titledBox never constrains height. The state line and the
+// subagent-count line are truncated to `inner` for the same reason: each is
+// one `lines` element, and titledBox's Width(edge) word-wraps either one into a
+// second physical row the moment it is wider than the tile's edge.
+//
+// The state line and the subagent count are the two framing lines; the middle
+// - a live tail while the agent works, else a fallback detail line - fills only
+// `mid`, the rows left between them. Budgeting the middle rather than only the
+// tail is what keeps the subagent count, appended last, off the row padRows
+// drops: at a small cell the detail line used to ignore the budget and crowd it
+// out. `lines` holds one physical row per element, so padRows sizes by rows.
+func (a App) tileBody(ag Agent, width, rows int) string {
 	inner := max(width-boxFrameWidth, 1)
 	lines := []string{HintStyle.Render(ansi.Truncate(labelOf(ag.State), inner, ellipsis))}
 
-	if ag.State == rpc.StateWorking {
-		if tail := a.tails[ag.ID].sized(inner); tail.text != "" {
-			lines = append(lines, tailLines(tail.view, inner)...)
+	if mid := max(rows-2, 0); mid > 0 {
+		if t := a.tails[ag.ID].sized(inner); ag.State == rpc.StateWorking && t.text != "" {
+			tl := tailLines(t.view, inner)
+			if len(tl) > mid {
+				tl = tl[len(tl)-mid:] // the newest rows that fit
+			}
+			lines = append(lines, tl...)
 		} else if d := boardDetail(ag); d != "" {
 			lines = append(lines, ansi.Truncate(oneLine(d), inner, ellipsis))
 		}
-	} else if d := boardDetail(ag); d != "" {
-		lines = append(lines, ansi.Truncate(oneLine(d), inner, ellipsis))
 	}
 
-	subs := len(a.fleet.RunningTasks(ag.ID))
-	word := "subagents"
-	if subs == 1 {
-		word = "subagent"
+	// The subagent count fits whenever the cell has room for a second framing
+	// line; below that (a one-row body) only the state line is drawn.
+	if rows >= 2 {
+		subs := len(a.fleet.RunningTasks(ag.ID))
+		word := "subagents"
+		if subs == 1 {
+			word = "subagent"
+		}
+		lines = append(lines, ansi.Truncate(fmt.Sprintf("⤷ %d %s", subs, word), inner, ellipsis))
 	}
-	lines = append(lines, ansi.Truncate(fmt.Sprintf("⤷ %d %s", subs, word), inner, ellipsis))
-	return strings.Join(padRows(lines, tileBodyRows), "\n")
+	return strings.Join(padRows(lines, rows), "\n")
 }
 
 // tailLines splits a live tail's wrapped view into its physical rows and
@@ -194,7 +267,7 @@ func (a App) tileBody(ag Agent, width int) string {
 // tile narrower than minBlockWidth its lines come back wider than inner - the
 // same boardDetail lines beside them are already truncated to. Each line is
 // truncated here too, or titledBox's Width(edge) word-wraps the overrun into
-// extra physical rows and grows the tile past tileHeight().
+// extra physical rows and grows the tile past its cell height.
 func tailLines(view string, inner int) []string {
 	rows := strings.Split(view, "\n")
 	out := make([]string, len(rows))
