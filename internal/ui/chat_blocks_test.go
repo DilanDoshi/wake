@@ -63,6 +63,42 @@ func TestAReplyTallerThanTheCapBecomesAPointerIntoTheDM(t *testing.T) {
 	}
 }
 
+// A folded room reply shows the response's real output-token count - the number
+// Claude reported for that message - rather than a word count.
+func TestAFoldedReplyShowsItsTokenCount(t *testing.T) {
+	long := "token refresh.\n\n" + strings.Repeat("more on the token refresh.\n\n", roomInlineRows+5)
+	b := roomBlock(
+		core.Event{Kind: core.KindAssistantText, Text: long, OutputTokens: 210},
+		Agent{ID: "s1", Name: "sydney", Label: "auth-fix"},
+		roomWidth,
+		false,
+	)
+	if !strings.Contains(b.text, "210 tokens") {
+		t.Errorf("the folded reply did not show its token count:\n%s", b.text)
+	}
+	if strings.Contains(b.text, "words") {
+		t.Errorf("the folded reply still counts words:\n%s", b.text)
+	}
+}
+
+// A reply that arrived without a usage count drops the figure rather than
+// showing a zero it cannot stand by - the open-DM hint is all that remains.
+func TestAFoldedReplyWithNoTokenCountShowsNoFigure(t *testing.T) {
+	long := "token refresh.\n\n" + strings.Repeat("more on the token refresh.\n\n", roomInlineRows+5)
+	b := roomBlock(
+		core.Event{Kind: core.KindAssistantText, Text: long, OutputTokens: 0},
+		Agent{ID: "s1", Name: "sydney"},
+		roomWidth,
+		false,
+	)
+	if !strings.Contains(b.text, openDMHint) {
+		t.Fatalf("precondition: the reply should still collapse to a pointer:\n%s", b.text)
+	}
+	if strings.Contains(b.text, "tokens") || strings.Contains(b.text, "words") {
+		t.Errorf("a reply with no usage showed a length figure it cannot back up:\n%s", b.text)
+	}
+}
+
 // The decision follows the rendered height, across shapes and widths. Each body
 // is rendered by the test itself, so the assertion is not a guess about
 // glamour's row math but the invariant the code implements: collapse iff the

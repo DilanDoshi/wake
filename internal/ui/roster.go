@@ -358,7 +358,7 @@ func (r Roster) subStyle(agentID string, t Task) lipgloss.Style {
 // far less urgent than warn. The selection rides along as bold when the blocked
 // row is also the cursor, so nothing is lost by giving warn the top slot.
 func (r Roster) headStyle(a Agent) lipgloss.Style {
-	style, colored := identityStyle(a.Color)
+	style, colored := identityStyleFor(a)
 	selected := r.Selected != "" && a.ID == r.Selected && r.SelectedTask == ""
 	switch {
 	case a.State == rpc.StateBlocked:

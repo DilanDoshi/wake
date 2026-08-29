@@ -93,8 +93,11 @@ const (
 	markerSep = " "
 
 	// collapsedFormat is the pointer's last line: how much there is, and the
-	// key that opens it.
-	collapsedFormat = "⤷ %s · " + openDMHint
+	// key that opens it. collapsedNoCount is the same line without the figure,
+	// for a response that carried no token count - the figure is dropped rather
+	// than shown as a zero.
+	collapsedFormat  = "⤷ %s · " + openDMHint
+	collapsedNoCount = "⤷ " + openDMHint
 
 	// unnamedSpeaker heads a line from an agent this client has no name for
 	// yet. Reachable: fan-out starts before a spawn is confirmed, so an event
@@ -119,7 +122,7 @@ func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 	w := max(width, minBlockWidth)
 	switch ev.Kind {
 	case core.KindAssistantText:
-		return block{text: agentSaid(ev.Text, a, w, expanded)}
+		return block{text: agentSaid(ev.Text, ev.OutputTokens, a, w, expanded)}
 	case core.KindUserText:
 		return block{text: youSaid(ev.Text, w)}
 	case core.KindTurnEnd:
@@ -152,14 +155,14 @@ func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 // height decision and the collapsed preview are taken from: a long message is
 // exactly the case glamour's process-global mutex makes expensive, so it is
 // never put through it twice.
-func agentSaid(text string, a Agent, width int, expanded bool) string {
+func agentSaid(text string, count int, a Agent, width int, expanded bool) string {
 	head := speakerStyle(a).MaxWidth(width).Render(speaker(a))
 	body := strings.TrimSpace(text)
 	rendered := render.Markdown(body, width)
 	if expanded || renderedRows(rendered) <= roomInlineRows {
 		return joinBlock(head, rendered)
 	}
-	return joinBlock(head, collapsed(rendered, words(body), width, roomCollapseLines))
+	return joinBlock(head, collapsed(rendered, tokenLabel(count), width, roomCollapseLines))
 }
 
 // roomCollapsible reports whether an event draws as a pointer at this width -
@@ -211,11 +214,30 @@ func renderedRows(rendered string) int {
 func collapsed(rendered, count string, width, keep int) string {
 	lines := strings.Split(strings.Trim(rendered, "\n"), "\n")
 	kept := lines[:min(len(lines), max(keep, 1))]
-	tail := ansi.Truncate(fmt.Sprintf(collapsedFormat, count), width, ellipsis)
+	line := collapsedNoCount
+	if count != "" {
+		line = fmt.Sprintf(collapsedFormat, count)
+	}
+	tail := ansi.Truncate(line, width, ellipsis)
 	return strings.Join(append(kept, HintStyle.MaxWidth(width).Render(tail)), "\n")
 }
 
+// tokenLabel is how much a response ran to, in Claude's own output-token count -
+// the unit the rest of Wake measures in. Empty for a response with no count, so
+// the pointer drops the figure rather than showing a zero it cannot stand by.
+func tokenLabel(n int) string {
+	if n <= 0 {
+		return ""
+	}
+	if n == 1 {
+		return "1 token"
+	}
+	return fmt.Sprintf("%s tokens", thousands(n))
+}
+
 // words is how much there is to read, in the unit a person judges length in.
+// The plan card still measures in words - a plan is not an assistant message
+// and carries no token count of its own.
 func words(text string) string {
 	n := len(strings.Fields(text))
 	if n == 1 {
@@ -305,7 +327,7 @@ func collapseWhitespaceOneLine(s string) string { return strings.Join(strings.Fi
 // otherwise. Only the ordinary turn header takes it - the finished marker stays
 // muted and an ask stays warn, because those are state rather than identity.
 func speakerStyle(a Agent) lipgloss.Style {
-	if style, ok := identityStyle(a.Color); ok {
+	if style, ok := identityStyleFor(a); ok {
 		return style
 	}
 	return AccentStyle

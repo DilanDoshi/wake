@@ -144,9 +144,9 @@ func statusBar(a Agent, mode string, width int) string {
 	// The bar recedes in the muted grey every bar wears, and it does not take the
 	// agent's /color hue: it is the least urgent thing on screen and the one that
 	// is about the session rather than the turn, so it stays chrome. The identity
-	// hue is where the operator's eye rests instead - the room name-tag, the
-	// roster row, and the composer they type into (speakerStyle, headStyle,
-	// Composer.boxStyle).
+	// hue - including the manager's yellow default (identityStyleFor) - is where
+	// the operator's eye rests instead: the room name-tag, the roster row, and
+	// the composer they type into (speakerStyle, headStyle, Composer.boxStyle).
 	return HintStyle.Render(ansi.Truncate(line, width, ellipsis))
 }
 

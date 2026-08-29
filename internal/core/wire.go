@@ -416,6 +416,14 @@ type wireMessage struct {
 	// user frames, and a bare string on compaction summaries and
 	// <local-command-stdout> frames.
 	Content json.RawMessage `json:"content"`
+
+	// Usage is the message's own token accounting on an assistant frame, kept
+	// raw and decoded separately (messageUsage). A malformed usage must never
+	// cost the prose beside it: decoding it into the struct here would fail the
+	// whole message and collapse it to a content-free KindUnknown - the
+	// all-or-nothing hazard messageEvents decodes content block-by-block to
+	// avoid, and a RawMessage never fails to capture whatever bytes are there.
+	Usage json.RawMessage `json:"usage"`
 }
 
 // wireBlock is one content block. Thinking blocks also carry "signature"
