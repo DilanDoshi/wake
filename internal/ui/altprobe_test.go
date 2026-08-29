@@ -76,8 +76,8 @@ func TestAltLettersNeedAConfiguredTerminalAndVanishUnderKitty(t *testing.T) {
 	}
 }
 
-// And the arrows are unmodified by comparison, which is what makes ↑↓ the
-// roster's and ⌥↑↓ available for something else.
+// And the arrows are unmodified by comparison, which is what keeps bare ↑↓ for
+// the roster or the query cursor and ⌥↑↓ available for the prompt history.
 func TestBareArrowsAreStillTheirOwnKeys(t *testing.T) {
 	for _, tc := range []struct {
 		seq  string

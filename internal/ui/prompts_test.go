@@ -1,7 +1,7 @@
 package ui
 
-// Walking back through what you typed, on ⌥↑↓ - because ↑↓ move the roster
-// cursor here and keep doing so.
+// Walking back through what you typed, on ⌥↑↓ - because bare ↑↓ move the roster
+// cursor or the query cursor here (keys.go), so the history needs the modifier.
 
 import (
 	"os"

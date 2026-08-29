@@ -390,8 +390,9 @@ func TestTheMenuWalksWithoutTheArrowKeys(t *testing.T) {
 	}
 }
 
-// ↑↓ are the roster's and stay the roster's. Their rebinding is an open ruling,
-// and a menu that took them would decide it.
+// The menu never claims ↑↓ or ↵, whatever they do outside it: here the draft is
+// a single line, so ↑↓ move the roster (keys.go) - in a multi-line draft they
+// move the query cursor - and a menu that took them would shadow either.
 func TestTheMenuNeverTakesTheArrowKeys(t *testing.T) {
 	fresh(t)
 	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(200, 40)

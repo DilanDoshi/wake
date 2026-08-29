@@ -4,8 +4,9 @@ package ui
 //
 // # Why the modifier, and why arrows
 //
-// ↑↓ recall the previous prompt in Claude Code and move the roster cursor here,
-// and the roster keeps them - nothing of Wake's moves for this. ⌥ is what is
+// ↑↓ recall the previous prompt in Claude Code, while here they move the query
+// cursor or the roster (keys.go) - either way the bare arrows are taken, so
+// nothing of Wake's history moves for this. ⌥ is what is
 // left that a terminal actually delivers: keyprobe_test.go measures ⌥↑ arriving
 // as `\x1b[1;3A` and as `\x1b\x1b[A`, both named, while ⌥+letter under the
 // Kitty protocol produces no message at all.
