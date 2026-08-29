@@ -4262,20 +4262,22 @@ recorded says what the CLI does with `--model opus --fallback-model opus`. A str
 not close it regardless — `opus` and `claude-opus-5` may be one model and nothing in this tree
 resolves an alias. *What closes it:* one recorded spawn with the two equal.
 
-**Wake — a session's effort is readable after all, and nothing reads it.** `docs/notes/deferred.md`
-and `internal/daemon/effort.go` both rested on *"effort is on no frame Wake receives at all"*, which
-was true of every frame Wake receives **unasked**. The bare `/model` reply carries it —
-`Current model: Opus 5 (1M context) (effort: xhigh)` — and §1 of
+**Wake — a session's effort is readable after all, and now it is read. BUILT 2026-08-29.**
+`docs/notes/deferred.md` and `internal/daemon/effort.go` both rested on *"effort is on no frame Wake
+receives at all"*, which was true of every frame Wake receives **unasked**. The bare `/model` reply
+carries it — `Current model: Opus 5 (1M context) (effort: xhigh)` — and §1 of
 `docs/superpowers/notes/2026-08-13-bare-command-findings.md` records that costing `num_turns: 0` and
-`$0`. So the daemon *could* confirm the level it believes, for free, instead of only remembering what
-it asked for. *Why not now:* two reasons and the second is the real one. Wake claims the bare
-`/model` for its own picker, so it would have to send one deliberately and then swallow the reply,
-which is a turn the operator did not type appearing in their transcript. And the level would be
-parsed out of **English an assistant wrote**, which is a different class of thing from reading a JSON
-field — the airlock exists to keep that distinction. *What closes it:* a decision that the daemon may
-issue a probe of its own, plus somewhere to put the answer that does not read as something the
-operator said. Until then the pane goes on showing the level Wake **asked for** and saying nothing
-about confirmation.
+`$0`. The two reasons this was deferred are both answered rather than dodged. Wake claims the bare
+`/model` for its own picker, so a probe *is* a turn the operator did not type — so the daemon sends it
+without `noteSent` (it counts as no turn and never marks the agent owed) and `absorbProbe` swallows
+the reply at `fanOut` before it reaches any client, while `history.go` drops the on-disk
+`/model`+`Current model:` pair on the way back, so it appears in no transcript. And the level is
+parsed out of **English an assistant wrote**, which stays behind the airlock: `core.IsModelReply` and
+`core.EffortFromModelReply` live in `vocabulary.go`, asserted against `testdata/stream/bare-model.jsonl`.
+The confirmed level lands on `agent.confirmedEffort`, published as `SessionStatus.Effort` (preferred
+over the asked-for one), and the probe fires once on `init` and again after an `/effort` change. Park
+still relaunches from the asked-for level, so a probed `auto`/`ultracode` never reaches an argv, and
+`parkedRecord` gains nothing — a woken session re-probes.
 
 **Wake — the manager may not set effort or model on other agents, and this is a refusal rather than a
 gap.** `cmd/wake/mcpguard_test.go` already refuses `mode` on the argument that a manager which could

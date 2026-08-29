@@ -8,6 +8,45 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-08-29 — the effort probe, and why an invisible turn is the honest one
+
+Effort is on no frame Claude sends unasked, so for a long time the status bar could only repeat the
+level Wake **asked for**. The one way to read the real level back is the bare `/model` reply
+(`Current model: … (effort: xhigh)`), which the CLI answers locally — `num_turns:0`, `$0`,
+`duration_ms:11`, no model inference. So the daemon sends one and reads the level out of it. Three
+rulings make that safe rather than a leak.
+
+**It counts as no turn.** The probe send skips `noteSent`, so the agent is never marked owed and
+never looks busy; at fleet scale a probe that flipped thirty agents to *working* on startup would be
+noise the operator has to learn to ignore. The `/effort` re-probe rides `noteEffort` returning
+whether it recorded a level, so it fires only on a send that actually changed the record.
+
+**The reply reaches no client, and suppression is keyed on the reply — not on a flag.** `absorbProbe`
+(`internal/daemon/agent.go`) swallows the probe's assistant line and its following turn end at
+`fanOut`, before `observe` and before the broadcast, so the agent's state never moves and no
+transcript or room ever sees it. The window opens on the reply's own shape (`core.IsModelReply` on an
+assistant frame), not on the `probing` flag alone: `probing` is set on the serveInput goroutine while
+a previous turn's frames may still be draining on the fanOut goroutine, and a blanket "suppress while
+probing" would eat that turn's real end and clear the window early, leaking the probe. Keying on the
+reply text is race-safe because a real turn's frames do not carry it.
+
+**The on-disk pair is filtered, because suppression is live-only.** Claude writes the `/model` command
+and its `Current model:` reply to the transcript regardless, so `liveHistory` drops the pair on the
+way back (both the DM and the room read through it). Safe because `internal/ui` intercepts an
+operator's bare `/model` (the picker) and never sends it, so any `/model` on disk is Wake's probe.
+
+**The parse stays behind the airlock.** Reading a level out of assistant prose is exactly the
+JSON-vs-English boundary the airlock exists for, so `IsModelReply`/`EffortFromModelReply` live in
+`vocabulary.go`, asserted against `testdata/stream/bare-model.jsonl`. Display prefers `confirmedEffort`
+over the asked-for level; **park does not** — it relaunches from `currentEffort`, the level `--effort`
+accepts, so a probed `auto`/`ultracode` never reaches an argv. `parkedRecord` gains nothing; a woken
+session re-probes.
+
+One visible consequence, accepted: the room's composer now carries a target line *and* an info bar,
+where a DM carries only a bar, so with both on screen the room's input box sits one row above the
+conversation's. Their info bars and legends still align, which is what the eye follows;
+`cmd/wake/gridscreen_unix_test.go`'s `paneEdges` was taught the two box tops no longer share a row.
+
 ## 2026-08-16 — the emergency quit, and why no key could have been one
 
 Reported by the owner: Wake froze inside **cmux**, the screen went completely static, and neither a

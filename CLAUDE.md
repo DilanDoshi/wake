@@ -741,10 +741,18 @@ can restore an added directory after a park, which is the budget's own argument 
 `parkedRecord` field; `/debug` **works at runtime**, so the debug flags may drop and be re-asked.
 Adding the field is a feature decision the owner holds; see `deferred.md`.
 
-**Effort is the one thing Wake sets and cannot confirm.** A model is on every `init` frame, so a
-wrong label is wrong for one turn. Effort is on no frame Wake receives unasked, so the pane shows the
-level Wake **asked for** and nothing says "applied". This is the permission mode's receipt rule in
-the one direction it cannot go.
+**Effort was the one thing Wake set and could not confirm, and now the daemon confirms it.** A model
+is on every `init` frame, so a wrong label is wrong for one turn. Effort is on no frame Wake receives
+*unasked* — so the pane once showed only the level Wake **asked for**, with nothing saying "applied".
+The fix is a probe: the daemon sends a bare `/model`, whose reply names the level
+(`Current model: … (effort: xhigh)`, `num_turns:0`/`$0`), reads it back, and carries it on the report
+as `confirmedEffort`. The status bar prefers the confirmed level, falls back to the asked-for one
+until the probe answers, and shows nothing when Wake chose none and no probe has returned. The reply
+is **suppressed** at `fanOut` (`internal/daemon/fanout.go` — `absorbProbe`) so it reaches no client,
+and its on-disk `/model`+`Current model:` pair is **filtered** out of restored history
+(`internal/daemon/history.go`). The parse lives in the airlock (`core.EffortFromModelReply`). The
+probe fires once on `init` and again after an `/effort` change. See `internal/daemon/effort.go` and
+`docs/notes/decisions.md`.
 
 **Discovery verifies a directory; it never decodes one.** The project-dir slug is lossy, so
 `verifiedDir` holds three facts against each other and answers exactly one directory or none.
@@ -791,7 +799,8 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Accept loop, dispatch, shutdown | `internal/daemon/server.go` — `quitVerb`, `beginQuit`, `reconsiderEmptyExit`, `shutdown` |
 | One supervised session, liveness policy | `internal/daemon/agent.go` — `stateLocked` |
 | One agent's stdin path: queue, drain, apply | `internal/daemon/apply.go` — `submit`, `serveInput`, `apply` |
-| Spawn, fork, wake, fan-out, watchdog | `internal/daemon/spawn.go` — `launch`, `forkRefusal`, `admit` |
+| Spawn, fork, wake, watchdog | `internal/daemon/spawn.go` — `launch`, `forkRefusal`, `admit` |
+| Fan-out: one session's events to every client | `internal/daemon/fanout.go` — `fanOut`, where the effort probe's reply is consumed (`absorbProbe`) and the startup probe fires (`firstInit`). Split from `spawn.go` to keep it under the hard max |
 | The supervisor a launch runs under | `internal/daemon/launcher.go` — `newAgentLauncher`, `DirectAgentLauncherEnv` (why tests default to the direct path) |
 | May this spawn happen at all: boundary, cap | `internal/daemon/mayspawn.go` — `maySpawn`, `liveCount`, `capRefusal` |
 | The worktree a session runs in | `internal/daemon/worktree.go` — `sessionDir`, `addWorktree`, and `git`, whose command is bounded by a WaitDelay and a process group (`worktreeproc_{unix,other}.go`) so a post-checkout hook cannot hang it forever. The name fence is `internal/rpc/worktree.go`'s `ValidWorktreeName`, because both sides check it and `internal/ui` may not import the daemon. Wake creates it; Wake never removes it. A **worktree** spawn runs off the dispatch goroutine so a slow git cannot hold a client's other frames — `server.go`'s `dispatch`, where a no-worktree spawn stays in line to keep `mcp.go`'s `act` ordering |
@@ -861,7 +870,10 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Who owns that fold, and why it is not on `Agent` | `internal/ui/fleettasks.go` — `Fleet.tasks` keyed on session id, `RunningTasks` (the sidebar's filter), `named` (ingest-time enrichment for the ending line). It is a second map because `Agent` must stay comparable for `Observe`'s `now == was`. The sidebar reads it directly; nothing projects it onto the DM any more |
 | Subagents in the right sidebar | `internal/ui/rostersubs.go` — `subagentRow` (the type, then the count if it fits whole), `subsOf`, `viewingPicked` (what `⌃D` and a click do with one). The walk is `roster.go`'s `walkable`; `Roster.SelectedTask` names the dispatch while `Selected` stays the **agent**, so `⌃C`, `⎋` and `↵` keep targeting a session |
 | Where a subagent's frames are drawn | `internal/ui/dm.go` — `forwardedTo` (which transcript a frame belongs to) · `appendForwarded` · `Viewing` · `renderForwarded` |
-| The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, and the permission mode; cached on `DM.bar`, drawn per change. The mode is **drawn whole or dropped**, never right-cut into `permissions: …`, and it is never a bar on its own — see the header for why a row bought with one always-known fact costs a row of transcript |
+| The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, and the permission mode; cached on `DM.bar`, drawn per change, and drawn **above** the legend (info row over the keys). Effort is the level `confirmedEffort` reads back, or the asked-for one until then. The mode is **drawn whole or dropped**, never right-cut into `permissions: …` |
+| The room's info bar | `internal/ui/chat.go` — `Room.bar`/`Room.withBar` · `internal/ui/send.go` — `App.withRoomBar`, which draws it for the agent the composer is addressing (a lone `@name`, else the manager) and nothing for an empty room. Cached like a DM's; the room *banner* stays fact-free (`banner_test.go`) — this is a different row |
+| The composer's info line and legend | `internal/ui/composer.go` — `WithBar` places a pre-rendered bar between the box and the legend; the pane builds the bar (it reads the filesystem) |
+| The effort probe | `internal/daemon/effort.go` — `probeEffort`, `noteEffort` (returns whether it recorded), the `/model` compose · `internal/daemon/agent.go` — `confirmedEffort`, `absorbProbe`, `firstInit`, `setProbing` · `internal/daemon/fanout.go` — the fan-out loop that consumes the reply · `internal/core/vocabulary.go` — `IsModelReply`, `EffortFromModelReply` (asserted against `testdata/stream/bare-model.jsonl`) · `internal/daemon/history.go` — the disk filter |
 | Which branch a directory is on | `internal/gitref/` — one implementation, shared by the daemon's label and the status bar |
 | What a session runs as, and how full it is | `internal/core/protocol.go` — `initFacts`, `resultFacts` → `core.SessionFacts` → `ui.Agent.withFacts`. `initFacts` also carries `slash_commands`, which is what the completion menu offers |
 | Markdown · diffs · tool blocks · task lists | `internal/render/` — `todo.go` for the checklist · `tool.go` owns the layout and takes its palette from the caller, so `theme.go` stays the one place a colour is written down |
@@ -1116,7 +1128,7 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/event.go` at 800 and `internal/daemon/spawn.go` at 799 — that sentence is derived by
+  `internal/core/event.go` at 800 and `internal/ui/slash.go` at 799 — that sentence is derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
   message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
