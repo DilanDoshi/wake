@@ -15,20 +15,22 @@ package ui
 // frame is a comparison against the pane and the draft it was built for, which
 // is also what closes it.
 //
-// **`↑↓` stay the roster's and `↵` stays send.** ⇥ completes and ⌃N/⌃P walk,
-// all three read above App.key's switch the way cardKey and pickerKey are - so
-// they take no legend entry, and the menu advertises them on itself. The menu
-// arrives while somebody types rather than because they asked, so it may not
-// give the one irreversible key a second meaning.
+// **The menu never takes `↵`, and it never takes `↑↓`.** ⇥ completes and
+// ⌃N/⌃P walk, all three read above App.key's switch the way cardKey and
+// pickerKey are - so they take no legend entry, and the menu advertises them on
+// itself. The menu arrives while somebody types rather than because they asked,
+// so it may not give the one irreversible key a second meaning.
 //
 // ⌃N/⌃P shadow the text area's own line keys, and that shadow is why the menu
-// is scoped to the **cursor** rather than to the trailing token. ↑↓ are
-// unconditionally the roster's, so ⌃N/⌃P are the only way to move between the
-// lines of a multi-line draft - and a menu claimed by a `@` at the end of the
-// buffer took them from every cursor position in it, which is a draft with no
-// vertical movement at all. So a menu exists only while the cursor is at the
-// end of the word it describes: it costs one space - which closes the menu -
-// and it buys back both the arrows and the lines.
+// is scoped to the **cursor** rather than to the trailing token: a menu claimed
+// by a `@` at the end of the buffer would take ⌃N/⌃P from every cursor position
+// in it. So a menu exists only while the cursor is at the end of the word it
+// describes: it costs one space - which closes the menu - and it buys back the
+// walk keys and the text area's own line movement. Plain ↑↓ are the roster's
+// only when the cursor cannot move within the draft (keys.go). Because a menu is
+// only up while the cursor is already at the end of the draft, ↑ there moves the
+// cursor up - off the trailing token, closing the menu on the next rebuild -
+// while ↓ has nowhere to go and stays the roster's.
 
 import (
 	"fmt"
