@@ -233,8 +233,10 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return a.movePane(Up), nil, true
 	case tea.KeyShiftDown:
 		return a.movePane(Down), nil, true
-	case tea.KeyCtrlG:
-		return a.toggleGroups(), nil, true
+	// ⌃G toggled the left workspaces sidebar, which is hidden for now - so the
+	// key is gone with it rather than advertised and doing nothing. toggleGroups
+	// and the sidebar's code are kept for the multi-groupchat version. See
+	// groups.go and legend.go.
 	case tea.KeyCtrlR:
 		return a.toggleRoster(), nil, true
 	case tea.KeyTab:

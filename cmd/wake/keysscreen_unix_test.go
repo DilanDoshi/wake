@@ -53,7 +53,9 @@ func TestShiftTabJumpsToTheBlockedAgent(t *testing.T) {
 	s.await("@" + name)
 }
 
-// ⌃G and ⌃R are the two sidebars, and both toggle.
+// ⌃R toggles the activity sidebar, and with it closed only the panes' own rule
+// is left. The left workspaces sidebar is hidden for now (groups.go), so ⌃R is
+// the one sidebar key.
 func TestTheSidebarsToggle(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
@@ -80,13 +82,10 @@ func TestTheSidebarsToggle(t *testing.T) {
 	s.send("\x12") // ⌃R on again
 	s.await("○ " + name)
 
-	s.send("\x12") // ⌃R off, so ⌃G is measured with one sidebar already gone
-	s.settle()
-
-	s.send("\x07") // ⌃G off: with both sidebars gone only the panes' own rule is left
+	s.send("\x12") // ⌃R off: the room and the conversation, with one rule between
 	s.settle()
 	if n := strings.Count(s.lines()[3], "│"); n != 1 {
-		t.Fatalf("want one rule with both sidebars closed, got %d.\n%s", n, s.dump())
+		t.Fatalf("want one rule with the sidebar closed, got %d.\n%s", n, s.dump())
 	}
 }
 

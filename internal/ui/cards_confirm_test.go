@@ -326,16 +326,26 @@ func TestSettlingACardTakesItsArmWithIt(t *testing.T) {
 // has vanished, and the mouse is the likeliest of all - the operator reaches
 // for it to scroll the room and read the card they are being asked about.
 func TestAnythingThatIsNotTheConfirmTakesBackAnArmedSettle(t *testing.T) {
-	for what, interrupt := range map[string]tea.Msg{
-		"a chord App.key's own switch claims": tea.KeyMsg{Type: tea.KeyCtrlG},
-		"an editing key it does not":          tea.KeyMsg{Type: tea.KeyBackspace},
-		"a mouse wheel":                       tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelUp},
-		"a click":                             tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft},
+	// The mouse events land on the focused conversation, not the origin: with
+	// the left workspaces sidebar hidden, (0,0) is now the room's own pane, and
+	// focusing it would let the ↵ below open the picked agent's DM - a cmd that
+	// reads like the confirm this test is trying to rule out. Clicking the pane
+	// that already holds the keys disarms without moving them. Built from `a`
+	// because the column's x depends on the layout.
+	for what, mk := range map[string]func(App) tea.Msg{
+		"a chord App.key's own switch claims": func(App) tea.Msg { return tea.KeyMsg{Type: tea.KeyCtrlR} },
+		"an editing key it does not":          func(App) tea.Msg { return tea.KeyMsg{Type: tea.KeyBackspace} },
+		"a mouse wheel": func(a App) tea.Msg {
+			return tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelUp, X: midOf(a.regions(), a.focusedCol()), Y: 1}
+		},
+		"a click": func(a App) tea.Msg {
+			return tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: midOf(a.regions(), a.focusedCol()), Y: 1}
+		},
 	} {
 		a := blockedPane(t)
 		a, _ = press(a, cardAllowKey)
 
-		m, _ := a.Update(interrupt)
+		m, _ := a.Update(mk(a))
 		a = m.(App)
 
 		a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})

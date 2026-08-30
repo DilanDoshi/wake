@@ -181,7 +181,8 @@ var legendEntries = []legendEntry{
 	{"⌃Y", "open right"},
 	{"⌃B", "open below"},
 	{"⌃W", "close pane"},
-	{"⌃G", "workspaces"},
+	// ⌃G workspaces is gone with the left sidebar it toggled, hidden for now;
+	// restored with the multi-groupchat version. See groups.go and keys.go.
 	{"⌃R", "activity"},
 	{"⇞⇟", "scroll"},
 	{"⌃E", "expand"},

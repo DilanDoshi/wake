@@ -81,6 +81,27 @@ func TestEveryDividerIsDrawnWhereRegionsPutsIt(t *testing.T) {
 	}
 }
 
+// The left workspaces sidebar is hidden for now, so the room owns the left
+// edge with no sidebar and no divider before it - even at a width wide enough
+// to have drawn it. The implementation is kept (groups.go); only the render and
+// the ⌃G key are gone, restored with the multi-groupchat version.
+func TestTheWorkspacesSidebarIsHidden(t *testing.T) {
+	a := newRoomApp(t).withSize(220, 40).withAgents("sydney", "john").applyGeometry()
+
+	r := a.regions()
+	if r.Groups != 0 {
+		t.Fatalf("the workspaces sidebar took %d columns at 220 wide; it is hidden for now and the room "+
+			"owns the left edge (groups.go)", r.Groups)
+	}
+	// Gone from the frame, not merely zero in the arithmetic: the room is the
+	// leftmost region, so "group chat" is drawn inside column 0's own columns
+	// with no sidebar and no divider before it.
+	_, end := colRange(r, 0)
+	if got := textIn(screen(a), 0, end, 0, len(screen(a))); !strings.Contains(got, "group chat") {
+		t.Fatalf("the room is not drawn at the left edge, so something is still left of it:\n%s", got)
+	}
+}
+
 // Each column draws its own conversation and nobody else's. The whole feature
 // is "put *that* agent over there", so a frame where the names are in the wrong
 // columns is the feature not working however well the widths measure.

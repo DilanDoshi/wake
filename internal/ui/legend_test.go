@@ -67,7 +67,6 @@ var legendKeyNames = map[string][]legendKey{
 	"⌃Y":   {{name: "KeyCtrlY", msg: tea.KeyMsg{Type: tea.KeyCtrlY}}},
 	"⌃B":   {{name: "KeyCtrlB", msg: tea.KeyMsg{Type: tea.KeyCtrlB}}},
 	"⌃W":   {{name: "KeyCtrlW", msg: tea.KeyMsg{Type: tea.KeyCtrlW}}},
-	"⌃G":   {{name: "KeyCtrlG", msg: tea.KeyMsg{Type: tea.KeyCtrlG}}},
 	"⌃R":   {{name: "KeyCtrlR", msg: tea.KeyMsg{Type: tea.KeyCtrlR}}},
 	"⇞⇟":   {{name: "KeyPgUp", msg: tea.KeyMsg{Type: tea.KeyPgUp}}, {name: "KeyPgDown", msg: tea.KeyMsg{Type: tea.KeyPgDown}}},
 	"⌃C":   {{name: "KeyCtrlC", msg: tea.KeyMsg{Type: tea.KeyCtrlC}}},
@@ -214,8 +213,10 @@ func teaKeyName(expr ast.Expr) string {
 // `⇧⇥ permissions` and `⌃X next blocked` arrived beside it, which is 17 cells of
 // key net. Then 231 until the grid's keys merged in beside them, and 311 until
 // `⌥↑↓ prompt history` arrived beside `⌃N⌃P dispatches` - the entry is 18 cells
-// and the separator in front of it is 3.
-const narrowLegendWidth = 317
+// and the separator in front of it is 3. It dropped from 317 when `⌃G
+// workspaces` left the legend with the hidden left sidebar - a 13-cell entry
+// and its 3-cell separator - narrowing the key half.
+const narrowLegendWidth = 300
 
 // What a legend too long for its pane loses, and in what order.
 //
@@ -305,7 +306,11 @@ func TestAWideLegendShowsEverything(t *testing.T) {
 // The constant is not therefore pointless: it is what
 // TestAWideLegendShowsEverything renders at, so the truncation test above is
 // measuring a cut rather than a legend that never had a mode.
-const fullLegendWidth = 334
+//
+// The ninth is a removal: `⌃G workspaces` went with the hidden left sidebar,
+// giving back 16 cells - the 13-cell entry and its 3-cell separator - so 334
+// became 318.
+const fullLegendWidth = 318
 
 func TestTheLegendFitsInTheWidthItClaims(t *testing.T) {
 	if got := len([]rune(hintLine(spawnedMode))) + hintIndentWidth; got != fullLegendWidth {
@@ -362,19 +367,20 @@ var legendWidthClaim = regexp.MustCompile(`needs \*\*([0-9]+) columns\*\*`)
 var terminalClaim = regexp.MustCompile(`terminal at least \*\*([0-9]+)\*\* columns wide`)
 
 // legendFitsAtTerminalWidth is the narrowest *terminal* whose room pane can
-// draw the whole legend: room-only, both sidebars open, which is the widest
-// pane this product produces.
+// draw the whole legend: room-only, the activity sidebar open, which is the
+// widest pane this product produces now the left workspaces sidebar is hidden
+// (ShowGroups stays false; see groups.go).
 //
 // Derived rather than stated, because the first draft of the sentence it backs
 // said the legend "fits in no pane this product has" - true of the 200-column
 // terminal it was measured at and false on a large monitor at a small font,
 // which is an ordinary setup rather than a corner. The room pane is the
-// terminal less the two sidebars and the frame, so this is a search rather than
+// terminal less the drawn sidebar and the frame, so this is a search rather than
 // arithmetic: Regions owns that relation and is allowed to change it.
 func legendFitsAtTerminalWidth(t *testing.T) int {
 	t.Helper()
 	for width := fullLegendWidth; width < fullLegendWidth*3; width++ {
-		roomOnly := Layout{Width: width, Height: 40, ShowGroups: true, ShowRoster: true}
+		roomOnly := Layout{Width: width, Height: 40, ShowRoster: true}
 		if roomOnly.Regions(1, 0).Room() >= fullLegendWidth {
 			return width
 		}

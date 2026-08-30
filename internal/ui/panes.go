@@ -506,6 +506,8 @@ func (a App) nextBlocked() App {
 // Applied immediately rather than through the settle: a keystroke is one change
 // and a drag is hundreds, so the debounce that makes a drag affordable would
 // only make a keypress feel broken.
+//
+//nolint:unused // left workspaces sidebar hidden for now; restored with the multi-groupchat version, when ⌃G rebinds to this. See groups.go.
 func (a App) toggleGroups() App {
 	a.layout.ShowGroups = !a.layout.ShowGroups
 	return a.resizePanes()

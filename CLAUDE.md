@@ -113,9 +113,10 @@ resolving.
 **The legend names only keys that work, and its order is a priority statement.** `ui.legendEntries`
 holds the (glyph, label) pairs, and a test requires a bijection with the `tea.Key…` cases in
 `App.key` — a glyph with no binding and a binding with no glyph are both build failures. **Do not add
-a key to that legend until the key works.** The whole legend needs **334 columns**; below that the
+a key to that legend until the key works.** The whole legend needs **318 columns**; below that the
 mode is cut first, deliberately, because a key is something to do and the mode is something to know.
-Drawing all of it needs a terminal at least **374** columns wide with both sidebars open, so every
+Drawing all of it needs a terminal at least **342** columns wide with the activity sidebar open (the
+left workspaces sidebar is hidden for now), so every
 ordinary terminal truncates and the order decides what is on screen: an
 80-column pane keeps `↵ esc ⌃O ⌃C ⇥ ⇧⇥` — leaving, parking, and the permission mode — and loses the
 rest, which now includes `⌃X next blocked` and `⌃Q quit & park all`. Every number and both lists here
@@ -247,7 +248,7 @@ a build failure**, and the Wake side is derived from `legendEntries` so a key ad
 construction. No count is written down, because a number nothing asserts drifts; the two maps in that
 file are the record. Only one collision is destructive: **⌃O expands a tool result there and detaches
 here**, so it is armed — the paragraph below is the whole mechanism. The rest are
-one-press confusions with a visible, reversible result (⌃T, ⌃G, ⌃R, ⌃B, ⌃E), and **⇧⇥ and ⌃E are not
+one-press confusions with a visible, reversible result (⌃T, ⌃R, ⌃B, ⌃E), and **⇧⇥ and ⌃E are not
 tolerated but asserted**: both sides cycle a permission mode and both reveal what a pane folded away,
 so they sit in `agrees`, where a rebinding on either side fails as an alignment that broke.
 
@@ -915,7 +916,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Hang-up and the way back | `internal/ui/hangup.go` |
 | Attention derivation | `internal/ui/attention.go` (**not** `internal/core/attention.go`, which the spec names) |
 | The awareness strip: the fleet in one row | `internal/ui/awareness.go` — `awarenessStrip`, `stateLabel` (a word per state, derived from `stateGlyph`), `stripWorkspace` |
-| Views and theme | `internal/ui/{chat,dm,cards,groups,roster,composer,theme}.go` |
+| Views and theme | `internal/ui/{chat,dm,cards,groups,roster,composer,theme}.go` — `groups.go` is the left workspaces sidebar, **hidden for now**: the code and its geometry (`Layout.ShowGroups`, `Regions`) are kept, but the app never enables it and there is no `⌃G`, until the multi-groupchat version. `⌃R` (activity/roster) is unaffected |
 | What a roster row spends 24 columns on | `internal/ui/roster.go` — `headLine`'s budget: the unread badge cuts the name, and the token count is dropped whole rather than cutting it. `rowTokens` draws on a **working** row only |
 | What the turn in flight has produced | `internal/core/protocol.go` — `turnTokensEvent`, off `message_delta`'s usage · `internal/ui/fleet.go` — `Agent.TurnTokens`, summed as the turn runs and cleared when it ends. **Never added to `Agent.Tokens`**, which is every *completed* turn: the result frame restates the same tokens |
 | The palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json`, maintained by hand (asserted by `palette_test.go`) |
