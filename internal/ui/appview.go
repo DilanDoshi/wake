@@ -129,10 +129,18 @@ func (a App) column(col, width, height int) string {
 	if bottom == 0 {
 		return a.pane(c.Top, width, top)
 	}
+	// Each pane is clipped to its own allocation before joining. A pane can draw
+	// taller than it was given - a task board is unbounded and is not in the
+	// composer's growth bound - and an unclipped overflow in the top pane pushes
+	// the bottom one down, so App.View's final clip cuts the bottom pane's own
+	// rows. On a focused card that means its key line off screen while
+	// cardFullyDrawn, measuring that pane's own height, still calls it drawn - an
+	// answerable permission decision nobody can see. Clipping here keeps one
+	// pane's overflow out of the other.
 	return lipgloss.JoinVertical(lipgloss.Left,
-		a.pane(c.Top, width, top),
+		firstRows(a.pane(c.Top, width, top), top),
 		HintStyle.Render(strings.Repeat(dividerRow, width)),
-		a.pane(c.Bottom, width, bottom),
+		firstRows(a.pane(c.Bottom, width, bottom), bottom),
 	)
 }
 

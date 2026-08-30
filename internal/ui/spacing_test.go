@@ -19,6 +19,42 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
+// A stacked column stays exactly its height even when the top pane's board
+// overflows its allocation, so the overflow is clipped to that pane rather than
+// pushing the focused bottom pane past App.View's final clip - which would cut a
+// blocked agent's card key line while cardFullyDrawn, measuring the bottom pane's
+// own height, still called it drawn. The task board is the overflow source: it
+// is unbounded and not in the composer's growth bound.
+func TestAStackedTopPaneOverflowDoesNotBleedIntoTheBottom(t *testing.T) {
+	fresh(t)
+	a := newRoomApp(t).withSize(120, 24).withAgents("sydney", "john")
+	a = pick(a, "s1").openRight("s1", "sydney")
+	a = pick(a, "s2").openBelow("s2", "john")
+	a = a.applyGeometry()
+
+	// A board on the top pane taller than its split allocation.
+	for i := range 24 {
+		a = a.observe("s1", taskCreate("task "+string(rune('a'+i%26)), "Doing"))
+	}
+	a = a.applyGeometry()
+
+	col := a.columnOf("s1")
+	r := a.regions()
+	w, h := r.Cols[col], a.paneHeight()
+	top, _ := a.layout.SplitRowsIn(col, h)
+
+	// The overflow is real, or the test exercises nothing: the top pane wants more
+	// rows than it was given.
+	if natural := lipgloss.Height(a.pane("s1", w, top)); natural <= top {
+		t.Fatalf("the top pane drew %d rows into %d - it did not overflow, so the bleed is not exercised", natural, top)
+	}
+	// And the column still measures exactly its height.
+	if got := lipgloss.Height(a.column(col, w, h)); got != h {
+		t.Fatalf("the stacked column drew %d rows into %d: the top pane's overflow bled into the bottom:\n%s",
+			got, h, stripANSI(a.column(col, w, h)))
+	}
+}
+
 // beatRowIn is the index of the working or done line, found by a marker only it
 // carries, or -1. The DM spinner trails its word with the ellipsis, the done
 // line carries the "· done " clause, and the room's minimal line reads
