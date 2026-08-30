@@ -4687,6 +4687,21 @@ fit at the minimum cell size; guardrail 2's live-tail cap was relaxed from the D
 rows to the cell's own body (bounded to `maxTileTailRows`), with the owner's approval. See the
 2026-08-28 amendment in `decisions.md` and the guardrail rewrite in the design spec.
 
+**Deferred, 2026-08-30 — inline images in a board tile (and in a transcript).** A tile shows an
+agent's live output as text; an image a tool returns (a `Read` of a PNG, a rendered chart) shows as
+`[Image]` — the placeholder floor, so it renders as *something* rather than nothing (the
+`toolResultText` fix, `fix/tool-result-image-placeholder`). Actually drawing the picture is **not**
+against the "not a terminal emulator" non-negotiable the way it first looks: it is an escape sequence
+the *host* terminal draws (iTerm2 OSC 1337, kitty graphics, sixel), the same delegation as the OSC 52
+clipboard write — Wake asks the terminal to draw, it does not emulate one. The real costs are three:
+**"cheap to leave open"** (an image is heavy — emit once per change, never per frame; a wall of thirty
+live tiles is the stress case); **terminal variance** (iTerm2 vs kitty vs sixel vs none, plus tmux/
+screen passthrough — so `[Image]` stays the fallback for terminals that cannot draw one); and **the
+exact-height invariant** (a cell holding a variable-pixel image complicates the alt-screen row math
+the tile render is built on). Owner-held: whether the board renders images at all, and whether that
+stays a board-only affordance or reaches every transcript. *Blocks:* nothing. *Closes with:* an owner
+ruling plus terminal-capability detection with an `[Image]` fallback.
+
 ## 2026-08-27 — feature idea, owner's ask: several group chats inside one fleet, not one room per fleet
 
 **The ask:** more than one group chat within a single Wake instance — separate room surfaces the
