@@ -333,12 +333,13 @@ func agentsOnRoster(s *screen) []string {
 	return out
 }
 
-// pickRoster walks the roster cursor from one named row onto another with ↓.
+// pickRoster walks the roster cursor from one named row onto another with ⇧↓ -
+// the roster's key since plain ↑↓ took Claude Code's prompt-history recall.
 //
 // The count is read off the screen rather than assumed to be one. Two things
-// made "↓ to the other agent" stop naming a row a test can predict: every room
+// made "⇧↓ to the other agent" stop naming a row a test can predict: every room
 // holds a manager as well as the agents a test made, and it sits among them in
-// arrival order - and Roster.Move **wraps**, so ↑ from the top row, a no-op
+// arrival order - and Roster.Move **wraps**, so ⇧↑ from the top row, a no-op
 // while a roster had a single row, now lands on the service instead.
 func (s *screen) pickRoster(from, to string) {
 	s.t.Helper()
@@ -348,7 +349,7 @@ func (s *screen) pickRoster(from, to string) {
 		s.t.Fatalf("the roster is %v and has no row for %q or %q.\n%s", rows, from, to, s.dump())
 	}
 	for range ((want-at)%len(rows) + len(rows)) % len(rows) {
-		s.send("\x1b[B")
+		s.send("\x1b[1;2B") // ⇧↓
 	}
 	s.settle()
 }

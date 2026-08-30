@@ -88,8 +88,8 @@ var acknowledged = map[collision]string{
 		"Wake has no external editor at all.",
 
 	{"ctrl+r", "history:search"}: "Claude Code searches your prompt history; Wake toggles the activity " +
-		"sidebar. Same shape as ⌃G - visible, reversible, one press. Wake has no prompt search; ⌥↑↓ " +
-		"walks the history without one.",
+		"sidebar. Same shape as ⌃G - visible, reversible, one press. Wake has no prompt search; ↑↓ " +
+		"walk the history without one, Claude Code's own recall keys.",
 
 	{"ctrl+b", "task:background"}: "Claude Code backgrounds the running task; Wake stacks the picked " +
 		"conversation under the focused pane. A pane opening is visible and ⌃W closes it.",

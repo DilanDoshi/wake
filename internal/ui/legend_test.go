@@ -52,16 +52,14 @@ var legendKeyNames = map[string][]legendKey{
 	"esc": {{name: "KeyEsc", msg: tea.KeyMsg{Type: tea.KeyEsc}}},
 	"⇥":   {{name: "KeyTab", msg: tea.KeyMsg{Type: tea.KeyTab}}},
 	"⇧⇥":  {{name: "KeyShiftTab", msg: tea.KeyMsg{Type: tea.KeyShiftTab}}},
-	"↑↓":  {{name: "KeyUp", msg: tea.KeyMsg{Type: tea.KeyUp}}, {name: "KeyDown", msg: tea.KeyMsg{Type: tea.KeyDown}}},
-	// The same two tea constants with Alt set, which is how bubbletea reports
-	// ⌥↑↓ - so the message is what tells these two entries apart, and this row
-	// is what makes the guard press the modifier rather than the bare key.
-	"⌥↑↓": {{name: "KeyUp", msg: tea.KeyMsg{Type: tea.KeyUp, Alt: true}}, {name: "KeyDown", msg: tea.KeyMsg{Type: tea.KeyDown, Alt: true}}},
-	"⇧←→↑↓": {
-		{name: "KeyShiftLeft", msg: tea.KeyMsg{Type: tea.KeyShiftLeft}},
-		{name: "KeyShiftRight", msg: tea.KeyMsg{Type: tea.KeyShiftRight}},
+	"↑↓": {{name: "KeyUp", msg: tea.KeyMsg{Type: tea.KeyUp}}, {name: "KeyDown", msg: tea.KeyMsg{Type: tea.KeyDown}}},
+	"⇧↑↓": {
 		{name: "KeyShiftUp", msg: tea.KeyMsg{Type: tea.KeyShiftUp}},
 		{name: "KeyShiftDown", msg: tea.KeyMsg{Type: tea.KeyShiftDown}},
+	},
+	"⇧←→": {
+		{name: "KeyShiftLeft", msg: tea.KeyMsg{Type: tea.KeyShiftLeft}},
+		{name: "KeyShiftRight", msg: tea.KeyMsg{Type: tea.KeyShiftRight}},
 	},
 	"⌃D":   {{name: "KeyCtrlD", msg: tea.KeyMsg{Type: tea.KeyCtrlD}}},
 	"⌃Y":   {{name: "KeyCtrlY", msg: tea.KeyMsg{Type: tea.KeyCtrlY}}},
@@ -214,8 +212,11 @@ func teaKeyName(expr ast.Expr) string {
 // `⇧⇥ permissions` and `⌃X next blocked` arrived beside it, which is 17 cells of
 // key net. Then 231 until the grid's keys merged in beside them, and 311 until
 // `⌥↑↓ prompt history` arrived beside `⌃N⌃P dispatches` - the entry is 18 cells
-// and the separator in front of it is 3.
-const narrowLegendWidth = 317
+// and the separator in front of it is 3. Then 315, when the arrow remap gave the
+// keys back two cells net: `⌥↑↓ prompt history` (18) and `⇧←→↑↓ move focus` (16)
+// left, `↑↓` took the `prompt history` label, and `⇧↑↓ pick agent` (14) and
+// `⇧←→ move focus` (14) arrived - keys 313 to 311.
+const narrowLegendWidth = 315
 
 // What a legend too long for its pane loses, and in what order.
 //
@@ -296,16 +297,17 @@ func TestAWideLegendShowsEverything(t *testing.T) {
 // too narrow to explain itself must still advertise - why ⇥ sits fifth, and why
 // ⌃Q sits last.
 //
-// The seventh is `⌥↑↓ prompt history`, which is 21 cells. It sits below `↑↓
-// pick agent` because it is those two keys under a modifier, and its cost is
-// paid at the far end of the truncation rather than at the near one: a pane too
-// narrow for it is a pane where recalling a prompt is a convenience and
-// leaving, parking and answering are not.
+// The seventh was `⌥↑↓ prompt history`, 21 cells, later dropped by the arrow
+// remap: `↑↓` took Claude Code's prompt-history recall and the `prompt history`
+// label, `⇧↑↓ pick agent` took the roster, and `⇧←→↑↓ move focus` shed its two
+// vertical arrows to become `⇧←→ move focus`. Net −2 cells, 334 to 332: the two
+// gone entries (18 + 16) against the two arrived (14 + 14) plus `↑↓`'s label
+// growing from `pick agent` (10) to `prompt history` (14).
 //
 // The constant is not therefore pointless: it is what
 // TestAWideLegendShowsEverything renders at, so the truncation test above is
 // measuring a cut rather than a legend that never had a mode.
-const fullLegendWidth = 334
+const fullLegendWidth = 332
 
 func TestTheLegendFitsInTheWidthItClaims(t *testing.T) {
 	if got := len([]rune(hintLine(spawnedMode))) + hintIndentWidth; got != fullLegendWidth {

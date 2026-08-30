@@ -1,7 +1,8 @@
 package ui
 
-// Walking back through what you typed, on ⌥↑↓ - because ↑↓ move the roster
-// cursor here and keep doing so.
+// Walking back through what you typed, on ↑↓ - Claude Code's own recall keys.
+// The roster moved to ⇧↑↓. ⌥↑↓ behave identically to the bare arrows (the switch
+// is on m.Type alone), which is why some cases below press the ⌥ form.
 
 import (
 	"os"
@@ -72,20 +73,20 @@ func TestTheWalkGivesBackTheDraftItStartedFrom(t *testing.T) {
 	}
 }
 
-// The bare arrows are still the roster's, which is the whole constraint this
-// key was chosen under: nothing of Wake's moves.
-func TestABareArrowStillMovesTheRosterAndLeavesTheDraft(t *testing.T) {
+// The roster is ⇧↑↓ now, and it leaves the draft alone: ⇧↓ picks without
+// recalling a prompt into the box.
+func TestAShiftArrowMovesTheRosterAndLeavesTheDraft(t *testing.T) {
 	a := spokenApp(t, "something said earlier").withAgents("alex", "john")
 	a.layout.ShowRoster = true
 
 	before := a.roster.Selected
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyShiftDown})
 
 	if a.roster.Selected == before {
-		t.Errorf("↓ left the roster cursor on %q: the roster keys are Wake's and do not move for this", before)
+		t.Errorf("⇧↓ left the roster cursor on %q: ⇧↑↓ are the roster's now", before)
 	}
 	if got := a.composer().Value(); got != "" {
-		t.Errorf("↓ put %q in the draft, so the bare arrow walked the prompt history", got)
+		t.Errorf("⇧↓ put %q in the draft, so it walked the prompt history instead of moving the roster", got)
 	}
 }
 
@@ -147,15 +148,15 @@ func TestTheRoomWalksWhatWasTypedIntoTheRoom(t *testing.T) {
 func TestAWalkWithNoHistorySaysSo(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40).withAgents("alex")
 
-	a, _ = pressKey(a, alt(tea.KeyUp))
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyUp})
 
 	n, said := notice.Latest()
-	if !said || !strings.Contains(n.String(), "⌥↑") {
-		t.Errorf("⌥↑ with nothing typed said %q; it has to name itself, the way every other key that "+
+	if !said || !strings.Contains(n.String(), "↑") {
+		t.Errorf("↑ with nothing typed said %q; it has to name itself, the way every other key that "+
 			"declines does", n)
 	}
 	if got := a.composer().Value(); got != "" {
-		t.Errorf("⌥↑ with no history put %q in the draft", got)
+		t.Errorf("↑ with no history put %q in the draft", got)
 	}
 }
 

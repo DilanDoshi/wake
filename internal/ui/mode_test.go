@@ -50,7 +50,7 @@ func initReporting(sessionID, mode string) rpc.Frame {
 func roomWithPick(t *testing.T, width int) App {
 	t.Helper()
 	a := newRoomApp(t).withSize(width, 40).withAgents("sydney", "alex", "john")
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyShiftDown})
 	if _, ok := a.pickedAgent(); !ok {
 		t.Fatal("no agent is picked: this test would assert nothing")
 	}

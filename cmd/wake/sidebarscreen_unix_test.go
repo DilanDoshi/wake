@@ -68,7 +68,7 @@ func TestAShortRosterSaysHowManyAgentsAreHidden(t *testing.T) {
 	}
 }
 
-// ↑↓ reaches an agent below the fold, and ⌃D opens the one it lands on.
+// ⇧↑↓ reaches an agent below the fold, and ⌃D opens the one it lands on.
 //
 // This is the defect end to end: before the window, the cursor moved onto rows
 // the column had stopped drawing, so ⌃D opened a conversation with an agent the
@@ -90,9 +90,9 @@ func TestTheCursorReachesAnAgentBelowTheFold(t *testing.T) {
 	// Up past the first drawn row. The cursor starts on the agent whose
 	// conversation was opened last, which is the bottom of the fleet, so the
 	// rows above the window are the ones to reach - and the window follows, so
-	// a name appears that was not on screen a moment ago.
+	// a name appears that was not on screen a moment ago. ⇧↑ is the roster's key.
 	for range len(shown) {
-		s.send("\x1b[A") // ↑
+		s.send("\x1b[1;2A") // ⇧↑
 	}
 	s.settle()
 

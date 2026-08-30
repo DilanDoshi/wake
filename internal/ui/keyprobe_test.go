@@ -116,7 +116,7 @@ func TestTheKeysTheLegendNamesAreTheKeysBubbleteaReports(t *testing.T) {
 		{"⌥↓, the same", "\x1b\x1b[B", "alt+down"},
 		{"⇧→, which moves the keys to the pane on the right", "\x1b[1;2C", "shift+right"},
 		{"⇧←", "\x1b[1;2D", "shift+left"},
-		{"⇧↑, which moves them to the upper slot of a split column", "\x1b[1;2A", "shift+up"},
+		{"⇧↑, which moves the roster cursor", "\x1b[1;2A", "shift+up"},
 		{"⇧↓", "\x1b[1;2B", "shift+down"},
 	} {
 		got := keysFor(t, tc.seq)

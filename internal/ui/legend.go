@@ -164,19 +164,17 @@ var legendEntries = []legendEntry{
 	{"⇥", "next chat"},
 	{"⇧⇥", "permissions"},
 	{"⌃X", "next blocked"},
-	{"↑↓", "pick agent"},
-	// Beside the bare arrows rather than with the other composer keys: it is the
-	// same two keys under a modifier, and a legend that separated them would
-	// make a reader hunt for the difference. Below them, because moving the
-	// cursor is how every other conversation is reached and this is a
-	// convenience on the box in front of you.
-	{"⌥↑↓", "prompt history"},
-	// After ↑↓ rather than beside ⇥: it is a movement key, but it moves among
-	// panes already drawn, so it is worth less than the permission mode to
-	// somebody in an 80-column pane. Placing it higher would push ⇧⇥ out of
-	// that set, which is a change to what a narrow pane advertises. Below the
-	// prompt history because that one is the same two glyphs under a modifier.
-	{"⇧←→↑↓", "move focus"},
+	{"↑↓", "prompt history"},
+	// Beside the bare arrows rather than with the other pane keys: ⇧↑↓ is the
+	// same two keys under a modifier, and a legend that separated them would make
+	// a reader hunt for the difference. The roster used to be the bare ↑↓; it
+	// moved here when those took Claude Code's prompt-history recall.
+	{"⇧↑↓", "pick agent"},
+	// After the arrows rather than beside ⇥: it is a movement key, but it moves
+	// among panes already drawn, so it is worth less than the permission mode to
+	// somebody in an 80-column pane. Placing it higher would push ⇧⇥ out of that
+	// set, which is a change to what a narrow pane advertises.
+	{"⇧←→", "move focus"},
 	{"⌃D", "open DM"},
 	{"⌃Y", "open right"},
 	{"⌃B", "open below"},
