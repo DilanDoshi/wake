@@ -404,9 +404,10 @@ var notInTheStatusReport = map[string]string{
 	"Budget":     "the spend ceiling this session was started under, and it is the one field here that is misleading rather than merely useless. Nothing reports spend-to-date on this surface, so a cap with no progress beside it tells a model that an agent *may stop* without telling it whether that is imminent or nowhere near - and a manager holding send_to_agent acts on what it is told. There is no budget verb here either, so it is not a fact this surface could do anything with. What would reopen it: a spend-to-date on the report, at which point the pair is a measurement rather than a ceiling",
 	"Commands":   "the slash commands a session advertised, which is the operator's completion menu and nothing this surface can act on: there is no command-typing verb here, and the list is the agent's own (it grows when an agent writes a .claude/commands file), so it is somebody else's words with nothing for a manager to do with them. It rides the report only so a reattached *client* can draw the menu",
 	"Color":      "the identity hue an operator chose for this agent, and pure display chrome: it says nothing about what the agent is doing, which is the only thing this report is for. There is no colour verb on this surface either - FrameColor is refused the manager for the same whose-decision reason - so it is a fact the manager could neither use nor act on, and one that would put the operator's own visual grouping into a model's context for nothing",
+	"PRs":        "the pull requests this session opened, which is the operator's status bar and nothing this surface can act on: there is no PR verb here, and the numbers are scraped from an agent's own tool output (agentAuthored), so they are somebody else's words with nothing for a manager to do with them. It rides the report only so a reattached client can draw the segment",
 }
 
-const notInTheStatusReportCount = 7
+const notInTheStatusReportCount = 8
 
 // agent_status is the daemon's facts, and which facts is a decision that
 // should fail loudly when rpc.SessionStatus grows a field.
@@ -432,15 +433,22 @@ func TestAgentStatusReportsEveryFactTheDaemonCarries(t *testing.T) {
 			sentinels[name] = sentinel
 			f.SetString(sentinel)
 		case reflect.Slice:
-			// Only []string today (RequestIDs). Filled so the exemption below is
-			// actually tested: the ids must not reach the report even though the
-			// blocked line does. A slice of any other element kind is a field
-			// this guard was never taught, which is a decision, not a skip.
-			if f.Type().Elem().Kind() != reflect.String {
-				t.Fatalf("SessionStatus.%s is a slice of %s and this guard only knows []string", name, f.Type().Elem().Kind())
+			// []string (RequestIDs) and []int (PRs). Filled so the exemption below is
+			// actually tested: neither must reach the report even though the blocked
+			// line does. A slice of any other element kind is a field this guard was
+			// never taught, which is a decision, not a skip.
+			switch f.Type().Elem().Kind() {
+			case reflect.String:
+				sentinels[name] = sentinel
+				f.Set(reflect.ValueOf([]string{sentinel}))
+			case reflect.Int:
+				// A distinct number the report must not carry, so the exemption is
+				// tested the way the string sentinel is.
+				sentinels[name] = "909090"
+				f.Set(reflect.ValueOf([]int{909090}))
+			default:
+				t.Fatalf("SessionStatus.%s is a slice of %s and this guard only knows []string and []int", name, f.Type().Elem().Kind())
 			}
-			sentinels[name] = sentinel
-			f.Set(reflect.ValueOf([]string{sentinel}))
 		}
 	}
 	// State has to survive round-tripping through the report as a word, and a
