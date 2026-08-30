@@ -573,10 +573,17 @@ func (r Room) View(width, height int) string {
 		transcript = quieted(transcript)
 	}
 	rows := []string{transcript}
-	// Between the transcript and the composer, where Claude Code puts it and
-	// where the conversation pane already draws its own.
+	// The working line, with a blank row above it so it sits clear of the output
+	// rather than crammed against it - Claude Code's own spacing. Its breathing
+	// room below is the composer gap the idle room already keeps.
 	if r.beat != "" {
-		rows = append(rows, r.beat)
+		rows = append(rows, "", r.beat)
+	}
+	// One blank row above the composer, dropped only when a picker or completion
+	// menu is pinned there. It is the idle room's breathing room and the working
+	// line's lower gap in one; baseChrome budgets it identically.
+	if r.menu == "" {
+		rows = append(rows, "")
 	}
 	// Last before the composer: the card, picker or completion menu is answered
 	// by typing, so it belongs at the query bar. Clipped to the same count
@@ -655,8 +662,14 @@ func (r Room) chromeHeight() int { return r.baseChrome() + r.menuRows() }
 // for it without asking for itself.
 func (r Room) baseChrome() int {
 	rows := lipgloss.Height(r.composer.View(max(r.width, minComposerWidth)))
+	// The working line plus the blank row View keeps above it.
 	if r.beat != "" {
-		rows++
+		rows += 1 + beatGap
+	}
+	// The blank row View keeps above the composer, dropped only when a menu is
+	// pinned there. Keyed on the raw field so this and View never disagree.
+	if r.menu == "" {
+		rows += composerGap
 	}
 	// The info bar's row. Counted separately because the composer measured here
 	// carries no bar - WithBar is a draw-time overlay, like the DM's, so the
