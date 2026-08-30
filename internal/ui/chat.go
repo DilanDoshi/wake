@@ -251,8 +251,11 @@ func (r Room) SetSize(w, h int) Room {
 	}
 	r.height = h
 	// The composer wraps the draft as keys arrive, so it is sized here rather
-	// than only when it is drawn. See Composer.SetWidth.
-	r.composer = r.composer.SetWidth(max(w, minComposerWidth)).WithMaxRows(composerRowsIn(h, r.composer.overhead()))
+	// than only when it is drawn (see Composer.SetWidth), and aboveComposerExtra
+	// is the chrome the draft may not grow into - the working line, its gaps and
+	// the bar - or the box outruns the pane and the frame scrolls the alt screen.
+	r.composer = r.composer.SetWidth(max(w, minComposerWidth)).
+		WithMaxRows(composerRowsIn(h, r.composer.overhead()+r.aboveComposerExtra()))
 	r.chrome = r.chromeHeight()
 	r.tr = r.tr.sized(max(w, minComposerWidth), max(h-r.chrome, minTranscriptHeight))
 	if following {
@@ -652,32 +655,37 @@ func (r Room) linesFor(id string) int {
 }
 
 // chromeHeight is the rows View spends on everything that is not conversation.
-// The composer is measured rather than assumed so this cannot drift out of
-// step with it; the working line is one row when there is one and none when
-// there is not, which is what makes it safe to give and take back.
+// The composer is measured rather than assumed so this cannot drift out of step
+// with it; the working line costs its own row and the beatGap above it, and none
+// when there is no turn - which is what makes it safe to give and take back.
 func (r Room) chromeHeight() int { return r.baseChrome() + r.menuRows() }
 
 // baseChrome is the chrome that is not the menu, which is what the menu's own
 // allowance is measured against. Split from chromeHeight so menuRows can ask
 // for it without asking for itself.
 func (r Room) baseChrome() int {
-	rows := lipgloss.Height(r.composer.View(max(r.width, minComposerWidth)))
-	// The working line plus the blank row View keeps above it.
+	return lipgloss.Height(r.composer.View(max(r.width, minComposerWidth))) + r.aboveComposerExtra()
+}
+
+// aboveComposerExtra is the rows above the composer that are not transcript: the
+// working line with its beatGap, the composerGap, and the info bar. Shared by
+// baseChrome and SetSize's composer bound so the draft may not grow into them -
+// or the composer plus its chrome outruns the pane and the frame scrolls. The
+// bar is added here because the composer measured for baseChrome carries none:
+// WithBar is a draw-time overlay, so the stored composer's height is bar-less.
+// DM's namesake adds a preview and a board the room has neither of.
+func (r Room) aboveComposerExtra() int {
+	n := 0
 	if r.beat != "" {
-		rows += 1 + beatGap
+		n += 1 + beatGap
 	}
-	// The blank row View keeps above the composer, dropped only when a menu is
-	// pinned there. Keyed on the raw field so this and View never disagree.
 	if r.menu == "" {
-		rows += composerGap
+		n += composerGap
 	}
-	// The info bar's row. Counted separately because the composer measured here
-	// carries no bar - WithBar is a draw-time overlay, like the DM's, so the
-	// stored composer's height is bar-less and the row is added back here.
 	if r.bar != "" {
-		rows++
+		n++
 	}
-	return rows
+	return n
 }
 
 // menuRows is how many rows of the menu block this pane draws: all of it, or

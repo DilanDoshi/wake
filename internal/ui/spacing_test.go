@@ -12,6 +12,9 @@ import (
 	"testing"
 	"time"
 
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -126,6 +129,27 @@ func TestRoomWorkingLineHasBlankRowsAroundIt(t *testing.T) {
 	}
 	if beat+1 >= len(lines) || strings.TrimSpace(lines[beat+1]) != "" {
 		t.Errorf("the row below the room's working line is not blank:\n%s", strings.Join(lines, "\n"))
+	}
+}
+
+// The gap rows are budgeted in the room's composer bound too, not only its
+// transcript sizing: a draft grown near its cap while the working line is up
+// must not push the frame past the pane. Without the beat and its gaps in
+// composerRowsIn the box outgrows its allowance and the room scrolls the alt
+// screen - the DM's own aboveComposerExtra rule, applied to the room.
+func TestRoomStaysInBoundsWithAWorkingLineAndAGrownComposer(t *testing.T) {
+	forceTrueColour(t)
+	const w, h = 60, 10
+	r := NewRoom().SetSize(w, h).WithWorking([]Agent{working("s1", "noah", time.Second, 100)})
+
+	// Typed through the real rune path, long enough to wrap past maxComposerRows.
+	c := r.Composer()
+	c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune(strings.Repeat("word ", 200))})
+	r = r.WithComposer(c)
+
+	if got := lipgloss.Height(r.View(w, h)); got != h {
+		t.Fatalf("a working room with a grown draft drew %d rows into a %d-row pane:\n%s",
+			got, h, stripANSI(r.View(w, h)))
 	}
 }
 
