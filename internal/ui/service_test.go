@@ -597,9 +597,12 @@ func TestAnArrivingManagerReportsAndOpensNoPane(t *testing.T) {
 	}
 }
 
-// And an ordinary agent still does open one, which is what makes the line above
-// a rule about the manager rather than a start that stopped working.
-func TestAnArrivingAgentStillOpensItsPane(t *testing.T) {
+// A fresh spawn - `/new`'s own arrival, ParentID empty like the manager's -
+// opens no pane either, and for a related reason: replacing whatever pane was
+// on screen for one that has said nothing yet is the wrong trade at fleet
+// scale. Unlike the manager it drafts a mention, so the room's composer names
+// the agent that just started rather than leaving the operator to spell it.
+func TestAnArrivingFreshSpawnPrefillsAMentionAndOpensNoPane(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40).awaitingStart("a1")
 
 	a = a.applyFrame(rpc.Frame{
@@ -609,8 +612,28 @@ func TestAnArrivingAgentStillOpensItsPane(t *testing.T) {
 		}},
 	})
 
+	if len(a.dms) != 0 {
+		t.Errorf("a fresh spawn opened %d conversation(s), want 0: it drafts a mention instead", len(a.dms))
+	}
+	if want, got := "@sydney ", a.room.Composer().Value(); got != want {
+		t.Errorf("the room's draft is %q after a fresh spawn arrived, want %q", got, want)
+	}
+}
+
+// A fork or an import still opens its pane: ParentID is what tells it apart
+// from a fresh spawn, and daemon.launch writes a non-empty one for both.
+func TestAnArrivingForkStillOpensItsPane(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).awaitingStart("a1")
+
+	a = a.applyFrame(rpc.Frame{
+		Kind: rpc.FrameStatusPush,
+		Status: &rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+			{ID: "a1", Name: "sydney", State: rpc.StateIdle, ParentID: "s0"},
+		}},
+	})
+
 	if len(a.dms) != 1 {
-		t.Errorf("an agent this client asked for opened %d conversation(s), want 1", len(a.dms))
+		t.Errorf("a fork this client asked for opened %d conversation(s), want 1", len(a.dms))
 	}
 }
 
