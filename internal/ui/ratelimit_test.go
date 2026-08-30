@@ -119,6 +119,28 @@ func TestOverlappingWarningsClearOnceAtTheLast(t *testing.T) {
 	}
 }
 
+// A warning arriving as the last frame before the daemon exits arms a clear
+// tick the done path never consumes (App.stream only arms in the `!m.done`
+// branch, and inbox.take can hand back a batch that is both non-empty and
+// done). Without a reset that stale arm rides across the reattach and the next
+// ordinary batch schedules a spurious tick keyed to a spent warning's gen - the
+// early-clear race the gen guard exists to prevent. A hang-up forgets it.
+func TestARateLimitWarningArmDoesNotSurviveAHangUp(t *testing.T) {
+	ticks := countRateLimitTicks(t)
+	a := sizedApp(t, nil, nil, "s1")
+
+	warn := core.Event{Kind: core.KindRateLimit, SessionID: "s1", Text: "allowed_warning", Notice: core.NoticeRateLimited}
+	done := streamMsg{batch: batch{frames: []rpc.Frame{{Kind: rpc.FrameEvent, SessionID: "s1", Event: &warn}}, done: true}, gen: a.gen}
+	m, _ := a.stream(done)
+
+	if *ticks != 0 {
+		t.Fatalf("the hang-up batch scheduled %d clear ticks itself, want 0", *ticks)
+	}
+	if m.(App).rl.arm {
+		t.Error("the warning's arm survived the hang-up; the next batch would schedule a spurious tick")
+	}
+}
+
 // A rate-limit event of either status never draws in the conversation
 // transcript - the surface is the timed notice above the composer.
 func TestARateLimitNeverDrawsInTheTranscript(t *testing.T) {

@@ -31,7 +31,9 @@ const rateLimitLinger = 6 * time.Second
 
 // rateLimitPrefix heads the warning. The status string is Claude's own value
 // (not a wire word - see CLAUDE.md's note on Event.Text), so it is passed
-// through beside it when there is one.
+// through beside it when there is one. "approaching" fits the only non-benign
+// status the corpus records ("allowed_warning"); a future "exhausted" status
+// would read oddly and is the note that revisits this wording.
 const rateLimitPrefix = "usage limit approaching"
 
 // rateLimitTimer is the seam the clear is scheduled through, for beat.go's

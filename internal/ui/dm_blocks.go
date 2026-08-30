@@ -355,9 +355,11 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		return mutedLine(withdrawnLabel, w)
 	case core.KindRateLimit:
 		// A quota heartbeat draws nothing in the scrollback: a warning is a
-		// timed pop-up above the composer (ratelimit.go) and a benign `allowed`
-		// is chrome. observe routes the live event here-ward before it reaches a
-		// transcript; this is the belt for a disk readback taking the same path.
+		// timed pop-up above the composer (ratelimit.go, where observe routes the
+		// live event) and a benign `allowed` is chrome. Explicit rather than left
+		// to default so the one kind whose transcript block was removed says so
+		// where the block used to be - a rate_limit frame never reaches history
+		// either, since DecodeTranscriptLine keeps only assistant and user lines.
 		return ""
 	case core.KindSystem:
 		// A dispatch ending is the one system frame that leaves a line: it is
