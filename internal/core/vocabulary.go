@@ -714,12 +714,15 @@ func dispatchResult(status string) SubagentResult {
 // four files end with…"), which is the one thing the airlock exists to
 // prevent, arriving through it rather than around it.
 //
-// Only text blocks contribute. The corpus holds one array that has none - a
-// lone tool_reference (interrupt-cancel-queued-empty.jsonl:28) - and that
-// yields "" rather than its JSON: a result with no prose has no prose to
-// show, and its ⏺ header still names the call, so the event is not lost.
-// Modelling tool_reference itself would mean designing a field around a shape
-// seen once whose meaning is unestablished.
+// Text and image blocks contribute; an image reads as ImagePlaceholder, the
+// same text blockEvent gives a decoded image on a user turn, because a Read of
+// a PNG records its tool_result as a lone image block and dropping it rendered
+// the result as nothing. The corpus also holds one array with neither - a lone
+// tool_reference (interrupt-cancel-queued-empty.jsonl:28) - and that still
+// yields "" rather than its JSON: a result with no prose has no prose to show,
+// and its ⏺ header still names the call, so the event is not lost. Modelling
+// tool_reference itself would mean designing a field around a shape seen once
+// whose meaning is unestablished.
 func toolResultText(content json.RawMessage) string {
 	if !isJSONArray(content) {
 		return jsonString(content)
@@ -734,10 +737,15 @@ func toolResultText(content json.RawMessage) string {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		}
-		if err := json.Unmarshal(rb, &b); err != nil || b.Type != blockTypeText || b.Text == "" {
+		if err := json.Unmarshal(rb, &b); err != nil {
 			continue
 		}
-		parts = append(parts, b.Text)
+		switch {
+		case b.Type == blockTypeText && b.Text != "":
+			parts = append(parts, b.Text)
+		case b.Type == blockTypeImage:
+			parts = append(parts, ImagePlaceholder)
+		}
 	}
 	return strings.Join(parts, "\n\n")
 }
