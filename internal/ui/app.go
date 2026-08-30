@@ -15,7 +15,6 @@ package ui
 import (
 	"errors"
 	"io"
-	"maps"
 	"net"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -547,6 +546,12 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.copied(m)
 
 	case tea.KeyMsg:
+		// A live query-box selection turns ⌫/delete into "remove what is
+		// highlighted" - read before cleared() wipes the selection, since that
+		// runs on every keystroke. See deleteSelectedDraft.
+		if next, cmd, handled := a.deleteSelectedDraft(m); handled {
+			return next, cmd
+		}
 		// Clears the highlight and then does its own job - see cleared.
 		a = a.cleared()
 		if model, cmd, handled := a.key(m); handled {
@@ -781,18 +786,4 @@ func (a App) appendEvent(ev core.Event) App {
 		return a.withRoom(a.room.Append(ev, Agent{}))
 	}
 	return a.withDM(a.focus, a.dms[a.focus].Append(ev))
-}
-
-// withDM returns an App whose dms map is its own.
-//
-// The map is copied rather than shared because Bubble Tea hands models around
-// by value and a shared map makes a discarded App's DM keep growing - the same
-// reason Fleet copies. It is the one write path into dms, so there is one place
-// for that to be true.
-func (a App) withDM(id string, dm DM) App {
-	next := make(map[string]*DM, len(a.dms)+1)
-	maps.Copy(next, a.dms)
-	next[id] = &dm
-	a.dms = next
-	return a
 }

@@ -886,7 +886,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Which conversations are on screen and where | `internal/ui/grid.go` — bounded: columns, each split once |
 | Pane focus, placement, and the DM ring | `internal/ui/panes.go` |
 | Frame layout, breakpoints, divider, mouse | `internal/ui/layout.go` · `appview.go` · `geometry.go` · `mouse.go` |
-| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) · `internal/ui/composersel.go` (the same, over the query box's own draft rows) |
+| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) · `internal/ui/composersel.go` (the same, over the query box's own draft rows) · `internal/ui/composerdelete.go` (⌫/delete removing the highlighted draft text, mapped back to raw runes through bubbles' own wrap) |
 | The clipboard, in three layers | `internal/ui/clipboard.go` · `cmd/wake/output.go` — the writer Bubble Tea draws through, which **must** embed `*os.File` |
 | Sending: routes, echoes, one command per draft | `internal/ui/send.go` |
 | Dropping an image into the composer | `internal/ui/imagedrop.go` — `droppedImage` (the paste hijack, read at the top of `App.key`), `imageDropPaths` (shape only, no I/O), `readDroppedImages` (the off-goroutine read, sniff, base64), `imageDropped` (fold to a chip, or path back on failure) · `internal/ui/composerimage.go` — `Attach`, `Images` (only the chips still in the draft), `stripImageChips`. The wire shape is `core.ImageBlock` → `rpc.Frame.Images` → `EncodeUserMessage` (images first, text last) |
@@ -1185,7 +1185,7 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/app.go` at 798 and `internal/ui/fleet.go` at 798 — that sentence is derived by
+  `internal/ui/fleet.go` at 798 and `internal/ui/dm.go` at 796 — that sentence is derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
   message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
