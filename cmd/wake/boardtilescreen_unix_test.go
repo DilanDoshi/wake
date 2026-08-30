@@ -33,13 +33,11 @@ func TestTheTiledBoardDrawsAndClicksOnAScreen(t *testing.T) {
 
 	// A click inside the first tile - row 2 (past the title row and the tile's
 	// own top border), column 2 (inside the first cell) - opens that agent and
-	// closes the board. The pane legend coming back is the durable fact
-	// boardscreen's esc case checks too.
+	// closes the board. The board giving way is the durable fact boardscreen's
+	// esc case checks too; the always-on legend is gone, so the board leaving is
+	// asserted directly rather than through a pane row it used to draw.
 	s.click(2, 2)
-	s.await("interrupt")
-	if strings.Contains(s.text(), "BOARD") {
-		t.Fatalf("the click opened a conversation but left the board drawn.\n%s", s.dump())
-	}
+	s.awaitGone("BOARD")
 }
 
 // A tile fills the frame rather than sitting at a fixed small height: with one

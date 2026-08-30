@@ -83,9 +83,9 @@ const (
 	liveBudget = "0.50"
 
 	// liveCols and liveRows are a realistic terminal rather than a generous one.
-	// CLAUDE.md's own measurement is that the whole legend needs 352 columns, so
-	// at 200 it truncates - which is the case an operator actually sees, and the
-	// case docs/notes/bugs.md BUG-1 was reported from.
+	// The permission mode lives in the status bar now, and 200 is where a real
+	// path can crowd it - the case an operator actually sees, and the case
+	// docs/notes/bugs.md BUG-1 was reported from.
 	liveCols, liveRows = 200, 50
 )
 

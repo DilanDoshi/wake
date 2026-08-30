@@ -1,9 +1,9 @@
 package ui
 
 // The line under the composer: where this session is, what it is running as,
-// and how much room it has left. Drawn above the legend rather than below it,
-// so the info row sits over the keys - what this session is, then what a key
-// would do.
+// and how much room it has left. Drawn inside the composer, below the box - and
+// above the armed cue on the rare frame one is up, so the info row still sits
+// over the keys when there are any.
 //
 //	~/Documents/wake  feat/fidelity  Sonnet 5 (1M context)  ctx:74%  effort:xhigh  permissions: auto
 //
@@ -63,6 +63,11 @@ const (
 
 	// homeGlyph replaces the operator's home directory in a path.
 	homeGlyph = "~"
+
+	// modeFormat is how the permission mode is spelled here. It used to be shared
+	// with the legend's tail; the legend no longer draws a mode, so the bar is
+	// its only home now.
+	modeFormat = "permissions: %s"
 )
 
 // statusBar draws the bar for one conversation, bounded to width, or "" when
@@ -101,11 +106,10 @@ func statusBar(a Agent, mode string, width int) string {
 	// which scrolls the alt screen away on every frame at the ticker's rate.
 	// The facts here are not all Wake's: the model is whatever a claude process
 	// reported, and a directory may legally contain a newline.
-	// The mode is drawn whole or not at all, which is hintFitting's ruling one
-	// line down: this bar is a plain right-cut, and a cut landing inside the
-	// last segment leaves `permissions: …`, a label announcing a value nobody
-	// can read. The facts above it are still cut, because half a path is still
-	// a path and half a mode is not a mode.
+	// The mode is drawn whole or not at all: this bar is a plain right-cut, and a
+	// cut landing inside the last segment leaves `permissions: …`, a label
+	// announcing a value nobody can read. The facts above it are still cut,
+	// because half a path is still a path and half a mode is not a mode.
 	//
 	// **What it is not any more is the first thing dropped.** Appending it only
 	// when the whole finished row fit meant it was never drawn at a realistic
@@ -150,9 +154,9 @@ func statusBar(a Agent, mode string, width int) string {
 	return HintStyle.Render(ansi.Truncate(line, width, ellipsis))
 }
 
-// permissionSegment is the mode this pane's session is in, spelled the way the
-// legend spells it - one format constant, because two spellings of one fact on
-// two lines of the same pane is a difference a reader would go looking for.
+// permissionSegment is the mode this pane's session is in. The bar is the only
+// surface that draws it now - the legend's always-on hints, the mode among
+// them, moved here whole.
 //
 // Dropped rather than guessed when the caller has none, which is every other
 // segment's rule. Nothing *drawn* reaches here empty - a pane goes through

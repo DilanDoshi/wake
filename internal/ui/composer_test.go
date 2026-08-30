@@ -1,7 +1,6 @@
 package ui
 
 import (
-	"fmt"
 	"strings"
 	"testing"
 
@@ -19,11 +18,13 @@ func typeInto(t *testing.T, c Composer, s string) Composer {
 	return c
 }
 
-// The info bar the composer carries sits above the legend - the info row over
-// the keys row, the order the operator asked for. The composer only places the
-// pre-rendered line; the pane builds it (it reads the filesystem).
+// The info bar the composer carries sits above the armed cue - the info row
+// over the keys row, the order the operator asked for. The cue is only drawn
+// while an arm is live, so this uses a detach-armed composer to have a cue at
+// all. The composer only places the pre-rendered bar; the pane builds it (it
+// reads the filesystem).
 func TestComposerDrawsBarAboveLegend(t *testing.T) {
-	c := NewComposer().WithBar("~/repo  main  Opus 5  effort:xhigh")
+	c := NewComposer().WithBar("~/repo  main  Opus 5  effort:xhigh").WithArms(legendArms{detach: true})
 	out := c.View(120)
 	lines := strings.Split(out, "\n")
 	barAt, hintAt := -1, -1
@@ -31,7 +32,7 @@ func TestComposerDrawsBarAboveLegend(t *testing.T) {
 		if strings.Contains(l, "effort:xhigh") {
 			barAt = i
 		}
-		if strings.Contains(l, "send") {
+		if strings.Contains(l, armedSendLabel) {
 			hintAt = i
 		}
 	}
@@ -39,10 +40,10 @@ func TestComposerDrawsBarAboveLegend(t *testing.T) {
 		t.Fatalf("the bar was not drawn:\n%s", out)
 	}
 	if hintAt < 0 {
-		t.Fatalf("the legend was not drawn:\n%s", out)
+		t.Fatalf("the armed cue was not drawn:\n%s", out)
 	}
 	if barAt > hintAt {
-		t.Fatalf("the bar (row %d) must sit above the legend (row %d):\n%s", barAt, hintAt, out)
+		t.Fatalf("the bar (row %d) must sit above the cue (row %d):\n%s", barAt, hintAt, out)
 	}
 }
 
@@ -198,50 +199,11 @@ func TestComposerAcceptsTypingAfterReset(t *testing.T) {
 	}
 }
 
-// Rendered wide enough for the whole legend. It used to be 60, then 100; the
-// room brought five more keys and the legend is truncated to the pane rather
-// than allowed to run, so a narrow pane cuts it - which is what
-// legend_test.go is about. Derived from the legend rather than written out, so
-// adding a key moves it here too.
-func TestViewShowsModeAndHint(t *testing.T) {
-	c := NewComposer()
-	out := c.View(fullLegendWidth)
-	if !strings.Contains(out, c.Mode()) {
-		t.Errorf("view does not show the mode:\n%s", out)
-	}
-	if !strings.Contains(out, "send") {
-		t.Errorf("view does not show the send hint:\n%s", out)
-	}
-}
-
-// What a legend too long for its pane loses, and in what order, is
-// legend_test.go's business - along with the guard that the keys it names are
-// the keys the App binds.
-
-// The legend must describe only what this build does. Two of the things it
-// used to advertise did not exist, and the permissions one failed in the
-// unsafe direction.
-//
-// ⇧⇥ used to be in that list and has left it, because it now carries the
-// next-blocked jump and does something. What is left is the pair that cannot
-// change: ⌃⇧A produces no KeyMsg at all in this library, so a legend entry for
-// it could never be honest; and the mode still has no key glyph in front of it,
-// which is the residue of the ⇧⇥ story and the half that would silently come
-// back if somebody re-bound a key to it without making it real.
-func TestTheHintAdvertisesNoKeyThatDoesNothing(t *testing.T) {
-	out := NewComposer().View(fullLegendWidth)
-
-	if strings.Contains(out, "⌃⇧A") {
-		t.Errorf("the hint advertises ⌃⇧A, which bubbletea names for no byte sequence at all:\n%s", out)
-	}
-	mode := fmt.Sprintf(modeFormat, spawnedMode)
-	if !strings.Contains(out, hintSep+mode) {
-		t.Errorf("the mode is not a bare statement after a separator - something is standing where a key glyph would be, about a mode nothing in this build can change:\n%s", out)
-	}
-	if !strings.Contains(out, spawnedMode) {
-		t.Errorf("the hint no longer says which permissions the session runs under:\n%s", out)
-	}
-}
+// The composer no longer draws a mode or an always-on key hint - both moved to
+// the status bar, and what one composer draws by default is exactly its box.
+// legend_test.go's TestUnarmedComposerDrawsNoLegendRow is that guard now, and
+// the armed cue is TestArmedComposerDrawsOnlyTheCue's. The ⌃⇧A-cannot-be-drawn
+// property is the bijection guard's: legendEntries has no such entry.
 
 func TestViewShowsTheDraftInsideABorderedBox(t *testing.T) {
 	c := typeInto(t, NewComposer(), "ship it")
@@ -274,22 +236,22 @@ func TestViewDoesNotChangeTheComposer(t *testing.T) {
 }
 
 // A pane in a 30-way grid can get very narrow, and the layout joins panes on
-// their widest line. So every line View returns — the hint included, which is
-// why it is truncated rather than left to run at its natural ~27 columns —
-// must measure exactly the width it was given, floored at minComposerWidth.
+// their widest line. So every line View returns — the armed cue included, which
+// is why it is truncated rather than left to run — must measure exactly the
+// width it was given, floored at minComposerWidth. Exercised armed and unarmed,
+// because the cue is the only row whose width the box does not fix.
 func TestViewFillsItsWidthAndNeverExceedsIt(t *testing.T) {
 	const draft = "a draft long enough to overflow a narrow pane"
 
-	for _, width := range []int{-5, 0, 1, 4, 8, 12, 27, 40, 60} {
-		c := typeInto(t, NewComposer(), draft)
-		out := c.View(width)
+	for _, arms := range []legendArms{{}, {detach: true}} {
+		for _, width := range []int{-5, 0, 1, 4, 8, 12, 27, 40, 60} {
+			c := typeInto(t, NewComposer().WithArms(arms), draft)
+			out := c.View(width)
 
-		want := max(width, minComposerWidth)
-		if got := lipgloss.Width(out); got != want {
-			t.Errorf("View(%d) measures %d columns, want %d:\n%s", width, got, want, out)
-		}
-		if !strings.Contains(out, "send") {
-			t.Errorf("View(%d) dropped the send hint:\n%s", width, out)
+			want := max(width, minComposerWidth)
+			if got := lipgloss.Width(out); got != want {
+				t.Errorf("View(%d) with %+v measures %d columns, want %d:\n%s", width, arms, got, want, out)
+			}
 		}
 	}
 }

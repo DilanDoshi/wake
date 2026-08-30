@@ -317,20 +317,16 @@ func TestAConversationsBarNamesItsOwnMode(t *testing.T) {
 	}
 }
 
-// The ruling this entry turns on: a blurred pane keeps the mode in its *bar*
-// and still withholds it from its legend. The legend sits beside the key that
-// changes a mode and would be naming an agent that key will not touch; the bar
-// is a statement about this pane's session, which is true wherever the keys
-// are.
+// The ruling this entry turns on: a blurred pane keeps the mode in its *bar*.
+// The bar is a statement about this pane's session, true wherever the keys are;
+// the composer draws no mode at all now (TestTheComposerNamesNoMode), so the
+// old "withheld from the blurred legend" half is the composer's rule to keep.
 func TestABlurredConversationStillNamesItsModeInTheBar(t *testing.T) {
 	d := dmInMode(core.PermissionModePlan, false)
 	want := "permissions: " + core.PermissionModePlan
 
 	if bar := stripANSI(d.bar); !strings.Contains(bar, want) {
 		t.Errorf("a blurred conversation's bar dropped its mode: %q", bar)
-	}
-	if legend := stripANSI(d.Composer().View(fullLegendWidth)); strings.Contains(legend, want) {
-		t.Errorf("a blurred legend named a mode:\n%s", legend)
 	}
 }
 
@@ -355,9 +351,8 @@ func dmInMode(mode string, focused bool) DM {
 }
 
 // The mode is drawn whole or dropped, never cut. A right-cut `permissions: …`
-// announces a value nobody can read, which is the failure hintFitting cuts the
-// legend at an entry boundary to avoid - and it is what a real conversation
-// pane produced at 90 columns with a long path above it.
+// announces a value nobody can read - and it is what a real conversation pane
+// produced at 90 columns with a long path above it.
 func TestANarrowBarDropsTheModeRatherThanCuttingIt(t *testing.T) {
 	a := Agent{Cwd: "/very/long/path/that/keeps/going/and/going/for/quite/a/while", Model: "claude-opus-5"}
 	for width := 10; width <= 120; width++ {

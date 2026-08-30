@@ -22,16 +22,17 @@ const (
 	// width, applied to height.
 	minTranscriptHeight = 1
 
-	// minDMHeight is the shortest View the DM draws: Composer's four rows and
-	// one row of transcript. TestViewFloorsBelowItsMinimumSize pins it against
-	// the composer it is derived from. The pane's name is no longer a row of
-	// its own - it sits in the composer's top border, so it costs nothing.
+	// minDMHeight is the shortest View the DM draws: Composer's rows and one row
+	// of transcript. TestViewFloorsBelowItsMinimumSize pins it against the
+	// composer it is derived from. The pane's name is no longer a row of its own
+	// - it sits in the composer's top border, so it costs nothing.
 	minDMHeight = composerViewHeight + minTranscriptHeight
 
-	// composerViewHeight is what Composer.View returns - the three-row
-	// bordered box plus the hint line. View measures the real composer rather
-	// than trusting this; it exists so minDMHeight can be a constant.
-	composerViewHeight = 4
+	// composerViewHeight is what an unarmed Composer.View returns - the
+	// three-row bordered box, and no legend row, since the always-on hints moved
+	// to the status bar. View measures the real composer rather than trusting
+	// this; it exists so minDMHeight can be a constant.
+	composerViewHeight = 3
 
 	// minBlockWidth is the narrowest width a block renderer is asked for.
 	// Below it they degenerate: ToolCall truncates a line to an ellipsis and
