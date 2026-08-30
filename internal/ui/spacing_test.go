@@ -19,6 +19,26 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
+// The working line is exactly one physical row even when the agent's activeForm
+// carries newlines - the airlock keeps them (Contained strips only terminal
+// control), and the beat is budgeted as one row, so an unflattened multiline
+// word would draw past it and, beside a card, hide the key line. Both panes.
+func TestWorkingLineFlattensAMultilineActiveForm(t *testing.T) {
+	forceTrueColour(t)
+	multiline := "Doing a\nthing\nover several lines"
+
+	dm := workingLine("s1", rpc.StateWorking, multiline, clock(), 100, 60)
+	if got := lipgloss.Height(dm); got != 1 {
+		t.Errorf("the DM working line drew %d rows for a multiline activeForm, want 1:\n%s", got, stripANSI(dm))
+	}
+	room := roomWorkingLine([]Agent{
+		{ID: "s1", Name: "noah", State: rpc.StateWorking, startedAt: clock(), Doing: multiline},
+	}, 80)
+	if got := lipgloss.Height(room); got != 1 {
+		t.Errorf("the room working line drew %d rows for a multiline activeForm, want 1:\n%s", got, stripANSI(room))
+	}
+}
+
 // A stacked column stays exactly its height even when the top pane's board
 // overflows its allocation, so the overflow is clipped to that pane rather than
 // pushing the focused bottom pane past App.View's final clip - which would cut a
