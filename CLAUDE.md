@@ -880,6 +880,8 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | A per-agent identity colour | `internal/rpc/color.go` — `ColorNames`, `NormalizeColor` (the fence both sides apply) · `internal/daemon/color.go` — `setColor`, `colorSession` · `internal/ui/color.go` — `App.colorAgent` · `internal/ui/theme.go` — `identityColors`/`identityStyle`/`identityColor` (Wake's own bolder set, not in `claude-palette.json`). Rendered by `speakerStyle` (room name-tag), `Composer.boxStyle`/`titleStyle` (the composer border and @name, set by the DM pane via `WithColor`) and `Roster.headStyle` (roster row, bold under the cursor). **The status bar does not take it** — `statusBar` recedes to `HintStyle` and `barKey` omits the colour. `@who /color` routing is the `mentionCommand` bridge in `internal/ui/slash.go`, dispatched from `sendRoom`. Survives a park via `parkedRecord.Color` |
 | MCP server exposed to the manager | `internal/mcp/` — `tools.go` (six tools, held to `managerScope` in both directions), `rollup.go`, `fleet.go`, `stateguard_test.go` |
 | Bubble Tea root model | `internal/ui/app.go` — start at `apply` |
+| Folding one agent's event into the model | `internal/ui/observe.go` — `observe` (the room/DM fold, and where a rate-limit event is routed away), `appendEvent`; split from `app.go` |
+| The rate-limit warning as a timed pop-up | `internal/ui/ratelimit.go` — `rateLimited` (a warning to the notice row, a benign `allowed` to nothing), `armRateLimitClear`/`rateLimitCleared` (the one-shot linger, `gen`-guarded against an overlapping warning clearing early) · `internal/notice/notice.go` — `ClearIf` (clears only while it is still the notice showing) |
 | What a fleet report does to the model | `internal/ui/report.go` — `applyStatus`, `noteEnding` |
 | The keys the App owns, and the legend bijection | `internal/ui/keys.go` |
 | The drain that is not the draw loop | `internal/ui/inbox.go` — the ring, the fold that keeps a preview off a slot, and what `dropped` counts (+ `inbox_bench_test.go` for the fold's price) |
@@ -1185,7 +1187,7 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/app.go` at 798 and `internal/ui/fleet.go` at 798 — that sentence is derived by
+  `internal/ui/fleet.go` at 798 and `internal/ui/dm.go` at 796 — that sentence is derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
   message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**

@@ -32,7 +32,6 @@ const (
 
 	thinkingLabel   = "✻ thinking"
 	permissionLabel = "⚠ permission request"
-	rateLimitLabel  = "⚠ rate limit:"
 	compactedLabel  = "⟲ context compacted"
 	deniedLabel     = "⊘ permission denied"
 
@@ -355,7 +354,11 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		// answer.
 		return mutedLine(withdrawnLabel, w)
 	case core.KindRateLimit:
-		return noticeBlock(ev, w)
+		// A quota heartbeat draws nothing in the scrollback: a warning is a
+		// timed pop-up above the composer (ratelimit.go) and a benign `allowed`
+		// is chrome. observe routes the live event here-ward before it reaches a
+		// transcript; this is the belt for a disk readback taking the same path.
+		return ""
 	case core.KindSystem:
 		// A dispatch ending is the one system frame that leaves a line: it is
 		// a thing that happened, in an order, which is what a transcript is
@@ -513,14 +516,11 @@ func permissionBlock(ev core.Event, width int) string {
 
 // noticeBlock draws the events core.Notice picked out, and nothing else.
 //
-// A rate limit is the one that carries data alongside its label: the status
-// string is what the reader needs and it is a value, not a wire word, so it
-// is passed through. The benign status earns no notice at all and so never
-// reaches here - drawing it is chrome.
+// A rate limit is not among them: it is a timed pop-up above the composer now
+// (kindBlock's KindRateLimit case, ratelimit.go), not a transcript line, so
+// NoticeRateLimited never reaches here - every other Notice arrives on a user
+// or system frame.
 func noticeBlock(ev core.Event, width int) string {
-	if ev.Notice == core.NoticeRateLimited {
-		return warnLine(rateLimitLabel+" "+ev.Text, width)
-	}
 	label, ok := noticeLabel[ev.Notice]
 	if !ok {
 		return ""
