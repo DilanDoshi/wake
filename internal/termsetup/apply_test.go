@@ -31,6 +31,40 @@ func TestApplyCreatesTheFileWhenNoneExists(t *testing.T) {
 	}
 }
 
+// Apply must never overwrite a backup that is already there. Claude Code's own
+// /terminal-setup writes <config>.bak too, so a fixed name would destroy the
+// one clean copy of a config it had just broken - the exact operator this verb
+// is for. A pre-existing .bak is left untouched and the real backup lands at
+// .bak.1.
+func TestApplyNeverOverwritesAnExistingBackup(t *testing.T) {
+	home := t.TempDir()
+	path := InfoFor(Ghostty).ConfigPath(home)
+	if err := os.MkdirAll(filepath.Dir(path), configDirPerm); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("existing config\n"), configPerm); err != nil {
+		t.Fatal(err)
+	}
+	const precious = "the only clean copy - do not clobber\n"
+	if err := os.WriteFile(path+".bak", []byte(precious), configPerm); err != nil {
+		t.Fatal(err)
+	}
+
+	result, err := Apply(Ghostty, home)
+	if err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+	if got := readFile(t, path+".bak"); got != precious {
+		t.Errorf("Apply clobbered an existing .bak:\nwant: %q\ngot:  %q", precious, got)
+	}
+	if result.BackupPath != path+".bak.1" {
+		t.Errorf("BackupPath = %q, want the non-clobbering %q", result.BackupPath, path+".bak.1")
+	}
+	if got := readFile(t, path+".bak.1"); got != "existing config\n" {
+		t.Errorf(".bak.1 has the wrong content: %q", got)
+	}
+}
+
 func TestApplyAppendsAndBacksUpAnExistingFile(t *testing.T) {
 	home := t.TempDir()
 	path := InfoFor(Kitty).ConfigPath(home)
@@ -366,9 +400,11 @@ func TestUndoOnAnUnconfiguredFileDoesNothing(t *testing.T) {
 }
 
 // A hand edit after Apply that disturbs the exact block - inserting a line
-// in the middle of it - must also refuse: Undo matches the suffix exactly
-// or not at all, never a fuzzy diff that could delete part of somebody's own
-// edit along with the marker.
+// in the middle of it, or appending after it - must refuse to remove: Undo
+// matches the suffix exactly or not at all, never a fuzzy diff that could
+// delete part of somebody's own edit along with the marker. Because the
+// marker itself is still in the file, it reports MarkerNotRemovable, not the
+// false "isn't there" that NothingToUndo would carry.
 func TestUndoRefusesWhenTheBlockWasEditedSince(t *testing.T) {
 	home := t.TempDir()
 	if _, err := Apply(Alacritty, home); err != nil {
@@ -384,8 +420,8 @@ func TestUndoRefusesWhenTheBlockWasEditedSince(t *testing.T) {
 	if err != nil {
 		t.Fatalf("Undo: %v", err)
 	}
-	if result.Outcome != NothingToUndo {
-		t.Fatalf("Outcome = %v, want NothingToUndo: an edited block must not be guessed at", result.Outcome)
+	if result.Outcome != MarkerNotRemovable {
+		t.Fatalf("Outcome = %v, want MarkerNotRemovable: an edited block must be refused, but its marker is still present", result.Outcome)
 	}
 	if got := readFile(t, path); got != edited {
 		t.Errorf("Undo touched a file whose block no longer matched exactly:\nbefore: %q\nafter:  %q", edited, got)
@@ -455,4 +491,72 @@ func readFile(t *testing.T, path string) string {
 		t.Fatalf("read %s: %v", path, err)
 	}
 	return string(b)
+}
+
+// A terminal config is often a symlink into a dotfile repo. The atomic write
+// must follow the link and replace its target - never replace the link with a
+// regular file, which would orphan the operator's real dotfile so their edit
+// silently stops reaching it. A naive temp+rename regresses exactly here, which
+// is why the write resolves the symlink first.
+func TestApplyThroughASymlinkKeepsTheLinkAndUpdatesTheTarget(t *testing.T) {
+	home := t.TempDir()
+	path := InfoFor(Kitty).ConfigPath(home)
+	if err := os.MkdirAll(filepath.Dir(path), configDirPerm); err != nil {
+		t.Fatal(err)
+	}
+	// The real config lives elsewhere; the config path is a symlink to it.
+	real := filepath.Join(t.TempDir(), "kitty.real.conf")
+	if err := os.WriteFile(real, []byte("original\n"), configPerm); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(real, path); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Apply(Kitty, home); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	fi, err := os.Lstat(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if fi.Mode()&os.ModeSymlink == 0 {
+		t.Errorf("Apply replaced the symlink with a regular file; a dotfile-repo link would be orphaned")
+	}
+	got := readFile(t, real)
+	if !strings.Contains(got, marker) || !strings.Contains(got, InfoFor(Kitty).Snippet) {
+		t.Errorf("the real symlink target did not receive the block:\n%s", got)
+	}
+	if !strings.HasPrefix(got, "original\n") {
+		t.Errorf("the real symlink target lost its original content:\n%s", got)
+	}
+}
+
+// A successful Apply replaces the file through a temp + rename; none of those
+// temps may be left beside the config.
+func TestApplyLeavesNoTempFileBehind(t *testing.T) {
+	home := t.TempDir()
+	path := InfoFor(Kitty).ConfigPath(home)
+	if err := os.MkdirAll(filepath.Dir(path), configDirPerm); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(path, []byte("existing\n"), configPerm); err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := Apply(Kitty, home); err != nil {
+		t.Fatalf("Apply: %v", err)
+	}
+
+	entries, err := os.ReadDir(filepath.Dir(path))
+	if err != nil {
+		t.Fatal(err)
+	}
+	base := filepath.Base(path)
+	for _, e := range entries {
+		if name := e.Name(); name != base && name != base+".bak" {
+			t.Errorf("leftover file after Apply: %q (a temp that was not renamed away?)", name)
+		}
+	}
 }

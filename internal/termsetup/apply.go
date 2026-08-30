@@ -114,7 +114,15 @@ func Apply(e Emulator, configHome string) (Result, error) {
 		}
 	}
 
-	if err := os.WriteFile(path, appendBlock(content, info.Snippet), configPerm); err != nil {
+	if err := writeFileAtomic(path, appendBlock(content, info.Snippet), configPerm); err != nil {
+		// Name the backup in the error: the write just failed on the operator's
+		// live config, and this is the one moment they need to know their
+		// original is safe and where. writeFileAtomic replaces atomically, so
+		// the live file is intact - but a caller reading only the error should
+		// still be pointed at the backup rather than left guessing.
+		if backupPath != "" {
+			return Result{}, fmt.Errorf("write %s (original backed up at %s): %w", path, backupPath, err)
+		}
 		return Result{}, fmt.Errorf("write %s: %w", path, err)
 	}
 	return Result{Emulator: e, Outcome: Wrote, ConfigPath: path, BackupPath: backupPath, ReloadHint: info.ReloadHint}, nil
@@ -145,7 +153,7 @@ func Undo(e Emulator, configHome string) (Result, error) {
 		}
 		return Result{Emulator: e, Outcome: NothingToUndo, ConfigPath: path}, nil
 	}
-	if err := os.WriteFile(path, trimmed, configPerm); err != nil {
+	if err := writeFileAtomic(path, trimmed, configPerm); err != nil {
 		return Result{}, fmt.Errorf("write %s: %w", path, err)
 	}
 	return Result{Emulator: e, Outcome: Removed, ConfigPath: path}, nil
