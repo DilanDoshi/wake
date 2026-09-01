@@ -79,7 +79,8 @@
     "manager-stop",
     "effort",
     "model",
-    "board"
+    "board",
+    "login"
   ],
   "neutral": [
     "alpha",
