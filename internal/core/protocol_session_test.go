@@ -5,6 +5,7 @@
 package core
 
 import (
+	"encoding/json"
 	"testing"
 )
 
@@ -59,6 +60,34 @@ func TestResultCarriesTheWholeContextLevel(t *testing.T) {
 	}
 }
 
+// A turn with several tool-use round-trips reports the context *level* - the
+// final call's input side - not the sum of every call's input. The top-level
+// usage sums input across the whole turn, so it grows with the round-trip
+// count while usage.iterations' last element stays the level alone. The
+// numbers below are auto-read-outside.jsonl's real 2-turn result: 74,433
+// summed against 37,931 for the final call. The corpus also holds
+// question-plan-bare.jsonl (num_turns 14) at 619,215 summed against 49,869 -
+// ~12x, enough to peg the ctx bar near empty on a window three quarters free.
+// TestRecordedContextTokensAreTheFinalIteration checks the whole corpus.
+func TestContextTokensIsTheFinalCallNotTheTurnSum(t *testing.T) {
+	evs := decodeLineT(t, `{"type":"result","subtype":"success","session_id":"s1","model":"claude-sonnet-5",`+
+		`"usage":{"input_tokens":4,"cache_creation_input_tokens":18697,"cache_read_input_tokens":55732,"output_tokens":172,`+
+		`"iterations":[{"input_tokens":2,"cache_creation_input_tokens":1429,"cache_read_input_tokens":36500}]},`+
+		`"modelUsage":{"claude-sonnet-5":{"contextWindow":1000000}}}`)
+
+	facts := evs[0].Session
+	if facts == nil {
+		t.Fatal("result carried no session facts; usage is on it")
+	}
+	if want := 2 + 1429 + 36500; facts.ContextTokens != want {
+		t.Errorf("context tokens = %d, want %d (the final round-trip's input, not the turn's summed %d)",
+			facts.ContextTokens, want, 4+18697+55732)
+	}
+	if facts.ContextWindow != 1000000 {
+		t.Errorf("context window = %d, want 1000000", facts.ContextWindow)
+	}
+}
+
 // The window is looked up by the frame's own model, so a turn that used two
 // does not take the wrong one's window.
 func TestTheContextWindowIsTheModelsOwn(t *testing.T) {
@@ -102,6 +131,57 @@ func TestEveryRecordedContextWindowIsUsable(t *testing.T) {
 	}
 	if seen == 0 {
 		t.Fatal("no recorded frame decoded to a context window; the corpus should carry several")
+	}
+}
+
+// Across the whole corpus the decoded level is the final round-trip's input,
+// never the turn's sum. The window guard above cannot catch the old summed
+// reading - every recorded window is 1M and even a 14-call sum stays under it -
+// so this compares against the level the recording itself names, and requires
+// at least one turn whose sum would have inflated the level, so the guard is
+// shown to bite rather than to pass vacuously.
+func TestRecordedContextTokensAreTheFinalIteration(t *testing.T) {
+	type usage struct {
+		In    int `json:"input_tokens"`
+		CC    int `json:"cache_creation_input_tokens"`
+		CR    int `json:"cache_read_input_tokens"`
+		Iters []struct {
+			In int `json:"input_tokens"`
+			CC int `json:"cache_creation_input_tokens"`
+			CR int `json:"cache_read_input_tokens"`
+		} `json:"iterations"`
+	}
+	var checked, inflating int
+	for _, path := range fixtureFiles(t) {
+		for _, line := range fixtureLines(t, path) {
+			var raw struct {
+				Type  string `json:"type"`
+				Usage *usage `json:"usage"`
+			}
+			if err := json.Unmarshal([]byte(line), &raw); err != nil ||
+				raw.Type != "result" || raw.Usage == nil || len(raw.Usage.Iters) == 0 {
+				continue
+			}
+			evs, err := DecodeLine([]byte(line))
+			if err != nil || len(evs) == 0 || evs[0].Session == nil {
+				continue
+			}
+			last := raw.Usage.Iters[len(raw.Usage.Iters)-1]
+			want := last.In + last.CC + last.CR
+			if got := evs[0].Session.ContextTokens; got != want {
+				t.Errorf("%s: context tokens = %d, want the final iteration's %d", path, got, want)
+			}
+			checked++
+			if raw.Usage.In+raw.Usage.CC+raw.Usage.CR > want {
+				inflating++
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no recorded result frame carried iterations; the corpus should hold many")
+	}
+	if inflating == 0 {
+		t.Fatal("no recorded turn's summed reading exceeded its level; the fix cannot be shown to bite")
 	}
 }
 

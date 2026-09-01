@@ -264,9 +264,14 @@ var claudeWireVocabulary = wordSet([]string{
 	// model a session runs is a fact Wake carries end to end, the way it
 	// carries a directory and a name, so policing the word would fire on
 	// Wake's own vocabulary rather than on a leak.
+	//
+	// "iterations" is the per-round-trip breakdown inside a turn's usage; its
+	// last element is the context level resultFacts reads, since the three
+	// fields above sum input across the whole turn. Policed with them - nothing
+	// outside the airlock names it.
 	"usage", "contextWindow",
 	"input_tokens", "cache_creation_input_tokens", "cache_read_input_tokens",
-	"output_tokens",
+	"output_tokens", "iterations",
 
 	// The task list a TodoWrite carries, and the two statuses the airlock
 	// resolves. "content", "status" and "completed" are already policed or
@@ -501,7 +506,7 @@ var notNamedByTheAirlock = map[string]string{
 // vocabulary - a word added, a word removed - has to update it, which is what
 // makes a deletion a three-place edit (the word, its excuse, this number)
 // rather than something that can happen by accident in a rebase.
-const policedWordCount = 150
+const policedWordCount = 151
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

@@ -365,8 +365,15 @@ type wireRateLimit struct {
 // OutputTokens is not part of that: it is what this turn *produced*, which is
 // what a running total is a total of.
 //
-// Both are per-turn figures rather than session totals, so a consumer sums the
-// output and keeps only the newest input.
+// But the three top-level input fields are the turn's *sum* across every
+// tool-use round-trip, not the level after it: question-plan-bare's 14-turn
+// result adds every call's cache read together for ~12x the context actually
+// in the window. usage.iterations carries the final call's own accounting -
+// the current level - which is what resultFacts reads. Claude reports exactly
+// one element there when a turn ran, and none when the turn produced no usage
+// (a no-op or an interrupted turn, both with a zero top-level sum), so reading
+// the last element gives the level or a safe zero. OutputTokens stays the
+// top-level sum: the total produced is a total.
 //
 // The last three are the *task* accounting, which travels under the same
 // `usage` key on task_progress and task_notification. One struct rather than
@@ -384,9 +391,20 @@ type wireUsage struct {
 	CacheReadTokens     int `json:"cache_read_input_tokens"`
 	OutputTokens        int `json:"output_tokens"`
 
+	Iterations []wireIteration `json:"iterations"`
+
 	TotalTokens int `json:"total_tokens"`
 	ToolUses    int `json:"tool_uses"`
 	DurationMS  int `json:"duration_ms"`
+}
+
+// wireIteration is one API round-trip's input accounting inside a turn. Only
+// the input side is read - the last iteration's is the context level - so the
+// output count and nested cache breakdown Claude also puts on it are left off.
+type wireIteration struct {
+	InputTokens         int `json:"input_tokens"`
+	CacheCreationTokens int `json:"cache_creation_input_tokens"`
+	CacheReadTokens     int `json:"cache_read_input_tokens"`
 }
 
 // wireTaskPatch is task_updated's whole payload beyond the id. Ten frames,
