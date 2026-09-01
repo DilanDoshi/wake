@@ -846,12 +846,15 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 
 | What | Where |
 |---|---|
-| Entrypoint and verb dispatch | `cmd/wake/main.go` — nine verbs, two not user commands |
+| Entrypoint and verb dispatch | `cmd/wake/main.go` — eleven verbs, two not user commands |
 | Bare `wake`: the front door and its branch | `cmd/wake/openroom.go` — `openRoom` (the bool), `seedRoom` (the frame the bool chooses) · `openroomguard_test.go` for the per-state verdicts · `openroomscreen_unix_test.go` for which pane has the terminal, which nothing in process can see |
 | Attach, spawn handshake, the detach line | `cmd/wake/attach.go` |
 | Resolving "which session did they mean" | `cmd/wake/match.go` |
 | `wake fork` | `cmd/wake/fork.go` |
 | `wake import` — the picker and adopting one | `cmd/wake/import.go` |
+| `wake setup-terminal` — the CLI shape: detect, confirm, apply/undo | `cmd/wake/setupterminal.go` |
+| Host-terminal detection, per-terminal knowledge, file I/O, the first-run marker | `internal/termsetup/` — `terminal.go` (`Detect`, pure over an env map) · `multiplexer.go` · `knowledge.go` (`Info`, the verified snippets — Ghostty's `\x1b\r`, Alacritty/VS Code's TOML/JSON-safe Unicode escape for ESC) · `apply.go` (`Apply`/`Undo`/`Status`, append-only and idempotent, auto-writable only for Ghostty/Kitty/Alacritty) · `firstrun.go` (`PromptSeen`/`MarkPromptSeen`, the one-time marker under `$XDG_CONFIG_HOME/wake/`) |
+| The one-time first-run offer | `cmd/wake/termsetupprompt.go` — `promptTerminalSetupOnce`, called from `converseModel` so every path that opens a TUI passes through it once |
 | Adopting sessions from inside the room | `internal/ui/adopt.go` — `adopt`/`adoptArrived`/`adoptAll` (why the word is not `/import`, why the machine is read from a `tea.Cmd`, why the picker goes to the room and never to a DM, and why the whole set is refused when one name does not resolve) · `adoptguard_test.go`, where the minted id and the frame kind are held statically because both failures are silent |
 | The seam a room is handed to see this machine | `cmd/wake/adopt.go` — `machineSessions` (holds no state, caches nothing) · `adoptRows` (why a pane is capped and a terminal is not) |
 | `wake status` · `wake stop` | `cmd/wake/status.go` · `cmd/wake/stop.go` |
