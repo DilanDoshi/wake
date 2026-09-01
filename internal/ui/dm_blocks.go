@@ -316,6 +316,8 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 	switch ev.Kind {
 	case core.KindAssistantText:
 		return render.Markdown(ev.Text, w)
+	case core.KindCrossSession:
+		return crossSessionBlock(ev, w)
 	case core.KindUserText:
 		// A user frame the airlock recognised as something other than the user
 		// speaking - Claude's abort marker, which carries nothing else to tell
@@ -384,6 +386,14 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 	}
 }
 
+// crossSessionBlock renders a peer's cross-session message in a DM: the sender's
+// from-name with the room's ↪ lead, then the body as prose. Not shadedOwn -
+// these are not the operator's words - and the sender's identity colour is the
+// room's alone, since a DM has no fleet to resolve from-name into an agent.
+func crossSessionBlock(ev core.Event, width int) string {
+	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), render.Markdown(strings.TrimSpace(ev.Text), width))
+}
+
 // userBlock renders one turn from the user's side of the conversation.
 //
 // Both halves belong in a 1:1 view, so the text is always shown; only the
@@ -394,10 +404,10 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 // be headed "› you".
 //
 // Echoed marks a frame the transcript replayed rather than one a human just
-// typed - but which of those Claude's --replay-user-messages produces for
-// Wake's own outgoing message has never been observed
-// (docs/superpowers/notes/2026-08-08-stream-json-findings.md §12). Keeping the
-// reliance cosmetic means a wrong guess mislabels a turn instead of hiding it.
+// typed. Under --replay-user-messages (now emitted) Wake's own outgoing message
+// comes back Echoed (isReplay, observed 2026-08-31) and observe drops it from
+// the live feed (replayedUserEcho), so this case now renders the Echoed frames a
+// reopen reads off disk - a compaction summary, <local-command-stdout>.
 //
 // The DM does not de-duplicate. It draws exactly the events it is handed, so
 // whoever feeds it must pick one source for the user's turn - the replayed

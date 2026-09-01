@@ -20,6 +20,14 @@ const (
 	// compaction summary, or <local-command-stdout>. Not assistant speech.
 	KindUserText EventKind = "user_text"
 
+	// KindCrossSession is a message another Claude Code session sent to this one
+	// over the peer channel - a user frame whose content is the
+	// <cross-session-message> envelope. Text is the body the peer wrote (the
+	// envelope, its preamble and the harness guidance stripped); FromName and
+	// FromAddr carry who sent it. It reaches the airlock live only under
+	// --replay-user-messages and always from the on-disk transcript.
+	KindCrossSession EventKind = "cross_session"
+
 	KindAssistantText EventKind = "assistant_text"
 	KindThinking      EventKind = "thinking"
 	KindToolUse       EventKind = "tool_use"
@@ -677,6 +685,12 @@ type Event struct {
 	// it is presentation only for Echoed's reason: a wrong value mislabels a
 	// turn, and nothing may key suppression or de-duplication on it.
 	FromRoom bool `json:"from_room,omitempty"`
+
+	// FromName attributes a KindCrossSession event: the peer's display name (its
+	// own --name). It is what the room heads the line with, matched to a fleet
+	// agent for its colour; set by the decoder off the <cross-session-message>
+	// envelope and empty on every other kind.
+	FromName string `json:"from_name,omitempty"`
 
 	Text string    `json:"text,omitempty"`
 	Tool *ToolCall `json:"tool,omitempty"`

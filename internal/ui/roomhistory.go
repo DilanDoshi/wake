@@ -309,7 +309,16 @@ func roomHistoryLines(events []core.Event, cutoff time.Time, agentOf func(string
 		next, out := fold(a, ev, ev.SessionID)
 		scratch[ev.SessionID] = next
 		for _, e := range out {
-			lines = append(lines, roomLine{ev: e, by: agentOf(ev.SessionID)})
+			by := agentOf(ev.SessionID)
+			if e.Kind == core.KindCrossSession {
+				// The sender, not the receiving session. agentOf is keyed by id
+				// and a peer's id is not on the frame, so the restore heads it
+				// with the from-name alone - the identity colour the live path
+				// resolves through the fleet is the room's when it is drawn live,
+				// dropped on a restore where the sender may not be running.
+				by = Agent{Name: e.FromName}
+			}
+			lines = append(lines, roomLine{ev: e, by: by})
 		}
 	}
 
@@ -446,6 +455,14 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 	open := make(map[string]bool, len(lines))
 	out := make([]roomLine, 0, len(lines))
 	for i, l := range lines {
+		if l.ev.Kind == core.KindCrossSession {
+			// A peer's message is a first-class room line, not agent prose gated
+			// by an open broadcast: it was drawn in the room when it arrived, so
+			// it comes back on any restore. Its speaker is the sender, set in
+			// roomHistoryLines, not the receiving session's open-turn state.
+			out = append(out, l)
+			continue
+		}
 		if l.ev.Kind != core.KindUserText {
 			if open[l.ev.SessionID] {
 				out = append(out, l)

@@ -575,8 +575,14 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		return one(base)
 	}
 	if !isJSONArray(m.Content) {
-		// Compaction summaries and <local-command-stdout> land here.
-		base.Kind, base.Text, base.Notice = frameText(f.Type, jsonString(m.Content))
+		// Compaction summaries, <local-command-stdout>, and a peer's
+		// <cross-session-message> all land here as string content.
+		text := jsonString(m.Content)
+		if body, name, ok := crossSession(f.Type, text); ok {
+			base.Kind, base.Text, base.FromName = KindCrossSession, body, name
+			return one(base)
+		}
+		base.Kind, base.Text, base.Notice = frameText(f.Type, text)
 		return one(base)
 	}
 	// Decoded one block at a time rather than into []wireBlock, which is

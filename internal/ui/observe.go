@@ -71,6 +71,12 @@ func (a App) observe(sessionID string, ev core.Event) App {
 			// conversation private, and an agent that has stopped and is
 			// waiting is the room's own filter rather than an exception to it.
 			a = a.withRoom(a.room.Append(e, agent))
+		case core.KindCrossSession:
+			// A peer's message, attributed to the sender rather than the
+			// receiving session (crossSpeaker resolves FromName), and not held by
+			// inDM: it is not the operator's own DM turn, so it belongs in the
+			// room whatever the receiver was last sent from.
+			a = a.withRoom(a.room.Append(e, a.fleet.crossSpeaker(e.FromName)))
 		default:
 			// A turn held in a DM stays in the DM. Fleet.sending says which
 			// turns those are; the DM below gets everything either way.
@@ -80,7 +86,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 			a = a.withRoom(a.room.Append(e, agent))
 		}
 	}
-	if dm, ok := a.dms[sessionID]; ok && a.wants(sessionID, ev) {
+	if dm, ok := a.dms[sessionID]; ok && a.wants(sessionID, ev) && !replayedUserEcho(ev) {
 		// Named from the fold above, which has already seen this frame - an
 		// ending says what it ended only once the row is consulted. The rows
 		// are carried across in the same write rather than a second one, and
@@ -90,6 +96,27 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	}
 	a = a.foldTail(sessionID, ev)
 	return a
+}
+
+// replayedUserEcho reports a replayed user frame the live DM feed drops.
+// --replay-user-messages replays every inbound user message on the stream, so
+// without this the DM's live feed fills with echoes: the operator's own sends
+// (sendDM already drew the local echo - a second copy double-renders, and the
+// DM does not de-duplicate), the manager's sends, and Claude's own user-frame
+// echoes. The room already drops all of these (fold's typedByHand), and the DM
+// live feed is the same conversation, so it drops them too and stays what it
+// was before the flag - the single-source rule core/event.go's Echoed comment
+// reserves for the App that owns the local echo.
+//
+// The cost, taken deliberately: a compaction summary and <local-command-stdout>
+// are replayed user frames too, so they no longer land in an *open* DM as they
+// stream - they return on reopen, which re-reads the transcript (history.go, an
+// unaffected path), and a compaction is still announced live by its own system
+// notice (NoticeContextCompacted). KindCrossSession is a different kind and is
+// kept - the one inbound the flag exists to surface, with no local echo to
+// double it.
+func replayedUserEcho(ev core.Event) bool {
+	return ev.Echoed && ev.Kind == core.KindUserText
 }
 
 // appendEvent puts one event into the conversation that is open.

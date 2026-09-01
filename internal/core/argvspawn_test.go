@@ -53,6 +53,21 @@ func TestBuildArgsCarriesTheDebugFlags(t *testing.T) {
 	}
 }
 
+// --replay-user-messages is what puts a peer's cross-session message on the
+// live stream: without it the message reaches only the on-disk transcript, so
+// the room never sees it as it arrives. Replayed copies of Wake's own sends
+// carry isReplay and stay dropped as Echoed; see KindCrossSession.
+func TestBuildArgsReplaysUserMessages(t *testing.T) {
+	args, err := NewSession(Config{SessionID: "uuid-1"}).buildArgs()
+	if err != nil {
+		t.Fatalf("buildArgs: %v", err)
+	}
+	joined := " " + strings.Join(args, " ") + " "
+	if !strings.Contains(joined, " --replay-user-messages ") {
+		t.Errorf("args carry no --replay-user-messages, so a cross-session message never reaches the room live\ngot: %s", joined)
+	}
+}
+
 // The other half of every optional flag: nothing chosen leaves the flag off
 // entirely, so claude applies its own default rather than parsing an empty one.
 func TestBuildArgsLeavesOffTheSpawnFlagsNobodyChose(t *testing.T) {

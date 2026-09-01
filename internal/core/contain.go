@@ -117,6 +117,7 @@ func containedAll(in []string) []string {
 // carries pointers and a caller may hold the one it was decoded from.
 func (e Event) contained() Event {
 	e.Text = Contained(e.Text)
+	e.FromName = Contained(e.FromName)
 	e.PermissionMode = Contained(e.PermissionMode)
 	e.Tool = containedTool(e.Tool)
 	e.Subagent = containedSubagent(e.Subagent)

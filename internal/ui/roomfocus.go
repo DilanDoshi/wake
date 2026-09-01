@@ -19,5 +19,12 @@ func focusAdmits(l roomLine, focus, managerID string) bool {
 	if l.ev.Kind == core.KindUserText {
 		return l.to == "" || l.to == focus
 	}
+	if l.ev.Kind == core.KindCrossSession {
+		// A peer message belongs to both threads: the sender's (l.by, resolved
+		// at Append) and the receiver's (l.ev.SessionID). Either narrowing shows
+		// it. l.by.ID is empty for an outside sender or a restore, which leaves
+		// it in the receiver's thread only - still an id comparison.
+		return l.by.ID == focus || l.ev.SessionID == focus
+	}
 	return l.ev.SessionID == focus || l.ev.SessionID == managerID
 }

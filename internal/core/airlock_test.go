@@ -310,6 +310,12 @@ var claudeWireVocabulary = wordSet([]string{
 	// Transcript plumbing.
 	"<local-command-stdout>", "</local-command-stdout>",
 
+	// The cross-session envelope a peer's message arrives wrapped in. Policed
+	// like the abort markers: the tag is the only thing identifying the frame,
+	// and a view matching on it would be reading Claude's wire format. The open
+	// carries attributes, so it is the tag start rather than a whole tag.
+	"<cross-session-message", "</cross-session-message>",
+
 	// Claude's abort markers. Policed as hard as any field name, and for a
 	// sharper reason than most: they arrive on a frame with no subtype and no
 	// isSynthetic, so the *string* is the only thing that identifies them, and
@@ -337,6 +343,10 @@ var deliberatelyGeneric = wordSet([]string{
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",
+
+	// The character that ends the cross-session envelope's opening tag, used to
+	// find where the body begins. Punctuation, not a wire word.
+	">",
 
 	// An image block's source object and its bytes. Both are Claude's wire keys
 	// and both are words any program uses about a payload, so policing them
@@ -501,7 +511,9 @@ var notNamedByTheAirlock = map[string]string{
 // vocabulary - a word added, a word removed - has to update it, which is what
 // makes a deletion a three-place edit (the word, its excuse, this number)
 // rather than something that can happen by accident in a rebase.
-const policedWordCount = 150
+// 150 → 152: the cross-session envelope's two tags, <cross-session-message and
+// </cross-session-message>, policed like the abort markers.
+const policedWordCount = 152
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -552,6 +564,10 @@ var notWireVocabulary = wordSet([]string{
 	// phrase it matches ("Current model:") is Claude's and is policed above;
 	// this pattern is Wake's construction, not a wire word.
 	`\(effort:\s*([a-zA-Z]+)\)`,
+
+	// Wake's own regexp for the cross-session envelope's from-name. The tags it
+	// parses are policed above; the pattern is Wake's construction.
+	`from-name="([^"]*)"`,
 })
 
 func wordSet(words []string) map[string]bool {
@@ -803,9 +819,11 @@ var notInTheCorpus = map[string]string{
 // the leading phrase of a longer reply value - so the quoted check cannot see
 // any of them and a substring check is the honest one for these three.
 var embeddedMarkers = map[string]bool{
-	"<local-command-stdout>":  true,
-	"</local-command-stdout>": true,
-	"Current model:":          true,
+	"<local-command-stdout>":   true,
+	"</local-command-stdout>":  true,
+	"Current model:":           true,
+	"<cross-session-message":   true,
+	"</cross-session-message>": true,
 }
 
 // The vocabulary has to be a real description of the corpus, or the test
