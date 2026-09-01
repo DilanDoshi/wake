@@ -89,7 +89,7 @@ func TestSoakDaemon(t *testing.T) {
 					errors.Add(1)
 				}
 			case rpc.FrameError:
-				if strings.Contains(f.Text, gapNotice) {
+				if f.Dropped > 0 {
 					gaps.Add(1)
 				}
 			}

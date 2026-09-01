@@ -320,6 +320,15 @@ type Frame struct {
 
 	Text string `json:"text,omitempty"`
 
+	// Dropped is how many frames the daemon lost for this client before the one
+	// that follows - set on the FrameError that reports a queue overflow, zero
+	// otherwise. The typed half of that report: every consumer routes off this
+	// field rather than string-matching the daemon's sentence (the Text half a
+	// person reads in a log). Both frame-gap producers - this queue and the
+	// window's own ring (internal/ui/inbox.go) - reach the one invalidation a gap
+	// demands through it. See App.notedGap and client.go's gapNotice.
+	Dropped int `json:"dropped,omitempty"`
+
 	// Images are attachments on a FrameSend, dropped into the composer and
 	// carried alongside Text. omitempty keeps every text-only send on the wire
 	// unchanged - the additive rule this frame's header states. The daemon

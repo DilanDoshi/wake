@@ -473,6 +473,59 @@ func TestADroppedFrameForgetsTheModeRatherThanKeepingAStaleOne(t *testing.T) {
 	}
 }
 
+// The same hole reached the third way: the daemon's own queue overflowed and it
+// dropped frames for this client. That used to land as a FrameError this arm only
+// reported, so a permission mode, a running tool and the counts all went stale on
+// a gap the window never counted (BUG-30). It now routes through the same
+// invalidation the window's ring does - notedGap - so a daemon-side gap forgets
+// exactly what a window-side one does.
+//
+// Mutation check: drop the `f.Dropped > 0` branch from apply's FrameError arm and
+// both the mode and the tool survive.
+func TestADaemonSideGapForgetsTheModeAndTheTurnState(t *testing.T) {
+	a := roomWithPick(t, modeRoomWidth)
+	picked, _ := a.pickedAgent()
+
+	// A mode this window believes, and a tool it believes is running - the two
+	// kinds of belief a gap can invalidate.
+	a = a.applyFrame(modeReceipt(picked.ID, core.PermissionModePlan))
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: picked.ID, Event: &core.Event{
+		Kind: core.KindToolUse,
+		Tool: &core.ToolCall{Name: "Bash", Display: "ls"},
+	}})
+	// And a turn this operator sent from the DM, so the room draws none of it.
+	a.fleet = a.fleet.sending(picked.ID, true)
+
+	if got := a.modeOf(picked.ID); got != core.PermissionModePlan {
+		t.Fatalf("mode = %q before the gap, want %q", got, core.PermissionModePlan)
+	}
+	if got, _ := a.fleet.Agent(picked.ID); got.Tool != "Bash" {
+		t.Fatalf("tool = %q before the gap, want Bash", got.Tool)
+	}
+
+	// The daemon's typed gap: a FrameError carrying a count, no session of its own.
+	after := a.applyFrame(rpc.Frame{Kind: rpc.FrameError, Dropped: 5,
+		Text: "dropped 5 frames: this client was not reading fast enough, so its view has a gap"})
+
+	if got := after.modeOf(picked.ID); got != spawnedMode {
+		t.Errorf("after a daemon-side gap the mode is still %q, want the spawn mode %q - a receipt may have been in the hole",
+			got, spawnedMode)
+	}
+	if got, _ := after.fleet.Agent(picked.ID); got.Tool != "" {
+		t.Errorf("after a daemon-side gap the tool is still %q, want none - the turn's end may have been in the hole", got.Tool)
+	}
+
+	// inDM is deliberately NOT cleared by the gap, exactly as the window-side gap
+	// leaves it: the DM turn may still be running, and clearing it here would leak
+	// the rest of a private turn into the room. See Fleet.ForgetTurns. It is
+	// reconciled instead when the report shows the turn actually ended
+	// (WithStatus's working→idle edge, TestAReportedTurnEndClearsAStaleInDM…) -
+	// not on the gap itself.
+	if !after.fleet.inDM(picked.ID) {
+		t.Error("a gap cleared inDM: the rest of a still-running private turn would then leak into the room")
+	}
+}
+
 // The same hole, reached the other way: a reattach is a new connection, and
 // everything that happened while this client was gone happened without it. The
 // fleet report it comes back with carries no permission mode, so a belief that

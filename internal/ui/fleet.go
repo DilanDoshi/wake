@@ -325,15 +325,26 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 			// into it and every turn after.
 			a.TurnTokens, a.turnDone, a.turnCur = 0, 0, 0
 		}
-		// The working→idle edge of a witnessed turn: record when and for how long,
-		// what the DM's done line reads. watchedStart implies a non-zero startedAt.
-		if s.State == rpc.StateIdle && turnInFlight(a.State) && a.watchedStart {
-			a.doneAt, a.turnDur = clock(), clock().Sub(a.startedAt)
+		// The working→idle edge of a witnessed turn. Two facts ride it. The done
+		// line's duration, gated on watchedStart (a turn whose start we saw). And
+		// inDM: fold clears it on the KindTurnEnd event, but a frame gap can eat
+		// that event and leave it stale, wrongly holding this agent's next turn's
+		// prose out of the room - so the report is the gap-robust second observable
+		// of the same turn-end. Not gated on watchedStart: a turn joined mid-flight
+		// still ended here. spoke is left to fold - clearing it before a late
+		// KindTurnEnd would draw a spurious finished marker. See docs/notes/bugs.md.
+		if s.State == rpc.StateIdle && turnInFlight(a.State) {
+			a.inDM = false
+			if a.watchedStart {
+				a.doneAt, a.turnDur = clock(), clock().Sub(a.startedAt)
+			}
 		}
 		// A park or an end forgets it: a wake starts fresh and reports idle directly
 		// (no working report between), so the pre-park summary must not reappear.
+		// inDM goes too - a woken session's first turn must not inherit a stale one.
 		if s.State == rpc.StateParked || s.State == rpc.StateEnded {
 			a.doneAt, a.turnDur, a.watchedStart = time.Time{}, 0, false
+			a.inDM = false
 		}
 		a.State, a.QuietMS = s.State, s.QuietMS
 		// Only when the report has one. The event stream is the fresher
@@ -611,10 +622,15 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 // tool it was running, the task it named, how much it has produced, and when it
 // began.
 //
+// Called by App.notedGap, the one invalidation both frame-gap producers reach:
+// the window's own ring (App.stream) and the daemon's client queue, which reports
+// its overflow as a FrameError carrying rpc.Frame.Dropped. Either is the same
+// hole, so both forget the same beliefs.
+//
 // **Only what the stream told it.** fold's KindTurnEnd clears two more - spoke
-// and inDM - and neither belongs here, because the gap that calls this is no
-// reason to doubt either. `dropped` is one counter for the whole fleet, so a
-// frame lost for *any* agent lands here for *every* agent:
+// and inDM - and neither belongs here, because a gap is no reason to doubt
+// either. `dropped` is one counter for the whole fleet, so a frame lost for *any*
+// agent lands here for *every* agent:
 //
 //   - **inDM is not stream-derived at all.** It is set by Fleet.sending the
 //     moment the operator presses send in a DM, and cleared the same way for a
@@ -626,9 +642,14 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 //     before the real KindTurnEnd arrives, the marker is drawn under prose that
 //     plainly finished.
 //
-// A stale inDM after an ending nobody saw is a real residual, and it is narrow:
-// a broadcast sets it false before its own turn, so only an *unprompted* turn
-// can inherit one. See docs/notes/bugs.md.
+// A stale inDM after an ending nobody saw used to be a real residual - a gap
+// eats the KindTurnEnd fold clears it on, and this ForgetTurns deliberately does
+// not touch it (clearing it mid-turn would leak the rest of a private turn's
+// prose into the room). It is closed now not here but at the report's own
+// working→idle edge in WithStatus: the report is a gap-robust second observable
+// of the same turn-end, so a missed KindTurnEnd no longer holds an agent's next
+// turn out of the room. Both gap producers route through notedGap for the mode
+// and turn state above; inDM is the report's to reconcile.
 //
 // **A reset needs a boundary this client saw**, and two things make one
 // missable: the inbox drops the oldest frame when a window is too slow to keep

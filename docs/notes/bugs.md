@@ -313,48 +313,6 @@ for exactly this caller. The item is one call from closable.
 ---
 
 
-## BUG-30 — there are two gap producers and only one of them invalidates anything
-
-Found on 2026-08-24 by an adversarial review of BUG-14's fix, and it is the reason that fix is
-narrower than it looks.
-
-**Frames are dropped in two places, and only one is wired to the forgetting.**
-
-The window's own ring drops when it cannot draw fast enough. That arrives as `m.dropped` and
-`internal/ui/app.go` does the whole job: it reports the gap, calls `forgotModes()` because a
-permission-mode receipt is one of the frames that can be in it, and calls `Fleet.ForgetTurns()`
-because a turn's result is another.
-
-**The daemon drops too, and that one lands as a sentence.** `internal/daemon/client.go` bounds each
-client's queue; when it overflows it counts, and `flush` opens the next write with an
-`rpc.FrameError` carrying `gapNotice`:
-
-```
-dropped 12 frames: this client was not reading fast enough, so its view has a gap
-```
-
-`App.apply`'s `rpc.FrameError` arm calls `startSettled` and `notice.Report`, and nothing else. It
-does not recognise that text, so **`forgotModes` and `ForgetTurns` never run for a daemon-side
-gap.** Everything BUG-14 is about survives it: the tool of a turn whose ending was in the hole, the
-counts, `Doing`, `spoke`, `inDM` — and the permission mode, which is the one CLAUDE.md says a window
-may not vouch for across a gap.
-
-The two producers are not equivalent in likelihood, either. The window's ring drops when a *draw*
-stalls; the daemon's queue drops when a client is slow to *read*, which is the case the daemon
-already hangs clients up over at 5s. At fleet scale the daemon-side one is the likelier of the two.
-
-**Why it is not BUG-14.** Same symptom, different mechanism, different package, and the fix is not a
-field: the UI would have to recognise the daemon's gap by its text, which is the string-matching
-`gapNotice`'s own comment already complains two other callers do — or, better, the daemon should say
-it in a typed frame and both gaps should route through one invalidation. That is a wire change and a
-decision about `rpc`, so it is written down rather than guessed at.
-
-**Not verified end to end.** This is read from the two code paths; no test drives a daemon queue to
-overflow and then asserts a stale tool on the far side. That test is the first thing the fix needs,
-and it is what would prove the entry.
-
----
-
 ## BUG-32 — `⌘←` / `⌘→` do nothing in the composer, where macOS puts line-start / line-end
 
 **Observed 2026-08-28** typing into the query/composer: `⌘←` and `⌘→` — the macOS reflex for
@@ -452,3 +410,11 @@ that. `deferred.md` carries the unification.
 **From BUG-4 (an ask stays in the conversation that put it).** If a blocked agent ever goes unnoticed
 on a narrow terminal, the pane-width path is the first thing to look at — ahead of putting a card
 back in the room.
+
+**From BUG-30 (two gap producers, one invalidation).** Both producers now route through `notedGap`
+for the permission mode and the turn's tool/counts, and `inDM` is reconciled at the report's
+working→idle edge (`Fleet.WithStatus`) rather than on the gap itself — clearing it on the gap would
+leak a still-running private turn into the room. The only residual: a gap that eats *both* the
+`KindTurnEnd` event and the working→idle report for the same turn leaves `inDM` stale until the next
+observed turn-end, so that agent's room prose is held back until then. Far narrower than the original,
+where a daemon-side gap invalidated nothing at all.
