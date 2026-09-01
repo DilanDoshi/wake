@@ -174,6 +174,41 @@ func TestADragOverQueryBoxTextPutsAHighlightOnIt(t *testing.T) {
 	}
 }
 
+// The reported bug: every rendered surface must be highlightable, not just the
+// transcript and the query box. The awareness strip is chrome - neither a
+// conversation nor a draft - and a drag across it now lands a background on the
+// cells it crossed, drawn as a frame-wide overlay. See screensel.go.
+func TestADragOverChromeHighlightsIt(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWakeInAConversation(t, 100, 30)
+	s.await("ready")
+	s.settle()
+
+	// The strip's leading cell is the first non-space of its content (a
+	// workspace or a state glyph), so a short drag from column 1 lands on text.
+	// Short on purpose: a long drag is many separate mouse-escape writes, and
+	// under -race the reader pools them and a read splits one mid-escape, which
+	// leaks into the composer as text and a keystroke-clear wipes the selection.
+	strip := s.rows - 2 // the awareness strip, above the notice row
+	bgBefore := s.rowBackgrounds(strip)
+	s.drag(1, 6, strip)
+	s.settle()
+	bgAfter := s.rowBackgrounds(strip)
+
+	changed := 0
+	for x := 1; x <= 6; x++ {
+		if bgBefore[x] != bgAfter[x] {
+			changed++
+		}
+	}
+	if changed == 0 {
+		t.Errorf("a drag across the awareness strip changed no cell's background: "+
+			"chrome that was unselectable is not being highlighted.\n%s", s.dump())
+	}
+}
+
 // rowBackgrounds is the background colour of every cell on one screen row.
 func (s *screen) rowBackgrounds(y int) []vt10x.Color {
 	s.term.Lock()

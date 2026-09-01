@@ -6,11 +6,13 @@ func (a App) withRoom(room Room) App {
 	moves := room.lineMoves
 	room.lineMoves = nil
 	a.room = room
-	// A composer selection is anchored to draft rows, not transcript lines, so
-	// the reconciliation below - which translates and bounds line indices against
-	// the room's transcript - would corrupt or clear it on any room update. Leave
-	// it alone; it survives until a keystroke or a width change clears it.
-	if a.sel.pane != "" || a.sel.inComposer || (a.sel == (selection{}) && !a.selecting) {
+	// A composer selection (draft rows) and a screen selection (absolute screen
+	// rows) are not anchored to the room's transcript lines, so the
+	// reconciliation below - which translates and bounds line indices against
+	// that transcript - would corrupt or clear either on any room update. A
+	// screen selection has pane == "" like a room selection, so it needs its own
+	// exclusion; both survive until a keystroke or a width change clears them.
+	if a.sel.pane != "" || a.sel.inComposer || a.sel.onScreen || (a.sel == (selection{}) && !a.selecting) {
 		return a
 	}
 	if moves != nil {

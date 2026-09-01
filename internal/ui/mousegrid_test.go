@@ -271,12 +271,14 @@ func TestAQueryBarInsideAStackedColumnIsNotConversation(t *testing.T) {
 	}
 
 	// The upper pane's own chrome: its transcript ends, its composer follows,
-	// and the rule is still rows below.
+	// and the rule is still rows below. None of it is a line of that
+	// conversation, so a press on it never resolves to the upper pane's
+	// transcript selection (it is a frame-wide selection instead).
 	for y := a.dms["s1"].tr.height; y < top; y++ {
 		got, _ := drag(a, x, x+20, y)
-		if !got.sel.empty() {
-			t.Errorf("a drag on row %d of the upper pane selected %+v: its transcript ends at row %d",
-				y, got.sel, a.dms["s1"].tr.height-1)
+		if got.selectionIn("s1") != (marked{}) {
+			t.Errorf("a drag on row %d of the upper pane resolved to its transcript selection: its transcript ends at row %d",
+				y, a.dms["s1"].tr.height-1)
 		}
 	}
 	// And the pane below still selects from its first row, which is what says

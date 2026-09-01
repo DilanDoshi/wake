@@ -45,6 +45,13 @@ func pressAt(x, y int) tea.MouseMsg {
 	return tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: x, Y: y}
 }
 
+// click is a press and a release on one cell - what resolves a chrome gesture
+// (a roster row opens) now that the open waits for release so a drag can copy.
+func click(a App, x, y int) (App, tea.Cmd) {
+	a, _ = a.mouse(pressAt(x, y))
+	return a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: x, Y: y})
+}
+
 // drag is a press, some motion and a release across one row of a pane.
 func drag(a App, x0, x1, y int) (App, tea.Cmd) {
 	a, _ = a.mouse(pressAt(x0, y))
@@ -208,19 +215,24 @@ func queryBarRows(a App) []int {
 	return rows
 }
 
-// Mutation check: dropping the fence from startSelection fails this on every
-// row, naming the line it clamped into.
-func TestADragOnTheQueryBarTakesNothing(t *testing.T) {
+// The query bar is chrome, and a press on it may never be read as a line of the
+// conversation: pointIn would clamp a row under the transcript into a transcript
+// line nobody dragged over, and every motion would scroll the reader to reach
+// it. It is a frame-wide selection instead - the box borders are text, the empty
+// draft is not - which never anchors into the scrollback and never scrolls.
+//
+// Mutation check: dropping the fence from startSelection makes every query-bar
+// press a transcript selection again, which this catches by row.
+func TestADragOnTheQueryBarIsNeverATranscriptSelection(t *testing.T) {
 	a := splitApp(t, 200, 40, 4)
-	last := a.transcriptIn("").height - 1
+	was := a.transcriptIn("").scroll
 	for _, y := range queryBarRows(a) {
-		got, cmd := drag(a, 10, 30, y)
-		if !got.sel.empty() {
-			t.Errorf("a drag on row %d selected %+v: the transcript's last row is %d, and pointIn clamps every row under it into a line nobody dragged over",
-				y, got.sel, last)
+		got, _ := drag(a, 10, 30, y)
+		if got.selectionIn("") != (marked{}) {
+			t.Errorf("a drag on row %d resolved to a transcript selection: a row under the transcript is not a line of it", y)
 		}
-		if cmd != nil {
-			t.Errorf("a drag on row %d wrote to the clipboard: there is no conversation on it", y)
+		if now := got.transcriptIn("").scroll; now != was {
+			t.Errorf("a drag on row %d scrolled the reader from %d to %d", y, was, now)
 		}
 	}
 }
@@ -234,9 +246,9 @@ func TestADragOnTheQueryBarLeavesTheReaderWhereTheyWere(t *testing.T) {
 	a := splitApp(t, 200, 40, 40).scrollPane("", 20)
 	was := a.transcriptIn("").scroll
 	got, _ := drag(a, 10, 30, a.transcriptIn("").height+1)
-	if !got.sel.empty() {
-		t.Errorf("a drag on the query bar selected %+v, %d lines into a conversation the reader was not on",
-			got.sel, got.sel.anchor.line)
+	if got.selectionIn("") != (marked{}) {
+		t.Errorf("a drag on the query bar resolved to a transcript selection %d lines into a conversation the reader was not on",
+			got.sel.anchor.line)
 	}
 	if now := got.transcriptIn("").scroll; now != was {
 		t.Errorf("the drag moved the reader from line %d to %d: a row under the transcript is not the pane's bottom edge", was, now)
@@ -318,13 +330,13 @@ func TestADragOnAMenuPinnedOverTheComposerTakesNothing(t *testing.T) {
 		t.Fatalf("the menu is not on the pane that draws it:\n%s", strings.Join(rows, "\n"))
 	}
 	for y := first; y < h; y++ {
-		if got, _ := drag(a, 10, 30, y); !got.sel.empty() {
-			t.Errorf("a drag on row %d selected %+v: the menu starts at row %d and nothing from there down is conversation",
-				y, got.sel, first)
+		if got, _ := drag(a, 10, 30, y); got.selectionIn("") != (marked{}) {
+			t.Errorf("a drag on row %d resolved to a transcript selection: the menu starts at row %d and nothing from there down is conversation",
+				y, first)
 		}
 	}
-	if got, _ := drag(a, 10, 30, first-1); got.sel.empty() {
-		t.Error("the row above the menu selected nothing: the fence took a row of conversation with it")
+	if got, _ := drag(a, 10, 30, first-1); got.selectionIn("") == (marked{}) {
+		t.Error("the row above the menu resolved to no conversation: the fence took a row of conversation with it")
 	}
 }
 
@@ -371,9 +383,9 @@ func TestADragOnAStreamingPreviewTakesNothing(t *testing.T) {
 	}
 	x := midOf(a.regions(), col)
 	for y := first; y < h; y++ {
-		if got, _ := drag(a, x, x+20, y); !got.sel.empty() {
-			t.Errorf("a drag on row %d selected %+v: the preview starts at row %d and is not conversation",
-				y, got.sel, first)
+		if got, _ := drag(a, x, x+20, y); got.selectionIn("s1") != (marked{}) {
+			t.Errorf("a drag on row %d resolved to a transcript selection: the preview starts at row %d and is not conversation",
+				y, first)
 		}
 	}
 }
@@ -402,8 +414,8 @@ func TestADragOnAPinnedQuestionCardTakesNothing(t *testing.T) {
 	}
 	x := midOf(a.regions(), col)
 	for y := first; y < h; y++ {
-		if got, _ := drag(a, x, x+20, y); !got.sel.empty() {
-			t.Errorf("a drag on row %d selected %+v: the card is drawn there and is not conversation", y, got.sel)
+		if got, _ := drag(a, x, x+20, y); got.selectionIn("s1") != (marked{}) {
+			t.Errorf("a drag on row %d resolved to a transcript selection: the card is drawn there and is not conversation", y)
 		}
 	}
 }

@@ -327,8 +327,9 @@ func TestClickingAnAgentsOwnRowLeavesNoOtherAgentsDispatchAttached(t *testing.T)
 	stale := a.roster.SelectedTask
 
 	// The far right column is the roster, and row 0 is the agent's own row.
-	// pickAgent has already opened the sidebar.
-	a = a.press(a.layout.Width-1, 0)
+	// pickAgent has already opened the sidebar. A roster click resolves on
+	// release now (so a drag can copy the row), so this is a full click.
+	a, _ = click(a, a.layout.Width-1, 0)
 
 	if a.roster.SelectedTask == stale {
 		t.Errorf("the click kept the previous agent's dispatch: %+v", a.roster)
