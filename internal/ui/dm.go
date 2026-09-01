@@ -507,7 +507,7 @@ func (d DM) View(width, height int) string {
 		d = d.SetSize(width, height)
 	}
 	w := max(width, minComposerWidth)
-	transcript := d.tr.view(d.sel)
+	transcript := withFollowBanner(d.tr.view(d.sel), d.tr, w)
 	if d.behindAsk {
 		transcript = quieted(transcript)
 	}
@@ -652,6 +652,13 @@ func (d DM) Before(earlier []core.Event) DM {
 // could keep - or break - while no caller could scroll.
 func (d DM) ScrollUp(lines int) DM {
 	d.tr = d.tr.scrolledUp(lines)
+	return d
+}
+
+// JumpToLatest returns to the newest line and resumes following - what a
+// click on the follow banner means. See followbanner.go.
+func (d DM) JumpToLatest() DM {
+	d.tr = d.tr.toBottom()
 	return d
 }
 

@@ -36,6 +36,39 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## KNOWN GAP, 2026-08-31 — the "scroll to bottom" clamp is computed three times, by hand, in three files
+
+**Shipped:** `fix/dm-scroll-follow-banner` adds a follow banner (`internal/ui/followbanner.go`) so a
+DM reader who has drifted off the newest line - a single stray wheel tick is enough, and it happens
+silently, with the streamed preview and working line still updating unconditionally underneath - gets
+told so and a one-click way back, instead of a transcript that looks frozen with no explanation. It
+does not add a chrome row: the banner overlays the transcript's own last rendered line, computed
+fresh every draw from `transcript.followLine()`.
+
+**Deferred:** `min(max(t.scroll, t.first()), t.bottom())` - "where does the visible window actually
+start" - is now written by hand in three places: `transcript.view()` (the render), `followLine()`
+(this change), and `mouse.go`'s `pointIn` (click-to-line resolution, pre-existing). All three
+independently agree today - proven by `followbanner_test.go` and by tracing `pointIn`'s clamp against
+a fresh `transcriptRows` measurement across the empty, exactly-fits, scrolled and prefix-present
+cases - but nothing stops a future change to `view()`'s windowing from silently un-syncing the other
+two, since none of them shares the other's code path.
+
+A click's own version of the same problem is worse than a copy-paste risk: `pointIn` resolves a
+screen row against the DM's *stored* transcript height, which `transcriptRows`'s own comment already
+documents as stale whenever chrome moves without a geometry change (a streaming preview, the working
+line) - exactly the case this change's banner exists for. The banner's own click handling sidesteps
+it by deciding the hit at press time from the same freshly measured height `transcriptRows` uses
+(`selection.bannerHit`, set in `startSelection`), rather than re-deriving a line to compare against at
+release. `pointIn` itself was not touched: doing so reaches every existing tool/run click and
+`extendSelection`'s own accepted imprecision ("the edge is a row or two out for the rest of a drag"),
+which is a larger, riskier change than this fix's scope, not a smaller one.
+
+*Blocks:* nothing observed - the divergence needs a scroll position in the narrow band between the
+stale and the true "bottom", which a single stray tick (the common case) does not reach. *Closes
+with:* factoring the clamp into one unstyled `transcript` method the other two call, and auditing
+whether `pointIn` should read a freshly measured height the way `startSelection`'s own gate already
+does.
+
 ## KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)
 
 **Shipped:** `fix/markdown-list-hanging-indent` hang-indents a wrapped **bullet** item's
