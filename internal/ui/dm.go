@@ -8,6 +8,7 @@ package ui
 import (
 	"cmp"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -66,6 +67,12 @@ type DM struct {
 	// writing titles the composer while it holds an answer rather than a
 	// message. Set for the draw; see WithWriting.
 	writing string
+
+	// compactingSince is when this session's compaction began, or the zero time
+	// when none is running. Set for the draw by App.dmPane off the App-owned map
+	// (compacting.go); it drives the compacting line the way Agent.startedAt
+	// drives the working one. See WithCompacting, DM.heartbeat.
+	compactingSince time.Time
 
 	SessionID string
 	Name      string

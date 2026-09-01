@@ -14,6 +14,8 @@ package ui
 // comment. Split by subject, which is the rule; the line count is only what
 // made it urgent.
 
+import "time"
+
 // WithAsk says an answerable card is drawn in this pane, which quiets the
 // transcript behind it. See askdim.go for what that costs.
 func (d DM) WithAsk(v bool) DM {
@@ -43,5 +45,12 @@ func (d DM) WithComposerSelection(m marked) DM {
 // WithMenu is the menu block this pane draws. See DM.menu.
 func (d DM) WithMenu(menu string) DM {
 	d.menu = menu
+	return d
+}
+
+// WithCompacting marks this pane as showing a compaction that began at since,
+// or clears it with the zero time. See DM.heartbeat.
+func (d DM) WithCompacting(since time.Time) DM {
+	d.compactingSince = since
 	return d
 }

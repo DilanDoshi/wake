@@ -34,6 +34,9 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	// A rewind receipt is the same non-decision, one kind over. See rewind.go.
 	a = a.noteRewind(sessionID, ev)
 	a = a.forgetHistoryOnReset(sessionID, ev)
+	// A compaction brackets itself with two status frames; the DM draws a
+	// "compacting…" line between them. See compacting.go.
+	a = a.observeCompaction(sessionID, ev)
 
 	var forRoom []core.Event
 	a.fleet, forRoom = a.fleet.Observe(ev, sessionID)

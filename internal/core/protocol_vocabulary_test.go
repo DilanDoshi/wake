@@ -159,6 +159,67 @@ func TestSystemSubtypeResolvesToANoticeWithoutLosingTheSubtype(t *testing.T) {
 	}
 }
 
+// A compaction is signalled on the wire by two system/status frames - the
+// binary "compacting" start flag and a terminal frame carrying compact_result -
+// and the airlock resolves each to a notice a reader drives a status line from.
+// Both share the subtype "status", so the resolution reads the payload, not the
+// subtype; and the end keys on compact_result, because a *failed* compaction
+// emits no compact_boundary (slash-commands.jsonl) where a success does.
+func TestCompactionStatusResolvesToNotices(t *testing.T) {
+	cases := []struct {
+		name string
+		line string
+		want Notice
+	}{
+		{"start", `{"type":"system","subtype":"status","status":"compacting","session_id":"s1"}`, NoticeCompacting},
+		{"end success", `{"type":"system","subtype":"status","status":null,"compact_result":"success","session_id":"s1"}`, NoticeCompacted},
+		{"end failed", `{"type":"system","subtype":"status","status":null,"compact_result":"failed","session_id":"s1"}`, NoticeCompacted},
+		// Other status frames share the subtype and earn no compaction notice: a
+		// "requesting" heartbeat and a mode receipt (which carries permissionMode
+		// on a subtype-"status" frame) both fall through to none.
+		{"a requesting status earns nothing", `{"type":"system","subtype":"status","status":"requesting","session_id":"s1"}`, ""},
+		{"a mode receipt earns nothing", `{"type":"system","subtype":"status","status":null,"permissionMode":"plan","session_id":"s1"}`, ""},
+	}
+	for _, c := range cases {
+		t.Run(c.name, func(t *testing.T) {
+			ev := onlyEvent(t, c.line, 0)
+			if ev.Kind != KindSystem {
+				t.Fatalf("Kind = %q, want %q", ev.Kind, KindSystem)
+			}
+			if ev.Text != "status" {
+				t.Errorf("Text = %q, want the raw subtype passed through", ev.Text)
+			}
+			if ev.Notice != c.want {
+				t.Errorf("Notice = %q, want %q", ev.Notice, c.want)
+			}
+		})
+	}
+}
+
+// The real recorded wire bytes resolve, not just hand-written ones. A success
+// (compaction.jsonl) and a failure (slash-commands.jsonl) bracket the same way,
+// and the failure is the one that proves the end cannot key on the boundary: it
+// carries a compact_result and no compact_boundary at all.
+func TestRecordedCompactionFramesResolve(t *testing.T) {
+	cases := []struct {
+		fixture, marker string
+		want            Notice
+	}{
+		{"compaction.jsonl", `"status":"compacting"`, NoticeCompacting},
+		{"compaction.jsonl", `"compact_result":"success"`, NoticeCompacted},
+		{"slash-commands.jsonl", `"status":"compacting"`, NoticeCompacting},
+		{"slash-commands.jsonl", `"compact_result":"failed"`, NoticeCompacted},
+	}
+	for _, c := range cases {
+		t.Run(c.fixture+" "+c.marker, func(t *testing.T) {
+			line, n := findFixtureLine(t, c.fixture, c.marker)
+			if got := onlyEvent(t, line, 0).Notice; got != c.want {
+				t.Errorf("%s:%d resolved to %q, want %q", c.fixture, n, got, c.want)
+			}
+		})
+	}
+}
+
 // The benign status is every sample the corpus has, and drawing it is chrome.
 // Anything else is the reason an agent stalled, so it earns a notice - and
 // the status itself still reaches a consumer either way.

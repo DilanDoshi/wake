@@ -45,7 +45,10 @@ var clock = time.Now
 // a fleet of thirty announcing themselves would otherwise start thirty
 // concurrent tickers that never stop.
 func (a App) beat() (App, tea.Cmd) {
-	if a.beating || !a.fleet.anyWorking() {
+	// A compacting session animates the same shimmer while it summarises, though
+	// no turn is in flight - so it keeps the ticker alive the way a working one
+	// does. Both stop it when they end.
+	if a.beating || (!a.fleet.anyWorking() && !a.anyCompacting()) {
 		return a, nil
 	}
 	a.beating = true
@@ -163,6 +166,28 @@ func workingLine(id, state, doing string, started time.Time, tokens, width int) 
 	// - a multiline word draws past it and, beside a card, pushes the key line off
 	// screen. Flattened here, the way the status bar keeps to one row. See oneRow.
 	return heartbeatLine(oneRow(word), turnAge(state, started), tokens, width)
+}
+
+// compactingWord is what the compacting line names - Claude Code's own, drawn
+// while it summarises a conversation to fit.
+const compactingWord = "Compacting conversation"
+
+// compactingLine is the working line a DM draws while a compaction runs: a
+// shimmering `✻ Compacting conversation…`, and "" when nothing is compacting.
+//
+// It is indeterminate on purpose. The wire carries no progress figure - only the
+// "compacting" start flag and the outcome - so there is no percentage to draw,
+// where Claude Code's own bar has one its interactive TUI computes internally.
+// since is when the compaction began, driving the glyph and the shimmer the way
+// a turn's age drives workingLine; no age or token clause, since neither belongs
+// to a compaction.
+func compactingLine(since time.Time, width int) string {
+	if since.IsZero() {
+		return ""
+	}
+	elapsed := clock().Sub(since)
+	head := heartbeatGlyph(elapsed) + " " + compactingWord + heartbeatEllipsis
+	return boundedShimmerLine(head, elapsed, "", width)
 }
 
 const (

@@ -16,6 +16,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
 	tea "github.com/charmbracelet/bubbletea"
@@ -182,6 +183,11 @@ type App struct {
 	// copy - App.wants' own reason, one surface over. Empty when the wall is
 	// down: foldTail is gated and closeBoard drops it.
 	tails map[string]partial
+
+	// compacting is which sessions are mid-compaction and when each began, so a
+	// DM can draw `✻ Compacting conversation…` while it runs. On App and keyed by
+	// session id for tails' reason. Folded from two notices; see compacting.go.
+	compacting map[string]time.Time
 
 	// askedHistory is which sessions this client has already asked for a
 	// transcript, and pendingHistory is the asks Update has not yet written.

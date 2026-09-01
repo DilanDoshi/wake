@@ -479,8 +479,20 @@ type Subagent struct {
 type Notice string
 
 const (
-	// NoticeContextCompacted is the conversation being summarised to fit.
+	// NoticeContextCompacted is the conversation being summarised to fit. It is
+	// the compact_boundary that lands *after* a successful compaction, and it is
+	// the transcript label - distinct from the two below, which bracket the work
+	// while it runs so a reader can draw a "compacting…" status line.
 	NoticeContextCompacted Notice = "context_compacted"
+
+	// NoticeCompacting and NoticeCompacted bracket a compaction. Both ride a
+	// system/status frame - the start carries status:"compacting", the end
+	// carries a compact_result - so the pair is resolved from the payload rather
+	// than the shared subtype. The end keys on compact_result and *not* on the
+	// boundary above, because a failed compaction emits a compact_result and no
+	// boundary at all (slash-commands.jsonl). See systemEvent.
+	NoticeCompacting Notice = "context_compacting"
+	NoticeCompacted  Notice = "context_compacted_done"
 
 	// NoticeToolDenied is the after-the-fact report that a tool call was
 	// refused - not the ask, which is KindPermissionRequest.

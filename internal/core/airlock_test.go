@@ -170,6 +170,12 @@ var claudeWireVocabulary = wordSet([]string{
 	"task_progress", "task_updated", "task_notification",
 	"background_tasks_changed", "status", "system",
 
+	// The compaction status frame's payload: the value the start flag carries
+	// and the key the end frame carries its outcome under. Both are read only in
+	// systemNoticeFor, which tells the two subtype-"status" frames apart. Wake's
+	// own words for what they mean are NoticeCompacting and NoticeCompacted.
+	"compacting", "compact_result",
+
 	// The task lifecycle's own fields and values, policed as the rest of the
 	// subtype's payload is. None of the ten appears anywhere in this tree
 	// outside internal/core, so policing them costs Wake nothing - the
@@ -516,10 +522,11 @@ var notNamedByTheAirlock = map[string]string{
 // vocabulary - a word added, a word removed - has to update it, which is what
 // makes a deletion a three-place edit (the word, its excuse, this number)
 // rather than something that can happen by accident in a rebase.
-// 150 → 153: the cross-session envelope's two tags, <cross-session-message and
-// </cross-session-message>, policed like the abort markers; plus "iterations",
-// the per-round-trip usage breakdown resultFacts reads the context level from.
-const policedWordCount = 153
+// 150 → 155: the cross-session envelope's two tags, <cross-session-message and
+// </cross-session-message>, policed like the abort markers; "iterations", the
+// per-round-trip usage breakdown resultFacts reads the context level from; and
+// the compaction status frame's "compacting"/"compact_result".
+const policedWordCount = 155
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

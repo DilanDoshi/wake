@@ -441,7 +441,7 @@ func (a App) dmPane(id string, width, height int) string {
 	// Handed over whole, for roomPane's reason. See DM.menuRows.
 	menu, ask := a.menuBlock(id, width)
 	return a.dmFor(id).WithSelection(a.selectionIn(id)).WithComposerSelection(a.composerSelectionIn(id)).
-		WithMenu(menu).WithAsk(ask).WithWriting(a.answerTitle(id)).View(width, height)
+		WithMenu(menu).WithAsk(ask).WithWriting(a.answerTitle(id)).WithCompacting(a.compactingSince(id)).View(width, height)
 }
 
 // transcriptRows is how many of a pane's rows are conversation, measured the
