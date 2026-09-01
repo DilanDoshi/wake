@@ -422,9 +422,20 @@ func resultFacts(f wireFrame) *SessionFacts {
 	if f.Usage == nil {
 		return nil
 	}
+	// The context level is the input side of the turn's *final* API call, not
+	// the top-level usage - which sums input across every tool-use round-trip,
+	// over-reporting by roughly the call count on a multi-tool turn.
+	// usage.iterations' last element is that final call; the corpus omits it
+	// only when the turn produced no usage - a no-op or an interrupted turn,
+	// both carrying a zero top-level sum - so the fallback is exact there.
+	level := f.Usage.InputTokens + f.Usage.CacheCreationTokens + f.Usage.CacheReadTokens
+	if n := len(f.Usage.Iterations); n > 0 {
+		it := f.Usage.Iterations[n-1]
+		level = it.InputTokens + it.CacheCreationTokens + it.CacheReadTokens
+	}
 	facts := SessionFacts{
 		Model:         f.Model,
-		ContextTokens: f.Usage.InputTokens + f.Usage.CacheCreationTokens + f.Usage.CacheReadTokens,
+		ContextTokens: level,
 		OutputTokens:  f.Usage.OutputTokens,
 	}
 	if m, ok := f.ModelUsage[f.Model]; ok {
