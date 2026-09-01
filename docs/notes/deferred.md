@@ -210,7 +210,17 @@ needed — the input shape is the documented `MultiEdit` schema — but a fixtur
 
 ---
 
-## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿`
+## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿` — record shipped 2026-08-31; purple-under-`⎿` presentation still deferred
+
+**Partially shipped (`fix/room-question-answered-notice`, PR #40, 2026-08-31).** The "yellow → gone"
+failure below is fixed: a settled question now leaves one line in the group chat — `● ‹agent› ·
+question answered` (green, `ToolOkStyle`) or `● ‹agent› · question cancelled` (muted) — authored above
+the airlock (`internal/ui/cardroom.go`, `core.NoticeQuestionAnswered`/`Cancelled`), attributed to the
+agent, closer to the `● Subagent "…" finished` a dispatch leaves than to the live card. **Still
+deferred is the *presentation* this entry asks for:** no purple headline, no answer text, no `⎿` body.
+Two of the "Open questions" below are settled by the ship — **Scope** is `ShapeQuestion` only (a
+permission or plan posts no distinct room line), and **Persistence** is a live-only marker (a
+`KindSystem` event, not re-derived off disk).
 
 **Asked for in this version.** When an agent's question is answered, the yellow `● ‹agent› › has a
 question` line the room pins should not simply vanish — it should **turn purple** and **show the
@@ -2912,10 +2922,13 @@ outstanding ones, in priority order:
    field); interrupting a subagent; a **denied** subagent tool call; `SendMessage` to a running
    subagent; whether a subagent can outlive the process; and `output_file`, which names an on-disk
    JSONL transcript of every subagent that Wake has never opened.
-3. **`--replay-user-messages`.** `CLAUDE.md` lists it as a flag Wake depends on. What it emits
-   when enabled — frame type, whether the echo is distinguishable from a genuine user turn,
-   whether it sets `isReplay` — has never been observed. Task 10 owns the single-source rule and
-   currently has no fixture behind it.
+3. **~~`--replay-user-messages`.~~ RECORDED** (`feat/cross-session-room`, PR #47, 2026-09-01) — probed
+   2026-08-31 against 2.1.252 and committed as `testdata/stream/cross-session.jsonl` with
+   `docs/superpowers/notes/2026-08-31-cross-session-findings.md`. It replays a message onto live stdout
+   as a `user` frame, and it **does** set `isReplay` (the question `event.go` marked unobserved): a
+   cross-session peer message carries `isReplay:true` **and** `isSynthetic:true`, while an ordinary
+   replayed stdin send carries `isReplay:true` alone — so both fold to `Echoed:true` and the room's
+   existing `typedByHand` fold drops them, surfacing only the envelope-bearing frames.
 4. **`rate_limit_info.status`** has exactly one observed value (`"allowed"`). Any fleet
    indicator built on it is designed against a single sample, and least trustworthy in exactly
    the situation it exists to catch.
@@ -3055,7 +3068,11 @@ It also could not transcribe four Minors at all, because I had put the review fi
 
 ---
 
-**The hint line truncates mid-word at intermediate widths.** Measured through the real render
+**~~The hint line truncates mid-word at intermediate widths.~~ RESOLVED** (`feat/status-bar-legend`,
+PR #31, 2026-08-31): the always-on hint line was removed — the legend now draws only while an arm is
+live (`↵ detach`, `esc clear draft`) and the permission mode moved to the status bar — so there is no
+static line left to right-truncate. The measurements below are kept as the record of why the always-on
+legend went. Measured through the real render
 path after `⌃F fork` took the legend to eleven entries: the whole legend plus the permissions
 label is **163 cells**; 147 gives all eleven keys and no mode; 80 gives `↵ ⎋ ⌃C ⇥ ⇧⇥ ⌃D`. But the
 cut is a plain right-truncate, so **at 100 columns it reads `… ⌃G wo`** — it stops in the middle
@@ -3293,7 +3310,7 @@ it is would be the same lie pointing the other way:
 grep this branch ran over `_test.go` for assertions that the capability does not exist came back
 clean, and these two are the same claim living in a document instead of a test.
 
-### The legend is now fourteen entries and a DM makes six of them unreachable
+### ~~The legend is now fourteen entries and a DM makes six of them unreachable~~ — RESOLVED (`feat/status-bar-legend`, PR #31, 2026-08-31)
 
 Not new, and made one worse. Lane B's #8 already recorded that *"with a DM open the last six legend
 entries are invisible on every terminal up to ~300 columns"*; `⌃T mention mode` is a fourteenth
@@ -3301,6 +3318,11 @@ entry at the tail, so it is the first thing cut at every width and invisible in 
 That is the truncation order working — the mode's current value is on the target line and in the
 notice row, so the entry advertises the key rather than carrying the state — but the underlying
 design call Lane B named (**fewer entries, or a second row**) is now carrying one more entry.
+
+**Resolved (`feat/status-bar-legend`, PR #31, 2026-08-31):** the always-on legend row is gone — it
+draws only while an arm is live and the permission mode moved to the status bar — so there is no static
+row of entries for a DM to make unreachable. Lane B's "fewer entries, or a second row" call was
+answered by removing the row.
 
 ---
 
@@ -4270,8 +4292,9 @@ two sessions inside five seconds, which session-specific prose is not.
 *What closes it* is a genuine-operator-turn flag carried out of `DecodeTranscriptLine` — an airlock
 change, so it needs the corpus read first for how each record is actually identifiable. **Not
 `Echoed`**: `core.Event.Echoed`'s own header forbids keying suppression or de-duplication on it, in
-those words, because it conflates replay with synthesis and nobody has watched what
-`--replay-user-messages` emits.
+those words, because it conflates replay with synthesis — now confirmed by observation
+(`2026-08-31-cross-session-findings.md`, PR #47): a cross-session message replays as `isReplay:true,
+isSynthetic:true` and an ordinary replayed send as `isReplay:true` alone, and both fold to `Echoed:true`.
 
 ---
 
