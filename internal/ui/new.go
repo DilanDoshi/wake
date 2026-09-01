@@ -125,8 +125,8 @@ func startedLine(name, label string) string {
 // It reports the ask on the keypress and the arrival on the report, which is
 // the split fork.go argues: the daemon may refuse — a name already taken, a
 // directory that is not there — and the operator should know the command was
-// read either way, while the conversation may not be opened until something
-// exists behind it.
+// read either way, while the room's mention of it (see starts.go's
+// draftMention) may not be drafted until something exists behind it.
 func (a App) newAgent(arg string) (App, tea.Cmd) {
 	req, err := parseNew(arg)
 	if err != nil {

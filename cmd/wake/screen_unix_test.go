@@ -362,7 +362,14 @@ func (s *screen) rosterNames() []string {
 	return out
 }
 
-var rosterRow = regexp.MustCompile(`[●◐○▪·] ([a-z][a-z0-9-]*)`)
+// Anchored on the sidebar's own left border (or the start of the dump) rather
+// than on the glyph alone: `·` is also StateEnded's own state glyph, but it is
+// bare in the room's own target line too - "→ @robin · direct" - which a
+// fresh `/new` now leaves drawn (see starts.go's draftMention), and an
+// unanchored match read "direct" off that line as a roster row. headLine
+// starts a row at column 0 of the sidebar, which is always immediately after
+// the divider - so requiring that adjacency is exact rather than heuristic.
+var rosterRow = regexp.MustCompile(`(?:^|│)[●◐○▪·] ([a-z][a-z0-9-]*)`)
 
 // agentsOnRoster is every roster row that is not the manager, in screen order.
 //

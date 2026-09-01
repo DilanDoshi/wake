@@ -36,10 +36,12 @@ func TestArrowsPickAnAgentAndCtrlDOpensIt(t *testing.T) {
 		t.Fatalf("want two agents on the roster beside the manager, got %v.\n%s", s.rosterNames(), s.dump())
 	}
 
-	// The cursor is on robin, where /new left it. Walking it is the subject
-	// here, so it is walked rather than clicked - and the walk is counted off
+	// The cursor is on names[0] already: `/new` opens no pane and selects
+	// nothing (see starts.go's draftMention), so the selection
+	// startWakeInAConversation made when it opened the scripted agent's own
+	// conversation survives untouched. Walking it is the subject below, so the
+	// second one is walked rather than clicked - and the walk is counted off
 	// the roster on screen, because the manager is a row between them now.
-	s.pickRoster(names[1], names[0])
 	s.send("\x04") // ⌃D on the first
 	s.await("@" + names[0])
 

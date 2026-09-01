@@ -103,10 +103,13 @@ func TestBroadcastReachesEveryAgentAndEchoesOnce(t *testing.T) {
 	s.send("/new robin\r")
 	s.await("@robin")
 
-	// /new opens the new agent's conversation and gives it the keys, so getting
-	// back to the room is a keystroke rather than an assumption.
-	s.send("\x17") // ⌃W
-	s.await("group chat")
+	// /new opens no pane and drafts a mention instead - "@robin " - and esc
+	// clears the room's draft in one press, which the broadcast below needs:
+	// these are raw keystrokes typed onto whatever the box already holds, and
+	// without clearing it first "@all stand up" lands after "@robin " rather
+	// than as the whole draft.
+	s.send("\x1b")
+	s.settle()
 
 	s.send("@all stand up")
 	s.await("2 turns") // the price is on screen before the key, not after it

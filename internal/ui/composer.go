@@ -702,11 +702,15 @@ func (c Composer) Reset() Composer {
 
 // WithDraft replaces the draft and puts the cursor at its end.
 //
-// Two callers: the picker's typed escape, which hands back a half-written
-// command for somebody to finish, and a prompt walk. It is a *replacement*
-// rather than an insert because the picker only opens over an empty composer, so
-// there is nothing to preserve and an insert would be an API that implies
-// otherwise.
+// Three callers: the picker's typed escape, which hands back a half-written
+// command for somebody to finish; a prompt walk; and starts.go's draftMention.
+// It is a *replacement* rather than an insert because the first two only ever
+// reach this over an empty composer - the picker opens over one and a walk
+// owns the whole draft - so there is nothing to preserve and an insert would
+// be an API that implies otherwise. draftMention is the one caller that could
+// reach a non-empty composer, and it gates itself before calling here rather
+// than asking this to insert - dropping a fresh spawn's mention is cheaper
+// than silently appending one onto a message the operator is mid-typing.
 //
 // It clears the walk for Reset's reason - a draft put here from anywhere else is
 // not a position in the history - and Composer.walked writes the position back
