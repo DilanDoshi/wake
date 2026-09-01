@@ -495,6 +495,17 @@ const (
 	// on every interrupt, which is about to be the most common thing anyone
 	// does here.
 	NoticeTurnInterrupted Notice = "turn_interrupted"
+
+	// NoticeQuestionAnswered and NoticeQuestionCancelled are the room's record
+	// that the operator resolved an agent's question - answered, or refused.
+	//
+	// Unlike every notice above they are authored above the airlock (internal/ui
+	// when it settles a question card), never decoded from a frame - the way
+	// Event.FromRoom is set by the App rather than the decoder. So the group chat
+	// shows the ask closing rather than its own warn line going stale. See
+	// internal/ui/cardroom.go.
+	NoticeQuestionAnswered  Notice = "question_answered"
+	NoticeQuestionCancelled Notice = "question_cancelled"
 )
 
 // AskKind is what a KindPermissionRequest wants from the operator, resolved
