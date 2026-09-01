@@ -1,28 +1,37 @@
 // Command wake is the terminal client, and the daemon it forks.
 //
-// Nine verbs, and the split between them is the product rather than a CLI
+// Eleven verbs, and the split between them is the product rather than a CLI
 // convention:
 //
-//   - wake               the front door: reopen the room over whatever fleet
-//     there is, and start an agent when there is not one.
-//   - wake new [name]    spawn: a new agent, with a name chosen rather than
-//     drawn.
-//   - wake attach <who>  the same conversation with an agent already running,
-//     found by name or by session id.
-//   - wake fork <who>    branch one: a new agent that inherits the named
+//   - wake                  the front door: reopen the room over whatever
+//     fleet there is, and start an agent when there is not one.
+//   - wake new [name]       spawn: a new agent, with a name chosen rather
+//     than drawn.
+//   - wake attach <who>     the same conversation with an agent already
+//     running, found by name or by session id.
+//   - wake fork <who>       branch one: a new agent that inherits the named
 //     session's conversation so far and then diverges. Its own id, its own
 //     name, its own DM - and the parent's transcript is not touched.
-//   - wake import [<id>] adopt a session Wake never started: a transcript from
-//     a `claude` somebody ran in a terminal. With no id it lists what is on the
-//     machine, which is the picker.
-//   - wake manager       start the manager: one session with tools over the
-//     fleet, addressed as @manager from the room. It opens no conversation of
-//     its own, because it is a service rather than a participant.
-//   - wake daemon        serve: what EnsureRunning forks. Not a user command.
-//   - wake mcp           serve the manager's tools on stdin and stdout. Spawned
-//     by a claude session through --mcp-config, so also not a user command.
-//   - wake status        what is running, including a fleet whose daemon died.
-//   - wake stop          end every session and the daemon, and wait for it.
+//   - wake import [<id>]    adopt a session Wake never started: a transcript
+//     from a `claude` somebody ran in a terminal. With no id it lists what is
+//     on the machine, which is the picker.
+//   - wake manager          start the manager: one session with tools over
+//     the fleet, addressed as @manager from the room. It opens no
+//     conversation of its own, because it is a service rather than a
+//     participant.
+//   - wake fleets           the named fleets on this machine.
+//   - wake setup-terminal   make Shift+Enter send a newline in the composer,
+//     by configuring the host terminal to send ESC CR for it - the sequence
+//     Wake already reads as a newline. See internal/termsetup.
+//   - wake daemon           serve: what EnsureRunning forks. Not a user
+//     command.
+//   - wake mcp              serve the manager's tools on stdin and stdout.
+//     Spawned by a claude session through --mcp-config, so also not a user
+//     command.
+//   - wake status           what is running, including a fleet whose daemon
+//     died.
+//   - wake stop             end every session and the daemon, and wait for
+//     it.
 //
 // Detach is not a verb here. ⌃O leaves the TUI and the fleet carries on,
 // which is the property the whole architecture exists to provide, so it
@@ -99,6 +108,10 @@ const (
 	// refuses anything not in it - and a verb that is not a verb is a typo that
 	// starts an agent.
 	cmdMCP = "mcp"
+
+	// cmdSetupTerminal configures the host terminal rather than the fleet -
+	// the one verb here that dials no socket at all. See setupterminal.go.
+	cmdSetupTerminal = "setup-terminal"
 )
 
 // The description column is a column. `wake fork <who> [name]` is five
@@ -119,6 +132,7 @@ var usage = `usage:
   wake status             what is running
   wake stop               stop every session and the daemon
   wake fleets             the named fleets on this machine
+  wake setup-terminal     make Shift+Enter send a newline, by configuring your terminal
 
 flags, anywhere:
   --fleet <name>          which fleet to talk to; several can run in one directory
@@ -131,7 +145,11 @@ flags, on the verbs that start a session (` + list(spawningVerbs) + `):
   --fallback-model <m,m>  models to fail over to, in order, when the first is overloaded
   --add-dir <dir>         let this session's tools reach a directory outside its own; repeatable
   --debug-file <name>     write this session's debug log there, under the fleet's own debug directory
-  --debug <categories>    narrow that log, as api,hooks or !1p,!file; needs --debug-file`
+  --debug <categories>    narrow that log, as api,hooks or !1p,!file; needs --debug-file
+
+flags, on wake setup-terminal:
+  --yes, -y               skip the confirmation prompt
+  --undo                  remove what wake setup-terminal added`
 
 func main() {
 	// Before any verb dispatch: a wake binary re-exec'd as an agent's supervisor
@@ -188,6 +206,19 @@ func run(args []string, out io.Writer) error {
 	// was never on the socket they had started one on.
 	if makesNewFleet(args, fleet, os.Getenv(daemon.SocketEnv)) {
 		return openNewFleet(out)
+	}
+
+	// wake setup-terminal touches no fleet at all - handled here, before
+	// daemon.FleetSocketPath below, because that call creates the fleet's
+	// state directory (mkdir -p ~/.wake or a named fleet's own directory)
+	// as a side effect of resolving a path this verb has no use for. Every
+	// other verb needs that path; this is the one that would otherwise
+	// leave a directory behind for a fleet that was never started.
+	if len(args) > 0 && args[0] == cmdSetupTerminal {
+		if _, err := setupTerminalFlags(args[1:]); err != nil {
+			return err
+		}
+		return runSetupTerminal(args[1:], os.Stdin, out)
 	}
 
 	socket, err := daemon.FleetSocketPath(fleet)
