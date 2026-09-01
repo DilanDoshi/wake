@@ -712,6 +712,23 @@ unopened one is filled from claude's transcript, `DecodeTranscriptLine` keeps us
 neither pane de-duplicates, so materializing would draw one turn twice in two spellings.
 `FromRoom` is presentation only, for `Echoed`'s reason. Full argument: `docs/notes/decisions.md`.
 
+**A peer's cross-session message shows in the room, headed by the sender.** Claude Code's own
+peer channel injects one session's message into another wrapped as a `<cross-session-message
+from-name="…">…</cross-session-message>` envelope. Probed 2026-08-31: without `--replay-user-messages`
+the envelope reaches only the recipient's on-disk transcript, so the room — fed by the live stream —
+never saw it; with the flag it replays live as a `user` frame carrying the envelope. So Wake now emits
+the flag (`argv.go`), the airlock resolves the envelope to `core.KindCrossSession` (`wire.go`'s
+`crossSession`, one decoder for the live stream and the transcript both), and the room admits it
+(`fold`) attributed to the **sender** — `Fleet.crossSpeaker` resolves `from-name` to a fleet agent for
+its identity colour, else a bare name for an outside session — with a `↪` lead so it reads apart from
+the sender's own room turn, folded past `roomInlineRows` like a reply. **The flag is contained by the
+envelope, not by `Echoed`:** every replayed *own-send* also carries `isReplay` (→ `Echoed`) and the
+room's existing `typedByHand` fold already drops those, so ordinary usage is untouched; the one place
+the flag would have double-rendered is the DM, whose feed `observe` now drops a replayed `KindUserText`
+from (`replayedOwnSend`) because `sendDM`'s local echo is its single source — the rule `event.go`'s
+`Echoed` comment reserves for the App that owns both halves. Full argument:
+`docs/superpowers/specs/2026-08-31-cross-session-messages-in-room-design.md`.
+
 **Slash commands resolve against a closed set Wake owns; anything else is text.** Claude's own
 `/model`, `/clear`, `/compact` and a user's `~/.claude/commands/*.md` all have to keep reaching the
 agent, and nothing can enumerate the latter at the moment the question is asked. `/add-<agent-name>`
@@ -914,6 +931,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Reading a conversation back off claude's disk | `internal/daemon/history.go` — `History`, `transcriptPath` (found by filename, never built from a slug), `answerHistory` behind two verbs · `internal/core/protocol.go` — `DecodeTranscriptLine`, a filter in front of `DecodeLine` rather than a second decoder, and the one on-disk key it reads · `internal/ui/history.go` — the ask and the fold |
 | Reading the **room** back off the same disk | `internal/ui/roomhistory.go` — `roomHistoryLines` (the merge, the filter, the broadcast rule), `roomAsk` (the room's own ledger) · `internal/ui/chat.go` — `Room.Before` |
 | Narrowing the room to one agent's thread | `internal/ui/roomfocus.go` — `focusAdmits` (pure, id-comparison) · `internal/ui/chat.go` — `Room.focus`/`WithFocus`, the `roomLine.to` stamp, the subset render (a hidden line stays in `said` at `rows == 0`) · `internal/ui/send.go` — `retarget` sets focus off the composer's lone direct `@name`, and stamps `to` on the echo |
+| A peer's cross-session message | `internal/core/wire.go` — `crossSession` (the envelope recogniser, beside the wire shapes it is one of) · `internal/core/event.go` — `KindCrossSession`, `FromName`/`FromAddr` · `internal/ui/fleet.go` — `fold`'s admit · `internal/ui/fleetquery.go` — `Fleet.crossSpeaker` (sender attribution) · `internal/ui/observe.go` — the room append and `replayedOwnSend` (the DM single-source) · `internal/ui/chat_blocks.go` — `crossSaid`/`crossSessionLead`, `roomCollapsible` · `internal/ui/dm_blocks.go` — `crossSessionBlock` · `internal/ui/crosssession_test.go` · `testdata/{stream,transcript}/cross-session.jsonl` |
 | ⎋, and the second one | `internal/ui/escape.go` — `escape`, `clearsOnEscape` (+ `escprobe_test.go` for what two escapes in one read actually are) |
 | The rewind picker: trigger, tree-aware read, receipt | `internal/ui/rewind.go` — `rewindArmable`, `RewindPicker`, `noteRewind` (the receipt fold and re-read) · `internal/core/activebranch.go` — `ActiveBranch`, the tree walk · `internal/daemon/rewindtargets.go` — `RewindTargets`, the daemon's own query behind `FrameRewindTargets` |
 | The manager's config and scope | `internal/daemon/manager.go` |
@@ -1124,7 +1142,7 @@ frame names its version.
 | Spend and failover | `--max-budget-usd <amount>` · `--fallback-model <model,model>` — **both emitted**, both documented "only works with `--print`", which is the mode every agent runs in. The chain is tried in order and the primary is re-tried at the start of each user turn |
 | What a session thinks with | `--effort low\|medium\|high\|xhigh\|max` (five — the command takes seven) · `--model <alias or full id>` |
 | Changing the mode after spawn | Not a flag: a `set_permission_mode` control request on stdin. The flag is the mode a session *starts* in and nothing more |
-| Visibility | `--include-hook-events`, `--include-partial-messages`, `--replay-user-messages`, `--forward-subagent-text`, `--brief` — Wake emits all but `--replay-user-messages`. `--include-partial-messages` is refused without `--print` and `--output-format stream-json` |
+| Visibility | `--include-hook-events`, `--include-partial-messages`, `--replay-user-messages`, `--forward-subagent-text`, `--brief` — **Wake emits all five** as of 2026-08-31. `--replay-user-messages` is what puts a peer's cross-session message on the live stream (without it that message reaches only the on-disk transcript); its replays of Wake's own sends carry `isReplay` and stay dropped as `Echoed`. `--include-partial-messages` is refused without `--print` and `--output-format stream-json` |
 | What a session's tools may reach | `--add-dir <directories...>` — variadic, and **both spellings are recorded as equivalent** (2026-08-16: repeated and variadic, two directories outside the session's tree, identical either way). Wake emits the **repeated** one, for a local reason: the variadic form has to ask whether a directory is the first, and `argvguard_test.go` refuses a question about a Config field's value on that path |
 | Logging one agent of thirty | `--debug-file <path>`, which *implicitly enables debug mode* · `-d, --debug [filter]`, `api,hooks` or `!1p,!file`. Wake carries a **name** for the first and places the file itself — see the paths ruling above |
 | Isolation | `--worktree [name]` — **read and not used.** It is a managed subsystem (paths under `.claude/worktrees`, a lock keyed on pid, persisted session state, a sweep that removes stale ones), so passing it would make claude the owner of the directory Wake's park book, discovery and groups all key on. Wake runs `git worktree add` itself and passes the path as `Dir` |
