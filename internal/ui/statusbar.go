@@ -82,6 +82,7 @@ func statusBar(a Agent, mode string, width int) string {
 		modelName(a.Model, a.ContextWindow),
 		contextLeft(a.ContextTokens, a.ContextWindow),
 		effortSegment(a.Effort),
+		prSegment(a.prs),
 	}
 	kept := segments[:0]
 	for _, s := range segments {
@@ -263,4 +264,20 @@ func effortSegment(level string) string {
 		return ""
 	}
 	return effortLabel + level
+}
+
+// prSegment names the pull requests this session has opened - `PR #29` for one,
+// `PR #29, #30` for several - and "" when it has opened none, dropped like every
+// other segment. The daemon scrapes the numbers from a `gh pr create` tool
+// result; nothing on Claude's wire names a PR. See prSet.
+func prSegment(p *prSet) string {
+	nums := p.numbers()
+	if len(nums) == 0 {
+		return ""
+	}
+	parts := make([]string, len(nums))
+	for i, n := range nums {
+		parts[i] = fmt.Sprintf("#%d", n)
+	}
+	return "PR " + strings.Join(parts, ", ")
 }

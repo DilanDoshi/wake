@@ -8,8 +8,32 @@ import (
 	"github.com/DilanDoshi/wake/internal/core"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
+
+// A selection over your own message must be visible. Your turns are drawn on
+// Own's ground, and the highlight used Own's ground too - so selecting a query
+// you typed in the room changed nothing on screen. The fix draws the selection
+// on Claude's own selectionBg instead, distinct from Own on both themes.
+func TestASelectionIsVisibleOnYourOwnShadedMessage(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor - the ground colours render exactly
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	own := OwnStyle.Width(20).Render("hello world") // your own shaded turn
+	w := ansi.StringWidth(own)
+
+	sel := highlighted(own, 0, 5) // select "hello"
+	// What the same cells would look like if the highlight used Own's own ground.
+	asOwn := ansi.Cut(own, 0, 0) +
+		OwnStyle.Render(ansi.Strip(ansi.Cut(own, 0, 5))) +
+		ansi.Cut(own, 5, w)
+
+	if sel == asOwn {
+		t.Error("a selection on your own message renders on the same ground as the message, so the highlight is invisible")
+	}
+}
 
 // textRow is a screen row of splitApp's room that carries a turn's body rather
 // than the banner, a blank or an attribution. Row 4 is empty, and a drag across

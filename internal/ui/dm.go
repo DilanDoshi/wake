@@ -232,6 +232,7 @@ type barKey struct {
 	state  string
 	used   int
 	window int
+	prs    *prSet // a PR arrives mid-turn with no other bar fact moving, so the key must carry it; prSet.same keeps the pointer stable so it does not redraw per frame
 }
 
 // withBar re-renders the status bar if anything it is drawn from has moved, and
@@ -245,7 +246,7 @@ func (d DM) withBar(width int) DM {
 	mode := d.composer.Mode()
 	key := barKey{
 		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, mode: mode, state: d.Agent.State,
-		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
+		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow, prs: d.Agent.prs,
 	}
 	if key == d.barFrom {
 		return d
