@@ -101,6 +101,11 @@ func subagentName(t Task) string {
 // pane that had been sent into a subagent stuck in it: walking the cursor back
 // up and pressing ⌃D again is what this promises as the way back, and it did
 // nothing.
+//
+// Seeded from the fleet's own backlog first, for a dispatch this DM is opening
+// for the first time - a DM just built by openDMWith has never watched
+// anything live, so without this its own subs would be empty and the pane
+// would draw the dispatch as if it had forwarded nothing. See fleetsubs.go.
 func (a App) viewingPicked(id string) App {
 	if a.roster.Selected != id {
 		return a
@@ -109,7 +114,8 @@ func (a App) viewingPicked(id string) App {
 	if !ok {
 		return a
 	}
-	return a.withDM(id, d.Viewing(a.roster.SelectedTask))
+	task := a.roster.SelectedTask
+	return a.withDM(id, d.withSubBacklog(task, a.fleet.SubBacklog(id, task)).Viewing(task))
 }
 
 // subsFor is the running dispatches a lookup answers for one agent, and none

@@ -881,6 +881,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | MCP server exposed to the manager | `internal/mcp/` — `tools.go` (six tools, held to `managerScope` in both directions), `rollup.go`, `fleet.go`, `stateguard_test.go` |
 | Bubble Tea root model | `internal/ui/app.go` — start at `apply` |
 | What a fleet report does to the model | `internal/ui/report.go` — `applyStatus`, `noteEnding` |
+| Reading the fleet back out: roster, ranking, routing | `internal/ui/fleetroster.go` — `OnRoster`, `Agents`, `ByName`, `Focus`/`Focused`, `sending`/`inDM`, `needsAuth`. Split from `fleet.go` once the subagent backlog pushed the fold half past the 800-line hard max — fold and read are two subjects sharing one type |
 | The keys the App owns, and the legend bijection | `internal/ui/keys.go` |
 | The drain that is not the draw loop | `internal/ui/inbox.go` — the ring, the fold that keeps a preview off a slot, and what `dropped` counts (+ `inbox_bench_test.go` for the fold's price) |
 | Which conversations are on screen and where | `internal/ui/grid.go` — bounded: columns, each split once |
@@ -925,8 +926,9 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | A dispatch's lifecycle, decoded | `internal/core/task.go` (Wake's vocabulary) · `protocol.go` — `taskUpdate` · `vocabulary.go` — `taskPhases`, `taskKinds`, `taskStatuses` |
 | What a conversation has dispatched | `internal/ui/tasks.go` — the fold, pure, and `named` (the ending frame does not say what ended) · `taskline.go` — the line an ending leaves in the transcript. The running subagents are drawn in the **right sidebar** (`rostersubs.go`), not a list under the pane — the pane space is the task board (`checklistpin.go`) |
 | Who owns that fold, and why it is not on `Agent` | `internal/ui/fleettasks.go` — `Fleet.tasks` keyed on session id, `RunningTasks` (the sidebar's filter), `named` (ingest-time enrichment for the ending line). It is a second map because `Agent` must stay comparable for `Observe`'s `now == was`. The sidebar reads it directly; nothing projects it onto the DM any more |
-| Subagents in the right sidebar | `internal/ui/rostersubs.go` — `subagentRow` (the type, then the count if it fits whole), `subsOf`, `viewingPicked` (what `⌃D` and a click do with one). The walk is `roster.go`'s `walkable`; `Roster.SelectedTask` names the dispatch while `Selected` stays the **agent**, so `⌃C`, `⎋` and `↵` keep targeting a session |
+| Subagents in the right sidebar | `internal/ui/rostersubs.go` — `subagentRow` (the type, then the count if it fits whole), `subsOf`, `viewingPicked` (what `⌃D` and a click do with one, and where a freshly-opened DM is seeded before `Viewing` renders — see the row below). The walk is `roster.go`'s `walkable`; `Roster.SelectedTask` names the dispatch while `Selected` stays the **agent**, so `⌃C`, `⎋` and `↵` keep targeting a session |
 | Where a subagent's frames are drawn | `internal/ui/dm.go` — `forwardedTo` (which transcript a frame belongs to) · `appendForwarded` · `Viewing` · `renderForwarded` |
+| A dispatch's speech, for an agent nobody has opened yet | `internal/ui/fleetsubs.go` — `Fleet.foldSub`/`SubBacklog` (folded unconditionally in `Fleet.Observe`, the same move `fleettasks.go` made for the row that names a dispatch) · `DM.withSubBacklog` (seeds a DM's own `subs` from it once, only when the DM holds nothing yet for that dispatch). Without this, opening a dispatch under an agent this client never watched live drew an empty transcript — indistinguishable from the wire's own floor for a dispatch that truly forwarded nothing |
 | The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, and the permission mode; cached on `DM.bar`, drawn per change, and drawn **above** the legend (info row over the keys). Effort is the level `confirmedEffort` reads back, or the asked-for one until then. The mode is **drawn whole or dropped**, never right-cut into `permissions: …` |
 | The room's info bar | `internal/ui/chat.go` — `Room.bar`/`Room.withBar` · `internal/ui/send.go` — `App.withRoomBar`, which draws it for the agent the composer is addressing (a lone `@name`, else the manager) and nothing for an empty room. Cached like a DM's; the room *banner* stays fact-free (`banner_test.go`) — this is a different row |
 | The composer's info line and legend | `internal/ui/composer.go` — `WithBar` places a pre-rendered bar between the box and the legend; the pane builds the bar (it reads the filesystem) |
@@ -1185,7 +1187,7 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/app.go` at 798 and `internal/ui/fleet.go` at 798 — that sentence is derived by
+  `internal/ui/app.go` at 798 and `internal/ui/dm.go` at 796 — that sentence is derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
   message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
