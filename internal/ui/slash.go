@@ -290,6 +290,23 @@ const managerStopCommand = "manager-stop"
 // reason.
 const managerStopVerb = SlashPrefix + managerStopCommand
 
+// quitCommand ends one agent and removes it from this window - `/manager-stop`
+// for an ordinary session. It writes `rpc.FrameStop`, the ending nothing brings
+// back, and unlike ⌃C park it is not recoverable.
+//
+// **The word is safe to take on the evidence `new` and `manager` are:** the
+// recorded corpus carries 133 commands claude advertises on its `init` frames
+// and `quit` is in none of them, which is what
+// TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising checks.
+//
+// It takes an `@who` and so is a roomTargetCommand: `@sydney /quit` aims at
+// sydney, the same mention→target bridge `/color`, `/name` and `/task` ride.
+// Bare, it ends the conversation it is typed in - see quit.go's quitTarget.
+const quitCommand = "quit"
+
+// quitVerb is `/quit` as somebody types it, for managerVerb's reason.
+const quitVerb = SlashPrefix + quitCommand
+
 const (
 	nameVerb = SlashPrefix + nameCommand
 	taskVerb = SlashPrefix + taskCommand
@@ -334,21 +351,24 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	mcpCommand:         App.mcp,
 	managerCommand:     App.manager,
 	managerStopCommand: App.managerStop,
+	quitCommand:        App.quitAgent,
 	boardCommand:       App.openBoard,
 }
 
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
-// aimed by a room mention: `@thea /color green` means `/color @thea green`. The
-// three that read displayTarget - name, task and colour - since only those have
-// a target for the mention to become. `/effort` and `/model` are the room's
-// other addressed path (configure, a picker over the bare form); every other
-// Wake verb takes no `@who`, and claude's own commands must pass through to the
-// agent untouched. So the set is closed and a subset of commands, held to both
-// by slashguard_test.go for the reason the passthrough itself is guarded.
+// aimed by a room mention: `@thea /color green` means `/color @thea green`.
+// name, task and colour read displayTarget for the value beside the target;
+// quit takes the target alone - `@thea /quit` ends thea. `/effort` and `/model`
+// are the room's other addressed path (configure, a picker over the bare form);
+// every other Wake verb takes no `@who`, and claude's own commands must pass
+// through to the agent untouched. So the set is closed and a subset of commands,
+// held to both by slashguard_test.go for the reason the passthrough itself is
+// guarded.
 var roomTargetCommands = map[string]struct{}{
 	nameCommand:  {},
 	taskCommand:  {},
 	colorCommand: {},
+	quitCommand:  {},
 }
 
 // # The second kind of command, and why it is in this file
@@ -511,7 +531,7 @@ func (a App) mentionCommand(who, text string) (App, tea.Cmd, bool) {
 //
 // Named for its half of the overload rather than `commandCount`, which this
 // package's tests already use for how many goroutines one tea.Cmd costs.
-const wakeCommandCount = 10
+const wakeCommandCount = 11
 
 // slash routes one draft, reporting whether Wake took it.
 //

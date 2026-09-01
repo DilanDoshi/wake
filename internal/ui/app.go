@@ -316,7 +316,8 @@ type App struct {
 
 	// parking are the sessions this client asked to park and has not yet seen
 	// parked. pendingStarts' shape, for pendingStarts' reason - see parkArrived.
-	parking map[string]struct{}
+	parking  map[string]struct{}
+	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
 
 	// waking: asked to wake, not yet seen back. See wakeArrived.
 	waking map[string]struct{}
