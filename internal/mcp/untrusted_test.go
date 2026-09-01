@@ -110,6 +110,14 @@ var agentAuthored = map[string]bool{
 	// rendered on this surface (notInTheStatusReport) - the verdict is here
 	// because every field needs one, not because a tool prints it.
 	"Commands": true,
+
+	// ConfirmedModel is the agent's, and it is where it parts from Effort beside
+	// it: the /model probe reads it out of a `Current model: …` line, and unlike
+	// Effort the model half is not a closed set - ValidModel admits any non-empty
+	// string, so a line shaped like that reply during a probe window could put
+	// arbitrary text here. Contained by oneRow on the status bar, the only surface
+	// that draws it, and not on this MCP surface at all (notInTheStatusReport).
+	"ConfirmedModel": true,
 }
 
 // Every field of the report has a provenance verdict.

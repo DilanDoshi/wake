@@ -89,8 +89,9 @@ func (a *agent) apply(p pending) {
 		}
 		if err = a.sess.Send(p.frame.Text, p.frame.Images); err == nil {
 			a.noteSent()
-			if a.noteEffort(p.frame.Text) {
-				// The level just changed under our record; confirm it.
+			// An /effort or a /model just changed what the session runs as; the
+			// same bare-/model probe confirms both the level and the model back.
+			if a.noteEffort(p.frame.Text) || a.noteModel(p.frame.Text) {
 				a.probeEffort()
 			}
 		}

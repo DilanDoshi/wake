@@ -17,6 +17,30 @@ func TestIsModelReply(t *testing.T) {
 	}
 }
 
+func TestModelFromModelReply(t *testing.T) {
+	for _, tc := range []struct {
+		name, in, want string
+		ok             bool
+	}{
+		// The recorded shape: a model name that itself carries a parenthesised
+		// note, the effort clause, and a second usage line - all of which the
+		// parse must strip off without eating the "(1M context)" the name owns.
+		{"the recorded reply", "Current model: Opus 5 (1M context) (effort: xhigh)\nUsage: /model <name>.", "Opus 5 (1M context)", true},
+		{"no note", "Current model: Sonnet 5 (effort: medium)", "Sonnet 5", true},
+		{"leading space", "  Current model: Fable 5 (effort: low)", "Fable 5", true},
+		{"not a model reply", "Sure, the current model is opus", "", false},
+		{"the prefix and nothing else", "Current model:", "", false},
+		{"empty", "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ModelFromModelReply(tc.in)
+			if ok != tc.ok || got != tc.want {
+				t.Errorf("ModelFromModelReply(%q) = (%q,%v), want (%q,%v)", tc.in, got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
 func TestEffortFromModelReply(t *testing.T) {
 	lvl, ok := EffortFromModelReply("Current model: Opus 5 (1M context) (effort: xhigh)")
 	if !ok || lvl != "xhigh" {

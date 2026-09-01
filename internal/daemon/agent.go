@@ -134,6 +134,13 @@ type agent struct {
 	// Not written to the park book: a woken session re-probes and re-confirms.
 	confirmedEffort string
 
+	// confirmedModel is the model's display name the same /model probe read back
+	// ("Opus 5 (1M context)"), or "" before one has answered. Display prefers it
+	// over the init frame's raw id: after a runtime /model the id on the wire is
+	// a turn stale, and this is re-read at once. Not park-persisted, for
+	// confirmedEffort's reason.
+	confirmedModel string
+
 	// pendingProbes counts effort-probe /model replies still expected; fanOut
 	// swallows a reply while it is positive. A counter rather than a bool
 	// because two probes can be in flight at once - two quick /effort changes,
@@ -676,22 +683,23 @@ func (a *agent) snapshot() rpc.SessionStatus {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	st := rpc.SessionStatus{
-		ID:         a.id,
-		Name:       a.name,
-		Label:      a.label,
-		Color:      a.color,
-		Dir:        a.dir,
-		Cwd:        a.runningIn(),
-		ParentID:   a.parent,
-		Tool:       a.tool,
-		ToolArg:    a.toolArg,
-		Effort:     cmp.Or(a.confirmedEffort, a.effort),
-		Budget:     a.budget,
-		Commands:   a.commands,
-		State:      a.stateLocked(time.Now()),
-		RequestIDs: a.pendingIDsLocked(),
-		PID:        a.sess.Pgid(),
-		QuietMS:    time.Since(a.lastEvent).Milliseconds(),
+		ID:             a.id,
+		Name:           a.name,
+		Label:          a.label,
+		Color:          a.color,
+		Dir:            a.dir,
+		Cwd:            a.runningIn(),
+		ParentID:       a.parent,
+		Tool:           a.tool,
+		ToolArg:        a.toolArg,
+		Effort:         cmp.Or(a.confirmedEffort, a.effort),
+		ConfirmedModel: a.confirmedModel,
+		Budget:         a.budget,
+		Commands:       a.commands,
+		State:          a.stateLocked(time.Now()),
+		RequestIDs:     a.pendingIDsLocked(),
+		PID:            a.sess.Pgid(),
+		QuietMS:        time.Since(a.lastEvent).Milliseconds(),
 	}
 	switch {
 	case a.err != nil:

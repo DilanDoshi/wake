@@ -224,13 +224,15 @@ var drawStatusBar = statusBar
 // every bar wears and does not take the hue (see statusBar), so a /color change
 // moves nothing here and belongs in no key that would redraw for it.
 type barKey struct {
-	width  int
-	dir    string
-	model  string
-	mode   string
-	state  string
-	used   int
-	window int
+	width     int
+	dir       string
+	model     string
+	confModel string
+	effort    string
+	mode      string
+	state     string
+	used      int
+	window    int
 }
 
 // withBar re-renders the status bar if anything it is drawn from has moved, and
@@ -243,7 +245,8 @@ type barKey struct {
 func (d DM) withBar(width int) DM {
 	mode := d.composer.Mode()
 	key := barKey{
-		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, mode: mode, state: d.Agent.State,
+		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, confModel: d.Agent.ConfirmedModel,
+		effort: d.Agent.Effort, mode: mode, state: d.Agent.State,
 		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
 	}
 	if key == d.barFrom {

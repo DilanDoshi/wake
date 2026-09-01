@@ -102,6 +102,36 @@ func TestNoteEffortRequiresTheCommandToEndAtTheWord(t *testing.T) {
 	}
 }
 
+// noteModel recognises a /model that carries a model, so apply can fire a
+// confirming probe on it - and nothing else, so the probe's own bare /model
+// (and the UI's picker) does not loop it.
+func TestNoteModelFiresOnlyOnAModelWithAnArgument(t *testing.T) {
+	for _, tc := range []struct {
+		name, text string
+		want       bool
+	}{
+		{"an alias", "/model opus", true},
+		{"a full id", "/model claude-opus-5", true},
+		{"leading and trailing space", "  /model sonnet  ", true},
+
+		// Everything below fires nothing. A bare /model names no model - it is
+		// the probe's own form and the picker's - so a re-probe there would loop.
+		{"bare", "/model", false},
+		{"bare with trailing space", "/model  ", false},
+		{"a different command", "/effort max", false},
+		{"not the command", "/modelish opus", false},
+		{"prose that mentions it", "please /model opus", false},
+		{"empty", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := &agent{}
+			if got := a.noteModel(tc.text); got != tc.want {
+				t.Errorf("noteModel(%q) = %v, want %v", tc.text, got, tc.want)
+			}
+		})
+	}
+}
+
 // A park book is a file on disk. A row that has been edited or corrupted must
 // not put an arbitrary string on a command line - and must still come back,
 // because refusing to wake a session over a bad decoration is worse than

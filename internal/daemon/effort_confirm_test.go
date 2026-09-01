@@ -35,6 +35,20 @@ func TestSnapshotPrefersConfirmedEffort(t *testing.T) {
 	}
 }
 
+// The snapshot carries the model a /model probe read back, empty until one has
+// answered - the report's own route for a fact the init frame reports a turn
+// stale after a runtime /model.
+func TestSnapshotCarriesTheConfirmedModel(t *testing.T) {
+	a := effortAgent(t)
+	if got := a.snapshot().ConfirmedModel; got != "" {
+		t.Fatalf("a session with no probe yet reports a model: %q", got)
+	}
+	a.confirmedModel = "Sonnet 5 (1M context)"
+	if got := a.snapshot().ConfirmedModel; got != "Sonnet 5 (1M context)" {
+		t.Fatalf("snapshot did not carry the confirmed model: %q", got)
+	}
+}
+
 // The probe is a bare /model queued on the agent's own stdin path, marked so
 // apply can send it without counting it as an operator turn.
 func TestProbeEnqueuesBareModel(t *testing.T) {
@@ -92,6 +106,10 @@ func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 	}
 	if a.confirmedEffort != core.EffortMax {
 		t.Fatalf("effort not recorded: %q", a.confirmedEffort)
+	}
+	// The same reply names the model, and the probe reads it back for display.
+	if a.confirmedModel != "Opus 5" {
+		t.Fatalf("model not recorded: %q", a.confirmedModel)
 	}
 
 	// The probe turn's end: suppressed, no second publish, window closed.
@@ -178,4 +196,33 @@ func TestTheProbeConfirmsEffortInvisibly(t *testing.T) {
 	c.await("effort re-confirmed as low", func(f rpc.Frame) bool {
 		return f.Status != nil && sessionRow(*f.Status, idAlpha).Effort == core.EffortLow
 	})
+}
+
+// The same probe reads the model back, so a runtime /model shows on the report
+// at once rather than at the next turn's init - the bug this change fixes. The
+// startup probe confirms the model the session is at; a /model re-probes.
+func TestTheProbeConfirmsTheModelAfterAModelChange(t *testing.T) {
+	fakeClaudeOnPath(t, "probe")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+
+	c.spawn(idAlpha, "sydney")
+
+	// The startup probe reads the model back, though the init only names an id.
+	c.await("model confirmed", func(f rpc.Frame) bool {
+		return f.Status != nil && sessionRow(*f.Status, idAlpha).ConfirmedModel == "Opus 5 (1M context)"
+	})
+
+	// A runtime /model re-probes, so the confirmed model follows the change.
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/model sonnet"})
+	c.await("model re-confirmed as sonnet", func(f rpc.Frame) bool {
+		return f.Status != nil && sessionRow(*f.Status, idAlpha).ConfirmedModel == "sonnet"
+	})
+
+	// And no probe reply leaked to a client on either round.
+	for _, f := range c.seen {
+		if f.Kind == rpc.FrameEvent && f.Event != nil && core.IsModelReply(f.Event.Text) {
+			t.Fatalf("a probe reply leaked to a client: %q", f.Event.Text)
+		}
+	}
 }

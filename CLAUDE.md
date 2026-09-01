@@ -810,6 +810,17 @@ airlock (`core.EffortFromModelReply`). The probe fires once on `init` and again 
 change. See `internal/daemon/effort.go` and
 `docs/notes/decisions.md`.
 
+**The same probe confirms the *model*, for the same reason effort needed it.** A model is on every
+`init` frame, but `/model <arg>` changes it with no turn and so no new `init` — the id on the wire is
+a turn stale, and the status bar showed the old model until the next query. So `/model` fires the
+same bare-`/model` probe `/effort` does, its reply also names the model
+(`core.ModelFromModelReply` reads `Current model: Opus 5 (1M context)` off the same line as the
+effort clause), and the daemon carries it as `rpc.SessionStatus.ConfirmedModel`. The status bar
+**prefers the confirmed model over the init-frame id**, falling back to the id until the probe
+answers. Not park-persisted (a woken session re-probes) and not written to `a.model` — the park
+book's model is the alias Wake asked for at spawn, a separate fact from the rendered name. Detected
+by `noteModel` in `apply`, beside `noteEffort`.
+
 **Discovery verifies a directory; it never decodes one.** The project-dir slug is lossy, so
 `verifiedDir` holds three facts against each other and answers exactly one directory or none.
 `slugOf` may only ever appear as an operand of `==` or `!=` — constructing a path from a slug is what
@@ -881,6 +892,8 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | MCP server exposed to the manager | `internal/mcp/` — `tools.go` (six tools, held to `managerScope` in both directions), `rollup.go`, `fleet.go`, `stateguard_test.go` |
 | Bubble Tea root model | `internal/ui/app.go` — start at `apply` |
 | What a fleet report does to the model | `internal/ui/report.go` — `applyStatus`, `noteEnding` |
+| The `Agent` type and the event fold that writes it | `internal/ui/fleet.go` — `Agent`, `Fleet.WithStatus`, `fold`, `withFacts` |
+| Reading the fleet: the immutability copy and the accessors | `internal/ui/fleetquery.go` — `Fleet.copy`, `Agent`, `OnRoster`, `ByName`, `Agents`, `Focus` (split from `fleet.go` at the write/read seam) |
 | The keys the App owns, and the legend bijection | `internal/ui/keys.go` |
 | The drain that is not the draw loop | `internal/ui/inbox.go` — the ring, the fold that keeps a preview off a slot, and what `dropped` counts (+ `inbox_bench_test.go` for the fold's price) |
 | Which conversations are on screen and where | `internal/ui/grid.go` — bounded: columns, each split once |
@@ -927,10 +940,10 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Who owns that fold, and why it is not on `Agent` | `internal/ui/fleettasks.go` — `Fleet.tasks` keyed on session id, `RunningTasks` (the sidebar's filter), `named` (ingest-time enrichment for the ending line). It is a second map because `Agent` must stay comparable for `Observe`'s `now == was`. The sidebar reads it directly; nothing projects it onto the DM any more |
 | Subagents in the right sidebar | `internal/ui/rostersubs.go` — `subagentRow` (the type, then the count if it fits whole), `subsOf`, `viewingPicked` (what `⌃D` and a click do with one). The walk is `roster.go`'s `walkable`; `Roster.SelectedTask` names the dispatch while `Selected` stays the **agent**, so `⌃C`, `⎋` and `↵` keep targeting a session |
 | Where a subagent's frames are drawn | `internal/ui/dm.go` — `forwardedTo` (which transcript a frame belongs to) · `appendForwarded` · `Viewing` · `renderForwarded` |
-| The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, and the permission mode; cached on `DM.bar`, drawn per change, and drawn **above** the legend (info row over the keys). Effort is the level `confirmedEffort` reads back, or the asked-for one until then. The mode is **drawn whole or dropped**, never right-cut into `permissions: …` |
+| The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, and the permission mode; cached on `DM.bar` (`barKey`), drawn per change, and drawn **above** the legend (info row over the keys). Effort is the level `confirmedEffort` reads back, or the asked-for one until then; the **model** is the name `ConfirmedModel` reads back, or the init-frame id until then. The mode is **drawn whole or dropped**, never right-cut into `permissions: …` |
 | The room's info bar | `internal/ui/chat.go` — `Room.bar`/`Room.withBar` · `internal/ui/send.go` — `App.withRoomBar`, which draws it for the agent the composer is addressing (a lone `@name`, else the manager) and nothing for an empty room. Cached like a DM's; the room *banner* stays fact-free (`banner_test.go`) — this is a different row |
 | The composer's info line and legend | `internal/ui/composer.go` — `WithBar` places a pre-rendered bar between the box and the legend; the pane builds the bar (it reads the filesystem) |
-| The effort probe | `internal/daemon/probe.go` — `probeEffort`, `absorbProbe` (a `pendingProbes` counter), `firstInit`, `incProbe`/`decProbe` · `internal/daemon/effort.go` — `noteEffort` (returns whether it recorded), the `/model` compose · `internal/daemon/agent.go` — the `confirmedEffort`/`pendingProbes` fields · `internal/daemon/fanout.go` — the fan-out loop that consumes the reply · `internal/core/vocabulary.go` — `IsModelReply`, `EffortFromModelReply` (asserted against `testdata/stream/bare-model.jsonl`) · `internal/daemon/history.go` — the disk filter |
+| The effort/model probe | `internal/daemon/probe.go` — `probeEffort`, `absorbProbe` (a `pendingProbes` counter, records both `confirmedEffort` and `confirmedModel`), `firstInit`, `incProbe`/`decProbe` · `internal/daemon/effort.go` — `noteEffort` and `noteModel` (each returns whether to re-probe), the `/model` compose · `internal/daemon/agent.go` — the `confirmedEffort`/`confirmedModel`/`pendingProbes` fields · `internal/daemon/fanout.go` — the fan-out loop that consumes the reply · `internal/core/vocabulary.go` — `IsModelReply`, `EffortFromModelReply`, `ModelFromModelReply` (asserted against `testdata/stream/bare-model.jsonl`) · `internal/daemon/history.go` — the disk filter |
 | Which branch a directory is on | `internal/gitref/` — one implementation, shared by the daemon's label and the status bar |
 | What a session runs as, and how full it is | `internal/core/protocol.go` — `initFacts`, `resultFacts` → `core.SessionFacts` → `ui.Agent.withFacts`. `initFacts` also carries `slash_commands`, which is what the completion menu offers |
 | Markdown · diffs · tool blocks · task lists | `internal/render/` — `todo.go` for the checklist · `tool.go` owns the layout and takes its palette from the caller, so `theme.go` stays the one place a colour is written down |
@@ -1185,7 +1198,7 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/app.go` at 798 and `internal/ui/fleet.go` at 798 — that sentence is derived by
+  `internal/ui/dm.go` at 799 and `internal/ui/app.go` at 798 — that sentence is derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
   message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**

@@ -100,6 +100,30 @@ func (a *agent) noteEffort(text string) bool {
 	return true
 }
 
+// noteModel reports whether this message is claude's /model command carrying a
+// model, so apply can fire the same confirming probe it fires after /effort.
+//
+// Unlike noteEffort it records nothing: the probe reads the model's display name
+// back for the status bar, and the park book's model is a separate fact - what
+// Wake asked for at spawn, an alias fit for --model, which the probe's rendered
+// name is not. A runtime /model changing the parked model is its own question
+// (docs/notes/deferred.md), untouched here.
+//
+// It fires only with an argument. A bare /model is the probe's own form (and the
+// UI's picker), so reading it as a change would make the probe trigger a probe.
+func (a *agent) noteModel(text string) bool {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(text), slashPrefix+modelVerb)
+	if !ok {
+		return false
+	}
+	// The command has to end where the word does, noteEffort's own rule:
+	// "/modelish" is not the command.
+	if rest != "" && !unicode.IsSpace(rune(rest[0])) {
+		return false
+	}
+	return strings.TrimSpace(rest) != ""
+}
+
 // argvEffort is what a level may become on a command line: itself, or nothing.
 //
 // The two sets are why this exists. `/effort` takes seven levels and `--effort`

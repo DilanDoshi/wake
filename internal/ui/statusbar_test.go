@@ -110,6 +110,26 @@ func TestTheBarShowsEffortWhenKnown(t *testing.T) {
 	}
 }
 
+// The confirmed model wins over the init-frame id, so a /model change shows the
+// moment the probe reads it back rather than at the next turn - the bug this
+// fixes. Until the probe answers, the init id is the fallback.
+func TestTheBarPrefersTheConfirmedModel(t *testing.T) {
+	bar := stripANSI(statusBar(Agent{
+		Cwd: "/tmp/repo", Model: "claude-opus-5", ConfirmedModel: "Sonnet 5 (1M context)",
+	}, modeAuto, 200))
+	if !strings.Contains(bar, "Sonnet 5 (1M context)") {
+		t.Errorf("bar %q did not prefer the confirmed model", bar)
+	}
+	if strings.Contains(bar, "Opus 5") {
+		t.Errorf("bar %q still drew the init-frame model over the confirmed one", bar)
+	}
+
+	fallback := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, modeAuto, 200))
+	if !strings.Contains(fallback, "Opus 5") {
+		t.Errorf("bar %q lost the init-frame model before a probe answered", fallback)
+	}
+}
+
 func TestTheBarIsEmptyWhenNothingIsKnown(t *testing.T) {
 	if got := statusBar(Agent{}, "", 80); got != "" {
 		t.Errorf("an unknown agent drew %q, want no bar at all", got)
@@ -202,6 +222,10 @@ func TestTheStatusBarIsRedrawnWhenItsFactsMove(t *testing.T) {
 	}{
 		{"the context moved", func(d DM) DM { d.Agent.ContextTokens = 50; return d }},
 		{"the model changed", func(d DM) DM { d.Agent.Model = "claude-sonnet-5"; return d }},
+		// The probe reading a model back is what makes a /model instant; a bar
+		// that did not redraw for it would move at the next turn, the bug again.
+		{"the probe confirmed a model", func(d DM) DM { d.Agent.ConfirmedModel = "Sonnet 5"; return d }},
+		{"the effort changed", func(d DM) DM { d.Agent.Effort = "low"; return d }},
 		{"the pane got narrower", func(d DM) DM { return d }},
 		// A turn boundary is what re-reads the branch, so an operator who
 		// checks out another one sees it without anything polling.

@@ -71,10 +71,17 @@ func statusBar(a Agent, mode string, width int) string {
 	if width < 1 {
 		return ""
 	}
+	// The confirmed model wins: it is the name a /model probe read back, which
+	// stays current through a runtime /model where the init frame's id does not.
+	// The init id is the fallback until the probe answers - see modelName.
+	model := a.ConfirmedModel
+	if model == "" {
+		model = modelName(a.Model, a.ContextWindow)
+	}
 	segments := []string{
 		shortPath(a.Cwd),
 		gitref.Of(a.Cwd).Name(),
-		modelName(a.Model, a.ContextWindow),
+		model,
 		contextLeft(a.ContextTokens, a.ContextWindow),
 		effortSegment(a.Effort),
 	}
