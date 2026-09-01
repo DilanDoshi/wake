@@ -116,9 +116,9 @@ func TestSlashBoardOpensTheOverview(t *testing.T) {
 	if !strings.Contains(out, boardKeyLineRows) {
 		t.Errorf("the board does not advertise its keys:\n%s", out)
 	}
-	// And it is an overview, not panes: the pane legend is not on screen.
-	if strings.Contains(out, escInterruptLabel) {
-		t.Errorf("the pane legend is still drawn under the board:\n%s", out)
+	// And it is an overview, not panes: the room's own composer is not on screen.
+	if strings.Contains(out, roomTitle) {
+		t.Errorf("the room composer is still drawn under the board:\n%s", out)
 	}
 }
 

@@ -15,7 +15,6 @@ package ui
 import (
 	"errors"
 	"io"
-	"maps"
 	"net"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -322,7 +321,8 @@ type App struct {
 
 	// parking are the sessions this client asked to park and has not yet seen
 	// parked. pendingStarts' shape, for pendingStarts' reason - see parkArrived.
-	parking map[string]struct{}
+	parking  map[string]struct{}
+	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
 
 	// waking: asked to wake, not yet seen back. See wakeArrived.
 	waking map[string]struct{}
@@ -510,8 +510,8 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case imageDropMsg:
 		return a.imageDropped(m)
 
-	case mcpResultMsg:
-		return a.mcpResult(m), nil
+	case mcpResultMsg, authResultMsg:
+		return a.panelResult(m), nil
 
 	case frameMsg:
 		// The frame is folded first, then two things read the result: the
@@ -556,6 +556,12 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.copied(m)
 
 	case tea.KeyMsg:
+		// A live query-box selection turns ⌫/delete into "remove what is
+		// highlighted" - read before cleared() wipes the selection, since that
+		// runs on every keystroke. See deleteSelectedDraft.
+		if next, cmd, handled := a.deleteSelectedDraft(m); handled {
+			return next, cmd
+		}
 		// Clears the highlight and then does its own job - see cleared.
 		a = a.cleared()
 		if model, cmd, handled := a.key(m); handled {
@@ -700,18 +706,4 @@ func (a App) apply(f rpc.Frame) App {
 		notice.Report("the daemon sent a frame this build does not understand: %q", f.Kind)
 		return a
 	}
-}
-
-// withDM returns an App whose dms map is its own.
-//
-// The map is copied rather than shared because Bubble Tea hands models around
-// by value and a shared map makes a discarded App's DM keep growing - the same
-// reason Fleet copies. It is the one write path into dms, so there is one place
-// for that to be true.
-func (a App) withDM(id string, dm DM) App {
-	next := make(map[string]*DM, len(a.dms)+1)
-	maps.Copy(next, a.dms)
-	next[id] = &dm
-	a.dms = next
-	return a
 }

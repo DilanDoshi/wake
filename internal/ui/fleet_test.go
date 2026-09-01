@@ -288,6 +288,7 @@ var notCarriedOntoAnAgent = map[string]string{
 	"Dir":        "where the session was *started*. It is the daemon's own business - park writes it down, unpark launches from it, a fork runs in it - because claude locates a transcript by it. No surface here wants it: every reader of Agent.Cwd wants where the agent is now, which is what runningIn folds",
 	"RequestIDs": "the asks a blocked session owes. Cards owns these, seeded from the permission-request events and reconciled against this same report - the agent record keeps no ask id, so there is nothing on Agent for a second copy to go stale against",
 	"Commands":   "the slash commands a session advertised. Carried, but folded into Agent.advertised (a *commandSet the completion menu reads) via withCommands rather than a same-named field, the way Dir folds into Cwd - the report is the only route to them for a client that attached after the init event carried them",
+	"PRs":        "the pull requests a session opened. Carried, but folded into Agent.prs (a *prSet the status bar reads) via withPRs rather than a same-named field - Commands' own shape, and for Commands' reason: Agent must stay comparable, so a slice is a pointer here",
 }
 
 // A fleet report is folded onto an Agent field by field, and this derives that
@@ -351,12 +352,16 @@ func everyFieldSet(t *testing.T) rpc.SessionStatus {
 		case reflect.Int, reflect.Int64:
 			f.SetInt(int64(i) + 1)
 		case reflect.Slice:
-			// []string fields today (RequestIDs, Commands). A zero slice compares
+			// []string (RequestIDs, Commands) and []int (PRs). A zero slice compares
 			// equal on both sides, so fill it for the same reason the strings are.
-			if f.Type().Elem().Kind() != reflect.String {
-				t.Fatalf("rpc.SessionStatus.%s is a slice of %s and this helper only knows []string", rt.Field(i).Name, f.Type().Elem().Kind())
+			switch f.Type().Elem().Kind() {
+			case reflect.String:
+				f.Set(reflect.ValueOf([]string{rt.Field(i).Name + "-value"}))
+			case reflect.Int:
+				f.Set(reflect.ValueOf([]int{i + 1}))
+			default:
+				t.Fatalf("rpc.SessionStatus.%s is a slice of %s and this helper only knows []string and []int", rt.Field(i).Name, f.Type().Elem().Kind())
 			}
-			f.Set(reflect.ValueOf([]string{rt.Field(i).Name + "-value"}))
 		default:
 			t.Fatalf("rpc.SessionStatus.%s is a %s and this helper cannot fill it: a field left zero compares equal on both sides, so the guard would pass over it",
 				rt.Field(i).Name, f.Kind())
