@@ -186,7 +186,10 @@ func (a App) resizePanes() App {
 func (a App) sizePane(id string, w, h int) App {
 	if id == "" {
 		a.room = a.room.SetSize(w, h)
-		return a
+		// The bar re-renders at the new width, the way DM.SetSize does its own -
+		// but the room's agent lives in the fleet, not on the pane, so it is
+		// resolved here rather than inside SetSize.
+		return a.withRoomBar()
 	}
 	return a.withDM(id, a.dms[id].SetSize(w, h))
 }

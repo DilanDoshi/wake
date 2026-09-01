@@ -36,6 +36,35 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)
+
+**Shipped:** `fix/markdown-list-hanging-indent` hang-indents a wrapped **bullet** item's
+continuation lines under the item text (`internal/render/markdown.go`, `hangIndentLists`), matching
+Claude Code. glamour v1.0.0 dropped them back to the list margin (under the bullet). The pass is a
+post-glamour line transform that runs **before** `fitToWidth` — for an ordinary continuation the
+shift only spends the trailing padding glamour already left, but an unbreakable token (a long URL,
+identifier, CJK) glamour could not wrap overruns width when shifted, so `fitToWidth` runs last and is
+the width authority that re-wraps it. Single-level and nested `•` bullets are done; fenced code,
+tables, blockquotes and paragraphs-after-a-list are provably untouched, and a `•`-looking line inside
+a code block is told from a real marker by its colour escape (each with a guard test in
+`listindent_test.go`, including an unbreakable-token width sweep and the code-bullet case an
+adversarial review caught).
+
+**Deferred:** ordered lists (`1.`/`2.`/`N.`) and task/checkbox items (`[ ] …`). Ordered: glamour
+wraps an enumeration's continuation text a cell or two **wider** than the enumerator is (its
+ordered-continuation budget is not the hang budget), so shifting those lines right by the marker width
+overruns `width` at *every* width when the text fills glamour's budget. A correct fix needs a real
+reflow of the item text at the hang indent (rejoining glamour's already-wrapped, already-styled
+fragments and re-wrapping them), which is the fragile ANSI-reflow work
+`third_party/reflow/WAKE-PATCH.md` warns about, and out of scope for a surgical change. Task items:
+glamour's `Task` style draws `[ ] text` with no bullet, so `bulletMarker` never fires. Both are left
+at glamour's margin, unchanged — pinned by `TestOrderedListContinuationIsLeftAtGlamoursMargin` and
+`TestTaskListContinuationIsLeftAtGlamoursMargin`.
+
+*Blocks:* nothing — ordered and task continuations render exactly as before. *Closes with:* a
+per-item hang-indent reflow that is width-safe for enumerators, or a glamour release that
+hang-indents lists itself.
+
 ## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance
 
 **Asked for in this version.** A "done" indicator in the right sidebar (the roster) so the operator
@@ -128,6 +157,25 @@ someone picks this up.
 *Related:* the `flaky-lifecycle-test` note (the lifecycle flake is one instance of the contention this
 entry names). *Blocks:* nothing in the product — but it makes the project's **only gate** (`make ci`
 exit 0) unreliable on a loaded machine, which is why it is written down rather than left as folklore.
+
+## KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment
+
+`feat/dm-diff-rendering` made an `Edit`/`Update` draw its diff whole in the DM pane rather than fold
+into a `1 tool use · 1 edit` rollup (see `decisions.md`, 2026-08-28). It keys on `core.ToolDiff`,
+which `core.toolDiff` builds from a **top-level** `old_string`/`new_string`. `MultiEdit` carries
+neither at the top level — its hunks are nested in an `edits` array — so its `Diff` is nil, it stays
+folded, and none of the feature reaches it: no diff, no confirmation suppression. This is pre-existing
+(the diff change did not touch `toolDiff`), but `MultiEdit` is the common multi-hunk tool and Claude
+Code does render its diff, so it is worth closing.
+
+**The work** is representing several hunks as a diff. A `MultiEdit` applies its edits sequentially to
+one file, so the honest rendering is one diff block **per hunk** (each `edits[i].old_string` →
+`edits[i].new_string`) under one `⏺ MultiEdit(path)` header, not a single `ToolDiff{Old,New}` — which
+means `core` growing a `[]ToolDiff` (or the airlock unwrapping the array) and `toolblocks.go` drawing
+each. Bounded by `render.MaxDiffLines` across all hunks, the way one edit already is. No recording is
+needed — the input shape is the documented `MultiEdit` schema — but a fixture would earn the decode.
+
+---
 
 ## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿`
 
@@ -4019,20 +4067,24 @@ recorded says what the CLI does with `--model opus --fallback-model opus`. A str
 not close it regardless — `opus` and `claude-opus-5` may be one model and nothing in this tree
 resolves an alias. *What closes it:* one recorded spawn with the two equal.
 
-**Wake — a session's effort is readable after all, and nothing reads it.** `docs/notes/deferred.md`
-and `internal/daemon/effort.go` both rested on *"effort is on no frame Wake receives at all"*, which
-was true of every frame Wake receives **unasked**. The bare `/model` reply carries it —
-`Current model: Opus 5 (1M context) (effort: xhigh)` — and §1 of
+**Wake — a session's effort is readable after all, and now it is read. BUILT 2026-08-29.**
+`docs/notes/deferred.md` and `internal/daemon/effort.go` both rested on *"effort is on no frame Wake
+receives at all"*, which was true of every frame Wake receives **unasked**. The bare `/model` reply
+carries it — `Current model: Opus 5 (1M context) (effort: xhigh)` — and §1 of
 `docs/superpowers/notes/2026-08-13-bare-command-findings.md` records that costing `num_turns: 0` and
-`$0`. So the daemon *could* confirm the level it believes, for free, instead of only remembering what
-it asked for. *Why not now:* two reasons and the second is the real one. Wake claims the bare
-`/model` for its own picker, so it would have to send one deliberately and then swallow the reply,
-which is a turn the operator did not type appearing in their transcript. And the level would be
-parsed out of **English an assistant wrote**, which is a different class of thing from reading a JSON
-field — the airlock exists to keep that distinction. *What closes it:* a decision that the daemon may
-issue a probe of its own, plus somewhere to put the answer that does not read as something the
-operator said. Until then the pane goes on showing the level Wake **asked for** and saying nothing
-about confirmation.
+`$0`. The two reasons this was deferred are both answered rather than dodged. Wake claims the bare
+`/model` for its own picker, so a probe *is* a turn the operator did not type — so the daemon sends it
+without `noteSent` (it counts as no turn and never marks the agent owed) and `absorbProbe` swallows
+the reply at `fanOut` before it reaches any client — a **counter**, so two probes in flight suppress
+two replies — while `history.go` drops the reply on its own `Current model:` shape on the way back
+(the command line only best-effort; the on-disk slash-command form is a fixture still owed, see
+`docs/live-testing.md`), so the level appears in no transcript. And the level is
+parsed out of **English an assistant wrote**, which stays behind the airlock: `core.IsModelReply` and
+`core.EffortFromModelReply` live in `vocabulary.go`, asserted against `testdata/stream/bare-model.jsonl`.
+The confirmed level lands on `agent.confirmedEffort`, published as `SessionStatus.Effort` (preferred
+over the asked-for one), and the probe fires once on `init` and again after an `/effort` change. Park
+still relaunches from the asked-for level, so a probed `auto`/`ultracode` never reaches an argv, and
+`parkedRecord` gains nothing — a woken session re-probes.
 
 **Wake — the manager may not set effort or model on other agents, and this is a refusal rather than a
 gap.** `cmd/wake/mcpguard_test.go` already refuses `mode` on the argument that a manager which could

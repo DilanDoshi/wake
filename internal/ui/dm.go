@@ -303,7 +303,7 @@ func (d DM) SetSize(w, h int) DM {
 	// width would size the pane against rows that no longer exist.
 	d.partial = d.partial.sized(d.blockWidth())
 	extra := d.partial.rows()
-	if d.Agent.State == rpc.StateWorking {
+	if d.hasBeat() {
 		extra++
 	}
 	if d.bar != "" {
@@ -340,6 +340,12 @@ func (d DM) SetSize(w, h int) DM {
 // is worse than having no scrollback at all. Sampling that before the content
 // changes is what makes it true.
 func (d DM) Append(ev core.Event) DM {
+	// A /clear blanks the pane rather than adding to it, before the folds below
+	// because nothing of the gone conversation has anywhere to land. See clear.go.
+	if ev.Kind == core.KindSessionReset {
+		return d.clearedBySessionReset()
+	}
+
 	// Before the guards below, because a tool result with an empty body draws
 	// nothing and still settles the call above it, so a bullet left dim by an
 	// early return is a call that never finishes on screen. A command that
@@ -579,21 +585,18 @@ func (d DM) View(width, height int) string {
 	if menu := firstRows(d.menu, d.menuRows()); menu != "" {
 		rows = append(rows, menu)
 	}
-	comp := d.composer.WithTitle(cmp.Or(d.writing, agentPrefix+d.Name+d.ancestry()+d.standing())).WithColor(d.Agent.Color).View(w)
+	// The bar rides inside the composer, drawn between the box and the legend -
+	// the info row over the keys row. baseChrome still counts it separately,
+	// because the composer it measures carries no bar (this WithBar is a draw-
+	// time overlay, like WithTitle and WithColor), so the height stays right.
+	comp := d.composer.
+		WithBar(d.bar).
+		WithColor(d.Agent.Color).
+		WithTitle(cmp.Or(d.writing, agentPrefix+d.Name+d.ancestry()+d.standing())).
+		View(w)
 	comp = highlightComposerBlock(comp, d.csel, composerTextLeft, w-composerRightInset)
 	rows = append(rows, comp)
-	// Under the composer, where Claude Code puts it: the least urgent thing on
-	// screen, and the only one that is about the session rather than the turn.
-	if d.bar != "" {
-		rows = append(rows, d.bar)
-	}
 	return strings.Join(rows, "\n")
-}
-
-// heartbeat is the working line for this conversation's agent, or "" between
-// turns. Drawn at the transcript's width so it lines up with the prose above it.
-func (d DM) heartbeat() string {
-	return workingLine(d.SessionID, d.Agent.State, d.Agent.Doing, d.Agent.startedAt, d.Agent.TurnTokens, d.blockWidth())
 }
 
 // standing is what the title says about an agent that is not running: nothing
@@ -761,10 +764,11 @@ func (d DM) baseChrome() int {
 	// re-wrapped here, for the reason the bar below is read from its cache:
 	// this runs inside SetSize and on every View.
 	h += d.partial.rows()
-	// The heartbeat's row, on the same condition workingLine draws one. Asked
-	// as the predicate rather than by rendering it: this runs inside SetSize,
-	// and the line costs a shimmer across its own width to produce.
-	if d.Agent.State == rpc.StateWorking {
+	// The heartbeat's row, on the same condition heartbeat() draws one - the
+	// working line or the done line. Asked as the predicate rather than by
+	// rendering it: this runs inside SetSize, and the line costs a shimmer across
+	// its own width to produce.
+	if d.hasBeat() {
 		h++
 	}
 	// The status bar's row. Read from the cache rather than rendered: this runs

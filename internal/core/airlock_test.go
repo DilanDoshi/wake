@@ -316,6 +316,13 @@ var claudeWireVocabulary = wordSet([]string{
 	// a renderer that matched on it would be the airlock's most direct leak -
 	// a view deciding what a frame is by reading Claude's English.
 	"[Request interrupted by user]", "[Request interrupted by user for tool use]",
+
+	// The bare /model reply's leading phrase. Policed for the abort markers'
+	// reason: it is Claude's rendered English, and the daemon reads the effort
+	// level out of it, so a view matching on it would be reading Claude's prose.
+	// It is a value *prefix* rather than a whole value, so it is in
+	// embeddedMarkers below.
+	"Current model:",
 })
 
 // deliberatelyGeneric is the other half of the vocabulary's honesty: wire
@@ -494,7 +501,7 @@ var notNamedByTheAirlock = map[string]string{
 // vocabulary - a word added, a word removed - has to update it, which is what
 // makes a deletion a three-place edit (the word, its excuse, this number)
 // rather than something that can happen by accident in a rebase.
-const policedWordCount = 149
+const policedWordCount = 150
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -540,6 +547,11 @@ var notWireVocabulary = wordSet([]string{
 	// a renderer fills with the body's line count. See ToolCall.Receipt for
 	// why Read is the only tool that has one.
 	"Read %d lines",
+
+	// Wake's own regexp for pulling the level out of a /model reply. The
+	// phrase it matches ("Current model:") is Claude's and is policed above;
+	// this pattern is Wake's construction, not a wire word.
+	`\(effort:\s*([a-zA-Z]+)\)`,
 })
 
 func wordSet(words []string) map[string]bool {
@@ -786,12 +798,14 @@ var notInTheCorpus = map[string]string{
 	"interrupt_if_running":        "outbound only; rewind request field Wake writes",
 }
 
-// embeddedMarkers never appear as a JSON key or as a whole value: they are
-// delimiters *inside* a string, so the quoted check cannot see them and a
-// substring check is the honest one for these two alone.
+// embeddedMarkers never appear as a JSON key or as a whole value: the two
+// local-command tags are delimiters *inside* a string, and "Current model:" is
+// the leading phrase of a longer reply value - so the quoted check cannot see
+// any of them and a substring check is the honest one for these three.
 var embeddedMarkers = map[string]bool{
 	"<local-command-stdout>":  true,
 	"</local-command-stdout>": true,
+	"Current model:":          true,
 }
 
 // The vocabulary has to be a real description of the corpus, or the test

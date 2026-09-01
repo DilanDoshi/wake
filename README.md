@@ -2,6 +2,8 @@
 
 A terminal app for developers running many Claude Code sessions at once.
 
+Currently being beta tested. V1 coming soon. 
+
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
 Wake turns your fleet into a room. A group chat is the primary surface: `@name` an individual,

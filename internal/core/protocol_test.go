@@ -54,6 +54,62 @@ func TestDecodeAssistantText(t *testing.T) {
 	}
 }
 
+// An assistant frame carries the real output-token count for its message in
+// message.usage.output_tokens; the decoded assistant-text event carries it, so
+// a surface can report how much a response ran to rather than counting words.
+func TestAssistantTextCarriesItsOutputTokens(t *testing.T) {
+	line := []byte(`{"type":"assistant","message":{"id":"m","role":"assistant","usage":{"output_tokens":210},"content":[{"type":"text","text":"a long report"}]},"session_id":"s1"}`)
+	evs, err := DecodeLine(line)
+	if err != nil {
+		t.Fatalf("DecodeLine: %v", err)
+	}
+	if len(evs) != 1 || evs[0].Kind != KindAssistantText {
+		t.Fatalf("got %d events, want one assistant_text", len(evs))
+	}
+	if evs[0].OutputTokens != 210 {
+		t.Errorf("OutputTokens = %d, want 210", evs[0].OutputTokens)
+	}
+}
+
+// output_tokens is the whole message's count, so it attaches to exactly one
+// text block, never once per block - two text blocks must not each claim the
+// message total.
+func TestOutputTokensAttachToOneTextBlockNotEvery(t *testing.T) {
+	line := []byte(`{"type":"assistant","message":{"id":"m","role":"assistant","usage":{"output_tokens":50},"content":[{"type":"text","text":"first"},{"type":"text","text":"second"}]},"session_id":"s1"}`)
+	evs, err := DecodeLine(line)
+	if err != nil {
+		t.Fatalf("DecodeLine: %v", err)
+	}
+	var total int
+	for _, e := range evs {
+		total += e.OutputTokens
+	}
+	if total != 50 {
+		t.Errorf("summed OutputTokens across blocks = %d, want 50 (attached once)", total)
+	}
+}
+
+// A malformed usage on an assistant frame must not cost the prose beside it:
+// usage is decoded separately, so a bad one leaves OutputTokens 0 and the text
+// intact rather than collapsing the whole frame to KindUnknown - the
+// all-on-nothing hazard messageEvents decodes content block-by-block to avoid.
+func TestAMalformedUsageDoesNotDiscardTheProse(t *testing.T) {
+	line := []byte(`{"type":"assistant","message":{"role":"assistant","usage":"broken","content":[{"type":"text","text":"still here"}]},"session_id":"s1"}`)
+	evs, err := DecodeLine(line)
+	if err != nil {
+		t.Fatalf("DecodeLine: %v", err)
+	}
+	if len(evs) != 1 || evs[0].Kind != KindAssistantText {
+		t.Fatalf("got %d events, want one assistant_text - a bad usage collapsed the prose", len(evs))
+	}
+	if evs[0].Text != "still here" {
+		t.Errorf("Text = %q, want %q", evs[0].Text, "still here")
+	}
+	if evs[0].OutputTokens != 0 {
+		t.Errorf("OutputTokens = %d, want 0 on a malformed usage", evs[0].OutputTokens)
+	}
+}
+
 func TestDecodeThinkingBlockIgnoresSignature(t *testing.T) {
 	line := []byte(`{"type":"assistant","session_id":"s1","message":{"role":"assistant","content":[{"type":"thinking","thinking":"weighing it","signature":"EssMCokBCBAYAipA"}]}}`)
 

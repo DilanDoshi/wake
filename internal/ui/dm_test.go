@@ -21,6 +21,38 @@ var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func stripANSI(s string) string { return ansiPattern.ReplaceAllString(s, "") }
 
+// The conversation's info bar sits above the legend - the info row over the
+// keys - and the pane stays within its height with the bar in its new place.
+func TestDMDrawsTheBarAboveTheLegend(t *testing.T) {
+	d := NewDM("s1", "alex")
+	d.Agent = Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", Effort: "xhigh"}
+	d = d.SetSize(120, 24)
+
+	out := stripANSI(d.View(120, 24))
+	lines := strings.Split(out, "\n")
+	if len(lines) > 24 {
+		t.Fatalf("the pane drew %d rows into 24 - the bar's new row was double-counted:\n%s", len(lines), out)
+	}
+	barAt, hintAt := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, effortLabel+"xhigh") {
+			barAt = i
+		}
+		if strings.Contains(l, "send") {
+			hintAt = i
+		}
+	}
+	if barAt < 0 {
+		t.Fatalf("the status bar was not drawn:\n%s", out)
+	}
+	if hintAt < 0 {
+		t.Fatalf("the legend was not drawn:\n%s", out)
+	}
+	if barAt > hintAt {
+		t.Fatalf("the bar (row %d) must sit above the legend (row %d):\n%s", barAt, hintAt, out)
+	}
+}
+
 // expandedDM is a conversation whose tool runs are drawn whole - every call as
 // its own ⏺ block with its result open - the ⌃E view. A run of tool calls folds
 // to one rollup line by default (see rollup.go), so the tests about how one call
@@ -484,6 +516,56 @@ func TestEditToolRendersADiff(t *testing.T) {
 	assertHides(t, d, 60, 20, "- alpha") // unchanged lines stay out of the diff
 }
 
+// An edit shows its diff by default, without ⌃E or a click. The diff is the
+// point of the edit, and folding it into a `1 tool use · 1 edit` count hides
+// exactly what changed - so a diff-carrying call draws whole the way a checklist
+// does, out of the run rather than into its tally. Owner's 2026-08-28 request.
+func TestEditShowsItsDiffWithoutExpanding(t *testing.T) {
+	d := NewDM("s1", "alex").SetSize(60, 20).
+		Append(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{
+			ID:      "t1",
+			Name:    "Edit",
+			Display: "auth.go",
+			Diff:    &core.ToolDiff{Old: "alpha\nbravo\ncharlie", New: "alpha\nBRAVO\ncharlie"},
+		}})
+
+	assertShows(t, d, 60, 20, "- bravo")
+	assertShows(t, d, 60, 20, "+ BRAVO")
+	// And it is not hidden behind a folded rollup count.
+	assertHides(t, d, 60, 20, "1 tool use")
+}
+
+// A successful edit's result is pure confirmation - "the file has been updated" -
+// which the diff and the green ⏺ already carry, so it is not drawn, the way
+// Claude Code omits it. A *failed* edit still shows its result, because that is
+// the error the operator has to read.
+func TestASuccessfulEditHidesItsConfirmationResult(t *testing.T) {
+	forceColour(t)
+	updated := "The file auth.go has been updated successfully. (file state is current in your context — no need to Read it back)"
+	d := NewDM("s1", "alex").SetSize(70, 20).
+		Append(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{
+			ID: "t1", Name: "Edit", Display: "auth.go",
+			Diff: &core.ToolDiff{Old: "alpha\nbravo", New: "alpha\nBRAVO"},
+		}}).
+		Append(result("t1", updated, false))
+
+	assertShows(t, d, 70, 20, "+ BRAVO")          // the diff still shows
+	assertHides(t, d, 70, 20, "has been updated") // the confirmation does not
+	// The bullet still settles green even though its result drew nothing.
+	if head := headerRow(t, d); !strings.Contains(head, escFor(t, Success)) {
+		t.Errorf("a successful edit whose result was suppressed never settled: %q", head)
+	}
+
+	// A failed edit shows its result - that is the error.
+	f := NewDM("s2", "bob").SetSize(70, 20).
+		Append(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{
+			ID: "t2", Name: "Edit", Display: "auth.go",
+			Diff: &core.ToolDiff{Old: "alpha\nbravo", New: "alpha\nBRAVO"},
+		}}).
+		Append(result("t2", "String to replace not found in file.", true))
+	assertShows(t, f, 70, 20, "String to replace not found")
+}
+
 // render.Diff has no cap of its own, and its prefix/suffix trim turns two
 // scattered edits in a large file into a hunk spanning everything between them
 // — here, 1582 styled lines for a change of two.
@@ -591,19 +673,6 @@ func TestPermissionRequestIsVisible(t *testing.T) {
 
 	assertShows(t, d, 60, 20, "Write")
 	assertShows(t, d, 60, 20, "permission")
-}
-
-// The event is built the way the decoder actually produces one: SessionID is
-// the id that died and there is no Text, because the reset frame names no
-// successor. The previous version of this test passed a Text the decoder can
-// no longer emit and asserted the view showed it, so it went on passing
-// while the view rendered an arrow pointing at nothing.
-func TestSessionResetIsVisible(t *testing.T) {
-	d := NewDM("s1", "alex").SetSize(60, 20).
-		Append(core.Event{Kind: core.KindSessionReset, SessionID: "old-id"})
-
-	assertShows(t, d, 60, 20, "session reset")
-	assertHides(t, d, 60, 20, "→")
 }
 
 // The only rate-limit status ever recorded is "allowed", once per process.

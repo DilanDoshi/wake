@@ -81,12 +81,13 @@ func claudeStyle(dark bool) gansi.StyleConfig {
 	}
 
 	// Headings: bold, and no colour at all. Every level is the same, because
-	// Claude Code does not shade a document by depth - the `#` prefixes below
-	// are what say how deep you are, exactly as they do in the source.
-	heading := func(prefix string) gansi.StyleBlock {
+	// Claude Code does not shade a document by depth, and it strips the `#`
+	// markers rather than drawing them - so no level carries a Prefix (owner
+	// observation, 2026-08-29). glamour's own default strips them too; the
+	// earlier Prefix here was Wake adding them back.
+	heading := func() gansi.StyleBlock {
 		return gansi.StyleBlock{StylePrimitive: gansi.StylePrimitive{
-			Prefix: prefix,
-			Bold:   boolPtr(true),
+			Bold: boolPtr(true),
 		}}
 	}
 
@@ -117,18 +118,19 @@ func claudeStyle(dark bool) gansi.StyleConfig {
 
 		Paragraph: gansi.StyleBlock{},
 
-		// One heading style, six prefixes. The blank line before a heading is
-		// BlockPrefix on Heading itself so it applies to all of them.
+		// One heading style, all six levels the same: bold text with the `#`
+		// markers stripped (owner observation, 2026-08-29). The blank line before
+		// a heading is BlockPrefix on Heading itself so it applies to all of them.
 		Heading: gansi.StyleBlock{StylePrimitive: gansi.StylePrimitive{
 			BlockSuffix: "\n",
 			Bold:        boolPtr(true),
 		}},
-		H1: heading("# "),
-		H2: heading("## "),
-		H3: heading("### "),
-		H4: heading("#### "),
-		H5: heading("##### "),
-		H6: heading("###### "),
+		H1: heading(),
+		H2: heading(),
+		H3: heading(),
+		H4: heading(),
+		H5: heading(),
+		H6: heading(),
 
 		Text:           gansi.StylePrimitive{},
 		Strong:         gansi.StylePrimitive{Bold: boolPtr(true)},

@@ -8,6 +8,57 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-08-29 — the effort probe, and why an invisible turn is the honest one
+
+Effort is on no frame Claude sends unasked, so for a long time the status bar could only repeat the
+level Wake **asked for**. The one way to read the real level back is the bare `/model` reply
+(`Current model: … (effort: xhigh)`), which the CLI answers locally — `num_turns:0`, `$0`,
+`duration_ms:11`, no model inference. So the daemon sends one and reads the level out of it. Three
+rulings make that safe rather than a leak.
+
+**It counts as no turn.** The probe send skips `noteSent`, so the agent is never marked owed and
+never looks busy; at fleet scale a probe that flipped thirty agents to *working* on startup would be
+noise the operator has to learn to ignore. The `/effort` re-probe rides `noteEffort` returning
+whether it recorded a level, so it fires only on a send that actually changed the record.
+
+**The reply reaches no client, suppression is keyed on the reply — not on a flag — and it counts.**
+`absorbProbe` (`internal/daemon/agent.go`) swallows the probe's assistant line and its following turn
+end at `fanOut`, before `observe` and before the broadcast, so the agent's state never moves and no
+transcript or room ever sees it. The window is keyed on the reply's own shape (`core.IsModelReply` on
+an assistant frame), not on a bare in-flight flag: the flag is armed on the serveInput goroutine while
+a previous turn's frames may still be draining on the fanOut goroutine, and a blanket "suppress while
+armed" would eat that turn's real end and clear the window early, leaking the probe. Keying on the
+reply text is race-safe because a real turn's frames do not carry it. And the arm is a **counter**
+(`pendingProbes`), not a bool: two probes can be in flight at once — two quick `/effort` changes, or a
+change racing the startup probe — and a bool cleared by the first reply let the second leak
+(caught by the adversarial review; `TestAbsorbProbeSuppressesBothOfTwoOverlappingProbes`). The
+per-turn `init` a mid-session `/model` emits is not suppressed and does not need to be — it draws no
+transcript line and moves no state — so the guarantee is precisely about **the reply**, not the whole
+exchange.
+
+**The on-disk reply is filtered, because suppression is live-only.** Claude writes the `/model` command
+and its `Current model:` reply to the transcript regardless, so `liveHistory` drops them on the way
+back (both the DM and the room read through it). The drop is keyed on the **reply**
+(`IsModelReply` on an assistant line), not on the command line above it: the on-disk form of a slash
+command is pinned by no transcript fixture — Claude may wrap it — so matching the command is
+best-effort, but the reply is Claude's own rendered line and only a `/model` produces one. An
+operator's `/model` is intercepted by `internal/ui` and never sent, so any such line on disk is a
+Wake probe's (an imported session that ran `/model` by hand is the one edge, and dropping a bare
+model-info line from it is harmless). The transcript fixture this still owes is in
+`docs/live-testing.md`.
+
+**The parse stays behind the airlock.** Reading a level out of assistant prose is exactly the
+JSON-vs-English boundary the airlock exists for, so `IsModelReply`/`EffortFromModelReply` live in
+`vocabulary.go`, asserted against `testdata/stream/bare-model.jsonl`. Display prefers `confirmedEffort`
+over the asked-for level; **park does not** — it relaunches from `currentEffort`, the level `--effort`
+accepts, so a probed `auto`/`ultracode` never reaches an argv. `parkedRecord` gains nothing; a woken
+session re-probes.
+
+One visible consequence, accepted: the room's composer now carries a target line *and* an info bar,
+where a DM carries only a bar, so with both on screen the room's input box sits one row above the
+conversation's. Their info bars and legends still align, which is what the eye follows;
+`cmd/wake/gridscreen_unix_test.go`'s `paneEdges` was taught the two box tops no longer share a row.
+
 ## 2026-08-28 — the completion menu offers the session's own commands and skills first, Wake's verbs after
 
 Reported by the owner: typing `/` in a conversation, or `@thea /` in the room, did not surface the
@@ -67,6 +118,55 @@ fit when a session advertises none — the empty-menu case where the menu is onl
 untouched: `⇥` completes, `⌃N`/`⌃P` walk, `↑↓` stay the roster's. (The owner is separately remapping
 the arrows to walk the menu; nothing here touches that.) `internal/ui/completion.go`,
 `completion_test.go`'s `TestTheSessionsCommandsComeBeforeWakes`.
+
+---
+
+## 2026-08-28 — an edit shows its diff by default, and its "updated" confirmation is dropped
+
+Owner, comparing the DM pane to Claude Code: when an agent updates a file, the diff should be
+visible without pressing ⌃E or clicking, the way Claude Code shows it.
+
+**The diff was already correct; it was hidden.** Wake renders an edit's diff from the tool's own
+input (`old_string`/`new_string` → `core.ToolDiff` → `render.Diff`), with no file read — the diff is
+free, off the wire. But a lone tool call folds into a `1 tool use · 1 edit` rollup by default, so the
+diff sat behind an expand. The fix is one predicate: `foldExempt` (rollup.go) now returns true for a
+call carrying a `Diff`, so an edit breaks the run and draws whole — the exact mechanism a
+`TaskCreate`/`TaskUpdate` checklist already used, for the same reason (the block is the point, not the
+count). A run's other tools (reads, bashes) still fold around it.
+
+**And a successful edit's result is dropped.** The exempt edit surfaced its result body — `The file X
+has been updated successfully. (file state is current in your context — no need to Read it back)` —
+which is pure confirmation the diff and the now-green ⏺ already carry, and which Claude Code omits. So
+`toolResultBlock` returns "" for a result whose call carries a `Diff` **and did not fail**; `Append`
+settles the bullet before an empty body returns (dm.go), so nothing is lost. A **failed** edit still
+shows its result, because that is the error the operator has to read. The suppression is not stored —
+the empty block is dropped from `d.events` — so it is **irreversible**: even ⌃E does not bring the
+confirmation back. That is a small tension with ⌃E's "reveal what was folded" contract and the right
+call anyway, because the line it hides is boilerplate nobody expands to read.
+
+**Two things were deliberately left out.** *Line numbers* — the 382/383 gutter in Claude Code's own
+diff — are **not on the wire**: the edit input carries only the before/after text (no file position),
+and the result is the bare "updated" line above (no `cat -n` snippet; Claude Code's UI numbers from
+file state it keeps, which Wake by design does not). Showing them would mean reading the edited file
+from disk at draw time, which the "cheap to leave open / owns almost no state" non-negotiables push
+against and which is fragile (later edits shift the lines). Owner chose to leave them out.
+*Renaming `Edit` → `Update`* (Claude Code's display label) was also left out: it is core's tool
+vocabulary, "Edit" is not wrong, and doing it right means verifying Claude Code's whole display
+mapping (Edit/Write/MultiEdit) against a recording rather than guessing.
+
+**`MultiEdit` gets none of this today, and that is a recorded gap rather than a decision.**
+`core.toolDiff` reads a *top-level* `old_string`/`new_string`, which `Edit` and `Update` carry;
+`MultiEdit` nests its hunks in an `edits` array and carries neither at the top level, so its `Diff`
+is nil, `foldExempt` is false, and a `MultiEdit` still folds into `1 tool use · 1 multiedit` — and
+because `diffBlock(nil)` is "", it shows **no diff even when expanded**, which is the sharper half of
+the gap. So after this change a single `Edit` shows a rich inline diff by default while `MultiEdit`,
+the common multi-hunk tool, shows a folded count with nothing behind it — a visible asymmetry, stated
+here so it reads as a known limit rather than an oversight. (`Write` carries no before/after either,
+so it too draws no diff — correctly, a created file has no "before".) Pre-existing (this change did
+not touch `toolDiff`); representing several hunks as a diff is the work, and `deferred.md` carries it.
+`internal/ui/rollup.go`'s `foldExempt`, `internal/ui/toolblocks.go`'s `toolResultBlock` (which the
+subagent-forwarded transcript shares, so a subagent's own successful edit is suppressed there too),
+`dm_test.go`.
 
 ---
 
