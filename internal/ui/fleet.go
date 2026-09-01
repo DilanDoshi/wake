@@ -547,6 +547,12 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 		}
 		return a, []core.Event{ev}
 
+	case core.KindCrossSession:
+		// A peer's message to this session. It belongs in the room attributed to
+		// the sender (observe resolves FromName), not to the receiving agent, so
+		// it goes through the same admit an agent's own speech does.
+		return a, []core.Event{ev}
+
 	case core.KindPermissionRequest, core.KindRequestWithdrawn:
 		// Both go to the room, which promotes them into cards; the agent record
 		// keeps no ask id of its own - Cards owns that, seeded from events here

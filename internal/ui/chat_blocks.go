@@ -92,6 +92,11 @@ const (
 	// agent's name - `sydney <> auth-fix <> ⤷ turn ended`.
 	markerSep = " "
 
+	// crossSessionLead marks a peer's cross-session message so it reads as a
+	// message from another session rather than the sender's own room turn. It
+	// heads the sender's name in the sender's own colour.
+	crossSessionLead = "↪ "
+
 	// collapsedFormat is the pointer's last line: how much there is, and the
 	// key that opens it. collapsedNoCount is the same line without the figure,
 	// for a response that carried no token count - the figure is dropped rather
@@ -140,6 +145,8 @@ func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 	switch ev.Kind {
 	case core.KindAssistantText:
 		return block{text: agentSaid(ev.Text, ev.OutputTokens, a, w, expanded)}
+	case core.KindCrossSession:
+		return block{text: crossSaid(ev.Text, a, w, expanded)}
 	case core.KindUserText:
 		return block{text: youSaid(ev.Text, w)}
 	case core.KindTurnEnd:
@@ -174,12 +181,28 @@ func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 // never put through it twice.
 func agentSaid(text string, count int, a Agent, width int, expanded bool) string {
 	head := speakerStyle(a).MaxWidth(width).Render(speaker(a))
-	body := strings.TrimSpace(text)
-	rendered := render.Markdown(body, width)
+	return saidBlock(head, text, tokenLabel(count), width, expanded)
+}
+
+// crossSaid draws a peer's cross-session message: the sender's name-tag with a
+// lead marking it as a message from another session - so it is not mistaken for
+// the sender's own turn in the room - then the body, folded past roomInlineRows
+// the way a reply is. No token count: a peer message is not this fleet's spend.
+func crossSaid(text string, a Agent, width int, expanded bool) string {
+	head := speakerStyle(a).MaxWidth(width).Render(crossSessionLead + speaker(a))
+	return saidBlock(head, text, "", width, expanded)
+}
+
+// said is the shared body of agentSaid and crossSaid: a head, then the message
+// whole if it renders short or a pointer if it is taller than the room shows
+// inline. Rendered once, so a long message never goes through glamour's
+// process-global mutex twice - the height decision and the preview share it.
+func saidBlock(head, text, label string, width int, expanded bool) string {
+	rendered := render.Markdown(strings.TrimSpace(text), width)
 	if expanded || renderedRows(rendered) <= roomInlineRows {
 		return joinBlock(head, rendered)
 	}
-	return joinBlock(head, collapsed(rendered, tokenLabel(count), width, roomCollapseLines))
+	return joinBlock(head, collapsed(rendered, label, width, roomCollapseLines))
 }
 
 // roomCollapsible reports whether an event draws as a pointer at this width -
@@ -189,7 +212,7 @@ func agentSaid(text string, count int, a Agent, width int, expanded bool) string
 // are expandable, and it renders once, which is affordable on a user gesture
 // and never on a frame.
 func roomCollapsible(ev core.Event, width int) bool {
-	if ev.Kind != core.KindAssistantText {
+	if ev.Kind != core.KindAssistantText && ev.Kind != core.KindCrossSession {
 		return false
 	}
 	rendered := render.Markdown(strings.TrimSpace(ev.Text), max(width, minBlockWidth))

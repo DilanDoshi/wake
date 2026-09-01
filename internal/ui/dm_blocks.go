@@ -316,6 +316,8 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 	switch ev.Kind {
 	case core.KindAssistantText:
 		return render.Markdown(ev.Text, w)
+	case core.KindCrossSession:
+		return crossSessionBlock(ev, w)
 	case core.KindUserText:
 		// A user frame the airlock recognised as something other than the user
 		// speaking - Claude's abort marker, which carries nothing else to tell
@@ -402,6 +404,14 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 // The DM does not de-duplicate. It draws exactly the events it is handed, so
 // whoever feeds it must pick one source for the user's turn - the replayed
 // frame or a local echo of what was sent, never both.
+// crossSessionBlock renders a peer's cross-session message in a DM: the sender's
+// from-name with the room's ↪ lead, then the body as prose. Not shadedOwn -
+// these are not the operator's words - and the sender's identity colour is the
+// room's alone, since a DM has no fleet to resolve from-name into an agent.
+func crossSessionBlock(ev core.Event, width int) string {
+	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), render.Markdown(strings.TrimSpace(ev.Text), width))
+}
+
 func userBlock(ev core.Event, width int) string {
 	if strings.TrimSpace(ev.Text) == "" {
 		return ""

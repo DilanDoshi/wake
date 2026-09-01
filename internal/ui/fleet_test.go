@@ -33,6 +33,7 @@ func roomCases() []roomCase {
 	return []roomCase{
 		{"the agent's own prose", core.Event{Kind: core.KindAssistantText, Text: "Fixed the retry header, tests pass"}, true},
 		{"your own turn", core.Event{Kind: core.KindUserText, Text: "look at the retry header"}, true},
+		{"a peer's cross-session message", core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}, true},
 		{"an ask", core.Event{Kind: core.KindPermissionRequest, RequestID: "r1"}, true},
 		{"an ask dying", core.Event{Kind: core.KindRequestWithdrawn, RequestID: "r1"}, true},
 		{"a turn that said nothing", core.Event{Kind: core.KindTurnEnd}, true},

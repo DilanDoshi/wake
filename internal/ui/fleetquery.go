@@ -94,6 +94,18 @@ func (f Fleet) ByName(name string) (Agent, bool) {
 	return Agent{}, false
 }
 
+// crossSpeaker is who to attribute a peer's cross-session message to: the fleet
+// agent of that name, so its identity colour and label head the line, or a bare
+// Agent carrying just the name when the sender is a session outside this fleet.
+// The name is Claude Code's own from-name, not a Wake address, so a miss is
+// ordinary rather than an error - an outside session is a real case.
+func (f Fleet) crossSpeaker(name string) Agent {
+	if a, ok := f.ByName(name); ok {
+		return a
+	}
+	return Agent{Name: name}
+}
+
 // Agents is every agent in attention order.
 //
 // It sorts on every call rather than caching a ranked slice inside the Fleet,
