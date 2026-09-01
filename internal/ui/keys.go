@@ -175,32 +175,27 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		model, cmd := a.submit()
 		return model, cmd, true
 	case tea.KeyUp:
-		// **⌥↑ walks the prompt history, and the bare arrow is the query cursor
-		// or the roster.**
+		// **The bare arrow is the query cursor or the prompt history, and the
+		// roster is ⇧↑↓.** ↑ recalls the previous prompt in Claude Code, so a hand
+		// arriving with that reflex gets the same thing here.
 		//
-		// Same trap as ⌥↵ below: this switch is on m.Type alone and bubbletea
-		// reports ⌥↑ as KeyUp with Alt set, so without this arm the roster
-		// swallows it and the history key could never fire. See prompts.go, and
-		// TestAltArrowsWalkThePromptHistoryFromRealKeyBytes for the bytes.
-		if m.Alt {
-			return a.walkPrompts(1)
-		}
-		// The composer takes ↑ when the draft has a row above the cursor to
-		// move into; only an empty, single-line, or top-of-draft cursor falls
-		// through to the roster. Returning not-taken lets Update feed the key to
-		// the focused composer and rebuild the menu after. See Composer.CanCursorUp.
+		// The composer takes ↑ when the draft has a row above the cursor to move
+		// into; only an empty, single-line, or top-of-draft cursor walks the
+		// history. Returning not-taken lets Update feed the key to the focused
+		// composer and rebuild the menu after. See Composer.CanCursorUp.
+		//
+		// ⌥↑ (KeyUp with Alt set) falls through the same path - this switch is on
+		// m.Type alone - so it behaves as ↑ does rather than carrying an arm of its
+		// own. See prompts.go.
 		if a.composer().CanCursorUp() {
 			return a, nil, false
 		}
-		return a.pickAgent(-1), nil, true
+		return a.walkPrompts(1)
 	case tea.KeyDown:
-		if m.Alt {
-			return a.walkPrompts(-1)
-		}
 		if a.composer().CanCursorDown() {
 			return a, nil, false
 		}
-		return a.pickAgent(1), nil, true
+		return a.walkPrompts(-1)
 	case tea.KeyCtrlD:
 		return a.openDM(), nil, true
 	case tea.KeyCtrlF:
@@ -218,21 +213,23 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	// for why the text area's "line end" is what this shadows instead.
 	case tea.KeyCtrlE:
 		return a.toggleExpanded()
-	// Shift rather than the ⌘+arrow asked for, and for the same reason as the
-	// two letters above: bubbletea's arrow table knows modifier params 2-8 and
-	// cmd is bit 8, so ⌘→ is param 9 and the library names nothing for it -
-	// and no macOS terminal transmits ⌘ to a tty anyway. ⌃+arrow is named and
-	// delivered and still wrong: macOS spends all four on spaces and Mission
-	// Control. Shift is the one arrow family free at every layer, the text area
-	// under the composer included.
+	// ⇧←→ move the keys between panes, and ⇧↑↓ move the roster - the job plain
+	// ↑↓ gave up to the prompt history. Shift for pane movement rather than the
+	// ⌘+arrow asked for, and for the same reason as the two letters above:
+	// bubbletea's arrow table knows modifier params 2-8 and cmd is bit 8, so ⌘→
+	// is param 9 and the library names nothing for it - and no macOS terminal
+	// transmits ⌘ to a tty anyway. ⌃+arrow is named and delivered and still
+	// wrong: macOS spends all four on spaces and Mission Control. Shift is the
+	// one arrow family free at every layer, the text area under the composer
+	// included.
 	case tea.KeyShiftLeft:
 		return a.movePane(Left), nil, true
 	case tea.KeyShiftRight:
 		return a.movePane(Right), nil, true
 	case tea.KeyShiftUp:
-		return a.movePane(Up), nil, true
+		return a.pickAgent(-1), nil, true
 	case tea.KeyShiftDown:
-		return a.movePane(Down), nil, true
+		return a.pickAgent(1), nil, true
 	// ⌃G toggled the left workspaces sidebar, which is hidden for now - so the
 	// key is gone with it rather than advertised and doing nothing. toggleGroups
 	// and the sidebar's code are kept for the multi-groupchat version. See

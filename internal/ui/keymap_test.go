@@ -85,7 +85,7 @@ var acknowledged = map[collision]string{
 
 	{"ctrl+r", "history:search"}: "Claude Code searches your prompt history; Wake toggles the activity " +
 		"sidebar. A sidebar appearing is the whole result and the same key puts it back. Wake has no " +
-		"prompt search; ⌥↑↓ walks the history without one.",
+		"prompt search; ↑↓ walk the history without one, Claude Code's own recall keys.",
 
 	{"ctrl+b", "task:background"}: "Claude Code backgrounds the running task; Wake stacks the picked " +
 		"conversation under the focused pane. A pane opening is visible and ⌃W closes it.",

@@ -231,12 +231,16 @@ func filledSessionStatus(t *testing.T) SessionStatus {
 		case reflect.Int, reflect.Int64:
 			v.Field(i).SetInt(int64(i) + 1)
 		case reflect.Slice:
-			// []string fields today (RequestIDs, Commands). Distinct per field for
+			// []string (RequestIDs, Commands) and []int (PRs). Distinct per field for
 			// the same reason the string case is, so a mis-wired field is a failure.
-			if v.Field(i).Type().Elem().Kind() != reflect.String {
-				t.Fatalf("SessionStatus.%s is a slice of %s and this filler only knows []string: teach it that element kind", f.Name, v.Field(i).Type().Elem().Kind())
+			switch v.Field(i).Type().Elem().Kind() {
+			case reflect.String:
+				v.Field(i).Set(reflect.ValueOf([]string{"value of " + f.Name}))
+			case reflect.Int:
+				v.Field(i).Set(reflect.ValueOf([]int{i + 1}))
+			default:
+				t.Fatalf("SessionStatus.%s is a slice of %s and this filler only knows []string and []int: teach it that element kind", f.Name, v.Field(i).Type().Elem().Kind())
 			}
-			v.Field(i).Set(reflect.ValueOf([]string{"value of " + f.Name}))
 		default:
 			t.Fatalf("SessionStatus.%s is a %s and this filler cannot populate it: teach it that kind, because a field it leaves zero crosses the wire with nothing checking it", f.Name, v.Field(i).Kind())
 		}

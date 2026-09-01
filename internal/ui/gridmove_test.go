@@ -1,16 +1,18 @@
 package ui
 
-// Moving the keys between panes by direction.
+// Moving the keys between panes by direction: ⇧←→. ⇧↑↓ moved to the roster when
+// the plain arrows took Claude Code's prompt-history recall, so vertical pane
+// movement has no key - the lower slot of a split column is reached by ⇥ or a
+// click.
 //
 // ⌘+arrow is what was asked for and is not bindable: bubbletea v1.3.10's arrow
 // table knows modifier params 2-8 and cmd is bit 8, so ⌘→ is param 9 and the
 // library names nothing for it - and no macOS terminal transmits ⌘ to the tty
 // in the first place. ⌃+arrow is named and delivered and still wrong: macOS
 // spends all four on spaces and Mission Control, which is the ⌃⇧+arrow trap
-// TestNoKeyIsACtrlArrow already holds. ⇧+arrow is the one family free
-// at every layer - bubbletea names it, App.key does not take it, and the text
-// area under the composer does not bind it. keyprobe_test.go holds the first
-// half of that.
+// TestNoKeyIsACtrlArrow already holds. ⇧+arrow is the one family free at every
+// layer - bubbletea names it and the text area under the composer does not bind
+// it. keyprobe_test.go holds the first half of that.
 
 import (
 	"strings"
@@ -41,11 +43,6 @@ func TestTowardWalksTheColumnsAndTheSplit(t *testing.T) {
 		{"left back to the room, which is a real destination and not a refusal", "alex", Left, "", true},
 		{"left from the room, where there is nothing", "", Left, "", false},
 		{"right from the last column", "sydney", Right, "", false},
-		{"down into the lower slot", "sydney", Down, "john", true},
-		{"up out of the lower slot", "john", Up, "sydney", true},
-		{"up from an unsplit pane", "alex", Up, "", false},
-		{"down from an unsplit pane", "alex", Down, "", false},
-		{"down from the unsplit room", "", Down, "", false},
 		{"a conversation the grid does not hold", "nobody", Right, "", false},
 	} {
 		got, ok := g.Toward(tc.from, tc.dir)
@@ -104,24 +101,6 @@ func TestShiftArrowsMoveTheKeysBetweenColumns(t *testing.T) {
 	}
 }
 
-func TestShiftArrowsMoveTheKeysWithinAStackedColumn(t *testing.T) {
-	a := pick(gridApp(t), "s1")
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlY})
-	a, _ = pressKey(pick(a, "s2"), tea.KeyMsg{Type: tea.KeyCtrlB})
-	if got := panesOf(a.grid); len(got) != 2 || got[1] != "s1/s2" {
-		t.Fatalf("setup: grid is %v, want s2 stacked under s1", got)
-	}
-
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyShiftUp})
-	if a.focus != "s1" {
-		t.Errorf("⇧↑ left the keys on %q, want the pane above", a.focus)
-	}
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyShiftDown})
-	if a.focus != "s2" {
-		t.Errorf("⇧↓ left the keys on %q, want the pane below", a.focus)
-	}
-}
-
 // The difference from ⇥, and the reason both keys exist: ⇥ walks the chat ring
 // and opens a conversation that is not on screen, this moves among the panes
 // that are drawn and opens nothing.
@@ -144,12 +123,12 @@ func TestAShiftArrowNeverOpensAConversation(t *testing.T) {
 	}
 }
 
-// Plain arrows still pick an agent, so adding the shifted ones costs the roster
-// nothing.
-func TestPlainArrowsStillPickAnAgent(t *testing.T) {
+// ⇧↓ picks the next agent - the roster nav plain ↓ gave up to the prompt
+// history.
+func TestShiftDownPicksTheNextAgent(t *testing.T) {
 	a := pick(gridApp(t), "s1")
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyShiftDown})
 	if a.roster.Selected != "s2" {
-		t.Errorf("↓ selected %q, want s2: the shifted arrows must not shadow the plain ones", a.roster.Selected)
+		t.Errorf("⇧↓ selected %q, want s2", a.roster.Selected)
 	}
 }

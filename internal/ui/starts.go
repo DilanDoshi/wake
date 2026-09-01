@@ -31,6 +31,7 @@ package ui
 
 import (
 	"maps"
+	"strings"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -82,18 +83,20 @@ func (a App) startSettled(id string) App {
 	return a
 }
 
-// startArrived opens the conversation of every session this client asked for,
-// the first time a report names it, and says what it is.
+// startArrived settles the wait on every session this client asked for, the
+// first time a report names it, and says what it is - opening its conversation
+// for a fork or an import, and drafting a mention for a fresh spawn instead
+// (see draftMention).
 //
-// Waiting for the report rather than opening on the keypress: the session does
+// Waiting for the report rather than acting on the keypress: the session does
 // not exist until the daemon has started it, and a DM for an id nothing holds
 // is the empty conversation with a working-looking header that
 // cmd/wake.reattach exists to prevent.
 //
 // The daemon's confirmation is a FrameStatusReply and its announcement is a
 // FrameStatusPush; applyStatus folds both, so this needs neither to know which
-// it is. It settles the wait first, so a later report cannot steal the pane a
-// second time.
+// it is. It settles the wait first, so a later report cannot steal the arrival
+// a second time.
 func (a App) startArrived(st *rpc.Status) App {
 	if len(a.pendingStarts) == 0 {
 		return a
@@ -104,20 +107,53 @@ func (a App) startArrived(st *rpc.Status) App {
 		}
 		a = a.startSettled(s.ID)
 		notice.Report("%s", a.startedNotice(s))
-		if s.Name == core.ManagerName {
-			// The manager is the one start that opens nothing, and it is a
-			// layout fact rather than a preference: cmd/wake/manager.go settles
-			// it as a *service*, whose surface is the room's own composer. A
+		switch {
+		case s.Name == core.ManagerName:
+			// The manager is a service, not a conversation: cmd/wake/manager.go
+			// settles it that way, whose surface is the room's own composer. A
 			// pane on it would put the operator in a composer whose unaddressed
 			// text goes to the session they are looking at - and `/manager` is
 			// most often typed by nobody at all, since cmd/wake starts one
 			// before the room is drawn. ⌃D on its roster row is how somebody who
 			// wants the conversation gets it.
-			continue
+		case s.ParentID == "":
+			// A fresh spawn - `/new`'s own arrival - has no conversation to
+			// open either, and opening one would replace whatever pane the
+			// operator was on for one that has said nothing yet (owner's
+			// ruling). ⌃F and `/adopt` always carry a ParentID and take the
+			// arm below.
+			a = a.draftMention(s.Name)
+		default:
+			a = a.openDMWith(s.ID, s.Name)
 		}
-		a = a.openDMWith(s.ID, s.Name)
 	}
 	return a
+}
+
+// draftMention pre-fills the room's composer with `@name ` for a fresh spawn's
+// arrival, so the operator can message it at once without losing whatever pane
+// they were on.
+//
+// It writes only Room.Composer and never App.focus - retarget reads the room's
+// own composer directly rather than through App.composer, which is the
+// focused pane's - so this leaves the keys exactly where they were. retarget
+// also narrows the room to the agent it just named, the same way typing
+// `@name` by hand would.
+//
+// **Gated to an empty draft.** WithDraft replaces rather than inserts, and a
+// spawn takes seconds - long enough to start typing a room message before the
+// confirmation lands - so an unconditional draft would silently discard
+// whatever the operator was writing. Losing that is worse than the mention
+// never appearing, so a non-empty draft is left untouched and the operator
+// types the mention themselves. The same gate decides two rapid `/new`s: the
+// second arrival finds the first's mention still sitting in the box and
+// leaves it rather than clobbering it, so the first spawn keeps the draft.
+func (a App) draftMention(name string) App {
+	if strings.TrimSpace(a.room.Composer().Value()) != "" {
+		return a
+	}
+	a.room = a.room.WithComposer(a.room.Composer().WithDraft(agentPrefix + name + " "))
+	return a.retarget()
 }
 
 // startedNotice is what a session this client asked for says when it arrives.
@@ -144,14 +180,15 @@ func (a App) startedNotice(s rpc.SessionStatus) string {
 // client asked for and has not yet seen arrive.
 //
 // The id and the state, and deliberately nothing else. **Every state with a
-// process behind it opens the conversation**: fan-out starts before the spawn's
-// confirmation is enqueued, so the first report naming a new session can already
-// show it working, blocked or silent, and an arm that waited for idle would lose
-// exactly the session that got going quickly - leaving it in the pending set for
-// a later session given that id to steal the pane. Ended and parked are the two
-// exceptions because there is nothing behind that pane; a start that failed says
-// so in a FrameError addressed to this same id, which is what clears the wait
-// instead.
+// process behind it is acted on** - startArrived opens a conversation for a
+// fork or an import and drafts a mention for a fresh spawn: fan-out starts
+// before the spawn's confirmation is enqueued, so the first report naming a
+// new session can already show it working, blocked or silent, and an arm that
+// waited for idle would lose exactly the session that got going quickly -
+// leaving it in the pending set for a later session given that id to steal the
+// arrival. Ended and parked are the two exceptions because there is nothing
+// behind that pane or that mention; a start that failed says so in a
+// FrameError addressed to this same id, which is what clears the wait instead.
 //
 // Parked is here for ended's reason and not by analogy with it: the process has
 // exited either way, and a composer over a dead process swallows every
@@ -162,12 +199,14 @@ func (a App) startedNotice(s rpc.SessionStatus) string {
 // bare `/resume` typed into it brings that session back and `submit` asks the
 // router before it asks whether there is anything to send to. It does not
 // change what the pane would *show*. A session reported parked by the first
-// report that names it has produced no events at all, so what opens is an empty
-// transcript under a working-looking header, which is exactly the thing
-// `cmd/wake.reattach` exists to prevent - and the operator asked for a
-// conversation by pressing ⌃F or typing `/new`, not for one they have to revive
-// first. So the cell stays false and the improvement `/resume` unlocks here is
-// in the sentence rather than the pane.
+// report that names it has produced no events at all, so a fork or an import
+// opens an empty transcript under a working-looking header, which is exactly
+// the thing `cmd/wake.reattach` exists to prevent - and the operator pressed
+// ⌃F or typed `/adopt` for a live conversation, not for one they have to
+// revive first. `/new` never opens a pane at all, but the same session is
+// behind the mention it would draft, so it stays excluded here too rather than
+// naming an agent that has already gone. So the cell stays false and the
+// improvement `/resume` unlocks here is in the sentence rather than the pane.
 //
 // A function rather than a condition inside the loop so the contract - the
 // answer depends on the id and the state alone - is a static property of

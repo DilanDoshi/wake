@@ -102,10 +102,13 @@ func TestBroadcastReachesEveryAgentAndEchoesOnce(t *testing.T) {
 	s.send("/new robin\r")
 	s.await("@robin")
 
-	// /new opens the new agent's conversation and gives it the keys, so getting
-	// back to the room is a keystroke rather than an assumption.
-	s.send("\x17") // ⌃W
-	s.await("group chat")
+	// /new opens no pane and drafts a mention instead - "@robin " - and esc
+	// clears the room's draft in one press, which the broadcast below needs:
+	// these are raw keystrokes typed onto whatever the box already holds, and
+	// without clearing it first "@all stand up" lands after "@robin " rather
+	// than as the whole draft.
+	s.send("\x1b")
+	s.settle()
 
 	s.send("@all stand up")
 	s.await("2 turns") // the price is on screen before the key, not after it
@@ -117,10 +120,11 @@ func TestBroadcastReachesEveryAgentAndEchoesOnce(t *testing.T) {
 	// package run. See screen.awaitCount and bugs.md BUG-7.
 	s.awaitCount(heardPrefix+"stand up", 2)
 	// The echo is its own line and keeps the mention, so the room is a record of
-	// who each message went to.
+	// who each message went to. Your own turn sits at the reply's indent now, so
+	// the mention leads the line's text rather than its first column.
 	echoes := 0
 	for _, line := range s.lines() {
-		if strings.HasPrefix(line, "@all stand up") {
+		if strings.HasPrefix(strings.TrimLeft(line, " "), "@all stand up") {
 			echoes++
 		}
 	}
@@ -195,9 +199,9 @@ func TestQuitParksTheFleetAndTheNextRunComesBackEmpty(t *testing.T) {
 	s.await("Parking")
 
 	again := startWake(t, 100, 30)
-	// A durable fact rather than a notice: the legend is drawn on every frame,
-	// and the notice row shows only the newest thing said.
-	again.await("detach")
+	// A durable fact rather than a notice: the room's composer names the group
+	// chat on every frame, where the notice row shows only the newest thing said.
+	again.await("group chat")
 	again.settle()
 
 	// Nothing about the parked session is on screen - no roster row, and no
@@ -262,19 +266,18 @@ func TestADraftTakesASecondLineFromRealKeyBytes(t *testing.T) {
 	}
 }
 
-// ⌥↑ brings back the last prompt, from the bytes a terminal really sends.
+// ↑ brings back the last prompt from the bytes a terminal really sends, and ⌥↑
+// does the same - the switch is on the key type alone, so the modifier changes
+// nothing.
 //
 // This is the test that can fail while every in-process one passes. App.key
-// switches on tea.KeyMsg.Type alone and bubbletea reports ⌥↑ as KeyUp with Alt
-// set, so a build with no arm for the modifier moves the roster cursor and
-// leaves the draft empty - and a unit test that hands the model a KeyMsg it
-// constructed itself passes whatever the arm does. The same trap took ⌥↵ (see
-// TestADraftTakesASecondLineFromRealKeyBytes) and the same harness is what
-// caught it.
-//
-// Both encodings, because terminals disagree: `\x1b[1;3A` is the CSI form and
-// `\x1b\x1b[A` is what a terminal configured to send Esc+ for ⌥ emits.
-func TestAltArrowsWalkThePromptHistoryFromRealKeyBytes(t *testing.T) {
+// switches on tea.KeyMsg.Type alone, so a build that decoded the arrow bytes
+// wrongly, or one that gated the recall behind a modifier, would leave the draft
+// empty - and a unit test that hands the model a KeyMsg it constructed itself
+// passes whatever the decode does. The same trap took ⌥↵ (see
+// TestADraftTakesASecondLineFromRealKeyBytes) and the same harness is what caught
+// it.
+func TestArrowsWalkThePromptHistoryFromRealKeyBytes(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 
@@ -288,23 +291,26 @@ func TestAltArrowsWalkThePromptHistoryFromRealKeyBytes(t *testing.T) {
 	// anything less exact would pass on the echo alone.
 	const inTheBox = "> the first prompt"
 
-	s.send("\x1b[1;3A") // ⌥↑
+	// A bare ↑ recalls it, the way Claude Code's own history key does.
+	s.send("\x1b[A") // ↑
 	s.await(inTheBox)
 
-	// And the bare arrow is still the roster's, which is the constraint the
-	// modifier exists to keep.
-	s.send("\x1b[A")
-	s.settle()
-	if s.rowOf(inTheBox) < 0 {
-		t.Fatalf("a bare ↑ changed the draft, so it is walking the history instead of the roster.\n%s", s.dump())
-	}
-
-	s.send("\x1b\x1b[B") // ⌥↓ in the Esc+ encoding: back to the draft it started from
+	// ↓ comes back to the empty draft the walk started from.
+	s.send("\x1b[B") // ↓
 	s.settle()
 	if s.rowOf(inTheBox) >= 0 {
-		t.Fatalf("⌥↓ left the recalled prompt in the box. The walk comes back the way it went, to the "+
+		t.Fatalf("↓ left the recalled prompt in the box. The walk comes back the way it went, to the "+
 			"empty draft it started from.\n%s", s.dump())
 	}
+
+	// ⌥↑ walks the same history. Both encodings, because terminals disagree:
+	// `\x1b[1;3A` is the CSI form and `\x1b\x1b[A` is the Esc+ one.
+	s.send("\x1b[1;3A") // ⌥↑, CSI form
+	s.await(inTheBox)
+	s.send("\x1b[B") // ↓ back to empty
+	s.settle()
+	s.send("\x1b\x1b[A") // ⌥↑, Esc+ form
+	s.await(inTheBox)
 }
 
 // A long message you type is readable in the room, at a real width.

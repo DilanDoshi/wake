@@ -110,6 +110,15 @@ var agentAuthored = map[string]bool{
 	// rendered on this surface (notInTheStatusReport) - the verdict is here
 	// because every field needs one, not because a tool prints it.
 	"Commands": true,
+
+	// PRs is the agent's, and the sharpest-sourced of the true ones: the numbers
+	// are scraped from an agent's own tool output (a `gh pr create` result, but the
+	// scrape cannot tell that from any PR URL the tools print), so an agent chooses
+	// what appears. It is a []int, so it cannot carry a separator the way a string
+	// can - TestNoFieldCanForgeALineOnAnySurface skips it by kind - and it is never
+	// rendered on this surface anyway (notInTheStatusReport). The verdict is here
+	// because every field needs one.
+	"PRs": true,
 }
 
 // Every field of the report has a provenance verdict.
