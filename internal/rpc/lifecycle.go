@@ -383,6 +383,14 @@ type SessionStatus struct {
 	// `slash_commands`, which only the airlock may name.
 	Commands []string `json:"commands,omitempty"`
 
+	// PRs is the GitHub pull-request numbers this session has opened, in
+	// first-seen order. Here for Commands' reason and by the same route: the
+	// daemon scrapes them from the tool result `gh pr create` prints (no frame on
+	// Claude's wire names a PR), and the report is the only way a client that
+	// attached after the PR was opened learns of it. The status bar draws them as
+	// `PR #29` or `PR #29, #30`. Empty for a session that has opened none.
+	PRs []int `json:"prs,omitempty"`
+
 	// State is one of the State constants above.
 	State string `json:"state"`
 
