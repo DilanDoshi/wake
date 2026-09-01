@@ -140,8 +140,9 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, nil, false
 	}
 	// The Alt variants are other keys wearing these types - ⌥↵ is the
-	// composer's newline and ⌥↑↓ the prompt history - so they are unclaimed:
-	// the board closes and they do their own job, App.key's own m.Alt branches.
+	// composer's newline, and ⌥↑↓ behave as the bare arrows do (the prompt
+	// history) - so they are unclaimed: the board closes and they do their own
+	// job in App.key.
 	if m.Alt {
 		return a.closeBoard(), nil, false
 	}

@@ -15,8 +15,8 @@ import (
 	"testing"
 )
 
-// ↑↓ walks the roster and ⌃D opens what it lands on.
-func TestArrowsPickAnAgentAndCtrlDOpensIt(t *testing.T) {
+// ⇧↑↓ walks the roster and ⌃D opens what it lands on.
+func TestShiftArrowsPickAnAgentAndCtrlDOpensIt(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 

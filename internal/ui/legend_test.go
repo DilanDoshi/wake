@@ -35,16 +35,14 @@ var legendKeyNames = map[string][]legendKey{
 	"esc": {{name: "KeyEsc", msg: tea.KeyMsg{Type: tea.KeyEsc}}},
 	"⇥":   {{name: "KeyTab", msg: tea.KeyMsg{Type: tea.KeyTab}}},
 	"⇧⇥":  {{name: "KeyShiftTab", msg: tea.KeyMsg{Type: tea.KeyShiftTab}}},
-	"↑↓":  {{name: "KeyUp", msg: tea.KeyMsg{Type: tea.KeyUp}}, {name: "KeyDown", msg: tea.KeyMsg{Type: tea.KeyDown}}},
-	// The same two tea constants with Alt set, which is how bubbletea reports
-	// ⌥↑↓ - so the message is what tells these two entries apart, and this row
-	// is what makes the guard press the modifier rather than the bare key.
-	"⌥↑↓": {{name: "KeyUp", msg: tea.KeyMsg{Type: tea.KeyUp, Alt: true}}, {name: "KeyDown", msg: tea.KeyMsg{Type: tea.KeyDown, Alt: true}}},
-	"⇧←→↑↓": {
-		{name: "KeyShiftLeft", msg: tea.KeyMsg{Type: tea.KeyShiftLeft}},
-		{name: "KeyShiftRight", msg: tea.KeyMsg{Type: tea.KeyShiftRight}},
+	"↑↓": {{name: "KeyUp", msg: tea.KeyMsg{Type: tea.KeyUp}}, {name: "KeyDown", msg: tea.KeyMsg{Type: tea.KeyDown}}},
+	"⇧↑↓": {
 		{name: "KeyShiftUp", msg: tea.KeyMsg{Type: tea.KeyShiftUp}},
 		{name: "KeyShiftDown", msg: tea.KeyMsg{Type: tea.KeyShiftDown}},
+	},
+	"⇧←→": {
+		{name: "KeyShiftLeft", msg: tea.KeyMsg{Type: tea.KeyShiftLeft}},
+		{name: "KeyShiftRight", msg: tea.KeyMsg{Type: tea.KeyShiftRight}},
 	},
 	"⌃D":   {{name: "KeyCtrlD", msg: tea.KeyMsg{Type: tea.KeyCtrlD}}},
 	"⌃Y":   {{name: "KeyCtrlY", msg: tea.KeyMsg{Type: tea.KeyCtrlY}}},

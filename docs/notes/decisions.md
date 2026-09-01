@@ -2777,7 +2777,7 @@ stale. Excluded: a user frame the airlock resolved to a **notice** (Claude's abo
 English about Wake's interrupt), one carrying a **subagent** (an agent's prompt, not a human's), and
 an **echoed** one — content the transcript replayed or the tooling generated. That third condition
 was missing and is a 2026-08-16 fix: a bang line's output, an `/mcp` panel and a compaction summary
-are all echoed `KindUserText` with no notice and no subagent, so `⌥↑` pulled generated text into the
+are all echoed `KindUserText` with no notice and no subagent, so `↑` pulled generated text into the
 draft where `↵` sends it back to the model as something the operator said. Reading `Echoed` here is
 inside its own ruling (`core.Event.Echoed`), which bans it for *suppression and de-duplication* and
 allows it where being wrong is cosmetic: a wrongly-echoed turn costs a recall somebody can retype,
@@ -2786,11 +2786,15 @@ The **room's** history is the room's own echo — the room is not a conversation
 and its agents' prompts were typed at other composers; what a history key means at a box is "what I
 typed here".
 
-**And the trap that bit `⌥↵` bit this too.** `App.key` switches on `m.Type` alone and bubbletea
-reports `⌥↑` as `KeyUp` with `Alt` set, so without an explicit arm the roster swallows it. An
-in-process test passes whatever the arm does, because it hands the model a `KeyMsg` somebody
-constructed. `TestAltArrowsWalkThePromptHistoryFromRealKeyBytes` drives the bytes through the pty
-harness, and it fails with the arm removed: the draft stays empty and the roster cursor moves.
+**The history is on the bare `↑↓` now — Claude Code's own recall keys — with the roster moved to
+`⇧↑↓`.** The prior build put history on `⌥↑↓` and the roster on the bare arrows, on the theory that
+"nothing of Wake's moves for Claude Code's reflex"; the owner's 2026-08-29 override reverses it, so a
+hand arriving with Claude Code's `↑` history reflex gets the history. `App.key` switches on `m.Type`
+alone, so `⌥↑` still walks the history — it behaves as `↑` does, with no arm of its own —
+which is why the bare `⌥` binding could simply be deleted rather than re-pointed. An in-process test
+passes whatever the decode does, because it hands the model a `KeyMsg` somebody constructed;
+`TestArrowsWalkThePromptHistoryFromRealKeyBytes` drives the arrow bytes through the pty harness (bare
+`↑`, and `⌥↑` in both the CSI and Esc+ encodings) so the decode and the walk are proven together.
 ## Measurement: an assistant frame's `output_tokens` is not the turn's, and is not a live counter
 
 Claude Code's breathing bar shows the tokens of the query in flight, climbing. The obvious way to

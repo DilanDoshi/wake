@@ -49,9 +49,17 @@ var legendEntries = []legendEntry{
 	{"⇥", "next chat"},
 	{"⇧⇥", "permissions"},
 	{"⌃X", "next blocked"},
-	{"↑↓", "pick agent"},
-	{"⌥↑↓", "prompt history"},
-	{"⇧←→↑↓", "move focus"},
+	{"↑↓", "prompt history"},
+	// Beside the bare arrows rather than with the other pane keys: ⇧↑↓ is the
+	// same two keys under a modifier, and a legend that separated them would make
+	// a reader hunt for the difference. The roster used to be the bare ↑↓; it
+	// moved here when those took Claude Code's prompt-history recall.
+	{"⇧↑↓", "pick agent"},
+	// After the arrows rather than beside ⇥: it is a movement key, but it moves
+	// among panes already drawn, so it is worth less than the permission mode to
+	// somebody in an 80-column pane. Placing it higher would push ⇧⇥ out of that
+	// set, which is a change to what a narrow pane advertises.
+	{"⇧←→", "move focus"},
 	{"⌃D", "open DM"},
 	{"⌃Y", "open right"},
 	{"⌃B", "open below"},

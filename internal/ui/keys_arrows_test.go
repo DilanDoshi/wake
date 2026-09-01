@@ -1,7 +1,8 @@
 package ui
 
-// Plain up/down move the query cursor when the draft has a row to move into,
-// and the roster otherwise. Shift+arrows stay the panes'. See keys.go.
+// Plain up/down walk the prompt history when the draft has no row to move into,
+// and move the query cursor when it does. The roster moved to ⇧↑↓, and ⇧←→ move
+// the keys between panes. See keys.go.
 
 import (
 	"testing"
@@ -16,9 +17,10 @@ func (a App) newline() App {
 	return m.(App)
 }
 
-// An empty or single-line query keeps up/down on the roster: there is no cursor
-// movement to make, so the arrow does the thing it did before this change.
-func TestPlainArrowsMoveRosterWhenQueryHasNoRowToMoveInto(t *testing.T) {
+// An empty or single-line query has no row for the cursor to move into, so ↑
+// recalls the previous prompt - Claude Code's own history key - and the roster
+// does not move for it.
+func TestPlainArrowsWalkHistoryWhenQueryHasNoRowToMoveInto(t *testing.T) {
 	for _, tc := range []struct {
 		what  string
 		build func(App) App
@@ -26,92 +28,78 @@ func TestPlainArrowsMoveRosterWhenQueryHasNoRowToMoveInto(t *testing.T) {
 		{"empty query", func(a App) App { return a }},
 		{"single-line query", func(a App) App { return a.withDraft("hello") }},
 	} {
-		a := newRoomApp(t).withSize(160, 40).withAgents("alex", "bo", "cy")
+		a := spokenApp(t, "the older", "the newer")
+		a.layout.ShowRoster = true
+		a.roster.Selected = "s1"
 		a = tc.build(a)
-		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
-		if a.roster.Selected == "" {
-			t.Errorf("%s: down did not move the roster, so a query that cannot take the cursor lost its roster nav", tc.what)
+
+		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyUp})
+		if got := a.composer().Value(); got != "the newer" {
+			t.Errorf("%s: ↑ put %q in the draft, want the newest prompt recalled", tc.what, got)
+		}
+		if a.roster.Selected != "s1" {
+			t.Errorf("%s: ↑ moved the roster to %q; the roster is ⇧↑↓ now", tc.what, a.roster.Selected)
 		}
 	}
 }
 
-// A multi-line query hands up/down to the text cursor and leaves the roster
-// where it was - the whole point of the remap.
+// A multi-line query hands up/down to the text cursor and leaves the roster and
+// the history alone - the recall is only offered when the cursor has nowhere to
+// climb.
 func TestPlainArrowsMoveCursorInsideMultiLineQuery(t *testing.T) {
-	a := newRoomApp(t).withSize(160, 40).withAgents("alex", "bo")
+	a := spokenApp(t, "an earlier prompt")
 	a = a.withDraft("first").newline()
 	a = a.withDraft("second") // draft is "first\nsecond", cursor at the end
 
 	if got := a.composer().ta.Line(); got != 1 {
 		t.Fatalf("draft did not end on its second line: cursor on line %d", got)
 	}
-	before := a.roster.Selected
 
-	// Up climbs to the first line; the roster does not move.
+	// Up climbs to the first line; the draft is untouched, so nothing was recalled.
 	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyUp})
 	if got := a.composer().ta.Line(); got != 0 {
 		t.Errorf("up did not move the cursor up inside the draft: still on line %d", got)
 	}
-	if a.roster.Selected != before {
-		t.Errorf("up moved the roster from %q to %q while editing a multi-line draft", before, a.roster.Selected)
+	if got := a.composer().Value(); got != "first\nsecond" {
+		t.Errorf("up changed the draft to %q, so it walked the history instead of moving the cursor", got)
 	}
 
-	// Down returns to the second line; the roster still does not move.
+	// Down returns to the second line, again without touching the draft.
 	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
 	if got := a.composer().ta.Line(); got != 1 {
 		t.Errorf("down did not move the cursor down inside the draft: on line %d", got)
 	}
-	if a.roster.Selected != before {
-		t.Errorf("down moved the roster while editing a multi-line draft")
+	if got := a.composer().Value(); got != "first\nsecond" {
+		t.Errorf("down changed the draft to %q while editing a multi-line draft", got)
 	}
 }
 
 // At the top of a multi-line draft up has nowhere to move the cursor, so it
-// falls through to the roster - the same edge behavior CanCursorUp encodes.
-func TestPlainUpAtTopOfDraftMovesRoster(t *testing.T) {
-	a := newRoomApp(t).withSize(160, 40).withAgents("alex", "bo")
+// falls through to the history - the same edge CanCursorUp encodes, one surface
+// out.
+func TestPlainUpAtTopOfDraftWalksHistory(t *testing.T) {
+	a := spokenApp(t, "an earlier prompt")
 	a = a.withDraft("first").newline()
-	a = a.withDraft("second")
+	a = a.withDraft("second") // draft "first\nsecond", cursor on the last line
 
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyUp}) // onto the first line, roster untouched
-	if a.roster.Selected != "" {
-		t.Fatalf("the first up should have moved the cursor, not the roster (selected %q)", a.roster.Selected)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyUp}) // onto the first line, draft intact
+	if got := a.composer().Value(); got != "first\nsecond" {
+		t.Fatalf("the first up should have moved the cursor, not walked history: draft is %q", got)
 	}
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyUp}) // at the top edge now: roster
-	if a.roster.Selected == "" {
-		t.Error("up at the top of the draft did not fall through to the roster")
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyUp}) // at the top edge now: history
+	if got := a.composer().Value(); got != "an earlier prompt" {
+		t.Errorf("up at the top of the draft did not walk the history: draft is %q", got)
 	}
 }
 
-// Down at the very bottom of a multi-line draft must do something - move the
-// cursor or move the roster - never nothing. This is the exact-width swallow
-// (bubbles counts a synthetic wrapped row the cursor cannot occupy) seen from
-// the App: if the predicate ever over-reports movement, down reaches a composer
-// that no-ops and the roster is skipped, so the key does nothing at all.
-func TestPlainDownAtBottomOfDraftIsNeverSwallowed(t *testing.T) {
-	a := newRoomApp(t).withSize(160, 40).withAgents("alex", "bo")
-	a = a.withDraft("first").newline()
-	a = a.withDraft("second") // cursor at the very end of the last line
-
-	beforeCursor := a.composer().ta
-	beforeRoster := a.roster.Selected
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
-
-	movedCursor := cursorRow(a.composer().ta) != cursorRow(beforeCursor)
-	movedRoster := a.roster.Selected != beforeRoster
-	if !movedCursor && !movedRoster {
-		t.Error("down at the bottom of a multi-line draft moved neither the cursor nor the roster: the arrow was swallowed")
-	}
-}
-
-// A single-line draft is the roster's however its runes group into graphemes.
-// bubbles' edge CursorUp/CursorDown can shuffle the column within a multi-rune
-// grapheme (a combining accent, a ZWJ sequence) without changing the row, so a
-// predicate that watched the column would read that as vertical movement and
-// nudge the cursor into the middle of the glyph instead of moving the roster.
-// The move keys stay vertical: up/down here must reach the roster. Graphemes are
-// built from rune code points so the source carries no ambiguous literal.
-func TestArrowsOnSingleLineGraphemesMoveRoster(t *testing.T) {
+// A single-line draft is not the composer's cursor's however its runes group
+// into graphemes. bubbles' edge CursorUp/CursorDown can shuffle the column
+// within a multi-rune grapheme (a combining accent, a ZWJ sequence) without
+// changing the row, so a predicate that watched the column would read that as
+// vertical movement and nudge the cursor into the middle of the glyph. With no
+// history behind it, ↑/↓ hold the draft exactly rather than nudging it. Graphemes
+// are built from rune code points so the source carries no ambiguous literal.
+func TestArrowsOnSingleLineGraphemesDoNotNudgeTheCursor(t *testing.T) {
 	combining := "e" + string(rune(0x0301)) + "llo"                                    // e + combining acute -> single glyph
 	zwj := string(rune(0x1F468)) + string(rune(0x200D)) + string(rune(0x1F4BB)) + " x" // man + ZWJ + laptop
 	for _, tc := range []struct {
@@ -123,26 +111,27 @@ func TestArrowsOnSingleLineGraphemesMoveRoster(t *testing.T) {
 	} {
 		for _, key := range []tea.KeyType{tea.KeyDown, tea.KeyUp} {
 			a := newRoomApp(t).withSize(160, 40).withAgents("alex", "bo")
-			a = a.withDraft(tc.draft) // one logical line, cursor at the end
-			before := a.roster.Selected
+			a = a.withDraft(tc.draft) // one logical line, cursor at the end, no history
 			a, _ = pressKey(a, tea.KeyMsg{Type: key})
-			if a.roster.Selected == before {
-				t.Errorf("%s with key %v: the arrow did not move the roster - a grapheme-boundary column shift was misread as vertical movement", tc.what, key)
+			if got := a.composer().Value(); got != tc.draft {
+				t.Errorf("%s with key %v: the draft became %q - a grapheme-boundary column shift was misread as vertical movement",
+					tc.what, key, got)
 			}
 		}
 	}
 }
 
-// Shift+arrows are the panes' and never leak into the draft, whatever the query
-// holds. A single room pane has nowhere to move, so the guard is that the cursor
-// does not move: the key was taken as movePane, not passed to the text.
+// ⇧+arrows never leak into the draft: ⇧↑↓ move the roster, ⇧←→ move the keys
+// between panes. Whatever the query holds, the cursor does not move.
 func TestShiftArrowsDoNotMoveTheQueryCursor(t *testing.T) {
 	a := newRoomApp(t).withSize(160, 40).withAgents("alex", "bo")
 	a = a.withDraft("first").newline()
 	a = a.withDraft("second") // cursor on line 1
 
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyShiftUp})
-	if got := a.composer().ta.Line(); got != 1 {
-		t.Errorf("shift+up moved the query cursor to line %d: it must stay a pane key, not edit the draft", got)
+	for _, key := range []tea.KeyType{tea.KeyShiftUp, tea.KeyShiftDown, tea.KeyShiftLeft, tea.KeyShiftRight} {
+		next, _ := pressKey(a, tea.KeyMsg{Type: key})
+		if got := next.composer().ta.Line(); got != 1 {
+			t.Errorf("%v moved the query cursor to line %d: a ⇧+arrow must not edit the draft", key, got)
+		}
 	}
 }
