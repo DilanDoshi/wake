@@ -419,6 +419,7 @@ func assertAgentLauncherTarget(t *testing.T, s *Session, wantDir string, got age
 		"--include-hook-events",
 		"--forward-subagent-text",
 		"--include-partial-messages",
+		"--replay-user-messages",
 		"--session-id", "0a1b2c3d-0000-4000-8000-00000000feed",
 		"--permission-mode", "auto",
 	}

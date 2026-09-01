@@ -20,7 +20,11 @@
 
 package core
 
-import "encoding/json"
+import (
+	"encoding/json"
+	"regexp"
+	"strings"
+)
 
 // maxLineBytes bounds one stream-json line. Frames carrying a large tool
 // result or a compaction summary comfortably exceed bufio's 64KB default,
@@ -556,4 +560,48 @@ type wireStreamDelta struct {
 type wireMCPServer struct {
 	Name   string `json:"name"`
 	Status string `json:"status"`
+}
+
+// The cross-session envelope is the one wire shape that is text rather than a
+// struct: a peer's message, injected into this session and (under
+// --replay-user-messages) replayed on stdout as a user frame whose string
+// content is <cross-session-message …>body</cross-session-message>. It rides
+// here beside the struct shapes because it is the same knowledge - what the
+// wire carries - and crossSession is the decoder protocol.go's messageEvents
+// calls, mirroring how frameText resolves the interrupt marker.
+const (
+	crossSessionOpen  = "<cross-session-message"
+	crossSessionClose = "</cross-session-message>"
+)
+
+// from-name is the peer's display name, from its cc-socks address; from-mode
+// and the rest are ignored. Matched inside the opening tag only, and the hyphen
+// keeps `from="` from matching `from-name="`.
+var (
+	crossSessionName = regexp.MustCompile(`from-name="([^"]*)"`)
+	crossSessionAddr = regexp.MustCompile(`\bfrom="([^"]*)"`)
+)
+
+// crossSession resolves the envelope: ok is true only for a user frame carrying
+// a complete one, body is what the peer wrote with the tags, the preamble line
+// before them and the harness guidance after them stripped, and name/addr are
+// its from-name and from.
+func crossSession(frameType, text string) (body, addr, name string, ok bool) {
+	open := strings.Index(text, crossSessionOpen)
+	if frameType != "user" || open < 0 {
+		return "", "", "", false
+	}
+	rel := strings.Index(text[open:], ">")
+	end := strings.Index(text, crossSessionClose)
+	if rel < 0 || end <= open+rel {
+		return "", "", "", false
+	}
+	tag := text[open : open+rel+1]
+	if m := crossSessionName.FindStringSubmatch(tag); m != nil {
+		name = m[1]
+	}
+	if m := crossSessionAddr.FindStringSubmatch(tag); m != nil {
+		addr = m[1]
+	}
+	return strings.TrimSpace(text[open+rel+1 : end]), addr, name, true
 }

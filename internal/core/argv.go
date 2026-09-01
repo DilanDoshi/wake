@@ -158,6 +158,12 @@ func (s *Session) buildArgs() ([]string, error) {
 		// Refused by the CLI without --print and --output-format=stream-json,
 		// both of which are above it in this same literal.
 		"--include-partial-messages",
+		// Puts a peer's cross-session message on the live stream so the room
+		// sees it as it arrives; without it that message reaches only the
+		// on-disk transcript. It also replays Wake's own sends, which carry
+		// isReplay and stay dropped as Echoed - see KindCrossSession and the
+		// room fold. Recorded 2026-08-31.
+		"--replay-user-messages",
 	}
 	identity, err := s.identityArgs()
 	if err != nil {
