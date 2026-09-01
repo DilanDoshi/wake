@@ -251,7 +251,8 @@ func (a App) tileBody(ag Agent, width, rows int) string {
 		bottom = append(bottom, tileSubagents(len(a.fleet.RunningTasks(ag.ID)), inner))
 	}
 	if rows >= 3 {
-		bottom = append(bottom, statusBar(ag, a.modeOf(ag.ID), inner))
+		// One row: a tile has a fixed height, so the bar never wraps here.
+		bottom = append(bottom, statusBar(ag, a.modeOf(ag.ID), inner, tileBarRows))
 	}
 
 	lines = append(lines, a.tileMiddle(ag, inner, max(rows-1-len(bottom), 0))...)

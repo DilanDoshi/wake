@@ -44,6 +44,7 @@ import (
 	"strings"
 	"unicode"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/gitref"
@@ -70,11 +71,27 @@ const (
 	modeFormat = "permissions: %s"
 )
 
+const (
+	// dmBarRows is how many rows the conversation and room bars may use. The
+	// overflow wraps onto a second when one row is too narrow (the owner's
+	// report: `permissions: auto` alone, the model and context gone) rather than
+	// dropping the facts. chromeHeight counts the bar's actual height, so a
+	// second row costs a row of transcript rather than scrolling the alt screen.
+	dmBarRows = 2
+
+	// tileBarRows keeps the board's per-agent tile to one row: its tiles have a
+	// fixed height, so a wrapped bar there would grow the grid.
+	tileBarRows = 1
+)
+
 // drawStatusBar is the seam the bar is rendered through, so a test can count
 // how often it actually runs. Reach it through this, never by calling
 // statusBar directly: drawing the bar reads the filesystem, and a direct call
-// is invisible to the counter that keeps that off the draw loop.
-var drawStatusBar = statusBar
+// is invisible to the counter that keeps that off the draw loop. It fixes the
+// row budget at dmBarRows, the conversation and room surfaces it serves.
+var drawStatusBar = func(a Agent, mode string, width int) string {
+	return statusBar(a, mode, width, dmBarRows)
+}
 
 // barKey is everything statusBar reads. A value type so "has anything changed"
 // is one comparison rather than a list somebody has to keep in step.
@@ -116,10 +133,18 @@ func (d DM) withBar(width int) DM {
 	return d
 }
 
-// statusBar draws the bar for one conversation, bounded to width, or "" when
-// nothing about the session is known yet.
-func statusBar(a Agent, mode string, width int) string {
-	if width < 1 {
+// statusBar draws the bar for one conversation, bounded to width and to rows
+// lines, or "" when nothing about the session is known yet.
+//
+// Row 1 is the historical single-row layout unchanged - the facts joined, the
+// mode appended after dropping facts rightmost-first to fit it whole - so a
+// caller passing rows == 1 (the board tile) gets exactly what it always did.
+// Above that, the facts row 1 could not hold wrap onto further rows rather than
+// being dropped: the owner's report was a narrow pane showing `permissions:
+// auto` alone with the model and context gone. The mode only ever rides row 1,
+// so a wrapped bar never puts `permissions: …` on a line of its own.
+func statusBar(a Agent, mode string, width, rows int) string {
+	if width < 1 || rows < 1 {
 		return ""
 	}
 	// The confirmed model wins: it is the name a /model probe read back, which
@@ -154,58 +179,90 @@ func statusBar(a Agent, mode string, width int) string {
 	if len(kept) == 0 {
 		return ""
 	}
-	// One row, and this is the guard rather than the styling. chromeHeight
-	// budgets exactly one row whenever this is non-empty, so a segment carrying
-	// a newline draws two and the pane is a row taller than it was given -
-	// which scrolls the alt screen away on every frame at the ticker's rate.
-	// The facts here are not all Wake's: the model is whatever a claude process
-	// reported, and a directory may legally contain a newline.
-	// The mode is drawn whole or not at all: this bar is a plain right-cut, and a
-	// cut landing inside the last segment leaves `permissions: …`, a label
-	// announcing a value nobody can read. The facts above it are still cut,
-	// because half a path is still a path and half a mode is not a mode.
-	//
-	// **What it is not any more is the first thing dropped.** Appending it only
-	// when the whole finished row fit meant it was never drawn at a realistic
-	// width: a home-relative path, a feature branch and a model name fill the
-	// row on their own, so the segment reached the operator who asked for it
-	// exactly never (docs/notes/bugs.md BUG-8, and BUG-1 before it - the fix
-	// that was proved against a short path nobody works in).
-	//
-	// So the facts in front of it give way instead, rightmost first: how full
-	// the context is, then which model, then which branch. That order is the
-	// priority statement. **The mode is the only segment here that moves under
-	// a keystroke**, and a row that cannot show the thing the operator just
-	// pressed a key to change is not a status bar. The path stays longest
-	// because it is the answer to "which of these thirty panes is this".
-	//
-	// oneRow here as well as at App.notedMode: this function is total over its
-	// arguments, and the width measurement is only right for one row.
-	seg := oneRow(permissionSegment(mode))
-	line := oneRow(strings.Join(kept, statusSep))
-	if seg != "" {
+	// Flatten each fact first, because the only row break here is the deliberate
+	// wrap: a newline in a model name or a directory - facts that are not Wake's,
+	// so hostile ones must be assumed - would otherwise draw a row chromeHeight
+	// did not budget and scroll the alt screen. oneRow over the joined line did
+	// this before, and wrapping makes it per-segment.
+	for i := range kept {
+		kept[i] = oneRow(kept[i])
+	}
+	modeSeg := oneRow(permissionSegment(mode))
+
+	// Row 1: the facts joined, then the mode appended after dropping facts
+	// rightmost-first to fit it whole. The mode is drawn whole or not at all -
+	// a cut landing inside it leaves `permissions: …`, a label naming a value
+	// nobody can read - and it is the one fact that moves under a keystroke, so
+	// a row that could not show it would not be a status bar (docs/notes/bugs.md
+	// BUG-1, BUG-8). The path is last to go: it answers which of thirty panes
+	// this is.
+	row1 := kept
+	line := strings.Join(row1, statusSep)
+	if modeSeg != "" {
 		for {
-			if ansi.StringWidth(line+statusSep+seg) <= width {
-				line += statusSep + seg
+			if ansi.StringWidth(line+statusSep+modeSeg) <= width {
+				line += statusSep + modeSeg
 				break
 			}
-			// Down to the path and it still will not fit: the mode is dropped
-			// rather than the path, because a bar naming neither where you are
-			// nor anything else is a row spent on a separator.
-			if len(kept) <= 1 {
+			if len(row1) <= 1 {
 				break
 			}
-			kept = kept[:len(kept)-1]
-			line = oneRow(strings.Join(kept, statusSep))
+			row1 = row1[:len(row1)-1]
+			line = strings.Join(row1, statusSep)
 		}
 	}
+	out := []string{ansi.Truncate(line, width, ellipsis)}
+
+	// The facts row 1 dropped flow onto further rows, rightmost order preserved,
+	// up to the budget. A single fact wider than a whole row takes one alone and
+	// is truncated - the same right-cut row 1 gives an over-long path.
+	for overflow := kept[len(row1):]; len(out) < rows && len(overflow) > 0; {
+		row, rest := takeRow(overflow, width)
+		out = append(out, ansi.Truncate(row, width, ellipsis))
+		overflow = rest
+	}
+
 	// The bar recedes in the muted grey every bar wears, and it does not take the
 	// agent's /color hue: it is the least urgent thing on screen and the one that
 	// is about the session rather than the turn, so it stays chrome. The identity
 	// hue - including the manager's yellow default (identityStyleFor) - is where
 	// the operator's eye rests instead: the room name-tag, the roster row, and
 	// the composer they type into (speakerStyle, headStyle, Composer.boxStyle).
-	return HintStyle.Render(ansi.Truncate(line, width, ellipsis))
+	return HintStyle.Render(strings.Join(out, "\n"))
+}
+
+// takeRow greedily packs whole segments into one row of at most width cells,
+// returning the row and the segments that did not fit. A single segment wider
+// than the whole row takes it alone (the caller truncates it), so the row
+// always consumes at least one segment and a pack loop always makes progress.
+func takeRow(segs []string, width int) (row string, rest []string) {
+	i := 0
+	for i < len(segs) {
+		cand := segs[i]
+		if row != "" {
+			cand = row + statusSep + segs[i]
+		}
+		if ansi.StringWidth(cand) <= width {
+			row, i = cand, i+1
+			continue
+		}
+		if row == "" {
+			return segs[i], segs[i+1:]
+		}
+		break
+	}
+	return row, segs[i:]
+}
+
+// barRows is how many rows a rendered bar occupies, which is what chromeHeight
+// must budget: zero when empty, else its real height - one or, since wrapping,
+// up to dmBarRows. Both the DM and the room count the bar this way, so the
+// sizing and the draw read the same stored string and cannot disagree.
+func barRows(bar string) int {
+	if bar == "" {
+		return 0
+	}
+	return lipgloss.Height(bar)
 }
 
 // permissionSegment is the mode this pane's session is in. The bar is the only

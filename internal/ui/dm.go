@@ -750,9 +750,7 @@ func (d DM) aboveComposerExtra() int {
 	if d.menu == "" {
 		n += composerGap
 	}
-	if d.bar != "" {
-		n++
-	}
+	n += barRows(d.bar)
 	return n
 }
 
