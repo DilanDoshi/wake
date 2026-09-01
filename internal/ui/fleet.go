@@ -382,6 +382,13 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 	}
 
 	now, out := fold(was, ev, sessionID)
+	// Attribute room events by the spawn id, not the id they carried: /clear
+	// re-keys it (fanout.go) and a permission ask carries none, so focusAdmits
+	// and linesFor - which key on the spawn id - would hide a focused agent's
+	// own lines. KindTurnEnd already stamped it; this makes the rest agree.
+	for i := range out {
+		out[i].SessionID = sessionID
+	}
 	if len(out) > 0 && countsAsUnread(ev.Kind) && sessionID != f.focused {
 		now.Unread++
 	}
