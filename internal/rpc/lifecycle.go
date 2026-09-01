@@ -356,6 +356,19 @@ type SessionStatus struct {
 	// route by which a client that attached late can learn it.
 	Effort string `json:"effort,omitempty"`
 
+	// ConfirmedModel is the model's display name a bare /model probe read back
+	// ("Opus 5 (1M context)"), or "" before one has answered.
+	//
+	// Here for a reason the init model is not enough on its own: the model *id*
+	// rides the init event, which keeps a connected client current, but the
+	// operator changes the model with /model - a command handled without a turn -
+	// so the init on the wire is a turn stale until the next one. The daemon
+	// re-probes on that change and carries the answer here, so a client prefers
+	// this over the init id and the status bar moves the moment the probe lands.
+	// The event's id is the fallback until then, and this is not park-persisted:
+	// a woken session re-probes, the way Effort's confirmed half does.
+	ConfirmedModel string `json:"confirmed_model,omitempty"`
+
 	// Budget is the spend ceiling this session was started under, or "" for one
 	// with none. Here for Effort's reason and by the same route: nothing on
 	// Claude's wire reports a cap, so this is Wake's own memory of what it

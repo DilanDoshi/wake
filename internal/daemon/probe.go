@@ -75,6 +75,11 @@ func (a *agent) absorbProbe(ev core.Event) (suppress, publish bool) {
 		// from being mistaken for the probe's reply and closing the window early.
 		if lvl, ok := core.EffortFromModelReply(ev.Text); ok {
 			a.confirmedEffort = lvl
+			// The same reply names the model; read it back for the status bar so a
+			// runtime /model shows at once rather than at the next turn's init.
+			if model, ok := core.ModelFromModelReply(ev.Text); ok {
+				a.confirmedModel = model
+			}
 			a.swallowTurnEnd = true
 			return true, true
 		}

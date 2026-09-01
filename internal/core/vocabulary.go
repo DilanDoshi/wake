@@ -436,6 +436,30 @@ func IsModelReply(text string) bool {
 	return strings.HasPrefix(strings.TrimSpace(text), modelReplyPrefix)
 }
 
+// ModelFromModelReply reads the model's display name out of a /model reply, or
+// reports false when the text is not one.
+//
+// It is the model name Claude Code itself renders ("Opus 5 (1M context)"),
+// which is why the status bar prefers it over the init frame's raw id: after a
+// runtime /model the id on the wire is a turn stale, and this is read back at
+// once by re-probing. The name may carry its own parentheses, so the effort
+// clause is removed by pattern rather than by cutting at the first "(".
+func ModelFromModelReply(text string) (string, bool) {
+	if !IsModelReply(text) {
+		return "", false
+	}
+	line := strings.TrimSpace(text)
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	}
+	line = strings.TrimSpace(strings.TrimPrefix(line, modelReplyPrefix))
+	line = strings.TrimSpace(effortClause.ReplaceAllString(line, ""))
+	if line == "" {
+		return "", false
+	}
+	return line, true
+}
+
 // EffortFromModelReply reads the reasoning level out of a /model reply, or
 // reports false when there is no clause or the level is not one /effort takes.
 func EffortFromModelReply(text string) (string, bool) {

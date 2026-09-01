@@ -212,49 +212,6 @@ type DM struct {
 	chrome int
 }
 
-// drawStatusBar is the seam the bar is rendered through, so a test can count
-// how often it actually runs. Reach it through this, never by calling
-// statusBar directly: drawing the bar reads the filesystem, and a direct call
-// is invisible to the counter that keeps that off the draw loop.
-var drawStatusBar = statusBar
-
-// barKey is everything statusBar reads. A value type so "has anything changed"
-// is one comparison rather than a list somebody has to keep in step.
-//
-// The identity colour is deliberately absent: the bar recedes in the muted grey
-// every bar wears and does not take the hue (see statusBar), so a /color change
-// moves nothing here and belongs in no key that would redraw for it.
-type barKey struct {
-	width  int
-	dir    string
-	model  string
-	mode   string
-	state  string
-	used   int
-	window int
-	prs    *prSet // a PR arrives mid-turn with no other bar fact moving, so the key must carry it; prSet.same keeps the pointer stable so it does not redraw per frame
-}
-
-// withBar re-renders the status bar if anything it is drawn from has moved, and
-// returns the receiver untouched otherwise.
-//
-// The mode comes off this pane's own composer, which App.dmFor has already set
-// from App.modeOf - the same value the legend names, so the two lines of one
-// pane cannot disagree about it. It is part of the key because the bar is drawn
-// per change: a mode left out of it would be the one fact here that goes stale.
-func (d DM) withBar(width int) DM {
-	mode := d.composer.Mode()
-	key := barKey{
-		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, mode: mode, state: d.Agent.State,
-		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow, prs: d.Agent.prs,
-	}
-	if key == d.barFrom {
-		return d
-	}
-	d.bar, d.barFrom = drawStatusBar(d.Agent, mode, width), key
-	return d
-}
-
 // withAgent folds this conversation's own agent in from the fleet, or leaves it
 // alone when the fleet has no row for it yet - a session that has ended, or one
 // whose first report has not landed.
