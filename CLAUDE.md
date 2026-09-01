@@ -111,16 +111,22 @@ client — only the daemon can see the whole fleet. **A name is never an address
 released when a session ends and reissued, which is why a rename has no alias and `@old` stops
 resolving.
 
-**The legend names only keys that work, and its order is a priority statement.** `ui.legendEntries`
-holds the (glyph, label) pairs, and a test requires a bijection with the `tea.Key…` cases in
-`App.key` — a glyph with no binding and a binding with no glyph are both build failures. **Do not add
-a key to that legend until the key works.** The whole legend needs **334 columns**; below that the
-mode is cut first, deliberately, because a key is something to do and the mode is something to know.
-Drawing all of it needs a terminal at least **374** columns wide with both sidebars open, so every
-ordinary terminal truncates and the order decides what is on screen: an
-80-column pane keeps `↵ esc ⌃O ⌃C ⇥ ⇧⇥` — leaving, parking, and the permission mode — and loses the
-rest, which now includes `⌃X next blocked` and `⌃Q quit & park all`. Every number and both lists here
-are derived by `TestCLAUDEmdDescribesTheLegendItDraws`; re-measure rather than hand-edit.
+**The legend is drawn only while an arm is live, and then it is only the armed cue.** The always-on
+row of key hints under the composer is gone — it was redundant with the status bar, which already
+names the permission mode and the rest of what a pane is (owner's request, "keep armed cues, drop
+static hints"). What survives is the safety confirmation: while a detach is armed the composer draws
+`↵ detach   ⌃O cancel`, while a clear-draft arm is live it draws `esc clear draft`, and an idle,
+empty conversation's second `⎋` draws `esc rewind`. That row is the only on-screen tell that the next
+keypress is irreversible, which is why it stays where the static hints went. An unarmed composer
+draws no legend row at all, and the permission mode is the status bar's alone now. `ui.legendEntries`
+still holds the (glyph, label) pairs and is still the canonical list of what this build binds:
+`TestEveryKeyTheLegendNamesIsBoundAndEveryBoundKeyIsNamed` requires a bijection with the `tea.Key…`
+cases in `App.key`, so **a key added to `App.key` without a `legendEntries` entry is still a build
+failure** even though the entry is no longer drawn. The cue's labels are derived from `legendEntries`
+by `TestCLAUDEmdDescribesTheLegendItDraws`, which holds this paragraph to what the composer actually
+draws; re-derive rather than hand-edit. The height that row costs is counted only when it is drawn —
+`Composer.showsCue` is the one predicate `overhead` counts by and `View` draws by, the `hasBeat`
+pattern one surface over, so a pane is never sized without the row and then drawn with it.
 
 **The permission mode moves on the receipt, never on the keystroke.** `⇧⇥` cycles
 `default` → `acceptEdits` → `plan` → `auto` for the agent `pickedAgent` names, writing an
@@ -264,9 +270,10 @@ stream frame, a heartbeat, a resize, a settle and a reattach all leave it standi
 other tell was a `notice.Report`, and `internal/notice` is one most-recent-message slot that routine
 fleet activity takes within seconds. Broadening the disarm to those messages was considered and is
 **worse**: at fleet size a frame lands between the two presses constantly, so ↵ would mean *send* on
-the press aimed at *detach*, decided by socket timing. So the legend swaps `↵ send` → `↵ detach` and
-`⌃O detach` → `⌃O cancel` in every pane, the way the armed pane swaps `⎋`'s label — `↵` is the entry
-that survives every truncation. It adds **no legend glyph**, for `escape.go`'s reason. A drawn
+the press aimed at *detach*, decided by socket timing. So while a detach is armed every pane draws
+the cue `↵ detach   ⌃O cancel` — the composer's only legend row now, since the static hints are gone
+— the way the armed pane draws `⎋ clear draft`, and `↵` leads it so it survives a narrow cue's own
+truncation. It adds **no legend glyph**, for `escape.go`'s reason. A drawn
 *question* card still wins ↵ and takes the arm back, which is the cheap way round: `chooseCursored`
 writes no frame. Full argument: `internal/ui/detach.go`. **Prompt history is
 `⌥↑↓`** rather than `↑↓`, which are the query cursor or the roster: the history is *derived* from the pane's own
@@ -646,9 +653,9 @@ arriving in `startArrived`. Two consequences worth knowing: the off switch does 
 the next `wake` turns it back on — and **the manager is an ordinary row on every surface**, so it
 takes a roster row, a place in the attention ranking and a slot in the strip's count. That last one
 is `deferred.md`'s open question, and it is now unavoidable rather than rare. It is a **command
-rather than a key**: with the default on, this is the rarest verb in the build, the legend is a
-bijection with `App.key` so a chord costs the entry an 80-column pane loses first, and every
-remaining ctrl byte is worse — `⌃M`/`⌃I` are Enter and Tab, `⌃J` is the composer's newline, and `⌃S`
+rather than a key**: with the default on, this is the rarest verb in the build, `legendEntries` is a
+bijection with `App.key` so a chord still costs a `legendEntries` entry to add, and every remaining
+ctrl byte is worse — `⌃M`/`⌃I` are Enter and Tab, `⌃J` is the composer's newline, and `⌃S`
 is XOFF beside a `⌃Q` already bound to *park the fleet and quit*.
 
 **`/manager-stop` is the ending, and it is a second word rather than an argument.** `/manager` parks;
@@ -924,7 +931,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Which key means what | `internal/ui/keys.go` — `App.key`, held to `legendEntries` in both directions |
 | Leaving takes ⌃O then ↵ | `internal/ui/detach.go` — the arm, why the confirm is a different key, and why the legend carries it |
 | The way out of a Wake that has stopped answering | `cmd/wake/killswitch.go` — `killTrigger` (pure, so the one thing that can close somebody's window is testable without a terminal) · `killSwitch.pump` (the read that never waits on the consumer it exists to escape) · `emergencyExit` · `watchSignals`. Wired in `attach.go`'s `converseModel`, which is the one place a program runs |
-| The legend, and the labels an arm swaps | `internal/ui/legend.go` — `legendEntries`, `legendArms`, `hintParts` (+ `legend_test.go` for the bijection and the widths) |
+| The legend, the armed cue it has become, and the labels an arm swaps | `internal/ui/legend.go` — `legendEntries` (the bijection's canonical list, no longer drawn on every frame), `legendArms`, `armedLabel`/`armedCueParts`/`armedCue` (the only thing drawn now, and only while an arm is live) · `internal/ui/composer.go` — `showsCue` (`View` draws the cue row and `overhead` counts it by the one predicate) · `legend_test.go` for the bijection and the cue |
 | Walking back through what you typed | `internal/ui/prompts.go` — `⌥↑↓`, derived from the pane's own events |
 | Where Wake's keyboard collides with Claude Code's | `internal/ui/testdata/claude-keymap.json`, maintained by hand (asserted by `keymap_test.go`, which holds the eight accepted collisions and fails on a ninth) |
 | `⇧⇥`, the cycle, and the label | `internal/ui/mode.go` |
@@ -951,10 +958,10 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Who owns that fold, and why it is not on `Agent` | `internal/ui/fleettasks.go` — `Fleet.tasks` keyed on session id, `RunningTasks` (the sidebar's filter), `named` (ingest-time enrichment for the ending line). It is a second map because `Agent` must stay comparable for `Observe`'s `now == was`. The sidebar reads it directly; nothing projects it onto the DM any more |
 | Subagents in the right sidebar | `internal/ui/rostersubs.go` — `subagentRow` (the type, then the count if it fits whole), `subsOf`, `viewingPicked` (what `⌃D` and a click do with one). The walk is `roster.go`'s `walkable`; `Roster.SelectedTask` names the dispatch while `Selected` stays the **agent**, so `⌃C`, `⎋` and `↵` keep targeting a session |
 | Where a subagent's frames are drawn | `internal/ui/dm.go` — `forwardedTo` (which transcript a frame belongs to) · `appendForwarded` · `Viewing` · `renderForwarded` |
-| The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, **PRs opened**, and the permission mode; cached on `DM.bar`, drawn per change, and drawn **above** the legend (info row over the keys). Effort is the level `confirmedEffort` reads back, or the asked-for one until then. `prSegment` names them `PR #29`/`PR #29, #30`. The mode is **drawn whole or dropped**, never right-cut into `permissions: …` |
+| The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, **PRs opened**, and the permission mode; cached on `DM.bar`, drawn per change, and drawn inside the composer below the box (above the armed cue on the rare frame one is up). **The permission mode is the bar's alone now** — the always-on legend that used to carry it is gone, so `modeFormat` lives here. Effort is the level `confirmedEffort` reads back, or the asked-for one until then. `prSegment` names them `PR #29`/`PR #29, #30`. The mode is **drawn whole or dropped**, never right-cut into `permissions: …` |
 | The PRs a session has opened | `internal/daemon/prs.go` — `recordPRs`, `prURL` (scraped from a `gh pr create` tool result, carried on `rpc.SessionStatus.PRs`, no subprocess or poll) · `internal/ui/prs.go` — `prSet`/`withPRs` (a pointer for `commandSet`'s reason, folded in `Fleet.WithStatus`) · drawn by `statusbar.go`'s `prSegment` |
 | The room's info bar | `internal/ui/chat.go` — `Room.bar`/`Room.withBar` · `internal/ui/send.go` — `App.withRoomBar`, which draws it for the agent the composer is addressing (a lone `@name`, else the manager) and nothing for an empty room. Cached like a DM's; the room *banner* stays fact-free (`banner_test.go`) — this is a different row |
-| The composer's info line and legend | `internal/ui/composer.go` — `WithBar` places a pre-rendered bar between the box and the legend; the pane builds the bar (it reads the filesystem) |
+| The composer's info line and armed cue | `internal/ui/composer.go` — `WithBar` places a pre-rendered bar below the box (above the armed cue when one is drawn); the pane builds the bar (it reads the filesystem). `View` draws the cue row only while `showsCue` |
 | The effort probe | `internal/daemon/probe.go` — `probeEffort`, `absorbProbe` (a `pendingProbes` counter), `firstInit`, `incProbe`/`decProbe` · `internal/daemon/effort.go` — `noteEffort` (returns whether it recorded), the `/model` compose · `internal/daemon/agent.go` — the `confirmedEffort`/`pendingProbes` fields · `internal/daemon/fanout.go` — the fan-out loop that consumes the reply · `internal/core/vocabulary.go` — `IsModelReply`, `EffortFromModelReply` (asserted against `testdata/stream/bare-model.jsonl`) · `internal/daemon/history.go` — the disk filter |
 | Which branch a directory is on | `internal/gitref/` — one implementation, shared by the daemon's label and the status bar |
 | What a session runs as, and how full it is | `internal/core/protocol.go` — `initFacts`, `resultFacts` → `core.SessionFacts` → `ui.Agent.withFacts`. `initFacts` also carries `slash_commands`, which is what the completion menu offers |
