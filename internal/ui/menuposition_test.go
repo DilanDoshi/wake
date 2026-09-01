@@ -103,17 +103,23 @@ func TestThePickerDrawsAboveTheRoomComposer(t *testing.T) {
 	}
 }
 
-// cardFullyDrawn must agree with what the draw actually clips: if it reports the
-// keys are safe to read, the card's key line has to be on screen.
+// cardFullyDrawn must agree with what the draw actually clips, in both
+// directions: if it reports the keys are safe to read, the card's key line has
+// to be on screen - and if the key line is on screen, it must report so, or the
+// answer keys are advertised but fall through to the composer while the agent
+// stays blocked.
 //
 // The card is clipped by DM.menuRows, which runs inside DM.View after withBar
 // refreshes the status bar from the live agent. cardFullyDrawn measures its
 // floor through dmFor, which carries the live agent but leaves the bar cached -
 // and a status push updates the fleet without re-sizing the stored DM, so that
 // cache can lag by the bar's one row. A floor short by that row calls a card
-// "fully drawn" whose key line the draw then clips: the answer keys stay live
-// with nothing on screen accounting for them, which is the accident the whole
-// arm-and-confirm dance exists to prevent.
+// "fully drawn" whose key line the draw then clips. The other direction is the
+// composerGap: the stored DM carries no menu, so its floor charges the blank row
+// above the box that a pinned card drops, and a floor one row too tall calls a
+// fully-drawn card clipped. Both are the accident the arm-and-confirm dance
+// exists to prevent, so the sweep asserts equality and requires crossing the
+// boundary.
 func TestCardFullyDrawnMatchesWhatTheDrawClips(t *testing.T) {
 	ev := questionAsk(t)
 	a := newRoomApp(t).withSize(narrowColumns, 40).withAgents("john")
@@ -122,39 +128,34 @@ func TestCardFullyDrawnMatchesWhatTheDrawClips(t *testing.T) {
 	// The Cwd arrives after the pane was sized, and the ask after it. The card
 	// is what diverges: it lives on App.cards and is assembled into the pane by
 	// menuBlock at draw time, so the stored DM never knows its rows.
-	//
-	// It used to be the *bar* that lagged here - applyStatus updated the fleet
-	// and not the stored DM, so its cached bar stayed empty while the drawn one
-	// gained a row. BUG-5 closed that: a report now folds the agent into the
-	// stored conversation and refreshes its bar, because the same lag was
-	// re-rendering the bar, filesystem walk included, on every frame. The card's
-	// own divergence is what this test rests on now.
 	st := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
 		{ID: "s1", Name: "john", State: rpc.StateIdle, Cwd: "/repo/api"},
 	}}
 	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
 	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: ev})
 
-	checked := false
+	sawDrawn, sawClipped := false, false
 	for h := 12; h <= 40; h++ {
 		a2, _ := a.resized(narrowColumns, h)
 		a2 = settle(a2)
-		if !a2.cardFullyDrawn() {
-			continue
-		}
 		width, height, ok := a2.focusedPane()
 		if !ok {
 			continue
 		}
-		checked = true
 		pane := stripANSI(a2.dmPane("s1", width, height))
-		if !strings.Contains(pane, cardDenyLabel) {
-			t.Fatalf("at terminal height %d cardFullyDrawn() is true but the card's key line (%q) is clipped from the draw:\n%s",
-				h, cardDenyLabel, pane)
+		keyLineDrawn := strings.Contains(pane, cardDenyLabel)
+		if fully := a2.cardFullyDrawn(); fully != keyLineDrawn {
+			t.Fatalf("at terminal height %d cardFullyDrawn()=%v but the card's key line (%q) drawn=%v:\n%s",
+				h, fully, cardDenyLabel, keyLineDrawn, pane)
+		}
+		if keyLineDrawn {
+			sawDrawn = true
+		} else {
+			sawClipped = true
 		}
 	}
-	if !checked {
-		t.Fatal("no swept height reported the card fully drawn, so the invariant was never exercised")
+	if !sawDrawn || !sawClipped {
+		t.Fatalf("the sweep never crossed the boundary (drawn=%v clipped=%v): the invariant was not exercised", sawDrawn, sawClipped)
 	}
 }
 
