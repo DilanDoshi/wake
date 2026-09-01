@@ -52,7 +52,6 @@ typed into the room, mention and all.
 | `⌃Y` | Open the selected agent in a **new column** |
 | `⌃B` | Open the selected agent **below** the focused pane |
 | `⌃W` | Close the open conversation |
-| `⌃G` | Toggle the workspaces sidebar |
 | `⌃R` | Toggle the activity sidebar |
 | `⇧←` `⇧→` `⇧↑` `⇧↓` | Move the keys to the pane that way. It moves among panes **already drawn** and opens nothing — that is the whole difference from `⇥`, and why a direction with no pane in it names `⇥` instead of wrapping |
 | `⌃N` `⌃P` | Walk the **dispatch list** — the subagents the focused conversation has spawned. While a completion menu is open they walk that instead |
@@ -143,7 +142,6 @@ of the shipped `claude` binary — one nobody has ruled on is a build failure ra
 |---|---|---|
 | `⌃O` | Expand the tool result it just truncated | **Detach.** The only one that costs anything, so it is armed: `⌃O` then `↵`. Pressing `⌃O` again cancels, which is what makes key repeat harmless. `⌃E` expands here |
 | `⌃T` | Raise the todo panel | Flip the mention mode — the line above the keys says which reading is live, and the same key puts it back |
-| `⌃G` | Open the draft in `$EDITOR` | Toggle the workspaces sidebar |
 | `⌃R` | Search your prompt history | Toggle the activity sidebar. There is no search here; `⌥↑↓` walks without one |
 | `⌃B` | Background the running task | Open the picked agent below the focused pane — `⌃W` closes it |
 | `⌃E` | Show the whole transcript / edit a custom theme / expand a confirmation's explanation | Expand this conversation's tool results. The first of those is the same meaning on both sides, reached by accident |

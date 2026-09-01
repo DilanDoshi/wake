@@ -122,6 +122,42 @@ func TestTheSinkIsBounded(t *testing.T) {
 	}
 }
 
+// A timed notice clears itself, but only while it is still the one showing:
+// its own expiry must not wipe a fresher failure that overwrote the slot.
+func TestClearIfOnlyClearsTheMatchingNotice(t *testing.T) {
+	fresh(t)
+
+	Report("usage limit approaching")
+	ClearIf("usage limit approaching")
+	if n, ok := Latest(); ok {
+		t.Errorf("ClearIf left %q showing; want the slot empty", n.Text)
+	}
+
+	// A different, newer failure is not the timed notice's to clear.
+	Report("usage limit approaching")
+	Report("the daemon hung up")
+	ClearIf("usage limit approaching")
+	n, ok := Latest()
+	if !ok || n.Text != "the daemon hung up" {
+		t.Errorf("ClearIf wiped a fresher failure: Latest = %q, %v", n.Text, ok)
+	}
+}
+
+// A message reported again after a clear starts its count over rather than
+// carrying a stale one.
+func TestClearIfForgetsTheCount(t *testing.T) {
+	fresh(t)
+
+	Report("close to the limit")
+	Report("close to the limit")
+	ClearIf("close to the limit")
+
+	Report("close to the limit")
+	if got := Count("close to the limit"); got != 1 {
+		t.Errorf("Count after a clear = %d, want 1", got)
+	}
+}
+
 func TestReportIsSafeForConcurrentUse(t *testing.T) {
 	fresh(t)
 

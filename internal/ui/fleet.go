@@ -49,7 +49,6 @@ package ui
 // could be work per change" the non-negotiables forbid.
 
 import (
-	"maps"
 	"slices"
 	"strings"
 	"time"
@@ -153,6 +152,7 @@ type Agent struct {
 	// lifecycle frame. withFacts replaces the pointer only when the words
 	// differ, so re-advertising the same 133 commands each turn compares equal.
 	advertised *commandSet
+	prs        *prSet // GitHub PRs opened, off the report, pointer-held for advertised's reason. See prSet, statusbar.go.
 
 	// Doing is the present-tense label of whatever task the agent last marked
 	// in progress - claude's activeForm, which is the word it puts on its own
@@ -180,6 +180,13 @@ type Agent struct {
 	Model         string
 	ContextTokens int
 	ContextWindow int
+
+	// ConfirmedModel is the model's display name a /model probe read back, off
+	// the report rather than the event stream - the one route that stays current
+	// through a runtime /model, which changes the model with no init to carry the
+	// new id. The status bar prefers it over Model, falling back to Model until
+	// the probe answers. See rpc.SessionStatus.ConfirmedModel.
+	ConfirmedModel string
 
 	// Tokens is what this session has produced, summed over its turns. A total
 	// rather than a level, because that is what the wire gives: each result
@@ -296,10 +303,10 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 			f.order = append(f.order, s.ID)
 		}
 		a.Name, a.Label, a.Color, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, runningIn(s), s.ParentID
-		a.Effort, a.Budget = s.Effort, s.Budget
-		// The report is the only route to these for a client that attached after
-		// the init event carried them - see rpc.SessionStatus.Commands.
-		a = a.withCommands(s.Commands)
+		a.Effort, a.Budget, a.ConfirmedModel = s.Effort, s.Budget, s.ConfirmedModel
+		// The report is the only route to these - and to PRs - for a client that
+		// attached after they were set. See rpc.SessionStatus.Commands.
+		a = a.withCommands(s.Commands).withPRs(s.PRs)
 
 		// Stamped on the way *into* working, so the heartbeat measures the turn
 		// rather than the report: reports fire on a state change, but an agent
@@ -684,34 +691,3 @@ func countsAsUnread(kind core.EventKind) bool {
 // room - the failure the marker exists to prevent, arriving through the branch
 // meant to prevent it.
 func blank(s string) bool { return strings.TrimSpace(s) == "" }
-
-// copy is the immutability contract. The map and the order slice are both
-// duplicated, so a caller holding an older Fleet holds the fleet it had.
-func (f Fleet) copy() Fleet {
-	out := Fleet{
-		agents:     make(map[string]Agent, len(f.agents)+1),
-		tasks:      make(map[string]Tasks, len(f.tasks)+1),
-		checklists: make(map[string]checklist, len(f.checklists)+1),
-		subs:       make(map[string]map[string]chunked[core.Event], len(f.subs)+1),
-		focused:    f.focused,
-	}
-	maps.Copy(out.agents, f.agents)
-	// A session's list is replaced wholesale by foldChecklist, never appended in
-	// place, so the shallow copy is all this needs - Tasks' own reason.
-	maps.Copy(out.checklists, f.checklists)
-	// Copied for agents' own reason: a caller holding an older Fleet keeps the
-	// dispatches it had. Tasks is a value whose slice is never written in
-	// place - Tasks.Observe copies before it appends - so the shallow copy is
-	// the whole of what this needs.
-	maps.Copy(out.tasks, f.tasks)
-	// subs follows the same rule: foldSub replaces one session's map wholesale.
-	maps.Copy(out.subs, f.subs)
-	out.order = append(make([]string, 0, len(f.order)+1), f.order...)
-	// Carried, not rebuilt: Observe copies for every event that moves an agent,
-	// and a book dropped there would take /resume's only index with it between
-	// one status report and the next.
-	out.parked = append([]Agent(nil), f.parked...)
-	return out
-}
-
-func (f Fleet) Agent(id string) (Agent, bool) { a, ok := f.agents[id]; return a, ok }

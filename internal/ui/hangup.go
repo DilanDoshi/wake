@@ -47,6 +47,15 @@ import (
 // Reattaching in either case would start a *fresh* daemon holding no sessions,
 // on the way out of a window whose last act was asking the old one to park them.
 func (a App) hungUp(err error) (tea.Model, tea.Cmd) {
+	// A hang-up forgets a rate-limit warning's pending clear, the way reattached
+	// below forgets a permission mode and a turn's tokens. A warning in the final
+	// batch arms a clear tick, but that arm is consumed only on the live
+	// (`!m.done`) path in App.stream - so without this a batch that is both
+	// non-empty and done leaves the arm standing, and the next batch after a
+	// reattach schedules a tick keyed to a spent warning. Only the arm is
+	// dropped: gen stays monotonic so an in-flight tick from before the outage
+	// cannot match a warning raised after it. See ratelimit.go.
+	a.rl.arm = false
 	if a.quit.waiting() {
 		return a.parkAllSettled(fmt.Errorf("%w: %w", errParkAllHungUp, err))
 	}

@@ -66,11 +66,12 @@ An agent is a headless `claude` process in stream-json mode with a Wake-assigned
 | `--debug-file <name>` · `--debug <categories>` | Per-session debug logging, so one agent of thirty can be diagnosed. **The wire carries a name and the daemon owns the directory** — `filepath.Dir(socket)/debug/<name>.log`, beside `mcp.json` and `parked.json` — because a path on the wire is a file anything that can dial the socket could choose. `--debug` only narrows the categories and is refused without a file: on its own it writes no log anywhere that can be read |
 | `wake status` · `wake stop` | What is running; end everything (irreversible) |
 | `wake fleets` · `--fleet <name>` | The fleets, and which one a verb is addressed to. `--fleet default` is the reserved word for the **unnamed** fleet at `~/.wake` - every fleet that existed before fleets did is that one, so without it a whole existing Wake would be reachable only through `$WAKE_SOCKET`. Only a bare `wake` makes a new fleet; every other verb with no `--fleet` still means the unnamed one. **Several fleets can run in one directory** — each is a directory under `~/.wake/fleets/` holding its own socket, and every other per-fleet file is `filepath.Dir(socket)` plus a name, so isolation is the layout rather than a rule anything enforces. A bare `wake` is the unnamed fleet at `~/.wake/`, unchanged. `$WAKE_SOCKET` still wins, and naming a fleet beside it is refused rather than one being ignored |
-| Room keys | `↵` send, open the picked agent, or confirm an armed detach · `esc` interrupt (clears the draft in the room; leaves answer mode while a card is taking one) · `esc esc` clear a conversation's draft, or — idle and empty — open a rewind picker to an earlier prompt · `↑↓` move the query cursor when the draft has a row to move into, else pick agent · `⌥↑↓` walk this pane's prompt history · `⌃O` arm detach — `↵` leaves, a second `⌃O` cancels · `⌃C` park focused · `⌃Q` park all & quit · **`⌃C⌃C` or `⌃Q⌃Q` emergency quit** — read off the tty *before* Bubble Tea, so it is the one exit that still works when the window has stopped drawing · `⇥` focus · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→↑↓` move the keys to the pane that way · `⌥↵`/`⌃J` newline · `⌃F` fork · `⌃D` open here · `⌃Y` open in a new column · `⌃B` open below · `⌃W` close pane · `⌃E` expand tool results, or the room's folded responses (a click opens one) |
-| Slash commands | `/resume`, `/new` (optionally `--worktree <name>`, `--add-dir <dir>`, `--debug-file <name>`, `--debug <categories>`, `--max-budget-usd <usd>`, `--fallback-model <m,m>`), `/name`, `/task`, `/color`, `/adopt`, `/mcp`, `/manager`, `/manager-stop`, `/board` (`⇥` toggles a tiled live wall, view-only, while the board is up) — everything else is passed to the agent byte for byte |
+| Room keys | `↵` send, open the picked agent, or confirm an armed detach · `esc` interrupt (clears the draft in the room; leaves answer mode while a card is taking one) · `esc esc` clear a conversation's draft, or — idle and empty — open a rewind picker to an earlier prompt · `↑↓` walk this pane's prompt history when the draft has no row to move into, else move the query cursor · `⇧↑↓` pick agent · `⌃O` arm detach — `↵` leaves, a second `⌃O` cancels · `⌃C` park focused · `⌃Q` park all & quit · **`⌃C⌃C` or `⌃Q⌃Q` emergency quit** — read off the tty *before* Bubble Tea, so it is the one exit that still works when the window has stopped drawing · `⇥` focus · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move the keys to the pane that way · `⌥↵`/`⌃J` newline · `⌃F` fork · `⌃D` open here · `⌃Y` open in a new column · `⌃B` open below · `⌃W` close pane · `⌃E` expand tool results, or the room's folded responses (a click opens one) |
+| Slash commands | `/resume`, `/new` (optionally `--worktree <name>`, `--add-dir <dir>`, `--debug-file <name>`, `--debug <categories>`, `--max-budget-usd <usd>`, `--fallback-model <m,m>`), `/name`, `/task`, `/color`, `/quit`, `/adopt`, `/mcp`, `/login`, `/manager`, `/manager-stop`, `/board` (`⇥` toggles a tiled live wall, view-only, while the board is up) — everything else is passed to the agent byte for byte |
 | `/color` | Sets an agent's identity hue — one of seven named colours — so its turns in the room, the composer it types into, and its roster row are told apart by more than name text. **The status bar deliberately does not take the hue** — it recedes as chrome. `/color <colour>` or `/color @who <colour>` — and **`@who /color <colour>` from the room** works too, since the mention is the target (the same bridge `/name` and `/task` take). `/color none` clears. In the roster the hue **survives the cursor**: an open agent's row is the selected one, so the selection shows as bold rather than the accent hiding the colour. The **manager** defaults to yellow — the one session with a hue the fleet does not share (`identityStyleFor`) — so on it `/color none` returns to yellow rather than to no hue, since its empty colour is its default. A session attribute that survives a park. **The word is Claude's own** (its theme command, advertised on 71 corpus inits); Wake claims it on the owner's 2026-08-27 override rather than the corpus rule — `slashguard_test.go`'s `ownerClaimedCommands`, retired if a recording ever shows Claude's headless `/color` is a redirect |
 | `/manager` | The switch: starts one when there is none, wakes a parked one, parks a running one. A command rather than a key — see `internal/ui/slash.go` for why every remaining chord is worse than a legend slot |
 | `/manager-stop` | The ending, where `/manager` only parks: `rpc.FrameStop`, so the name goes back to the pool and the next `/manager` starts a fresh one. Refuses a **parked** manager (a stop reaches only a session with a process) and refuses when there is none |
+| `/quit` | `/manager-stop` for an ordinary agent: `rpc.FrameStop` ends one session (irreversible, releases the name), and this window **drops its row** once the report confirms the ending — off the roster, the group chat, the ⇥ ring and the sidebar. Bare `/quit` ends the conversation you are in; `@who /quit` from the room ends that agent (the same mention→target bridge `/color` takes). The stop lets the in-flight turn finish, so a busy agent stays until it ends. Reaches a **blocked** agent (a stop has no wake — `/manager-stop`'s inversion of ⌃C); refuses a **parked** one with advice; **refuses the manager** and points at `/manager-stop`, which is its one ending. The daemon still keeps the ended row in its recent ring, so **another window shows the `·`** — the hide is per-window, since only the operator who typed it knows it ended |
 | Inline completion | A draft whose word **at the cursor** starts a `/command` or an `@` offers what could finish it: the target session's own commands **and skills** (both ride in `init.slash_commands`), then Wake's own commands, then live agent names and paths under that session's directory. **The session's come first** (owner's 2026-08-28 override): Wake's twelve verbs filling the bound first was a bare `/` that never showed the operator's own Claude Code skills — they sat in the "N more" overflow. Wake's follow, still reached by their first letters and shown whole whenever the session advertises fewer than the bound. **Behind a resolved lone `@name`, only that agent's own** — Wake's fleet verbs are not the addressed agent's. `⇥` completes · `⌃N`/`⌃P` walk · `↵` still sends. Move the cursor off that word and all three go back to the text area |
 | A lone `@name` in the room | **narrows the group chat to that agent's thread** — their lines, the manager's, every broadcast, and your own messages to them — for as long as it is the composer's target, widening again when the target changes or the draft clears. A *view* filter over the room's own, not a route or a mode: it adds no key, `@john hi` still routes and `@john /effort` still configures, open mode does not narrow (it widens the message, not the view), and the pane header reads `group chat › @john` |
 | Bare `/effort` · `/model` | Wake draws the menu claude cannot draw headless; with an argument they pass through untouched |
@@ -110,16 +111,22 @@ client — only the daemon can see the whole fleet. **A name is never an address
 released when a session ends and reissued, which is why a rename has no alias and `@old` stops
 resolving.
 
-**The legend names only keys that work, and its order is a priority statement.** `ui.legendEntries`
-holds the (glyph, label) pairs, and a test requires a bijection with the `tea.Key…` cases in
-`App.key` — a glyph with no binding and a binding with no glyph are both build failures. **Do not add
-a key to that legend until the key works.** The whole legend needs **334 columns**; below that the
-mode is cut first, deliberately, because a key is something to do and the mode is something to know.
-Drawing all of it needs a terminal at least **374** columns wide with both sidebars open, so every
-ordinary terminal truncates and the order decides what is on screen: an
-80-column pane keeps `↵ esc ⌃O ⌃C ⇥ ⇧⇥` — leaving, parking, and the permission mode — and loses the
-rest, which now includes `⌃X next blocked` and `⌃Q quit & park all`. Every number and both lists here
-are derived by `TestCLAUDEmdDescribesTheLegendItDraws`; re-measure rather than hand-edit.
+**The legend is drawn only while an arm is live, and then it is only the armed cue.** The always-on
+row of key hints under the composer is gone — it was redundant with the status bar, which already
+names the permission mode and the rest of what a pane is (owner's request, "keep armed cues, drop
+static hints"). What survives is the safety confirmation: while a detach is armed the composer draws
+`↵ detach   ⌃O cancel`, while a clear-draft arm is live it draws `esc clear draft`, and an idle,
+empty conversation's second `⎋` draws `esc rewind`. That row is the only on-screen tell that the next
+keypress is irreversible, which is why it stays where the static hints went. An unarmed composer
+draws no legend row at all, and the permission mode is the status bar's alone now. `ui.legendEntries`
+still holds the (glyph, label) pairs and is still the canonical list of what this build binds:
+`TestEveryKeyTheLegendNamesIsBoundAndEveryBoundKeyIsNamed` requires a bijection with the `tea.Key…`
+cases in `App.key`, so **a key added to `App.key` without a `legendEntries` entry is still a build
+failure** even though the entry is no longer drawn. The cue's labels are derived from `legendEntries`
+by `TestCLAUDEmdDescribesTheLegendItDraws`, which holds this paragraph to what the composer actually
+draws; re-derive rather than hand-edit. The height that row costs is counted only when it is drawn —
+`Composer.showsCue` is the one predicate `overhead` counts by and `View` draws by, the `hasBeat`
+pattern one surface over, so a pane is never sized without the row and then drawn with it.
 
 **The permission mode moves on the receipt, never on the keystroke.** `⇧⇥` cycles
 `default` → `acceptEdits` → `plan` → `auto` for the agent `pickedAgent` names, writing an
@@ -206,38 +213,44 @@ nothing, which is why `⌃Y` and `⌃B` are single bytes — 0x19 and 0x02, whic
 keyboard and Wake claims. `keyprobe_test.go` holds the chord findings and
 `TestNoKeyIsACtrlArrow` holds the macOS one; the measurement is in `docs/notes/decisions.md`.
 
-**Moving the keys between panes is `⇧`+arrow, because it is the only arrow family free at every
-layer.** `⌘`+arrow is what was asked for and is dead twice: bubbletea's arrow table knows modifier
+**Moving the keys between panes is `⇧←→`, because it is the only arrow family free at every
+layer** — and `⇧↑↓` move the roster instead, the job plain `↑↓` gave up to prompt history.
+`⌘`+arrow is what was asked for and is dead twice: bubbletea's arrow table knows modifier
 params 2–8, cmd is bit 8, so `⌘→` is param 9 and the library names *nothing* for it — and no macOS
 terminal transmits `⌘` to a tty anyway. `⌃`+arrow is named and delivered and still wrong, for the
 `⌃⇧`+arrow reason one paragraph up: macOS spends all four on spaces and Mission Control, so
 `TestNoKeyIsACtrlArrow` refuses the whole `KeyCtrl…`+arrow class rather than the `⌃⇧` half it used
 to. `⌥←/→` are the text area's word-movement. That leaves `⇧`+arrow, which `App.key` did not take
-and `bubbles` does not bind. **It moves among panes that are already *drawn* and opens nothing** —
+and `bubbles` does not bind. **`⇧←→` move among panes that are already *drawn* and open nothing** —
 that is the whole difference from `⇥`, which walks the chat ring and will open a conversation that
 is off screen, and it is why a direction with no pane in it names `⇥` instead of wrapping. A wrap in
 a two-pane grid makes `⇧←` and `⇧→` the same key. `ui.Grid.Toward` is the pure half and returns
-`(id, ok)` because `""` is both the room and "nothing that way".
+`(id, ok)` because `""` is both the room and "nothing that way". **Vertical pane movement has no key**
+— `⇧↑↓` are the roster's now, so the lower slot of a split column is reached by `⇥` or a click.
 
-**Plain `↑↓` move the query cursor when the draft can take it, and the roster otherwise.** `←→` have
-always reached the text area; `↑↓` were the roster's unconditionally, so a multi-line draft had no
-way to move the cursor between its own lines. Now `App.key` asks the focused composer first:
-`Composer.CanCursorUp`/`CanCursorDown` run bubbles' own `CursorUp`/`CursorDown` on a *copy* of the
-text area and report whether the cursor actually moved — the same move `App.key` delegates to, so the
-two can never disagree. It is a simulated move rather than a row count on purpose: bubbles' `wrap`
-adds a synthetic trailing row at exact wrap width (its `>=`) that `LineInfo.Height` counts but the
-cursor cannot occupy, so a count-based predicate reported a move `CursorDown` never makes and
-**swallowed `↓`** — moving neither the cursor nor the roster (found by the Codex adversarial pass;
-pinned by `TestCanCursorMatchesRealMovementAcrossWidths`, which sweeps widths and lengths across the
-exact-width boundary). When the cursor has somewhere to go the arrow falls through to the composer
-(Update rebuilds the completion menu after, `App.recompleted`); only an empty, single-line, or
-top/bottom-edge cursor reaches `pickAgent`, which is why an empty or single-line query keeps its
-roster nav and the common case is unchanged. **The roster stays on plain `↑↓`, not a new chord**, because there is no free arrow family
-for it: on macOS `⌃`+arrow and `⌃⇧`+arrow never arrive (the rule above), `⌥↑↓` is prompt history and
-`⌥←→` is word-movement, and `⇧`+arrow is *pane* movement — which is why panes did **not** move onto
-`⌃⇧`+arrow when this was asked for. The legend keeps `{"↑↓","pick agent"}`: the label is still true in
-the empty/single-line case and cursor movement is a composer fall-through the legend never advertises,
-so the bijection guard is untouched. `internal/ui/keys.go`, `internal/ui/composer.go`.
+**Plain `↑↓` walk the prompt history on an empty or single-line draft and move the query cursor on a
+multi-line one — Claude Code's own `↑↓`, which recall the previous prompt.** `←→` have always reached
+the text area; `↑↓` were the roster's unconditionally, so a hand arriving with Claude Code's
+history reflex got the roster, and a multi-line draft had no way to move the cursor between its own
+lines. Now `App.key` asks the focused composer first: `Composer.CanCursorUp`/`CanCursorDown` run
+bubbles' own `CursorUp`/`CursorDown` on a *copy* of the text area and report whether the cursor
+actually moved — the same move `App.key` delegates to, so the two can never disagree. It is a
+simulated move rather than a row count on purpose: bubbles' `wrap` adds a synthetic trailing row at
+exact wrap width (its `>=`) that `LineInfo.Height` counts but the cursor cannot occupy, so a
+count-based predicate reported a move `CursorDown` never makes and **swallowed `↓`** — moving neither
+the cursor nor the history (found by the Codex adversarial pass; pinned by
+`TestCanCursorMatchesRealMovementAcrossWidths`, which sweeps widths and lengths across the exact-width
+boundary). When the cursor has somewhere to go the arrow falls through to the composer (Update
+rebuilds the completion menu after, `App.recompleted`); only an empty, single-line, or top/bottom-edge
+cursor reaches `walkPrompts`, which is why the common case is a history recall on an empty box.
+**`⌥↑↓` carry no binding of their own**: the switch is on `m.Type` alone, so a `⌥` arrow behaves
+exactly as the bare one does — it is the same `walkPrompts`/cursor path, not a second key.
+**The roster moved to `⇧↑↓`**, because there is no other free arrow family for it: on macOS
+`⌃`+arrow and `⌃⇧`+arrow never arrive (the rule above), `⌥↑↓` are the bare arrows and `⌥←→` is
+word-movement, and `⇧←→` is *pane* movement. The legend is `{"↑↓","prompt history"}` and
+`{"⇧↑↓","pick agent"}`; cursor movement is a composer fall-through the legend never advertises, so the
+bijection guard names `KeyUp`/`KeyDown` and the four shift-arrows exactly once each.
+`internal/ui/keys.go`, `internal/ui/composer.go`.
 
 **Wake shares a keyboard with Claude Code, and nothing of Wake's moves for it.** An operator arrives
 with Claude Code's reflexes, and several chords mean something else here.
@@ -247,7 +260,7 @@ a build failure**, and the Wake side is derived from `legendEntries` so a key ad
 construction. No count is written down, because a number nothing asserts drifts; the two maps in that
 file are the record. Only one collision is destructive: **⌃O expands a tool result there and detaches
 here**, so it is armed — the paragraph below is the whole mechanism. The rest are
-one-press confusions with a visible, reversible result (⌃T, ⌃G, ⌃R, ⌃B, ⌃E), and **⇧⇥ and ⌃E are not
+one-press confusions with a visible, reversible result (⌃T, ⌃R, ⌃B, ⌃E), and **⇧⇥ and ⌃E are not
 tolerated but asserted**: both sides cycle a permission mode and both reveal what a pane folded away,
 so they sit in `agrees`, where a rebinding on either side fails as an alignment that broke.
 
@@ -263,15 +276,15 @@ stream frame, a heartbeat, a resize, a settle and a reattach all leave it standi
 other tell was a `notice.Report`, and `internal/notice` is one most-recent-message slot that routine
 fleet activity takes within seconds. Broadening the disarm to those messages was considered and is
 **worse**: at fleet size a frame lands between the two presses constantly, so ↵ would mean *send* on
-the press aimed at *detach*, decided by socket timing. So the legend swaps `↵ send` → `↵ detach` and
-`⌃O detach` → `⌃O cancel` in every pane, the way the armed pane swaps `⎋`'s label — `↵` is the entry
-that survives every truncation. It adds **no legend glyph**, for `escape.go`'s reason. A drawn
+the press aimed at *detach*, decided by socket timing. So while a detach is armed every pane draws
+the cue `↵ detach   ⌃O cancel` — the composer's only legend row now, since the static hints are gone
+— the way the armed pane draws `⎋ clear draft`, and `↵` leads it so it survives a narrow cue's own
+truncation. It adds **no legend glyph**, for `escape.go`'s reason. A drawn
 *question* card still wins ↵ and takes the arm back, which is the cheap way round: `chooseCursored`
 writes no frame. Full argument: `internal/ui/detach.go`. **Prompt history is
-`⌥↑↓`** rather than `↑↓`, which are the query cursor or the roster: the history is *derived* from the pane's own
-events, so it works on a reattach and on a conversation this client has never opened, and the room's
-is what was typed into the room. `⌥`+letter was measured and rejected — it vanishes under a Kitty
-keyboard protocol (`keyprobe_test.go`).
+`↑↓`** on an empty or single-line draft, Claude Code's own recall key: the history is *derived* from
+the pane's own events, so it works on a reattach and on a conversation this client has never opened,
+and the room's is what was typed into the room. The roster moved to `⇧↑↓` for it.
 
 **A pane that holds the keys is always a pane that is drawn.** Below `dmTakeoverColumns` only one
 column fits, and `Layout.window` slides the drawn range to keep the focused one on screen rather than
@@ -645,9 +658,9 @@ arriving in `startArrived`. Two consequences worth knowing: the off switch does 
 the next `wake` turns it back on — and **the manager is an ordinary row on every surface**, so it
 takes a roster row, a place in the attention ranking and a slot in the strip's count. That last one
 is `deferred.md`'s open question, and it is now unavoidable rather than rare. It is a **command
-rather than a key**: with the default on, this is the rarest verb in the build, the legend is a
-bijection with `App.key` so a chord costs the entry an 80-column pane loses first, and every
-remaining ctrl byte is worse — `⌃M`/`⌃I` are Enter and Tab, `⌃J` is the composer's newline, and `⌃S`
+rather than a key**: with the default on, this is the rarest verb in the build, `legendEntries` is a
+bijection with `App.key` so a chord still costs a `legendEntries` entry to add, and every remaining
+ctrl byte is worse — `⌃M`/`⌃I` are Enter and Tab, `⌃J` is the composer's newline, and `⌃S`
 is XOFF beside a `⌃Q` already bound to *park the fleet and quit*.
 
 **`/manager-stop` is the ending, and it is a second word rather than an argument.** `/manager` parks;
@@ -662,6 +675,24 @@ which is where an *ended* one lands too, since `Fleet.manager` reads ended as ab
 borrow `parkTarget`'s blocked refusal**, and that inversion is deliberate: park refuses a blocked
 agent because the denial nobody made *survives the wake*, and a stop has no wake. See
 `docs/notes/decisions.md`.
+
+**`/quit` is `/manager-stop` for an ordinary agent, and its removal is a client-side fold rather
+than a daemon change.** The stop half is identical — `rpc.FrameStop`, irreversible, releases the
+name, reaches a blocked agent and refuses a parked one — so `internal/ui/quit.go` mirrors
+`service.go`'s rulings. What is new is the *removal*: an ended session is deliberately kept as a `·`
+row (`Fleet.WithStatus`, the daemon's `recentEndings`) so a client learns of an ending it **missed**,
+and a `/quit` is an ending the operator **typed**. So `awaitingQuit` remembers the ask and
+`departedQuit` — run from `applyStatus` on every report, because the daemon re-reports the ending
+until it leaves the recent ring — drops the agent from the fleet, the ⇥ ring, the grid and the roster
+cursor once the ending is **confirmed**, never on the keystroke (⌃C park's own rule: a stop lets the
+turn finish, so a working agent stays until it ends). It is the one place a live-reported agent
+*leaves* `Fleet.Agents()`, so `Fleet.drop` and `forgetConversation` are the whole of it; the hide is
+**per-window** (the `quitting` set is on `App`, not the wire), so another operator's roster keeps the
+`·`. `quitting` is pruned once the daemon stops reporting an id (it has left the recent ring), so the watch
+set stays bounded rather than growing one entry per `/quit`. Both entry points reach one handler: bare
+`/quit` targets the focused conversation, `@who /quit` rides the `mentionCommand` bridge, so `quit` is a
+`roomTargetCommand`. **The manager is refused** and pointed at `/manager-stop` — one ending path for
+the manager, not a second verb that also drops its row. Full argument: `internal/ui/quit.go`'s header.
 
 **The manager's configuration is a function of its name**, applied in `launch`, never a field on the
 wire — a path on the wire would let anything that can dial the socket choose that session's command
@@ -721,9 +752,10 @@ draws.** All three were the trailing token of a string. **The cursor:** `⌃N`/`
 area's line keys, so a menu claimed by an `@` at the end of the buffer would take them from every
 cursor position in it. A menu exists only while the cursor is at the end of the word it
 describes (`Composer.AtEnd`), which is what the "it costs one space" trade always claimed. Plain `↑↓`
-are the roster's only when the cursor cannot move within the draft (see below); because a menu is only
-up while the cursor is already at the end, `↑` there moves the cursor up — off the trailing token,
-closing the menu on the rebuild — while `↓` has nowhere to go and stays the roster's.
+walk the prompt history or move the cursor within the draft (see below), never the menu; because a
+menu is only up while the cursor is already at the end of its word, `↑` there either climbs to a line
+above — off the trailing token, closing the menu on the rebuild — or, on a single-line draft, recalls
+a prompt, and either way the menu is left to the offers.
 **The pane:** `completion.pane` is the conversation it was built for, because two panes holding the
 same characters are not holding the same menu — two repositories with a `README.md` each completed
 one from the other, and that reference *resolves*. **The read:** `pathScanMax` bounds the entry count
@@ -810,6 +842,17 @@ airlock (`core.EffortFromModelReply`). The probe fires once on `init` and again 
 change. See `internal/daemon/effort.go` and
 `docs/notes/decisions.md`.
 
+**The same probe confirms the *model*, for the same reason effort needed it.** A model is on every
+`init` frame, but `/model <arg>` changes it with no turn and so no new `init` — the id on the wire is
+a turn stale, and the status bar showed the old model until the next query. So `/model` fires the
+same bare-`/model` probe `/effort` does, its reply also names the model
+(`core.ModelFromModelReply` reads `Current model: Opus 5 (1M context)` off the same line as the
+effort clause), and the daemon carries it as `rpc.SessionStatus.ConfirmedModel`. The status bar
+**prefers the confirmed model over the init-frame id**, falling back to the id until the probe
+answers. Not park-persisted (a woken session re-probes) and not written to `a.model` — the park
+book's model is the alias Wake asked for at spawn, a separate fact from the rendered name. Detected
+by `noteModel` in `apply`, beside `noteEffort`.
+
 **Discovery verifies a directory; it never decodes one.** The project-dir slug is lossy, so
 `verifiedDir` holds three facts against each other and answers exactly one directory or none.
 `slugOf` may only ever appear as an operand of `==` or `!=` — constructing a path from a slug is what
@@ -827,18 +870,22 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 
 | What | Where |
 |---|---|
-| Entrypoint and verb dispatch | `cmd/wake/main.go` — nine verbs, two not user commands |
+| Entrypoint and verb dispatch | `cmd/wake/main.go` — eleven verbs, two not user commands |
 | Bare `wake`: the front door and its branch | `cmd/wake/openroom.go` — `openRoom` (the bool), `seedRoom` (the frame the bool chooses) · `openroomguard_test.go` for the per-state verdicts · `openroomscreen_unix_test.go` for which pane has the terminal, which nothing in process can see |
 | Attach, spawn handshake, the detach line | `cmd/wake/attach.go` |
 | Resolving "which session did they mean" | `cmd/wake/match.go` |
 | `wake fork` | `cmd/wake/fork.go` |
 | `wake import` — the picker and adopting one | `cmd/wake/import.go` |
+| `wake setup-terminal` — the CLI shape: detect, confirm, apply/undo | `cmd/wake/setupterminal.go` |
+| Host-terminal detection, per-terminal knowledge, file I/O, the first-run marker | `internal/termsetup/` — `terminal.go` (`Detect`, pure over an env map) · `multiplexer.go` · `knowledge.go` (`Info`, the verified snippets — Ghostty's `\x1b\r`, Alacritty/VS Code's TOML/JSON-safe Unicode escape for ESC) · `apply.go` (`Apply`/`Undo`/`Status`, append-only and idempotent, auto-writable only for Ghostty/Kitty/Alacritty) · `firstrun.go` (`PromptSeen`/`MarkPromptSeen`, the one-time marker under `$XDG_CONFIG_HOME/wake/`) |
+| The one-time first-run offer | `cmd/wake/termsetupprompt.go` — `promptTerminalSetupOnce`, called from `converseModel` so every path that opens a TUI passes through it once |
 | Adopting sessions from inside the room | `internal/ui/adopt.go` — `adopt`/`adoptArrived`/`adoptAll` (why the word is not `/import`, why the machine is read from a `tea.Cmd`, why the picker goes to the room and never to a DM, and why the whole set is refused when one name does not resolve) · `adoptguard_test.go`, where the minted id and the frame kind are held statically because both failures are silent |
 | The seam a room is handed to see this machine | `cmd/wake/adopt.go` — `machineSessions` (holds no state, caches nothing) · `adoptRows` (why a pane is capped and a terminal is not) |
 | `wake status` · `wake stop` | `cmd/wake/status.go` · `cmd/wake/stop.go` |
 | `wake manager` · `wake mcp` | `cmd/wake/manager.go` · `cmd/wake/mcp.go` (+ `mcpguard_test.go`) |
 | Seating a manager on the way into the room | `cmd/wake/ensuremanager.go` — called by `openroom.go` and `attach.go` |
 | The manager switch, and what a fleet with none needs | `internal/ui/service.go` — `ManagerFrames` (pure, both callers) · `Fleet.manager` · `App.manager` · `App.managerStop` |
+| Ending one agent and dropping its row | `internal/ui/quit.go` — `quitAgent`, `quitTarget` (bare = the focused conversation, `@who` = that agent), `awaitingQuit`, `departedQuit` (the confirm-on-report drop, run from `applyStatus`), `forgetConversation`, `Fleet.drop` (the one place a live-reported agent leaves the fleet) · `quit_test.go` |
 | Claude JSON airlock | `internal/core/protocol.go` (decode) · `wire.go` · `vocabulary.go` · `encode.go` — start at `protocol.go` |
 | Airlock tests | `internal/core/protocol*_test.go`, `fixtures*_test.go`, `encode_test.go`, `airlock_test.go` |
 | One agent: spawn · events · lifecycle · stop | `internal/core/session.go` |
@@ -880,14 +927,17 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | A per-agent identity colour | `internal/rpc/color.go` — `ColorNames`, `NormalizeColor` (the fence both sides apply) · `internal/daemon/color.go` — `setColor`, `colorSession` · `internal/ui/color.go` — `App.colorAgent` · `internal/ui/theme.go` — `identityColors`/`identityStyle`/`identityColor` (Wake's own bolder set, not in `claude-palette.json`). Rendered by `speakerStyle` (room name-tag), `Composer.boxStyle`/`titleStyle` (the composer border and @name, set by the DM pane via `WithColor`) and `Roster.headStyle` (roster row, bold under the cursor). **The status bar does not take it** — `statusBar` recedes to `HintStyle` and `barKey` omits the colour. `@who /color` routing is the `mentionCommand` bridge in `internal/ui/slash.go`, dispatched from `sendRoom`. Survives a park via `parkedRecord.Color` |
 | MCP server exposed to the manager | `internal/mcp/` — `tools.go` (six tools, held to `managerScope` in both directions), `rollup.go`, `fleet.go`, `stateguard_test.go` |
 | Bubble Tea root model | `internal/ui/app.go` — start at `apply` |
+| Folding one agent's event into the model | `internal/ui/observe.go` — `observe` (the room/DM fold, and where a rate-limit event is routed away), `appendEvent`; split from `app.go` |
+| The rate-limit warning as a timed pop-up | `internal/ui/ratelimit.go` — `rateLimited` (a warning to the notice row, a benign `allowed` to nothing), `armRateLimitClear`/`rateLimitCleared` (the one-shot linger, `gen`-guarded against an overlapping warning clearing early) · `internal/notice/notice.go` — `ClearIf` (clears only while it is still the notice showing) |
 | What a fleet report does to the model | `internal/ui/report.go` — `applyStatus`, `noteEnding` |
-| Reading the fleet back out: roster, ranking, routing | `internal/ui/fleetroster.go` — `OnRoster`, `Agents`, `ByName`, `Focus`/`Focused`, `sending`/`inDM`, `needsAuth`. Split from `fleet.go` once the subagent backlog pushed the fold half past the 800-line hard max — fold and read are two subjects sharing one type |
+| The `Agent` type and the event fold that writes it | `internal/ui/fleet.go` — `Agent`, `Fleet.WithStatus`, `fold`, `withFacts` |
+| Reading the fleet: the immutability copy and the accessors | `internal/ui/fleetquery.go` — `Fleet.copy` (copies `subs` too, once a missing line here left a subagent's transcript blank), `Agent`, `OnRoster`, `ByName`, `Agents`, `Focus` (split from `fleet.go` at the write/read seam) |
 | The keys the App owns, and the legend bijection | `internal/ui/keys.go` |
 | The drain that is not the draw loop | `internal/ui/inbox.go` — the ring, the fold that keeps a preview off a slot, and what `dropped` counts (+ `inbox_bench_test.go` for the fold's price) |
 | Which conversations are on screen and where | `internal/ui/grid.go` — bounded: columns, each split once |
 | Pane focus, placement, and the DM ring | `internal/ui/panes.go` |
 | Frame layout, breakpoints, divider, mouse | `internal/ui/layout.go` · `appview.go` · `geometry.go` · `mouse.go` |
-| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) · `internal/ui/composersel.go` (the same, over the query box's own draft rows) |
+| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) · `internal/ui/composersel.go` (the same, over the query box's own draft rows) · `internal/ui/composerdelete.go` (⌫/delete removing the highlighted draft text, mapped back to raw runes through bubbles' own wrap) |
 | The clipboard, in three layers | `internal/ui/clipboard.go` · `cmd/wake/output.go` — the writer Bubble Tea draws through, which **must** embed `*os.File` |
 | Sending: routes, echoes, one command per draft | `internal/ui/send.go` |
 | Dropping an image into the composer | `internal/ui/imagedrop.go` — `droppedImage` (the paste hijack, read at the top of `App.key`), `imageDropPaths` (shape only, no I/O), `readDroppedImages` (the off-goroutine read, sniff, base64), `imageDropped` (fold to a chip, or path back on failure) · `internal/ui/composerimage.go` — `Attach`, `Images` (only the chips still in the draft), `stripImageChips`. The wire shape is `core.ImageBlock` → `rpc.Frame.Images` → `EncodeUserMessage` (images first, text last) |
@@ -897,17 +947,19 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | The transcript behind an ask | `internal/ui/askdim.go` — `quieted`, and why the SGR pair is taken from `HintStyle` once rather than rendered per row (`askdim_bench_test.go` for both numbers) |
 | What App sets on a pane for the draw | `internal/ui/panedraw.go` — `WithAsk`, `WithWriting`, `WithSelection`, `WithMenu`; set on the way to `View`, never folded into |
 | Which pane draws an ask | `internal/ui/appview.go` — `cardOf` (a conversation puts its own agent's; **the room puts none**), `cardBlock`, `drawnConversations`, `focusedPane` · `internal/ui/cardhome_test.go` for the four placements |
+| The room's record that a question was resolved | `internal/ui/cardroom.go` — `recordQuestionResolved` (authored above the airlock, questions only), called from `cardreview.go` (answered) and `cardanswer.go` (cancelled) · `internal/ui/chat_blocks.go` — `resolvedLine` (green for an answer, muted for a refusal) · `core.NoticeQuestionAnswered`/`NoticeQuestionCancelled` · `askroom_test.go` for both, beside the ask announcement it closes |
 | What a pane pins over its composer, and how many rows are left | `internal/ui/appview.go` — `menuBlock` (the card, then the picker, then the completion menu) · `transcriptRows`, sized by the draw's own `SetSize` and read by `mouse.go`'s `startSelection` |
 | The sample beside an option | `internal/ui/preview.go` — three tiers: beside, stacked, dropped |
 | Which key means what | `internal/ui/keys.go` — `App.key`, held to `legendEntries` in both directions |
 | Leaving takes ⌃O then ↵ | `internal/ui/detach.go` — the arm, why the confirm is a different key, and why the legend carries it |
 | The way out of a Wake that has stopped answering | `cmd/wake/killswitch.go` — `killTrigger` (pure, so the one thing that can close somebody's window is testable without a terminal) · `killSwitch.pump` (the read that never waits on the consumer it exists to escape) · `emergencyExit` · `watchSignals`. Wired in `attach.go`'s `converseModel`, which is the one place a program runs |
-| The legend, and the labels an arm swaps | `internal/ui/legend.go` — `legendEntries`, `legendArms`, `hintParts` (+ `legend_test.go` for the bijection and the widths) |
-| Walking back through what you typed | `internal/ui/prompts.go` — `⌥↑↓`, derived from the pane's own events |
+| The legend, the armed cue it has become, and the labels an arm swaps | `internal/ui/legend.go` — `legendEntries` (the bijection's canonical list, no longer drawn on every frame), `legendArms`, `armedLabel`/`armedCueParts`/`armedCue` (the only thing drawn now, and only while an arm is live) · `internal/ui/composer.go` — `showsCue` (`View` draws the cue row and `overhead` counts it by the one predicate) · `legend_test.go` for the bijection and the cue |
+| Walking back through what you typed | `internal/ui/prompts.go` — `↑↓` on an empty or single-line draft, derived from the pane's own events |
 | Where Wake's keyboard collides with Claude Code's | `internal/ui/testdata/claude-keymap.json`, maintained by hand (asserted by `keymap_test.go`, which holds the eight accepted collisions and fails on a ninth) |
 | `⇧⇥`, the cycle, and the label | `internal/ui/mode.go` |
 | Fork · park · resume · slash · new · starts · last-read | `internal/ui/fork.go` · `park.go` · `resume.go` (`/resume` and the wake bookkeeping, split out when `slash.go` hit the 800 line max) · `slash.go` · `new.go` · `starts.go` · `lastread.go` |
 | The command kinds, and the fence | `internal/ui/slash.go` — `slash` (Wake-addressed) · `configure` (session-addressed, bare) · `mentionCommand`/`roomTargetCommands` (a room mention aiming a target-command, `@who /color`) · `bareOnlyCommands` (+ `slashguard_test.go`) |
+| The `/login` auth panel | `internal/ui/authapp.go` — `login`, `runAuthStatus`, `authResult`, and `panelResult` (the one Update case `/mcp` and `/login` share) · `authpanel.go` — `parseAuthStatus`, `authPanel`. Runs `claude auth status --json` through `bangRun` and hands `claude auth login` over, never running the login (no-PTY). Decodes only `loggedIn`/`authMethod`, never the account email or org (public repo) |
 | The menu Wake draws | `internal/ui/picker.go` — drawn through `cards_blocks.go`'s `optionRow` |
 | The board: the fleet as one row per agent, or a tiled live wall | `internal/ui/board.go` — `/board`, an overview and never panes you *operate* (the owner's 2026-08-12 ruling, narrowed 2026-08-27 for the tile view); drawn instead of the grid, closed by any key it does not claim · `internal/ui/boardtile.go` — the tile render and grid geometry, toggled by `⇥` |
 | The tiled board's live tail | `internal/ui/tail.go` — `App.tails`, `withTail`, `foldTail`; one `partial` preview per agent, accumulated only while the board is up and tiled (`board.go`'s guardrail 2) |
@@ -916,7 +968,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Hang-up and the way back | `internal/ui/hangup.go` |
 | Attention derivation | `internal/ui/attention.go` (**not** `internal/core/attention.go`, which the spec names) |
 | The awareness strip: the fleet in one row | `internal/ui/awareness.go` — `awarenessStrip`, `stateLabel` (a word per state, derived from `stateGlyph`), `stripWorkspace` |
-| Views and theme | `internal/ui/{chat,dm,cards,groups,roster,composer,theme}.go` |
+| Views and theme | `internal/ui/{chat,dm,cards,groups,roster,composer,theme}.go` — `groups.go` is the left workspaces sidebar, **hidden for now**: the code and its geometry (`Layout.ShowGroups`, `Regions`) are kept, but the app never enables it and there is no `⌃G`, until the multi-groupchat version. `⌃R` (activity/roster) is unaffected |
 | What a roster row spends 24 columns on | `internal/ui/roster.go` — `headLine`'s budget: the unread badge cuts the name, and the token count is dropped whole rather than cutting it. `rowTokens` draws on a **working** row only |
 | What the turn in flight has produced | `internal/core/protocol.go` — `turnTokensEvent`, off `message_delta`'s usage · `internal/ui/fleet.go` — `Agent.TurnTokens`, summed as the turn runs and cleared when it ends. **Never added to `Agent.Tokens`**, which is every *completed* turn: the result frame restates the same tokens |
 | The palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json`, maintained by hand (asserted by `palette_test.go`) |
@@ -929,10 +981,11 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Subagents in the right sidebar | `internal/ui/rostersubs.go` — `subagentRow` (the type, then the count if it fits whole), `subsOf`, `viewingPicked` (what `⌃D` and a click do with one, and where a freshly-opened DM is seeded before `Viewing` renders — see the row below). The walk is `roster.go`'s `walkable`; `Roster.SelectedTask` names the dispatch while `Selected` stays the **agent**, so `⌃C`, `⎋` and `↵` keep targeting a session |
 | Where a subagent's frames are drawn | `internal/ui/dm.go` — `forwardedTo` (which transcript a frame belongs to) · `appendForwarded` · `Viewing` · `renderForwarded` |
 | A dispatch's speech, for an agent nobody has opened yet | `internal/ui/fleetsubs.go` — `Fleet.foldSub`/`SubBacklog` (folded unconditionally in `Fleet.Observe`, the same move `fleettasks.go` made for the row that names a dispatch) · `DM.withSubBacklog` (seeds a DM's own `subs` from it once, only when the DM holds nothing yet for that dispatch). Without this, opening a dispatch under an agent this client never watched live drew an empty transcript — indistinguishable from the wire's own floor for a dispatch that truly forwarded nothing |
-| The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, and the permission mode; cached on `DM.bar`, drawn per change, and drawn **above** the legend (info row over the keys). Effort is the level `confirmedEffort` reads back, or the asked-for one until then. The mode is **drawn whole or dropped**, never right-cut into `permissions: …` |
+| The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, **PRs opened**, and the permission mode; cached on `DM.bar` (`barKey`), drawn per change, and drawn inside the composer below the box (above the armed cue on the rare frame one is up). **The permission mode is the bar's alone now** — the always-on legend that used to carry it is gone, so `modeFormat` lives here. Effort is the level `confirmedEffort` reads back, or the asked-for one until then; the **model** is the name `ConfirmedModel` reads back, or the init-frame id until then. `prSegment` names them `PR #29`/`PR #29, #30`. The mode is **drawn whole or dropped**, never right-cut into `permissions: …` |
+| The PRs a session has opened | `internal/daemon/prs.go` — `recordPRs`, `prURL` (scraped from a `gh pr create` tool result, carried on `rpc.SessionStatus.PRs`, no subprocess or poll) · `internal/ui/prs.go` — `prSet`/`withPRs` (a pointer for `commandSet`'s reason, folded in `Fleet.WithStatus`) · drawn by `statusbar.go`'s `prSegment` |
 | The room's info bar | `internal/ui/chat.go` — `Room.bar`/`Room.withBar` · `internal/ui/send.go` — `App.withRoomBar`, which draws it for the agent the composer is addressing (a lone `@name`, else the manager) and nothing for an empty room. Cached like a DM's; the room *banner* stays fact-free (`banner_test.go`) — this is a different row |
-| The composer's info line and legend | `internal/ui/composer.go` — `WithBar` places a pre-rendered bar between the box and the legend; the pane builds the bar (it reads the filesystem) |
-| The effort probe | `internal/daemon/probe.go` — `probeEffort`, `absorbProbe` (a `pendingProbes` counter), `firstInit`, `incProbe`/`decProbe` · `internal/daemon/effort.go` — `noteEffort` (returns whether it recorded), the `/model` compose · `internal/daemon/agent.go` — the `confirmedEffort`/`pendingProbes` fields · `internal/daemon/fanout.go` — the fan-out loop that consumes the reply · `internal/core/vocabulary.go` — `IsModelReply`, `EffortFromModelReply` (asserted against `testdata/stream/bare-model.jsonl`) · `internal/daemon/history.go` — the disk filter |
+| The composer's info line and armed cue | `internal/ui/composer.go` — `WithBar` places a pre-rendered bar below the box (above the armed cue when one is drawn); the pane builds the bar (it reads the filesystem). `View` draws the cue row only while `showsCue` |
+| The effort/model probe | `internal/daemon/probe.go` — `probeEffort`, `absorbProbe` (a `pendingProbes` counter, records both `confirmedEffort` and `confirmedModel`), `firstInit`, `incProbe`/`decProbe` · `internal/daemon/effort.go` — `noteEffort` and `noteModel` (each returns whether to re-probe), the `/model` compose · `internal/daemon/agent.go` — the `confirmedEffort`/`confirmedModel`/`pendingProbes` fields · `internal/daemon/fanout.go` — the fan-out loop that consumes the reply · `internal/core/vocabulary.go` — `IsModelReply`, `EffortFromModelReply`, `ModelFromModelReply` (asserted against `testdata/stream/bare-model.jsonl`) · `internal/daemon/history.go` — the disk filter |
 | Which branch a directory is on | `internal/gitref/` — one implementation, shared by the daemon's label and the status bar |
 | What a session runs as, and how full it is | `internal/core/protocol.go` — `initFacts`, `resultFacts` → `core.SessionFacts` → `ui.Agent.withFacts`. `initFacts` also carries `slash_commands`, which is what the completion menu offers |
 | Markdown · diffs · tool blocks · task lists | `internal/render/` — `todo.go` for the checklist · `tool.go` owns the layout and takes its palette from the caller, so `theme.go` stays the one place a colour is written down |
@@ -1187,7 +1240,7 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/app.go` at 798 and `internal/ui/dm.go` at 796 — that sentence is derived by
+  `internal/daemon/server.go` at 791 and `internal/rpc/wire.go` at 789 — that sentence is derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
   message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**

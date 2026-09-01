@@ -1,14 +1,47 @@
 package ui
 
-// The fleet as a roster: reading it back out, in the shapes the sidebar, the
-// room and routing each want. Split from fleet.go once the subagent backlog
-// (fleetsubs.go) pushed the fold half past the 800-line hard max - fold and
-// read are two subjects sharing one type, not one subject that grew.
+// Reading the fleet: the immutability contract and the accessors a surface asks
+// for a roster, a name or the open DM through. Split from fleet.go, which keeps
+// the Agent type and the event fold that writes these fields, when the file
+// crossed the 800-line hard max - the subject seam is write versus read.
 
 import (
+	"maps"
+
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
+
+// copy is the immutability contract. The map and the order slice are both
+// duplicated, so a caller holding an older Fleet holds the fleet it had.
+func (f Fleet) copy() Fleet {
+	out := Fleet{
+		agents:     make(map[string]Agent, len(f.agents)+1),
+		tasks:      make(map[string]Tasks, len(f.tasks)+1),
+		checklists: make(map[string]checklist, len(f.checklists)+1),
+		subs:       make(map[string]map[string]chunked[core.Event], len(f.subs)+1),
+		focused:    f.focused,
+	}
+	maps.Copy(out.agents, f.agents)
+	// A session's list is replaced wholesale by foldChecklist, never appended in
+	// place, so the shallow copy is all this needs - Tasks' own reason.
+	maps.Copy(out.checklists, f.checklists)
+	// Copied for agents' own reason: a caller holding an older Fleet keeps the
+	// dispatches it had. Tasks is a value whose slice is never written in
+	// place - Tasks.Observe copies before it appends - so the shallow copy is
+	// the whole of what this needs.
+	maps.Copy(out.tasks, f.tasks)
+	// subs follows the same rule: foldSub replaces one session's map wholesale.
+	maps.Copy(out.subs, f.subs)
+	out.order = append(make([]string, 0, len(f.order)+1), f.order...)
+	// Carried, not rebuilt: Observe copies for every event that moves an agent,
+	// and a book dropped there would take /resume's only index with it between
+	// one status report and the next.
+	out.parked = append([]Agent(nil), f.parked...)
+	return out
+}
+
+func (f Fleet) Agent(id string) (Agent, bool) { a, ok := f.agents[id]; return a, ok }
 
 // OnRoster is every agent the sidebar draws and the cursor can land on: the
 // fleet minus the ones that have ended.

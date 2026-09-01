@@ -81,7 +81,7 @@ func TestFirstRunsAgentOpensFromItsRosterRow(t *testing.T) {
 // Below sidebarsHideColumns both sidebars are hidden by the width, so the row
 // the test above clicks is not on screen - and `⇥` is no help either, because
 // the ring is the room plus the conversations *already opened* and first run has
-// opened none. What is left is `↑↓` and `↵`, which read `layout.ShowRoster` -
+// opened none. What is left is `⇧↑↓` and `↵`, which read `layout.ShowRoster` -
 // the operator's toggle, still true - rather than what the width drew. The old
 // behaviour reached the agent by putting it on the screen; this has to reach it
 // by a key, and at 80 columns that key is the only route there is.
@@ -104,13 +104,14 @@ func TestFirstRunsAgentIsReachableWhereTheRosterIsNotDrawn(t *testing.T) {
 			got, s.dump())
 	}
 
-	// ↓ onto a row nothing is drawing, then ↵ on an empty draft.
-	s.send("\x1b[B")
+	// ⇧↓ onto a row nothing is drawing (⇧↑↓ are the roster's now), then ↵ on an
+	// empty draft.
+	s.send("\x1b[1;2B")
 	s.send("\r")
 
 	// Waited for by title rather than by await(): the pooled name is not known
 	// in advance, and every string a conversation puts on screen here - "@",
-	// "╭", the legend - is already on the room's own frame at this width. What
+	// "╭", the status bar - is already on the room's own frame at this width. What
 	// changes is which conversation the one drawn pane is titled for, since
 	// below the takeover the room goes off screen rather than shrinking.
 	for deadline := time.Now().Add(screenTimeout); ; time.Sleep(20 * time.Millisecond) {
