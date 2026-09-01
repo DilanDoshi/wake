@@ -33,11 +33,21 @@ const screenChunk = 76
 // not hold a goroutine for the life of the program.
 const copyTimeout = 2 * time.Second
 
+// copiedFormat confirms a copy in the notice slot (count is runes, not bytes);
+// copiedNativeFailFormat is the same when the machine's clipboard tool errored
+// - OSC 52 still carried the copy, so the tool failure rides along.
+const (
+	copiedFormat           = "copied %d chars to clipboard"
+	copiedNativeFailFormat = "copied %d chars (system clipboard unavailable: %v)"
+)
+
 // copiedMsg is what a clipboard write produced: a sequence for the terminal,
-// and whatever went wrong reaching the machine's own clipboard.
+// how many characters it carried, and whatever went wrong reaching the
+// machine's own clipboard.
 type copiedMsg struct {
-	seq string
-	err error
+	seq   string
+	chars int
+	err   error
 }
 
 // multiplexer names what sits between wake and the terminal, "" for nothing.
@@ -100,20 +110,22 @@ func copyToClipboard(text string) tea.Cmd {
 	}
 	return func() tea.Msg {
 		return copiedMsg{
-			seq: clipboardSequence(text, multiplexer(os.Getenv)),
-			err: nativeCopy(text),
+			seq:   clipboardSequence(text, multiplexer(os.Getenv)),
+			chars: len([]rune(text)),
+			err:   nativeCopy(text),
 		}
 	}
 }
 
-// copied puts the sequence a clipboard write produced on the terminal.
-//
-// A failure to reach the machine's own clipboard is reported and then ignored:
-// the sequence is still worth writing, because OSC 52 is the layer that crosses
-// an ssh connection and it is the one that will have worked.
+// copied confirms a clipboard write, in one notice: notice keeps a single slot,
+// so a separate error report would be overwritten unseen by the confirmation in
+// the same Update. OSC 52 went out regardless, so the copy happened even when
+// the subprocess failed - the confirmation stands and names the failure inline.
 func (a App) copied(m copiedMsg) (tea.Model, tea.Cmd) {
 	if m.err != nil {
-		notice.Report("clipboard: %v", m.err)
+		notice.Report(copiedNativeFailFormat, m.chars, m.err)
+	} else {
+		notice.Report(copiedFormat, m.chars)
 	}
 	return a, a.writeSequence(m.seq)
 }
