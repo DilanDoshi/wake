@@ -81,7 +81,7 @@ An agent is a headless `claude` process in stream-json mode with a Wake-assigned
 | An answer being written | A conversation shows the block as it is generated, under the transcript and above the working line. A preview, never a record — the completed block replaces it |
 | The task board | The `TaskCreate`/`TaskUpdate` checklist an agent keeps for itself — its steps, with the one in flight marked — is **pinned above the composer** where Claude Code draws it, folded live from the ops. The ops draw nothing in the transcript: the board is the one place the list shows, and it shrinks when items are deleted. A subagent's own list draws inline in its dispatch transcript, since a subagent has no board of its own |
 | `!cmd` | A bounded shell line whose output lands in the conversation |
-| The mouse | Wheel scrolls the pane under the pointer · click focuses · drag a divider to resize · **drag across text to select it, and the release copies it** — in the transcript *and* in the query box, where a drag over what you typed highlights and copies it · **click a folded tool result to open that one**, which is the gesture Claude Code spends the same way · **click a run's rollup line to open that whole run** |
+| The mouse | Wheel scrolls the pane under the pointer · click focuses · drag a divider to resize · **drag across text to select it, and the release copies it** — in the transcript, the query box, **and every other rendered surface** (the roster, the sidebars, the status bar, a card), where a drag highlights the cells it crosses and the release copies them · **click a folded tool result to open that one**, which is the gesture Claude Code spends the same way · **click a run's rollup line to open that whole run** |
 | A folded tool run | A message's tool calls draw as one dimmed line — `28 tool uses · 24 bash · 1 read · 3 linear-server` — the way Claude Code shows a turn's activity rather than every ⏺ and ⎿. `⌃E` opens every run in the conversation; a **click** on one rollup opens that run alone, and `⌃E` folds everything back. A `TaskCreate`/`TaskUpdate` draws nothing in the transcript at all — its checklist is live status, not activity, so it is the **task board pinned above the composer** rather than a block or a count. An **`Edit` draws its diff whole**, out of the run the way a checklist is (`foldExempt` on `Diff`) — the diff is the point of the edit, so it shows by default rather than only under `⌃E`/a click (owner's 2026-08-28 request) — and its successful `has been updated` confirmation is suppressed, since the diff and the green ⏺ already say so; a **failed** edit still shows its result, which is the error |
 
 ## Non-negotiables
@@ -195,12 +195,31 @@ a draft row highlights the typed characters and the release copies them; the bor
 and lipgloss's trailing pad are all stripped off, so only what you typed reaches the clipboard. The
 geometry is fixed by `theme.BoxStyle` and the prompt rather than measured — text starts
 `composerTextLeft` columns in and stops `composerRightInset` short of the far edge — and it is
-**gated to the text**: an empty box, the blank past a short line, and the chrome above the box (the
-menu, the preview, the working line, the borders) all take nothing, which is what preserves the old
-fence that a query-bar drag must never clamp into a transcript line. Unlike the transcript it does
-not scroll under a drag — the box is a handful of rows, all on screen. `internal/ui/composersel.go`
-is the whole of it; the highlight is drawn by `DM`/`Room.View` through `highlightComposerBlock`, and
-`cmd/wake/selectscreen_unix_test.go` proves a real drag lands a background on the typed cells.
+**gated to the text**: an empty box and the blank past a short line take nothing, which is what
+preserves the old fence that a query-bar drag must never clamp into a transcript line. Unlike the
+transcript it does not scroll under a drag — the box is a handful of rows, all on screen.
+`internal/ui/composersel.go` is the whole of it; the highlight is drawn by `DM`/`Room.View` through
+`highlightComposerBlock`, and `cmd/wake/selectscreen_unix_test.go` proves a real drag lands a
+background on the typed cells.
+
+**And every other rendered surface is selectable too, as a frame-wide screen selection.** The
+transcript and the query box each anchor to what they draw — `transcript.lines` indices, draft-row
+indices — so a highlight follows its text as the pane scrolls and events arrive; everything else Wake
+draws neither scrolls nor renumbers, so a drag over it (the roster, the sidebars, the status bar, the
+awareness strip, a card, a menu, a preview, the box's own borders) anchors to an absolute
+`(row, column)` on screen and the highlight is drawn once over the assembled frame. It reuses
+`selection`/`marked`/`selectedText` unchanged — only the anchor's meaning differs, which
+`selection.onScreen` records. A press routes here when it is neither a transcript row nor a query-box
+draft row nor a divider — the three surfaces with a gesture of their own — so a **divider still drags
+to resize** and a **roster click still opens** its conversation, resolved on release now so a drag
+copies a name and a click opens. The query box's blank interior still takes nothing, because blank
+space is not text — the one fence that survives. It reads the frame **live** rather than snapshotting
+it — chrome redraws on every fleet report, so like a terminal's own selection it follows the cells and
+copies whatever stands under them at release. The one thing resolved at *press* is a **roster click's
+target** (`rosterHit`): the roster reorders by attention, so a click must open the row that was
+pressed, not whoever slid onto it before the button came up. `internal/ui/screensel.go` is the whole
+of it; `View` lays the overlay over `assembleFrame`, and `endSelection` copies off that same frame, so
+the copy is exactly the cells the overlay highlighted at release.
 
 **The grid keys are letters because two prior answers were unpressable, in two different ways.**
 `⇧↵` and `⌃⇧↵` are what was asked for and bubbletea v1.3.10 names neither — probed in both the Kitty
@@ -601,8 +620,9 @@ reads those same rows as "the drag has left the bottom edge" and scrolls one lin
 `App.transcriptRows` sizes the menu-carrying copy through the draw's own `SetSize` and reads the
 height back, so the two cannot disagree; `startSelection` fences the anchor on it and keeps it as
 `App.selRows`. Below that fence a press now falls to `startComposerSelection` rather than being
-discarded — the query box's own draft rows take a selection, the chrome around them does not (see
-`composersel.go`). Two rulings hold it together. **The anchor is taken before the keys move** — `refocus`
+discarded — the query box's own draft rows take a selection, and the chrome around them takes a
+frame-wide screen selection instead of nothing (see `composersel.go` and `screensel.go`). Two rulings
+hold it together. **The anchor is taken before the keys move** — `refocus`
 re-sizes the panes and a picker belongs to whichever pane holds them, so a measurement after it
 measures a frame nobody clicked. And **a drag's edge stays the window it was taken in**, which is
 `selTop`'s own rule: a motion message arrives per cell crossed, and re-rendering a pane's chrome on
@@ -962,7 +982,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Which conversations are on screen and where | `internal/ui/grid.go` — bounded: columns, each split once |
 | Pane focus, placement, and the DM ring | `internal/ui/panes.go` |
 | Frame layout, breakpoints, divider, mouse | `internal/ui/layout.go` · `appview.go` · `geometry.go` · `mouse.go` |
-| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) · `internal/ui/composersel.go` (the same, over the query box's own draft rows) · `internal/ui/composerdelete.go` (⌫/delete removing the highlighted draft text, mapped back to raw runes through bubbles' own wrap) |
+| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) · `internal/ui/composersel.go` (the same, over the query box's own draft rows) · `internal/ui/screensel.go` (the same again, over every other rendered surface as a frame-wide screen selection; `appview.go`'s `View` lays the overlay over `assembleFrame`) · `internal/ui/composerdelete.go` (⌫/delete removing the highlighted draft text, mapped back to raw runes through bubbles' own wrap) |
 | A DM reader told they have drifted off the newest line | `internal/ui/followbanner.go` — `followLine` (the absolute line the banner overlays, `-1` while following), `withFollowBanner` (the overlay, applied in `DM.View` after `transcript.view`) · `internal/ui/selection.go`'s `bannerHit` (decided at press time in `mouse.go`'s `startSelection`, from the same freshly measured height `transcriptRows` uses — not re-derived at release, where the DM's own stored transcript can be stale) · `DM.JumpToLatest` in `dm.go`. The streamed preview and the working line update regardless of scroll position (`dm.go`'s `View`); the transcript deliberately does not follow a scrolled reader (`Append`'s own comment) — this is the missing signal that a reader has silently detached, not a change to either rule |
 | The clipboard, in three layers | `internal/ui/clipboard.go` · `cmd/wake/output.go` — the writer Bubble Tea draws through, which **must** embed `*os.File` |
 | Sending: routes, echoes, one command per draft | `internal/ui/send.go` |

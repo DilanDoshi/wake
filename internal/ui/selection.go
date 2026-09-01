@@ -45,6 +45,14 @@ type selection struct {
 	// prompt), so the same marked/covers/selectedText machinery reads it. See
 	// composersel.go.
 	inComposer bool
+
+	// onScreen marks a selection over the assembled frame rather than a pane's
+	// own transcript or query box - the roster, the sidebars, the status bar,
+	// the awareness strip, a card, a menu: every rendered surface that is not
+	// one of the two scrolling ones. Its point is an absolute (row, column) on
+	// screen, so nothing follows it and the highlight is drawn once over the
+	// whole frame. See screensel.go.
+	onScreen bool
 }
 
 // marked is a selection with its ends ordered, half-open in both axes.

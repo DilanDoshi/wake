@@ -287,6 +287,7 @@ type App struct {
 	selRows   int
 	selecting bool
 	cdrag     composerDrag // query-box drag geometry, captured at its start; see composersel.go
+	rosterHit rosterHit    // the roster row resolved at a press, opened on an empty release; see screensel.go
 
 	// out is the terminal, for the one thing Wake writes that is not a frame.
 	// Nil writes nowhere. See clipboard.go and cmd/wake/output.go.

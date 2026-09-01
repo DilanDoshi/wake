@@ -123,8 +123,10 @@ func (a App) applyGeometry() App {
 	// pointing at the text they were taken on - and a highlight sliding onto
 	// different words is worse than one that goes away. Only a *width* change
 	// re-wraps, which is the same reason it is the only one that returns a
-	// reader to the newest line.
-	if a.layout.Width != a.pending.width {
+	// reader to the newest line. A screen selection is the exception: it is
+	// anchored to absolute screen rows, so a *height* change re-lays the frame
+	// under it too and it must go as well.
+	if a.layout.Width != a.pending.width || (a.sel.onScreen && a.layout.Height != a.pending.height) {
 		a.sel, a.selecting = selection{}, false
 	}
 	a.layout.Width, a.layout.Height, a.layout.Weights = a.pending.width, a.pending.height, a.pending.weights

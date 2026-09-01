@@ -85,23 +85,24 @@ func (a App) drawnComposer(id string, width, height int) (c Composer, below, min
 // unless a query-box drag was taken in it. Its counterpart selectionIn answers
 // the transcript.
 func (a App) composerSelectionIn(id string) marked {
-	if a.sel.empty() || !a.sel.inComposer || a.sel.pane != id {
+	if a.sel.empty() || !a.sel.inComposer || a.sel.onScreen || a.sel.pane != id {
 		return marked{}
 	}
 	return a.sel.marked()
 }
 
-// startComposerSelection takes the anchor a query-box drag runs from, or clears
-// the selection when the press missed the text - the border, the hint, the
-// status bar and an empty box are not text to select, and neither is the blank
-// space past a short line. The press must land on a row's own characters; a drag
-// off their end still extends into the blank and copies only what it trims to,
-// the way it does in the transcript.
+// startComposerSelection takes the anchor a query-box drag runs from. A press
+// not on a draft row falls through to a frame-wide screen selection (the menu
+// above the box, the box borders, the status bar, the armed cue - all rendered
+// text); a press on a draft row but off its typed characters takes nothing,
+// because the prompt, the border and the blank past a short line are not text
+// you typed. The press must land on a row's own characters; a drag off their end
+// still extends into the blank and copies only what it trims to, the way it does
+// in the transcript.
 func (a App) startComposerSelection(id string, col, top, height, x, y int, r Regions) App {
 	draftTop, draftRows, boxWidth, rows, ok := a.composerRegion(id, r.Cols[col], top, height)
-	miss := func() App { a.sel, a.selecting = selection{}, false; return a }
 	if !ok || y < draftTop || y >= draftTop+draftRows {
-		return miss()
+		return a.startScreenSelection(x, y)
 	}
 	paneLeft := a.layout.PaneLeft(r, col)
 	// Gate on the raw press column, not the clamped one: composerPoint pulls a
@@ -111,7 +112,10 @@ func (a App) startComposerSelection(id string, col, top, height, x, y int, r Reg
 	rawCol := x - paneLeft
 	textLen := composerRowTextLen(rows[min(max(y-draftTop, 0), draftRows-1)], boxWidth)
 	if rawCol < composerTextLeft || rawCol >= composerTextLeft+textLen {
-		return miss()
+		// The blank of a draft row is not text - not even a screen selection, or
+		// an empty query box would take a highlight it deliberately does not.
+		a.sel, a.selecting = selection{}, false
+		return a
 	}
 	a.cdrag = composerDrag{draftTop, draftRows, paneLeft, boxWidth, rows}
 	p := a.composerPoint(x, y)

@@ -23,14 +23,24 @@ const dividerGlyph = "│"
 // the same idea.
 const dividerRow = "─"
 
-// View draws the layout: sidebars, the room, the DM beside it, and the notice
-// row.
+// View draws the frame and lays a frame-wide selection's highlight over it.
+//
+// The overlay is a no-op unless a screen selection is live, so an ordinary
+// frame is byte-identical to what assembleFrame produced - and endSelection
+// copies off the same assembleFrame, so the copy is exactly the cells the
+// overlay highlighted at release. See screensel.go.
+func (a App) View() string {
+	return a.overlayScreenSelection(a.assembleFrame())
+}
+
+// assembleFrame draws the layout: sidebars, the room, the DM beside it, and the
+// notice row.
 //
 // The ranked roster is taken once. Fleet.Agents sorts on every call - 6.8µs at
-// 30 agents against a View that costs ~250µs - which is affordable once per
+// 30 agents against a frame that costs ~250µs - which is affordable once per
 // frame and is exactly the sort of per-frame cost that multiplies by thirty if
 // it is paid three times.
-func (a App) View() string {
+func (a App) assembleFrame() string {
 	r := a.regions()
 	h := a.paneHeight()
 	agents := a.fleet.OnRoster()

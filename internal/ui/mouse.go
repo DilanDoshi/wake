@@ -112,10 +112,19 @@ func (a App) rowsOf(col int) (top, bottom int) {
 // took the y coordinate. The workspaces sidebar still answers nothing: a
 // workspace is not a conversation and there is no verb for one yet.
 func (a App) press(x, y int) App {
+	a.rosterHit = rosterHit{} // a fresh press; only a roster press below re-arms it
 	r := a.regions()
 	switch region, at := a.layout.Hit(r, x); region {
 	case RegionDivider:
-		a.dragAt, a.dragRows = at, false
+		// A divider is a divider only over the panes it separates - it is drawn to
+		// paneHeight. Below that the same column is the awareness strip or the
+		// notice row, which is selectable chrome, not a handle to resize (Hit
+		// classifies by x alone, so it cannot tell the two apart on its own).
+		if y >= a.paneHeight() {
+			a = a.startScreenSelection(x, y)
+		} else {
+			a.dragAt, a.dragRows = at, false
+		}
 	case RegionPane:
 		id, top, height, ok := a.paneAt(at, y)
 		if !ok {
@@ -139,18 +148,19 @@ func (a App) press(x, y int) App {
 		a.fleet = a.fleet.Focus(id)
 		a = a.refocus(id)
 	case RegionRoster:
+		// Chrome takes a frame-wide selection so its text can be copied, and the
+		// row's click-to-open resolves on release so a drag copies a name and a
+		// click opens. The target is resolved *now*, not on release: the roster
+		// reorders by attention on every fleet report, so a report between press
+		// and release would otherwise open whatever agent slid onto this row. See
+		// screenClick.
+		a = a.startScreenSelection(x, y)
 		if agent, dispatch, ok := a.clickedAgent(y); ok {
-			a = a.openDMWith(agent.ID, agent.Name)
-			// Both fields together, always. show() writes Selected on every
-			// open and never touches SelectedTask, so a click that resolved to
-			// no dispatch used to leave the *previous* agent's dispatch
-			// attached to this one - a pair Move and walkable cannot produce,
-			// which then draws the cursor on a row nobody clicked and asks this
-			// conversation to show a transcript belonging to another agent.
-			a.roster.Selected, a.roster.SelectedTask = agent.ID, dispatch
-			a = a.viewingPicked(agent.ID)
+			a.rosterHit = rosterHit{id: agent.ID, name: agent.Name, dispatch: dispatch, ok: true}
 		}
-	case RegionNone, RegionGroups:
+	case RegionGroups:
+		a = a.startScreenSelection(x, y)
+	case RegionNone:
 	}
 	return a
 }
@@ -233,7 +243,7 @@ func (a App) transcriptIn(id string) transcript {
 // This is the whole of what a pane knows about selection, which is what keeps
 // transcript a pure value that has never heard of a pane or an id.
 func (a App) selectionIn(id string) marked {
-	if a.sel.empty() || a.sel.inComposer || a.sel.pane != id {
+	if a.sel.empty() || a.sel.inComposer || a.sel.onScreen || a.sel.pane != id {
 		return marked{}
 	}
 	return a.sel.marked()
@@ -299,6 +309,9 @@ func (a App) bannerShowing(id string, rows int) bool {
 // row) leaves the edge a row or two out for the rest of that drag, which is
 // where the stored height it used to read was already.
 func (a App) extendSelection(x, y int) App {
+	if a.sel.onScreen {
+		return a.extendScreenSelection(x, y)
+	}
 	if a.sel.inComposer {
 		return a.extendComposerSelection(x, y)
 	}
@@ -325,6 +338,14 @@ func (a App) endSelection() (App, tea.Cmd) {
 		return a, nil
 	}
 	a.selecting = false
+	if a.sel.onScreen {
+		// A frame-wide drag copies the cells it crossed; a click resolves to the
+		// chrome's own gesture (a roster row opens) and takes no text.
+		if a.sel.empty() {
+			return a.screenClick(), nil
+		}
+		return a, copyToClipboard(a.screenSelectedText())
+	}
 	if a.sel.inComposer {
 		// A drag in the query box copies its own text; a click there took none,
 		// and there is no folded tool under a composer to open the way there is

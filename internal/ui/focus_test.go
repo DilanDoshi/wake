@@ -396,9 +396,9 @@ func TestOnlyTheComposerWithTheKeysIsAccented(t *testing.T) {
 	// go through withFocus, so this is asserting that they still do rather than
 	// a second behaviour - the intersection of "a click moves the focus" and
 	// "the focused box is marked" is otherwise reached by nothing.
-	a = a.press(a.layout.Width-1, 0) // the DM column, with the roster closed
+	a = a.press(midOf(a.regions(), 1), 0) // into the DM column, which takes the keys
 	if a.focus == "" {
-		t.Fatalf("a click at the right-hand edge did not land in the DM (regions %+v), so the accent below proves nothing", a.regions())
+		t.Fatalf("a click in the DM column did not land in the DM (regions %+v), so the accent below proves nothing", a.regions())
 	}
 	if !accented(a.dms["s1"].Composer(), esc) || accented(a.room.Composer(), esc) {
 		t.Error("a click moved the keys and the accent stayed where it was")
