@@ -24,6 +24,15 @@ func clearDetectionEnv(t *testing.T) {
 	} {
 		t.Setenv(k, "")
 	}
+	// cmux is detected by its whole CMUX_ family (like Alacritty's), and this
+	// suite runs inside cmux on the dev machine - so neutralise every CMUX_
+	// var actually set rather than a fixed list, or a test that means "not in a
+	// multiplexer" would detect the ambient one.
+	for _, kv := range os.Environ() {
+		if k, _, ok := strings.Cut(kv, "="); ok && strings.HasPrefix(k, "CMUX_") {
+			t.Setenv(k, "")
+		}
+	}
 }
 
 func TestSetupTerminalFlagsParsesYesAndUndo(t *testing.T) {
@@ -133,6 +142,38 @@ func TestSetupTerminalWritesOnConfirm(t *testing.T) {
 	}
 	path := termsetup.InfoFor(termsetup.Ghostty).ConfigPath(configHome)
 	if _, err := os.Stat(path); err != nil {
+		t.Errorf("the config file was not written: %v", err)
+	}
+}
+
+// Inside cmux the terminal detects as Ghostty and the write goes to the right
+// file, but cmux loads a ghostty-config change only on `cmux reload-config` -
+// so the output must send the operator there and must NOT repeat Ghostty's
+// standalone "reloads automatically" claim, which is false inside cmux and is
+// exactly the false success this fix exists to remove.
+func TestSetupTerminalInCmuxSendsYouToReloadConfig(t *testing.T) {
+	clearDetectionEnv(t)
+	t.Setenv("TERM_PROGRAM", "ghostty")
+	t.Setenv("CMUX_PANEL_ID", "0186FB26")
+	configHome := t.TempDir()
+	t.Setenv("XDG_CONFIG_HOME", configHome)
+	t.Setenv("HOME", t.TempDir())
+
+	var out bytes.Buffer
+	if err := runSetupTerminal([]string{"--yes"}, strings.NewReader(""), &out); err != nil {
+		t.Fatalf("runSetupTerminal: %v", err)
+	}
+	s := out.String()
+	if !strings.Contains(s, "wrote ") {
+		t.Errorf("output does not confirm a write: %q", s)
+	}
+	if !strings.Contains(s, "cmux reload-config") {
+		t.Errorf("output does not tell the operator to run `cmux reload-config`: %q", s)
+	}
+	if strings.Contains(s, "reloads its config automatically") {
+		t.Errorf("output repeats Ghostty's standalone auto-reload claim, which is false inside cmux: %q", s)
+	}
+	if _, err := os.Stat(termsetup.InfoFor(termsetup.Ghostty).ConfigPath(configHome)); err != nil {
 		t.Errorf("the config file was not written: %v", err)
 	}
 }
