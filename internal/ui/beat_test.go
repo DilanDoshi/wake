@@ -202,8 +202,10 @@ func TestThePaneStaysInBoundsWhenItsAgentArrivesAfterSizing(t *testing.T) {
 	}
 }
 
-// The extra row is budgeted, or the pane draws one line more than it was given
-// and the alt screen scrolls on every frame.
+// The extra rows are budgeted, or the pane draws more lines than it was given
+// and the alt screen scrolls on every frame. The working line brings two rows
+// over idle - the line itself and the blank above it - since both states keep
+// the one blank row above the composer.
 func TestTheHeartbeatsRowIsBudgeted(t *testing.T) {
 	const w, h = 60, 20
 	idle := NewDM("s1", "alex")
@@ -214,8 +216,8 @@ func TestTheHeartbeatsRowIsBudgeted(t *testing.T) {
 	busy.Agent = Agent{ID: "s1", State: rpc.StateWorking, startedAt: clock()}
 	busy = busy.SetSize(w, h)
 
-	if busy.chromeHeight() != idle.chromeHeight()+1 {
-		t.Errorf("working chrome is %d rows and idle is %d; the heartbeat's row is not budgeted",
+	if busy.chromeHeight() != idle.chromeHeight()+2 {
+		t.Errorf("working chrome is %d rows and idle is %d; the heartbeat's line and its gap are not budgeted",
 			busy.chromeHeight(), idle.chromeHeight())
 	}
 	if got := lipgloss.Height(busy.View(w, h)); got > h {

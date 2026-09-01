@@ -105,5 +105,8 @@ func (a App) reviewChoose(c Card) (tea.Model, tea.Cmd, bool) {
 	// allow produces no frame of its own. Cards.Reconcile puts back any ask the
 	// next report still names, which is what makes that safe.
 	a.cards = a.cards.Settle(c.AgentID, c.RequestID)
+	// And the room records the close, so the ask's warn line there does not go
+	// stale. Only reached for a question - OnReview above implies ShapeQuestion.
+	a = a.recordQuestionResolved(c.AgentID, true)
 	return a, a.write(answerFailed, c.Allow()), true
 }

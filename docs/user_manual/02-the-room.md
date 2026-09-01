@@ -62,15 +62,18 @@ is labelled.
 ## The panes
 
 ```
-┌─────────────┬───────────────────────────────┬──────────┐
-│ workspaces  │            the room           │ activity │
-│   (⌃G)      │                               │   (⌃R)   │
-│             ├───────────────────────────────┤          │
-│             │        composer               │          │
-└─────────────┴───────────────────────────────┴──────────┘
+┌───────────────────────────────────────────┬──────────┐
+│                 the room                   │ activity │
+│                                            │   (⌃R)   │
+├───────────────────────────────────────────┤          │
+│               composer                     │          │
+└───────────────────────────────────────────┴──────────┘
 ```
 
-**Left — workspaces.** One row per directory you have agents in, with unread counts.
+**Left — workspaces (hidden for now).** There was a left sidebar with one row per directory you
+have agents in, and its unread counts; it is hidden for now and returns with a future
+multi-group-chat version. Until then the awareness strip's `#workspace` segment names the directory
+of the conversation you are in.
 
 **Right — activity.** One row per agent, ordered by whether it needs you: blocked agents first
 with the tool they are waiting on, then working agents stalest-first, then idle. At 30 agents in a

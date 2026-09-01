@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
+
+	"github.com/DilanDoshi/wake/internal/notice"
 )
 
 func TestTheClipboardSequenceIsOSC52(t *testing.T) {
@@ -77,5 +80,77 @@ func TestTheMultiplexerIsReadFromTheEnvironment(t *testing.T) {
 func TestNothingIsCopiedForAnEmptySelection(t *testing.T) {
 	if cmd := copyToClipboard(""); cmd != nil {
 		t.Error("an empty selection must produce no command: there is nothing to put anywhere")
+	}
+}
+
+// A successful copy leaves a confirmation where the UI already looks for one.
+func TestASuccessfulCopyReportsTheCharacterCount(t *testing.T) {
+	notice.Reset()
+	t.Cleanup(notice.Reset)
+
+	app := dmApp(nil, Stream{}, "s1", "alex")
+	m, cmd := app.Update(copiedMsg{seq: "\x1b]52;c;aGVsbG8gd29ybGQh\x07", chars: 13})
+	if _, ok := m.(App); !ok {
+		t.Fatalf("Update(copiedMsg) returned %T, want App", m)
+	}
+	if cmd != nil {
+		cmd()
+	}
+
+	n, said := notice.Latest()
+	if !said {
+		t.Fatal("a successful copy reported no notice")
+	}
+	if want := "copied 13 chars to clipboard"; n.Text != want {
+		t.Errorf("notice = %q, want %q", n.Text, want)
+	}
+}
+
+// The count is what a screen reads as characters, not the encoded byte count -
+// the fix note calls out len([]rune(text)) by name because a multi-byte rune
+// must count once.
+func TestTheCopiedCountIsRunesNotBytes(t *testing.T) {
+	notice.Reset()
+	t.Cleanup(notice.Reset)
+
+	cmd := copyToClipboard("héllo") // 5 runes, 6 bytes
+	if cmd == nil {
+		t.Fatal("non-empty text produced no clipboard command")
+	}
+	msg, ok := cmd().(copiedMsg)
+	if !ok {
+		t.Fatalf("copyToClipboard's command produced %T, want copiedMsg", cmd())
+	}
+	if msg.chars != 5 {
+		t.Errorf("copiedMsg.chars = %d, want 5", msg.chars)
+	}
+}
+
+// OSC 52 went out regardless of whether the machine's own clipboard subprocess
+// could run, so a native failure still confirms the copy - in one notice, which
+// also names the failure rather than dropping it into a second slot nothing
+// would show (notice keeps only the most recent).
+func TestTheNativeFailureNoticeConfirmsTheCopyAndNamesTheFailure(t *testing.T) {
+	notice.Reset()
+	t.Cleanup(notice.Reset)
+
+	app := dmApp(nil, Stream{}, "s1", "alex")
+	m, cmd := app.Update(copiedMsg{seq: "x", chars: 3, err: errors.New("pbcopy: not found")})
+	if _, ok := m.(App); !ok {
+		t.Fatalf("Update(copiedMsg) returned %T, want App", m)
+	}
+	if cmd != nil {
+		cmd()
+	}
+
+	n, said := notice.Latest()
+	if !said {
+		t.Fatal("a copy that hit a native-clipboard error reported no notice")
+	}
+	if !strings.Contains(n.Text, "copied 3 chars") {
+		t.Errorf("notice = %q, want it to confirm the copy still happened over OSC 52", n.Text)
+	}
+	if !strings.Contains(n.Text, "pbcopy: not found") {
+		t.Errorf("notice = %q, want it to name the native-clipboard failure, not swallow it", n.Text)
 	}
 }

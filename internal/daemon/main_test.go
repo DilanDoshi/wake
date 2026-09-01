@@ -860,14 +860,20 @@ func fakeModelProbe(sid string) int {
 	emitInit(sid)
 	emitText(sid, "ready")
 	emitResult(sid)
-	effort := "max"
+	effort, model := "max", "Opus 5 (1M context)"
 	for line := range stdinLines() {
 		switch {
 		case strings.Contains(line, `"text":"/model"`):
-			emitText(sid, "Current model: Opus 5 (1M context) (effort: "+effort+")")
+			emitText(sid, "Current model: "+model+" (effort: "+effort+")")
+			emitResult(sid)
+		case strings.Contains(line, `"text":"/model `):
+			// A runtime /model change: the next bare-/model probe reports it, the
+			// way 2.1.232 renders the newly selected model back.
+			model = argAskedIn(line, "/model ")
+			emitText(sid, "echo: "+line)
 			emitResult(sid)
 		case strings.Contains(line, `"text":"/effort `):
-			effort = effortAskedIn(line)
+			effort = argAskedIn(line, "/effort ")
 			emitText(sid, "echo: "+line)
 			emitResult(sid)
 		default:
@@ -878,9 +884,10 @@ func fakeModelProbe(sid string) int {
 	return 0
 }
 
-// effortAskedIn pulls the level out of a "text":"/effort <level>" user line.
-func effortAskedIn(line string) string {
-	const marker = `"text":"/effort `
+// argAskedIn pulls the argument out of a "text":"<cmd> <arg>" user line, for
+// the fake to echo back what a runtime /effort or /model asked for.
+func argAskedIn(line, cmd string) string {
+	marker := `"text":"` + cmd
 	i := strings.Index(line, marker)
 	if i < 0 {
 		return ""

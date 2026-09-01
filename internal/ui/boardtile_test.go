@@ -167,10 +167,11 @@ func TestATileNeverOvershootsItsCellHeightWhenTheTailWraps(t *testing.T) {
 }
 
 // The tiled wall relaxes the DM preview's three-row cap (maxPreviewRows): a big
-// cell retains up to maxTileTailRows of live tail so it fills with output
-// rather than stopping at three rows - the board's narrowed guardrail 2,
-// bounded and with no scrollback. The DM preview and the inbox fold keep the
-// three-row cap; only the tile tail is raised.
+// cell retains as much live tail as its own body can draw (tileTailCap) so it
+// fills with output rather than stopping at three rows - the board's narrowed
+// guardrail 2, bounded to the cell body and with no scrollback. The DM preview
+// and the inbox fold keep the three-row cap; only the tile tail is raised, and
+// only to what the cell can show.
 func TestABigTileFillsWithMoreTailThanTheDMPreviewCap(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
@@ -187,8 +188,8 @@ func TestABigTileFillsWithMoreTailThanTheDMPreviewCap(t *testing.T) {
 	if rows <= maxPreviewRows {
 		t.Fatalf("the tile tail retained %d rows, want more than the DM cap of %d", rows, maxPreviewRows)
 	}
-	if rows > maxTileTailRows {
-		t.Fatalf("the tile tail retained %d rows, past its own cap of %d", rows, maxTileTailRows)
+	if cap := a.tileTailCap(); rows > cap {
+		t.Fatalf("the tile tail retained %d rows, past its own cell body budget of %d", rows, cap)
 	}
 }
 

@@ -32,7 +32,6 @@ const (
 
 	thinkingLabel   = "✻ thinking"
 	permissionLabel = "⚠ permission request"
-	rateLimitLabel  = "⚠ rate limit:"
 	compactedLabel  = "⟲ context compacted"
 	deniedLabel     = "⊘ permission denied"
 
@@ -355,7 +354,13 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		// answer.
 		return mutedLine(withdrawnLabel, w)
 	case core.KindRateLimit:
-		return noticeBlock(ev, w)
+		// A quota heartbeat draws nothing in the scrollback: a warning is a
+		// timed pop-up above the composer (ratelimit.go, where observe routes the
+		// live event) and a benign `allowed` is chrome. Explicit rather than left
+		// to default so the one kind whose transcript block was removed says so
+		// where the block used to be - a rate_limit frame never reaches history
+		// either, since DecodeTranscriptLine keeps only assistant and user lines.
+		return ""
 	case core.KindSystem:
 		// A dispatch ending is the one system frame that leaves a line: it is
 		// a thing that happened, in an order, which is what a transcript is
@@ -450,13 +455,27 @@ func userBlock(ev core.Event, width int) string {
 // five lines of exactly 40 cells, so the padding is display-width aware and a
 // wide-character message shades correctly.
 //
-// Below one column there is nothing to shade and Width(0) means "unbounded",
-// which would draw the message on one endless line.
+// PaddingLeft(bodyIndent) sits the text under the reply beneath it - Width is
+// padding-inclusive, so the rectangle stays width cells and the shade fills the
+// two indent columns too, the way thinkingBlock aligns its plain body but with a
+// ground under it. Only labels and markers stay at the edge.
+//
+// The indent is applied only when there is room for it. At width <= bodyIndent
+// the padding is the whole line, so Width leaves zero cells for the text and
+// wraps nothing - one unbounded line rather than the solid rectangle this whole
+// function is for. Below that the shade is kept but not the indent, and below
+// one column Width(0) means "unbounded" so there is nothing to shade at all.
+// Both are unreachable today - every caller floors at minBlockWidth - but the
+// guard belongs on the function, not on the callers that happen to floor it.
 func shadedOwn(text string, width int) string {
 	if width < 1 {
 		return TextStyle.Render(text)
 	}
-	return OwnStyle.Width(width).Render(text)
+	style := OwnStyle.Width(width)
+	if width > bodyIndent {
+		style = style.PaddingLeft(bodyIndent)
+	}
+	return style.Render(text)
 }
 
 // thinkingBlock shows what the agent was reasoning about, not just that it
@@ -513,14 +532,11 @@ func permissionBlock(ev core.Event, width int) string {
 
 // noticeBlock draws the events core.Notice picked out, and nothing else.
 //
-// A rate limit is the one that carries data alongside its label: the status
-// string is what the reader needs and it is a value, not a wire word, so it
-// is passed through. The benign status earns no notice at all and so never
-// reaches here - drawing it is chrome.
+// A rate limit is not among them: it is a timed pop-up above the composer now
+// (kindBlock's KindRateLimit case, ratelimit.go), not a transcript line, so
+// NoticeRateLimited never reaches here - every other Notice arrives on a user
+// or system frame.
 func noticeBlock(ev core.Event, width int) string {
-	if ev.Notice == core.NoticeRateLimited {
-		return warnLine(rateLimitLabel+" "+ev.Text, width)
-	}
 	label, ok := noticeLabel[ev.Notice]
 	if !ok {
 		return ""

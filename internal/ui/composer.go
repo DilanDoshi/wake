@@ -155,8 +155,9 @@ func targetLine(r roomRoute, turns int) string {
 // intact. TestResetReturnsANewComposer pins that.
 type Composer struct {
 	ta textarea.Model
-	// mode is the permission mode the legend names, set by whoever draws this
-	// composer rather than held as a belief here - see WithMode.
+	// mode is the permission mode the status bar names, set by whoever draws
+	// this composer rather than held as a belief here - see WithMode. The legend
+	// no longer draws it; the bar reads it back through Mode().
 	mode string
 
 	// target is the line above the legend: where ↵ will send what is being
@@ -373,11 +374,18 @@ func (c Composer) reposition() Composer {
 	return c
 }
 
-// View renders the box and the hint line beneath it at the given pane width.
+// View renders the box, the optional info bar, and - only while an arm is live
+// - the armed cue beneath it, at the given pane width.
 //
-// Every line of the result fits within width — the hint is truncated rather
-// than allowed to run at its natural length. The grid joins panes on their
-// widest line, so one over-wide hint would shove its neighbours out of place.
+// Every line of the result fits within width — the cue is truncated rather than
+// allowed to run at its natural length. The grid joins panes on their widest
+// line, so one over-wide cue would shove its neighbours out of place.
+//
+// An unarmed composer draws no cue row at all: the always-on key hints and the
+// permission mode both moved to the status bar. What is left is the safety
+// confirmation - `↵ detach   ⌃O cancel`, or `esc clear draft`/`esc rewind` -
+// which is the only on-screen tell that the next keypress is irreversible. See
+// legend.go.
 func (c Composer) View(width int) string {
 	width = max(width, minComposerWidth)
 	c = c.SetWidth(width)
@@ -385,21 +393,27 @@ func (c Composer) View(width int) string {
 	if c.target != "" {
 		rows = append(rows, " "+AccentStyle.MaxWidth(width-hintIndentWidth).Render(c.target))
 	}
-	// The info bar above the legend: what this session is, over what a key does.
-	// Placed flush-left and verbatim - statusBar already truncated it to width,
-	// so it fits, and it carries its own SGR that a second measure would cut.
+	// The info bar above the cue: what this session is, over what an armed key
+	// does. Placed flush-left and verbatim - statusBar already truncated it to
+	// width, so it fits, and it carries its own SGR that a second measure would
+	// cut.
 	if c.bar != "" {
 		rows = append(rows, c.bar)
 	}
-	// The mode is withheld from a blurred pane: it is the one legend entry that
-	// reads as a claim about the pane rather than about the keys, and the keys
-	// are somewhere else. See modeFormat.
-	mode := c.mode
-	if c.blurred {
-		mode = ""
+	// The cue row is drawn iff an arm is live, the one predicate overhead counts
+	// the row by too - so the height and the draw cannot disagree.
+	if c.showsCue() {
+		rows = append(rows, " "+HintStyle.Render(armedCue(c.arms, width-hintIndentWidth)))
 	}
-	hint := HintStyle.Render(hintFitting(mode, width-hintIndentWidth, c.arms))
-	return strings.Join(append(rows, " "+hint), "\n")
+	return strings.Join(rows, "\n")
+}
+
+// showsCue is whether this composer draws its one legend row: only while an arm
+// is live. It is the row overhead accounts for and View draws, held to one
+// predicate so a pane sized without the row is never drawn with it - the
+// alt-screen hazard DM.chrome exists for, in the composer's own chrome.
+func (c Composer) showsCue() bool {
+	return c.arms != legendArms{}
 }
 
 // box is the bordered input with the pane's name set into its top edge, the
@@ -482,9 +496,13 @@ func (c Composer) WithMaxRows(n int) Composer {
 }
 
 // overhead is the rows the composer spends on everything that is not the
-// draft, which is what a pane subtracts before deciding what it can lend.
+// draft, which is what a pane subtracts before deciding what it can lend. The
+// cue row is counted only while it is drawn - showsCue is View's own predicate.
 func (c Composer) overhead() int {
-	rows := boxBorderRows + 1 // the box's two edges, and the hint line
+	rows := boxBorderRows // the box's two edges
+	if c.showsCue() {
+		rows++
+	}
 	if c.target != "" {
 		rows++
 	}
@@ -557,7 +575,8 @@ func (c Composer) draftRows(bound int) int {
 // WithTitle names the pane this composer belongs to.
 func (c Composer) WithTitle(t string) Composer { c.title = t; return c }
 
-// WithBar sets the pre-rendered info line drawn between the box and the legend.
+// WithBar sets the pre-rendered info line drawn below the box, above the armed
+// cue on the frames one is drawn.
 func (c Composer) WithBar(bar string) Composer { c.bar = bar; return c }
 
 // WithColor gives this composer its agent's identity hue, so the border and the
@@ -670,13 +689,15 @@ func cursorRow(ta textarea.Model) [2]int {
 	return [2]int{ta.Line(), info.RowOffset}
 }
 
-// Mode is the permission mode this composer's legend names.
+// Mode is the permission mode this composer's status bar names, read back by
+// the pane's withBar.
 func (c Composer) Mode() string { return c.mode }
 
-// WithMode says which mode the legend names, and it is set at draw time by
-// whoever knows *whose* mode this composer is about - App.roomPane and
-// App.dmPane. It is not a belief held here: a composer is a text box, and the
-// one fact this whole feature exists to keep honest may not have a second home.
+// WithMode says which mode this composer's status bar names, and it is set at
+// draw time by whoever knows *whose* mode this composer is about - App.roomPane
+// and App.dmPane. It is not a belief held here: a composer is a text box, and
+// the one fact this whole feature exists to keep honest may not have a second
+// home.
 func (c Composer) WithMode(mode string) Composer {
 	if mode != "" {
 		c.mode = mode
@@ -707,11 +728,15 @@ func (c Composer) Reset() Composer {
 
 // WithDraft replaces the draft and puts the cursor at its end.
 //
-// Two callers: the picker's typed escape, which hands back a half-written
-// command for somebody to finish, and a prompt walk. It is a *replacement*
-// rather than an insert because the picker only opens over an empty composer, so
-// there is nothing to preserve and an insert would be an API that implies
-// otherwise.
+// Three callers: the picker's typed escape, which hands back a half-written
+// command for somebody to finish; a prompt walk; and starts.go's draftMention.
+// It is a *replacement* rather than an insert because the first two only ever
+// reach this over an empty composer - the picker opens over one and a walk
+// owns the whole draft - so there is nothing to preserve and an insert would
+// be an API that implies otherwise. draftMention is the one caller that could
+// reach a non-empty composer, and it gates itself before calling here rather
+// than asking this to insert - dropping a fresh spawn's mention is cheaper
+// than silently appending one onto a message the operator is mid-typing.
 //
 // It clears the walk for Reset's reason - a draft put here from anywhere else is
 // not a position in the history - and Composer.walked writes the position back

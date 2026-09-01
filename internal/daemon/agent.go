@@ -54,6 +54,7 @@ import (
 	"cmp"
 	"context"
 	"path/filepath"
+	"slices"
 	"sync"
 	"time"
 
@@ -134,6 +135,13 @@ type agent struct {
 	// Not written to the park book: a woken session re-probes and re-confirms.
 	confirmedEffort string
 
+	// confirmedModel is the model's display name the same /model probe read back
+	// ("Opus 5 (1M context)"), or "" before one has answered. Display prefers it
+	// over the init frame's raw id: after a runtime /model the id on the wire is
+	// a turn stale, and this is re-read at once. Not park-persisted, for
+	// confirmedEffort's reason.
+	confirmedModel string
+
 	// pendingProbes counts effort-probe /model replies still expected; fanOut
 	// swallows a reply while it is positive. A counter rather than a bool
 	// because two probes can be in flight at once - two quick /effort changes,
@@ -163,6 +171,12 @@ type agent struct {
 	// the report is the only route to them for such a client. Display only, like
 	// cwd, and updated on the receipt the same way. See rpc.SessionStatus.Commands.
 	commands []string
+
+	// prs is the GitHub pull requests this session has opened, scraped from the
+	// tool result `gh pr create` prints and carried on the report so a client that
+	// attached after the PR was opened still learns it - Commands' own reason. It
+	// only accumulates; see prs.go and rpc.SessionStatus.PRs.
+	prs []int
 
 	// parent is the session this one was forked from, or empty. Immutable
 	// after newAgent and display only, exactly like label: nothing addresses an
@@ -323,6 +337,16 @@ func (a *agent) observe(ev core.Event) {
 	// same way withFacts guards against. See rpc.SessionStatus.Commands.
 	if ev.Session != nil && len(ev.Session.SlashCommands) > 0 {
 		a.commands = ev.Session.SlashCommands
+	}
+
+	// A session opens a PR by running `gh pr create`, whose tool result prints
+	// the URL. Scraped off the decoded text of a result frame - never prose - and
+	// carried on the report. **This session's own**, not a subagent's: a forwarded
+	// result decodes to KindToolResult too, and a subagent's PR is not the parent's
+	// - the ev.Subagent==nil gate is the tree's own rule for tool activity (fold,
+	// rollup, checklist all keep it). See prs.go.
+	if ev.Kind == core.KindToolResult && ev.Subagent == nil {
+		a.prs = recordPRs(a.prs, ev.Text)
 	}
 
 	switch ev.Kind {
@@ -676,22 +700,24 @@ func (a *agent) snapshot() rpc.SessionStatus {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	st := rpc.SessionStatus{
-		ID:         a.id,
-		Name:       a.name,
-		Label:      a.label,
-		Color:      a.color,
-		Dir:        a.dir,
-		Cwd:        a.runningIn(),
-		ParentID:   a.parent,
-		Tool:       a.tool,
-		ToolArg:    a.toolArg,
-		Effort:     cmp.Or(a.confirmedEffort, a.effort),
-		Budget:     a.budget,
-		Commands:   a.commands,
-		State:      a.stateLocked(time.Now()),
-		RequestIDs: a.pendingIDsLocked(),
-		PID:        a.sess.Pgid(),
-		QuietMS:    time.Since(a.lastEvent).Milliseconds(),
+		ID:             a.id,
+		Name:           a.name,
+		Label:          a.label,
+		Color:          a.color,
+		Dir:            a.dir,
+		Cwd:            a.runningIn(),
+		ParentID:       a.parent,
+		Tool:           a.tool,
+		ToolArg:        a.toolArg,
+		Effort:         cmp.Or(a.confirmedEffort, a.effort),
+		ConfirmedModel: a.confirmedModel,
+		Budget:         a.budget,
+		Commands:       a.commands,
+		PRs:            slices.Clone(a.prs),
+		State:          a.stateLocked(time.Now()),
+		RequestIDs:     a.pendingIDsLocked(),
+		PID:            a.sess.Pgid(),
+		QuietMS:        time.Since(a.lastEvent).Milliseconds(),
 	}
 	switch {
 	case a.err != nil:

@@ -147,6 +147,12 @@ func (a App) commitAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 			reason = text
 		}
 		a.cards = a.cards.Settle(c.AgentID, c.RequestID).stopWriting()
+		// A refused question leaves a room record too, the counterpart of the
+		// answered one - questions only, since a permission or a plan deny is a
+		// verb the room does not announce specially (see cardroom.go).
+		if c.Shape() == ShapeQuestion {
+			a = a.recordQuestionResolved(c.AgentID, false)
+		}
 		return a.clearDraft(), a.write(answerFailed, c.Deny(reason)), true
 	}
 	if text == "" {

@@ -102,6 +102,22 @@ func Latest() (Notice, bool) {
 	return Notice{Text: newest, Count: counts[newest]}, true
 }
 
+// ClearIf forgets the current notice only if it is still the given text.
+//
+// A timed notice (see internal/ui/ratelimit.go) uses it so its own expiry
+// clears the warning it set, and never a fresher failure that overwrote the
+// slot in the meantime. The count is dropped with it, so the same message
+// reported again starts counting from one rather than resuming a stale total.
+func ClearIf(text string) {
+	mu.Lock()
+	defer mu.Unlock()
+	if newest != text {
+		return
+	}
+	delete(counts, text)
+	newest, present = "", false
+}
+
 // Count is how many times one exact message has been reported. Zero for a
 // message that never has been.
 func Count(text string) int {

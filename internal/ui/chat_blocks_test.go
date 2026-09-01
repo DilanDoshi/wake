@@ -14,6 +14,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -254,6 +255,65 @@ func TestTheQuietMarkerIsNotDrawnAsAThirdHalfOfTheAgentsName(t *testing.T) {
 	if !strings.Contains(b.text, "auth-fix") {
 		t.Errorf("the marker does not say what the agent was working on:\n%s", b.text)
 	}
+}
+
+// Your own room turn lines up with the agents' replies. It sits at bodyIndent -
+// render.Markdown's two-column margin - so the shaded turn reads as part of the
+// same column rather than a block shoved against the edge. The room shades
+// without a label, so the indent is all that sets your words off the pane edge.
+func TestYourOwnRoomTurnAlignsWithAnAgentsReply(t *testing.T) {
+	forceColour(t)
+	const w = roomWidth
+	const body = "check the retry header on a 401 refresh path and then report what you find"
+
+	// Where an agent's prose starts in the room, off the real agentSaid render.
+	reply := agentSaid(body, 0, Agent{Name: "sydney"}, w, false)
+	want := indentOf(stripANSI(reply), "check")
+	if want != bodyIndent {
+		t.Fatalf("precondition: an agent's room reply starts at column %d, not bodyIndent (%d)", want, bodyIndent)
+	}
+
+	out := youSaid("@sydney "+body, w)
+	if got := indentOf(stripANSI(out), "check"); got != want {
+		t.Errorf("your own room turn starts at column %d, an agent's reply at %d - they do not line up:\n%s", got, want, out)
+	}
+
+	// Solid shaded rectangle to end of line, wrapped lines included.
+	bg := background(t)
+	for i, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, bg) {
+			t.Errorf("room turn line %d lost its shaded ground:\n%q", i, line)
+		}
+		if cells := lipgloss.Width(line); cells != w {
+			t.Errorf("room turn line %d is %d cells against width %d - the ground is ragged, not a rectangle", i, cells, w)
+		}
+	}
+
+	// The leading @mention keeps its colour at the indented position. It rides a
+	// compound SGR beside Own's ground, so assert the mention colour parameter in
+	// the escape directly before the handle rather than a bare escape.
+	param := mentionParam(t)
+	idx := strings.Index(out, "@sydney")
+	if idx < 0 {
+		t.Fatalf("the @handle vanished from your own turn:\n%q", out)
+	}
+	lead := out[:idx]
+	esc := lead[strings.LastIndex(lead, "\x1b["):]
+	if !strings.Contains(esc, param) {
+		t.Errorf("the leading @mention lost its colour: the escape before it is %q, missing the mention parameter %q", esc, param)
+	}
+}
+
+// mentionParam is the SGR parameter lipgloss emits for the mention colour at the
+// forced profile - "94" for bright blue, say - derived rather than hard-coded so
+// the assertion is about whether the colour is applied, not how it is spelled.
+func mentionParam(t *testing.T) string {
+	t.Helper()
+	esc, _, ok := strings.Cut(lipgloss.NewStyle().Foreground(Mention).Render("x"), "x")
+	if !ok || esc == "" {
+		t.Fatalf("lipgloss emitted no escape for the mention colour at this profile")
+	}
+	return strings.TrimSuffix(strings.TrimPrefix(esc, "\x1b["), "m")
 }
 
 func TestYourOwnMessageIsDrawnAsYours(t *testing.T) {
