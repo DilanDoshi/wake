@@ -163,8 +163,9 @@ func TestAnArmedPaneSaysTheNextEscClears(t *testing.T) {
 	a = a.withDraft("keep me")
 
 	before := shown(a)
-	if !strings.Contains(before, escInterruptLabel) {
-		t.Fatalf("the legend does not name ⎋ at all before the arm:\n%s", before)
+	if strings.Contains(before, escClearLabel) {
+		t.Fatalf("the composer already says %q before the arm, so this test cannot tell the cue from "+
+			"the ordinary frame:\n%s", escClearLabel, before)
 	}
 
 	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})

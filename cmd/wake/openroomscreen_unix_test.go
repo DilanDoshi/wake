@@ -110,7 +110,7 @@ func TestFirstRunsAgentIsReachableWhereTheRosterIsNotDrawn(t *testing.T) {
 
 	// Waited for by title rather than by await(): the pooled name is not known
 	// in advance, and every string a conversation puts on screen here - "@",
-	// "╭", the legend - is already on the room's own frame at this width. What
+	// "╭", the status bar - is already on the room's own frame at this width. What
 	// changes is which conversation the one drawn pane is titled for, since
 	// below the takeover the room goes off screen rather than shrinking.
 	for deadline := time.Now().Add(screenTimeout); ; time.Sleep(20 * time.Millisecond) {

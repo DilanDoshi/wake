@@ -197,9 +197,9 @@ func TestQuitParksTheFleetAndTheNextRunComesBackEmpty(t *testing.T) {
 	s.await("Parking")
 
 	again := startWake(t, 100, 30)
-	// A durable fact rather than a notice: the legend is drawn on every frame,
-	// and the notice row shows only the newest thing said.
-	again.await("detach")
+	// A durable fact rather than a notice: the room's composer names the group
+	// chat on every frame, where the notice row shows only the newest thing said.
+	again.await("group chat")
 	again.settle()
 
 	// Nothing about the parked session is on screen - no roster row, and no
