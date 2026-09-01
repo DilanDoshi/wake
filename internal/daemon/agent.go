@@ -142,6 +142,13 @@ type agent struct {
 	// confirmedEffort's reason.
 	confirmedModel string
 
+	// observedModel is the model id seen on this session's init frame - the
+	// resolved id, distinct from a.model (the spawn alias, empty for a default
+	// spawn). Carried on the report so a client that never witnessed the init
+	// still names the model; display only. Not the same as confirmedModel, which
+	// is the probe's display name and preferred when present.
+	observedModel string
+
 	// pendingProbes counts effort-probe /model replies still expected; fanOut
 	// swallows a reply while it is positive. A counter rather than a bool
 	// because two probes can be in flight at once - two quick /effort changes,
@@ -337,6 +344,14 @@ func (a *agent) observe(ev core.Event) {
 	// same way withFacts guards against. See rpc.SessionStatus.Commands.
 	if ev.Session != nil && len(ev.Session.SlashCommands) > 0 {
 		a.commands = ev.Session.SlashCommands
+	}
+
+	// The resolved model id off init, carried on the report for a client that
+	// never saw the init. Only when a frame names one: a result frame carries
+	// none, and blanking it once a turn would empty the tile's model the way the
+	// Commands guard above prevents. See rpc.SessionStatus.Model.
+	if ev.Session != nil && ev.Session.Model != "" {
+		a.observedModel = ev.Session.Model
 	}
 
 	// A session opens a PR by running `gh pr create`, whose tool result prints
@@ -711,6 +726,7 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		ToolArg:        a.toolArg,
 		Effort:         cmp.Or(a.confirmedEffort, a.effort),
 		ConfirmedModel: a.confirmedModel,
+		Model:          a.observedModel,
 		Budget:         a.budget,
 		Commands:       a.commands,
 		PRs:            slices.Clone(a.prs),
