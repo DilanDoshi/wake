@@ -727,17 +727,18 @@ func TestPermissionRequestIsVisible(t *testing.T) {
 	assertShows(t, d, 60, 20, "permission")
 }
 
-// The only rate-limit status ever recorded is "allowed", once per process.
-// Drawing that on every DM is chrome; anything else is the reason the agent
-// stalled.
-func TestRateLimitShowsOnlyWhenItIsNotAllowed(t *testing.T) {
+// A rate limit never draws in the transcript at all now: a warning is a timed
+// pop-up above the composer (ratelimit.go, TestARateLimitNeverDrawsInThe-
+// Transcript) and a benign `allowed` heartbeat is chrome. This asserts the DM
+// side of that - the renderer draws nothing for either.
+func TestRateLimitDrawsNoTranscriptBlock(t *testing.T) {
 	quiet := NewDM("s1", "alex").SetSize(60, 20).
 		Append(core.Event{Kind: core.KindRateLimit, Text: "allowed"})
 	assertHides(t, quiet, 60, 20, "allowed")
 
 	loud := NewDM("s1", "alex").SetSize(60, 20).
 		Append(core.Event{Kind: core.KindRateLimit, Text: "exhausted", Notice: core.NoticeRateLimited})
-	assertShows(t, loud, 60, 20, "exhausted")
+	assertHides(t, loud, 60, 20, "exhausted")
 }
 
 // --- user turns and Echoed ---------------------------------------------

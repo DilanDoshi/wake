@@ -532,7 +532,7 @@ func (a App) mentionCommand(who, text string) (App, tea.Cmd, bool) {
 //
 // Named for its half of the overload rather than `commandCount`, which this
 // package's tests already use for how many goroutines one tea.Cmd costs.
-const wakeCommandCount = 11
+const wakeCommandCount = 12
 
 // slash routes one draft, reporting whether Wake took it.
 //
