@@ -297,11 +297,14 @@ func youSaid(text string, width int) string {
 	if _, ok := commandInvocation(body); ok {
 		return commandLine(body, width)
 	}
-	// MaxWidth is deliberately not set beside Width. Width wraps to the pane;
-	// MaxWidth would *cut* whatever the wrap could not place, which is the
-	// behaviour this function is losing - and on an unbreakable token (a URL, a
-	// path) the two disagree, with MaxWidth winning.
-	return OwnStyle.Width(width).Render(colourMention(body))
+	// Shaded through shadedOwn, the same primitive the DM's own turn uses, so the
+	// indent that lines the text up with the agents' replies, the width-cell
+	// rectangle and the width<=bodyIndent guard are one implementation rather than
+	// two. colourMention tints the leading @handle first; shadedOwn draws the
+	// ground under it and rides the tint in at the indent. It wraps to the pane
+	// and is never MaxWidth, which would *cut* an unbreakable token (a URL, a
+	// path) rather than wrap it - the behaviour this function exists to lose.
+	return shadedOwn(colourMention(body), width)
 }
 
 // leadingMention is the @handle a room message opens with, which is the whole

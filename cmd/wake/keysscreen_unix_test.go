@@ -118,10 +118,11 @@ func TestBroadcastReachesEveryAgentAndEchoesOnce(t *testing.T) {
 	// package run. See screen.awaitCount and bugs.md BUG-7.
 	s.awaitCount(heardPrefix+"stand up", 2)
 	// The echo is its own line and keeps the mention, so the room is a record of
-	// who each message went to.
+	// who each message went to. Your own turn sits at the reply's indent now, so
+	// the mention leads the line's text rather than its first column.
 	echoes := 0
 	for _, line := range s.lines() {
-		if strings.HasPrefix(line, "@all stand up") {
+		if strings.HasPrefix(strings.TrimLeft(line, " "), "@all stand up") {
 			echoes++
 		}
 	}
