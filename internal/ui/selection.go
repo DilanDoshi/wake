@@ -30,6 +30,15 @@ type selection struct {
 	// cursor - see clickedTool.
 	refocused bool
 
+	// bannerHit marks a press that landed on the follow banner - decided once,
+	// at press time, from the same freshly measured geometry the draw used
+	// (transcriptRows), rather than re-derived from the DM's own stored
+	// transcript at release. The stored one is stale whenever chrome has moved
+	// without a resize (a preview row, the working line), which is
+	// transcriptRows's own reason to exist - re-deriving at release would put
+	// the banner back on the wrong side of that gap. See followbanner.go.
+	bannerHit bool
+
 	// inComposer marks a selection taken inside a pane's query box rather than
 	// its transcript. Its point.line is a draft-row index and point.col is a
 	// column into the typed text (0 is the first character after the "> "

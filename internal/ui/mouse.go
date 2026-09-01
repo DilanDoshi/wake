@@ -268,8 +268,25 @@ func (a App) startSelection(id string, col, top, height, x, y int, r Regions, re
 	}
 	a.selTop, a.selRows = top, rows
 	p := a.pointIn(id, x-a.layout.PaneLeft(r, col), y)
-	a.sel, a.selecting = selection{pane: id, anchor: p, head: p, refocused: refocused}, true
+	a.sel, a.selecting = selection{
+		pane: id, anchor: p, head: p, refocused: refocused,
+		bannerHit: y == top+rows-1 && a.bannerShowing(id, rows),
+	}, true
 	return a
+}
+
+// bannerShowing reports whether a DM's follow banner draws on its own last
+// transcript row at rows - the height transcriptRows just measured for this
+// press, rather than the DM's own possibly-stale stored one. See
+// followbanner.go.
+func (a App) bannerShowing(id string, rows int) bool {
+	dm, ok := a.dms[id]
+	if !ok {
+		return false
+	}
+	tr := dm.tr
+	tr.height = rows
+	return tr.followLine() >= 0
 }
 
 // extendSelection moves the end the pointer is on, scrolling the pane when the
@@ -362,6 +379,15 @@ func (a App) clickedTool() App {
 	dm, ok := a.dms[a.sel.pane]
 	if !ok {
 		return a
+	}
+	// Tried first: the banner replaces whatever the transcript actually drew on
+	// that line, so a run or a result registered against it is not what the
+	// reader sees or clicked. Decided at press time (selection.bannerHit) and
+	// not re-derived here, which would need the DM's own stored transcript -
+	// stale whenever chrome has moved since the last resize. See
+	// followbanner.go.
+	if a.sel.bannerHit {
+		return a.withDM(a.sel.pane, dm.JumpToLatest())
 	}
 	if next, hit := dm.openRun(a.sel.anchor.line); hit {
 		return a.withDM(a.sel.pane, next)
