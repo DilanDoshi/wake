@@ -9,6 +9,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 func TestFocusAdmits(t *testing.T) {
@@ -97,6 +98,50 @@ func TestRoomViewNarrowsToFocus(t *testing.T) {
 	back := r.View(80, 24)
 	if !strings.Contains(back, "still building") || !strings.Contains(back, "hurry") {
 		t.Fatalf("unfocus did not restore hidden lines")
+	}
+}
+
+// The reported bug: with the room narrowed to @john, the operator sees their
+// own messages and the manager's but not john's own replies - "sometimes". The
+// "sometimes" is a /clear: the room line is attributed by the event's own
+// session_id, which claude mints anew mid-process on a /clear (fanout.go), while
+// focus is the id Wake spawned under. When they diverge, the focused agent's own
+// prose is hidden. Driven through the live path so the frame id and the event id
+// can differ the way they do after a /clear.
+func TestFocusStillShowsTheAgentsOwnReplyAfterItsSessionIdDrifts(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withAgents("john", "iris", "manager")
+	john := idOfAgentNamed(t, a, "john")
+	iris := idOfAgentNamed(t, a, "iris")
+	mgr := idOfAgentNamed(t, a, "manager")
+
+	// Narrow to john by making @john the composer's target.
+	a = a.withDraft("@john ")
+	if a.room.focus != john {
+		t.Fatalf("precondition: @john did not narrow the room (focus=%q, want %q)", a.room.focus, john)
+	}
+
+	// john replies. The frame is addressed by the spawn id, but the event's own
+	// session_id has drifted - the shape a /clear produces.
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: john, Event: &core.Event{
+		Kind: core.KindAssistantText, SessionID: john + "-after-clear", Text: "john here, tests are green",
+	}})
+	// The manager replies (its id has not drifted) and iris replies.
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: mgr, Event: &core.Event{
+		Kind: core.KindAssistantText, SessionID: mgr, Text: "manager coordinating",
+	}})
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: iris, Event: &core.Event{
+		Kind: core.KindAssistantText, SessionID: iris, Text: "iris still building",
+	}})
+
+	out := shown(a)
+	if !strings.Contains(out, "tests are green") {
+		t.Errorf("the room narrowed to @john hid john's own reply:\n%s", out)
+	}
+	if !strings.Contains(out, "manager coordinating") {
+		t.Errorf("the room narrowed to @john hid the manager's reply:\n%s", out)
+	}
+	if strings.Contains(out, "iris still building") {
+		t.Errorf("the room narrowed to @john leaked iris's reply:\n%s", out)
 	}
 }
 
