@@ -686,13 +686,11 @@ type Event struct {
 	// turn, and nothing may key suppression or de-duplication on it.
 	FromRoom bool `json:"from_room,omitempty"`
 
-	// FromName and FromAddr attribute a KindCrossSession event: the peer's
-	// display name (its own --name) and its cc-socks address. FromName is what
-	// the room heads the line with, matched to a fleet agent for its colour;
-	// set by the decoder off the <cross-session-message> envelope and empty on
-	// every other kind.
+	// FromName attributes a KindCrossSession event: the peer's display name (its
+	// own --name). It is what the room heads the line with, matched to a fleet
+	// agent for its colour; set by the decoder off the <cross-session-message>
+	// envelope and empty on every other kind.
 	FromName string `json:"from_name,omitempty"`
-	FromAddr string `json:"from_addr,omitempty"`
 
 	Text string    `json:"text,omitempty"`
 	Tool *ToolCall `json:"tool,omitempty"`

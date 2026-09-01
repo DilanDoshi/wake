@@ -136,6 +136,34 @@ TDD, red first.
 - No poll, no per-frame work added; the flag rides the existing stream.
 - One implementation: extend `frameText`/`fold`/`roomBlock` in place, no parallel path.
 
+## Refinements from review (2026-08-31)
+
+The code review and an adversarial pass sharpened three points before merge:
+
+- **Room resume dropped the line (real defect, now fixed).** The room's restore filter
+  `collapseBroadcasts` (`roomhistory.go`) admits a non-`KindUserText` line only while its session has
+  a proven-broadcast turn open, so a lone `KindCrossSession` was silently dropped on any room restore
+  (`⌃Q`→`wake`→`/resume`, or reopening the room over a running fleet) — defeating the feature on the
+  exact supervision surface it exists for. Fixed: `collapseBroadcasts` keeps `KindCrossSession`
+  unconditionally (a first-class room event), and `roomHistoryLines` heads it with the sender
+  (`from-name` alone; the identity colour is the live path's, dropped on a restore where the sender
+  may not be running). Pinned by `TestACrossSessionMessageSurvivesARoomRestore`.
+
+- **The discriminator is string content, not a flag (spoofing closed).** `crossSession` fires only on
+  a user frame whose content is a bare string. `EncodeUserMessage` always writes *array* content, so
+  every message Wake sends (operator, manager MCP, routed) replays as array content and never reaches
+  `crossSession` — a message that merely contains the envelope cannot forge a peer line. Pinned by
+  `TestAnArrayContentUserFrameWithTheEnvelopeIsNotACrossSessionMessage`.
+
+- **The DM filter's true scope, stated honestly.** `replayedUserEcho` (renamed from `replayedOwnSend`)
+  drops *every* replayed `KindUserText` from the live DM feed, not only the operator's own send: the
+  manager's sends, a compaction summary and `<local-command-stdout>` are replayed echoes too. This
+  keeps the live DM the conversation (consistent with the room's fold) rather than letting the flag
+  flood it; the cost — those frames land in an *open* DM only on reopen (a disk re-read), with a
+  compaction still announced live by `NoticeContextCompacted` — is taken deliberately. `FromAddr` was
+  dropped as an unused field; `focusAdmits` now admits a cross-session line in either the sender's or
+  the receiver's `@name`-narrowed thread.
+
 ## Docs updated in this PR
 
 CLAUDE.md CLI table (`--replay-user-messages` now emitted), the "messages don't echo back"

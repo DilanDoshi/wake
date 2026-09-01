@@ -574,34 +574,36 @@ const (
 	crossSessionClose = "</cross-session-message>"
 )
 
-// from-name is the peer's display name, from its cc-socks address; from-mode
-// and the rest are ignored. Matched inside the opening tag only, and the hyphen
-// keeps `from="` from matching `from-name="`.
-var (
-	crossSessionName = regexp.MustCompile(`from-name="([^"]*)"`)
-	crossSessionAddr = regexp.MustCompile(`\bfrom="([^"]*)"`)
-)
+// crossSessionName pulls the peer's display name out of the opening tag. Matched
+// inside the tag only; from and from-mode are not read.
+var crossSessionName = regexp.MustCompile(`from-name="([^"]*)"`)
 
 // crossSession resolves the envelope: ok is true only for a user frame carrying
 // a complete one, body is what the peer wrote with the tags, the preamble line
-// before them and the harness guidance after them stripped, and name/addr are
-// its from-name and from.
-func crossSession(frameType, text string) (body, addr, name string, ok bool) {
+// before them and the harness guidance after them stripped, and name is its
+// from-name.
+//
+// It is called on **string** content only (messageEvents), never on the array
+// content EncodeUserMessage writes - so a message that merely *contains* the
+// envelope, whether pasted, quoted, or composed by an agent, stays the user's
+// own turn and cannot forge a peer line. The genuine article is string content
+// Claude injects, which is the whole discriminator.
+func crossSession(frameType, text string) (body, name string, ok bool) {
 	open := strings.Index(text, crossSessionOpen)
 	if frameType != "user" || open < 0 {
-		return "", "", "", false
+		return "", "", false
 	}
 	rel := strings.Index(text[open:], ">")
-	end := strings.Index(text, crossSessionClose)
-	if rel < 0 || end <= open+rel {
-		return "", "", "", false
+	if rel < 0 {
+		return "", "", false
 	}
-	tag := text[open : open+rel+1]
-	if m := crossSessionName.FindStringSubmatch(tag); m != nil {
+	relEnd := strings.Index(text[open+rel:], crossSessionClose)
+	if relEnd < 0 {
+		return "", "", false
+	}
+	end := open + rel + relEnd
+	if m := crossSessionName.FindStringSubmatch(text[open : open+rel+1]); m != nil {
 		name = m[1]
 	}
-	if m := crossSessionAddr.FindStringSubmatch(tag); m != nil {
-		addr = m[1]
-	}
-	return strings.TrimSpace(text[open+rel+1 : end]), addr, name, true
+	return strings.TrimSpace(text[open+rel+1 : end]), name, true
 }

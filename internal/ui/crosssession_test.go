@@ -3,11 +3,29 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
+
+// The room comes back with the peer message after a restore. A cross-session
+// line is a first-class room event, not agent prose gated by an open broadcast,
+// so collapseBroadcasts must keep it and roomHistoryLines must head it with the
+// sender - the surface the feature exists for is the one a resume rebuilds.
+func TestACrossSessionMessageSurvivesARoomRestore(t *testing.T) {
+	r := restored([]core.Event{
+		{Kind: core.KindCrossSession, SessionID: "s1", FromName: "planner", Text: "rerun the build", At: base.Add(time.Second)},
+	})
+	out := ansi.Strip(r.View(80, 24))
+	if !strings.Contains(out, "rerun the build") {
+		t.Errorf("a cross-session message was dropped on room restore:\n%s", out)
+	}
+	if !strings.Contains(out, "planner") {
+		t.Errorf("the restored cross-session line is not attributed to the sender:\n%s", out)
+	}
+}
 
 // Attribution is by from-name: a fleet agent when the sender is one of ours (so
 // its colour and label head the line), a bare name when it is an outside session.
@@ -92,6 +110,21 @@ func TestTheDMShowsACrossSessionMessage(t *testing.T) {
 	out := stripANSI(a.dms["s1"].View(100, 40))
 	if !strings.Contains(out, "planner") || !strings.Contains(out, "rerun the build") {
 		t.Errorf("the DM did not show the cross-session message from planner:\n%s", out)
+	}
+}
+
+// @name room-narrowing keeps a peer message in both threads it belongs to - the
+// sender's (l.by) and the receiver's (l.ev.SessionID) - and out of any other.
+func TestNarrowingAdmitsACrossSessionLineForSenderAndReceiver(t *testing.T) {
+	l := roomLine{ev: core.Event{Kind: core.KindCrossSession, SessionID: "receiver"}, by: Agent{ID: "sender"}}
+	if !focusAdmits(l, "sender", "mgr") {
+		t.Error("narrowing to the sender hid a cross-session line it sent")
+	}
+	if !focusAdmits(l, "receiver", "mgr") {
+		t.Error("narrowing to the receiver hid a cross-session line it got")
+	}
+	if focusAdmits(l, "other", "mgr") {
+		t.Error("narrowing to an unrelated agent showed a cross-session line")
 	}
 }
 

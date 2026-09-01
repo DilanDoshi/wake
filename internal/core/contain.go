@@ -118,7 +118,6 @@ func containedAll(in []string) []string {
 func (e Event) contained() Event {
 	e.Text = Contained(e.Text)
 	e.FromName = Contained(e.FromName)
-	e.FromAddr = Contained(e.FromAddr)
 	e.PermissionMode = Contained(e.PermissionMode)
 	e.Tool = containedTool(e.Tool)
 	e.Subagent = containedSubagent(e.Subagent)

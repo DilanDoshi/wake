@@ -565,10 +565,9 @@ var notWireVocabulary = wordSet([]string{
 	// this pattern is Wake's construction, not a wire word.
 	`\(effort:\s*([a-zA-Z]+)\)`,
 
-	// Wake's own regexps for the cross-session envelope's attributes. The
-	// tags they parse are policed above; the patterns are Wake's construction.
+	// Wake's own regexp for the cross-session envelope's from-name. The tags it
+	// parses are policed above; the pattern is Wake's construction.
 	`from-name="([^"]*)"`,
-	`\bfrom="([^"]*)"`,
 })
 
 func wordSet(words []string) map[string]bool {
@@ -820,10 +819,10 @@ var notInTheCorpus = map[string]string{
 // the leading phrase of a longer reply value - so the quoted check cannot see
 // any of them and a substring check is the honest one for these three.
 var embeddedMarkers = map[string]bool{
-	"<local-command-stdout>":  true,
-	"</local-command-stdout>": true,
-	"Current model:":          true,
-	"<cross-session-message":  true,
+	"<local-command-stdout>":   true,
+	"</local-command-stdout>":  true,
+	"Current model:":           true,
+	"<cross-session-message":   true,
 	"</cross-session-message>": true,
 }
 

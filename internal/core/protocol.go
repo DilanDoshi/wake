@@ -578,8 +578,8 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		// Compaction summaries, <local-command-stdout>, and a peer's
 		// <cross-session-message> all land here as string content.
 		text := jsonString(m.Content)
-		if body, addr, name, ok := crossSession(f.Type, text); ok {
-			base.Kind, base.Text, base.FromAddr, base.FromName = KindCrossSession, body, addr, name
+		if body, name, ok := crossSession(f.Type, text); ok {
+			base.Kind, base.Text, base.FromName = KindCrossSession, body, name
 			return one(base)
 		}
 		base.Kind, base.Text, base.Notice = frameText(f.Type, text)

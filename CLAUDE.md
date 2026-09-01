@@ -721,12 +721,19 @@ the flag (`argv.go`), the airlock resolves the envelope to `core.KindCrossSessio
 `crossSession`, one decoder for the live stream and the transcript both), and the room admits it
 (`fold`) attributed to the **sender** — `Fleet.crossSpeaker` resolves `from-name` to a fleet agent for
 its identity colour, else a bare name for an outside session — with a `↪` lead so it reads apart from
-the sender's own room turn, folded past `roomInlineRows` like a reply. **The flag is contained by the
-envelope, not by `Echoed`:** every replayed *own-send* also carries `isReplay` (→ `Echoed`) and the
-room's existing `typedByHand` fold already drops those, so ordinary usage is untouched; the one place
-the flag would have double-rendered is the DM, whose feed `observe` now drops a replayed `KindUserText`
-from (`replayedOwnSend`) because `sendDM`'s local echo is its single source — the rule `event.go`'s
-`Echoed` comment reserves for the App that owns both halves. Full argument:
+the sender's own room turn, folded past `roomInlineRows` like a reply. It survives a room restore
+too: `collapseBroadcasts` keeps a `KindCrossSession` line unconditionally (a first-class room event,
+not agent prose gated by an open broadcast) and `roomHistoryLines` heads it with the sender.
+**The discriminator is the envelope on *string* content, not a wire flag:** `crossSession` fires only
+where a user frame's content is a bare string — which is what Claude injects a peer message as — and
+never on the array content `EncodeUserMessage` writes, so a message that merely *contains* the
+envelope (pasted, quoted, or composed by an agent through the manager's `send`) stays the user's own
+turn and cannot forge a peer line. **The one place the flag would have double-rendered is the DM**,
+whose live feed `observe` now drops every replayed `KindUserText` from (`replayedUserEcho`): the
+operator's own send has `sendDM`'s local echo as its single source, and the manager's sends, a
+compaction summary and `<local-command-stdout>` are replayed echoes the room already drops too — they
+return on reopen off disk. `event.go`'s `Echoed` comment reserves that single-source call for the App
+that owns the local echo, which is `observe`. Full argument:
 `docs/superpowers/specs/2026-08-31-cross-session-messages-in-room-design.md`.
 
 **Slash commands resolve against a closed set Wake owns; anything else is text.** Claude's own
