@@ -125,6 +125,12 @@ const (
 // CLAUDE.md on result and init both being per-turn.
 const subtypeInit = "init"
 
+// subtypeStatus carries a session's transient status. The notice map cannot
+// resolve it alone: a compaction sends two, told apart by their payload rather
+// than the subtype. See systemNoticeFor. statusCompacting is the start's value.
+const subtypeStatus = "status"
+const statusCompacting = "compacting"
+
 // rateLimitAllowed means nothing is wrong, and was the only
 // rate_limit_info.status recorded until partial-turn.jsonl (2026-08-21)
 // carried the corpus's one "allowed_warning" — which the switch below draws

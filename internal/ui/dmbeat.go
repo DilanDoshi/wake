@@ -26,6 +26,12 @@ const (
 // nothing this client saw. Drawn at the transcript's width so it lines up with
 // the prose above it.
 func (d DM) heartbeat() string {
+	// Compaction runs between turns - each of its several result frames clears
+	// the turn, so the agent is idle - which is exactly when the done line would
+	// show. So it wins over both: a session plainly still working is not "done".
+	if !d.compactingSince.IsZero() {
+		return compactingLine(d.compactingSince, d.blockWidth())
+	}
 	if d.Agent.State == rpc.StateWorking {
 		return workingLine(d.SessionID, d.Agent.State, d.Agent.Doing, d.Agent.startedAt, d.Agent.TurnTokens, d.blockWidth())
 	}
@@ -46,5 +52,5 @@ func (d DM) showsDone() bool {
 // row baseChrome and SetSize must both account for, or the pane is sized a row
 // out and the alt screen scrolls on every draw.
 func (d DM) hasBeat() bool {
-	return d.Agent.State == rpc.StateWorking || d.showsDone()
+	return !d.compactingSince.IsZero() || d.Agent.State == rpc.StateWorking || d.showsDone()
 }

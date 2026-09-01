@@ -278,12 +278,31 @@ func systemEvent(f wireFrame, raw json.RawMessage) Event {
 		Kind:           KindSystem,
 		SessionID:      f.SessionID,
 		Text:           f.Subtype,
-		Notice:         systemNotice[f.Subtype],
+		Notice:         systemNoticeFor(f),
 		PermissionMode: f.PermissionMode,
 		Raw:            raw,
 		Session:        initFacts(f),
 		Task:           taskUpdate(f),
 	}
+}
+
+// systemNoticeFor resolves a system frame to its notice. It reads the payload
+// for the one subtype the map cannot tell apart: a compaction brackets its work
+// with two status frames - the start carries statusCompacting, the end a
+// compact_result - so each earns its own notice while every other status frame
+// earns none. The end keys on compact_result and not on the compact_boundary
+// the map resolves, because a failed compaction emits the former and never the
+// latter (slash-commands.jsonl).
+func systemNoticeFor(f wireFrame) Notice {
+	if f.Subtype == subtypeStatus {
+		switch {
+		case f.Status == statusCompacting:
+			return NoticeCompacting
+		case f.CompactResult != "":
+			return NoticeCompacted
+		}
+	}
+	return systemNotice[f.Subtype]
 }
 
 // taskUpdate is the dispatch lifecycle a system frame reports, and nil for

@@ -207,6 +207,11 @@ type wireFrame struct {
 	Status       string         `json:"status"`
 	Patch        *wireTaskPatch `json:"patch"`
 
+	// CompactResult is the outcome a compaction's terminal system/status frame
+	// carries - "success" or "failed". Its presence is what tells that frame from
+	// the "compacting" start flag, both being subtype "status". See systemNoticeFor.
+	CompactResult string `json:"compact_result"`
+
 	// ToolUseResult is the structured sibling of a tool_result block, and it
 	// is polymorphic in the same way Message is: an object on some frames
 	// and a bare string on others (permission-deny-response.jsonl,
