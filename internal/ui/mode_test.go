@@ -522,55 +522,36 @@ func TestARefusedControlRequestIsReported(t *testing.T) {
 	}
 }
 
-// TestABlurredComposerNamesNoMode is the other half of "the value must match the
-// key beside it".
+// The composer draws no mode, focused or blurred, armed or not.
 //
-// With both panes drawn, two legends are on screen. The room's names the mode
-// ⇧⇥ would act on; a DM's would name its own agent's - and when the focus is in
-// the room those are different agents, so one visible `permissions: …` describes
-// something the key beside it will not touch.
-//
-// The pane without the keys says nothing about the mode. Every other glyph in a
-// blurred legend already refers to the focused target, so the mode is the one
-// entry that could be read as a claim about the pane it is drawn in.
-func TestABlurredComposerNamesNoMode(t *testing.T) {
-	blurred := NewComposer().Focused(false).WithMode(core.PermissionModePlan)
-	if got := stripANSI(blurred.View(fullLegendWidth)); strings.Contains(got, core.PermissionModePlan) {
-		t.Errorf("a blurred composer names a mode:\n%s", got)
-	}
-	focused := NewComposer().Focused(true).WithMode(core.PermissionModePlan)
-	if got := stripANSI(focused.View(fullLegendWidth)); !strings.Contains(got, core.PermissionModePlan) {
-		t.Errorf("the focused composer does not name its mode:\n%s", got)
+// The permission mode moved to the status bar whole, so neither the (gone)
+// always-on legend nor the armed cue carries it. The blurred/focused split was
+// the legend's old ambiguity rule - two composers on screen, one naming an
+// agent ⇧⇥ would not touch - and there is nothing left in the composer for it
+// to protect. That rule lives in statusbar.go now, one line down.
+func TestTheComposerNamesNoMode(t *testing.T) {
+	for _, focused := range []bool{true, false} {
+		for _, arms := range []legendArms{{}, {detach: true}, {esc: true}} {
+			c := NewComposer().Focused(focused).WithMode(core.PermissionModePlan).WithArms(arms)
+			if got := stripANSI(c.View(fullLegendWidth)); strings.Contains(got, core.PermissionModePlan) {
+				t.Errorf("the composer (focused=%v, %+v) names a mode, which moved to the status bar:\n%s", focused, arms, got)
+			}
+		}
 	}
 }
 
-// The terminal is wide enough for the mode to survive the truncation: the
-// legend is cut to the pane, and the tail is the first entry cut. A narrower
-// window would make this test measure the truncation rather than the label.
-func TestTheHintLineShowsTheModeOfTheAgentShiftTabWouldAct(t *testing.T) {
-	a := roomWithPick(t, legendFitsAtTerminalWidth(t))
-	picked, _ := a.pickedAgent()
-
-	settled := a.applyFrame(modeReceipt(picked.ID, core.PermissionModePlan))
-
-	want := fmt.Sprintf(modeFormat, core.PermissionModePlan)
-	if got := shown(settled); !strings.Contains(got, want) {
-		t.Errorf("the screen does not say %q after the picked agent reached it:\n%s", want, got)
-	}
-}
-
-// The mode is the agent's own word, and two surfaces draw it now.
+// The mode is the agent's own word, and the status bar draws it.
 //
 // It arrives on a receipt or an init and nothing between the CLI and App.modes
-// constrains it to the four the cycle walks - so a newline in it draws a legend
-// row nobody counted, which is the pane-taller-than-its-box failure chromeHeight
-// exists for, and a control sequence rewrites what the terminal has already
-// drawn. Flattened once at the writer, so the bar and the legend agree by
-// construction rather than by both remembering to.
+// constrains it to the four the cycle walks - so a newline in it would draw a
+// bar row nobody counted, which is the pane-taller-than-its-box failure
+// chromeHeight exists for, and a control sequence would rewrite what the
+// terminal has already drawn. Flattened once at the writer. (The legend no
+// longer draws a mode, so the bar is the only surface to check.)
 //
 // Measured against the same pane holding a benign mode rather than against a
-// row count, so it stays true if either surface gains a row for its own reasons.
-func TestAHostileModeAddsNoRowToTheBarOrTheLegend(t *testing.T) {
+// row count, so it stays true if the bar gains a row for its own reasons.
+func TestAHostileModeAddsNoRowToTheBar(t *testing.T) {
 	for _, hostile := range []string{"plan\nauto", "plan\rauto", "plan\x1b[2Kauto", "plan\tauto"} {
 		t.Run(hostile, func(t *testing.T) {
 			benign := paneInMode(t, core.PermissionModePlan)
@@ -581,10 +562,6 @@ func TestAHostileModeAddsNoRowToTheBarOrTheLegend(t *testing.T) {
 			}
 			if got, want := lipgloss.Height(evil.bar), lipgloss.Height(benign.bar); got != want {
 				t.Errorf("the bar drew %d rows against %d for a benign mode:\n%q", got, want, evil.bar)
-			}
-			got := lipgloss.Height(evil.Composer().View(fullLegendWidth))
-			if want := lipgloss.Height(benign.Composer().View(fullLegendWidth)); got != want {
-				t.Errorf("the legend drew %d rows against %d for a benign mode", got, want)
 			}
 		})
 	}

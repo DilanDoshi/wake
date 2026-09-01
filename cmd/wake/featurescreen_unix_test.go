@@ -390,8 +390,8 @@ func TestDetachLeavesTheFleetRunning(t *testing.T) {
 			"a window with the whole fleet still behind it.\n%s", s.dump())
 	}
 
-	s.send("\x0f") // ⌃O again: the cancel, which is what auto repeat produces
-	s.await("↵ send")
+	s.send("\x0f")          // ⌃O again: the cancel, which is what auto repeat produces
+	s.awaitGone("↵ detach") // the armed cue clears - the composer draws no legend row unarmed now
 	s.settle()
 	if strings.Contains(s.text(), "Detached") {
 		t.Fatalf("a repeated ⌃O detached. Auto repeat and the reflex of pressing a key again because "+

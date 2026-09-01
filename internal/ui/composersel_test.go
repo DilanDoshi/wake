@@ -174,6 +174,45 @@ func TestADragBegunOnComposerChromeTakesNothing(t *testing.T) {
 	}
 }
 
+// A room addressing an agent draws a status bar between the box and the legend,
+// and that row must be counted when the composer's draft rows are placed - or a
+// drag lands a row above where the operator clicked. The bar rides inside the
+// composer as a draw-time overlay (WithBar), so overhead() cannot see it and
+// composerRegion has to account for it the way the DM already does.
+func TestAComposerSelectionIsNotOffByOneWhenTheRoomHasAStatusBar(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 40).withAgents("alex")
+	a.layout.ShowRoster = false
+	a.focus = ""
+	a = a.applyGeometry()
+	a = a.withDraft("HELLO world\nsecond line here")
+	// The state the screenshots were taken in: a room addressing an agent with
+	// facts draws a bar. This is exactly the call withRoomBar makes.
+	a.room = a.room.withBar(Agent{ID: "s1", Cwd: "/tmp/repo", Model: "claude-opus-5"}, "", a.room.width)
+	if a.room.bar == "" {
+		t.Fatal("no room bar was drawn, so this proves nothing about one")
+	}
+
+	// The screen row the operator sees the first draft line on - where they click.
+	frame := strings.Split(stripANSI(a.View()), "\n")
+	firstRow := -1
+	for i, l := range frame {
+		if strings.Contains(l, "HELLO world") {
+			firstRow = i
+			break
+		}
+	}
+	if firstRow < 0 {
+		t.Fatal("the first draft line is not on screen")
+	}
+
+	r := a.regions()
+	left := a.layout.PaneLeft(r, 0) + composerTextLeft
+	got, _ := drag(a, left, left+10, firstRow) // across "HELLO world"
+	if s := got.composerSelectedText(); s != "HELLO world" {
+		t.Errorf("a drag on the first draft row copied %q, want %q: the bar row shifts draftTop, so the selection lands a row off", s, "HELLO world")
+	}
+}
+
 // A pane too short to draw the composer inside its allocation overflows and is
 // clipped, so the bottom-up placement would point at rows the frame never drew.
 // composerRegion declines it rather than anchoring on a phantom row.
