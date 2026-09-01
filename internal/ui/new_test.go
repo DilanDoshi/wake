@@ -6,6 +6,8 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -125,32 +127,58 @@ func TestSlashNewRefusesAnUnfinishedDirectory(t *testing.T) {
 	}
 }
 
-// The payoff: after the daemon confirms, the operator is in the conversation
-// with the agent they asked for, and is told which one it is.
+// The payoff: after the daemon confirms, the room's draft names the agent that
+// just started - `@sydney ` - so the operator can message it at once. `/new`
+// opens no pane: it has no conversation to open, and replacing whatever pane
+// was on screen for one that has said nothing yet is the wrong trade at fleet
+// scale. The operator's own focus - on alex's conversation here - must not
+// move, and neither must the grid or the ring ⇥ walks.
 //
 // The sentence is not the fork's. A fork is a snapshot of somebody else's
 // conversation and says so; a fresh agent has no conversation to be a snapshot
 // of, and telling an operator that nothing the parent does next reaches it
 // would be a claim about a parent that does not exist.
-func TestTheNewAgentOpensItsOwnConversationWhenTheDaemonConfirmsIt(t *testing.T) {
+func TestTheNewAgentPrefillsTheRoomsMentionInsteadOfOpeningAPane(t *testing.T) {
 	fresh(t)
-	a := newRoomApp(t).withSize(200, 40)
+	conn, sent := pipeClient(t)
+	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
+	mustBeALiveConversation(t, a)
+	beforeGrid, beforeOrder := a.grid, slices.Clone(a.dmOrder)
 
 	m, cmd := typeAndSubmit(a, "/new")
 	a = m.(App)
-	id := sentFrame(t, a, cmd).SessionID
+	go func() { _ = runCmdQuietly(cmd) }()
+	id := awaitFrame(t, sent).SessionID
 
 	st := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateIdle},
 		{ID: id, Name: "sydney", Label: "dev-5748", State: rpc.StateIdle},
 	}}
-	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusReply, Status: &st})
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
 
-	if a.focus != id {
-		t.Errorf("the pane holds %q, want the new agent %q", a.focus, id)
+	if a.focus != "s1" {
+		t.Errorf("a fresh /new spawn moved the keys from %q to %q: it opens no pane, so the operator's "+
+			"own focus must not move", "s1", a.focus)
+	}
+	if _, held := a.dms[id]; held {
+		t.Errorf("a fresh /new spawn opened a DM for %q: it drafts a mention instead", id)
+	}
+	if !reflect.DeepEqual(a.grid, beforeGrid) {
+		t.Errorf("a fresh /new spawn changed the grid from %+v to %+v", beforeGrid, a.grid)
+	}
+	if !slices.Equal(a.dmOrder, beforeOrder) {
+		t.Errorf("a fresh /new spawn changed the ring ⇥ walks from %v to %v", beforeOrder, a.dmOrder)
 	}
 	if len(a.pendingStarts) != 0 {
 		t.Errorf("%d starts are still pending after the agent arrived: the next session given that id "+
-			"would steal the pane", len(a.pendingStarts))
+			"would steal the draft", len(a.pendingStarts))
+	}
+	if want, got := "@sydney ", a.room.Composer().Value(); got != want {
+		t.Errorf("the room's draft is %q after a fresh spawn arrived, want %q", got, want)
+	}
+	if a.room.focus != id || a.room.focusName != "sydney" {
+		t.Errorf("the room did not narrow to the agent it just drafted a mention to (focus=%q, name=%q)",
+			a.room.focus, a.room.focusName)
 	}
 	got := shown(a)
 	if !strings.Contains(got, "sydney") || !strings.Contains(got, "dev-5748") {
@@ -158,6 +186,42 @@ func TestTheNewAgentOpensItsOwnConversationWhenTheDaemonConfirmsIt(t *testing.T)
 	}
 	if strings.Contains(got, "fork") || strings.Contains(got, "snapshot") {
 		t.Errorf("a fresh agent was announced as a fork:\n%s", got)
+	}
+}
+
+// A room draft already in progress survives a fresh spawn's arrival
+// untouched. WithDraft replaces rather than inserts, and a spawn takes
+// seconds - long enough to start typing a room message before the
+// confirmation lands - so draftMention gates itself on an empty draft rather
+// than silently discarding whatever the operator was writing.
+func TestAFreshSpawnLeavesAnInProgressRoomDraftAlone(t *testing.T) {
+	fresh(t)
+	a := newRoomApp(t).withSize(200, 40).withAgents("alex")
+
+	m, cmd := typeAndSubmit(a, "/new")
+	a = m.(App)
+	id := sentFrame(t, a, cmd).SessionID
+
+	// The room's own draft, typed while the spawn is still in flight - through
+	// Update, the real key path, so this is what the operator's keystrokes
+	// would actually leave in the box.
+	const inProgress = "do not clobber this draft"
+	a = a.withDraft(inProgress)
+
+	st := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateIdle},
+		{ID: id, Name: "sydney", Label: "dev-5748", State: rpc.StateIdle},
+	}}
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+
+	if want, got := inProgress, a.room.Composer().Value(); got != want {
+		t.Errorf("a fresh spawn's arrival changed the room's in-progress draft: got %q, want %q", got, want)
+	}
+	if _, held := a.dms[id]; held {
+		t.Errorf("a fresh /new spawn opened a DM for %q even with a draft in progress", id)
+	}
+	if len(a.pendingStarts) != 0 {
+		t.Errorf("%d starts are still pending after the agent arrived", len(a.pendingStarts))
 	}
 }
 
@@ -186,8 +250,8 @@ func TestARefusedNewAgentStopsTheClientWaitingAndSaysWhy(t *testing.T) {
 }
 
 // An error about a *different* session leaves the wait alone. One unrelated
-// crash while an agent is starting would otherwise cancel it, and the agent
-// then opens nothing at all.
+// crash while an agent is starting would otherwise cancel it, and the agent's
+// arrival would then draft nothing at all.
 func TestAnErrorAboutAnotherSessionLeavesTheNewAgentComing(t *testing.T) {
 	fresh(t)
 	a := newRoomApp(t).withSize(200, 40).withAgents("alex")
@@ -203,8 +267,8 @@ func TestAnErrorAboutAnotherSessionLeavesTheNewAgentComing(t *testing.T) {
 
 	st := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{{ID: id, Name: "maya", State: rpc.StateIdle}}}
 	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
-	if a.focus != id {
-		t.Errorf("the agent arrived and the pane holds %q", a.focus)
+	if want, got := "@maya ", a.room.Composer().Value(); got != want {
+		t.Errorf("the agent arrived and the room's draft is %q, want %q", got, want)
 	}
 }
 

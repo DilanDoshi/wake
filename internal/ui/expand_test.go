@@ -151,7 +151,10 @@ func TestCtrlEInTheRoomExpandsEveryCollapsedResponse(t *testing.T) {
 		Kind: rpc.FrameEvent, SessionID: "s1",
 		Event: &core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: longRoomReply("TAIL_OF_THE_REPLY")},
 	})
-	if !strings.Contains(shown(a), openDMHint) {
+	// The fold is checked by its ⤷ marker rather than by openDMHint: with the
+	// left sidebar hidden the room pane is wide enough that its own legend now
+	// draws `⌃D open DM`, so openDMHint no longer means "a reply is folded".
+	if !strings.Contains(shown(a), roomFoldMark) {
 		t.Fatalf("the reply is not collapsed to begin with:\n%s", shown(a))
 	}
 
@@ -160,7 +163,7 @@ func TestCtrlEInTheRoomExpandsEveryCollapsedResponse(t *testing.T) {
 	if !strings.Contains(shown(a), "TAIL_OF_THE_REPLY") {
 		t.Errorf("⌃E did not expand the collapsed response in the room:\n%s", shown(a))
 	}
-	if strings.Contains(shown(a), openDMHint) {
+	if strings.Contains(shown(a), roomFoldMark) {
 		t.Errorf("⌃E left the pointer up beside the expanded body:\n%s", shown(a))
 	}
 

@@ -51,6 +51,7 @@ func paletteBinding() map[string]struct {
 		"Muted":         {Muted, "inactive"},
 		"Border":        {Border, "promptBorder"},
 		"Own":           {Own, "userMessageBackground"},
+		"Selection":     {Selection, "selectionBg"},
 		"Mention":       {Mention, "suggestion"},
 		"Subtle":        {Subtle, "subtle"},
 		"Success":       {Success, "success"},

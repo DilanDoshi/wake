@@ -72,10 +72,12 @@ func TestATaskListDoesNotOverflowThePane(t *testing.T) {
 	s.await("■ encode the receipt")
 
 	// The composer is the last thing on screen, so its presence after the list
-	// arrived is the evidence nothing pushed it off.
+	// arrived is the evidence nothing pushed it off. The always-on hint line it
+	// used to be checked by is gone, so the tell is the composer's own titled
+	// border - the agent's @name in the top edge.
 	screen := s.text()
-	if !strings.Contains(screen, "↵ send") {
-		t.Errorf("the composer's hint line is gone, so the frame is taller than the pane:\n%s", screen)
+	if name := s.agentName(); !strings.Contains(screen, "@"+name) {
+		t.Errorf("the composer's titled border is gone, so the frame is taller than the pane:\n%s", screen)
 	}
 	if got := len(strings.Split(strings.TrimRight(screen, "\n"), "\n")); got > rows {
 		t.Errorf("the screen holds %d rows, want at most %d:\n%s", got, rows, screen)

@@ -43,7 +43,7 @@ var roomWorkingWords = []string{
 // else a past-tense word held for the turn by seeding on the turn's start.
 func roomWorkingWord(id, doing string, started time.Time) string {
 	if doing != "" {
-		return doing
+		return oneRow(doing) // agent-authored; kept to one row - see workingLine
 	}
 	return roomWorkingWords[turnSeed(id, started)%uint64(len(roomWorkingWords))]
 }

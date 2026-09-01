@@ -33,12 +33,66 @@ func TestTheTiledBoardDrawsAndClicksOnAScreen(t *testing.T) {
 
 	// A click inside the first tile - row 2 (past the title row and the tile's
 	// own top border), column 2 (inside the first cell) - opens that agent and
-	// closes the board. The pane legend coming back is the durable fact
-	// boardscreen's esc case checks too.
+	// closes the board. The board giving way is the durable fact boardscreen's
+	// esc case checks too; the always-on legend is gone, so the board leaving is
+	// asserted directly rather than through a pane row it used to draw.
 	s.click(2, 2)
-	s.await("interrupt")
-	if strings.Contains(s.text(), "BOARD") {
-		t.Fatalf("the click opened a conversation but left the board drawn.\n%s", s.dump())
+	s.awaitGone("BOARD")
+}
+
+// A tile is a full four-sided box on a real screen: its body rows carry a wall
+// on the left and on the right, not just a top and a bottom edge. Before this
+// the tile passed a borderless style and its body rows were open on both sides
+// - a lid and a floor. The single-agent tile fills the frame width, so a body
+// row's right wall is the last non-blank cell and survives the row's trim.
+func TestATiledBoardTileIsAFullFourSidedBox(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWake(t, 100, 30)
+	s.await("ready")
+	s.send("/board\r")
+	s.await("BOARD")
+	s.send("\t") // ⇥ to tiles
+	s.await("╭")
+	s.settle()
+
+	walled := false
+	for _, ln := range strings.Split(s.text(), "\n") {
+		if !strings.HasPrefix(ln, "│") {
+			continue
+		}
+		if !strings.HasSuffix(ln, "│") {
+			t.Fatalf("a tile body row has a left wall but no right wall: %q\n%s", ln, s.dump())
+		}
+		walled = true
+	}
+	if !walled {
+		t.Fatalf("the tiled board drew no body row with side walls.\n%s", s.dump())
+	}
+}
+
+// The tile carries the per-agent status bar as a body row - the same bar the DM
+// pane draws (path, branch, model, context, permission mode), reused rather
+// than reimplemented. The path is the bar's first segment and the one it keeps
+// longest under a narrow tile, so the home-glyph path is the durable screen
+// assertion; the field-by-field check is the unit test at a controlled width
+// (internal/ui: TestATileDrawsThePerAgentStatusBar). The tiled board draws no
+// other path, so "~/" on screen is the status bar.
+func TestATiledBoardTileShowsThePerAgentStatusBar(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWake(t, 100, 30)
+	s.await("ready")
+	s.send("/board\r")
+	s.await("BOARD")
+	s.send("\t") // ⇥ to tiles
+	s.await("╭")
+	s.settle()
+
+	if !strings.Contains(s.text(), "~/") {
+		t.Fatalf("the tiled board drew no per-agent status bar (no home-glyph path).\n%s", s.dump())
 	}
 }
 

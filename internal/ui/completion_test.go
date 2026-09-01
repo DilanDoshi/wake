@@ -417,8 +417,9 @@ func TestTheMenuWalksWithoutTheArrowKeys(t *testing.T) {
 	}
 }
 
-// ↑↓ are the roster's and stay the roster's. Their rebinding is an open ruling,
-// and a menu that took them would decide it.
+// ↑↓ walk the prompt history and stay that way; a menu that navigated on them
+// would swallow it. With no history behind the pane they leave the draft and the
+// menu exactly as they were, rather than moving the menu's own cursor.
 func TestTheMenuNeverTakesTheArrowKeys(t *testing.T) {
 	fresh(t)
 	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(200, 40)
@@ -430,10 +431,10 @@ func TestTheMenuNeverTakesTheArrowKeys(t *testing.T) {
 	for _, k := range []tea.KeyType{tea.KeyUp, tea.KeyDown} {
 		next, _ := pressKey(a, tea.KeyMsg{Type: k})
 		if next.completion.cursor != 0 {
-			t.Errorf("%v moved the menu's cursor to %d: ↑↓ pick an agent", k, next.completion.cursor)
+			t.Errorf("%v moved the menu's cursor to %d: ↑↓ are the prompt history, not the menu's", k, next.completion.cursor)
 		}
-		if next.roster.Selected == "" {
-			t.Errorf("%v with a menu up picked no agent, so the menu swallowed the roster's key", k)
+		if !next.completion.open() {
+			t.Errorf("%v closed the menu; with no history the draft is untouched, so the menu should still be up", k)
 		}
 	}
 }

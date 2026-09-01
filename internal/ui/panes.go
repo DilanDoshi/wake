@@ -5,6 +5,7 @@ package ui
 // they move.
 
 import (
+	"maps"
 	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -12,6 +13,20 @@ import (
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
+
+// withDM returns an App whose dms map is its own.
+//
+// The map is copied rather than shared because Bubble Tea hands models around
+// by value and a shared map makes a discarded App's DM keep growing - the same
+// reason Fleet copies. It is the one write path into dms, so there is one place
+// for that to be true.
+func (a App) withDM(id string, dm DM) App {
+	next := make(map[string]*DM, len(a.dms)+1)
+	maps.Copy(next, a.dms)
+	next[id] = &dm
+	a.dms = next
+	return a
+}
 
 const (
 	// noPaneAdvice is what a key that needs an agent says when there is not
@@ -506,6 +521,8 @@ func (a App) nextBlocked() App {
 // Applied immediately rather than through the settle: a keystroke is one change
 // and a drag is hundreds, so the debounce that makes a drag affordable would
 // only make a keypress feel broken.
+//
+//nolint:unused // left workspaces sidebar hidden for now; restored with the multi-groupchat version, when ⌃G rebinds to this. See groups.go.
 func (a App) toggleGroups() App {
 	a.layout.ShowGroups = !a.layout.ShowGroups
 	return a.resizePanes()

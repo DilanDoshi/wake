@@ -41,6 +41,12 @@ var (
 	// shades a turn you typed.
 	Own = lipgloss.AdaptiveColor{Light: "#f0f0f0", Dark: "#373737"} // userMessageBackground
 
+	// Selection is the ground under a drag-highlight, Claude Code's own
+	// selectionBg. It is deliberately not Own: your turns are already drawn on
+	// Own, so a selection sharing that ground was invisible on exactly the
+	// messages you typed.
+	Selection = lipgloss.AdaptiveColor{Light: "#b4d5ff", Dark: "#264f78"} // selectionBg
+
 	// LastRead is the boundary rule, and it is the one colour on this surface
 	// that is **Wake's own decision rather than Claude's**.
 	//
@@ -166,12 +172,11 @@ var (
 
 	// SelectionStyle marks the cells a drag has taken.
 	//
-	// Own's ground rather than a new colour: it already means "this part of the
-	// surface is yours" behind a message you typed, and a selection is the same
-	// claim made with the mouse. Text over it because the selected part is
-	// stripped before it is restyled - see highlighted - so it carries no
-	// foreground of its own.
-	SelectionStyle = lipgloss.NewStyle().Background(Own).Foreground(Text)
+	// Claude Code's selectionBg rather than Own: a selection on Own's own ground
+	// is invisible behind a message you typed, which is exactly the room's user
+	// queries. Text over it because the selected part is stripped before it is
+	// restyled - see highlighted - so it carries no foreground of its own.
+	SelectionStyle = lipgloss.NewStyle().Background(Selection).Foreground(Text)
 
 	// TextStyle is ordinary body text.
 	TextStyle = lipgloss.NewStyle().Foreground(Text)

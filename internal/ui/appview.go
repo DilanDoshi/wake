@@ -129,10 +129,18 @@ func (a App) column(col, width, height int) string {
 	if bottom == 0 {
 		return a.pane(c.Top, width, top)
 	}
+	// Each pane is clipped to its own allocation before joining. A pane can draw
+	// taller than it was given - a task board is unbounded and is not in the
+	// composer's growth bound - and an unclipped overflow in the top pane pushes
+	// the bottom one down, so App.View's final clip cuts the bottom pane's own
+	// rows. On a focused card that means its key line off screen while
+	// cardFullyDrawn, measuring that pane's own height, still calls it drawn - an
+	// answerable permission decision nobody can see. Clipping here keeps one
+	// pane's overflow out of the other.
 	return lipgloss.JoinVertical(lipgloss.Left,
-		a.pane(c.Top, width, top),
+		firstRows(a.pane(c.Top, width, top), top),
 		HintStyle.Render(strings.Repeat(dividerRow, width)),
-		a.pane(c.Bottom, width, bottom),
+		firstRows(a.pane(c.Bottom, width, bottom), bottom),
 	)
 }
 
@@ -154,8 +162,15 @@ func (a App) pane(id string, width, height int) string {
 // the last thing clipped - but its key line is the card's own last row, so a
 // card taller than the room draws with its keys cut, still blocking an agent and
 // still looking answerable. So the whole card has to fit, and paneFloor is
-// baseChrome plus a transcript row - the same allowance menuRows measures the
-// block against, since the stored DM carries no menu of its own.
+// baseChrome plus a transcript row.
+//
+// The card is a menu, and a pinned menu drops the composerGap - it hugs the box
+// where an empty pane keeps a blank row above it - so the card gets that row
+// back. paneFloor measures the stored DM, which carries no menu, so it charges
+// the gap; without adding it back a card that fills the pane exactly is called
+// clipped, and its answer keys stay live with nothing on screen to account for
+// them while the agent stays blocked. The reverse of the stale-bar direction
+// below, and menuposition_test.go now sweeps both.
 //
 // paneFloor is asked at the pane width, which is not a nicety: menuRows runs
 // inside DM.View, after withBar has re-rendered the status bar from the live
@@ -174,7 +189,7 @@ func (a App) cardFullyDrawn() bool {
 		return false
 	}
 	card := a.cardBlock(a.focus, width)
-	room := height - a.paneFloor(a.focus, width)
+	room := height - a.paneFloor(a.focus, width) + composerGap
 	return card != "" && room > 0 && lipgloss.Height(card) <= room
 }
 

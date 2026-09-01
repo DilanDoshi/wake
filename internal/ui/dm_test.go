@@ -21,24 +21,26 @@ var ansiPattern = regexp.MustCompile(`\x1b\[[0-9;]*m`)
 
 func stripANSI(s string) string { return ansiPattern.ReplaceAllString(s, "") }
 
-// The conversation's info bar sits above the legend - the info row over the
-// keys - and the pane stays within its height with the bar in its new place.
+// The conversation's info bar sits above the armed cue - the info row over the
+// keys - and the pane stays within its height with the bar and the cue both in
+// place. The cue is the only legend row now, so a detach is armed to have one,
+// which also exercises the height accounting across the extra row.
 func TestDMDrawsTheBarAboveTheLegend(t *testing.T) {
 	d := NewDM("s1", "alex")
 	d.Agent = Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", Effort: "xhigh"}
-	d = d.SetSize(120, 24)
+	d = d.WithComposer(d.Composer().WithArms(legendArms{detach: true})).SetSize(120, 24)
 
 	out := stripANSI(d.View(120, 24))
 	lines := strings.Split(out, "\n")
 	if len(lines) > 24 {
-		t.Fatalf("the pane drew %d rows into 24 - the bar's new row was double-counted:\n%s", len(lines), out)
+		t.Fatalf("the pane drew %d rows into 24 - the bar's or the cue's row was double-counted:\n%s", len(lines), out)
 	}
 	barAt, hintAt := -1, -1
 	for i, l := range lines {
 		if strings.Contains(l, effortLabel+"xhigh") {
 			barAt = i
 		}
-		if strings.Contains(l, "send") {
+		if strings.Contains(l, armedSendLabel) {
 			hintAt = i
 		}
 	}
@@ -46,10 +48,10 @@ func TestDMDrawsTheBarAboveTheLegend(t *testing.T) {
 		t.Fatalf("the status bar was not drawn:\n%s", out)
 	}
 	if hintAt < 0 {
-		t.Fatalf("the legend was not drawn:\n%s", out)
+		t.Fatalf("the armed cue was not drawn:\n%s", out)
 	}
 	if barAt > hintAt {
-		t.Fatalf("the bar (row %d) must sit above the legend (row %d):\n%s", barAt, hintAt, out)
+		t.Fatalf("the bar (row %d) must sit above the cue (row %d):\n%s", barAt, hintAt, out)
 	}
 }
 
@@ -141,7 +143,9 @@ func TestHeaderShowsAgentName(t *testing.T) {
 
 func TestViewIncludesComposer(t *testing.T) {
 	d := NewDM("s1", "alex").SetSize(60, 20)
-	assertShows(t, d, 60, 20, "send")
+	// The composer names its agent in the box's top border; the always-on legend
+	// is gone, so that is the durable tell the composer is drawn.
+	assertShows(t, d, 60, 20, agentPrefix+"alex")
 }
 
 // --- immutability, beyond the receiver ---------------------------------
@@ -230,6 +234,54 @@ func TestViewMeasuresExactlyTheSizeRequested(t *testing.T) {
 			if got := lipgloss.Width(out); got != w {
 				t.Errorf("View(%d,%d) is %d columns wide, want %d:\n%s", w, h, got, w, out)
 			}
+		}
+	}
+}
+
+// Arming a detach or a clear-draft flips the composer's one legend row on and
+// off, and the pane must measure exactly its height in every state - a pane
+// sized without the cue and drawn with it (or the reverse) is a frame one row
+// too tall, which scrolls the alt screen away on every draw. This is showsCue's
+// whole job: overhead counts the row by the predicate View draws it by, and
+// baseChrome measures the real composer either way. Heights are kept above the
+// armed pane's own floor so this measures the flip rather than the floor.
+func TestThePaneStaysExactlyItsHeightAcrossAnArmFlip(t *testing.T) {
+	for _, h := range []int{8, 20, 40} {
+		base := NewDM("s1", "alex").
+			Append(core.Event{Kind: core.KindAssistantText, Text: "a message long enough to wrap somewhere on a narrow pane"})
+		for _, arms := range []legendArms{{}, {detach: true}, {esc: true}, {}} {
+			d := base.WithComposer(base.Composer().WithArms(arms)).SetSize(80, h)
+			out := d.View(80, h)
+			if got := lipgloss.Height(out); got != h {
+				t.Errorf("with %+v the pane is %d rows into %d - the cue row was mis-accounted:\n%s", arms, got, h, out)
+			}
+			hasCue := strings.Contains(stripANSI(out), armedSendLabel) || strings.Contains(stripANSI(out), escClearLabel)
+			if want := arms != (legendArms{}); hasCue != want {
+				t.Errorf("with %+v the cue is present=%v, want %v:\n%s", arms, hasCue, want, out)
+			}
+		}
+	}
+}
+
+// View re-sizes on its own when an arm flips with no SetSize between, which is
+// the production path: the arm is a draw-time overlay dmFor sets fresh on a copy
+// every frame and never persists, so the stored pane is sized unarmed and then
+// drawn armed. View's guard (chromeHeight() != chrome) is the only thing that
+// can account for the row that adds - this pins it directly rather than through
+// the pty harness. SetSize unarmed once, then flip the arm and just View.
+func TestViewReSizesWhenAnArmFlipsWithoutASetSize(t *testing.T) {
+	const w, h = 80, 20
+	base := NewDM("s1", "alex").SetSize(w, h).
+		Append(core.Event{Kind: core.KindAssistantText, Text: "a message long enough to wrap somewhere on a narrow pane"})
+
+	for _, arms := range []legendArms{{detach: true}, {}, {esc: true}, {}} {
+		// Set the arm the way dmFor does - on the composer, with no SetSize - so
+		// only View's own guard can account for the row it adds or drops.
+		d := base.WithComposer(base.Composer().WithArms(arms))
+		out := d.View(w, h)
+		if got := lipgloss.Height(out); got != h {
+			t.Errorf("with %+v and no SetSize between, View is %d rows into %d - the guard did not re-size:\n%s",
+				arms, got, h, out)
 		}
 	}
 }
@@ -675,17 +727,18 @@ func TestPermissionRequestIsVisible(t *testing.T) {
 	assertShows(t, d, 60, 20, "permission")
 }
 
-// The only rate-limit status ever recorded is "allowed", once per process.
-// Drawing that on every DM is chrome; anything else is the reason the agent
-// stalled.
-func TestRateLimitShowsOnlyWhenItIsNotAllowed(t *testing.T) {
+// A rate limit never draws in the transcript at all now: a warning is a timed
+// pop-up above the composer (ratelimit.go, TestARateLimitNeverDrawsInThe-
+// Transcript) and a benign `allowed` heartbeat is chrome. This asserts the DM
+// side of that - the renderer draws nothing for either.
+func TestRateLimitDrawsNoTranscriptBlock(t *testing.T) {
 	quiet := NewDM("s1", "alex").SetSize(60, 20).
 		Append(core.Event{Kind: core.KindRateLimit, Text: "allowed"})
 	assertHides(t, quiet, 60, 20, "allowed")
 
 	loud := NewDM("s1", "alex").SetSize(60, 20).
 		Append(core.Event{Kind: core.KindRateLimit, Text: "exhausted", Notice: core.NoticeRateLimited})
-	assertShows(t, loud, 60, 20, "exhausted")
+	assertHides(t, loud, 60, 20, "exhausted")
 }
 
 // --- user turns and Echoed ---------------------------------------------

@@ -19,6 +19,12 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
+// roomFoldMark is the glyph a collapsed reply's pointer opens with (see
+// collapsedFormat). Used where a test reads the whole app frame - which includes
+// the composer legend - because that legend draws `⌃D open DM` too once the pane
+// is wide enough, so openDMHint alone no longer means "a reply is folded".
+const roomFoldMark = "⤷"
+
 // roomShown is the room drawn at a size and stripped of styling, so a test can
 // name a row it should or should not carry.
 func roomShown(r Room, w, h int) string { return ansi.Strip(r.View(w, h)) }
@@ -373,16 +379,19 @@ func TestClickingACollapsedRoomReplyExpandsIt(t *testing.T) {
 		Kind: rpc.FrameEvent, SessionID: "s1",
 		Event: &core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: longRoomReply("CLICK_TAIL")},
 	})
-	if !strings.Contains(shown(a), openDMHint) {
+	// The fold is checked by its ⤷ marker rather than by openDMHint: with the
+	// left sidebar hidden the room pane is wide enough that its own legend now
+	// draws `⌃D open DM`, so openDMHint no longer means "a reply is folded".
+	if !strings.Contains(shown(a), roomFoldMark) {
 		t.Fatalf("the reply is not folded to begin with:\n%s", shown(a))
 	}
 
-	a = fullClick(a, midOf(a.regions(), 0), rowOf(t, a, openDMHint))
+	a = fullClick(a, midOf(a.regions(), 0), rowOf(t, a, roomFoldMark))
 
 	if !strings.Contains(shown(a), "CLICK_TAIL") {
 		t.Errorf("a click on the folded reply did not expand it:\n%s", shown(a))
 	}
-	if strings.Contains(shown(a), openDMHint) {
+	if strings.Contains(shown(a), roomFoldMark) {
 		t.Errorf("the pointer survived the click:\n%s", shown(a))
 	}
 }
