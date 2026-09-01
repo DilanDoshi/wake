@@ -505,8 +505,8 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case imageDropMsg:
 		return a.imageDropped(m)
 
-	case mcpResultMsg:
-		return a.mcpResult(m), nil
+	case mcpResultMsg, authResultMsg:
+		return a.panelResult(m), nil
 
 	case frameMsg:
 		// The frame is folded first, then two things read the result: the

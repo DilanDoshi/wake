@@ -353,6 +353,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	managerStopCommand: App.managerStop,
 	quitCommand:        App.quitAgent,
 	boardCommand:       App.openBoard,
+	loginCommand:       App.login,
 }
 
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
@@ -597,6 +598,17 @@ func (a App) renameMirror(text string) tea.Cmd {
 	}
 	return a.renameTo(agent, name)
 }
+
+// loginCommand draws the auth panel: whether this machine is signed in, and the
+// command to sign in from a terminal when it is not.
+//
+// **The word is safe to take on the same evidence `new` is.** The recorded
+// corpus in testdata/stream advertises no `login` (nor `auth` or `logout`) on any
+// `init` frame, which is what TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising
+// checks - so this needs no `mcp`-style exception, and taking it replaces no
+// working headless feature. Wake shows status and hands `claude auth login` over;
+// it never runs the login, which is the no-PTY non-negotiable. See authapp.go.
+const loginCommand = "login"
 
 // adoptCommand is the room's half of session importing, and the word is a
 // finding rather than a preference.
