@@ -28,10 +28,11 @@ const (
 	// row of its own - it sits in the composer's top border, so it costs nothing.
 	minDMHeight = composerViewHeight + composerGap + minTranscriptHeight
 
-	// composerViewHeight is what Composer.View returns - the three-row
-	// bordered box plus the hint line. View measures the real composer rather
-	// than trusting this; it exists so minDMHeight can be a constant.
-	composerViewHeight = 4
+	// composerViewHeight is what an unarmed Composer.View returns - the
+	// three-row bordered box, and no legend row, since the always-on hints moved
+	// to the status bar. View measures the real composer rather than trusting
+	// this; it exists so minDMHeight can be a constant.
+	composerViewHeight = 3
 
 	// minBlockWidth is the narrowest width a block renderer is asked for.
 	// Below it they degenerate: ToolCall truncates a line to an ellipsis and
@@ -231,6 +232,7 @@ type barKey struct {
 	state  string
 	used   int
 	window int
+	prs    *prSet // a PR arrives mid-turn with no other bar fact moving, so the key must carry it; prSet.same keeps the pointer stable so it does not redraw per frame
 }
 
 // withBar re-renders the status bar if anything it is drawn from has moved, and
@@ -244,7 +246,7 @@ func (d DM) withBar(width int) DM {
 	mode := d.composer.Mode()
 	key := barKey{
 		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, mode: mode, state: d.Agent.State,
-		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
+		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow, prs: d.Agent.prs,
 	}
 	if key == d.barFrom {
 		return d

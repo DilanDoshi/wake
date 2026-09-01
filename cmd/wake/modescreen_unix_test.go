@@ -10,15 +10,16 @@ import (
 // docs/notes/bugs.md BUG-1, at the surface it was reported on.
 //
 // The owner cycled the permission mode in a conversation pane and nothing on
-// screen moved: the mode's only home was the legend's tail, which is the first
-// entry a narrow pane cuts, and the whole legend is withheld from a blurred
-// composer. Neither is a broken mechanism - the frame was written and the
-// receipt arrived - so nothing but a rendered screen could see it.
+// screen moved: back then the mode's only home was the legend's tail, the first
+// entry a narrow pane cut, and the whole legend was withheld from a blurred
+// composer. Neither was a broken mechanism - the frame was written and the
+// receipt arrived - so nothing but a rendered screen could see it. The legend's
+// always-on hints are gone entirely now; the mode is the status bar's alone.
 //
 // Wide enough that the bar is not truncated: it is one right-cut line and the
 // mode is its last segment, so a pane too narrow for the whole bar loses the
-// mode the way the legend does. That is the ordering working - the path is what
-// this line is most read for - and it is why this test is not run at 80.
+// mode, its last segment dropped first. That is the ordering working - the path
+// is what this line is most read for - and it is why this test is not run at 80.
 func TestAConversationsBarNamesItsPermissionMode(t *testing.T) {
 	withScriptedAgent(t, scriptModes)
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
