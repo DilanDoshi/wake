@@ -131,8 +131,9 @@ type partial struct {
 	view  string
 	width int
 	// rowCap caps how many rows the tail retains; 0 means the default
-	// maxPreviewRows. The tiled board sets it (maxTileTailRows) so a big cell
-	// fills with output; the DM preview and the inbox fold leave it zero.
+	// maxPreviewRows. The tiled board sets it (tileTailCap, its cell body
+	// height) so a big cell fills with output; the DM preview and the inbox
+	// fold leave it zero.
 	rowCap int
 }
 

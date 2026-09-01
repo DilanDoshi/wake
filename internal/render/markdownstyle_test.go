@@ -172,45 +172,48 @@ func TestTheTwoBackgroundsGetDifferentStyles(t *testing.T) {
 	}
 }
 
-// The diff bands are Claude's four, and nothing else held them to the palette.
+// The dark diff bands are Wake's deliberately muted four, darkened below Claude's.
 //
-// They were right and unasserted: the markdown body was in the same state until
-// this branch, and it had drifted to glamour's stock theme without anything
-// failing. A colour nothing checks is a colour that is correct until somebody
-// touches it, and these four are the ones that carry meaning by *ground* rather
-// than by letterform - a diff whose bands drift is a diff that stops reading as
-// one.
-func TestTheDiffBandsAreClaudesFour(t *testing.T) {
+// They began as Claude's exact diff colours and were held to the palette here so
+// they could not drift silently - a colour nothing checks is a colour that is
+// correct until somebody touches it, and these four carry meaning by *ground*
+// rather than by letterform, so a band that drifts is a diff that stops reading
+// as one. On the owner's 2026-08-29 override the dark bands are pulled deeper and
+// more muted - a translucent wash the white text reads cleanly over - so this
+// test now pins Wake's own dark values and notes how far each sits below Claude's
+// palette. The word ground stays a step brighter than its band, so an intra-line
+// change still stands out. The light bands are still Claude's own, held to the
+// palette below.
+func TestTheDiffBandsAreWakesMutedFour(t *testing.T) {
 	p := loadClaudePalette(t)
 
 	for _, tc := range []struct {
 		what  string
 		key   string
+		dark  string
 		style lipgloss.Style
 	}{
-		{"an added line's band", "diffAdded", addBand},
-		{"a removed line's band", "diffRemoved", delBand},
-		{"the changed words inside an added line", "diffAddedWord", addWord},
-		{"the changed words inside a removed line", "diffRemovedWord", delWord},
+		{"an added line's band", "diffAdded", "#17351e", addBand},
+		{"a removed line's band", "diffRemoved", "#3f1d24", delBand},
+		{"the changed words inside an added line", "diffAddedWord", "#256b3f", addWord},
+		{"the changed words inside a removed line", "diffRemovedWord", "#7a3a46", delWord},
 	} {
 		t.Run(tc.key, func(t *testing.T) {
-			want, ok := p.Dark[tc.key]
-			if !ok {
-				t.Fatalf("%s binds Claude key %q, which %s (from %s) does not define",
-					tc.what, tc.key, paletteFromUI, p.Source)
-			}
 			got, ok := tc.style.GetBackground().(lipgloss.AdaptiveColor)
 			if !ok {
 				t.Fatalf("%s is not an AdaptiveColor, so it cannot answer for both backgrounds", tc.what)
 			}
-			if got.Dark != want {
-				t.Errorf("%s is %q on a dark terminal, want %q (Claude's %s in %s)",
-					tc.what, got.Dark, want, tc.key, p.Source)
+			if got.Dark != tc.dark {
+				t.Errorf("%s is %q on a dark terminal, want %q (Wake's muted band)",
+					tc.what, got.Dark, tc.dark)
+			}
+			if claude, ok := p.Dark[tc.key]; ok && got.Dark != claude {
+				t.Logf("NOTE: %s is %q on dark, deliberately darker than Claude's %s %q "+
+					"(owner's 2026-08-29 muted-wash override)", tc.what, got.Dark, tc.key, claude)
 			}
 			if light := p.Light[tc.key]; got.Light != light && light != "" {
-				t.Logf("NOTE: %s is %q on light, Claude's %s is %q - Wake brightens the light "+
-					"bands deliberately, since Claude's light diffAdded is a mid green that "+
-					"black text does not sit on", tc.what, got.Light, tc.key, light)
+				t.Errorf("%s is %q on light, want %q (Claude's %s in %s) - only the dark "+
+					"bands were muted", tc.what, got.Light, light, tc.key, p.Source)
 			}
 		})
 	}
