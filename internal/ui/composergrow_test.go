@@ -133,6 +133,44 @@ func TestTheComposerShrinksBackWhenTheDraftDoes(t *testing.T) {
 	}
 }
 
+// A box that scrolled to its tail in a short pane shows the whole draft again
+// once the pane grows enough to hold it - not the tail followed by blank prompt
+// rows.
+//
+// fit changes the box height without moving the viewport, and bubbles' textarea
+// only ever re-scrolls to follow the cursor - so a resize that GROWS the box
+// leaves the old, deeper scroll in place, and the box draws its last content
+// rows above blank rows. That is the "extra space in the query bar" a window
+// resize left behind. The keystroke-by-keystroke type is what scrolls the
+// viewport; a set-whole value would not.
+func TestTheComposerHasNoBlankRowsAfterItGrowsToFitTheDraft(t *testing.T) {
+	c := NewComposer().SetWidth(80).WithMaxRows(2) // a short pane: the box caps at 2 rows
+	for i, line := range []string{"one", "two", "three", "four"} {
+		if i > 0 {
+			c, _ = c.Update(tea.KeyMsg{Type: tea.KeyCtrlJ}) // ⌃J is the newline key
+		}
+		for _, r := range line {
+			c, _ = c.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		}
+	}
+
+	// The pane grows: the box can now hold all four rows.
+	c = c.WithMaxRows(10)
+
+	out := stripANSI(c.box(80))
+	if !strings.Contains(out, "one") {
+		t.Errorf("the first line of the draft is off screen after the box grew - the stale scroll hid it:\n%s", out)
+	}
+	// Every interior row of the box carries typed text: no blank prompt rows
+	// trailing the draft, which is what the resize left behind.
+	rows := strings.Split(out, "\n")
+	for i, row := range rows[1 : len(rows)-1] { // drop the two borders
+		if strings.TrimSpace(strings.Trim(row, "│>")) == "" {
+			t.Errorf("interior box row %d is blank after the box grew, so the query bar has extra space:\n%s", i, out)
+		}
+	}
+}
+
 // An empty composer is still one row. The box growing is what makes a long
 // draft readable; a box that started tall would spend the transcript's rows on
 // nothing.
