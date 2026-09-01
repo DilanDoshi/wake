@@ -103,10 +103,13 @@ func TestBroadcastReachesEveryAgentAndEchoesOnce(t *testing.T) {
 	s.send("/new robin\r")
 	s.await("@robin")
 
-	// /new opens the new agent's conversation and gives it the keys, so getting
-	// back to the room is a keystroke rather than an assumption.
-	s.send("\x17") // ⌃W
-	s.await("group chat")
+	// /new opens no pane and drafts a mention instead - "@robin " - and esc
+	// clears the room's draft in one press, which the broadcast below needs:
+	// these are raw keystrokes typed onto whatever the box already holds, and
+	// without clearing it first "@all stand up" lands after "@robin " rather
+	// than as the whole draft.
+	s.send("\x1b")
+	s.settle()
 
 	s.send("@all stand up")
 	s.await("2 turns") // the price is on screen before the key, not after it
@@ -118,10 +121,11 @@ func TestBroadcastReachesEveryAgentAndEchoesOnce(t *testing.T) {
 	// package run. See screen.awaitCount and bugs.md BUG-7.
 	s.awaitCount(heardPrefix+"stand up", 2)
 	// The echo is its own line and keeps the mention, so the room is a record of
-	// who each message went to.
+	// who each message went to. Your own turn sits at the reply's indent now, so
+	// the mention leads the line's text rather than its first column.
 	echoes := 0
 	for _, line := range s.lines() {
-		if strings.HasPrefix(line, "@all stand up") {
+		if strings.HasPrefix(strings.TrimLeft(line, " "), "@all stand up") {
 			echoes++
 		}
 	}
@@ -196,9 +200,9 @@ func TestQuitParksTheFleetAndTheNextRunComesBackEmpty(t *testing.T) {
 	s.await("Parking")
 
 	again := startWake(t, 100, 30)
-	// A durable fact rather than a notice: the legend is drawn on every frame,
-	// and the notice row shows only the newest thing said.
-	again.await("detach")
+	// A durable fact rather than a notice: the room's composer names the group
+	// chat on every frame, where the notice row shows only the newest thing said.
+	again.await("group chat")
 	again.settle()
 
 	// Nothing about the parked session is on screen - no roster row, and no

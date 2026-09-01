@@ -8,6 +8,19 @@ package ui
 
 import "github.com/DilanDoshi/wake/internal/rpc"
 
+const (
+	// composerGap is the blank row kept above the composer, so the input box sits
+	// clear of the last line of output rather than crammed against it - Claude
+	// Code's own spacing. Both panes keep it while nothing (a card, picker or
+	// completion menu) is pinned there. Budgeted in baseChrome, or the pane draws
+	// a row past what it was given and the alt screen scrolls.
+	composerGap = 1
+
+	// beatGap is the blank row above the working/done line, so it too sits clear
+	// of the output. Its breathing room below is composerGap - one blank each side.
+	beatGap = 1
+)
+
 // heartbeat is the line above the composer: the working line while a turn is in
 // flight, the done line once it has finished, or "" for an agent that has done
 // nothing this client saw. Drawn at the transcript's width so it lines up with

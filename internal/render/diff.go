@@ -15,20 +15,25 @@ const (
 	diffAddMarker = "  + "
 )
 
-// Claude Code's diff colours, kept by hand alongside the rest of the palette.
-// A changed line is a full-width *band* -
-// the ground is the signal, not the letterform - and within a paired change the
-// words that actually differ carry a brighter ground still. That is why there
-// are four colours here rather than two.
+// Wake's diff colours. A changed line is a full-width *band* - the ground is the
+// signal, not the letterform - and within a paired change the words that
+// actually differ carry a brighter ground still. That is why there are four
+// colours here rather than two.
+//
+// The light bands are Claude Code's own, kept by hand alongside the rest of the
+// palette. The dark bands are muted below Claude's on the owner's 2026-08-29
+// override: deeper, more translucent grounds the white text reads cleanly over,
+// each word ground still a step brighter than its band. markdownstyle_test.go
+// pins all four.
 var (
 	addBand = lipgloss.NewStyle().
-		Background(lipgloss.AdaptiveColor{Light: "#69db7c", Dark: "#225c2b"}).
+		Background(lipgloss.AdaptiveColor{Light: "#69db7c", Dark: "#17351e"}).
 		Foreground(lipgloss.AdaptiveColor{Light: "#000000", Dark: "#ffffff"})
 	delBand = lipgloss.NewStyle().
-		Background(lipgloss.AdaptiveColor{Light: "#ffa8b4", Dark: "#7a2936"}).
+		Background(lipgloss.AdaptiveColor{Light: "#ffa8b4", Dark: "#3f1d24"}).
 		Foreground(lipgloss.AdaptiveColor{Light: "#000000", Dark: "#ffffff"})
-	addWord = addBand.Background(lipgloss.AdaptiveColor{Light: "#2f9d44", Dark: "#38a660"})
-	delWord = delBand.Background(lipgloss.AdaptiveColor{Light: "#d1454b", Dark: "#b3596b"})
+	addWord = addBand.Background(lipgloss.AdaptiveColor{Light: "#2f9d44", Dark: "#256b3f"})
+	delWord = delBand.Background(lipgloss.AdaptiveColor{Light: "#d1454b", Dark: "#7a3a46"})
 )
 
 // span is a run of a diff line that shares one ground: either the line's band

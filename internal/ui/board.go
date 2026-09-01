@@ -42,9 +42,10 @@ package ui
 //  1. View-only. No keystroke reaches an agent's stdin from a tile; keys
 //     drive the board itself (move, jump in, park, close).
 //  2. Bounded live tail, no scrollback. A tile shows live text bounded to its
-//     own body (at most maxTileTailRows kept per agent) and nothing you can
-//     scroll back through - the tail lives in App.tails (tail.go), gated on
-//     Tiled so a closed or row-mode board holds none of it.
+//     own body (tileTailCap kept per agent - the cell's own height, so a big
+//     cell fills and a dense grid keeps little) and nothing you can scroll back
+//     through - the tail lives in App.tails (tail.go), gated on Tiled so a
+//     closed or row-mode board holds none of it.
 //  3. Fixed grid, no per-tile resize, no pane tree. Equal cells sized to fill
 //     the frame, no divider to drag, no split, no nesting.
 //  4. Act from it, never in it. ↵ and click leave the wall for the agent's

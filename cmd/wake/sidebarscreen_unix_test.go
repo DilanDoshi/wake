@@ -25,6 +25,15 @@ func fleetOfNine(t *testing.T, s *screen) []string {
 	s.send("\x17") // ⌃W
 	s.await("group chat")
 
+	// The one agent already on the roster - `/new` opens no pane and selects
+	// nothing (starts.go's draftMention), so the cursor stays on whichever
+	// agent startWakeInAConversation opened, which is this one, through the
+	// whole loop below.
+	before := agentsOnRoster(s)
+	if len(before) != 1 {
+		t.Fatalf("want one agent on the roster before the fleet is grown, got %v.\n%s", before, s.dump())
+	}
+
 	// Names the pool cannot have already given the agent bare `wake` spawns.
 	// The first draft used ordinary first names and flaked: the pool assigns
 	// one of those to the first session, so `/new milo` collided with the milo
@@ -33,16 +42,30 @@ func fleetOfNine(t *testing.T, s *screen) []string {
 	names := []string{"w1", "w2", "w3", "w4", "w5", "w6", "w7", "w8"}
 	for _, n := range names {
 		s.send("/new " + n + "\r")
-		// The notice rather than the conversation: /new opens the new agent's
-		// pane when the daemon's report arrives, and under load that report can
-		// land after the ⌃W below - so waiting on the pane is waiting on a race.
-		// The notice is written when the start is acknowledged either way.
+		// /new opens no pane and drafts a mention instead, so this waits on the
+		// notice that says the start was acknowledged rather than on a pane
+		// that never opens.
 		s.await("@" + n + " started")
-		s.send("\x17") // ⌃W, harmless if no pane opened
+		// The room's draft is now "@n " (starts.go's draftMention), and these
+		// are raw keystrokes typed into whatever the box already holds - so
+		// without clearing it first, the next /new below is typed onto the end
+		// of this one's mention and reaches that agent as an ordinary message
+		// instead of Wake's router. esc clears the room's draft in one press -
+		// settled before the next byte, or bubbletea reads the two as one
+		// alt-modified key the way escprobe_test.go documents for two escapes.
+		s.send("\x1b")
+		s.settle()
+		s.send("\x17") // ⌃W, harmless: the room is what has the keys throughout
 		s.await("group chat")
 	}
 	// No ⌃R: the sidebar is open on arrival and nothing above closes it.
 	s.settle()
+
+	// Walk the cursor onto the bottom of the fleet as drawn, so the fold this
+	// helper exists to test has something below it to reach - the cursor is
+	// otherwise still on the one agent that predates the loop.
+	all := agentsOnRoster(s)
+	s.pickRoster(before[0], all[len(all)-1])
 	return names
 }
 

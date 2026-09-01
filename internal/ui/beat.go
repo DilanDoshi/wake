@@ -158,7 +158,11 @@ func workingLine(id, state, doing string, started time.Time, tokens, width int) 
 	if word == "" {
 		word = heartbeatWord(turnSeed(id, started))
 	}
-	return heartbeatLine(word, turnAge(state, started), tokens, width)
+	// activeForm is agent-authored and the airlock keeps its newlines (Contained
+	// strips only terminal control), but this line is budgeted as exactly one row
+	// - a multiline word draws past it and, beside a card, pushes the key line off
+	// screen. Flattened here, the way the status bar keeps to one row. See oneRow.
+	return heartbeatLine(oneRow(word), turnAge(state, started), tokens, width)
 }
 
 const (
