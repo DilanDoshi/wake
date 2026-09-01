@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -66,6 +67,73 @@ func TestYourOwnMessageSitsOnAShadedRectangle(t *testing.T) {
 		if got := lipgloss.Width(line); got != width {
 			t.Errorf("body line %d is %d cells against a width of %d: the ground is ragged, not a rectangle", i, got, width)
 		}
+	}
+}
+
+// Your own turn's words line up with the reply beneath them. Both sit at
+// bodyIndent - glamour's two-column margin - so only the "› you" label is at the
+// edge, the same rule thinkingBlock already follows. The room-routed turn shades
+// through the same shadedOwn, so it is covered here too.
+func TestYourOwnMessageAlignsWithTheReply(t *testing.T) {
+	forceColour(t)
+	const width = 40
+	const text = "does the retry header survive a 401 or does refresh drop it somewhere"
+
+	// Where the assistant's prose starts, measured off the real reply render so
+	// the two surfaces cannot drift apart in the test either.
+	reply := NewDM("s1", "sydney").kindBlock(core.Event{Kind: core.KindAssistantText, Text: text}, width)
+	want := indentOf(stripANSI(reply), "does")
+	if want != bodyIndent {
+		t.Fatalf("precondition: the assistant reply starts at column %d, not bodyIndent (%d)", want, bodyIndent)
+	}
+
+	bg := background(t)
+	for _, fromRoom := range []bool{false, true} {
+		out := userBlock(core.Event{Kind: core.KindUserText, Text: text, FromRoom: fromRoom}, width)
+		body := strings.Split(out, "\n")[1:] // line 0 is the label
+		if len(body) < 2 {
+			t.Fatalf("fromRoom=%v: fixture did not wrap (%d body line(s)), so a ragged edge cannot show", fromRoom, len(body))
+		}
+		if got := indentOf(stripANSI(out), "does"); got != want {
+			t.Errorf("fromRoom=%v: your own turn starts at column %d, the reply at %d - they do not line up:\n%s", fromRoom, got, want, out)
+		}
+		// The indent is drawn inside the shade, so every line is still a solid
+		// width-cell rectangle - wrapped lines included.
+		for i, line := range body {
+			if !strings.Contains(line, bg) {
+				t.Errorf("fromRoom=%v: body line %d lost its shaded ground:\n%q", fromRoom, i, line)
+			}
+			if cells := lipgloss.Width(line); cells != width {
+				t.Errorf("fromRoom=%v: body line %d is %d cells against width %d - the ground is ragged, not a rectangle", fromRoom, i, cells, width)
+			}
+		}
+	}
+}
+
+// The shaded own turn is a rectangle bounded to its pane at every width,
+// including the ones too narrow for the indent. PaddingLeft(bodyIndent) at
+// width <= bodyIndent leaves Width zero cells to wrap into and spills the whole
+// message onto one unbounded line - which in the room would shove the
+// neighbouring columns out of place - so shadedOwn drops the indent below that
+// width and the shade below one column. Unreachable today, since every caller
+// floors at minBlockWidth, but the guard belongs on the function. youSaid shades
+// through the same primitive, so one sweep covers both surfaces.
+func TestAShadedOwnTurnNeverOverflowsItsPane(t *testing.T) {
+	const breakable = "alpha beta gamma delta epsilon zeta eta theta iota kappa"
+	for _, w := range []int{1, bodyIndent, bodyIndent + 1, 4, 8, 20, 40} {
+		for _, out := range []string{shadedOwn(breakable, w), youSaid("@sydney "+breakable, w)} {
+			for _, line := range strings.Split(out, "\n") {
+				if cells := ansi.StringWidth(line); cells > w {
+					t.Errorf("width %d: a shaded own-turn line is %d cells - the ground overflows the pane and shoves its neighbours out of place:\n%q", w, cells, line)
+				}
+			}
+		}
+	}
+
+	// Below one column Width(0) is unbounded, so there is nothing to bound; the
+	// turn falls back to plain text rather than an endless shaded line.
+	if got, want := shadedOwn("hi", 0), TextStyle.Render("hi"); got != want {
+		t.Errorf("shadedOwn lost its width<1 fallback: got %q, want %q", got, want)
 	}
 }
 

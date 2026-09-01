@@ -106,7 +106,28 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 	bin := wakeBinary(t)
 	cmd := exec.Command(bin, args...)
 	cmd.Dir = dir
-	cmd.Env = append(os.Environ(), "TERM=xterm-256color")
+	// XDG_CONFIG_HOME is pinned to a scratch directory for the same reason
+	// WAKE_SOCKET is asserted above: internal/termsetup reads it to find the
+	// terminal configs `wake setup-terminal` and the first-run notice touch,
+	// and the real binary run here would otherwise read and write the
+	// machine's own ~/.config. termsetup.ConfigHome checks this before ever
+	// falling back to $HOME, so this alone is enough - $HOME itself is left
+	// real, which is what discover.go's ProjectsDir and fleet.go's own
+	// ~/.wake fallback (unreachable here, since WAKE_SOCKET is always set)
+	// already assume.
+	//
+	// withoutTerminalDetectionEnv strips every variable internal/termsetup.Detect
+	// or DetectMultiplexer reads, rather than overriding each with an empty
+	// value: Detect's TERM_PROGRAM check is a value switch, so an empty override
+	// works there, but KITTY_WINDOW_ID/WEZTERM_PANE/ALACRITTY_*/TMUX/STY are
+	// presence checks, for which an *empty* env entry still counts as present -
+	// appending "KITTY_WINDOW_ID=" would make a screen test report Kitty on a
+	// machine that never set the variable at all. Without this a screen test run
+	// from this developer's own Ghostty session renders the first-run notice in
+	// every room it opens, which is a real behaviour change no screen test here
+	// is asserting on - and it is what made TestTheRoomDrawsAWorkingLineOnARealScreen
+	// flake under full-suite load.
+	cmd.Env = append(withoutTerminalDetectionEnv(os.Environ()), "TERM=xterm-256color", "XDG_CONFIG_HOME="+t.TempDir())
 	if testParentLeaseRead != nil {
 		childFD := 3 + len(cmd.ExtraFiles)
 		cmd.ExtraFiles = append(cmd.ExtraFiles, testParentLeaseRead)
@@ -159,6 +180,32 @@ func testLeaseEnv(env []string, fd int) []string {
 		}
 	}
 	return append(out, fmt.Sprintf("%s=%d", testParentLeaseSourceEnv, fd))
+}
+
+// terminalDetectionVars is every variable internal/termsetup.Detect or
+// DetectMultiplexer reads. Named once so startWakeIn's filter and any test
+// that wants to opt back into a specific one (none does yet) share the list.
+var terminalDetectionVars = []string{
+	"TERM_PROGRAM", "WEZTERM_PANE", "KITTY_WINDOW_ID",
+	"ALACRITTY_WINDOW_ID", "ALACRITTY_SOCKET", "ALACRITTY_LOG",
+	"TMUX", "STY",
+}
+
+// withoutTerminalDetectionEnv drops every entry whose key is in
+// terminalDetectionVars, so a spawned wake reports internal/termsetup.Unknown
+// with no multiplexer regardless of what the host running this suite happens
+// to be. Filtering rather than overriding with an empty value matters for the
+// presence-based checks (KITTY_WINDOW_ID and friends) - an empty override is
+// still a present key, per startWakeIn's own comment.
+func withoutTerminalDetectionEnv(env []string) []string {
+	out := make([]string, 0, len(env))
+	for _, entry := range env {
+		key, _, _ := strings.Cut(entry, "=")
+		if !slices.Contains(terminalDetectionVars, key) {
+			out = append(out, entry)
+		}
+	}
+	return out
 }
 
 // startWakeInAConversation is `wake new`: an agent, and its conversation with

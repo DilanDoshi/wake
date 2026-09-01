@@ -22,16 +22,17 @@ const (
 	// width, applied to height.
 	minTranscriptHeight = 1
 
-	// minDMHeight is the shortest View the DM draws: Composer's four rows and
-	// one row of transcript. TestViewFloorsBelowItsMinimumSize pins it against
-	// the composer it is derived from. The pane's name is no longer a row of
-	// its own - it sits in the composer's top border, so it costs nothing.
-	minDMHeight = composerViewHeight + minTranscriptHeight
+	// minDMHeight is the shortest View the DM draws: Composer's four rows, the
+	// blank row kept above the box (composerGap), and one row of transcript.
+	// TestViewFloorsBelowItsMinimumSize pins it. The pane's name is no longer a
+	// row of its own - it sits in the composer's top border, so it costs nothing.
+	minDMHeight = composerViewHeight + composerGap + minTranscriptHeight
 
-	// composerViewHeight is what Composer.View returns - the three-row
-	// bordered box plus the hint line. View measures the real composer rather
-	// than trusting this; it exists so minDMHeight can be a constant.
-	composerViewHeight = 4
+	// composerViewHeight is what an unarmed Composer.View returns - the
+	// three-row bordered box, and no legend row, since the always-on hints moved
+	// to the status bar. View measures the real composer rather than trusting
+	// this; it exists so minDMHeight can be a constant.
+	composerViewHeight = 3
 
 	// minBlockWidth is the narrowest width a block renderer is asked for.
 	// Below it they degenerate: ToolCall truncates a line to an ellipsis and
@@ -231,6 +232,7 @@ type barKey struct {
 	state  string
 	used   int
 	window int
+	prs    *prSet // a PR arrives mid-turn with no other bar fact moving, so the key must carry it; prSet.same keeps the pointer stable so it does not redraw per frame
 }
 
 // withBar re-renders the status bar if anything it is drawn from has moved, and
@@ -244,7 +246,7 @@ func (d DM) withBar(width int) DM {
 	mode := d.composer.Mode()
 	key := barKey{
 		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, mode: mode, state: d.Agent.State,
-		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow,
+		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow, prs: d.Agent.prs,
 	}
 	if key == d.barFrom {
 		return d
@@ -294,23 +296,14 @@ func (d DM) SetSize(w, h int) DM {
 	}
 	d.height = h
 	// The composer wraps the draft as keys arrive, so it is sized here rather
-	// than only when it is drawn. See Composer.SetWidth.
-	// The heartbeat's row and the status bar's are chrome the draft does not own
-	// either, so they come out of its allowance the same way the transcript's
-	// floor does - see composerRowsIn.
-	// Re-wrapped before the chrome is measured: its rows are part of what the
-	// transcript's height is taken out of, so a preview laid out for the old
-	// width would size the pane against rows that no longer exist.
+	// than only when it is drawn (see Composer.SetWidth), and aboveComposerExtra
+	// is the chrome the draft does not own - taken out of its allowance the way
+	// the transcript's floor is. The preview is re-wrapped first: its rows are
+	// part of that chrome, so one laid out for the old width would size the pane
+	// against rows that no longer exist.
 	d.partial = d.partial.sized(d.blockWidth())
-	extra := d.partial.rows()
-	if d.hasBeat() {
-		extra++
-	}
-	if d.bar != "" {
-		extra++
-	}
 	d.composer = d.composer.SetWidth(max(w, minComposerWidth)).
-		WithMaxRows(composerRowsIn(h, d.composer.overhead()+extra))
+		WithMaxRows(composerRowsIn(h, d.composer.overhead()+d.aboveComposerExtra()))
 
 	// A height change is not that. It moves a window over lines that already
 	// exist, so a reader who has scrolled back keeps their place - which is the
@@ -568,8 +561,12 @@ func (d DM) View(width, height int) string {
 	if d.partial.view != "" {
 		rows = append(rows, d.partial.view)
 	}
+	// The working/done line, preceded by its beatGap blank (dmbeat.go).
 	if beat := d.heartbeat(); beat != "" {
-		rows = append(rows, beat)
+		rows = append(rows, "", beat)
+	}
+	if d.menu == "" { // composerGap, dropped when a menu hugs the box instead
+		rows = append(rows, "")
 	}
 	// Above the composer with the heartbeat, because both answer "what is
 	// happening now" - the heartbeat for this agent, this board for the tasks it
@@ -757,29 +754,35 @@ func (d DM) menuRows() int {
 }
 
 // baseChrome is the chrome that is not the menu, which is what the menu's own
-// allowance is measured against.
+// allowance is measured against. The task board is counted rather than drawn -
+// rendering it costs a truncation per row and this runs on every re-lay.
 func (d DM) baseChrome() int {
-	h := lipgloss.Height(d.composer.View(max(d.width, minComposerWidth)))
-	// The preview's rows. Counted off the wrap the draw will use rather than
-	// re-wrapped here, for the reason the bar below is read from its cache:
-	// this runs inside SetSize and on every View.
-	h += d.partial.rows()
-	// The heartbeat's row, on the same condition heartbeat() draws one - the
-	// working line or the done line. Asked as the predicate rather than by
-	// rendering it: this runs inside SetSize, and the line costs a shimmer across
-	// its own width to produce.
+	composer := lipgloss.Height(d.composer.View(max(d.width, minComposerWidth)))
+	return composer + d.aboveComposerExtra() + d.checklistRows()
+}
+
+// aboveComposerExtra is the rows above the composer that are neither transcript
+// nor the board: the streamed preview, the working/done line with its beatGap,
+// the composerGap, and the status bar. Shared by baseChrome (which adds the
+// board) and SetSize's composer bound (which does not - the board is pinned but
+// the draft grows beneath it). Everything is a count rather than a render,
+// because this runs inside SetSize and on every View: the preview off its wrap,
+// the beat as a predicate (the line costs a shimmer to draw), the bar from its
+// cache (drawing it reads the filesystem). The composerGap is keyed on the raw
+// menu field so this and View never disagree - a mismatch sizes the pane a row
+// out and scrolls the alt screen.
+func (d DM) aboveComposerExtra() int {
+	n := d.partial.rows()
 	if d.hasBeat() {
-		h++
+		n += 1 + beatGap
 	}
-	// The status bar's row. Read from the cache rather than rendered: this runs
-	// inside SetSize, and drawing the bar reads the filesystem.
+	if d.menu == "" {
+		n += composerGap
+	}
 	if d.bar != "" {
-		h++
+		n++
 	}
-	// The task board. Counted rather than drawn, for the same reason: rendering
-	// it costs a truncation per row and this runs on every re-lay.
-	h += d.checklistRows()
-	return h
+	return n
 }
 
 // minHeight is the shortest pane this conversation draws: its chrome, plus one

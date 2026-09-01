@@ -922,6 +922,35 @@ func TestDecodeToolResultWithNoTextBlocksYieldsNoProse(t *testing.T) {
 	}
 }
 
+// A tool that returns an image - Read on a PNG - records the tool_result with
+// an array carrying an image block and no text. It used to render nothing (a
+// ⏺ Read header over an empty ⎿ body); it now carries the same [Image]
+// placeholder a decoded image on a user turn already does, so the result reads
+// rather than vanishes. Wake never draws the bytes - the placeholder is all of
+// it.
+func TestDecodeToolResultWithImageBlockYieldsPlaceholder(t *testing.T) {
+	line := `{"type":"user","session_id":"s1","message":{"role":"user","content":[{"tool_use_id":"toolu_1","type":"tool_result","content":[{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGg"}}]}]}}`
+
+	ev := onlyEvent(t, line, 0)
+	if ev.Kind != KindToolResult {
+		t.Fatalf("Kind = %q, want %q", ev.Kind, KindToolResult)
+	}
+	if ev.Text != ImagePlaceholder {
+		t.Errorf("Text = %q, want %q - a tool_result image must read as the placeholder, not as nothing", ev.Text, ImagePlaceholder)
+	}
+}
+
+// A tool_result carrying prose and an image interleaves them in order, each
+// image contributing one placeholder, joined by the blank line every other
+// pair of blocks already takes.
+func TestDecodeToolResultJoinsTextAndImageInOrder(t *testing.T) {
+	line := `{"type":"user","session_id":"s1","message":{"role":"user","content":[{"tool_use_id":"toolu_1","type":"tool_result","content":[{"type":"text","text":"here it is"},{"type":"image","source":{"type":"base64","media_type":"image/png","data":"iVBORw0KGg"}}]}]}}`
+
+	if got, want := onlyEvent(t, line, 0).Text, "here it is\n\n"+ImagePlaceholder; got != want {
+		t.Errorf("Text = %q, want %q", got, want)
+	}
+}
+
 // The recorded rewind fixture (testdata/transcript/rewind-tree.jsonl, Task 0)
 // proves both halves DecodeTranscriptNode reads: several user nodes carrying
 // their own uuid and their parent's, and the rewind marker's own leaf.

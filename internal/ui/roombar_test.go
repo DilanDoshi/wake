@@ -8,12 +8,14 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// The room draws an info bar above its legend when it has an agent to draw one
-// for, and none when it does not - the room aggregates a fleet, so a bar there
-// is a fact about one named agent or nothing at all.
+// The room draws an info bar above its armed cue when it has an agent to draw
+// one for, and none when it does not - the room aggregates a fleet, so a bar
+// there is a fact about one named agent or nothing at all. A detach is armed to
+// have a cue row at all, the only legend row now.
 func TestRoomDrawsInfoBarAboveLegend(t *testing.T) {
-	r := NewRoom().SetSize(120, 24).
+	r := NewRoom().
 		withBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", Effort: "xhigh"}, "auto", 120)
+	r = r.WithComposer(r.Composer().WithArms(legendArms{detach: true})).SetSize(120, 24)
 
 	out := stripANSI(r.View(120, 24))
 	lines := strings.Split(out, "\n")
@@ -22,7 +24,7 @@ func TestRoomDrawsInfoBarAboveLegend(t *testing.T) {
 		if strings.Contains(l, effortLabel+"xhigh") {
 			barAt = i
 		}
-		if strings.Contains(l, "send") {
+		if strings.Contains(l, armedSendLabel) {
 			hintAt = i
 		}
 	}
@@ -30,10 +32,10 @@ func TestRoomDrawsInfoBarAboveLegend(t *testing.T) {
 		t.Fatalf("the room info bar was not drawn:\n%s", out)
 	}
 	if hintAt < 0 {
-		t.Fatalf("the legend was not drawn:\n%s", out)
+		t.Fatalf("the armed cue was not drawn:\n%s", out)
 	}
 	if barAt > hintAt {
-		t.Fatalf("the room bar (row %d) must sit above the legend (row %d):\n%s", barAt, hintAt, out)
+		t.Fatalf("the room bar (row %d) must sit above the cue (row %d):\n%s", barAt, hintAt, out)
 	}
 
 	empty := NewRoom().SetSize(120, 24).withBar(Agent{}, "", 120)

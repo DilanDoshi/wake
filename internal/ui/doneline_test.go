@@ -191,8 +191,9 @@ func TestDMHeartbeatIsTheDoneLineWhenIdleAfterATurn(t *testing.T) {
 	}
 }
 
-// The done line takes a chrome row exactly as the working line does; if it did
-// not, the pane would be sized a row short and the alt screen would scroll.
+// The done line takes the same chrome as the working line: the line itself plus
+// the blank row above it, two rows over idle. If they were not budgeted, the
+// pane would be sized short and the alt screen would scroll.
 func TestTheDoneLineCostsAChromeRow(t *testing.T) {
 	start := time.Now()
 	d := NewDM("s1", "alex").SetSize(80, 30)
@@ -203,7 +204,7 @@ func TestTheDoneLineCostsAChromeRow(t *testing.T) {
 	d.Agent = Agent{State: rpc.StateIdle, startedAt: start, doneAt: start.Add(time.Minute), turnDur: time.Minute}
 	with := d.chromeHeight()
 
-	if with != without+1 {
-		t.Errorf("chromeHeight without the done line = %d, with = %d: it should cost one row", without, with)
+	if with != without+2 {
+		t.Errorf("chromeHeight without the done line = %d, with = %d: it should cost its line and the blank above it", without, with)
 	}
 }
