@@ -49,7 +49,17 @@ func titledBox(body string, width int, style lipgloss.Style, top, bottom string,
 	// to its own minimum at narrow widths and returns a row wider than the
 	// width it was given. Width lays the rows out; MaxWidth is what makes the
 	// frame's own claim true.
-	inner := style.BorderTop(false).BorderBottom(false).Width(edge).MaxWidth(edge).Render(body)
+	//
+	// A border-only style (the tile's rounded box, no padding) is the one case
+	// the clip must widen to the full frame: its side walls sit in
+	// boxFrameWidth, and clipping to the edge shaves the right wall off. Every
+	// other style keeps the edge clip - a plain body (no walls to lose) and the
+	// card's border+padding, which is left exactly as it was.
+	clip := edge
+	if style.GetBorderLeft() && style.GetHorizontalPadding() == 0 {
+		clip = width
+	}
+	inner := style.BorderTop(false).BorderBottom(false).Width(edge).MaxWidth(clip).Render(body)
 	b := lipgloss.RoundedBorder()
 	rule := lipgloss.NewStyle().Foreground(style.GetBorderTopForeground())
 	return lipgloss.JoinVertical(lipgloss.Left,
