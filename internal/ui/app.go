@@ -387,11 +387,11 @@ func NewRoomApp(conn net.Conn, stream Stream, seed *rpc.Status) App {
 		dms:    map[string]*DM{},
 		grid:   NewGrid(),
 		dragAt: noDrag,
-		// Both sidebars start open. They are what the room is for - who is
-		// there and what they are doing - and Layout hides them by width
-		// anyway, so opening narrow costs nothing and opening wide is the
-		// arrangement §8 describes.
-		layout: Layout{ShowGroups: true, ShowRoster: true},
+		// The right sidebar starts open - what the room is for, who is there and
+		// what they are doing; Layout hides it by width anyway. The left
+		// workspaces sidebar (ShowGroups) is hidden for now - kept in the code
+		// (groups.go, Regions) but never enabled and with no ⌃G. See groups.go.
+		layout: Layout{ShowRoster: true},
 	}
 	// A blocked agent in the seed is answerable immediately rather than after
 	// the next push: the report carries a request id for exactly the client

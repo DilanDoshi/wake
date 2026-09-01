@@ -92,8 +92,11 @@ func TestCtrlWClosesTheConversationAndKeepsIt(t *testing.T) {
 	}
 }
 
-// ⌃G and ⌃R are the two sidebars. Asserted on the columns rather than on a
-// flag, because the flag is what a case that does nothing else would still set.
+// ⌃R is the sidebar key. Asserted on the columns rather than on a flag, because
+// the flag is what a case that does nothing else would still set.
+//
+// ⌃G, the left workspaces sidebar, is hidden for now (see groups.go), so only
+// the activity sidebar has a key here.
 func TestTheSidebarKeysOpenAndCloseTheirColumns(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40).applyFrame(blockedFleet())
 
@@ -102,7 +105,6 @@ func TestTheSidebarKeysOpenAndCloseTheirColumns(t *testing.T) {
 		key  tea.KeyType
 		of   func(Regions) int
 	}{
-		{"⌃G", tea.KeyCtrlG, func(r Regions) int { return r.Groups }},
 		{"⌃R", tea.KeyCtrlR, func(r Regions) int { return r.Roster }},
 	} {
 		open := tc.of(a.regions())

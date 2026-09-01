@@ -147,8 +147,8 @@ func (g Groups) View(agents []Agent, width, height int) string {
 		// same decision on the other sidebar and the reason this one is not a
 		// scroll: a workspace list has no cursor, so there is nothing to follow
 		// and nothing to reach the rows below with. The count is what an
-		// operator can act on - ⌃G is one key away from the room, which does
-		// have the whole fleet.
+		// operator can act on - the room has the whole fleet. (This sidebar is
+		// hidden for now; see the header.)
 		room = height - 1
 	}
 

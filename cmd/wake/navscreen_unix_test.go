@@ -123,20 +123,21 @@ func TestCtrlCFromTheRoomRefusesAnAgentYouCannotSee(t *testing.T) {
 	s.await("▪ " + name)
 }
 
-// The four regions are separated by a rule, which is what the spec draws and
-// what the build did not have: sidebars were columns of text with whitespace
-// between them.
+// The regions are separated by a rule, which is what the spec draws and what
+// the build did not have: sidebars were columns of text with whitespace between
+// them. Three regions now - the room, the conversation and the activity sidebar
+// - since the left workspaces sidebar is hidden (groups.go), so two rules.
 func TestTheSidebarsAreSeparatedByARule(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 
 	s := startWakeInAConversation(t, 200, 45)
 	s.await("ready")
-	s.settle() // all four regions are drawn on arrival
+	s.settle() // every drawn region is up on arrival
 
 	row := s.lines()[3] // a row below the headers, inside every column
-	if n := strings.Count(row, "│"); n != 3 {
-		t.Fatalf("want three rules between four regions, got %d in %q.\n%s", n, row, s.dump())
+	if n := strings.Count(row, "│"); n != 2 {
+		t.Fatalf("want two rules between three regions, got %d in %q.\n%s", n, row, s.dump())
 	}
 }
 

@@ -55,7 +55,6 @@ pressing it on your machine produce anything at all?
 | `⌃Y` | Open that same agent in a new column beside the room | It shadows nothing anywhere, so nothing arriving means the byte is being taken above Wake |
 | `⌃B` | Open it below the focused pane instead | Some readline setups claim `⌃B` for backward-char; in a one-line composer that is `←`, so losing it costs nothing and losing *open below* is the thing to notice |
 | `⌃W` | Close the pane | Some terminals bind `⌃W` to "delete word" |
-| `⌃G` | Toggle the workspaces sidebar | |
 | `⌃R` | Toggle the right sidebar | Some shells bind `⌃R` to reverse-search; inside the alt screen it should reach Wake |
 | `⎋` | Interrupt the current turn | Watch for a delay — some terminals hold `⎋` briefly to see if an escape sequence follows |
 | `⎋⎋` | With something typed into a **conversation** pane, clear the draft. The legend under that box changes to `⎋ clear draft` after the first press | This is the key most exposed to the delay above: the two presses have to reach Wake as `esc esc` or as one `alt+esc`, and a terminal that inserts a long escape timeout between them will produce two *first* presses and never clear. **Try it fast and slow, and say which one failed** — the suite covers both spellings and can prove neither happens on your hardware |
