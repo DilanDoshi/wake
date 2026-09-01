@@ -342,11 +342,34 @@ func (c Composer) Update(msg tea.Msg) (Composer, tea.Cmd) {
 // stays pinned to its first row however far the cursor has gone. It is one
 // render per keystroke, which is work per change; View renders it again per
 // frame either way.
+//
+// **It also pulls the view back to the top, which is what settles a resize.**
+// fit changes the box height without moving the cursor, and bubbles only ever
+// re-scrolls to follow the cursor - so when the box GROWS (a wider or taller
+// pane) the deeper scroll a short box needed survives, and the box draws its
+// last content rows above blank prompt rows: the "extra space in the query bar"
+// a window resize leaves. A bare repositionView will not undo it, because the
+// cursor is already in view. There is no exported way to set the viewport
+// offset, so this scrolls it up the one way a value receiver can - the wheel
+// message the text area forwards to its viewport - and then repositionView
+// (run at the end of every Update) re-shows the cursor: the tail when the draft
+// overflows the box, the top when it fits. The wheel never touches the cursor.
+// It runs at the bound for the phantom-row reason above, is bounded by the cap,
+// and exits the moment the box stops changing - one Update on an unscrolled box.
 func (c Composer) reposition() Composer {
 	fitted := c.ta.Height()
 	c.ta.SetHeight(c.bound())
 	_ = c.ta.View()
-	c.ta, _ = c.ta.Update(nil)
+	up := tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelUp}
+	prev := ""
+	for range maxComposerRows + 1 {
+		c.ta, _ = c.ta.Update(up)
+		now := c.ta.View()
+		if now == prev {
+			break
+		}
+		prev = now
+	}
 	c.ta.SetHeight(fitted)
 	return c
 }
@@ -462,11 +485,14 @@ func composerRowsIn(height, overhead int) int {
 	return min(max(height-minTranscriptHeight-overhead, 1), maxComposerRows)
 }
 
-// WithMaxRows bounds how tall the box may grow and re-fits it. The pane owns
-// this number because only the pane knows what the transcript can spare.
+// WithMaxRows bounds how tall the box may grow, re-fits it, and repositions the
+// view for the new size. The pane owns this number because only the pane knows
+// what the transcript can spare, and it is the last step of a pane's re-lay
+// (SetSize does SetWidth then this), so the reposition here is what settles a
+// scroll a resize left stale - see reposition.
 func (c Composer) WithMaxRows(n int) Composer {
 	c.maxRows = max(n, 1)
-	return c.fit()
+	return c.fit().reposition()
 }
 
 // overhead is the rows the composer spends on everything that is not the
