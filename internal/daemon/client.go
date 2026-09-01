@@ -159,11 +159,12 @@ func (c *client) closed() bool {
 	}
 }
 
-// gapNotice opens the error frame that announces dropped frames. Named
-// because two other places recognise it by its text: the soak counts them, and
-// watchStates fails on one - a test that concludes "the daemon never entered
-// that state" from the frames it received is only entitled to if none went
-// missing.
+// gapNotice is the word that opens the human-readable half of a dropped-frames
+// report. The count also rides the frame as the typed rpc.Frame.Dropped, and
+// that is what every consumer routes on now: the UI's invalidation, the soak's
+// count, watchStates' failure - none of them string-match this sentence any
+// more. The text stays because a frame a person reads in a log should still say
+// what happened, and TestADroppedFrameIsConfessedBeforeTheNextOne pins that half.
 const gapNotice = "dropped"
 
 // flush reports the gap, if any, and then writes the frame.
@@ -174,6 +175,7 @@ const gapNotice = "dropped"
 func (c *client) flush(f rpc.Frame) error {
 	if n := c.dropped.Swap(0); n > 0 {
 		gap := errorFrame("", fmt.Sprintf("%s %d frames: this client was not reading fast enough, so its view has a gap", gapNotice, n))
+		gap.Dropped = int(n)
 		if err := c.send(gap); err != nil {
 			return err
 		}

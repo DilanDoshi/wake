@@ -612,16 +612,10 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 	}
 	if m.dropped > 0 {
 		// Counted at the buffer, and previews are not in it: a lost token is
-		// replaced by the block behind it, so this sentence and the forgetting
-		// below fire only when the record itself lost something. See inbox.go.
-		notice.Report("dropped %d frames: this window could not draw fast enough, so the conversation above has a gap", m.dropped)
-		// A receipt is one of the frames that can be in that gap, and a
-		// permission mode kept across one is a mode this window cannot vouch
-		// for - in the direction that matters. See forgotModes.
-		a = a.forgotModes()
-		// A turn's result is another, and its boundary is what would have
-		// cleared the count the row is drawing. See Fleet.ForgetTurns.
-		a.fleet = a.fleet.ForgetTurns()
+		// replaced by the block behind it, so notedGap fires only when the record
+		// itself lost something. See inbox.go, and notedGap for the invalidation
+		// this shares with the daemon's own gap.
+		a = a.notedGap(m.dropped)
 	}
 	for _, f := range m.frames {
 		a = a.apply(f)
@@ -636,6 +630,29 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		return next, tea.Batch(tick, rl, next.reading())
 	}
 	return a.hungUp(m.err)
+}
+
+// notedGap reports a frame gap and drops the per-turn beliefs a missing frame
+// could have staled: the permission mode, and the turn's tool and counts.
+//
+// One helper for the two gap producers, so their invalidation cannot drift: the
+// window's own ring counts a drop onto streamMsg.dropped, and the daemon's client
+// queue reports its overflow as a FrameError carrying rpc.Frame.Dropped. Both
+// mean the same thing - the record has a hole - and both demand the same two
+// forgettings. A permission-mode receipt may be in the hole, and a mode kept
+// across one is a mode this window cannot vouch for in the unsafe direction (see
+// forgotModes); a turn's result may be in it too, and its boundary is what would
+// have cleared the turn state the roster draws (see Fleet.ForgetTurns).
+//
+// Not inDM: a gap is not itself a turn-end, and clearing it blindly here would
+// leak an in-flight DM turn's remaining prose into the room. It is reconciled
+// instead at the report's own working→idle edge (Fleet.WithStatus), the
+// gap-robust second observable of the turn-end fold clears it on. See bugs.md.
+func (a App) notedGap(n int) App {
+	notice.Report("dropped %d frames: this window fell behind, so the conversation above has a gap", n)
+	a = a.forgotModes()
+	a.fleet = a.fleet.ForgetTurns()
+	return a
 }
 
 // apply folds one frame into the model.
@@ -669,6 +686,16 @@ func (a App) apply(f rpc.Frame) App {
 		return a.rewindTargetsArrived(f)
 
 	case rpc.FrameError:
+		// The daemon's own queue overflowed: it dropped frames for this client
+		// and says so with a typed count. That is the same hole the window's ring
+		// produces one layer up, so it routes through the one invalidation rather
+		// than being recognised by the daemon's sentence - the text-matching
+		// client.go's gapNotice already complains two other callers do. See
+		// notedGap. (This frame carries no SessionID, so nothing below is owed it.)
+		if f.Dropped > 0 {
+			return a.notedGap(f.Dropped)
+		}
+
 		// A refused spawn arrives this way rather than as a dropped
 		// connection, so a client that ignored these would show an empty
 		// conversation for a session that never started.
@@ -676,9 +703,7 @@ func (a App) apply(f rpc.Frame) App {
 		// Every one of them is reported now, not only this client's own. A DM
 		// filtered these because it was 1:1 and another agent's failure was
 		// somebody else's window; the room is every agent, so an error about
-		// any of them is about something on this screen. An error carrying no
-		// session is the daemon talking about this client - the report that
-		// frames were dropped - and is always ours.
+		// any of them is about something on this screen.
 		// If this refusal names a fork, stop waiting for a conversation that
 		// will never arrive - most often because the parent is mid-turn. Keyed
 		// on the id and nothing else: an error about *another* agent must leave

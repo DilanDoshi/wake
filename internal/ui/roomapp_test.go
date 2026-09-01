@@ -45,6 +45,46 @@ func TestAnotherAgentsWordsReachTheRoomInsteadOfBeingThrownAway(t *testing.T) {
 	}
 }
 
+// A frame gap can eat the KindTurnEnd that fold clears inDM on, leaving a
+// DM-sent turn's flag stuck true - which would then hold this agent's *next*
+// turn out of the room, even though the operator is no longer in a DM with it.
+// The report is the gap-robust second observable of that turn-end: an agent
+// reported working→idle has inDM reconciled in Fleet.WithStatus, so its next
+// prose reaches the room. This is BUG-30's room-suppression half - notedGap
+// (the mode/tool/counts half) never touches inDM.
+//
+// Mutation check: drop `a.inDM = false` from WithStatus's working→idle edge and
+// the follow-up line never reaches the room.
+func TestAReportedTurnEndClearsAStaleInDMSoTheRoomGetsTheNextTurn(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{Sessions: []rpc.SessionStatus{
+		{ID: "s2", Name: "john", Label: "api-v2", Dir: "/repos/api", State: rpc.StateWorking},
+	}}})
+	// The operator sent this turn from john's DM, so its prose stays private.
+	a.fleet = a.fleet.sending("s2", true)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
+		Kind: core.KindAssistantText, Text: "the private DM answer",
+	}})
+	if strings.Contains(shown(a), "private DM answer") {
+		t.Fatalf("a DM-sent turn's prose reached the room:\n%s", shown(a))
+	}
+	// The turn's KindTurnEnd is dropped in a gap, so fold never clears inDM. The
+	// next report says john is idle - the working→idle edge must reconcile it.
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{Sessions: []rpc.SessionStatus{
+		{ID: "s2", Name: "john", Label: "api-v2", Dir: "/repos/api", State: rpc.StateIdle},
+	}}})
+	if a.fleet.inDM("s2") {
+		t.Fatal("a reported working→idle left inDM stale; the next turn's prose will be held out of the room")
+	}
+	// A new turn's words now belong in the room.
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
+		Kind: core.KindAssistantText, Text: "the public follow-up",
+	}})
+	if !strings.Contains(shown(a), "public follow-up") {
+		t.Errorf("after a reported turn-end the agent's next prose was still suppressed from the room:\n%s", shown(a))
+	}
+}
+
 // A blocked agent is the highest-priority thing in a fleet and the worst thing
 // to be invisible: it is stopped dead until somebody answers, with no timeout
 // and no heartbeat. Its conversation is where it is put and where it is

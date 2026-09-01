@@ -93,15 +93,59 @@ func TestADroppedFrameIsConfessedBeforeTheNextOne(t *testing.T) {
 		if !strings.Contains(f.Text, fmt.Sprint(overflow)) {
 			t.Errorf("gap notice = %q, want it to say how many frames were lost", f.Text)
 		}
-		// And it is recognisable *as* a gap notice. Two places identify one by
-		// its text and neither can see the frame being built: the soak counts
-		// them, and watchStates fails on one - a test that concludes "the
-		// daemon never entered that state" from the frames it received is only
-		// entitled to if none went missing. This is the one test that drives
-		// the real drop path, so it is where the ends of that coupling are
-		// pinned together.
+		// And the human-readable half opens with the word that names it - this is
+		// the log line a person reads, distinct from the typed count machines
+		// route on (TestADroppedFrameCarriesTheTypedGapCount). This is the one
+		// test that drives the real drop path, so it pins the text half here.
 		if !strings.Contains(f.Text, gapNotice) {
-			t.Errorf("gap notice = %q, want it to contain %q - the soak and watchStates both look for that", f.Text, gapNotice)
+			t.Errorf("gap notice = %q, want it to open with %q", f.Text, gapNotice)
+		}
+	case err := <-errs:
+		t.Fatalf("read: %v", err)
+	case <-time.After(testTimeout):
+		t.Fatal("nothing was written to a client with a full queue")
+	}
+}
+
+// The gap is a *typed* signal and not only a sentence. The window routes its own
+// ring's gap through one invalidation - forgotModes and Fleet.ForgetTurns - and
+// the daemon's queue overflow has to reach the same one; recognising it by its
+// text is the string-matching gapNotice's own comment complains two other callers
+// do. So the gap frame carries the count in rpc.Frame.Dropped, which is what the
+// UI reads.
+//
+// Mutation check: drop `gap.Dropped = n` from flush and this fails at 0.
+func TestADroppedFrameCarriesTheTypedGapCount(t *testing.T) {
+	const overflow = 7
+
+	server, peer := net.Pipe()
+	c := newClient(server)
+	t.Cleanup(func() {
+		c.close()
+		_ = peer.Close()
+	})
+
+	for i := range clientQueue + overflow {
+		c.enqueue(rpc.Frame{Kind: rpc.FrameEvent, SessionID: fmt.Sprintf("s%d", i)})
+	}
+
+	go c.write()
+
+	frames, errs := rpc.ReadFrames(peer)
+	defer func() {
+		_ = peer.Close()
+		for range frames {
+		}
+		<-errs
+	}()
+
+	select {
+	case f := <-frames:
+		if f.Kind != rpc.FrameError {
+			t.Fatalf("first frame = %+v, want the gap reported before anything else", f)
+		}
+		if f.Dropped != overflow {
+			t.Errorf("gap Dropped = %d, want %d - the typed count the UI routes its invalidation off", f.Dropped, overflow)
 		}
 	case err := <-errs:
 		t.Fatalf("read: %v", err)

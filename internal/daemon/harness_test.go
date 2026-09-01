@@ -618,8 +618,8 @@ func (c *testClient) watchStates(sessionID string, d time.Duration) []string {
 
 	record := func(f rpc.Frame) {
 		c.seen = append(c.seen, f)
-		if f.Kind == rpc.FrameError && strings.Contains(f.Text, gapNotice) {
-			c.t.Fatalf("the daemon dropped frames for this client (%q) while watching %s, so a state this never saw is no longer evidence the daemon never entered it", f.Text, sessionID)
+		if f.Dropped > 0 {
+			c.t.Fatalf("the daemon dropped %d frames for this client while watching %s, so a state this never saw is no longer evidence the daemon never entered it", f.Dropped, sessionID)
 		}
 		if f.Status == nil || (f.Kind != rpc.FrameStatusReply && f.Kind != rpc.FrameStatusPush) {
 			return
