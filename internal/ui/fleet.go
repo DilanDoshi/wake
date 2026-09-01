@@ -260,6 +260,10 @@ type Fleet struct {
 	// tasks' reason, and folded by foldChecklist. See checklist.go.
 	checklists map[string]checklist
 
+	// subs is each session's subagent backlog, folded whether or not a DM is
+	// open for it. See fleetsubs.go.
+	subs map[string]map[string]chunked[core.Event]
+
 	// parked is the daemon's park book: sessions nothing is holding, which this
 	// client can name and resume and cannot do anything else with.
 	//
@@ -272,7 +276,10 @@ type Fleet struct {
 }
 
 func NewFleet() Fleet {
-	return Fleet{agents: map[string]Agent{}, tasks: map[string]Tasks{}, checklists: map[string]checklist{}}
+	return Fleet{
+		agents: map[string]Agent{}, tasks: map[string]Tasks{}, checklists: map[string]checklist{},
+		subs: map[string]map[string]chunked[core.Event]{},
+	}
 }
 
 // WithStatus folds a fleet report. Both kinds are folded: a reply and a push
@@ -380,9 +387,15 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 	}
 	// Folded before the return below and tested by it: a dispatch frame moves
 	// nothing on Agent, so `now == was` holds for every one of them and a
-	// return taken on that alone would drop the whole fold.
+	// return taken on that alone would drop the whole fold. Same for a
+	// forwarded frame, which is a subagent's rather than this session's own,
+	// and for a reset, which may leave Agent's own fold a no-op (a /clear with
+	// nothing accumulated since the last one) while tasks and subs still need
+	// dropping below.
 	tasks, dispatched := f.foldTask(ev, sessionID)
-	if known && now == was && !dispatched {
+	subs, forwarded := f.foldSub(ev, sessionID)
+	reset := ev.Kind == core.KindSessionReset
+	if known && now == was && !dispatched && !forwarded && !reset {
 		return f, out
 	}
 
@@ -393,6 +406,19 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 	f.agents[sessionID] = now
 	if dispatched {
 		f.tasks[sessionID] = tasks
+	}
+	if forwarded {
+		f.subs[sessionID] = subs
+	}
+	// /clear drops the model's own conversation, and a dispatch or a
+	// subagent's speech from before it is a claim about work the model no
+	// longer has - the same reason DM.clearedBySessionReset blanks the pane's
+	// own copy (clear.go). Without this a dispatch that was running across the
+	// clear kept its pre-clear backlog in the fleet, and viewingPicked would
+	// resurrect it into a DM that just watched the conversation reset.
+	if reset {
+		delete(f.tasks, sessionID)
+		delete(f.subs, sessionID)
 	}
 	return f, out
 }

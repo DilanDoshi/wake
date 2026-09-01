@@ -19,6 +19,7 @@ func (f Fleet) copy() Fleet {
 		agents:     make(map[string]Agent, len(f.agents)+1),
 		tasks:      make(map[string]Tasks, len(f.tasks)+1),
 		checklists: make(map[string]checklist, len(f.checklists)+1),
+		subs:       make(map[string]map[string]chunked[core.Event], len(f.subs)+1),
 		focused:    f.focused,
 	}
 	maps.Copy(out.agents, f.agents)
@@ -30,6 +31,8 @@ func (f Fleet) copy() Fleet {
 	// place - Tasks.Observe copies before it appends - so the shallow copy is
 	// the whole of what this needs.
 	maps.Copy(out.tasks, f.tasks)
+	// subs follows the same rule: foldSub replaces one session's map wholesale.
+	maps.Copy(out.subs, f.subs)
 	out.order = append(make([]string, 0, len(f.order)+1), f.order...)
 	// Carried, not rebuilt: Observe copies for every event that moves an agent,
 	// and a book dropped there would take /resume's only index with it between

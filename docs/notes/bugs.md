@@ -389,6 +389,49 @@ terminal-config side effect the `⇧↵` entry in `deferred.md` weighs and does 
 
 ---
 
+## BUG-33 — a subagent's row in the right sidebar reportedly named `general-purpose` for a dispatch that was not
+
+**Reported 2026-08-31**, secondhand: a session dispatching a named subagent (a custom
+`subagent_type`, not the built-in default) showed `general-purpose` on its row in the right sidebar
+instead. No transcript of the session was available to this investigation.
+
+**Audited and not reproduced.** The whole path was read end to end: `core.taskUpdate` reads
+`subagent_type` off `task_started`/`task_progress` unconditionally into `TaskUpdate.Type`
+(`internal/core/protocol.go`); `Tasks.updated` (`internal/ui/tasks.go`) applies it to `Task.Type`
+only when the frame carries a non-empty value, so `task_updated`/`task_notification` — which carry
+none — cannot clobber what `task_started` set; and `subagentRow`/`subagentName`
+(`internal/ui/rostersubs.go`) reads `Task.Type` first, with no fallback that could read as
+`general-purpose` (`subagentUnnamed` is `"subagent"`). No cross-wiring, no keying bug: rows are keyed
+on `task_id`, exact, including under two concurrent dispatches.
+
+**Three live dispatches were then recorded against a real `code-reviewer` subagent definition** (not
+committed — see below) to settle whether the CLI itself was at fault: a single dispatch, two
+concurrent dispatches with different `subagent_type`s, and one against a nonexistent type (which the
+model declined to attempt, so it settled nothing). In every completed run, `task_started`,
+`task_progress` (when it fired) and the tool-use receipt all carried the real subagent type
+end to end — never `general-purpose`. **The mechanism this entry was written to find was not
+found.**
+
+**Why nothing was committed.** The corpus rule (`CLAUDE.md`'s "Never test against a live LLM... any
+session that misbehaves in real use gets recorded") calls for exactly this — record the session that
+went wrong. But the session that went wrong was never available to record: the report was
+secondhand, the reporter's own transcripts do not carry the frames in question (Claude does not
+persist `task_*` system events to the on-disk transcript at all — confirmed by scanning a large local
+corpus of real sessions for `type":"system"` subtypes and finding none), and a *fresh* recording that
+reproduces the correct behavior is not evidence of the bug — it is evidence against reproducing it
+under the conditions tried. Committing it would have added a fixture that asserts nothing this entry
+is about.
+
+**What would settle it, if it recurs.** The three live tests above never got a `task_progress` frame
+to fire (both dispatches finished before one arrived) — that is the one lifecycle shape this audit
+could not exercise, and `TaskUpdate.Type`'s own doc comment already flags it as unverified for
+anything but `general-purpose` in the recorded corpus. If it recurs, the one fact worth capturing
+under `--debug-file` (`CLAUDE.md`'s per-session logging) is whether a `task_progress` frame for that
+dispatch ever carries a *different* `subagent_type` than its `task_started` — that is the only gap
+this audit did not close.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

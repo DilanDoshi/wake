@@ -168,3 +168,55 @@ func TestASubagentsTranscriptSurvivesAReWrap(t *testing.T) {
 
 	assertShows(t, d, 120, 24, subSaid)
 }
+
+// withSubBacklog is Fleet.SubBacklog's other half: a DM opening a dispatch it
+// never watched live seeds itself from what the fleet held instead of drawing
+// the wire's own floor for a dispatch that truly said nothing.
+func TestWithSubBacklogSeedsADispatchThisDMNeverWatchedLive(t *testing.T) {
+	d := conversation(t).withSubBacklog(subDispatch, []core.Event{spoke(subDispatch, subSaid)})
+
+	assertShows(t, d.Viewing(subDispatch), 80, 24, subSaid)
+}
+
+// The regression an adversarial review found in the first version: a DM that
+// was not yet open when a dispatch's opening lines arrived, and opened only
+// partway through, captured just the tail live - and the first withSubBacklog
+// skipped seeding whenever the DM already held *anything*, reading that
+// partial tail as the whole story. It must always take the fleet's copy,
+// which is complete because foldSub runs unconditionally from the first
+// frame - see fleetsubs.go's header.
+func TestWithSubBacklogRecoversAPrefixMissedBeforeTheDMOpened(t *testing.T) {
+	d := conversation(t).Append(spoke(subDispatch, "second")) // the DM's own, partial, live capture
+
+	full := d.withSubBacklog(subDispatch, []core.Event{spoke(subDispatch, "first"), spoke(subDispatch, "second")})
+	assertShows(t, full.Viewing(subDispatch), 80, 24, "first")
+	assertShows(t, full.Viewing(subDispatch), 80, 24, "second")
+}
+
+// A tool call and its result, seeded together, must settle the same way they
+// would live: Append folds every event through observedTool before it ever
+// asks whether the event is forwarded (dm.go), so a subagent's own tool
+// state was already tracked on the live path - and withSubBacklog has to do
+// the same or a seeded call's ⏺ is stuck reading as still running.
+func TestWithSubBacklogSettlesASeededToolCall(t *testing.T) {
+	forceColour(t)
+	tool := &core.ToolCall{ID: "toolu_x", Name: "Grep"}
+	d := conversation(t).withSubBacklog(subDispatch, []core.Event{
+		{Kind: core.KindToolUse, Tool: tool, Subagent: &core.Subagent{Dispatch: subDispatch, Type: "general-purpose"}},
+		{Kind: core.KindToolResult, Tool: &core.ToolCall{ID: "toolu_x"}, Subagent: &core.Subagent{Dispatch: subDispatch, Type: "general-purpose"}},
+	})
+
+	if got, want := d.bulletFor("toolu_x").Render("x"), ToolOkStyle.Render("x"); got != want {
+		t.Errorf("a seeded, completed call's bullet is %q, want the settled colour %q", got, want)
+	}
+}
+
+// An empty backlog seeds nothing - Task.Openable already keeps the keys off a
+// dispatch that forwarded nothing, and a nil-versus-empty-map distinction here
+// would only matter to Viewing's own floor, which withSubBacklog must not
+// disturb either way.
+func TestWithSubBacklogOnAnEmptyBacklogChangesNothing(t *testing.T) {
+	d := conversation(t).withSubBacklog(subDispatch, nil)
+
+	assertHides(t, d.Viewing(subDispatch), 80, 24, subSaid)
+}
