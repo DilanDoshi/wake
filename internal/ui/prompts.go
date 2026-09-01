@@ -1,19 +1,17 @@
 package ui
 
-// The prompt history: what was typed into this pane, walked with ⌥↑↓.
+// The prompt history: what was typed into this pane, walked with ↑↓.
 //
-// # Why the modifier, and why arrows
+// # Why the bare arrows
 //
-// ↑↓ recall the previous prompt in Claude Code, while here they move the query
-// cursor or the roster (keys.go) - either way the bare arrows are taken, so
-// nothing of Wake's history moves for this. ⌥ is what is
-// left that a terminal actually delivers: keyprobe_test.go measures ⌥↑ arriving
-// as `\x1b[1;3A` and as `\x1b\x1b[A`, both named, while ⌥+letter under the
-// Kitty protocol produces no message at all.
-//
-// bubbletea reports ⌥↑ as tea.KeyUp with Alt set, so App.key's switch on
-// m.Type alone reads it as the roster's key unless something says otherwise.
-// That arm is in keys.go beside ⌥↵'s, which is the same trap.
+// ↑↓ recall the previous prompt in Claude Code, so a hand arriving with that
+// reflex gets the same thing here: on an empty or single-line draft ↑ walks
+// back and ↓ walks forward, and the roster moved to ⇧↑↓ (keys.go). On a
+// multi-line draft the arrow moves the text cursor instead - the recall is
+// only offered when the cursor has nowhere to climb, Composer.CanCursorUp's
+// job. ⌥↑↓ carry no binding of their own: bubbletea reports ⌥↑ as tea.KeyUp
+// with Alt set and App.key's switch is on m.Type alone, so a ⌥ arrow behaves
+// exactly as the bare one does.
 //
 // # Where the history comes from
 //
@@ -47,22 +45,22 @@ const (
 
 	// noPromptHistory is a walk with nothing behind it. Named rather than
 	// silent, for noPaneAdvice's reason.
-	noPromptHistory = "nothing has been typed here yet, so ⌥↑ has no prompt to bring back"
+	noPromptHistory = "nothing has been typed here yet, so ↑ has no prompt to bring back"
 )
 
 // promptWalk is where a walk has got to, and the draft it started from.
 //
 // at counts back from the newest prompt: 0 is the live draft, 1 the newest
 // thing typed, len(prompts) the oldest. held is what was in the box when the
-// walk began, so ⌥↓ off the end of it returns a half-written message rather
+// walk began, so ↓ off the end of it returns a half-written message rather
 // than an empty box.
 type promptWalk struct {
 	at   int
 	held string
 }
 
-// walkPrompts moves one step through the focused pane's history: back for ⌥↑,
-// forward for ⌥↓.
+// walkPrompts moves one step through the focused pane's history: back for ↑,
+// forward for ↓.
 func (a App) walkPrompts(back int) (tea.Model, tea.Cmd, bool) {
 	prompts := a.prompts()
 	if len(prompts) == 0 {
@@ -125,7 +123,7 @@ func promptsIn(evs []core.Event) []string {
 // **echoed** frame is content the transcript replayed or the tooling generated:
 // a bang line's output, an /mcp panel, a compaction summary. None was typed by
 // a person, and userBlock draws all three as something other than the operator
-// speaking - Echoed was the case this predicate was missing, so `⌥↑` pulled a
+// speaking - Echoed was the case this predicate was missing, so `↑` pulled a
 // compaction summary into the draft where `↵` sends it back to the model.
 //
 // **Echoed may be read here and not everywhere**, which is core.Event.Echoed's

@@ -15,8 +15,8 @@ import (
 	"testing"
 )
 
-// ↑↓ walks the roster and ⌃D opens what it lands on.
-func TestArrowsPickAnAgentAndCtrlDOpensIt(t *testing.T) {
+// ⇧↑↓ walks the roster and ⌃D opens what it lands on.
+func TestShiftArrowsPickAnAgentAndCtrlDOpensIt(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 
@@ -36,10 +36,12 @@ func TestArrowsPickAnAgentAndCtrlDOpensIt(t *testing.T) {
 		t.Fatalf("want two agents on the roster beside the manager, got %v.\n%s", s.rosterNames(), s.dump())
 	}
 
-	// The cursor is on robin, where /new left it. Walking it is the subject
-	// here, so it is walked rather than clicked - and the walk is counted off
+	// The cursor is on names[0] already: `/new` opens no pane and selects
+	// nothing (see starts.go's draftMention), so the selection
+	// startWakeInAConversation made when it opened the scripted agent's own
+	// conversation survives untouched. Walking it is the subject below, so the
+	// second one is walked rather than clicked - and the walk is counted off
 	// the roster on screen, because the manager is a row between them now.
-	s.pickRoster(names[1], names[0])
 	s.send("\x04") // ⌃D on the first
 	s.await("@" + names[0])
 
@@ -121,20 +123,21 @@ func TestCtrlCFromTheRoomRefusesAnAgentYouCannotSee(t *testing.T) {
 	s.await("▪ " + name)
 }
 
-// The four regions are separated by a rule, which is what the spec draws and
-// what the build did not have: sidebars were columns of text with whitespace
-// between them.
+// The regions are separated by a rule, which is what the spec draws and what
+// the build did not have: sidebars were columns of text with whitespace between
+// them. Three regions now - the room, the conversation and the activity sidebar
+// - since the left workspaces sidebar is hidden (groups.go), so two rules.
 func TestTheSidebarsAreSeparatedByARule(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 
 	s := startWakeInAConversation(t, 200, 45)
 	s.await("ready")
-	s.settle() // all four regions are drawn on arrival
+	s.settle() // every drawn region is up on arrival
 
 	row := s.lines()[3] // a row below the headers, inside every column
-	if n := strings.Count(row, "│"); n != 3 {
-		t.Fatalf("want three rules between four regions, got %d in %q.\n%s", n, row, s.dump())
+	if n := strings.Count(row, "│"); n != 2 {
+		t.Fatalf("want two rules between three regions, got %d in %q.\n%s", n, row, s.dump())
 	}
 }
 

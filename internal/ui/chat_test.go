@@ -128,12 +128,17 @@ func TestTheRoomDrawsExactlyTheSizeItWasGiven(t *testing.T) {
 		t.Errorf("the last %d rows are not the composer:\n%s", len(composer), strings.Join(got, "\n"))
 	}
 	// The pane's name is in the composer's top border rather than on a row of
-	// its own, which is where Claude Code puts its own.
+	// its own, which is where Claude Code puts its own. One blank row above it is
+	// the breathing room the idle box keeps, so the composer's top is that many
+	// rows up from the gap.
 	if top := lines[len(lines)-len(composer)]; !strings.Contains(top, roomTitle) {
 		t.Errorf("the composer's top edge is %q, want the pane's own name set into it", top)
 	}
-	if want := 24 - len(composer); lipgloss.Height(r.tr.view(marked{})) != want {
-		t.Errorf("the conversation has %d rows of a 24-row pane, want %d: the composer is the whole of the rest", lipgloss.Height(r.tr.view(marked{})), want)
+	if row := lines[len(lines)-len(composer)-composerGap]; strings.TrimSpace(row) != "" {
+		t.Errorf("the row above the composer is %q, want the blank gap", row)
+	}
+	if want := 24 - len(composer) - composerGap; lipgloss.Height(r.tr.view(marked{})) != want {
+		t.Errorf("the conversation has %d rows of a 24-row pane, want %d: the composer and the blank row above it are the whole of the rest", lipgloss.Height(r.tr.view(marked{})), want)
 	}
 }
 

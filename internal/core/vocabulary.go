@@ -436,6 +436,30 @@ func IsModelReply(text string) bool {
 	return strings.HasPrefix(strings.TrimSpace(text), modelReplyPrefix)
 }
 
+// ModelFromModelReply reads the model's display name out of a /model reply, or
+// reports false when the text is not one.
+//
+// It is the model name Claude Code itself renders ("Opus 5 (1M context)"),
+// which is why the status bar prefers it over the init frame's raw id: after a
+// runtime /model the id on the wire is a turn stale, and this is read back at
+// once by re-probing. The name may carry its own parentheses, so the effort
+// clause is removed by pattern rather than by cutting at the first "(".
+func ModelFromModelReply(text string) (string, bool) {
+	if !IsModelReply(text) {
+		return "", false
+	}
+	line := strings.TrimSpace(text)
+	if i := strings.IndexByte(line, '\n'); i >= 0 {
+		line = line[:i]
+	}
+	line = strings.TrimSpace(strings.TrimPrefix(line, modelReplyPrefix))
+	line = strings.TrimSpace(effortClause.ReplaceAllString(line, ""))
+	if line == "" {
+		return "", false
+	}
+	return line, true
+}
+
 // EffortFromModelReply reads the reasoning level out of a /model reply, or
 // reports false when there is no clause or the level is not one /effort takes.
 func EffortFromModelReply(text string) (string, bool) {
@@ -714,12 +738,15 @@ func dispatchResult(status string) SubagentResult {
 // four files end with…"), which is the one thing the airlock exists to
 // prevent, arriving through it rather than around it.
 //
-// Only text blocks contribute. The corpus holds one array that has none - a
-// lone tool_reference (interrupt-cancel-queued-empty.jsonl:28) - and that
-// yields "" rather than its JSON: a result with no prose has no prose to
-// show, and its ⏺ header still names the call, so the event is not lost.
-// Modelling tool_reference itself would mean designing a field around a shape
-// seen once whose meaning is unestablished.
+// Text and image blocks contribute; an image reads as ImagePlaceholder, the
+// same text blockEvent gives a decoded image on a user turn, because a Read of
+// a PNG records its tool_result as a lone image block and dropping it rendered
+// the result as nothing. The corpus also holds one array with neither - a lone
+// tool_reference (interrupt-cancel-queued-empty.jsonl:28) - and that still
+// yields "" rather than its JSON: a result with no prose has no prose to show,
+// and its ⏺ header still names the call, so the event is not lost. Modelling
+// tool_reference itself would mean designing a field around a shape seen once
+// whose meaning is unestablished.
 func toolResultText(content json.RawMessage) string {
 	if !isJSONArray(content) {
 		return jsonString(content)
@@ -734,10 +761,15 @@ func toolResultText(content json.RawMessage) string {
 			Type string `json:"type"`
 			Text string `json:"text"`
 		}
-		if err := json.Unmarshal(rb, &b); err != nil || b.Type != blockTypeText || b.Text == "" {
+		if err := json.Unmarshal(rb, &b); err != nil {
 			continue
 		}
-		parts = append(parts, b.Text)
+		switch {
+		case b.Type == blockTypeText && b.Text != "":
+			parts = append(parts, b.Text)
+		case b.Type == blockTypeImage:
+			parts = append(parts, ImagePlaceholder)
+		}
 	}
 	return strings.Join(parts, "\n\n")
 }

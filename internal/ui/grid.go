@@ -187,15 +187,13 @@ func (g Grid) Neighbour(id string) string {
 	}
 }
 
-// Direction is which way ⇧+arrow moves the keys: Left and Right step a column,
-// Up and Down move inside a split one.
+// Direction is which way ⇧←→ moves the keys: Left and Right step a column.
+// Vertical movement is no longer bound - ⇧↑↓ move the roster now.
 type Direction int
 
 const (
 	Left Direction = iota
 	Right
-	Up
-	Down
 )
 
 // Toward is the pane one step from a conversation in a direction, and whether
@@ -215,32 +213,20 @@ func (g Grid) Toward(id string, d Direction) (string, bool) {
 	}
 	// The id has to be checked before the slot: an unsplit column's Bottom is
 	// "", which is also the room, so a bare `Bottom == id` calls the room a
-	// lower pane.
+	// lower pane. lower is what keeps a horizontal step on the row it was on.
 	lower := id != "" && g.Cols[at].Bottom == id
 
-	switch d {
-	case Up:
-		if lower {
-			return g.Cols[at].Top, true
-		}
-	case Down:
-		if !lower && g.Cols[at].Bottom != "" {
-			return g.Cols[at].Bottom, true
-		}
-	case Left, Right:
-		to := at - 1
-		if d == Right {
-			to = at + 1
-		}
-		if to < 0 || to >= len(g.Cols) {
-			return "", false
-		}
-		if c := g.Cols[to]; lower && c.Bottom != "" {
-			return c.Bottom, true
-		}
-		return g.Cols[to].Top, true
+	to := at - 1
+	if d == Right {
+		to = at + 1
 	}
-	return "", false
+	if to < 0 || to >= len(g.Cols) {
+		return "", false
+	}
+	if c := g.Cols[to]; lower && c.Bottom != "" {
+		return c.Bottom, true
+	}
+	return g.Cols[to].Top, true
 }
 
 // withCols is the one write path, so a Grid handed out never shares a backing

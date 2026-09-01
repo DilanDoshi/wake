@@ -192,8 +192,8 @@ func TestAFailedInterruptIsVisible(t *testing.T) {
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	m, _ = m.Update(runCmd(t, cmd))
 
-	// The failure's own words, not the word "interrupt", which is in the hint
-	// line and would make this pass with the whole error path deleted.
+	// The failure's own words: the report has to name the pipe, not just say a
+	// turn was interrupted, or the whole error path could be deleted unnoticed.
 	if !strings.Contains(shown(m), "closed pipe") {
 		t.Errorf("an interrupt that could not be written left no trace in the view:\n%s", shown(m))
 	}

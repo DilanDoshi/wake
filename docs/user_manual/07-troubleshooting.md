@@ -41,7 +41,7 @@ If it *is* on the list and does nothing, the likely causes are your terminal or 
 
 - **`⌃C` kills Wake instead of parking.** Your terminal is delivering it as a signal. Wake puts the
   terminal in raw mode to prevent that; under tmux or ssh it is worth checking first.
-- **`⌃W`, `⌃R`, `⌃G`** are claimed by some terminals and shells (delete-word, reverse-search).
+- **`⌃W`, `⌃R`** are claimed by some terminals and shells (delete-word, reverse-search).
 - **`⇧⇥`** is the most likely of all to be intercepted.
 
 ## `wake status` says there is no daemon, but agents are running

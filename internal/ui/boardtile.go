@@ -30,12 +30,16 @@ const (
 	// tileGap is the blank column between neighbouring tiles.
 	tileGap = 1
 
-	// maxTileTailRows bounds the live tail a tile retains. It relaxes the DM
-	// preview's maxPreviewRows cap (partial.go) so a big cell fills with output
-	// rather than stopping at three rows - the board's narrowed guardrail 2:
-	// bounded to the tile body, still no scrollback. A render draws only the
-	// rows its own cell has; this is the ceiling on what is kept per token.
-	maxTileTailRows = 10
+	// tileFrameRows is the rows a tile spends on everything but the live tail:
+	// the two border edges, the state word, the subagent count and the status
+	// bar. The tail fills whatever the cell has left (cellH - tileFrameRows),
+	// which is what tileTailCap tracks - the board's narrowed guardrail 2:
+	// bounded to the tile body, still no scrollback.
+	tileFrameRows = 5
+
+	// minTileTailRows floors the retained tail so a tile too short to have a
+	// tail budget of its own still keeps one row rather than none.
+	minTileTailRows = 1
 )
 
 // tileGrid is the tiled board's geometry for one frame: how many columns and
@@ -182,80 +186,127 @@ func joinTilesRow(cells []string) string {
 	return lipgloss.JoinHorizontal(lipgloss.Top, interleave(cells, gap)...)
 }
 
-// tile is one agent as a rounded box of a fixed cell size: the name in the top
-// edge, its state and what it is doing (or saying) in the body, and its
-// subagent count. The body is built to exactly height-2 rows - the border owns
-// the other two - so the box is exactly `height` tall and the grid stays
-// regular; titledBox itself never constrains height. This holds for height >= 3
-// (the box's own minimum: two borders and a row); a shorter cell only occurs on
-// a terminal too small to use the board, where View's firstRows clips the frame
-// so an oversize tile cannot scroll the alt screen.
+// tile is one agent as a full rounded box of a fixed cell size: the name in the
+// top edge, its state, its live tail and its subagent count in the body, and a
+// per-agent status bar on the last body row - with walls down both sides. The
+// body is built to exactly height-2 rows - the border owns the other two - so
+// the box is exactly `height` tall and the grid stays regular; titledBox itself
+// never constrains height. This holds for height >= 3 (the box's own minimum:
+// two borders and a row); a shorter cell only occurs on a terminal too small to
+// use the board, where View's firstRows clips the frame so an oversize tile
+// cannot scroll the alt screen.
+//
+// The border wears the attention colour - the accent when cursored, warn when
+// blocked, else the receding grey - so "needs you" is legible in a wall of
+// thirty; the name wears the agent's own identity hue. The body text keeps the
+// ordinary Text foreground, which is what fills between the walls.
 func (a App) tile(ag Agent, width, height int, cursored bool) string {
-	boxStyle := TextStyle
+	border := Border
 	switch {
 	case cursored:
-		boxStyle = AccentStyle
+		border = Accent
 	case ag.State == rpc.StateBlocked:
-		boxStyle = warnStyle
+		border = Warn
+	}
+	boxStyle := lipgloss.NewStyle().Foreground(Text).
+		Border(lipgloss.RoundedBorder()).BorderForeground(border)
+	// The name is drawn in the agent's identity hue; a session without one
+	// falls back to the border colour so cursored and blocked tiles still read.
+	// A borderless style, because titledEdge renders the label alone - a
+	// bordered one would frame the name in a box of its own.
+	name, ok := identityStyleFor(ag)
+	if !ok {
+		name = lipgloss.NewStyle().Foreground(border)
 	}
 	head := rowGlyph(ag) + " " + ag.Name
 	body := a.tileBody(ag, width, max(height-2, 1))
-	return titledBox(body, width, boxStyle, oneLine(head), "", boxStyle, boxStyle)
+	return titledBox(body, width, boxStyle, oneLine(head), "", name, name)
 }
 
-// tileBody is the tile's inner rows: the state word, then what the agent is on
-// (a live tail while it works, the ask while it is blocked, its last line when
-// idle), then the subagent count - boardDetail's by-state logic, one field
-// richer for the live tail. Every line is agent-authored or derived from
-// agent-authored text, and every line goes through oneLine before it joins
-// `lines` - the live tail included, by way of tailLines, since a raw CR or
-// escape in a streamed token could otherwise redraw or forge the tile beside
-// it (tiles sit side by side via lipgloss.JoinHorizontal).
+// tileBody is the tile's inner rows: the state word on top, the live tail (or a
+// by-state detail line) filling the middle, and the subagent count and status
+// bar pinned to the bottom. Every line is agent-authored or derived from
+// agent-authored text, and every one goes through oneLine before it joins
+// `lines` - the live tail by way of tailLines, since a raw CR or escape in a
+// streamed token could otherwise redraw or forge the tile beside it (tiles sit
+// side by side via lipgloss.JoinHorizontal).
 //
 // `lines` holds one PHYSICAL row per element - tailLines flattens the tail's
-// own "\n"s into separate elements before this returns - so padRows pads and
-// truncates by row count, not by how many pieces the body was assembled from.
-// Without that, a tail wrapped to multiple lines was one `lines` element
-// holding several rows, and padRows padded the *element* count back up to
-// `rows` on top of them - overshooting the cell height and growing the whole
-// tile row, since titledBox never constrains height. The state line and the
-// subagent-count line are truncated to `inner` for the same reason: each is
-// one `lines` element, and titledBox's Width(edge) word-wraps either one into a
-// second physical row the moment it is wider than the tile's edge.
+// own "\n"s into separate elements, and each framing line is truncated to
+// `inner` - so padRows sizes by row count and titledBox's Width(edge) never
+// word-wraps a line into a second physical row that would overshoot the cell.
 //
-// The state line and the subagent count are the two framing lines; the middle
-// - a live tail while the agent works, else a fallback detail line - fills only
-// `mid`, the rows left between them. Budgeting the middle rather than only the
-// tail is what keeps the subagent count, appended last, off the row padRows
-// drops: at a small cell the detail line used to ignore the budget and crowd it
-// out. `lines` holds one physical row per element, so padRows sizes by rows.
+// The middle fills every row between the state line and the bottom framing, so
+// a tall cell fills with output rather than stopping at a fixed cap. The bottom
+// framing is dropped from the bottom up when the body is too short: the status
+// bar first, since it is the least urgent thing on the tile (statusbar.go),
+// then the subagent count - so the smallest bodies keep the state and the count
+// the eye triages by.
 func (a App) tileBody(ag Agent, width, rows int) string {
 	inner := max(width-boxFrameWidth, 1)
 	lines := []string{HintStyle.Render(ansi.Truncate(labelOf(ag.State), inner, ellipsis))}
 
-	if mid := max(rows-2, 0); mid > 0 {
-		if t := a.tails[ag.ID].sized(inner); ag.State == rpc.StateWorking && t.text != "" {
-			tl := tailLines(t.view, inner)
-			if len(tl) > mid {
-				tl = tl[len(tl)-mid:] // the newest rows that fit
-			}
-			lines = append(lines, tl...)
-		} else if d := boardDetail(ag); d != "" {
-			lines = append(lines, ansi.Truncate(oneLine(d), inner, ellipsis))
-		}
+	bottom := make([]string, 0, 2)
+	if rows >= 2 {
+		bottom = append(bottom, tileSubagents(len(a.fleet.RunningTasks(ag.ID)), inner))
+	}
+	if rows >= 3 {
+		bottom = append(bottom, statusBar(ag, a.modeOf(ag.ID), inner))
 	}
 
-	// The subagent count fits whenever the cell has room for a second framing
-	// line; below that (a one-row body) only the state line is drawn.
-	if rows >= 2 {
-		subs := len(a.fleet.RunningTasks(ag.ID))
-		word := "subagents"
-		if subs == 1 {
-			word = "subagent"
-		}
-		lines = append(lines, ansi.Truncate(fmt.Sprintf("⤷ %d %s", subs, word), inner, ellipsis))
-	}
+	lines = append(lines, a.tileMiddle(ag, inner, max(rows-1-len(bottom), 0))...)
+	lines = append(lines, bottom...)
 	return strings.Join(padRows(lines, rows), "\n")
+}
+
+// tileMiddle is the rows between the state line and the bottom framing: the
+// live tail while the agent works, else the one-line by-state detail
+// (boardDetail's account). It returns exactly `rows` rows, the tail top-aligned
+// and padded down, so the bottom framing sits on the tile's own last rows. The
+// newest tail rows are the ones kept when it has more than fit.
+func (a App) tileMiddle(ag Agent, inner, rows int) []string {
+	if rows <= 0 {
+		return nil
+	}
+	var body []string
+	if t := a.tails[ag.ID].sized(inner); ag.State == rpc.StateWorking && t.text != "" {
+		body = tailLines(t.view, inner)
+	} else if d := boardDetail(ag); d != "" {
+		body = []string{ansi.Truncate(oneLine(d), inner, ellipsis)}
+	}
+	if len(body) > rows {
+		body = body[len(body)-rows:] // the newest rows that fit
+	}
+	return padRows(body, rows)
+}
+
+// tileSubagents is the "⤷ N subagents" line, dim and truncated to the tile's
+// inner width - titledBox's Width(edge) word-wraps an over-wide line into a
+// second physical row that would overshoot the cell.
+func tileSubagents(count, inner int) string {
+	word := "subagents"
+	if count == 1 {
+		word = "subagent"
+	}
+	return HintStyle.Render(ansi.Truncate(fmt.Sprintf("⤷ %d %s", count, word), inner, ellipsis))
+}
+
+// tileTailCap is how many rows of live tail a tile retains: its own body height
+// less the framing lines (cellH - tileFrameRows), so a tall cell fills with
+// output and a dense grid of small cells keeps only what each draws. Bounded to
+// the tile body - guardrail 2 - and floored so a short cell still keeps a row.
+//
+// The roster count is taken inline rather than through OnRoster, which ranks
+// and allocates: this runs per streamed token while the wall is up, so it may
+// not spend a fleet-sized allocation a token (partial.go's own withDM trap).
+func (a App) tileTailCap() int {
+	live := 0
+	for _, id := range a.fleet.order {
+		if a.fleet.agents[id].State != rpc.StateEnded {
+			live++
+		}
+	}
+	return max(a.boardTileGrid(live).cellH-tileFrameRows, minTileTailRows)
 }
 
 // tailLines splits a live tail's wrapped view into its physical rows and

@@ -110,6 +110,61 @@ func TestTheBarShowsEffortWhenKnown(t *testing.T) {
 	}
 }
 
+// The confirmed model wins over the init-frame id, so a /model change shows the
+// moment the probe reads it back rather than at the next turn - the bug this
+// fixes. Until the probe answers, the init id is the fallback.
+func TestTheBarPrefersTheConfirmedModel(t *testing.T) {
+	bar := stripANSI(statusBar(Agent{
+		Cwd: "/tmp/repo", Model: "claude-opus-5", ConfirmedModel: "Sonnet 5 (1M context)",
+	}, modeAuto, 200))
+	if !strings.Contains(bar, "Sonnet 5 (1M context)") {
+		t.Errorf("bar %q did not prefer the confirmed model", bar)
+	}
+	if strings.Contains(bar, "Opus 5") {
+		t.Errorf("bar %q still drew the init-frame model over the confirmed one", bar)
+	}
+
+	fallback := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, modeAuto, 200))
+	if !strings.Contains(fallback, "Opus 5") {
+		t.Errorf("bar %q lost the init-frame model before a probe answered", fallback)
+	}
+}
+
+// The PRs this session has opened, named as Claude Code would - one or several -
+// and dropped rather than guessed when it has opened none.
+func TestTheBarShowsThePRsThisSessionOpened(t *testing.T) {
+	one := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", prs: &prSet{nums: []int{29}}}, "", 200))
+	if !strings.Contains(one, "PR #29") {
+		t.Errorf("bar %q has no PR segment", one)
+	}
+
+	many := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", prs: &prSet{nums: []int{29, 30}}}, "", 200))
+	if !strings.Contains(many, "PR #29, #30") {
+		t.Errorf("bar %q did not list both PRs", many)
+	}
+
+	none := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, "", 200))
+	if strings.Contains(none, "PR #") {
+		t.Errorf("bar %q drew a PR segment for a session that opened none", none)
+	}
+}
+
+// The report is the only route to a PR for a client that attached after it was
+// opened, so a WithStatus fold has to land the numbers on the agent the bar
+// draws - the same late-attach path Commands and Effort take.
+func TestAReportCarriesThePRsOntoTheBar(t *testing.T) {
+	f := NewFleet().WithStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateWorking, Cwd: "/tmp/repo", PRs: []int{29, 30}},
+	}})
+	a, ok := f.Agent("s1")
+	if !ok {
+		t.Fatal("no agent after a report naming one")
+	}
+	if bar := stripANSI(statusBar(a, "", 200)); !strings.Contains(bar, "PR #29, #30") {
+		t.Errorf("the report's PRs did not reach the bar: %q", bar)
+	}
+}
+
 func TestTheBarIsEmptyWhenNothingIsKnown(t *testing.T) {
 	if got := statusBar(Agent{}, "", 80); got != "" {
 		t.Errorf("an unknown agent drew %q, want no bar at all", got)
@@ -202,6 +257,13 @@ func TestTheStatusBarIsRedrawnWhenItsFactsMove(t *testing.T) {
 	}{
 		{"the context moved", func(d DM) DM { d.Agent.ContextTokens = 50; return d }},
 		{"the model changed", func(d DM) DM { d.Agent.Model = "claude-sonnet-5"; return d }},
+		// The probe reading a model back is what makes a /model instant; a bar
+		// that did not redraw for it would move at the next turn, the bug again.
+		{"the probe confirmed a model", func(d DM) DM { d.Agent.ConfirmedModel = "Sonnet 5"; return d }},
+		{"the effort changed", func(d DM) DM { d.Agent.Effort = "low"; return d }},
+		// A PR is scraped mid-turn with no other bar fact moving, so barKey has to
+		// carry it or the segment never appears until something else redraws.
+		{"a PR was opened", func(d DM) DM { d.Agent.prs = &prSet{nums: []int{29}}; return d }},
 		{"the pane got narrower", func(d DM) DM { return d }},
 		// A turn boundary is what re-reads the branch, so an operator who
 		// checks out another one sees it without anything polling.
@@ -317,20 +379,16 @@ func TestAConversationsBarNamesItsOwnMode(t *testing.T) {
 	}
 }
 
-// The ruling this entry turns on: a blurred pane keeps the mode in its *bar*
-// and still withholds it from its legend. The legend sits beside the key that
-// changes a mode and would be naming an agent that key will not touch; the bar
-// is a statement about this pane's session, which is true wherever the keys
-// are.
+// The ruling this entry turns on: a blurred pane keeps the mode in its *bar*.
+// The bar is a statement about this pane's session, true wherever the keys are;
+// the composer draws no mode at all now (TestTheComposerNamesNoMode), so the
+// old "withheld from the blurred legend" half is the composer's rule to keep.
 func TestABlurredConversationStillNamesItsModeInTheBar(t *testing.T) {
 	d := dmInMode(core.PermissionModePlan, false)
 	want := "permissions: " + core.PermissionModePlan
 
 	if bar := stripANSI(d.bar); !strings.Contains(bar, want) {
 		t.Errorf("a blurred conversation's bar dropped its mode: %q", bar)
-	}
-	if legend := stripANSI(d.Composer().View(fullLegendWidth)); strings.Contains(legend, want) {
-		t.Errorf("a blurred legend named a mode:\n%s", legend)
 	}
 }
 
@@ -355,9 +413,8 @@ func dmInMode(mode string, focused bool) DM {
 }
 
 // The mode is drawn whole or dropped, never cut. A right-cut `permissions: …`
-// announces a value nobody can read, which is the failure hintFitting cuts the
-// legend at an entry boundary to avoid - and it is what a real conversation
-// pane produced at 90 columns with a long path above it.
+// announces a value nobody can read - and it is what a real conversation pane
+// produced at 90 columns with a long path above it.
 func TestANarrowBarDropsTheModeRatherThanCuttingIt(t *testing.T) {
 	a := Agent{Cwd: "/very/long/path/that/keeps/going/and/going/for/quite/a/while", Model: "claude-opus-5"}
 	for width := 10; width <= 120; width++ {

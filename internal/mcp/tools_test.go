@@ -398,15 +398,17 @@ var notInTheStatusReport = map[string]string{
 		"on Dir precisely because an operator chose it. Reporting an agent-chosen directory " +
 		"beside an operator-chosen one invites reading them as one kind of thing",
 
-	"PID":        "a process id is not an address a model may hold. The reaper's only proof of identity is the session UUID in an argv, and the whole name-on-the-wire ruling is about keeping what a model chose away from that proof - a pid on the tool surface is an invitation to reach past it",
-	"RequestIDs": "the *fact* of a blocked ask is reported and the ids are not, because no tool answers a permission request: only a human can. An id a model cannot use is an id it will try to use",
-	"ParentID":   "which session this one was forked from. There is no fork verb on this surface, so lineage is context a manager cannot act on, and the manager-legible form of it is the parent's *name* rather than a UUID. Resolving that name is a loop over the report agentStatus already holds - cheap, and deliberately not done here: the task that gives the manager a fork tool is the one that knows what it should say",
-	"Budget":     "the spend ceiling this session was started under, and it is the one field here that is misleading rather than merely useless. Nothing reports spend-to-date on this surface, so a cap with no progress beside it tells a model that an agent *may stop* without telling it whether that is imminent or nowhere near - and a manager holding send_to_agent acts on what it is told. There is no budget verb here either, so it is not a fact this surface could do anything with. What would reopen it: a spend-to-date on the report, at which point the pair is a measurement rather than a ceiling",
-	"Commands":   "the slash commands a session advertised, which is the operator's completion menu and nothing this surface can act on: there is no command-typing verb here, and the list is the agent's own (it grows when an agent writes a .claude/commands file), so it is somebody else's words with nothing for a manager to do with them. It rides the report only so a reattached *client* can draw the menu",
-	"Color":      "the identity hue an operator chose for this agent, and pure display chrome: it says nothing about what the agent is doing, which is the only thing this report is for. There is no colour verb on this surface either - FrameColor is refused the manager for the same whose-decision reason - so it is a fact the manager could neither use nor act on, and one that would put the operator's own visual grouping into a model's context for nothing",
+	"PID":            "a process id is not an address a model may hold. The reaper's only proof of identity is the session UUID in an argv, and the whole name-on-the-wire ruling is about keeping what a model chose away from that proof - a pid on the tool surface is an invitation to reach past it",
+	"RequestIDs":     "the *fact* of a blocked ask is reported and the ids are not, because no tool answers a permission request: only a human can. An id a model cannot use is an id it will try to use",
+	"ParentID":       "which session this one was forked from. There is no fork verb on this surface, so lineage is context a manager cannot act on, and the manager-legible form of it is the parent's *name* rather than a UUID. Resolving that name is a loop over the report agentStatus already holds - cheap, and deliberately not done here: the task that gives the manager a fork tool is the one that knows what it should say",
+	"Budget":         "the spend ceiling this session was started under, and it is the one field here that is misleading rather than merely useless. Nothing reports spend-to-date on this surface, so a cap with no progress beside it tells a model that an agent *may stop* without telling it whether that is imminent or nowhere near - and a manager holding send_to_agent acts on what it is told. There is no budget verb here either, so it is not a fact this surface could do anything with. What would reopen it: a spend-to-date on the report, at which point the pair is a measurement rather than a ceiling",
+	"Commands":       "the slash commands a session advertised, which is the operator's completion menu and nothing this surface can act on: there is no command-typing verb here, and the list is the agent's own (it grows when an agent writes a .claude/commands file), so it is somebody else's words with nothing for a manager to do with them. It rides the report only so a reattached *client* can draw the menu",
+	"Color":          "the identity hue an operator chose for this agent, and pure display chrome: it says nothing about what the agent is doing, which is the only thing this report is for. There is no colour verb on this surface either - FrameColor is refused the manager for the same whose-decision reason - so it is a fact the manager could neither use nor act on, and one that would put the operator's own visual grouping into a model's context for nothing",
+	"ConfirmedModel": "the model's display name a /model probe read back, which is the operator's status-bar chrome and not a fact this surface can act on: the init frame already names the model in use, there is no model verb here, and unlike Effort it is not a closed set (ValidModel admits any non-empty string), so it is exactly the kind of agent-influenced string this report keeps out. It rides the report only so a *client* can prefer it over the init id",
+	"PRs":            "the pull requests this session opened, which is the operator's status bar and nothing this surface can act on: there is no PR verb here, and the numbers are scraped from an agent's own tool output (agentAuthored), so they are somebody else's words with nothing for a manager to do with them. It rides the report only so a reattached client can draw the segment",
 }
 
-const notInTheStatusReportCount = 7
+const notInTheStatusReportCount = 9
 
 // agent_status is the daemon's facts, and which facts is a decision that
 // should fail loudly when rpc.SessionStatus grows a field.
@@ -432,15 +434,22 @@ func TestAgentStatusReportsEveryFactTheDaemonCarries(t *testing.T) {
 			sentinels[name] = sentinel
 			f.SetString(sentinel)
 		case reflect.Slice:
-			// Only []string today (RequestIDs). Filled so the exemption below is
-			// actually tested: the ids must not reach the report even though the
-			// blocked line does. A slice of any other element kind is a field
-			// this guard was never taught, which is a decision, not a skip.
-			if f.Type().Elem().Kind() != reflect.String {
-				t.Fatalf("SessionStatus.%s is a slice of %s and this guard only knows []string", name, f.Type().Elem().Kind())
+			// []string (RequestIDs) and []int (PRs). Filled so the exemption below is
+			// actually tested: neither must reach the report even though the blocked
+			// line does. A slice of any other element kind is a field this guard was
+			// never taught, which is a decision, not a skip.
+			switch f.Type().Elem().Kind() {
+			case reflect.String:
+				sentinels[name] = sentinel
+				f.Set(reflect.ValueOf([]string{sentinel}))
+			case reflect.Int:
+				// A distinct number the report must not carry, so the exemption is
+				// tested the way the string sentinel is.
+				sentinels[name] = "909090"
+				f.Set(reflect.ValueOf([]int{909090}))
+			default:
+				t.Fatalf("SessionStatus.%s is a slice of %s and this guard only knows []string and []int", name, f.Type().Elem().Kind())
 			}
-			sentinels[name] = sentinel
-			f.Set(reflect.ValueOf([]string{sentinel}))
 		}
 	}
 	// State has to survive round-tripping through the report as a word, and a

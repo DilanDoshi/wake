@@ -17,6 +17,7 @@
 package main
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 )
@@ -34,6 +35,13 @@ func gridScreen(t *testing.T, cols, rows int) (*screen, []string) {
 	s.await("group chat")
 	s.send("/new robin\r")
 	s.await("@robin")
+	// /new drafts a mention instead of opening a pane (starts.go's
+	// draftMention), so the room is left holding "@robin " and narrowed to its
+	// thread. esc clears that in one press - settled before the next byte, or
+	// bubbletea reads the two as one alt-modified key (escprobe_test.go) -
+	// which is what makes "nothing open" also mean "nothing typed" below.
+	s.send("\x1b")
+	s.settle()
 	s.send("\x17")
 	s.await("group chat")
 
@@ -43,12 +51,11 @@ func gridScreen(t *testing.T, cols, rows int) (*screen, []string) {
 	if len(names) != 2 {
 		t.Fatalf("want two agents on the roster beside the manager, got %v.\n%s", s.rosterNames(), s.dump())
 	}
-	// The cursor is on robin, which is where /new left it - opening a
-	// conversation selects it. Walk it onto the first agent so a caller's first
-	// grid key is about the row it named. There used to be a bare ↑ here, which
-	// worked only while the roster had one row: it wraps, and the row it wraps
-	// onto is the manager now.
-	s.pickRoster(names[1], names[0])
+	// The cursor is on names[0] already, and no walk is needed to put it there.
+	// `/new` opens no pane and selects nothing (see starts.go's draftMention),
+	// so the selection `startWakeInAConversation` made when it opened the
+	// scripted agent's own conversation - names[0] - survives untouched: ⌃W
+	// does not clear it, and neither does `/new robin` arriving after it.
 	return s, names
 }
 
@@ -62,25 +69,42 @@ func panesOnScreen(s *screen) int {
 	return n
 }
 
+// titleSegment is one box's own top border - `╭─── label ───╮` - lazy about
+// the label and greedy about the fill on both sides of it, and matched per
+// occurrence rather than per line: two boxes' top borders can share one
+// terminal row (a narrow room beside a freshly opened pane), and reading the
+// whole row as one field list let the room's own title - "group chat ›
+// @robin" once a fresh spawn has drafted a mention into it, see starts.go's
+// draftMention - be misread as a *pane* named @robin.
+var titleSegment = regexp.MustCompile(`╭─*(.*?)─*╮`)
+
 // paneTitles is the conversation each drawn pane names, read off the composer
 // borders where a pane's own name is drawn.
 //
 // Not `strings.Contains(screen, "@name")`, which was the first draft and is a
 // different question: an agent's handle is also on the notice row, in the
-// room's transcript and on the roster, so a closed pane's name is still all
-// over the frame. Reading the borders asks "is there a *pane* for it".
+// room's transcript, in its own composer's draft and target line, and on the
+// roster, so a closed pane's name - or a mention nobody has sent yet - is
+// still all over the frame. Reading the borders asks "is there a *pane* for
+// it", and only the text inside one box's own corners answers that.
 func paneTitles(s *screen) []string {
 	var out []string
 	for _, line := range s.lines() {
-		if !strings.Contains(line, "╭") {
-			continue
-		}
-		if strings.Contains(line, "group chat") {
-			out = append(out, "group chat")
-		}
-		for _, f := range strings.Fields(line) {
-			if strings.HasPrefix(f, "@") {
-				out = append(out, f)
+		for _, m := range titleSegment.FindAllStringSubmatch(line, -1) {
+			label := strings.TrimSpace(m[1])
+			switch {
+			case label == "":
+				continue
+			case strings.Contains(label, "group chat"):
+				// The room's own title, narrowed or not - never a pane named
+				// for whichever agent it narrowed to.
+				out = append(out, "group chat")
+			default:
+				for _, f := range strings.Fields(label) {
+					if strings.HasPrefix(f, "@") {
+						out = append(out, f)
+					}
+				}
 			}
 		}
 	}
