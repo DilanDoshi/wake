@@ -312,6 +312,56 @@ func TestRenameMirrorsOntoWakesHandleWhileStillReachingClaude(t *testing.T) {
 	}
 }
 
+// `@who /rename bob` from the room mirrors claude's rename onto Wake's handle
+// for the mentioned agent - the room half of the focused-DM case - while still
+// passing /rename through to claude. The reported bug: the rename reached claude
+// (it replied "Session renamed to…") but not Wake, because the mirror fired only
+// in a focused conversation, so the roster, the DM header and future room tags
+// kept the old name.
+func TestRenameFromTheRoomMirrorsOntoTheMentionedAgent(t *testing.T) {
+	fresh(t)
+	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").
+		withAgents("alex", "sydney").withSize(200, 40).showRoom()
+
+	_, cmd := typeAndSubmit(a, "@sydney /rename bob")
+	frames := batchFrames(t, a, cmd)
+
+	var renamed, passed bool
+	for _, f := range frames {
+		if f.Kind == rpc.FrameRename && f.SessionID == "s2" && f.Text == "bob" {
+			renamed = true
+		}
+		if f.Kind == rpc.FrameSend && f.SessionID == "s2" && strings.Contains(f.Text, "rename bob") {
+			passed = true
+		}
+	}
+	if !renamed {
+		t.Errorf("@sydney /rename bob wrote no FrameRename for s2, so Wake's handle did not move - the reported bug. frames=%+v", frames)
+	}
+	if !passed {
+		t.Errorf("@sydney /rename bob did not still reach claude as a message, so claude's own /rename stopped working. frames=%+v", frames)
+	}
+}
+
+// In open mention mode `@who /rename bob` is a broadcast, not a targeted config:
+// the message reaches the whole fleet with the mention kept, so no agent gets a
+// leading /rename and claude renames nobody. The Wake mirror must not fire on its
+// own then, or Wake would rename who while claude renamed no one - the very drift
+// the mirror exists to prevent. Direct mode (the default) is where both fire.
+func TestRenameFromTheRoomDoesNotMirrorInOpenMentionMode(t *testing.T) {
+	fresh(t)
+	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").
+		withAgents("alex", "sydney").withSize(200, 40).showRoom()
+	a.mention = MentionOpen
+
+	_, cmd := typeAndSubmit(a, "@sydney /rename bob")
+	for _, f := range batchFrames(t, a, cmd) {
+		if f.Kind == rpc.FrameRename {
+			t.Errorf("open-mode @sydney /rename bob wrote %+v: Wake renamed while the broadcast (mention kept) left claude renaming nobody", f)
+		}
+	}
+}
+
 // A bare `/rename` with no new name is left entirely alone: nothing to mirror,
 // and the draft passes through to claude the way it always did.
 func TestBareRenameIsJustAMessage(t *testing.T) {

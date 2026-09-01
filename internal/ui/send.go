@@ -248,6 +248,20 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 			return next, cmd
 		}
 	}
+	// `@who /rename bob` is claude's own word, so it passes through to the agent
+	// like any message - and Wake mirrors it onto its handle for who beside the
+	// send, the room half of renameMirror's focused case. nil for every other
+	// draft, so an ordinary broadcast is still one command. See renameMirrorFor.
+	//
+	// Direct mode only: open mode widens the message to the fleet and keeps the
+	// `@who` in the text, so the passthrough broadcasts `@who /rename bob` and no
+	// agent gets a leading /rename - claude renames nobody. Mirroring alone then
+	// would move Wake's handle while claude's stayed, the drift this exists to
+	// prevent, so the mirror stays home with the targeted send.
+	var mirror tea.Cmd
+	if r.mentioned && r.mode == MentionDirect {
+		mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)
+	}
 	a = a.clearDraft()
 	for _, id := range r.Targets {
 		a.fleet = a.fleet.sending(id, false)
@@ -267,7 +281,7 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 	}
 	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
 	a = a.echoToRouted(r.Targets, text)
-	return a, a.write(sendFailed, sendFrames(r.Targets, r.Text, images)...)
+	return a, tea.Batch(mirror, a.write(sendFailed, sendFrames(r.Targets, r.Text, images)...))
 }
 
 // echoToRouted puts a routed message into each conversation it was addressed

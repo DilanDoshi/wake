@@ -562,38 +562,63 @@ func (a App) slash(text string) (App, tea.Cmd, bool) {
 	return next, cmd, mine
 }
 
-// renameMirror is Wake's half of a `/rename bob` draft: the write that moves
-// this conversation's own handle for its agent, so the roster and claude's
-// title do not drift - or nil for any draft that is not one.
+// renameMirror is Wake's half of a `/rename bob` typed in a conversation: the
+// write that moves this conversation's own handle for its agent, so the roster
+// and claude's title do not drift - or nil for any draft that is not one. The
+// room's `@who /rename bob` is renameMirrorFor, off the router's resolved
+// mention.
 //
 // It is here, not in send.go, because recognising the draft means knowing what
 // a leading slash means, which is this file's alone
 // (TestNothingButTheRouterKnowsWhatASlashMeans). It is deliberately not a
 // commands entry: `rename` is a word claude advertises, so slash leaves the
-// draft a message and it still reaches the agent - submit writes this *beside*
-// the send, never instead of it, so claude's own rename keeps working.
+// draft a message and it still reaches the agent - the caller writes this
+// *beside* the send, never instead of it, so claude's own rename keeps working.
 //
 // It mirrors claude's grammar rather than `/name`'s, and the difference is the
 // whole correctness of it. Claude's `/rename` renames the session it is typed
-// in, so this moves the *focused conversation's* agent and fires **only in a
-// conversation** - never an `@who`, which is `/name`'s alone and would rename
-// one agent in Wake while claude renamed the one the DM is actually with. Matched
-// exact-case, like the word claude advertises, and only for a one-word name Wake
-// can hold: anything else - a second word, a different case, the room - is left
-// to the passthrough, so Wake declines silently rather than renaming to
-// something claude will not, or reporting a `/name` refusal for a `/rename`.
+// in, so a focused conversation's mirror moves *that* agent and a leading `@who`
+// is just a word - two of them, so renameMirrorArg declines - never a Wake
+// target, which would rename one agent while claude renamed the one the DM is
+// with. The room is the opposite case: an `@who` there is the router's routing
+// target, so claude and Wake rename the same agent, and renameMirrorFor honours
+// it the way `/color` and `/name` take a room mention.
 func (a App) renameMirror(text string) tea.Cmd {
+	if a.focus == "" {
+		return nil
+	}
+	agent, ok := a.fleet.Agent(a.focus)
+	if !ok {
+		return nil
+	}
+	return a.renameMirrorArg(agent, text)
+}
+
+// renameMirrorFor is the room's half of `@who /rename bob`: it mirrors claude's
+// rename onto the mentioned agent, beside the passthrough that carries /rename
+// to claude. who is the router's resolved mention - a live fleet name - so it
+// resolves the same way mentionCommand's reconstructed `@who` does, and nil when
+// the mention no longer names a live agent.
+func (a App) renameMirrorFor(who, text string) tea.Cmd {
+	agent, ok := a.fleet.ByName(who)
+	if !ok {
+		return nil
+	}
+	return a.renameMirrorArg(agent, text)
+}
+
+// renameMirrorArg is the shared recogniser behind both mirrors: a one-word
+// `/rename bob` becomes a rename of agent, or nil for anything else - a second
+// word Wake cannot hold, a folded case claude will not read, or an empty name.
+// One copy, so the focused and room mirrors cannot drift on what a `/rename` is.
+func (a App) renameMirrorArg(agent Agent, text string) tea.Cmd {
 	body, ok := strings.CutPrefix(strings.TrimSpace(text), SlashPrefix)
 	if !ok {
 		return nil
 	}
 	word, name, _ := strings.Cut(body, " ")
 	name = strings.TrimSpace(name)
-	if word != renameCommand || a.focus == "" || name == "" || len(strings.Fields(name)) != 1 {
-		return nil
-	}
-	agent, ok := a.fleet.Agent(a.focus)
-	if !ok {
+	if word != renameCommand || name == "" || len(strings.Fields(name)) != 1 {
 		return nil
 	}
 	return a.renameTo(agent, name)
