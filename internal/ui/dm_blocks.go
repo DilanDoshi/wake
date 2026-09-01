@@ -450,13 +450,27 @@ func userBlock(ev core.Event, width int) string {
 // five lines of exactly 40 cells, so the padding is display-width aware and a
 // wide-character message shades correctly.
 //
-// Below one column there is nothing to shade and Width(0) means "unbounded",
-// which would draw the message on one endless line.
+// PaddingLeft(bodyIndent) sits the text under the reply beneath it - Width is
+// padding-inclusive, so the rectangle stays width cells and the shade fills the
+// two indent columns too, the way thinkingBlock aligns its plain body but with a
+// ground under it. Only labels and markers stay at the edge.
+//
+// The indent is applied only when there is room for it. At width <= bodyIndent
+// the padding is the whole line, so Width leaves zero cells for the text and
+// wraps nothing - one unbounded line rather than the solid rectangle this whole
+// function is for. Below that the shade is kept but not the indent, and below
+// one column Width(0) means "unbounded" so there is nothing to shade at all.
+// Both are unreachable today - every caller floors at minBlockWidth - but the
+// guard belongs on the function, not on the callers that happen to floor it.
 func shadedOwn(text string, width int) string {
 	if width < 1 {
 		return TextStyle.Render(text)
 	}
-	return OwnStyle.Width(width).Render(text)
+	style := OwnStyle.Width(width)
+	if width > bodyIndent {
+		style = style.PaddingLeft(bodyIndent)
+	}
+	return style.Render(text)
 }
 
 // thinkingBlock shows what the agent was reasoning about, not just that it
