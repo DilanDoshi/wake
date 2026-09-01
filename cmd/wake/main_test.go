@@ -74,9 +74,28 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "test parent lease:", err)
 		os.Exit(1)
 	}
+	// XDG_CONFIG_HOME is sandboxed the same way and for the same reason as
+	// WAKE_SOCKET: internal/termsetup reads it to find the terminal configs
+	// `wake setup-terminal` writes and the ones the first-run notice reads,
+	// and every process this suite forks or runs in-process inherits
+	// os.Environ() - so without this, this suite would read and write the
+	// machine's own ~/.config. termsetup.ConfigHome checks this before ever
+	// falling back to $HOME, which is left real and unsandboxed - the same
+	// split screen_unix_test.go's startWakeIn documents for its own,
+	// per-test-narrower override of this same variable.
+	configHome, err := os.MkdirTemp("", "waketconfig")
+	if err != nil {
+		fmt.Fprintln(os.Stderr, "test XDG_CONFIG_HOME:", err)
+		os.Exit(1)
+	}
+	if err := os.Setenv("XDG_CONFIG_HOME", configHome); err != nil {
+		fmt.Fprintln(os.Stderr, "test XDG_CONFIG_HOME:", err)
+		os.Exit(1)
+	}
 	code := m.Run()
 	_ = leaseW.Close()
 	_ = leaseR.Close()
+	_ = os.RemoveAll(configHome)
 	removeWakeBinary()
 	os.Exit(code)
 }

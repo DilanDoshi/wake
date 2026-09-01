@@ -152,6 +152,7 @@ type Agent struct {
 	// lifecycle frame. withFacts replaces the pointer only when the words
 	// differ, so re-advertising the same 133 commands each turn compares equal.
 	advertised *commandSet
+	prs        *prSet // GitHub PRs opened, off the report, pointer-held for advertised's reason. See prSet, statusbar.go.
 
 	// Doing is the present-tense label of whatever task the agent last marked
 	// in progress - claude's activeForm, which is the word it puts on its own
@@ -296,9 +297,9 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		}
 		a.Name, a.Label, a.Color, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, runningIn(s), s.ParentID
 		a.Effort, a.Budget, a.ConfirmedModel = s.Effort, s.Budget, s.ConfirmedModel
-		// The report is the only route to these for a client that attached after
-		// the init event carried them - see rpc.SessionStatus.Commands.
-		a = a.withCommands(s.Commands)
+		// The report is the only route to these - and to PRs - for a client that
+		// attached after they were set. See rpc.SessionStatus.Commands.
+		a = a.withCommands(s.Commands).withPRs(s.PRs)
 
 		// Stamped on the way *into* working, so the heartbeat measures the turn
 		// rather than the report: reports fire on a state change, but an agent

@@ -117,10 +117,13 @@ type Layout struct {
 	Width  int
 	Height int
 
-	// ShowGroups and ShowRoster are moved by ⌃G and ⌃R and by nothing else.
-	// Opening a conversation used to close the right sidebar for the ~10 columns
-	// it bought, which put the sidebar away under the cursor that had just been
-	// used to pick from it.
+	// ShowRoster is moved by ⌃R and by nothing else. Opening a conversation used
+	// to close the right sidebar for the ~10 columns it bought, which put the
+	// sidebar away under the cursor that had just been used to pick from it.
+	//
+	// ShowGroups is the left workspaces sidebar. Hidden for now: the app never
+	// sets it and ⌃G is gone, so it stays false, but the geometry it drives is
+	// kept (see Regions) for the multi-groupchat version. groups.go.
 	ShowGroups bool
 	ShowRoster bool
 

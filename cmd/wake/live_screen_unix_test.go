@@ -83,9 +83,9 @@ const (
 	liveBudget = "0.50"
 
 	// liveCols and liveRows are a realistic terminal rather than a generous one.
-	// CLAUDE.md's own measurement is that the whole legend needs 352 columns, so
-	// at 200 it truncates - which is the case an operator actually sees, and the
-	// case docs/notes/bugs.md BUG-1 was reported from.
+	// The permission mode lives in the status bar now, and 200 is where a real
+	// path can crowd it - the case an operator actually sees, and the case
+	// docs/notes/bugs.md BUG-1 was reported from.
 	liveCols, liveRows = 200, 50
 )
 
@@ -199,11 +199,12 @@ func openAgentAny(t *testing.T, s *screen, name string) {
 
 // focusRoom puts the keys back on the group chat.
 //
-// `/new` opens a pane and the new conversation takes the focus, so a room
-// message sent after a spawn goes into that agent's DM instead - which is how
-// the first run of this test sent every prompt to the wrong place. Clicking the
-// room's own composer is the shortest way back that does not depend on how many
-// panes are open.
+// `/new` opens no pane and leaves the keys on whichever pane already had them
+// (starts.go's draftMention), so this is not undoing a spawn - it is undoing
+// phase 6 below, which opens the blocked agent's own conversation to answer
+// its card and would otherwise leave every later phase typing into that pane
+// instead of the room. Clicking the room's own composer is the shortest way
+// back that does not depend on how many panes are open.
 func focusRoom(t *testing.T, s *screen) {
 	t.Helper()
 	row := s.rowOf("group chat")
@@ -256,6 +257,13 @@ func TestLiveJourney(t *testing.T) {
 		if got := agentsOnRoster(s); len(got) < 2 {
 			t.Errorf("wanted a second agent, roster is %v.\n%s", got, s.dump())
 		}
+		// /new drafts a mention instead of opening a pane (starts.go's
+		// draftMention), so the room is left holding "@<name> " - and esc
+		// clears that in one press, settled before the next byte, or
+		// bubbletea reads the two as one alt-modified key
+		// (escprobe_test.go). Without it phase 3's liveSay below types its
+		// own message onto the end of this one's leftover mention.
+		s.send("\x1b")
 		s.settle()
 		t.Logf("PHASE 2 - two agents\n%s", s.dump())
 	})

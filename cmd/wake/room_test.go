@@ -54,9 +54,10 @@ func drawRoom(t *testing.T, app ui.App, keys ...tea.KeyMsg) string {
 // it has no connection at all - so every name in the frame came from the report
 // the client already held.
 //
-// Asserted through ⌃R because opening a DM closes the right sidebar, which is
-// what `wake` does on the way in: the room beside you is doing the awareness
-// job, and the sidebar is a key away.
+// The activity sidebar is open by arrival - opening a DM no longer closes it -
+// and it is where the fleet is named, so the frame carries the roster without a
+// key. (The left workspaces sidebar, which used to name them too, is hidden for
+// now; see groups.go.)
 func TestTheRoomOpensWithTheFleetTheClientAlreadyHad(t *testing.T) {
 	held := &connection{}
 	t.Cleanup(held.close)
@@ -64,7 +65,7 @@ func TestTheRoomOpensWithTheFleetTheClientAlreadyHad(t *testing.T) {
 	seed := fleetOf("sydney", "john", "marco")
 	app := conversation(tempSocket(t), seed.Sessions[0], seed, nil, ui.Stream{}, held)
 
-	view := drawRoom(t, app, tea.KeyMsg{Type: tea.KeyCtrlR})
+	view := drawRoom(t, app)
 	for _, name := range []string{"sydney", "john", "marco"} {
 		if !strings.Contains(view, name) {
 			t.Errorf("the room opened without %q, so the roster fills in on the next state change rather than immediately - which at an idle fleet is not a second:\n%s", name, view)
@@ -81,7 +82,7 @@ func TestWithoutASeedTheRoomOpensEmpty(t *testing.T) {
 	sess := rpc.SessionStatus{ID: "a-session", Name: "sydney", State: rpc.StateIdle}
 	app := conversation(tempSocket(t), sess, nil, nil, ui.Stream{}, held)
 
-	view := drawRoom(t, app, tea.KeyMsg{Type: tea.KeyCtrlR})
+	view := drawRoom(t, app)
 	for _, name := range []string{"john", "marco"} {
 		if strings.Contains(view, name) {
 			t.Errorf("an unseeded room knows about %q:\n%s", name, view)

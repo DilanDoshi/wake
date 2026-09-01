@@ -2,11 +2,11 @@ package ui
 
 // ↑↓ and ↵ against a question card.
 //
-// The two keys the room already spends on the roster and on opening a
+// The two keys the room already spends on the prompt history and on opening a
 // conversation, claimed *only* while a question is being put in the focused
 // pane. Everything here is about the boundary: a permission card must not take
 // them, because a yes/no has nothing for a cursor to walk, and taking ↑↓ for as
-// long as any agent is blocked would cost the roster its keys.
+// long as any agent is blocked would cost the prompt history its keys.
 
 import (
 	"testing"
@@ -72,11 +72,11 @@ func TestEnterChoosesTheCursoredOptionWhenNothingIsArmed(t *testing.T) {
 	}
 }
 
-// A permission card has nothing for a cursor to walk, so it must hand both keys
-// back: ↑↓ is the roster's and ↵ opens the picked conversation, and an agent
-// blocked on a yes/no would otherwise hold them for as long as it stayed
-// blocked.
-func TestAPermissionCardLeavesTheArrowsToTheRoster(t *testing.T) {
+// A permission card has nothing for a cursor to walk, so it hands ↑↓ back to the
+// prompt history and never locks the roster: with the arrows handed back, ⇧↓
+// still picks while an agent is stuck on a yes/no, and a card that ate the keys
+// would cost that for as long as it stayed blocked.
+func TestAPermissionCardLeavesTheArrowsAlone(t *testing.T) {
 	a := newRoomApp(t).withSize(220, 40).withAgents("john", "sydney").
 		openDMWith("s1", "john").opened(t)
 	a.cards = a.cards.Add("s1", ask("r1", "Bash", "rm -rf build/"))
@@ -84,9 +84,18 @@ func TestAPermissionCardLeavesTheArrowsToTheRoster(t *testing.T) {
 		t.Fatal("the focused pane is putting no card, so this test is not exercising the boundary")
 	}
 
+	// The card claims neither arrow: a yes/no has no option cursor, so cardKey
+	// hands them back rather than swallowing them.
+	for _, k := range []tea.KeyType{tea.KeyUp, tea.KeyDown} {
+		if _, _, handled := a.cardKey(tea.KeyMsg{Type: k}); handled {
+			t.Errorf("a permission card took %v, a key it has no meaning for", k)
+		}
+	}
+
+	// And the roster is still reachable while the pane is blocked, on ⇧↓.
 	before := a.roster.Selected
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyShiftDown})
 	if a.roster.Selected == before {
-		t.Errorf("↓ did not move the roster while a permission card was up: the card took a key it has no meaning for")
+		t.Errorf("⇧↓ did not move the roster while a permission card was up")
 	}
 }

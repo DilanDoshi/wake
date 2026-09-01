@@ -1,9 +1,9 @@
 package ui
 
 // The line under the composer: where this session is, what it is running as,
-// and how much room it has left. Drawn above the legend rather than below it,
-// so the info row sits over the keys - what this session is, then what a key
-// would do.
+// and how much room it has left. Drawn inside the composer, below the box - and
+// above the armed cue on the rare frame one is up, so the info row still sits
+// over the keys when there are any.
 //
 //	~/Documents/wake  feat/fidelity  Sonnet 5 (1M context)  ctx:74%  effort:xhigh  permissions: auto
 //
@@ -63,7 +63,58 @@ const (
 
 	// homeGlyph replaces the operator's home directory in a path.
 	homeGlyph = "~"
+
+	// modeFormat is how the permission mode is spelled here. It used to be shared
+	// with the legend's tail; the legend no longer draws a mode, so the bar is
+	// its only home now.
+	modeFormat = "permissions: %s"
 )
+
+// drawStatusBar is the seam the bar is rendered through, so a test can count
+// how often it actually runs. Reach it through this, never by calling
+// statusBar directly: drawing the bar reads the filesystem, and a direct call
+// is invisible to the counter that keeps that off the draw loop.
+var drawStatusBar = statusBar
+
+// barKey is everything statusBar reads. A value type so "has anything changed"
+// is one comparison rather than a list somebody has to keep in step.
+//
+// The identity colour is deliberately absent: the bar recedes in the muted grey
+// every bar wears and does not take the hue (see statusBar), so a /color change
+// moves nothing here and belongs in no key that would redraw for it.
+type barKey struct {
+	width     int
+	dir       string
+	model     string
+	confModel string
+	effort    string
+	mode      string
+	state     string
+	used      int
+	window    int
+	prs       *prSet // a PR arrives mid-turn with no other bar fact moving, so the key must carry it; prSet.same keeps the pointer stable so it does not redraw per frame
+}
+
+// withBar re-renders the status bar if anything it is drawn from has moved, and
+// returns the receiver untouched otherwise.
+//
+// The mode comes off this pane's own composer, which App.dmFor has already set
+// from App.modeOf - the same value the legend names, so the two lines of one
+// pane cannot disagree about it. It is part of the key because the bar is drawn
+// per change: a mode left out of it would be the one fact here that goes stale.
+func (d DM) withBar(width int) DM {
+	mode := d.composer.Mode()
+	key := barKey{
+		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, confModel: d.Agent.ConfirmedModel,
+		effort: d.Agent.Effort, mode: mode, state: d.Agent.State,
+		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow, prs: d.Agent.prs,
+	}
+	if key == d.barFrom {
+		return d
+	}
+	d.bar, d.barFrom = drawStatusBar(d.Agent, mode, width), key
+	return d
+}
 
 // statusBar draws the bar for one conversation, bounded to width, or "" when
 // nothing about the session is known yet.
@@ -84,6 +135,7 @@ func statusBar(a Agent, mode string, width int) string {
 		model,
 		contextLeft(a.ContextTokens, a.ContextWindow),
 		effortSegment(a.Effort),
+		prSegment(a.prs),
 	}
 	kept := segments[:0]
 	for _, s := range segments {
@@ -108,11 +160,10 @@ func statusBar(a Agent, mode string, width int) string {
 	// which scrolls the alt screen away on every frame at the ticker's rate.
 	// The facts here are not all Wake's: the model is whatever a claude process
 	// reported, and a directory may legally contain a newline.
-	// The mode is drawn whole or not at all, which is hintFitting's ruling one
-	// line down: this bar is a plain right-cut, and a cut landing inside the
-	// last segment leaves `permissions: …`, a label announcing a value nobody
-	// can read. The facts above it are still cut, because half a path is still
-	// a path and half a mode is not a mode.
+	// The mode is drawn whole or not at all: this bar is a plain right-cut, and a
+	// cut landing inside the last segment leaves `permissions: …`, a label
+	// announcing a value nobody can read. The facts above it are still cut,
+	// because half a path is still a path and half a mode is not a mode.
 	//
 	// **What it is not any more is the first thing dropped.** Appending it only
 	// when the whole finished row fit meant it was never drawn at a realistic
@@ -157,9 +208,9 @@ func statusBar(a Agent, mode string, width int) string {
 	return HintStyle.Render(ansi.Truncate(line, width, ellipsis))
 }
 
-// permissionSegment is the mode this pane's session is in, spelled the way the
-// legend spells it - one format constant, because two spellings of one fact on
-// two lines of the same pane is a difference a reader would go looking for.
+// permissionSegment is the mode this pane's session is in. The bar is the only
+// surface that draws it now - the legend's always-on hints, the mode among
+// them, moved here whole.
 //
 // Dropped rather than guessed when the caller has none, which is every other
 // segment's rule. Nothing *drawn* reaches here empty - a pane goes through
@@ -266,4 +317,20 @@ func effortSegment(level string) string {
 		return ""
 	}
 	return effortLabel + level
+}
+
+// prSegment names the pull requests this session has opened - `PR #29` for one,
+// `PR #29, #30` for several - and "" when it has opened none, dropped like every
+// other segment. The daemon scrapes the numbers from a `gh pr create` tool
+// result; nothing on Claude's wire names a PR. See prSet.
+func prSegment(p *prSet) string {
+	nums := p.numbers()
+	if len(nums) == 0 {
+		return ""
+	}
+	parts := make([]string, len(nums))
+	for i, n := range nums {
+		parts[i] = fmt.Sprintf("#%d", n)
+	}
+	return "PR " + strings.Join(parts, ", ")
 }

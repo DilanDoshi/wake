@@ -30,11 +30,11 @@ func TestTheBoardTakesTheFrameAndEscGivesItBack(t *testing.T) {
 	if !strings.Contains(s.text(), name) {
 		t.Fatalf("the board draws no row for @%s.\n%s", name, s.dump())
 	}
-	// The takeover is real: the composer's legend is not on screen.
-	if strings.Contains(s.text(), "interrupt") {
-		t.Fatalf("the pane legend is still drawn under the board.\n%s", s.dump())
+	// The takeover is real: the room's own composer is not on screen.
+	if strings.Contains(s.text(), "group chat") {
+		t.Fatalf("the room composer is still drawn under the board.\n%s", s.dump())
 	}
 
-	s.send("\x1b") // esc
-	s.await("interrupt") // the legend is back, a durable fact on every frame
+	s.send("\x1b")        // esc
+	s.await("group chat") // the room composer is back - the legend row is armed-only now
 }
