@@ -103,6 +103,16 @@ const (
 	// yet. Reachable: fan-out starts before a spawn is confirmed, so an event
 	// can precede every report that would have named it.
 	unnamedSpeaker = agentPrefix + "unnamed"
+
+	// A question the operator resolved leaves one line in the group chat, so the
+	// yellow "has a question" the ask posted (roomBlock's KindPermissionRequest
+	// case) gets a close rather than going stale. One line, attributed to the
+	// agent - closer to the "● Subagent finished" a dispatch leaves than to the
+	// live card the room deliberately does not draw. See cardroom.go.
+	resolvedLead      = "● "
+	resolvedSep       = " · "
+	resolvedAnswered  = "question answered"
+	resolvedCancelled = "question cancelled"
 )
 
 // renderRoomBlock is the one seam through which the Room renders an event. A
@@ -120,6 +130,13 @@ var renderRoomBlock = roomBlock
 // over-wide line here shoves both sidebars out of place.
 func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 	w := max(width, minBlockWidth)
+	// The operator's own resolution of a question, authored above the airlock
+	// (cardroom.go) and keyed on the notice rather than the kind, so the record
+	// does not depend on which kind carried it. "" for every other notice, so an
+	// ordinary event falls through to its own case unchanged.
+	if line := resolvedLine(ev.Notice, a, w); line != "" {
+		return block{text: line}
+	}
 	switch ev.Kind {
 	case core.KindAssistantText:
 		return block{text: agentSaid(ev.Text, ev.OutputTokens, a, w, expanded)}
@@ -334,6 +351,23 @@ func speakerStyle(a Agent) lipgloss.Style {
 		return style
 	}
 	return AccentStyle
+}
+
+// resolvedLine is the room's record that a question was resolved by the
+// operator, or "" for any other notice. Green for an answer and muted for a
+// refusal - the operator's own choice, not a fault, the way ⊘ turn interrupted
+// is muted - so the two read as positive and neutral, not only in their
+// wording. Bounded to the width like every other room block, for roomBlock's
+// reason: one over-wide line shoves both sidebars out of place.
+func resolvedLine(n core.Notice, a Agent, width int) string {
+	switch n {
+	case core.NoticeQuestionAnswered:
+		return ToolOkStyle.MaxWidth(width).Render(resolvedLead + speaker(a) + resolvedSep + resolvedAnswered)
+	case core.NoticeQuestionCancelled:
+		return mutedLine(resolvedLead+speaker(a)+resolvedSep+resolvedCancelled, width)
+	default:
+		return ""
+	}
 }
 
 // speaker is who is talking: the name, and what they are on.

@@ -13,10 +13,12 @@ import (
 	"strings"
 	"testing"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // The room announces; it does not offer. The card is still the one surface
@@ -41,6 +43,93 @@ func TestTheRoomStillSaysItWhenAConversationDrawsTheCard(t *testing.T) {
 	out := ansi.Strip(a.room.View(roomWidth, 40))
 	if !strings.Contains(out, cardHasQuestion) {
 		t.Errorf("the conversation has the card and the group chat says nothing at all, so a fleet's supervisor cannot see that this agent stopped:\n%s", out)
+	}
+}
+
+// The room says an agent's question was resolved, so the yellow "has a
+// question" line the ask posted gets a close rather than going stale. The
+// awareness strip's "N need you" clears on its own (it counts StateBlocked);
+// this is the record in the group chat, the counterpart of the ask above.
+func TestAnsweringAQuestionIsRecordedResolvedInTheRoom(t *testing.T) {
+	a := answerEvery(paneAsking(t))
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEnter}) // Submit on the review
+	out := ansi.Strip(a.room.View(roomWidth, 40))
+	if !strings.Contains(out, resolvedAnswered) {
+		t.Errorf("the group chat does not record that the question was answered, so the ask's warn line just goes stale:\n%s", out)
+	}
+	if strings.Contains(out, resolvedCancelled) {
+		t.Errorf("an answered question was recorded as cancelled:\n%s", out)
+	}
+}
+
+// A refusal is a resolution too, and a different one: the operator said no.
+func TestRefusingAQuestionIsRecordedCancelledInTheRoom(t *testing.T) {
+	a := paneAsking(t)
+	a, _ = press(a, cardDenyKey)                       // opens the deny-reason box (the arm)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEnter}) // sends the refusal
+	out := ansi.Strip(a.room.View(roomWidth, 40))
+	if !strings.Contains(out, resolvedCancelled) {
+		t.Errorf("the group chat does not record that the question was cancelled:\n%s", out)
+	}
+	if strings.Contains(out, resolvedAnswered) {
+		t.Errorf("a refused question was recorded as answered:\n%s", out)
+	}
+}
+
+// roomBlock draws the resolution line for the two authored notices, names the
+// agent, and draws nothing for ordinary system chatter - so a KindSystem event
+// the fold might one day admit does not start drawing a stray line.
+func TestTheRoomDrawsAQuestionResolutionLine(t *testing.T) {
+	by := Agent{Name: "iris"}
+	answered := ansi.Strip(roomBlock(core.Event{Kind: core.KindSystem, Notice: core.NoticeQuestionAnswered}, by, roomWidth, false).text)
+	if !strings.Contains(answered, "iris") || !strings.Contains(answered, resolvedAnswered) {
+		t.Errorf("the answered line does not name the agent and what happened: %q", answered)
+	}
+	cancelled := ansi.Strip(roomBlock(core.Event{Kind: core.KindSystem, Notice: core.NoticeQuestionCancelled}, by, roomWidth, false).text)
+	if !strings.Contains(cancelled, resolvedCancelled) {
+		t.Errorf("the cancelled line does not say so: %q", cancelled)
+	}
+	if plain := roomBlock(core.Event{Kind: core.KindSystem, Text: "lifecycle"}, by, roomWidth, false).text; plain != "" {
+		t.Errorf("ordinary system chatter drew a line in the room: %q", plain)
+	}
+}
+
+// A permission or a plan deny is a verb, not a chosen answer, so it leaves no
+// question-resolution line in the room - only a question does. These lock the
+// ShapeQuestion gate in commitAnswer, which is logically sound but was unpinned:
+// a refactor could regress it silently and draw "question cancelled" for a
+// permission the operator refused.
+func TestAPermissionDenyLeavesNoResolutionLineInTheRoom(t *testing.T) {
+	a := blockedPane(t) // a permission ask (Bash), not a question
+	a, _ = press(a, cardDenyKey)
+	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	if f := sentFrame(t, a, cmd); f.Kind != rpc.FrameDeny {
+		t.Fatalf("the deny wrote a %v frame, want %v - the exclusion is only tested if the deny path ran", f.Kind, rpc.FrameDeny)
+	}
+	out := ansi.Strip(a.room.View(roomWidth, 40))
+	if strings.Contains(out, resolvedAnswered) || strings.Contains(out, resolvedCancelled) {
+		t.Errorf("a permission deny drew a question-resolution line in the room:\n%s", out)
+	}
+}
+
+func TestAPlanDenyLeavesNoResolutionLineInTheRoom(t *testing.T) {
+	plan := planAsk(t)
+	a := newRoomApp(t).withSize(200, 40).withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateBlocked},
+	).openDMWith("s2", "sydney").opened(t).applyFrame(rpc.Frame{
+		Kind: rpc.FrameEvent, SessionID: "s2", Event: &plan,
+	})
+	if c, ok := a.cardOf(a.focus); !ok || c.Shape() != ShapePlan {
+		t.Fatalf("the focused pane is not putting a plan card, so this test asserts nothing")
+	}
+	a, _ = press(a, cardDenyKey)
+	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	if f := sentFrame(t, a, cmd); f.Kind != rpc.FrameDeny {
+		t.Fatalf("the plan deny wrote a %v frame, want %v", f.Kind, rpc.FrameDeny)
+	}
+	out := ansi.Strip(a.room.View(roomWidth, 40))
+	if strings.Contains(out, resolvedAnswered) || strings.Contains(out, resolvedCancelled) {
+		t.Errorf("a plan deny drew a question-resolution line in the room:\n%s", out)
 	}
 }
 
