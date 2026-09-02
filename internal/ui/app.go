@@ -177,18 +177,11 @@ type App struct {
 	// write. Keyed on *DM: a write replaces the pointer, never mutating a value.
 	dms map[string]*DM
 
-	// tails is each agent's live output tail while the tiled board is up,
-	// keyed by session id and holding the same partial preview a DM shows.
-	// On App (not Fleet) so a streamed token never triggers a fleet-sized
-	// copy - App.wants' own reason, one surface over. Empty when the wall is
-	// down: foldTail is gated and closeBoard drops it.
-	tails map[string]partial
-
 	// boardDMs holds one rendered conversation per on-screen tile of the tiled
 	// board, and boardHistoryAsked records which have a disk-history ask
 	// outstanding (how many events each held at ask time - historyArrived's rule).
 	// Both are built while board.Up && board.Tiled and dropped whole on close -
-	// App.tails's lifecycle - and isolated from the pane map (a.dms): the ⇥ ring,
+	// the board's own lifecycle - and isolated from the pane map (a.dms): the ⇥ ring,
 	// App.wants and hideDM never see these, so a tile costs nothing where a pane
 	// is counted. See boardtranscript.go.
 	boardDMs          map[string]*DM

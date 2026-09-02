@@ -130,33 +130,16 @@ type partial struct {
 	text  string
 	view  string
 	width int
-	// rowCap caps how many rows the tail retains; 0 means the default
-	// maxPreviewRows. The tiled board sets it (tileTailCap, its cell body
-	// height) so a big cell fills with output; the DM preview and the inbox
-	// fold leave it zero.
-	rowCap int
 }
-
-// cap is how many rows this tail retains: rowCap when set, else the default.
-func (p partial) cap() int {
-	if p.rowCap > 0 {
-		return p.rowCap
-	}
-	return maxPreviewRows
-}
-
-// chars is how many characters of the block are retained at this tail's width
-// and row cap - previewChars, aware of a raised cap.
-func (p partial) chars() int { return max(p.width, minBlockWidth) * (p.cap() + previewSlack) }
 
 // add appends the tokens that just arrived, keeping only what can be drawn.
 func (p partial) add(s string) partial {
 	p.text += s
-	if len(p.text) > p.chars() {
+	if keep := previewChars(p.width); len(p.text) > keep {
 		// Bytes rather than runes: this is a bound on work, and a multi-byte
 		// rune cut in half at the front is dropped by the wrap below rather
 		// than drawn - which is what the slack is for.
-		p.text = p.text[len(p.text)-p.chars():]
+		p.text = p.text[len(p.text)-keep:]
 	}
 	return p.wrapped()
 }
@@ -191,8 +174,8 @@ func (p partial) wrapped() partial {
 	}
 	// ToValidUTF8 drops the rune the byte-wise cut in add may have halved.
 	lines := strings.Split(ansi.Wrap(strings.ToValidUTF8(p.text, ""), max(p.width, minBlockWidth), ""), "\n")
-	if len(lines) > p.cap() {
-		lines = lines[len(lines)-p.cap():]
+	if len(lines) > maxPreviewRows {
+		lines = lines[len(lines)-maxPreviewRows:]
 	}
 	p.view = strings.Join(lines, "\n")
 	return p

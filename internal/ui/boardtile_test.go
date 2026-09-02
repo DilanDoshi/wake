@@ -8,8 +8,20 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
+
+// partialEv is a streamed token event - the board DM folds it into its preview.
+func partialEv(text string) core.Event {
+	return core.Event{Kind: core.KindPartialText, Text: text}
+}
+
+// assistantBlock is a completed prose block - the board DM renders it into the
+// transcript the tile draws.
+func assistantBlock(text string) core.Event {
+	return core.Event{Kind: core.KindAssistantText, Text: text}
+}
 
 // tileGridFor chooses a near-square grid that fills the whole frame: a few
 // agents get big cells stretched across both axes, many agents pack down to
@@ -17,10 +29,10 @@ import (
 // draw, the mouse and the cursor all measure the same grid.
 func TestTileGridFillsTheWindow(t *testing.T) {
 	cases := []struct {
-		name                string
-		width, availH, n    int
-		cols, rows          int
-		cellW, cellH        int
+		name             string
+		width, availH, n int
+		cols, rows       int
+		cellW, cellH     int
 	}{
 		// One agent fills the whole board.
 		{"one agent, whole frame", 120, 24, 1, 1, 1, 120, 24},
@@ -107,20 +119,20 @@ func TestTiledBoardDrawsARoundedTilePerAgent(t *testing.T) {
 	}
 }
 
-// A working agent's tile shows the live tail rather than its last line. alex
-// is the working one in boardApp's fixture - OnRoster()[0] is sydney, sorted
-// first because attention order puts blocked ahead of working, so the agent
-// under test is looked up by name rather than assumed to be the first row.
-func TestTileShowsTheLiveTailOfAWorkingAgent(t *testing.T) {
+// A tile shows the agent's transcript, not its last line. alex is the working
+// one in boardApp's fixture - OnRoster()[0] is sydney, sorted first because
+// attention order puts blocked ahead of working, so the agent under test is
+// looked up by name rather than assumed to be the first row.
+func TestTileShowsTheTranscriptOfAnAgent(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
 	working, ok := a.fleet.ByName("alex")
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	a = a.foldTail(working.ID, partialEv("wiring the auth guard"))
+	a = a.ensureBoardDMs().foldBoard(working.ID, assistantBlock("wiring the auth guard"))
 	if !strings.Contains(a.View(), "wiring the auth guard") {
-		t.Fatalf("the working tile did not show its live tail.\n%s", a.View())
+		t.Fatalf("the tile did not show its transcript.\n%s", a.View())
 	}
 }
 
@@ -142,7 +154,7 @@ func TestTileShowsSubagentCount(t *testing.T) {
 // Measured on a.tile directly, since tiles sit side by side in a row
 // (lipgloss.JoinHorizontal) and a single tile's row count is not separable from
 // the joined row once assembled into the whole board.
-func TestATileNeverOvershootsItsCellHeightWhenTheTailWraps(t *testing.T) {
+func TestATileNeverOvershootsItsCellHeightWhenTheTranscriptWraps(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
 	working, ok := a.fleet.ByName("alex")
@@ -150,29 +162,25 @@ func TestATileNeverOvershootsItsCellHeightWhenTheTailWraps(t *testing.T) {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
 	g := a.boardTileGrid(len(a.fleet.OnRoster()))
-	inner := max(g.cellW-boxFrameWidth, 1)
 
-	// A tail long enough to wrap to many rows and fill the cell's tail budget.
-	a = a.foldTail(working.ID, partialEv(strings.Repeat("wiring the auth guard ", 80)))
-	if got := strings.Count(a.tails[working.ID].sized(inner).view, "\n") + 1; got < 2 {
-		t.Fatalf("precondition: tail wrapped to %d row(s), want multiple rows to exercise the fill/truncate path", got)
-	}
+	// A transcript long enough to wrap past the cell body and exercise the
+	// fill/truncate path.
+	a = a.ensureBoardDMs().foldBoard(working.ID, assistantBlock(strings.Repeat("wiring the auth guard ", 80)))
 	_ = a.View() // exercises the tiled render path end to end
 
 	ag, _ := a.fleet.Agent(working.ID)
 	out := a.tile(ag, g.cellW, g.cellH, false)
 	if got := strings.Count(out, "\n") + 1; got != g.cellH {
-		t.Fatalf("the tile drew %d rows with an overflowing tail, want exactly the cell height %d:\n%s", got, g.cellH, out)
+		t.Fatalf("the tile drew %d rows with an overflowing transcript, want exactly the cell height %d:\n%s", got, g.cellH, out)
 	}
 }
 
-// The tiled wall relaxes the DM preview's three-row cap (maxPreviewRows): a big
-// cell retains as much live tail as its own body can draw (tileTailCap) so it
-// fills with output rather than stopping at three rows - the board's narrowed
-// guardrail 2, bounded to the cell body and with no scrollback. The DM preview
-// and the inbox fold keep the three-row cap; only the tile tail is raised, and
-// only to what the cell can show.
-func TestABigTileFillsWithMoreTailThanTheDMPreviewCap(t *testing.T) {
+// The tile fills with the transcript window rather than the DM preview's
+// three-row cap (maxPreviewRows): a big cell shows as many rows of the
+// conversation as its own body can draw - the board's revised guardrail 2,
+// bounded to the cell body and with no scrollback. The DM preview and the inbox
+// fold keep the three-row cap; the tile shows the whole transcript tail.
+func TestABigTileFillsWithTranscriptBeyondThePreviewCap(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
 	working, ok := a.fleet.ByName("alex")
@@ -182,14 +190,17 @@ func TestABigTileFillsWithMoreTailThanTheDMPreviewCap(t *testing.T) {
 	g := a.boardTileGrid(len(a.fleet.OnRoster()))
 	inner := max(g.cellW-boxFrameWidth, 1)
 
-	// Many wrapped rows of output, well past the three-row DM cap.
-	a = a.foldTail(working.ID, partialEv(strings.Repeat("streamed line of output ", 80)))
-	rows := strings.Count(a.tails[working.ID].sized(inner).view, "\n") + 1
-	if rows <= maxPreviewRows {
-		t.Fatalf("the tile tail retained %d rows, want more than the DM cap of %d", rows, maxPreviewRows)
+	// Many wrapped rows of output, well past the three-row DM preview cap.
+	a = a.ensureBoardDMs().foldBoard(working.ID, assistantBlock(strings.Repeat("streamed line of output ", 80)))
+	middle := a.tileMiddle(working, inner, g.cellH-tileFrameRows)
+	filled := 0
+	for _, r := range middle {
+		if strings.TrimSpace(ansi.Strip(r)) != "" {
+			filled++
+		}
 	}
-	if cap := a.tileTailCap(); rows > cap {
-		t.Fatalf("the tile tail retained %d rows, past its own cell body budget of %d", rows, cap)
+	if filled <= maxPreviewRows {
+		t.Fatalf("the tile filled only %d transcript rows, want more than the DM preview cap of %d", filled, maxPreviewRows)
 	}
 }
 
@@ -214,10 +225,11 @@ func TestATileNeverOvershootsAtNarrowWidthBelowTheWrapFloor(t *testing.T) {
 		t.Fatalf("precondition: inner=%d is not below minBlockWidth(%d)", inner, minBlockWidth)
 	}
 
-	// An unbroken run of characters, so the tail wraps at the wrap floor
-	// (minBlockWidth=20) with no word boundary to fall short of it - every
-	// physical line comes back exactly 20 columns wide, wider than inner(18).
-	a = a.foldTail(working.ID, partialEv(strings.Repeat("x", 400)))
+	// An unbroken run of characters streamed as a preview, so it wraps at the
+	// wrap floor (minBlockWidth=20) with no word boundary to fall short of it -
+	// every physical line comes back exactly 20 columns wide, wider than
+	// inner(18). tileMiddle's tailLines must truncate each to inner.
+	a = a.ensureBoardDMs().foldBoard(working.ID, partialEv(strings.Repeat("x", 400)))
 	ag, _ := a.fleet.Agent(working.ID)
 	out := a.tile(ag, g.cellW, g.cellH, false)
 	if got := strings.Count(out, "\n") + 1; got != g.cellH {
@@ -259,21 +271,16 @@ func TestATileNeverOvershootsWhenTheSubagentLineWraps(t *testing.T) {
 	}
 }
 
-// At a small cell the tile body has room for the state line, one middle line
-// and the subagent count - no more. The subagent count, appended last, must
-// survive: it used to be the row padRows dropped whenever a detail line was
-// present, because the detail line ignored the row budget the tail respected.
+// At a small cell the tile body has room for the state line and the subagent
+// count - no more. The subagent count, appended last, must survive the row
+// budget: it used to be the row padRows dropped whenever the middle ignored the
+// budget the framing respected.
 func TestATinyTileKeepsTheSubagentCount(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
-	// A working agent with a last line has a non-empty detail - the case that
-	// used to push the subagent count out of a two-row body.
-	ag := Agent{ID: "solo", Name: "solo", State: rpc.StateWorking, LastLine: "compiling the parser"}
-	if boardDetail(ag) == "" {
-		t.Fatal("precondition: this agent has no detail line to crowd the body")
-	}
+	ag := Agent{ID: "solo", Name: "solo", State: rpc.StateWorking}
 
-	out := a.tileBody(ag, 40, 2) // a two-row body: state, then one framing line
+	out := a.tileBody(ag, 40, 2) // a two-row body: state, then the subagent count
 	if !strings.Contains(out, "subagent") {
 		t.Fatalf("a two-row tile body dropped the subagent count:\n%s", out)
 	}
@@ -295,13 +302,13 @@ func TestTileTailControlBytesCannotForgeANeighbouringTile(t *testing.T) {
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	a = a.foldTail(working.ID, partialEv("done\rFORGED\x1b[2Jred"))
+	a = a.ensureBoardDMs().foldBoard(working.ID, partialEv("done\rFORGED\x1b[2Jred"))
 	out := a.View()
 	if strings.Contains(out, "\r") {
-		t.Errorf("a raw carriage return from the live tail reached the tiled board:\n%q", out)
+		t.Errorf("a raw carriage return from the live preview reached the tiled board:\n%q", out)
 	}
 	if strings.Contains(out, "\x1b[2J") {
-		t.Errorf("a raw clear-screen escape from the live tail reached the tiled board:\n%q", out)
+		t.Errorf("a raw clear-screen escape from the live preview reached the tiled board:\n%q", out)
 	}
 }
 
@@ -382,13 +389,15 @@ func benchTiledApp(b *testing.B, n int) App {
 	}
 	a := NewRoomApp(nil, Stream{}, seed)
 	a.board = Board{Up: true, Tiled: true}
-	return a.withSize(idleTerminalWidth, idleTerminalHeight)
+	return a.withSize(idleTerminalWidth, idleTerminalHeight).ensureBoardDMs()
 }
 
 // BenchmarkTiledBoardFleetSecond prices a fleet-second of thirty agents
 // streaming with the wall up: the fold plus a draw. It is the spec's cost
-// gate - read the allocs/op, which must not scale with the token count the
-// way a per-token fleet copy would (partial.go's withDM trap).
+// gate - read the allocs/op, which must not scale with the token count the way
+// a per-token fleet copy would (partial.go's withDM trap). Tokens for a paged-off
+// agent fold into nothing (foldBoard is gated on a visible tile's board DM), so
+// this measures the visible-tile render integral, which is the cost model.
 func BenchmarkTiledBoardFleetSecond(b *testing.B) {
 	a := benchTiledApp(b, 30)
 	const tokensPerSecond = 1300
@@ -397,7 +406,7 @@ func BenchmarkTiledBoardFleetSecond(b *testing.B) {
 	for i := 0; i < b.N; i++ {
 		for t := 0; t < tokensPerSecond; t++ {
 			id := a.fleet.OnRoster()[t%30].ID
-			a = a.foldTail(id, partialEv("tok "))
+			a = a.foldBoard(id, partialEv("tok "))
 		}
 		_ = a.View()
 	}
