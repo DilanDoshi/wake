@@ -189,8 +189,9 @@ type parkAll struct {
 	// before the write, because after tea.Quit there is no model anybody reads.
 	asked int
 
-	// pressed records that ⌃Q is why this program is ending. It is set on the
-	// keypress and never cleared: the second press is a no-op, not a restart.
+	// pressed records that ⌃Q is why this program is ending. It is set when the
+	// park is confirmed - the operator's second ⌃Q, since the first only arms -
+	// and never cleared: a further ⌃Q is a no-op (armParkFleet), not a restart.
 	pressed bool
 
 	// settled is the answer having arrived, by any of the four routes, and err
@@ -307,13 +308,10 @@ func (a App) armParkFleet(armed bool) (tea.Model, tea.Cmd, bool) {
 // prints instead of asking a daemon that is, by then, shutting down and will
 // spend its whole status timeout in the backlog.
 func (a App) parkFleet() (tea.Model, tea.Cmd, bool) {
-	if a.quit.pressed {
-		// The second press is a no-op rather than a second ask. beginQuit's
-		// first verb wins, so another FrameParkAll changes nothing at the
-		// daemon; another wait would be a second deadline racing the first,
-		// and the loser would settle an ask that was already answered.
-		return a, nil, true
-	}
+	// The once-only invariant is the caller's now: armParkFleet is the sole
+	// caller and returns on a.quit.pressed before it reaches here, so a second
+	// ⌃Q never re-asks and never schedules a second deadline racing the first.
+	// beginQuit's first verb wins at the daemon regardless.
 	a.quit = parkAll{asked: a.carriedForward(), pressed: true}
 	notice.Report(parkingFleet, a.quit.asked)
 	return a, tea.Sequence(a.askParkAll(), a.parkAllDeadline()), true

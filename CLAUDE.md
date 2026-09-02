@@ -442,8 +442,8 @@ which never sends its outcome; the notices leave **no transcript block** (`notic
 the pinned line is the only place it shows. Full argument: `internal/ui/compacting.go`.
 
 **Every ordinary exit is a key the Update loop reads, so the emergency one is a byte read before it.**
-⌃Q parks the fleet and quits, ⌃O then ↵ detaches, ⌃C parks one agent — all three are `tea.KeyMsg`,
-and all three are gone the moment the loop is what has stopped. It can be: `Update` calls `View`,
+⌃Q arms and a second ⌃Q parks the fleet and quits, ⌃O then ↵ detaches, ⌃C parks one agent — all are `tea.KeyMsg`,
+and all are gone the moment the loop is what has stopped. It can be: `Update` calls `View`,
 `View` goes through one `os.File`, and a terminal that stops draining that file parks the write
 inside the renderer's mutex — which is the goroutine that reads every message. **And a signal does
 not rescue it**: bubbletea's `handleSignals` does `p.msgs <- InterruptMsg{}` on an *unbuffered*
@@ -471,8 +471,8 @@ case**, which is ⎋⎋'s reason: it is not in `App.key` at all. Arming it takes
 claims it only for a reader that is itself a terminal, and the reader it gets is a pipe — so
 `converseModel` owns the restore.
 
-**Park is recoverable; stop is not.** `⌃C` parks the focused agent, `⌃Q` parks the fleet and exits,
-`wake stop` ends everything and clears the park book. A parked session keeps its id, name, label and
+**Park is recoverable; stop is not.** `⌃C` parks the focused agent, `⌃Q⌃Q` parks the fleet and exits
+(the first `⌃Q` arms), `wake stop` ends everything and clears the park book. A parked session keeps its id, name, label and
 directory in `parked.json` beside the socket.
 
 **`⌃Q` waits for the daemon to say it took the park before the window closes**, and the exit line

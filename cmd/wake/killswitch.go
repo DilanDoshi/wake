@@ -4,10 +4,10 @@ package main
 //
 // # What this exists for
 //
-// Every exit Wake had went through Bubble Tea's Update loop: ⌃Q parks the fleet
-// and quits, ⌃O then ↵ detaches, ⌃C parks one agent. All three are keys the
-// loop reads, so all three are gone the moment the loop is the thing that is
-// stuck - and it can be. Update calls View, View is written through one
+// Every exit Wake had went through Bubble Tea's Update loop: ⌃Q⌃Q parks the
+// fleet and quits (the first ⌃Q arms), ⌃O then ↵ detaches, ⌃C parks one agent.
+// All three are keys the loop reads, so all are gone the moment the loop is the
+// thing that is stuck - and it can be. Update calls View, View is written through one
 // os.File, and a terminal that stops draining that file parks the write inside
 // the renderer's own mutex, which is the goroutine Bubble Tea reads messages
 // on. Nothing after that point can be reached by pressing a key, because the
