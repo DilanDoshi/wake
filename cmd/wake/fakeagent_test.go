@@ -36,6 +36,7 @@ import (
 	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // The markers that turn this binary into an agent, and which script it runs.
@@ -56,6 +57,15 @@ const scriptInterruptible = "interruptible"
 // scriptAsks blocks on a permission request instead of answering, which is the
 // only state an answerable card exists in.
 const scriptAsks = "asks"
+
+// scriptStreaming keeps emitting a distinctive assistant block on a loop, so a
+// tiled board opened at any time captures it live - the one path that shows a
+// tile's transcript without a real on-disk conversation to seed from.
+const scriptStreaming = "streaming"
+
+// streamingMarker is what fakeAgentStreaming keeps saying, so the board tile
+// screen test can find it.
+const streamingMarker = "streamed transcript line"
 
 // scriptPlans writes a task list and leaves it on screen, which is the only
 // state a checklist block exists in. The tool is never called anywhere in
@@ -171,6 +181,8 @@ func runFakeAgent() int {
 	switch os.Getenv(fakeAgentScript) {
 	case scriptInterruptible:
 		return fakeAgentInterruptible(sid)
+	case scriptStreaming:
+		return fakeAgentStreaming(sid)
 	case scriptAsks:
 		return fakeAgentAsks(sid)
 	case scriptQuestions:
@@ -230,6 +242,19 @@ func fakeAgentPlans(sid string) int {
 		sayTodos(sid)
 		sayText(sid, heardPrefix+"planned")
 		sayResult(sid)
+	}
+	return 0
+}
+
+// fakeAgentStreaming says ready, then keeps emitting a distinctive assistant
+// block on a slow loop so a board tiled at any time folds it live. Bounded so
+// the process exits rather than leaking if the harness does not kill it first.
+func fakeAgentStreaming(sid string) int {
+	sayText(sid, "ready")
+	sayResult(sid)
+	for i := 0; i < 80; i++ {
+		sayText(sid, streamingMarker)
+		time.Sleep(150 * time.Millisecond)
 	}
 	return 0
 }

@@ -40,6 +40,27 @@ func TestTheTiledBoardDrawsAndClicksOnAScreen(t *testing.T) {
 	s.awaitGone("BOARD")
 }
 
+// A tile draws the agent's real transcript live, not a one-line summary. The
+// scripted agent keeps saying a distinctive block; with the tiled board up, that
+// block is folded into the tile's board DM and drawn - the 2026-09-01 guardrail-2
+// revision, end to end through the real binary, daemon and pty. Before this the
+// tile showed only the currently-streaming block and went blank the rest of the
+// time; the streamed line proves the transcript reaches the cell.
+func TestATiledBoardTileDrawsTheTranscript(t *testing.T) {
+	withScriptedAgent(t, scriptStreaming)
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWake(t, 100, 30)
+	s.await("ready")
+	s.send("/board\r")
+	s.await("BOARD")
+	s.send("\t") // ⇥ to tiles
+	s.await("╭")
+	// The agent keeps emitting streamingMarker; with the board tiled it lands in
+	// the tile's transcript within a couple of its 150ms beats.
+	s.await(streamingMarker)
+}
+
 // A tile is a full four-sided box on a real screen: its body rows carry a wall
 // on the left and on the right, not just a top and a bottom edge. Before this
 // the tile passed a borderless style and its body rows were open on both sides

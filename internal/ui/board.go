@@ -41,17 +41,22 @@ package ui
 //
 //  1. View-only. No keystroke reaches an agent's stdin from a tile; keys
 //     drive the board itself (move, jump in, park, close).
-//  2. Bounded live tail, no scrollback. A tile shows live text bounded to its
-//     own body (tileTailCap kept per agent - the cell's own height, so a big
-//     cell fills and a dense grid keeps little) and nothing you can scroll back
-//     through - the tail lives in App.tails (tail.go), gated on Tiled so a
-//     closed or row-mode board holds none of it.
+//  2. Bounded transcript window, no scrollback. Revised 2026-09-01 from the
+//     original "bounded live tail, a tail -f snippet, never a conversation": a
+//     tile now shows the tail of the real conversation at DM fidelity - prose,
+//     tool calls, results - bounded to its own cell body and with nothing you
+//     can scroll back through. Still no history you can page and no input; the
+//     window follows the newest line live. The renders live in App.boardDMs
+//     (boardtranscript.go), reusing the DM's render-once-cache machinery so no
+//     glamour runs per frame, gated on Tiled so a closed or row-mode board holds
+//     none of it.
 //  3. Fixed grid, no per-tile resize, no pane tree. Equal cells sized to fill
 //     the frame, no divider to drag, no split, no nesting.
 //  4. Act from it, never in it. ↵ and click leave the wall for the agent's
 //     real DM rather than working inside the tile.
 //
-// Full argument: docs/superpowers/specs/2026-08-27-tiled-board-design.md
+// Full argument: docs/superpowers/specs/2026-08-27-tiled-board-design.md and
+// its revision docs/superpowers/specs/2026-09-01-board-tile-transcripts-design.md
 // §§1-2.
 
 import (
@@ -124,7 +129,8 @@ func (a App) openBoard(arg string) (App, tea.Cmd) {
 
 func (a App) closeBoard() App {
 	a.board = Board{}
-	a.tails = nil
+	a.boardDMs = nil
+	a.boardHistoryAsked = nil
 	return a
 }
 
@@ -150,7 +156,9 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	case tea.KeyTab:
 		a.board.Tiled = !a.board.Tiled
 		if !a.board.Tiled {
-			a.tails = nil // rows draw no tails; drop what the wall accumulated
+			// Rows draw no transcripts; drop what the wall accumulated.
+			a.boardDMs = nil
+			a.boardHistoryAsked = nil
 		}
 		return a, nil, true
 	case tea.KeyUp:

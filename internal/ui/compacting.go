@@ -4,7 +4,7 @@ package ui
 //
 // Held on App and folded from the two notices the airlock resolves a
 // compaction's bracketing status frames to (NoticeCompacting, NoticeCompacted).
-// On App rather than Agent or Fleet for tails.go's reason: it is set and cleared
+// On App rather than Agent or Fleet for boardtranscript.go's reason: it is set and cleared
 // by two events a session sends *between* turns, and a map keyed by session id
 // keeps Agent comparable for Observe's now==was. The DM reads it at draw time
 // through WithCompacting; the ticker reads anyCompacting.

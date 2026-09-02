@@ -369,6 +369,16 @@ type SessionStatus struct {
 	// a woken session re-probes, the way Effort's confirmed half does.
 	ConfirmedModel string `json:"confirmed_model,omitempty"`
 
+	// Model is the model id this session was observed running on its init frame -
+	// the resolved id, e.g. "claude-opus-4-8". It rides the init *event* (the UI
+	// folds it via withFacts), which keeps a connected client current; this is the
+	// only route by which a client that never saw the init - a late attach, a board
+	// tile - learns it. Distinct from the spawn alias, which is empty for a
+	// default-model spawn, so this is the source that works there. Empty until the
+	// daemon has seen an init; ConfirmedModel is still preferred over it when a
+	// probe has answered. Not park-persisted: a woken session re-observes on init.
+	Model string `json:"model,omitempty"`
+
 	// Budget is the spend ceiling this session was started under, or "" for one
 	// with none. Here for Effort's reason and by the same route: nothing on
 	// Claude's wire reports a cap, so this is Wake's own memory of what it

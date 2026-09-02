@@ -304,6 +304,14 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		}
 		a.Name, a.Label, a.Color, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, runningIn(s), s.ParentID
 		a.Effort, a.Budget, a.ConfirmedModel = s.Effort, s.Budget, s.ConfirmedModel
+		// Only when the report names one, so a report assembled before the daemon
+		// saw an init does not blank a model the event stream already gave. Model
+		// rides both wires now; last-writer-wins keeps them consistent. The event
+		// path (withFacts) is the live source; this backfills a late attach. See
+		// rpc.SessionStatus.Model.
+		if s.Model != "" {
+			a.Model = s.Model
+		}
 		// The report is the only route to these - and to PRs - for a client that
 		// attached after they were set. See rpc.SessionStatus.Commands.
 		a = a.withCommands(s.Commands).withPRs(s.PRs)

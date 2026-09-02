@@ -97,7 +97,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 		// stored DM that does not have them re-sizes on every frame.
 		a = a.withDM(sessionID, dm.Append(a.fleet.named(sessionID, ev)))
 	}
-	a = a.foldTail(sessionID, ev)
+	a = a.foldBoard(sessionID, ev)
 	return a
 }
 

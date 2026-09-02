@@ -57,27 +57,26 @@ func TestATileDrawsThePerAgentStatusBar(t *testing.T) {
 	}
 }
 
-// A working agent's live tail fills the whole middle of a tall tile rather than
-// stopping at a fixed cap - the fill-the-window change (guardrail 2). A tall
-// cell shows far more than the DM preview's three rows.
-func TestATileTailFillsTheBodyOfATallCell(t *testing.T) {
+// A tile's transcript fills the whole middle of a tall cell rather than stopping
+// at a fixed cap - the fill-the-window guardrail 2. A tall cell shows far more
+// than the DM preview's three rows.
+func TestATileTranscriptFillsTheBodyOfATallCell(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
 	working, _ := a.fleet.ByName("alex") // the working agent
-	a = a.foldTail(working.ID, partialEv(strings.Repeat("streamed line of output ", 200)))
+	a = a.ensureBoardDMs().foldBoard(working.ID, assistantBlock(strings.Repeat("streamed line of output ", 200)))
 
-	const w, h = 50, 20 // a tall tile: body is 18 rows, tail middle ~15
+	const w, h = 50, 20 // a tall tile: body is 18 rows, transcript middle ~15
 	ag, _ := a.fleet.Agent(working.ID)
 	out := ansi.Strip(a.tile(ag, w, h, false))
-	rows := strings.Split(out, "\n")
-	tailRows := 0
-	for _, r := range rows {
-		if strings.Contains(r, "streamed line of output") {
-			tailRows++
+	filled := 0
+	for _, r := range strings.Split(out, "\n") {
+		if strings.Contains(r, "streamed") {
+			filled++
 		}
 	}
-	if tailRows <= 2 {
-		t.Fatalf("the live tail filled only %d rows of a %d-row tile, want it to fill the body:\n%s", tailRows, h, out)
+	if filled <= 2 {
+		t.Fatalf("the transcript filled only %d rows of a %d-row tile, want it to fill the body:\n%s", filled, h, out)
 	}
 }
 
@@ -89,7 +88,7 @@ func TestATileIsExactlyItsCellSize(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
 	working, _ := a.fleet.ByName("alex")
-	a = a.foldTail(working.ID, partialEv(strings.Repeat("filling the cell with output ", 60)))
+	a = a.ensureBoardDMs().foldBoard(working.ID, assistantBlock(strings.Repeat("filling the cell with output ", 60)))
 	ag, _ := a.fleet.Agent(working.ID)
 
 	sizes := []struct{ w, h int }{{26, 7}, {40, 12}, {59, 24}, {30, 8}}

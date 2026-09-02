@@ -83,8 +83,16 @@ func (a App) takeHistoryAsks() (App, tea.Cmd) {
 // history the model no longer has. Membership, not the count, is what tells the
 // two apart, so the drop is keyed on whether the ask still stands. See clear.go.
 func (a App) historyArrived(f rpc.Frame) App {
+	// A reply for a conversation the pane world does not hold is the board's - see
+	// boardHistoryArrived (boardtranscript.go). The two asks are mutually exclusive
+	// per id (the board is drawn instead of panes, so no pane opens while it is up),
+	// so this never steals a pane's reply. One wire and one DM.Before fold serve
+	// both; only the map the reply lands in differs.
 	dm, ok := a.dms[f.SessionID]
-	if !ok || len(f.Events) == 0 {
+	if !ok {
+		return a.boardHistoryArrived(f)
+	}
+	if len(f.Events) == 0 {
 		return a
 	}
 	held, asked := a.askedHistory[f.SessionID]

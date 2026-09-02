@@ -30,15 +30,15 @@ const (
 	// tileGap is the blank column between neighbouring tiles.
 	tileGap = 1
 
-	// tileFrameRows is the rows a tile spends on everything but the live tail:
+	// tileFrameRows is the rows a tile spends on everything but the transcript:
 	// the two border edges, the state word, the subagent count and the status
-	// bar. The tail fills whatever the cell has left (cellH - tileFrameRows),
-	// which is what tileTailCap tracks - the board's narrowed guardrail 2:
-	// bounded to the tile body, still no scrollback.
+	// bar. The transcript window fills whatever the cell has left (cellH -
+	// tileFrameRows), which is what tileInner computes - the board's revised
+	// guardrail 2: a bounded transcript window, no scrollback.
 	tileFrameRows = 5
 
-	// minTileTailRows floors the retained tail so a tile too short to have a
-	// tail budget of its own still keeps one row rather than none.
+	// minTileTailRows floors the transcript window so a tile too short to have a
+	// budget of its own still keeps one row rather than none.
 	minTileTailRows = 1
 )
 
@@ -260,24 +260,55 @@ func (a App) tileBody(ag Agent, width, rows int) string {
 }
 
 // tileMiddle is the rows between the state line and the bottom framing: the
-// live tail while the agent works, else the one-line by-state detail
-// (boardDetail's account). It returns exactly `rows` rows, the tail top-aligned
-// and padded down, so the bottom framing sits on the tile's own last rows. The
-// newest tail rows are the ones kept when it has more than fit.
+// agent's live transcript tail at DM fidelity, sized to the cell in
+// ensureBoardDMs and drawn here, following the newest line. Every state draws it
+// - idle shows the last exchange, working shows text streaming in, blocked shows
+// the transcript with the ask below it. Empty rows while a freshly-seeded tile's
+// disk history is still in flight; the framing (state, subagents, bar) draws
+// immediately regardless. It returns exactly `rows` rows so the box stays its
+// cell height and boardHit's click math holds.
+//
+// The transcript lines keep their SGR colour (the DM pane draws the same lines,
+// so they are safe) and are only bounded in width by transcriptWindow. The
+// streaming preview rides at the bottom, hardened through tailLines - oneLine
+// strips the raw control bytes a token could carry to redraw or forge a
+// neighbouring tile, which the coloured transcript above must not be run through
+// (oneLine maps ESC to a space and would strip its colour).
 func (a App) tileMiddle(ag Agent, inner, rows int) []string {
 	if rows <= 0 {
 		return nil
 	}
-	var body []string
-	if t := a.tails[ag.ID].sized(inner); ag.State == rpc.StateWorking && t.text != "" {
-		body = tailLines(t.view, inner)
-	} else if d := boardDetail(ag); d != "" {
-		body = []string{ansi.Truncate(oneLine(d), inner, ellipsis)}
+	d, ok := a.boardDMs[ag.ID]
+	if !ok {
+		return padRows(nil, rows) // seeded on the next Update; the framing draws now
 	}
-	if len(body) > rows {
-		body = body[len(body)-rows:] // the newest rows that fit
+	_, view := d.transcriptWindow(inner, rows)
+	lines := strings.Split(view, "\n")
+	// Clamp each transcript line to inner. transcriptWindow floors its render
+	// width to minBlockWidth, so at a tile narrower than that its lines come back
+	// wider than inner - and titledBox's Width(edge) then word-wraps the overrun
+	// into an extra physical row, growing the tile past its cell height. ansi.Truncate
+	// is SGR-aware, so this keeps the transcript's colour where oneLine would strip it.
+	for i, l := range lines {
+		lines[i] = ansi.Truncate(l, inner, "")
 	}
-	return padRows(body, rows)
+	if pv := d.partial.sized(inner).view; pv != "" {
+		lines = append(dropTrailingBlank(lines), tailLines(pv, inner)...)
+	}
+	if len(lines) > rows {
+		lines = lines[len(lines)-rows:] // the newest rows that fit
+	}
+	return padRows(lines, rows)
+}
+
+// dropTrailingBlank removes the blank padding transcript.view adds below a short
+// transcript, so the streaming preview appended after it continues the
+// conversation rather than sitting past a gap.
+func dropTrailingBlank(lines []string) []string {
+	for len(lines) > 0 && strings.TrimSpace(lines[len(lines)-1]) == "" {
+		lines = lines[:len(lines)-1]
+	}
+	return lines
 }
 
 // tileSubagents is the "⤷ N subagents" line, dim and truncated to the tile's
@@ -289,24 +320,6 @@ func tileSubagents(count, inner int) string {
 		word = "subagent"
 	}
 	return HintStyle.Render(ansi.Truncate(fmt.Sprintf("⤷ %d %s", count, word), inner, ellipsis))
-}
-
-// tileTailCap is how many rows of live tail a tile retains: its own body height
-// less the framing lines (cellH - tileFrameRows), so a tall cell fills with
-// output and a dense grid of small cells keeps only what each draws. Bounded to
-// the tile body - guardrail 2 - and floored so a short cell still keeps a row.
-//
-// The roster count is taken inline rather than through OnRoster, which ranks
-// and allocates: this runs per streamed token while the wall is up, so it may
-// not spend a fleet-sized allocation a token (partial.go's own withDM trap).
-func (a App) tileTailCap() int {
-	live := 0
-	for _, id := range a.fleet.order {
-		if a.fleet.agents[id].State != rpc.StateEnded {
-			live++
-		}
-	}
-	return max(a.boardTileGrid(live).cellH-tileFrameRows, minTileTailRows)
 }
 
 // tailLines splits a live tail's wrapped view into its physical rows and

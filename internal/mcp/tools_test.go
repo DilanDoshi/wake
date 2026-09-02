@@ -405,10 +405,11 @@ var notInTheStatusReport = map[string]string{
 	"Commands":       "the slash commands a session advertised, which is the operator's completion menu and nothing this surface can act on: there is no command-typing verb here, and the list is the agent's own (it grows when an agent writes a .claude/commands file), so it is somebody else's words with nothing for a manager to do with them. It rides the report only so a reattached *client* can draw the menu",
 	"Color":          "the identity hue an operator chose for this agent, and pure display chrome: it says nothing about what the agent is doing, which is the only thing this report is for. There is no colour verb on this surface either - FrameColor is refused the manager for the same whose-decision reason - so it is a fact the manager could neither use nor act on, and one that would put the operator's own visual grouping into a model's context for nothing",
 	"ConfirmedModel": "the model's display name a /model probe read back, which is the operator's status-bar chrome and not a fact this surface can act on: the init frame already names the model in use, there is no model verb here, and unlike Effort it is not a closed set (ValidModel admits any non-empty string), so it is exactly the kind of agent-influenced string this report keeps out. It rides the report only so a *client* can prefer it over the init id",
+	"Model":          "the model id observed on the session's init frame, the operator's status-bar chrome and not a fact this surface can act on: there is no model verb here, and it rides the report only so a client that attached without witnessing an init can still name the model. ConfirmedModel beside it is kept out for the same reason",
 	"PRs":            "the pull requests this session opened, which is the operator's status bar and nothing this surface can act on: there is no PR verb here, and the numbers are scraped from an agent's own tool output (agentAuthored), so they are somebody else's words with nothing for a manager to do with them. It rides the report only so a reattached client can draw the segment",
 }
 
-const notInTheStatusReportCount = 9
+const notInTheStatusReportCount = 10
 
 // agent_status is the daemon's facts, and which facts is a decision that
 // should fail loudly when rpc.SessionStatus grows a field.
