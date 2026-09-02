@@ -61,10 +61,11 @@ func runSetupTerminal(args []string, in io.Reader, out io.Writer) error {
 	term := termsetup.Detect(env)
 	configHome := termsetup.ConfigHome(env)
 
+	mux, inMux := termsetup.DetectMultiplexer(env)
 	if err := say(out, "detected: %s", term); err != nil {
 		return err
 	}
-	if mux, ok := termsetup.DetectMultiplexer(env); ok {
+	if inMux {
 		if err := say(out, "%s", termsetup.MultiplexerWarning(mux)); err != nil {
 			return err
 		}
@@ -84,11 +85,14 @@ func runSetupTerminal(args []string, in io.Reader, out io.Writer) error {
 		}
 		return printSetupTerminalResult(result, out)
 	}
-	return runSetupTerminalApply(term, configHome, opts.Yes, in, out)
+	return runSetupTerminalApply(term, configHome, opts.Yes, mux == termsetup.Cmux, in, out)
 }
 
-// runSetupTerminalApply is the non-undo half: preview, confirm, write.
-func runSetupTerminalApply(term termsetup.Emulator, configHome string, yes bool, in io.Reader, out io.Writer) error {
+// runSetupTerminalApply is the non-undo half: preview, confirm, write. cmux
+// says the write happened inside cmux, whose reload advice is the multiplexer
+// warning above rather than Ghostty's own - so the written result's reload
+// hint is dropped rather than contradicting it.
+func runSetupTerminalApply(term termsetup.Emulator, configHome string, yes, cmux bool, in io.Reader, out io.Writer) error {
 	info := termsetup.InfoFor(term)
 	if !info.AutoWritable {
 		result, err := termsetup.Apply(term, configHome)
@@ -132,6 +136,12 @@ func runSetupTerminalApply(term termsetup.Emulator, configHome string, yes bool,
 	result, err := termsetup.Apply(term, configHome)
 	if err != nil {
 		return err
+	}
+	if cmux {
+		// Ghostty's "reloads automatically" is false inside cmux; the cmux
+		// warning above already said to run `cmux reload-config`, so drop the
+		// contradicting line rather than print both.
+		result.ReloadHint = ""
 	}
 	return printSetupTerminalResult(result, out)
 }
