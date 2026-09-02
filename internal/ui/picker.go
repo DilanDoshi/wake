@@ -57,6 +57,14 @@ type Picker struct {
 	// session, or none.
 	Names []string
 
+	// Current is the value the one target is already at, shown so a bare command
+	// answers "what is it now" before it changes anything. Empty when there is
+	// more than one target (no single answer) or the value is unknown. For
+	// /effort it is one of Options - the level words - so the matching row is
+	// marked and the cursor opens on it; for /model it is a display name that
+	// does not reverse-map to an alias, so it is a line only. See App.pickerCurrent.
+	Current string
+
 	Options []string
 	Cursor  int
 }
@@ -93,8 +101,41 @@ func (a App) openPicker(word string, targets []string) App {
 	for _, id := range targets {
 		names = append(names, a.agentName(id))
 	}
-	a.picker = Picker{Word: word, Targets: targets, Names: names, Options: pickerOptions(word)}
+	current, cursor := a.pickerCurrent(word, targets)
+	a.picker = Picker{Word: word, Targets: targets, Names: names, Options: pickerOptions(word), Current: current, Cursor: cursor}
 	return a.clearDraft()
+}
+
+// pickerCurrent is the value the one target is already at, and where the cursor
+// should open. Empty and zero when there is more than one target - a broadcast
+// has no single current value - or when the target's value is unknown.
+//
+// Effort is a level word, so it is one of the options: the cursor opens on it
+// and View marks the row. A model is a display name that does not reverse-map to
+// an alias (opus, opus[1m] and opusplan all render the same), so it is returned
+// as a line and the cursor stays at the top.
+func (a App) pickerCurrent(word string, targets []string) (current string, cursor int) {
+	if len(targets) != 1 {
+		return "", 0
+	}
+	ag, ok := a.fleet.Agent(targets[0])
+	if !ok {
+		return "", 0
+	}
+	switch word {
+	case effortCommand:
+		for i, opt := range pickerOptions(word) {
+			if opt == ag.Effort {
+				return ag.Effort, i
+			}
+		}
+	case modelCommand:
+		if m := ag.ConfirmedModel; m != "" {
+			return m, 0
+		}
+		return modelName(ag.Model, ag.ContextWindow), 0
+	}
+	return "", 0
 }
 
 // closePicker takes it down with nothing sent.
@@ -207,10 +248,18 @@ func (p Picker) View(width int) string {
 	if !p.Open() {
 		return ""
 	}
-	rows := make([]string, 0, len(p.Options)+1)
+	rows := make([]string, 0, len(p.Options)+2)
 	rows = append(rows, detailRow(p.Header(), width))
+	// What the one target is already at, so the menu answers "what is it now"
+	// before it changes anything.
+	if p.Current != "" {
+		rows = append(rows, detailRow("current: "+p.Current, width))
+	}
 	for i, option := range p.Options {
-		rows = append(rows, optionRow(option, width, i == p.Cursor, false, AccentStyle))
+		// chosen marks the current row - true only for /effort, where Current is
+		// one of the options; a /model alias never equals a display name, so its
+		// menu carries the current on the line above and marks nothing.
+		rows = append(rows, optionRow(option, width, i == p.Cursor, option == p.Current, AccentStyle))
 	}
 	return strings.Join(rows, "\n")
 }

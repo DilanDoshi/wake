@@ -142,10 +142,10 @@ func TestTheDMComposerDrawsInTheAgentsHue(t *testing.T) {
 func TestTheStatusBarDoesNotTakeTheIdentityHue(t *testing.T) {
 	forceColour(t)
 	base := Agent{Cwd: t.TempDir(), Model: "claude-opus-5", ContextTokens: 10, ContextWindow: 100}
-	plain := statusBar(base, modeAuto, 200)
+	plain := statusBar(base, modeAuto, 200, 2)
 	coloured := base
 	coloured.Color = "violet"
-	if got := statusBar(coloured, modeAuto, 200); got != plain {
+	if got := statusBar(coloured, modeAuto, 200, 2); got != plain {
 		t.Errorf("a /color'd agent's status bar differs from an uncoloured one; the bar recedes and must not take the hue\n plain:    %q\n coloured: %q", plain, got)
 	}
 }

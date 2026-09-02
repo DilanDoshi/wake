@@ -213,6 +213,76 @@ func TestThePickerHeaderNamesWhatItWillConfigure(t *testing.T) {
 	}
 }
 
+// The effort menu opens on the level the session is already at and marks it, so
+// a bare /effort answers "what is it now" before it changes anything - the
+// owner's request. The options are the effort words themselves, so the current
+// level is one of them and can be both the cursor's start and a marked row.
+func TestTheEffortMenuOpensOnAndMarksTheCurrentLevel(t *testing.T) {
+	fresh(t)
+	conn, _ := pipeClient(t)
+	a := dmApp(conn, Stream{}, "s1", "alex").withSize(160, 30)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateIdle, Effort: "xhigh"},
+	}}})
+	a = a.openPicker(effortCommand, []string{"s1"})
+
+	if a.picker.Current != "xhigh" {
+		t.Errorf("the effort menu's current level is %q, want xhigh", a.picker.Current)
+	}
+	if got := a.picker.Options[a.picker.Cursor]; got != "xhigh" {
+		t.Errorf("the effort menu opened on %q, want the current level xhigh", got)
+	}
+	view := stripANSI(a.picker.View(160))
+	if !strings.Contains(view, "current: xhigh") {
+		t.Errorf("the effort menu does not list the current level: %q", view)
+	}
+	if !strings.Contains(view, cardChosen+"xhigh") {
+		t.Errorf("the current level is not marked in the list: %q", view)
+	}
+}
+
+// The model menu lists the current model too, but as a line rather than a mark:
+// a model id/display name does not reverse-map to one of the aliases the menu
+// offers (opus vs opus[1m] vs opusplan all render the same name), so guessing
+// which row is current would be a mark that is wrong as often as right.
+func TestTheModelMenuListsTheCurrentModelAsALine(t *testing.T) {
+	fresh(t)
+	conn, _ := pipeClient(t)
+	a := dmApp(conn, Stream{}, "s1", "alex").withSize(160, 30)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateIdle, ConfirmedModel: "Opus 5 (1M context)"},
+	}}})
+	a = a.openPicker(modelCommand, []string{"s1"})
+
+	if a.picker.Current != "Opus 5 (1M context)" {
+		t.Errorf("the model menu's current is %q, want the confirmed display name", a.picker.Current)
+	}
+	view := stripANSI(a.picker.View(160))
+	if !strings.Contains(view, "current: Opus 5 (1M context)") {
+		t.Errorf("the model menu does not list the current model: %q", view)
+	}
+	if strings.Contains(view, cardChosen) {
+		t.Errorf("the model menu marked a row as current though no alias matched: %q", view)
+	}
+}
+
+// Several targets have no single current value, so nothing is claimed: a
+// broadcast /effort configures many sessions that may each be at a different
+// level, and a menu naming one of them would be naming the wrong one for the rest.
+func TestTheMenuClaimsNoCurrentAcrossSeveralTargets(t *testing.T) {
+	fresh(t)
+	conn, _ := pipeClient(t)
+	a := dmApp(conn, Stream{}, "s1", "alex").withSize(160, 30)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateIdle, Effort: "xhigh"},
+		{ID: "s2", Name: "sydney", State: rpc.StateIdle, Effort: "low"},
+	}}})
+	a = a.openPicker(effortCommand, []string{"s1", "s2"})
+	if a.picker.Current != "" {
+		t.Errorf("a two-target effort menu claimed a current level %q", a.picker.Current)
+	}
+}
+
 // Every word Wake claims has something to offer, held as a bijection so the two
 // cannot drift.
 func TestEveryBareOnlyCommandHasOptions(t *testing.T) {

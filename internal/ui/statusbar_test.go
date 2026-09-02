@@ -83,7 +83,7 @@ func TestShortPathUsesTilde(t *testing.T) {
 // Wake learns these one frame at a time, so a bar of "unknown  unknown" is the
 // ordinary state for the first second of every session.
 func TestTheBarDropsSegmentsItDoesNotKnow(t *testing.T) {
-	bar := stripANSI(statusBar(Agent{Model: "claude-sonnet-5"}, "", 80))
+	bar := stripANSI(statusBar(Agent{Model: "claude-sonnet-5"}, "", 80, 2))
 
 	if !strings.Contains(bar, "Sonnet 5") {
 		t.Errorf("bar %q lost the one fact it had", bar)
@@ -99,12 +99,12 @@ func TestTheBarDropsSegmentsItDoesNotKnow(t *testing.T) {
 // Effort is the level a /model probe confirmed (or the one Wake asked for until
 // then), shown once known and dropped when neither exists - never guessed.
 func TestTheBarShowsEffortWhenKnown(t *testing.T) {
-	bar := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", Effort: "xhigh"}, modeAuto, 200))
+	bar := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", Effort: "xhigh"}, modeAuto, 200, 2))
 	if !strings.Contains(bar, effortLabel+"xhigh") {
 		t.Errorf("bar %q has no effort segment", bar)
 	}
 
-	bare := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, modeAuto, 200))
+	bare := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, modeAuto, 200, 2))
 	if strings.Contains(bare, effortLabel) {
 		t.Errorf("bar %q drew an effort with none known", bare)
 	}
@@ -116,7 +116,7 @@ func TestTheBarShowsEffortWhenKnown(t *testing.T) {
 func TestTheBarPrefersTheConfirmedModel(t *testing.T) {
 	bar := stripANSI(statusBar(Agent{
 		Cwd: "/tmp/repo", Model: "claude-opus-5", ConfirmedModel: "Sonnet 5 (1M context)",
-	}, modeAuto, 200))
+	}, modeAuto, 200, 2))
 	if !strings.Contains(bar, "Sonnet 5 (1M context)") {
 		t.Errorf("bar %q did not prefer the confirmed model", bar)
 	}
@@ -124,7 +124,7 @@ func TestTheBarPrefersTheConfirmedModel(t *testing.T) {
 		t.Errorf("bar %q still drew the init-frame model over the confirmed one", bar)
 	}
 
-	fallback := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, modeAuto, 200))
+	fallback := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, modeAuto, 200, 2))
 	if !strings.Contains(fallback, "Opus 5") {
 		t.Errorf("bar %q lost the init-frame model before a probe answered", fallback)
 	}
@@ -133,17 +133,17 @@ func TestTheBarPrefersTheConfirmedModel(t *testing.T) {
 // The PRs this session has opened, named as Claude Code would - one or several -
 // and dropped rather than guessed when it has opened none.
 func TestTheBarShowsThePRsThisSessionOpened(t *testing.T) {
-	one := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", prs: &prSet{nums: []int{29}}}, "", 200))
+	one := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", prs: &prSet{nums: []int{29}}}, "", 200, 2))
 	if !strings.Contains(one, "PR #29") {
 		t.Errorf("bar %q has no PR segment", one)
 	}
 
-	many := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", prs: &prSet{nums: []int{29, 30}}}, "", 200))
+	many := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", prs: &prSet{nums: []int{29, 30}}}, "", 200, 2))
 	if !strings.Contains(many, "PR #29, #30") {
 		t.Errorf("bar %q did not list both PRs", many)
 	}
 
-	none := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, "", 200))
+	none := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, "", 200, 2))
 	if strings.Contains(none, "PR #") {
 		t.Errorf("bar %q drew a PR segment for a session that opened none", none)
 	}
@@ -160,13 +160,13 @@ func TestAReportCarriesThePRsOntoTheBar(t *testing.T) {
 	if !ok {
 		t.Fatal("no agent after a report naming one")
 	}
-	if bar := stripANSI(statusBar(a, "", 200)); !strings.Contains(bar, "PR #29, #30") {
+	if bar := stripANSI(statusBar(a, "", 200, 2)); !strings.Contains(bar, "PR #29, #30") {
 		t.Errorf("the report's PRs did not reach the bar: %q", bar)
 	}
 }
 
 func TestTheBarIsEmptyWhenNothingIsKnown(t *testing.T) {
-	if got := statusBar(Agent{}, "", 80); got != "" {
+	if got := statusBar(Agent{}, "", 80, 2); got != "" {
 		t.Errorf("an unknown agent drew %q, want no bar at all", got)
 	}
 }
@@ -179,8 +179,13 @@ func TestTheBarIsBounded(t *testing.T) {
 		ContextWindow: 1_000_000,
 	}
 	for _, width := range []int{10, 20, 40, 80} {
-		if got := ansi.StringWidth(statusBar(a, modeAuto, width)); got > width {
-			t.Errorf("width %d: bar is %d cells", width, got)
+		// The bound is per row, not per bar: a wrapped bar has two rows and each
+		// one has to fit, so measuring the whole string (which sums them) would
+		// be the wrong question.
+		for _, line := range strings.Split(stripANSI(statusBar(a, modeAuto, width, 2)), "\n") {
+			if got := ansi.StringWidth(line); got > width {
+				t.Errorf("width %d: row %q is %d cells", width, line, got)
+			}
 		}
 	}
 }
@@ -195,7 +200,7 @@ func TestTheBarDrawsWhatItKnows(t *testing.T) {
 		Model:         "claude-opus-5",
 		ContextTokens: 260_000,
 		ContextWindow: 1_000_000,
-	}, modeAuto, 200))
+	}, modeAuto, 200, 2))
 
 	for _, want := range []string{"feat/fidelity", "Opus 5 (1M context)", "ctx:74%", "permissions: " + modeAuto} {
 		if !strings.Contains(bar, want) {
@@ -284,14 +289,14 @@ func TestTheStatusBarIsRedrawnWhenItsFactsMove(t *testing.T) {
 	}
 }
 
-// The bar is one row, and this is the guard rather than a preference.
-// chromeHeight budgets exactly one row whenever the bar is non-empty, so a
-// segment carrying a newline draws two and the pane is a row taller than it was
-// given - which scrolls the alt screen away on every frame at the ticker's rate.
-//
-// The facts are not all Wake's: the model is whatever a claude process reported
-// on its init frame, and a directory may legally contain a newline.
-func TestTheStatusBarIsAlwaysOneRow(t *testing.T) {
+// A hostile fact adds no row of its own: the only deliberate row break is the
+// overflow wrap, which chromeHeight budgets (barRows). A newline in a model
+// name or a directory - facts that are not Wake's, since the model is whatever
+// a claude process reported and a directory may legally contain one - is
+// flattened, so each of these single facts still draws exactly one row at a
+// width that holds it. Without the per-segment flatten it would draw two the
+// pane did not budget and scroll the alt screen at the ticker's rate.
+func TestAHostileFactAddsNoRow(t *testing.T) {
 	for _, tc := range []struct {
 		name  string
 		agent Agent
@@ -307,11 +312,30 @@ func TestTheStatusBarIsAlwaysOneRow(t *testing.T) {
 		{"a mode with a newline", Agent{Model: "claude-opus-5"}, "plan\nsecond-row"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			bar := statusBar(tc.agent, tc.mode, 200)
+			bar := statusBar(tc.agent, tc.mode, 200, 2)
 			if got := lipgloss.Height(bar); got != 1 {
 				t.Errorf("the bar drew %d rows: %q", got, stripANSI(bar))
 			}
 		})
+	}
+}
+
+// A genuinely wrapped bar (two rows, not a hostile newline flattened to one)
+// still leaves the pane the height it was given. This is the load-bearing half
+// of the wrap: chromeHeight has to count the second row (barRows), or the frame
+// is a row too tall and scrolls the alt screen on every draw.
+func TestAWrappedBarKeepsThePaneInBounds(t *testing.T) {
+	const w, h = 44, 24
+	d := NewDM("s1", "alex")
+	d.Agent = Agent{ID: "s1", Cwd: "/tmp/repo", Model: "claude-opus-5", ContextTokens: 260_000, ContextWindow: 1_000_000}
+	d = d.SetSize(w, h)
+
+	// Precondition: the bar must actually wrap here, or this proves nothing.
+	if got := lipgloss.Height(d.bar); got < 2 {
+		t.Fatalf("the bar did not wrap at width %d (%d rows) - pick a narrower pane: %q", w, got, stripANSI(d.bar))
+	}
+	if got := lipgloss.Height(d.View(w, h)); got != h {
+		t.Errorf("a pane with a wrapped bar drew %d rows into %d", got, h)
 	}
 }
 
@@ -323,6 +347,46 @@ func TestThePaneStaysInBoundsWithAMultiLineFact(t *testing.T) {
 
 	if got := lipgloss.Height(d.View(w, h)); got != h {
 		t.Errorf("pane drew %d rows into %d", got, h)
+	}
+}
+
+// A pane too narrow for one row wraps the overflow onto a second row rather
+// than dropping the model and context - the owner's report, the screenshot
+// where `permissions: auto` sat alone and the model was gone. The board tile
+// keeps one row (statusBarRows there is 1); a conversation gets two.
+func TestTheBarWrapsOverflowToASecondRow(t *testing.T) {
+	// No git under /tmp/repo, so there is no branch segment to make the width
+	// math depend on the machine: path, model, context, mode.
+	a := Agent{Cwd: "/tmp/repo", Model: "claude-opus-5", ContextTokens: 260_000, ContextWindow: 1_000_000}
+	const width = 40
+
+	// One row (the board's budget) drops the model and context to keep the mode.
+	oneRow := stripANSI(statusBar(a, modeAuto, width, 1))
+	if strings.Contains(oneRow, "Opus 5") || strings.Contains(oneRow, ctxLabel) {
+		t.Fatalf("the one-row bar should have dropped model/ctx at width %d: %q", width, oneRow)
+	}
+
+	// Two rows recover them on a second line, and the mode is still there.
+	two := statusBar(a, modeAuto, width, 2)
+	if h := lipgloss.Height(two); h != 2 {
+		t.Fatalf("the two-row bar drew %d rows, want 2: %q", h, stripANSI(two))
+	}
+	plain := stripANSI(two)
+	for _, want := range []string{"/tmp/repo", "Opus 5 (1M context)", "ctx:74%", "permissions: " + modeAuto} {
+		if !strings.Contains(plain, want) {
+			t.Errorf("the wrapped bar is missing %q: %q", want, plain)
+		}
+	}
+	// Each row is still within the width - the bound is per row, not per bar.
+	for _, line := range strings.Split(plain, "\n") {
+		if w := ansi.StringWidth(line); w > width {
+			t.Errorf("wrapped row %q is %d cells, over %d", line, w, width)
+		}
+	}
+
+	// A wide pane needs no second row.
+	if h := lipgloss.Height(statusBar(a, modeAuto, 200, 2)); h != 1 {
+		t.Errorf("a wide pane wrapped to %d rows, want 1", h)
 	}
 }
 
@@ -340,7 +404,7 @@ const modeAuto = "auto"
 // would do, the bar says what this session *is*.
 
 func TestTheBarNamesThePermissionMode(t *testing.T) {
-	bar := stripANSI(statusBar(Agent{Model: "claude-opus-5"}, "plan", 200))
+	bar := stripANSI(statusBar(Agent{Model: "claude-opus-5"}, "plan", 200, 2))
 	if want := "permissions: plan"; !strings.Contains(bar, want) {
 		t.Errorf("bar %q is missing %q", bar, want)
 	}
@@ -350,10 +414,10 @@ func TestTheBarNamesThePermissionMode(t *testing.T) {
 // when the caller has none. Every real pane has one - modeOf falls back to the
 // spawn mode - but statusBar does not invent it here.
 func TestTheBarDropsAModeItWasNotGiven(t *testing.T) {
-	if bar := stripANSI(statusBar(Agent{Model: "claude-opus-5"}, "", 200)); strings.Contains(bar, "permissions") {
+	if bar := stripANSI(statusBar(Agent{Model: "claude-opus-5"}, "", 200, 2)); strings.Contains(bar, "permissions") {
 		t.Errorf("bar %q named a mode it was not given", bar)
 	}
-	if got := statusBar(Agent{}, "", 80); got != "" {
+	if got := statusBar(Agent{}, "", 80, 2); got != "" {
 		t.Errorf("an agent with no facts and no mode drew %q, want no bar at all", got)
 	}
 }
@@ -364,7 +428,7 @@ func TestTheBarDropsAModeItWasNotGiven(t *testing.T) {
 // pane already at minDMHeight. Nothing real lands here: a fleet report carries
 // the spawn directory from the moment a session exists.
 func TestTheModeIsNotAWholeBarOnItsOwn(t *testing.T) {
-	if got := statusBar(Agent{}, modeAuto, 200); got != "" {
+	if got := statusBar(Agent{}, modeAuto, 200, 2); got != "" {
 		t.Errorf("an agent with nothing but a mode drew %q, want no bar at all", stripANSI(got))
 	}
 }
@@ -418,7 +482,7 @@ func dmInMode(mode string, focused bool) DM {
 func TestANarrowBarDropsTheModeRatherThanCuttingIt(t *testing.T) {
 	a := Agent{Cwd: "/very/long/path/that/keeps/going/and/going/for/quite/a/while", Model: "claude-opus-5"}
 	for width := 10; width <= 120; width++ {
-		bar := stripANSI(statusBar(a, modeAuto, width))
+		bar := stripANSI(statusBar(a, modeAuto, width, 2))
 		if strings.Contains(bar, "permissions") && !strings.Contains(bar, "permissions: "+modeAuto) {
 			t.Fatalf("width %d cut the mode: %q", width, bar)
 		}

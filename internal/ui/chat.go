@@ -682,9 +682,7 @@ func (r Room) aboveComposerExtra() int {
 	if r.menu == "" {
 		n += composerGap
 	}
-	if r.bar != "" {
-		n++
-	}
+	n += barRows(r.bar)
 	return n
 }
 
