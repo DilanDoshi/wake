@@ -119,6 +119,17 @@ var agentAuthored = map[string]bool{
 	// that draws it, and not on this MCP surface at all (notInTheStatusReport).
 	"ConfirmedModel": true,
 
+	// Model is the agent's, on ConfirmedModel's footing one field over: an agent
+	// changes its own model with /model, so which id lands here is a value it has
+	// a path to - which is why it cannot be false ("no path at all"). Unlike
+	// ConfirmedModel it carries no arbitrary-text vector: it is read from the
+	// structured system/init (or result) frame's model field, which an agent's
+	// output cannot forge - only claude emits that frame, and it resolves the id -
+	// so the value is always a real model rather than a shaped line. Contained by
+	// oneRow on the status bar, its only surface, and not on this MCP surface at
+	// all (notInTheStatusReport).
+	"Model": true,
+
 	// PRs is the agent's, and the sharpest-sourced of the true ones: the numbers
 	// are scraped from an agent's own tool output (a `gh pr create` result, but the
 	// scrape cannot tell that from any PR URL the tools print), so an agent chooses
