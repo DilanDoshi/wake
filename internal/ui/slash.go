@@ -466,16 +466,28 @@ func commandStem(draft string) (head, word string, ok bool) {
 }
 
 // leadingCommand reports whether a draft body is addressed to the agent as a
-// slash command - text that begins with the command prefix, Wake's own or one
-// claude owns.
+// slash command: a leading prefix and a single name token, `/model`, `/clear`
+// or an operator's own `/my-command`. Wake's own or claude's alike - it does not
+// consult either set, because claude's is not enumerable at this point (slash.go's
+// whole reason) and a syntactic shape covers all three.
+//
+// The name is the first whitespace-delimited token, which is exactly the word
+// the routers below cut and look up. A token that is empty (a bare prefix), or
+// carries a slash of its own - a path like `/etc/hosts`, or `//resume` - is
+// prose that merely begins with a slash, not a command, so it stays a message
+// that open mode may widen. Without that, open mode narrowed slash-prefixed prose
+// to one agent (the adversarial review's finding).
 //
 // It lives here for SlashPrefix's reason: recognising a leading slash is this
 // file's alone (TestNothingButTheRouterKnowsWhatASlashMeans), so route() asks
-// this rather than spelling the prefix in mention.go. It decides nothing about
-// *which* command - only that the body is one - because that is all route()
-// needs to know that open mode is widening a knob rather than a message.
+// this rather than spelling the prefix in mention.go.
 func leadingCommand(text string) bool {
-	return strings.HasPrefix(strings.TrimSpace(text), SlashPrefix)
+	body, ok := strings.CutPrefix(strings.TrimSpace(text), SlashPrefix)
+	if !ok {
+		return false
+	}
+	name, _, _ := strings.Cut(body, " ")
+	return name != "" && !strings.Contains(name, SlashPrefix)
 }
 
 // configure draws a picker if this draft is one of Wake's bare configure

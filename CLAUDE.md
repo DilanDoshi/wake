@@ -835,11 +835,15 @@ stays with john: `route` (`internal/ui/mention.go`) resolves a resolved single `
 `leadingCommand` (`slash.go`) to `MentionDirect` whatever the mode, so the mention is stripped and the
 command reaches john alone exactly as it would in his DM. Widening one would retune, clear or rename
 thirty sessions off one keystroke. This is the whole of "every `/` command that works in a DM works in
-the room". `roomRoute.direct` still carries the pre-widening reading for a *message*, which is what the
-completion menu (`addressedAgent`) resolves the one named agent through so it offers that agent's own
-commands and paths even while a message to them fans out. The old build widened a slash command with
-an argument (a bare `/model` was already a knob), so `@john /model opus` in open mode broadcast
-`@john /model opus` to the fleet and every agent read it as prose. Fixed 2026-09-01.
+the room". **A command is a *name*, not just a leading slash** — `leadingCommand` narrows only a `/`
+plus a single name token (Wake's, claude's, or an operator's own `.claude/commands` file, since
+claude's set is not enumerable here), so slash-prefixed *prose* — a path `/etc/hosts`, a `//resume`, a
+bare `/` — stays a message open mode widens. `roomRoute.direct` still carries the pre-widening reading
+for a message, which is what the completion menu (`addressedAgent`) resolves the one named agent
+through so it offers that agent's own commands and paths even while a message to them fans out. The
+old build widened a slash command with an argument (a bare `/model` was already a knob), so `@john
+/model opus` in open mode broadcast `@john /model opus` to the fleet and every agent read it as prose.
+Fixed 2026-09-01.
 
 **A `Picker` is not a `Card`, and the reason is mechanical.** `Cards.Reconcile` rebuilds the open set
 from every fleet report and drops what is absent; a picker has no request id and is in no report, so
