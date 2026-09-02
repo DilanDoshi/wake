@@ -15,6 +15,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -81,6 +82,52 @@ func TestEscOnAQuestionDeniesItInsteadOfInterrupting(t *testing.T) {
 	}
 	if _, ok := m.cards.For("s1"); ok {
 		t.Error("the card is still open after esc denied it - it should be settled locally too, or the next report re-draws a question nobody is waiting on")
+	}
+}
+
+// Dismissing a question with esc is a refusal, so the room records it the same
+// way [d] does - a muted "question cancelled" close, not a stale warn line and
+// never the green "question answered". esc writes the identical deny frame [d]
+// writes (above), so the two refusal paths must leave the same room record;
+// interrupt() forgot to, so the ask's "⚠ has a question" line went stale while
+// any earlier "question answered" stayed on screen.
+func TestEscDismissingAQuestionIsRecordedCancelledInTheRoom(t *testing.T) {
+	a, _ := asking(t, 200)
+
+	if card, ok := a.cards.For("s1"); !ok || card.Shape() != ShapeQuestion {
+		t.Fatal("the question is not open as a question, so this test asserts nothing")
+	}
+
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+
+	out := ansi.Strip(a.room.View(roomWidth, 40))
+	if !strings.Contains(out, resolvedCancelled) {
+		t.Errorf("esc-dismissing a question left no cancelled record in the room, so the ask's warn line just goes stale:\n%s", out)
+	}
+	if strings.Contains(out, resolvedAnswered) {
+		t.Errorf("a question dismissed with esc was recorded as answered:\n%s", out)
+	}
+}
+
+// A permission dismissed with esc is an interrupt, not a refusal, so it leaves
+// no question-resolution line at all - the counterpart of the [d]-deny guard in
+// askroom_test.go, one path over.
+func TestEscOnAPermissionLeavesNoResolutionLineInTheRoom(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withAgents("john")
+	a = pick(a, "s1").openDMWith("s1", "john").applyGeometry()
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &core.Event{
+		Kind: core.KindPermissionRequest, RequestID: "r1", Ask: core.AskPermission,
+		Tool: &core.ToolCall{Name: "Bash", Display: "ls"},
+	}})
+	if card, ok := a.cards.For("s1"); !ok || card.Shape() != ShapePermission {
+		t.Fatal("the permission ask is not open as a permission, so this test asserts nothing")
+	}
+
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+
+	out := ansi.Strip(a.room.View(roomWidth, 40))
+	if strings.Contains(out, resolvedAnswered) || strings.Contains(out, resolvedCancelled) {
+		t.Errorf("esc on a permission drew a question-resolution line in the room:\n%s", out)
 	}
 }
 
