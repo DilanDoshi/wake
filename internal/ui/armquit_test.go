@@ -106,6 +106,27 @@ func TestAnythingButASecondCtrlQTakesTheParkArmBack(t *testing.T) {
 	}
 }
 
+// A card's own keys take the park arm back too, which is the call site the
+// unconditional disarm cannot reach: cardKey returns before it, so the arm is
+// taken back in the conditional disarm above it - the same reason detach
+// captures detachArmed early (TestACardKeyTakesTheDetachArmBack). Without
+// quitArmed in that conditional, a card key would strand the arm and the next ⌃Q
+// would park the fleet.
+func TestACardKeyTakesTheParkArmBack(t *testing.T) {
+	a, _ := pressKey(blockedPane(t), ctrlQ)
+	if !a.quitArmed {
+		t.Fatal("⌃Q did not arm on a blocked pane, so this test cannot observe a card key disarming it")
+	}
+
+	a, _ = press(a, cardDenyKey)
+	m, _ := pressKey(a, ctrlQ)
+	if _, pressed, _ := m.ParkedFleet(); pressed {
+		t.Error("a card key left the park armed, so the next ⌃Q confirmed and parked the fleet. cardKey " +
+			"returns before the unconditional disarm, so quitArmed has to be taken back in the conditional " +
+			"disarm above it - the same seam detach uses")
+	}
+}
+
 // The park arm is drawn for as long as it is live, so a second ⌃Q pressed later
 // is never a surprise. App.disarmed is reached only from key and mouse paths, so
 // a stream frame, a resize and a heartbeat all leave the arm standing.
