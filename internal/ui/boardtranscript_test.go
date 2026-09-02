@@ -72,12 +72,14 @@ func TestClosingTheBoardDropsTheBoardDMs(t *testing.T) {
 	}
 }
 
-// Only the tiles on screen render a transcript - the cost bound that keeps the
-// board "cheap to leave open" at fleet scale. A fleet wider than one screen of
-// tiles pages the rest, and a paged-off agent gets no board DM, so neither its
-// seed nor its live blocks run through renderTranscript (the whole-transcript
-// glamour pass). The seam is the same var TestTranscriptWindowReWrapsOnlyOnWidthChange
-// swaps.
+// Only the tiles on screen are seeded, so only they run through renderTranscript
+// (the whole-transcript glamour pass) - the cost bound that keeps the board
+// "cheap to leave open" at fleet scale. A fleet wider than one screen of tiles
+// pages the rest, and a paged-off agent gets no board DM. This counts the seed
+// path (renderTranscript, the same seam TestTranscriptWindowReWrapsOnlyOnWidthChange
+// swaps); the live-feed half - that a paged-off agent's blocks build no board DM -
+// is TestFoldBoardIgnoresAPagedOffAgent's, since DM.Append renders a block through
+// renderEvent rather than this seam.
 func TestOnlyVisibleTilesRenderATranscript(t *testing.T) {
 	rendered := map[string]int{}
 	restore := renderTranscript
@@ -102,6 +104,35 @@ func TestOnlyVisibleTilesRenderATranscript(t *testing.T) {
 	}
 	if len(rendered) != len(visible) {
 		t.Errorf("rendered %d transcripts, want only the %d visible tiles: %v", len(rendered), len(visible), rendered)
+	}
+}
+
+// A board tile for an agent that already has a pane DM open (a.dms keeps one for
+// the life of the client, even after ⌃W) seeds from the pane's own events rather
+// than asking disk. Asking disk here would lose: historyArrived routes a reply by
+// a.dms membership, so a board ask for an id with a pane would be folded into the
+// pane and the tile would stay blank forever - the regression the code review
+// caught. Seeding from the pane keeps the board's only disk asks to ids with no
+// pane, which is what makes historyArrived's routing sound.
+func TestABoardTileSeedsFromAnOpenPaneDMRatherThanAskingDisk(t *testing.T) {
+	a := tiledBoardApp()
+	pane := NewDM("s1", "luca").SetSize(80, 20).Append(assistantBlock("from the pane"))
+	a.dms["s1"] = &pane
+	a.pendingHistory = nil
+
+	a = a.ensureBoardDMs()
+
+	_, body := a.boardDMs["s1"].transcriptWindow(40, 6)
+	if !strings.Contains(body, "from the pane") {
+		t.Errorf("board tile was not seeded from the open pane DM:\n%s", body)
+	}
+	if _, asked := a.boardHistoryAsked["s1"]; asked {
+		t.Error("board issued a disk history ask for an agent that already has a pane DM (would contest the pane's reply)")
+	}
+	for _, id := range a.pendingHistory {
+		if id == "s1" {
+			t.Error("board queued a FrameHistory for an agent with an open pane DM")
+		}
 	}
 }
 

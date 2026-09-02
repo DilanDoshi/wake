@@ -237,6 +237,35 @@ func TestATileNeverOvershootsAtNarrowWidthBelowTheWrapFloor(t *testing.T) {
 	}
 }
 
+// A completed transcript block at a tile narrower than the wrap floor must not
+// overshoot the cell height. transcriptWindow floors its render width to
+// minBlockWidth(20), so its lines come back wider than a sub-20 inner; tileMiddle
+// must clamp each to inner, or titledBox word-wraps the overrun into an extra
+// physical row - the same failure the partial path already avoids, on the
+// transcript path the code review found unclamped.
+func TestATileNeverOvershootsAtNarrowWidthWithACompletedBlock(t *testing.T) {
+	a := boardApp(t)
+	a = a.withSize(20, 30).applyGeometry() // single column: cellW=20, inner=18 < minBlockWidth(20)
+	a.board.Tiled = true
+	working, ok := a.fleet.ByName("alex")
+	if !ok || working.State != rpc.StateWorking {
+		t.Fatal("precondition: boardApp does not seat alex as the working agent")
+	}
+	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	inner := max(g.cellW-boxFrameWidth, 1)
+	if inner >= minBlockWidth {
+		t.Fatalf("precondition: inner=%d is not below minBlockWidth(%d)", inner, minBlockWidth)
+	}
+
+	// A completed block, not a preview - the path that does not go through tailLines.
+	a = a.ensureBoardDMs().foldBoard(working.ID, assistantBlock(strings.Repeat("x", 400)))
+	ag, _ := a.fleet.Agent(working.ID)
+	out := a.tile(ag, g.cellW, g.cellH, false)
+	if got := strings.Count(out, "\n") + 1; got != g.cellH {
+		t.Fatalf("the tile drew %d rows with a narrow completed block, want exactly the cell height %d:\n%s", got, g.cellH, out)
+	}
+}
+
 // The subagent-count line ("⤷ 1 subagent") is appended to the tile body
 // without truncation, unlike the tail and boardDetail lines beside it.
 // titledBox's Width(edge) word-wraps it into a second physical row the

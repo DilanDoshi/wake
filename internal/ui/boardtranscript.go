@@ -21,29 +21,52 @@ import (
 // window tileView draws, so the built set and the drawn set cannot disagree.
 func (a App) visibleBoardAgents() []Agent {
 	agents := a.fleet.OnRoster()
+	g := a.boardTileGrid(len(agents))
+	return boardWindow(agents, a.boardCursor(agents), g)
+}
+
+// boardWindow is the slice of agents whose tiles the grid draws this frame.
+func boardWindow(agents []Agent, cursor int, g tileGrid) []Agent {
 	if len(agents) == 0 {
 		return nil
 	}
-	g := a.boardTileGrid(len(agents))
-	start := tileWindowStart(a.boardCursor(agents), len(agents), g.cols, g.rows)
-	end := min(start+g.cols*g.rows, len(agents))
-	return agents[start:end]
+	start := tileWindowStart(cursor, len(agents), g.cols, g.rows)
+	return agents[start:min(start+g.cols*g.rows, len(agents))]
 }
 
-// ensureBoardDMs builds a board DM for each visible tile that lacks one - queuing
-// a disk-history ask - and re-wraps one whose cell width has moved. A no-op off
-// the tiled board, so calling it every Update is work per change: a stable width
-// with every tile already built stores nothing.
+// ensureBoardDMs builds a board DM for each visible tile that lacks one and
+// re-wraps one whose cell width has moved. A no-op off the tiled board, so
+// calling it every Update is work per change: a stable width with every tile
+// already built stores nothing.
+//
+// A new tile seeds one of two ways. An agent whose pane DM is open (a.dms holds
+// one - it persists for the life of the client, kept by hideDM after ⌃W) seeds
+// from that pane's own events: asking disk for it would lose, because
+// historyArrived routes a reply by a.dms membership, so a board ask for an id
+// with a pane is folded into the pane and the tile stays blank. An agent with no
+// pane asks disk (the FrameHistory wire), and that ask is the only kind
+// historyArrived's !ok branch ever sees - which is what keeps the routing sound.
 func (a App) ensureBoardDMs() App {
 	if !a.board.Up || !a.board.Tiled {
 		return a
 	}
-	inner, rows := a.tileInner()
-	for _, ag := range a.visibleBoardAgents() {
+	agents := a.fleet.OnRoster()
+	g := a.boardTileGrid(len(agents))
+	inner := max(g.cellW-boxFrameWidth, 1)
+	rows := max(g.cellH-tileFrameRows, minTileTailRows)
+	for _, ag := range boardWindow(agents, a.boardCursor(agents), g) {
 		d, ok := a.boardDMs[ag.ID]
 		if !ok {
 			nd := NewDM(ag.ID, ag.Name)
 			nd, _ = nd.transcriptWindow(inner, rows) // set the width so the draw never re-wraps
+			if pane, open := a.dms[ag.ID]; open {
+				// Seed from the pane - it already read this conversation off disk,
+				// so no ask, no routing contest. A pane whose own history is still
+				// in flight seeds only its live events; the tile picks up the rest
+				// on the next board open.
+				a = a.withBoardDM(ag.ID, nd.Before(pane.events.slice(0, pane.events.len())))
+				continue
+			}
 			a = a.withBoardDM(ag.ID, nd).askBoardHistory(ag.ID)
 			continue
 		}
@@ -53,14 +76,6 @@ func (a App) ensureBoardDMs() App {
 		}
 	}
 	return a
-}
-
-// tileInner is the inner width and body-row budget of one tile at the current
-// grid - the same arithmetic tileBody applies, so a board DM is sized to exactly
-// what the draw asks for and the draw never re-wraps.
-func (a App) tileInner() (inner, rows int) {
-	g := a.boardTileGrid(len(a.fleet.OnRoster()))
-	return max(g.cellW-boxFrameWidth, 1), max(g.cellH-tileFrameRows, minTileTailRows)
 }
 
 // withBoardDM returns an App whose boardDMs map is its own, one entry replaced -
@@ -130,5 +145,8 @@ func (a App) foldBoard(sessionID string, ev core.Event) App {
 	if !ok {
 		return a
 	}
-	return a.withBoardDM(sessionID, d.Append(ev))
+	// Named the way the pane fold names it (observe.go), so a dispatch-ending line
+	// reads `● Subagent "…" finished` on the tile too - the ending frame does not
+	// carry what ended, and Fleet.named backfills it from the live task record.
+	return a.withBoardDM(sessionID, d.Append(a.fleet.named(sessionID, ev)))
 }

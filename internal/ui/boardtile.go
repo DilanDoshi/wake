@@ -284,6 +284,14 @@ func (a App) tileMiddle(ag Agent, inner, rows int) []string {
 	}
 	_, view := d.transcriptWindow(inner, rows)
 	lines := strings.Split(view, "\n")
+	// Clamp each transcript line to inner. transcriptWindow floors its render
+	// width to minBlockWidth, so at a tile narrower than that its lines come back
+	// wider than inner - and titledBox's Width(edge) then word-wraps the overrun
+	// into an extra physical row, growing the tile past its cell height. ansi.Truncate
+	// is SGR-aware, so this keeps the transcript's colour where oneLine would strip it.
+	for i, l := range lines {
+		lines[i] = ansi.Truncate(l, inner, "")
+	}
 	if pv := d.partial.sized(inner).view; pv != "" {
 		lines = append(dropTrailingBlank(lines), tailLines(pv, inner)...)
 	}
