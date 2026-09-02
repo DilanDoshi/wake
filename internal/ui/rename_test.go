@@ -343,22 +343,44 @@ func TestRenameFromTheRoomMirrorsOntoTheMentionedAgent(t *testing.T) {
 	}
 }
 
-// In open mention mode `@who /rename bob` is a broadcast, not a targeted config:
-// the message reaches the whole fleet with the mention kept, so no agent gets a
-// leading /rename and claude renames nobody. The Wake mirror must not fire on its
-// own then, or Wake would rename who while claude renamed no one - the very drift
-// the mirror exists to prevent. Direct mode (the default) is where both fire.
-func TestRenameFromTheRoomDoesNotMirrorInOpenMentionMode(t *testing.T) {
+// `@who /rename bob` in open mention mode reaches who alone, mirror and all -
+// the same as direct mode - because a slash command is a knob and route never
+// widens one. The old behavior broadcast the mention to the fleet, so claude
+// renamed nobody and the mirror was suppressed to avoid drift; now `/rename bob`
+// reaches sydney directly, so claude renames sydney and the mirror moving Wake's
+// handle onto sydney is exactly right rather than drift.
+func TestRenameFromTheRoomIsNotWidenedInOpenMentionMode(t *testing.T) {
 	fresh(t)
 	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").
 		withAgents("alex", "sydney").withSize(200, 40).showRoom()
 	a.mention = MentionOpen
 
 	_, cmd := typeAndSubmit(a, "@sydney /rename bob")
-	for _, f := range batchFrames(t, a, cmd) {
+	frames := batchFrames(t, a, cmd)
+
+	var renamed, passed bool
+	for _, f := range frames {
 		if f.Kind == rpc.FrameRename {
-			t.Errorf("open-mode @sydney /rename bob wrote %+v: Wake renamed while the broadcast (mention kept) left claude renaming nobody", f)
+			if f.SessionID != "s2" || f.Text != "bob" {
+				t.Errorf("open-mode @sydney /rename bob renamed %q to %q, want s2 to bob", f.SessionID, f.Text)
+			}
+			renamed = true
 		}
+		if f.Kind == rpc.FrameSend {
+			if f.SessionID != "s2" {
+				t.Errorf("open-mode @sydney /rename bob sent to %q: a knob reaches the one named, not the "+
+					"fleet, so claude does not rename an agent nobody addressed", f.SessionID)
+			}
+			passed = true
+		}
+	}
+	if !renamed {
+		t.Errorf("open-mode @sydney /rename bob wrote no FrameRename for s2: the mirror must fire now the "+
+			"command reaches sydney, or Wake's handle drifts from claude's. frames=%+v", frames)
+	}
+	if !passed {
+		t.Errorf("open-mode @sydney /rename bob did not reach claude as a message: claude's own /rename "+
+			"stopped working. frames=%+v", frames)
 	}
 }
 

@@ -827,10 +827,19 @@ with the directory it read, one at a time — a directory that never answers cos
 one per character — and a read is a *listing*, narrowed per keystroke, so a path costs one read per
 directory rather than one per character. One directory, never a walk.
 
-**Open mention mode widens a message; it does not widen a knob.** `@john hello` in open mode reaches
-the fleet and keeps the name in the text, which is a property of something being *said*.
-`@john /effort` configures one session, so it stays with john — `roomRoute.direct` carries the
-pre-widening reading rather than the router being consulted twice.
+**Open mention mode widens a message; it does not widen a knob — and a knob is any slash command.**
+`@john hello` in open mode reaches the fleet and keeps the name in the text, which is a property of
+something being *said*. `@john /model opus`, `@john /clear`, `@john /effort xhigh` — every command,
+Wake's own or one claude owns, with an argument or bare — configures or controls one session, so it
+stays with john: `route` (`internal/ui/mention.go`) resolves a resolved single `@name` followed by a
+`leadingCommand` (`slash.go`) to `MentionDirect` whatever the mode, so the mention is stripped and the
+command reaches john alone exactly as it would in his DM. Widening one would retune, clear or rename
+thirty sessions off one keystroke. This is the whole of "every `/` command that works in a DM works in
+the room". `roomRoute.direct` still carries the pre-widening reading for a *message*, which is what the
+completion menu (`addressedAgent`) resolves the one named agent through so it offers that agent's own
+commands and paths even while a message to them fans out. The old build widened a slash command with
+an argument (a bare `/model` was already a knob), so `@john /model opus` in open mode broadcast
+`@john /model opus` to the fleet and every agent read it as prose. Fixed 2026-09-01.
 
 **A `Picker` is not a `Card`, and the reason is mechanical.** `Cards.Reconcile` rebuilds the open set
 from every fleet report and drops what is absent; a picker has no request id and is in no report, so

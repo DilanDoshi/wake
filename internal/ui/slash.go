@@ -465,6 +465,19 @@ func commandStem(draft string) (head, word string, ok bool) {
 	return draft[:at], word, true
 }
 
+// leadingCommand reports whether a draft body is addressed to the agent as a
+// slash command - text that begins with the command prefix, Wake's own or one
+// claude owns.
+//
+// It lives here for SlashPrefix's reason: recognising a leading slash is this
+// file's alone (TestNothingButTheRouterKnowsWhatASlashMeans), so route() asks
+// this rather than spelling the prefix in mention.go. It decides nothing about
+// *which* command - only that the body is one - because that is all route()
+// needs to know that open mode is widening a knob rather than a message.
+func leadingCommand(text string) bool {
+	return strings.HasPrefix(strings.TrimSpace(text), SlashPrefix)
+}
+
 // configure draws a picker if this draft is one of Wake's bare configure
 // commands, reporting whether Wake took it.
 //
