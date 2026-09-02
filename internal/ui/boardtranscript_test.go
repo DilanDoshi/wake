@@ -72,6 +72,39 @@ func TestClosingTheBoardDropsTheBoardDMs(t *testing.T) {
 	}
 }
 
+// Only the tiles on screen render a transcript - the cost bound that keeps the
+// board "cheap to leave open" at fleet scale. A fleet wider than one screen of
+// tiles pages the rest, and a paged-off agent gets no board DM, so neither its
+// seed nor its live blocks run through renderTranscript (the whole-transcript
+// glamour pass). The seam is the same var TestTranscriptWindowReWrapsOnlyOnWidthChange
+// swaps.
+func TestOnlyVisibleTilesRenderATranscript(t *testing.T) {
+	rendered := map[string]int{}
+	restore := renderTranscript
+	renderTranscript = func(d DM) []block { rendered[d.SessionID]++; return restore(d) }
+	defer func() { renderTranscript = restore }()
+
+	a := App{board: Board{Up: true, Tiled: true}, fleet: NewFleet(), dms: map[string]*DM{}}
+	a.layout = Layout{Width: 30, Height: 18} // a narrow, short frame: one column, few rows
+	var sessions []rpc.SessionStatus
+	for _, id := range []string{"s1", "s2", "s3", "s4", "s5"} {
+		sessions = append(sessions, rpc.SessionStatus{ID: id, Name: id, State: rpc.StateWorking, Cwd: "/tmp"})
+	}
+	a.fleet = a.fleet.WithStatus(&rpc.Status{Sessions: sessions})
+
+	visible := a.visibleBoardAgents()
+	if len(visible) == 0 || len(visible) >= len(sessions) {
+		t.Fatalf("precondition: want a paged grid (0 < visible < %d), got %d visible", len(sessions), len(visible))
+	}
+	a = a.ensureBoardDMs()
+	for _, s := range sessions {
+		a = a.foldBoard(s.ID, assistantBlock("x"))
+	}
+	if len(rendered) != len(visible) {
+		t.Errorf("rendered %d transcripts, want only the %d visible tiles: %v", len(rendered), len(visible), rendered)
+	}
+}
+
 // A disk-history reply for a board tile with no pane DM folds into the board DM,
 // through the same routing historyArrived took (the reply is not a pane's).
 func TestBoardHistoryReplyFoldsIntoTheBoardDM(t *testing.T) {
