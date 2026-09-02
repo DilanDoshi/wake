@@ -96,6 +96,13 @@ const (
 	detachGlyph      = "⌃O"
 	detachLabel      = "detach"
 	armedDetachLabel = "cancel"
+
+	// quitGlyph is how the legend spells ⌃Q; armedQuitLabel is what a live ⌃Q arm
+	// calls it, drawn in the cue only while the first press is waiting for the
+	// second. Unlike ⌃O detach, the confirm is the same key, so the cue names the
+	// one action a second ⌃Q performs. See park.go's armParkFleet.
+	quitGlyph      = "⌃Q"
+	armedQuitLabel = "park all & quit"
 )
 
 // hintSep separates the parts of the armed cue - a detach names two keys, so
@@ -110,7 +117,7 @@ const hintSep = "   "
 // and esc/rewind are themselves split from the same escArmed bit by
 // rewindArmable (armsFor), which is mutually exclusive with clearsOnEscape by
 // construction. See escape.go and rewind.go.
-type legendArms struct{ esc, rewind, detach bool }
+type legendArms struct{ esc, rewind, detach, quit bool }
 
 // armedLabel is the label an arm gives one entry, and whether the arm touches
 // it at all. The one place the swap is spelled, so the cue and any guard over
@@ -126,6 +133,8 @@ func armedLabel(e legendEntry, arms legendArms) (string, bool) {
 		return armedSendLabel, true
 	case arms.detach && e.glyph == detachGlyph:
 		return armedDetachLabel, true
+	case arms.quit && e.glyph == quitGlyph:
+		return armedQuitLabel, true
 	}
 	return e.what, false
 }

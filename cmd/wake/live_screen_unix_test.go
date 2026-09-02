@@ -452,9 +452,12 @@ func TestLiveJourney(t *testing.T) {
 
 	// --- 9. leaving -----------------------------------------------------------
 	t.Run("park", func(t *testing.T) {
-		s.send("\x11") // ⌃Q
+		// ⌃Q arms, a second ⌃Q confirms - a single press no longer parks.
+		s.send("\x11") // ⌃Q (arm)
+		s.await("park all & quit")
+		s.send("\x11") // ⌃Q (confirm)
 		s.settle()
-		t.Logf("PHASE 9 - after ⌃Q\n%s", s.dump())
+		t.Logf("PHASE 9 - after ⌃Q ⌃Q\n%s", s.dump())
 	})
 }
 

@@ -282,7 +282,7 @@ func (a App) dmFor(id string) DM {
 func (a App) armsFor(id string) legendArms {
 	focused := a.escArmed && a.focus == id
 	rewind := focused && a.rewindArmable()
-	return legendArms{esc: focused && !rewind, rewind: rewind, detach: a.detachArmed}
+	return legendArms{esc: focused && !rewind, rewind: rewind, detach: a.detachArmed, quit: a.quitArmed}
 }
 
 // cardBlock is the card this pane draws, or "" for a pane with no ask to put.

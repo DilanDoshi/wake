@@ -8,22 +8,56 @@ import (
 // The trigger is a pure function so the one decision that can close somebody's
 // window by accident is testable without a terminal, a pty or a process.
 
-func TestTwoOfTheSameKeyInTheWindowFires(t *testing.T) {
+func TestTwoCtrlCsInTheWindowFires(t *testing.T) {
+	at := time.Unix(0, 0)
+	k, fired := killTrigger{}.saw([]byte{keyCtrlC, keyCtrlC}, at)
+	if !fired {
+		t.Fatalf("saw(⌃C ⌃C) did not fire, trigger now %+v", k)
+	}
+}
+
+// ctrlQ is the byte the kill-switch deliberately does NOT watch any more. It is
+// spelled raw rather than as a const, because keyCtrlQ was removed with the
+// behaviour - see TestCtrlQNeverFiresTheEmergencyExit.
+const ctrlQ = 0x11
+
+// ⌃Q must never fire the emergency exit, at any repetition or spacing.
+//
+// This is the whole of the fix. ⌃Q now arms and confirms a real park in the
+// TUI, and that park waits up to three seconds for the daemon's acknowledgement
+// before the window closes. While ⌃Q was also an emergency chord here, a held
+// key auto-repeating - or an impatient second tap during that visible delay -
+// arrived as ⌃Q⌃Q in one read and fired this exit, which leaves the fleet
+// untouched. So a healthy park was pre-empted into a bare exit and every agent
+// was left running. Removing ⌃Q from the watched set is what closes that.
+func TestCtrlQNeverFiresTheEmergencyExit(t *testing.T) {
 	at := time.Unix(0, 0)
 	cases := []struct {
 		name  string
 		bytes []byte
 	}{
-		{"two ctrl-c", []byte{keyCtrlC, keyCtrlC}},
-		{"two ctrl-q", []byte{keyCtrlQ, keyCtrlQ}},
+		{"two ⌃Q in one read", []byte{ctrlQ, ctrlQ}},
+		{"a held ⌃Q auto-repeating", []byte{ctrlQ, ctrlQ, ctrlQ, ctrlQ, ctrlQ}},
+		{"a single ⌃Q", []byte{ctrlQ}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
-			k, fired := killTrigger{}.saw(tc.bytes, at)
-			if !fired {
-				t.Fatalf("saw(%v) did not fire, trigger now %+v", tc.bytes, k)
+			if _, fired := (killTrigger{}).saw(tc.bytes, at); fired {
+				t.Fatalf("saw(%v) fired the emergency exit; ⌃Q leaves the fleet untouched and must not "+
+					"pre-empt the park - the escape hatch is ⌃C⌃C alone now", tc.bytes)
 			}
 		})
+	}
+	// And two ⌃Q spanning two reads inside the window must not fire either - the
+	// slow double press is what a person does, and it is the case the emergency
+	// used to catch.
+	k, _ := killTrigger{}.saw([]byte{ctrlQ}, at)
+	if _, fired := k.saw([]byte{ctrlQ}, at.Add(50*time.Millisecond)); fired {
+		t.Fatal("two ⌃Q across two reads fired the emergency exit")
+	}
+	// A ⌃Q between two ⌃C disarms the emergency, exactly as any other key does.
+	if _, fired := (killTrigger{}).saw([]byte{keyCtrlC, ctrlQ, keyCtrlC}, at); fired {
+		t.Fatal("⌃C ⌃Q ⌃C fired; the ⌃Q in the middle must take the arm back like any other byte")
 	}
 }
 
@@ -43,16 +77,15 @@ func TestOneReadAndTwoReadsAreTheSamePress(t *testing.T) {
 }
 
 func TestOnePressNeverFires(t *testing.T) {
-	for _, b := range []byte{keyCtrlC, keyCtrlQ} {
-		if _, fired := (killTrigger{}).saw([]byte{b}, time.Unix(0, 0)); fired {
-			t.Fatalf("a single %#x fired the emergency quit", b)
-		}
+	if _, fired := (killTrigger{}).saw([]byte{keyCtrlC}, time.Unix(0, 0)); fired {
+		t.Fatal("a single ⌃C fired the emergency quit")
 	}
 }
 
 // Anything between the two presses takes the arm back, which is what keeps ⌃C
 // meaning park: parking two agents needs the roster cursor moved between them,
-// and the arrow is the byte that disarms.
+// and the arrow is the byte that disarms. ⌃Q is one such byte now that it is no
+// longer watched - see TestCtrlQNeverFiresTheEmergencyExit.
 func TestAnythingBetweenThePressesDisarms(t *testing.T) {
 	cases := []struct {
 		name  string
@@ -60,8 +93,6 @@ func TestAnythingBetweenThePressesDisarms(t *testing.T) {
 	}{
 		{"an arrow between two parks", []byte{keyCtrlC, 0x1b, '[', 'B', keyCtrlC}},
 		{"a typed character", []byte{keyCtrlC, 'a', keyCtrlC}},
-		{"the other quit key", []byte{keyCtrlC, keyCtrlQ}},
-		{"the other quit key, reversed", []byte{keyCtrlQ, keyCtrlC}},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

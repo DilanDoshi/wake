@@ -40,22 +40,33 @@ package main
 // detach.go rules that a same-key confirm is wrong, because terminal
 // auto-repeat and the human reply to a key that appeared to do nothing produce
 // the same bytes as intent. That ruling is about a key whose *first* press is
-// invisible. Both keys here have a visible first press - ⌃C parks the focused
-// agent and says so, ⌃Q parks the fleet and says so - so a second press is
-// never the reflex that follows silence. It is the reflex that follows *the
-// first press not having worked*, which is exactly the state this exists for.
+// invisible. ⌃C here has a visible first press - it parks the focused agent and
+// says so - so a second press is never the reflex that follows silence. It is
+// the reflex that follows *the first press not having worked*, which is exactly
+// the state this exists for.
 //
 // The disarm is what keeps ⌃C meaning park: anything at all between the two
 // presses takes it back, and parking two agents needs the roster cursor moved
 // between them. That is App.disarmed's rule with the same shape and the same
 // job.
 //
-// Both keys, because either can be the one that does not arrive. ⌃Q is XON and
-// ⌃C is INTR; bubbletea's MakeRaw clears IXON and ISIG so the driver eats
-// neither, but decisions.md's own open worry is the layer that is *not* the
-// driver - tmux, screen, ssh, cmux - and a fleet-park key eaten as flow control
-// is a quit key that never arrives. ⌃C is not flow control and gets through
-// where ⌃Q does not.
+// # Why ⌃C alone, and why ⌃Q was removed from the escape hatch
+//
+// This watched ⌃Q⌃Q as well, for redundancy: ⌃Q is XON and ⌃C is INTR, and if a
+// layer that is not the tty driver - tmux, screen, ssh, cmux - ever ate one, the
+// other still arrived. That redundancy is given up here, because keeping it cost
+// the far more common failure. ⌃Q is the TUI's park-and-quit, and it is now
+// armed (internal/ui/park.go): the first press arms, the second confirms, and
+// the confirmed park waits up to three seconds for the daemon's acknowledgement
+// before the window closes. While ⌃Q was also an emergency chord, a held key
+// auto-repeating - or an impatient second tap during that visible delay -
+// arrived as ⌃Q⌃Q in one read and fired *this* exit, which asks the daemon for
+// nothing and leaves the fleet untouched. So a perfectly healthy park was
+// pre-empted into a bare exit and every agent was left running - the
+// fleet-still-running-after-⌃Q failure this whole change exists to close. ⌃C is
+// not flow control, gets through where ⌃Q might not, and cannot collide with a
+// park because it parks one agent rather than quitting - so it is the whole of
+// the escape hatch now.
 
 import (
 	"fmt"
@@ -69,10 +80,10 @@ import (
 )
 
 const (
-	// keyCtrlC and keyCtrlQ are the two bytes this watches for: the key Claude
-	// Code exits on, and the key Wake already calls quit.
+	// keyCtrlC is the byte this watches for: the key Claude Code exits on, and
+	// the one this build spends the emergency escape on. ⌃Q is no longer a second
+	// one - see the header for why watching it pre-empted a healthy park.
 	keyCtrlC = 0x03
-	keyCtrlQ = 0x11
 
 	// killWindow is how long the first press stays armed. Long enough to be a
 	// double press by a hand that has just watched nothing happen, short enough
@@ -119,7 +130,6 @@ const emergencyLine = "Wake stopped responding and was closed without parking an
 // killTrigger is the decision, and it is a value so the one thing here that can
 // close somebody's window is testable without a terminal.
 type killTrigger struct {
-	key   byte
 	count int
 	at    time.Time
 	spent bool
@@ -136,16 +146,17 @@ func (k killTrigger) saw(b []byte, now time.Time) (killTrigger, bool) {
 	}
 	for _, c := range b {
 		switch {
-		case c != keyCtrlC && c != keyCtrlQ:
-			// Anything else disarms. See the header: this is what keeps ⌃C
+		case c != keyCtrlC:
+			// Anything else disarms - ⌃Q included, which is what keeps it from
+			// pre-empting the park. See the header: this is what keeps ⌃C
 			// meaning park.
-			k.key, k.count = 0, 0
-		case c == k.key && k.count > 0 && now.Sub(k.at) <= killWindow:
+			k.count = 0
+		case k.count > 0 && now.Sub(k.at) <= killWindow:
 			k.spent = true
 			return k, true
 		default:
-			// A first press, the other key, or one too late to be a second.
-			k.key, k.count, k.at = c, 1, now
+			// A first ⌃C, or one too late to be a second.
+			k.count, k.at = 1, now
 		}
 	}
 	return k, false

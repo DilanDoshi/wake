@@ -249,8 +249,12 @@ func TestTheDetachLineSaysHowToReachTheFleet(t *testing.T) {
 func TestCtrlQsExitLineIsCountedByTheModelRatherThanAskedOfTheDaemon(t *testing.T) {
 	d := startFakeDaemon(t, 0, twoLiveAgents())
 
-	m, _ := ui.NewRoomApp(nil, ui.Stream{}, statusOf(twoLiveAgents())).
+	// Two ⌃Q, because the first only arms now - a single accidental or
+	// auto-repeated press must not park the fleet. The second confirms. See
+	// internal/ui/park.go's armParkFleet.
+	armed, _ := ui.NewRoomApp(nil, ui.Stream{}, statusOf(twoLiveAgents())).
 		Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, _ := armed.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
 
 	got := leavingLine(m, d.socket)
 	if !strings.Contains(got, "2 agents") {

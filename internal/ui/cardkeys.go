@@ -325,6 +325,7 @@ func (a App) disarmed() App {
 	a.cards = a.cards.disarm()
 	a.detachArmed = false
 	a.escArmed = false
+	a.quitArmed = false
 	return a
 }
 

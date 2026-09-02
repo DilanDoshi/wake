@@ -48,7 +48,7 @@ func TestCtrlQAsksWhetherTheDaemonTookTheParkBeforeTheWindowCloses(t *testing.T)
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(160, 30)
 
-	_, cmd, handled := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	_, cmd, handled := confirmQuit(t, a)
 	if !handled {
 		t.Fatal("⌃Q was not taken by App.key")
 	}
@@ -169,7 +169,7 @@ func TestCtrlQParksEveryAgentBeforeItQuits(t *testing.T) {
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(160, 30)
 
-	m, cmd, handled := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, cmd, handled := confirmQuit(t, a)
 	if !handled {
 		t.Fatal("⌃Q was not taken by App.key")
 	}
@@ -217,7 +217,7 @@ func TestCtrlQCountsWhatItCarriesForwardAndNotWhatItCouldSendTo(t *testing.T) {
 		rpc.SessionStatus{ID: "s4", Name: "peter", State: rpc.StateEnded},
 	)
 
-	m, _, handled := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, _, handled := confirmQuit(t, a)
 	if !handled {
 		t.Fatal("⌃Q was not taken by App.key")
 	}
@@ -248,7 +248,7 @@ func TestCtrlQOnAFleetParkedByHandDoesNotReportZero(t *testing.T) {
 		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateParked},
 	)
 
-	m, _, handled := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, _, handled := confirmQuit(t, a)
 	if !handled {
 		t.Fatal("⌃Q was not taken by App.key")
 	}
@@ -257,6 +257,20 @@ func TestCtrlQOnAFleetParkedByHandDoesNotReportZero(t *testing.T) {
 			"both into the book and the next `wake` offers both back, so a zero here is the client "+
 			"disowning a fleet it is carrying", n)
 	}
+}
+
+// confirmQuit presses ⌃Q twice - the arm, then the confirm - because a single
+// ⌃Q now only arms so an accidental or auto-repeated press cannot park the
+// fleet. It returns what the confirm press did, which is what the old single
+// press used to. See armParkFleet.
+func confirmQuit(t *testing.T, a App) (tea.Model, tea.Cmd, bool) {
+	t.Helper()
+	q := tea.KeyMsg{Type: tea.KeyCtrlQ}
+	armed, _, ok := a.key(q)
+	if !ok {
+		t.Fatal("the ⌃Q arm was not taken by App.key")
+	}
+	return armed.(App).key(q)
 }
 
 // runLikeTheLoop runs one command the way Bubble Tea's loop does.
@@ -513,7 +527,7 @@ func TestCtrlQDoesNotCloseTheWindowUntilTheDaemonHasAnswered(t *testing.T) {
 	fresh(t)
 	a := newRoomApp(t).withSize(160, 30).withAgents("alex", "sydney")
 
-	m, cmd, handled := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, cmd, handled := confirmQuit(t, a)
 	if !handled {
 		t.Fatal("⌃Q was not taken by App.key")
 	}
@@ -557,7 +571,7 @@ func TestTheAnswerIsNotLostWhenTheDaemonHangsUpInTheSameBatch(t *testing.T) {
 	holdParkAck(t)
 	a := newRoomApp(t).withSize(160, 30).withAgents("alex", "sydney")
 
-	m, _, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, _, _ := confirmQuit(t, a)
 	st := rpc.Status{Running: true}
 	reply := rpc.Frame{Kind: rpc.FrameStatusReply, Status: &st}
 	m, end := m.Update(streamMsg{batch: batch{
@@ -594,7 +608,7 @@ func TestAnAnswerThatArrivedIsNotOverwrittenByTheDeadlineBehindIt(t *testing.T) 
 	held := holdParkAck(t)
 	a := newRoomApp(t).withSize(160, 30).withAgents("alex", "sydney")
 
-	m, _, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, _, _ := confirmQuit(t, a)
 	st := rpc.Status{Running: true}
 	reply := rpc.Frame{Kind: rpc.FrameStatusReply, Status: &st}
 	m, _ = m.Update(streamMsg{batch: batch{frames: []rpc.Frame{reply}}})
@@ -714,7 +728,7 @@ func TestEveryWayCtrlQGoesUnansweredStillClosesTheWindowAndSaysSo(t *testing.T) 
 			}
 			a := NewRoomApp(conn, Stream{}, nil).withSize(160, 30).withAgents("alex", "sydney")
 
-			m, cmd, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+			m, cmd, _ := confirmQuit(t, a)
 			if quits(cmd) {
 				t.Fatal("⌃Q ended the program on the keypress")
 			}
@@ -773,7 +787,7 @@ func TestCtrlQWithNoConnectionSaysNothingWasAskedRatherThanWaiting(t *testing.T)
 	held := holdParkAck(t)
 	a := NewRoomApp(nil, Stream{}, nil).withSize(160, 30).withAgents("alex")
 
-	m, cmd, handled := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, cmd, handled := confirmQuit(t, a)
 	if !handled {
 		t.Fatal("⌃Q was not taken by App.key")
 	}
@@ -818,7 +832,7 @@ func TestCtrlQIsAnsweredByAReplyAndNeverByAPush(t *testing.T) {
 	holdParkAck(t)
 	a := newRoomApp(t).withSize(160, 30).withAgents("alex", "sydney")
 
-	m, _, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, _, _ := confirmQuit(t, a)
 
 	st := rpc.Status{Running: true}
 	m, cmd := m.Update(frameMsg{Frame: rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st}})
@@ -841,28 +855,34 @@ func TestCtrlQIsAnsweredByAReplyAndNeverByAPush(t *testing.T) {
 	}
 }
 
-// A second ⌃Q while the first is still waiting changes nothing.
+// An extra ⌃Q while the park is already waiting changes nothing.
 //
-// Two waits would be two deadlines racing one answer, and the loser settles an
-// ask that was already settled - so a confirmed park could be overwritten by
-// "the daemon did not answer" three seconds later. It is also what an impatient
-// operator does when a window does not close instantly, which is precisely the
-// case this change introduced.
-func TestASecondCtrlQWhileTheFirstIsWaitingIsANoOp(t *testing.T) {
+// The arm makes ⌃Q ⌃Q the ordinary confirm, so this is the *third* press: an
+// impatient operator mashing the key while the window has not closed yet. A
+// second deadline would race the one answer, and the loser settles an ask that
+// was already settled - so a confirmed park could be overwritten by "the daemon
+// did not answer" three seconds later. armParkFleet's a.quit.pressed guard is
+// what makes the extra press a no-op rather than a re-arm or a re-ask.
+func TestAnExtraCtrlQWhileTheParkIsWaitingIsANoOp(t *testing.T) {
 	fresh(t)
 	held := holdParkAck(t)
 	a := newRoomApp(t).withSize(160, 30).withAgents("alex", "sydney")
 
-	m, _, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+	m, _, _ := confirmQuit(t, a) // arm + confirm: the park is now waiting
 	first := held.msg
 	m2, cmd, _ := m.(App).key(tea.KeyMsg{Type: tea.KeyCtrlQ})
 	if quits(cmd) {
-		t.Fatal("the second ⌃Q ended the program on its own keypress, which is the first press's bug " +
-			"reintroduced by an operator pressing the key twice")
+		t.Fatal("an extra ⌃Q while the park was waiting ended the program on its own keypress")
 	}
 	if held.msg != first {
-		t.Error("the second ⌃Q scheduled a second deadline. Two deadlines race one answer, and the " +
+		t.Error("an extra ⌃Q scheduled a second deadline. Two deadlines race one answer, and the " +
 			"loser overwrites a confirmed park with `the daemon did not answer`")
+	}
+	if m2.(App).quitArmed {
+		// It must also not re-arm: a cue reappearing over the parking notice would
+		// read as though nothing had been asked.
+		t.Error("an extra ⌃Q while parking re-armed the quit, so the cue is drawn back over the " +
+			"parking notice as if nothing had been asked")
 	}
 
 	st := rpc.Status{Running: true}
@@ -871,7 +891,7 @@ func TestASecondCtrlQWhileTheFirstIsWaitingIsANoOp(t *testing.T) {
 		t.Fatal("the reply did not close a window two ⌃Q presses had asked to close")
 	}
 	if _, _, err := m3.(App).ParkedFleet(); err != nil {
-		t.Errorf("after two presses the ask settled as %v, want no error", err)
+		t.Errorf("after the confirm the ask settled as %v, want no error", err)
 	}
 }
 
@@ -1041,7 +1061,7 @@ func TestCtrlQCarriesForwardExactlyWhatTheTableSays(t *testing.T) {
 			a := newRoomApp(t).withSize(160, 30).
 				withRoster(rpc.SessionStatus{ID: "s1", Name: "alex", State: state})
 
-			m, _, handled := a.key(tea.KeyMsg{Type: tea.KeyCtrlQ})
+			m, _, handled := confirmQuit(t, a)
 			if !handled {
 				t.Fatal("⌃Q was not taken by App.key")
 			}
