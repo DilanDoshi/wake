@@ -43,9 +43,11 @@ func (d DM) heartbeat() string {
 
 // showsDone is whether the idle agent has a finished turn to summarise. Gated to
 // idle: a parked or ended agent's standing is in the title, and a blocked one is
-// still owed a turn.
+// still owed a turn. And gated to a quiet pane: a live streaming preview is a new
+// turn in flight (one the daemon reports idle, so State never returns to working
+// - see notDone), and the summary must not draw over the sentence being written.
 func (d DM) showsDone() bool {
-	return d.Agent.State == rpc.StateIdle && !d.Agent.doneAt.IsZero()
+	return d.Agent.State == rpc.StateIdle && !d.Agent.doneAt.IsZero() && d.partial.view == ""
 }
 
 // hasBeat is whether the pane draws the line above the composer at all - the one

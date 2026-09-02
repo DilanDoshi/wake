@@ -7,6 +7,7 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -167,6 +168,120 @@ func TestAParkForgetsTheDoneLine(t *testing.T) {
 	f = f.WithStatus(report("s1", "alex", rpc.StateIdle))   // /resume → idle directly
 	if a, _ := f.Agent("s1"); !a.doneAt.IsZero() {
 		t.Error("a woken session shows the pre-park turn's done line")
+	}
+}
+
+// The daemon reports idle for a turn Wake did not initiate: --brief lets an
+// agent self-start, and a long job goes idle between turns, so stateLocked
+// returns idle (`!owed`) while the agent works and the working report that
+// normally replaces the done line never arrives (agent.go's header,
+// deferred.md). Here the event stream is that turn's only observable, so the
+// agent's own new-turn content must forget the stale done summary - otherwise a
+// pane shows `✻ … done 10:41 PM` while tools stream in below it.
+func TestNewTurnProseForgetsTheDoneLineWhileStillReportedIdle(t *testing.T) {
+	f := fleetWithFinishedTurn(t)
+	f, _ = f.Observe(core.Event{Kind: core.KindAssistantText, Text: "Now in the worktree.", SessionID: "s1"}, "s1")
+	if a, _ := f.Agent("s1"); !a.doneAt.IsZero() {
+		t.Error("the agent's own new-turn prose left the stale done line standing")
+	}
+}
+
+func TestNewTurnToolUseForgetsTheDoneLineWhileStillReportedIdle(t *testing.T) {
+	f := fleetWithFinishedTurn(t)
+	f, _ = f.Observe(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{Name: "Read", Display: "roster.go"}, SessionID: "s1"}, "s1")
+	if a, _ := f.Agent("s1"); !a.doneAt.IsZero() {
+		t.Error("the agent's own new-turn tool call left the stale done line standing")
+	}
+}
+
+// Reasoning lands before the prose and its deltas are dropped (no preview
+// covers it), so the agent's own thinking block is the earliest signal a
+// self-started turn is underway - it must forget the stale done line too.
+func TestNewTurnThinkingForgetsTheDoneLineWhileStillReportedIdle(t *testing.T) {
+	f := fleetWithFinishedTurn(t)
+	f, _ = f.Observe(core.Event{Kind: core.KindThinking, Text: "Let me read the test patterns first.", SessionID: "s1"}, "s1")
+	if a, _ := f.Agent("s1"); !a.doneAt.IsZero() {
+		t.Error("the agent's own new-turn reasoning left the stale done line standing")
+	}
+}
+
+// The user's report: it also strands a done line after accepting a permission or
+// answering a question. On an unowed turn (daemon reports idle, `!owed`) a
+// permission is StateBlocked; answering clears the ask and flips it blocked→idle,
+// which WithStatus captures a done line on though the turn is continuing. The
+// granted tool's own result forgets it - otherwise the summary stands for the
+// whole length of that tool (a long bash), the "done" over live work all over.
+func TestAGrantedToolResultForgetsADoneLineCapturedOnBlockedToIdle(t *testing.T) {
+	start := time.Date(2026, 8, 28, 18, 46, 1, 0, time.Local)
+	clock = func() time.Time { return start }
+	defer func() { clock = time.Now }()
+
+	f := NewFleet().WithStatus(report("s1", "alex", rpc.StateIdle))
+	f = f.WithStatus(report("s1", "alex", rpc.StateWorking))
+	f = f.WithStatus(report("s1", "alex", rpc.StateBlocked))
+	clock = func() time.Time { return start.Add(30 * time.Second) }
+	f = f.WithStatus(report("s1", "alex", rpc.StateIdle)) // answered → blocked→idle captures a done line
+	if a, _ := f.Agent("s1"); a.doneAt.IsZero() {
+		t.Fatal("setup: blocked→idle should have captured a done time")
+	}
+
+	f, _ = f.Observe(core.Event{Kind: core.KindToolResult, Text: "ok", SessionID: "s1"}, "s1")
+	if a, _ := f.Agent("s1"); !a.doneAt.IsZero() {
+		t.Error("the granted tool's result left a done line standing over a continuing turn")
+	}
+}
+
+// A subagent's frame is not the agent's own turn - it streams past the parent's
+// result (the ev.Subagent==nil gate fold keeps for tool activity everywhere) -
+// so it must not forget the parent's done line.
+func TestASubagentsActivityKeepsTheDoneLine(t *testing.T) {
+	f := fleetWithFinishedTurn(t)
+	f, _ = f.Observe(core.Event{
+		Kind:      core.KindToolUse,
+		Tool:      &core.ToolCall{Name: "Read", Display: "roster.go"},
+		Subagent:  &core.Subagent{},
+		SessionID: "s1",
+	}, "s1")
+	if a, _ := f.Agent("s1"); a.doneAt.IsZero() {
+		t.Error("a subagent's tool call forgot the parent's done line")
+	}
+}
+
+// fleetWithFinishedTurn drives one watched turn to its idle end so s1 carries a
+// done summary, then leaves the clock fixed for the caller.
+func fleetWithFinishedTurn(t *testing.T) Fleet {
+	t.Helper()
+	start := time.Date(2026, 8, 28, 18, 46, 1, 0, time.Local)
+	clock = func() time.Time { return start }
+	t.Cleanup(func() { clock = time.Now })
+
+	f := NewFleet().WithStatus(report("s1", "alex", rpc.StateIdle))
+	f = f.WithStatus(report("s1", "alex", rpc.StateWorking))
+	clock = func() time.Time { return start.Add(time.Minute) }
+	f = f.WithStatus(report("s1", "alex", rpc.StateIdle))
+	if a, _ := f.Agent("s1"); a.doneAt.IsZero() {
+		t.Fatal("setup: no done time to forget")
+	}
+	return f
+}
+
+// A self-started turn (daemon still reporting idle) can begin with a streaming
+// preview before its first completed block lands to fire notDone. While that
+// preview is up the pane must not also draw the prior turn's done line - a
+// sentence being written above `✻ … done` is the same contradiction one step
+// earlier. showsDone is gated to a quiet pane for it.
+func TestAStreamingPreviewHidesTheDoneLine(t *testing.T) {
+	start := time.Date(2026, 8, 28, 18, 46, 1, 0, time.Local)
+	d := NewDM("s1", "alex").SetSize(80, 30)
+	d.Agent = Agent{State: rpc.StateIdle, startedAt: start, doneAt: start.Add(time.Minute), turnDur: time.Minute}
+	d.partial = d.partial.add("Now in the worktree, reading the test patterns")
+	if got := ansi.Strip(d.heartbeat()); got != "" {
+		t.Errorf("done line %q drew over a live streaming preview", got)
+	}
+	// Once the preview clears (block landed, or turn ended), the done line returns.
+	d.partial = d.partial.cleared()
+	if got := ansi.Strip(d.heartbeat()); !strings.Contains(got, "done") {
+		t.Errorf("done line did not return after the preview cleared: %q", got)
 	}
 }
 

@@ -417,7 +417,18 @@ report was already working began its turn before this client attached, so the st
 gets no line rather than one whose duration is really only the time since attach. **A park, an end and
 a gap each forget it** — the first two in `WithStatus`, the gap in `ForgetTurns` — because a woken
 session reports idle directly, with no working report in between, so the pre-park summary would
-otherwise reappear the instant the pane reopened. `DM.hasBeat` is the one predicate `baseChrome` and
+otherwise reappear the instant the pane reopened. **And the agent's own new-turn content forgets it
+too** (`Agent.notDone`, in `fold` on `KindToolUse`, `KindToolResult`, `KindAssistantText` and
+`KindThinking`, all `ev.Subagent==nil`): a turn Wake did not initiate — `--brief` self-starts one, a
+long job goes idle between turns, and **an unowed turn answered off a permission flips `blocked→idle`
+rather than `blocked→working`** (which `WithStatus` then wrongly captures a done line on) — reports
+idle while it works, so `stateLocked` never returns to working and the working line's own replacement
+of the summary never fires. The event stream is that turn's only observable here, the mirror of
+`WithStatus` reconciling `inDM` off the report because a gap can eat the `KindTurnEnd`; a
+**subagent's** frame is excluded, since it streams past the parent's result and is not the agent's
+turn. A **streaming preview** forgets it on `DM.showsDone` instead — a partial never reaches `fold`.
+Without all this a pane showed `✻ … done 10:41 PM` while tools streamed in below it, and stranded a
+done line for the length of a granted tool after a permission was accepted. `DM.hasBeat` is the one predicate `baseChrome` and
 `SetSize` both count the row by —
 it is the working line's row that stays occupied through the done line, so the transition costs no
 height change, the alt-screen hazard `DM.chrome` exists for.
@@ -1050,7 +1061,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | What the turn in flight has produced | `internal/core/protocol.go` — `turnTokensEvent`, off `message_delta`'s usage · `internal/ui/fleet.go` — `Agent.TurnTokens`, summed as the turn runs and cleared when it ends. **Never added to `Agent.Tokens`**, which is every *completed* turn: the result frame restates the same tokens |
 | The palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json`, maintained by hand (asserted by `palette_test.go`) |
 | The working line, and the one ticker | `internal/ui/heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `beat.go` — start at `beat.go` for the cost argument, and for `roomWorkingLine`, the same line for a surface with many agents on it · `roomwords.go` — the room's own minimal `✻ Sailed for 49s` (`roomHeartbeatLine`) and its past-tense nautical-and-dawn pool, drawn without the DM's token clause |
-| The DM's done line, once a turn finishes | `internal/ui/beat.go` — `doneLine` (`✻ Cooked for 1m 59s · done 6:48 PM`, static and dim) · `internal/ui/donewords.go` — the Wake-authored past-tense pool · `internal/ui/dmbeat.go` — `DM.heartbeat` (working line or done line), `showsDone`, `hasBeat` (the one row `baseChrome`/`SetSize` count) · `internal/ui/fleet.go` — `Agent.doneAt`/`turnDur`, captured at the working→idle edge |
+| The DM's done line, once a turn finishes | `internal/ui/beat.go` — `doneLine` (`✻ Cooked for 1m 59s · done 6:48 PM`, static and dim) · `internal/ui/donewords.go` — the Wake-authored past-tense pool · `internal/ui/dmbeat.go` — `DM.heartbeat` (working line or done line), `showsDone`, `hasBeat` (the one row `baseChrome`/`SetSize` count) · `internal/ui/fleet.go` — `Agent.doneAt`/`turnDur`, captured at the working→idle edge; `notDone`, the event-side forget for a self-started turn the daemon reports idle |
 | The DM's compacting line, while `/compact` runs | `internal/ui/compacting.go` — the App-owned `compacting` map (session id → start), `observeCompaction` (fold on the bracketing notices), `anyCompacting`, `compactingSince`, `pruneCompacting` (the backstop for a compaction cut short) · `internal/ui/beat.go` — `compactingLine` (`✻ Compacting conversation…`, indeterminate — the wire carries no progress figure) · `internal/ui/dmbeat.go` — `DM.heartbeat`/`hasBeat` (it wins over the done line: a compaction runs between turns, so the agent is idle) · `internal/ui/panedraw.go` — `WithCompacting` · `internal/core/vocabulary.go`/`protocol.go` — `systemNoticeFor`, which resolves the two subtype-`status` frames to `NoticeCompacting`/`NoticeCompacted` off the payload (the end keys on `compact_result`, not the boundary a failed compaction never emits) |
 | An answer as it is written | `internal/core/protocol.go` — `partialEvent` · `wire.go` — `wireStreamEvent` · `internal/ui/partial.go` — start there for the cost argument, and `partial_bench_test.go` for the numbers |
 | A dispatch's lifecycle, decoded | `internal/core/task.go` (Wake's vocabulary) · `protocol.go` — `taskUpdate` · `vocabulary.go` — `taskPhases`, `taskKinds`, `taskStatuses` |

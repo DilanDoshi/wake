@@ -512,6 +512,22 @@ func (a Agent) withCommands(names []string) Agent {
 	return a
 }
 
+// notDone forgets the last turn's done summary, so the agent's own new-turn
+// content - prose, a tool call, or reasoning - drops the `✻ … done` line.
+// WithStatus's working→idle→working report edge normally ends it, but that never
+// fires for a turn Wake did not initiate: --brief self-starts a turn and a long
+// job goes idle between turns, so stateLocked reports idle (`!owed`) while the
+// agent works and no working report arrives. The event stream is the only
+// observable of that turn here - the mirror of WithStatus reconciling inDM off
+// the report because a gap can eat the KindTurnEnd. Its callers gate on
+// ev.Subagent==nil: a subagent streams past the parent's result and is not the
+// agent's own turn. A streaming preview forgets it too, but on the DM's own
+// showsDone - a partial never reaches fold.
+func (a Agent) notDone() Agent {
+	a.doneAt, a.turnDur = time.Time{}, 0
+	return a
+}
+
 // turnMessage closes whatever message was in flight and opens the next.
 //
 // The boundary is what makes a turn's figure addable at all - without it there
@@ -553,6 +569,19 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 			if doing := activeForm(ev.Tool.Todos); doing != "" {
 				a.Doing = doing
 			}
+			a = a.notDone()
+		}
+		return a, nil
+
+	case core.KindToolResult:
+		// A granted tool's result is the agent's own turn continuing past a
+		// permission (or question) answer, which for an unowed turn flips it
+		// blocked→idle - the edge WithStatus wrongly captures a done line on. It
+		// closes that window for the length of the granted tool, where waiting
+		// for the model's next block would leave the summary up all through a
+		// long bash. A subagent's result is not the agent's own turn.
+		if ev.Subagent == nil {
+			a = a.notDone()
 		}
 		return a, nil
 
@@ -562,7 +591,18 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 		}
 		a.spoke = true
 		a.LastLine = lastProseLine(ev.Text)
+		a = a.notDone()
 		return a, []core.Event{ev}
+
+	case core.KindThinking:
+		// The agent's own reasoning is this turn's output the way its prose is,
+		// and it lands before the prose - so it forgets a prior turn's done line
+		// (thinking deltas are dropped, so no preview covers this). A subagent's
+		// is not the agent's turn. The room draws none of it, so no event out.
+		if ev.Subagent == nil {
+			a = a.notDone()
+		}
+		return a, nil
 
 	case core.KindUserText:
 		// The same question the prompt walk asks of the same frames, so the two
