@@ -525,7 +525,10 @@ func (a App) interrupt() (tea.Model, tea.Cmd, bool) {
 	// the card never clears. So esc on a question settles it with a deny - the
 	// same frame [d] writes, adding no unrecorded dependency [d] does not
 	// already carry - which unblocks the agent and takes the card down here,
-	// the way commitAnswer does.
+	// the way commitAnswer does. And it leaves the room the same "question
+	// cancelled" record [d] does (recordQuestionResolved false): esc is a
+	// refusal too, so without it the ask's warn line goes stale and any earlier
+	// "question answered" stays on screen. See cardroom.go.
 	//
 	// Only the focused pane's card, which is the one surface a card is drawn on
 	// at all. And only a card whose shape is *known* to be a question: one
@@ -537,6 +540,7 @@ func (a App) interrupt() (tea.Model, tea.Cmd, bool) {
 	if a.focus != "" {
 		if card, ok := a.cardOf(a.focus); ok && card.Shape() == ShapeQuestion {
 			a.cards = a.cards.Settle(card.AgentID, card.RequestID)
+			a = a.recordQuestionResolved(card.AgentID, false)
 			return a, a.write(answerFailed, card.Deny(escDismissReason)), true
 		}
 	}
