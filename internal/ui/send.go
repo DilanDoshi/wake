@@ -229,8 +229,9 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		return a, nil
 	}
 	// After the no-targets refusals above, so a picker is only ever opened over
-	// something it can be confirmed against. It reads the *direct* route: open
-	// mode widens a message to the fleet and does not widen a knob.
+	// something it can be confirmed against. It reads the *knob* route: a slash
+	// command is already direct (route never widens one), and a bare `@thea
+	// /model` in open mode aims the picker at thea alone rather than the fleet.
 	if cr := r.configureRoute(); len(cr.Targets) > 0 {
 		if next, cmd, ok := a.configure(cr.Targets, cr.Text); ok {
 			return next, cmd
@@ -241,8 +242,8 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 	// to a live fleet member, the one route mention mode decides - so it fires for
 	// exactly the single agent the command can act on. @all is a broadcast and the
 	// manager is the service rather than a mention, so both fall through to an
-	// ordinary send. The direct reading (configureRoute) so that in open mode the
-	// command still aims at the one named rather than widening a knob.
+	// ordinary send. The knob route (configureRoute) so the command aims at the
+	// one named.
 	if r.mentioned {
 		if next, cmd, ok := a.mentionCommand(r.Resolved, r.configureRoute().Text); ok {
 			return next, cmd
@@ -253,11 +254,11 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 	// send, the room half of renameMirror's focused case. nil for every other
 	// draft, so an ordinary broadcast is still one command. See renameMirrorFor.
 	//
-	// Direct mode only: open mode widens the message to the fleet and keeps the
-	// `@who` in the text, so the passthrough broadcasts `@who /rename bob` and no
-	// agent gets a leading /rename - claude renames nobody. Mirroring alone then
-	// would move Wake's handle while claude's stayed, the drift this exists to
-	// prevent, so the mirror stays home with the targeted send.
+	// r.mode is MentionDirect for any slash command now - route never widens a
+	// knob - so `@who /rename bob` reaches who alone and the mirror moves who's
+	// handle beside it, whatever the mention mode. A plain `@who hello` in open
+	// mode is MentionOpen and takes no mirror, which is right: it is a broadcast
+	// keeping the @name in the text, and no agent gets a leading /rename.
 	var mirror tea.Cmd
 	if r.mentioned && r.mode == MentionDirect {
 		mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)

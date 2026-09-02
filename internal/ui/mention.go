@@ -141,26 +141,24 @@ type roomRoute struct {
 	// mode is the reading this route was resolved under. Carried rather than
 	// re-read at the point of drawing, so the line the composer shows is a
 	// property of the route that was computed and not of the App as it stands
-	// a moment later.
+	// a moment later. A slash command resolves to MentionDirect even while the
+	// App is in open mode, because route below never widens a knob.
 	mode MentionMode
 
-	// direct is the reading before open mode widened it, and it is empty
-	// unless it did.
-	//
-	// **Open mode widens a message; it does not widen a knob.** `@john hello`
-	// in open mode reaches the whole fleet and keeps the name in the text, so
-	// the others can see who was addressed - which is a property of something
-	// being *said*. `@john /effort` is not that: it configures one session, and
-	// widening it would retune thirty and send each of them a line beginning
-	// with somebody else's name.
+	// direct is the reading before open mode widened it, and it is empty unless
+	// it did - which is only ever a *message* now, because route never widens a
+	// slash command (see below). It is what the completion menu resolves the one
+	// named agent through (addressedAgent): a menu is a knob, so it offers that
+	// agent's own commands and paths even while a message to them fans out.
 	//
 	// Carried rather than resolved a second time, because two callers of the
 	// router are two answers to one question.
 	direct core.Route
 }
 
-// configureRoute is where a configure command goes: the direct reading when
-// open mode widened one, and the route itself otherwise.
+// configureRoute is where a knob goes: the direct reading when open mode widened
+// a message, and the route itself otherwise. A slash command's route is already
+// direct, so this returns it unchanged there.
 func (r roomRoute) configureRoute() core.Route {
 	if r.direct.Targets != nil {
 		return r.direct
@@ -182,8 +180,18 @@ func (a App) route(text string) roomRoute {
 	if !fleetMention(r, live) {
 		return roomRoute{Route: r, mode: a.mention}
 	}
-	if a.mention == MentionDirect {
-		return roomRoute{Route: r, mentioned: true, mode: a.mention}
+	// **Open mode widens a message; it does not widen a knob.** `@john hello` in
+	// open mode reaches the whole fleet and keeps the name in the text, so the
+	// others can see who was addressed - a property of something being *said*. A
+	// slash command is not that: `@john /model opus`, `@john /clear`, `@john
+	// /effort xhigh` each configure or control one session, so they reach john
+	// alone with the mention stripped - exactly as they would in his DM - and
+	// widening one would retune or clear thirty off one keystroke. r.Text is the
+	// body core stripped the mention off, so leadingCommand reads the command
+	// rather than the @name. It resolves MentionDirect so the composer promises
+	// the one turn it sends.
+	if a.mention == MentionDirect || leadingCommand(r.Text) {
+		return roomRoute{Route: r, mentioned: true, mode: MentionDirect}
 	}
 	return roomRoute{Route: openRoute(r, text, live), direct: r, mentioned: true, mode: a.mention}
 }
