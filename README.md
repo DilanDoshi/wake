@@ -37,7 +37,7 @@ come back.
 | | | | |
 |---|---|---|---|
 | `↵` send | `⎋` interrupt | `⎋⎋` clear draft | `⌃O` detach |
-| `⌃C` park | `⌃Q` quit & park all | `⇥` next chat | `⇧⇥` permissions |
+| `⌃C` park | `⌃Q⌃Q` quit & park all | `⇥` next chat | `⇧⇥` permissions |
 | `↑↓` prompt history | `⇧↑↓` pick agent | `⇧←→` move focus | `⌃X` next blocked |
 | `⌃D` open DM | `⌃Y` open right | `⌃B` open below | `⌃W` close pane |
 | `⌃R` activity | `⇞⇟` scroll | `⌃E` expand | `⌃F` fork |

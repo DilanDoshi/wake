@@ -212,7 +212,13 @@ silence; it is the reply to the first press not having worked, which is the stat
 Anything between the two disarms, so parking two agents (which needs the roster cursor moved) is
 still two parks.
 
-**Why both ⌃C and ⌃Q.** The owner asked for ⌃Q — *"just ctrl q like we have, but that did not
+**Why both ⌃C and ⌃Q — SUPERSEDED 2026-09-01, ⌃Q removed from the kill-switch.** ⌃Q became the
+TUI's *armed* park (first press arms, second confirms), and the park waits ~3s for the daemon's ack
+before the window closes. A held or auto-repeated ⌃Q arrived as ⌃Q⌃Q in one read and fired the
+emergency `os.Exit`, which leaves the fleet untouched — so the emergency chord was pre-empting a
+healthy park and leaving every agent running. The escape hatch is ⌃C⌃C alone now; see
+`fix/ctrlq-emergency-preempts-park` and `deferred.md`. The original argument, kept as the record of
+why ⌃Q was there: the owner asked for ⌃Q — *"just ctrl q like we have, but that did not
 work"* — and ⌃Q is XON. The paragraph below about `⌃Q` reaching Wake ends on the one third nothing
 settles: the layer that is **not** the tty driver — tmux, screen, ssh, **cmux**. If that layer eats
 ⌃Q as flow control, ⌃Q⌃Q is eaten with it, and ⌃C is not flow control.
