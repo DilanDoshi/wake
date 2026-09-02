@@ -43,7 +43,7 @@ func TestTranscriptWindowReWrapsOnlyOnWidthChange(t *testing.T) {
 	d = d.Append(core.Event{Kind: core.KindAssistantText, Text: "prose"})
 	renders = 0
 	d, _ = d.transcriptWindow(30, 4) // width 80→30: one re-wrap
-	d, _ = d.transcriptWindow(30, 6) // width same, height changed: no re-wrap
+	d.transcriptWindow(30, 6)        // width same, height changed: no re-wrap, so no render
 	if renders != 1 {
 		t.Errorf("renderTranscript ran %d times, want 1 (only the width change re-wraps)", renders)
 	}
