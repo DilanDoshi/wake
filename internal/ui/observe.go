@@ -98,6 +98,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 		a = a.withDM(sessionID, dm.Append(a.fleet.named(sessionID, ev)))
 	}
 	a = a.foldTail(sessionID, ev)
+	a = a.foldBoard(sessionID, ev)
 	return a
 }
 

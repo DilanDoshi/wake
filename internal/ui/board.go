@@ -125,6 +125,8 @@ func (a App) openBoard(arg string) (App, tea.Cmd) {
 func (a App) closeBoard() App {
 	a.board = Board{}
 	a.tails = nil
+	a.boardDMs = nil
+	a.boardHistoryAsked = nil
 	return a
 }
 
@@ -150,7 +152,10 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	case tea.KeyTab:
 		a.board.Tiled = !a.board.Tiled
 		if !a.board.Tiled {
-			a.tails = nil // rows draw no tails; drop what the wall accumulated
+			// Rows draw no transcripts; drop what the wall accumulated.
+			a.tails = nil
+			a.boardDMs = nil
+			a.boardHistoryAsked = nil
 		}
 		return a, nil, true
 	case tea.KeyUp:

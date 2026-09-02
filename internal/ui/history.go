@@ -126,11 +126,6 @@ func (a App) forgetHistoryAsk(id string) App {
 	return a
 }
 
-// boardHistoryArrived is replaced by the board DM's own fold in boardtranscript.go.
-// Until App.boardDMs exists there is nowhere to fold a board reply, so a stray one
-// is dropped. (Temporary shim for the routing seam; superseded in the next commit.)
-func (a App) boardHistoryArrived(rpc.Frame) App { return a }
-
 func (a App) withHistoryAsked(id string, held int) App {
 	next := make(map[string]int, len(a.askedHistory)+1)
 	for k, v := range a.askedHistory {
