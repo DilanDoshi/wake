@@ -38,13 +38,15 @@ come back.
 |---|---|---|---|
 | `↵` send | `⎋` interrupt | `⎋⎋` clear draft | `⌃O` detach |
 | `⌃C` park | `⌃Q` quit & park all | `⇥` next chat | `⇧⇥` permissions |
-| `↑↓` pick agent | `⌥↑↓` prompt history | `⇧←→↑↓` move focus | `⌃X` next blocked |
-| `⌃N⌃P` dispatches | `⌃D` open DM | `⌃Y` open right | `⌃B` open below |
-| `⌃W` close pane | `⌃G` workspaces | `⌃R` activity | `⇞⇟` scroll |
-| `⌃E` expand | `⌃F` fork | `⌃T` mention mode | `⌥↵`/`⌃J` newline |
+| `↑↓` prompt history | `⇧↑↓` pick agent | `⇧←→` move focus | `⌃X` next blocked |
+| `⌃D` open DM | `⌃Y` open right | `⌃B` open below | `⌃W` close pane |
+| `⌃R` activity | `⇞⇟` scroll | `⌃E` expand | `⌃F` fork |
+| `⌃T` mention mode | `⌥↵`/`⌃J` newline | | |
 
-`⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels. `⌃N⌃P` walk a conversation's
-subagent dispatches, and `↵` opens the one the cursor is on — or the completion menu, while one is up.
+`↑↓` recall your previous prompts into the query bar (Claude Code's own history keys); `⇧↑↓` walk the
+roster instead — including a conversation's running subagents in the right sidebar — and `↵` or `⌃D`
+opens the one the cursor is on. `⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels.
+While a completion menu is up, `⌃N`/`⌃P` walk it and `⇥` completes.
 
 Full reference: [Keyboard shortcuts](docs/user_manual/03-keyboard.md).
 
@@ -58,6 +60,7 @@ wake new [name]         open a conversation with a new agent, with a name you ch
 wake attach <who>       open a conversation with one already running, by name or id
 wake fork <who> [name]  branch a conversation: a new agent with the same history so far
 wake import [<id>]      adopt a claude session this machine already has
+wake setup-terminal     make Shift+Enter insert a newline, by configuring your terminal
 wake manager            start the manager from a shell (the room seats one by default)
 wake status             what is running
 wake stop               stop every session and the daemon — the one irreversible verb
@@ -77,9 +80,9 @@ Flags on the verbs that start a session (`new`, `manager`):
 ```
 
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
-slash commands are `/resume`, `/name`, `/task`, `/adopt`, `/mcp`, `/manager`, `/manager-stop` and
-`/board`; `/effort` and `/model` configure the session they are addressed to. Everything else you
-type is passed to the agent byte for byte.
+slash commands are `/resume`, `/name`, `/task`, `/color`, `/quit`, `/adopt`, `/mcp`, `/login`,
+`/manager`, `/manager-stop` and `/board`; `/effort` and `/model` configure the session they are
+addressed to. Everything else you type is passed to the agent byte for byte.
 
 ## Development
 
