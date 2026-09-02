@@ -321,6 +321,13 @@ var claudeWireVocabulary = wordSet([]string{
 	// Transcript plumbing.
 	"<local-command-stdout>", "</local-command-stdout>",
 
+	// The invocation and caveat envelopes a slash command leaves on disk,
+	// dropped whole by isLocalCommandPlumbing. Policed like the stdout one: the
+	// tag is the only thing identifying the frame, so a view matching on it
+	// would be reading Claude's wire format.
+	"<command-name>", "</command-args>",
+	"<local-command-caveat>", "</local-command-caveat>",
+
 	// The cross-session envelope a peer's message arrives wrapped in. Policed
 	// like the abort markers: the tag is the only thing identifying the frame,
 	// and a view matching on it would be reading Claude's wire format. The open
@@ -526,7 +533,10 @@ var notNamedByTheAirlock = map[string]string{
 // </cross-session-message>, policed like the abort markers; "iterations", the
 // per-round-trip usage breakdown resultFacts reads the context level from; and
 // the compaction status frame's "compacting"/"compact_result".
-const policedWordCount = 155
+// 155 → 159: the slash-command invocation and caveat envelopes' four tags,
+// <command-name>/</command-args> and <local-command-caveat>/</local-command-caveat>,
+// dropped whole by isLocalCommandPlumbing.
+const policedWordCount = 159
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -827,13 +837,17 @@ var notInTheCorpus = map[string]string{
 	"interrupt_if_running":        "outbound only; rewind request field Wake writes",
 }
 
-// embeddedMarkers never appear as a JSON key or as a whole value: the two
-// local-command tags are delimiters *inside* a string, and "Current model:" is
-// the leading phrase of a longer reply value - so the quoted check cannot see
-// any of them and a substring check is the honest one for these three.
+// embeddedMarkers never appear as a JSON key or as a whole value: the
+// local-command and cross-session envelope tags are delimiters *inside* a
+// string, and "Current model:" is the leading phrase of a longer reply value -
+// so the quoted check cannot see them and a substring check is the honest one.
 var embeddedMarkers = map[string]bool{
 	"<local-command-stdout>":   true,
 	"</local-command-stdout>":  true,
+	"<command-name>":           true,
+	"</command-args>":          true,
+	"<local-command-caveat>":   true,
+	"</local-command-caveat>":  true,
 	"Current model:":           true,
 	"<cross-session-message":   true,
 	"</cross-session-message>": true,
