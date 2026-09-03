@@ -119,7 +119,11 @@ func TestTheWholeLifecycleComposesFromAKeyboard(t *testing.T) {
 	awaitSessionState(t, socket, id, rpc.StateParked)
 	awaitParkBook(t, socket, id)
 
-	// --- ⌃Q parks the fleet and the daemon exits ----------------------------
+	// --- ⌃Q ⌃Q parks the fleet and the daemon exits -------------------------
+	// The first ⌃Q only arms now, so an accidental or auto-repeated press cannot
+	// close the workspace; the second confirms. See internal/ui/park.go.
+	d.typeKeys("\x11")
+	d.awaitView("the ⌃Q arm cue", "park all & quit")
 	d.typeKeys("\x11")
 	awaitProgramExit(t, d)
 	first.awaitExit(t, "after ⌃Q")

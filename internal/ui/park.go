@@ -122,6 +122,13 @@ const (
 	// forkRefusal's rule: a refusal that is only "no" leaves an operator with a
 	// key that does nothing and no idea when it would.
 	parkWouldDeny = "%s%s is blocked on a permission request, and parking closes stdin under it - which the agent is told is a denial. Answer it, or esc withdraws it, then ⌃C parks."
+
+	// parkArm is what the first ⌃Q says. ⌃Q parks the whole fleet and closes
+	// Wake, and a single press used to do it outright - so an accidental or
+	// auto-repeated one closed the workspace and, through the emergency
+	// kill-switch it tripped, left every agent running. It arms now, like ⌃O
+	// detach: the second ⌃Q confirms, and any other key takes it back.
+	parkArm = "⌃Q again: park the whole fleet and close Wake. Any other key cancels."
 )
 
 // parkAckTimer is how ⌃Q's deadline on the daemon's answer is scheduled, and it
@@ -182,8 +189,9 @@ type parkAll struct {
 	// before the write, because after tea.Quit there is no model anybody reads.
 	asked int
 
-	// pressed records that ⌃Q is why this program is ending. It is set on the
-	// keypress and never cleared: the second press is a no-op, not a restart.
+	// pressed records that ⌃Q is why this program is ending. It is set when the
+	// park is confirmed - the operator's second ⌃Q, since the first only arms -
+	// and never cleared: a further ⌃Q is a no-op (armParkFleet), not a restart.
 	pressed bool
 
 	// settled is the answer having arrived, by any of the four routes, and err
@@ -256,6 +264,30 @@ func (a App) parkTarget(id, name string) (App, tea.Cmd, bool) {
 	return a.awaitingPark(id), a.write(parkFailed, rpc.Frame{Kind: rpc.FramePark, SessionID: id}), true
 }
 
+// armParkFleet takes ⌃Q: the first press arms, and a second confirms the park.
+//
+// armed is the value App.key captured before its disarm, the way armDetach reads
+// its own - so "every other input takes the arm back" holds without a call site
+// per key. The confirm goes through parkFleet unchanged; this only guards the
+// first press, so an accidental or auto-repeated ⌃Q cannot park the fleet on its
+// own. Removing ⌃Q from the emergency kill-switch (cmd/wake/killswitch.go) is the
+// matching half: both presses now reach here rather than one tripping a
+// fleet-untouched exit and leaving every agent running.
+func (a App) armParkFleet(armed bool) (tea.Model, tea.Cmd, bool) {
+	if a.quit.pressed {
+		// Already asked and waiting on the daemon's answer; a further ⌃Q neither
+		// re-arms nor re-asks. parkFleet is itself a no-op on a second press, and
+		// this keeps the arm's notice from being drawn back over the parking one.
+		return a, nil, true
+	}
+	if armed {
+		return a.parkFleet()
+	}
+	notice.Report("%s", parkArm)
+	a.quitArmed = true
+	return a, nil, true
+}
+
 // parkFleet asks the daemon to park everything, and closes Wake once it has
 // answered.
 //
@@ -276,13 +308,10 @@ func (a App) parkTarget(id, name string) (App, tea.Cmd, bool) {
 // prints instead of asking a daemon that is, by then, shutting down and will
 // spend its whole status timeout in the backlog.
 func (a App) parkFleet() (tea.Model, tea.Cmd, bool) {
-	if a.quit.pressed {
-		// The second press is a no-op rather than a second ask. beginQuit's
-		// first verb wins, so another FrameParkAll changes nothing at the
-		// daemon; another wait would be a second deadline racing the first,
-		// and the loser would settle an ask that was already answered.
-		return a, nil, true
-	}
+	// The once-only invariant is the caller's now: armParkFleet is the sole
+	// caller and returns on a.quit.pressed before it reaches here, so a second
+	// ⌃Q never re-asks and never schedules a second deadline racing the first.
+	// beginQuit's first verb wins at the daemon regardless.
 	a.quit = parkAll{asked: a.carriedForward(), pressed: true}
 	notice.Report(parkingFleet, a.quit.asked)
 	return a, tea.Sequence(a.askParkAll(), a.parkAllDeadline()), true

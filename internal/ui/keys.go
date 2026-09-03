@@ -79,7 +79,12 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	// roster's pick and the dispatch cursor draw no such line, so for them the
 	// legend's `↵ detach` is the only statement there is and it has to be true.
 	detachArmed := a.detachArmed
-	if detachArmed {
+	// quitArmed rides here with detachArmed and for the same reason: ⌃Q's confirm
+	// (a second ⌃Q) is read in the switch below, and every other input - a card
+	// key among them, which returns before the disarm lower down - has to take the
+	// arm back. See park.go's armParkFleet.
+	quitArmed := a.quitArmed
+	if detachArmed || quitArmed {
 		a = a.disarmed()
 	}
 	// Not while the board was up when the key arrived: the card was on no
@@ -119,7 +124,11 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	case tea.KeyCtrlC:
 		return a.park()
 	case tea.KeyCtrlQ:
-		return a.parkFleet()
+		// Armed, not immediate: a single ⌃Q parked the whole fleet and quit, so an
+		// accidental or auto-repeated press closed the workspace - and tripped the
+		// emergency kill-switch, which left every agent running. A second ⌃Q
+		// confirms. See park.go and cmd/wake/killswitch.go.
+		return a.armParkFleet(quitArmed)
 	case tea.KeyCtrlO:
 		// Detach: the TUI exits and the fleet keeps working. That is the
 		// property the daemon exists to provide, and it reaches the daemon as

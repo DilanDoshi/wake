@@ -580,7 +580,17 @@ subagents turn out to author task lists.
 
 ---
 
-## ⌃Q arm-before-quit — WON'T DO (owner, 2026-08-28; a stray ⌃Q is recoverable and ⌃Q⌃Q already covers the wedged case)
+## ⌃Q arm-before-quit — DONE (`fix/ctrlq-emergency-preempts-park`, 2026-09-01), reversing the 2026-08-28 WON'T DO
+
+The 2026-08-28 ruling was *"a stray ⌃Q is recoverable and ⌃Q⌃Q already covers the wedged case."*
+Both halves were the bug. A stray or **auto-repeated** ⌃Q was *not* recoverable: the kill-switch's
+`saw()` folds every byte of one read, so a held ⌃Q — or an impatient second tap during the park's
+~3s ack wait — arrived as ⌃Q⌃Q in one read and fired the emergency `os.Exit`, which asks the daemon
+for nothing and **leaves the fleet untouched**. So the "wedged-case" chord was silently pre-empting a
+*healthy* park and leaving every agent running; the owner watched agents survive a ⌃Q, still alive
+minutes later on `wake --fleet`. The fix arms ⌃Q (first press arms, a second confirms the real park)
+**and** drops ⌃Q from the kill-switch, so the emergency escape is ⌃C⌃C alone. See
+`internal/ui/park.go`'s `armParkFleet` and `cmd/wake/killswitch.go`.
 
 ---
 

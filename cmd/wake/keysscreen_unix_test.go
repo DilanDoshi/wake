@@ -195,7 +195,10 @@ func TestQuitParksTheFleetAndTheNextRunComesBackEmpty(t *testing.T) {
 	s.await("ready")
 	name := s.agentName()
 
-	s.send("\x11") // ⌃Q
+	// ⌃Q arms and a second ⌃Q confirms: a single press must not park the fleet.
+	s.send("\x11") // ⌃Q (arm)
+	s.await("park all & quit")
+	s.send("\x11") // ⌃Q (confirm)
 	s.await("Parking")
 
 	again := startWake(t, 100, 30)

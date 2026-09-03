@@ -66,7 +66,7 @@ An agent is a headless `claude` process in stream-json mode with a Wake-assigned
 | `--debug-file <name>` · `--debug <categories>` | Per-session debug logging, so one agent of thirty can be diagnosed. **The wire carries a name and the daemon owns the directory** — `filepath.Dir(socket)/debug/<name>.log`, beside `mcp.json` and `parked.json` — because a path on the wire is a file anything that can dial the socket could choose. `--debug` only narrows the categories and is refused without a file: on its own it writes no log anywhere that can be read |
 | `wake status` · `wake stop` | What is running; end everything (irreversible) |
 | `wake fleets` · `--fleet <name>` | The fleets, and which one a verb is addressed to. `--fleet default` is the reserved word for the **unnamed** fleet at `~/.wake` - every fleet that existed before fleets did is that one, so without it a whole existing Wake would be reachable only through `$WAKE_SOCKET`. Only a bare `wake` makes a new fleet; every other verb with no `--fleet` still means the unnamed one. **Several fleets can run in one directory** — each is a directory under `~/.wake/fleets/` holding its own socket, and every other per-fleet file is `filepath.Dir(socket)` plus a name, so isolation is the layout rather than a rule anything enforces. A bare `wake` is the unnamed fleet at `~/.wake/`, unchanged. `$WAKE_SOCKET` still wins, and naming a fleet beside it is refused rather than one being ignored |
-| Room keys | `↵` send, open the picked agent, or confirm an armed detach · `esc` interrupt (clears the draft in the room; leaves answer mode while a card is taking one) · `esc esc` clear a conversation's draft, or — idle and empty — open a rewind picker to an earlier prompt · `↑↓` walk this pane's prompt history when the draft has no row to move into, else move the query cursor · `⇧↑↓` pick agent · `⌃O` arm detach — `↵` leaves, a second `⌃O` cancels · `⌃C` park focused · `⌃Q` park all & quit · **`⌃C⌃C` or `⌃Q⌃Q` emergency quit** — read off the tty *before* Bubble Tea, so it is the one exit that still works when the window has stopped drawing · `⇥` focus · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move the keys to the pane that way · `⌥↵`/`⌃J` newline · `⌃F` fork · `⌃D` open here · `⌃Y` open in a new column · `⌃B` open below · `⌃W` close pane · `⌃E` expand tool results, or the room's folded responses (a click opens one) |
+| Room keys | `↵` send, open the picked agent, or confirm an armed detach · `esc` interrupt (clears the draft in the room; leaves answer mode while a card is taking one) · `esc esc` clear a conversation's draft, or — idle and empty — open a rewind picker to an earlier prompt · `↑↓` walk this pane's prompt history when the draft has no row to move into, else move the query cursor · `⇧↑↓` pick agent · `⌃O` arm detach — `↵` leaves, a second `⌃O` cancels · `⌃C` park focused · `⌃Q` arm park all & quit — a second `⌃Q` confirms, any other key cancels · **`⌃C⌃C` emergency quit** — read off the tty *before* Bubble Tea, so it is the one exit that still works when the window has stopped drawing · `⇥` focus · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move the keys to the pane that way · `⌥↵`/`⌃J` newline · `⌃F` fork · `⌃D` open here · `⌃Y` open in a new column · `⌃B` open below · `⌃W` close pane · `⌃E` expand tool results, or the room's folded responses (a click opens one) |
 | Slash commands | `/resume`, `/new` (optionally `--worktree <name>`, `--add-dir <dir>`, `--debug-file <name>`, `--debug <categories>`, `--max-budget-usd <usd>`, `--fallback-model <m,m>`), `/name`, `/task`, `/color`, `/quit`, `/adopt`, `/mcp`, `/login`, `/manager`, `/manager-stop`, `/board` (`⇥` toggles a tiled live wall of live transcripts, view-only, while the board is up) — everything else is passed to the agent byte for byte |
 | `/color` | Sets an agent's identity hue — one of seven named colours — so its turns in the room, the composer it types into, and its roster row are told apart by more than name text. **The status bar deliberately does not take the hue** — it recedes as chrome. `/color <colour>` or `/color @who <colour>` — and **`@who /color <colour>` from the room** works too, since the mention is the target (the same bridge `/name` and `/task` take). `/color none` clears. In the roster the hue **survives the cursor**: an open agent's row is the selected one, so the selection shows as bold rather than the accent hiding the colour. The **manager** defaults to yellow — the one session with a hue the fleet does not share (`identityStyleFor`) — so on it `/color none` returns to yellow rather than to no hue, since its empty colour is its default. A session attribute that survives a park. **The word is Claude's own** (its theme command, advertised on 71 corpus inits); Wake claims it on the owner's 2026-08-27 override rather than the corpus rule — `slashguard_test.go`'s `ownerClaimedCommands`, retired if a recording ever shows Claude's headless `/color` is a redirect |
 | `/manager` | The switch: starts one when there is none, wakes a parked one, parks a running one. A command rather than a key — see `internal/ui/slash.go` for why every remaining chord is worse than a legend slot |
@@ -115,8 +115,9 @@ resolving.
 row of key hints under the composer is gone — it was redundant with the status bar, which already
 names the permission mode and the rest of what a pane is (owner's request, "keep armed cues, drop
 static hints"). What survives is the safety confirmation: while a detach is armed the composer draws
-`↵ detach   ⌃O cancel`, while a clear-draft arm is live it draws `esc clear draft`, and an idle,
-empty conversation's second `⎋` draws `esc rewind`. That row is the only on-screen tell that the next
+`↵ detach   ⌃O cancel`, while a clear-draft arm is live it draws `esc clear draft`, an idle,
+empty conversation's second `⎋` draws `esc rewind`, and while a `⌃Q` park is armed it draws
+`⌃Q park all & quit` — a second `⌃Q` confirms it. That row is the only on-screen tell that the next
 keypress is irreversible, which is why it stays where the static hints went. An unarmed composer
 draws no legend row at all, and the permission mode is the status bar's alone now. `ui.legendEntries`
 still holds the (glyph, label) pairs and is still the canonical list of what this build binds:
@@ -452,8 +453,8 @@ which never sends its outcome; the notices leave **no transcript block** (`notic
 the pinned line is the only place it shows. Full argument: `internal/ui/compacting.go`.
 
 **Every ordinary exit is a key the Update loop reads, so the emergency one is a byte read before it.**
-⌃Q parks the fleet and quits, ⌃O then ↵ detaches, ⌃C parks one agent — all three are `tea.KeyMsg`,
-and all three are gone the moment the loop is what has stopped. It can be: `Update` calls `View`,
+⌃Q arms and a second ⌃Q parks the fleet and quits, ⌃O then ↵ detaches, ⌃C parks one agent — all are `tea.KeyMsg`,
+and all are gone the moment the loop is what has stopped. It can be: `Update` calls `View`,
 `View` goes through one `os.File`, and a terminal that stops draining that file parks the write
 inside the renderer's mutex — which is the goroutine that reads every message. **And a signal does
 not rescue it**: bubbletea's `handleSignals` does `p.msgs <- InterruptMsg{}` on an *unbuffered*
@@ -464,17 +465,25 @@ inside an alt screen with mouse reporting on and the tty still raw. Measured, no
 a goroutine of its own and decides before Bubble Tea has seen the byte — `inbox.go`'s rule about the
 socket, one layer further out. **Two of the same key**, which `detach.go` rules out for ⌃O and which
 is right here for the reason that ruling turns on: a same-key confirm is wrong when the *first* press
-is invisible, and both of these have a visible first press, so a second is never the reflex that
-follows silence — it is the reflex that follows the first press not having worked. Anything at all
-between them disarms, which is what keeps ⌃C meaning park. **Both keys, because either can be the
-one that does not arrive**: ⌃Q is XON, and `decisions.md`'s own open worry is the layer that is not
-the tty driver — tmux, screen, ssh, cmux. It adds **no legend glyph and no `tea.Key…` case**, which
-is ⎋⎋'s reason: it is not in `App.key` at all. Arming it takes raw mode off Bubble Tea — `initInput`
+is invisible, and ⌃C has a visible first press — it parks the focused agent and says so — so a second
+is never the reflex that follows silence, it is the reflex that follows the first press not having
+worked. Anything at all between them disarms, which is what keeps ⌃C meaning park. **⌃C alone now,
+and ⌃Q dropped from the escape hatch.** This watched ⌃Q⌃Q as well, for redundancy — ⌃Q is XON and ⌃C
+is INTR, and if a layer that is not the tty driver (tmux, screen, ssh, cmux) ate one the other still
+arrived. But ⌃Q is the TUI's park-and-quit, and it is now *armed*: the first press arms, the second
+confirms, and the confirmed park waits up to three seconds for the daemon's answer before the window
+closes. A held ⌃Q auto-repeating, or an impatient second tap during that visible delay, arrived as
+⌃Q⌃Q in one read and fired *this* exit — which asks the daemon for nothing and leaves the fleet
+untouched — so a healthy park was pre-empted into a bare exit and every agent was left running. That
+is the fleet-still-running-after-⌃Q failure, and dropping ⌃Q from the watched set is its fix: ⌃C is
+the reliable chord (not flow control) and parks one agent rather than quitting, so it cannot collide
+with a park and is the whole of the escape hatch now. It adds **no legend glyph and no `tea.Key…`
+case**, which is ⎋⎋'s reason: it is not in `App.key` at all. Arming it takes raw mode off Bubble Tea — `initInput`
 claims it only for a reader that is itself a terminal, and the reader it gets is a pipe — so
 `converseModel` owns the restore.
 
-**Park is recoverable; stop is not.** `⌃C` parks the focused agent, `⌃Q` parks the fleet and exits,
-`wake stop` ends everything and clears the park book. A parked session keeps its id, name, label and
+**Park is recoverable; stop is not.** `⌃C` parks the focused agent, `⌃Q⌃Q` parks the fleet and exits
+(the first `⌃Q` arms), `wake stop` ends everything and clears the park book. A parked session keeps its id, name, label and
 directory in `parked.json` beside the socket.
 
 **`⌃Q` waits for the daemon to say it took the park before the window closes**, and the exit line

@@ -90,9 +90,11 @@ pressing it on your machine produce anything at all?
   check three things — the process ends, the shell prompt comes back **echoing what you type**
   (raw mode restored), and the alt screen is gone. If the shell echoes but the screen is still
   Wake's, the termios restore landed and the escape sequences did not, which is the bounded-write
-  case and is what `reset` fixes. Try `⌃Q⌃Q` too: if that one does nothing where ⌃C⌃C worked, the
-  layer between the keyboard and Wake is eating XON, which is the open third of the `⌃Q` question
-  below and is worth reporting.
+  case and is what `reset` fixes. `⌃Q⌃Q` is **not** an emergency chord any more — ⌃Q now arms the
+  fleet park and a second ⌃Q confirms it (both go through Bubble Tea, so a wedged Wake processes
+  neither), and it was dropped from the kill-switch because a held/auto-repeated ⌃Q was firing the
+  emergency exit and pre-empting a healthy park. So ⌃C⌃C is the whole of the escape hatch now; if it
+  fails to get you out, that is the case to report.
 - **`kill <pid>` from another window ends it and restores the terminal.** bubbletea's own SIGINT and
   SIGTERM handlers are swallowed by a wedged loop (measured — see `decisions.md`), so this is
   `watchSignals` doing it after a two-second grace. A `kill` that needs `-9` means the grace path is

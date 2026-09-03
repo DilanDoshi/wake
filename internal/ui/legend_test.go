@@ -202,6 +202,7 @@ func TestArmedComposerDrawsOnlyTheCue(t *testing.T) {
 		{"detach", legendArms{detach: true}},
 		{"clear draft", legendArms{esc: true}},
 		{"rewind", legendArms{rewind: true}},
+		{"park all & quit", legendArms{quit: true}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := stripANSI(NewComposer().WithArms(tc.arms).View(fullLegendWidth))
@@ -235,6 +236,7 @@ func TestTheArmedCuesAreExactlyTheirLabels(t *testing.T) {
 		{legendArms{detach: true}, sendGlyph + " " + armedSendLabel + hintSep + detachGlyph + " " + armedDetachLabel},
 		{legendArms{esc: true}, escGlyph + " " + escClearLabel},
 		{legendArms{rewind: true}, escGlyph + " " + escRewindLabel},
+		{legendArms{quit: true}, quitGlyph + " " + armedQuitLabel},
 	}
 	for _, c := range cases {
 		if got := armedCueLine(c.arms); got != c.want {
@@ -251,7 +253,7 @@ func TestTheArmedCuesAreExactlyTheirLabels(t *testing.T) {
 // advertising nothing, or a fragment that reads as another key's whole label.
 // A whole part is dropped from the end rather than a fragment left.
 func TestNoWidthDrawsAPartOfTheArmedCue(t *testing.T) {
-	for _, arms := range []legendArms{{detach: true}, {esc: true}, {rewind: true}} {
+	for _, arms := range []legendArms{{detach: true}, {esc: true}, {rewind: true}, {quit: true}} {
 		whole := map[string]bool{}
 		for _, part := range armedCueParts(arms) {
 			whole[part] = true
@@ -334,7 +336,7 @@ func TestCLAUDEmdDescribesTheLegendItDraws(t *testing.T) {
 
 	// The armed cue is the only thing the legend draws now, and CLAUDE.md names
 	// each part it can draw. Derived from the renderer so a relabelled arm fails.
-	for _, arms := range []legendArms{{detach: true}, {esc: true}, {rewind: true}} {
+	for _, arms := range []legendArms{{detach: true}, {esc: true}, {rewind: true}, {quit: true}} {
 		for _, part := range armedCueParts(arms) {
 			if !strings.Contains(text, part) {
 				t.Errorf("%s does not name the armed cue part %q (%+v). The cue is the whole of what "+

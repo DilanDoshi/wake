@@ -367,6 +367,12 @@ type App struct {
 	// picker, rather than stopping the turn again. See escape.go.
 	escArmed bool
 
+	// quitArmed is a ⌃Q pressed once and not yet confirmed. park.go is why the
+	// fleet park takes two presses now, and App.disarmed takes this back with the
+	// other arms. Removing ⌃Q from the emergency kill-switch is the matching half
+	// - see cmd/wake/killswitch.go.
+	quitArmed bool
+
 	// roomAsk is the room's own history ledger, which is not the DM's. See
 	// roomhistory.go.
 	roomAsk roomAsk
