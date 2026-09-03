@@ -390,6 +390,49 @@ this audit did not close.
 
 ---
 
+## BUG-34 — a DM's done line read `✻ … done 10:41 PM` while the agent was actively calling tools
+
+**Reported 2026-09-01**, with a screenshot: an agent had entered a worktree and was reading files and
+running bash — visibly, in the transcript — while the line above the composer read
+`✻ Computed for 2h 24m · done 10:41 PM`. The summary claimed the turn was finished on a pane where
+the next turn was plainly in flight. The reporter added that it also tends to strand a done line
+**after answering a question or accepting a permission** — the same root cause, sharpened (below).
+
+**Root cause: `idle` is not "not working," and the done line trusted that it was.** `stateLocked`
+(`internal/daemon/agent.go`) reports `StateIdle` whenever `!a.owed` — no turn is owed *to Wake*. Wake
+spawns every agent `--brief`, and the daemon header plus `deferred.md` both spell this out: an agent
+that self-starts a turn, or continues a long job between turns, owes Wake nothing and reads idle while
+it works. The done line's gate (`DM.showsDone` = `State==idle && !doneAt.IsZero()`) took that idle as
+"turn finished, nothing happening." A prior turn had set `doneAt`/`turnDur`; the summary is meant to
+stand only "until the next turn," and its **only** end-mechanism was `WithStatus`'s
+working→idle→**working** report edge — which never fires when the daemon cannot see the new turn. So
+nothing forgot the stale summary, and it stood over live tool calls.
+
+**The permission/question sharpening.** An unowed turn that hits a permission is `StateBlocked`
+(`pending>0` overrides `!owed`). Answering it clears the ask, and `stateLocked` then returns **idle**
+(not working — the turn is still unowed) — a `blocked→idle` edge `WithStatus` *captures a done line
+on* (`TestABlockedTurnStillRecordsADoneTime` is the legitimate case it cannot be told apart from). So
+accepting a permission on an unowed turn mints a *fresh* wrong done line, and the granted tool then
+runs — its result is a `KindToolResult`, not a new block — so the summary stands for the whole length
+of that tool (a long bash → a long-lived lie).
+
+**Fix (`Agent.notDone`, `internal/ui/fleet.go`).** The client sees the events the daemon's `owed`
+model cannot: the agent's own new-turn content forgets the done summary in `fold` — `KindToolUse`,
+`KindToolResult`, `KindAssistantText`, `KindThinking`, all gated `ev.Subagent==nil` (a subagent
+streams past the parent's result and is not the agent's turn). It is the mirror of `WithStatus`
+reconciling `inDM` off the report because a gap can eat the `KindTurnEnd` — here the report is blind
+and the event stream is the observable. A **streaming preview** forgets it on the DM's own
+`showsDone` instead (a partial never reaches `fold`; thinking deltas are dropped, so only a completed
+`KindThinking` block clears through `fold`). While such a turn runs the pane draws the live
+preview/activity but not the false "done."
+
+**Not fixed here: the daemon still reports idle for a working self-started turn.** That is the
+deliberate liveness model (`agent.go`'s header: being wrongly idle is harmless, wrongly silent invites
+a kill) and the open "done state" design in `deferred.md`. This entry closes the *lie* — a done line
+over live work — not the deeper question of a working line for a turn Wake did not initiate.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
