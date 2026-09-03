@@ -652,6 +652,17 @@ func stripLocalCommandStdout(s string) string {
 	return strings.TrimSpace(strings.TrimSuffix(strings.TrimPrefix(t, localStdoutOpen), localStdoutClose))
 }
 
+// isLocalCommandPlumbing reports whether user string content is a whole
+// slash-command invocation (<command-name>…</command-args>) or caveat envelope -
+// plumbing dropped so a reopened conversation does not draw the raw tags. A whole
+// envelope only, like stripLocalCommandStdout, and only the bare string the CLI
+// writes these as, so the same tags inside an array block are kept.
+func isLocalCommandPlumbing(s string) bool {
+	t := strings.TrimSpace(s)
+	return (strings.HasPrefix(t, "<command-name>") && strings.HasSuffix(t, "</command-args>")) ||
+		(strings.HasPrefix(t, "<local-command-caveat>") && strings.HasSuffix(t, "</local-command-caveat>"))
+}
+
 // forwardedSubagent attributes a frame the CLI forwarded from a subagent, and
 // returns nil for one the agent itself produced.
 //
