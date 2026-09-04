@@ -5,6 +5,7 @@ package daemon
 // is its own: spawn.go starts a process, this forwards what the process says.
 
 import (
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -50,11 +51,18 @@ func (s *server) fanOut(a *agent) {
 			s.broadcast(s.statusPush())
 		}
 
-		// The session's init arrives before any input, so it is where the
-		// startup effort probe belongs - the one place Wake can read a level it
-		// never chose. Fires once; the /effort re-probe is in apply.
+		// The session's init is the header of the operator's first turn (init
+		// is a turn header - session.go), so this is where the startup effort
+		// probe is requested rather than sent: wantProbe defers it behind that
+		// turn. Fires once; the /effort re-probe is requested from apply.
 		if a.firstInit(ev) {
-			a.probeEffort()
+			a.wantProbe()
+		}
+
+		// Where a deferred probe fires: after observe has cleared owed for
+		// this turn, never from inside it, which holds a.mu.
+		if ev.Kind == core.KindTurnEnd {
+			a.probeIfWanted()
 		}
 	}
 }
