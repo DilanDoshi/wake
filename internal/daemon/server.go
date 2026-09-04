@@ -157,6 +157,7 @@ func (s *server) run(ctx context.Context, ln net.Listener) error {
 		}
 		c := newClient(conn)
 		c.enqueue(rpc.Frame{Kind: rpc.FrameHello})
+		s.replayPendingAsks(c)
 		s.addClient(c)
 		if c.closed() {
 			continue
