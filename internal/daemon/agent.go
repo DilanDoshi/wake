@@ -162,11 +162,12 @@ type agent struct {
 	probed         bool
 
 	// probeWanted records that a startup or re-probe is due once this agent is
-	// next idle. probeEffort refuses to send while a turn is owed - the probe
-	// is the daemon's only unprompted stdin write, and one landing mid-turn is
+	// next idle. tryProbe refuses to send while a turn is owed - the probe is
+	// the daemon's only unprompted stdin write, and one landing mid-turn is
 	// what let its reply interleave with a real turn's own frames - so a
 	// trigger that arrives mid-turn sets this instead, and fanOut fires it once
-	// the turn in flight ends. See wantProbe, probeIfWanted.
+	// the turn in flight ends. Cleared only in the same locked step that queues
+	// the probe, so a concurrent wantProbe cannot be lost. See tryProbe.
 	probeWanted bool
 
 	// model is what this session runs as, or "" for none. Display and the park

@@ -53,7 +53,8 @@ func TestSnapshotCarriesTheConfirmedModel(t *testing.T) {
 // apply can send it without counting it as an operator turn.
 func TestProbeEnqueuesBareModel(t *testing.T) {
 	a := effortAgent(t)
-	a.probeEffort()
+	a.probeWanted = true
+	a.tryProbe()
 	select {
 	case p := <-a.in:
 		if !p.probe {
@@ -63,7 +64,7 @@ func TestProbeEnqueuesBareModel(t *testing.T) {
 			t.Errorf("probe queued %+v, want a /model FrameSend", p.frame)
 		}
 	default:
-		t.Fatal("probeEffort queued nothing")
+		t.Fatal("tryProbe queued nothing")
 	}
 }
 
@@ -72,15 +73,20 @@ func TestProbeEnqueuesBareModel(t *testing.T) {
 // answer nobody made at worst.
 func TestProbeSkipsABlockedOrGoneAgent(t *testing.T) {
 	blocked := effortAgent(t)
+	blocked.probeWanted = true
 	blocked.pending = []ask{{id: "r1"}}
-	blocked.probeEffort()
+	blocked.tryProbe()
 	if len(blocked.in) != 0 {
 		t.Error("a blocked agent was probed")
 	}
+	if !blocked.probeWanted {
+		t.Error("a probe skipped for a block was not kept due for later")
+	}
 
 	gone := effortAgent(t)
+	gone.probeWanted = true
 	close(gone.gone)
-	gone.probeEffort()
+	gone.tryProbe()
 	if len(gone.in) != 0 {
 		t.Error("a gone agent was probed")
 	}
@@ -168,16 +174,20 @@ func TestFirstInitFiresOnce(t *testing.T) {
 	}
 }
 
-// probeEffort is the daemon's only unprompted stdin write, and a turn in
-// flight is exactly the state that let a probe's reply interleave with that
-// turn's own frames. It must refuse to send while one is owed, whatever else
-// about the agent looks probeable.
-func TestProbeEffortDoesNotEnqueueWhileATurnIsOwed(t *testing.T) {
+// The probe is the daemon's only unprompted stdin write, and a turn in flight
+// is exactly the state that let a probe's reply interleave with that turn's own
+// frames. tryProbe must refuse to send while one is owed, whatever else about
+// the agent looks probeable, and keep the request due for the turn's end.
+func TestProbeDoesNotEnqueueWhileATurnIsOwed(t *testing.T) {
 	a := effortAgent(t)
+	a.probeWanted = true
 	a.owed = true
-	a.probeEffort()
+	a.tryProbe()
 	if len(a.in) != 0 {
 		t.Error("a probe was queued while a turn was owed")
+	}
+	if !a.probeWanted {
+		t.Error("a probe deferred by the idle gate was dropped instead of kept due")
 	}
 }
 
@@ -229,12 +239,15 @@ func TestWantProbeFiresAtOnceWhenAlreadyIdle(t *testing.T) {
 	}
 }
 
-// The interleaving the idle gate exists to prevent: a probe's reply arrives
-// and arms the suppression window, then a real turn's own end - racing the
-// probe's, because a new send landed before the probe's near-instant reply
-// did - must not be eaten by it. Only once the agent is genuinely idle again
-// does the probe's own end close the window.
-func TestAbsorbProbeDoesNotSwallowARealTurnEndRacingTheProbesOwn(t *testing.T) {
+// The first turn end after a probe's reply is always the probe's own, and is
+// swallowed whether or not a real turn has since marked owed. The idle gate
+// means a probe is only ever queued when no real turn is in flight, and stdin
+// is FIFO, so a real send landing right behind the probe ("world") produces its
+// own end only *after* the probe's. Keying the swallow on !owed instead leaked
+// the probe's own result as a phantom turn end - which cleared owed - and then
+// ate the real turn's end under the still-armed window, reporting the agent
+// idle for a whole turn it was actually working.
+func TestAbsorbProbeSwallowsTheProbesOwnEndEvenWhenARealTurnHasStarted(t *testing.T) {
 	a := effortAgent(t)
 	a.incProbe()
 
@@ -242,25 +255,26 @@ func TestAbsorbProbeDoesNotSwallowARealTurnEndRacingTheProbesOwn(t *testing.T) {
 		t.Fatalf("the probe's own reply was not suppressed and published: suppress=%v publish=%v", suppress, publish)
 	}
 
-	// A real turn is in flight when its own result arrives - the exact
-	// interleaving that used to swallow a parent turn's end and leave it
-	// owing one forever.
+	// A real send landed right behind the probe and marked the turn owed before
+	// the probe's near-instant reply was read off stdout.
 	a.owed = true
-	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the real turn's own result"}); suppress {
-		t.Fatal("a real turn's own end was swallowed as though it were the probe's")
+
+	// The probe's OWN result is the next turn end (FIFO), and must be swallowed
+	// even though a real turn is now owed - not leaked as a phantom end.
+	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the probe's own result"}); !suppress || publish {
+		t.Fatalf("the probe's own end was not swallowed while a real turn was owed: suppress=%v publish=%v", suppress, publish)
 	}
 	if a.confirmedEffort != core.EffortHigh {
-		t.Fatal("the confirmed level was lost along with the wrongly-refused swallow")
-	}
-
-	// The window is still armed for the probe's own end, delivered once the
-	// agent is idle again.
-	a.owed = false
-	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); !suppress || publish {
-		t.Fatalf("the probe's own turn end was not cleanly suppressed: suppress=%v publish=%v", suppress, publish)
+		t.Fatalf("the confirmed level was lost: %q", a.confirmedEffort)
 	}
 	if a.pendingProbes != 0 {
 		t.Fatalf("the suppression window did not close: pendingProbes = %d", a.pendingProbes)
+	}
+
+	// The real turn's own end follows with the window closed, and reaches
+	// clients rather than being eaten.
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the real turn's own result"}); suppress {
+		t.Fatal("the real turn's own end was eaten after the probe's window had closed")
 	}
 }
 

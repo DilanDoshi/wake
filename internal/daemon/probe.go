@@ -6,88 +6,68 @@ package daemon
 // Effort is on no frame Claude sends unasked, so the only way to confirm a level
 // is to ask - a bare /model, whose reply names it (`Current model: … (effort:
 // xhigh)`) and which the CLI answers locally (num_turns:0, $0, no inference).
-// probeEffort sends it, absorbProbe swallows the reply at fanOut before it
+// tryProbe sends it, absorbProbe swallows the reply at fanOut before it
 // reaches a client, and the level lands on agent.confirmedEffort. The command
 // counts as no turn (apply.go skips noteSent) and the fields it touches
 // (pendingProbes, swallowTurnEnd, confirmedEffort, probed, probeWanted) live on
 // the agent and are written only under a.mu. It is also the daemon's only
-// unprompted stdin write, so probeEffort refuses to send one while a real turn
-// is owed - wantProbe/probeIfWanted defer it to the next idle instead of
-// dropping it. Split from agent.go/effort.go as its own subject.
+// unprompted stdin write, so tryProbe refuses to send one while a real turn is
+// owed - wantProbe/probeIfWanted defer it to the next idle instead of dropping
+// it. Split from agent.go/effort.go as its own subject.
 
 import (
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// probeEffort queues a bare /model to read the session's reasoning level back -
-// a local CLI reply (num_turns:0, $0) the daemon suppresses. Best-effort: it is
-// skipped for an agent that is gone or blocked on an ask, whose stdin is a
-// closed decision, or that owes a turn - this is the daemon's only unprompted
-// stdin write, and one sent while a real turn is in flight is what let its
-// reply interleave with that turn's own frames and have absorbProbe swallow
-// the wrong turn end. Dropped silently if the queue is full (the level simply
-// does not refresh this cycle). Reports whether it queued, so a deferred
-// caller (wantProbe, probeIfWanted) knows whether to keep waiting. The reply
-// is consumed by absorbProbe.
-func (a *agent) probeEffort() bool {
-	if a.blockedOnAsk() || a.turnOwed() {
-		return false
+// wantProbe marks a startup or re-probe due and fires it at once if the agent
+// is already idle. Called while the turn it belongs to is normally still in
+// flight (the startup probe's own init is that turn's header; the /effort and
+// /model re-probe follows noteSent in the same breath), so the common case
+// defers: probeWanted stays set and fanOut fires it from probeIfWanted once
+// that turn's end is observed. If the agent is already idle when this runs -
+// the turn ended before the trigger reached this goroutine - there is no future
+// turn end to catch the request, so tryProbe fires it now instead.
+func (a *agent) wantProbe() {
+	a.mu.Lock()
+	a.probeWanted = true
+	a.mu.Unlock()
+	a.tryProbe()
+}
+
+// probeIfWanted fires a due probe once this agent's turn end has been observed.
+// Called from fanOut after observe returns - never from inside it, which holds
+// a.mu. A no-op unless a probe is due and the agent is now idle.
+func (a *agent) probeIfWanted() {
+	a.tryProbe()
+}
+
+// tryProbe queues a bare /model to read the session's reasoning level back - a
+// local CLI reply (num_turns:0, $0) absorbProbe suppresses - when one is due
+// (probeWanted) and the agent is idle. It is the daemon's only unprompted stdin
+// write, and one sent while a real turn is owed is what let its reply interleave
+// with that turn's own frames, so it defers while owed or blocked on an ask
+// (whose stdin is a closed decision). probeWanted is cleared only in the same
+// locked step that queues the probe, so a re-probe requested by a concurrent
+// wantProbe between two turn ends is never cleared without having fired.
+// Best-effort past the idle gate: skipped for an agent that is gone, and dropped
+// if the queue is full - the level does not refresh this cycle and the next turn
+// end retries. The reply is consumed by absorbProbe.
+func (a *agent) tryProbe() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if !a.probeWanted || a.owed || len(a.pending) > 0 {
+		return
 	}
 	select {
 	case <-a.gone:
-		return false
+		return
 	default:
 	}
 	select {
 	case a.in <- pending{probe: true, frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: slashPrefix + modelVerb}}:
-		return true
-	default:
-		return false
-	}
-}
-
-// turnOwed reports whether this agent currently owes a turn end - probeEffort's
-// idle gate. The caller takes no lock.
-func (a *agent) turnOwed() bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	return a.owed
-}
-
-// wantProbe requests a startup or re-probe for the next time this agent is
-// idle. Called while a turn it belongs to is normally still in flight (the
-// startup probe's own init is that turn's header; the /effort and /model
-// re-probe follows noteSent in the same breath), so the common case defers:
-// probeWanted is set and fanOut fires it from probeIfWanted once that turn's
-// end is observed. If the agent is already idle when this runs - the turn
-// ended before the trigger reached this goroutine - there is no future turn
-// end to catch a deferred request, so it fires now instead; a failure there
-// still falls back to probeWanted; a future turn's end retries it.
-func (a *agent) wantProbe() {
-	a.mu.Lock()
-	owed := a.owed
-	a.probeWanted = owed
-	a.mu.Unlock()
-	if !owed && !a.probeEffort() {
-		a.mu.Lock()
-		a.probeWanted = true
-		a.mu.Unlock()
-	}
-}
-
-// probeIfWanted fires a probe deferred by wantProbe, once this agent's turn
-// end has been observed. Called from fanOut after observe returns - never
-// from inside it, which holds a.mu. Left armed if probeEffort could not send
-// it (a fresh turn raced the old one's end, say), so the next turn end retries.
-func (a *agent) probeIfWanted() {
-	a.mu.Lock()
-	wanted := a.probeWanted
-	a.mu.Unlock()
-	if wanted && a.probeEffort() {
-		a.mu.Lock()
 		a.probeWanted = false
-		a.mu.Unlock()
+	default:
 	}
 }
 
@@ -144,14 +124,14 @@ func (a *agent) absorbProbe(ev core.Event) (suppress, publish bool) {
 		}
 		return true, false
 	}
-	// !a.owed is what keeps this from being the probe's own only by
-	// assumption: probeEffort refuses to send while a turn is owed, so a
-	// reply's genuine turn end always arrives with none in flight, and a real
-	// turn racing the reply (a new send landing before it answers) is read
-	// here and let through instead of swallowed - the failure this trades for
-	// is a leaked probe reply, never a real turn end eaten and its agent
-	// stuck owing one forever.
-	if a.swallowTurnEnd && !a.owed && ev.Kind == core.KindTurnEnd {
+	// The first turn end after a reply is the probe's own, always: tryProbe
+	// only ever queues a probe while idle, and stdin is FIFO, so a real send
+	// landing right behind the probe emits its own end only after the probe's.
+	// So this swallows it whatever owed says - keying it on !a.owed instead let
+	// a racing send's owed leak the probe's own end as a phantom turn end and
+	// then eat the real turn's end under the still-armed window, reporting the
+	// agent idle for a turn it was working.
+	if a.swallowTurnEnd && ev.Kind == core.KindTurnEnd {
 		a.swallowTurnEnd = false
 		if a.pendingProbes > 0 {
 			a.pendingProbes--
