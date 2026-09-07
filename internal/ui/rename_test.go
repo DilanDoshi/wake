@@ -89,7 +89,6 @@ func TestNameAndTaskRefuseRatherThanGuess(t *testing.T) {
 		{name: "no new name", draft: "/name", says: nameUsage},
 		{name: "no label", draft: "/task", says: taskUsage},
 		{name: "a name for nobody", draft: "/name @nobody bob", says: noSuchAgent},
-		{name: "two new names", draft: "/name bob carol", says: nameUsage},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fresh(t)
@@ -402,19 +401,20 @@ func TestBareRenameIsJustAMessage(t *testing.T) {
 // differ it declines **silently** - no FrameRename, and no `/name`-flavoured
 // refusal leaking over a passthrough that worked.
 //
-// claude's `/rename` renames the session it is typed in: it has no `@who` (so a
-// leading one is just a word claude reads, not a Wake target - the reported
-// footgun was `/rename @sydney bob` in alex's DM renaming sydney in Wake while
-// claude renamed alex), it is a one-word name (Wake cannot hold two), it is the
-// exact advertised word (not `/RENAME`), and it is a conversation (the room is
-// not one session). Each is left to the passthrough rather than mirrored wrong.
+// claude's `/rename` renames the session it is typed in: a leading `@` is just
+// claude's own title text, not a Wake target - the reported footgun was
+// `/rename @sydney bob` in alex's DM renaming sydney in Wake while claude renamed
+// alex, and Wake cannot hold a name starting with `@` anyway - it is the exact
+// advertised word (not `/RENAME`), and it is a conversation (the room is not one
+// session). Each is left to the passthrough rather than mirrored wrong. A
+// multi-word name is *not* here: it is hyphenated and mirrored now, see
+// TestARenameWithSpacesIsHyphenatedRatherThanRefused.
 func TestRenameMirrorDeclinesSilentlyWhenItIsNotClaudesGrammar(t *testing.T) {
 	for _, tc := range []struct {
 		name, draft string
 		room        bool
 	}{
 		{name: "a leading @who is not a target", draft: "/rename @sydney bob"},
-		{name: "a multi-word name Wake cannot hold", draft: "/rename bob smith"},
 		{name: "the exact word, not a folded one", draft: "/RENAME bob"},
 		{name: "the room is not one conversation", draft: "/rename bob", room: true},
 	} {
@@ -435,6 +435,53 @@ func TestRenameMirrorDeclinesSilentlyWhenItIsNotClaudesGrammar(t *testing.T) {
 			}
 			if got := shown(a); strings.Contains(got, nameUsage) || strings.Contains(got, noNameTarget) {
 				t.Errorf("%q leaked a /name refusal over a /rename that just passes through:\n%s", tc.draft, got)
+			}
+		})
+	}
+}
+
+// A name typed with spaces is folded to hyphens rather than refused, so the
+// one-word address Wake stores is what the operator meant - `/name foo bar` and
+// `/rename foo bar` both land `foo-bar`. Whitespace was always going to be
+// refused by normalizeName's character set; hyphenating it here is the owner's
+// chosen fix for the reported footgun where `/rename foo bar` renamed claude's
+// own session but silently moved nothing in Wake. A run of spaces collapses to
+// one hyphen, and `/name`'s `@who` target is unaffected because the slug is
+// taken from the value, not the handle.
+func TestARenameWithSpacesIsHyphenatedRatherThanRefused(t *testing.T) {
+	for _, tc := range []struct {
+		name, draft, session, text string
+		room                       bool
+	}{
+		{name: "/name in a conversation", draft: "/name foo bar", session: "s1", text: "foo-bar"},
+		{name: "/name collapses a run of spaces", draft: "/name foo   bar baz", session: "s1", text: "foo-bar-baz"},
+		{name: "/name @who keeps the target", draft: "/name @sydney foo bar", session: "s2", text: "foo-bar", room: true},
+		{name: "/rename in a conversation", draft: "/rename foo bar", session: "s1", text: "foo-bar"},
+		{name: "@who /rename from the room", draft: "@sydney /rename foo bar", session: "s2", text: "foo-bar", room: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fresh(t)
+			a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(200, 40)
+			if tc.room {
+				a = a.showRoom()
+			}
+
+			_, cmd := typeAndSubmit(a, tc.draft)
+			found := false
+			for _, f := range batchFrames(t, a, cmd) {
+				if f.Kind != rpc.FrameRename {
+					continue
+				}
+				found = true
+				if f.SessionID != tc.session {
+					t.Errorf("%q renamed %q, want %q", tc.draft, f.SessionID, tc.session)
+				}
+				if f.Text != tc.text {
+					t.Errorf("%q asked for %q, want the hyphenated %q", tc.draft, f.Text, tc.text)
+				}
+			}
+			if !found {
+				t.Fatalf("%q wrote no FrameRename: a name with spaces is hyphenated, not refused", tc.draft)
 			}
 		})
 	}
