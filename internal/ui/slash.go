@@ -354,6 +354,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	quitCommand:        App.quitAgent,
 	boardCommand:       App.openBoard,
 	loginCommand:       App.login,
+	reauthCommand:      App.reauth,
 }
 
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
@@ -557,7 +558,7 @@ func (a App) mentionCommand(who, text string) (App, tea.Cmd, bool) {
 //
 // Named for its half of the overload rather than `commandCount`, which this
 // package's tests already use for how many goroutines one tea.Cmd costs.
-const wakeCommandCount = 12
+const wakeCommandCount = 13
 
 // slash routes one draft, reporting whether Wake took it.
 //
@@ -659,6 +660,12 @@ func (a App) renameMirrorArg(agent Agent, text string) tea.Cmd {
 // working headless feature. Wake shows status and hands `claude auth login` over;
 // it never runs the login, which is the no-PTY non-negotiable. See authapp.go.
 const loginCommand = "login"
+
+// reauthCommand recovers the sessions a shared-login expiry knocked out. The
+// corpus advertises no `reauth` (nor `auth`), so Wake owns it on `login`'s own
+// evidence - TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising. See
+// reauth.go.
+const reauthCommand = "reauth"
 
 // adoptCommand is the room's half of session importing, and the word is a
 // finding rather than a preference.

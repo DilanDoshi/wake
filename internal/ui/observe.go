@@ -18,6 +18,15 @@ func (a App) observe(sessionID string, ev core.Event) App {
 		// transcript or the fleet. See ratelimit.go.
 		return a.rateLimited(ev)
 	}
+	if ev.Kind == core.KindAPIError {
+		// A turn that failed on the API is infrastructure, not the model
+		// speaking, so it never reaches the transcript as agent text: pop a
+		// notice and remember the session for /reauth. See apierror.go.
+		return a.apiErrored(sessionID, ev)
+	}
+	// A healthy turn clears any auth-failed mark, so /reauth never re-parks a
+	// session that has already recovered. Cheap: a no-op unless it was marked.
+	a = a.clearedAuthFailedOn(sessionID, ev)
 
 	// Read before the fold, which clears it on the turn end that belongs to the
 	// same turn.

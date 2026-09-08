@@ -334,6 +334,13 @@ type App struct {
 	parking  map[string]struct{}
 	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
 
+	// authFailed are sessions whose last turn failed on the API - an expired
+	// login, a rejected key, an overload (core.KindAPIError). observe marks each
+	// instead of letting the error render as agent speech; /reauth (reauth.go)
+	// restarts them in place. Copy-on-write, like quitting. A token expires for
+	// the whole fleet at once, so this is usually several ids together.
+	authFailed map[string]struct{}
+
 	// waking: asked to wake, not yet seen back. See wakeArrived.
 	waking map[string]struct{}
 

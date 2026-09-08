@@ -117,6 +117,29 @@ func TestASidechainLineIsDropped(t *testing.T) {
 	}
 }
 
+// A failed turn's synthetic frame is a type:"assistant" line on disk, so it must
+// be dropped rather than restored as the agent saying "Not logged in · Please run
+// /login" - the /resume that recovery drives re-reads exactly this. The disk key
+// is camelCase (isApiErrorMessage) where the live stream is snake_case, recorded
+// in testdata/transcript/api-error-auth.jsonl.
+func TestAnAPIErrorTranscriptLineIsDropped(t *testing.T) {
+	const line = `{"type":"assistant","isApiErrorMessage":true,"error":"authentication_failed","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Not logged in · Please run /login"}]}}`
+	events, err := DecodeTranscriptLine([]byte(line))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("an API-error line produced %d events: a failed turn's synthetic frame is not conversation content and must not restore as agent speech", len(events))
+	}
+
+	// The same line without the marker is ordinary assistant text and is kept, so
+	// the drop is about the marker rather than the "<synthetic>" model.
+	events, err = DecodeTranscriptLine([]byte(strings.Replace(line, `"isApiErrorMessage":true,`, "", 1)))
+	if err != nil || len(events) == 0 {
+		t.Errorf("the same line without isApiErrorMessage produced %d events (err=%v)", len(events), err)
+	}
+}
+
 // A malformed line is an error rather than a silent drop.
 func TestAMalformedTranscriptLineIsReported(t *testing.T) {
 	if _, err := DecodeTranscriptLine([]byte("{not json")); err == nil {

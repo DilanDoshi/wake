@@ -158,6 +158,15 @@ type wireFrame struct {
 	IsReplay    bool `json:"isReplay"`
 	IsSynthetic bool `json:"isSynthetic"`
 
+	// IsAPIErrorMessage marks a *synthetic* assistant frame the CLI writes when
+	// a turn fails on the API - an expired login, a rejected key, an overload -
+	// rather than a message the model produced. It is top-level, beside the
+	// message rather than inside it (the inner message.model is "<synthetic>").
+	// Without it the error text renders under the agent's name as if it spoke;
+	// see messageEvents and KindAPIError. Recorded 2026-09-07 in
+	// api-error-auth.jsonl (the not-logged-in variant of the fleet-wide 401).
+	IsAPIErrorMessage bool `json:"is_api_error_message"`
+
 	// The subagent dimension, and it is three fields rather than one. All
 	// three are top-level on an assistant or user frame the CLI forwarded
 	// from a subagent, and all three arrive together: measured over the
@@ -491,6 +500,52 @@ const (
 	blockTypeToolResult = "tool_result"
 	blockTypeImage      = "image"
 )
+
+// jsonString unquotes a JSON string, falling back to the raw bytes so a
+// shape we have not seen still reaches a human instead of vanishing.
+//
+// The fallback is for shapes that are genuinely unrecorded. It used to catch
+// a tool_result's array content as well, which was not unrecorded at all -
+// 10 of the 44 recorded results carry it - and printed a JSON literal in the
+// transcript. toolResultText handles that shape properly now, and this is
+// left to cover what is still unknown.
+func jsonString(raw json.RawMessage) string {
+	var s string
+	if err := json.Unmarshal(raw, &s); err == nil {
+		return s
+	}
+	return string(raw)
+}
+
+// apiErrorText pulls the human message out of a synthetic API-error frame's
+// message, whose content is a text-block array in the recording but may be a
+// bare string. Here beside the shapes it reads rather than in protocol.go,
+// which is at its size cap; a shape it does not recognise yields "" rather than
+// an error, the airlock's rule for a frame a future release may move.
+func apiErrorText(msg json.RawMessage) string {
+	if !isJSONObject(msg) {
+		return jsonString(msg)
+	}
+	var m wireMessage
+	if err := json.Unmarshal(msg, &m); err != nil {
+		return ""
+	}
+	if !isJSONArray(m.Content) {
+		return jsonString(m.Content)
+	}
+	var raws []json.RawMessage
+	if err := json.Unmarshal(m.Content, &raws); err != nil {
+		return ""
+	}
+	text := ""
+	for _, rb := range raws {
+		var b wireBlock
+		if err := json.Unmarshal(rb, &b); err == nil && b.Type == blockTypeText {
+			text += b.Text
+		}
+	}
+	return text
+}
 
 // The four streaming words Wake reads, out of the seven event types and five
 // delta types a stream_event can carry. Named for the reason the block types

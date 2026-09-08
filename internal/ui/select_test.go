@@ -315,7 +315,11 @@ func TestAFreshlyOpenedConversationCanBeSelectedAtOnce(t *testing.T) {
 // - the box's typed text *is* selectable with a menu open, which
 // TestAComposerSelectionWorksWhileAMenuIsPinnedAboveIt covers.
 func TestADragOnAMenuPinnedOverTheComposerTakesNothing(t *testing.T) {
-	a := splitApp(t, 200, 40, 40).withDraft("/re")
+	// "/res" so exactly one Wake verb (resume) matches: the "/resume" row is then
+	// the menu's top, which is what the fence below is measured against. A prefix
+	// that matches several (e.g. "/re" now also completes /reauth) puts a menu row
+	// above /resume and the proxy for "menu start" stops being the start.
+	a := splitApp(t, 200, 40, 40).withDraft("/res")
 	if !a.completionUp() {
 		t.Fatal("no menu is drawn, so this proves nothing about one")
 	}
