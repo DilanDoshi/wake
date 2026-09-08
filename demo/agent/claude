@@ -149,6 +149,24 @@ def say_text(text):
     })
 
 
+# Claude Code's own display names, keyed on the id a scenario spawns with. The
+# daemon reads the model and the effort back off this reply for the status bar.
+MODEL_NAMES = {"claude-opus-5": "Opus 5", "claude-sonnet-5": "Sonnet 5",
+               "claude-fable-5-1": "Fable 5.1", "claude-haiku-4-5-20251001": "Haiku 4.5"}
+
+
+def say_model_reply(sc):
+    """A bare `/model`, answered the way the CLI does: one assistant line and a
+    turn end, no model turn. The daemon sends one as an effort probe on every
+    init, absorbs the reply, and lets nothing of it reach a client - so a fake
+    that treated it as a turn put every agent's default line in the room."""
+    model = sc.get("model", "claude-opus-5")
+    say_text("Current model: %s (effort: %s)\nUsage: /model <name>. "
+             "Available: sonnet, opus, haiku, fable, best, sonnet[1m], opus[1m], "
+             "fable[1m], opusplan" % (MODEL_NAMES.get(model, model), sc.get("effort", "high")))
+    say_result(0)
+
+
 def say_tool(name, tool_input, tool_id=None):
     emit({
         "type": "assistant",
@@ -180,21 +198,44 @@ def say_tool_result(tool_id, content):
     })
 
 
+# The context window the status bar draws `ctx:NN%` against, and a running
+# input level that grows a little each turn so the figure falls over a
+# conversation the way a real one does. Opus 5's window is 200k; the level is
+# set once in main() off the scenario's model. A probe turn (0 output tokens)
+# adds nothing — it is a $0 no-op and must not move the figure.
+CONTEXT = {"model": "claude-opus-5", "window": 200_000, "used": 26_000}
+
+
 def say_result(output_tokens=1180):
     """End a turn. Per-turn, never per-process — one session emits many."""
-    emit({
+    usage = {
+        "input_tokens": 0,
+        "cache_creation_input_tokens": 0,
+        "cache_read_input_tokens": 0,
+        "output_tokens": output_tokens,
+    }
+    frame = {
         "type": "result",
         "subtype": "success",
         "is_error": False,
         "session_id": SID,
         "result": "done",
-        "usage": {
-            "input_tokens": 0,
+        "usage": usage,
+    }
+    # A real result carries the turn's final API call in usage.iterations[-1]
+    # and the window in modelUsage[model].contextWindow — resultFacts reads
+    # exactly those. A no-op turn (the /model probe) has neither, so the status
+    # bar keeps the last real figure rather than resetting to 100%.
+    if output_tokens > 0:
+        CONTEXT["used"] = min(CONTEXT["used"] + 5200, CONTEXT["window"] - 8000)
+        usage["input_tokens"] = CONTEXT["used"]
+        usage["iterations"] = [{
+            "input_tokens": CONTEXT["used"],
             "cache_creation_input_tokens": 0,
             "cache_read_input_tokens": 0,
-            "output_tokens": output_tokens,
-        },
-    })
+        }]
+        frame["modelUsage"] = {CONTEXT["model"]: {"contextWindow": CONTEXT["window"]}}
+    emit(frame)
 
 
 def say_aborted_result():
@@ -535,6 +576,10 @@ def pick_turn(sc, text, used):
 
 def main():
     sc = load_scenario()
+    CONTEXT["model"] = sc.get("model", "claude-opus-5")
+    # A busier session starts fuller, so the fleet's ctx figures differ on
+    # camera rather than all reading the same number.
+    CONTEXT["used"] = 20_000 + (sum(ord(c) for c in ROLE) % 9) * 6_000
     say_init(sc)
 
     threading.Thread(target=reader, daemon=True).start()
@@ -569,6 +614,9 @@ def main():
         if kind != "turn":
             continue
         interrupted.clear()
+        if payload.strip() == "/model":
+            say_model_reply(sc)
+            continue
         t = pick_turn(sc, payload, used)
         ok = run_steps(t.get("steps", []))
         finish(ok, t.get("tokens", 1180))
