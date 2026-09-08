@@ -222,19 +222,41 @@ func TestGroupchatFilterBareReportsAndRejectsBadArg(t *testing.T) {
 	}
 }
 
+// A live event arriving while ⌃A has widened a narrowed room is admitted, and a
+// re-narrow hides the next one - the steady-state streaming path (appendLine's
+// own filter site) that the tests above skip by appending everything before they
+// toggle. Guards against appendLine reverting to the raw focus.
+func TestWidenedRoomAdmitsLiveEventsThenHidesThemAgain(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withAgents("john", "iris")
+	iris := idOfAgentNamed(t, a, "iris")
+
+	a = a.withDraft("@john ")                          // narrow to john (default on)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlA}) // ⌃A widens
+	a = a.applyFrame(frameText(iris, "iris live while widened"))
+	if out := shown(a); !strings.Contains(out, "iris live while widened") {
+		t.Fatalf("a widened room hid a live event from a non-addressed agent:\n%s", out)
+	}
+
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlA}) // ⌃A re-narrows
+	a = a.applyFrame(frameText(iris, "iris live while narrowed"))
+	if out := shown(a); strings.Contains(out, "iris live while narrowed") {
+		t.Fatalf("a re-narrowed room admitted a live event from a non-addressed agent:\n%s", out)
+	}
+}
+
 // ⌃A is a room view control: it refuses from a DM pane and refuses in the room
 // when nothing has narrowed it, naming what to do instead.
 func TestCtrlARefusedWithoutARoomTarget(t *testing.T) {
 	// No lone @name resolved: nothing to widen.
 	a := newRoomApp(t).withSize(200, 40).withAgents("john")
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlA})
+	pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlA})
 	if notice.Count(roomFilterNoTarget) != 1 {
 		t.Fatalf("⌃A with no target did not refuse (count=%d)", notice.Count(roomFilterNoTarget))
 	}
 
 	// From a DM pane, ⌃A is not a key this surface owns.
 	d := dmApp(newRecorder(t), Stream{}, "s1", "john").withSize(200, 40)
-	d, _ = pressKey(d, tea.KeyMsg{Type: tea.KeyCtrlA})
+	pressKey(d, tea.KeyMsg{Type: tea.KeyCtrlA})
 	if notice.Count(roomFilterDMOnly) != 1 {
 		t.Fatalf("⌃A from a DM did not refuse (count=%d)", notice.Count(roomFilterDMOnly))
 	}
