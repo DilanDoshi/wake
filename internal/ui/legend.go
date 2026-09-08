@@ -72,6 +72,7 @@ var legendEntries = []legendEntry{
 	{"⌃F", "fork"},
 	{"⌃Q", "quit & park all"},
 	{"⌃T", "mention mode"},
+	{"⌃A", "show all"},
 }
 
 const (
