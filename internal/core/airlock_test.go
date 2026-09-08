@@ -493,7 +493,6 @@ var notNamedByTheAirlock = map[string]string{
 	"run_in_background": "unverified per findings §11; nothing may key on it",
 
 	// result-frame fields nothing decodes.
-	"num_turns":          "result field, not decoded",
 	"total_cost_usd":     "result field, not decoded",
 	"terminal_reason":    "result field, not decoded",
 	"permission_denials": "result field, not decoded",

@@ -73,7 +73,7 @@ func decodeLine(line []byte) ([]Event, error) {
 	case "system":
 		return one(systemEvent(f, raw)), nil
 	case "result":
-		return one(Event{Kind: KindTurnEnd, SessionID: f.SessionID, Text: f.Result, Raw: raw, Session: resultFacts(f)}), nil
+		return one(Event{Kind: KindTurnEnd, SessionID: f.SessionID, Text: f.Result, Raw: raw, Session: resultFacts(f), LocalCommand: f.NumTurns != nil && *f.NumTurns == 0}), nil
 	case "control_request":
 		// Note f.Request, not f.Subtype: see wireFrame.RequestID.
 		return one(controlRequestEvent(f, raw)), nil

@@ -96,13 +96,24 @@ func (a *agent) decProbe() {
 // it safe for a probe to be armed on another goroutine: a previous turn's frames
 // still draining here do not match, so they pass through untouched. Each reply
 // arms swallowTurnEnd, which carries the window one frame further so the probe
-// turn's end is swallowed too and decrements the counter - so two probes in
-// flight suppress two replies, not one. The agent's state never moves for a
-// question the operator did not ask.
+// turn's own end is swallowed too and decrements the counter - so two probes in
+// flight suppress two replies, not one. The end is swallowed only when it is a
+// local command (num_turns==0, Event.LocalCommand): the arm is content-matched
+// and a real turn's prose can begin "Current model:", but only the probe's own
+// turn ran no inference, so a look-alike real turn's end passes through. The
+// agent's state never moves for a question the operator did not ask.
 func (a *agent) absorbProbe(ev core.Event) (suppress, publish bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if a.pendingProbes > 0 && ev.Kind == core.KindAssistantText && core.IsModelReply(ev.Text) {
+		// Content-matched, so a real turn whose prose merely begins "Current
+		// model:" also arms and has this block suppressed (and, if it carries an
+		// (effort: …) clause, records a level that the real probe's reply then
+		// corrects). That mis-suppression of the block is pre-existing and not
+		// what the LocalCommand gate below addresses - that gate protects only
+		// the turn *end*, so a look-alike real turn keeps its end even though it
+		// loses this one block.
+		//
 		// Armed whether or not the level parses. Arming only inside the ok
 		// branch below used to leave a reply this build cannot read as neither
 		// - not published, and its window never closed - so pendingProbes
@@ -124,19 +135,30 @@ func (a *agent) absorbProbe(ev core.Event) (suppress, publish bool) {
 		}
 		return true, false
 	}
-	// The first turn end after a reply is the probe's own, always: tryProbe
-	// only ever queues a probe while idle, and stdin is FIFO, so a real send
-	// landing right behind the probe emits its own end only after the probe's.
-	// So this swallows it whatever owed says - keying it on !a.owed instead let
-	// a racing send's owed leak the probe's own end as a phantom turn end and
-	// then eat the real turn's end under the still-armed window, reporting the
-	// agent idle for a turn it was working.
+	// Swallow the probe's own turn end. The arm above fires on any
+	// "Current model:" assistant frame, which a real turn's prose can match,
+	// so the end is swallowed only when it is a local command (num_turns==0)
+	// - the shape of the bare /model the daemon sends (bare-model.jsonl) and of
+	// no real inference turn. A real turn whose text merely began "Current
+	// model:" disarms here and passes through, and the actual probe's reply and
+	// end follow and re-arm. Keying this on !a.owed instead ate a real turn's
+	// end whenever a racing send had set owed, and keying it on the arm alone
+	// ate the end of any real turn that started "Current model:".
+	//
+	// pendingProbes decrements only here, so it relies on the probe's own end
+	// being a local command; that is the recorded shape of a bare /model, and
+	// were it ever to run a turn the window would disarm without draining. An
+	// operator's own num_turns==0 passthrough (/model <arg>, /clear) that armed
+	// on a "Current model:" prefix would also be swallowed here, the same as it
+	// was before this gate - a pre-existing limit of content-matched arming.
 	if a.swallowTurnEnd && ev.Kind == core.KindTurnEnd {
 		a.swallowTurnEnd = false
-		if a.pendingProbes > 0 {
-			a.pendingProbes--
+		if ev.LocalCommand {
+			if a.pendingProbes > 0 {
+				a.pendingProbes--
+			}
+			return true, false
 		}
-		return true, false
 	}
 	return false, false
 }

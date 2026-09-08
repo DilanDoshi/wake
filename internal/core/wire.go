@@ -46,6 +46,13 @@ type wireFrame struct {
 	// is one turn ending, not the process exiting.
 	Result string `json:"result"`
 
+	// NumTurns is how many model turns the result accounts for. Zero for a
+	// local CLI command that ran no inference - a bare /model or /effort - and
+	// >=1 for any real turn. A pointer so an absent field (a synthetic fixture
+	// that omits it) is told apart from a real zero. Read only to mark a result
+	// as Claude's local-command reply; see Event.LocalCommand and absorbProbe.
+	NumTurns *int `json:"num_turns"`
+
 	// control_request frames carry no session_id - they, control_response and
 	// control_cancel_request are the only frames in the corpus that do not -
 	// so RequestID is the sole correlator. They also carry no top-level

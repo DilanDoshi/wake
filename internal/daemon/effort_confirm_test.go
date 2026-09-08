@@ -118,8 +118,9 @@ func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 		t.Fatalf("model not recorded: %q", a.confirmedModel)
 	}
 
-	// The probe turn's end: suppressed, no second publish, window closed.
-	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); !suppress || publish {
+	// The probe turn's end: a local command (num_turns==0), so suppressed, no
+	// second publish, window closed.
+	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress || publish {
 		t.Fatalf("the probe turn end: suppress=%v publish=%v, want true/false", suppress, publish)
 	}
 
@@ -141,7 +142,7 @@ func TestAbsorbProbeSuppressesBothOfTwoOverlappingProbes(t *testing.T) {
 		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: " + level + ")"}); !suppress {
 			t.Fatalf("a probe reply (effort %s) leaked to clients", level)
 		}
-		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); !suppress {
+		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress {
 			t.Fatalf("a probe turn end (effort %s) leaked to clients", level)
 		}
 	}
@@ -239,13 +240,12 @@ func TestWantProbeFiresAtOnceWhenAlreadyIdle(t *testing.T) {
 	}
 }
 
-// The first turn end after a probe's reply is always the probe's own, and is
-// swallowed whether or not a real turn has since marked owed. The idle gate
-// means a probe is only ever queued when no real turn is in flight, and stdin
-// is FIFO, so a real send landing right behind the probe ("world") produces its
-// own end only *after* the probe's. Keying the swallow on !owed instead leaked
-// the probe's own result as a phantom turn end - which cleared owed - and then
-// ate the real turn's end under the still-armed window, reporting the agent
+// The probe's own end is swallowed whether or not a real turn has since marked
+// owed, because it is keyed on the end being a local command (num_turns==0), not
+// on owed. A real send landing right behind the probe ("world") sets owed before
+// the probe's near-instant reply is read; keying the swallow on !owed instead
+// leaked the probe's own result as a phantom turn end - which cleared owed - and
+// then ate the real turn's end under the still-armed window, reporting the agent
 // idle for a whole turn it was actually working.
 func TestAbsorbProbeSwallowsTheProbesOwnEndEvenWhenARealTurnHasStarted(t *testing.T) {
 	a := effortAgent(t)
@@ -259,9 +259,9 @@ func TestAbsorbProbeSwallowsTheProbesOwnEndEvenWhenARealTurnHasStarted(t *testin
 	// the probe's near-instant reply was read off stdout.
 	a.owed = true
 
-	// The probe's OWN result is the next turn end (FIFO), and must be swallowed
-	// even though a real turn is now owed - not leaked as a phantom end.
-	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the probe's own result"}); !suppress || publish {
+	// The probe's OWN result (a local command, num_turns==0) is the next turn
+	// end, and must be swallowed even though a real turn is now owed.
+	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the probe's own result", LocalCommand: true}); !suppress || publish {
 		t.Fatalf("the probe's own end was not swallowed while a real turn was owed: suppress=%v publish=%v", suppress, publish)
 	}
 	if a.confirmedEffort != core.EffortHigh {
@@ -275,6 +275,41 @@ func TestAbsorbProbeSwallowsTheProbesOwnEndEvenWhenARealTurnHasStarted(t *testin
 	// clients rather than being eaten.
 	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the real turn's own result"}); suppress {
 		t.Fatal("the real turn's own end was eaten after the probe's window had closed")
+	}
+}
+
+// A real turn whose assistant text coincidentally begins "Current model:" arms
+// the suppression window (the arm is content-matched and cannot tell it from a
+// probe reply), but its own end is a real inference turn (num_turns>=1), so it
+// must NOT be swallowed - only a local-command end (the probe's own) is. The
+// real turn's end reaches clients, and the actual probe that follows still
+// confirms cleanly. Keying the swallow on the arm alone ate this real end.
+func TestAbsorbProbeDoesNotEatARealTurnThatLooksLikeAProbeReply(t *testing.T) {
+	a := effortAgent(t)
+	a.incProbe() // a probe is in flight behind this real turn
+
+	// The real turn's assistant frame happens to start "Current model:", so it
+	// arms the window and is (pre-existing) suppressed.
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: is the phrase this agent chose to open with"}); !suppress {
+		t.Fatal("a Current-model-shaped assistant frame did not arm the window")
+	}
+	a.owed = true // it is a real inference turn, in flight
+
+	// The real turn's own end (num_turns>=1, not a local command) must pass
+	// through - eating it was the regression removing the !owed gate introduced.
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the real turn's end", LocalCommand: false}); suppress {
+		t.Fatal("a real turn's own end was swallowed because its text looked like a probe reply")
+	}
+
+	// The actual probe's reply and its local-command end still confirm cleanly.
+	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)"}); !suppress || !publish {
+		t.Fatalf("the real probe reply did not confirm after the look-alike: suppress=%v publish=%v", suppress, publish)
+	}
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "probe end", LocalCommand: true}); !suppress {
+		t.Fatal("the probe's own local-command end was not swallowed")
+	}
+	if a.confirmedEffort != core.EffortMax || a.pendingProbes != 0 {
+		t.Fatalf("probe did not confirm/close after the look-alike: effort=%q pending=%d", a.confirmedEffort, a.pendingProbes)
 	}
 }
 
@@ -298,7 +333,7 @@ func TestAbsorbProbeClosesTheWindowOnAnUnrecognizedReply(t *testing.T) {
 		t.Fatalf("an unrecognized reply recorded a level anyway: %q", a.confirmedEffort)
 	}
 
-	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); !suppress {
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress {
 		t.Fatal("the probe's own turn end was not suppressed")
 	}
 	if a.pendingProbes != 0 {
