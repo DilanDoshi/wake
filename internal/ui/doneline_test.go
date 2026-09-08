@@ -39,6 +39,74 @@ func TestDonePoolIsWellFormed(t *testing.T) {
 	}
 }
 
+// An agent that dispatched a subagent still running is not "done", so its DM
+// must not draw the `✻ … done` line while that subagent works. fold keeps a
+// subagent's own frames from clearing the parent's doneAt (they are not the
+// parent's turn), so a background subagent left the parent showing "done" while
+// edits streamed under it - the reported freeze. WithRunningSub suppresses it.
+func TestTheDoneLineIsSuppressedWhileASubagentRuns(t *testing.T) {
+	d := NewDM("s1", "alex")
+	d.Agent = idleDoneAgent()
+	if !d.showsDone() {
+		t.Fatal("baseline: an idle agent with a finished turn should show the done line")
+	}
+
+	d = d.WithRunningSub(true)
+	if d.showsDone() {
+		t.Error("the done line showed while a subagent was still running under this agent")
+	}
+
+	d = d.WithRunningSub(false)
+	if !d.showsDone() {
+		t.Error("the done line stayed suppressed after the subagent finished")
+	}
+}
+
+// End to end over real frame shapes: a witnessed turn ends (the working→idle
+// edge captures doneAt), a background subagent starts and the done line goes,
+// and once it ends the line returns with doneAt intact - the subagent's frames
+// never touched it. Drives the same report/started/ended frames the airlock
+// decodes, so it is the recorded shape rather than WithRunningSub(bool) alone.
+func TestARunningSubagentSuppressesTheDoneLineThenItReturns(t *testing.T) {
+	f := NewFleet().WithStatus(report("s1", "alex", rpc.StateIdle)) // a watched start needs a prior state
+	f = f.WithStatus(report("s1", "alex", rpc.StateWorking))
+	f = f.WithStatus(report("s1", "alex", rpc.StateIdle)) // turn ends, doneAt captured
+	drawn := func() DM {
+		ag, _ := f.Agent("s1")
+		d := NewDM("s1", "alex")
+		d.Agent = ag
+		return d.WithRunningSub(len(f.RunningTasks("s1")) > 0)
+	}
+	if !drawn().showsDone() {
+		t.Fatal("baseline: an idle finished turn with no subagent should show the done line")
+	}
+
+	f, _ = f.Observe(started("a1", "toolu_1", "Audit the diff", "general-purpose", core.TaskAgent), "s1")
+	if drawn().showsDone() {
+		t.Error("the done line showed while a background subagent was running")
+	}
+
+	f, _ = f.Observe(ended("a1", core.TaskDone), "s1")
+	if d := drawn(); !d.showsDone() {
+		t.Error("the done line did not return after the subagent finished")
+	} else if d.Agent.doneAt.IsZero() {
+		t.Error("doneAt was lost across the subagent - the returned line would be blank")
+	}
+}
+
+// The other half of the wiring: dmFor marks the pane from Fleet.RunningTasks, so
+// the showsDone gate above actually fires in the drawn pane. Without this the
+// suppression is a field nothing sets.
+func TestDmForMarksAnAgentWithARunningSubagent(t *testing.T) {
+	a := dispatching(t) // s1 has two subagents still running
+	if !a.dmFor("s1").subRunning {
+		t.Error("dmFor did not mark s1 as having a running subagent")
+	}
+	if a.dmFor("nobody").subRunning {
+		t.Error("an agent with no running subagent was marked as having one")
+	}
+}
+
 func TestDoneLineReadsLikeTheScreenshot(t *testing.T) {
 	started := time.Date(2026, 8, 28, 18, 46, 1, 0, time.Local)
 	done := started.Add(1*time.Minute + 59*time.Second)

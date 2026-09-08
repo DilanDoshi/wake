@@ -46,8 +46,15 @@ func (d DM) heartbeat() string {
 // still owed a turn. And gated to a quiet pane: a live streaming preview is a new
 // turn in flight (one the daemon reports idle, so State never returns to working
 // - see notDone), and the summary must not draw over the sentence being written.
+// And gated to no running subagent: fold keeps a subagent's frames from clearing
+// the parent's doneAt (they are not the parent's turn), so a background subagent
+// left the parent showing `✻ … done` while it worked on - subRunning, set by
+// dmFor off Fleet.RunningTasks, closes that. The trade: a task row that never
+// gets its terminal frame (dropped in a gap, or a subagent-failure path nothing
+// records) keeps the line hidden until the agent's next turn or a park - a stuck
+// row was only a phantom sidebar entry before and now costs the done line too.
 func (d DM) showsDone() bool {
-	return d.Agent.State == rpc.StateIdle && !d.Agent.doneAt.IsZero() && d.partial.view == ""
+	return d.Agent.State == rpc.StateIdle && !d.Agent.doneAt.IsZero() && d.partial.view == "" && !d.subRunning
 }
 
 // hasBeat is whether the pane draws the line above the composer at all - the one
