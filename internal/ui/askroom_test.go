@@ -133,6 +133,56 @@ func TestAPlanDenyLeavesNoResolutionLineInTheRoom(t *testing.T) {
 	}
 }
 
+// A replay redelivering an ask this client also got live must announce it in
+// the room exactly once - not nought, not twice. The reattach shape: the
+// blocked session's seed report carries its RequestIDs (a daemon never reports
+// blocked without them), so Cards.Reconcile builds a bare stand-in card before
+// the replay arrives; then the daemon subscribes the client before replaying,
+// so the full ask can arrive both live and in the replay. Keying the room dedup
+// on the stand-in card would suppress the one real announce (0); keying it on
+// nothing would double it (2). roomAsked - set only by a real room append -
+// gives exactly 1.
+func TestARedeliveredAskIsAnnouncedInTheRoomExactlyOnce(t *testing.T) {
+	ask := core.Event{
+		Kind: core.KindPermissionRequest, RequestID: "r1", Ask: core.AskPermission,
+		Tool: &core.ToolCall{Name: "Bash", Display: "rm -rf build/"},
+	}
+	frame := rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &ask}
+	a := newRoomApp(t).withSize(200, 40).withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateBlocked, Tool: "Bash", RequestIDs: []string{"r1"}},
+	)
+	if _, ok := a.cards.For("s2"); !ok {
+		t.Fatal("the seed report built no stand-in card, so this is not the reattach case the fix is about")
+	}
+	a = a.applyFrame(frame).applyFrame(frame) // the replay, and a live delivery of the same ask
+
+	out := ansi.Strip(a.room.View(roomWidth, 40))
+	if n := strings.Count(out, "Bash"); n != 1 {
+		t.Fatalf("the room announced the ask %d times, want 1 (0 = over-suppressed by the stand-in, 2 = doubled):\n%s", n, out)
+	}
+}
+
+// roomAsked is reconciled against each report like Cards, so it does not grow
+// for the life of the process: once a report stops naming an ask outstanding,
+// its announcement record is dropped.
+func TestRoomAskedIsPrunedWhenTheAskLeavesTheReport(t *testing.T) {
+	ask := core.Event{
+		Kind: core.KindPermissionRequest, RequestID: "r1", Ask: core.AskPermission,
+		Tool: &core.ToolCall{Name: "Bash", Display: "rm -rf build/"},
+	}
+	a := newRoomApp(t).withSize(200, 40).
+		withRoster(rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateBlocked, RequestIDs: []string{"r1"}}).
+		applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &ask})
+	if len(a.roomAsked) != 1 {
+		t.Fatalf("after announcing, roomAsked has %d entries, want 1", len(a.roomAsked))
+	}
+	// The ask is answered/withdrawn, so the next report no longer names it.
+	a = a.withRoster(rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateIdle})
+	if len(a.roomAsked) != 0 {
+		t.Fatalf("roomAsked kept %d entries after the ask left the report - it grows unbounded", len(a.roomAsked))
+	}
+}
+
 // A permission ask keeps its command in the room, because "wants Bash" is not
 // what is being asked about.
 func TestTheRoomNamesWhatAPermissionAskWants(t *testing.T) {

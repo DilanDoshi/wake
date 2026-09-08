@@ -1,13 +1,15 @@
-// A client that attaches after an ask is already outstanding - a reattach, a
-// second window, or one that missed the live event to ring eviction - used to
-// learn only rpc.SessionStatus.RequestIDs: an id and a tool name, nothing
-// about what the ask actually wants. internal/ui.Cards.Reconcile could build
-// only a bare permission stand-in from that, and its Allow is a bare
+// A client that attaches after an ask is already outstanding - a reattach or a
+// second window - used to learn only rpc.SessionStatus.RequestIDs: an id and a
+// tool name, nothing about what the ask actually wants. internal/ui.Cards.Reconcile
+// could build only a bare permission stand-in from that, and its Allow is a bare
 // FrameAllow - silently wrong for a question (see internal/ui/cardreplay_test.go).
 //
-// replayPendingAsks closes it: a newly accepted connection is handed every
-// outstanding ask as the ordinary rpc.FrameEvent a live client would have
-// gotten, before it is even subscribed to broadcast.
+// replayPendingAsks closes it for the *at-attach* case: a newly accepted
+// connection is handed every outstanding ask as the ordinary rpc.FrameEvent a
+// live client would have gotten, right after it is subscribed to broadcast so
+// an ask racing the replay is delivered rather than missed. It does not cover an
+// ask a still-attached client later drops from its own queue - that client is
+// not re-handed the fleet's asks.
 
 package daemon
 
