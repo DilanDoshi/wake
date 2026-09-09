@@ -106,16 +106,24 @@ func (a App) renameAgent(arg string) (App, tea.Cmd) {
 	if !ok {
 		return a, nil
 	}
-	if len(strings.Fields(to)) != 1 {
-		// A name is one word by construction - normalizeName admits no
-		// whitespace - so two is a shape this does not read rather than a name
-		// the daemon would refuse with a worse sentence. A label is prose and
-		// gets no such check, which is the whole of why these are two verbs.
-		notice.Report("%s", nameUsage)
-		return a, nil
-	}
 	a = a.clearDraft()
-	return a, a.renameTo(agent, to)
+	return a, a.renameTo(agent, hyphenateName(to))
+}
+
+// hyphenateName folds internal whitespace in a requested name into single
+// hyphens, so a name a person types with spaces becomes the one-word address
+// Wake stores - `/name foo bar` and `/rename foo bar` both land `foo-bar`.
+//
+// Whitespace was always going to be refused: normalizeName's character set
+// admits none, so a spaced name used to be a dead end (the `/name` guard said so
+// with a usage line; the `/rename` mirror declined it in silence). Hyphenating
+// it is the owner's chosen fix - the daemon stays the authority on every other
+// rule, this only spares the operator the one character it was certain to reject.
+// strings.Fields collapses any run of whitespace, so "foo   bar" is one hyphen
+// too, and a single word is returned unchanged. A label is prose and is never
+// hyphenated, which is the whole of why these are two verbs.
+func hyphenateName(name string) string {
+	return strings.Join(strings.Fields(name), "-")
 }
 
 // labelAgent says what one agent is working on.
