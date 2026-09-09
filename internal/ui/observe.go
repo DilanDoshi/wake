@@ -4,7 +4,10 @@ package ui
 // DM gets, and the events this model produces for itself. Split from app.go,
 // which keeps the connection, the struct and the Update loop.
 
-import "github.com/DilanDoshi/wake/internal/core"
+import (
+	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
+)
 
 // observe folds one agent's event: what it does to the fleet, what the room
 // draws for it, and what an open DM gets whether the room wanted it or not.
@@ -77,12 +80,23 @@ func (a App) observe(sessionID string, ev core.Event) App {
 			if e.Kind != core.KindPermissionRequest {
 				continue
 			}
+			// A re-delivered ask - the daemon replaying at attach one this
+			// client also got live in the subscribe-then-replay window - is
+			// already in the room. The card dedups on (AgentID, RequestID); the
+			// room line would not, so a second "needs you" would appear. Keyed
+			// on what the room has actually announced, *not* on whether a card
+			// exists: a Cards.Reconcile stand-in from a report's RequestIDs is a
+			// card with no room line, so keying on the card would suppress the
+			// one announce the canonical reattach does have.
+			if _, announced := a.roomAsked[[2]string{sessionID, e.RequestID}]; announced {
+				continue
+			}
 			// And the room says so, as well as the card - the card is the one
 			// surface that *answers* (Cards.Undrawn), and this is the record
 			// that it happened. Not gated on inDM: that rule keeps a private
 			// conversation private, and an agent that has stopped and is
 			// waiting is the room's own filter rather than an exception to it.
-			a = a.withRoom(a.room.Append(e, agent))
+			a = a.markRoomAsked(sessionID, e.RequestID).withRoom(a.room.Append(e, agent))
 		case core.KindCrossSession:
 			// A peer's message, attributed to the sender rather than the
 			// receiving session (crossSpeaker resolves FromName), and not held by
@@ -108,6 +122,45 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	}
 	a = a.foldBoard(sessionID, ev)
 	return a
+}
+
+// markRoomAsked records that the room has announced a permission ask, so a
+// re-delivered one (a replay of an ask also seen live) draws no second line.
+// Copy-on-write like quitting; pruneRoomAsked retires an entry once its ask is
+// no longer outstanding, so the set stays bounded rather than growing for the
+// life of the process.
+func (a App) markRoomAsked(sessionID, requestID string) App {
+	next := make(map[[2]string]struct{}, len(a.roomAsked)+1)
+	for k := range a.roomAsked {
+		next[k] = struct{}{}
+	}
+	next[[2]string{sessionID, requestID}] = struct{}{}
+	a.roomAsked = next
+	return a
+}
+
+// pruneRoomAsked drops the announcement record of any ask the report no longer
+// names outstanding - the same reconciliation Cards.Reconcile does on the same
+// frame, so roomAsked tracks the fleet's live asks rather than every one ever
+// raised. Safe because re-delivery of an ask (replay or the attach race) only
+// happens while it is outstanding, so a retired entry is never needed again.
+func pruneRoomAsked(asked map[[2]string]struct{}, st *rpc.Status) map[[2]string]struct{} {
+	if len(asked) == 0 {
+		return asked
+	}
+	live := make(map[[2]string]struct{}, len(asked))
+	for _, s := range st.Sessions {
+		for _, id := range s.RequestIDs {
+			live[[2]string{s.ID, id}] = struct{}{}
+		}
+	}
+	next := make(map[[2]string]struct{}, len(live))
+	for k := range asked {
+		if _, ok := live[k]; ok {
+			next[k] = struct{}{}
+		}
+	}
+	return next
 }
 
 // replayedUserEcho reports a replayed user frame the live DM feed drops.

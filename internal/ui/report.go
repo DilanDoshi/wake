@@ -42,6 +42,9 @@ func (a App) applyStatus(st *rpc.Status) App {
 	// names that this client never saw arrived while it was detached. See
 	// Cards.Reconcile.
 	a.cards = a.cards.Reconcile(st)
+	// The room's announcement record is reconciled with it, so it retires an ask
+	// the same moment the card does and stays bounded. See pruneRoomAsked.
+	a.roomAsked = pruneRoomAsked(a.roomAsked, st)
 	// A report is exactly when this session's state can have moved out from
 	// under an open rewind picker too - Cards.Reconcile's own reason, one
 	// picker over. See rewind.go's reconcileRewind, and the adversarial

@@ -89,13 +89,11 @@ var silenceLimit = defaultSilenceLimit
 type ask struct {
 	id string
 
-	// choice marks an ask whose answer has to ride inside the allow -
-	// core.AskChoice. It is false for an ordinary permission ask and false for
-	// a plan approval, and the second of those is the one worth stating: a
-	// plan ask also demands a human, and a bare allow is its complete and
-	// correct answer, so keying this on "requires a human" instead would fire
-	// on every plan an operator ever approves.
-	choice bool
+	// event is the KindPermissionRequest this ask arrived as, retained so a
+	// late-attaching client can be handed the same event a live one got (see
+	// pendingAskFrames) rather than only rpc.SessionStatus.RequestIDs, from
+	// which Cards.Reconcile can build only a bare permission stand-in.
+	event core.Event
 }
 
 // agent is one core.Session plus everything the daemon knows about it.
@@ -397,11 +395,9 @@ func (a *agent) observe(ev core.Event) {
 		// after the event went past can still find every outstanding ask and
 		// settle it - a session can be blocked on more than one at once.
 		//
-		// Ask is kept with it because it stops being knowable the moment this
-		// event is past: the answer frame that comes back names a request id
-		// and nothing else about what it is answering. A duplicate id is not
-		// appended twice, so a reattach's replay cannot double an ask.
-		a.addPending(ev.RequestID, ev.Ask == core.AskChoice)
+		// The whole event is kept, not just the id - see ask.event. A
+		// duplicate id is not appended twice.
+		a.addPending(ev)
 	case core.KindRequestWithdrawn:
 		// Claude has retired an ask nobody answered - an interrupt landing
 		// on one, in every recording there is. Answering it now does
@@ -454,16 +450,16 @@ func (a *agent) noteSent() {
 // A duplicate id is not appended twice: a reattaching client's replay can
 // deliver the same ask as an event a second time, and a doubled ask would keep
 // the agent blocked after its one answer took only the first copy down.
-func (a *agent) addPending(id string, choice bool) {
-	if id == "" {
+func (a *agent) addPending(ev core.Event) {
+	if ev.RequestID == "" {
 		return
 	}
 	for _, p := range a.pending {
-		if p.id == id {
+		if p.id == ev.RequestID {
 			return
 		}
 	}
-	a.pending = append(a.pending, ask{id: id, choice: choice})
+	a.pending = append(a.pending, ask{id: ev.RequestID, event: ev})
 }
 
 // withoutAsk is the pending set with one id removed, as a new slice. An empty
@@ -504,7 +500,7 @@ func (a *agent) awaitsChoice(requestID string) bool {
 	defer a.mu.Unlock()
 	for _, p := range a.pending {
 		if p.id == requestID {
-			return p.choice
+			return p.event.Ask == core.AskChoice
 		}
 	}
 	return false
@@ -717,6 +713,22 @@ func (a *agent) pendingIDsLocked() []string {
 		ids[i] = p.id
 	}
 	return ids
+}
+
+// pendingAskFrames is this agent's outstanding asks as the ordinary
+// rpc.FrameEvent a live client would have gotten - see replayPendingAsks.
+func (a *agent) pendingAskFrames() []rpc.Frame {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.pending) == 0 {
+		return nil
+	}
+	frames := make([]rpc.Frame, len(a.pending))
+	for i, p := range a.pending {
+		ev := p.event
+		frames[i] = rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev}
+	}
+	return frames
 }
 
 // snapshot is this agent's line in a status report.

@@ -341,6 +341,16 @@ type App struct {
 	// the whole fleet at once, so this is usually several ids together.
 	authFailed map[string]struct{}
 
+	// roomAsked is every (agentID, requestID) the room has already announced a
+	// permission ask for, so a re-delivered ask - the daemon replaying at attach
+	// one this client also got live - does not draw a second "needs you". A
+	// Cards.Reconcile stand-in (built from a report's RequestIDs) never enters
+	// it, since only a real room append records here; that is what keeps the
+	// canonical reattach announcing once rather than nought. Reconciled against
+	// each report by pruneRoomAsked, the way Cards is, so it stays bounded to the
+	// fleet's outstanding asks. See observe.go.
+	roomAsked map[[2]string]struct{}
+
 	// waking: asked to wake, not yet seen back. See wakeArrived.
 	waking map[string]struct{}
 
