@@ -263,6 +263,9 @@ func (a App) dmFor(id string) DM {
 	if agent, ok := a.fleet.Agent(id); ok {
 		d.Agent = agent
 	}
+	// A subagent still running means the agent is not "done", even though fold
+	// left its doneAt standing (a subagent's frames are not the parent's turn).
+	d = d.WithRunningSub(len(a.fleet.RunningTasks(id)) > 0)
 	return d.WithComposer(d.Composer().WithMode(a.modeOf(id)).WithArms(a.armsFor(id)))
 }
 

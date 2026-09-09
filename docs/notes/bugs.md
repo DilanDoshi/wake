@@ -433,6 +433,36 @@ over live work — not the deeper question of a working line for a turn Wake did
 
 ---
 
+## BUG-35 — the done line still stood while a *background subagent* edited beneath it (BUG-34's one uncovered path)
+
+**Reported 2026-09-07**, with a screenshot: `✻ Squared for 15m 45s · done 1:13 PM`, no beating
+heartbeat, while `Edit(…)` calls streamed into the pane. BUG-34's `notDone` did not catch it.
+
+**Root cause: `notDone` excludes a subagent's frames by design, so a *background* subagent leaves
+the parent's `doneAt` standing.** BUG-34 clears the done summary on the agent's own new-turn content,
+all gated `ev.Subagent==nil` — a subagent streams past the parent's result and is not the parent's
+turn, so the room must not attribute it. That exclusion is right for the room but wrong for the done
+line: a *synchronous* subagent keeps the parent owed (`StateWorking`, so `showsDone` was already
+false), but a **background** one lets the parent's turn end (`doneAt` captured) and go idle while the
+subagent edits on — and its `Subagent!=nil` frames never clear `doneAt`. The drawn pane already
+self-corrects for the agent's *own* content (`dmFor` refreshes `d.Agent` from the fleet every render;
+`fold`'s `notDone` runs per event), so this subagent path was the only survivor.
+
+**Fix (`DM.subRunning`, `internal/ui/dmbeat.go` + `appview.go`).** `showsDone` gains `&& !d.subRunning`,
+set for the draw by `dmFor` off `Fleet.RunningTasks(id)` — the same list the sidebar draws. The
+parent's turn genuinely ended, so `fold` still keeps `doneAt`; the *display* gate is what says the
+agent is not "done" while work it launched runs. Verified against the recorded async shape
+(`testdata/stream/subagent-no-forward-async.jsonl`): `task_started` (`local_agent`) → `RunningTasks`
+non-empty → line suppressed; `task_ended` → line returns with `doneAt` intact.
+
+**Two caveats carried, not fixed.** A task row that never gets its terminal frame (dropped in a gap,
+or an unrecorded subagent-failure path — `deferred.md` notes nothing records how a subagent fails)
+keeps the line hidden until the agent's next turn or a park; a stuck row was only a phantom sidebar
+entry before and now costs the done line too. And on return the line shows the *parent's* turn-end
+wall-clock, not the subagent's finish — defensible, since the parent's own turn is what ended.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

@@ -54,3 +54,10 @@ func (d DM) WithCompacting(since time.Time) DM {
 	d.compactingSince = since
 	return d
 }
+
+// WithRunningSub records whether this agent has a subagent still running, which
+// suppresses the done line. See DM.showsDone.
+func (d DM) WithRunningSub(v bool) DM {
+	d.subRunning = v
+	return d
+}

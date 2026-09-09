@@ -74,6 +74,14 @@ type DM struct {
 	// drives the working one. See WithCompacting, DM.heartbeat.
 	compactingSince time.Time
 
+	// subRunning is whether this agent has a subagent still running, set for the
+	// draw by App.dmFor off Fleet.RunningTasks. It suppresses the done line: fold
+	// keeps a subagent's frames from clearing the parent's doneAt (they are not
+	// the parent's turn), so an agent that dispatched a background subagent and
+	// went idle would otherwise show `✻ … done` while that subagent works on.
+	// See WithRunningSub, DM.showsDone.
+	subRunning bool
+
 	SessionID string
 	Name      string
 
