@@ -7,7 +7,7 @@ Enter
 Sleep 14s
 Show
 Sleep 1500ms
-Down
-Sleep 1s
+# ⌃F forks the roster's pick. The roster moves on ⇧↑↓, which VHS cannot send,
+# so the pick is whoever attention ranks first — fine for a beat about forking.
 Ctrl+F
 Sleep 8s

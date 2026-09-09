@@ -8,8 +8,8 @@ Sleep 10s
 Show
 Sleep 1500ms
 
-# The legend swaps: "Enter send" becomes "Enter detach", "^O detach" becomes
-# "^O cancel". Held so the swap is readable.
+# The armed cue appears under the composer: "↵ detach   ⌃O cancel". It is the
+# only legend row Wake draws, and only while the arm is live. Held so it reads.
 Ctrl+O
 Sleep 3500ms
 Enter

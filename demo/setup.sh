@@ -81,27 +81,37 @@ Sleep 7s
 Ctrl+W
 Sleep 2s
 
+# \`/new\` drafts \`@<name> \` into the room composer once the spawn lands, so the
+# operator can address the new agent at once. Here the next line would
+# concatenate onto that mention, so each one is cleared with \`⎋\` — which in
+# the room clears the draft and nothing else.
 Type "/new omar in $work/harbor/web"
 Enter
 Sleep 6s
+Escape
+Sleep 500ms
 Type "/new priya in $work/harbor/cli"
 Enter
 Sleep 6s
+Escape
+Sleep 500ms
 Type "/new luca in $work/harbor/docs"
 Enter
 Sleep 6s
+Escape
+Sleep 500ms
 Type "/new nora in $work/harbor/api"
 Enter
 Sleep 6s
+Escape
+Sleep 500ms
 Type "/new alex in $work/harbor/api"
 Enter
-Sleep 5s
+Sleep 6s
 
-# \`/new\` opens the conversation it started and gives it the keys, so the last
-# one leaves the room unfocused — and every line typed after it would go to
-# that agent's DM instead of the group chat. Closing it hands the keys back.
-Ctrl+W
-Sleep 2s
+# The last \`/new\` drafted its mention too. Clear it before the labels go in.
+Escape
+Sleep 1s
 
 # Labels are what a fleet is triaged by: they head every line an agent says,
 # fill the roster and the board, and are the only handle the manager has for

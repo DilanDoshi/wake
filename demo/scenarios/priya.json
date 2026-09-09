@@ -6,6 +6,9 @@
       { "after": 1.9, "text": "Taking the flag. `--rate-limit` on `harborctl keys set`, so a plan's ceiling can be changed without a dashboard round trip." },
       { "after": 1.2, "tool": { "name": "Edit", "input": { "file_path": "cli/root.ts" }, "result": "Applied 2 edits to cli/root.ts", "takes": 0.9 } },
       { "after": 1.0, "text": "Parsed and validated. It refuses a value above the plan's own ceiling rather than silently clamping — a clamp reads as success and isn't." }
+    ] },
+    { "match": "number", "tokens": 560, "steps": [
+      { "after": 0.9, "text": "Either. A bare integer is requests per minute. A plan name — `free`, `team` — takes that plan's ceiling from `quota.ts`, so ops can say `--rate-limit team` without knowing the figure, and it moves when the plan does." }
     ] }
   ],
   "default": { "tokens": 320, "steps": [ { "after": 0.9, "text": "Noted." } ] }
