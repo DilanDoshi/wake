@@ -74,6 +74,11 @@ func roomCases() []roomCase {
 		{"a rewind receipt", core.Event{Kind: core.KindRewindReceipt}, false},
 		{"the fate of a message Wake sent", core.Event{Kind: core.KindMessageState, MessageID: "m1"}, false},
 		{"a quota report", core.Event{Kind: core.KindRateLimit, Text: "fine"}, false},
+		// A turn that failed on the API is infrastructure, not conversation:
+		// App.observe routes it to a pop-up and a /reauth mark before the fold
+		// ever runs (apierror.go), and fold's default drops it here too, so it
+		// reaches the room by neither path.
+		{"a failed turn on the API", core.Event{Kind: core.KindAPIError, Text: "Not logged in"}, false},
 		{"a session id dying", core.Event{Kind: core.KindSessionReset, SessionID: "s1"}, false},
 		{"a frame Wake does not model", core.Event{Kind: core.KindUnknown, Text: "whatever"}, false},
 	}

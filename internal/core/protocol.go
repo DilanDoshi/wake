@@ -189,11 +189,19 @@ func DecodeTranscriptLine(line []byte) ([]Event, error) {
 		Type      string `json:"type"`
 		Sidechain bool   `json:"isSidechain"`
 		Timestamp string `json:"timestamp"`
+		// On disk the API-error marker is camelCase (isApiErrorMessage), where
+		// the live stream spells it is_api_error_message - a different wire, so a
+		// different key. A failed turn's synthetic frame is a `type:"assistant"`
+		// line, so without this it would restore through the normal text path and
+		// render "Not logged in · Please run /login" (or "401 …") as agent speech
+		// on the /resume that recovery drives. Dropped, like a sidechain line: it
+		// is not conversation content. See KindAPIError and testdata/transcript.
+		APIError bool `json:"isApiErrorMessage"`
 	}
 	if err := json.Unmarshal(line, &f); err != nil {
 		return nil, fmt.Errorf("decode transcript line: %w", err)
 	}
-	if f.Sidechain || (f.Type != "assistant" && f.Type != "user") {
+	if f.APIError || f.Sidechain || (f.Type != "assistant" && f.Type != "user") {
 		return nil, nil
 	}
 	events, err := DecodeLine(line)
@@ -595,6 +603,13 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 	base := frameEvent(f, raw)
 
+	// A failed turn is a synthetic assistant frame; pulled out before the text
+	// path renders the API's message under the agent's name. See KindAPIError.
+	if f.IsAPIErrorMessage {
+		base.Kind, base.Text, base.Notice = KindAPIError, apiErrorText(f.Message), NoticeAPIError
+		return one(base)
+	}
+
 	if !isJSONObject(f.Message) {
 		base.Kind, base.Text, base.Notice = frameText(f.Type, jsonString(f.Message))
 		return one(base)
@@ -782,19 +797,3 @@ func firstJSONByte(raw json.RawMessage) byte {
 
 func isJSONObject(raw json.RawMessage) bool { return firstJSONByte(raw) == '{' }
 func isJSONArray(raw json.RawMessage) bool  { return firstJSONByte(raw) == '[' }
-
-// jsonString unquotes a JSON string, falling back to the raw bytes so a
-// shape we have not seen still reaches a human instead of vanishing.
-//
-// The fallback is for shapes that are genuinely unrecorded. It used to catch
-// a tool_result's array content as well, which was not unrecorded at all -
-// 10 of the 44 recorded results carry it - and printed a JSON literal in the
-// transcript. toolResultText handles that shape properly now, and this is
-// left to cover what is still unknown.
-func jsonString(raw json.RawMessage) string {
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return s
-	}
-	return string(raw)
-}

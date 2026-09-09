@@ -161,6 +161,13 @@ const (
 	// KindRateLimit reports quota status. Text is the status string.
 	KindRateLimit EventKind = "rate_limit"
 
+	// KindAPIError is a turn that failed on the API, not in the model - an
+	// expired login, a rejected key, an overload. Claude sends it as a synthetic
+	// assistant frame (is_api_error_message), so left alone it renders "401 API
+	// key is invalid" under the agent's name. Text is the message; routed to a
+	// pop-up like KindRateLimit. Recorded in testdata/stream/api-error-auth.jsonl.
+	KindAPIError EventKind = "api_error"
+
 	// KindSessionReset is /clear killing a session id. SessionID is the id
 	// that just ended, and that is the whole report: this event does NOT
 	// name the id replacing it, because the frame does not either.
@@ -503,6 +510,10 @@ const (
 	// sample carries means nothing is wrong, and drawing it is chrome.
 	// Event.Text still carries the status itself.
 	NoticeRateLimited Notice = "rate_limited"
+
+	// NoticeAPIError rides a KindAPIError so the UI raises a pop-up like
+	// NoticeRateLimited rather than a transcript line. Text is the API message.
+	NoticeAPIError Notice = "api_error"
 
 	// NoticeTurnInterrupted is Claude's own account of a turn Wake aborted.
 	//

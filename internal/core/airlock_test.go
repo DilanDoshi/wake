@@ -257,7 +257,7 @@ var claudeWireVocabulary = wordSet([]string{
 	"parent_tool_use_id", "subagent_type", "task_description",
 	"tool_use_id", "agent_id", "agentId", "agentType",
 	"tool_use_result", "command_uuid", "new_conversation_id",
-	"rate_limit_info", "isReplay", "isSynthetic",
+	"rate_limit_info", "isReplay", "isSynthetic", "is_api_error_message", "isApiErrorMessage",
 	"run_in_background", "last_tool_name", "task_id",
 	"non_execution_kind", "permission_denials", "terminal_reason",
 	"modelUsage", "total_cost_usd", "num_turns",
@@ -535,7 +535,11 @@ var notNamedByTheAirlock = map[string]string{
 // 155 → 159: the slash-command invocation and caveat envelopes' four tags,
 // <command-name>/</command-args> and <local-command-caveat>/</local-command-caveat>,
 // dropped whole by isLocalCommandPlumbing.
-const policedWordCount = 159
+// 159 → 160: "is_api_error_message", the synthetic-frame marker messageEvents
+// reads to surface a failed turn as KindAPIError rather than agent speech.
+// 160 → 161: "isApiErrorMessage", the same marker's camelCase spelling on disk,
+// which DecodeTranscriptLine reads to drop the failed turn from restored history.
+const policedWordCount = 161
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

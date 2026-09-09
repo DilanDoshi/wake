@@ -32,6 +32,56 @@ rather than a blind merge. **BUG-25** is partly overtaken by merged #103 and #10
 ---
 
 
+## BUG-35 — a fleet-wide `401 API key is invalid`, and closing the whole fleet was the only way out
+
+**Watched go wrong 2026-09-04.** Every agent in a running fleet showed
+`Failed to authenticate. API Error: 401 API key is invalid.` at the same moment, under each agent's
+own name in the room, as if the models had each said it. Nothing the owner did fixed it — including
+`/login` in an outside Claude Code session — and the only escape was closing the whole fleet, which
+lost the mid-flight work. The owner is on a Max plan, so there is no API key at all.
+
+**The part that is not Wake's.** This is a known, still-open Claude Code bug
+(`anthropics/claude-code#48786`, `#54443`, `#28207`, all closed without a fix). A Max-plan `/login`
+stores **one** OAuth credential (macOS Keychain; `apiKeySource:"none"` in every fixture). The access
+token expires ~8h for the whole fleet at once; every session then races to refresh a shared,
+rotating-refresh-token credential with no file-locking, so one refresh wins and the rest 401. Wake
+only triggers it because it runs 15–30 concurrent `claude` processes — a 1–2-session user rarely
+hits the cliff. `CLAUDE_CODE_OAUTH_TOKEN` via `claude setup-token` is reported broken on some
+versions and can revoke the live token, so it is not a safe blanket fix. "API key is invalid" is
+just Claude Code's generic label for an OAuth 401.
+
+**The part that was Wake's, and is fixed (PR on `fix/fleet-auth-401`).** Two rulings met a case they
+did not anticipate:
+
+- **The error rendered as agent speech.** Claude sends an API failure as a *synthetic* assistant
+  frame (`is_api_error_message:true`, inner `model:"<synthetic>"`), and `messageEvents` decoded it as
+  ordinary `KindAssistantText`. The discriminator is `is_api_error_message`, **not** `api_error_status`
+  — that field is `null` even here, and `subtype` is a misleading `"success"` (recorded in
+  `testdata/stream/api-error-auth.jsonl`, the not-logged-in variant; the 401-invalid variant shares
+  the shape). Now it decodes to `core.KindAPIError`, `observe` routes it to a notice like a rate-limit
+  and marks the session, and it never reaches the transcript.
+- **The only recovery was `wake stop`.** A running `claude` process never picks up a refreshed token
+  (which is why the owner's external `/login` did nothing), so the process must be *replaced*.
+  `/reauth` (`internal/ui/reauth.go`) parks the marked sessions in place — stopping the stale process,
+  keeping the transcript on disk — so `/resume all` brings them back on a fresh login, the affected
+  sessions only, the rest untouched. A mark is cleared once the session produces a healthy turn or is
+  woken, so a later `/reauth` cannot re-park a recovered agent.
+- **The restore path would have re-shown it.** The failed turn *is* written to the on-disk transcript,
+  and there the marker is **camelCase `isApiErrorMessage`** — a different wire from the stream's
+  snake_case `is_api_error_message`, and the frame's `type` is an ordinary `"assistant"`. So a `/resume`
+  (the recovery path itself) re-reading disk would have decoded it as `KindAssistantText` and rendered
+  the 401 as agent speech again. `DecodeTranscriptLine` now drops it, like a sidechain line
+  (`testdata/transcript/api-error-auth.jsonl`). Found by recording the on-disk transcript rather than
+  assuming it matched the stream.
+
+**Still a workaround, and the decision behind it.** The upstream race is unfixed, so a woken session
+whose login is still expired will 401 again and re-mark — self-correcting, but it means `/reauth`
+guides the login step (Wake cannot run `claude auth login`: no-PTY) rather than guaranteeing success.
+And it parks-then-`/resume` in two steps rather than one: an automatic wake would have to thread a
+`tea.Cmd` back through the fleet-report chain (`applyStatus` returns only `App`), a larger change than
+this fix carried. See `deferred.md`.
+
+
 ## BUG-10 — the picker takes four keys the legend says belong to something else, and says nothing
 
 **Measured 2026-08-23**, by driving `App` directly rather than by reading `pickerKey`:

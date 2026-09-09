@@ -4825,3 +4825,26 @@ approve first.
 *Blocks:* nothing today — no code exists for this. *Closes with:* an owner ruling on which of the two
 readings is meant (a filtered view over the one room, which reduces to teams + the `@john` filter; or
 a second room surface, which needs a §2c scope decision), then a plan.
+
+---
+
+## 2026-09-04 — `/reauth` parks then `/resume`s in two steps; one-command park→wake is deferred
+
+`/reauth` (BUG-35, `internal/ui/reauth.go`) recovers the sessions a fleet-wide OAuth expiry knocked
+out by **parking** them in place; the operator then types `/resume all` to bring them back on a fresh
+login. That is two commands where one would do.
+
+*Why it is two:* an automatic wake would have to fire a `FrameWake` for each session **after** its
+park is confirmed on a fleet report — and the report chain is `App.applyStatus`, which returns only
+`App`, no `tea.Cmd`. Threading a command back out of `parkArrived`/`applyStatus` (a `reauthing` set
+that emits wakes as each park lands) is the right design but a broader change than the fix carried, and
+it touches the report fold every other feature reads.
+
+*Also deferred:* `/reauth` does not run the auth check itself — the operator runs `/login` to see
+whether a `claude auth login` is even needed. Folding the async `claude auth status --json` panel
+(authapp.go) into `/reauth` so it says "you are signed in, just restarting" vs "sign in first" is a
+nicety, not load-bearing.
+
+*Blocks:* nothing. *Closes with:* threading a `tea.Cmd` through the report chain (or a small
+command-queue on `App` drained after `applyStatus`), then auto-waking each `reauthing` session as its
+park is confirmed.

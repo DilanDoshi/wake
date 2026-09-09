@@ -561,6 +561,48 @@ func TestDecodeRateLimitEvent(t *testing.T) {
 	}
 }
 
+// An API error - an expired login, a rejected key, an overload - arrives as a
+// *synthetic* assistant frame carrying is_api_error_message:true, so decoding it
+// as ordinary assistant text renders "Not logged in · Please run /login" (or
+// "401 API key is invalid") under the agent's name, as if the model said it.
+// Recorded 2026-09-07 in testdata/stream/api-error-auth.jsonl (the not-logged-in
+// variant; the 401-invalid variant shares this shape - is_api_error_message and
+// the synthetic model are the markers, only the human text differs).
+func TestDecodeAPIErrorMessageIsNotAgentSpeech(t *testing.T) {
+	line := []byte(`{"type":"assistant","message":{"model":"<synthetic>","role":"assistant","type":"message","content":[{"type":"text","text":"Not logged in · Please run /login"}]},"session_id":"s1","uuid":"u1","error":"authentication_failed","is_api_error_message":true}`)
+
+	evs, err := DecodeLine(line)
+	if err != nil {
+		t.Fatalf("DecodeLine: %v", err)
+	}
+	if len(evs) != 1 || evs[0].Kind != KindAPIError {
+		t.Fatalf("got %+v, want one KindAPIError", evs)
+	}
+	if evs[0].Text != "Not logged in · Please run /login" {
+		t.Errorf("Text = %q, want the error message", evs[0].Text)
+	}
+	if evs[0].Notice != NoticeAPIError {
+		t.Errorf("Notice = %q, want %q so the UI raises a pop-up rather than a transcript line", evs[0].Notice, NoticeAPIError)
+	}
+	if evs[0].SessionID != "s1" {
+		t.Errorf("SessionID = %q, want s1", evs[0].SessionID)
+	}
+}
+
+// The marker is necessary: an ordinary assistant turn that merely mentions a
+// number must stay KindAssistantText, or every turn could be swallowed as infra.
+func TestDecodeOrdinaryAssistantTextIsNotAnAPIError(t *testing.T) {
+	line := []byte(`{"type":"assistant","message":{"model":"claude-sonnet-5","role":"assistant","type":"message","content":[{"type":"text","text":"the API returned 401 last time"}]},"session_id":"s1","uuid":"u1"}`)
+
+	evs, err := DecodeLine(line)
+	if err != nil {
+		t.Fatalf("DecodeLine: %v", err)
+	}
+	if len(evs) != 1 || evs[0].Kind != KindAssistantText {
+		t.Fatalf("got %+v, want one KindAssistantText", evs)
+	}
+}
+
 // /clear kills a session id. The frame carries the id that died and a
 // new_conversation_id that is NOT the one replacing it - the successor
 // appears nowhere on this frame, and first shows up on the next frame, a
