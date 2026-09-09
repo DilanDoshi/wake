@@ -263,6 +263,11 @@ const managerCommand = "manager"
 // pane below. See board.go for the whole argument.
 const boardCommand = "board"
 
+// groupchatFilterCommand toggles whether a lone @name narrows the room's view.
+// Wake-addressed (target-independent) like /manager: it configures this client,
+// not a session. See roomfilter.go.
+const groupchatFilterCommand = "groupchat-filter"
+
 // boardVerb is `/board` as somebody types it, for managerVerb's reason.
 const boardVerb = SlashPrefix + boardCommand
 
@@ -342,18 +347,19 @@ var (
 // A map from the bare word to what it does, so adding /new is one entry rather
 // than an arm in a switch somebody has to find.
 var commands = map[string]func(App, string) (App, tea.Cmd){
-	resumeCommand:      App.resume,
-	newCommand:         App.newAgent,
-	nameCommand:        App.renameAgent,
-	taskCommand:        App.labelAgent,
-	colorCommand:       App.colorAgent,
-	adoptCommand:       App.adopt,
-	mcpCommand:         App.mcp,
-	managerCommand:     App.manager,
-	managerStopCommand: App.managerStop,
-	quitCommand:        App.quitAgent,
-	boardCommand:       App.openBoard,
-	loginCommand:       App.login,
+	resumeCommand:          App.resume,
+	newCommand:             App.newAgent,
+	nameCommand:            App.renameAgent,
+	taskCommand:            App.labelAgent,
+	colorCommand:           App.colorAgent,
+	adoptCommand:           App.adopt,
+	mcpCommand:             App.mcp,
+	managerCommand:         App.manager,
+	managerStopCommand:     App.managerStop,
+	quitCommand:            App.quitAgent,
+	boardCommand:           App.openBoard,
+	loginCommand:           App.login,
+	groupchatFilterCommand: App.groupchatFilter,
 }
 
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
@@ -557,7 +563,7 @@ func (a App) mentionCommand(who, text string) (App, tea.Cmd, bool) {
 //
 // Named for its half of the overload rather than `commandCount`, which this
 // package's tests already use for how many goroutines one tea.Cmd costs.
-const wakeCommandCount = 12
+const wakeCommandCount = 13
 
 // slash routes one draft, reporting whether Wake took it.
 //

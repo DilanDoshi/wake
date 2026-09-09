@@ -56,6 +56,7 @@ var legendKeyNames = map[string][]legendKey{
 	"⌃Q":   {{name: "KeyCtrlQ", msg: tea.KeyMsg{Type: tea.KeyCtrlQ}}},
 	"⌃T":   {{name: "KeyCtrlT", msg: tea.KeyMsg{Type: tea.KeyCtrlT}}},
 	"⌃X":   {{name: "KeyCtrlX", msg: tea.KeyMsg{Type: tea.KeyCtrlX}}},
+	"⌃A":   {{name: "KeyCtrlA", msg: tea.KeyMsg{Type: tea.KeyCtrlA}}},
 	"⌃N⌃P": {{name: "KeyCtrlN", msg: tea.KeyMsg{Type: tea.KeyCtrlN}}, {name: "KeyCtrlP", msg: tea.KeyMsg{Type: tea.KeyCtrlP}}},
 	"⌃E":   {{name: "KeyCtrlE", msg: tea.KeyMsg{Type: tea.KeyCtrlE}}},
 }

@@ -336,7 +336,7 @@ func (a App) clearDraft() App {
 // Only the room's. A DM has one recipient and its header names them.
 func (a App) retarget() App {
 	draft := a.room.Composer().Value()
-	prev := a.room.focus
+	prev := a.room.effectiveFocus()
 	managerID := ""
 	if m, ok := a.fleet.manager(); ok {
 		managerID = m.ID
@@ -382,13 +382,16 @@ func (a App) withRoomBar() App {
 	return a
 }
 
-// clearedSelOnFocusChange drops the room's text selection when the focus id
-// changed, because WithFocus re-rendered and renumbered the lines it is anchored
-// to - a width change's own rule (CLAUDE.md). Scoped to the room's own selection
-// (pane == ""): a focus change re-renders only the room, so a selection held in
-// a DM pane is untouched, unlike a width change which re-wraps every pane.
-func (a App) clearedSelOnFocusChange(prev string) App {
-	if a.room.focus != prev && a.sel.pane == "" {
+// clearedSelOnFocusChange drops the room's text selection when the effective
+// focus changed, because the re-render renumbered the lines it is anchored to -
+// a width change's own rule (CLAUDE.md). It keys on effectiveFocus rather than
+// the raw target so a ⌃A override (which re-renders without changing the target)
+// clears it too, and a target that resolves under a filter that is off (no
+// re-render) does not. Scoped to the room's own selection (pane == ""): a focus
+// change re-renders only the room, so a selection held in a DM pane is untouched,
+// unlike a width change which re-wraps every pane.
+func (a App) clearedSelOnFocusChange(prevEff string) App {
+	if a.room.effectiveFocus() != prevEff && a.sel.pane == "" {
 		a.sel, a.selecting = selection{}, false
 	}
 	return a

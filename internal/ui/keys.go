@@ -256,6 +256,8 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return a.nextBlocked(), nil, true
 	case tea.KeyCtrlT:
 		return a.flipMention()
+	case tea.KeyCtrlA:
+		return a.toggleRoomFilter()
 	case tea.KeyPgUp:
 		return a.scrollFocused(a.pageLines()), nil, true
 	case tea.KeyPgDown:

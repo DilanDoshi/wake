@@ -133,6 +133,15 @@ type Room struct {
 	managerID string
 	focusName string
 
+	// narrowed is whether the room is currently narrowing to focus, and
+	// narrowDefault is the state a freshly resolved target starts in. The two
+	// exist because ⌃A overrides the default per target: effectiveFocus is focus
+	// only while narrowed, so the whole filter is off when narrowed is false even
+	// with a target resolved. narrowDefault defaults on (NewRoom); /groupchat-filter
+	// flips it. See roomfilter.go.
+	narrowed      bool
+	narrowDefault bool
+
 	// menu is everything pinned between the transcript and the composer - the
 	// card, the picker and the completion menu (App.menuBlock) - handed over
 	// whole by App.roomPane and clipped here (see menuRows).
@@ -216,7 +225,7 @@ type roomLine struct {
 }
 
 // NewRoom returns an empty group conversation with a focused composer.
-func NewRoom() Room { return Room{composer: NewComposer()} }
+func NewRoom() Room { return Room{composer: NewComposer(), narrowDefault: true} }
 
 // SetSize re-lays the room for a pane of w by h. Only a width change re-wraps;
 // height moves a window over lines that are already rendered.
@@ -279,17 +288,15 @@ func (r Room) SetSize(w, h int) Room {
 func (r Room) WithFocus(focus, focusName, managerID string) Room {
 	r.focusName = focusName
 	r.managerID = managerID
-	if r.focus == focus {
-		return r
+	prevEff := r.effectiveFocus()
+	if r.focus != focus {
+		// A new target resets the ⌃A override: narrowing starts at the default
+		// again. The same target left untouched, so an override survives more
+		// typing into the same draft. See roomfilter.go.
+		r.focus = focus
+		r.narrowed = r.narrowDefault
 	}
-	r.focus = focus
-	lines := r.said.slice(r.said.first(), r.said.len())
-	blocks := renderRoom(r, lines)
-	first := r.said.first()
-	r.said = chunked[roomLine]{base: first, n: first}.append(lines...)
-	r.tr = r.tr.replace(blocks)
-	r.tr = r.tr.toBottom()
-	return r
+	return r.rerenderOnFocusChange(prevEff)
 }
 
 // Append draws one event, attributed to the agent that produced it.
@@ -317,7 +324,8 @@ func (r Room) appendLine(ev core.Event, by Agent, to string) Room {
 	// is skipped, not done and dropped. A shown line renders as before; the
 	// empty-block guard stays on that path (fold pre-drops blanks, so it is
 	// defensive) and runs before an id is spent.
-	hidden := r.focus != "" && !focusAdmits(line, r.focus, r.managerID)
+	eff := r.effectiveFocus()
+	hidden := eff != "" && !focusAdmits(line, eff, r.managerID)
 	var b block
 	if !hidden {
 		// A new event carries no per-line open of its own, but expandAll is a
@@ -597,7 +605,7 @@ func (r Room) View(width, height int) string {
 	// The pane names the focused agent so the narrowing is discoverable; the
 	// composer's own target line is the secondary tell.
 	title := roomTitle
-	if r.focus != "" && r.focusName != "" {
+	if r.effectiveFocus() != "" && r.focusName != "" {
 		title = roomTitle + " › @" + r.focusName
 	}
 	comp := r.composer.WithBar(r.bar).WithTitle(cmp.Or(r.writing, title)).View(w)
@@ -735,12 +743,13 @@ func (r Room) renderAll(lines []roomLine) []block {
 		banner.laidOut = blockLines(banner, true)
 		blocks = append(blocks, banner)
 	}
+	eff := r.effectiveFocus()
 	for i := range lines {
 		lines[i].rows = 0
 		// A line the current focus hides keeps rows == 0 and contributes no
 		// block, so the geometry (which sums rows) needs no notion of "shown vs
 		// exists" - and its glamour render is skipped, not rendered then dropped.
-		if r.focus != "" && !focusAdmits(lines[i], r.focus, r.managerID) {
+		if eff != "" && !focusAdmits(lines[i], eff, r.managerID) {
 			continue
 		}
 		b := renderRoomBlock(lines[i].ev, lines[i].by, r.blockWidth(), r.expandAll || r.expanded[lines[i].id])
