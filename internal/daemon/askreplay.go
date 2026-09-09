@@ -3,6 +3,8 @@ package daemon
 // Handing a newly attached client the fleet's outstanding asks - split out of
 // server.go to keep it under the hard max.
 
+import "github.com/DilanDoshi/wake/internal/rpc"
+
 // replayPendingAsks hands a newly attached client every ask still outstanding
 // across the fleet, each as the ordinary rpc.FrameEvent a client watching live
 // would have gotten for it - so its own observe/Cards.Add rebuilds the real
@@ -27,4 +29,20 @@ func (s *server) replayPendingAsks(c *client) {
 			c.enqueue(f)
 		}
 	}
+}
+
+// pendingAskFrames is this agent's outstanding asks as the ordinary
+// rpc.FrameEvent a live client would have gotten - see replayPendingAsks.
+func (a *agent) pendingAskFrames() []rpc.Frame {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.pending) == 0 {
+		return nil
+	}
+	frames := make([]rpc.Frame, len(a.pending))
+	for i, p := range a.pending {
+		ev := p.event
+		frames[i] = rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev}
+	}
+	return frames
 }

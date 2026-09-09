@@ -715,22 +715,6 @@ func (a *agent) pendingIDsLocked() []string {
 	return ids
 }
 
-// pendingAskFrames is this agent's outstanding asks as the ordinary
-// rpc.FrameEvent a live client would have gotten - see replayPendingAsks.
-func (a *agent) pendingAskFrames() []rpc.Frame {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if len(a.pending) == 0 {
-		return nil
-	}
-	frames := make([]rpc.Frame, len(a.pending))
-	for i, p := range a.pending {
-		ev := p.event
-		frames[i] = rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev}
-	}
-	return frames
-}
-
 // snapshot is this agent's line in a status report.
 func (a *agent) snapshot() rpc.SessionStatus {
 	a.mu.Lock()
