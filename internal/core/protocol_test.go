@@ -600,6 +600,38 @@ func TestDecodeResultIsATurnEndNotAnExit(t *testing.T) {
 	if evs[0].Text != "hello" {
 		t.Errorf("Text = %q, want %q", evs[0].Text, "hello")
 	}
+	if evs[0].LocalCommand {
+		t.Error("a num_turns:1 result is a real inference turn, not a local command")
+	}
+}
+
+// LocalCommand marks a result that ran no inference (num_turns==0), the shape of
+// Claude's local commands like the daemon's bare-/model effort probe. The field
+// is a *int on the wire so an absent num_turns (a synthetic fixture that omits
+// it) reads as a real turn rather than a probe. See Event.LocalCommand.
+func TestDecodeResultLocalCommandFromNumTurns(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		line string
+		want bool
+	}{
+		{"num_turns zero is a local command", `{"type":"result","subtype":"success","num_turns":0,"result":"Current model: Opus 5","session_id":"s1"}`, true},
+		{"num_turns one is a real turn", `{"type":"result","subtype":"success","num_turns":1,"result":"hi","session_id":"s1"}`, false},
+		{"absent num_turns is not a local command", `{"type":"result","subtype":"success","result":"hi","session_id":"s1"}`, false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			evs, err := DecodeLine([]byte(tc.line))
+			if err != nil {
+				t.Fatalf("DecodeLine: %v", err)
+			}
+			if len(evs) != 1 || evs[0].Kind != KindTurnEnd {
+				t.Fatalf("got %+v, want one KindTurnEnd", evs)
+			}
+			if evs[0].LocalCommand != tc.want {
+				t.Errorf("LocalCommand = %v, want %v", evs[0].LocalCommand, tc.want)
+			}
+		})
+	}
 }
 
 func TestDecodeMalformedLineReturnsError(t *testing.T) {

@@ -53,7 +53,8 @@ func TestSnapshotCarriesTheConfirmedModel(t *testing.T) {
 // apply can send it without counting it as an operator turn.
 func TestProbeEnqueuesBareModel(t *testing.T) {
 	a := effortAgent(t)
-	a.probeEffort()
+	a.probeWanted = true
+	a.tryProbe()
 	select {
 	case p := <-a.in:
 		if !p.probe {
@@ -63,7 +64,7 @@ func TestProbeEnqueuesBareModel(t *testing.T) {
 			t.Errorf("probe queued %+v, want a /model FrameSend", p.frame)
 		}
 	default:
-		t.Fatal("probeEffort queued nothing")
+		t.Fatal("tryProbe queued nothing")
 	}
 }
 
@@ -72,15 +73,20 @@ func TestProbeEnqueuesBareModel(t *testing.T) {
 // answer nobody made at worst.
 func TestProbeSkipsABlockedOrGoneAgent(t *testing.T) {
 	blocked := effortAgent(t)
+	blocked.probeWanted = true
 	blocked.pending = []ask{{id: "r1"}}
-	blocked.probeEffort()
+	blocked.tryProbe()
 	if len(blocked.in) != 0 {
 		t.Error("a blocked agent was probed")
 	}
+	if !blocked.probeWanted {
+		t.Error("a probe skipped for a block was not kept due for later")
+	}
 
 	gone := effortAgent(t)
+	gone.probeWanted = true
 	close(gone.gone)
-	gone.probeEffort()
+	gone.tryProbe()
 	if len(gone.in) != 0 {
 		t.Error("a gone agent was probed")
 	}
@@ -112,8 +118,9 @@ func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 		t.Fatalf("model not recorded: %q", a.confirmedModel)
 	}
 
-	// The probe turn's end: suppressed, no second publish, window closed.
-	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); !suppress || publish {
+	// The probe turn's end: a local command (num_turns==0), so suppressed, no
+	// second publish, window closed.
+	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress || publish {
 		t.Fatalf("the probe turn end: suppress=%v publish=%v, want true/false", suppress, publish)
 	}
 
@@ -135,7 +142,7 @@ func TestAbsorbProbeSuppressesBothOfTwoOverlappingProbes(t *testing.T) {
 		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: " + level + ")"}); !suppress {
 			t.Fatalf("a probe reply (effort %s) leaked to clients", level)
 		}
-		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done"}); !suppress {
+		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress {
 			t.Fatalf("a probe turn end (effort %s) leaked to clients", level)
 		}
 	}
@@ -168,6 +175,172 @@ func TestFirstInitFiresOnce(t *testing.T) {
 	}
 }
 
+// The probe is the daemon's only unprompted stdin write, and a turn in flight
+// is exactly the state that let a probe's reply interleave with that turn's own
+// frames. tryProbe must refuse to send while one is owed, whatever else about
+// the agent looks probeable, and keep the request due for the turn's end.
+func TestProbeDoesNotEnqueueWhileATurnIsOwed(t *testing.T) {
+	a := effortAgent(t)
+	a.probeWanted = true
+	a.owed = true
+	a.tryProbe()
+	if len(a.in) != 0 {
+		t.Error("a probe was queued while a turn was owed")
+	}
+	if !a.probeWanted {
+		t.Error("a probe deferred by the idle gate was dropped instead of kept due")
+	}
+}
+
+// A startup or re-probe requested mid-turn (wantProbe) does not fire until
+// the turn it was requested behind actually ends (probeIfWanted) - never on
+// the trigger itself, and never merely because the agent looks idle before
+// that turn's own end has been observed.
+func TestStartupProbeWaitsForTheFirstTurnEndBeforeFiring(t *testing.T) {
+	a := effortAgent(t)
+	a.owed = true // the operator's first turn, whose init this request rides in on
+
+	a.wantProbe()
+	if len(a.in) != 0 {
+		t.Fatal("the probe fired during the turn instead of waiting for it to end")
+	}
+
+	// Events besides a turn end must not fire the deferred request early.
+	a.probeIfWanted()
+	if len(a.in) != 0 {
+		t.Fatal("probeIfWanted fired without a turn end to license it")
+	}
+
+	// fanOut's own hook: called after observe has cleared owed for this turn.
+	a.owed = false
+	a.probeIfWanted()
+	select {
+	case p := <-a.in:
+		if !p.probe {
+			t.Error("the deferred probe pending is not marked as a probe")
+		}
+	default:
+		t.Fatal("the probe never fired once the turn it was deferred behind ended")
+	}
+}
+
+// wantProbe requested while the agent is already idle - the turn it was meant
+// to ride ended before the request reached this goroutine - has no future
+// turn end to catch it, so it fires at once instead of waiting forever.
+func TestWantProbeFiresAtOnceWhenAlreadyIdle(t *testing.T) {
+	a := effortAgent(t)
+	a.wantProbe() // a.owed is false: the zero value, same as a freshly spawned agent
+	select {
+	case p := <-a.in:
+		if !p.probe {
+			t.Error("the immediate probe pending is not marked as a probe")
+		}
+	default:
+		t.Fatal("wantProbe did not fire immediately for an already-idle agent")
+	}
+}
+
+// The probe's own end is swallowed whether or not a real turn has since marked
+// owed, because it is keyed on the end being a local command (num_turns==0), not
+// on owed. A real send landing right behind the probe ("world") sets owed before
+// the probe's near-instant reply is read; keying the swallow on !owed instead
+// leaked the probe's own result as a phantom turn end - which cleared owed - and
+// then ate the real turn's end under the still-armed window, reporting the agent
+// idle for a whole turn it was actually working.
+func TestAbsorbProbeSwallowsTheProbesOwnEndEvenWhenARealTurnHasStarted(t *testing.T) {
+	a := effortAgent(t)
+	a.incProbe()
+
+	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: high)"}); !suppress || !publish {
+		t.Fatalf("the probe's own reply was not suppressed and published: suppress=%v publish=%v", suppress, publish)
+	}
+
+	// A real send landed right behind the probe and marked the turn owed before
+	// the probe's near-instant reply was read off stdout.
+	a.owed = true
+
+	// The probe's OWN result (a local command, num_turns==0) is the next turn
+	// end, and must be swallowed even though a real turn is now owed.
+	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the probe's own result", LocalCommand: true}); !suppress || publish {
+		t.Fatalf("the probe's own end was not swallowed while a real turn was owed: suppress=%v publish=%v", suppress, publish)
+	}
+	if a.confirmedEffort != core.EffortHigh {
+		t.Fatalf("the confirmed level was lost: %q", a.confirmedEffort)
+	}
+	if a.pendingProbes != 0 {
+		t.Fatalf("the suppression window did not close: pendingProbes = %d", a.pendingProbes)
+	}
+
+	// The real turn's own end follows with the window closed, and reaches
+	// clients rather than being eaten.
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the real turn's own result"}); suppress {
+		t.Fatal("the real turn's own end was eaten after the probe's window had closed")
+	}
+}
+
+// A real turn whose assistant text coincidentally begins "Current model:" arms
+// the suppression window (the arm is content-matched and cannot tell it from a
+// probe reply), but its own end is a real inference turn (num_turns>=1), so it
+// must NOT be swallowed - only a local-command end (the probe's own) is. The
+// real turn's end reaches clients, and the actual probe that follows still
+// confirms cleanly. Keying the swallow on the arm alone ate this real end.
+func TestAbsorbProbeDoesNotEatARealTurnThatLooksLikeAProbeReply(t *testing.T) {
+	a := effortAgent(t)
+	a.incProbe() // a probe is in flight behind this real turn
+
+	// The real turn's assistant frame happens to start "Current model:", so it
+	// arms the window and is (pre-existing) suppressed.
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: is the phrase this agent chose to open with"}); !suppress {
+		t.Fatal("a Current-model-shaped assistant frame did not arm the window")
+	}
+	a.owed = true // it is a real inference turn, in flight
+
+	// The real turn's own end (num_turns>=1, not a local command) must pass
+	// through - eating it was the regression removing the !owed gate introduced.
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the real turn's end", LocalCommand: false}); suppress {
+		t.Fatal("a real turn's own end was swallowed because its text looked like a probe reply")
+	}
+
+	// The actual probe's reply and its local-command end still confirm cleanly.
+	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)"}); !suppress || !publish {
+		t.Fatalf("the real probe reply did not confirm after the look-alike: suppress=%v publish=%v", suppress, publish)
+	}
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "probe end", LocalCommand: true}); !suppress {
+		t.Fatal("the probe's own local-command end was not swallowed")
+	}
+	if a.confirmedEffort != core.EffortMax || a.pendingProbes != 0 {
+		t.Fatalf("probe did not confirm/close after the look-alike: effort=%q pending=%d", a.confirmedEffort, a.pendingProbes)
+	}
+}
+
+// A /model reply this build cannot parse - matching the "Current model:"
+// prefix but not the (effort: …) clause - must still close the suppression
+// window it opened. Leaving pendingProbes stuck open the way the old code did
+// left every later turn's own end swallowed under a window nothing could ever
+// legitimately close again.
+func TestAbsorbProbeClosesTheWindowOnAnUnrecognizedReply(t *testing.T) {
+	a := effortAgent(t)
+	a.incProbe()
+
+	suppress, publish := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: something this build does not recognise"})
+	if !suppress {
+		t.Fatal("an unrecognized /model reply was not suppressed")
+	}
+	if publish {
+		t.Fatal("an unrecognized reply must not publish - nothing new was confirmed")
+	}
+	if a.confirmedEffort != "" {
+		t.Fatalf("an unrecognized reply recorded a level anyway: %q", a.confirmedEffort)
+	}
+
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress {
+		t.Fatal("the probe's own turn end was not suppressed")
+	}
+	if a.pendingProbes != 0 {
+		t.Fatalf("the suppression window did not close: pendingProbes = %d", a.pendingProbes)
+	}
+}
+
 // The whole round trip over a real process: the startup probe confirms the
 // level a default-effort session is actually at, the reply never reaches a
 // client, and a runtime /effort re-probes and re-confirms.
@@ -178,8 +351,13 @@ func TestTheProbeConfirmsEffortInvisibly(t *testing.T) {
 
 	c.spawn(idAlpha, "sydney")
 
+	// A real first turn: init is that turn's header (session.go), and the
+	// startup probe waits behind whatever turn its init belongs to rather than
+	// firing into it.
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hello"})
+
 	// The startup probe reads back the level the fake reports, though the spawn
-	// asked for none.
+	// asked for none - fired once that first turn has ended, never during it.
 	c.await("effort confirmed as max", func(f rpc.Frame) bool {
 		return f.Status != nil && sessionRow(*f.Status, idAlpha).Effort == core.EffortMax
 	})
@@ -207,6 +385,10 @@ func TestTheProbeConfirmsTheModelAfterAModelChange(t *testing.T) {
 	c := attach(t, d.socket)
 
 	c.spawn(idAlpha, "sydney")
+
+	// A real first turn: init is that turn's header, so the startup probe has
+	// nothing to defer behind until one exists - see the same note above.
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hello"})
 
 	// The startup probe reads the model back, though the init only names an id.
 	c.await("model confirmed", func(f rpc.Frame) bool {

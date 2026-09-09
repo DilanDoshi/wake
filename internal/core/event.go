@@ -719,6 +719,13 @@ type Event struct {
 	// the whole answer and an allow that has to carry one.
 	Ask AskKind `json:"ask,omitempty"`
 
+	// LocalCommand marks a KindTurnEnd whose result ran no model inference
+	// (num_turns == 0) - the shape of Claude's local commands, of which the
+	// daemon's own bare-/model effort probe is one. It is how the fan-out tells
+	// the probe's own turn end apart from a real turn that merely looks like a
+	// probe reply; false on every other kind. See absorbProbe.
+	LocalCommand bool `json:"local_command,omitempty"`
+
 	// Subagent is set on every event a subagent produced, and on the receipt
 	// the parent gets back for one. Nil means the agent itself. See Subagent
 	// for the two identifier spaces and why a renderer must show it.

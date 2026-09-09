@@ -856,12 +856,20 @@ func emitInit(sid string) {
 // line the way 2.1.232 does, reporting whatever level the last /effort set, so
 // the daemon's startup probe and its re-probe after /effort can both be seen to
 // confirm the level end to end. Everything else it echoes like fakeTurns.
+//
+// init is withheld until the first stdin line, as the header of that turn -
+// never emitted eagerly, because a spawned-and-unprompted session sends none
+// at all (session.go). Emitting it before any input used to let the daemon's
+// startup probe fire with no real turn ever in flight to race, which is not
+// the timing this fake exists to exercise.
 func fakeModelProbe(sid string) int {
-	emitInit(sid)
-	emitText(sid, "ready")
-	emitResult(sid)
 	effort, model := "max", "Opus 5 (1M context)"
+	initSent := false
 	for line := range stdinLines() {
+		if !initSent {
+			emitInit(sid)
+			initSent = true
+		}
 		switch {
 		case strings.Contains(line, `"text":"/model"`):
 			emitText(sid, "Current model: "+model+" (effort: "+effort+")")

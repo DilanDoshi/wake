@@ -91,8 +91,10 @@ func (a *agent) apply(p pending) {
 			a.noteSent()
 			// An /effort or a /model just changed what the session runs as; the
 			// same bare-/model probe confirms both the level and the model back.
+			// noteSent just marked this turn owed, so wantProbe defers it to the
+			// turn's own end rather than sending it into the turn that changed it.
 			if a.noteEffort(p.frame.Text) || a.noteModel(p.frame.Text) {
-				a.probeEffort()
+				a.wantProbe()
 			}
 		}
 	case rpc.FrameAllow:
