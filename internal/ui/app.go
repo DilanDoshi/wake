@@ -341,6 +341,13 @@ type App struct {
 	// the whole fleet at once, so this is usually several ids together.
 	authFailed map[string]struct{}
 
+	// authFailRetries counts a session's consecutive 401 api_retry events, so
+	// Wake auto-parks it once a dead OAuth token is clearly not a blip
+	// (authRetryParkAttempt) - ending Claude Code's ~5-min retry hang - while a
+	// single 401 that recovers on a later attempt never parks. Copy-on-write like
+	// authFailed; cleared with the mark on recovery, a wake, or /reauth.
+	authFailRetries map[string]int
+
 	// roomAsked is every (agentID, requestID) the room has already announced a
 	// permission ask for, so a re-delivered ask - the daemon replaying at attach
 	// one this client also got live - does not draw a second "needs you". A
@@ -557,7 +564,8 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		next := a.apply(m.Frame)
 		next, cmd := next.beat()
 		next, rl := next.armRateLimitClear()
-		return next, tea.Batch(cmd, rl, next.closing())
+		next, park := next.autoParkStalled()
+		return next, tea.Batch(cmd, rl, park, next.closing())
 
 	case heartbeatMsg:
 		return a.beatArrived()
@@ -663,8 +671,9 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		// tick. frameMsg's own beat covers only the single-frame form.
 		next, tick := a.beat()
 		next, rl := next.armRateLimitClear()
+		next, park := next.autoParkStalled()
 		// Re-armed unconditionally, unless one of those frames was ⌃Q's answer.
-		return next, tea.Batch(tick, rl, next.reading())
+		return next, tea.Batch(tick, rl, park, next.reading())
 	}
 	return a.hungUp(m.err)
 }
