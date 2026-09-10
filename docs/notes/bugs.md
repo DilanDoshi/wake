@@ -81,6 +81,30 @@ And it parks-then-`/resume` in two steps rather than one: an automatic wake woul
 `tea.Cmd` back through the fleet-report chain (`applyStatus` returns only `App`), a larger change than
 this fix carried. See `deferred.md`.
 
+**Still open after the fix — the surfacing is easy to miss (watched 2026-09-09).** The rebuild that
+first put #66 in a running binary showed the recovery works and the *presentation* does not. `pablo`
+401'd, the notice fired, and the operator sitting in pablo's DM saw none of it. Three residuals, one
+root — the failure has one tell, it is transient, and it is not where the operator is:
+
+- **One global, last-writer-wins notice row.** `noticeLine` draws `notice.Latest()` (`appview.go`) —
+  the single slot `CLAUDE.md` says routine fleet activity overwrites within seconds — and the durable
+  `authFailed` mark renders **nowhere** (only `apierror.go`/`reauth.go`/`app.go`): no roster row,
+  status bar, awareness strip, or the failed agent's own pane. So the one signal is displaceable and
+  has nothing behind it.
+- **The failed turn still paints a done line.** pablo's DM read `✻ Ferried for 3m 2s · done 10:44 PM`
+  over the 401'd turn: `doneAt`/`turnDur` are captured at the working→idle edge (`Fleet.WithStatus`)
+  with no knowledge of `authFailed` (absent from `beat.go`/`dmbeat.go`/`fleet.go`/`report.go`) —
+  BUG-34's shape one turn on, a done line minted over a *failure* rather than a stale one over live
+  work.
+- **The retry storm is silent.** #66 keys on the terminal `isApiErrorMessage` frame; the ~3–4 min of
+  `system/api_error` retries before it are unmarked (nine unmarked, then one marked, in a real
+  transcript), so even the notice waits minutes. (Read from the frames; the first two were watched.)
+
+*What would settle it:* give `authFailed` a render — the failed agent's DM working line becoming
+`✻ … · auth failed — /reauth` in the row the done line already owns, plus a roster/awareness glyph
+for the closed-DM case; suppressing the done line for an `authFailed` session is a one-line gate
+beside BUG-34's `notDone`.
+
 
 ## BUG-10 — the picker takes four keys the legend says belong to something else, and says nothing
 
