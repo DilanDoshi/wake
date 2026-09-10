@@ -394,9 +394,10 @@ func TestAFoldedPreviewIsBounded(t *testing.T) {
 	if !strings.HasSuffix(got.frames[0].Event.Text, "tok ") {
 		t.Error("the folded preview was cut at the wrong end: a pane draws its tail")
 	}
-	// And the bound is above what any pane can draw, so nothing drawable is cut.
-	if foldChars < previewChars(foldWidth) {
-		t.Errorf("foldChars = %d, want at least previewChars(%d) = %d", foldChars, foldWidth, previewChars(foldWidth))
+	// And the bound covers the preview floor, so a fold emptied every frame feeds
+	// the DM's own tail without cutting anything drawable within one consume.
+	if foldChars < previewChars(foldWidth, minPreviewRows) {
+		t.Errorf("foldChars = %d, want at least previewChars(%d, %d) = %d", foldChars, foldWidth, minPreviewRows, previewChars(foldWidth, minPreviewRows))
 	}
 }
 

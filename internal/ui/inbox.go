@@ -102,9 +102,8 @@ const (
 	// nanoseconds.
 	takeLimit = 256
 
-	// foldWidth is the pane the fold's bound is taken at. Wider than any
-	// terminal, so the tail foldChars keeps is always more than a preview can
-	// draw and the cut is never visible.
+	// foldWidth is the width the fold's byte bound is taken at. Wider than any
+	// terminal, so the bytes foldChars keeps cover many rows of any real pane.
 	foldWidth = 800
 )
 
@@ -113,8 +112,15 @@ const (
 //
 // It is a bound on *work* rather than on what is shown. Deltas are additive, so
 // a draw loop stalled for a minute would otherwise grow one string per session
-// for as long as it stalls, and appending to a string costs its length.
-var foldChars = previewChars(foldWidth)
+// for as long as it stalls, and appending to a string costs its length. It is
+// taken at the preview's floor, not DM.previewCap's larger pane-filling cap: the
+// DM accumulates its own tail across the frequent consumes that empty this fold,
+// so the cap is fed frame by frame rather than from one fold's buffer. The only
+// shortfall is a multi-second stall into a wide, empty-transcript pane, where the
+// fold can trim below what previewCap would grow to; the next tokens refill it,
+// so the preview is briefly short rather than wrong - not worth a larger work
+// bound multiplied across a stalled fleet.
+var foldChars = previewChars(foldWidth, minPreviewRows)
 
 // inbox is the frames that have arrived and not yet been drawn.
 //

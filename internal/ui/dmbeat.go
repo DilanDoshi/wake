@@ -63,3 +63,18 @@ func (d DM) showsDone() bool {
 func (d DM) hasBeat() bool {
 	return !d.compactingSince.IsZero() || d.Agent.State == rpc.StateWorking || d.showsDone()
 }
+
+// beatBarRows is aboveComposerExtra without the preview's own rows: the
+// working/done line with its gap, the composer's gap, and the status bar. Split
+// out so previewCap can size the pool the preview competes with the transcript
+// for without counting the preview itself.
+func (d DM) beatBarRows() int {
+	n := 0
+	if d.hasBeat() {
+		n += 1 + beatGap
+	}
+	if d.menu == "" { // composerGap, dropped when a menu hugs the box instead
+		n += composerGap
+	}
+	return n + barRows(d.bar)
+}

@@ -276,6 +276,10 @@ func (d DM) SetSize(w, h int) DM {
 	d.partial = d.partial.sized(d.blockWidth())
 	d.composer = d.composer.SetWidth(max(w, minComposerWidth)).
 		WithMaxRows(composerRowsIn(h, d.composer.overhead()+d.aboveComposerExtra()))
+	// How many rows the preview may draw depends on the pane and the transcript's
+	// own height, both settled now. The growing preview retriggers this through
+	// View's chrome guard, so a token needs no recompute of its own (Append).
+	d.partial = d.partial.capped(d.previewCap())
 
 	// A height change is not that. It moves a window over lines that already
 	// exist, so a reader who has scrolled back keeps their place - which is the
@@ -415,6 +419,10 @@ func (d DM) Append(ev core.Event) DM {
 	if following {
 		d.tr = d.tr.toBottom()
 	}
+	// The transcript's height just moved, so the preview's cap is recomputed
+	// against it - the token path returns above and keeps the cap this settled,
+	// so a stream re-measures only when a block lands rather than per token.
+	d.partial = d.partial.capped(d.previewCap())
 	return d
 }
 
@@ -751,15 +759,7 @@ func (d DM) baseChrome() int {
 // menu field so this and View never disagree - a mismatch sizes the pane a row
 // out and scrolls the alt screen.
 func (d DM) aboveComposerExtra() int {
-	n := d.partial.rows()
-	if d.hasBeat() {
-		n += 1 + beatGap
-	}
-	if d.menu == "" {
-		n += composerGap
-	}
-	n += barRows(d.bar)
-	return n
+	return d.partial.rows() + d.beatBarRows()
 }
 
 // minHeight is the shortest pane this conversation draws: its chrome, plus one
