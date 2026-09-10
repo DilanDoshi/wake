@@ -113,6 +113,11 @@ type DM struct {
 	events chunked[core.Event]
 	tr     transcript
 
+	// seed is the room's provisional account of this agent's turns, shown above
+	// the transcript when a DM opens after those turns happened and cleared once
+	// the on-disk read supersedes it. Never in events. See roomseed.go.
+	seed []core.Event
+
 	// subs is each dispatch's own frames, keyed by the dispatch id they carry,
 	// and viewing is which of them this pane is drawing - "" for the
 	// conversation itself.

@@ -139,8 +139,9 @@ var lastReadStyle = lipgloss.NewStyle().Foreground(LastRead)
 //
 // A conversation with nothing in it records nothing. A rule above the first line
 // a transcript ever carries has no "before" on the other side of it, so it reads
-// as chrome rather than as a boundary - and it would be the common case, because
-// a DM opened for the first time starts empty.
+// as chrome rather than as a boundary. A DM opened for the first time is empty
+// *unless* it seeded from the room (roomseed.go): those turns are content the
+// reader has read, so a seed-only DM does mark a boundary at index 0.
 //
 // **It also drops the preview, and that is not a second job.** Leaving is the
 // one thing that happens on every path a pane stops being drawn on - closed,
@@ -157,7 +158,12 @@ var lastReadStyle = lipgloss.NewStyle().Foreground(LastRead)
 func (d DM) Leave() DM {
 	d.partial = d.partial.cleared()
 	at := d.events.len()
-	if at == 0 {
+	// A seed-only DM (opened after the agent spoke in the room, no live event yet)
+	// still has a transcript the reader has read - the room turns above events -
+	// so leaving marks index 0, and the first live event to arrive renders under
+	// the boundary rather than silently beneath already-read content. See
+	// roomseed.go.
+	if at == 0 && len(d.seed) == 0 {
 		return d
 	}
 	if n := len(d.marks); n > 0 && d.marks[n-1] == at {
