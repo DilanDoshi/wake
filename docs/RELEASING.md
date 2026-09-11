@@ -11,14 +11,22 @@ release should go out. There is no CI release trigger; the timing is entirely yo
    make ci        # must exit 0 — this is the only gate
    ```
 
-2. Tag the commit (semver):
+2. Bump the checked-in banner default to the release number, so a plain `go
+   build`/`go install` reports it. Update `Version` in `internal/ui/banner.go`
+   and the `bannerVersion` constant in `internal/ui/menuposition_test.go` (they
+   must match — the screen tests assert the banner draws `v<Version>`), then
+   re-run `make ci`. A release build stamps the version from the tag via
+   `-ldflags -X`, but the checked-in default is what every non-release build
+   shows, so keep it in step with the tag you are about to cut.
+
+3. Tag the commit (semver):
 
    ```sh
-   git tag v0.1.0
-   git push origin v0.1.0
+   git tag v0.1.2
+   git push origin v0.1.2
    ```
 
-3. Cut it:
+4. Cut it:
 
    ```sh
    GITHUB_TOKEN=$(gh auth token) goreleaser release --clean
@@ -35,6 +43,8 @@ reports comes from the tag, via `-ldflags -X …/internal/ui.Version` (this is w
   and a cross-compile. Run it from a normal checkout under your home directory — not `/tmp` and not a
   very long temp path, because the screen tests render the working directory and assume a sane path.
 - Follow semver for the tag.
+- The checked-in banner default (`internal/ui.Version`, and its `bannerVersion` test twin) matches the
+  tag — that is step 2 above. A tag ahead of the default means every non-release build under-reports.
 
 ## After you cut
 
