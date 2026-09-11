@@ -45,7 +45,7 @@ const composerTopGlyph = "╭"
 
 // bannerVersion is on the first row of every conversation's banner, which is
 // the top of the transcript.
-const bannerVersion = "0.1.0"
+const bannerVersion = "0.1.2"
 
 // The picker opens below the transcript and directly above the composer in a
 // conversation - not pinned at the pane's top.
