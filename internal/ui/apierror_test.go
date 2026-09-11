@@ -24,6 +24,82 @@ func apiErrorFrame(sessionID, text string) rpc.Frame {
 	}
 }
 
+// A fleet-wide OAuth 401 makes Claude Code retry a dead token for ~5 min before
+// giving up - the "loads for five minutes and returns nothing" hang. The retries
+// arrive as KindAPIError from attempt 1, so Wake surfaces the failure within a
+// second (marks the session) and, once it is clearly a dead login rather than a
+// blip, auto-parks it to end the hang. The park is derived after the fold the way
+// the rate-limit clear is: observe returns only App, and a park is a write. See
+// docs/notes/bugs.md.
+func TestARetryStormSurfacesEarlyAndAutoParksAtTheThreshold(t *testing.T) {
+	a := sizedApp(t, nil, nil, "s1")
+	// A retrying session is a live fleet row; the park's candidate set is
+	// authFailedLive, which excludes one the fleet has no row for.
+	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateWorking}}})
+	retry := func(app App) App {
+		m, _ := app.Update(frameMsg{Frame: apiErrorFrame("s1", "Failed to authenticate. API Error: 401")})
+		return m.(App)
+	}
+
+	// First 401: surfaced at once, never parked - a single 401 can still recover.
+	app := retry(a)
+	if _, marked := app.authFailed["s1"]; !marked {
+		t.Fatal("first api_retry did not mark s1 authFailed, so nothing surfaced early")
+	}
+	if _, parking := app.parking["s1"]; parking {
+		t.Fatal("s1 was parked on the first 401 - one that might have recovered")
+	}
+
+	// Below the threshold: still only surfaced.
+	for app.authFailRetries["s1"] < authRetryParkAttempt-1 {
+		app = retry(app)
+		if _, parking := app.parking["s1"]; parking {
+			t.Fatalf("s1 parked at attempt %d, before the threshold %d", app.authFailRetries["s1"], authRetryParkAttempt)
+		}
+	}
+
+	// At the threshold: auto-parked, so the 5-min hang ends.
+	app = retry(app)
+	if _, parking := app.parking["s1"]; !parking {
+		t.Fatalf("s1 was not auto-parked at attempt %d - the hang stands", authRetryParkAttempt)
+	}
+}
+
+// A session that recovers on a later retry must not carry its count into the next
+// storm, or a single stale 401 much later would park it one retry in.
+func TestRecoveryResetsTheRetryCount(t *testing.T) {
+	a := sizedApp(t, nil, nil, "s1").bumpAuthRetries("s1").bumpAuthRetries("s1").markAuthFailed("s1")
+	a = a.clearAuthFailed("s1")
+	if n := a.authFailRetries["s1"]; n != 0 {
+		t.Fatalf("retry count survived recovery: got %d, want 0", n)
+	}
+}
+
+// Parking closes stdin, so a blocked agent's ask would die as a deny nobody made
+// and survive the wake - autoParkStalled refuses a blocked agent past the
+// threshold, the way parkTarget and reauth refuse one.
+func TestABlockedAuthFailedSessionIsNotAutoParked(t *testing.T) {
+	a := sizedApp(t, nil, nil, "s1")
+	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateBlocked}}})
+	a = a.markAuthFailed("s1").bumpAuthRetries("s1").bumpAuthRetries("s1").bumpAuthRetries("s1")
+	next, _ := a.autoParkStalled()
+	if _, parking := next.parking["s1"]; parking {
+		t.Error("a blocked agent was auto-parked; its ask dies as a deny nobody made")
+	}
+}
+
+// A session the fleet has no row for - never registered, or dropped on an
+// ending - must not be parked: the write reaches an id nothing owns and the mark
+// never clears. authFailedLive excludes it, as reauth's own candidate set does.
+func TestAnUntrackedAuthFailedSessionIsNotAutoParked(t *testing.T) {
+	a := sizedApp(t, nil, nil, "s1")
+	a = a.markAuthFailed("ghost").bumpAuthRetries("ghost").bumpAuthRetries("ghost").bumpAuthRetries("ghost")
+	next, _ := a.autoParkStalled()
+	if _, parking := next.parking["ghost"]; parking {
+		t.Error("a session the fleet has no row for was auto-parked")
+	}
+}
+
 func TestAnAPIErrorPopsANoticeAndMarksTheSessionForReauth(t *testing.T) {
 	a := sizedApp(t, nil, nil, "s1")
 

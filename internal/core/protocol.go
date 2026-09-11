@@ -283,10 +283,10 @@ func one(ev Event) []Event { return []Event{ev} }
 // Event.PermissionMode.
 func systemEvent(f wireFrame, raw json.RawMessage) Event {
 	return Event{
-		Kind:           KindSystem,
+		Kind:           systemKind(f),
 		SessionID:      f.SessionID,
-		Text:           f.Subtype,
-		Notice:         systemNoticeFor(f),
+		Text:           systemText(f),
+		Notice:         apiRetryNotice(f, systemNoticeFor(f)),
 		PermissionMode: f.PermissionMode,
 		Raw:            raw,
 		Session:        initFacts(f),

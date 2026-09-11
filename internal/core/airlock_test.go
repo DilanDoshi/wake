@@ -258,6 +258,7 @@ var claudeWireVocabulary = wordSet([]string{
 	"tool_use_id", "agent_id", "agentId", "agentType",
 	"tool_use_result", "command_uuid", "new_conversation_id",
 	"rate_limit_info", "isReplay", "isSynthetic", "is_api_error_message", "isApiErrorMessage",
+	"api_retry", "error_status",
 	"run_in_background", "last_tool_name", "task_id",
 	"non_execution_kind", "permission_denials", "terminal_reason",
 	"modelUsage", "total_cost_usd", "num_turns",
@@ -539,7 +540,10 @@ var notNamedByTheAirlock = map[string]string{
 // reads to surface a failed turn as KindAPIError rather than agent speech.
 // 160 → 161: "isApiErrorMessage", the same marker's camelCase spelling on disk,
 // which DecodeTranscriptLine reads to drop the failed turn from restored history.
-const policedWordCount = 161
+// 161 → 163: "api_retry" and "error_status", the live-stream retry frame Wake
+// reads to surface a 401 from the first retry (auto-parking a dead login) rather
+// than at the give-up ~5 min later. Recorded in api-retry-auth.jsonl.
+const policedWordCount = 163
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -559,6 +563,9 @@ var notWireVocabulary = wordSet([]string{
 	"%w: encode user message: nothing to send",
 	// The text a decoded image block carries up in place of its bytes.
 	ImagePlaceholder,
+	// Wake's own surfacing text for a 401 api_retry, which carries no message of
+	// its own (only error_status) - so this is written here, not read off a frame.
+	"Failed to authenticate. API Error: 401",
 	"encode control response",
 	"%w: encode control response: empty request id",
 	"encode interrupt",

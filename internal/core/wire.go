@@ -174,6 +174,15 @@ type wireFrame struct {
 	// api-error-auth.jsonl (the not-logged-in variant of the fleet-wide 401).
 	IsAPIErrorMessage bool `json:"is_api_error_message"`
 
+	// RetryStatus is the HTTP status on a system/api_retry frame: Claude Code
+	// emits one per retry on a failed API call, on the LIVE stream from attempt 1
+	// (recorded 2026-09-09 in api-retry-auth.jsonl). It is what lets a 401 - a
+	// dead OAuth token a running process will not recover - be surfaced as an auth
+	// failure in a second, where the give-up frame is ~5 min later, and lets an
+	// overload (429/529) be left alone because it usually recovers. See
+	// authFailedRetry and docs/notes/bugs.md.
+	RetryStatus int `json:"error_status"`
+
 	// The subagent dimension, and it is three fields rather than one. All
 	// three are top-level on an assistant or user frame the CLI forwarded
 	// from a subagent, and all three arrive together: measured over the
@@ -552,6 +561,46 @@ func apiErrorText(msg json.RawMessage) string {
 		}
 	}
 	return text
+}
+
+// subtypeAPIRetry is the system frame Claude Code emits per retry on a failed API
+// call. apiRetryAuthText is what a 401 one surfaces as - the retry frame carries
+// no message of its own, only error_status - matching the eventual give-up.
+const (
+	subtypeAPIRetry  = "api_retry"
+	authErrorStatus  = 401
+	apiRetryAuthText = "Failed to authenticate. API Error: 401"
+)
+
+// authFailedRetry reports whether a system frame is a 401 api_retry: Claude Code
+// retrying a dead OAuth token, which a running process will not recover. The
+// three helpers below let systemEvent surface it as a KindAPIError - the same
+// route the synthetic give-up frame takes - without adding to protocol.go, which
+// is at its size cap. A non-401 retry (an overload) is left a plain system event
+// because it usually recovers. See docs/notes/bugs.md.
+func (f wireFrame) authFailedRetry() bool {
+	return f.Subtype == subtypeAPIRetry && f.RetryStatus == authErrorStatus
+}
+
+func systemKind(f wireFrame) EventKind {
+	if f.authFailedRetry() {
+		return KindAPIError
+	}
+	return KindSystem
+}
+
+func systemText(f wireFrame) string {
+	if f.authFailedRetry() {
+		return apiRetryAuthText
+	}
+	return f.Subtype
+}
+
+func apiRetryNotice(f wireFrame, base Notice) Notice {
+	if f.authFailedRetry() {
+		return NoticeAPIError
+	}
+	return base
 }
 
 // The four streaming words Wake reads, out of the seven event types and five
