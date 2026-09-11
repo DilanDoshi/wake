@@ -13,10 +13,10 @@ import (
 // promptTerminalSetupOnceFormat points at the verb rather than applying
 // anything itself - the same "offer, never act" line every other first-run
 // notice in this package already draws (managerStarted, newFleetLine).
-const promptTerminalSetupOnceFormat = "%s can send Shift+Enter as a newline: run `wake setup-terminal` " +
-	"(Ctrl+J already works). One-time notice."
+const promptTerminalSetupOnceFormat = "%s can send Shift+Enter as a newline and Cmd+Left/Right to line " +
+	"start/end: run `wake setup-terminal` (Ctrl+J already works). One-time notice."
 
-// promptTerminalSetupOnce offers the Shift+Enter fix through the room's own
+// promptTerminalSetupOnce offers the terminal-setup fix through the room's own
 // reserved notice row - `internal/notice`, the one-line surface every other
 // transient message in this build already uses - so this adds no chrome, no
 // key and no geometry change of its own.

@@ -20,9 +20,9 @@
 //     conversation of its own, because it is a service rather than a
 //     participant.
 //   - wake fleets           the named fleets on this machine.
-//   - wake setup-terminal   make Shift+Enter send a newline in the composer,
-//     by configuring the host terminal to send ESC CR for it - the sequence
-//     Wake already reads as a newline. See internal/termsetup.
+//   - wake setup-terminal   make Shift+Enter send a newline and Cmd+Left/Right
+//     jump to line start/end in the composer, by configuring the host terminal
+//     to send the byte sequences Wake reads for them. See internal/termsetup.
 //   - wake daemon           serve: what EnsureRunning forks. Not a user
 //     command.
 //   - wake mcp              serve the manager's tools on stdin and stdout.
@@ -132,7 +132,7 @@ var usage = `usage:
   wake status             what is running
   wake stop               stop every session and the daemon
   wake fleets             the named fleets on this machine
-  wake setup-terminal     make Shift+Enter send a newline, by configuring your terminal
+  wake setup-terminal     Shift+Enter newline, Cmd+Left/Right line start/end, via your terminal
 
 flags, anywhere:
   --fleet <name>          which fleet to talk to; several can run in one directory
