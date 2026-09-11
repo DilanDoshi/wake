@@ -1,8 +1,9 @@
-// `wake setup-terminal`: make Shift+Enter send a newline, by configuring the
-// host terminal to send ESC CR for it - the sequence bubbletea already reads
-// as alt+enter and internal/ui/composer.go already binds to a newline. See
-// internal/termsetup for the detection, the per-terminal knowledge and the
-// file I/O; this file is the CLI shape around it.
+// `wake setup-terminal`: configure the host terminal to send the byte sequences
+// Wake reads for two keys it cannot otherwise see - Shift+Enter -> ESC CR (a
+// newline, which bubbletea reads as alt+enter and composer.go binds) and
+// Cmd+Left/Right -> CSI H / CSI F (Home/End, which move the composer cursor to
+// line start/end). See internal/termsetup for the detection, the per-terminal
+// knowledge and the file I/O; this file is the CLI shape around it.
 //
 // The one verb in this package that dials no socket: it never touches a
 // fleet, a session or the wire, only a config file on this machine.

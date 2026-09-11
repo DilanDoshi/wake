@@ -74,12 +74,13 @@ func TestAutoWritableTerminalsHaveASnippetAndNoManualSteps(t *testing.T) {
 	}
 }
 
-// The exact string the owner verified against real Ghostty. Anyone changing
-// this snippet changes what the owner already confirmed works.
-func TestGhosttySnippetIsTheVerifiedString(t *testing.T) {
+// The exact Shift+Enter line the owner verified against real Ghostty must
+// survive verbatim inside the (now multi-line) snippet. The ⌘←/→ lines beside
+// it are asserted by TestSnippetsBindCmdArrowToLineNavigation.
+func TestGhosttySnippetKeepsTheVerifiedShiftEnterLine(t *testing.T) {
 	want := `keybind = shift+enter=text:\x1b\r`
-	if got := InfoFor(Ghostty).Snippet; got != want {
-		t.Errorf("Ghostty snippet = %q, want the verified %q", got, want)
+	if got := InfoFor(Ghostty).Snippet; !strings.Contains(got, want) {
+		t.Errorf("Ghostty snippet no longer contains the owner-verified line %q:\n%s", want, got)
 	}
 }
 
@@ -132,6 +133,54 @@ func TestVSCodeManualStepUsesTheJSONUnicodeEscape(t *testing.T) {
 	}
 	if !strings.Contains(joined, tomlUnicodeEscToken) {
 		t.Errorf("VS Code manual steps are missing the JSON Unicode escape for ESC: %q", joined)
+	}
+}
+
+// The ⌘←/→ line-navigation bindings, in each auto-writable terminal's own
+// syntax. ⌘← sends CSI H (Home), ⌘→ sends CSI F (End); bubbletea reads those as
+// Home/End and internal/ui/composer.go's textarea moves the cursor to line
+// start/end on them. Ghostty's key names (`super`, `arrow_left`) are the ground
+// truth its own binary reports; Kitty's and Alacritty's are from their docs.
+func TestSnippetsBindCmdArrowToLineNavigation(t *testing.T) {
+	escBracketH := tomlUnicodeEscToken + "[H"
+	escBracketF := tomlUnicodeEscToken + "[F"
+	for _, tc := range []struct {
+		e    Emulator
+		want []string
+	}{
+		{Ghostty, []string{`keybind = super+arrow_left=text:\x1b[H`, `keybind = super+arrow_right=text:\x1b[F`}},
+		{Kitty, []string{`map cmd+left send_text all \e[H`, `map cmd+right send_text all \e[F`}},
+		{Alacritty, []string{`key = "Left"`, `key = "Right"`, `chars = "` + escBracketH + `"`, `chars = "` + escBracketF + `"`}},
+	} {
+		got := InfoFor(tc.e).Snippet
+		for _, want := range tc.want {
+			if !strings.Contains(got, want) {
+				t.Errorf("%v snippet missing the line-navigation binding %q:\n%s", tc.e, want, got)
+			}
+		}
+	}
+}
+
+// The manual-only terminals must carry the same two bindings as copy-paste
+// steps, in the escape form each format accepts: iTerm2's vim special chars and
+// WezTerm's Lua take \x1b, VS Code's JSON takes the Unicode escape.
+func TestManualStepsCoverCmdArrowBindings(t *testing.T) {
+	escBracketH := tomlUnicodeEscToken + "[H"
+	escBracketF := tomlUnicodeEscToken + "[F"
+	for _, tc := range []struct {
+		e    Emulator
+		want []string
+	}{
+		{ITerm2, []string{`\x1b[H`, `\x1b[F`}},
+		{VSCode, []string{"cmd+left", "cmd+right", escBracketH, escBracketF}},
+		{WezTerm, []string{"LeftArrow", "RightArrow", `\x1b[H`, `\x1b[F`}},
+	} {
+		joined := strings.Join(InfoFor(tc.e).ManualSteps, "\n")
+		for _, want := range tc.want {
+			if !strings.Contains(joined, want) {
+				t.Errorf("%v manual steps missing %q:\n%s", tc.e, want, joined)
+			}
+		}
 	}
 }
 
