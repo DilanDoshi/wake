@@ -574,9 +574,14 @@ shared by every session**, and streaming a block through it costs the integral r
 render — **303ms for a single 1,024-token block against 4.6ms for the preview, 65×**, and visibly
 superlinear (7× at 64 tokens, 19× at 256). A tick does not fix it either; it lowers the rate and
 not the growth, and it is a poll where a wait will do. So `core.KindPartialText` never enters
-`DM.events` or the transcript: it is a **plain-text tail**, bounded to `maxPreviewRows`, wrapped on
+`DM.events` or the transcript: it is a **plain-text tail**, bounded to `DM.previewCap` rows, wrapped on
 change and never through glamour, cleared by the completed block or by the turn ending — which is
-the interrupted case where no block ever arrives. The transcript is byte-identical to what it was;
+the interrupted case where no block ever arrives. **That cap is the pane's, not a fixed three:** over
+a full transcript it is `minPreviewRows` (3) so the preview pushes nothing read off screen, and over
+an empty or short one it grows into the rows the transcript is not using, so a long answer streaming
+into a blank pane fills it rather than scrolling inside a three-row box. It is re-measured in
+`SetSize` and when a block lands (`Append`), never per token, so the cost stays flat in the block's
+length — the pane bounds it, the answer never does. The transcript is byte-identical to what it was;
 the completed block still goes through glamour exactly once, as it always did. **And a token is
 accumulated only for a pane on screen** (`App.wants`): `App.dms` holds every conversation ever
 *opened* and `withDM` copies the whole map of `DM` values per write, so an operator who had looked

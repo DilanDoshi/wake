@@ -2419,9 +2419,14 @@ That is what licenses every property in `internal/ui/partial.go`:
   invalidate the memoized lines, and gives a width change nothing extra to re-wrap. The transcript
   is *rendered lines* precisely because re-rendering is expensive (11.3 ms of an 11.5 ms `Append` at
   4,000 events); a per-token writer into it would have been that defect returning through a new door.
-- **It is bounded to `maxPreviewRows`,** and the retained text with it — the tail, because the newest
-  tokens are the ones being read. That is what makes the per-token work *flat* instead of growing
-  with the answer, and it is the property the linear column above is measuring.
+- **It is bounded to the pane (`DM.previewCap`),** and the retained text with it — the tail, because
+  the newest tokens are the ones being read. The cap is `minPreviewRows` (3) over a full transcript,
+  so the preview pushes nothing read off screen, and grows into the unused rows over an empty or short
+  one, so a long answer streaming into a blank pane fills it rather than scrolling inside a three-row
+  box (`fix/streaming-preview-fills-pane`, 2026-09-10). It is the *pane* that bounds it, never the
+  block, so the per-token work stays *flat* instead of growing with the answer — the property the
+  linear column above is measuring. Re-measured in `SetSize` and when a block lands (`Append`), never
+  per token.
 - **It is cleared by the block that supersedes it, or by the turn ending.** The second is not
   belt-and-braces: an interrupted turn produces no completed block at all, so nothing else would
   ever clear it and half a sentence would sit under the transcript until the agent next spoke.
@@ -3120,10 +3125,12 @@ rather than a few big ones — "too small, doesn't show enough." `tileGridFor` (
 chooses a near-square grid for the agent count and stretches each cell to fill *both* axes (the
 rows fill the height the way the columns already filled the width); a fleet larger than fits at the
 minimum cell size pages through the existing cursor window. **Guardrail 2 was relaxed, deliberately
-and with the owner's yes:** the live tail was capped at `maxPreviewRows` (3, the DM preview's bound);
+and with the owner's yes:** the live tail was capped at `minPreviewRows` (3, the DM preview's floor);
 it is now bounded to the *cell's own body* — a big cell fills with output — with retention capped at
 `maxTileTailRows` per agent so the per-token work stays flat. Still view-only, still no scrollback,
 still a fixed equal-cell grid with no dividers or splits (guardrails 1, 3, 4 untouched). The cap is a
-tile-only field on `partial` (`rowCap`); the DM preview and the inbox fold keep the three-row bound.
+tile-only field on `partial` (`rowCap`); the inbox fold keeps the three-row bound (the DM preview
+later grew to the pane too — see the streaming-preview entry above — and `rowCap` was itself
+superseded by the transcript-window tile of 2026-09-01).
 `tileGridFor` is one function read by the draw, the mouse (`boardHit`) and the cursor (`stepBoard`),
 so a click and a tile cannot disagree.

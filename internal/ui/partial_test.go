@@ -77,21 +77,78 @@ func TestAnInterruptedTurnLeavesNoHalfSentenceUnderTheTranscript(t *testing.T) {
 
 // The bound is what makes the cost flat. Without it a 13,499-character block -
 // the longest in the recorded corpus - is wrapped in full on every token that
-// arrives, and the work per delta grows with the answer.
+// arrives, and the work per delta grows with the answer. The cap is the pane's
+// now rather than a fixed three rows, but it is still the pane's and never the
+// block's, so the cost stays flat however long the answer runs.
 func TestThePreviewIsBoundedToItsRowsHoweverLongTheBlockGets(t *testing.T) {
 	d := NewDM("s1", "alex").SetSize(60, 20)
 	for range 400 {
 		d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: "the quick brown fox jumps over the lazy dog. "})
 	}
-	if got := d.partial.rows(); got > maxPreviewRows {
-		t.Errorf("the preview draws %d rows, want at most %d", got, maxPreviewRows)
+	if limit := d.previewCap(); d.partial.rows() > limit {
+		t.Errorf("the preview draws %d rows, want at most the pane's cap of %d", d.partial.rows(), limit)
 	}
-	if got := len(d.partial.text); got > previewChars(60) {
-		t.Errorf("the preview retains %d characters, want at most %d: an unbounded tail is an unbounded wrap on every token", got, previewChars(60))
+	if got, want := len(d.partial.text), previewChars(60, d.previewCap()); got > want {
+		t.Errorf("the preview retains %d characters, want at most %d: an unbounded tail is an unbounded wrap on every token", got, want)
 	}
 	// The newest tokens are the ones being read, so the tail is the end.
 	if !strings.HasSuffix(d.partial.text, "lazy dog. ") {
 		t.Errorf("the preview kept the wrong end of the block: %q", lastRunes(d.partial.text, 40))
+	}
+}
+
+// The preview grows to fill an otherwise-empty pane rather than sitting in a
+// three-row box while the rest of it stays blank - and it yields back to its
+// floor once the transcript has filled the pane, so it never pushes read
+// conversation off screen. The pane draws exactly its height in both cases,
+// which is the alt-screen invariant the fixed cap protected and this must keep.
+func TestThePreviewFillsAnEmptyPaneAndYieldsToAFullOne(t *testing.T) {
+	const w, h = 60, 30
+	long := strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200)
+
+	// Empty transcript, tall pane: the preview fills far past the old floor.
+	empty := NewDM("s1", "alex")
+	empty.Agent = Agent{ID: "s1", State: rpc.StateWorking}
+	empty = tokens(empty.SetSize(w, h), long)
+	if got := empty.partial.rows(); got <= minPreviewRows {
+		t.Errorf("into an empty %d-row pane the preview drew only %d rows: it is stuck in the old box while the pane sits blank", h, got)
+	}
+	if got := lipgloss.Height(empty.View(w, h)); got != h {
+		t.Fatalf("filling the preview drew %d rows in a %d-row pane: a frame past its height scrolls the alt screen away on every draw", got, h)
+	}
+
+	// Full transcript: the preview yields to its floor so nothing scrolls off.
+	full := NewDM("s1", "alex")
+	full.Agent = Agent{ID: "s1", State: rpc.StateWorking}
+	full = full.SetSize(w, h)
+	for range 100 {
+		full = full.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "an earlier line of the conversation"})
+	}
+	full.Agent = Agent{ID: "s1", State: rpc.StateWorking}
+	full = tokens(full, long)
+	if got := full.partial.rows(); got != minPreviewRows {
+		t.Errorf("under a full transcript the preview drew %d rows, want the floor of %d: it is shoving read conversation off screen", got, minPreviewRows)
+	}
+	if got := lipgloss.Height(full.View(w, h)); got != h {
+		t.Fatalf("the preview over a full transcript drew %d rows in a %d-row pane", got, h)
+	}
+}
+
+// A pane too short to also hold a preview yields the preview to zero rows rather
+// than drawing it and overflowing - a frame one row past its height scrolls the
+// alt screen away on every draw. Regression for the tiny-working-pane case the
+// code review caught: previewCap's floor forced a row that did not fit.
+func TestATightPaneYieldsThePreviewRatherThanOverflowing(t *testing.T) {
+	long := strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200)
+	d := NewDM("s1", "alex")
+	d.Agent = Agent{ID: "s1", State: rpc.StateWorking}
+	d = d.SetSize(60, 40)  // establish the chrome at a comfortable size first
+	floor := d.minHeight() // chrome plus one transcript row, no preview reserved
+	for _, h := range []int{floor, floor + 1, floor + 2} {
+		dd := tokens(d.SetSize(60, h), long)
+		if got := lipgloss.Height(dd.View(60, h)); got != h {
+			t.Fatalf("a %d-row working pane streaming a long reply drew %d rows: the preview overflowed a pane too tight to hold it", h, got)
+		}
 	}
 }
 

@@ -176,7 +176,7 @@ func TestATileNeverOvershootsItsCellHeightWhenTheTranscriptWraps(t *testing.T) {
 }
 
 // The tile fills with the transcript window rather than the DM preview's
-// three-row cap (maxPreviewRows): a big cell shows as many rows of the
+// three-row cap (minPreviewRows): a big cell shows as many rows of the
 // conversation as its own body can draw - the board's revised guardrail 2,
 // bounded to the cell body and with no scrollback. The DM preview and the inbox
 // fold keep the three-row cap; the tile shows the whole transcript tail.
@@ -199,8 +199,8 @@ func TestABigTileFillsWithTranscriptBeyondThePreviewCap(t *testing.T) {
 			filled++
 		}
 	}
-	if filled <= maxPreviewRows {
-		t.Fatalf("the tile filled only %d transcript rows, want more than the DM preview cap of %d", filled, maxPreviewRows)
+	if filled <= minPreviewRows {
+		t.Fatalf("the tile filled only %d transcript rows, want more than the DM preview cap of %d", filled, minPreviewRows)
 	}
 }
 

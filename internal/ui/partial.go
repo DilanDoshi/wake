@@ -40,8 +40,9 @@ package ui
 // It works because the preview is not the record. The same words arrive a
 // moment later as a complete assistant frame and go through glamour exactly
 // once, as they always did - so the transcript is byte-identical to what this
-// build drew before, and the preview costs a wrap of at most maxPreviewRows
-// rows. Nothing about the conversation's length enters that.
+// build drew before, and the preview costs a wrap of at most the rows the pane
+// can spare (DM.previewCap) - the floor over a full transcript, more over one it
+// does not fill. Nothing about the conversation's length enters that.
 //
 // # The four properties, each with a test named for it
 //
@@ -57,6 +58,7 @@ package ui
 import (
 	"strings"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -97,14 +99,17 @@ func (a App) wants(sessionID string, ev core.Event) bool {
 }
 
 const (
-	// maxPreviewRows is how much of the pane a preview may take.
+	// minPreviewRows is the floor the preview always gets, and its cap when the
+	// transcript already fills the pane.
 	//
 	// It is a preview of the sentence being written rather than of the message,
 	// which arrives whole a moment later and is rendered properly. Three rows
-	// read a sentence at any pane width, and in one of four grid panes - about
-	// eighteen rows of transcript - spending three is affordable where spending
-	// ten would push the conversation off screen to show something temporary.
-	maxPreviewRows = 3
+	// read a sentence at any pane width; over a full transcript spending more
+	// would push read conversation off screen to show something temporary, so
+	// three is the floor. Over an empty or short one there is nothing to push
+	// off, so DM.previewCap grows the preview into the unused rows instead - the
+	// same relaxation boardtile.go took for a tile's live tail.
+	minPreviewRows = 3
 
 	// previewSlack is how many rows of text are kept beyond the drawn ones. The
 	// tail is cut by byte to bound the work, so the slack is what absorbs the
@@ -113,10 +118,14 @@ const (
 	previewSlack = 2
 )
 
-// previewChars is how many characters of the block are retained at width w.
-// Everything before that is dropped as it arrives: it can never be drawn, and
-// keeping it would make the wrap below cost the length of the answer.
-func previewChars(w int) int { return max(w, minBlockWidth) * (maxPreviewRows + previewSlack) }
+// previewChars is how many characters of the block are retained at width w for a
+// preview that may draw rows rows. Everything before that is dropped as it
+// arrives: it can never be drawn, and keeping it would make the wrap below cost
+// the length of the answer. rows below the floor is treated as the floor, so an
+// unset cap (a partial the DM never sized) still retains the three-row minimum.
+func previewChars(w, rows int) int {
+	return max(w, minBlockWidth) * (max(rows, minPreviewRows) + previewSlack)
+}
 
 // partial is the tail of the block being written, and the rows it draws.
 //
@@ -124,23 +133,40 @@ func previewChars(w int) int { return max(w, minBlockWidth) * (maxPreviewRows + 
 // the reason DM.bar is cached: this sits under a working agent, which is
 // exactly when something is redrawing.
 //
+// cap is how many rows the preview may draw, set by DM.previewCap: the floor
+// over a full pane, more over one the transcript does not fill. It is held on
+// the partial so a token can wrap against it without recomputing the pane, and
+// is refreshed by SetSize (which the growing preview retriggers through View).
+//
 // Its methods take value receivers and return a new partial, like everything
 // else a DM holds.
 type partial struct {
 	text  string
 	view  string
 	width int
+	cap   int
 }
 
 // add appends the tokens that just arrived, keeping only what can be drawn.
 func (p partial) add(s string) partial {
 	p.text += s
-	if keep := previewChars(p.width); len(p.text) > keep {
+	if keep := previewChars(p.width, p.cap); len(p.text) > keep {
 		// Bytes rather than runes: this is a bound on work, and a multi-byte
 		// rune cut in half at the front is dropped by the wrap below rather
 		// than drawn - which is what the slack is for.
 		p.text = p.text[len(p.text)-keep:]
 	}
+	return p.wrapped()
+}
+
+// capped sets how many rows the preview may draw and re-wraps to it. A no-op
+// when the cap has not moved, so streaming a token past a settled cap costs
+// nothing here.
+func (p partial) capped(n int) partial {
+	if n == p.cap {
+		return p
+	}
+	p.cap = n
 	return p.wrapped()
 }
 
@@ -174,8 +200,13 @@ func (p partial) wrapped() partial {
 	}
 	// ToValidUTF8 drops the rune the byte-wise cut in add may have halved.
 	lines := strings.Split(ansi.Wrap(strings.ToValidUTF8(p.text, ""), max(p.width, minBlockWidth), ""), "\n")
-	if len(lines) > maxPreviewRows {
-		lines = lines[len(lines)-maxPreviewRows:]
+	// Honour the cap exactly - previewCap keeps it no larger than the pane can
+	// spare over the transcript's floor, so respecting it (including a cap of
+	// zero, a pane too tight for any preview) is what keeps the pane in bounds. A
+	// partial the DM never sized has cap zero and is never drawn (View sizes the
+	// pane before rendering), so it wraps to nothing here, which is harmless.
+	if keep := max(p.cap, 0); len(lines) > keep {
+		lines = lines[len(lines)-keep:]
 	}
 	p.view = strings.Join(lines, "\n")
 	return p
@@ -189,4 +220,41 @@ func (p partial) rows() int {
 		return 0
 	}
 	return strings.Count(p.view, "\n") + 1
+}
+
+// previewCap is how many rows the preview may draw in this pane: the floor over
+// a full transcript, and the rows the transcript is not using over a short one -
+// so a long answer streaming into an empty pane fills it rather than scrolling
+// inside a three-row box, while one over a full pane still yields to the floor
+// and pushes nothing read off screen.
+//
+// It is derived from the pool the transcript and preview share (the pane less
+// the preview-free chrome) minus the rows the transcript's own content wants,
+// and is capped a floor short of the pool so the transcript keeps at least
+// minTranscriptHeight - which is what keeps DM.View exactly its height, the
+// alt-screen invariant the fixed cap held. A menu present takes the floor: its
+// own allowance already leaves the transcript that floor, so the pool accounting
+// this walks would double-count it.
+func (d DM) previewCap() int {
+	if d.height <= 0 || d.menu != "" {
+		return minPreviewRows
+	}
+	pool := d.height - d.chromeSansPreview()
+	room := pool - minTranscriptHeight // leave the transcript its own floor
+	blank := pool - d.tr.lines.count() // rows the transcript is not using
+	// Floor the target at minPreviewRows, then cap it at room. room is the ceiling
+	// and can be zero or negative in a pane too tight to hold the transcript's
+	// floor and a preview both; there the ceiling wins and the preview yields to
+	// zero rows rather than drawing one that does not fit and overflowing the pane.
+	return max(0, min(max(blank, minPreviewRows), room))
+}
+
+// chromeSansPreview is chromeHeight without the preview's own rows: the pool the
+// preview competes with the transcript for is the pane less this. Summed rather
+// than taken as chromeHeight()-partial.rows(), because menuRows is itself a
+// function of the preview - and previewCap is only ever reached with no menu up
+// (its floor branch handles the rest), so menuRows is zero here by construction.
+func (d DM) chromeSansPreview() int {
+	composer := lipgloss.Height(d.composer.View(max(d.width, minComposerWidth)))
+	return composer + d.beatBarRows() + d.checklistRows()
 }
