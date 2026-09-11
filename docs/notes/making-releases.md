@@ -45,14 +45,17 @@ to v0.1.0 — 14 mentions neutralised.
   prone to spawning mentions (though a PR *title* containing `@name` could still
   do it).
 
-## `go install` and the reflow `replace` (context for future config changes)
+## `go install` and the reflow `replace` (resolved)
 
 `go install github.com/DilanDoshi/wake/cmd/wake@<version>` refuses any module
-whose `go.mod` carries a `replace` directive. As long as `go.mod` has
+whose `go.mod` carries a `replace` directive. Wake used to carry
 `replace github.com/muesli/reflow => ./third_party/reflow` (the vendored
-word-wrap fix), the `go install` channel does not work — only the GitHub Release
-binaries and `git clone && go build` do. Removing that blocker is tracked
-separately (the wrap-move: wake wraps via `x/ansi` so glamour can use upstream
-reflow). Until it lands, the README should not lead with `go install`.
+word-wrap fix), which blocked the `go install` channel — only the GitHub Release
+binaries and `git clone && go build` worked. **Fixed by the wrap-move:** the
+greedy-wrap fix moved into `internal/render`'s `reflowProse` (Wake re-wraps
+glamour's prose with `x/ansi.Wrap`), so glamour uses upstream `muesli/reflow`,
+the `replace` and `third_party/reflow/` are gone, and `go.mod` carries no
+`replace`. `go install` works from the first tag cut after that change — so the
+README may lead with it once a tag ships it.
 
 <!-- add future release gotchas below -->

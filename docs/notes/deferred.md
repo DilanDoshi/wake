@@ -88,8 +88,9 @@ wraps an enumeration's continuation text a cell or two **wider** than the enumer
 ordered-continuation budget is not the hang budget), so shifting those lines right by the marker width
 overruns `width` at *every* width when the text fills glamour's budget. A correct fix needs a real
 reflow of the item text at the hang indent (rejoining glamour's already-wrapped, already-styled
-fragments and re-wrapping them), which is the fragile ANSI-reflow work
-`third_party/reflow/WAKE-PATCH.md` warns about, and out of scope for a surgical change. Task items:
+fragments and re-wrapping them) — the ANSI-reflow that `internal/render/markdown.go`'s `reflowProse`
+now does for paragraphs and bullets, so the machinery exists; hanging an enumerator on top of it is
+the remaining work and out of scope for a surgical change. Task items:
 glamour's `Task` style draws `[ ] text` with no bullet, so `bulletMarker` never fires. Both are left
 at glamour's margin, unchanged — pinned by `TestOrderedListContinuationIsLeftAtGlamoursMargin` and
 `TestTaskListContinuationIsLeftAtGlamoursMargin`.
