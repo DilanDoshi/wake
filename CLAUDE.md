@@ -1109,7 +1109,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | A run of tool calls folded to one line | `internal/ui/rollup.go` — `rollupSummary` (the count, MCP grouped by server), `isToolUse`/`runEnd` (what a run is), `foldExempt` (why `TodoWrite`, a checklist, **and an edit's diff** stay whole out of the run), `openRun` (a click), `trailingRun`/`runKey` (the live run a new event restyles) · `internal/ui/dmtranscript.go` — `renderAll` (re-derived) and `drawFold` (incremental), the two paths held to the same run boundary · `internal/render/tool.go` — `ToolRollup` · `transcript.go`'s `runs`/`runHeads` for where a rollup sits |
 | Assembling a DM's transcript from events | `internal/ui/dmtranscript.go` — the `block` type, `renderAll`, `renderForwarded`, `drawFold`; split from `dm.go`, which keeps the model and the sizing |
 | Failure reporting under a TUI | `internal/notice/notice.go` |
-| Markdown wrapping, and the dependency patched to make it correct | `internal/render/markdown.go` — `Markdown`, `fitToWidth` · `third_party/reflow/` + its `WAKE-PATCH.md` (why a fork, and why counting the rune is only half of it) · `internal/render/wrap_test.go` |
+| Markdown wrapping, and where the greedy-wrap fix lives | `internal/render/markdown.go` — `Markdown`, `reflowProse` (re-wraps glamour's rendered prose with `x/ansi.Wrap` so glamour can use upstream `muesli/reflow` — no `replace`, so `go install` works), `fitToWidth` · `internal/render/wrap_test.go` |
 | Recorded stream-json fixtures | `testdata/stream/` · `testdata/transcript/` is the **on-disk** format, which is a different one. `testdata/input/` is a third kind: a line Wake would *write*, kept out of `stream/` because `TestDecodeRecordedFixtures` requires every line there to decode |
 | The demo film: a scripted fleet, recorded | `demo/` — `agent/claude` (a **Python** stand-in on a shim PATH, because `argv_test.go` and `airlock_test.go` walk every non-test .go file and a Go one would need an exemption in both) · `agent/wakemcp.py`, so the manager's fan-out really goes through `wake mcp` · `tapes/*.tape` (VHS) · `setup.sh`, which **generates** the staging tape because `/new … in <dir>` resolves against the session's directory · `build.sh`. Every frame is the real binary; only what the models say is scripted |
 | Taking the recording machine back out of a fixture | `scripts/scrub-fixtures.py` (`--check` is a gate) · `internal/core/corpus_test.go` is the guard it satisfies, and is tree-wide via `git ls-files` |
@@ -1130,15 +1130,18 @@ make run       # build and start
 
 Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, Charm).
 
-**One of them is patched, and the patch is in the tree.** `third_party/reflow` is
-`muesli/reflow` v0.3.0 (MIT) with one branch changed, reached through a `replace` in `go.mod`.
-glamour wraps every paragraph *twice* and upstream's first pass writes a breakpoint rune (`-`)
-without counting it or checking that it fits, so the second pass re-breaks the over-long line it
-was handed and strands the word after the break on a line of its own - on any hyphen, which here
-means `--resume`, a date or a ticket id. Nothing in glamour's API reaches it. The argument, the
-measurements and what guards it are in `third_party/reflow/WAKE-PATCH.md`; the guard is
-`internal/render.TestProseWrapsGreedily`, because that directory is a separate module and
-`make ci` does not descend into it.
+**glamour's greedy-wrap defect is fixed wake-side, not by a fork.** glamour wraps every paragraph
+*twice* and its first pass writes a breakpoint rune (`-`) without counting it or checking that it
+fits, so the second pass re-breaks the over-long line it was handed and strands the word after the
+break on a line of its own - on any hyphen, which here means `--resume`, a date or a ticket id.
+Nothing in glamour's API reaches it. Wake once fixed this with a forked `muesli/reflow` reached
+through a `replace` in `go.mod`, but a `replace` makes `go install …/cmd/wake@version` **refuse the
+module** - so the fix moved into `internal/render`'s `reflowProse`, which re-wraps glamour's rendered
+prose with `x/ansi.Wrap` (it checks the limit before a breakpoint, where `x/ansi.Wordwrap` and
+upstream muesli do not). glamour keeps laying out tables, lists and block quotes at the real width;
+only paragraph and list-item text is re-wrapped, so nothing but the stranding changes. glamour now
+uses upstream `muesli/reflow` and `go install` works. The guard is
+`internal/render.TestProseWrapsGreedily`.
 
 ## Testing
 

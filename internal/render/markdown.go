@@ -94,10 +94,166 @@ func Markdown(src string, width int) string {
 	if err != nil {
 		return degraded("rendering markdown failed", src, width, err)
 	}
-	// fitToWidth runs last, so the hard width bound is the final word: it re-wraps
-	// anything hangIndentLists shifted past width (an unbreakable token in a
-	// bullet), which is the one case the shift cannot keep within width itself.
-	return strings.TrimRight(trimOpeningScaffold(fitToWidth(hangIndentLists(stylingOnly(out)), width)), "\n")
+	// reflowProse re-wraps the prose glamour laid out, restoring the greedy word
+	// wrap its paragraph pass loses without the muesli fork; hangIndentLists then
+	// hangs bullet continuations, and fitToWidth is the hard width net last of all
+	// — it re-wraps anything the hang shifted past width (an unbreakable token in a
+	// bullet), the one case the shift cannot keep within width itself.
+	return strings.TrimRight(trimOpeningScaffold(fitToWidth(hangIndentLists(reflowProse(stylingOnly(out), width)), width)), "\n")
+}
+
+// boxDrawing marks a rendered line as glamour's own table or block-quote layout,
+// which reflowProse must leave exactly as glamour drew it.
+const boxDrawing = "│─┼┌┐└┘├┤┬┴╭╮╰╯"
+
+// reflowProse re-wraps the prose glamour rendered, restoring the greedy word
+// wrap glamour's paragraph pass loses. glamour wraps a paragraph twice — once
+// through muesli/reflow/wordwrap, then again over the document block — and the
+// first pass writes a breakpoint rune without checking it fits, so the second
+// re-breaks the over-long line and strands the tail word (`--resume`, a date, a
+// ticket id). Wake once carried a forked muesli via a go.mod `replace` to fix
+// that first pass; the replace made `go install pkg@version` refuse the module,
+// so the fix moved here instead — glamour uses upstream reflow and Wake re-wraps
+// the prose wake-side. glamour still lays out every block — margins, lists,
+// tables, block quotes, code — at the real width; this pass only re-wraps the
+// lines those never produce: unstyled prose and list-item text sitting at the
+// block margin. It runs before hangIndentLists, which hangs a bullet's
+// continuation, and before fitToWidth, the width net.
+//
+// Each maximal run of reflowable lines at one indent is one paragraph or one
+// list item — broken at a new list marker — and is re-wrapped as a unit. The
+// join mirrors what glamour's wrap consumed: a line broken at a hyphen kept the
+// hyphen and took no space, so it rejoins with none; every other break took a
+// space.
+func reflowProse(s string, width int) string {
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	for i := 0; i < len(lines); {
+		if !reflowable(lines[i]) {
+			out = append(out, lines[i])
+			i++
+			continue
+		}
+		lead := leadSpaces(lines[i])
+		j := i + 1
+		for j < len(lines) && reflowable(lines[j]) &&
+			leadSpaces(lines[j]) == lead && !opensItem(lines[j]) {
+			j++
+		}
+		out = append(out, rewrapProse(lines[i:j], lead, width)...)
+		i = j
+	}
+	return strings.Join(out, "\n")
+}
+
+// reflowable reports whether a line is glamour-rendered prose this pass may
+// re-wrap: it opens with the margin's spaces — code and block quotes open with an
+// SGR escape, since glamour colours them — and holds no table or quote
+// box-drawing.
+//
+// The `line[0] != ' '` guard is conservative on purpose: a paragraph
+// *continuation* that begins with an inline-styled span (inline code, bold, a
+// link) also opens with an SGR escape, so it is excluded too and left at
+// glamour's wrap. That only forgoes fixing a strand in that one styled paragraph
+// — never corrupts it — and it is what keeps a fenced code block (indistinguishable
+// from styled prose once the leading SGR is stripped) safe from being re-wrapped.
+func reflowable(line string) bool {
+	if line == "" || line[0] != ' ' {
+		return false
+	}
+	plain := ansi.Strip(line)
+	if strings.TrimSpace(plain) == "" {
+		return false // a blank row separates groups
+	}
+	return !strings.ContainsAny(plain, boxDrawing)
+}
+
+// leadSpaces is the count of leading space bytes, which for a reflowable line is
+// its block indent (spaces are one byte each).
+func leadSpaces(line string) int {
+	return len(line) - len(strings.TrimLeft(line, " "))
+}
+
+// opensItem reports whether a line begins a new list item, which ends the group
+// before it: a bullet, an `N.` enumeration, or a `[ ]`/`[✓]` task. The head is
+// trimmed of the trailing padding glamour lays out, so a sentence-final number
+// (`DEV-3035.`, wrapped to a line of its own) does not read as an `N.` marker
+// and split a paragraph.
+func opensItem(line string) bool {
+	head := strings.TrimSpace(ansi.Strip(line))
+	return bulletMarker(line, leadSpaces(line)) || isEnumerated(head) ||
+		strings.HasPrefix(head, "[ ] ") || strings.HasPrefix(head, "[✓] ")
+}
+
+// rewrapProse re-wraps one paragraph or list item — the group shares an indent —
+// greedily to the width glamour laid it out for, padding each result line to that
+// budget so hangIndentLists can reclaim the padding as it hangs a bullet's
+// continuation. Budget is width less the indent and the far margin, which is the
+// content width glamour itself wrapped to (bs.Width = width - indent - margin*2,
+// with indent+margin the lead).
+func rewrapProse(group []string, lead, width int) []string {
+	budget := width - lead - int(defaultMargin)
+	if budget < 1 {
+		return group
+	}
+	var joined strings.Builder
+	for k, line := range group {
+		content := strings.TrimRight(line[lead:], " ")
+		if k > 0 && !hyphenJoin(joined.String(), content) {
+			joined.WriteByte(' ')
+		}
+		joined.WriteString(content)
+	}
+	indent := strings.Repeat(" ", lead)
+	var out []string
+	// ansi.Wrap, not ansi.Wordwrap: Wrap checks the limit before it writes a
+	// breakpoint rune, so a run of two (`--resume`) does not strand, which is the
+	// exact defect the muesli fork existed to fix; Wordwrap shares the bug.
+	for _, wl := range strings.Split(ansi.Wrap(joined.String(), budget, ""), "\n") {
+		out = append(out, indent+padRight(wl, budget))
+	}
+	return out
+}
+
+// hyphenJoin reports whether next should abut prev with no space, because
+// glamour's wrap broke inside a token at a hyphen (which consumes no space)
+// rather than at a standalone dash (which does). glamour keeps the `-` on the
+// line, so prev ends in `-` for both; the tells disambiguate. next beginning with
+// `-` means the token continues across the break — `--resume` split as `-`/`-resume`
+// — and next beginning with a digit means a hyphen-prefixed number — `-42`, or the
+// tail of `DEV-3035` — so both abut with no space. Otherwise the rune before prev's
+// trailing `-` decides: a non-space is a token break (`end-to-`, `--`), a space (or
+// a lone `-`) is a standalone dash (`one - two`, rendered `one -`), which keeps it.
+//
+// This cannot be perfect: whether the source had a space *after* the hyphen is
+// gone once glamour wraps, and a hyphen-prefixed token whose tail is a letter and
+// whose head has a space before it (a rare `-v`-style flag, or a standalone dash
+// before a number) is indistinguishable from a standalone dash on the fragments
+// alone. Those land a spurious space only at the exact widths glamour splits on
+// that hyphen; the common cases (spaced dashes, `--flags`, negative numbers,
+// compound and dotted tokens) are exact.
+func hyphenJoin(prev, next string) bool {
+	if !strings.HasSuffix(prev, "-") || next == "" {
+		return false
+	}
+	if next[0] == '-' || (next[0] >= '0' && next[0] <= '9') {
+		return true
+	}
+	before := prev[:len(prev)-1]
+	if before == "" {
+		return false
+	}
+	r, _ := utf8.DecodeLastRuneInString(before)
+	return r != ' '
+}
+
+// padRight pads s with trailing spaces to width display cells, the trailing
+// padding glamour lays every wrapped line out with and hangIndentLists reclaims.
+func padRight(s string, width int) string {
+	if n := width - ansi.StringWidth(s); n > 0 {
+		return s + strings.Repeat(" ", n)
+	}
+	return s
 }
 
 // stylingOnly keeps the escape sequences this renderer produced and neutralises

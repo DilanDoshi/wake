@@ -50,16 +50,19 @@ func content(line string) string {
 //	me load the Linear tools and fetch the ticket.
 //
 // glamour wraps a paragraph twice, once through muesli/reflow/wordwrap and
-// again over the document block, and upstream's first pass writes a breakpoint
+// again over the document block, and glamour's first pass writes a breakpoint
 // rune without counting it or checking that it fits. So the first pass hands
-// the second an over-long line, and the second re-breaks it. See
-// third_party/reflow/WAKE-PATCH.md.
+// the second an over-long line, and the second re-breaks it. Wake fixes this in
+// render.reflowProse rather than in glamour: it re-wraps the prose glamour laid
+// out with x/ansi.Wrap (which does check the limit before a breakpoint), so
+// glamour can use upstream reflow and go install works — see reflowProse.
 //
 // Stated as a property over a corpus rather than as golden output: the
 // stranded word moves with the pane, so a fixed string would pin one width and
-// miss every other. Against upstream reflow this reports 8,693 stranded lines;
-// counting the breakpoint rune without also checking that it fits still leaves
-// 254, which is why the patch does both.
+// miss every other. Against unfixed glamour this reports thousands of stranded
+// lines; the double-hyphen tokens in wrapWords (`--resume`, `--fork-session`)
+// are the case a single-hyphen fix leaves behind, which is why reflowProse uses
+// x/ansi.Wrap and not x/ansi.Wordwrap.
 func TestProseWrapsGreedily(t *testing.T) {
 	sources := []string{hyphenatedProse}
 	r := rand.New(rand.NewSource(1))
@@ -107,5 +110,55 @@ func TestProseWrapsGreedily(t *testing.T) {
 	}
 	if stranded > 5 {
 		t.Errorf("%d stranded lines in total (first five above)", stranded)
+	}
+}
+
+// TestReflowKeepsSpacingFaithful is the fidelity guard the greedy-wrap test
+// cannot be: TestProseWrapsGreedily's own join rule assumes a trailing `-` is a
+// token break, so it cannot see a standalone dash glued to the next word. This
+// checks the spacing reflowProse reconstructs when it rejoins glamour's wrapped
+// fragments — the reviewer's two cases: a standalone spaced dash, and hyphen
+// tokens (`--resume`, `--fork-session`) including next to inline styling.
+//
+// The properties are read per rendered line (a line break at a `-` is fine and
+// expected; the defect is an inserted or dropped space *within* one line):
+//   - a standalone dash (sources whose only `-` is a spaced ` - `) must be
+//     followed by a space or the line end, never glued to a letter;
+//   - a flag/token dash (sources with `--flag`) must never be followed by a
+//     space, so `--resume` never renders `-- resume` or `--fork- session`.
+func TestReflowKeepsSpacingFaithful(t *testing.T) {
+	dashSources := []string{
+		"alpha - beta and gamma - delta wrapping across several lines here now for sure absolutely indeed yes",
+		"one - two - three - four - five - six - seven - eight - nine - ten - eleven - twelve - thirteen here",
+	}
+	flagSources := []string{
+		"Run wake with --resume and --fork-session and the --session-id flag to bring the agent back now here",
+		"Use the inline token and pass --resume plus --fork-session across a paragraph long enough to wrap now",
+		"The **important** flags are --resume and --fork-session across a wrapping paragraph long enough here now",
+		"Prefer `--session-id` and --add-dir over the defaults in a paragraph long enough to wrap at these widths",
+		// Hyphen-prefixed numbers: no standalone dash here, so a `- ` is corruption.
+		"Exit codes like -1 and -42 and offsets -7 and -128 across a paragraph long enough to wrap at these widths",
+	}
+	for _, src := range dashSources {
+		for w := minMarkdownWidth; w <= 80; w++ {
+			for _, line := range strings.Split(Markdown(src, w), "\n") {
+				plain := strings.TrimRight(ansi.Strip(line), " ")
+				for i := 0; i < len(plain)-1; i++ {
+					if plain[i] == '-' && plain[i+1] != ' ' {
+						t.Fatalf("w=%d standalone dash glued to a word: %q", w, plain)
+					}
+				}
+			}
+		}
+	}
+	for _, src := range flagSources {
+		for w := minMarkdownWidth; w <= 80; w++ {
+			for _, line := range strings.Split(Markdown(src, w), "\n") {
+				plain := strings.TrimRight(ansi.Strip(line), " ")
+				if strings.Contains(plain, "- ") {
+					t.Fatalf("w=%d a flag/token hyphen gained a space: %q", w, plain)
+				}
+			}
+		}
 	}
 }

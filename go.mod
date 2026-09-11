@@ -46,5 +46,3 @@ require (
 	golang.org/x/term v0.36.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
 )
-
-replace github.com/muesli/reflow => ./third_party/reflow
