@@ -251,7 +251,11 @@ func (a App) show(sessionID, name string, place func(Grid) Grid) App {
 	}
 	before := a.grid
 	if _, ok := a.dms[sessionID]; !ok {
-		a = a.withDM(sessionID, NewDM(sessionID, name))
+		// A conversation opening for the first time seeds itself from the room's
+		// account of this agent's turns, so a room turn that happened before this
+		// DM existed shows even if the on-disk read is dropped by the race. Only on
+		// a fresh DM: a reopened one already holds its turns. See dm.go's seed.
+		a = a.withDM(sessionID, NewDM(sessionID, name).withRoomSeed(a.room.turnsFor(sessionID)))
 	}
 	if !slices.Contains(a.dmOrder, sessionID) {
 		// The ring ⇥ walks, in the order a person opened things. Keyed on the

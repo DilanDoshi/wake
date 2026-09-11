@@ -104,7 +104,14 @@ func (a App) historyArrived(f rpc.Frame) App {
 		// empty pane this exists to remove, with no second chance.
 		return a.forgetHistoryAsk(f.SessionID)
 	}
-	return a.withDM(f.SessionID, dm.Before(f.Events))
+	// The disk read is authoritative, so the seed is dropped as it folds - in the
+	// ordinary case the read carries the same turns and keeping the seed would
+	// draw them twice. A room turn older than the read's bounded tail is not in
+	// the fold and is lost with the seed, but that is the disk read's own tail
+	// bound rather than a regression: a never-opened DM never showed it before
+	// this. On the dropped path above the seed is kept - the only copy a
+	// never-opened DM has. See roomseed.go.
+	return a.withDM(f.SessionID, dm.withoutSeed().Before(f.Events))
 }
 
 // withHistoryAsked records that this session's transcript has been asked for,

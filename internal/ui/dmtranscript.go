@@ -62,9 +62,19 @@ func (d DM) renderAll() []block {
 		return d.renderForwarded()
 	}
 	events := d.events.slice(0, d.events.len())
-	blocks := make([]block, 0, len(events)+2)
+	blocks := make([]block, 0, len(events)+len(d.seed)+2)
 	// First, so it scrolls away as the conversation fills - see banner.go.
 	blocks = append(blocks, dmBanner(d.Agent, d.blockWidth()))
+
+	// The provisional room seed, above the transcript and outside the run fold:
+	// text turns the room already holds, drawn until the on-disk read supersedes
+	// them (dm.go's seed field). Standalone blocks - the room drops tool calls,
+	// so nothing here starts a run - so they never disturb the marks below.
+	for _, ev := range d.seed {
+		if b := d.renderEvent(ev); b.text != "" {
+			blocks = append(blocks, b)
+		}
+	}
 
 	runStart := -1 // the open run's first event, or -1 for none
 	flush := func(end int) {

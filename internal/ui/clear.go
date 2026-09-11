@@ -31,6 +31,10 @@ func (d DM) clearedBySessionReset() DM {
 	d.calls, d.outcomes, d.opened = nil, nil, nil
 	d.runOpen, d.runKey, d.runTally = nil, "", nil
 	d.partial = d.partial.cleared()
+	// The provisional room seed is the conversation as it was before the clear,
+	// so it goes too - renderTranscript below reads it, and /clear must blank the
+	// pane rather than redraw the pre-clear room turns. See roomseed.go.
+	d.seed = nil
 	d.tr = d.tr.replace(renderTranscript(d)).toBottom()
 	return d.resettleBoard()
 }
