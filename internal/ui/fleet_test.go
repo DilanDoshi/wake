@@ -296,6 +296,7 @@ var notCarriedOntoAnAgent = map[string]string{
 	"Commands":   "the slash commands a session advertised. Carried, but folded into Agent.advertised (a *commandSet the completion menu reads) via withCommands rather than a same-named field, the way Dir folds into Cwd - the report is the only route to them for a client that attached after the init event carried them",
 	"PRs":        "the pull requests a session opened. Carried, but folded into Agent.prs (a *prSet the status bar reads) via withPRs rather than a same-named field - Commands' own shape, and for Commands' reason: Agent must stay comparable, so a slice is a pointer here",
 	"Goal":       "the native /goal a session has active. Carried, but folded into Agent.goal (a value GoalState the ◆ marker reads via Agent.Goal()) via goalFromReport rather than a same-named field - the report is *rpc.GoalStatus and this guard compares by name, so the folded form takes its own, the advertised/prs precedent",
+	"Loop":       "the native /loop a session has active. Carried, but folded into Agent.loop (a value LoopState the ↻ marker reads via Agent.Loop()) via loopFromReport rather than a same-named field - Goal's own shape and reason, the report being *rpc.LoopStatus and this guard comparing by name",
 }
 
 // A fleet report is folded onto an Agent field by field, and this derives that
