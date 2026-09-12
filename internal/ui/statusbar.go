@@ -109,7 +109,8 @@ type barKey struct {
 	state     string
 	used      int
 	window    int
-	prs       *prSet // a PR arrives mid-turn with no other bar fact moving, so the key must carry it; prSet.same keeps the pointer stable so it does not redraw per frame
+	prs       *prSet    // a PR arrives mid-turn with no other bar fact moving, so the key must carry it; prSet.same keeps the pointer stable so it does not redraw per frame
+	goal      GoalState // the /goal moves mid-turn with no other bar fact changing, so the key carries it; a value struct, so it compares by content
 }
 
 // withBar re-renders the status bar if anything it is drawn from has moved, and
@@ -125,6 +126,7 @@ func (d DM) withBar(width int) DM {
 		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, confModel: d.Agent.ConfirmedModel,
 		effort: d.Agent.Effort, mode: mode, state: d.Agent.State,
 		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow, prs: d.Agent.prs,
+		goal: d.Agent.goal,
 	}
 	if key == d.barFrom {
 		return d
@@ -161,6 +163,7 @@ func statusBar(a Agent, mode string, width, rows int) string {
 		contextLeft(a.ContextTokens, a.ContextWindow),
 		effortSegment(a.Effort),
 		prSegment(a.prs),
+		goalSegment(a.goal),
 	}
 	kept := segments[:0]
 	for _, s := range segments {
@@ -390,4 +393,15 @@ func prSegment(p *prSet) string {
 		parts[i] = fmt.Sprintf("#%d", n)
 	}
 	return "PR " + strings.Join(parts, ", ")
+}
+
+// goalSegment is the native /goal this session has active - `◆ <condition>` - and
+// "" when it has none, dropped like every other segment. The condition is the
+// child's own words, contained in the airlock; the bar's own truncation cuts a
+// long one to the row. See GoalState.
+func goalSegment(g GoalState) string {
+	if !g.Active {
+		return ""
+	}
+	return goalGlyph + " " + g.Condition
 }
