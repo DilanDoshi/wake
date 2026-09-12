@@ -356,25 +356,25 @@ func TestBoardHitInTiledModeReadsTheDrawnGeometry(t *testing.T) {
 	// A click inside the second tile (row 0, col 1) lands on agents[1].
 	x := g.cellW + tileGap + 1 // one column in, one cell past the gap
 	y := boardChromeRows + 1   // inside the first tile row's body
-	if got := a.boardHit(x, y, agents); got != 1 {
-		t.Errorf("boardHit(%d,%d) = %d, want 1 (row 0, col 1)", x, y, got)
+	if got, _, ok := a.boardHit(x, y, agents); !ok || got != 1 {
+		t.Errorf("boardHit(%d,%d) = (%d, ok=%v), want 1 (row 0, col 1)", x, y, got, ok)
 	}
 
 	// A click on the key line, past every tile row, opens nothing.
 	pastRow := boardChromeRows + g.rows*g.cellH
-	if got := a.boardHit(2, pastRow, agents); got != -1 {
-		t.Errorf("a click past the last tile row resolved to %d, want -1", got)
+	if _, _, ok := a.boardHit(2, pastRow, agents); ok {
+		t.Error("a click past the last tile row resolved to a tile, want none")
 	}
 
 	// A click past the last column opens nothing.
 	pastCol := g.cols * (g.cellW + tileGap)
-	if got := a.boardHit(pastCol, boardChromeRows+1, agents); got != -1 {
-		t.Errorf("a click past the last column resolved to %d, want -1", got)
+	if _, _, ok := a.boardHit(pastCol, boardChromeRows+1, agents); ok {
+		t.Error("a click past the last column resolved to a tile, want none")
 	}
 
 	// A click above the title row opens nothing.
-	if got := a.boardHit(2, 0, agents); got != -1 {
-		t.Errorf("a click on the title row resolved to %d, want -1", got)
+	if _, _, ok := a.boardHit(2, 0, agents); ok {
+		t.Error("a click on the title row resolved to a tile, want none")
 	}
 }
 

@@ -611,3 +611,145 @@ func TestAKeyThatClosesTheBoardCannotArmTheHiddenCard(t *testing.T) {
 		t.Errorf("the rune that closed the board was swallowed: draft is %q, want %q", got, string(cardAllowKey))
 	}
 }
+
+// The rows view lists an agent's running subagents under it, the right
+// sidebar's own display: the subagent glyph and its type. alex (s1) is given
+// one running "general-purpose" dispatch by boardApp.
+func TestABoardRowShowsItsRunningSubagents(t *testing.T) {
+	a := boardApp(t)
+	if a.board.Tiled {
+		t.Fatal("precondition: the board opened in tiles; rows are the default")
+	}
+	out := shown(a)
+	if !strings.Contains(out, "general-purpose") {
+		t.Errorf("the board rows view does not name alex's running subagent:\n%s", out)
+	}
+	if !strings.Contains(out, subGlyph) {
+		t.Errorf("the subagent row is not marked with the subagent glyph %q:\n%s", subGlyph, out)
+	}
+}
+
+// ↓ walks onto a subagent row, the sidebar's own walkable: Selected goes on
+// naming the agent while SelectedTask names the dispatch under it. Attention
+// order is sydney(0), alex(1), alex's subagent(2), robin(3), so two ↓ from the
+// top land on alex's dispatch d1.
+func TestTheBoardCursorWalksOntoSubagents(t *testing.T) {
+	a := boardApp(t)
+	m, _ := a.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m, _ = m.(App).Update(tea.KeyMsg{Type: tea.KeyDown})
+	next := m.(App)
+	if next.board.Selected != "s1" || next.board.SelectedTask != "d1" {
+		t.Errorf("two ↓ from the top: Selected=%q SelectedTask=%q, want s1/d1",
+			next.board.Selected, next.board.SelectedTask)
+	}
+	// The cursor is drawn on the subagent row, not alex's own: only the dispatch
+	// row carries the cursor lead.
+	cursor := strings.TrimSpace(cardCursor)
+	for _, line := range strings.Split(shown(next), "\n") {
+		if strings.Contains(line, "general-purpose") && !strings.Contains(line, cursor) {
+			t.Errorf("the selected subagent row is drawn without the cursor lead %q: %q", cursor, line)
+		}
+		if strings.Contains(line, " alex ") && strings.Contains(line, cursor) {
+			t.Errorf("the cursor is on alex's own row while a subagent is selected: %q", line)
+		}
+	}
+}
+
+// ↵ on a subagent row opens the parent agent's conversation and swaps it onto
+// the dispatch's transcript - the sidebar's "toggle into them" through
+// viewingPicked, and the board's own placement (a column beside the room).
+func TestEnterOnASubagentOpensTheParentViewingTheDispatch(t *testing.T) {
+	a := boardApp(t)
+	a.board.Selected = "s1"
+	a.board.SelectedTask = "d1"
+	next, _, handled := a.boardKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if !handled {
+		t.Fatal("↵ was not claimed by the board")
+	}
+	if next.board.Up {
+		t.Fatal("↵ left the board up over the conversation")
+	}
+	if next.focus != "s1" {
+		t.Errorf("↵ on a subagent focused %q, want the parent s1", next.focus)
+	}
+	if d := next.dms["s1"]; d == nil || d.Viewed() != "d1" {
+		t.Errorf("↵ on a subagent did not view the dispatch d1: DM=%v", d)
+	}
+}
+
+// A click on a subagent row does the same as ↵ on it: opens the parent and
+// views the dispatch. alex's dispatch is drawn at line 2 (sydney, alex, then
+// alex's subagent).
+func TestAClickOnASubagentRowOpensTheParentViewingTheDispatch(t *testing.T) {
+	a := boardApp(t)
+	m, _ := a.Update(tea.MouseMsg{
+		Action: tea.MouseActionPress, Button: tea.MouseButtonLeft,
+		X: 4, Y: boardChromeRows + 2,
+	})
+	next := m.(App)
+	if next.board.Up {
+		t.Fatal("a click on a subagent row left the board up")
+	}
+	if next.focus != "s1" {
+		t.Errorf("a click on alex's subagent focused %q, want the parent s1", next.focus)
+	}
+	if d := next.dms["s1"]; d == nil || d.Viewed() != "d1" {
+		t.Errorf("the click did not view the dispatch d1: DM=%v", d)
+	}
+}
+
+// The click and cursor math count a subagent's row: robin sits below alex's
+// dispatch, so it is at line 3 rather than line 2. A hit that ignored the
+// subagent row would resolve line 3 to nothing (only three agents) and open
+// nothing.
+func TestASubagentRowShiftsTheAgentsBelowIt(t *testing.T) {
+	a := boardApp(t)
+	m, _ := a.Update(tea.MouseMsg{
+		Action: tea.MouseActionPress, Button: tea.MouseButtonLeft,
+		X: 4, Y: boardChromeRows + 3,
+	})
+	next := m.(App)
+	if next.focus != "s3" {
+		t.Errorf("a click below alex's subagent row focused %q, want robin s3 (the subagent shifted it down)", next.focus)
+	}
+}
+
+// A subagent selected on the board, then its agent ends: ↵ opens the fallback
+// (top) row's own conversation and never swaps it onto the ended agent's
+// dispatch. boardCursor falls back to the top row when Selected has left the
+// roster, and the stale SelectedTask must not ride along onto that unrelated
+// agent - the wrong-open the paired guard in openBoardRow closes.
+func TestASubagentSelectionDoesNotLeakToTheFallbackAgent(t *testing.T) {
+	a := boardApp(t)
+	a.board.Selected = "s1"     // alex
+	a.board.SelectedTask = "d1" // alex's running dispatch
+	// alex ends while the board is open; sydney (s2) is now the top row.
+	a = a.withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateBlocked, Dir: "/repos/two"},
+		rpc.SessionStatus{ID: "s3", Name: "robin", State: rpc.StateIdle, Dir: "/repos/three"},
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateEnded, Dir: "/repos/one"},
+	)
+	next, _, _ := a.boardKey(tea.KeyMsg{Type: tea.KeyEnter})
+	if next.focus != "s2" {
+		t.Fatalf("↵ with the selected agent ended focused %q, want the top row s2", next.focus)
+	}
+	if d := next.dms["s2"]; d != nil && d.Viewed() == "d1" {
+		t.Error("↵ swapped the fallback agent's DM onto the ended agent's dispatch d1 - a foreign dispatch leaked to it")
+	}
+}
+
+// ⇥ to tiles drops the subagent selection: the tiled board has no subagent
+// cursor (it states a count), so a SelectedTask left over from rows would make
+// the next open toggle into a dispatch nobody could see selected.
+func TestTogglingToTilesClearsTheSubagentSelection(t *testing.T) {
+	a := boardApp(t)
+	a.board.Selected = "s1"
+	a.board.SelectedTask = "d1"
+	next, _, _ := a.boardKey(tea.KeyMsg{Type: tea.KeyTab})
+	if !next.board.Tiled {
+		t.Fatal("⇥ did not switch to tiles")
+	}
+	if next.board.SelectedTask != "" {
+		t.Errorf("⇥ to tiles kept SelectedTask=%q; tiles have no subagent cursor", next.board.SelectedTask)
+	}
+}

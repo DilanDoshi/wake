@@ -1,6 +1,7 @@
 package ui
 
-// The board: the fleet as one row per agent, and nothing else drawn.
+// The board: the fleet as one row per agent, its running subagents indented
+// under it - the right sidebar's own list, on a surface with room for it.
 //
 // Spec §8 names it in one line - "one row per agent with current task and
 // progress" - and the owner's 2026-08-12 ruling (phase-4 scope §2c) is what
@@ -9,6 +10,18 @@ package ui
 // multiplexer the non-negotiables refuse. What a row carries instead is what
 // the operator triages by - state, activity, the agent's own last words - and
 // the verbs are the triage verbs: jump to one, park one, leave.
+//
+// # The subagent rows, and full sidebar parity
+//
+// The rows view lists an agent's running dispatches under it, the same
+// Fleet.RunningTasks the roster draws through subagentRow. The cursor walks onto
+// one (Board.SelectedTask, the roster's own field for its own reason: Selected
+// goes on naming the agent, so ⌃C parks the parent and a subagent is not a
+// session), and opening it swaps the parent's DM onto that dispatch's transcript
+// through viewingPicked - the sidebar's "toggle into them", reached by one path
+// (viewBoardDispatch) whether by key or click. The window and the click math are
+// height-aware because a block is now an agent row plus its subagent rows. Tiles
+// keep the count they already stated; SelectedTask is a rows-only cursor.
 //
 // # A command rather than a key
 //
@@ -111,6 +124,13 @@ var boardTakesNoArgument = boardVerb + " opens the fleet overview. It takes no a
 type Board struct {
 	Up       bool
 	Selected string
+	// SelectedTask is the running dispatch the cursor is on under Selected, and
+	// "" for the agent's own row - the roster's own SelectedTask, for its own
+	// reason. Selected goes on naming the agent while the cursor is on one of its
+	// subagents, so ⌃C parks the parent and ↵ opens it; a subagent is not a
+	// session. Rows only: tiles state a count, so stepBoard's tile branch and the
+	// ⇥ toggle both clear it.
+	SelectedTask string
 	// Tiled draws the fleet as a grid of live tiles rather than one row per
 	// agent. The row view is the default; ⇥ toggles (Task 3).
 	Tiled bool
@@ -155,7 +175,12 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	switch m.Type {
 	case tea.KeyTab:
 		a.board.Tiled = !a.board.Tiled
-		if !a.board.Tiled {
+		if a.board.Tiled {
+			// Tiles have no subagent cursor - they state a count - so a dispatch
+			// selected in rows must not linger and make the next open toggle into
+			// one nothing on the tile shows as selected.
+			a.board.SelectedTask = ""
+		} else {
 			// Rows draw no transcripts; drop what the wall accumulated.
 			a.boardDMs = nil
 			a.boardHistoryAsked = nil
@@ -202,28 +227,41 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	return a.closeBoard(), nil, false
 }
 
-// stepBoard walks the cursor one step. In rows it is ↑↓ by one; in tiles it is
-// the 2-D walk, cols derived from the frame width the tiles are laid out at.
+// stepBoard walks the cursor one step. In rows it walks the agent-and-subagent
+// stops; in tiles it is the 2-D walk, cols derived from the frame width the
+// tiles are laid out at.
 func (a App) stepBoard(dir tileDir) App {
 	agents := a.fleet.OnRoster()
 	if len(agents) == 0 {
 		return a
 	}
-	cur := a.boardCursor(agents)
-	var at int
 	if a.board.Tiled {
-		at = tileNav(cur, a.boardTileGrid(len(agents)).cols, len(agents), dir)
-	} else {
-		switch dir {
-		case tileUp:
-			at = clamp(cur-1, 0, len(agents)-1)
-		case tileDown:
-			at = clamp(cur+1, 0, len(agents)-1)
-		default:
-			at = cur
-		}
+		at := tileNav(a.boardCursor(agents), a.boardTileGrid(len(agents)).cols, len(agents), dir)
+		a.board.Selected = agents[at].ID
+		a.board.SelectedTask = "" // tiles have no subagent cursor
+		return a
 	}
-	a.board.Selected = agents[at].ID
+	// Rows walk the sidebar's own walkable - each agent, then the dispatches
+	// running under it - so ↑↓ step onto a subagent the way they do there.
+	// Clamped rather than wrapped, the board's own rule (TestTheBoardCursorDoesNotWrap).
+	stops := walkable(agents, a.fleet.RunningTasks)
+	at := stopIndex(stops, Roster{Selected: a.board.Selected, SelectedTask: a.board.SelectedTask})
+	if at < 0 && a.board.SelectedTask != "" {
+		// The dispatch the cursor named has finished; fall back to its agent
+		// rather than the top of the list - Roster.Move's own recovery.
+		at = stopIndex(stops, Roster{Selected: a.board.Selected})
+	}
+	if at < 0 {
+		at = 0
+	}
+	switch dir {
+	case tileUp:
+		at = clamp(at-1, 0, len(stops)-1)
+	case tileDown:
+		at = clamp(at+1, 0, len(stops)-1)
+	}
+	a.board.Selected = stops[at].Selected
+	a.board.SelectedTask = stops[at].SelectedTask
 	return a
 }
 
@@ -239,19 +277,34 @@ func (a App) boardMouse(m tea.MouseMsg) (App, tea.Cmd) {
 		return a.stepBoard(tileDown), nil
 	case m.Action == tea.MouseActionPress && m.Button == tea.MouseButtonLeft:
 		agents := a.fleet.OnRoster()
-		i := a.boardHit(m.X, m.Y, agents)
-		if i < 0 || i >= len(agents) {
+		i, dispatch, ok := a.boardHit(m.X, m.Y, agents)
+		if !ok {
 			return a, nil
 		}
-		return a.closeBoard().openRight(agents[i].ID, agents[i].Name), nil
+		a = a.closeBoard().openRight(agents[i].ID, agents[i].Name)
+		if dispatch != "" {
+			a = a.viewBoardDispatch(agents[i].ID, dispatch)
+		}
+		return a, nil
 	}
 	return a, nil
 }
 
-// boardHit is the agent index a click lands on, or -1. It reads the same
-// geometry the draw used, so a click and a tile cannot disagree - the row
-// view's boardChromeRows rule, in two dimensions.
-func (a App) boardHit(x, y int, agents []Agent) int {
+// viewBoardDispatch swaps the just-opened conversation onto a subagent's
+// transcript - the sidebar's "toggle into them" through viewingPicked, reached
+// by setting the cursor it reads. Both the placement keys and a click use it, so
+// the board opens a dispatch exactly one way - screensel.go's own pattern.
+func (a App) viewBoardDispatch(id, dispatch string) App {
+	a.roster.Selected = id
+	a.roster.SelectedTask = dispatch
+	return a.viewingPicked(id)
+}
+
+// boardHit is the agent a click lands on, the running dispatch under it if the
+// click was on one of its subagent rows, and whether the click hit a row at
+// all. It reads the same window and block heights the draw used, so a click and
+// a row cannot disagree - the row view's boardChromeRows rule, made subagent-aware.
+func (a App) boardHit(x, y int, agents []Agent) (int, string, bool) {
 	if a.board.Tiled {
 		g := a.boardTileGrid(len(agents))
 		start := tileWindowStart(a.boardCursor(agents), len(agents), g.cols, g.rows)
@@ -262,28 +315,44 @@ func (a App) boardHit(x, y int, agents []Agent) int {
 		// first tile instead of nothing.
 		line := y - boardChromeRows
 		if line < 0 {
-			return -1
+			return -1, "", false
 		}
 		r := line / g.cellH
 		c := x / (g.cellW + tileGap)
 		if r < 0 || r >= g.rows || c < 0 || c >= g.cols {
-			return -1
+			return -1, "", false
 		}
-		return start + r*g.cols + c
+		i := start + r*g.cols + c
+		if i < 0 || i >= len(agents) {
+			return -1, "", false
+		}
+		return i, "", true
 	}
-	// Row view: bounded to the drawn window before the offset is added -
-	// Roster.At's rule. Without the upper bound a click on the key line, the
-	// strip or the notice row under it resolved to a valid index past the
-	// window and opened an agent that was never on screen.
+	// Row view: bounded to the drawn window before the walk - Roster.At's rule.
+	// Without the upper bound a click on the key line, the strip or the notice
+	// row under it resolved to a row past the window and opened an agent that was
+	// never on screen.
+	visible := a.boardRowsVisible()
 	line := y - boardChromeRows
-	if line < 0 || line >= a.boardRowsVisible() {
-		return -1
+	if line < 0 || line >= visible {
+		return -1, "", false
 	}
-	row := boardWindowStart(a.boardCursor(agents), len(agents), a.boardRowsVisible()) + line
-	if row >= len(agents) {
-		return -1
+	// Walk the drawn blocks - an agent row then its running subagent rows - from
+	// the same window start the draw used, so a click on a dispatch resolves to
+	// it and a click one below resolves to the next agent.
+	off := 0
+	for i := a.boardRowFrom(agents, a.boardCursor(agents), visible); i < len(agents) && off < visible; i++ {
+		subs := a.fleet.RunningTasks(agents[i].ID)
+		h := 1 + len(subs)
+		if line < off+h {
+			if within := line - off; within > 0 {
+				return i, subs[within-1].Dispatch, true
+			}
+			return i, "", true
+		}
+		off += h
 	}
-	return row
+	return -1, "", false
 }
 
 // boardCursor is the cursored row's index in this draw's order: the selected
@@ -310,7 +379,24 @@ func (a App) openBoardRow(open func(App, string, string) App) (App, tea.Cmd, boo
 		return a.closeBoard(), nil, true
 	}
 	ag := agents[a.boardCursor(agents)]
-	return open(a.closeBoard(), ag.ID, ag.Name), nil, true
+	// Carry the selected dispatch only when its agent is still the cursor's own.
+	// boardCursor falls back to the top row when Selected has left the roster
+	// (its agent ended while the board stayed open), and pairing a stale
+	// SelectedTask with that fallback agent would swap an unrelated agent's DM
+	// onto a dispatch it never had. The mouse path resolves both together and
+	// stepBoard re-pairs through walkable, so this is the one place they can
+	// disagree.
+	dispatch := ""
+	if ag.ID == a.board.Selected {
+		dispatch = a.board.SelectedTask
+	}
+	a = open(a.closeBoard(), ag.ID, ag.Name)
+	if dispatch != "" {
+		// The cursor was on one of this agent's subagents: open the parent, then
+		// swap it onto the dispatch's transcript.
+		a = a.viewBoardDispatch(ag.ID, dispatch)
+	}
+	return a, nil, true
 }
 
 // openHere is ⌃D's placement - ↵'s old one - named so the open keys share one
@@ -342,36 +428,70 @@ func (a App) boardRowsVisible() int {
 	return max(a.paneHeight()-boardChromeRows-1, 1)
 }
 
-// boardWindowStart is which row the window opens on, derived from the cursor
-// rather than stored - the sidebars' rule, for the sidebars' reason: the list
-// re-ranks between frames, and a stored offset would need maintaining against
-// every one. The cursor rides the bottom edge once it is past the first
-// window, so walking down reads as scrolling.
-func boardWindowStart(cursor, total, visible int) int {
-	return clamp(cursor-visible+1, 0, max(total-visible, 0))
+// boardRowHeight is how many lines an agent's block draws: its own row and one
+// per running subagent under it. The draw, the click math and the window all
+// read this one number, so a scrolled click cannot land on the wrong row.
+func (a App) boardRowHeight(ag Agent) int {
+	return 1 + len(a.fleet.RunningTasks(ag.ID))
 }
 
-// boardView is the whole frame's worth of overview: title, one row per agent
-// in attention order, the key line.
+// boardRowFrom is the first agent index the window draws, derived from the
+// cursor rather than stored - the sidebars' rule, for the sidebars' reason: the
+// list re-ranks between frames, and a stored offset would need maintaining
+// against every one. The cursor rides the bottom edge once it is past the first
+// window, so walking down reads as scrolling. Line-aware, so a subagent row
+// counts against the budget rather than an agent index; distinct from the
+// roster's grow-around-cursor window (roster.go) on purpose - the board keeps
+// its own scroll feel.
+func (a App) boardRowFrom(agents []Agent, cursor, budget int) int {
+	if cursor < 0 || cursor >= len(agents) {
+		return 0
+	}
+	used := a.boardRowHeight(agents[cursor])
+	from := cursor
+	for from > 0 {
+		h := a.boardRowHeight(agents[from-1])
+		if used+h > budget {
+			break
+		}
+		used += h
+		from--
+	}
+	return from
+}
+
+// boardView is the whole frame's worth of overview: title, one block per agent
+// in attention order (its row and its running subagents), the key line.
 func (a App) boardView(agents []Agent, width int) string {
 	if a.board.Tiled {
 		return a.tileView(agents, width)
 	}
 	visible := a.boardRowsVisible()
 	cursor := a.boardCursor(agents)
-	start := boardWindowStart(cursor, len(agents), visible)
+	from := a.boardRowFrom(agents, cursor, visible)
 
 	nameW, stateW := boardColumns(agents)
-	rows := make([]string, 0, visible+2)
-	rows = append(rows, mutedLine(fmt.Sprintf("%s — %d agents", boardTitle, len(agents)), width))
-	for i := start; i < len(agents) && i < start+visible; i++ {
-		rows = append(rows, boardRow(agents[i], nameW, stateW, width, i == cursor))
+	blocks := make([]string, 0, visible)
+	for i := from; i < len(agents) && len(blocks) < visible; i++ {
+		ag := agents[i]
+		blocks = append(blocks, boardRow(ag, nameW, stateW, width, i == cursor && a.board.SelectedTask == ""))
+		for _, t := range a.fleet.RunningTasks(ag.ID) {
+			if len(blocks) >= visible {
+				break
+			}
+			cursored := ag.ID == a.board.Selected && t.Dispatch == a.board.SelectedTask
+			blocks = append(blocks, boardSubRow(t, width, cursored))
+		}
 	}
 	// Padded to the height it was given, so the key line and everything under
 	// the frame sit where every other view puts them.
-	for len(rows) < visible+boardChromeRows {
-		rows = append(rows, "")
+	for len(blocks) < visible {
+		blocks = append(blocks, "")
 	}
+
+	rows := make([]string, 0, visible+2)
+	rows = append(rows, mutedLine(fmt.Sprintf("%s — %d agents", boardTitle, len(agents)), width))
+	rows = append(rows, blocks...)
 	rows = append(rows, mutedLine(boardKeyLineRows, width))
 	return strings.Join(rows, "\n")
 }
@@ -425,6 +545,22 @@ func boardDetail(ag Agent) string {
 		parts = append(parts, ag.LastLine)
 	}
 	return strings.Join(parts, cardDot)
+}
+
+// boardSubRow is one running dispatch under an agent - the right sidebar's own
+// subagentRow, with the board's cursor lead in front so the ⎿ aligns under the
+// agent's name and a selected dispatch reads as the cursor. Flattened through
+// oneLine for boardRow's own reason: the type it names is a string a model
+// wrote, and a control byte in it forges or redraws a row.
+func boardSubRow(t Task, width int, cursored bool) string {
+	lead := cardUnchosen
+	style := HintStyle
+	if cursored {
+		lead = cardCursor
+		style = AccentStyle
+	}
+	body := subagentRow(t, max(width-ansi.StringWidth(lead), 1))
+	return style.MaxWidth(width).Render(oneLine(lead + body))
 }
 
 // lastProseLine is the last non-blank line of a block of prose, bounded to
