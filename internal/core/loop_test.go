@@ -46,6 +46,28 @@ func TestSelfPacedLoopDecodes(t *testing.T) {
 	}
 }
 
+// A recorded self-paced run: three ScheduleWakeups, the last two quiet. It is the
+// canonical stream a "quiet ×N" streak folds from - the accumulation itself is
+// daemon/loop_test's, this proves the airlock recognises every tick of a real run.
+func TestSelfPacedRunDecodesEveryTick(t *testing.T) {
+	ops := loopOps(t, "loop-selfpaced-run.jsonl")
+	if len(ops) != 3 {
+		t.Fatalf("loop-selfpaced-run produced %d loop ops, want 3 ScheduleWakeups", len(ops))
+	}
+	quiet := 0
+	for i, op := range ops {
+		if op.Kind != LoopSelfPaced {
+			t.Errorf("op %d = %+v, want self-paced", i, op)
+		}
+		if op.Noop {
+			quiet++
+		}
+	}
+	if quiet != 2 {
+		t.Errorf("the run had %d quiet ticks, want 2", quiet)
+	}
+}
+
 // A one-shot CronCreate is a reminder, not a loop; only a recurring one counts.
 func TestOneShotCronIsNotALoop(t *testing.T) {
 	line := `{"type":"assistant","message":{"model":"claude-opus-4-8","role":"assistant","content":[{"type":"tool_use","id":"t","name":"CronCreate","input":{"cron":"0 15 * * *","prompt":"remind me","recurring":false}}]},"session_id":"s","uuid":"u"}`
