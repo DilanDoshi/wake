@@ -1,8 +1,8 @@
 # Wake
 
-A terminal app for developers running many Claude Code sessions at once.
+A terminal app for developers running many Claude Code sessions at once. 
 
-Currently being beta tested. V1 coming soon. 
+Version 1 is out!
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
