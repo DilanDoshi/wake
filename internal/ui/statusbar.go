@@ -397,11 +397,11 @@ func prSegment(p *prSet) string {
 
 // goalSegment is the native /goal this session has active - `◆ <condition>` - and
 // "" when it has none, dropped like every other segment. The condition is the
-// child's own words, contained in the airlock; the bar's own truncation cuts a
-// long one to the row. See GoalState.
+// child's own words and agent-authorable (untrusted_test.go), so it runs through
+// oneLine here; the bar's own truncation cuts a long one to the row. See GoalState.
 func goalSegment(g GoalState) string {
 	if !g.Active {
 		return ""
 	}
-	return goalGlyph + " " + g.Condition
+	return goalGlyph + " " + oneLine(g.Condition)
 }

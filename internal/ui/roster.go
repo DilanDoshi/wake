@@ -305,7 +305,7 @@ func (r Roster) rows(a Agent, subs []Task, width int) []string {
 	} else if goalActivityShown(a) {
 		// The goal's condition where the tool call would sit - indented under the
 		// name, muted like the rest of a glance, and clipped to the column below.
-		out = append(out, strings.Repeat(" ", toolIndent)+HintStyle.Render(goalGlyph+" "+a.goal.Condition))
+		out = append(out, strings.Repeat(" ", toolIndent)+HintStyle.Render(goalGlyph+" "+oneLine(a.goal.Condition)))
 	}
 	// Under the tool call rather than above it: the tool is what this agent is
 	// doing itself, and a dispatch is work it handed to somebody else.
