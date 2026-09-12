@@ -120,6 +120,14 @@ type Card struct {
 	Cursor int
 	Option int
 
+	// DetailExpanded is whether ⌃E has opened the cursored option's whole
+	// description. Collapsed (the default) draws one truncated line; expanded
+	// wraps the whole thing, since a description too long for one line had no
+	// other way to be read - the card does not scroll. Presentation state like
+	// Cursor and Option, so it rides a card scrolling off and back. See
+	// detailSlot and App.toggleCardDetail.
+	DetailExpanded bool
+
 	// asked is the ask's own input, carried back unopened.
 	//
 	// Unexported, and that is the airlock rule in a form this package cannot

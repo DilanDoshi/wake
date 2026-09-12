@@ -110,6 +110,15 @@ const (
 	// cardKey hands both keys back on every other shape.
 	cardMoveKeys = "↑↓ move" + cardKeySep + cardConfirmGlyph + " choose"
 
+	// cardExpandDetail and cardCollapseDetail advertise ⌃E, which opens the
+	// cursored option's whole description (Card.DetailExpanded) - the one row a
+	// card truncates and cannot scroll to. Unbracketed like cardMoveKeys, so the
+	// bijection guard reads no rune from it: ⌃E is a chord App.key owns, not a
+	// card rune. Dropped first when the line will not fit.
+	cardExpandGlyph    = "⌃E"
+	cardExpandDetail   = cardExpandGlyph + " expand"
+	cardCollapseDetail = cardExpandGlyph + " collapse"
+
 	// cardInterruptHint is the key that destroys this ask, drawn beside the
 	// keys that answer it - the re-scoped undo item's own shape: ⎋ ends an
 	// outstanding ask and a billed turn, a two-press ⎋ was rejected for
@@ -377,11 +386,28 @@ func (c Card) questionKeys(room int) string {
 		return settle
 	}
 	need := chooseKeys(min(otherIndex(q)+1, cardMaxOptions)) + cardKeySep + settle
-	full := cardMoveKeys + cardKeySep + need
-	if ansi.StringWidth(full) <= room {
-		return full
+	line := need
+	if full := cardMoveKeys + cardKeySep + need; ansi.StringWidth(full) <= room {
+		line = full
 	}
-	return need
+	// ⌃E last, so it is dropped before the digits and the refusal - the
+	// load-bearing half - when the line will not fit, and only when there is a
+	// description to open. See canExpandDetail.
+	if c.canExpandDetail() {
+		if withExpand := line + cardKeySep + c.expandKeys(); ansi.StringWidth(withExpand) <= room {
+			line = withExpand
+		}
+	}
+	return line
+}
+
+// expandKeys is ⌃E's label on the question key line: open the description, or -
+// once open - close it again.
+func (c Card) expandKeys() string {
+	if c.DetailExpanded {
+		return cardCollapseDetail
+	}
+	return cardExpandDetail
 }
 
 // chooseKeys names the digits this question answers to. One option is spelled
@@ -465,7 +491,7 @@ func (c Card) questionBody(width int) string {
 	// that moment. The slot is drawn whenever *any* option explains itself, so
 	// the block's height does not depend on where the cursor is either.
 	if anyOptionExplains(q) {
-		rows = append(rows, "", detailRow(c.optionDetail(q), options))
+		rows = append(rows, "", c.detailSlot(q, options))
 	}
 
 	body := strings.Join(rows, "\n")
@@ -579,6 +605,50 @@ func (c Card) optionDetail(q core.Question) string {
 func detailRow(detail string, width int) string {
 	room := max(width-ansi.StringWidth(cardUnchosen), 1)
 	return mutedLine(cardUnchosen+ansi.Truncate(collapseWhitespaceOneLine(detail), room, ellipsis), width)
+}
+
+// canExpandDetail reports whether ⌃E has an option description to open on this
+// card: a question, on a question step rather than the review, whose options
+// carry an explanation. The one gate on the key (App.toggleCardDetail) and on
+// its hint (questionKeys), so the two agree about when ⌃E does something.
+func (c Card) canExpandDetail() bool {
+	if c.Shape() != ShapeQuestion || c.OnReview() {
+		return false
+	}
+	q, ok := c.question()
+	return ok && anyOptionExplains(q)
+}
+
+// detailSlot is the cursored option's explanation below the option list: one
+// truncated line, or - once ⌃E has expanded it - the whole thing wrapped. The
+// slot sits below every option, so opening it grows the card downward without
+// moving the choices above it. Expanded is unbounded on purpose: ⌃E is the
+// operator asking to read all of it, and the card does not scroll, so a
+// description too long for the pane is clipped from the bottom like any menu
+// (DM.menuRows) and a second ⌃E collapses it back to answer.
+func (c Card) detailSlot(q core.Question, width int) string {
+	if !c.DetailExpanded {
+		return detailRow(c.optionDetail(q), width)
+	}
+	return detailBlock(c.optionDetail(q), width)
+}
+
+// detailBlock is detailRow's expanded form: the whole description wrapped to the
+// width, each line under the same lead so it aligns with the option labels.
+func detailBlock(detail string, width int) string {
+	flat := collapseWhitespaceOneLine(detail)
+	if flat == "" {
+		// The lead even when empty, so the slot holds the same 2-column indent
+		// detailRow gives it - the cursored option has no description but another
+		// does, so the slot is drawn (anyOptionExplains) and must not jump.
+		return mutedLine(cardUnchosen, width)
+	}
+	room := max(width-ansi.StringWidth(cardUnchosen), 1)
+	lines := strings.Split(HintStyle.Width(room).MaxWidth(room).Render(flat), "\n")
+	for i, ln := range lines {
+		lines[i] = cardUnchosen + ln
+	}
+	return strings.Join(lines, "\n")
 }
 
 // askHeadline is what an ask wants, in one line, for a surface that has no
