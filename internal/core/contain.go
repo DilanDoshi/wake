@@ -124,8 +124,21 @@ func (e Event) contained() Event {
 	e.Task = containedTask(e.Task)
 	e.Control = containedControl(e.Control)
 	e.Rewind = containedRewind(e.Rewind)
+	e.Goal = containedGoal(e.Goal)
 	e.Session = containedFacts(e.Session)
 	return e
+}
+
+// containedGoal contains a /goal op's child-authored text: the condition the
+// operator gave and the evaluator's latest reason, both drawn. Op is Wake's own
+// vocabulary and is excused in notAuthoredByTheChild.
+func containedGoal(g *GoalOp) *GoalOp {
+	if g == nil {
+		return nil
+	}
+	c := *g
+	c.Condition, c.Reason = Contained(c.Condition), Contained(c.Reason)
+	return &c
 }
 
 func containedTool(t *ToolCall) *ToolCall {
@@ -298,4 +311,8 @@ var notAuthoredByTheChild = map[string]string{
 	"Event.Ask":                   "resolved by askKind from the payload shape",
 	"Event.Tool.Todos[].Status":   "resolved by todoStatus into Wake's closed set",
 	"Event.Tool.Checklist.Status": "resolved by todoStatus into Wake's closed set",
+
+	// Wake's own /goal op kind, resolved by goalOp from a closed set. Condition
+	// and Reason beside it are the child's own words and are contained.
+	"Event.Goal.Op": "Wake's own vocabulary, resolved by goalOp",
 }

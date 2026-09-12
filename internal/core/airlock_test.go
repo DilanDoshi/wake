@@ -348,6 +348,14 @@ var claudeWireVocabulary = wordSet([]string{
 	// It is a value *prefix* rather than a whole value, so it is in
 	// embeddedMarkers below.
 	"Current model:",
+
+	// Claude Code's /goal lifecycle, the rendered English wire.go's goalOp reads.
+	// "<synthetic>" (the announcement's model) and "No goal set" are whole values;
+	// the three prefixes are a longer value's leading phrase, so they are in
+	// embeddedMarkers below. All are Claude's, so a view matching on one would be
+	// reading its prose. See core.GoalOp.
+	"<synthetic>", "No goal set",
+	"Goal set: ", "Goal cleared: ", "Stop hook feedback:",
 })
 
 // deliberatelyGeneric is the other half of the vocabulary's honesty: wire
@@ -543,7 +551,10 @@ var notNamedByTheAirlock = map[string]string{
 // 161 → 163: "api_retry" and "error_status", the live-stream retry frame Wake
 // reads to surface a 401 from the first retry (auto-parking a dead login) rather
 // than at the give-up ~5 min later. Recorded in api-retry-auth.jsonl.
-const policedWordCount = 163
+// 163 → 168: the /goal lifecycle's rendered English wire.go's goalOp reads -
+// "<synthetic>", "No goal set", and the three prefixes "Goal set: ",
+// "Goal cleared: " and "Stop hook feedback:". Recorded in goal-*.jsonl.
+const policedWordCount = 168
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -601,6 +612,11 @@ var notWireVocabulary = wordSet([]string{
 	// Wake's own regexp for the cross-session envelope's from-name. The tags it
 	// parses are policed above; the pattern is Wake's construction.
 	`from-name="([^"]*)"`,
+
+	// goalProgress's parsing delimiters: the condition sits in the first [..] and
+	// the reason follows the "]: " of a Stop-hook feedback frame. Punctuation
+	// Wake matches on, not wire words.
+	"[", "]", ":",
 })
 
 func wordSet(words []string) map[string]bool {
@@ -861,6 +877,11 @@ var embeddedMarkers = map[string]bool{
 	"Current model:":           true,
 	"<cross-session-message":   true,
 	"</cross-session-message>": true,
+	// The /goal announcements' leading phrases; "<synthetic>" and "No goal set"
+	// are whole values, so they are matched quoted rather than here.
+	"Goal set: ":          true,
+	"Goal cleared: ":      true,
+	"Stop hook feedback:": true,
 }
 
 // The vocabulary has to be a real description of the corpus, or the test
