@@ -349,6 +349,54 @@ func TestARowCarriesTheAgentsLastLine(t *testing.T) {
 	}
 }
 
+// The board list row wears an agent's /color identity hue, the roster row's own
+// rule (identityRowStyle) one overview over. The tile view already coloured its
+// name; the list rows drew every agent in default text, so a fleet the operator
+// had /color'd read as one undifferentiated column. Blocked still wins over the
+// hue - checked here too, since the whole row takes one style.
+func TestTheBoardListRowWearsTheIdentityHue(t *testing.T) {
+	forceColour(t)
+	const nameW, stateW, width = 6, 8, 80
+
+	// hueEscape is the SGR foreground a style emits at the forced profile,
+	// derived rather than hard-coded (appearance_test.go's own approach).
+	hueEscape := func(rendered string) string {
+		t.Helper()
+		esc, _, ok := strings.Cut(rendered, "x")
+		if !ok || esc == "" {
+			t.Fatalf("no foreground escape at this profile: %q", rendered)
+		}
+		return esc
+	}
+	violetStyle, _ := identityStyleFor(Agent{Color: "violet"})
+	violetEsc := hueEscape(violetStyle.Render("x"))
+	warnEsc := hueEscape(warnStyle.Render("x"))
+
+	// Same name and state on both, so the only difference between the rows is
+	// the colour - otherwise the strings would differ on the name alone.
+	coloured := Agent{ID: "s1", Name: "iris", Color: "violet", State: rpc.StateIdle}
+	plain := Agent{ID: "s1", Name: "iris", State: rpc.StateIdle}
+
+	got := boardRow(coloured, nameW, stateW, width, false)
+	if !strings.Contains(got, violetEsc) {
+		t.Errorf("an idle /color'd board row does not carry its identity hue\n want escape: %q\n row:        %q", violetEsc, got)
+	}
+	if bare := boardRow(plain, nameW, stateW, width, false); bare == got {
+		t.Errorf("a /color'd row and an uncoloured row render identically; the hue is not consulted\n row: %q", got)
+	}
+
+	// Precedence unchanged: a blocked coloured row still warns rather than
+	// drawing its hue - identityRowStyle checks blocked first, the roster's rule.
+	blocked := Agent{ID: "s1", Name: "iris", Color: "violet", State: rpc.StateBlocked}
+	row := boardRow(blocked, nameW, stateW, width, false)
+	if strings.Contains(row, violetEsc) {
+		t.Errorf("a blocked coloured board row drew its identity hue; warn must win\n row: %q", row)
+	}
+	if !strings.Contains(row, warnEsc) {
+		t.Errorf("a blocked board row does not warn\n want escape: %q\n row:        %q", warnEsc, row)
+	}
+}
+
 // The stored line is bounded: a fleet of thirty must not hold thirty
 // paragraphs, and the draw truncates to the row anyway.
 func TestTheLastLineIsBounded(t *testing.T) {

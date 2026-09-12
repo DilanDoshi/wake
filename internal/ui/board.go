@@ -394,13 +394,10 @@ func boardRow(ag Agent, nameW, stateW, width int, cursored bool) string {
 		lead = cardCursor
 	}
 	head := fmt.Sprintf("%s%s %-*s  %-*s  ", lead, rowGlyph(ag), nameW, ag.Name, stateW, labelOf(ag.State))
-	style := TextStyle
-	switch {
-	case cursored:
-		style = AccentStyle
-	case ag.State == rpc.StateBlocked:
-		style = warnStyle
-	}
+	// The roster's own precedence (identityRowStyle): blocked warns, the cursor
+	// bolds an identity hue or accents an uncoloured row, else the /color hue.
+	// The row is one rendered line, so the whole of it takes the style.
+	style := identityRowStyle(ag, cursored)
 	// oneLine over the assembled row, because half of it is agent-authored -
 	// Doing is a TodoWrite activeForm, Tool an argument, LastLine prose - and
 	// a control byte in any of them redraws or forges the row. mcp.oneLine's
