@@ -195,6 +195,10 @@ type agent struct {
 	// goalCondition is the native /goal this session has set, "" for none. See goal.go.
 	goalCondition string
 
+	// loop is the native /loop this session has active, folded from its scheduler
+	// tool_use calls. See loop.go.
+	loop loopState
+
 	// parent is the session this one was forked from, or empty. Immutable
 	// after newAgent and display only, exactly like label: nothing addresses an
 	// agent by it and nothing here reads it.
@@ -375,6 +379,9 @@ func (a *agent) observe(ev core.Event) {
 	}
 	if ev.Kind == core.KindGoal && ev.Goal != nil {
 		a.goalCondition = foldGoal(a.goalCondition, *ev.Goal)
+	}
+	if ev.Kind == core.KindToolUse && ev.Tool != nil && ev.Tool.Loop != nil {
+		a.loop = foldLoop(a.loop, *ev.Tool.Loop)
 	}
 
 	switch ev.Kind {
@@ -742,6 +749,7 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		Commands:       a.commands,
 		PRs:            slices.Clone(a.prs),
 		Goal:           goalStatus(a.goalCondition),
+		Loop:           loopStatus(a.loop),
 		State:          a.stateLocked(time.Now()),
 		RequestIDs:     a.pendingIDsLocked(),
 		PID:            a.sess.Pgid(),

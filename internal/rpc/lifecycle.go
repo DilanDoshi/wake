@@ -258,6 +258,17 @@ type GoalStatus struct {
 	Active    bool   `json:"active,omitempty"`
 }
 
+// LoopStatus is the native /loop a session has active, carried on the fleet
+// report. SelfPaced tells the two modes apart - a ScheduleWakeup where Claude
+// picks each delay, versus a recurring CronCreate on a fixed cadence; Cron is
+// that cadence, empty for self-paced. Value fields so ui.Agent stays comparable.
+// See internal/core/loop.go.
+type LoopStatus struct {
+	Active    bool   `json:"active,omitempty"`
+	SelfPaced bool   `json:"self_paced,omitempty"`
+	Cron      string `json:"cron,omitempty"`
+}
+
 type SessionStatus struct {
 	ID   string `json:"id"`
 	Name string `json:"name,omitempty"`
@@ -431,6 +442,13 @@ type SessionStatus struct {
 	// whole; see GoalStatus. Achieve is silent on the wire, so an achieved goal
 	// reads active until an explicit clear.
 	Goal *GoalStatus `json:"goal,omitempty"`
+
+	// Loop is the native /loop this session has active, or nil for none. Goal's
+	// route exactly: the daemon folds the scheduler tool_use calls (core/loop.go)
+	// and the report backfills a late attach. A pointer so an idle session omits
+	// it whole; see LoopStatus. Ended is silent beyond a CronDelete, so a loop
+	// reads active until one - the loop half of the goal's own §6 limitation.
+	Loop *LoopStatus `json:"loop,omitempty"`
 
 	// State is one of the State constants above.
 	State string `json:"state"`

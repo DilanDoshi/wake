@@ -162,6 +162,11 @@ type Agent struct {
 	// fields to Agent's by name. See goal.go.
 	goal GoalState
 
+	// loop is the native /loop this agent has active, folded from the live
+	// scheduler tool_use (ev.Tool.Loop) and from the report. A value struct for
+	// goal's reason; the ↻ marker and its detail read it. See loop.go.
+	loop LoopState
+
 	// Doing is the present-tense label of whatever task the agent last marked
 	// in progress - claude's activeForm, which is the word it puts on its own
 	// working line. Empty for an agent that has written no task list, which is
@@ -327,6 +332,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		// daemon holds it authoritatively, so its snapshot is never spuriously
 		// empty. The live KindGoal fold is the fresher source for a watching client.
 		a.goal = goalFromReport(s.Goal)
+		a.loop = loopFromReport(s.Loop)
 
 		// Stamped on the way *into* working, so the heartbeat measures the turn
 		// rather than the report: reports fire on a state change, but an agent
@@ -582,6 +588,11 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 				a.Doing = doing
 			}
 			a = a.notDone()
+			// The native /loop: a recurring CronCreate or a ScheduleWakeup this
+			// agent (not a subagent) made. The room draws none of it.
+			if ev.Tool.Loop != nil {
+				a = a.withLoop(*ev.Tool.Loop)
+			}
 		}
 		return a, nil
 
