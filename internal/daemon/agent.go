@@ -192,6 +192,9 @@ type agent struct {
 	// only accumulates; see prs.go and rpc.SessionStatus.PRs.
 	prs []int
 
+	// goalCondition is the native /goal this session has set, "" for none. See goal.go.
+	goalCondition string
+
 	// parent is the session this one was forked from, or empty. Immutable
 	// after newAgent and display only, exactly like label: nothing addresses an
 	// agent by it and nothing here reads it.
@@ -369,6 +372,9 @@ func (a *agent) observe(ev core.Event) {
 	// rollup, checklist all keep it). See prs.go.
 	if ev.Kind == core.KindToolResult && ev.Subagent == nil {
 		a.prs = recordPRs(a.prs, ev.Text)
+	}
+	if ev.Kind == core.KindGoal && ev.Goal != nil {
+		a.goalCondition = foldGoal(a.goalCondition, *ev.Goal)
 	}
 
 	switch ev.Kind {
@@ -735,6 +741,7 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		Budget:         a.budget,
 		Commands:       a.commands,
 		PRs:            slices.Clone(a.prs),
+		Goal:           goalStatus(a.goalCondition),
 		State:          a.stateLocked(time.Now()),
 		RequestIDs:     a.pendingIDsLocked(),
 		PID:            a.sess.Pgid(),
