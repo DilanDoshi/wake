@@ -549,8 +549,10 @@ func permissionBlock(ev core.Event, width int) string {
 func noticeBlock(ev core.Event, width int) string {
 	// A finished compaction whose boundary carried its metadata draws the rich
 	// completion line - before, after, freed and duration. A boundary without it
-	// (restored off disk, where the metadata is not read) falls back to the plain
-	// label below, so it still says a compaction happened rather than nothing.
+	// falls back to the plain label below, so it still says a compaction happened
+	// rather than nothing. The line is live-only: a compact_boundary is a system
+	// frame and DecodeTranscriptLine keeps only assistant/user, so it never returns
+	// off disk - on reopen no compacted line is redrawn (deferred.md, 2026-08-15).
 	if ev.Notice == core.NoticeContextCompacted && ev.Compaction != nil {
 		return compactedSummaryLine(ev.Compaction, width)
 	}

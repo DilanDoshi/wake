@@ -467,8 +467,10 @@ a context-limit trigger — **the `"auto"` wire value is expected but unverified
 recorded, so the clause simply does not draw if the real word differs (record one to confirm). The
 bracketing `NoticeCompacting`/`NoticeCompacted` still leave **no transcript
 block** (the pinned line is their only place); the boundary's `NoticeContextCompacted` is the one that
-does, falling back to the plain `✻ Compacted` label when a boundary is restored off disk without its
-metadata (deferred). Full argument: `internal/ui/compacting.go`, `beat.go`.
+does, falling back to the plain `✻ Compacted` label for a live boundary that carried no metadata. The
+rich line is **live-only**: a `compact_boundary` is a `system` frame and `DecodeTranscriptLine` keeps
+only `assistant`/`user`, so it never returns off disk — on reopen no compacted line is redrawn at all
+(`docs/notes/deferred.md`, 2026-08-15). Full argument: `internal/ui/compacting.go`, `beat.go`.
 
 **Every ordinary exit is a key the Update loop reads, so the emergency one is a byte read before it.**
 ⌃Q arms and a second ⌃Q parks the fleet and quits, ⌃O then ↵ detaches, ⌃C parks one agent — all are `tea.KeyMsg`,

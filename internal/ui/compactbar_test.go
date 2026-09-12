@@ -111,8 +111,8 @@ func TestCompactedSummaryLineMarksAutoOnly(t *testing.T) {
 }
 
 // The boundary's transcript block is the rich summary when metadata is present,
-// and the plain label when it is not - a boundary restored off disk carries no
-// metadata, and must still say a compaction happened rather than nothing.
+// and the plain label when it is not - a live boundary that carried no metadata
+// must still say a compaction happened rather than nothing.
 func TestNoticeBlockEnrichesTheCompactionWhenMetadataIsPresent(t *testing.T) {
 	forceTrueColour(t)
 	rich := core.Event{Kind: core.KindSystem, Notice: core.NoticeContextCompacted, Compaction: compactSummary("manual")}
