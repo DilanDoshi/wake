@@ -184,10 +184,12 @@ func TestTheWholeLifecycleComposesFromAKeyboard(t *testing.T) {
 	awaitSessionState(t, socket, id, rpc.StateIdle)
 
 	// And out of the book, because a book entry for a session that is running is
-	// what would offer a later daemon an id something already holds.
-	if recs := parkBookRecords(t, socket); len(recs) != 0 {
-		t.Errorf("the park book still holds %+v after the session was woken", recs)
-	}
+	// what would offer a later daemon an id something already holds. A wait, not a
+	// read: the record is deleted in the launch outcome (parkLaunchOutcome ->
+	// settleParkReservation -> parked.commit), which can settle a beat after the
+	// woken session first reports idle - the wake-side twin of the race
+	// awaitParkBook's own header describes on the park side.
+	awaitParkBook(t, socket)
 
 	// --- and it answers ------------------------------------------------------
 	//

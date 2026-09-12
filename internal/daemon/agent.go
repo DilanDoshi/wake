@@ -18,10 +18,10 @@
 // nothing has been sent yet. A working agent owes a turn end, because Wake
 // wrote a message to its stdin and has not seen the turn close. So:
 //
-//	owes nothing                              -> idle
-//	owes a turn end, events still arriving    -> working
-//	owes a permission answer from a human     -> blocked
-//	owes a turn end, nothing for silenceLimit -> silent
+//	owes nothing, and no tool running          -> idle
+//	events arriving, or a tool call in flight  -> working
+//	owes a permission answer from a human      -> blocked
+//	owes a turn end, no tool, quiet past limit -> silent
 //
 // Two more rules, and both exist because the first four are blind in the same
 // place: they can only ever fire on a session Wake is *waiting for*. An agent
@@ -37,16 +37,11 @@
 // process group core recorded at spawn, which is the only route to the answer
 // when nobody is talking to it at all.
 //
-// Silent is reported, never acted on. Wake is not entitled to kill an agent on
-// a timer - it might be four seconds into a legitimate ten-minute Bash - so
-// the daemon makes the distinction visible and leaves the verb to the
-// operator. That is the whole policy: the daemon never guesses, and the
-// operator can no longer be unable to tell.
-//
-// It is deliberately conservative in one direction. An agent that starts a
-// turn on its own (--brief lets it) is owed nothing by Wake and reads as idle
-// while it works. Being wrongly idle is harmless; being wrongly silent would
-// invite a kill nobody meant.
+// Silent is reported, never acted on: Wake will not kill an agent on a timer,
+// so the daemon makes the distinction visible and leaves the verb to the
+// operator. It stays conservative in one direction - a self-started turn
+// (--brief lets one) not yet in a tool reads idle while it works, which is
+// harmless where being wrongly silent would invite a kill nobody meant.
 
 package daemon
 
@@ -774,6 +769,11 @@ func (a *agent) stateLocked(now time.Time) string {
 		return rpc.StateSilent
 	case len(a.pending) > 0:
 		return rpc.StateBlocked
+	case a.tool != "":
+		// An outstanding tool call (set tool_use..turn end) is a slow tool, not a
+		// wedged process: working. Above owed/silence so an unasked turn counts
+		// too; a real death still lands via failed-write and OS-probe.
+		return rpc.StateWorking
 	case !a.owed:
 		return rpc.StateIdle
 	case now.Sub(a.lastEvent) >= silenceLimit:
