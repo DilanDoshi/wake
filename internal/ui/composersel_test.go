@@ -213,6 +213,51 @@ func TestAComposerSelectionIsNotOffByOneWhenTheRoomHasAStatusBar(t *testing.T) {
 	}
 }
 
+// The bar wraps to a second row when it is too narrow for one, and both rows
+// must be counted or the draft is anchored a row too high - which routed a click
+// on the real query box to the chrome and moved nothing. drawnComposer counts
+// barRows, not a hardcoded one. This forces the wrap and drags across the text.
+func TestAComposerSelectionIsNotOffByOneWhenTheBarWrapsToTwoRows(t *testing.T) {
+	a := newRoomApp(t).withSize(50, 40).withAgents("alex")
+	a.layout.ShowRoster = false
+	a.focus = ""
+	a = a.applyGeometry()
+	a = a.withDraft("HELLO world")
+	// Enough facts that path, model, context and effort plus the mode cannot share
+	// one row at this width, so the mode drops facts onto a second row. The mode is
+	// what forces the wrap (statusBar keeps it whole).
+	a.room = a.room.withBar(Agent{
+		ID:            "s1",
+		Cwd:           "/Users/someone/projects/repo/cmd/wake",
+		Model:         "claude-opus-5",
+		ContextTokens: 50000,
+		ContextWindow: 200000,
+		Effort:        "high",
+	}, "acceptEdits", a.room.width)
+	if barRows(a.room.bar) != 2 {
+		t.Fatalf("the bar is %d rows, not the two this test is about", barRows(a.room.bar))
+	}
+
+	frame := strings.Split(stripANSI(a.View()), "\n")
+	row := -1
+	for i, l := range frame {
+		if strings.Contains(l, "HELLO world") {
+			row = i
+			break
+		}
+	}
+	if row < 0 {
+		t.Fatal("the draft is not on screen")
+	}
+
+	r := a.regions()
+	left := a.layout.PaneLeft(r, 0) + composerTextLeft
+	got, _ := drag(a, left, left+10, row) // across "HELLO world"
+	if s := got.composerSelectedText(); s != "HELLO world" {
+		t.Errorf("with a two-row bar a drag copied %q, want %q: the second bar row shifts draftTop", s, "HELLO world")
+	}
+}
+
 // A pane too short to draw the composer inside its allocation overflows and is
 // clipped, so the bottom-up placement would point at rows the frame never drew.
 // composerRegion declines it rather than anchoring on a phantom row.
