@@ -15,6 +15,11 @@ type GoalState struct {
 	Active    bool
 }
 
+// goalGlyph marks a session with an active /goal across every surface - the
+// roster row, the DM and room bars, the board. Wake's own diamond, not Claude's
+// ◎; one column wide.
+const goalGlyph = "◆"
+
 // withGoal folds one KindGoal op onto the agent for the watching client: a set
 // and each per-turn progress refresh carry the condition, a clear or a "no goal"
 // status ends it. Achieve is silent on the wire, so an achieved goal persists
