@@ -417,7 +417,7 @@ def main():
   </section>
 
   <section>
-    <div class="attr"><span class="glyph">·</span>also in the build <span class="lbl">&lt;&gt; no clip, still real</span></div>
+    <div class="attr"><span class="glyph">·</span>also in the build</div>
     <h2>The rest of what landed.</h2>
     <div class="notes dense">{also}
     </div>
