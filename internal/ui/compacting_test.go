@@ -19,17 +19,18 @@ func compactEnd(id string) core.Event {
 	return core.Event{Kind: core.KindSystem, Notice: core.NoticeCompacted, SessionID: id}
 }
 
-// The compacting line names the work and nothing else - the wire carries no
-// progress figure, so there is no percentage to draw, only Claude Code's own
-// `Compacting conversation…` and the shimmer that says it is alive.
+// The compacting line names the work and shows how long it has run. The bar is
+// indeterminate - the wire carries no progress figure, so there is no percentage
+// to draw, only the shimmer and the sweep that say it is alive (see
+// TestCompactBarSweeps and TestCompactingLineShowsElapsedAndAnimates).
 func TestCompactingLineNamesTheWork(t *testing.T) {
 	forceTrueColour(t)
-	got := stripANSI(compactingLine(clock().Add(-2*time.Second), 40))
+	got := stripANSI(compactingLine(clock().Add(-2*time.Second), 60))
 	if !strings.Contains(got, "Compacting conversation") {
 		t.Errorf("compacting line = %q, want it to name the work", got)
 	}
-	if !strings.Contains(got, "…") {
-		t.Errorf("compacting line = %q, want Claude's ellipsis", got)
+	if !strings.Contains(got, "2s") {
+		t.Errorf("compacting line = %q, want the elapsed time", got)
 	}
 }
 

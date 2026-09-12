@@ -125,8 +125,21 @@ func (e Event) contained() Event {
 	e.Control = containedControl(e.Control)
 	e.Rewind = containedRewind(e.Rewind)
 	e.Goal = containedGoal(e.Goal)
+	e.Compaction = containedCompaction(e.Compaction)
 	e.Session = containedFacts(e.Session)
 	return e
+}
+
+// containedCompaction contains the one string a boundary's summary carries: the
+// trigger word. The token counts and duration are numbers, which no child can
+// forge a control sequence into.
+func containedCompaction(s *CompactSummary) *CompactSummary {
+	if s == nil {
+		return nil
+	}
+	c := *s
+	c.Trigger = Contained(c.Trigger)
+	return &c
 }
 
 // containedGoal contains a /goal op's child-authored text: the condition the

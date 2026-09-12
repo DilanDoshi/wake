@@ -282,7 +282,7 @@ func one(ev Event) []Event { return []Event{ev} }
 // what it means is the reader's ruling rather than this decoder's - see
 // Event.PermissionMode.
 func systemEvent(f wireFrame, raw json.RawMessage) Event {
-	return Event{
+	ev := Event{
 		Kind:           systemKind(f),
 		SessionID:      f.SessionID,
 		Text:           systemText(f),
@@ -292,6 +292,11 @@ func systemEvent(f wireFrame, raw json.RawMessage) Event {
 		Session:        initFacts(f),
 		Task:           taskUpdate(f),
 	}
+	// Only a successful compaction's boundary carries a summary. See CompactSummary.
+	if m := f.CompactMetadata; m != nil {
+		ev.Compaction = &CompactSummary{Trigger: m.Trigger, PreTokens: m.PreTokens, PostTokens: m.PostTokens, Dropped: m.Dropped, DurationMs: m.DurationMs}
+	}
+	return ev
 }
 
 // systemNoticeFor resolves a system frame to its notice. It reads the payload
