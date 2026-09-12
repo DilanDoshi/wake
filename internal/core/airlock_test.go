@@ -176,6 +176,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// own words for what they mean are NoticeCompacting and NoticeCompacted.
 	"compacting", "compact_result",
 
+	// The compact_boundary's summary keys, read only in wireFrame.compaction.
+	// duration_ms is policed below with the task lifecycle; Wake's own words for
+	// these are core.CompactSummary's fields.
+	"compact_metadata", "trigger", "pre_tokens", "post_tokens", "cumulative_dropped_tokens",
+
 	// The task lifecycle's own fields and values, policed as the rest of the
 	// subtype's payload is. None of the ten appears anywhere in this tree
 	// outside internal/core, so policing them costs Wake nothing - the
@@ -574,7 +579,10 @@ var notNamedByTheAirlock = map[string]string{
 // 168 → 175: the /loop scheduler tools and their input keys, "CronCreate",
 // "ScheduleWakeup", "CronDelete", "cron", "recurring", "delaySeconds" and
 // "noop". Recorded in loop-fixed.jsonl and loop-selfpaced.jsonl.
-const policedWordCount = 175
+// 175 → 180: the compact_boundary summary keys wireFrame.compaction reads -
+// "compact_metadata", "trigger", "pre_tokens", "post_tokens" and
+// "cumulative_dropped_tokens" (duration_ms was already policed). compaction.jsonl.
+const policedWordCount = 180
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

@@ -441,23 +441,34 @@ done line for the length of a granted tool after a permission was accepted. `DM.
 it is the working line's row that stays occupied through the done line, so the transition costs no
 height change, the alt-screen hazard `DM.chrome` exists for.
 
-**While a `/compact` runs the DM draws a third form of that row — `✻ Compacting conversation…` — and it
-is indeterminate because the wire gives it nothing else to be.** A compaction announces itself with two
-`system/status` frames: a `status:"compacting"` start flag and a terminal one carrying a
-`compact_result`, resolved in the airlock to `NoticeCompacting`/`NoticeCompacted` (`systemNoticeFor`,
-off the payload — both share subtype `status`). **The end keys on `compact_result`, never the
-`compact_boundary`**, because a *failed* compaction emits the former and no boundary at all
-(`slash-commands.jsonl`). There is **no progress figure anywhere on the stream** — Claude Code's own
-`2%` bar is computed inside its interactive TUI, off nothing a headless session emits — so Wake draws
-Claude's line without the bar: a shimmer that says the work is live, and no percentage it would have to
-invent or scrape (the non-negotiable). The state lives on `App.compacting` (session id → start), folded
-by `observeCompaction` and read at draw time through `WithCompacting`, keyed by id for `tails.go`'s
-reason. It **wins over the done line**: a compaction runs *between* turns — each of its several result
-frames clears the turn — so the agent is idle exactly when the stale `✻ Cooked …` would otherwise show.
-**DM only** for the done line's reason, and it keeps the ticker alive (`anyCompacting`) the way a working
-agent does. `pruneCompacting` on every report is the backstop for a compaction cut short by a crash,
-which never sends its outcome; the notices leave **no transcript block** (`noticeLabel` omits both), so
-the pinned line is the only place it shows. Full argument: `internal/ui/compacting.go`.
+**While a `/compact` runs the DM draws a third form of that row — an animated
+`✻ Compacting conversation ▮▮▯▯▯▯▯▯▯▯ · 14s` — and the bar is indeterminate because the wire gives it
+nothing else to be.** A compaction announces itself with two `system/status` frames: a
+`status:"compacting"` start flag and a terminal one carrying a `compact_result`, resolved in the airlock
+to `NoticeCompacting`/`NoticeCompacted` (`systemNoticeFor`, off the payload — both share subtype
+`status`). **The end keys on `compact_result`, never the `compact_boundary`**, because a *failed*
+compaction emits the former and no boundary at all (`slash-commands.jsonl`). There is **no progress
+figure while it runs** — Claude Code's own `2%` bar is computed inside its interactive TUI, off nothing a
+headless session emits (verified against the recorded stream: only hook noise falls between the start and
+the end) — so the bar is a sweeping block that says the work is live (`compactBar`, off the one shimmer
+ticker via `sweepPos`), never a percentage Wake would invent or scrape (the non-negotiable); the elapsed
+timer beside it is what the operator watches, and both drop widest-first on a narrow pane so the word
+survives. The state lives on `App.compacting` (session id → start), folded by `observeCompaction` and
+read at draw time through `WithCompacting`, keyed by id for `tails.go`'s reason. It **wins over the done
+line**: a compaction runs *between* turns — each of its several result frames clears the turn — so the
+agent is idle exactly when the stale `✻ Cooked …` would otherwise show. **DM only** for the done line's
+reason, and it keeps the ticker alive (`anyCompacting`) the way a working agent does. `pruneCompacting`
+on every report is the backstop for a compaction cut short by a crash, which never sends its outcome.
+**The real figures arrive only at the end, and only then a line shows them.** The `compact_boundary`
+carries `compact_metadata` — context before and after, tokens dropped, duration and trigger — surfaced by
+the airlock as `core.CompactSummary` (`systemEvent`, `wire.go`'s field) and drawn in the DM transcript as
+`✻ Compacted · 50.8k → 4.5k tokens · freed 46.3k · 16s` (`compactedSummaryLine`), with `· auto` only for
+a context-limit trigger — **the `"auto"` wire value is expected but unverified**, only `manual` being
+recorded, so the clause simply does not draw if the real word differs (record one to confirm). The
+bracketing `NoticeCompacting`/`NoticeCompacted` still leave **no transcript
+block** (the pinned line is their only place); the boundary's `NoticeContextCompacted` is the one that
+does, falling back to the plain `✻ Compacted` label when a boundary is restored off disk without its
+metadata (deferred). Full argument: `internal/ui/compacting.go`, `beat.go`.
 
 **Every ordinary exit is a key the Update loop reads, so the emergency one is a byte read before it.**
 ⌃Q arms and a second ⌃Q parks the fleet and quits, ⌃O then ↵ detaches, ⌃C parks one agent — all are `tea.KeyMsg`,
@@ -1089,7 +1100,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | The palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json`, maintained by hand (asserted by `palette_test.go`) |
 | The working line, and the one ticker | `internal/ui/heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `beat.go` — start at `beat.go` for the cost argument, and for `roomWorkingLine`, the same line for a surface with many agents on it · `roomwords.go` — the room's own minimal `✻ Sailed for 49s` (`roomHeartbeatLine`) and its past-tense nautical-and-dawn pool, drawn without the DM's token clause |
 | The DM's done line, once a turn finishes | `internal/ui/beat.go` — `doneLine` (`✻ Cooked for 1m 59s · done 6:48 PM`, static and dim) · `internal/ui/donewords.go` — the Wake-authored past-tense pool · `internal/ui/dmbeat.go` — `DM.heartbeat` (working line or done line), `showsDone` (also false while `subRunning`), `hasBeat` (the one row `baseChrome`/`SetSize` count) · `internal/ui/panedraw.go` — `WithRunningSub`, set by `appview.go`'s `dmFor` off `Fleet.RunningTasks` so a background subagent's parent does not read "done" · `internal/ui/fleet.go` — `Agent.doneAt`/`turnDur`, captured at the working→idle edge; `notDone`, the event-side forget for a self-started turn the daemon reports idle |
-| The DM's compacting line, while `/compact` runs | `internal/ui/compacting.go` — the App-owned `compacting` map (session id → start), `observeCompaction` (fold on the bracketing notices), `anyCompacting`, `compactingSince`, `pruneCompacting` (the backstop for a compaction cut short) · `internal/ui/beat.go` — `compactingLine` (`✻ Compacting conversation…`, indeterminate — the wire carries no progress figure) · `internal/ui/dmbeat.go` — `DM.heartbeat`/`hasBeat` (it wins over the done line: a compaction runs between turns, so the agent is idle) · `internal/ui/panedraw.go` — `WithCompacting` · `internal/core/vocabulary.go`/`protocol.go` — `systemNoticeFor`, which resolves the two subtype-`status` frames to `NoticeCompacting`/`NoticeCompacted` off the payload (the end keys on `compact_result`, not the boundary a failed compaction never emits) |
+| The DM's compacting line, while `/compact` runs, and its completion line | `internal/ui/compacting.go` — the App-owned `compacting` map (session id → start), `observeCompaction` (fold on the bracketing notices), `anyCompacting`, `compactingSince`, `pruneCompacting` (the backstop for a compaction cut short) · `internal/ui/beat.go` — `compactingLine` (`✻ Compacting conversation` + `compactBar`, an indeterminate sweep off the shimmer ticker, plus the elapsed timer — the wire carries no mid-compaction progress figure) and `compactedSummaryLine` (`✻ Compacted · 50.8k → 4.5k tokens · freed 46.3k · 16s`, the transcript block a finished compaction leaves) · `internal/ui/dmbeat.go` — `DM.heartbeat`/`hasBeat` (the compacting line wins over the done line: a compaction runs between turns, so the agent is idle) · `internal/ui/dm_blocks.go` — `noticeBlock` (the boundary's block, `compactedSummaryLine` when its metadata is present, the plain `compactedLabel` otherwise) · `internal/ui/panedraw.go` — `WithCompacting` · `internal/core/protocol.go`/`vocabulary.go` — `systemNoticeFor` resolves the two subtype-`status` frames to `NoticeCompacting`/`NoticeCompacted` off the payload (the end keys on `compact_result`, not the boundary a failed compaction never emits), and `systemEvent` surfaces the `compact_boundary`'s `compact_metadata` as `core.CompactSummary` (`internal/core/event.go`, decoded by `wire.go`'s `CompactMetadata`; contained by `contain.go`'s `containedCompaction`) · `testdata/stream/compaction.jsonl` |
 | An answer as it is written | `internal/core/protocol.go` — `partialEvent` · `wire.go` — `wireStreamEvent` · `internal/ui/partial.go` — start there for the cost argument, and `partial_bench_test.go` for the numbers |
 | A dispatch's lifecycle, decoded | `internal/core/task.go` (Wake's vocabulary) · `protocol.go` — `taskUpdate` · `vocabulary.go` — `taskPhases`, `taskKinds`, `taskStatuses` |
 | The native `/goal` lifecycle, decoded | `internal/core/goal.go` (Wake's vocabulary — `KindGoal`, `GoalOp`, the op kinds) · `wire.go` — the synthetic-frame markers and `messageText` · `encode.go` — `goalOp`/`goalProgress` (the recogniser; here for room, since the airlock is four files and wire.go is at the hard max) · `protocol.go` — `messageEvents`' hook · `goal_test.go` · `testdata/stream/goal-*.jsonl`. Achieve is silent on the wire, so an achieved goal reads active until an explicit clear (spec §6) |

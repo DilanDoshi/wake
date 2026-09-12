@@ -433,7 +433,7 @@ func TestLifecycleChatterIsDropped(t *testing.T) {
 // let this map grow one wire string at a time.
 func TestMeaningfulSystemFramesBecomeNotices(t *testing.T) {
 	for notice, want := range map[core.Notice]string{
-		core.NoticeContextCompacted: "compacted",
+		core.NoticeContextCompacted: "Compacted",
 		core.NoticeToolDenied:       "denied",
 	} {
 		d := NewDM("s1", "alex").SetSize(60, 20).

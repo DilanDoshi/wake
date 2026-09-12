@@ -20,11 +20,13 @@ package ui
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -173,22 +175,113 @@ func workingLine(id, state, doing string, started time.Time, tokens, width int) 
 // while it summarises a conversation to fit.
 const compactingWord = "Compacting conversation"
 
+const (
+	// compactBarCells is the indeterminate bar's width, compactBarLit its moving
+	// block's, and compactBarStep how long the block spends on one cell.
+	compactBarCells = 10
+	compactBarLit   = 2
+	compactBarStep  = 90 * time.Millisecond
+
+	// compactBarFull is a lit cell, compactBarEmpty the dim track under it.
+	compactBarFull  = "▮"
+	compactBarEmpty = "▯"
+)
+
+// compactBar is the indeterminate sweep: a lit block of compactBarLit cells
+// crossing compactBarCells and wrapping, its position read off elapsed so it
+// advances on the one shimmer ticker like the glyph and the shimmer do. It is
+// motion, never a percentage - the wire has no mid-compaction progress figure to
+// fill a determinate bar from, so a filling one would be invented (the
+// non-negotiable). Claude Code's own bar computes its percentage inside its
+// interactive TUI, off nothing a headless session emits.
+func compactBar(elapsed time.Duration) string {
+	pos := int(elapsed/compactBarStep) % compactBarCells
+	if pos < 0 {
+		pos += compactBarCells
+	}
+	var b strings.Builder
+	for i := 0; i < compactBarCells; i++ {
+		lit := false
+		for k := 0; k < compactBarLit; k++ {
+			if (pos+k)%compactBarCells == i {
+				lit = true
+				break
+			}
+		}
+		if lit {
+			b.WriteString(AccentStyle.Render(compactBarFull))
+		} else {
+			b.WriteString(HintStyle.Render(compactBarEmpty))
+		}
+	}
+	return b.String()
+}
+
 // compactingLine is the working line a DM draws while a compaction runs: a
-// shimmering `✻ Compacting conversation…`, and "" when nothing is compacting.
+// shimmering `✻ Compacting conversation`, an indeterminate bar, and the elapsed
+// time - `✻ Compacting conversation  ▮▮▯▯▯▯▯▯▯▯ · 14s`. "" when nothing is
+// compacting.
 //
-// It is indeterminate on purpose. The wire carries no progress figure - only the
-// "compacting" start flag and the outcome - so there is no percentage to draw,
-// where Claude Code's own bar has one its interactive TUI computes internally.
-// since is when the compaction began, driving the glyph and the shimmer the way
-// a turn's age drives workingLine; no age or token clause, since neither belongs
-// to a compaction.
+// The bar is indeterminate on purpose (see compactBar). The elapsed timer is
+// what the operator watches to gauge how long it has run, since a long
+// compaction is otherwise silent. since drives the glyph, the shimmer, the bar
+// and the timer - one clock at four rates, so the line cannot say one thing and
+// animate another. It is truncated timer-first then bar, so the narrowest pane
+// keeps the word that says a compaction is live.
 func compactingLine(since time.Time, width int) string {
-	if since.IsZero() {
+	if since.IsZero() || width < 1 {
 		return ""
 	}
 	elapsed := clock().Sub(since)
-	head := heartbeatGlyph(elapsed) + " " + compactingWord + heartbeatEllipsis
-	return boundedShimmerLine(head, elapsed, "", width)
+	word := heartbeatGlyph(elapsed) + " " + compactingWord
+	line, used := shimmer(word, sweepPos(elapsed, ansi.StringWidth(word)), Accent, AccentShimmer), ansi.StringWidth(word)
+	// Word, then bar, then timer - each added whole only if it fits, so a narrow
+	// pane drops a clause rather than cutting one and the word (which says a
+	// compaction is live) always survives. The timer rides on the bar: the bar is
+	// the main signal, so the timer is not kept once the bar has been dropped.
+	if bar, timer := "  "+compactBar(elapsed), metaSep+elapsedText(elapsed); used+barWidth <= width {
+		line += bar
+		if used+barWidth+ansi.StringWidth(timer) <= width {
+			line += HintStyle.Render(timer)
+		}
+	}
+	return ansi.Truncate(line, width, ellipsis)
+}
+
+// barWidth is the compacting bar's display width: its cells plus the two-space
+// gap that sets it off from the word.
+const barWidth = 2 + compactBarCells
+
+const (
+	// The compaction completion line's parts, joined onto compactedLabel. Every
+	// figure is the boundary's own - see core.CompactSummary.
+	compactedArrow  = " → "
+	compactedTokens = " tokens"
+	compactedFreed  = "freed "
+
+	// compactTriggerAuto is the trigger value the line marks with `· auto`. Only
+	// "manual" is recorded (compaction.jsonl); "auto" is the expected value for a
+	// context-limit compaction but is unverified, so a real word that differs
+	// simply does not draw the clause - the safe failure. Record one to confirm.
+	compactTriggerAuto = "auto"
+)
+
+// compactedSummaryLine is the line a finished /compact leaves in the transcript:
+// `✻ Compacted · 50.8k → 4.5k tokens · freed 46.3k · 16s`, static and dim, where
+// the animated compactingLine was. Every figure is the boundary's own
+// (core.CompactSummary) - nothing here is derived or estimated. `· auto` marks a
+// compaction the context limit triggered; a manual one stays quiet, the done
+// line's rule for the ordinary case. It follows the transcript's own truncation
+// (mutedLine), so a narrow pane keeps the word and drops the tail.
+func compactedSummaryLine(s *core.CompactSummary, width int) string {
+	line := compactedLabel +
+		metaSep + humanTokens(s.PreTokens) + compactedArrow + humanTokens(s.PostTokens) + compactedTokens +
+		metaSep + compactedFreed + humanTokens(s.Dropped) +
+		metaSep + elapsedText(time.Duration(s.DurationMs)*time.Millisecond)
+	if s.Trigger == compactTriggerAuto {
+		line += metaSep + compactTriggerAuto
+	}
+	return mutedLine(line, width)
 }
 
 const (

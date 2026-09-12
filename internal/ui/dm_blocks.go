@@ -32,7 +32,7 @@ const (
 
 	thinkingLabel   = "✻ thinking"
 	permissionLabel = "⚠ permission request"
-	compactedLabel  = "⟲ context compacted"
+	compactedLabel  = "✻ Compacted"
 	deniedLabel     = "⊘ permission denied"
 
 	// interruptedLabel replaces Claude's own abort wording, which arrives on a
@@ -547,6 +547,13 @@ func permissionBlock(ev core.Event, width int) string {
 // NoticeRateLimited never reaches here - every other Notice arrives on a user
 // or system frame.
 func noticeBlock(ev core.Event, width int) string {
+	// A finished compaction whose boundary carried its metadata draws the rich
+	// completion line - before, after, freed and duration. A boundary without it
+	// (restored off disk, where the metadata is not read) falls back to the plain
+	// label below, so it still says a compaction happened rather than nothing.
+	if ev.Notice == core.NoticeContextCompacted && ev.Compaction != nil {
+		return compactedSummaryLine(ev.Compaction, width)
+	}
 	label, ok := noticeLabel[ev.Notice]
 	if !ok {
 		return ""

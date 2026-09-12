@@ -241,6 +241,15 @@ type wireFrame struct {
 	// the "compacting" start flag, both being subtype "status". See systemNoticeFor.
 	CompactResult string `json:"compact_result"`
 
+	// CompactMetadata is the compact_boundary's summary; see CompactSummary.
+	CompactMetadata *struct {
+		Trigger    string `json:"trigger"`
+		PreTokens  int    `json:"pre_tokens"`
+		PostTokens int    `json:"post_tokens"`
+		Dropped    int    `json:"cumulative_dropped_tokens"`
+		DurationMs int    `json:"duration_ms"`
+	} `json:"compact_metadata"`
+
 	// ToolUseResult is the structured sibling of a tool_result block, and it
 	// is polymorphic in the same way Message is: an object on some frames
 	// and a bare string on others (permission-deny-response.jsonl,

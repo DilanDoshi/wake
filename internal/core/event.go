@@ -541,6 +541,20 @@ type ControlResult struct {
 	Error       string   `json:"error,omitempty"`
 }
 
+// CompactSummary is what a successful /compact reports on its compact_boundary
+// frame: the context size before and after, the tokens dropped, how long it
+// took, and whether the operator (manual) or the context limit (auto) triggered
+// it. Every figure is the boundary's own - a renderer draws them rather than
+// deriving a percentage, since the wire carries none while a compaction runs.
+// Nil on every event but that boundary.
+type CompactSummary struct {
+	Trigger    string
+	PreTokens  int
+	PostTokens int
+	Dropped    int
+	DurationMs int
+}
+
 // Event is the single type every layer above the airlock consumes.
 type Event struct {
 	Kind      EventKind `json:"kind"`
@@ -673,6 +687,10 @@ type Event struct {
 	// a per-turn progress refresh, or a clear - and nil on every other kind. The
 	// same pointer-payload shape Tool and Task use. See GoalOp and goal.go.
 	Goal *GoalOp `json:"goal,omitempty"`
+
+	// Compaction is a successful /compact's boundary summary, nil on every other
+	// event - the same pointer-payload shape Goal and Task use. See CompactSummary.
+	Compaction *CompactSummary `json:"compaction,omitempty"`
 
 	// Control is the payload of a KindControlReceipt, nil on every other
 	// kind - the same pointer-payload shape Tool uses. Rewind is that shape
