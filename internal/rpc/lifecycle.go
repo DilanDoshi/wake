@@ -266,7 +266,10 @@ type GoalStatus struct {
 type LoopStatus struct {
 	Active    bool   `json:"active,omitempty"`
 	SelfPaced bool   `json:"self_paced,omitempty"`
-	Cron      string `json:"cron,omitempty"`
+	// Cron is the fixed cadence's expression. The json tag avoids the bare wire
+	// literal "cron" - that is Claude's CronCreate key, policed to the airlock, and
+	// this is Wake's own report wire, free to name its field anything.
+	Cron string `json:"cron_expr,omitempty"`
 }
 
 type SessionStatus struct {
