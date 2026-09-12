@@ -66,19 +66,14 @@ func (a App) drawnComposer(id string, width, height int) (c Composer, below, min
 	if id == "" {
 		room := a.roomFor().WithMenu(menu).SetSize(width, height)
 		// The room bar rides inside the composer as a draw-time overlay
-		// (Room.View's WithBar), so overhead() cannot see it - count it here the
-		// way the DM branch below does, or a room addressing an agent anchors the
-		// draft rows one row too high and a drag lands a row above the pointer.
-		if room.bar != "" {
-			below = 1
-		}
-		return room.composer, below, room.minHeight()
+		// (Room.View's WithBar), so overhead() cannot see it - count its real rows
+		// here, the same barRows chromeHeight budgets, or a room addressing an
+		// agent anchors the draft rows too high and a drag lands above the pointer.
+		// A narrow bar wraps to dmBarRows, so this is not always one.
+		return room.composer, barRows(room.bar), room.minHeight()
 	}
 	d := a.dmFor(id).WithMenu(menu).SetSize(width, height)
-	if d.bar != "" {
-		below = 1
-	}
-	return d.composer, below, d.minHeight()
+	return d.composer, barRows(d.bar), d.minHeight()
 }
 
 // composerSelectionIn is the composer selection resolved for one pane: nothing

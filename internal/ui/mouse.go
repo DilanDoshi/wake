@@ -347,11 +347,12 @@ func (a App) endSelection() (App, tea.Cmd) {
 		return a, copyToClipboard(a.screenSelectedText())
 	}
 	if a.sel.inComposer {
-		// A drag in the query box copies its own text; a click there took none,
-		// and there is no folded tool under a composer to open the way there is
-		// under a transcript.
+		// A drag in the query box copies its own text; a click there places the
+		// caret onto the character it landed on - the box's one job the arrow keys
+		// used to be the only way to do. There is no folded tool under a composer
+		// to open the way there is under a transcript.
 		if a.sel.empty() {
-			return a, nil
+			return a.clickedComposer()
 		}
 		return a, copyToClipboard(a.composerSelectedText())
 	}
@@ -417,6 +418,27 @@ func (a App) clickedTool() App {
 		return a.withDM(a.sel.pane, next)
 	}
 	return a
+}
+
+// clickedComposer places the caret where a click landed in the query box, onto
+// that character, and clears the highlight - a click positions where a drag
+// copies. It resets the caret's blink so it shows at once at the new spot, and
+// rebuilds the completion menu the way a cursor-moving key does. A scrolled draft
+// declines the placement (caretAtPoint), and then the click leaves the caret
+// alone.
+func (a App) clickedComposer() (App, tea.Cmd) {
+	c, ok := a.composerFor(a.sel.pane)
+	if !ok {
+		return a, nil
+	}
+	moved, placed := c.caretAtPoint(a.sel.anchor, a.cdrag.rows, a.cdrag.boxWidth)
+	if !placed {
+		// A scrolled draft declines the placement; drop the empty selection the
+		// press took, the way deleteSelectedDraft clears on its own decline.
+		return a.cleared(), nil
+	}
+	moved, blink := moved.Refocus()
+	return a.withComposerFor(a.sel.pane, moved).cleared().recompleted(), blink
 }
 
 // pointIn is where a screen row and a pane-local column land in a
