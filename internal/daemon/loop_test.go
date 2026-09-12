@@ -52,6 +52,20 @@ func TestFoldLoopAccumulatesTheSelfPacedRun(t *testing.T) {
 	}
 }
 
+// A tick with no usable delay (a missing key, or an immediate wake) clears the
+// next fire rather than leaving the last iteration's - which is already in the
+// past and would render as an elapsed "next" time.
+func TestFoldLoopClearsAStaleNextFire(t *testing.T) {
+	now := time.Unix(1_700_000_000, 0)
+	s := foldLoop(loopState{}, core.LoopOp{Kind: core.LoopSelfPaced, DelaySeconds: 300}, now)
+	if s.nextFire.IsZero() {
+		t.Fatal("setup: the first tick should have stamped a next fire")
+	}
+	if s = foldLoop(s, core.LoopOp{Kind: core.LoopSelfPaced}, now); !s.nextFire.IsZero() {
+		t.Errorf("a tick with no delay kept the stale next fire: %+v", s)
+	}
+}
+
 func TestLoopStatusReportsOnlyAnActiveLoop(t *testing.T) {
 	if loopStatus(loopState{}) != nil {
 		t.Error("loopStatus of an idle session should be nil so the report key omits")

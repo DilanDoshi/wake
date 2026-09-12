@@ -53,8 +53,12 @@ func (a Agent) withLoop(op core.LoopOp) Agent {
 		} else {
 			a.loop.Quiet = 0
 		}
+		// A tick with no usable delay clears the next fire rather than leaving the
+		// last iteration's stale one - see daemon/loop.go's foldLoop.
 		if op.DelaySeconds > 0 {
 			a.loop.NextFire = clock().Add(time.Duration(op.DelaySeconds) * time.Second)
+		} else {
+			a.loop.NextFire = time.Time{}
 		}
 	}
 	return a

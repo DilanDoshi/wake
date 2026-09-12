@@ -36,8 +36,12 @@ func TestADMShowsALoopWaitLineBetweenIterations(t *testing.T) {
 	if line == "" {
 		t.Fatalf("no loop-wait line on screen after the iteration.\n%s", s.dump())
 	}
-	if !strings.Contains(line, "iter 1 done") {
-		t.Errorf("loop-wait line %q is missing the iteration count", line)
+	// The exact iteration count is pinned deterministically by the unit tests; this
+	// only proves the line renders in a real pane, so it does not pin the number -
+	// a daemon probe turn could fold an extra iteration and that is not this test's
+	// concern.
+	if !strings.Contains(line, "iter ") || !strings.Contains(line, "done") {
+		t.Errorf("loop-wait line %q is missing the iteration clause", line)
 	}
 	if !strings.Contains(line, "next ") {
 		t.Errorf("loop-wait line %q is missing the next-fire clause", line)

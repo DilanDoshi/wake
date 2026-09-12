@@ -52,6 +52,13 @@ func TestSelfPacedRunAccumulatesOntoTheAgent(t *testing.T) {
 	if a, _ := f.Agent("s1"); a.Loop().Quiet != 0 {
 		t.Errorf("a working tick did not reset the quiet streak: %+v", a.Loop())
 	}
+
+	// A tick with no usable delay clears the stale next fire rather than leaving
+	// the previous iteration's, which is already in the past.
+	f, _ = f.Observe(loopToolEvent(core.LoopOp{Kind: core.LoopSelfPaced}), "s1")
+	if a, _ := f.Agent("s1"); !a.Loop().NextFire.IsZero() {
+		t.Errorf("a tick with no delay kept a stale next fire: %+v", a.Loop())
+	}
 }
 
 // The report is the late-attach route and both sets and clears the loop.

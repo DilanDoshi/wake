@@ -43,8 +43,14 @@ func foldLoop(s loopState, op core.LoopOp, now time.Time) loopState {
 		} else {
 			s.quiet = 0
 		}
+		// Every tick resolves the next fire, the way it resolves the quiet streak:
+		// a tick with no usable delay (a missing/malformed key, or an immediate
+		// wake) clears it rather than leaving the last iteration's - which is a time
+		// already in the past, and would render "next <elapsed time>".
 		if op.DelaySeconds > 0 {
 			s.nextFire = now.Add(time.Duration(op.DelaySeconds) * time.Second)
+		} else {
+			s.nextFire = time.Time{}
 		}
 		return s
 	}
