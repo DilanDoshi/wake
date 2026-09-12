@@ -29,10 +29,32 @@ import (
 // expanding is about what is being *read*, and the cursor names an agent that
 // may have no pane on screen. A focus that names no conversation is the room.
 func (a App) toggleExpanded() (tea.Model, tea.Cmd, bool) {
+	// A focused question card's description expands here first: while a card is up
+	// the transcript behind it is dimmed and read past, so ⌃E means "show me the
+	// rest of this option's description" - the one row the card truncates and
+	// cannot scroll to. It falls through to the tool results below when the
+	// focused pane has no question card with a description. See detailSlot.
+	if next, ok := a.toggleCardDetail(); ok {
+		return next, nil, true
+	}
 	if dm, ok := a.dms[a.focus]; ok {
 		return a.withDM(a.focus, dm.toggleExpanded()), nil, true
 	}
 	return a.withRoom(a.room.toggleExpandAll()), nil, true
+}
+
+// toggleCardDetail flips the focused pane's question card between one truncated
+// description line and the whole thing, reporting whether it acted. False when
+// the focused pane draws no question card with a description to open, so ⌃E goes
+// on to the tool-result expansion it always did.
+func (a App) toggleCardDetail() (App, bool) {
+	card, ok := a.cardOf(a.focus)
+	if !ok || !card.canExpandDetail() {
+		return a, false
+	}
+	card.DetailExpanded = !card.DetailExpanded
+	a.cards = a.cards.With(card)
+	return a, true
 }
 
 // toggleExpanded flips the flag and re-renders, which is the whole of it: the
