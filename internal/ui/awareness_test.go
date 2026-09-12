@@ -43,6 +43,28 @@ func TestEveryStateTheRosterDrawsIsCountedInTheStrip(t *testing.T) {
 	}
 }
 
+// The strip counts the looping agents as a cross-cutting segment: a loop rides
+// over any state, so it is one figure beside the state counts, not a state of its
+// own. A blocked-mid-loop agent is counted under "need you", never as looping -
+// the strip answers whether to stop, and a blocked loop is a stop.
+func TestTheStripCountsTheLoopingAgents(t *testing.T) {
+	agents := inState(rpc.StateIdle, 2)
+	agents[0].loop = LoopState{Active: true, SelfPaced: true}
+	agents[1].loop = LoopState{Active: true, Cron: "*/5 * * * *"}
+	blockedLooper := Agent{ID: "b", Name: "b", State: rpc.StateBlocked, loop: LoopState{Active: true, SelfPaced: true}}
+	agents = append(agents, blockedLooper)
+
+	out := stripANSI(awarenessStrip(agents, "", 200))
+	if !strings.Contains(out, "2 looping") {
+		t.Errorf("the strip does not count the two unblocked loopers: %q", out)
+	}
+
+	none := stripANSI(awarenessStrip(inState(rpc.StateIdle, 3), "", 200))
+	if strings.Contains(none, "looping") {
+		t.Errorf("a fleet with no loops named looping: %q", none)
+	}
+}
+
 // The thing worth stopping for is leftmost.
 //
 // Through the roster's own ranking, so a glance at the strip and a glance at the
