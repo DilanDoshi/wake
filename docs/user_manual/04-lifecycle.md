@@ -1,6 +1,6 @@
 # 4. The lifecycle
 
-There are four ways to stop something in Wake and they are genuinely different. Getting them
+There are several ways to stop something in Wake and they are genuinely different. Getting them
 confused is the one mistake here that costs work, so this chapter is short and worth reading once.
 
 ## The distinction that matters
@@ -22,7 +22,7 @@ Park pauses an employee. Detach is you going home while they keep working.
 | | What it does | Recoverable |
 |---|---|---|
 | **`⌃C`** | Park the agent in front of you | **Yes** — `/resume <name>` |
-| **`⌃Q`** | Park the whole fleet, then quit Wake | **Yes** — next `wake` offers it back |
+| **`⌃Q⌃Q`** | Park the whole fleet, then quit Wake (the first `⌃Q` arms, the second confirms) | **Yes** — next `wake` offers it back |
 | **`⌃O`** | Detach: close Wake, leave everyone running | Nothing stopped |
 | **`wake stop`** | End every session and the daemon | **No** |
 
@@ -44,7 +44,8 @@ cannot be told apart from a real one afterwards. Interrupt with `⎋` first, the
 
 ## Parking everything and quitting
 
-`⌃Q` parks the fleet and exits. The next `wake` sees what was parked and offers it back:
+`⌃Q` parks the fleet and exits, and it is armed: the first press arms it (the cue reads
+`⌃Q park all & quit`), a second confirms. The next `wake` sees what was parked and offers it back:
 
 ```
 1 session parked: @kwame.
@@ -64,6 +65,13 @@ in time it is killed rather than parked, and it will not be in the offer.
 
 This is what the background daemon exists for. If you only ever detach, you never lose anything —
 but you also leave 30 `claude` processes running, which is what park is for.
+
+## Ending one agent
+
+`/quit` ends the conversation you are in for good — it stops the process, releases the name, and
+drops the row from your window. It is irreversible, which is the whole difference from `⌃C`: park
+pauses, `/quit` ends. Like `wake stop` it lets an in-flight turn finish first. `@who /quit` from the
+room ends that agent instead. The manager is refused and pointed at `/manager-stop`, its one ending.
 
 ## Ending the fleet
 

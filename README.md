@@ -41,7 +41,7 @@ come back.
 | `↑↓` prompt history | `⇧↑↓` pick agent | `⇧←→` move focus | `⌃X` next blocked |
 | `⌃D` open DM | `⌃Y` open right | `⌃B` open below | `⌃W` close pane |
 | `⌃R` activity | `⇞⇟` scroll | `⌃E` expand | `⌃F` fork |
-| `⌃T` mention mode | `⌥↵`/`⌃J` newline | | |
+| `⌃T` mention mode | `⌃A` show all | `⌥↵`/`⌃J` newline | |
 
 `↑↓` recall your previous prompts into the query bar (Claude Code's own history keys); `⇧↑↓` walk the
 roster instead — including a conversation's running subagents in the right sidebar — and `↵` or `⌃D`
@@ -60,7 +60,7 @@ wake new [name]         open a conversation with a new agent, with a name you ch
 wake attach <who>       open a conversation with one already running, by name or id
 wake fork <who> [name]  branch a conversation: a new agent with the same history so far
 wake import [<id>]      adopt a claude session this machine already has
-wake setup-terminal     make Shift+Enter insert a newline, by configuring your terminal
+wake setup-terminal     configure your terminal: Shift+Enter → a newline, Cmd+←/→ → line start/end
 wake manager            start the manager from a shell (the room seats one by default)
 wake status             what is running
 wake stop               stop every session and the daemon — the one irreversible verb
@@ -81,8 +81,10 @@ Flags on the verbs that start a session (`new`, `manager`):
 
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
 slash commands are `/resume`, `/name`, `/task`, `/color`, `/quit`, `/adopt`, `/mcp`, `/login`,
-`/manager`, `/manager-stop` and `/board`; `/effort` and `/model` configure the session they are
-addressed to. Everything else you type is passed to the agent byte for byte.
+`/reauth`, `/manager`, `/manager-stop`, `/board` and `/groupchat-filter`; `/effort` and `/model`
+configure the session they are addressed to. Everything else you type is passed to the agent byte for
+byte. A lone `@name` narrows the room to that agent's thread; `⌃A` widens it back to everyone while
+still addressing them, and `/groupchat-filter off` flips that default.
 
 ## Development
 

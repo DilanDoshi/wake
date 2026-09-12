@@ -1,11 +1,13 @@
 # 3. Keyboard shortcuts
 
-Every key Wake binds, and nothing else. The *legend under the composer* is enforced: a test parses
-the key handler and the hint line and requires an exact match both ways, so a key with no label and
-a label with no key are each a build failure. **This page is not in that loop** — it drifted behind
-the legend twice before anyone noticed — so what it promises is weaker and worth stating plainly:
-every key here is one the library names and the terminal sends. Whether your particular terminal
-sends it is [chapter 7](07-troubleshooting.md) and `docs/live-testing.md`.
+Every key Wake binds, and nothing else. Wake keeps a canonical list of its bindings, and a test
+parses the key handler against it and requires an exact match both ways, so a key with no entry and
+an entry with no key are each a build failure. Wake no longer draws an always-on hint row, though —
+the permission mode lives in the status bar, and the only thing under the composer is a safety
+**cue** while a key is *armed* (the lifecycle keys below). **This page is not in that enforcement
+loop** — it has drifted behind the bindings before — so what it promises is weaker and worth stating
+plainly: every key here is one the library names and the terminal sends. Whether your particular
+terminal sends it is [chapter 7](07-troubleshooting.md) and `docs/live-testing.md`.
 
 ## Talking
 
@@ -13,9 +15,9 @@ sends it is [chapter 7](07-troubleshooting.md) and `docs/live-testing.md`.
 |---|---|
 | `↵` | Send |
 | `⎋` | Interrupt the current turn — safe on a blocked agent, no respawn |
-| `⌥↑` `⌥↓` | Walk back through what you typed into **this** pane, and forward again. `⌥↓` past the newest gives you back the draft you were writing |
+| `↑↓` | Recall your previous prompts into **this** pane (Claude Code's own history keys), on an empty or single-line draft; on a multi-line one they move the query cursor between its lines. `⌥` held does the same — it is not a separate binding |
 | `⌥↵` `⌃J` | A newline in the draft, rather than sending it |
-| `⎋⎋` | Clear a conversation's draft. The first `⎋` interrupts *and* arms; the second clears |
+| `⎋⎋` | Clear a conversation's draft — the first `⎋` interrupts *and* arms, the second clears. On an **idle conversation with no draft**, that second `⎋` opens a rewind picker to an earlier prompt instead |
 | `⇞` `⇟` | Scroll the pane with the keys |
 | `⌃E` | Expand what the pane folded — a conversation's tool results, or the room's folded responses — and collapse it again |
 
@@ -33,9 +35,10 @@ just one, **click** its folded pointer.
 Expanding returns you to the newest line. That is the same thing a width change does, for the same
 reason: the lines a scroll position points at have renumbered underneath it.
 
-`↑↓` are Claude Code's prompt-history keys; here they move the query cursor when the draft you are
-typing is multi-line, and the roster cursor otherwise (an empty or single-line query). So prompt
-history is on the same two arrows with `⌥` held, where it never collides with either. A conversation's history is the conversation:
+`↑↓` are Claude Code's prompt-history keys, and Wake keeps them there: on an empty or single-line
+draft they recall your previous prompts, and on a multi-line one they move the query cursor between
+its lines. `⌥` held behaves identically. The **roster** moved to `⇧↑↓` to make room for this — the
+job plain `↑↓` used to do. A conversation's history is the conversation:
 Wake keeps no prompt file, it reads the user turns already in the pane, and a pane filled from
 claude's own transcript has a history the first time you open it. The room's history is what you
 typed into the room, mention and all.
@@ -47,13 +50,14 @@ typed into the room, mention and all.
 | `⇥` | Move the keys between the room and the conversations open beside it |
 | `⇧⇥` | Cycle the permission mode of the agent the roster has selected: `default` → `acceptEdits` → `plan` → `auto`, the same four Claude Code walks |
 | `⌃X` | Jump to the next blocked agent |
-| `↑↓` | Move the query cursor when the draft is multi-line; otherwise move the roster cursor — which is what the three open keys below read |
+| `⇧↑` `⇧↓` | Move the roster cursor — which is what the open keys below read. (Plain `↑↓` are prompt history; the roster took `⇧` when they did) |
 | `⌃D` | Open the selected agent **into the focused pane** |
 | `⌃Y` | Open the selected agent in a **new column** |
 | `⌃B` | Open the selected agent **below** the focused pane |
 | `⌃W` | Close the open conversation |
 | `⌃R` | Toggle the activity sidebar |
-| `⇧←` `⇧→` `⇧↑` `⇧↓` | Move the keys to the pane that way. It moves among panes **already drawn** and opens nothing — that is the whole difference from `⇥`, and why a direction with no pane in it names `⇥` instead of wrapping |
+| `⌃A` | **Show all** — widen a room a lone `@name` has narrowed back to every agent's lines, while still addressing that one; a second `⌃A` re-narrows |
+| `⇧←` `⇧→` | Move the keys to the pane that way. It moves among panes **already drawn** and opens nothing — that is the whole difference from `⇥`, and why a direction with no pane in it names `⇥` instead of wrapping. There is no vertical version: the lower pane of a split column is reached by `⇥` or a click |
 | `⌃N` `⌃P` | Walk the **dispatch list** — the subagents the focused conversation has spawned. While a completion menu is open they walk that instead |
 
 `⌃N` and `⌃P` are the conversation's own list, not the fleet's. An agent that spawns subagents gets a
@@ -72,8 +76,8 @@ built in parallel and both wanted the pair, and the order they intercept in deci
 | Key | Does | Reversible |
 |---|---|---|
 | `⌃C` | **Park** the agent in front of you | Yes — `/resume` |
-| `⌃Q` | **Quit** Wake and park the whole fleet | Yes — next `wake` offers it back |
-| `⌃O` | **Arm a detach** — closing Wake and leaving everyone working. `↵` finishes it; a second `⌃O` takes it back. While it is armed the legend reads `↵ detach   …   ⌃O cancel` | Nothing stopped |
+| `⌃Q` | **Quit** Wake and park the whole fleet — armed, like the detach: the first `⌃Q` arms (the cue reads `⌃Q park all & quit`), a second confirms | Yes — next `wake` offers it back |
+| `⌃O` | **Arm a detach** — closing Wake and leaving everyone working. `↵` finishes it; a second `⌃O` takes it back. While it is armed the cue reads `↵ detach   …   ⌃O cancel` | Nothing stopped |
 
 ## While the completion menu is up — see [chapter 6](06-commands.md)
 
@@ -86,7 +90,7 @@ is why they are not in the legend under the composer. The menu names them itself
 | `⌃N` `⌃P` | Move down and up the list |
 
 `↑↓` and `↵` are **not** among them: the menu never claims the arrows or enter — they keep their
-usual jobs (the roster or, in a multi-line draft, the query cursor; enter still sends).
+usual jobs (prompt history, or the query cursor in a multi-line draft; enter still sends).
 
 Move the cursor off that word — or type a space — and all three go back to the text area, where `⌃N`
 and `⌃P` are how you move between the lines of a multi-line draft.
@@ -142,11 +146,11 @@ of the shipped `claude` binary — one nobody has ruled on is a build failure ra
 |---|---|---|
 | `⌃O` | Expand the tool result it just truncated | **Detach.** The only one that costs anything, so it is armed: `⌃O` then `↵`. Pressing `⌃O` again cancels, which is what makes key repeat harmless. `⌃E` expands here |
 | `⌃T` | Raise the todo panel | Flip the mention mode — the line above the keys says which reading is live, and the same key puts it back |
-| `⌃R` | Search your prompt history | Toggle the activity sidebar. There is no search here; `⌥↑↓` walks without one |
+| `⌃R` | Search your prompt history | Toggle the activity sidebar. There is no search here; `↑↓` walks without one |
 | `⌃B` | Background the running task | Open the picked agent below the focused pane — `⌃W` closes it |
 | `⌃E` | Show the whole transcript / edit a custom theme / expand a confirmation's explanation | Expand this conversation's tool results. The first of those is the same meaning on both sides, reached by accident |
 | `⇧⇥` | Cycle the permission mode | Cycle the permission mode of the agent the roster has selected. The closest thing here to an alignment |
-| `⌃N` `⌃P` | Walk its own footer list | Walk the dispatch list, or the completion menu while one is open — **the same job on both sides.** Claude Code binds `up`/`⌃P` and `down`/`⌃N` for it; Wake can have the second pair and not the first, because `↑↓` are the roster's — except when they move the query cursor in a multi-line draft — and open the sidebar as they move |
+| `⌃N` `⌃P` | Walk its own footer list | Walk the dispatch list, or the completion menu while one is open — **the same job on both sides.** Claude Code binds `up`/`⌃P` and `down`/`⌃N` for it; Wake can have the second pair and not the first, because `↑↓` are prompt history — recall on an empty draft, the query cursor in a multi-line one — and `⇧↑↓` are the roster's |
 
 ## Shadowed keys
 
@@ -165,12 +169,10 @@ reaches line-end, which made `⌃E` the cheapest one to spend.
 puts the terminal in raw mode, which stops that — so `⌃C` reaches Wake and parks, rather than
 killing it. Under tmux or ssh this is the first thing worth checking.
 
-## At narrow widths
+## The armed cue at narrow widths
 
-The hint line is 303 cells at full width and truncates from the right — at an entry boundary, so you
-never see half of one — which means at an ordinary terminal size you see the first several keys.
-They are ordered so that the ones you need most survive: send, interrupt, detach, park, then
-navigation. Prompt history sits below `↑↓ pick agent`, so a narrow pane loses it.
-
-Note the legend is cut to the width of the **pane**, not the terminal — with a conversation open
-beside the room, a 120-column terminal gives each pane about 50, and only four entries fit.
+There is no always-on legend row to truncate any more. What can appear under the composer is the
+safety **cue** while a key is armed — `↵ detach   ⌃O cancel`, `esc clear draft`, `esc rewind`, or
+`⌃Q park all & quit` — and it is cut to the width of the **pane**, not the terminal. The confirming
+key leads it (`↵` for a detach, `esc` for a clear or a rewind), so the part you need survives a
+narrow pane even when the rest is dropped.

@@ -32,6 +32,24 @@ cannot be distinguished from a real one afterwards.
 
 Press `⎋` to interrupt the ask, then `⌃C`.
 
+## Every agent starts failing with a 401 at once
+
+A fleet of 15–30 sessions on one Max-plan login can lose auth together: the shared OAuth token
+expires, the sessions race to refresh it, and the ones that lose the race hold a dead login and end
+every turn `401`. This is an upstream Claude Code bug rather than Wake's — Wake just runs enough
+concurrent sessions to trigger it. A live `claude` process never picks up a fresh token, so logging
+in elsewhere does not heal one.
+
+Wake surfaces the 401 as an infrastructure notice — not as something an agent said — and marks the
+sessions it hit. To recover:
+
+1. Run **`/reauth`**. It parks the marked sessions in place: the stale process stops, the transcript
+   is kept.
+2. Log in again, then `/resume all` brings them back on the fresh login. No full-fleet kill.
+
+A session that keeps hitting a 401 long enough to be a dead login rather than a blip is auto-parked
+to end the retry hang.
+
 ## A key does nothing
 
 Check it is on the list in [chapter 3](03-keyboard.md) — if it is not there, Wake does not bind it,

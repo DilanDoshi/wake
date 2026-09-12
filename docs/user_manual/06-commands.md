@@ -5,18 +5,24 @@ Three kinds, in three places.
 ## `wake …` — at the shell
 
 ```
-wake                    reopen the room, or start an agent if nothing is running
+wake                    start a new fleet, name it, and open it on the room
+wake --fleet <name>     open a fleet that already exists (a bare `wake` always makes a new one)
+wake fleets             every fleet on this machine
 wake new [name]         open a conversation with a new agent, with a name you choose
 wake attach <who>       open a conversation with one already running, by name or id
 wake fork <who> [name]  branch a conversation: a new agent with the same history so far
+wake import [<id>]      adopt a claude session this machine already has
+wake manager            start the manager from a shell (the room seats one by default)
+wake setup-terminal     configure your terminal: Shift+Enter → a newline, Cmd+←/→ → line start/end
 wake status             what is running
 wake stop               stop every session and the daemon
 ```
 
-**`wake` with no arguments is the one to remember.** It reopens the whole room on whatever is
-running. If nothing is running it starts an agent as well, so it is also the right first command —
-but the room is what opens either way, and that agent is a roster row you press `↵` on. `wake new`
-is the verb that opens a conversation.
+**`wake` starts a fleet and opens the room; `wake new` opens a conversation.** A bare `wake` makes a
+*new* fleet each time and names it from the pool, so the obvious command is no longer the way back —
+`wake --fleet <name>` reopens one you already have, and `wake fleets` lists them. On a machine with
+nothing at all it spawns an agent too, because a first command has to produce one, but that agent is
+a roster row you press `↵` on rather than a pane.
 
 **`<who>`** is a name or a session id, and a unique prefix of either works — `wake attach syd`, or
 the first few characters of the id `wake status` prints. If a prefix is ambiguous Wake lists the
@@ -111,7 +117,16 @@ Wake owns a short, closed list of slash commands:
 /new [<name>] [in <dir>]       start an agent without leaving the room; takes the spawn flags too
 /name [@who] <new-name>        rename a session
 /task [@who] <what it is on>   set the label beside its name
+/color [@who] <colour>|none    an identity hue — seven named colours, or none to clear
+/quit [@who]                   end one session for good and drop its row (irreversible)
+/adopt                         adopt a claude session this machine already has, from the room
+/manager                       the switch: start one, wake a parked one, or park a running one
+/manager-stop                  end the manager for good (a fresh /manager starts a new one)
+/board                         the fleet as one row per agent; ⇥ tiles it into a live wall
+/groupchat-filter [on|off]     whether a lone @name narrows the room by default (bare reports)
+/reauth                        recover a fleet knocked out by an expired shared login
 /mcp                           the MCP panel claude cannot draw headless
+/login                         the auth panel — sign in or check status
 /effort                        pick a reasoning level — bare, no argument
 /model                         pick a model — bare, no argument
 ```

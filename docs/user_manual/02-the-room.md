@@ -23,14 +23,26 @@ sidebar as activity, not in the room as prose.
 |---|---|
 | `@sydney look at the retry logic` | just sydney |
 | `@all pause what you are doing` | everybody, with a count of the turns it starts |
-| anything with no `@` | **nobody** — the room refuses it and says so |
+| anything with no `@` | the **manager** — the room seats one by default |
 
-The room refuses an unaddressed message on purpose. In a group chat with thirty members,
-"send to whoever" is not a thing you can mean.
+An unaddressed message goes to the **manager**, the session Wake seats in every room to field exactly
+this (`@manager` reaches it by name too). Only when there is no manager at all does an unaddressed
+message resolve to nobody — in a group chat with thirty members, "send to whoever" is not otherwise
+a thing you can mean.
 
 **`@` is overloaded, exactly as in Claude Code.** `@sydney` is a session if a live session is
 called that; otherwise `@src/main.go` is a file path and passes straight through to the agent.
 Live names win, and Wake shows you what it resolved to.
+
+### Narrowing the room to one agent
+
+Type a lone `@name` and the room **narrows to that agent's thread** — their lines, the manager's,
+every broadcast, and your own messages to them — for as long as it is what the composer is
+addressing. It is a view filter, not a mode: `@sydney hi` still routes to sydney, and the room widens
+again when you change or clear the target. `⌃A` **shows all** — it widens a narrowed room back to
+every agent while still addressing `@sydney`, and a second `⌃A` re-narrows. `/groupchat-filter off`
+flips the default so a lone `@name` no longer narrows (`⌃A` then narrows on demand); `on` restores
+it, and a bare `/groupchat-filter` reports which is set.
 
 ### What you said from the room shows up in their conversation
 

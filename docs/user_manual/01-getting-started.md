@@ -13,8 +13,8 @@ this point is one agent.
 
 You will see it on the roster, on the right, as a row like `sydney <> dev-5748`. The first half is
 the agent's handle — what you type after `@`. The second half is its **task label**, read from the
-git branch checked out where the session started, falling back to the directory name. You cannot
-set it yet.
+git branch checked out where the session started, falling back to the directory name. Set your own
+with `/task <what it is on>`.
 
 Press `↵` on that row and the conversation opens. Type and press `↵` again. You are in Claude
 Code: the same rendering, the same `/commands`, the same `@file` completion. `⌃W` closes the pane
@@ -34,8 +34,9 @@ you the output, and that is the whole of it.
 shell. `⌃O` closes Wake and leaves everything running. Close the terminal, shut the laptop lid,
 come back tomorrow, run `wake` — the work is done and waiting.
 
-**3. Every agent runs in `auto` permission mode.** It will act without asking for most things, and
-ask you when it genuinely needs a decision. You cannot change this yet.
+**3. Every agent starts in `auto` permission mode.** It will act without asking for most things, and
+ask you when it genuinely needs a decision. `⇧⇥` cycles it — `default` → `acceptEdits` → `plan` →
+`auto` — for the agent the roster has selected.
 
 **4. A name is not an address.** Names are for you. Wake routes on session ids internally, and a
 name is released when its session ends and may be reissued to somebody else.
@@ -49,21 +50,23 @@ wake new backend         # a name you choose
 
 Both open a conversation with the new agent and put it in the room with the others.
 
-There is no way to do this from inside Wake yet — no `/new`, no button. It is the largest gap
-between what this app was asked to be and what it is, and it is written down as such.
+You can also start one without leaving Wake: `/new [name]` in the composer spawns an agent from
+inside the room, and takes the spawn flags too — `/new backend --worktree fix-42 in ~/api`.
 
 ## Finding your way back
 
 ```sh
-wake                     # reopen the room on whatever is running
+wake --fleet <name>      # reopen a fleet you already have
+wake fleets              # list every fleet on this machine
 wake attach sydney       # open one conversation by name
 wake attach 6c246eb1     # or by the first few characters of its id
 wake status              # what is alive, without opening anything
 ```
 
-`wake` with no arguments is the one to remember. It reopens the whole room — every agent, both
-sidebars, everything as you left it. If nothing is running it starts an agent as well, so it is
-also the right first command on a fresh machine; either way what opens is the room.
+The thing to know: a bare `wake` starts a *new* fleet each time and names it, so it is no longer the
+way back. `wake --fleet <name>` reopens one you already have, and `wake fleets` lists them. On a
+fresh machine with nothing running, a bare `wake` is still the right first command — it makes your
+first fleet and spawns an agent to start with.
 
 ## Stopping
 
@@ -72,7 +75,7 @@ genuinely different and one of them cannot be undone. The short version:
 
 - **`⌃O`** — you leave, they keep working.
 - **`⌃C`** — park the agent in front of you. Recoverable with `/resume`.
-- **`⌃Q`** — park everything and quit. Next `wake` offers it back.
+- **`⌃Q⌃Q`** — park everything and quit (the first `⌃Q` arms, the second confirms). Next `wake` offers it back.
 - **`wake stop`** — end the fleet. **Not recoverable.**
 
 ## Where your conversations actually live
