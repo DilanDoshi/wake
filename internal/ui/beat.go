@@ -19,6 +19,7 @@ package ui
 
 import (
 	"fmt"
+	"strconv"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -224,4 +225,67 @@ func doneLine(id string, started, doneAt time.Time, dur time.Duration, width int
 		meta = ""
 	}
 	return HintStyle.Render(head + meta)
+}
+
+const (
+	// loopWaitWord heads the waiting line: the idle agent is still looping, so it
+	// reads "Looping" rather than the generic done word it replaces.
+	loopWaitWord = "Looping"
+
+	// loopWaitDone follows the iteration count on the waiting line.
+	loopWaitDone = " done"
+
+	// loopNextMeta heads the next-fire time, the done line's own separator.
+	loopNextMeta = metaSep + "next "
+
+	// loopWorkClause marks a working turn as one iteration of a self-paced loop.
+	// Presence only, no number: iter counts completed iterations, so a count here
+	// would be one behind the turn on screen.
+	loopWorkClause = metaSep + loopGlyph + " looping"
+)
+
+// loopWaitLine is the line a DM draws while an active /loop waits between
+// iterations - `✻ Looping · iter 4 done · next 6:48 PM` - dim and static, in the
+// row the done line it replaces would take. "" for no loop.
+//
+// The next-fire is a wall-clock time rather than a live-ticking countdown, the
+// way the done line writes its done time: a countdown would need the one ticker
+// running through an idle wait, which the cheap-to-leave-open non-negotiable
+// forbids. A fixed loop names its cadence instead - a cron-fire carries no wire
+// marker to count an iteration or a next fire from.
+func loopWaitLine(l LoopState, width int) string {
+	if !l.Active || width < 1 {
+		return ""
+	}
+	head := doneGlyph + " " + loopWaitWord
+	switch {
+	case l.SelfPaced:
+		if l.Iter > 0 {
+			head += metaSep + "iter " + strconv.Itoa(l.Iter) + loopWaitDone
+		}
+	case loopCadence(l.Cron) != "":
+		head += metaSep + loopCadence(l.Cron)
+	}
+	// Only a fire still in the future is drawn: a self-paced loop that ended
+	// silently (the model stopped rescheduling) leaves its last next-fire behind,
+	// and asserting a specific time that has already passed reads as a fire that is
+	// coming when none is. Once it elapses the clause drops to a bare "Looping".
+	meta := ""
+	if l.NextFire.After(clock()) {
+		meta = loopNextMeta + l.NextFire.Format(doneClock)
+	}
+	head = ansi.Truncate(head, width, ellipsis)
+	if width-ansi.StringWidth(head) < ansi.StringWidth(meta) {
+		meta = ""
+	}
+	return HintStyle.Render(head + meta)
+}
+
+// loopWorkingClause is the ` · ↻ looping` suffix a working line takes while the
+// turn is one iteration of a self-paced loop, and "" otherwise.
+func loopWorkingClause(l LoopState) string {
+	if l.Active && l.SelfPaced {
+		return loopWorkClause
+	}
+	return ""
 }

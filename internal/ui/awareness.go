@@ -65,9 +65,16 @@ func awarenessStrip(agents []Agent, workspace string, width int) string {
 	for _, a := range agents {
 		counts[a.State]++
 	}
-	segs := make([]string, 0, len(counts))
+	segs := make([]string, 0, len(counts)+1)
 	for _, state := range statesByAttention(counts) {
 		segs = append(segs, glyphOf(state)+" "+strconv.Itoa(counts[state])+" "+labelOf(state))
+	}
+	// The looping count is cross-cutting rather than a state - a loop rides over
+	// working or idle - so it trails the state segments as one figure. A
+	// blocked-mid-loop agent is left to "need you": the strip answers whether to
+	// stop, and a blocked loop is a stop. Cut first at a tight width for that reason.
+	if n := loopingCount(agents); n > 0 {
+		segs = append(segs, loopGlyph+" "+strconv.Itoa(n)+" looping")
 	}
 	body := strings.Join(segs, stripSep)
 	if body == "" {
@@ -103,6 +110,19 @@ func awarenessStrip(agents []Agent, workspace string, width int) string {
 	// Padded to the frame rather than only clipped to it: the grid asserts every
 	// row is the terminal's width, and one short row makes the whole frame ragged.
 	return row + strings.Repeat(" ", max(width-ansi.StringWidth(row), 0))
+}
+
+// loopingCount is how many agents have an active /loop and are not blocked - a
+// blocked one is counted under "need you", since the strip answers whether to
+// stop and a blocked loop is a stop.
+func loopingCount(agents []Agent) int {
+	n := 0
+	for _, a := range agents {
+		if a.loop.Active && a.State != rpc.StateBlocked {
+			n++
+		}
+	}
+	return n
 }
 
 // minWorkspaceWidth is the narrowest name worth drawing: a `#`, two characters

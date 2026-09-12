@@ -200,6 +200,15 @@ var claudeWireVocabulary = wordSet([]string{
 	"TaskCreate", "TaskUpdate", "subject", "taskId", "deleted",
 	"total_tokens", "tool_uses", "duration_ms",
 
+	// The bundled scheduler tools a headless session reaches for when it
+	// reproduces /loop, and their input keys. CronCreate recurring is a fixed
+	// cadence, ScheduleWakeup is self-paced, CronDelete ends one; "cron",
+	// "recurring", "delaySeconds" and "noop" are their wire keys, policed for
+	// "subject"/"taskId"'s reason - Claude's spellings with one meaning here,
+	// where Wake's own words are LoopOp's fields. See core/loop.go.
+	"CronCreate", "ScheduleWakeup", "CronDelete",
+	"cron", "recurring", "delaySeconds", "noop",
+
 	// control_request / control_response.
 	"can_use_tool", "cancel_queued", "still_queued",
 	"updatedInput", "permission_suggestions", "display_name",
@@ -389,6 +398,14 @@ var deliberatelyGeneric = wordSet([]string{
 	// cannot reach either of these without first naming one of those.
 	"mode", "error",
 
+	// ScheduleWakeup's end signal - the self-paced loop's own stop, since a
+	// wakeup is one-shot and there is no cron to delete. Generic for "mode"'s
+	// reason: "stop" is the plainest English (Wake has FrameStop, /quit's stop,
+	// a dozen stop verbs), so policing it would fire across the tree rather than
+	// on a leak, and it is not a route in on its own - a file cannot reach this
+	// flag without first naming "ScheduleWakeup", which is policed above.
+	"stop",
+
 	// The stream_event envelope's two keys. "event" is the name of the central
 	// type in this whole tree - core.Event - and "delta" is a word this
 	// project's own performance notes use about a measurement, so policing
@@ -554,7 +571,10 @@ var notNamedByTheAirlock = map[string]string{
 // 163 → 168: the /goal lifecycle's rendered English wire.go's goalOp reads -
 // "<synthetic>", "No goal set", and the three prefixes "Goal set: ",
 // "Goal cleared: " and "Stop hook feedback:". Recorded in goal-*.jsonl.
-const policedWordCount = 168
+// 168 → 175: the /loop scheduler tools and their input keys, "CronCreate",
+// "ScheduleWakeup", "CronDelete", "cron", "recurring", "delaySeconds" and
+// "noop". Recorded in loop-fixed.jsonl and loop-selfpaced.jsonl.
+const policedWordCount = 175
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

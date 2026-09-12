@@ -50,7 +50,6 @@ package ui
 
 import (
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -161,6 +160,11 @@ type Agent struct {
 	// carries it as *rpc.GoalStatus and WithStatus's provenance guard compares its
 	// fields to Agent's by name. See goal.go.
 	goal GoalState
+
+	// loop is the native /loop this agent has active, folded from the live
+	// scheduler tool_use (ev.Tool.Loop) and from the report. A value struct for
+	// goal's reason; the ↻ marker and its detail read it. See loop.go.
+	loop LoopState
 
 	// Doing is the present-tense label of whatever task the agent last marked
 	// in progress - claude's activeForm, which is the word it puts on its own
@@ -327,6 +331,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		// daemon holds it authoritatively, so its snapshot is never spuriously
 		// empty. The live KindGoal fold is the fresher source for a watching client.
 		a.goal = goalFromReport(s.Goal)
+		a.loop = loopFromReport(s.Loop)
 
 		// Stamped on the way *into* working, so the heartbeat measures the turn
 		// rather than the report: reports fire on a state change, but an agent
@@ -582,6 +587,11 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 				a.Doing = doing
 			}
 			a = a.notDone()
+			// The native /loop: a recurring CronCreate or a ScheduleWakeup this
+			// agent (not a subagent) made. The room draws none of it.
+			if ev.Tool.Loop != nil {
+				a = a.withLoop(*ev.Tool.Loop)
+			}
 		}
 		return a, nil
 
@@ -743,53 +753,3 @@ func (f Fleet) ForgetTurns() Fleet {
 }
 
 // turnInFlight is whether a state means "this session owes a turn", which is
-// what says a move into working is a turn *resuming* rather than starting.
-//
-// Read off the daemon's own stateLocked rather than guessed at, and the two
-// that are easy to get wrong are the two that decide this: **blocked** is a
-// permission ask outstanding with the turn still owed, and **silent** is
-// owed-and-quiet. Both are the same turn as the working either side of them.
-// Treating either as a boundary restarts the turn's clock and throws away the
-// tokens it has produced, so a permission answered halfway through leaves the
-// row counting the suffix while the result frame states the whole.
-//
-// The others are boundaries by construction: idle is `!owed`, and parked, ended
-// and orphaned have no process owing anything.
-//
-// Its domain is derived from stateGlyph by
-// TestEveryStateTheRosterDrawsIsInFlightOrIsNot, so a seventh state is a
-// decision somebody has to make here rather than one that silently reads as a
-// boundary.
-func turnInFlight(state string) bool {
-	switch state {
-	case rpc.StateWorking, rpc.StateBlocked, rpc.StateSilent:
-		return true
-	default:
-		return false
-	}
-}
-
-// countsAsUnread: everything the room draws is something you have not seen,
-// except the words you typed yourself.
-//
-// The quiet marker counts, and that is the case worth stating. For 8 of 52
-// recorded turns it is the only thing the room shows, so an agent whose turn
-// said nothing would otherwise leave a line in the room with no badge anywhere
-// saying it is there.
-// A progress frame is not something you have not read either: it draws no line
-// anywhere, and thirty working agents would otherwise drive every badge in the
-// sidebar on their own. It never reaches this - fold returns nothing for it, and
-// Observe only counts an event the room takes - but the pair is stated here
-// because that is where the question is answered.
-func countsAsUnread(kind core.EventKind) bool {
-	return kind != core.KindUserText && kind != core.KindTurnTokens
-}
-
-// blank is text with nothing in it.
-//
-// The decoder does not drop an empty text block and dm_blocks.userBlock
-// already renders one as nothing, so an empty run of prose would set spoke,
-// suppress the quiet marker, and leave the turn showing nothing at all in the
-// room - the failure the marker exists to prevent, arriving through the branch
-// meant to prevent it.
-func blank(s string) bool { return strings.TrimSpace(s) == "" }

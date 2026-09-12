@@ -236,16 +236,16 @@ func (r Roster) window(agents []Agent, subs subsOf, width, height int) span {
 // a window sized for a column somebody else is rendering.
 func rowsFor(a Agent, subs []Task) int {
 	n := 1
-	if a.Tool != "" || goalActivityShown(a) {
+	if a.Tool != "" || idleActivityShown(a) {
 		n++
 	}
 	return n + len(subs)
 }
 
-// goalActivityShown reports whether the indented `◆ <condition>` line is drawn:
-// when the agent has a goal and is not running a tool, which owns that one
-// activity line while it lasts.
-func goalActivityShown(a Agent) bool { return a.Tool == "" && a.goal.Active }
+// idleActivityShown reports whether the indented `◆ goal · ↻ loop` line is
+// drawn: when the agent has a goal or a loop and is not running a tool, which
+// owns that one activity line while it lasts.
+func idleActivityShown(a Agent) bool { return a.Tool == "" && (a.goal.Active || a.loop.Active) }
 
 // At is the agent whose rows include line y, counted the way View lays them.
 //
@@ -302,10 +302,10 @@ func (r Roster) rows(a Agent, subs []Task, width int) []string {
 		// glance at what an agent is doing, not the conversation's own block.
 		tool := render.ToolCall(render.Call{Name: a.Tool, Display: shortArg(a.ToolArg)}, render.ToolStyle{}, width-toolIndent)
 		out = append(out, strings.Repeat(" ", toolIndent)+HintStyle.Render(tool))
-	} else if goalActivityShown(a) {
-		// The goal's condition where the tool call would sit - indented under the
-		// name, muted like the rest of a glance, and clipped to the column below.
-		out = append(out, strings.Repeat(" ", toolIndent)+HintStyle.Render(goalGlyph+" "+oneLine(a.goal.Condition)))
+	} else if detail := idleDetail(a); detail != "" {
+		// The goal and/or the loop where the tool call would sit - indented under
+		// the name, muted like the rest of a glance, and clipped to the column.
+		out = append(out, strings.Repeat(" ", toolIndent)+HintStyle.Render(detail))
 	}
 	// Under the tool call rather than above it: the tool is what this agent is
 	// doing itself, and a dispatch is work it handed to somebody else.
@@ -423,6 +423,13 @@ func headLine(a Agent, width int) string {
 	// so it takes its column first, and the tokens drop before it does.
 	if a.goal.Active {
 		if marker := " " + goalGlyph; lipgloss.Width(head)+lipgloss.Width(marker) <= width {
+			head += marker
+		}
+	}
+	// The loop marker follows the goal's and outranks the tokens for its reason:
+	// always-on, so it takes its column before the figure that drops first.
+	if a.loop.Active {
+		if marker := " " + loopGlyph; lipgloss.Width(head)+lipgloss.Width(marker) <= width {
 			head += marker
 		}
 	}

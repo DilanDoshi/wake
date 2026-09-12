@@ -111,6 +111,7 @@ type barKey struct {
 	window    int
 	prs       *prSet    // a PR arrives mid-turn with no other bar fact moving, so the key must carry it; prSet.same keeps the pointer stable so it does not redraw per frame
 	goal      GoalState // the /goal moves mid-turn with no other bar fact changing, so the key carries it; a value struct, so it compares by content
+	loop      LoopState // the /loop moves mid-turn on its own, goal's reason; a value struct so it compares by content
 }
 
 // withBar re-renders the status bar if anything it is drawn from has moved, and
@@ -126,7 +127,7 @@ func (d DM) withBar(width int) DM {
 		width: width, dir: d.Agent.Cwd, model: d.Agent.Model, confModel: d.Agent.ConfirmedModel,
 		effort: d.Agent.Effort, mode: mode, state: d.Agent.State,
 		used: d.Agent.ContextTokens, window: d.Agent.ContextWindow, prs: d.Agent.prs,
-		goal: d.Agent.goal,
+		goal: d.Agent.goal, loop: d.Agent.loop,
 	}
 	if key == d.barFrom {
 		return d
@@ -164,6 +165,7 @@ func statusBar(a Agent, mode string, width, rows int) string {
 		effortSegment(a.Effort),
 		prSegment(a.prs),
 		goalSegment(a.goal),
+		loopLine(a.loop),
 	}
 	kept := segments[:0]
 	for _, s := range segments {

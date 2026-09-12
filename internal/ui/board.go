@@ -413,6 +413,9 @@ func boardDetail(ag Agent) string {
 	if g := ag.Goal(); g.Active {
 		parts = append(parts, goalGlyph+" "+g.Condition)
 	}
+	if d := loopLine(ag.Loop()); d != "" {
+		parts = append(parts, d)
+	}
 	switch {
 	case ag.State == rpc.StateBlocked && ag.Tool != "":
 		parts = append(parts, fmt.Sprintf(cardWantsFmt, ag.Tool))

@@ -79,6 +79,12 @@ const scriptPlans = "plans"
 // screen test of the mode needs an agent that sends one.
 const scriptModes = "modes"
 
+// scriptLoops reproduces Claude's native /loop headless: each turn ends with a
+// ScheduleWakeup tool call (a self-paced iteration) and then goes idle, so a DM
+// shows the loop-waiting line between iterations. The only end-to-end source of
+// one, the way scriptPlans is for the checklist.
+const scriptLoops = "loops"
+
 // scriptRewinds answers a rewind_conversation control request with a
 // rewound:true receipt, the way scriptModes answers set_permission_mode. The
 // default echo fake drops every non-user line, so a FrameRewind's control
@@ -193,6 +199,8 @@ func runFakeAgent() int {
 		return fakeAgentRewinds(sid)
 	case scriptPlans:
 		return fakeAgentPlans(sid)
+	case scriptLoops:
+		return fakeAgentLoops(sid)
 	case scriptDispatches:
 		return fakeAgentDispatches(sid)
 	case scriptDispatchesLive:
@@ -257,6 +265,34 @@ func fakeAgentStreaming(sid string) int {
 		time.Sleep(150 * time.Millisecond)
 	}
 	return 0
+}
+
+// fakeAgentLoops reproduces the native /loop: each turn ends with a
+// ScheduleWakeup (a self-paced iteration) and then goes idle, so the DM draws
+// the loop-waiting line between iterations.
+func fakeAgentLoops(sid string) int {
+	sayText(sid, "ready")
+	sayResult(sid)
+
+	for line := range agentStdin() {
+		if _, ok := userTextOf(line); !ok {
+			continue
+		}
+		sayWakeup(sid)
+		sayText(sid, heardPrefix+"looping")
+		sayResult(sid)
+	}
+	return 0
+}
+
+// sayWakeup emits a ScheduleWakeup tool call - a self-paced loop iteration
+// scheduling its next wake twenty minutes out.
+func sayWakeup(sid string) {
+	fmt.Printf(`{"type":"assistant","session_id":%q,"message":{"role":"assistant","content":`+
+		`[{"type":"tool_use","id":"toolu_wake","name":"ScheduleWakeup","input":`+
+		`{"delaySeconds":1200,"noop":false,"reason":"next check","prompt":"check the deploy"}}]}}`+"\n", sid)
+	fmt.Printf(`{"type":"user","session_id":%q,"message":{"role":"user","content":`+
+		`[{"type":"tool_result","tool_use_id":"toolu_wake","content":"Next wakeup scheduled."}]}}`+"\n", sid)
 }
 
 // sayTodos emits a TodoWrite tool call carrying a three-item list.

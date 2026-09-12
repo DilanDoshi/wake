@@ -142,6 +142,15 @@ var agentAuthored = map[string]bool{
 	// board), so it is quoted, never a row of its own.
 	"Goal": true,
 
+	// Loop is the native /loop, and an agent chooses it outright: it calls the
+	// CronCreate/ScheduleWakeup tools itself, so whether a session loops and (for
+	// a fixed one) on what cron are values it authored. It is a *LoopStatus, not a
+	// string, so the forge-a-line tests skip it by kind, and it is not on this MCP
+	// surface (notInTheStatusReport). The cron is contained in the airlock
+	// (containedTool), and no surface draws it raw - only a derived cadence
+	// ("every 5m") or a bare "looping" - so nothing an agent writes reaches a row.
+	"Loop": true,
+
 	// PRs is the agent's, and the sharpest-sourced of the true ones: the numbers
 	// are scraped from an agent's own tool output (a `gh pr create` result, but the
 	// scrape cannot tell that from any PR URL the tools print), so an agent chooses

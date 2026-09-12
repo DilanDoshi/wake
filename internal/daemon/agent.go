@@ -46,10 +46,8 @@
 package daemon
 
 import (
-	"cmp"
 	"context"
 	"path/filepath"
-	"slices"
 	"sync"
 	"time"
 
@@ -189,6 +187,10 @@ type agent struct {
 
 	// goalCondition is the native /goal this session has set, "" for none. See goal.go.
 	goalCondition string
+
+	// loop is the native /loop this session has active, folded from its scheduler
+	// tool_use calls. See loop.go.
+	loop loopState
 
 	// parent is the session this one was forked from, or empty. Immutable
 	// after newAgent and display only, exactly like label: nothing addresses an
@@ -370,6 +372,11 @@ func (a *agent) observe(ev core.Event) {
 	}
 	if ev.Kind == core.KindGoal && ev.Goal != nil {
 		a.goalCondition = foldGoal(a.goalCondition, *ev.Goal)
+	}
+	// ev.Subagent==nil: a subagent's own CronCreate is not the parent's loop, the
+	// same gate tool activity takes above.
+	if ev.Kind == core.KindToolUse && ev.Tool != nil && ev.Tool.Loop != nil && ev.Subagent == nil {
+		a.loop = foldLoop(a.loop, *ev.Tool.Loop, time.Now())
 	}
 
 	switch ev.Kind {
@@ -714,41 +721,6 @@ func (a *agent) pendingIDsLocked() []string {
 		ids[i] = p.id
 	}
 	return ids
-}
-
-// snapshot is this agent's line in a status report.
-func (a *agent) snapshot() rpc.SessionStatus {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	st := rpc.SessionStatus{
-		ID:             a.id,
-		Name:           a.name,
-		Label:          a.label,
-		Color:          a.color,
-		Dir:            a.dir,
-		Cwd:            a.runningIn(),
-		ParentID:       a.parent,
-		Tool:           a.tool,
-		ToolArg:        a.toolArg,
-		Effort:         cmp.Or(a.confirmedEffort, a.effort),
-		ConfirmedModel: a.confirmedModel,
-		Model:          a.observedModel,
-		Budget:         a.budget,
-		Commands:       a.commands,
-		PRs:            slices.Clone(a.prs),
-		Goal:           goalStatus(a.goalCondition),
-		State:          a.stateLocked(time.Now()),
-		RequestIDs:     a.pendingIDsLocked(),
-		PID:            a.sess.Pgid(),
-		QuietMS:        time.Since(a.lastEvent).Milliseconds(),
-	}
-	switch {
-	case a.err != nil:
-		st.Error = a.err.Error()
-	case a.unreachable != nil:
-		st.Error = a.unreachable.Error()
-	}
-	return st
 }
 
 // stateLocked is the liveness policy, stated once. See the file header for

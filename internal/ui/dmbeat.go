@@ -6,7 +6,11 @@ package ui
 // subject-split panedraw.go took. The line itself is beat.go's workingLine and
 // doneLine; this is only which of them a DM shows, and the one row that costs.
 
-import "github.com/DilanDoshi/wake/internal/rpc"
+import (
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/DilanDoshi/wake/internal/rpc"
+)
 
 const (
 	// composerGap is the blank row kept above the composer, so the input box sits
@@ -33,12 +37,31 @@ func (d DM) heartbeat() string {
 		return compactingLine(d.compactingSince, d.blockWidth())
 	}
 	if d.Agent.State == rpc.StateWorking {
-		return workingLine(d.SessionID, d.Agent.State, d.Agent.Doing, d.Agent.startedAt, d.Agent.TurnTokens, d.blockWidth())
+		line := workingLine(d.SessionID, d.Agent.State, d.Agent.Doing, d.Agent.startedAt, d.Agent.TurnTokens, d.blockWidth())
+		// The loop clause is appended and the whole line re-truncated, so it never
+		// runs past the row it is budgeted for; a tight width drops the clause first.
+		if c := loopWorkingClause(d.Agent.loop); c != "" {
+			line = ansi.Truncate(line+HintStyle.Render(c), d.blockWidth(), ellipsis)
+		}
+		return line
+	}
+	// A loop between iterations reads "still looping", not "done": the agent is
+	// idle only because it is waiting for its next wakeup. Wins over the done line.
+	if d.showsLoopWait() {
+		return loopWaitLine(d.Agent.loop, d.blockWidth())
 	}
 	if d.showsDone() {
 		return doneLine(d.SessionID, d.Agent.startedAt, d.Agent.doneAt, d.Agent.turnDur, d.blockWidth())
 	}
 	return ""
+}
+
+// showsLoopWait is whether the idle agent has an active /loop to say it is waiting
+// on. The same gates as showsDone - idle, a quiet pane, no running subagent - so
+// the waiting line and the done line are told apart only by whether a loop is
+// live, never drawn at once.
+func (d DM) showsLoopWait() bool {
+	return d.Agent.State == rpc.StateIdle && d.Agent.loop.Active && d.partial.view == "" && !d.subRunning
 }
 
 // showsDone is whether the idle agent has a finished turn to summarise. Gated to
@@ -61,7 +84,7 @@ func (d DM) showsDone() bool {
 // row baseChrome and SetSize must both account for, or the pane is sized a row
 // out and the alt screen scrolls on every draw.
 func (d DM) hasBeat() bool {
-	return !d.compactingSince.IsZero() || d.Agent.State == rpc.StateWorking || d.showsDone()
+	return !d.compactingSince.IsZero() || d.Agent.State == rpc.StateWorking || d.showsLoopWait() || d.showsDone()
 }
 
 // beatBarRows is aboveComposerExtra without the preview's own rows: the

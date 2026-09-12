@@ -626,7 +626,8 @@ func (r Room) ScrollUp(lines int) Room {
 func (r Room) withBar(agent Agent, mode string, width int) Room {
 	key := barKey{
 		width: width, dir: agent.Cwd, model: agent.Model, mode: mode, state: agent.State,
-		used: agent.ContextTokens, window: agent.ContextWindow, prs: agent.prs, goal: agent.goal,
+		used: agent.ContextTokens, window: agent.ContextWindow, prs: agent.prs,
+		goal: agent.goal, loop: agent.loop,
 	}
 	if key == r.barFrom {
 		return r

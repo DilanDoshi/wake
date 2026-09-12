@@ -243,14 +243,18 @@ func filledSessionStatus(t *testing.T) SessionStatus {
 				t.Fatalf("SessionStatus.%s is a slice of %s and this filler only knows []string and []int: teach it that element kind", f.Name, v.Field(i).Type().Elem().Kind())
 			}
 		case reflect.Pointer:
-			// *GoalStatus today, the report's one pointer field. Filled explicitly
-			// so the pointer and the struct behind it both cross the wire; an
-			// unknown pointer type is a fatal rather than a skip, the filler's own
-			// rule.
-			if v.Field(i).Type() != reflect.TypeOf((*GoalStatus)(nil)) {
+			// *GoalStatus and *LoopStatus, the report's two pointer fields. Filled
+			// explicitly so the pointer and the struct behind it both cross the
+			// wire; an unknown pointer type is a fatal rather than a skip, the
+			// filler's own rule.
+			switch v.Field(i).Type() {
+			case reflect.TypeOf((*GoalStatus)(nil)):
+				v.Field(i).Set(reflect.ValueOf(&GoalStatus{Condition: "value of " + f.Name, Active: true}))
+			case reflect.TypeOf((*LoopStatus)(nil)):
+				v.Field(i).Set(reflect.ValueOf(&LoopStatus{Active: true, SelfPaced: true, Cron: "value of " + f.Name, Iter: 4, Quiet: 2, NextFire: 1_700_000_300}))
+			default:
 				t.Fatalf("SessionStatus.%s is a pointer this filler does not know: teach it that type", f.Name)
 			}
-			v.Field(i).Set(reflect.ValueOf(&GoalStatus{Condition: "value of " + f.Name, Active: true}))
 		default:
 			t.Fatalf("SessionStatus.%s is a %s and this filler cannot populate it: teach it that kind, because a field it leaves zero crosses the wire with nothing checking it", f.Name, v.Field(i).Kind())
 		}
