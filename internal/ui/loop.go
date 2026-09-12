@@ -1,7 +1,9 @@
 package ui
 
 import (
+	"strconv"
 	"strings"
+	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -12,10 +14,18 @@ import (
 // so Agent stays comparable (Observe's now == was): Active distinguishes "no
 // loop" (the zero value) from one, SelfPaced tells the two modes apart, and Cron
 // is the fixed cadence the ↻ detail draws. See core.LoopOp and daemon/loop.go.
+//
+// Iter, Quiet and NextFire are a self-paced run's figures and stay zero for a
+// fixed loop: Iter is how many iterations have completed, Quiet the current run
+// of noop ticks, and NextFire when the next wakeup is due. NextFire is a
+// time.Time - comparable, so Agent stays comparable - captured like doneAt.
 type LoopState struct {
 	Active    bool
 	SelfPaced bool
 	Cron      string
+	Iter      int
+	Quiet     int
+	NextFire  time.Time
 }
 
 // loopGlyph marks a session with an active /loop across every surface - the
@@ -26,7 +36,9 @@ const loopGlyph = "↻"
 // withLoop folds one scheduler op onto the agent for the watching client: a
 // recurring CronCreate or a ScheduleWakeup activates it, a CronDelete ends it.
 // A loop reads active until a delete - an expired or completed one is silent on
-// the wire, the loop half of the goal's own limitation (spec §6).
+// the wire, the loop half of the goal's own limitation (spec §6). A self-paced
+// tick accumulates the run onto the existing state (the daemon's foldLoop does
+// the same for the report); the next-fire is stamped off clock() the way doneAt is.
 func (a Agent) withLoop(op core.LoopOp) Agent {
 	switch {
 	case op.Stop:
@@ -34,7 +46,16 @@ func (a Agent) withLoop(op core.LoopOp) Agent {
 	case op.Kind == core.LoopFixed:
 		a.loop = LoopState{Active: true, Cron: op.Cron}
 	case op.Kind == core.LoopSelfPaced:
-		a.loop = LoopState{Active: true, SelfPaced: true}
+		a.loop.Active, a.loop.SelfPaced, a.loop.Cron = true, true, ""
+		a.loop.Iter++
+		if op.Noop {
+			a.loop.Quiet++
+		} else {
+			a.loop.Quiet = 0
+		}
+		if op.DelaySeconds > 0 {
+			a.loop.NextFire = clock().Add(time.Duration(op.DelaySeconds) * time.Second)
+		}
 	}
 	return a
 }
@@ -68,7 +89,14 @@ func loopLine(l LoopState) string {
 	}
 	switch {
 	case l.SelfPaced:
-		return loopGlyph + " self-paced"
+		s := loopGlyph + " self-paced"
+		if l.Iter > 0 {
+			s = loopGlyph + " iter " + strconv.Itoa(l.Iter)
+		}
+		if l.Quiet > 0 {
+			s += " · quiet ×" + strconv.Itoa(l.Quiet)
+		}
+		return s
 	case loopCadence(l.Cron) != "":
 		return loopGlyph + " " + loopCadence(l.Cron)
 	default:
@@ -109,5 +137,9 @@ func loopFromReport(l *rpc.LoopStatus) LoopState {
 	if l == nil {
 		return LoopState{}
 	}
-	return LoopState{Active: l.Active, SelfPaced: l.SelfPaced, Cron: l.Cron}
+	s := LoopState{Active: l.Active, SelfPaced: l.SelfPaced, Cron: l.Cron, Iter: l.Iter, Quiet: l.Quiet}
+	if l.NextFire != 0 {
+		s.NextFire = time.Unix(l.NextFire, 0)
+	}
+	return s
 }

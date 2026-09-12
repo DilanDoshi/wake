@@ -1,6 +1,8 @@
 package daemon
 
 import (
+	"time"
+
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -10,22 +12,41 @@ import (
 // ScheduleWakeup is self-paced, a CronDelete ends it. There is deliberately no
 // "ended" op beyond a delete - an expired or completed loop leaves no frame -
 // so a loop reads active until a CronDelete, the loop half of /goal's §6 silence.
+//
+// A self-paced run also accumulates: iter counts the iterations (each ends with a
+// ScheduleWakeup), quiet is the current run of noop ticks, and nextFire is when
+// the last-scheduled wakeup is due. A fixed loop has none of the three - a
+// cron-fire carries no wire marker to count - so it stays cadence-only.
 type loopState struct {
 	active    bool
 	selfPaced bool
 	cron      string
+	iter      int
+	quiet     int
+	nextFire  time.Time
 }
 
-// foldLoop applies one decoded loop op to a session's loop state, and leaves it
-// as it was for an op that names neither mode nor a stop.
-func foldLoop(s loopState, op core.LoopOp) loopState {
+// foldLoop applies one decoded loop op to a session's loop state at now, and
+// leaves it as it was for an op that names neither mode nor a stop. A self-paced
+// tick accumulates onto the run; a fixed CronCreate or a delete resets it.
+func foldLoop(s loopState, op core.LoopOp, now time.Time) loopState {
 	switch {
 	case op.Stop:
 		return loopState{}
 	case op.Kind == core.LoopFixed:
 		return loopState{active: true, cron: op.Cron}
 	case op.Kind == core.LoopSelfPaced:
-		return loopState{active: true, selfPaced: true}
+		s.active, s.selfPaced, s.cron = true, true, ""
+		s.iter++
+		if op.Noop {
+			s.quiet++
+		} else {
+			s.quiet = 0
+		}
+		if op.DelaySeconds > 0 {
+			s.nextFire = now.Add(time.Duration(op.DelaySeconds) * time.Second)
+		}
+		return s
 	}
 	return s
 }
@@ -36,5 +57,9 @@ func loopStatus(s loopState) *rpc.LoopStatus {
 	if !s.active {
 		return nil
 	}
-	return &rpc.LoopStatus{Active: true, SelfPaced: s.selfPaced, Cron: s.cron}
+	st := &rpc.LoopStatus{Active: true, SelfPaced: s.selfPaced, Cron: s.cron, Iter: s.iter, Quiet: s.quiet}
+	if !s.nextFire.IsZero() {
+		st.NextFire = s.nextFire.Unix()
+	}
+	return st
 }

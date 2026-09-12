@@ -270,6 +270,15 @@ type LoopStatus struct {
 	// literal "cron" - that is Claude's CronCreate key, policed to the airlock, and
 	// this is Wake's own report wire, free to name its field anything.
 	Cron string `json:"cron_expr,omitempty"`
+
+	// Iter, Quiet and NextFire are a self-paced run's live figures, all zero for a
+	// fixed loop. Iter is how many iterations have completed (each ends with a
+	// ScheduleWakeup); Quiet is the current run of noop ticks; NextFire is when the
+	// next wakeup is due, unix seconds, 0 when unscheduled. The "iter" tag avoids
+	// the policed wire literal "iterations" for Cron's own reason.
+	Iter     int   `json:"iter,omitempty"`
+	Quiet    int   `json:"quiet,omitempty"`
+	NextFire int64 `json:"next_fire,omitempty"`
 }
 
 type SessionStatus struct {

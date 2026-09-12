@@ -251,7 +251,7 @@ func filledSessionStatus(t *testing.T) SessionStatus {
 			case reflect.TypeOf((*GoalStatus)(nil)):
 				v.Field(i).Set(reflect.ValueOf(&GoalStatus{Condition: "value of " + f.Name, Active: true}))
 			case reflect.TypeOf((*LoopStatus)(nil)):
-				v.Field(i).Set(reflect.ValueOf(&LoopStatus{Active: true, SelfPaced: true, Cron: "value of " + f.Name}))
+				v.Field(i).Set(reflect.ValueOf(&LoopStatus{Active: true, SelfPaced: true, Cron: "value of " + f.Name, Iter: 4, Quiet: 2, NextFire: 1_700_000_300}))
 			default:
 				t.Fatalf("SessionStatus.%s is a pointer this filler does not know: teach it that type", f.Name)
 			}

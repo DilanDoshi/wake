@@ -3,6 +3,7 @@ package ui
 import (
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -32,13 +33,39 @@ func TestLoopFoldsFromTheLiveEvent(t *testing.T) {
 	}
 }
 
+// A self-paced run accumulates onto the watching client's Agent: each
+// ScheduleWakeup is one iteration, a noop tick runs a quiet streak, and the delay
+// stamps the next fire off the seam clock.
+func TestSelfPacedRunAccumulatesOntoTheAgent(t *testing.T) {
+	restore := clock
+	now := time.Unix(1_700_000_000, 0)
+	clock = func() time.Time { return now }
+	defer func() { clock = restore }()
+
+	f, _ := NewFleet().Observe(loopToolEvent(core.LoopOp{Kind: core.LoopSelfPaced, DelaySeconds: 300}), "s1")
+	f, _ = f.Observe(loopToolEvent(core.LoopOp{Kind: core.LoopSelfPaced, DelaySeconds: 60, Noop: true}), "s1")
+	a, _ := f.Agent("s1")
+	if l := a.Loop(); l.Iter != 2 || l.Quiet != 1 || !l.NextFire.Equal(now.Add(60*time.Second)) {
+		t.Fatalf("after a work tick then a quiet one, Loop = %+v, want iter 2, quiet 1, nextFire +60s", l)
+	}
+	f, _ = f.Observe(loopToolEvent(core.LoopOp{Kind: core.LoopSelfPaced, DelaySeconds: 60}), "s1")
+	if a, _ := f.Agent("s1"); a.Loop().Quiet != 0 {
+		t.Errorf("a working tick did not reset the quiet streak: %+v", a.Loop())
+	}
+}
+
 // The report is the late-attach route and both sets and clears the loop.
 func TestLoopFoldsFromTheReport(t *testing.T) {
+	fire := time.Unix(1_700_000_300, 0)
 	set := NewFleet().WithStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
 		{ID: "s1", State: rpc.StateWorking, Loop: &rpc.LoopStatus{Active: true, Cron: "0 * * * *"}},
+		{ID: "s2", State: rpc.StateIdle, Loop: &rpc.LoopStatus{Active: true, SelfPaced: true, Iter: 4, Quiet: 2, NextFire: fire.Unix()}},
 	}})
 	if a, _ := set.Agent("s1"); !a.Loop().Active || a.Loop().Cron != "0 * * * *" {
 		t.Fatalf("report did not set the loop: %+v", a.Loop())
+	}
+	if a, _ := set.Agent("s2"); a.Loop().Iter != 4 || a.Loop().Quiet != 2 || !a.Loop().NextFire.Equal(fire) {
+		t.Fatalf("report did not carry the self-paced run: %+v", a.Loop())
 	}
 	cleared := set.WithStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", State: rpc.StateIdle}}})
 	if a, _ := cleared.Agent("s1"); a.Loop().Active {
@@ -85,8 +112,14 @@ func TestLoopRendersAcrossSurfaces(t *testing.T) {
 	}
 
 	sp := Agent{ID: "s2", State: rpc.StateIdle}.withLoop(core.LoopOp{Kind: core.LoopSelfPaced})
-	if d := loopLine(sp.Loop()); d != "↻ self-paced" {
-		t.Errorf("self-paced line = %q, want ↻ self-paced", d)
+	if d := loopLine(sp.Loop()); d != "↻ iter 1" {
+		t.Errorf("self-paced line = %q, want ↻ iter 1 after one tick", d)
+	}
+	if d := loopLine(LoopState{Active: true, SelfPaced: true}); d != "↻ self-paced" {
+		t.Errorf("a self-paced loop with no iterations = %q, want ↻ self-paced", d)
+	}
+	if d := loopLine(LoopState{Active: true, SelfPaced: true, Iter: 4, Quiet: 2}); d != "↻ iter 4 · quiet ×2" {
+		t.Errorf("a quiet self-paced run = %q, want ↻ iter 4 · quiet ×2", d)
 	}
 	if plain := (Agent{ID: "s3", State: rpc.StateIdle}); idleDetail(plain) != "" {
 		t.Errorf("a plain agent has an idle detail: %q", idleDetail(plain))
