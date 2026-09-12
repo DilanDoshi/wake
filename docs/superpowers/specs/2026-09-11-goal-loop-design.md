@@ -105,13 +105,19 @@ carried on the report.
 
 ## 6. Park / resume
 
-- **Goal survives** park + wake (restored on `--resume`) → keep the badge; the turn/timer reset is
-  Claude's, and Wake re-derives from the woken session's frames.
-- **Self-paced loop does not survive** → clear the badge on wake, exactly as permission mode's
-  `modeReverted` does.
-- **Fixed cron survives** → keep the badge; it re-registers on resume.
-- **No new `parkedRecord` field** — the state is Claude's (restored by `--resume` or not); Wake
-  re-derives it from frames, never writes it to the park book.
+- **Goal survives** park + wake (Claude restores it on `--resume`) — and Wake **re-derives** it from
+  the woken session's frames rather than persisting it. **No `parkedRecord` field** (confirmed: the
+  park book carries no goal), so a woken agent's badge is empty until the resumed session next
+  emits a goal signal. Whether resume re-emits a `Goal set:`/progress signal is **not verified by a
+  recording** (park+wake capture deferred); if it does, the existing fold catches it, and if it does
+  not, the badge stays empty until the goal next acts — either way no code special-cases resume.
+- **Silent-achieve is a documented limitation, not a guess.** Achieve emits no wire frame
+  (`foldGoal` has no achieved case), so an achieved goal reads **active until an explicit
+  `/goal clear`** or a `No goal set` status. Auto-clearing on silent achieve (a working→idle fold,
+  the done-line's pattern) is a follow-up.
+- **Self-paced loop does not survive** → clear the badge on wake, as permission mode's
+  `modeReverted` does. **Fixed cron survives** → keep the badge; it re-registers on resume. (Both are
+  the loop PR's concern, not this one.)
 
 ## 7. Render — the locked catalog
 
