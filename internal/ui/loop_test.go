@@ -54,6 +54,16 @@ func TestOrdinaryToolDoesNotTouchTheLoop(t *testing.T) {
 	}
 }
 
+// A subagent's own scheduler call is not the parent agent's loop - the same
+// Subagent==nil gate the agent's tool activity takes.
+func TestSubagentLoopDoesNotFlagTheParent(t *testing.T) {
+	ev := core.Event{Kind: core.KindToolUse, Subagent: &core.Subagent{}, Tool: &core.ToolCall{Name: "CronCreate", Loop: &core.LoopOp{Kind: core.LoopFixed, Cron: "*/5 * * * *"}}}
+	f, _ := NewFleet().Observe(ev, "s1")
+	if a, _ := f.Agent("s1"); a.Loop().Active {
+		t.Errorf("a subagent's CronCreate activated the parent's loop: %+v", a.Loop())
+	}
+}
+
 // The ↻ shows on every operator surface, and its head-line marker survives while
 // the agent is working (the tool call takes the activity line, not the marker).
 func TestLoopRendersAcrossSurfaces(t *testing.T) {

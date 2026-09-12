@@ -378,7 +378,9 @@ func (a *agent) observe(ev core.Event) {
 	if ev.Kind == core.KindGoal && ev.Goal != nil {
 		a.goalCondition = foldGoal(a.goalCondition, *ev.Goal)
 	}
-	if ev.Kind == core.KindToolUse && ev.Tool != nil && ev.Tool.Loop != nil {
+	// ev.Subagent==nil: a subagent's own CronCreate is not the parent's loop, the
+	// same gate tool activity takes above.
+	if ev.Kind == core.KindToolUse && ev.Tool != nil && ev.Tool.Loop != nil && ev.Subagent == nil {
 		a.loop = foldLoop(a.loop, *ev.Tool.Loop)
 	}
 
