@@ -83,6 +83,23 @@ func TestLoopRendersAcrossSurfaces(t *testing.T) {
 	}
 }
 
+// /loop is Claude's own command (the headless model reproduces it via the
+// scheduler tools): Wake does not claim it, and @who /loop routes to that one
+// agent via leadingCommand, the path @who /clear takes.
+func TestLoopIsPassthroughAndRoutesUnderAMention(t *testing.T) {
+	if _, mine := commands["loop"]; mine {
+		t.Error("Wake claims /loop; it must pass through to the agent")
+	}
+	if _, mine := roomTargetCommands["loop"]; mine {
+		t.Error("/loop is a roomTargetCommand, but those are Wake-owned; /loop passes through")
+	}
+	for _, body := range []string{"/loop 5m check the deploy", "/loop check CI"} {
+		if !leadingCommand(body) {
+			t.Errorf("leadingCommand(%q) = false; @who %s would broadcast, not route to the agent", body, body)
+		}
+	}
+}
+
 func TestLoopCadenceHumanises(t *testing.T) {
 	cases := map[string]string{
 		"*/5 * * * *":  "every 5m",
