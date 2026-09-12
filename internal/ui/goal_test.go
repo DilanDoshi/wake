@@ -69,6 +69,15 @@ func TestRoomBarShowsAndRefreshesTheGoal(t *testing.T) {
 	}
 }
 
+// The one-row board view leads an agent's detail with its goal; the tiled view
+// gets it free from the shared status bar.
+func TestBoardRowShowsTheGoal(t *testing.T) {
+	ag := Agent{ID: "s1", Name: "iris", State: rpc.StateIdle}.withGoal(core.GoalOp{Op: core.GoalSet, Condition: "get CI green"})
+	if d := boardDetail(ag); !strings.Contains(d, goalGlyph+" get CI green") {
+		t.Fatalf("board detail missing the goal: %q", d)
+	}
+}
+
 // Re-observing the same goal changes nothing, so Agent stays comparable and the
 // fleet is not copied - the now == was optimisation Observe rests on.
 func TestReobservingTheSameGoalIsANoOp(t *testing.T) {
