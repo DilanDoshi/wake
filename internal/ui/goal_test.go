@@ -78,6 +78,25 @@ func TestBoardRowShowsTheGoal(t *testing.T) {
 	}
 }
 
+// /goal is Claude's own command: Wake does not claim it (it passes through to
+// the agent), and it is not a roomTargetCommand. @who /goal still routes to that
+// one agent because a leading /goal makes route resolve MentionDirect - the same
+// path @who /clear takes - so the mention is stripped and the command reaches the
+// agent alone rather than broadcasting.
+func TestGoalIsPassthroughAndRoutesUnderAMention(t *testing.T) {
+	if _, mine := commands["goal"]; mine {
+		t.Error("Wake claims /goal; it must pass through to the agent")
+	}
+	if _, mine := roomTargetCommands["goal"]; mine {
+		t.Error("/goal is a roomTargetCommand, but those are Wake-owned; /goal passes through")
+	}
+	for _, body := range []string{"/goal ship the release", "/goal clear"} {
+		if !leadingCommand(body) {
+			t.Errorf("leadingCommand(%q) = false; @who %s would broadcast, not route to the agent", body, body)
+		}
+	}
+}
+
 // Re-observing the same goal changes nothing, so Agent stays comparable and the
 // fleet is not copied - the now == was optimisation Observe rests on.
 func TestReobservingTheSameGoalIsANoOp(t *testing.T) {
