@@ -146,8 +146,9 @@ var agentAuthored = map[string]bool{
 	// CronCreate/ScheduleWakeup tools itself, so whether a session loops and (for
 	// a fixed one) on what cron are values it authored. It is a *LoopStatus, not a
 	// string, so the forge-a-line tests skip it by kind, and it is not on this MCP
-	// surface (notInTheStatusReport); the cron runs through oneLine on the operator
-	// surfaces that draw it, the way the goal condition beside it does.
+	// surface (notInTheStatusReport). The cron is contained in the airlock
+	// (containedTool), and no surface draws it raw - only a derived cadence
+	// ("every 5m") or a bare "looping" - so nothing an agent writes reaches a row.
 	"Loop": true,
 
 	// PRs is the agent's, and the sharpest-sourced of the true ones: the numbers
