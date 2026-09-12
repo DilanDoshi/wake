@@ -248,6 +248,12 @@ type ToolCall struct {
 	// a fold above the airlock, and Todos above is the snapshot it produces.
 	Checklist *ChecklistOp `json:"checklist,omitempty"`
 
+	// Loop is the native /loop a scheduler tool_use carries - a recurring
+	// CronCreate or a ScheduleWakeup - and nil for every other call. Recognized
+	// by toolLoopOp behind the airlock, folded onto Agent.Loop above it. See
+	// core/loop.go.
+	Loop *LoopOp `json:"loop,omitempty"`
+
 	// Diff is the before and after an edit carries in its own input, or nil
 	// for a call that carries neither. Resolved here for the same reason as
 	// Display: old_string/new_string are Claude's key names.

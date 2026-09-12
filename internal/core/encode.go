@@ -581,3 +581,52 @@ func goalProgress(text string) (GoalOp, bool) {
 	reason = strings.TrimSpace(strings.TrimPrefix(reason, ":"))
 	return GoalOp{Op: GoalProgress, Condition: cond, Reason: reason}, true
 }
+
+// The bundled scheduler tools a headless session reaches for when it reproduces
+// /loop: a recurring CronCreate is a fixed cadence, ScheduleWakeup is self-paced,
+// and CronDelete ends a fixed one. Claude's names, so they are recognised behind
+// the airlock; here rather than vocabulary.go for room, beside goalOp. See
+// core/loop.go for the Wake types.
+const (
+	toolCronCreate     = "CronCreate"
+	toolScheduleWakeup = "ScheduleWakeup"
+	toolCronDelete     = "CronDelete"
+
+	cronKey         = "cron"
+	recurringKey    = "recurring"
+	delaySecondsKey = "delaySeconds"
+	noopKey         = "noop"
+)
+
+// toolLoopOp recognizes a /loop from a scheduler tool_use, and nil for every
+// other call. A CronCreate counts as a loop only when recurring - a one-shot
+// CronCreate is a reminder, not a loop. A CronDelete ends the loop.
+// ScheduleWakeup is always a self-paced iteration; its noop flag marks a quiet
+// tick. Values are read tolerantly, the way toolChecklistOp reads its own: a
+// missing or wrong-typed key is the zero value.
+func toolLoopOp(name string, input map[string]any) *LoopOp {
+	switch name {
+	case toolCronCreate:
+		if rec, _ := input[recurringKey].(bool); !rec {
+			return nil
+		}
+		cron, _ := input[cronKey].(string)
+		return &LoopOp{Kind: LoopFixed, Cron: cron}
+	case toolScheduleWakeup:
+		noop, _ := input[noopKey].(bool)
+		return &LoopOp{Kind: LoopSelfPaced, DelaySeconds: intArg(input, delaySecondsKey), Noop: noop}
+	case toolCronDelete:
+		return &LoopOp{Stop: true}
+	}
+	return nil
+}
+
+// intArg is one input value as an int, and 0 for a key a tool omits or whose
+// value is not a number - JSON numbers decode as float64 through encoding/json.
+func intArg(input map[string]any, key string) int {
+	v, ok := input[key].(float64)
+	if !ok {
+		return 0
+	}
+	return int(v)
+}

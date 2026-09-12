@@ -169,6 +169,11 @@ func containedTool(t *ToolCall) *ToolCall {
 		d.Old, d.New = Contained(d.Old), Contained(d.New)
 		c.Diff = &d
 	}
+	if c.Loop != nil {
+		op := *c.Loop
+		op.Cron = Contained(op.Cron) // the child's own cron expression; Kind is Wake's, excused
+		c.Loop = &op
+	}
 	c.Ask = containedAsk(c.Ask)
 	return &c
 }
@@ -315,4 +320,9 @@ var notAuthoredByTheChild = map[string]string{
 	// Wake's own /goal op kind, resolved by goalOp from a closed set. Condition
 	// and Reason beside it are the child's own words and are contained.
 	"Event.Goal.Op": "Wake's own vocabulary, resolved by goalOp",
+
+	// Wake's own /loop kind, resolved by toolLoopOp from the scheduler tool's
+	// name. Cron beside it is the child's own cron expression and is contained;
+	// DelaySeconds, Noop and Stop are not strings, so the walk never reaches them.
+	"Event.Tool.Loop.Kind": "Wake's own vocabulary, resolved by toolLoopOp",
 }

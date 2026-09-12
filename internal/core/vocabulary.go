@@ -494,6 +494,7 @@ func toolCall(id, name string, input map[string]any) *ToolCall {
 		Diff:      toolDiff(input),
 		Todos:     toolTodos(input),
 		Checklist: toolChecklistOp(name, input),
+		Loop:      toolLoopOp(name, input),
 		Input:     input,
 	}
 }
