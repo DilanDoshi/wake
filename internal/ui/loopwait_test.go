@@ -16,6 +16,8 @@ import (
 // ticker running through an idle wait.
 func TestLoopWaitLineReadsForSelfPaced(t *testing.T) {
 	fire := time.Date(2026, 8, 28, 18, 48, 0, 0, time.Local)
+	clock = func() time.Time { return fire.Add(-time.Minute) } // the fire is still ahead
+	defer func() { clock = time.Now }()
 	line := ansi.Strip(loopWaitLine(LoopState{Active: true, SelfPaced: true, Iter: 4, NextFire: fire}, 80))
 	if !strings.HasPrefix(line, doneGlyph+" "+loopWaitWord) {
 		t.Errorf("waiting line %q does not open with the looping head", line)
@@ -46,10 +48,28 @@ func TestLoopWaitLineEmptyWithNoLoop(t *testing.T) {
 	}
 }
 
+// A self-paced loop that ended silently leaves its last next-fire in the past;
+// the line drops the stale "next" clause rather than asserting a fire that has
+// already come and gone, but still reads "Looping" (the loop is not known ended).
+func TestLoopWaitLineDropsAnElapsedNextFire(t *testing.T) {
+	now := time.Date(2026, 8, 28, 18, 48, 0, 0, time.Local)
+	clock = func() time.Time { return now }
+	defer func() { clock = time.Now }()
+	line := ansi.Strip(loopWaitLine(LoopState{Active: true, SelfPaced: true, Iter: 5, NextFire: now.Add(-time.Minute)}, 80))
+	if strings.Contains(line, "next") {
+		t.Errorf("waiting line %q asserted a next-fire time already elapsed", line)
+	}
+	if !strings.Contains(line, loopWaitWord) || !strings.Contains(line, "iter 5 done") {
+		t.Errorf("waiting line %q lost the looping head or iteration count", line)
+	}
+}
+
 // A width too tight for the whole line drops the next-fire clause rather than
 // cutting mid-word, the done line's own rule.
 func TestLoopWaitLineDropsNextBeforeCuttingWord(t *testing.T) {
 	fire := time.Date(2026, 8, 28, 18, 48, 0, 0, time.Local)
+	clock = func() time.Time { return fire.Add(-time.Minute) }
+	defer func() { clock = time.Now }()
 	l := LoopState{Active: true, SelfPaced: true, Iter: 4, NextFire: fire}
 	full := ansi.Strip(loopWaitLine(l, 200))
 	narrow := ansi.Strip(loopWaitLine(l, ansi.StringWidth(full)-4))
@@ -66,6 +86,8 @@ func TestLoopWaitLineDropsNextBeforeCuttingWord(t *testing.T) {
 func TestTheWaitingLineWinsOverTheDoneLine(t *testing.T) {
 	start := time.Date(2026, 8, 28, 18, 46, 1, 0, time.Local)
 	fire := start.Add(20 * time.Minute)
+	clock = func() time.Time { return start } // the fire is still ahead
+	defer func() { clock = time.Now }()
 	d := NewDM("s1", "alex").SetSize(80, 30)
 	d.Agent = Agent{
 		State: rpc.StateIdle, startedAt: start, doneAt: start.Add(time.Minute), turnDur: time.Minute,

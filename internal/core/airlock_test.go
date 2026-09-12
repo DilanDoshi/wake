@@ -398,6 +398,14 @@ var deliberatelyGeneric = wordSet([]string{
 	// cannot reach either of these without first naming one of those.
 	"mode", "error",
 
+	// ScheduleWakeup's end signal - the self-paced loop's own stop, since a
+	// wakeup is one-shot and there is no cron to delete. Generic for "mode"'s
+	// reason: "stop" is the plainest English (Wake has FrameStop, /quit's stop,
+	// a dozen stop verbs), so policing it would fire across the tree rather than
+	// on a leak, and it is not a route in on its own - a file cannot reach this
+	// flag without first naming "ScheduleWakeup", which is policed above.
+	"stop",
+
 	// The stream_event envelope's two keys. "event" is the name of the central
 	// type in this whole tree - core.Event - and "delta" is a word this
 	// project's own performance notes use about a measurement, so policing

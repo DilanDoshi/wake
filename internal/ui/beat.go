@@ -266,8 +266,12 @@ func loopWaitLine(l LoopState, width int) string {
 	case loopCadence(l.Cron) != "":
 		head += metaSep + loopCadence(l.Cron)
 	}
+	// Only a fire still in the future is drawn: a self-paced loop that ended
+	// silently (the model stopped rescheduling) leaves its last next-fire behind,
+	// and asserting a specific time that has already passed reads as a fire that is
+	// coming when none is. Once it elapses the clause drops to a bare "Looping".
 	meta := ""
-	if !l.NextFire.IsZero() {
+	if l.NextFire.After(clock()) {
 		meta = loopNextMeta + l.NextFire.Format(doneClock)
 	}
 	head = ansi.Truncate(head, width, ellipsis)

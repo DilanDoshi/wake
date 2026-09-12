@@ -106,6 +106,23 @@ func TestSelfPacedNoopIsAQuietTick(t *testing.T) {
 	}
 }
 
+// A ScheduleWakeup with stop:true ends a self-paced loop - its own end signal,
+// not CronDelete (a self-paced wakeup is one-shot, so there is no cron to
+// delete). Recorded against claude 2.1.270. Without this the stop decodes as
+// another active iteration, the opposite of ending.
+func TestSelfPacedStopEndsTheLoop(t *testing.T) {
+	line := `{"type":"assistant","message":{"model":"claude-opus-4-8","role":"assistant","content":[{"type":"tool_use","id":"t","name":"ScheduleWakeup","input":{"stop":true}}]},"session_id":"s","uuid":"u"}`
+	var got *LoopOp
+	for _, ev := range decodeOne(t, line) {
+		if ev.Tool != nil && ev.Tool.Loop != nil {
+			got = ev.Tool.Loop
+		}
+	}
+	if got == nil || !got.Stop || got.Kind == LoopSelfPaced {
+		t.Errorf("ScheduleWakeup stop:true op = %+v, want Stop true and no active self-paced kind", got)
+	}
+}
+
 // A non-scheduler tool carries no loop op.
 func TestOrdinaryToolHasNoLoop(t *testing.T) {
 	line := `{"type":"assistant","message":{"model":"claude-opus-4-8","role":"assistant","content":[{"type":"tool_use","id":"t","name":"Bash","input":{"command":"ls"}}]},"session_id":"s","uuid":"u"}`

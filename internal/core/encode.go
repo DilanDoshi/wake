@@ -596,14 +596,17 @@ const (
 	recurringKey    = "recurring"
 	delaySecondsKey = "delaySeconds"
 	noopKey         = "noop"
+	stopKey         = "stop"
 )
 
 // toolLoopOp recognizes a /loop from a scheduler tool_use, and nil for every
 // other call. A CronCreate counts as a loop only when recurring - a one-shot
-// CronCreate is a reminder, not a loop. A CronDelete ends the loop.
-// ScheduleWakeup is always a self-paced iteration; its noop flag marks a quiet
-// tick. Values are read tolerantly, the way toolChecklistOp reads its own: a
-// missing or wrong-typed key is the zero value.
+// CronCreate is a reminder, not a loop. A CronDelete ends a fixed loop, and a
+// ScheduleWakeup with stop:true ends a self-paced one (its own end signal, not
+// CronDelete - a self-paced wakeup is one-shot, so there is no cron to delete;
+// recorded against claude 2.1.270). Otherwise a ScheduleWakeup is a self-paced
+// iteration whose noop flag marks a quiet tick. Values are read tolerantly, the
+// way toolChecklistOp reads its own: a missing or wrong-typed key is the zero value.
 func toolLoopOp(name string, input map[string]any) *LoopOp {
 	switch name {
 	case toolCronCreate:
@@ -613,6 +616,9 @@ func toolLoopOp(name string, input map[string]any) *LoopOp {
 		cron, _ := input[cronKey].(string)
 		return &LoopOp{Kind: LoopFixed, Cron: cron}
 	case toolScheduleWakeup:
+		if stop, _ := input[stopKey].(bool); stop {
+			return &LoopOp{Stop: true}
+		}
 		noop, _ := input[noopKey].(bool)
 		return &LoopOp{Kind: LoopSelfPaced, DelaySeconds: intArg(input, delaySecondsKey), Noop: noop}
 	case toolCronDelete:
