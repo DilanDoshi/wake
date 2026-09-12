@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -52,6 +53,19 @@ func TestGoalFoldsFromTheReport(t *testing.T) {
 	}})
 	if a, _ := cleared.Agent("s1"); a.Goal().Active {
 		t.Errorf("a report with no goal did not clear it: %+v", a.Goal())
+	}
+}
+
+// The room bar shows the addressed agent's goal, and its cache refreshes when
+// only the goal changes: the room's barKey must carry the goal the way the DM's
+// does, or a goal set/cleared with no other bar fact moving draws a stale bar.
+func TestRoomBarShowsAndRefreshesTheGoal(t *testing.T) {
+	plain := Agent{ID: "s1", Name: "iris", State: rpc.StateIdle}
+	r := Room{}.withBar(plain, "default", 80)
+	withGoal := plain.withGoal(core.GoalOp{Op: core.GoalSet, Condition: "get CI green"})
+	r = r.withBar(withGoal, "default", 80)
+	if !strings.Contains(r.bar, goalGlyph) {
+		t.Fatalf("room bar did not refresh to show the goal after a goal-only change: %q", r.bar)
 	}
 }
 
