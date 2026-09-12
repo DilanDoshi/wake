@@ -9,6 +9,7 @@ package rpc
 
 import (
 	"bytes"
+	"encoding/json"
 	"go/ast"
 	"go/parser"
 	"go/token"
@@ -241,6 +242,15 @@ func filledSessionStatus(t *testing.T) SessionStatus {
 			default:
 				t.Fatalf("SessionStatus.%s is a slice of %s and this filler only knows []string and []int: teach it that element kind", f.Name, v.Field(i).Type().Elem().Kind())
 			}
+		case reflect.Pointer:
+			// *GoalStatus today, the report's one pointer field. Filled explicitly
+			// so the pointer and the struct behind it both cross the wire; an
+			// unknown pointer type is a fatal rather than a skip, the filler's own
+			// rule.
+			if v.Field(i).Type() != reflect.TypeOf((*GoalStatus)(nil)) {
+				t.Fatalf("SessionStatus.%s is a pointer this filler does not know: teach it that type", f.Name)
+			}
+			v.Field(i).Set(reflect.ValueOf(&GoalStatus{Condition: "value of " + f.Name, Active: true}))
 		default:
 			t.Fatalf("SessionStatus.%s is a %s and this filler cannot populate it: teach it that kind, because a field it leaves zero crosses the wire with nothing checking it", f.Name, v.Field(i).Kind())
 		}
@@ -258,6 +268,32 @@ func TestStatusIsAbsentFromAnEventFrame(t *testing.T) {
 	}
 	if got := buf.String(); strings.Contains(got, "status") {
 		t.Errorf("event frame carries a status key: %s", got)
+	}
+}
+
+// A session with an active goal carries its condition and active flag across the
+// wire; an inactive one omits the key whole, so an ordinary report is not padded
+// with a goal object per session.
+func TestGoalRoundTripsAndOmitsWhenAbsent(t *testing.T) {
+	absent, err := json.Marshal(SessionStatus{ID: "s1", State: StateIdle})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(absent), "goal") {
+		t.Errorf("a session with no goal serialized a goal key: %s", absent)
+	}
+
+	st := SessionStatus{ID: "s1", State: StateWorking, Goal: &GoalStatus{Condition: "ship the PR", Active: true}}
+	b, err := json.Marshal(st)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var back SessionStatus
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if back.Goal == nil || back.Goal.Condition != "ship the PR" || !back.Goal.Active {
+		t.Errorf("goal did not round-trip: %+v", back.Goal)
 	}
 }
 
