@@ -337,21 +337,8 @@ func (r Roster) subStyle(agentID string, t Task) lipgloss.Style {
 	return HintStyle
 }
 
-// headStyle is the whole of what a row says in colour: where the cursor is,
-// who is stopped waiting for you, and which agent this is when /color named one.
-//
-// Everything else is ordinary text. A sidebar in which every row is emphasised
-// has emphasised nothing, and the states that are not blocked are already
-// distinguished by their glyph.
-//
-// The cursor is matched on a non-empty id rather than on equality alone: a
-// Roster selecting nothing and an agent whose id has not arrived are both "",
-// and reading that as a match would draw every row as the cursor for as long as
-// nothing was selected - which is the state a fleet starts in.
-// SelectedTask is what keeps this to one row. Selected goes on naming the agent
-// while the cursor is on one of its subagents - which is what ⌃C and ⎋ read -
-// so without that clause both rows wear the accent and the sidebar shows two
-// selections with nothing saying which one a key is about.
+// identityRowStyle is the colour a fleet-overview row wears, shared by the
+// roster and the board list so the two overviews cannot drift.
 //
 // # Blocked wins, then the cursor keeps the identity hue it used to hide
 //
@@ -363,19 +350,18 @@ func (r Roster) subStyle(agentID string, t Task) lipgloss.Style {
 // cursor tell it ever had.
 //
 // Blocked is checked first, so a "waiting for you" is never painted over - by
-// the accent, as it was before this reorder, or by an identity hue that reads
-// far less urgent than warn. The selection rides along as bold when the blocked
-// row is also the cursor, so nothing is lost by giving warn the top slot.
-func (r Roster) headStyle(a Agent) lipgloss.Style {
+// the accent, or by an identity hue that reads far less urgent than warn. The
+// selection rides along as bold when the blocked row is also the cursor, so
+// nothing is lost by giving warn the top slot.
+func identityRowStyle(a Agent, cursored bool) lipgloss.Style {
 	style, colored := identityStyleFor(a)
-	selected := r.Selected != "" && a.ID == r.Selected && r.SelectedTask == ""
 	switch {
 	case a.State == rpc.StateBlocked:
-		if selected {
+		if cursored {
 			return warnStyle.Bold(true)
 		}
 		return warnStyle
-	case selected:
+	case cursored:
 		if colored {
 			return style.Bold(true)
 		}
@@ -386,6 +372,24 @@ func (r Roster) headStyle(a Agent) lipgloss.Style {
 		}
 		return TextStyle
 	}
+}
+
+// headStyle is the whole of what a roster row says in colour: where the cursor
+// is, who is stopped waiting for you, and which agent this is when /color named
+// one. The precedence is identityRowStyle's; this only computes what "cursored"
+// means for the roster.
+//
+// The cursor is matched on a non-empty id rather than on equality alone: a
+// Roster selecting nothing and an agent whose id has not arrived are both "",
+// and reading that as a match would draw every row as the cursor for as long as
+// nothing was selected - which is the state a fleet starts in.
+// SelectedTask is what keeps this to one row. Selected goes on naming the agent
+// while the cursor is on one of its subagents - which is what ⌃C and ⎋ read -
+// so without that clause both rows wear the accent and the sidebar shows two
+// selections with nothing saying which one a key is about.
+func (r Roster) headStyle(a Agent) lipgloss.Style {
+	selected := r.Selected != "" && a.ID == r.Selected && r.SelectedTask == ""
+	return identityRowStyle(a, selected)
 }
 
 // headLine is a row's first line: liveness, name, the count of what you have
