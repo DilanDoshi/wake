@@ -470,3 +470,43 @@ func slicesContains(haystack []string, needle string) bool {
 	}
 	return false
 }
+
+// A goal marks the roster: an always-on ◆ on the head line (present even while
+// working), and the condition on the indented activity line when the agent is
+// idle and not running a tool.
+func TestARosterRowMarksAnActiveGoal(t *testing.T) {
+	idle := Agent{ID: "s1", Name: "iris", State: rpc.StateIdle, goal: GoalState{Condition: "ship the PR", Active: true}}
+	if head := headLine(idle, rosterWidth); !strings.Contains(head, goalGlyph) {
+		t.Errorf("an idle goal-active row has no ◆ marker: %q", head)
+	}
+	rows := Roster{}.rows(idle, nil, rosterWidth)
+	joined := strings.Join(rows, "\n")
+	if len(rows) != 2 || !strings.Contains(joined, goalGlyph+" ship the PR") {
+		t.Errorf("the goal condition is not on the activity line:\n%s", joined)
+	}
+
+	// A working row keeps the ◆ marker but the tool owns the one activity line.
+	working := Agent{ID: "s1", Name: "iris", State: rpc.StateWorking, Tool: "Edit", ToolArg: "auth/token.go",
+		goal: GoalState{Condition: "ship the PR", Active: true}}
+	if head := headLine(working, rosterWidth); !strings.Contains(head, goalGlyph) {
+		t.Errorf("a working goal-active row lost its ◆ marker: %q", head)
+	}
+	wrows := Roster{}.rows(working, nil, rosterWidth)
+	if len(wrows) != 2 || !strings.Contains(strings.Join(wrows, "\n"), "token.go") {
+		t.Errorf("the tool did not own the activity line of a working goal row:\n%s", strings.Join(wrows, "\n"))
+	}
+}
+
+// The token figure drops before the ◆ marker when the column is too narrow for
+// both: the goal marker is always-on and outranks the working count.
+func TestTheGoalMarkerOutranksTheTokenCount(t *testing.T) {
+	a := Agent{ID: "s1", Name: "a-fairly-long-name", State: rpc.StateWorking, TurnTokens: 12345,
+		goal: GoalState{Condition: "x", Active: true}}
+	head := headLine(a, rosterWidth)
+	if !strings.Contains(head, goalGlyph) {
+		t.Errorf("the ◆ marker dropped instead of the tokens: %q", head)
+	}
+	if strings.Contains(head, tokenArrow) {
+		t.Errorf("the tokens were kept over the ◆ marker in a narrow column: %q", head)
+	}
+}

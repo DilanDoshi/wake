@@ -248,6 +248,16 @@ type Status struct {
 }
 
 // SessionStatus is one agent's line in that report.
+// GoalStatus is the native /goal a session has active, carried on the fleet
+// report. Condition is what the agent is working toward; Active is redundant with
+// the pointer being set today, but kept so the fold has a single value to read
+// and a future terminal state (achieved, impossible) has somewhere to live
+// without a wire change. Value fields so ui.Agent stays comparable.
+type GoalStatus struct {
+	Condition string `json:"condition,omitempty"`
+	Active    bool   `json:"active,omitempty"`
+}
+
 type SessionStatus struct {
 	ID   string `json:"id"`
 	Name string `json:"name,omitempty"`
@@ -413,6 +423,14 @@ type SessionStatus struct {
 	// attached after the PR was opened learns of it. The status bar draws them as
 	// `PR #29` or `PR #29, #30`. Empty for a session that has opened none.
 	PRs []int `json:"prs,omitempty"`
+
+	// Goal is the native /goal this session has active, or nil for none. Here for
+	// Commands' reason and by the same route: the daemon folds the KindGoal events
+	// (core/goal.go) and the report is the only way a client that attached after
+	// the goal was set learns of it. A pointer so an inactive session omits it
+	// whole; see GoalStatus. Achieve is silent on the wire, so an achieved goal
+	// reads active until an explicit clear.
+	Goal *GoalStatus `json:"goal,omitempty"`
 
 	// State is one of the State constants above.
 	State string `json:"state"`

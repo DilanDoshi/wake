@@ -130,6 +130,18 @@ var agentAuthored = map[string]bool{
 	// all (notInTheStatusReport).
 	"Model": true,
 
+	// Goal is the native /goal's condition, and an agent has a path to it: the
+	// manager holds send_to_agent, and a message it sends a peer arrives as a user
+	// frame on that peer's stream, where goalOp's GoalProgress arm keys on the
+	// `Stop hook feedback:\n[…]` text prefix - so a crafted send forges the peer's
+	// reported goal. The activating half is unforgeable: a `Goal set:` frame is
+	// gated on the <synthetic> model, which a worker's own output cannot wear. It
+	// is a *GoalStatus, not a string, so the forge-a-line tests skip it by kind; it
+	// is never on this MCP surface (notInTheStatusReport); and the condition runs
+	// through oneLine on every operator surface that draws it (roster, both bars,
+	// board), so it is quoted, never a row of its own.
+	"Goal": true,
+
 	// PRs is the agent's, and the sharpest-sourced of the true ones: the numbers
 	// are scraped from an agent's own tool output (a `gh pr create` result, but the
 	// scrape cannot tell that from any PR URL the tools print), so an agent chooses

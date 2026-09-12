@@ -619,6 +619,13 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		base.Kind, base.Text = KindUnknown, f.Type
 		return one(base)
 	}
+	// The native /goal lifecycle, recognised from the decoded message before the
+	// text path renders the synthetic announcement or the Stop-hook feedback as
+	// prose. See wire.go's goalOp and core.KindGoal.
+	if op, ok := goalOp(f.Type, m); ok {
+		base.Kind, base.Goal = KindGoal, &op
+		return one(base)
+	}
 	if !isJSONArray(m.Content) {
 		// Compaction summaries, <local-command-stdout>, and a peer's
 		// <cross-session-message> all land here as string content.
@@ -643,20 +650,6 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		return one(base)
 	}
 	return blockEvents(f, raws, raw, messageUsage(m.Usage))
-}
-
-// messageUsage decodes an assistant message's own usage tolerantly: a malformed
-// one yields no usage rather than an error, so it can never cost the prose the
-// message carried beside it. See wireMessage.Usage for the hazard.
-func messageUsage(raw json.RawMessage) *wireUsage {
-	if len(raw) == 0 {
-		return nil
-	}
-	var u wireUsage
-	if err := json.Unmarshal(raw, &u); err != nil {
-		return nil
-	}
-	return &u
 }
 
 func blockEvents(f wireFrame, raws []json.RawMessage, raw json.RawMessage, usage *wireUsage) []Event {

@@ -464,6 +464,11 @@ type wireModel struct {
 type wireMessage struct {
 	Role string `json:"role"`
 
+	// Model is the id that produced an assistant message - "<synthetic>" for the
+	// CLI's own announcements (a /goal set, the bare-/model receipt). goalOp gates
+	// on it; a user frame has none and it decodes to "".
+	Model string `json:"model"`
+
 	// Content is an array of blocks on assistant frames and on tool-result
 	// user frames, and a bare string on compaction summaries and
 	// <local-command-stdout> frames.
@@ -533,27 +538,18 @@ func jsonString(raw json.RawMessage) string {
 	return string(raw)
 }
 
-// apiErrorText pulls the human message out of a synthetic API-error frame's
-// message, whose content is a text-block array in the recording but may be a
-// bare string. Here beside the shapes it reads rather than in protocol.go,
-// which is at its size cap; a shape it does not recognise yields "" rather than
-// an error, the airlock's rule for a frame a future release may move.
-func apiErrorText(msg json.RawMessage) string {
-	if !isJSONObject(msg) {
-		return jsonString(msg)
-	}
-	var m wireMessage
-	if err := json.Unmarshal(msg, &m); err != nil {
-		return ""
-	}
-	if !isJSONArray(m.Content) {
-		return jsonString(m.Content)
+// messageText joins a message's text blocks, or returns its bare string content
+// (a compaction summary, a Stop-hook frame). A shape it does not recognise
+// yields "" rather than an error - the airlock's rule for a frame a release moves.
+func messageText(content json.RawMessage) string {
+	if !isJSONArray(content) {
+		return jsonString(content)
 	}
 	var raws []json.RawMessage
-	if err := json.Unmarshal(m.Content, &raws); err != nil {
+	if err := json.Unmarshal(content, &raws); err != nil {
 		return ""
 	}
-	text := ""
+	var text string
 	for _, rb := range raws {
 		var b wireBlock
 		if err := json.Unmarshal(rb, &b); err == nil && b.Type == blockTypeText {
@@ -562,6 +558,49 @@ func apiErrorText(msg json.RawMessage) string {
 	}
 	return text
 }
+
+// apiErrorText pulls the human message out of a synthetic API-error frame. Here
+// beside the shapes it reads rather than in protocol.go, which is at its size cap.
+func apiErrorText(msg json.RawMessage) string {
+	if !isJSONObject(msg) {
+		return jsonString(msg)
+	}
+	var m wireMessage
+	if err := json.Unmarshal(msg, &m); err != nil {
+		return ""
+	}
+	return messageText(m.Content)
+}
+
+// messageUsage decodes an assistant message's own usage tolerantly: a malformed
+// one yields no usage rather than an error, so it can never cost the prose the
+// message carried beside it. Here beside the shapes it reads, protocol.go being
+// at its size cap. See wireMessage.Usage for the hazard.
+func messageUsage(raw json.RawMessage) *wireUsage {
+	if len(raw) == 0 {
+		return nil
+	}
+	var u wireUsage
+	if err := json.Unmarshal(raw, &u); err != nil {
+		return nil
+	}
+	return &u
+}
+
+// Goal lifecycle markers. Claude Code's /goal is a genuine headless command: it
+// announces a set or clear as a synthetic assistant frame (model "<synthetic>",
+// like the bare-/model receipt) and drives each unfinished turn with a "Stop
+// hook feedback" user frame naming the condition in [..] and the evaluator's
+// latest reason after "]: ". All are Claude's rendered English, read here rather
+// than above the airlock. See core.GoalOp.
+const (
+	syntheticModel     = "<synthetic>"
+	goalSetPrefix      = "Goal set: "
+	goalClearedPrefix  = "Goal cleared: "
+	goalNoneText       = "No goal set"
+	goalFeedbackPrefix = "Stop hook feedback:"
+	frameTypeUser      = "user"
+)
 
 // subtypeAPIRetry is the system frame Claude Code emits per retry on a failed API
 // call. apiRetryAuthText is what a 401 one surfaces as - the retry frame carries

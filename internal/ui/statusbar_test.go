@@ -165,6 +165,33 @@ func TestAReportCarriesThePRsOntoTheBar(t *testing.T) {
 	}
 }
 
+// The bar shows the native /goal this session has active, and nothing for one
+// without - the same drop-when-unknown rule every segment keeps.
+func TestTheBarShowsTheActiveGoal(t *testing.T) {
+	active := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5",
+		goal: GoalState{Condition: "ship the PR", Active: true}}, "", 200, 2))
+	if !strings.Contains(active, goalGlyph+" ship the PR") {
+		t.Errorf("bar %q has no goal segment", active)
+	}
+
+	none := stripANSI(statusBar(Agent{Cwd: "/tmp/repo", Model: "claude-opus-5"}, "", 200, 2))
+	if strings.Contains(none, goalGlyph) {
+		t.Errorf("bar %q drew a goal segment for a session with none", none)
+	}
+}
+
+// The bar is cached on barKey, so a goal change must move the key or the segment
+// goes stale mid-turn with no other bar fact changing.
+func TestBarKeyChangesWithTheGoal(t *testing.T) {
+	base := DM{Agent: Agent{ID: "s1", Cwd: "/tmp/repo", Model: "claude-opus-5"}}
+	before := base.withBar(200)
+	base.Agent.goal = GoalState{Condition: "ship it", Active: true}
+	after := base.withBar(200)
+	if before.barFrom == after.barFrom {
+		t.Error("barKey did not change when the goal did: the bar would cache a stale segment")
+	}
+}
+
 func TestTheBarIsEmptyWhenNothingIsKnown(t *testing.T) {
 	if got := statusBar(Agent{}, "", 80, 2); got != "" {
 		t.Errorf("an unknown agent drew %q, want no bar at all", got)

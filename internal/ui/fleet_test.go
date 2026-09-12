@@ -295,6 +295,7 @@ var notCarriedOntoAnAgent = map[string]string{
 	"RequestIDs": "the asks a blocked session owes. Cards owns these, seeded from the permission-request events and reconciled against this same report - the agent record keeps no ask id, so there is nothing on Agent for a second copy to go stale against",
 	"Commands":   "the slash commands a session advertised. Carried, but folded into Agent.advertised (a *commandSet the completion menu reads) via withCommands rather than a same-named field, the way Dir folds into Cwd - the report is the only route to them for a client that attached after the init event carried them",
 	"PRs":        "the pull requests a session opened. Carried, but folded into Agent.prs (a *prSet the status bar reads) via withPRs rather than a same-named field - Commands' own shape, and for Commands' reason: Agent must stay comparable, so a slice is a pointer here",
+	"Goal":       "the native /goal a session has active. Carried, but folded into Agent.goal (a value GoalState the ◆ marker reads via Agent.Goal()) via goalFromReport rather than a same-named field - the report is *rpc.GoalStatus and this guard compares by name, so the folded form takes its own, the advertised/prs precedent",
 }
 
 // A fleet report is folded onto an Agent field by field, and this derives that
@@ -368,6 +369,10 @@ func everyFieldSet(t *testing.T) rpc.SessionStatus {
 			default:
 				t.Fatalf("rpc.SessionStatus.%s is a slice of %s and this helper only knows []string and []int", rt.Field(i).Name, f.Type().Elem().Kind())
 			}
+		case reflect.Pointer:
+			// *GoalStatus today, the report's one pointer field. Filled non-nil so
+			// its fold (excused as Goal above) is exercised rather than left zero.
+			f.Set(reflect.New(f.Type().Elem()))
 		default:
 			t.Fatalf("rpc.SessionStatus.%s is a %s and this helper cannot fill it: a field left zero compares equal on both sides, so the guard would pass over it",
 				rt.Field(i).Name, f.Kind())

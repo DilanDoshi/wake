@@ -532,3 +532,52 @@ func marshalLine(frame any, what string) ([]byte, error) {
 	}
 	return append(b, '\n'), nil
 }
+
+// goalOp recognises the native /goal lifecycle on an already-decoded message and
+// returns the Wake op, or ok=false for any frame that is not one. It reuses the
+// decoded message so a frame is never parsed twice. The announcements are gated
+// on the synthetic model so an agent typing the words is not mistaken for the
+// command (the markers are in wire.go beside the wire shapes); the progress
+// refresh is a user frame carrying the feedback prefix.
+//
+// It reads, not writes - so wire.go would be its subject home - but that file is
+// at the 800-line hard max and the airlock is a fixed four files
+// (airlock_test.go's TestTheAirlockIsFourFilesInInternalCore), so a fifth is not
+// an option. encode.go held the room; the placement turns on it being an airlock
+// file, not on the direction of the frame.
+func goalOp(frameType string, m wireMessage) (GoalOp, bool) {
+	if m.Model == syntheticModel {
+		text := messageText(m.Content)
+		switch {
+		case strings.HasPrefix(text, goalSetPrefix):
+			return GoalOp{Op: GoalSet, Condition: strings.TrimSpace(text[len(goalSetPrefix):])}, true
+		case strings.HasPrefix(text, goalClearedPrefix):
+			return GoalOp{Op: GoalCleared, Condition: strings.TrimSpace(text[len(goalClearedPrefix):])}, true
+		case text == goalNoneText:
+			return GoalOp{Op: GoalNone}, true
+		}
+		return GoalOp{}, false
+	}
+	if frameType == frameTypeUser {
+		if text := jsonString(m.Content); strings.HasPrefix(text, goalFeedbackPrefix) {
+			return goalProgress(text)
+		}
+	}
+	return GoalOp{}, false
+}
+
+// goalProgress parses a "Stop hook feedback" refresh: the condition sits in the
+// first [..] and the evaluator's latest reason follows "]: ".
+func goalProgress(text string) (GoalOp, bool) {
+	open := strings.Index(text, "[")
+	if open < 0 {
+		return GoalOp{}, false
+	}
+	cond, reason, closed := strings.Cut(text[open+1:], "]")
+	cond = strings.TrimSpace(cond)
+	if !closed || cond == "" {
+		return GoalOp{}, false
+	}
+	reason = strings.TrimSpace(strings.TrimPrefix(reason, ":"))
+	return GoalOp{Op: GoalProgress, Condition: cond, Reason: reason}, true
+}

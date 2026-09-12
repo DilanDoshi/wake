@@ -154,6 +154,14 @@ type Agent struct {
 	advertised *commandSet
 	prs        *prSet // GitHub PRs opened, off the report, pointer-held for advertised's reason. See prSet, statusbar.go.
 
+	// goal is the native /goal this agent has active, folded from the live
+	// KindGoal event and from the report. A value struct so Agent stays
+	// comparable; the ◆ marker and its detail line read it. Unexported and folded
+	// under a name of its own - the advertised/prs precedent - because the report
+	// carries it as *rpc.GoalStatus and WithStatus's provenance guard compares its
+	// fields to Agent's by name. See goal.go.
+	goal GoalState
+
 	// Doing is the present-tense label of whatever task the agent last marked
 	// in progress - claude's activeForm, which is the word it puts on its own
 	// working line. Empty for an agent that has written no task list, which is
@@ -315,6 +323,10 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		// The report is the only route to these - and to PRs - for a client that
 		// attached after they were set. See rpc.SessionStatus.Commands.
 		a = a.withCommands(s.Commands).withPRs(s.PRs)
+		// The goal both sets and clears from the report (unlike Commands): the
+		// daemon holds it authoritatively, so its snapshot is never spuriously
+		// empty. The live KindGoal fold is the fresher source for a watching client.
+		a.goal = goalFromReport(s.Goal)
 
 		// Stamped on the way *into* working, so the heartbeat measures the turn
 		// rather than the report: reports fire on a state change, but an agent
@@ -647,6 +659,14 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 		// One message of this turn ended and the next began, which is the only
 		// thing that makes the counts on the deltas addable. See turnMessage.
 		return a.turnMessage(), nil
+
+	case core.KindGoal:
+		// The native /goal, folded for the watching client; the report backfills a
+		// late attach (WithStatus). The room draws none of it, so no event out.
+		if ev.Goal != nil {
+			a = a.withGoal(*ev.Goal)
+		}
+		return a, nil
 
 	case core.KindSessionReset:
 		// /clear. The conversation the totals describe is gone, so the totals

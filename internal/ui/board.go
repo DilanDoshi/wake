@@ -412,7 +412,10 @@ func boardRow(ag Agent, nameW, stateW, width int, cursored bool) string {
 // then its last words. Both are the agent's own - Wake asserts nothing about
 // progress it cannot see, the turn-end rule.
 func boardDetail(ag Agent) string {
-	parts := make([]string, 0, 2)
+	parts := make([]string, 0, 3)
+	if g := ag.Goal(); g.Active {
+		parts = append(parts, goalGlyph+" "+g.Condition)
+	}
 	switch {
 	case ag.State == rpc.StateBlocked && ag.Tool != "":
 		parts = append(parts, fmt.Sprintf(cardWantsFmt, ag.Tool))

@@ -236,11 +236,16 @@ func (r Roster) window(agents []Agent, subs subsOf, width, height int) span {
 // a window sized for a column somebody else is rendering.
 func rowsFor(a Agent, subs []Task) int {
 	n := 1
-	if a.Tool != "" {
+	if a.Tool != "" || goalActivityShown(a) {
 		n++
 	}
 	return n + len(subs)
 }
+
+// goalActivityShown reports whether the indented `◆ <condition>` line is drawn:
+// when the agent has a goal and is not running a tool, which owns that one
+// activity line while it lasts.
+func goalActivityShown(a Agent) bool { return a.Tool == "" && a.goal.Active }
 
 // At is the agent whose rows include line y, counted the way View lays them.
 //
@@ -297,6 +302,10 @@ func (r Roster) rows(a Agent, subs []Task, width int) []string {
 		// glance at what an agent is doing, not the conversation's own block.
 		tool := render.ToolCall(render.Call{Name: a.Tool, Display: shortArg(a.ToolArg)}, render.ToolStyle{}, width-toolIndent)
 		out = append(out, strings.Repeat(" ", toolIndent)+HintStyle.Render(tool))
+	} else if goalActivityShown(a) {
+		// The goal's condition where the tool call would sit - indented under the
+		// name, muted like the rest of a glance, and clipped to the column below.
+		out = append(out, strings.Repeat(" ", toolIndent)+HintStyle.Render(goalGlyph+" "+oneLine(a.goal.Condition)))
 	}
 	// Under the tool call rather than above it: the tool is what this agent is
 	// doing itself, and a dispatch is work it handed to somebody else.
@@ -404,6 +413,14 @@ func headLine(a Agent, width int) string {
 	if a.Unread > 0 {
 		badge := " " + unreadBadge(a.Unread)
 		head = clip(head, width-lipgloss.Width(badge)) + badge
+	}
+	// The goal marker sits between the name and the tokens and outranks them: it
+	// is always-on (present even while the agent works, unlike the token figure)
+	// so it takes its column first, and the tokens drop before it does.
+	if a.goal.Active {
+		if marker := " " + goalGlyph; lipgloss.Width(head)+lipgloss.Width(marker) <= width {
+			head += marker
+		}
 	}
 	tokens := rowTokens(a)
 	if tokens == "" || lipgloss.Width(head)+lipgloss.Width(tokens) > width {
