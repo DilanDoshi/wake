@@ -537,6 +537,51 @@ wall-clock, not the subagent's finish — defensible, since the parent's own tur
 
 ---
 
+
+## BUG-36 — the sidebar heartbeat dies mid-tool: a long `bash` reads `silent`, a self-started tool turn reads `idle`
+
+**Observed 2026-09-12**, operator-reported: *"sometimes the heartbeat 'dies' in the sidebar but the
+agent is still working … usually when using a tool like bash."*
+
+**Root cause.** `agent.stateLocked` decided `working` from `owed` and elapsed quiet alone. A single
+slow tool call — a build, a test suite, an install — emits the `tool_use` frame and then nothing at
+all until its `tool_result`, so after `silenceLimit` (5 min) an *owed* agent reads `silent`, and a
+turn the agent started on its own (owed false, e.g. `--brief`) reads `idle` from the first
+`tool_use`. Either way `rpc.StateWorking` is lost, and `internal/ui/roster.go`'s `rowGlyph` only
+animates on `StateWorking` — so the glyph goes static, the heartbeat "dies," while the agent is
+working perfectly well. The DM working line vanishes for the same reason.
+
+**Fix.** `stateLocked` gains a `case a.tool != ""` arm returning `StateWorking`, after the `blocked`
+(pending) check and before the `!owed`/silence arms. `a.tool` is set on `KindToolUse` and cleared on
+`KindTurnEnd`, so it is non-empty exactly while a turn with a tool in it is in flight — which is work
+whoever started the turn. The two sharper liveness nets are untouched: a failed stdin write still
+reports `silent` at once (`a.unreachable != nil`, checked earlier), and the OS probe
+(`probeQuietAgents`) still reclaims a process group that is genuinely gone.
+
+**Residual — the window this widens, and why it is acceptable.** A process that dies *mid-tool* while
+a grandchild holds its stdout open (`a.tool` still recorded, `owed` still true, the pump parked in
+Scan) now reads `working` rather than flipping to `silent` at the 5-minute mark. It is caught the
+moment anyone writes to it (failed write → `silent`), and reclaimed when the OS probe's own decaying
+schedule confirms the process group gone (up to ~`probeCeiling()`, 30 min capped, after the first
+probe), at which point it jumps to `ended`. `silent` bounds a report and never a kill, and this
+corner is indistinguishable from a long tool from the stream alone — so the trade is a dim-glyph
+signal on a rare, self-resolving corner against an animated heartbeat on the common case the state
+exists to serve. The owner chose this scope over a new state or a raised limit.
+
+**A pre-existing test flake fixed alongside.** Running the gate surfaced
+`TestTheWholeLifecycleComposesFromAKeyboard` failing at `lifecycle_unix_test.go:189` ("the park book
+still holds … after the session was woken") — reproduced on `origin/main` too, so unrelated to the
+fix above. It is the wake-side twin of the race `awaitParkBook`'s own header describes on the park
+side: the durable record is deleted in the launch outcome (`parkLaunchOutcome` →
+`settleParkReservation` → `parked.commit`), which can settle a beat *after* the woken session first
+reports `idle`, so a single-shot `parkBookRecords` read right after `awaitSessionState(StateIdle)`
+loses the race under a loaded full run. Fixed by waiting — `awaitParkBook(t, socket)` for empty — the
+same treatment the class (BUG-3/6/7/15/29) got. Safe in the window: the record is reserved and
+`resumeSafe` refuses any second process under the id, so nothing double-spawns before the commit.
+
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

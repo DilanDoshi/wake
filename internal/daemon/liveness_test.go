@@ -292,6 +292,51 @@ func TestATurnEndingClearsWhatAnAgentIsDoing(t *testing.T) {
 	}
 }
 
+// A single slow tool call - a build, a test suite, an install - emits the
+// tool_use and then nothing at all until its result, which is routinely longer
+// than silenceLimit. That gap is a known reason to be quiet, not a wedged
+// process, and reporting silent there dies the animated heartbeat on the sidebar
+// mid-bash while the agent is working perfectly well. See stateLocked's tool arm.
+func TestAnAgentRunningALongToolIsWorkingNotSilent(t *testing.T) {
+	a := newAgent("s1", "alex", "main", "/repo/api", "", nil, func() {})
+	a.noteSent() // Wake asked for a turn, so a turn end is owed.
+	a.observe(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{Name: "Bash", Display: "make test"}})
+
+	long := a.lastEvent.Add(silenceLimit + time.Minute)
+	if got := a.stateLocked(long); got != rpc.StateWorking {
+		t.Errorf("stateLocked = %q with a tool outstanding past the silence limit, want %q: a slow tool is why the agent is quiet, not a wedged process", got, rpc.StateWorking)
+	}
+}
+
+// A turn Wake did not ask for still runs its tools, and an agent mid-tool is
+// working whoever started the turn: owed is about whether Wake is waiting, not
+// about whether the agent is busy. Without the tool arm this reads idle from the
+// first tool_use, dying the heartbeat the instant the tool starts.
+func TestAnAgentRunningAToolOnAnUnaskedTurnIsWorkingNotIdle(t *testing.T) {
+	a := newAgent("s1", "alex", "main", "/repo/api", "", nil, func() {})
+	// No noteSent: nothing is owed, which is the self-started-turn case.
+	a.observe(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{Name: "Bash", Display: "make test"}})
+
+	if got := a.stateLocked(a.lastEvent.Add(time.Second)); got != rpc.StateWorking {
+		t.Errorf("stateLocked = %q with a tool outstanding on an unasked turn, want %q: a running tool is work, whoever started it", got, rpc.StateWorking)
+	}
+}
+
+// The boundary the tool arm must not cross. An agent that owes a turn end and has
+// produced nothing at all - no tool, no text - for the silence limit is the
+// wedged-or-dead case silent exists for, and it stays silent. Only "quiet because
+// a known tool is running" is spared, so this pins the scope: dropping the
+// a.tool guard would turn every silent agent working.
+func TestAQuietAgentWithNoToolStillGoesSilent(t *testing.T) {
+	a := newAgent("s1", "alex", "main", "/repo/api", "", nil, func() {})
+	a.noteSent() // owed, but the agent then said nothing at all.
+
+	long := a.lastEvent.Add(silenceLimit + time.Minute)
+	if got := a.stateLocked(long); got != rpc.StateSilent {
+		t.Errorf("stateLocked = %q for an owed agent quiet past the limit with no tool, want %q: a truly silent agent must still be flagged", got, rpc.StateSilent)
+	}
+}
+
 // snapshotFields is snapshot() for an agent no test ever started.
 //
 // It **calls** snapshot rather than restating it, and that is the whole design
