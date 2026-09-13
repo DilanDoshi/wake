@@ -123,6 +123,37 @@ func TestSelfPacedStopEndsTheLoop(t *testing.T) {
 	}
 }
 
+// A ScheduleWakeup that carries neither stop nor a prompt is the invalid shape
+// the tool itself refuses ("prompt is required when stop is not true"): the model
+// still emits the tool_use, the call errors, but the decoded op used to light the
+// ↻ and - a self-paced loop clearing only on a stop it never sent - keep it lit.
+// The recognizer requires the tool's own required field, so an invalid call is not
+// a loop. The delaySeconds/reason without a prompt is exactly the observed bug.
+func TestScheduleWakeupWithoutPromptIsNotALoop(t *testing.T) {
+	line := `{"type":"assistant","message":{"model":"claude-opus-4-8","role":"assistant","content":[{"type":"tool_use","id":"t","name":"ScheduleWakeup","input":{"delaySeconds":180,"noop":false,"reason":"poll CI"}}]},"session_id":"s","uuid":"u"}`
+	for _, ev := range decodeOne(t, line) {
+		if ev.Tool != nil && ev.Tool.Loop != nil {
+			t.Errorf("a promptless ScheduleWakeup decoded as a loop: %+v", ev.Tool.Loop)
+		}
+	}
+}
+
+// An autonomous /loop passes the sentinel <<autonomous-loop-dynamic>> as its
+// prompt rather than a user prompt, so it is a non-empty prompt and stays a loop -
+// the gate above requires a prompt, not a *user* one.
+func TestAutonomousLoopSentinelIsALoop(t *testing.T) {
+	line := `{"type":"assistant","message":{"model":"claude-opus-4-8","role":"assistant","content":[{"type":"tool_use","id":"t","name":"ScheduleWakeup","input":{"delaySeconds":1200,"noop":false,"prompt":"<<autonomous-loop-dynamic>>"}}]},"session_id":"s","uuid":"u"}`
+	var got *LoopOp
+	for _, ev := range decodeOne(t, line) {
+		if ev.Tool != nil && ev.Tool.Loop != nil {
+			got = ev.Tool.Loop
+		}
+	}
+	if got == nil || got.Kind != LoopSelfPaced {
+		t.Errorf("autonomous ScheduleWakeup op = %+v, want a self-paced loop", got)
+	}
+}
+
 // A non-scheduler tool carries no loop op.
 func TestOrdinaryToolHasNoLoop(t *testing.T) {
 	line := `{"type":"assistant","message":{"model":"claude-opus-4-8","role":"assistant","content":[{"type":"tool_use","id":"t","name":"Bash","input":{"command":"ls"}}]},"session_id":"s","uuid":"u"}`

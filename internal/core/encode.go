@@ -597,6 +597,7 @@ const (
 	delaySecondsKey = "delaySeconds"
 	noopKey         = "noop"
 	stopKey         = "stop"
+	promptKey       = "prompt"
 )
 
 // toolLoopOp recognizes a /loop from a scheduler tool_use, and nil for every
@@ -605,8 +606,16 @@ const (
 // ScheduleWakeup with stop:true ends a self-paced one (its own end signal, not
 // CronDelete - a self-paced wakeup is one-shot, so there is no cron to delete;
 // recorded against claude 2.1.270). Otherwise a ScheduleWakeup is a self-paced
-// iteration whose noop flag marks a quiet tick. Values are read tolerantly, the
-// way toolChecklistOp reads its own: a missing or wrong-typed key is the zero value.
+// iteration whose noop flag marks a quiet tick.
+//
+// A self-paced iteration must carry a prompt - it is the /loop input the wakeup
+// re-fires, and the tool refuses a non-stop call without one ("prompt is required
+// when stop is not true"). The model still emits the tool_use of such a call, and
+// reading it as a loop lit the ↻ off a call that errored - and a self-paced loop
+// clears only on a stop it never sends, so the marker stuck. An absent or blank
+// prompt names no work to resume, so it is not a loop. Other values are read
+// tolerantly, the way toolChecklistOp reads its own: a missing or wrong-typed key
+// is the zero value.
 func toolLoopOp(name string, input map[string]any) *LoopOp {
 	switch name {
 	case toolCronCreate:
@@ -618,6 +627,10 @@ func toolLoopOp(name string, input map[string]any) *LoopOp {
 	case toolScheduleWakeup:
 		if stop, _ := input[stopKey].(bool); stop {
 			return &LoopOp{Stop: true}
+		}
+		prompt, _ := input[promptKey].(string)
+		if strings.TrimSpace(prompt) == "" {
+			return nil
 		}
 		noop, _ := input[noopKey].(bool)
 		return &LoopOp{Kind: LoopSelfPaced, DelaySeconds: intArg(input, delaySecondsKey), Noop: noop}
