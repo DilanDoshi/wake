@@ -338,4 +338,14 @@ var notAuthoredByTheChild = map[string]string{
 	// name. Cron beside it is the child's own cron expression and is contained;
 	// DelaySeconds, Noop and Stop are not strings, so the walk never reaches them.
 	"Event.Tool.Loop.Kind": "Wake's own vocabulary, resolved by toolLoopOp",
+
+	// The receiving session's display name, App-set (internal/ui: observe and
+	// roomHistoryLines) from that session's fleet Agent.Name and empty at decode,
+	// where contained() runs - so containing it here would be dead. It is not the
+	// child's bytes: every fleet name passes normalizeName (letters, digits, '-',
+	// '_') or the fixed pool, the same trust the matched sender's Agent.Name is
+	// already drawn under in crossSaid. The receiver is always a fleet member
+	// (Wake sees the envelope only on a session it runs), so there is no
+	// outside-name case the way FromName has one.
+	"Event.ToName": "the receiver's fleet name, normalizeName-clean, App-set",
 }
