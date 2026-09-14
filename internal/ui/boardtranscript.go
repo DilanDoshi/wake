@@ -150,3 +150,20 @@ func (a App) foldBoard(sessionID string, ev core.Event) App {
 	// carry what ended, and Fleet.named backfills it from the live task record.
 	return a.withBoardDM(sessionID, d.Append(a.fleet.named(sessionID, ev)))
 }
+
+// transcriptWindow renders the tail of this conversation for a view-only tile
+// of w by rows, following the newest line. It re-wraps through renderTranscript
+// only when the width has moved - the DM's own cost model (see DM.View) - and
+// takes no selection, because a tile has none (guardrail 1). The tile draws this
+// instead of DM.View, which would add the composer and the rest of a pane's
+// chrome. The re-wrap rides back on the returned DM, so the caller stores it and
+// a stable width across a frame pays no glamour.
+func (d DM) transcriptWindow(w, rows int) (DM, string) {
+	w, rows = max(w, minBlockWidth), max(rows, minTranscriptHeight)
+	if w != d.width {
+		d.width = w
+		d.tr = d.tr.replace(renderTranscript(d))
+	}
+	d.tr = d.tr.sized(w, rows).toBottom()
+	return d, d.tr.view(marked{})
+}

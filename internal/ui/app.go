@@ -334,6 +334,12 @@ type App struct {
 	parking  map[string]struct{}
 	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
 
+	// queued is messages typed while an agent was working, waiting for its turn
+	// to end rather than going to the wire mid-turn. Per window, keyed by session
+	// id, copy-on-write like quitting; flushQueued (queue.go) delivers one on each
+	// working→idle edge.
+	queued map[string][]queuedMsg
+
 	// authFailed are sessions whose last turn failed on the API - an expired
 	// login, a rejected key, an overload (core.KindAPIError). observe marks each
 	// instead of letting the error render as agent speech; /reauth (reauth.go)
@@ -562,10 +568,14 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// heartbeat, which may need starting, and ⌃Q's ask, which this frame
 		// may have settled. See park.go's closing.
 		next := a.apply(m.Frame)
+		// A message held while an agent worked goes out now if this report is the
+		// working→idle edge that ends its turn. Off a.fleet, the fleet before the
+		// fold, so a real edge is told from an agent that was already idle.
+		next, flush := next.flushQueued(a.fleet)
 		next, cmd := next.beat()
 		next, rl := next.armRateLimitClear()
 		next, park := next.autoParkStalled()
-		return next, tea.Batch(cmd, rl, park, next.closing())
+		return next, tea.Batch(flush, cmd, rl, park, next.closing())
 
 	case heartbeatMsg:
 		return a.beatArrived()

@@ -184,6 +184,13 @@ func (a App) sendDM(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) 
 	}
 	id := a.focus
 	wire := a.composer().WireText(text)
+	// A message typed while this agent is working waits rather than going to the
+	// wire mid-turn - the "the agent doesn't even see it" fix. It flushes on the
+	// turn's own working→idle edge (queue.go), echoed then rather than now.
+	if a.shouldQueue(id) {
+		a = a.enqueue(id, queuedMsg{wire: wire, echo: text, images: images})
+		return a.clearDraft(), nil
+	}
 	a = a.clearDraft()
 	a.fleet = a.fleet.sending(id, true)
 	// The echo keeps the chips - what the operator typed, image markers and all
@@ -264,8 +271,18 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)
 	}
 	a = a.clearDraft()
+	// A target still working takes the broadcast when its turn ends (queue.go),
+	// fromRoom so its held-DM echo reads `from the room`. The room's own line is
+	// drawn now regardless - you said it once, whoever is busy - so only the idle
+	// targets are written and echoed to their DMs here.
+	var sendNow []string
 	for _, id := range r.Targets {
+		if a.shouldQueue(id) {
+			a = a.enqueue(id, queuedMsg{wire: r.Text, echo: text, images: images, fromRoom: true})
+			continue
+		}
 		a.fleet = a.fleet.sending(id, false)
+		sendNow = append(sendNow, id)
 	}
 	// Echoed as it was typed, mention and all: the room is the record of who you
 	// said it to, chips included, while the agents get r.Text - already routed
@@ -281,8 +298,8 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		to = r.Targets[0]
 	}
 	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
-	a = a.echoToRouted(r.Targets, text)
-	return a, tea.Batch(mirror, a.write(sendFailed, sendFrames(r.Targets, r.Text, images)...))
+	a = a.echoToRouted(sendNow, text)
+	return a, tea.Batch(mirror, a.write(sendFailed, sendFrames(sendNow, r.Text, images)...))
 }
 
 // echoToRouted puts a routed message into each conversation it was addressed

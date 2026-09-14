@@ -82,6 +82,12 @@ type DM struct {
 	// See WithRunningSub, DM.showsDone.
 	subRunning bool
 
+	// queued is the echo text of each message waiting for this agent to finish
+	// its turn, oldest first - drawn as a pin above the composer so type-ahead is
+	// visible. Draw-time state, set by App.dmFor off App.queued; the messages
+	// themselves live on App (queue.go). See WithQueued, queuedPin.
+	queued []string
+
 	SessionID string
 	Name      string
 
@@ -561,6 +567,12 @@ func (d DM) View(width, height int) string {
 	if board := d.checklistPin(w); board != "" {
 		rows = append(rows, board)
 	}
+	// The messages typed ahead while this agent works, waiting for its turn to
+	// end. Above the composer like the board, since both are "what happens next"
+	// rather than transcript; counted in baseChrome as queuedRows. See queue.go.
+	if pin := d.queuedPin(w); pin != "" {
+		rows = append(rows, pin)
+	}
 	// Last before the composer: the card, picker or completion menu is answered
 	// by typing, so it belongs at the query bar. Clipped to the same count
 	// chromeHeight took out of the transcript, so the two cannot disagree.
@@ -750,7 +762,7 @@ func (d DM) menuRows() int {
 // rendering it costs a truncation per row and this runs on every re-lay.
 func (d DM) baseChrome() int {
 	composer := lipgloss.Height(d.composer.View(max(d.width, minComposerWidth)))
-	return composer + d.aboveComposerExtra() + d.checklistRows()
+	return composer + d.aboveComposerExtra() + d.checklistRows() + d.queuedRows()
 }
 
 // aboveComposerExtra is the rows above the composer that are neither transcript
@@ -779,20 +791,3 @@ func (d DM) minHeight() int { return d.chromeHeight() + minTranscriptHeight }
 
 // blockWidth is the width block renderers are asked for.
 func (d DM) blockWidth() int { return max(d.width, minBlockWidth) }
-
-// transcriptWindow renders the tail of this conversation for a view-only tile
-// of w by rows, following the newest line. It re-wraps through renderTranscript
-// only when the width has moved - the DM's own cost model (see View) - and takes
-// no selection, because a tile has none (guardrail 1). The tile draws this
-// instead of DM.View, which would add the composer and the rest of a pane's
-// chrome. The re-wrap rides back on the returned DM, so the caller stores it and
-// a stable width across a frame pays no glamour.
-func (d DM) transcriptWindow(w, rows int) (DM, string) {
-	w, rows = max(w, minBlockWidth), max(rows, minTranscriptHeight)
-	if w != d.width {
-		d.width = w
-		d.tr = d.tr.replace(renderTranscript(d))
-	}
-	d.tr = d.tr.sized(w, rows).toBottom()
-	return d, d.tr.view(marked{})
-}

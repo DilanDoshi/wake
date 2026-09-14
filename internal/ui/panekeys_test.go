@@ -44,9 +44,12 @@ func TestCtrlDOpensAConversationWithTheAgentTheCursorIsOn(t *testing.T) {
 	// And typing now reaches that agent rather than the room, which is the
 	// whole of what focus means.
 	a = a.withDraft("run the tests")
-	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
-	if f := sentFrame(t, a, cmd); f.SessionID != "s2" || f.Text != "run the tests" {
-		t.Errorf("a message typed after ⌃D went to %+v, want john with no routing", f)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	// john is mid-turn, so the message waits for his turn to end rather than
+	// going to the wire (queue.go) - but it waits for john, not the room, which
+	// is the whole of what focus means.
+	if got := a.queued["s2"]; len(got) != 1 || got[0].echo != "run the tests" {
+		t.Errorf("a message typed after ⌃D did not queue for john (s2), want it addressed to him: %v", got)
 	}
 }
 
