@@ -31,8 +31,12 @@ import (
 // earlier in their lives; this is that observation, applied. Without it a
 // session interrupted once would have every later silent failure forgiven for
 // the rest of its life, which at 15-30 sessions is most of them.
-func (s *Session) Send(text string, images []ImageBlock) error {
-	line, err := EncodeUserMessage(text, images)
+// messageID is the uuid stamped on the outgoing frame, or "" for an unstamped
+// send (the effort probe, which wants no lifecycle frames). A stamped message is
+// what the CLI emits command_lifecycle for, so it is how a caller tracks the fate
+// of what it sent - see EncodeUserMessage.
+func (s *Session) Send(text string, images []ImageBlock, messageID string) error {
+	line, err := EncodeUserMessage(text, images, messageID)
 	if err != nil {
 		return err
 	}

@@ -25,7 +25,7 @@ import (
 )
 
 func TestEncodeUserMessage(t *testing.T) {
-	got, err := EncodeUserMessage("hello world", nil)
+	got, err := EncodeUserMessage("hello world", nil, "")
 	if err != nil {
 		t.Fatalf("EncodeUserMessage: %v", err)
 	}
@@ -54,8 +54,35 @@ func TestEncodeUserMessage(t *testing.T) {
 	}
 }
 
+// A stamped message carries its uuid at the top level, which is what makes the
+// CLI emit command_lifecycle for it; an unstamped one omits the key entirely, so
+// the wire is byte-identical to a pre-stamping send.
+func TestEncodeUserMessageStampsUUID(t *testing.T) {
+	stamped, err := EncodeUserMessage("hi", nil, "abc-123")
+	if err != nil {
+		t.Fatalf("EncodeUserMessage: %v", err)
+	}
+	var f struct {
+		UUID string `json:"uuid"`
+	}
+	if err := json.Unmarshal(stamped[:len(stamped)-1], &f); err != nil {
+		t.Fatalf("not valid JSON: %v", err)
+	}
+	if f.UUID != "abc-123" {
+		t.Errorf("stamped uuid = %q, want abc-123", f.UUID)
+	}
+
+	unstamped, err := EncodeUserMessage("hi", nil, "")
+	if err != nil {
+		t.Fatalf("EncodeUserMessage: %v", err)
+	}
+	if strings.Contains(string(unstamped), "uuid") {
+		t.Errorf("an unstamped message carries a uuid key: %s", unstamped)
+	}
+}
+
 func TestEncodeUserMessageEscapesNewlinesAndQuotes(t *testing.T) {
-	got, err := EncodeUserMessage("line one\nline \"two\"", nil)
+	got, err := EncodeUserMessage("line one\nline \"two\"", nil, "")
 	if err != nil {
 		t.Fatalf("EncodeUserMessage: %v", err)
 	}
@@ -71,7 +98,7 @@ func TestEncodeUserMessageEscapesNewlinesAndQuotes(t *testing.T) {
 func TestEncodeUserMessagePreservesAwkwardTextThroughDecode(t *testing.T) {
 	const msg = "line one\nline \"two\" <local-command-stdout> & \\ done"
 
-	line, err := EncodeUserMessage(msg, nil)
+	line, err := EncodeUserMessage(msg, nil, "")
 	if err != nil {
 		t.Fatalf("EncodeUserMessage: %v", err)
 	}
@@ -89,7 +116,7 @@ func TestEncodeUserMessagePreservesAwkwardTextThroughDecode(t *testing.T) {
 
 func TestEncodeDecodeRoundTrip(t *testing.T) {
 	const msg = "check the snapshot tests"
-	line, err := EncodeUserMessage(msg, nil)
+	line, err := EncodeUserMessage(msg, nil, "")
 	if err != nil {
 		t.Fatalf("EncodeUserMessage: %v", err)
 	}
@@ -124,7 +151,7 @@ func decodeUserContent(t *testing.T, line []byte) []map[string]any {
 // the final block, so a message ending on an image routes wrong.
 func TestEncodeUserMessagePutsImagesBeforeText(t *testing.T) {
 	img := ImageBlock{MediaType: "image/png", Data: "aGVsbG8="}
-	line, err := EncodeUserMessage("what is this?", []ImageBlock{img})
+	line, err := EncodeUserMessage("what is this?", []ImageBlock{img}, "")
 	if err != nil {
 		t.Fatalf("EncodeUserMessage: %v", err)
 	}
@@ -149,7 +176,7 @@ func TestEncodeUserMessagePutsImagesBeforeText(t *testing.T) {
 
 // An image with no text still sends: the text block is simply absent.
 func TestEncodeUserMessageImageOnly(t *testing.T) {
-	line, err := EncodeUserMessage("", []ImageBlock{{MediaType: "image/jpeg", Data: "eHg="}})
+	line, err := EncodeUserMessage("", []ImageBlock{{MediaType: "image/jpeg", Data: "eHg="}}, "")
 	if err != nil {
 		t.Fatalf("EncodeUserMessage: %v", err)
 	}
@@ -162,7 +189,7 @@ func TestEncodeUserMessageImageOnly(t *testing.T) {
 // Neither text nor an image is refused rather than sent as an empty content
 // array, which Claude silently drops.
 func TestEncodeUserMessageRefusesEmpty(t *testing.T) {
-	if _, err := EncodeUserMessage("", nil); !errors.Is(err, ErrNotWritten) {
+	if _, err := EncodeUserMessage("", nil, ""); !errors.Is(err, ErrNotWritten) {
 		t.Fatalf("err = %v, want ErrNotWritten - an empty content array is dropped on the floor", err)
 	}
 }
@@ -203,7 +230,7 @@ func TestEncodeUserMessageMatchesRecordedInput(t *testing.T) {
 			imgs = append(imgs, ImageBlock{MediaType: mt, Data: data})
 		}
 	}
-	got, err := EncodeUserMessage(text, imgs)
+	got, err := EncodeUserMessage(text, imgs, "")
 	if err != nil {
 		t.Fatalf("EncodeUserMessage: %v", err)
 	}

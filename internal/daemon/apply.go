@@ -81,13 +81,13 @@ func (a *agent) apply(p pending) {
 			// report a failure to. incProbe before the write opens the window
 			// fanOut uses to swallow the reply; a failed write closes it again.
 			a.incProbe()
-			if err := a.sess.Send(p.frame.Text, nil); err != nil {
+			if err := a.sess.Send(p.frame.Text, nil, ""); err != nil {
 				a.decProbe()
 				logf("wake: session %s: effort probe not sent: %v", a.id, err)
 			}
 			return
 		}
-		if err = a.sess.Send(p.frame.Text, p.frame.Images); err == nil {
+		if err = a.sess.Send(p.frame.Text, p.frame.Images, p.frame.MessageID); err == nil {
 			a.noteSent()
 			// An /effort or a /model just changed what the session runs as; the
 			// same bare-/model probe confirms both the level and the model back.

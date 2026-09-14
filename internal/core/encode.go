@@ -64,6 +64,11 @@ var ErrNotWritten = errors.New("nothing was written")
 type outUserFrame struct {
 	Type    string         `json:"type"`
 	Message outUserMessage `json:"message"`
+	// UUID is the top-level command uuid. Stamping it is what makes the CLI emit
+	// command_lifecycle frames (queued/started/completed/cancelled) for this
+	// message - an unstamped one produces none - which is how Wake tracks the fate
+	// of what it sent. omitempty so an unstamped send is byte-identical to before.
+	UUID string `json:"uuid,omitempty"`
 }
 
 type outUserMessage struct {
@@ -103,7 +108,7 @@ type outImageSource struct {
 // and the text block last (Claude derives the prompt from the final block), an
 // empty content array is silently dropped so a message with neither text nor an
 // image is refused here, and the base64 is handed over raw for Claude to budget.
-func EncodeUserMessage(text string, images []ImageBlock) ([]byte, error) {
+func EncodeUserMessage(text string, images []ImageBlock, uuid string) ([]byte, error) {
 	content := make([]any, 0, len(images)+1)
 	for _, img := range images {
 		content = append(content, outImageBlock{
@@ -120,6 +125,7 @@ func EncodeUserMessage(text string, images []ImageBlock) ([]byte, error) {
 	return marshalLine(outUserFrame{
 		Type:    "user",
 		Message: outUserMessage{Role: "user", Content: content},
+		UUID:    uuid,
 	}, "encode user message")
 }
 

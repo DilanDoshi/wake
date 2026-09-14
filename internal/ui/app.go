@@ -334,11 +334,11 @@ type App struct {
 	parking  map[string]struct{}
 	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
 
-	// queued is messages typed while an agent was working, waiting for its turn
-	// to end rather than going to the wire mid-turn. Per window, keyed by session
-	// id, copy-on-write like quitting; flushQueued (queue.go) delivers one on each
-	// working→idle edge.
-	queued map[string][]queuedMsg
+	// queued is type-ahead waiting for each agent to be free, and inflight is the
+	// uuid of the message last sent it that has not completed - the signal shouldQueue
+	// and flushQueued turn on. Per window, copy-on-write like quitting. See queue.go.
+	queued   map[string][]queuedMsg
+	inflight map[string]string
 
 	// authFailed are sessions whose last turn failed on the API - an expired
 	// login, a rejected key, an overload (core.KindAPIError). observe marks each

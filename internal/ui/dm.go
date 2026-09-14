@@ -285,8 +285,14 @@ func (d DM) SetSize(w, h int) DM {
 	// part of that chrome, so one laid out for the old width would size the pane
 	// against rows that no longer exist.
 	d.partial = d.partial.sized(d.blockWidth())
+	// The pinned rows above the composer - the task board and the type-ahead queue
+	// - are reserved from the draft's growth as well as from the transcript's
+	// floor, or a full board plus a deep queue plus a growing draft draws the pane
+	// taller than its allocation and the frame's top clip eats the composer.
+	// aboveComposerExtra itself excludes them (baseChrome adds them once); they are
+	// added only here, to the draft's own ceiling.
 	d.composer = d.composer.SetWidth(max(w, minComposerWidth)).
-		WithMaxRows(composerRowsIn(h, d.composer.overhead()+d.aboveComposerExtra()))
+		WithMaxRows(composerRowsIn(h, d.composer.overhead()+d.aboveComposerExtra()+d.checklistRows()+d.queuedRows()))
 	// How many rows the preview may draw depends on the pane and the transcript's
 	// own height, both settled now. The growing preview retriggers this through
 	// View's chrome guard, so a token needs no recompute of its own (Append).

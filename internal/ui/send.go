@@ -12,7 +12,6 @@ package ui
 
 import (
 	"fmt"
-	"maps"
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -183,21 +182,18 @@ func (a App) sendDM(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) 
 		return next, cmd
 	}
 	id := a.focus
-	wire := a.composer().WireText(text)
-	// A message typed while this agent is working waits rather than going to the
-	// wire mid-turn - the "the agent doesn't even see it" fix. It flushes on the
-	// turn's own working→idle edge (queue.go), echoed then rather than now.
+	// A message typed while this agent is busy waits rather than going to the wire
+	// mid-turn - the "the agent doesn't even see it" fix. It is stamped now so its
+	// lifecycle can be tracked, and delivered when the agent is free (queue.go).
+	// The echo keeps the chips (image markers and all); the wire text has them
+	// stripped and their images ride beside it.
+	msg := newQueued(a.composer().WireText(text), text, images, false)
 	if a.shouldQueue(id) {
-		a = a.enqueue(id, queuedMsg{wire: wire, echo: text, images: images})
+		a = a.enqueue(id, msg)
 		return a.clearDraft(), nil
 	}
-	a = a.clearDraft()
-	a.fleet = a.fleet.sending(id, true)
-	// The echo keeps the chips - what the operator typed, image markers and all
-	// - while the wire text has the backed ones stripped and their images ride
-	// beside it.
-	a = a.withDM(id, a.dms[id].Append(core.Event{Kind: core.KindUserText, SessionID: id, Text: text}))
-	return a, a.write(sendFailed, sendFrames([]string{id}, wire, images)...)
+	a = a.clearDraft().markSent(id, msg)
+	return a, a.write(sendFailed, sendFrame(id, msg))
 }
 
 // sendRoom routes a draft the way §7 says: a leading @name that matches a live
@@ -271,18 +267,19 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)
 	}
 	a = a.clearDraft()
-	// A target still working takes the broadcast when its turn ends (queue.go),
-	// fromRoom so its held-DM echo reads `from the room`. The room's own line is
-	// drawn now regardless - you said it once, whoever is busy - so only the idle
-	// targets are written and echoed to their DMs here.
-	var sendNow []string
+	// A busy target takes the broadcast when its turn ends (queue.go), fromRoom so
+	// its held-DM echo reads `from the room`. The room's own line is drawn now
+	// regardless - you said it once, whoever is busy - so only the free targets are
+	// written and echoed to their DMs here; each frame carries its own stamped uuid.
+	var frames []rpc.Frame
 	for _, id := range r.Targets {
+		msg := newQueued(r.Text, text, images, true)
 		if a.shouldQueue(id) {
-			a = a.enqueue(id, queuedMsg{wire: r.Text, echo: text, images: images, fromRoom: true})
+			a = a.enqueue(id, msg)
 			continue
 		}
-		a.fleet = a.fleet.sending(id, false)
-		sendNow = append(sendNow, id)
+		a = a.markSent(id, msg)
+		frames = append(frames, sendFrame(id, msg))
 	}
 	// Echoed as it was typed, mention and all: the room is the record of who you
 	// said it to, chips included, while the agents get r.Text - already routed
@@ -298,42 +295,7 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		to = r.Targets[0]
 	}
 	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
-	a = a.echoToRouted(sendNow, text)
-	return a, tea.Batch(mirror, a.write(sendFailed, sendFrames(sendNow, r.Text, images)...))
-}
-
-// echoToRouted puts a routed message into each conversation it was addressed
-// to, spelled as it was typed.
-//
-// **Only conversations this client already holds**, which is the rule
-// App.observe uses for the agent's own events - and here it is load-bearing
-// rather than symmetric. An unopened conversation is filled from claude's
-// transcript when it opens, DecodeTranscriptLine keeps user lines as well as
-// assistant ones, and neither pane de-duplicates: writing this turn here too
-// would draw it twice, once as typed and once as the agent received it.
-//
-// At most one map copy for the whole fan-out, and none at all until a target
-// turns out to be held. withDM copies App.dms per call, so @all at thirty
-// agents would otherwise be thirty copies of it for one keystroke - and a room
-// with no conversation open beside it, which is where most messages are typed,
-// would pay for a copy that changes nothing.
-func (a App) echoToRouted(targets []string, text string) App {
-	var next map[string]*DM
-	for _, id := range targets {
-		if _, held := a.dms[id]; !held {
-			continue
-		}
-		if next == nil {
-			next = maps.Clone(a.dms)
-		}
-		dm := next[id].Append(core.Event{Kind: core.KindUserText, SessionID: id, Text: text, FromRoom: true})
-		next[id] = &dm
-	}
-	if next == nil {
-		return a
-	}
-	a.dms = next
-	return a
+	return a, tea.Batch(mirror, a.write(sendFailed, frames...))
 }
 
 // clearDraft empties the focused composer and re-reads where ↵ would now send.
