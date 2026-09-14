@@ -236,6 +236,25 @@ func TestTheBarDrawsWhatItKnows(t *testing.T) {
 	}
 }
 
+// The reported bug: the ctx figure reaches the fleet only on a live result
+// frame, so a client that never witnessed one - a late attach, a board tile, a
+// woken session's first idle - had ContextTokens 0 and dropped the segment. The
+// report is the backfill, the route Model and Effort already take, so an Agent
+// built from the report alone must still name the context.
+func TestTheReportBackfillsContextForAClientThatSawNoResultFrame(t *testing.T) {
+	f := NewFleet().WithStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{
+		ID: "s1", Name: "alex", State: rpc.StateIdle,
+		Model: "claude-opus-5", ContextTokens: 260_000, ContextWindow: 1_000_000,
+	}}})
+	a, ok := f.Agent("s1")
+	if !ok {
+		t.Fatalf("no agent for the reported session")
+	}
+	if got := stripANSI(statusBar(a, modeAuto, 200, 2)); !strings.Contains(got, "ctx:74%") {
+		t.Errorf("bar %q is missing the context the report carried", got)
+	}
+}
+
 // countBars replaces the render seam with a counter, and puts it back.
 func countBars(t *testing.T) *int {
 	t.Helper()
