@@ -1252,13 +1252,14 @@ should **replace** the interrupted-flag pairing rather than add to it, and delet
 `Session.interrupted`.
 
 *Decided and worth knowing:* **`cancel_queued` is not sent and the rpc frame has no field for
-it.** `EncodeUserMessage` stamps no top-level uuid, so the CLI emits no `command_lifecycle` for
-anything Wake sends and the receipt's `cancelled` array could not name what it had destroyed —
-while `App.submit` has already echoed that message into the transcript as sent. Without the flag
-a queued message still runs (`interrupt-queued-survives.jsonl`), which is the end of the trade
-that loses nothing. **Stamping outgoing messages with a uuid is what re-opens the choice**, and
-it is cheap: `KindMessageState` already decodes the frames it would produce, so the operator
-would get "queued / started / cancelled" for their own messages as a bonus.
+it, and stamping has since shipped without changing that answer.** The type-ahead queue now
+stamps every operator message with a uuid (`internal/ui/queue.go`, `rpc.Frame.MessageID` →
+`EncodeUserMessage`), so the CLI *does* emit `command_lifecycle` for what Wake sends and the queue
+folds those (`core.KindMessageState`, `Event.MessageEnded`) to know when a message is over. But
+`interruptCancelQueued` stays `false`: Wake's own client-side queue hands the CLI at most one
+message per turn, so the CLI's native queue is empty by construction and `cancel_queued` would
+have nothing to destroy — an interrupt of the running turn is all esc wants. Without the flag a
+queued message still runs (`interrupt-queued-survives.jsonl`). See `internal/core/write.go`.
 
 *Found by review of that commit and fixed in `5dc1f59`, because it is the same failure the legend
 rule exists for, one level up:* the guard that was supposed to hold the legend honest iterated a

@@ -174,6 +174,18 @@ func (a App) clearInflight(id string) App {
 	return a
 }
 
+// forgetInflight drops every in-flight mark, for a reattach: a mark that survived
+// a disconnection is a belief nothing can confirm, and a send that failed across
+// it left one with no lifecycle to clear it. Safe because turnInFlight(State) still
+// gates shouldQueue, so a genuinely running turn keeps a follow-up waiting.
+func (a App) forgetInflight() App {
+	if len(a.inflight) == 0 {
+		return a
+	}
+	a.inflight = map[string]string{}
+	return a
+}
+
 // observeMessageState clears an agent's in-flight mark when the message it named
 // completes or is cancelled - the deterministic "the turn is over" signal, ahead
 // of the State-edge backstop. Ignores a lifecycle for a uuid this window did not
@@ -204,35 +216,47 @@ func sendFrame(id string, msg queuedMsg) rpc.Frame {
 	return rpc.Frame{Kind: rpc.FrameSend, SessionID: id, Text: msg.wire, Images: msg.images, MessageID: msg.id}
 }
 
-// flushQueued delivers one waiting message to each agent that is now free, drops
-// the queue of any that ended or parked, and applies the State-edge backstop for a
-// lifecycle frame that never arrived.
+// reconcileInflight clears an agent's in-flight mark when the daemon reports its
+// turn over - a working→idle edge - or the agent gone. It is the backstop for a
+// completed lifecycle lost to a frame gap, run per report (from applyStatus)
+// rather than per batch, so an edge that opens and closes inside one inbox drain
+// is not collapsed. prev is the fleet before this one report folded.
 //
-// prev is the fleet before this batch folded, so the backstop fires on a genuine
-// working→idle edge rather than an agent that was already idle. One message per
-// free agent per call keeps a burst from coalescing: the delivered message sets
-// inflight, so the agent is no longer free until its turn ends.
-func (a App) flushQueued(prev Fleet) (App, tea.Cmd) {
-	// Both empty is the common idle case, and it must stay free. When either has
-	// an entry the backstop below runs even for an agent with no queue, because an
-	// in-flight mark left standing after a turn ends would wrongly queue the next
-	// message forever - so inflight is reconciled whether or not anything waits.
-	if len(a.queued) == 0 && len(a.inflight) == 0 {
-		return a, nil
+// Clearing an idle agent's mark can never flush anything mid-turn: agentFree also
+// requires the daemon's idle, so a mark cleared while the agent still works leaves
+// it not-free.
+func (a App) reconcileInflight(prev Fleet) App {
+	if len(a.inflight) == 0 {
+		return a
 	}
-	seen := make(map[string]struct{}, len(a.queued)+len(a.inflight))
-	ids := make([]string, 0, len(a.queued)+len(a.inflight))
-	collect := func(id string) {
-		if _, ok := seen[id]; !ok {
-			seen[id] = struct{}{}
-			ids = append(ids, id)
+	ids := make([]string, 0, len(a.inflight))
+	for id := range a.inflight {
+		ids = append(ids, id)
+	}
+	for _, id := range ids {
+		agent, ok := a.fleet.Agent(id)
+		switch {
+		case !ok || agent.State == rpc.StateEnded || agent.State == rpc.StateParked:
+			a = a.clearInflight(id)
+		case turnInFlight(prev.agents[id].State) && agent.State == rpc.StateIdle:
+			a = a.clearInflight(id)
 		}
 	}
-	for id := range a.queued {
-		collect(id)
+	return a
+}
+
+// flushQueued delivers one waiting message to each agent that is now free and
+// drops the queue of any that ended or parked. inflight is reconciled elsewhere
+// (reconcileInflight, observeMessageState), so this only reads agentFree. One
+// message per free agent per call keeps a burst from coalescing: the delivered
+// message sets inflight, so the agent is no longer free until its turn ends.
+func (a App) flushQueued() (App, tea.Cmd) {
+	if len(a.queued) == 0 {
+		return a, nil
 	}
-	for id := range a.inflight {
-		collect(id)
+	ids := make([]string, 0, len(a.queued))
+	for id := range a.queued {
+		ids = append(ids, id)
 	}
 	var frames []rpc.Frame
 	for _, id := range ids {
@@ -241,13 +265,7 @@ func (a App) flushQueued(prev Fleet) (App, tea.Cmd) {
 			a = a.dropQueue(id) // also clears any inflight mark
 			continue
 		}
-		// Backstop: our in-flight message's turn ended per the daemon's edge, in
-		// case its completed lifecycle was lost to a frame gap. Runs regardless of
-		// whether a message waits, so the mark never strands the next one.
-		if a.inflight[id] != "" && turnInFlight(prev.agents[id].State) && agent.State == rpc.StateIdle {
-			a = a.clearInflight(id)
-		}
-		if len(a.queued[id]) == 0 || !a.agentFree(id) {
+		if !a.agentFree(id) {
 			continue
 		}
 		var (

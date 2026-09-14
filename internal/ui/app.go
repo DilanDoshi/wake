@@ -568,10 +568,9 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// heartbeat, which may need starting, and ⌃Q's ask, which this frame
 		// may have settled. See park.go's closing.
 		next := a.apply(m.Frame)
-		// A message held while an agent worked goes out now if this report is the
-		// working→idle edge that ends its turn. Off a.fleet, the fleet before the
-		// fold, so a real edge is told from an agent that was already idle.
-		next, flush := next.flushQueued(a.fleet)
+		// A message held for an agent goes out if this frame freed it (inflight
+		// reconciled per report inside apply, or a completed lifecycle in observe).
+		next, flush := next.flushQueued()
 		next, cmd := next.beat()
 		next, rl := next.armRateLimitClear()
 		next, park := next.autoParkStalled()
@@ -672,16 +671,13 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		// this shares with the daemon's own gap.
 		a = a.notedGap(m.dropped)
 	}
-	// Off the fleet before this batch folds, so a message held for an agent goes
-	// out when a frame in the batch is its turn's working→idle edge. This is the
-	// path production frames take; frameMsg's own flush covers the single-frame
-	// form. Per batch rather than per frame, so at most one message per agent
-	// leaves per read - two in one batch would race each other mid-turn.
-	prev := a.fleet
 	for _, f := range m.frames {
 		a = a.apply(f)
 	}
-	a, flush := a.flushQueued(prev)
+	// A message held for an agent goes out once the batch has folded and the agent
+	// is free (inflight reconciled per report inside apply). At most one per agent
+	// per read - two in one batch would race each other mid-turn. See queue.go.
+	a, flush := a.flushQueued()
 	if !m.done {
 		// The heartbeat starts here because this is the path production frames
 		// take: a status that put an agent into a turn schedules the first

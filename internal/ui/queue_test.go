@@ -109,7 +109,7 @@ func TestLifecycleCompletedFlushesTheNextQueued(t *testing.T) {
 	if a.inflight["s1"] != "" {
 		t.Fatalf("a completed lifecycle did not clear the in-flight mark")
 	}
-	a, cmd := a.flushQueued(a.fleet)
+	a, cmd := a.flushQueued()
 	f := sentFrame(t, a, cmd)
 	if f.Text != "second" {
 		t.Errorf("the flush sent %q, want the queued message once the first completed", f.Text)
@@ -125,7 +125,7 @@ func TestInterruptCancelledFlushesTheNextQueued(t *testing.T) {
 	a, firstID := sentThenQueued(t, "first", "second")
 
 	a = a.observeMessageState("s1", core.Event{Kind: core.KindMessageState, SessionID: "s1", MessageID: firstID, Text: "cancelled"})
-	a, cmd := a.flushQueued(a.fleet)
+	a, cmd := a.flushQueued()
 	f := sentFrame(t, a, cmd)
 	if f.Text != "second" {
 		t.Errorf("a cancelled in-flight message did not let the next through: sent %q", f.Text)
@@ -138,9 +138,8 @@ func TestStateEdgeBackstopsALostLifecycle(t *testing.T) {
 	a, _ := sentThenQueued(t, "first", "second")
 	// The first message's turn ran (working) and ended (idle), but its lifecycle
 	// never arrived - only the status reports did.
-	prev := a.applyFrame(oneAgent("s1", "alex", rpc.StateWorking)).fleet
 	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateWorking)).applyFrame(oneAgent("s1", "alex", rpc.StateIdle))
-	a, cmd := a.flushQueued(prev)
+	a, cmd := a.flushQueued()
 
 	f := sentFrame(t, a, cmd)
 	if f.Text != "second" {
@@ -156,9 +155,8 @@ func TestStateEdgeBackstopsALostLifecycle(t *testing.T) {
 func TestNoFlushWhileAMessageIsInFlight(t *testing.T) {
 	a, _ := sentThenQueued(t, "first", "second")
 	// s1 is now working on the first message.
-	prev := a.fleet
 	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateWorking))
-	a, cmd := a.flushQueued(prev)
+	a, cmd := a.flushQueued()
 
 	if cmd != nil {
 		t.Errorf("the queue flushed while the first message was still in flight")
@@ -174,10 +172,9 @@ func TestQueuedMessageFlushesWhenAgentGoesIdle(t *testing.T) {
 	a := idleDM(t).applyFrame(oneAgent("s1", "alex", rpc.StateWorking))
 	m, _ := typeAndSubmit(a, "run the tests")
 	a = m.(App)
-	prev := a.fleet
 
 	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateIdle))
-	a, cmd := a.flushQueued(prev)
+	a, cmd := a.flushQueued()
 
 	f := sentFrame(t, a, cmd)
 	if f.Kind != rpc.FrameSend || f.SessionID != "s1" || f.Text != "run the tests" {
@@ -192,15 +189,51 @@ func TestQueueDropsWhenTheAgentEnds(t *testing.T) {
 	m, _ := typeAndSubmit(a, "later")
 	a = m.(App)
 
-	prev := a.fleet
 	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateEnded))
-	a, cmd := a.flushQueued(prev)
+	a, cmd := a.flushQueued()
 
 	if cmd != nil {
 		t.Errorf("an ended agent's queue was delivered rather than dropped")
 	}
 	if _, held := a.queued["s1"]; held {
 		t.Errorf("an ended agent's queue was not dropped")
+	}
+}
+
+// A working→idle edge that opens and closes inside one inbox batch, with the
+// completed lifecycle dropped, still frees the agent: inflight is reconciled per
+// report, not per batch, so the intermediate edge is not collapsed.
+func TestAnIntraBatchEdgeIsNotCollapsed(t *testing.T) {
+	a, _ := sentThenQueued(t, "first", "second")
+
+	// One batch carrying the whole turn - working then idle - and no lifecycle.
+	m, _ := a.Update(streamMsg{gen: a.gen, batch: batch{frames: []rpc.Frame{
+		oneAgent("s1", "alex", rpc.StateWorking),
+		oneAgent("s1", "alex", rpc.StateIdle),
+	}}})
+	a = m.(App)
+
+	// The queue drained: the edge freed the agent (first's mark cleared) and second
+	// flushed. Were the edge collapsed, first would stay in flight and second would
+	// strand. (inflight now holds second's own uuid, which is right.)
+	if len(a.queued["s1"]) != 0 {
+		t.Errorf("the queued message was stranded when the working→idle edge fell inside one batch: %v", a.queued["s1"])
+	}
+}
+
+// A reattach clears in-flight marks: a send that failed across the disconnection
+// left one with no lifecycle to clear it, which would queue every later message
+// forever. The queue itself survives to flush on the next idle.
+func TestReattachForgetsInflight(t *testing.T) {
+	a, _ := sentThenQueued(t, "first", "second")
+
+	next, _ := a.reattached(reattachedMsg{})
+	a = next.(App)
+	if len(a.inflight) != 0 {
+		t.Errorf("reattach left an in-flight mark that nothing can now clear: %v", a.inflight)
+	}
+	if len(a.queued["s1"]) != 1 {
+		t.Errorf("reattach dropped the queued message; it should survive to flush on the next idle")
 	}
 }
 

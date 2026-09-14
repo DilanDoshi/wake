@@ -256,5 +256,5 @@ func (d DM) previewCap() int {
 // (its floor branch handles the rest), so menuRows is zero here by construction.
 func (d DM) chromeSansPreview() int {
 	composer := lipgloss.Height(d.composer.View(max(d.width, minComposerWidth)))
-	return composer + d.beatBarRows() + d.checklistRows()
+	return composer + d.beatBarRows() + d.checklistRows() + d.queuedRows()
 }
