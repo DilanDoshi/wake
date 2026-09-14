@@ -392,9 +392,14 @@ func (a *agent) observe(ev core.Event) {
 		// the next one - so this only forgets, and the arm below relearns.
 		a.claudeID = ""
 	case core.KindToolUse:
-		// The sidebar's "what is this agent on". Not cleared by the tool's own
-		// result - see rpc.SessionStatus.Tool.
-		if ev.Tool != nil {
+		// The sidebar's "what is this agent on", and what stateLocked reads as a
+		// tool in flight. ev.Subagent==nil: a subagent's forwarded tool_use is not
+		// the parent's own turn, so a background subagent's tools must not put the
+		// parent back to StateWorking after its turn ended (the working line draws
+		// off it) or overwrite what the sidebar says the parent is on - the gate the
+		// rest of the tree takes on tool activity (ui/fold), and the prs/goal/loop
+		// folds above. Not cleared by the tool's own result - see rpc.SessionStatus.Tool.
+		if ev.Tool != nil && ev.Subagent == nil {
 			a.tool, a.toolArg = ev.Tool.Name, ev.Tool.Display
 		}
 	case core.KindPermissionRequest:
