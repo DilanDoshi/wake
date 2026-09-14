@@ -672,9 +672,16 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		// this shares with the daemon's own gap.
 		a = a.notedGap(m.dropped)
 	}
+	// Off the fleet before this batch folds, so a message held for an agent goes
+	// out when a frame in the batch is its turn's working→idle edge. This is the
+	// path production frames take; frameMsg's own flush covers the single-frame
+	// form. Per batch rather than per frame, so at most one message per agent
+	// leaves per read - two in one batch would race each other mid-turn.
+	prev := a.fleet
 	for _, f := range m.frames {
 		a = a.apply(f)
 	}
+	a, flush := a.flushQueued(prev)
 	if !m.done {
 		// The heartbeat starts here because this is the path production frames
 		// take: a status that put an agent into a turn schedules the first
@@ -683,7 +690,7 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		next, rl := next.armRateLimitClear()
 		next, park := next.autoParkStalled()
 		// Re-armed unconditionally, unless one of those frames was ⌃Q's answer.
-		return next, tea.Batch(tick, rl, park, next.reading())
+		return next, tea.Batch(flush, tick, rl, park, next.reading())
 	}
 	return a.hungUp(m.err)
 }

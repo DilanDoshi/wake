@@ -160,8 +160,8 @@ func TestQueueDropsWhenTheAgentEnds(t *testing.T) {
 	}
 }
 
-// The flush is wired into the real frame path, not only callable in isolation:
-// a status report that ends a turn drains the queue through Update.
+// The flush is wired into the single-frame path, not only callable in isolation:
+// a status report that ends a turn drains the queue through the frameMsg case.
 func TestFlushIsWiredIntoTheFrameUpdate(t *testing.T) {
 	a, _ := workingWithQueued(t, "go")
 
@@ -170,6 +170,19 @@ func TestFlushIsWiredIntoTheFrameUpdate(t *testing.T) {
 
 	if len(a.queued["s1"]) != 0 {
 		t.Errorf("a turn-ending report did not flush the queue; flushQueued is not wired into the frameMsg case")
+	}
+}
+
+// And into the batched stream path, which is the one production frames actually
+// take - the flush belongs on both, since a report can arrive either way.
+func TestFlushIsWiredIntoTheStreamPath(t *testing.T) {
+	a, _ := workingWithQueued(t, "go")
+
+	m, _ := a.Update(streamMsg{gen: a.gen, batch: batch{frames: []rpc.Frame{oneAgent("s1", "alex", rpc.StateIdle)}}})
+	a = m.(App)
+
+	if len(a.queued["s1"]) != 0 {
+		t.Errorf("a turn-ending report on the stream path did not flush the queue; flushQueued is not wired into stream()")
 	}
 }
 
