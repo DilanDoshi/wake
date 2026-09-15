@@ -39,8 +39,8 @@ import (
 
 // Version is what the banner claims to be. A var, not a const, so a release
 // build stamps it from the git tag with -ldflags -X (see .goreleaser.yaml); the
-// "0.1.2" default is what a plain `go build`/`go install` reports off a tag.
-var Version = "0.1.2"
+// "0.1.3" default is what a plain `go build`/`go install` reports off a tag.
+var Version = "0.1.3"
 
 const (
 	// bannerName is the product, and the one word in the banner set in Text.
