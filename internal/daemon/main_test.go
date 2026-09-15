@@ -303,6 +303,10 @@ func runFakeClaude() int {
 		return fakeQuestion()
 	case "plan":
 		return fakePlan()
+	case "subagent":
+		// Replays a recorded dispatch's start and then holds it running - see
+		// taskreplay_test.go.
+		return fakeSubagentDispatch()
 	default:
 		return fakeTurns(sid)
 	}
