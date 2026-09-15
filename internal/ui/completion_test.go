@@ -387,10 +387,11 @@ func TestTabTakesTheCursoredOffer(t *testing.T) {
 	}
 }
 
-// The menu walks without ↑↓, which belong to the roster. ⌃N and ⌃P are the
-// text area's line keys, and a single-token draft has no second line to move
-// to - which is what makes them free exactly while this menu is up.
-func TestTheMenuWalksWithoutTheArrowKeys(t *testing.T) {
+// ⌃N/⌃P still walk the menu, kept as aliases beside the ↑↓ the menu now owns
+// (Claude Code accepts both). A single-token draft has no second line for the
+// text area's own ⌃N/⌃P to move to, which is what keeps them free while a menu
+// is up.
+func TestTheMenuWalksWithCtrlNP(t *testing.T) {
 	fresh(t)
 	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
 	a = a.advertising("s1", "zebra-one", "zebra-two", "zebra-three").withDraft("/zebra-")
@@ -417,25 +418,71 @@ func TestTheMenuWalksWithoutTheArrowKeys(t *testing.T) {
 	}
 }
 
-// ↑↓ walk the prompt history and stay that way; a menu that navigated on them
-// would swallow it. With no history behind the pane they leave the draft and the
-// menu exactly as they were, rather than moving the menu's own cursor.
-func TestTheMenuNeverTakesTheArrowKeys(t *testing.T) {
+// ↑↓ walk the menu while it is up: on a single-line `/`or`@` draft the text
+// cursor has no row to climb, so the arrows move the offer cursor the way ⌃N/⌃P
+// do. The draft is untouched, so the menu stays up; ↑ at the top clamps rather
+// than falling through to the prompt history, which returns once the menu closes.
+func TestTheMenuWalksWithTheArrowKeys(t *testing.T) {
 	fresh(t)
-	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(200, 40)
-	a = a.advertising("s1", "zebra-one", "zebra-two").withDraft("/zebra-")
-	if !a.completion.open() {
-		t.Fatal("the fixture drew no menu, so this asserts nothing about the keys")
+	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
+	a = a.advertising("s1", "zebra-one", "zebra-two", "zebra-three").withDraft("/zebra-")
+	if len(a.completion.offers) < 3 {
+		t.Fatalf("the fixture offers %q, which is too few to walk", a.completion.offers)
 	}
 
-	for _, k := range []tea.KeyType{tea.KeyUp, tea.KeyDown} {
-		next, _ := pressKey(a, tea.KeyMsg{Type: k})
-		if next.completion.cursor != 0 {
-			t.Errorf("%v moved the menu's cursor to %d: ↑↓ are the prompt history, not the menu's", k, next.completion.cursor)
-		}
-		if !next.completion.open() {
-			t.Errorf("%v closed the menu; with no history the draft is untouched, so the menu should still be up", k)
-		}
+	down, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
+	if down.completion.cursor != 1 {
+		t.Errorf("↓ left the menu cursor at %d, want 1", down.completion.cursor)
+	}
+	if !down.completionUp() {
+		t.Error("↓ closed the menu; the draft is untouched, so it should still be up")
+	}
+	up, _ := pressKey(down, tea.KeyMsg{Type: tea.KeyUp})
+	if up.completion.cursor != 0 {
+		t.Errorf("↑ left the menu cursor at %d, want 0", up.completion.cursor)
+	}
+	// ↑ at the top clamps and holds the draft rather than walking history.
+	top, _ := pressKey(up, tea.KeyMsg{Type: tea.KeyUp})
+	if top.completion.cursor != 0 {
+		t.Errorf("↑ at the top moved the cursor to %d, want it held at 0", top.completion.cursor)
+	}
+	if got := top.composer().Value(); got != "/zebra-" {
+		t.Errorf("↑ at the top changed the draft to %q: the menu owns ↑↓, so it must not walk history", got)
+	}
+
+	// ⇥ takes whatever the walk landed on.
+	took, _ := pressKey(down, tea.KeyMsg{Type: tea.KeyTab})
+	if got, want := took.composer().Value(), down.completion.offers[1]+" "; got != want {
+		t.Errorf("⇥ after ↓ left the draft %q, want %q", got, want)
+	}
+}
+
+// A multi-line draft ending in a mention keeps ↑ as text-cursor movement rather
+// than a menu walk: the menu only owns the arrows when the cursor has no row to
+// climb. So ↑ here moves off the last line - closing the menu on the rebuild -
+// the way it always has, and a real multi-line draft never loses its line keys.
+func TestTheMenuLeavesArrowsToAMultiLineCursor(t *testing.T) {
+	dir := workdir(t, "alexander.md")
+	fresh(t)
+	a := newRoomApp(t).withSize(200, 40).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "alex", Dir: dir, State: rpc.StateIdle},
+	)
+	a = a.withDraft("one")
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlJ})
+	a = a.withDraft("two @al") // draft "one\ntwo @al", cursor at the end of line 1
+	if !a.completionUp() {
+		t.Fatal("the fixture drew no menu with the cursor on the mention, so this asserts nothing")
+	}
+	if got := a.composer().ta.Line(); got != 1 {
+		t.Fatalf("the draft did not end on its second line: cursor on line %d", got)
+	}
+
+	up, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyUp})
+	if got := up.composer().ta.Line(); got != 0 {
+		t.Errorf("↑ did not move the text cursor up inside the multi-line draft: still on line %d", got)
+	}
+	if got := up.composer().Value(); got != "one\ntwo @al" {
+		t.Errorf("↑ changed the draft to %q: it walked the menu or history instead of moving the cursor", got)
 	}
 }
 
