@@ -140,6 +140,14 @@ type agent struct {
 	// is the probe's display name and preferred when present.
 	observedModel string
 
+	// contextTokens and contextWindow are how full the context is after the last
+	// result frame - what the status bar draws as ctx. Carried on the report so a
+	// client that never witnessed the result they ride still shows it, the route
+	// observedModel takes. The used half is cleared on /clear (the window kept);
+	// display only. See rpc.SessionStatus.ContextTokens.
+	contextTokens int
+	contextWindow int
+
 	// pendingProbes counts effort-probe /model replies still expected; fanOut
 	// swallows a reply while it is positive. A counter rather than a bool
 	// because two probes can be in flight at once - two quick /effort changes,
@@ -361,6 +369,18 @@ func (a *agent) observe(ev core.Event) {
 		a.observedModel = ev.Session.Model
 	}
 
+	// How full the context is, off a result frame's usage, carried on the report
+	// for a client that never saw one. Only when a frame accounts for it: an init
+	// or a tool-use carries none, and blanking it once a turn would drop the
+	// segment the way the observedModel guard just above prevents. See
+	// rpc.SessionStatus.ContextTokens.
+	if ev.Session != nil && ev.Session.ContextWindow > 0 {
+		a.contextWindow = ev.Session.ContextWindow
+	}
+	if ev.Session != nil && ev.Session.ContextTokens > 0 {
+		a.contextTokens = ev.Session.ContextTokens
+	}
+
 	// A session opens a PR by running `gh pr create`, whose tool result prints
 	// the URL. Scraped off the decoded text of a result frame - never prose - and
 	// carried on the report. **This session's own**, not a subagent's: a forwarded
@@ -391,6 +411,10 @@ func (a *agent) observe(ev core.Event) {
 		// memory was cleared. The successor is not on this frame - it arrives on
 		// the next one - so this only forgets, and the arm below relearns.
 		a.claudeID = ""
+		// The context figure describes the conversation /clear just emptied, so
+		// the used half goes with it - the UI's fleet.go reset. The window stays:
+		// the model, and so its window, is unchanged.
+		a.contextTokens = 0
 	case core.KindToolUse:
 		// The sidebar's "what is this agent on". Not cleared by the tool's own
 		// result - see rpc.SessionStatus.Tool.
