@@ -292,6 +292,50 @@ func TestATurnEndingClearsWhatAnAgentIsDoing(t *testing.T) {
 	}
 }
 
+// A background subagent's forwarded tool_use is not the parent's own turn, and
+// must not put the parent back to StateWorking after its turn has ended. The
+// working/heartbeat line draws off StateWorking, so without the ev.Subagent==nil
+// gate an agent that finished its turn keeps a spinner running for the whole of a
+// background subagent's work - the gate the rest of the tree already takes on tool
+// activity (ui/fold, and this function's own prs/goal/loop folds).
+func TestASubagentsToolDoesNotKeepTheParentWorkingAfterItsTurnEnds(t *testing.T) {
+	a := newAgent("s1", "alex", "main", "/repo/api", "", nil, func() {})
+	a.noteSent() // the operator's turn
+	// The parent dispatches a subagent in the background and its own turn ends,
+	// so nothing is owed and no tool of the parent's is in flight.
+	a.observe(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{Name: "Task", Display: "opus48-worker"}})
+	a.observe(core.Event{Kind: core.KindTurnEnd})
+	// The background subagent then uses tools of its own, forwarded past the
+	// parent's result (Subagent set, Result empty - it is speech, not a receipt).
+	a.observe(core.Event{
+		Kind:     core.KindToolUse,
+		Tool:     &core.ToolCall{Name: "Bash", Display: "make test"},
+		Subagent: &core.Subagent{Dispatch: "toolu_1", Type: "opus48-worker"},
+	})
+
+	if got := a.stateLocked(a.lastEvent.Add(time.Second)); got != rpc.StateIdle {
+		t.Errorf("stateLocked = %q while only a background subagent runs, want %q: a subagent's tool is not the parent's own turn, and the working line draws off StateWorking", got, rpc.StateIdle)
+	}
+}
+
+// The sidebar half of the same rule: a subagent's tool_use does not overwrite
+// what the parent is on. During a foreground dispatch the parent is on its own
+// Task call, and the subagent's Bash beneath it is the subagent's activity, not
+// the parent's - which is exactly what ui/fold already keeps on the client.
+func TestASubagentsToolDoesNotChangeWhatTheParentIsDoing(t *testing.T) {
+	a := newAgent("s1", "alex", "main", "/repo/api", "", nil, func() {})
+	a.observe(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{Name: "Task", Display: "opus48-worker"}})
+	a.observe(core.Event{
+		Kind:     core.KindToolUse,
+		Tool:     &core.ToolCall{Name: "Bash", Display: "make test"},
+		Subagent: &core.Subagent{Dispatch: "toolu_1", Type: "opus48-worker"},
+	})
+
+	if st := a.snapshotFields(); st.Tool != "Task" {
+		t.Errorf("Tool = %q after a subagent's own tool_use, want Task: a subagent's work is not the parent's activity", st.Tool)
+	}
+}
+
 // A single slow tool call - a build, a test suite, an install - emits the
 // tool_use and then nothing at all until its result, which is routinely longer
 // than silenceLimit. That gap is a known reason to be quiet, not a wedged

@@ -506,11 +506,6 @@ var notNamedByTheAirlock = map[string]string{
 	// because a file guessing the dispatch tool's name would guess this one.
 	"Task": "advertised, never on the wire; the guess this test exists to catch",
 
-	// An Agent input key and a task_started field. primaryArg maps Agent to
-	// description, not prompt, so the airlock names one and not the other -
-	// and prompt is the obvious second key a renderer would reach for.
-	"prompt": "Agent input key the airlock does not read",
-
 	// control_request fields the decoder deliberately does not read.
 	"display_name":           "control_request field, deliberately not decoded",
 	"permission_suggestions": "control_request field, deliberately not decoded",

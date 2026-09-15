@@ -412,6 +412,19 @@ type SessionStatus struct {
 	// probe has answered. Not park-persisted: a woken session re-observes on init.
 	Model string `json:"model,omitempty"`
 
+	// ContextTokens and ContextWindow are how full the context is after the last
+	// turn - the input side of its final API call, and the window it ran against.
+	// The status bar draws them as `ctx:74%`. Here for Model's reason and by the
+	// same route: the figure rides a *result* frame (resultFacts), which the UI
+	// folds via withFacts and which keeps a connected client current, but a client
+	// that never witnessed one - a late attach, a board tile, a woken session that
+	// reports idle before its first turn - had no context to show and dropped the
+	// segment. This is the only route by which such a client learns it. The daemon
+	// keeps the last result's figures (its own > 0 guard, cleared on /clear); not
+	// park-persisted, since a woken session re-accounts on its next turn.
+	ContextTokens int `json:"context_tokens,omitempty"`
+	ContextWindow int `json:"context_window,omitempty"`
+
 	// Budget is the spend ceiling this session was started under, or "" for one
 	// with none. Here for Effort's reason and by the same route: nothing on
 	// Claude's wire reports a cap, so this is Wake's own memory of what it

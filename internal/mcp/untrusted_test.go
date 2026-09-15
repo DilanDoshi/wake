@@ -159,6 +159,17 @@ var agentAuthored = map[string]bool{
 	// rendered on this surface anyway (notInTheStatusReport). The verdict is here
 	// because every field needs one.
 	"PRs": true,
+
+	// ContextTokens and ContextWindow are how full the context is after the last
+	// result frame, and an agent has a path to both: the window follows the model
+	// it changes with /model (Model's footing one field over), and the used count
+	// follows the context it accumulates. Neither carries an arbitrary-value or
+	// forge-a-line vector - both are ints read from claude's structured result
+	// usage, so TestNoFieldCanForgeALineOnAnySurface skips them by kind - and
+	// neither is on this MCP surface (notInTheStatusReport). The verdict is here
+	// because every field needs one.
+	"ContextTokens": true,
+	"ContextWindow": true,
 }
 
 // Every field of the report has a provenance verdict.

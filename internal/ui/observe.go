@@ -101,7 +101,10 @@ func (a App) observe(sessionID string, ev core.Event) App {
 			// A peer's message, attributed to the sender rather than the
 			// receiving session (crossSpeaker resolves FromName), and not held by
 			// inDM: it is not the operator's own DM turn, so it belongs in the
-			// room whatever the receiver was last sent from.
+			// room whatever the receiver was last sent from. The receiver is this
+			// stream's own session (agent, resolved above), so the room heads the
+			// line "sender → recipient"; "" when unknown drops the arrow.
+			e.ToName = agent.Name
 			a = a.withRoom(a.room.Append(e, a.fleet.crossSpeaker(e.FromName)))
 		default:
 			// A turn held in a DM stays in the DM. Fleet.sending says which

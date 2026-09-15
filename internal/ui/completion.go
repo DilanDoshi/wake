@@ -15,22 +15,27 @@ package ui
 // frame is a comparison against the pane and the draft it was built for, which
 // is also what closes it.
 //
-// **The menu never takes `↵`, and it never takes `↑↓`.** ⇥ completes and
-// ⌃N/⌃P walk, all three read above App.key's switch the way cardKey and
-// pickerKey are - so they take no legend entry, and the menu advertises them on
-// itself. The menu arrives while somebody types rather than because they asked,
-// so it may not give the one irreversible key a second meaning.
+// **The menu never takes `↵`, but it takes `↑↓` to walk.** ⇥ completes, ↑↓ walk
+// the offers, and ⌃N/⌃P walk too as aliases - the ⌃ pair read above App.key's
+// switch the way cardKey and pickerKey are, ↑↓ in the KeyUp/KeyDown cases after
+// the cursor-move guard. None takes a legend entry, and the menu advertises the
+// keys on itself. What it may not take is `↵`: the menu arrives while somebody
+// types rather than because they asked, so it may not give the one irreversible
+// key a second meaning.
+//
+// ↑↓ are the menu's only when the text cursor has no row to move into - the
+// single-line `/`or`@` draft, which is the common case. On a multi-line draft the
+// arrow moves the cursor first (Composer.CanCursorUp, keys.go): a menu exists only
+// while the cursor is at the end of the word it describes, so `↑` there climbs off
+// the trailing token and closes the menu on the next rebuild rather than walking
+// the offers. Prompt history (keys.go) is what `↑↓` recall once the menu is gone.
 //
 // ⌃N/⌃P shadow the text area's own line keys, and that shadow is why the menu
 // is scoped to the **cursor** rather than to the trailing token: a menu claimed
 // by a `@` at the end of the buffer would take ⌃N/⌃P from every cursor position
 // in it. So a menu exists only while the cursor is at the end of the word it
 // describes: it costs one space - which closes the menu - and it buys back the
-// walk keys and the text area's own line movement. Plain ↑↓ are the roster's
-// only when the cursor cannot move within the draft (keys.go). Because a menu is
-// only up while the cursor is already at the end of the draft, ↑ there moves the
-// cursor up - off the trailing token, closing the menu on the next rebuild -
-// while ↓ has nowhere to go and stays the roster's.
+// walk keys and the text area's own line movement.
 
 import (
 	"fmt"
@@ -54,10 +59,11 @@ const (
 	// expensive.
 	moreFormat = "%d more - keep typing"
 
-	// completionKeys is what the menu advertises about itself. It is the only
-	// place these three are named: they are read above App.key's switch, so
-	// legendEntries neither holds them nor could.
-	completionKeys = "⇥ complete   ⌃N ⌃P walk"
+	// completionKeys is what the menu advertises about itself: ⇥ to accept and
+	// ↑↓ to walk. ⌃N/⌃P walk too and stay bound as aliases, unadvertised to keep
+	// the line short. None takes a legendEntries slot - the ⌃ pair are read above
+	// App.key's switch, and ↑↓ are the KeyUp/KeyDown cases' own.
+	completionKeys = "⇥ complete   ↑↓ walk"
 
 	// wordBreak is what ends the word being typed. One spelling for both stems:
 	// they were a literal space and a set of three, which agreed only because

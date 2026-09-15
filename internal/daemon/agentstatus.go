@@ -25,6 +25,8 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		Effort:         cmp.Or(a.confirmedEffort, a.effort),
 		ConfirmedModel: a.confirmedModel,
 		Model:          a.observedModel,
+		ContextTokens:  a.contextTokens,
+		ContextWindow:  a.contextWindow,
 		Budget:         a.budget,
 		Commands:       a.commands,
 		PRs:            slices.Clone(a.prs),

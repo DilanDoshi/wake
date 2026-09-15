@@ -324,6 +324,16 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		if s.Model != "" {
 			a.Model = s.Model
 		}
+		// The context figure rides a result frame (withFacts) for a connected
+		// client; the report backfills one that never saw it - the same route and
+		// guard as Model, so a report assembled before the daemon saw a result does
+		// not blank a figure the event stream already gave. See rpc.SessionStatus.ContextTokens.
+		if s.ContextWindow > 0 {
+			a.ContextWindow = s.ContextWindow
+		}
+		if s.ContextTokens > 0 {
+			a.ContextTokens = s.ContextTokens
+		}
 		// The report is the only route to these - and to PRs - for a client that
 		// attached after they were set. See rpc.SessionStatus.Commands.
 		a = a.withCommands(s.Commands).withPRs(s.PRs)

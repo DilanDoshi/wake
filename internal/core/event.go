@@ -647,6 +647,16 @@ type Event struct {
 	// envelope and empty on every other kind.
 	FromName string `json:"from_name,omitempty"`
 
+	// ToName is the receiving session's display name, so the room can head a
+	// KindCrossSession line "sender → recipient" rather than by the sender
+	// alone. Never set by the decoder - the envelope names only the sender - it
+	// is resolved from the receiving SessionID by the App that has the fleet
+	// (observe live, roomHistoryLines on a restore), and it is presentation
+	// only for FromRoom's reason: a wrong value mislabels a line and nothing
+	// keys on it. Empty when the receiver is unknown, which falls back to
+	// heading the line by the sender.
+	ToName string `json:"to_name,omitempty"`
+
 	Text string    `json:"text,omitempty"`
 	Tool *ToolCall `json:"tool,omitempty"`
 

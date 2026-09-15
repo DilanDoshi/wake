@@ -311,11 +311,14 @@ func roomHistoryLines(events []core.Event, cutoff time.Time, agentOf func(string
 		for _, e := range out {
 			by := agentOf(ev.SessionID)
 			if e.Kind == core.KindCrossSession {
-				// The sender, not the receiving session. agentOf is keyed by id
-				// and a peer's id is not on the frame, so the restore heads it
-				// with the from-name alone - the identity colour the live path
-				// resolves through the fleet is the room's when it is drawn live,
-				// dropped on a restore where the sender may not be running.
+				// Head "sender → recipient". The receiving session is the
+				// transcript this frame came off (by, before the override); the
+				// sender is the from-name. agentOf is keyed by id and a peer's id
+				// is not on the frame, so the sender heads it with the from-name
+				// alone - the identity colour the live path resolves through the
+				// fleet is the room's when it is drawn live, dropped on a restore
+				// where the sender may not be running.
+				e.ToName = by.Name
 				by = Agent{Name: e.FromName}
 			}
 			lines = append(lines, roomLine{ev: e, by: by})

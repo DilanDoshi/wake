@@ -140,6 +140,14 @@ type agent struct {
 	// is the probe's display name and preferred when present.
 	observedModel string
 
+	// contextTokens and contextWindow are how full the context is after the last
+	// result frame - what the status bar draws as ctx. Carried on the report so a
+	// client that never witnessed the result they ride still shows it, the route
+	// observedModel takes. The used half is cleared on /clear (the window kept);
+	// display only. See rpc.SessionStatus.ContextTokens.
+	contextTokens int
+	contextWindow int
+
 	// pendingProbes counts effort-probe /model replies still expected; fanOut
 	// swallows a reply while it is positive. A counter rather than a bool
 	// because two probes can be in flight at once - two quick /effort changes,
@@ -239,6 +247,13 @@ type agent struct {
 
 	tool    string
 	toolArg string
+
+	// runningSubs is the set of agent dispatches (subagents) this session has
+	// running now, keyed on the task id. It is what forkSource refuses a fork on
+	// while a background subagent is still writing this session's transcript past
+	// its own turn end. Folded by trackSub - see subagenttrack.go.
+	runningSubs map[string]struct{}
+
 	stopped bool
 	ended   bool
 
@@ -372,6 +387,18 @@ func (a *agent) observe(ev core.Event) {
 		a.observedModel = ev.Session.Model
 	}
 
+	// How full the context is, off a result frame's usage, carried on the report
+	// for a client that never saw one. Only when a frame accounts for it: an init
+	// or a tool-use carries none, and blanking it once a turn would drop the
+	// segment the way the observedModel guard just above prevents. See
+	// rpc.SessionStatus.ContextTokens.
+	if ev.Session != nil && ev.Session.ContextWindow > 0 {
+		a.contextWindow = ev.Session.ContextWindow
+	}
+	if ev.Session != nil && ev.Session.ContextTokens > 0 {
+		a.contextTokens = ev.Session.ContextTokens
+	}
+
 	// A session opens a PR by running `gh pr create`, whose tool result prints
 	// the URL. Scraped off the decoded text of a result frame - never prose - and
 	// carried on the report. **This session's own**, not a subagent's: a forwarded
@@ -388,6 +415,11 @@ func (a *agent) observe(ev core.Event) {
 	// same gate tool activity takes above.
 	if ev.Kind == core.KindToolUse && ev.Tool != nil && ev.Tool.Loop != nil && ev.Subagent == nil {
 		a.loop = foldLoop(a.loop, *ev.Tool.Loop, time.Now())
+	}
+	// A dispatch's lifecycle, so forkSource can refuse a fork while a background
+	// subagent is still writing this session's transcript past its own turn end.
+	if ev.Task != nil {
+		a.trackSub(ev.Task)
 	}
 	// A dispatch's start is retained and its end forgets it, so runningTaskFrames
 	// hands a late client exactly what is still running. Keyed on task id like
@@ -414,14 +446,23 @@ func (a *agent) observe(ev core.Event) {
 		// memory was cleared. The successor is not on this frame - it arrives on
 		// the next one - so this only forgets, and the arm below relearns.
 		a.claudeID = ""
+		// The context figure describes the conversation /clear just emptied, so
+		// the used half goes with it - the UI's fleet.go reset. The window stays:
+		// the model, and so its window, is unchanged.
+		a.contextTokens = 0
 		// A dispatch from the pre-clear conversation is gone with it, so a late
 		// client must not have it replayed: the mirror of internal/ui's own
 		// Fleet.Observe dropping f.tasks on a reset. See taskreplay.go.
 		clear(a.runningTasks)
 	case core.KindToolUse:
-		// The sidebar's "what is this agent on". Not cleared by the tool's own
-		// result - see rpc.SessionStatus.Tool.
-		if ev.Tool != nil {
+		// The sidebar's "what is this agent on", and what stateLocked reads as a
+		// tool in flight. ev.Subagent==nil: a subagent's forwarded tool_use is not
+		// the parent's own turn, so a background subagent's tools must not put the
+		// parent back to StateWorking after its turn ended (the working line draws
+		// off it) or overwrite what the sidebar says the parent is on - the gate the
+		// rest of the tree takes on tool activity (ui/fold), and the prs/goal/loop
+		// folds above. Not cleared by the tool's own result - see rpc.SessionStatus.Tool.
+		if ev.Tool != nil && ev.Subagent == nil {
 			a.tool, a.toolArg = ev.Tool.Name, ev.Tool.Display
 		}
 	case core.KindPermissionRequest:
@@ -455,7 +496,11 @@ func (a *agent) observe(ev core.Event) {
 	case core.KindTurnEnd:
 		// The turn is closed, so nothing is owed. A denied tool still ends
 		// its turn normally, which is why this is keyed on the turn end and
-		// not on anything about how the turn went.
+		// not on anything about how the turn went. This is always the
+		// parent's own turn: KindTurnEnd is built only from a result frame
+		// (protocol.go), which never carries Subagent, so a background
+		// subagent's frames cannot close a turn - runningSubs tracks it
+		// instead, and the KindToolUse gate above keeps it from reopening one.
 		//
 		// It clears the ask too, and that is a backstop rather than the
 		// route: an ask this daemon never saw withdrawn is dead by the time
