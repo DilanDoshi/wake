@@ -97,6 +97,11 @@ const (
 	// heads the sender's name in the sender's own colour.
 	crossSessionLead = "↪ "
 
+	// crossSessionArrow joins the sender to the receiving session so a peer
+	// message reads "planner → sydney" - a directed message, not the sender's
+	// own room turn. Dropped when the receiver is unknown (ToName is "").
+	crossSessionArrow = " → "
+
 	// collapsedFormat is the pointer's last line: how much there is, and the
 	// key that opens it. collapsedNoCount is the same line without the figure,
 	// for a response that carried no token count - the figure is dropped rather
@@ -146,7 +151,7 @@ func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 	case core.KindAssistantText:
 		return block{text: agentSaid(ev.Text, ev.OutputTokens, a, w, expanded)}
 	case core.KindCrossSession:
-		return block{text: crossSaid(ev.Text, a, w, expanded)}
+		return block{text: crossSaid(ev.Text, ev.ToName, a, w, expanded)}
 	case core.KindUserText:
 		return block{text: youSaid(ev.Text, w)}
 	case core.KindTurnEnd:
@@ -186,10 +191,15 @@ func agentSaid(text string, count int, a Agent, width int, expanded bool) string
 
 // crossSaid draws a peer's cross-session message: the sender's name-tag with a
 // lead marking it as a message from another session - so it is not mistaken for
-// the sender's own turn in the room - then the body, folded past roomInlineRows
-// the way a reply is. No token count: a peer message is not this fleet's spend.
-func crossSaid(text string, a Agent, width int, expanded bool) string {
-	head := speakerStyle(a).MaxWidth(width).Render(crossSessionLead + speaker(a))
+// the sender's own turn in the room - the receiving session after an arrow when
+// it is known (toName), then the body, folded past roomInlineRows the way a
+// reply is. No token count: a peer message is not this fleet's spend.
+func crossSaid(text, toName string, a Agent, width int, expanded bool) string {
+	name := crossSessionLead + speaker(a)
+	if toName != "" {
+		name += crossSessionArrow + toName
+	}
+	head := speakerStyle(a).MaxWidth(width).Render(name)
 	return saidBlock(head, text, "", width, expanded)
 }
 

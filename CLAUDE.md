@@ -802,11 +802,18 @@ the envelope reaches only the recipient's on-disk transcript, so the room — fe
 never saw it; with the flag it replays live as a `user` frame carrying the envelope. So Wake now emits
 the flag (`argv.go`), the airlock resolves the envelope to `core.KindCrossSession` (`wire.go`'s
 `crossSession`, one decoder for the live stream and the transcript both), and the room admits it
-(`fold`) attributed to the **sender** — `Fleet.crossSpeaker` resolves `from-name` to a fleet agent for
-its identity colour, else a bare name for an outside session — with a `↪` lead so it reads apart from
-the sender's own room turn, folded past `roomInlineRows` like a reply. It survives a room restore
-too: `collapseBroadcasts` keeps a `KindCrossSession` line unconditionally (a first-class room event,
-not agent prose gated by an open broadcast) and `roomHistoryLines` heads it with the sender.
+(`fold`) headed **`↪ sender → recipient`** — `Fleet.crossSpeaker` resolves `from-name` to a fleet
+agent for the sender's identity colour (else a bare name for an outside session), and the **recipient
+is this stream's own session**, resolved to its fleet name and carried on the presentation-only
+`core.Event.ToName` (`observe`), so the line reads `↪ planner → sydney` and is not mistaken for the
+sender's own room turn — folded past `roomInlineRows` like a reply. The receiver is named because a
+peer message the room shows once, attributed to the sender alone, read like the sender just spoke in
+the room; the arrow says who it was *for* (owner's report, `<agent_name>` was missing). The arrow is
+**dropped when the receiver is unknown** (`ToName` empty), falling back to the sender alone. It
+survives a room restore too: `collapseBroadcasts` keeps a `KindCrossSession` line unconditionally (a
+first-class room event, not agent prose gated by an open broadcast) and `roomHistoryLines` heads it
+`sender → recipient`, the receiver being the transcript the frame came off (`ToName`, before the
+sender override).
 **The discriminator is the envelope on *string* content, not a wire flag:** `crossSession` fires only
 where a user frame's content is a bare string — which is what Claude injects a peer message as — and
 never on the array content `EncodeUserMessage` writes, so a message that merely *contains* the
@@ -1042,7 +1049,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Reading the **room** back off the same disk | `internal/ui/roomhistory.go` — `roomHistoryLines` (the merge, the filter, the broadcast rule), `roomAsk` (the room's own ledger) · `internal/ui/chat.go` — `Room.Before` |
 | Narrowing the room to one agent's thread | `internal/ui/roomfocus.go` — `focusAdmits` (pure, id-comparison) · `internal/ui/chat.go` — `Room.focus`/`WithFocus`, `narrowed`/`narrowDefault`, the `roomLine.to` stamp, the subset render (a hidden line stays in `said` at `rows == 0`) · `internal/ui/send.go` — `retarget` sets focus off the composer's lone direct `@name`, and stamps `to` on the echo |
 | Toggling that narrowing off | `internal/ui/roomfilter.go` — `Room.effectiveFocus` (the id the render paths filter on), `ToggleNarrow` (`⌃A`, the per-target override), `WithNarrowDefault`, `App.toggleRoomFilter` (the key, with its two refusals) and `App.groupchatFilter` (the `/groupchat-filter on\|off` default) · `roomfilter_test.go` |
-| A peer's cross-session message | `internal/core/wire.go` — `crossSession` (the envelope recogniser, beside the wire shapes it is one of) · `internal/core/event.go` — `KindCrossSession`, `FromName`/`FromAddr` · `internal/ui/fleet.go` — `fold`'s admit · `internal/ui/fleetquery.go` — `Fleet.crossSpeaker` (sender attribution) · `internal/ui/observe.go` — the room append and `replayedOwnSend` (the DM single-source) · `internal/ui/chat_blocks.go` — `crossSaid`/`crossSessionLead`, `roomCollapsible` · `internal/ui/dm_blocks.go` — `crossSessionBlock` · `internal/ui/crosssession_test.go` · `testdata/{stream,transcript}/cross-session.jsonl` |
+| A peer's cross-session message | `internal/core/wire.go` — `crossSession` (the envelope recogniser, beside the wire shapes it is one of) · `internal/core/event.go` — `KindCrossSession`, `FromName` (the sender, decoder-set and contained), `ToName` (the recipient, App-set from the receiving session's validated fleet name, so excused in `contain.go`'s `notAuthoredByTheChild`) · `internal/ui/fleet.go` — `fold`'s admit · `internal/ui/fleetquery.go` — `Fleet.crossSpeaker` (sender attribution) · `internal/ui/observe.go` — the room append (resolves `ToName` from the receiving session) and `replayedOwnSend` (the DM single-source) · `internal/ui/chat_blocks.go` — `crossSaid`/`crossSessionLead`/`crossSessionArrow` (heads `sender → recipient`), `roomCollapsible` · `internal/ui/roomhistory.go` — the restore heads it `sender → recipient` · `internal/ui/dm_blocks.go` — `crossSessionBlock` · `internal/ui/crosssession_test.go` · `testdata/{stream,transcript}/cross-session.jsonl` |
 | ⎋, and the second one | `internal/ui/escape.go` — `escape`, `clearsOnEscape` (+ `escprobe_test.go` for what two escapes in one read actually are) |
 | The rewind picker: trigger, tree-aware read, receipt | `internal/ui/rewind.go` — `rewindArmable`, `RewindPicker`, `noteRewind` (the receipt fold and re-read) · `internal/core/activebranch.go` — `ActiveBranch`, the tree walk · `internal/daemon/rewindtargets.go` — `RewindTargets`, the daemon's own query behind `FrameRewindTargets` |
 | The manager's config and scope | `internal/daemon/manager.go` |

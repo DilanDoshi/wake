@@ -12,8 +12,9 @@ import (
 
 // The room comes back with the peer message after a restore. A cross-session
 // line is a first-class room event, not agent prose gated by an open broadcast,
-// so collapseBroadcasts must keep it and roomHistoryLines must head it with the
-// sender - the surface the feature exists for is the one a resume rebuilds.
+// so collapseBroadcasts must keep it and roomHistoryLines must head it
+// "sender → recipient" - the surface the feature exists for is the one a resume
+// rebuilds. The receiver is the transcript this frame came off (named("s1")).
 func TestACrossSessionMessageSurvivesARoomRestore(t *testing.T) {
 	r := restored([]core.Event{
 		{Kind: core.KindCrossSession, SessionID: "s1", FromName: "planner", Text: "rerun the build", At: base.Add(time.Second)},
@@ -22,8 +23,25 @@ func TestACrossSessionMessageSurvivesARoomRestore(t *testing.T) {
 	if !strings.Contains(out, "rerun the build") {
 		t.Errorf("a cross-session message was dropped on room restore:\n%s", out)
 	}
-	if !strings.Contains(out, "planner") {
-		t.Errorf("the restored cross-session line is not attributed to the sender:\n%s", out)
+	if !strings.Contains(out, "planner → agent-s1") {
+		t.Errorf("the restored cross-session line is not headed sender → recipient:\n%s", out)
+	}
+}
+
+// The room names both ends of a peer message: the sender who wrote it and the
+// receiving session it reached, sender first - so it reads as "planner → sydney",
+// a directed message, rather than as planner's own room turn.
+func TestTheRoomNamesSenderAndRecipientOfACrossSessionMessage(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 40).withAgents("planner", "sydney")
+	// s2 is sydney, the receiver whose stream carried the envelope; planner sent it.
+	a = a.observe("s2", core.Event{Kind: core.KindCrossSession, SessionID: "s2", FromName: "planner", Text: "rerun the build"})
+
+	out := ansi.Strip(a.View())
+	if !strings.Contains(out, "planner → sydney") {
+		t.Errorf("room cross-session line should name sender → recipient (\"planner → sydney\"):\n%s", out)
+	}
+	if !strings.Contains(out, "rerun the build") {
+		t.Errorf("body missing from the room:\n%s", out)
 	}
 }
 
@@ -40,9 +58,9 @@ func TestCrossSpeakerMatchesFleetElseSynthesizes(t *testing.T) {
 	}
 }
 
-// The room line is the sender's, not the receiving session's: a peer's message
-// arriving at sydney is headed by planner, who sent it.
-func TestObserveAttributesACrossSessionMessageToTheSender(t *testing.T) {
+// The sender still heads the line, before the recipient: a peer's message
+// arriving at sydney reads "↪ planner → sydney", not "↪ sydney → planner".
+func TestACrossSessionLineIsHeadedByTheSenderNotTheReceiver(t *testing.T) {
 	a := newRoomApp(t).withSize(120, 40).withAgents("planner", "sydney")
 	a = a.observe("s2", core.Event{Kind: core.KindCrossSession, SessionID: "s2", FromName: "planner", Text: "rerun the build"})
 
@@ -57,14 +75,12 @@ func TestObserveAttributesACrossSessionMessageToTheSender(t *testing.T) {
 	if head == "" {
 		t.Fatalf("no cross-session line in the room:\n%s", out)
 	}
-	if !strings.Contains(head, "planner") {
-		t.Errorf("cross-session line not headed by the sender: %q", head)
+	sender, receiver := strings.Index(head, "planner"), strings.Index(head, "sydney")
+	if sender < 0 || receiver < 0 {
+		t.Fatalf("cross-session head should name both ends, got %q", head)
 	}
-	if strings.Contains(head, "sydney") {
-		t.Errorf("cross-session line headed by the receiver, not the sender: %q", head)
-	}
-	if !strings.Contains(out, "rerun the build") {
-		t.Errorf("body missing from the room:\n%s", out)
+	if sender > receiver {
+		t.Errorf("the sender must head the line, before the recipient: %q", head)
 	}
 }
 
@@ -78,16 +94,25 @@ func TestFoldAdmitsACrossSessionMessageToTheRoom(t *testing.T) {
 	}
 }
 
-// The room heads the line with the sender's name and carries what the peer
-// wrote - the owner's ask: "the color and name of that agent and their message".
-func TestTheRoomHeadsACrossSessionMessageWithTheSender(t *testing.T) {
-	ev := core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}
+// The room heads the line "sender → recipient" and carries what the peer wrote.
+// With no ToName - an outside receiver the fleet can't name - it falls back to
+// heading by the sender alone rather than drawing a dangling arrow.
+func TestTheRoomHeadsACrossSessionMessageSenderThenRecipient(t *testing.T) {
+	ev := core.Event{Kind: core.KindCrossSession, FromName: "planner", ToName: "sydney", Text: "rerun the build"}
 	b := roomBlock(ev, Agent{Name: "planner"}, 60, false)
-	if !strings.Contains(b.text, "planner") {
-		t.Errorf("room block does not name the sender: %q", b.text)
+	if !strings.Contains(b.text, "planner → sydney") {
+		t.Errorf("room block does not head sender → recipient: %q", b.text)
 	}
 	if !strings.Contains(b.text, "rerun the build") {
 		t.Errorf("room block does not carry the body: %q", b.text)
+	}
+
+	noRecv := roomBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}, Agent{Name: "planner"}, 60, false)
+	if !strings.Contains(noRecv.text, "planner") {
+		t.Errorf("room block does not name the sender when the receiver is unknown: %q", noRecv.text)
+	}
+	if strings.Contains(noRecv.text, crossSessionArrow) {
+		t.Errorf("room block drew a dangling arrow with no recipient: %q", noRecv.text)
 	}
 }
 
