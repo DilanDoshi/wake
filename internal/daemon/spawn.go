@@ -369,6 +369,22 @@ func (s *server) forkSource(parentID string) (rpc.SessionStatus, error) {
 		if why := forkRefusal(p); why != "" {
 			return rpc.SessionStatus{}, errors.New(why)
 		}
+		// forkRefusal reads State/Name/ID alone (forkgate_test.go) and cannot see
+		// a background subagent: the parent's own turn has ended, so it reports
+		// idle while the subagent's frames still write its transcript. Forking
+		// that is the unrecorded concurrent-flush case forkRefusal refuses a
+		// working parent for, so it is refused here, off the live agent. Only for
+		// idle: an ended or parked parent's process is gone, so nothing is writing.
+		if p.State == rpc.StateIdle {
+			if a, ok := s.agent(parentID); ok && a.hasRunningSubagent() {
+				who := p.Name
+				if who == "" {
+					who = p.ID
+				}
+				return rpc.SessionStatus{}, errors.New(who + " has a background subagent still running. " +
+					"Fork it when the subagent finishes, or stop the turn first.")
+			}
+		}
 		if p.Dir == "" {
 			return rpc.SessionStatus{}, fmt.Errorf("this daemon does not know where session %s ran, and a fork has to run there: "+
 				"claude locates a transcript by the directory it was started in", parentID)

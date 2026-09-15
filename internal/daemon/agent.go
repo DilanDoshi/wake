@@ -229,6 +229,17 @@ type agent struct {
 	pending []ask
 	tool    string
 	toolArg string
+
+	// runningSubs is the set of agent dispatches (subagents) with a transcript
+	// of their own that this session has running now, keyed on the task id. A
+	// background subagent streams past the parent's own turn end, so the parent
+	// reads idle - its working line off (see the KindToolUse gate) - while the
+	// subagent's frames still write the conversation. forkSource refuses a fork
+	// while one is live, because forking a transcript a subagent is still writing
+	// is unrecorded. Agent tasks only: a shell forwards nothing into the parent's
+	// conversation. Folded by trackSub.
+	runningSubs map[string]struct{}
+
 	stopped bool
 	ended   bool
 
@@ -378,6 +389,11 @@ func (a *agent) observe(ev core.Event) {
 	if ev.Kind == core.KindToolUse && ev.Tool != nil && ev.Tool.Loop != nil && ev.Subagent == nil {
 		a.loop = foldLoop(a.loop, *ev.Tool.Loop, time.Now())
 	}
+	// A dispatch's lifecycle, so forkSource can refuse a fork while a background
+	// subagent is still writing this session's transcript past its own turn end.
+	if ev.Task != nil {
+		a.trackSub(ev.Task)
+	}
 
 	switch ev.Kind {
 	case core.KindSessionReset:
@@ -433,7 +449,11 @@ func (a *agent) observe(ev core.Event) {
 	case core.KindTurnEnd:
 		// The turn is closed, so nothing is owed. A denied tool still ends
 		// its turn normally, which is why this is keyed on the turn end and
-		// not on anything about how the turn went.
+		// not on anything about how the turn went. This is always the
+		// parent's own turn: KindTurnEnd is built only from a result frame
+		// (protocol.go), which never carries Subagent, so a background
+		// subagent's frames cannot close a turn - runningSubs tracks it
+		// instead, and the KindToolUse gate above keeps it from reopening one.
 		//
 		// It clears the ask too, and that is a backstop rather than the
 		// route: an ask this daemon never saw withdrawn is dead by the time
@@ -448,6 +468,40 @@ func (a *agent) observe(ev core.Event) {
 		// flicker at the rate a busy agent works.
 		a.tool, a.toolArg = "", ""
 	}
+}
+
+// trackSub folds one dispatch-lifecycle frame into the running-subagent set.
+// The caller holds a.mu.
+//
+// Keyed on phase, not status: task_started is the only frame that carries the
+// kind and the dispatch, so membership is decided when the dispatch opens (an
+// agent with a transcript of its own - ui.Task.Openable's predicate) and the id
+// alone retires it, since an ending frame names neither. A progress frame is
+// neither phase and leaves the row as task_started set it. This is the daemon's
+// own liveness track, the running-and-openable subset of ui.Tasks; the daemon
+// owns liveness, the UI owns the row.
+func (a *agent) trackSub(u *core.TaskUpdate) {
+	switch u.Phase {
+	case core.TaskStarted:
+		if u.Kind == core.TaskAgent && u.Dispatch != "" {
+			if a.runningSubs == nil {
+				a.runningSubs = make(map[string]struct{})
+			}
+			a.runningSubs[u.ID] = struct{}{}
+		}
+	case core.TaskEnded:
+		delete(a.runningSubs, u.ID)
+	}
+}
+
+// hasRunningSubagent reports whether an agent dispatch with a transcript of its
+// own is still running - the fact forkSource refuses a fork on. Read on the
+// client goroutine while observe writes the set on the fan-out one, so it takes
+// the lock.
+func (a *agent) hasRunningSubagent() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return len(a.runningSubs) > 0
 }
 
 // noteSent records that Wake asked for a turn, which is what makes a later

@@ -582,6 +582,51 @@ same treatment the class (BUG-3/6/7/15/29) got. Safe in the window: the record i
 
 ---
 
+## BUG-37 — the working line beats on while only a *background subagent* runs (BUG-35's inverse, on the daemon side)
+
+**Reported 2026-09-14**, with a screenshot: `✻ Fossicking… (1m 17s)` beating in a DM whose own turn
+had ended, with a background subagent (`opus48-worker`) still running beneath it. Where BUG-35 was the
+*done* line standing while a background subagent worked, this is the *working* line beating after the
+parent is done — the same background-subagent path, seen from the state that precedes `doneAt`.
+
+**Root cause: the daemon attributed a subagent's forwarded `tool_use` to the parent.** `agent.observe`
+set `a.tool`/`a.toolArg` from every `KindToolUse` frame, without the `ev.Subagent==nil` gate the rest
+of the tree takes on tool activity (`ui/fold`, and this same function's `prs`/`goal`/`loop` folds).
+Wake spawns with `--forward-subagent-text`, so a background subagent's tool calls arrive as ordinary
+`KindToolUse` frames with `Subagent!=nil`. BUG-36 made `stateLocked` read `a.tool != ""` as
+`StateWorking`; so although the parent's own `KindTurnEnd` cleared `a.tool`, each subsequent forwarded
+subagent tool call re-set it and flipped the parent back to `working`, and the working line drew off
+`StateWorking`. Confirmed against `testdata/stream/subagent-background.jsonl`: `task_started`
+(`local_agent`) at frame 14, the parent's `result` (turn end) at 29, then forwarded subagent tool
+frames 30–76 — each of which re-set `a.tool` before the fix.
+
+**Fix, part 1 (`internal/daemon/agent.go`).** Gate the `KindToolUse` assignment on `ev.Subagent==nil`,
+matching the tree's rule: a subagent's tool is not the parent's own turn. The parent now reads idle
+once its turn ends; the working line stops, and BUG-35's `showsDone`/`!subRunning` already keeps the
+done line hidden too, so the pane goes quiet with the subagent in the sidebar — Claude Code's own
+behavior.
+
+**Fix, part 2 (the fork consequence the owner chose to keep).** Reporting the parent idle relaxed a
+*second* gate: `forkRefusal` refuses `working`/`blocked`/`silent`, so ⌃F fork — previously refused
+throughout a background dispatch *because the parent misreported as working* — was now permitted while
+the subagent still wrote the parent's transcript. That incidental refusal was itself a symptom of the
+bug, but forking a transcript a subagent is concurrently writing is the unrecorded concurrent-flush
+case `forkRefusal` refuses a working parent for. `forkRefusal` reads State/Name/ID alone
+(`forkgate_test.go`) and cannot see a subagent, so the guard lives in `forkSource`, off the live
+agent: a per-agent `runningSubs` set folded from the dispatch lifecycle (`trackSub`, keyed on
+`TaskStarted`/`TaskEnded` phase — the running-and-openable subset of `ui.Tasks`, agent tasks only,
+since a shell forwards nothing into the parent's conversation), and `forkSource` refuses an idle
+parent with a live one, pointing the operator at waiting or stopping the turn. Scoped to `StateIdle`:
+an ended or parked parent's process is gone, so nothing is writing.
+
+**Caveat carried, not fixed** (BUG-35's, shared for the same reason). A dispatch that never gets its
+terminal task frame — dropped in a gap, or an unrecorded subagent-failure path — leaves a stale
+`runningSubs` entry, so the fork stays refused until the agent's next turn or a park. `runningSubs`
+has the same fidelity as the sidebar's `RunningTasks`, which retires a row only on a frame; the trade
+errs toward refusing a fork rather than shipping one whose contents are unknown.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
