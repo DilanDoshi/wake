@@ -51,6 +51,25 @@ func TestABackgroundShellIsNotTrackedAsARunningSubagent(t *testing.T) {
 	}
 }
 
+// Two concurrent subagents are two ids: the set is keyed on the task id, so one
+// ending leaves the parent guarded while the other runs. The recorded shape is
+// testdata/stream/subagent-parallel.jsonl.
+func TestTwoConcurrentSubagentsAreTrackedIndependently(t *testing.T) {
+	a := newAgent(idAlpha, "alex", "dev", "/repo/api", "", nil, func() {})
+	a.observe(core.Event{Task: &core.TaskUpdate{ID: "t1", Kind: core.TaskAgent, Dispatch: "toolu_1", Phase: core.TaskStarted, Status: core.TaskRunning}})
+	a.observe(core.Event{Task: &core.TaskUpdate{ID: "t2", Kind: core.TaskAgent, Dispatch: "toolu_2", Phase: core.TaskStarted, Status: core.TaskRunning}})
+
+	a.observe(core.Event{Task: &core.TaskUpdate{ID: "t1", Phase: core.TaskEnded, Status: core.TaskDone}})
+	if !a.hasRunningSubagent() {
+		t.Fatal("one of two concurrent subagents ended and the parent is unguarded, but the other is still running")
+	}
+
+	a.observe(core.Event{Task: &core.TaskUpdate{ID: "t2", Phase: core.TaskEnded, Status: core.TaskDone}})
+	if a.hasRunningSubagent() {
+		t.Fatal("both subagents ended and the parent is still guarded")
+	}
+}
+
 // The gate itself: an idle parent with a live background subagent is refused,
 // and forkable again the moment the subagent ends.
 func TestAForkIsRefusedWhileABackgroundSubagentRuns(t *testing.T) {

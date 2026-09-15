@@ -1024,6 +1024,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Test-only parent-death lease | `internal/daemon/lease_*.go` — inherited pipe EOF cancels `Serve`; normal product daemons receive no lease |
 | Accept loop, dispatch, shutdown | `internal/daemon/server.go` — `quitVerb`, `beginQuit`, `reconsiderEmptyExit`, `shutdown` |
 | One supervised session, liveness policy | `internal/daemon/agent.go` — `stateLocked` |
+| Which dispatches a session has running, for fork-safety | `internal/daemon/subagenttrack.go` — `trackSub`, `hasRunningSubagent` (the running-and-openable subset of `ui.Tasks`; `forkSource` refuses a fork off it while a background subagent still writes the parent's transcript) · `forksubagent_test.go` |
 | One agent's stdin path: queue, drain, apply | `internal/daemon/apply.go` — `submit`, `serveInput`, `apply` |
 | Spawn, fork, wake, watchdog | `internal/daemon/spawn.go` — `launch`, `forkRefusal`, `admit` |
 | Fan-out: one session's events to every client | `internal/daemon/fanout.go` — `fanOut`, where the effort probe's reply is consumed (`absorbProbe`) and the startup probe fires (`firstInit`). Split from `spawn.go` to keep it under the hard max |

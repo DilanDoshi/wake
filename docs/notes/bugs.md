@@ -619,11 +619,19 @@ since a shell forwards nothing into the parent's conversation), and `forkSource`
 parent with a live one, pointing the operator at waiting or stopping the turn. Scoped to `StateIdle`:
 an ended or parked parent's process is gone, so nothing is writing.
 
-**Caveat carried, not fixed** (BUG-35's, shared for the same reason). A dispatch that never gets its
-terminal task frame — dropped in a gap, or an unrecorded subagent-failure path — leaves a stale
-`runningSubs` entry, so the fork stays refused until the agent's next turn or a park. `runningSubs`
-has the same fidelity as the sidebar's `RunningTasks`, which retires a row only on a frame; the trade
-errs toward refusing a fork rather than shipping one whose contents are unknown.
+**Two residuals, documented not fixed** (found by the adversarial review). **(1) A missing terminal
+frame leaves a stale entry.** A dispatch that never gets its `task_ended` — dropped in a gap, or an
+unrecorded subagent-failure path — leaves a stale `runningSubs` entry, so a fork of that idle parent
+stays refused **until the session is parked or ends**; nothing else reconciles the set, and a later
+parent turn does *not* clear it (only `TaskEnded` does). This is the same fidelity the sidebar's
+`RunningTasks` already ships with — it too retires a row only on a frame — and the trade errs toward
+refusing a fork rather than shipping one whose contents are unknown. **(2) The parent's own completion
+turn is not covered.** After the subagent's `task_ended`, the parent often writes a completion turn
+reacting to it; that turn is **unowed and toolless, so it reads idle** (`stateLocked`'s own residual,
+BUG-36), and this guard — which tracks the *subagent*, now finished and no longer writing — does not
+extend to it. A fork in that brief window is the general "forking a parent mid-unowed-turn" gap
+`forkRefusal` has always had for `--brief`, not the subagent-write hazard this guard closes; covering
+it would mean solving the unowed-turn-reads-idle problem the owner scoped out in BUG-36.
 
 ---
 
