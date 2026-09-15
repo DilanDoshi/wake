@@ -9,7 +9,9 @@ package ui
 // back and ↓ walks forward, and the roster moved to ⇧↑↓ (keys.go). On a
 // multi-line draft the arrow moves the text cursor instead - the recall is
 // only offered when the cursor has nowhere to climb, Composer.CanCursorUp's
-// job. ⌥↑↓ carry no binding of their own: bubbletea reports ⌥↑ as tea.KeyUp
+// job. And before either, a completion menu that is up takes ↑↓ to walk its
+// offers (completion.go), so the recall is what the arrows mean once the menu
+// is gone. ⌥↑↓ carry no binding of their own: bubbletea reports ⌥↑ as tea.KeyUp
 // with Alt set and App.key's switch is on m.Type alone, so a ⌥ arrow behaves
 // exactly as the bare one does.
 //

@@ -116,7 +116,9 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	a = a.disarmed()
 	// Below the disarm and above the switch: ⇥ finishes a word being typed
 	// before it moves the keys to another pane, and ⌃N/⌃P walk the offers. Only
-	// while a menu is up, and it claims neither ↑↓ nor ↵ - see completion.go.
+	// while a menu is up. ↑↓ walk it too, but through the KeyUp/KeyDown cases
+	// below - after the cursor-move guard, so a multi-line draft keeps its line
+	// keys; ↵ still sends. See completion.go.
 	if next, cmd, handled := a.completionKey(m); handled {
 		return next, cmd, true
 	}
@@ -199,10 +201,20 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if a.composer().CanCursorUp() {
 			return a, nil, false
 		}
+		// A single-line `/`or`@` draft has no row to climb, so the menu owns ↑↓
+		// while it is up - the walk ⌃N/⌃P also do, and ⇥ accepts. Prompt history
+		// returns once the menu closes. Below CanCursorUp, so a multi-line draft
+		// keeps its line keys. See completion.go.
+		if a.completionUp() {
+			return a.walkCompletion(-1), nil, true
+		}
 		return a.walkPrompts(1)
 	case tea.KeyDown:
 		if a.composer().CanCursorDown() {
 			return a, nil, false
+		}
+		if a.completionUp() {
+			return a.walkCompletion(1), nil, true
 		}
 		return a.walkPrompts(-1)
 	case tea.KeyCtrlD:

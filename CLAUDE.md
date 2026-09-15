@@ -73,7 +73,7 @@ An agent is a headless `claude` process in stream-json mode with a Wake-assigned
 | `/manager-stop` | The ending, where `/manager` only parks: `rpc.FrameStop`, so the name goes back to the pool and the next `/manager` starts a fresh one. Refuses a **parked** manager (a stop reaches only a session with a process) and refuses when there is none |
 | `/quit` | `/manager-stop` for an ordinary agent: `rpc.FrameStop` ends one session (irreversible, releases the name), and this window **drops its row** once the report confirms the ending — off the roster, the group chat, the ⇥ ring and the sidebar. Bare `/quit` ends the conversation you are in; `@who /quit` from the room ends that agent (the same mention→target bridge `/color` takes). The stop lets the in-flight turn finish, so a busy agent stays until it ends. Reaches a **blocked** agent (a stop has no wake — `/manager-stop`'s inversion of ⌃C); refuses a **parked** one with advice; **refuses the manager** and points at `/manager-stop`, which is its one ending. The daemon still keeps the ended row in its recent ring, so **another window shows the `·`** — the hide is per-window, since only the operator who typed it knows it ended |
 | `/reauth` | Recovery for a fleet-wide auth failure. A Max-plan OAuth token expires for every session at once; the ones that lose the shared-credential refresh race hold a dead login and every turn ends `401` — an **upstream Claude Code bug** (#48786), not Wake's, triggered because Wake runs 15–30 concurrent sessions. A running `claude` process never picks up a fresh token, so an external `/login` cannot heal a live one. So the airlock decodes the synthetic API-error frame to `core.KindAPIError` (**not** agent text — `is_api_error_message`, not `api_error_status`, which is null), `observe` pops a notice and marks the session, and `/reauth` **parks the marked sessions in place** (stopping the stale process, keeping the transcript) so `/resume all` brings them back on a fresh login — no full-fleet kill. Wake never runs `claude auth login` (no-PTY). See `internal/ui/apierror.go`, `reauth.go`, `docs/notes/bugs.md` |
-| Inline completion | A draft whose word **at the cursor** starts a `/command` or an `@` offers what could finish it: the target session's own commands **and skills** (both ride in `init.slash_commands`), then Wake's own commands, then live agent names and paths under that session's directory. **The session's come first** (owner's 2026-08-28 override): Wake's fourteen verbs filling the bound first was a bare `/` that never showed the operator's own Claude Code skills — they sat in the "N more" overflow. Wake's follow, still reached by their first letters and shown whole whenever the session advertises fewer than the bound. **Behind a resolved lone `@name`, only that agent's own** — Wake's fleet verbs are not the addressed agent's. `⇥` completes · `⌃N`/`⌃P` walk · `↵` still sends. Move the cursor off that word and all three go back to the text area |
+| Inline completion | A draft whose word **at the cursor** starts a `/command` or an `@` offers what could finish it: the target session's own commands **and skills** (both ride in `init.slash_commands`), then Wake's own commands, then live agent names and paths under that session's directory. **The session's come first** (owner's 2026-08-28 override): Wake's fourteen verbs filling the bound first was a bare `/` that never showed the operator's own Claude Code skills — they sat in the "N more" overflow. Wake's follow, still reached by their first letters and shown whole whenever the session advertises fewer than the bound. **Behind a resolved lone `@name`, only that agent's own** — Wake's fleet verbs are not the addressed agent's. `⇥` completes · `↑↓` walk (on a single-line draft, where the cursor has no row to climb; a multi-line draft keeps the arrows for its own cursor) · `⌃N`/`⌃P` walk too, as aliases · `↵` still sends. Move the cursor off that word and the completion keys go back to the text area |
 | A lone `@name` in the room | **narrows the group chat to that agent's thread** — their lines, the manager's, every broadcast, and your own messages to them — for as long as it is the composer's target, widening again when the target changes or the draft clears. A *view* filter over the room's own, not a route or a mode: `@john hi` still routes and `@john /effort` still configures, open mode does not narrow (it widens the message, not the view), and the pane header reads `group chat › @john`. **`⌃A` overrides the narrowing per target** — it widens a narrowed room back to every agent while still addressing `@john`, and a second `⌃A` re-narrows; the override lives as long as the target does and resets to the default when the addressee changes or the draft clears. **`/groupchat-filter off` flips the default** so a lone `@name` no longer narrows and `⌃A` narrows on demand (`on` restores it, bare reports it) — window-scoped, so a fresh `wake` starts back at on, the shape `⌃T` mention mode takes |
 | Bare `/effort` · `/model` | Wake draws the menu claude cannot draw headless; with an argument they pass through untouched. The menu **names the value the session is already at** (`Picker.Current`): `/effort` opens the cursor on the current level and marks it (the options are the level words); `/model` shows the current model as a `current:` line rather than a mark, since a display name does not reverse-map to one of the aliases offered |
 | A dispatch ending | Leaves one line in the conversation — `● Subagent "Counting lines" finished · 24s` — coloured by outcome. The `⏺ Agent(…)` tool call above it is the start marker, so there is no started line |
@@ -839,7 +839,7 @@ exempted by assertion. Anything with an argument passes through byte for byte. B
 `slash.go` because `TestNothingButTheRouterKnowsWhatASlashMeans` holds *what a leading slash means*
 to one file; a surface that must build a command takes `configureVerb` instead.
 
-**The completion menu offers; it never routes, and it never takes `↑↓` or `↵`.** Every `init` frame
+**The completion menu offers; it never routes, and it never takes `↵`.** Every `init` frame
 carries `slash_commands` — the session's own commands and the operator's `.claude/commands` files
 together, 133 across the corpus — and the airlock dropped the key until now. Decoded onto
 `core.SessionFacts` and folded onto `ui.Agent`, it is what the composer offers under a draft that
@@ -848,22 +848,25 @@ begins a `/command` or an `@`. **It rides the fleet report as well as the init e
 attached after an agent's init with an empty menu for it, so the report carries it too — the only
 route to a late attach, the same one `Effort` and `Budget` take. **It cannot decide routing** for `slash.go`'s own reason: the list is
 per session and arrives after the first frame, while a draft is judged per keystroke — a menu may be
-wrong about a machine that has started nothing, a fence may not. The keys are `⇥` to complete and
-`⌃N`/`⌃P` to walk, read above `App.key`'s switch the way `cardKey` and `pickerKey` are, so they take
-no legend entry and the menu advertises them on itself. The menu never takes `↑↓` or `↵`:
-the menu arrives while somebody types rather than because they asked, so it may not give the one
-irreversible key a second meaning. It is rebuilt on a keystroke and on a fleet report and never per
-frame.
+wrong about a machine that has started nothing, a fence may not. The keys are `⇥` to complete, `↑↓`
+to walk (on a single-line draft, where the cursor has no row to climb — a multi-line draft keeps the
+arrows for its own cursor), and `⌃N`/`⌃P` to walk too as aliases; the `⌃` pair are read above
+`App.key`'s switch the way `cardKey` and `pickerKey` are, the arrows in the `KeyUp`/`KeyDown` cases
+after the cursor-move guard, so none takes a legend entry and the menu advertises them on itself. The
+menu never takes `↵`: the menu arrives while somebody types rather than because they asked, so it may
+not give the one irreversible key a second meaning. It is rebuilt on a keystroke and on a fleet report
+and never per frame.
 
 **The menu belongs to a cursor and to a pane, and its directory read is not on the goroutine that
 draws.** All three were the trailing token of a string. **The cursor:** `⌃N`/`⌃P` shadow the text
 area's line keys, so a menu claimed by an `@` at the end of the buffer would take them from every
 cursor position in it. A menu exists only while the cursor is at the end of the word it
 describes (`Composer.AtEnd`), which is what the "it costs one space" trade always claimed. Plain `↑↓`
-walk the prompt history or move the cursor within the draft (see below), never the menu; because a
-menu is only up while the cursor is already at the end of its word, `↑` there either climbs to a line
-above — off the trailing token, closing the menu on the rebuild — or, on a single-line draft, recalls
-a prompt, and either way the menu is left to the offers.
+walk the menu while one is up and the cursor has no row to climb — the single-line `/`or`@` draft;
+because a menu is only up while the cursor is already at the end of its word, `↑` on a multi-line draft
+climbs to the line above instead — off the trailing token, closing the menu on the rebuild — and the
+arrows stay the text cursor's there. Prompt history and within-draft cursor movement (see below) are
+what `↑↓` mean once the menu is gone.
 **The pane:** `completion.pane` is the conversation it was built for, because two panes holding the
 same characters are not holding the same menu — two repositories with a `README.md` each completed
 one from the other, and that reference *resolves*. **The read:** `pathScanMax` bounds the entry count
@@ -1092,7 +1095,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | The menu Wake draws | `internal/ui/picker.go` — drawn through `cards_blocks.go`'s `optionRow` · `pickerCurrent` (the value the one target is already at, marked for `/effort` and lined for `/model`) |
 | The board: the fleet as one row per agent, or a tiled live wall | `internal/ui/board.go` — `/board`, an overview and never panes you *operate* (the owner's 2026-08-12 ruling, narrowed 2026-08-27 for the tile view, guardrail 2 revised 2026-09-01 to a transcript window); drawn instead of the grid, closed by any key it does not claim · `internal/ui/boardtile.go` — the tile render (each tile a live transcript window, `tileMiddle`) and grid geometry, toggled by `⇥` |
 | The tiled board's per-tile transcripts | `internal/ui/boardtranscript.go` — `App.boardDMs`/`boardHistoryAsked`, `ensureBoardDMs`, `foldBoard`, `boardHistoryArrived`; one rendered DM per on-screen tile, seeded from disk (the shared `FrameHistory` wire) and fed live, dropped whole on close. `DM.transcriptWindow` (in `boardtranscript.go`) so no glamour runs per frame — `board.go`'s revised guardrail 2, `docs/superpowers/specs/2026-09-01-board-tile-transcripts-design.md` |
-| Inline completion, and the directory read that is not on the draw goroutine | `internal/ui/completion.go` — `completing`, `completionUp` (pane *and* draft), `completionKey` (⇥ · ⌃N/⌃P, read above `App.key`'s switch so they take no legend entry) · `completionpath.go` — `scanning`, `pathsScanned`, one directory, `pathScanMax` entries, one read at a time · `slash.go`'s `commandStem`/`wakeVerbs`, because only that file knows what a leading slash means |
+| Inline completion, and the directory read that is not on the draw goroutine | `internal/ui/completion.go` — `completing`, `completionUp` (pane *and* draft), `completionKey` (⇥ · ⌃N/⌃P, read above `App.key`'s switch so they take no legend entry; `↑↓` walk it too, in keys.go's `KeyUp`/`KeyDown` after the cursor-move guard) · `completionpath.go` — `scanning`, `pathsScanned`, one directory, `pathScanMax` entries, one read at a time · `slash.go`'s `commandStem`/`wakeVerbs`, because only that file knows what a leading slash means |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Hang-up and the way back | `internal/ui/hangup.go` |
 | Attention derivation | `internal/ui/attention.go` (**not** `internal/core/attention.go`, which the spec names) |
