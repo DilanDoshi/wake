@@ -237,6 +237,13 @@ type agent struct {
 	pending []ask
 	tool    string
 	toolArg string
+
+	// runningSubs is the set of agent dispatches (subagents) this session has
+	// running now, keyed on the task id. It is what forkSource refuses a fork on
+	// while a background subagent is still writing this session's transcript past
+	// its own turn end. Folded by trackSub - see subagenttrack.go.
+	runningSubs map[string]struct{}
+
 	stopped bool
 	ended   bool
 
@@ -398,6 +405,11 @@ func (a *agent) observe(ev core.Event) {
 	if ev.Kind == core.KindToolUse && ev.Tool != nil && ev.Tool.Loop != nil && ev.Subagent == nil {
 		a.loop = foldLoop(a.loop, *ev.Tool.Loop, time.Now())
 	}
+	// A dispatch's lifecycle, so forkSource can refuse a fork while a background
+	// subagent is still writing this session's transcript past its own turn end.
+	if ev.Task != nil {
+		a.trackSub(ev.Task)
+	}
 
 	switch ev.Kind {
 	case core.KindSessionReset:
@@ -416,9 +428,14 @@ func (a *agent) observe(ev core.Event) {
 		// the model, and so its window, is unchanged.
 		a.contextTokens = 0
 	case core.KindToolUse:
-		// The sidebar's "what is this agent on". Not cleared by the tool's own
-		// result - see rpc.SessionStatus.Tool.
-		if ev.Tool != nil {
+		// The sidebar's "what is this agent on", and what stateLocked reads as a
+		// tool in flight. ev.Subagent==nil: a subagent's forwarded tool_use is not
+		// the parent's own turn, so a background subagent's tools must not put the
+		// parent back to StateWorking after its turn ended (the working line draws
+		// off it) or overwrite what the sidebar says the parent is on - the gate the
+		// rest of the tree takes on tool activity (ui/fold), and the prs/goal/loop
+		// folds above. Not cleared by the tool's own result - see rpc.SessionStatus.Tool.
+		if ev.Tool != nil && ev.Subagent == nil {
 			a.tool, a.toolArg = ev.Tool.Name, ev.Tool.Display
 		}
 	case core.KindPermissionRequest:
@@ -452,7 +469,11 @@ func (a *agent) observe(ev core.Event) {
 	case core.KindTurnEnd:
 		// The turn is closed, so nothing is owed. A denied tool still ends
 		// its turn normally, which is why this is keyed on the turn end and
-		// not on anything about how the turn went.
+		// not on anything about how the turn went. This is always the
+		// parent's own turn: KindTurnEnd is built only from a result frame
+		// (protocol.go), which never carries Subagent, so a background
+		// subagent's frames cannot close a turn - runningSubs tracks it
+		// instead, and the KindToolUse gate above keeps it from reopening one.
 		//
 		// It clears the ask too, and that is a backstop rather than the
 		// route: an ask this daemon never saw withdrawn is dead by the time
