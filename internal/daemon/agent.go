@@ -227,6 +227,16 @@ type agent struct {
 	// moment any single one was answered, while the CLI stayed stopped on the
 	// rest. See ask, and rpc.SessionStatus.RequestIDs.
 	pending []ask
+
+	// runningTasks is the task_started event of each dispatch this session has
+	// not yet ended, keyed by task id. Retained only to hand a late client its
+	// running-dispatch rows: task_* frames are live-only (never on disk, never
+	// on the report), so a reattach or a second window has no other way to learn
+	// a subagent is running. See taskreplay.go and rpc.SessionStatus. A dispatch
+	// that never sends a terminal frame leaks one entry until a reset or retire,
+	// the bounded residual internal/ui's own Tasks.Rows() already carries.
+	runningTasks map[string]core.Event
+
 	tool    string
 	toolArg string
 	stopped bool
@@ -286,17 +296,18 @@ type agent struct {
 func newAgent(id, name, label, dir, parent string, sess *core.Session, cancel context.CancelFunc) *agent {
 	now := time.Now()
 	return &agent{
-		id:        id,
-		name:      name,
-		label:     label,
-		dir:       dir,
-		parent:    parent,
-		sess:      sess,
-		cancel:    cancel,
-		in:        make(chan pending, agentQueue),
-		gone:      make(chan struct{}),
-		started:   now,
-		lastEvent: now,
+		id:           id,
+		name:         name,
+		label:        label,
+		dir:          dir,
+		parent:       parent,
+		sess:         sess,
+		cancel:       cancel,
+		in:           make(chan pending, agentQueue),
+		gone:         make(chan struct{}),
+		started:      now,
+		lastEvent:    now,
+		runningTasks: make(map[string]core.Event),
 	}
 }
 
@@ -378,6 +389,18 @@ func (a *agent) observe(ev core.Event) {
 	if ev.Kind == core.KindToolUse && ev.Tool != nil && ev.Tool.Loop != nil && ev.Subagent == nil {
 		a.loop = foldLoop(a.loop, *ev.Tool.Loop, time.Now())
 	}
+	// A dispatch's start is retained and its end forgets it, so runningTaskFrames
+	// hands a late client exactly what is still running. Keyed on task id like
+	// the client's own fold; the started frame is what carries the Kind and
+	// Dispatch a sidebar row needs. See taskreplay.go.
+	if ev.Task != nil {
+		switch ev.Task.Phase {
+		case core.TaskStarted:
+			a.runningTasks[ev.Task.ID] = ev
+		case core.TaskEnded:
+			delete(a.runningTasks, ev.Task.ID)
+		}
+	}
 
 	switch ev.Kind {
 	case core.KindSessionReset:
@@ -391,6 +414,10 @@ func (a *agent) observe(ev core.Event) {
 		// memory was cleared. The successor is not on this frame - it arrives on
 		// the next one - so this only forgets, and the arm below relearns.
 		a.claudeID = ""
+		// A dispatch from the pre-clear conversation is gone with it, so a late
+		// client must not have it replayed: the mirror of internal/ui's own
+		// Fleet.Observe dropping f.tasks on a reset. See taskreplay.go.
+		clear(a.runningTasks)
 	case core.KindToolUse:
 		// The sidebar's "what is this agent on". Not cleared by the tool's own
 		// result - see rpc.SessionStatus.Tool.

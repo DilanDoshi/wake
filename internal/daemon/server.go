@@ -157,10 +157,12 @@ func (s *server) run(ctx context.Context, ln net.Listener) error {
 		}
 		c := newClient(conn)
 		c.enqueue(rpc.Frame{Kind: rpc.FrameHello})
-		// Subscribe first, then replay - an ask racing the replay is then
-		// delivered live too rather than missed. See replayPendingAsks.
+		// Subscribe first, then replay - an ask racing the replay, or a
+		// dispatch ending in the same window, is then delivered live too
+		// rather than missed. See replayPendingAsks and replayRunningTasks.
 		s.addClient(c)
 		s.replayPendingAsks(c)
+		s.replayRunningTasks(c)
 		if c.closed() {
 			continue
 		}
