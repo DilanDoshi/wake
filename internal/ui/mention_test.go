@@ -107,8 +107,21 @@ func TestAnOpenMentionReachesExactlyWhatAllReaches(t *testing.T) {
 		}})
 	}
 
+	// "Reaches" is addressed, not delivered-this-instant: a live target mid-turn
+	// takes the broadcast into its queue rather than to the wire (queue.go), so
+	// the reached set is what was sent plus what was queued. s1 is idle and sent
+	// now, so the write is never nil.
+	reached := func(a App, cmd tea.Cmd) []string {
+		ids := frameIDs(sentFrames(t, a, cmd))
+		for id := range a.queued {
+			ids = append(ids, id)
+		}
+		sort.Strings(ids)
+		return ids
+	}
+
 	a, cmd := pressKey(fleet().withDraft("@all ship it"), tea.KeyMsg{Type: tea.KeyEnter})
-	broadcast := frameIDs(sentFrames(t, a, cmd))
+	broadcast := reached(a, cmd)
 	if len(broadcast) < 3 {
 		t.Fatalf("@all reached %v: the fixture has to have a fleet, or this compares two empty lists", broadcast)
 	}
@@ -116,7 +129,7 @@ func TestAnOpenMentionReachesExactlyWhatAllReaches(t *testing.T) {
 	b := fleet()
 	b.mention = MentionOpen
 	b, cmd = pressKey(b.withDraft("@sydney ship it"), tea.KeyMsg{Type: tea.KeyEnter})
-	open := frameIDs(sentFrames(t, b, cmd))
+	open := reached(b, cmd)
 
 	if strings.Join(open, ",") != strings.Join(broadcast, ",") {
 		t.Errorf("an open mention reached %v and @all reaches %v. Open widens a mention to the fleet, and "+

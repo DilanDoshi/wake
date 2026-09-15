@@ -61,3 +61,10 @@ func (d DM) WithRunningSub(v bool) DM {
 	d.subRunning = v
 	return d
 }
+
+// WithQueued is the messages waiting for this agent, drawn as a pin above the
+// composer. See queue.go.
+func (d DM) WithQueued(texts []string) DM {
+	d.queued = texts
+	return d
+}

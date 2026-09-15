@@ -266,6 +266,9 @@ func (a App) dmFor(id string) DM {
 	// A subagent still running means the agent is not "done", even though fold
 	// left its doneAt standing (a subagent's frames are not the parent's turn).
 	d = d.WithRunningSub(len(a.fleet.RunningTasks(id)) > 0)
+	// The type-ahead pin, off App.queued so both View and transcriptRows measure
+	// the same chrome (queue.go).
+	d = d.WithQueued(a.queuedTexts(id))
 	return d.WithComposer(d.Composer().WithMode(a.modeOf(id)).WithArms(a.armsFor(id)))
 }
 

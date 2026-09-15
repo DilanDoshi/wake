@@ -791,3 +791,9 @@ func toolResultText(content json.RawMessage) string {
 	}
 	return strings.Join(parts, "\n\n")
 }
+
+// MessageEnded reports whether a KindMessageState says the message Wake sent is
+// over - completed or cancelled. Both free the wire for the next. See queue.go.
+func (e Event) MessageEnded() bool {
+	return e.Kind == KindMessageState && (e.Text == "completed" || e.Text == "cancelled")
+}

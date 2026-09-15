@@ -457,7 +457,7 @@ func TestAgentLauncherPropagatesTargetIOAndExit(t *testing.T) {
 	if err := s.Start(context.Background()); err != nil {
 		t.Fatalf("Start I/O target: %v", err)
 	}
-	if err := s.Send("supervisor stdin", nil); err != nil {
+	if err := s.Send("supervisor stdin", nil, ""); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 

@@ -334,6 +334,8 @@ type Frame struct {
 	// unchanged - the additive rule this frame's header states. The daemon
 	// hands them to core.Session.Send, which renders Claude's wire shape.
 	Images []core.ImageBlock `json:"images,omitempty"`
+	// MessageID is a FrameSend's stamped uuid, named by the CLI's command_lifecycle. See EncodeUserMessage.
+	MessageID string `json:"message_id,omitempty"`
 
 	Event *core.Event `json:"event,omitempty"`
 

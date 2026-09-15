@@ -321,7 +321,7 @@ func TestSendingAgainEndsTheLicenceToForgiveAnExitOne(t *testing.T) {
 	if _, err := s.Interrupt(); err != nil {
 		t.Fatalf("Interrupt: %v", err)
 	}
-	if err := s.Send("carry on, then", nil); err != nil {
+	if err := s.Send("carry on, then", nil, ""); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	if err := s.Stop(); err != nil {
@@ -346,7 +346,7 @@ func TestASendThatFailedDoesNotEndTheLicence(t *testing.T) {
 	}
 
 	s.stdin = errWriteCloser{err: errors.New("broken pipe")}
-	if err := s.Send("this goes nowhere", nil); err == nil {
+	if err := s.Send("this goes nowhere", nil, ""); err == nil {
 		t.Fatal("Send = nil on a stdin that refuses, want the write error")
 	}
 

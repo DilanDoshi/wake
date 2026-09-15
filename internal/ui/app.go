@@ -334,6 +334,12 @@ type App struct {
 	parking  map[string]struct{}
 	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
 
+	// queued is type-ahead waiting for each agent to be free, and inflight is the
+	// uuid of the message last sent it that has not completed - the signal shouldQueue
+	// and flushQueued turn on. Per window, copy-on-write like quitting. See queue.go.
+	queued   map[string][]queuedMsg
+	inflight map[string]string
+
 	// authFailed are sessions whose last turn failed on the API - an expired
 	// login, a rejected key, an overload (core.KindAPIError). observe marks each
 	// instead of letting the error render as agent speech; /reauth (reauth.go)
@@ -562,10 +568,13 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// heartbeat, which may need starting, and ⌃Q's ask, which this frame
 		// may have settled. See park.go's closing.
 		next := a.apply(m.Frame)
+		// A message held for an agent goes out if this frame freed it (inflight
+		// reconciled per report inside apply, or a completed lifecycle in observe).
+		next, flush := next.flushQueued()
 		next, cmd := next.beat()
 		next, rl := next.armRateLimitClear()
 		next, park := next.autoParkStalled()
-		return next, tea.Batch(cmd, rl, park, next.closing())
+		return next, tea.Batch(flush, cmd, rl, park, next.closing())
 
 	case heartbeatMsg:
 		return a.beatArrived()
@@ -665,6 +674,10 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 	for _, f := range m.frames {
 		a = a.apply(f)
 	}
+	// A message held for an agent goes out once the batch has folded and the agent
+	// is free (inflight reconciled per report inside apply). At most one per agent
+	// per read - two in one batch would race each other mid-turn. See queue.go.
+	a, flush := a.flushQueued()
 	if !m.done {
 		// The heartbeat starts here because this is the path production frames
 		// take: a status that put an agent into a turn schedules the first
@@ -673,7 +686,7 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		next, rl := next.armRateLimitClear()
 		next, park := next.autoParkStalled()
 		// Re-armed unconditionally, unless one of those frames was ⌃Q's answer.
-		return next, tea.Batch(tick, rl, park, next.reading())
+		return next, tea.Batch(flush, tick, rl, park, next.reading())
 	}
 	return a.hungUp(m.err)
 }

@@ -31,8 +31,12 @@ import (
 // earlier in their lives; this is that observation, applied. Without it a
 // session interrupted once would have every later silent failure forgiven for
 // the rest of its life, which at 15-30 sessions is most of them.
-func (s *Session) Send(text string, images []ImageBlock) error {
-	line, err := EncodeUserMessage(text, images)
+// messageID is the uuid stamped on the outgoing frame, or "" for an unstamped
+// send (the effort probe, which wants no lifecycle frames). A stamped message is
+// what the CLI emits command_lifecycle for, so it is how a caller tracks the fate
+// of what it sent - see EncodeUserMessage.
+func (s *Session) Send(text string, images []ImageBlock, messageID string) error {
+	line, err := EncodeUserMessage(text, images, messageID)
 	if err != nil {
 		return err
 	}
@@ -91,19 +95,17 @@ func (s *Session) DenyTool(requestID, reason string) error {
 //
 // It is false, and that is a decision rather than a default. The capability is
 // real and recorded both ways - without it a queued message still runs
-// (interrupt-queued-survives.jsonl), with it the receipt lists what it
-// destroyed (interrupt-cancel-queued.jsonl) - but the receipt names those
-// messages by the uuid the *sender* stamped on them, and EncodeUserMessage
-// stamps none. So every message Wake sends is one the CLI emits no lifecycle
-// frame for and the receipt cannot name: Wake would be destroying work it
-// could not then tell the operator it had destroyed, and the transcript would
-// keep showing that message as sent, because App.submit echoes it locally the
-// moment it goes out. Whether cancel_queued even reaches an unstamped message
-// is unrecorded - every queued message in the corpus was stamped.
+// (interrupt-queued-survives.jsonl), with it the receipt lists what it destroyed
+// (interrupt-cancel-queued.jsonl).
 //
-// The safe end of that failure is the one recorded to lose nothing. Stamping
-// outgoing messages is what unblocks the other choice; KindMessageState
-// already decodes the frames it would produce.
+// Messages now carry a uuid (the queue's own stamping), so the receipt could name
+// what it cancelled - but false is still right, because Wake's own client-side
+// queue holds every follow-up and hands the CLI at most one message per turn (see
+// internal/ui/queue.go). The CLI's native queue is empty by construction, so
+// cancel_queued would have nothing to destroy, while an interrupt of the running
+// turn is what esc already wants. The stranded worry the old note answered - a
+// destroyed message the receipt could not name, still drawn as sent - cannot
+// arise when nothing is queued at the CLI to destroy.
 const interruptCancelQueued = false
 
 // Interrupt aborts the turn this session is running, and returns the
