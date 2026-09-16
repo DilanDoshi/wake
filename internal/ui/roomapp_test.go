@@ -46,27 +46,33 @@ func TestAnotherAgentsWordsReachTheRoomInsteadOfBeingThrownAway(t *testing.T) {
 }
 
 // A frame gap can eat the KindTurnEnd that fold clears inDM on, leaving a
-// DM-sent turn's flag stuck true - which would then hold this agent's *next*
-// turn out of the room, even though the operator is no longer in a DM with it.
-// The report is the gap-robust second observable of that turn-end: an agent
-// reported working→idle has inDM reconciled in Fleet.WithStatus, so its next
-// prose reaches the room. This is BUG-30's room-suppression half - notedGap
-// (the mode/tool/counts half) never touches inDM.
+// DM-sent turn's flag stuck true - which, while its DM is still on screen, would
+// hold this agent's *next* turn out of the room even though the turn ended. The
+// report is the gap-robust second observable of that turn-end: an agent reported
+// working→idle has inDM reconciled in Fleet.WithStatus, so its next prose reaches
+// the room. This is BUG-30's room-suppression half - notedGap (the mode/tool/
+// counts half) never touches inDM.
+//
+// The DM is kept drawn here on purpose: promotion is on *leaving* (an undrawn
+// DM's prose reaches the room whatever inDM says), so the stale-flag hazard only
+// bites while the operator is still reading the pane, where the room is the
+// shared record other windows watch.
 //
 // Mutation check: drop `a.inDM = false` from WithStatus's working→idle edge and
 // the follow-up line never reaches the room.
 func TestAReportedTurnEndClearsAStaleInDMSoTheRoomGetsTheNextTurn(t *testing.T) {
-	a := newRoomApp(t).withSize(200, 40)
-	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{Sessions: []rpc.SessionStatus{
-		{ID: "s2", Name: "john", Label: "api-v2", Dir: "/repos/api", State: rpc.StateWorking},
-	}}})
-	// The operator sent this turn from john's DM, so its prose stays private.
+	a := newRoomApp(t).withSize(narrowColumns, 40).withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "john", Label: "api-v2", Dir: "/repos/api", State: rpc.StateWorking},
+	)
+	// The operator is reading john's DM (its pane is the drawn one), so a turn
+	// they sent from it stays private.
+	a = a.openDMWith("s2", "john").applyGeometry()
 	a.fleet = a.fleet.sending("s2", true)
 	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
 		Kind: core.KindAssistantText, Text: "the private DM answer",
 	}})
-	if strings.Contains(shown(a), "private DM answer") {
-		t.Fatalf("a DM-sent turn's prose reached the room:\n%s", shown(a))
+	if out := roomShown(a.room, 200, 40); strings.Contains(out, "private DM answer") {
+		t.Fatalf("a DM-sent turn's prose reached the room while its pane was being read:\n%s", out)
 	}
 	// The turn's KindTurnEnd is dropped in a gap, so fold never clears inDM. The
 	// next report says john is idle - the working→idle edge must reconcile it.
@@ -80,8 +86,87 @@ func TestAReportedTurnEndClearsAStaleInDMSoTheRoomGetsTheNextTurn(t *testing.T) 
 	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
 		Kind: core.KindAssistantText, Text: "the public follow-up",
 	}})
-	if !strings.Contains(shown(a), "public follow-up") {
-		t.Errorf("after a reported turn-end the agent's next prose was still suppressed from the room:\n%s", shown(a))
+	if out := roomShown(a.room, 200, 40); !strings.Contains(out, "public follow-up") {
+		t.Errorf("after a reported turn-end the agent's next prose was still suppressed from the room:\n%s", out)
+	}
+}
+
+// The owner's "promote on leave": a reply to a DM you have walked away from
+// reaches the room, so someone watching the group chat does not miss it. inDM
+// holds a turn out of the room only while its DM is on screen and being read
+// (drawnConversations), not for the whole turn - so once the pane stops being
+// drawn, the rest of the turn's prose flows to the room. The DM stays the record
+// (it still gets everything); the room gets the words too.
+//
+// Mutation check: restore observe's unconditional `if inDM { continue }` and the
+// reply never reaches the room.
+func TestALeftDMsReplyPromotesToTheRoom(t *testing.T) {
+	a := newRoomApp(t).withSize(narrowColumns, 40).withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "john", Label: "api-v2", Dir: "/repos/api", State: rpc.StateWorking},
+	)
+	// Opened to send, then left for the room: below the takeover only the focused
+	// column draws, so john's DM has stopped being drawn.
+	a = a.openDMWith("s2", "john").showRoom().applyGeometry()
+	if a.drawnConversations()("s2") {
+		t.Fatal("john's DM is still drawn after leaving it for the room; the test is not exercising the left case")
+	}
+	// The turn was sent from john's DM, so the old rule held its whole reply private.
+	a.fleet = a.fleet.sending("s2", true)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
+		Kind: core.KindAssistantText, Text: "the reply you walked away from",
+	}})
+	if out := shown(a); !strings.Contains(out, "reply you walked away from") {
+		t.Errorf("a reply to a DM the operator had left did not reach the room:\n%s", out)
+	}
+}
+
+// The invariant the feature keeps: while its DM is on screen and being read, a
+// DM-sent turn's prose is the DM's alone and the room draws none of it.
+// Promotion is on leaving, and this is the not-left case.
+func TestADMsReplyStaysOutOfTheRoomWhileItsPaneIsDrawn(t *testing.T) {
+	a := newRoomApp(t).withSize(narrowColumns, 40).withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "john", Label: "api-v2", Dir: "/repos/api", State: rpc.StateWorking},
+	)
+	a = a.openDMWith("s2", "john").applyGeometry() // john's DM is the drawn pane
+	if !a.drawnConversations()("s2") {
+		t.Fatal("john's DM is not drawn; the test is not exercising the on-screen case")
+	}
+	a.fleet = a.fleet.sending("s2", true)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
+		Kind: core.KindAssistantText, Text: "the private DM answer",
+	}})
+	if out := roomShown(a.room, 200, 40); strings.Contains(out, "private DM answer") {
+		t.Errorf("a DM-sent turn's prose reached the room while its pane was being read:\n%s", out)
+	}
+}
+
+// Promotion is decided per prose block against the pane's current drawn state,
+// so leaving mid-turn splits the reply: what the agent wrote while its DM was on
+// screen stays the DM's, and only what it writes after the operator leaves
+// reaches the room. This is "the rest of the turn's prose" - a promoted reply
+// with a lead-in the room never saw is the shape the owner accepted.
+func TestLeavingMidTurnPromotesOnlyTheProseAfterTheLeave(t *testing.T) {
+	a := newRoomApp(t).withSize(narrowColumns, 40).withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "john", Label: "api-v2", Dir: "/repos/api", State: rpc.StateWorking},
+	)
+	a = a.openDMWith("s2", "john").applyGeometry() // reading john's DM
+	a.fleet = a.fleet.sending("s2", true)
+	// Written while the DM was on screen: the DM's alone.
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
+		Kind: core.KindAssistantText, Text: "the half before you left",
+	}})
+	// The operator leaves for the room; the turn is still running (no KindTurnEnd),
+	// so inDM stays set - the split is drawn-state, not a new turn.
+	a = a.showRoom().applyGeometry()
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
+		Kind: core.KindAssistantText, Text: "the half after you left",
+	}})
+	out := roomShown(a.room, 200, 40)
+	if strings.Contains(out, "half before you left") {
+		t.Errorf("prose written while the DM was on screen leaked into the room:\n%s", out)
+	}
+	if !strings.Contains(out, "half after you left") {
+		t.Errorf("prose written after the operator left the DM did not reach the room:\n%s", out)
 	}
 }
 
