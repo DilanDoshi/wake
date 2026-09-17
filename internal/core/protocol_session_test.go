@@ -91,12 +91,15 @@ func TestContextTokensIsTheFinalCallNotTheTurnSum(t *testing.T) {
 // The window is looked up by the frame's own model, so a turn that used two
 // does not take the wrong one's window.
 func TestTheContextWindowIsTheModelsOwn(t *testing.T) {
-	evs := decodeLineT(t, `{"type":"result","session_id":"s1","model":"claude-opus-5",`+
+	// The named model carries the *smaller* window, so this fails under a
+	// "largest wins" regression and genuinely pins the direct-lookup branch
+	// rather than coinciding with the max-over-entries fallback.
+	evs := decodeLineT(t, `{"type":"result","session_id":"s1","model":"claude-sonnet-5",`+
 		`"usage":{"input_tokens":10},`+
 		`"modelUsage":{"claude-sonnet-5":{"contextWindow":200000},"claude-opus-5":{"contextWindow":1000000}}}`)
 
-	if got := evs[0].Session.ContextWindow; got != 1000000 {
-		t.Errorf("context window = %d, want the frame's own model's 1000000", got)
+	if got := evs[0].Session.ContextWindow; got != 200000 {
+		t.Errorf("context window = %d, want the named model's 200000, not the larger entry", got)
 	}
 }
 

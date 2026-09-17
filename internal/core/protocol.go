@@ -448,8 +448,10 @@ func mcpServers(rows []wireMCPServer) []MCPServer {
 //
 // The window is looked up by the model the frame names, but a result frame
 // carries none across the whole corpus, so the fallback resolves it: the
-// largest window among the entries, which keeps a --fallback-model failover on
-// the running model's window rather than the smaller fallback's false 0%.
+// largest window among the entries. That fixes the false 0% a failover leaves
+// (a stale small window under a growing level); the inverse, a failover onto the
+// smaller model, is overstated instead - the "a failover is invisible" blind
+// spot in docs/notes/deferred.md, since no wire signal names a result's model.
 func resultFacts(f wireFrame) *SessionFacts {
 	if f.Usage == nil {
 		return nil
