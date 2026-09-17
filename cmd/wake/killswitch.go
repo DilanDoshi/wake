@@ -69,6 +69,7 @@ package main
 // the escape hatch now.
 
 import (
+	"bytes"
 	"fmt"
 	"io"
 	"os"
@@ -84,6 +85,11 @@ const (
 	// the one this build spends the emergency escape on. ⌃Q is no longer a second
 	// one - see the header for why watching it pre-empted a healthy park.
 	keyCtrlC = 0x03
+
+	// keyEsc opens every escape sequence, including the SGR mouse reports a fast
+	// scroll floods the tty with (`\x1b[<b;x;yM`). alignedCut holds a partial one
+	// back across the queue handoff so a drop never splits one.
+	keyEsc = 0x1b
 
 	// killWindow is how long the first press stays armed. Long enough to be a
 	// double press by a hand that has just watched nothing happen, short enough
@@ -233,6 +239,91 @@ func (k *killSwitch) Input() io.Reader {
 	return k.pipe
 }
 
+// alignedCut is how much of buf ends on an escape-sequence boundary: buf[:cut]
+// is safe to forward or to drop whole, and buf[cut:] is a trailing partial
+// sequence to hold back for the next read.
+//
+// # Why the pump needs it
+//
+// A pipe is lossless and ordered, so the one way the pump corrupts Bubble Tea's
+// input is the drop below: when the forward queue is full it lets a whole read
+// go. A read ends at an arbitrary byte - during a scroll flood, almost always
+// mid-report - so a dropped chunk splits the report either side of it, and Bubble
+// Tea decodes the orphaned `<`, digits, `;` and `M` as typed runes that land in
+// the composer. Holding the trailing partial back means every chunk the pump
+// enqueues (and so every chunk it drops) begins and ends on a boundary, and a gap
+// between two boundaries cannot split a sequence.
+//
+// Only a trailing *CSI* sequence with no final byte yet is held. Plain runes are
+// self-delimiting and a completed sequence needs no continuation, so everything
+// up to the last unterminated ESC is already aligned. A non-CSI escape (an SS3, an
+// Alt+key) is short and treated as complete once its next byte is here; splitting
+// one is not the reported failure and not what a scroll floods.
+func alignedCut(buf []byte) int {
+	e := bytes.LastIndexByte(buf, keyEsc)
+	if e < 0 {
+		return len(buf) // no escape sequence pending; runes are self-delimiting
+	}
+	if e+1 >= len(buf) || buf[e+1] != '[' {
+		// A lone trailing ESC waits for more; anything else after ESC is a short,
+		// non-CSI sequence taken as whole. Neither is a mouse report.
+		if e+1 >= len(buf) {
+			return e
+		}
+		return len(buf)
+	}
+	// X10 mouse is the one input sequence whose final byte is not the end:
+	// `\x1b[M` is followed by three raw coordinate bytes. Wake asks for SGR
+	// (`\x1b[?1006h`), so a report is almost always `\x1b[<…M`, but a terminal
+	// without 1006 falls back to X10 - hold until all six bytes are here.
+	if e+2 < len(buf) && buf[e+2] == 'M' {
+		if len(buf) >= e+6 {
+			return len(buf)
+		}
+		return e
+	}
+	// CSI: complete once a final byte (0x40-0x7e, ECMA-48) has arrived after the
+	// `\x1b[`. Until then the report is still open, so hold it from that ESC.
+	for i := e + 2; i < len(buf); i++ {
+		if buf[i] >= 0x40 && buf[i] <= 0x7e {
+			return len(buf)
+		}
+	}
+	return e
+}
+
+// chunker aligns a stream of reads to escape-sequence boundaries. It is the
+// carry alignedCut's doc describes, kept as its own value so the invariant it
+// holds - that every chunk it yields, and so every chunk a drop discards, begins
+// and ends on a boundary - is testable without the pump's goroutines or a
+// terminal, the way killTrigger is.
+type chunker struct {
+	// carry is the trailing partial sequence held back from the last read; it
+	// begins with the ESC of an unfinished report, so prepending it to the next
+	// read reassembles that report.
+	carry []byte
+}
+
+// step folds one read and returns the chunk to forward, updating carry. full
+// says the read filled its buffer, so more is likely pending and a trailing
+// partial is worth holding; a short read is a finished burst and forwards whole,
+// so a lone ESC keystroke is never delayed (bubbletea's own canHaveMoreData).
+//
+// The returned chunk owns its bytes: step copies the read in, so the caller may
+// enqueue it without the copy the raw pump needed, and dropping it is safe
+// because it is boundary-aligned. carry updates whether or not the caller drops.
+func (c *chunker) step(read []byte, full bool) []byte {
+	data := make([]byte, 0, len(c.carry)+len(read))
+	data = append(data, c.carry...)
+	data = append(data, read...)
+	cut := len(data)
+	if full {
+		cut = alignedCut(data)
+	}
+	c.carry = data[cut:]
+	return data[:cut]
+}
+
 // pump is the read that never waits on anything downstream.
 //
 // It is the whole mechanism: the trigger is decided here, on this goroutine,
@@ -241,6 +332,7 @@ func (k *killSwitch) Input() io.Reader {
 func (k *killSwitch) pump() {
 	defer close(k.queue)
 	var trigger killTrigger
+	var chunks chunker
 	buf := make([]byte, readChunk)
 	for {
 		n, err := k.tty.Read(buf)
@@ -250,16 +342,18 @@ func (k *killSwitch) pump() {
 				k.exit()
 				return
 			}
-			// Copied because the next read overwrites buf and the forwarder may
-			// not have written this one yet.
-			chunk := make([]byte, n)
-			copy(chunk, buf[:n])
-			select {
-			case k.queue <- chunk:
-			default:
-				// Dropped. See forwardQueue: a full queue means Bubble Tea has
-				// stopped reading, and a keystroke it will never read is worth
-				// less than the next one being noticed.
+			// Boundary-aligned so a drop below cannot split a mouse report - see
+			// alignedCut. step copies buf in, so the chunk is safe to enqueue and
+			// buf is free to be overwritten by the next read.
+			if chunk := chunks.step(buf[:n], n == len(buf)); len(chunk) > 0 {
+				select {
+				case k.queue <- chunk:
+				default:
+					// Dropped. See forwardQueue: a full queue means Bubble Tea has
+					// stopped reading, and a report it will never read is worth less
+					// than the next one being noticed. Safe because chunk ends on a
+					// boundary, so the gap it leaves cannot split a report.
+				}
 			}
 		}
 		if err != nil {
