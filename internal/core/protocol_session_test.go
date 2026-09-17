@@ -100,6 +100,26 @@ func TestTheContextWindowIsTheModelsOwn(t *testing.T) {
 	}
 }
 
+// Every result frame in the corpus carries no top-level model, so the window
+// must resolve from the modelUsage entries alone. A --fallback-model failover
+// puts two entries in the map with no top-level model to disambiguate them;
+// taking the larger window keeps the running model's window rather than reading
+// a false 0% off the smaller fallback's. Without this the window is 0 (blank),
+// or a stale small one is retained and the growing level pegs the bar at 0%.
+func TestTheContextWindowResolvesWithoutATopLevelModel(t *testing.T) {
+	evs := decodeLineT(t, `{"type":"result","subtype":"success","session_id":"s1",`+
+		`"usage":{"input_tokens":10,"cache_read_input_tokens":205590},`+
+		`"modelUsage":{"claude-sonnet-5":{"contextWindow":200000},"claude-opus-5[1m]":{"contextWindow":1000000}}}`)
+
+	facts := evs[0].Session
+	if facts == nil {
+		t.Fatal("result carried no session facts; usage is on it")
+	}
+	if facts.ContextWindow != 1000000 {
+		t.Errorf("context window = %d, want 1000000 (the larger entry; no top-level model to key on)", facts.ContextWindow)
+	}
+}
+
 // A result with no usage says nothing about the window rather than claiming
 // it is empty. An interrupted turn has no usage at all.
 func TestAResultWithoutUsageCarriesNoFacts(t *testing.T) {
