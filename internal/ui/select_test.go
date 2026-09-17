@@ -439,6 +439,51 @@ func TestARoomPressAnchorsToTheRowUnderThePointerWhileAnAgentWorks(t *testing.T)
 	}
 }
 
+// The DM twin of the room bug: a compacting DM draws a compacting line, chrome
+// dmPane adds (WithCompacting) that the stored DM is not sized for. transcriptRows
+// omitted it, so selRows was two rows too tall and a press anchored above the
+// pointer while /compact ran. pointIn trusts selRows, so the fix is to measure
+// the DM the way it is drawn.
+//
+// Mutation check: dropping WithCompacting from transcriptRows' DM path fails this
+// at "press at row N anchored to line M, but that row draws ...".
+func TestADMPressAnchorsToTheRowUnderThePointerWhileCompacting(t *testing.T) {
+	a := splitApp(t, 200, 40, 0)
+	for i := range 60 {
+		a = said(a, "s1", fmt.Sprintf("dmrowmarker%03d", i))
+	}
+	// A compacting DM draws a compacting line - the draw-only chrome this regresses.
+	a = a.observeCompaction("s1", compactStart("s1"))
+	if a.dmFor("s1").WithCompacting(a.compactingSince("s1")).heartbeat() == "" {
+		t.Fatal("the DM draws no compacting line, so this proves nothing about the chrome it adds")
+	}
+
+	col := a.columnOf("s1")
+	w, h := a.regions().Cols[col], a.paneHeight()
+	rows := strings.Split(a.dmPane("s1", w, h), "\n")
+	x := midOf(a.regions(), col)
+	tested := 0
+	for y, row := range rows {
+		if !strings.Contains(ansi.Strip(row), "dmrowmarker") {
+			continue
+		}
+		b, _ := a.mouse(pressAt(x, y))
+		if b.sel.pane != "s1" {
+			continue
+		}
+		line := b.sel.anchor.line
+		stored := strings.TrimRight(ansi.Strip(b.transcriptIn("s1").lines.slice(line, line+1)[0]), " ")
+		drawn := strings.TrimRight(ansi.Strip(row), " ")
+		if stored != drawn {
+			t.Errorf("press at row %d anchored to line %d %q, but that row draws %q", y, line, stored, drawn)
+		}
+		tested++
+	}
+	if tested == 0 {
+		t.Fatal("no transcript marker rows were on screen to press")
+	}
+}
+
 // The card is the third producer of the same chrome and the one that matters
 // most: it goes up while an agent is blocked, which is exactly when somebody is
 // reading that pane - and it is the tallest, so it moved a drag furthest.
