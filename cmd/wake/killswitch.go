@@ -114,6 +114,14 @@ const (
 	// than a keystroke, and the trigger reads whatever a chunk holds.
 	readChunk = 4096
 
+	// maxCarry bounds the unfinished sequence chunker holds between reads. Every
+	// escape sequence that reaches here is a handful of bytes - the longest, an SGR
+	// mouse report for a huge terminal, is well under this - so a carry past it is
+	// not a pending sequence but garbage from a misbehaving source, and is flushed
+	// rather than held unbounded. This file is the way out of a wedged Wake; it may
+	// not grow memory on a stream nobody is draining.
+	maxCarry = 64
+
 	// exitEmergency is what the process exits with. 130 is the shell's own
 	// "terminated by ⌃C", which is what this is.
 	exitEmergency = 130
@@ -240,7 +248,7 @@ func (k *killSwitch) Input() io.Reader {
 }
 
 // alignedCut is how much of buf ends on an escape-sequence boundary: buf[:cut]
-// is safe to forward or to drop whole, and buf[cut:] is a trailing partial
+// is safe to forward or to drop whole, and buf[cut:] is a trailing unfinished
 // sequence to hold back for the next read.
 //
 // # Why the pump needs it
@@ -250,46 +258,56 @@ func (k *killSwitch) Input() io.Reader {
 // go. A read ends at an arbitrary byte - during a scroll flood, almost always
 // mid-report - so a dropped chunk splits the report either side of it, and Bubble
 // Tea decodes the orphaned `<`, digits, `;` and `M` as typed runes that land in
-// the composer. Holding the trailing partial back means every chunk the pump
-// enqueues (and so every chunk it drops) begins and ends on a boundary, and a gap
-// between two boundaries cannot split a sequence.
+// the composer. Holding the trailing unfinished sequence back means every chunk
+// the pump enqueues (and so every chunk it drops) begins and ends on a boundary,
+// and a gap between two boundaries cannot split a sequence.
 //
-// Only a trailing *CSI* sequence with no final byte yet is held. Plain runes are
-// self-delimiting and a completed sequence needs no continuation, so everything
-// up to the last unterminated ESC is already aligned. A non-CSI escape (an SS3, an
-// Alt+key) is short and treated as complete once its next byte is here; splitting
-// one is not the reported failure and not what a scroll floods.
+// It reports a boundary only for the escape sequences that actually arrive here -
+// CSI (SGR mouse `\x1b[<…M`, arrows, function keys), X10 mouse (`\x1b[M`+3 raw
+// bytes) and SS3 (`\x1bO`+1) - and treats a completed sequence, plain runes and
+// any other ESC+byte as already whole, since they need no continuation. Plain
+// runes are self-delimiting, so everything up to the last unterminated ESC is
+// aligned; chunker.step is what decides a genuinely lone trailing ESC is a keypress
+// rather than an opening.
 func alignedCut(buf []byte) int {
 	e := bytes.LastIndexByte(buf, keyEsc)
 	if e < 0 {
 		return len(buf) // no escape sequence pending; runes are self-delimiting
 	}
-	if e+1 >= len(buf) || buf[e+1] != '[' {
-		// A lone trailing ESC waits for more; anything else after ESC is a short,
-		// non-CSI sequence taken as whole. Neither is a mouse report.
-		if e+1 >= len(buf) {
+	if e+1 >= len(buf) {
+		return e // a lone trailing ESC; step decides keypress vs opening
+	}
+	switch buf[e+1] {
+	case '[': // CSI: SGR mouse, arrows, function keys - and X10 mouse
+		if e+2 >= len(buf) {
+			return e // `\x1b[` only so far; the CSI is still opening
+		}
+		// X10 mouse is the one sequence whose final byte is not the end: `\x1b[M`
+		// is followed by three raw coordinate bytes. Wake asks for SGR
+		// (`\x1b[?1006h`), so a report is almost always `\x1b[<…M`, but a terminal
+		// without 1006 falls back to X10 - hold until all six bytes are here.
+		if buf[e+2] == 'M' {
+			if len(buf) >= e+6 {
+				return len(buf)
+			}
 			return e
 		}
-		return len(buf)
-	}
-	// X10 mouse is the one input sequence whose final byte is not the end:
-	// `\x1b[M` is followed by three raw coordinate bytes. Wake asks for SGR
-	// (`\x1b[?1006h`), so a report is almost always `\x1b[<…M`, but a terminal
-	// without 1006 falls back to X10 - hold until all six bytes are here.
-	if e+2 < len(buf) && buf[e+2] == 'M' {
-		if len(buf) >= e+6 {
+		// Otherwise complete once a final byte (0x40-0x7e, ECMA-48) arrives after
+		// `\x1b[`; the SGR params `<`, digits and `;` are all below 0x40.
+		for i := e + 2; i < len(buf); i++ {
+			if buf[i] >= 0x40 && buf[i] <= 0x7e {
+				return len(buf)
+			}
+		}
+		return e
+	case 'O': // SS3: `\x1bO`+1 byte (application-mode arrows, F1-F4)
+		if len(buf) >= e+3 {
 			return len(buf)
 		}
 		return e
+	default: // Alt+key and any other ESC+byte is already whole
+		return len(buf)
 	}
-	// CSI: complete once a final byte (0x40-0x7e, ECMA-48) has arrived after the
-	// `\x1b[`. Until then the report is still open, so hold it from that ESC.
-	for i := e + 2; i < len(buf); i++ {
-		if buf[i] >= 0x40 && buf[i] <= 0x7e {
-			return len(buf)
-		}
-	}
-	return e
 }
 
 // chunker aligns a stream of reads to escape-sequence boundaries. It is the
@@ -304,21 +322,33 @@ type chunker struct {
 	carry []byte
 }
 
-// step folds one read and returns the chunk to forward, updating carry. full
-// says the read filled its buffer, so more is likely pending and a trailing
-// partial is worth holding; a short read is a finished burst and forwards whole,
-// so a lone ESC keystroke is never delayed (bubbletea's own canHaveMoreData).
+// step folds one read and returns the chunk to forward, updating carry. It aligns
+// on every read, not just a full one, because a mouse report split across two
+// short reads (a byte stream over SSH or tmux delivers one however it likes) plus a
+// coincident drop is the same leak a flood's full reads are - so a trailing partial
+// is held whatever the read size.
+//
+// full says the read filled its buffer, so more is likely pending. It decides only
+// the one genuinely ambiguous carry: a lone trailing ESC. On a full read it is the
+// opening of a sequence whose rest is coming, so hold it; on a short read it is a
+// real Escape keypress that must not wait for the next input, so forward it. A
+// partial *sequence* (a split mouse report) is never a keypress, so it is held
+// either way. This is bubbletea's own full-buffer heuristic, narrowed to the one
+// byte it is actually ambiguous for.
 //
 // The returned chunk owns its bytes: step copies the read in, so the caller may
-// enqueue it without the copy the raw pump needed, and dropping it is safe
-// because it is boundary-aligned. carry updates whether or not the caller drops.
+// enqueue it without the copy the raw pump needed, and dropping it is safe because
+// it is boundary-aligned. carry updates whether or not the caller drops.
 func (c *chunker) step(read []byte, full bool) []byte {
 	data := make([]byte, 0, len(c.carry)+len(read))
 	data = append(data, c.carry...)
 	data = append(data, read...)
-	cut := len(data)
-	if full {
-		cut = alignedCut(data)
+	cut := alignedCut(data)
+	switch {
+	case !full && cut == len(data)-1 && data[cut] == keyEsc:
+		cut = len(data) // a lone trailing ESC on a short read is a keypress, not an opening
+	case len(data)-cut > maxCarry:
+		cut = len(data) // not a real pending sequence; do not hold it unbounded
 	}
 	c.carry = data[cut:]
 	return data[:cut]

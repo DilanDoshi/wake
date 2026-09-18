@@ -24,13 +24,16 @@ func TestAlignedCutHoldsBackAnUnfinishedReport(t *testing.T) {
 		{"a whole mouse report", report, len(report)},
 		{"a whole report then a partial one", report + esc + "[<64;10;", len(report)},
 		{"a partial report on its own", esc + "[<64;10;", 0},
+		{"a CSI opening with nothing after the bracket", esc + "[", 0},
 		{"a CSI with no final byte yet", esc + "[<64;10;5", 0},
 		{"no escape at all is all runes", "hello", len("hello")},
 		{"a lone trailing ESC waits", "ab" + esc, len("ab")},
 		{"a whole report then a lone ESC", report + esc, len(report)},
-		{"a non-CSI escape is taken whole", esc + "OP", len(esc + "OP")},
 		{"a whole X10 mouse report", esc + "[M\x20\x21\x22", len(esc + "[M\x20\x21\x22")},
 		{"an X10 report missing a coordinate byte", esc + "[M\x20\x21", 0},
+		{"a whole SS3 key", esc + "OP", len(esc + "OP")},
+		{"an SS3 key missing its final byte", esc + "O", 0},
+		{"an Alt+key is whole", esc + "x", len(esc + "x")},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
@@ -77,6 +80,58 @@ func TestADroppedChunkSplitsARawReadButNotAnAlignedOne(t *testing.T) {
 	}
 	if !wholeReports(aligned, report) {
 		t.Fatalf("a dropped aligned chunk split a report: survivors near the gap are %q", nearFirstFragment(aligned, report))
+	}
+}
+
+// A mouse report split across two short reads - what a byte stream over SSH or
+// tmux can deliver - must not become two droppable chunks. step holds the partial
+// until the report completes, so the report is only ever one whole chunk and a
+// drop can never expose half of it. This is the residual the full-read-only version
+// left, that both reviews flagged.
+func TestAMouseReportSplitAcrossShortReadsIsHeldUntilWhole(t *testing.T) {
+	var c chunker
+	if got := c.step([]byte(esc+"[<64;10;"), false); len(got) != 0 {
+		t.Fatalf("the first half of a split report was forwarded as %q; it must be held whole", got)
+	}
+	got := c.step([]byte("5M"), false)
+	if string(got) != esc+"[<64;10;5M" {
+		t.Fatalf("the completed report was %q, want the whole %q", got, esc+"[<64;10;5M")
+	}
+	if len(c.carry) != 0 {
+		t.Fatalf("carry was left holding %q after the report completed", c.carry)
+	}
+}
+
+// A lone ESC is the one ambiguous carry. On a short read it is a real Escape
+// keypress and must go now - holding it would strand ⎋, which interrupts a turn.
+// On a full read more is coming, so it opens a sequence and is held.
+func TestALoneEscGoesNowOnAShortReadAndWaitsOnAFullOne(t *testing.T) {
+	var short chunker
+	if got := short.step([]byte(esc), false); string(got) != esc {
+		t.Fatalf("a lone ESC on a short read was %q, want it forwarded at once", got)
+	}
+	if len(short.carry) != 0 {
+		t.Fatal("a lone ESC on a short read was held; ⎋ would be stranded")
+	}
+	var full chunker
+	if got := full.step(append(bytes.Repeat([]byte("a"), readChunk-1), keyEsc), true); len(got) != readChunk-1 {
+		t.Fatalf("a full read ending in ESC forwarded %d bytes, want the ESC held back", len(got))
+	}
+	if string(full.carry) != esc {
+		t.Fatalf("a full read's trailing ESC was not held; carry is %q", full.carry)
+	}
+}
+
+// carry never grows past a real sequence's worth, whatever a misbehaving source
+// streams into an open ESC - the memory bound forwardQueue promises.
+func TestCarryStaysBounded(t *testing.T) {
+	var c chunker
+	junk := append([]byte(esc+"["), bytes.Repeat([]byte("1"), readChunk)...) // an ESC then only params, never a final byte
+	for range 8 {
+		c.step(junk, true)
+		if len(c.carry) > maxCarry {
+			t.Fatalf("carry grew to %d bytes, past the %d bound", len(c.carry), maxCarry)
+		}
 	}
 }
 
