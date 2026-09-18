@@ -336,6 +336,20 @@ type chunker struct {
 // either way. This is bubbletea's own full-buffer heuristic, narrowed to the one
 // byte it is actually ambiguous for.
 //
+// # The one residual, and why the ESC keypress wins it
+//
+// A lone ESC is ambiguous only because its own read has no lookahead: a real ⎋ and
+// the first byte of a mouse report whose ESC was segmented onto its own read are
+// the same one byte. Forwarding it keeps ⎋ instant but leaves a remote-only leak -
+// if SSH/tmux split a report exactly after its ESC *and* a drop then lands on that
+// one-byte chunk, the tail `[<…M` can still reach Bubble Tea as runes. It needs no
+// contrivance locally to be impossible (a terminal writes a report's bytes at once,
+// so one VMIN=1 read gets `\x1b[<…` whole), matches what Bubble Tea does reading the
+// tty directly, and the alternative - holding ⎋ behind an inter-byte timeout - buys
+// that rare case a timer and a second goroutine in the pump whose whole doctrine is
+// to stay trivial and never block. ⎋ interrupts a runaway agent, so it wins. See
+// docs/notes/deferred.md.
+//
 // The returned chunk owns its bytes: step copies the read in, so the caller may
 // enqueue it without the copy the raw pump needed, and dropping it is safe because
 // it is boundary-aligned. carry updates whether or not the caller drops.
