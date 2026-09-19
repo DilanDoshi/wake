@@ -32,10 +32,48 @@ release should go out. There is no CI release trigger; the timing is entirely yo
    GITHUB_TOKEN=$(gh auth token) goreleaser release --clean
    ```
 
+   This publishes with `.goreleaser.yaml`'s default changelog — every commit since the last tag, one
+   line each, machine-authored. **Replace it before calling the release done** — see the format below.
+
+5. Write the real release notes and replace the auto-generated changelog:
+
+   ```sh
+   gh release edit v0.1.2 --notes-file /path/to/notes.md
+   ```
+
 That builds `wake` for **macOS and Linux, amd64 and arm64**, stamps the version from the tag, and
 publishes a **GitHub Release** with the binaries and a `checksums.txt`. The version the banner
 reports comes from the tag, via `-ldflags -X …/internal/ui.Version` (this is why `Version` is a
 `var`, not a `const` — a `const` can't be stamped).
+
+## Release notes format
+
+`v0.1.1` and `v0.1.2` are the template — hand-written, organized by what a user of Wake cares about,
+never the raw commit list. `v0.1.0` and `v0.1.3` shipped with goreleaser's default changelog because
+step 5 above was skipped; they are what *not* to repeat, not a second acceptable shape.
+
+The shape, in order:
+
+1. **One summary line** naming the headline change(s) in plain language — no heading, right under the
+   title. `v0.1.2`'s: "This release brings Claude Code's native `/goal` and `/loop` lifecycles into
+   Wake, animates `/compact`, and lands a set of board, composer, and terminal-setup improvements —
+   plus a fix that makes `go install` work without a fork." A patch release with nothing to opt into
+   says so (`v0.1.1`: "a patch release... No new flags and nothing to opt into: it installs and runs
+   exactly like v0.1.0.").
+2. **`## New features`** — one `### Feature name (#PR)` subsection per notable feature, each a short
+   prose paragraph on what it does and why, not a changelog line. Omit this section entirely on a
+   patch release with no new features (`v0.1.1` has none).
+3. **`## Improvements`** — a bullet list, each `- **Short name** (#PR) — description.` for smaller,
+   non-headline additions.
+4. **`## Fixes`** — same bullet shape as Improvements: `- **Short name** (#PR).` then a paragraph.
+   Name the user-visible symptom and the mechanism, the way the PR title and body would, not just
+   "fixed a bug."
+5. **`## Install`** — the `go install github.com/DilanDoshi/wake/cmd/wake@<tag or latest>` command,
+   plus a line pointing at the prebuilt binaries below and `checksums.txt`.
+6. **`**Full changelog:**`** — one line, `https://github.com/DilanDoshi/wake/compare/<prev>...<tag>`.
+
+Every named change gets its PR number in parentheses — a reader can always jump to the diff. Skip a
+section that has nothing in it rather than writing "None" under a heading.
 
 ## Before you tag
 
