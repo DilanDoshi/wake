@@ -382,9 +382,14 @@ applied where a reply lands can never see a second session.
 **The turn is the unit, and an agent's prose is restored only inside a public one.** Deciding it line
 by line hid the question and showed the answer: the private turn was dropped and the agent's reply to
 it — the same conversation, in the agent's words — went into the group chat anyway. Live,
-`App.observe` keeps a whole DM-sent turn out of the room through `Fleet.inDM`, and nothing on disk
-records which surface a turn was typed on, so the restore carries provenance itself: prose is kept
-while its session's last user turn was a proven broadcast, and the next user turn closes it. **Prose
+`App.observe` keeps a DM-sent turn out of the room through `Fleet.inDM` **only while its DM is
+drawn** — once the reader leaves it (the pane stops being drawn, `drawnConversations`), the rest of
+the turn's prose promotes to the room, so someone watching the group chat does not miss a reply to a
+DM they walked away from; the DM stays the record and gets everything either way. That promotion is
+**live-only** (a promoted reply is not a proven broadcast, so a restore does not reconstruct it).
+Nothing on disk records which surface a turn was typed on, so the restore carries provenance itself:
+prose is kept while its session's last user turn was a proven broadcast, and the next user turn
+closes it. **Prose
 with no initiator in the window is dropped**, which is most of a 400-event tail — and that is why
 there are two bounds. `roomRawEvents` is a memory backstop on `Room.raw`; `roomHistoryEvents` is
 applied *after* the rule, because trimming `raw` takes the oldest line of a turn and the oldest line
@@ -1094,7 +1099,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | The sample beside an option | `internal/ui/preview.go` — three tiers: beside, stacked, dropped |
 | Which key means what | `internal/ui/keys.go` — `App.key`, held to `legendEntries` in both directions |
 | Leaving takes ⌃O then ↵ | `internal/ui/detach.go` — the arm, why the confirm is a different key, and why the legend carries it |
-| The way out of a Wake that has stopped answering | `cmd/wake/killswitch.go` — `killTrigger` (pure, so the one thing that can close somebody's window is testable without a terminal) · `killSwitch.pump` (the read that never waits on the consumer it exists to escape) · `emergencyExit` · `watchSignals`. Wired in `attach.go`'s `converseModel`, which is the one place a program runs |
+| The way out of a Wake that has stopped answering | `cmd/wake/killswitch.go` — `killTrigger` (pure, so the one thing that can close somebody's window is testable without a terminal) · `killSwitch.pump` (the read that never waits on the consumer it exists to escape) · `alignedCut`/`chunker` (pure: the pump forwards only escape-sequence-aligned chunks, so a drop when Bubble Tea falls behind a fast scroll cannot split a mouse report into runes typed into the composer) · `emergencyExit` · `watchSignals`. Wired in `attach.go`'s `converseModel`, which is the one place a program runs |
 | The legend, the armed cue it has become, and the labels an arm swaps | `internal/ui/legend.go` — `legendEntries` (the bijection's canonical list, no longer drawn on every frame), `legendArms`, `armedLabel`/`armedCueParts`/`armedCue` (the only thing drawn now, and only while an arm is live) · `internal/ui/composer.go` — `showsCue` (`View` draws the cue row and `overhead` counts it by the one predicate) · `legend_test.go` for the bijection and the cue |
 | Walking back through what you typed | `internal/ui/prompts.go` — `↑↓` on an empty or single-line draft, derived from the pane's own events |
 | Where Wake's keyboard collides with Claude Code's | `internal/ui/testdata/claude-keymap.json`, maintained by hand (asserted by `keymap_test.go`, which holds the eight accepted collisions and fails on a ninth) |
@@ -1391,7 +1396,7 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/rpc/wire.go` at 800 and `internal/core/vocabulary.go` at 799 — that sentence is derived by
+  `internal/rpc/wire.go` at 800 and `internal/core/protocol.go` at 799 — that sentence is derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
   message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**

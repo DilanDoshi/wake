@@ -1,11 +1,13 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -391,6 +393,94 @@ func TestADragOnAStreamingPreviewTakesNothing(t *testing.T) {
 			t.Errorf("a drag on row %d resolved to a transcript selection: the preview starts at row %d and is not conversation",
 				y, first)
 		}
+	}
+}
+
+// The reported bug: dragging across a message you sent in the room highlighted
+// a row a few lines above the pointer and copied that instead of your own text.
+// The room draws a working line while any agent is busy - chrome the stored
+// transcript is never sized for, since WithWorking is applied for the draw only
+// (roomFor). pointIn resolved the top visible line from the stored, taller
+// transcript, so every press anchored a working-line's worth of rows above what
+// was on screen. The fix resolves the top line off the draw-sized transcript.
+//
+// Mutation check: reverting pointIn to read the stored transcript's own height
+// fails this at "press at row N anchored to line M, but that row draws ...".
+func TestARoomPressAnchorsToTheRowUnderThePointerWhileAnAgentWorks(t *testing.T) {
+	a := splitApp(t, 200, 40, 0)
+	for i := range 60 {
+		a = said(a, "s1", fmt.Sprintf("roomrowmarker%03d", i))
+	}
+	// An agent working is what makes the room draw a working line - the chrome the
+	// stored room is never sized for. Without it there is no mismatch to catch.
+	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateWorking}}})
+	if a.roomFor().WithWorking(a.fleet.OnRoster()).beat == "" {
+		t.Fatal("the room draws no working line, so this proves nothing about the chrome it adds")
+	}
+
+	w, h := a.regions().Room(), a.paneHeight()
+	rows := strings.Split(a.roomPane(w, h), "\n")
+	tested := 0
+	for y, row := range rows {
+		if !strings.Contains(ansi.Strip(row), "roomrowmarker") {
+			continue
+		}
+		b, _ := a.mouse(pressAt(10, y))
+		line := b.sel.anchor.line
+		stored := strings.TrimRight(ansi.Strip(b.transcriptIn("").lines.slice(line, line+1)[0]), " ")
+		drawn := strings.TrimRight(ansi.Strip(row), " ")
+		if stored != drawn {
+			t.Errorf("press at row %d anchored to line %d %q, but that row draws %q", y, line, stored, drawn)
+		}
+		tested++
+	}
+	if tested == 0 {
+		t.Fatal("no transcript marker rows were on screen to press")
+	}
+}
+
+// The DM twin of the room bug: a compacting DM draws a compacting line, chrome
+// dmPane adds (WithCompacting) that the stored DM is not sized for. transcriptRows
+// omitted it, so selRows was two rows too tall and a press anchored above the
+// pointer while /compact ran. pointIn trusts selRows, so the fix is to measure
+// the DM the way it is drawn.
+//
+// Mutation check: dropping WithCompacting from transcriptRows' DM path fails this
+// at "press at row N anchored to line M, but that row draws ...".
+func TestADMPressAnchorsToTheRowUnderThePointerWhileCompacting(t *testing.T) {
+	a := splitApp(t, 200, 40, 0)
+	for i := range 60 {
+		a = said(a, "s1", fmt.Sprintf("dmrowmarker%03d", i))
+	}
+	// A compacting DM draws a compacting line - the draw-only chrome this regresses.
+	a = a.observeCompaction("s1", compactStart("s1"))
+	if a.dmFor("s1").WithCompacting(a.compactingSince("s1")).heartbeat() == "" {
+		t.Fatal("the DM draws no compacting line, so this proves nothing about the chrome it adds")
+	}
+
+	col := a.columnOf("s1")
+	w, h := a.regions().Cols[col], a.paneHeight()
+	rows := strings.Split(a.dmPane("s1", w, h), "\n")
+	x := midOf(a.regions(), col)
+	tested := 0
+	for y, row := range rows {
+		if !strings.Contains(ansi.Strip(row), "dmrowmarker") {
+			continue
+		}
+		b, _ := a.mouse(pressAt(x, y))
+		if b.sel.pane != "s1" {
+			continue
+		}
+		line := b.sel.anchor.line
+		stored := strings.TrimRight(ansi.Strip(b.transcriptIn("s1").lines.slice(line, line+1)[0]), " ")
+		drawn := strings.TrimRight(ansi.Strip(row), " ")
+		if stored != drawn {
+			t.Errorf("press at row %d anchored to line %d %q, but that row draws %q", y, line, stored, drawn)
+		}
+		tested++
+	}
+	if tested == 0 {
+		t.Fatal("no transcript marker rows were on screen to press")
 	}
 }
 

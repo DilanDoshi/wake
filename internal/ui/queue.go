@@ -43,6 +43,8 @@ import (
 	"fmt"
 	"slices"
 	"strings"
+	"unicode"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -283,16 +285,47 @@ func (a App) flushQueued() (App, tea.Cmd) {
 	return a, a.write(sendFailed, frames...)
 }
 
-// queuedTexts is the echo text of each message waiting for an agent, oldest first,
-// for the pin above its composer. nil for an agent with none.
+// pinText is the message as the queued pin draws it for its recipient. A room
+// broadcast keeps its addressing @name in the echo - the transcript needs it
+// under a "from the room" head (dm_blocks.go) - but in the recipient's own DM the
+// pin has no such head, so a bare @<own name> reads as a stray self-mention.
+// Strip exactly that: this agent's own leading @name, whole word, with a body
+// after it. Everything else is kept as typed - a different agent's mention (an
+// open-mode broadcast's @john, or @all) is context the terse pin still shows, a
+// leading @word that only prefixes this agent's name or is a path is not its
+// routing address, and a bare @name with no body keeps the name rather than
+// stripping to nothing. Matching the exact name rather than re-parsing the echo
+// with a display regex is what keeps it from clipping `@alexander` to `alex` or
+// `@a/b` to `/b` - the failure the router's own whole-word grammar avoids.
+func (m queuedMsg) pinText(recipient string) string {
+	if !m.fromRoom || recipient == "" {
+		return m.echo
+	}
+	rest, ok := strings.CutPrefix(m.echo, "@"+recipient)
+	if !ok || rest == "" {
+		return m.echo
+	}
+	if r, _ := utf8.DecodeRuneInString(rest); !unicode.IsSpace(r) {
+		return m.echo
+	}
+	return strings.TrimLeftFunc(rest, unicode.IsSpace)
+}
+
+// queuedTexts is the pin text of each message waiting for an agent, oldest first,
+// for the pin above its composer. nil for an agent with none. The agent's own
+// name resolves the self-mention pinText strips from a room broadcast.
 func (a App) queuedTexts(id string) []string {
 	q := a.queued[id]
 	if len(q) == 0 {
 		return nil
 	}
+	name := ""
+	if ag, ok := a.fleet.Agent(id); ok {
+		name = ag.Name
+	}
 	out := make([]string, len(q))
 	for i, m := range q {
-		out[i] = m.echo
+		out[i] = m.pinText(name)
 	}
 	return out
 }

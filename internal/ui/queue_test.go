@@ -278,6 +278,80 @@ func TestRoomBroadcastQueuesBusyTargetsAndSendsIdle(t *testing.T) {
 	}
 }
 
+// A message routed from the room keeps its addressing @name in the stored echo,
+// because the transcript draws it under a "from the room" head that explains it.
+// The queued pin has no such head, so in the target's own DM a bare @name reads
+// as a stray self-mention - the pin strips it.
+func TestAQueuedRoomBroadcastDropsItsMentionInThePin(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{
+		Running: true,
+		Sessions: []rpc.SessionStatus{
+			{ID: "s2", Name: "scroll-bug", State: rpc.StateWorking},
+			{ID: "s6", Name: core.ManagerName, State: rpc.StateIdle},
+		},
+	}})
+	m, _ := typeAndSubmit(a, "@scroll-bug here is an example")
+	a = m.(App)
+
+	if got := a.queuedTexts("s2"); len(got) != 1 || got[0] != "here is an example" {
+		t.Errorf("the queued room broadcast's pin kept its @name self-mention, want [%q]: %#v", "here is an example", got)
+	}
+	// The stored echo still carries the mention: the transcript's "from the room"
+	// head is what explains it there, so the strip is the pin's alone.
+	if q := a.queued["s2"]; len(q) != 1 || q[0].echo != "@scroll-bug here is an example" {
+		t.Errorf("the stored echo lost its mention, which the transcript head needs: %#v", q)
+	}
+}
+
+// A DM-typed message that opens with an @word is prose to the agent, not a
+// routing address, so its pin keeps it verbatim - the strip is fromRoom-only.
+func TestAQueuedDMMessageKeepsALeadingAtWordInThePin(t *testing.T) {
+	a := idleDM(t).applyFrame(oneAgent("s1", "alex", rpc.StateWorking))
+	m, _ := typeAndSubmit(a, "@decorator is broken")
+	a = m.(App)
+	if got := a.queuedTexts("s1"); len(got) != 1 || got[0] != "@decorator is broken" {
+		t.Errorf("a DM-typed leading @word was stripped from the pin: %#v", got)
+	}
+}
+
+// Stripping the room mention keeps the rest, image chip and all, so the pin
+// still says an image is attached.
+func TestAQueuedRoomBroadcastKeepsItsImageChipInThePin(t *testing.T) {
+	a := idleDM(t).enqueue("s1", newQueued("ship it", "@alex ship it [Image #1]", nil, true))
+	if got := a.queuedTexts("s1"); len(got) != 1 || got[0] != "ship it [Image #1]" {
+		t.Errorf("the pin dropped the image chip along with the mention: %#v", got)
+	}
+}
+
+// A bystander to an open-mode `@john hello` broadcast: john's mention is the
+// message's context, not this agent's own address, so the pin keeps it whole.
+// Only the recipient's *own* @name is a redundant self-mention to strip.
+func TestAQueuedRoomBroadcastKeepsADifferentAgentsMentionInThePin(t *testing.T) {
+	a := idleDM(t).enqueue("s1", newQueued("hello", "@john hello", nil, true))
+	if got := a.queuedTexts("s1"); len(got) != 1 || got[0] != "@john hello" {
+		t.Errorf("a bystander pin lost another agent's mention: %#v", got)
+	}
+}
+
+// A leading @word that only prefixes this agent's name (or is a path, `@a/b`) is
+// not its routing address - the pin keeps it whole rather than clipping to the
+// name, the whole-word failure a display regex like leadingMention would hit.
+func TestAQueuedRoomMessageKeepsALeadingAtWordThatIsNotThisAgent(t *testing.T) {
+	a := idleDM(t).enqueue("s1", newQueued("look", "@alexander take a look", nil, true))
+	if got := a.queuedTexts("s1"); len(got) != 1 || got[0] != "@alexander take a look" {
+		t.Errorf("the pin clipped a longer @word down to this agent's name: %#v", got)
+	}
+}
+
+// A room message that is only the addressee's @name (no body) keeps the name,
+// rather than stripping to an empty pin row with a bare glyph.
+func TestABareQueuedRoomMentionKeepsItsNameInThePin(t *testing.T) {
+	a := idleDM(t).enqueue("s1", newQueued("", "@alex", nil, true))
+	if got := a.queuedTexts("s1"); len(got) != 1 || got[0] != "@alex" {
+		t.Errorf("a bare room mention stripped to an empty pin: %#v", got)
+	}
+}
+
 // The waiting messages are visible above the composer so type-ahead is not silent.
 func TestAQueuedMessageShowsInThePin(t *testing.T) {
 	a := idleDM(t).applyFrame(oneAgent("s1", "alex", rpc.StateWorking))

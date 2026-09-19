@@ -36,6 +36,59 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## KNOWN GAP, 2026-09-15 — a DM reply can miss room-promotion during the 80ms resize settle
+
+**Shipped:** `feat/promote-dm-reply-on-leave` promotes a DM-sent turn's prose into the room once its
+DM stops being drawn (the operator has left it), so someone watching the group chat does not miss a
+reply to a DM they walked away from. `internal/ui/observe.go` decides this with
+`drawnConversations()`, the same "is this pane on screen" predicate `App.wants` uses.
+
+**Deferred:** `drawnConversations()` reads the *committed* layout (`a.layout`), the width `View` draws
+at — which lags the terminal's real width through the 80ms resize settle (`geometry.go`: a width
+change applies height only and defers the re-wrap, drawing the old wrap clipped to the new size). So
+during a wide→narrow resize that crosses the 120-column takeover, a completed assistant block landing
+in that window reads the DM as still drawn and is held out of the room, even though the terminal has
+already clipped the DM off screen. It is **not** a regression — the pre-feature code never promoted at
+all — and nothing is lost: the block is in the DM, and the roster's unread badge still fires. It is
+the new feature failing to fire for ~80ms.
+
+The clean fix is neither cheap nor proportionate. The actually-visible set during a settle is
+`old-layout ∩ pending-clip` — `View` renders columns at the *old* layout and the terminal clips to the
+*new* width, so neither the committed layout nor the pending width is correct on its own, and in
+opposite resize directions each is wrong the other way. `App.wants` (preview accumulation,
+`partial.go`) already lives with exactly this settle-window imprecision, so the feature inherits an
+accepted tradeoff of the debounce design rather than introducing a new class of bug. Codex flagged it
+in the branch's adversarial review (2026-09-15); recorded here as a decision rather than fixed.
+
+## KNOWN GAP, 2026-09-17 — a lone ⎋ segmented onto its own read can still de-frame a mouse report, remote-only
+
+**Shipped:** `fix/scroll-wheel-injects-text` stops a fast scroll from typing `[<64;48;56M`-shaped
+runes into the composer. The kill-switch input pump (`cmd/wake/killswitch.go`) forwards the tty to
+Bubble Tea through a bounded queue and drops a whole read-chunk when that queue is full (a Bubble Tea
+that has fallen behind). A scroll floods the tty with SGR mouse reports; a dropped chunk that ended
+mid-report split it, and Bubble Tea decoded the orphaned `<`, digits, `;` and `M` as typed runes.
+`alignedCut`/`chunker` now forward only escape-sequence-aligned chunks, so every chunk the pump
+enqueues (and every chunk a drop discards) begins and ends on a report boundary and a gap cannot
+split one — across full *and* short reads, so a report split over an SSH/tmux byte stream reassembles
+before a drop can see half of it.
+
+**Deferred:** one residual survives, and it is the lone trailing ESC. Its own read has no lookahead —
+a real ⎋ keypress and the first byte of a mouse report whose ESC was segmented onto its own read are
+the same one byte — so `chunker.step` forwards a lone ESC at once on a short read to keep ⎋ instant.
+If a remote byte stream splits a report *exactly* after its ESC **and** a queue drop then lands on
+that one-byte chunk, the tail `[<…M` can still reach Bubble Tea as runes. It is **impossible locally**
+(a terminal writes a report's bytes at once, so one `VMIN=1` read gets `\x1b[<…` whole), needs a
+triple coincidence remotely (segmentation after byte 0 + backpressure + the drop landing on the ESC),
+and is roughly what Bubble Tea does reading the tty directly — it de-frames a report whose ESC is read
+alone too. `TestALoneEscGoesNowOnAShortReadAndWaitsOnAFullOne` pins the ⎋-wins-latency behaviour that
+is the reason the residual exists.
+
+*Blocks:* nothing observed — remote-only, and the reported (local) bug is fully closed. *Closes with:*
+a bounded inter-byte timeout that holds a lone ESC a few ms and flushes it as a keypress on the
+deadline or reassembles if the tail arrives first — deliberately not taken, because it puts a timer
+and a second goroutine into the pump whose whole doctrine (its own header) is to stay trivial and
+never block, and ⎋ interrupts a runaway agent so its latency wins. Owner's call, 2026-09-17.
+
 ## KNOWN GAP, 2026-08-31 — the "scroll to bottom" clamp is computed three times, by hand, in three files
 
 **Shipped:** `fix/dm-scroll-follow-banner` adds a follow banner (`internal/ui/followbanner.go`) so a
