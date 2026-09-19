@@ -36,6 +36,35 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## KNOWN GAP, 2026-09-17 — a lone ⎋ segmented onto its own read can still de-frame a mouse report, remote-only
+
+**Shipped:** `fix/scroll-wheel-injects-text` stops a fast scroll from typing `[<64;48;56M`-shaped
+runes into the composer. The kill-switch input pump (`cmd/wake/killswitch.go`) forwards the tty to
+Bubble Tea through a bounded queue and drops a whole read-chunk when that queue is full (a Bubble Tea
+that has fallen behind). A scroll floods the tty with SGR mouse reports; a dropped chunk that ended
+mid-report split it, and Bubble Tea decoded the orphaned `<`, digits, `;` and `M` as typed runes.
+`alignedCut`/`chunker` now forward only escape-sequence-aligned chunks, so every chunk the pump
+enqueues (and every chunk a drop discards) begins and ends on a report boundary and a gap cannot
+split one — across full *and* short reads, so a report split over an SSH/tmux byte stream reassembles
+before a drop can see half of it.
+
+**Deferred:** one residual survives, and it is the lone trailing ESC. Its own read has no lookahead —
+a real ⎋ keypress and the first byte of a mouse report whose ESC was segmented onto its own read are
+the same one byte — so `chunker.step` forwards a lone ESC at once on a short read to keep ⎋ instant.
+If a remote byte stream splits a report *exactly* after its ESC **and** a queue drop then lands on
+that one-byte chunk, the tail `[<…M` can still reach Bubble Tea as runes. It is **impossible locally**
+(a terminal writes a report's bytes at once, so one `VMIN=1` read gets `\x1b[<…` whole), needs a
+triple coincidence remotely (segmentation after byte 0 + backpressure + the drop landing on the ESC),
+and is roughly what Bubble Tea does reading the tty directly — it de-frames a report whose ESC is read
+alone too. `TestALoneEscGoesNowOnAShortReadAndWaitsOnAFullOne` pins the ⎋-wins-latency behaviour that
+is the reason the residual exists.
+
+*Blocks:* nothing observed — remote-only, and the reported (local) bug is fully closed. *Closes with:*
+a bounded inter-byte timeout that holds a lone ESC a few ms and flushes it as a keypress on the
+deadline or reassembles if the tail arrives first — deliberately not taken, because it puts a timer
+and a second goroutine into the pump whose whole doctrine (its own header) is to stay trivial and
+never block, and ⎋ interrupts a runaway agent so its latency wins. Owner's call, 2026-09-17.
+
 ## KNOWN GAP, 2026-08-31 — the "scroll to bottom" clamp is computed three times, by hand, in three files
 
 **Shipped:** `fix/dm-scroll-follow-banner` adds a follow banner (`internal/ui/followbanner.go`) so a
