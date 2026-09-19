@@ -1,22 +1,23 @@
-// One supervised session's permission asks: the ones it is blocked on, and the
-// bookkeeping the daemon does about them. Split from agent.go, which crossed the
-// 800-line hard max - the subject subagenttrack.go and agentstatus.go were each
-// split out the same way.
-//
-// The daemon holds each ask rather than leaving it to the client because this is
-// the only layer that has both facts at once: core sees the ask go past and
-// forgets it, and a client can be told the ask exists and then answer it with a
-// frame that carries no evidence of what it was answering. So the daemon watches
-// the ask arrive and holds it until it is settled - the only place that can
-// notice an answer settling it wrongly (see allow) or hand a late-attaching
-// client the same event a live one got (see pendingAskFrames in askreplay.go).
-
 package daemon
+
+// The permission asks an agent is blocked on: recording them as they arrive,
+// taking them down as they settle, and reporting what is still outstanding.
+// Split from agent.go, whose subject is the liveness policy. The ask
+// bookkeeping is a distinct concern the daemon owns because it is the only
+// layer that watches an ask arrive and holds it until it settles - see the ask
+// type's own note.
 
 import "github.com/DilanDoshi/wake/internal/core"
 
 // ask is one permission request an agent is blocked on: which one, and what it
 // wants from the operator. An agent holds a slice of these - see agent.pending.
+//
+// The second half is here rather than left to the client because this is the
+// only layer that has both facts at once. core sees the ask go past and
+// forgets it; a client can be told the ask exists and then answer it with a
+// frame that carries no evidence of what it was answering. The daemon watched
+// the ask arrive and holds it until it is settled, so it is the only place
+// that can notice an answer settling it wrongly - see allow.
 type ask struct {
 	id string
 
