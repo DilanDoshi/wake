@@ -382,9 +382,14 @@ applied where a reply lands can never see a second session.
 **The turn is the unit, and an agent's prose is restored only inside a public one.** Deciding it line
 by line hid the question and showed the answer: the private turn was dropped and the agent's reply to
 it — the same conversation, in the agent's words — went into the group chat anyway. Live,
-`App.observe` keeps a whole DM-sent turn out of the room through `Fleet.inDM`, and nothing on disk
-records which surface a turn was typed on, so the restore carries provenance itself: prose is kept
-while its session's last user turn was a proven broadcast, and the next user turn closes it. **Prose
+`App.observe` keeps a DM-sent turn out of the room through `Fleet.inDM` **only while its DM is
+drawn** — once the reader leaves it (the pane stops being drawn, `drawnConversations`), the rest of
+the turn's prose promotes to the room, so someone watching the group chat does not miss a reply to a
+DM they walked away from; the DM stays the record and gets everything either way. That promotion is
+**live-only** (a promoted reply is not a proven broadcast, so a restore does not reconstruct it).
+Nothing on disk records which surface a turn was typed on, so the restore carries provenance itself:
+prose is kept while its session's last user turn was a proven broadcast, and the next user turn
+closes it. **Prose
 with no initiator in the window is dropped**, which is most of a 400-event tail — and that is why
 there are two bounds. `roomRawEvents` is a memory backstop on `Room.raw`; `roomHistoryEvents` is
 applied *after* the rule, because trimming `raw` takes the oldest line of a turn and the oldest line

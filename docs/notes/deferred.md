@@ -36,6 +36,30 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## KNOWN GAP, 2026-09-15 — a DM reply can miss room-promotion during the 80ms resize settle
+
+**Shipped:** `feat/promote-dm-reply-on-leave` promotes a DM-sent turn's prose into the room once its
+DM stops being drawn (the operator has left it), so someone watching the group chat does not miss a
+reply to a DM they walked away from. `internal/ui/observe.go` decides this with
+`drawnConversations()`, the same "is this pane on screen" predicate `App.wants` uses.
+
+**Deferred:** `drawnConversations()` reads the *committed* layout (`a.layout`), the width `View` draws
+at — which lags the terminal's real width through the 80ms resize settle (`geometry.go`: a width
+change applies height only and defers the re-wrap, drawing the old wrap clipped to the new size). So
+during a wide→narrow resize that crosses the 120-column takeover, a completed assistant block landing
+in that window reads the DM as still drawn and is held out of the room, even though the terminal has
+already clipped the DM off screen. It is **not** a regression — the pre-feature code never promoted at
+all — and nothing is lost: the block is in the DM, and the roster's unread badge still fires. It is
+the new feature failing to fire for ~80ms.
+
+The clean fix is neither cheap nor proportionate. The actually-visible set during a settle is
+`old-layout ∩ pending-clip` — `View` renders columns at the *old* layout and the terminal clips to the
+*new* width, so neither the committed layout nor the pending width is correct on its own, and in
+opposite resize directions each is wrong the other way. `App.wants` (preview accumulation,
+`partial.go`) already lives with exactly this settle-window imprecision, so the feature inherits an
+accepted tradeoff of the debounce design rather than introducing a new class of bug. Codex flagged it
+in the branch's adversarial review (2026-09-15); recorded here as a decision rather than fixed.
+
 ## KNOWN GAP, 2026-08-31 — the "scroll to bottom" clamp is computed three times, by hand, in three files
 
 **Shipped:** `fix/dm-scroll-follow-banner` adds a follow banner (`internal/ui/followbanner.go`) so a

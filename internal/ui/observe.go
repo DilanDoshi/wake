@@ -73,6 +73,24 @@ func (a App) observe(sessionID string, ev core.Event) App {
 		a = a.refreshedBar(sessionID)
 	}
 
+	// A DM-sent turn (inDM) is held out of the room only while its DM is on
+	// screen and being read; once the reader leaves it - the pane stops being
+	// drawn - the rest of the turn's prose flows to the room, so someone watching
+	// the group chat does not miss a reply to a DM they walked away from. The
+	// layout walk is gated on a room candidate existing, so a streamed partial
+	// (which yields none) never pays for it - work per prose block, not per token,
+	// and App.wants already walks it per token, so the marginal cost is nil.
+	//
+	// drawnConversations reads the committed layout (the one View draws), which
+	// lags the terminal through the 80ms resize settle - so a reply landing during
+	// a wide→narrow resize can briefly miss promotion and fall back to the roster
+	// badge. The exact-visible set is an old-layout∩pending intersection out of
+	// proportion to an 80ms edge App.wants already lives with; see deferred.md.
+	dmDrawn := false
+	if inDM && len(forRoom) > 0 {
+		dmDrawn = a.drawnConversations()(sessionID)
+	}
+
 	for _, e := range forRoom {
 		switch e.Kind {
 		case core.KindPermissionRequest, core.KindRequestWithdrawn:
@@ -111,9 +129,11 @@ func (a App) observe(sessionID string, ev core.Event) App {
 			e.ToName = agent.Name
 			a = a.withRoom(a.room.Append(e, a.fleet.crossSpeaker(e.FromName)))
 		default:
-			// A turn held in a DM stays in the DM. Fleet.sending says which
-			// turns those are; the DM below gets everything either way.
-			if inDM {
+			// A DM-sent turn stays private only while its DM is drawn; once the
+			// reader has left it, its prose promotes to the room. Fleet.sending
+			// says which turns are DM-sent; dmDrawn (above) whether the pane is
+			// still on screen. The DM below gets everything either way.
+			if inDM && dmDrawn {
 				continue
 			}
 			a = a.withRoom(a.room.Append(e, agent))
