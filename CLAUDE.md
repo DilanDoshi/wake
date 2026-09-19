@@ -1099,7 +1099,7 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | The sample beside an option | `internal/ui/preview.go` — three tiers: beside, stacked, dropped |
 | Which key means what | `internal/ui/keys.go` — `App.key`, held to `legendEntries` in both directions |
 | Leaving takes ⌃O then ↵ | `internal/ui/detach.go` — the arm, why the confirm is a different key, and why the legend carries it |
-| The way out of a Wake that has stopped answering | `cmd/wake/killswitch.go` — `killTrigger` (pure, so the one thing that can close somebody's window is testable without a terminal) · `killSwitch.pump` (the read that never waits on the consumer it exists to escape) · `emergencyExit` · `watchSignals`. Wired in `attach.go`'s `converseModel`, which is the one place a program runs |
+| The way out of a Wake that has stopped answering | `cmd/wake/killswitch.go` — `killTrigger` (pure, so the one thing that can close somebody's window is testable without a terminal) · `killSwitch.pump` (the read that never waits on the consumer it exists to escape) · `alignedCut`/`chunker` (pure: the pump forwards only escape-sequence-aligned chunks, so a drop when Bubble Tea falls behind a fast scroll cannot split a mouse report into runes typed into the composer) · `emergencyExit` · `watchSignals`. Wired in `attach.go`'s `converseModel`, which is the one place a program runs |
 | The legend, the armed cue it has become, and the labels an arm swaps | `internal/ui/legend.go` — `legendEntries` (the bijection's canonical list, no longer drawn on every frame), `legendArms`, `armedLabel`/`armedCueParts`/`armedCue` (the only thing drawn now, and only while an arm is live) · `internal/ui/composer.go` — `showsCue` (`View` draws the cue row and `overhead` counts it by the one predicate) · `legend_test.go` for the bijection and the cue |
 | Walking back through what you typed | `internal/ui/prompts.go` — `↑↓` on an empty or single-line draft, derived from the pane's own events |
 | Where Wake's keyboard collides with Claude Code's | `internal/ui/testdata/claude-keymap.json`, maintained by hand (asserted by `keymap_test.go`, which holds the eight accepted collisions and fails on a ninth) |
@@ -1396,7 +1396,7 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/rpc/wire.go` at 800 and `internal/core/vocabulary.go` at 799 — that sentence is derived by
+  `internal/rpc/wire.go` at 800 and `internal/core/protocol.go` at 799 — that sentence is derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
   message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**

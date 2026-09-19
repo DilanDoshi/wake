@@ -467,7 +467,11 @@ func (a App) transcriptRows(id string, width, height int) int {
 	if id == "" {
 		return a.roomFor().WithMenu(menu).SetSize(width, height).tr.height
 	}
-	return a.dmFor(id).WithMenu(menu).SetSize(width, height).tr.height
+	// WithCompacting is chrome dmPane adds and dmFor does not: a compacting DM
+	// draws its bar a row taller (hasBeat), so a measurement without it is a
+	// selRows two rows too tall, and pointIn would anchor above the pointer - the
+	// same class of bug the room's working line was. See dmPane.
+	return a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).SetSize(width, height).tr.height
 }
 
 // dividerColumn is the one column between the panes, drawn its whole height so

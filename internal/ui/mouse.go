@@ -443,9 +443,25 @@ func (a App) clickedComposer() (App, tea.Cmd) {
 
 // pointIn is where a screen row and a pane-local column land in a
 // conversation's scrollback.
+//
+// The top visible line is resolved off the transcript sized the way the *draw*
+// sizes it - height selRows, the chrome-adjusted count startSelection measured
+// through the draw's own SetSize - not the stored transcript's own height. The
+// two differ whenever chrome moves without a resize: the room grows a working
+// line while any agent is busy (WithWorking is applied for the draw only), so
+// the stored transcript is a working-line taller than what is on screen, and
+// its top line is that many rows too low. Reading it there anchored every press
+// a few rows above the pointer. Mirrors SetSize+transcript.view exactly:
+// following is sampled on the stored height, then the top clamps against the
+// drawn one. See transcriptRows and Room.chrome.
 func (a App) pointIn(id string, col, y int) point {
 	tr := a.transcriptIn(id)
-	first := min(max(tr.scroll, tr.first()), tr.bottom())
+	following := tr.atBottom()
+	drawn := tr.sized(tr.width, a.selRows)
+	if following {
+		drawn = drawn.toBottom()
+	}
+	first := min(max(drawn.scroll, drawn.first()), drawn.bottom())
 	return point{
 		line: clamp(first+y-a.selTop, tr.first(), max(tr.lines.len()-1, tr.first())),
 		col:  max(col, 0),
