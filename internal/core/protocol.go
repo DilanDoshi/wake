@@ -446,10 +446,12 @@ func mcpServers(rows []wireMCPServer) []MCPServer {
 // resultFacts is how full the context is after a turn, and nil for a result
 // that did not account for one.
 //
-// The window is looked up by the model the same frame names, rather than by
-// taking whatever single entry the map holds: modelUsage is keyed by model and
-// a turn that changed model mid-flight has two, in which case the frame's own
-// model is the one whose window applies.
+// The window is looked up by the model the frame names, but a result frame
+// carries none across the whole corpus, so the fallback resolves it: the
+// largest window among the entries. That fixes the false 0% a failover leaves
+// (a stale small window under a growing level); the inverse, a failover onto the
+// smaller model, is overstated instead - the "a failover is invisible" blind
+// spot in docs/notes/deferred.md, since no wire signal names a result's model.
 func resultFacts(f wireFrame) *SessionFacts {
 	if f.Usage == nil {
 		return nil
@@ -472,11 +474,11 @@ func resultFacts(f wireFrame) *SessionFacts {
 	}
 	if m, ok := f.ModelUsage[f.Model]; ok {
 		facts.ContextWindow = m.ContextWindow
-	} else if len(f.ModelUsage) == 1 {
-		// A result naming no model, which the corpus has: one entry is
-		// unambiguous whatever it is keyed by.
+	} else {
+		// No top-level model to key on (every recorded result frame): take the
+		// largest entry, so a failover keeps the running window over the fallback's.
 		for _, m := range f.ModelUsage {
-			facts.ContextWindow = m.ContextWindow
+			facts.ContextWindow = max(facts.ContextWindow, m.ContextWindow)
 		}
 	}
 	return &facts

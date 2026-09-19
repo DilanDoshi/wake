@@ -91,12 +91,35 @@ func TestContextTokensIsTheFinalCallNotTheTurnSum(t *testing.T) {
 // The window is looked up by the frame's own model, so a turn that used two
 // does not take the wrong one's window.
 func TestTheContextWindowIsTheModelsOwn(t *testing.T) {
-	evs := decodeLineT(t, `{"type":"result","session_id":"s1","model":"claude-opus-5",`+
+	// The named model carries the *smaller* window, so this fails under a
+	// "largest wins" regression and genuinely pins the direct-lookup branch
+	// rather than coinciding with the max-over-entries fallback.
+	evs := decodeLineT(t, `{"type":"result","session_id":"s1","model":"claude-sonnet-5",`+
 		`"usage":{"input_tokens":10},`+
 		`"modelUsage":{"claude-sonnet-5":{"contextWindow":200000},"claude-opus-5":{"contextWindow":1000000}}}`)
 
-	if got := evs[0].Session.ContextWindow; got != 1000000 {
-		t.Errorf("context window = %d, want the frame's own model's 1000000", got)
+	if got := evs[0].Session.ContextWindow; got != 200000 {
+		t.Errorf("context window = %d, want the named model's 200000, not the larger entry", got)
+	}
+}
+
+// Every result frame in the corpus carries no top-level model, so the window
+// must resolve from the modelUsage entries alone. A --fallback-model failover
+// puts two entries in the map with no top-level model to disambiguate them;
+// taking the larger window keeps the running model's window rather than reading
+// a false 0% off the smaller fallback's. Without this the window is 0 (blank),
+// or a stale small one is retained and the growing level pegs the bar at 0%.
+func TestTheContextWindowResolvesWithoutATopLevelModel(t *testing.T) {
+	evs := decodeLineT(t, `{"type":"result","subtype":"success","session_id":"s1",`+
+		`"usage":{"input_tokens":10,"cache_read_input_tokens":205590},`+
+		`"modelUsage":{"claude-sonnet-5":{"contextWindow":200000},"claude-opus-5[1m]":{"contextWindow":1000000}}}`)
+
+	facts := evs[0].Session
+	if facts == nil {
+		t.Fatal("result carried no session facts; usage is on it")
+	}
+	if facts.ContextWindow != 1000000 {
+		t.Errorf("context window = %d, want 1000000 (the larger entry; no top-level model to key on)", facts.ContextWindow)
 	}
 }
 
