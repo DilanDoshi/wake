@@ -387,11 +387,40 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 }
 
 // crossSessionBlock renders a peer's cross-session message in a DM: the sender's
-// from-name with the room's ↪ lead, then the body as prose. Not shadedOwn -
+// from-name with the room's ↪ lead, then the body in Subtle. Not shadedOwn -
 // these are not the operator's words - and the sender's identity colour is the
 // room's alone, since a DM has no fleet to resolve from-name into an agent.
 func crossSessionBlock(ev core.Event, width int) string {
-	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), render.Markdown(strings.TrimSpace(ev.Text), width))
+	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), crossSessionBody(ev.Text, width))
+}
+
+// crossSessionBody draws a received peer message's body in Subtle - Claude's
+// dimmest grey - so an incoming cross-session message reads apart from the
+// agent's own white replies (owner's request, both this DM and the room's
+// crossSaid). Plain text, not markdown, for thinkingBlock's reason: a
+// foreground wrapped around glamour's output ends at glamour's first SGR reset,
+// so a dim body has to be plain to stay dim to the last line. Width wraps and
+// pads each line and PaddingLeft aligns it under the head, the way thinkingBlock
+// draws its own muted body one indent in.
+func crossSessionBody(text string, width int) string {
+	body := strings.TrimSpace(text)
+	if body == "" {
+		return ""
+	}
+	// shadedOwn's guard, one helper over, because this body reaches the room:
+	// Width(0) is lipgloss for "unbounded", and PaddingLeft(bodyIndent) at a
+	// width the indent fills leaves zero for the text, so either returns a line
+	// wider than the column and shoves the sidebars out of place (roomBlock's
+	// invariant). Unreachable while every caller floors at minBlockWidth, but
+	// the bound belongs on the function, not the callers that happen to floor.
+	if width < 1 {
+		return SubtleStyle.Render(body)
+	}
+	style := SubtleStyle.Width(width)
+	if width > bodyIndent {
+		style = style.PaddingLeft(bodyIndent)
+	}
+	return style.Render(body)
 }
 
 // userBlock renders one turn from the user's side of the conversation.

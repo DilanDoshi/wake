@@ -186,33 +186,36 @@ func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 // never put through it twice.
 func agentSaid(text string, count int, a Agent, width int, expanded bool) string {
 	head := speakerStyle(a).MaxWidth(width).Render(speaker(a))
-	return saidBlock(head, text, tokenLabel(count), width, expanded)
+	return saidBlock(head, render.Markdown(strings.TrimSpace(text), width), tokenLabel(count), width, expanded)
 }
 
 // crossSaid draws a peer's cross-session message: the sender's name-tag with a
 // lead marking it as a message from another session - so it is not mistaken for
 // the sender's own turn in the room - the receiving session after an arrow when
-// it is known (toName), then the body, folded past roomInlineRows the way a
-// reply is. No token count: a peer message is not this fleet's spend.
+// it is known (toName), then the body in Subtle, folded past roomInlineRows the
+// way a reply is. Dimmer than a reply so an incoming message reads apart from
+// the agent's own words (crossSessionBody); no token count, since a peer message
+// is not this fleet's spend.
 func crossSaid(text, toName string, a Agent, width int, expanded bool) string {
 	name := crossSessionLead + speaker(a)
 	if toName != "" {
 		name += crossSessionArrow + toName
 	}
 	head := speakerStyle(a).MaxWidth(width).Render(name)
-	return saidBlock(head, text, "", width, expanded)
+	return saidBlock(head, crossSessionBody(text, width), "", width, expanded)
 }
 
-// said is the shared body of agentSaid and crossSaid: a head, then the message
-// whole if it renders short or a pointer if it is taller than the room shows
-// inline. Rendered once, so a long message never goes through glamour's
-// process-global mutex twice - the height decision and the preview share it.
-func saidBlock(head, text, label string, width int, expanded bool) string {
-	rendered := render.Markdown(strings.TrimSpace(text), width)
-	if expanded || renderedRows(rendered) <= roomInlineRows {
-		return joinBlock(head, rendered)
+// saidBlock is the shared body of agentSaid and crossSaid: a head, then a
+// pre-rendered body whole if it is short or a pointer if it is taller than the
+// room shows inline. The body is rendered by the caller - markdown for a reply,
+// Subtle plain text for a peer message - and passed in once, so a long message
+// never goes through glamour's process-global mutex twice: the height decision
+// and the collapsed preview share the one render.
+func saidBlock(head, body, label string, width int, expanded bool) string {
+	if expanded || renderedRows(body) <= roomInlineRows {
+		return joinBlock(head, body)
 	}
-	return joinBlock(head, collapsed(rendered, label, width, roomCollapseLines))
+	return joinBlock(head, collapsed(body, label, width, roomCollapseLines))
 }
 
 // roomCollapsible reports whether an event draws as a pointer at this width -
@@ -222,11 +225,17 @@ func saidBlock(head, text, label string, width int, expanded bool) string {
 // are expandable, and it renders once, which is affordable on a user gesture
 // and never on a frame.
 func roomCollapsible(ev core.Event, width int) bool {
-	if ev.Kind != core.KindAssistantText && ev.Kind != core.KindCrossSession {
+	w := max(width, minBlockWidth)
+	switch ev.Kind {
+	case core.KindAssistantText:
+		return renderedRows(render.Markdown(strings.TrimSpace(ev.Text), w)) > roomInlineRows
+	case core.KindCrossSession:
+		// The same Subtle body crossSaid draws, so the two agree on which
+		// peer messages fold to a pointer.
+		return renderedRows(crossSessionBody(ev.Text, w)) > roomInlineRows
+	default:
 		return false
 	}
-	rendered := render.Markdown(strings.TrimSpace(ev.Text), max(width, minBlockWidth))
-	return renderedRows(rendered) > roomInlineRows
 }
 
 // renderedRows is how many rows a rendered block occupies with its blank edges

@@ -160,6 +160,11 @@ var (
 	// HintStyle is for key hints and other chrome that must recede.
 	HintStyle = lipgloss.NewStyle().Foreground(Muted)
 
+	// SubtleStyle recedes a step further than HintStyle - Claude's dimmest grey.
+	// It draws a received peer message's body (crossSessionBody), so an incoming
+	// cross-session message reads apart from the agent's own white replies.
+	SubtleStyle = lipgloss.NewStyle().Foreground(Subtle)
+
 	// AccentStyle marks the active or attention-worthy element.
 	AccentStyle = lipgloss.NewStyle().Foreground(Accent)
 
