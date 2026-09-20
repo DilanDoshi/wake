@@ -160,8 +160,9 @@ type App struct {
 	// picker is the menu Wake draws for a bare /effort or /model, and the zero
 	// value is "there is not one". Beside cards rather than in them: it is
 	// Wake's own and appears in no fleet report. See picker.go.
-	picker Picker
-	rewind RewindPicker // esc esc's own picker, on an idle empty conversation; see rewind.go
+	picker       Picker
+	rewind       RewindPicker // esc esc's own picker, on an idle empty conversation; see rewind.go
+	resumePicker ResumePicker // a bare /resume's own picker, over the composer; see resumepicker.go
 
 	// completion is the menu under the focused draft: what could finish the
 	// word at the cursor. Rebuilt per keystroke, never per frame, and its `@`
