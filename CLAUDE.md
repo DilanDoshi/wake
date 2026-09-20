@@ -546,9 +546,19 @@ before the second process exists: `resumeSafe` asks the OS (one `ps`, matched on
 value), every error is a refusal, and `launch` takes the row **before** it starts anything.
 
 **Forks and imports are snapshots.** A fork is `--resume <parent> --fork-session --session-id <new>`
-emitted as one literal; the parent's transcript is byte-identical afterwards. Import is a fork rather
-than a resume — it costs the original id, and it is the only safe primitive, because a `claude`
-somebody started by hand carries no id in its argv for `resumeSafe` to find.
+emitted as one literal; the parent's transcript is byte-identical afterwards. Import (`/adopt`, `wake
+import`) is a fork rather than a resume — it costs the original id, and it is the only *guaranteed*
+safe primitive, because a `claude` somebody started by hand carries no id in its argv for
+`resumeSafe` to find.
+
+**`/resume` resumes in place, and it is the one deliberate exception to that guarantee** (owner's
+2026-09-20 ruling, "same as Claude Code, no guard"). Its picker resumes an on-disk conversation under
+its **own** id via `FrameResume` → `--resume <id>` (no fork), so the transcript continues — and the
+handler **skips `resumeSafe`**, exactly as Claude Code's own `/resume` performs no such check. This
+accepts the branch-if-still-open-elsewhere risk the non-negotiable above names; `/adopt` remains for
+when a safe copy is wanted. Parked rows still take `FrameWake`/`unparkRecord` with `resumeSafe`
+intact — Wake parked them, so that path is genuinely safe. Full argument:
+`internal/daemon/resume.go`, `docs/notes/decisions.md`.
 
 **Anything waiting on a spawn waits on the id it minted, never the parent's.** A client waiting on
 the wrong id does not fail — it waits forever with nothing printed. The daemon addresses every fork
@@ -1104,7 +1114,8 @@ yet says so in bold** — a table that cannot be told apart from a build is wors
 | Walking back through what you typed | `internal/ui/prompts.go` — `↑↓` on an empty or single-line draft, derived from the pane's own events |
 | Where Wake's keyboard collides with Claude Code's | `internal/ui/testdata/claude-keymap.json`, maintained by hand (asserted by `keymap_test.go`, which holds the eight accepted collisions and fails on a ninth) |
 | `⇧⇥`, the cycle, and the label | `internal/ui/mode.go` |
-| Fork · park · resume · slash · new · starts · last-read | `internal/ui/fork.go` · `park.go` · `resume.go` (`/resume` and the wake bookkeeping, split out when `slash.go` hit the 800 line max) · `slash.go` · `new.go` · `starts.go` · `lastread.go` |
+| Fork · park · resume · slash · new · starts · last-read | `internal/ui/fork.go` · `park.go` · `resume.go` (`/resume`, the wake bookkeeping, and `resumeRowsFrom` — the merge of parked + on-disk that a bare `/resume` opens) · `slash.go` · `new.go` · `starts.go` · `lastread.go` |
+| The `/resume` picker: rows, keys, the mixed-batch confirm | `internal/ui/resumepicker.go` — `ResumePicker`, `resumeRow`, `resumePickerKey` (␣ toggles in the room only, above `App.key`'s switch so no legend entry), `confirmResume`, `resumeFrames` (parked → `FrameWake`, disk → `FrameResume`) · `internal/daemon/resume.go` — `resumeSession`/`resumeSource` (in place, no `resumeSafe` — the reversal) · `internal/ui/adopt.go`'s `Sessions.Resumable()` seam · `resumepicker_test.go`, `resumeopen_test.go`, `resumeframe_test.go` |
 | The command kinds, and the fence | `internal/ui/slash.go` — `slash` (Wake-addressed) · `configure` (session-addressed, bare) · `mentionCommand`/`roomTargetCommands` (a room mention aiming a target-command, `@who /color`) · `bareOnlyCommands` (+ `slashguard_test.go`) |
 | The `/login` auth panel | `internal/ui/authapp.go` — `login`, `runAuthStatus`, `authResult`, and `panelResult` (the one Update case `/mcp` and `/login` share) · `authpanel.go` — `parseAuthStatus`, `authPanel`. Runs `claude auth status --json` through `bangRun` and hands `claude auth login` over, never running the login (no-PTY). Decodes only `loggedIn`/`authMethod`, never the account email or org (public repo) |
 | The menu Wake draws | `internal/ui/picker.go` — drawn through `cards_blocks.go`'s `optionRow` · `pickerCurrent` (the value the one target is already at, marked for `/effort` and lined for `/model`) |
@@ -1396,9 +1407,9 @@ Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-f
 - **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
   `router`, which must stay pure.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/rpc/wire.go` at 800 and `internal/core/protocol.go` at 799 — that sentence is derived by
-  `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction in its own
-  message. Split by subject, never by line count.
+  `internal/core/protocol.go` at 799 and `internal/core/vocabulary.go` at 799 — that sentence is
+  derived by `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction
+  in its own message. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** Never silently swallow. A malformed JSON line logs and skips — it
   never crashes the render loop. Under a TUI, failures go to `internal/notice`, never to stderr.
