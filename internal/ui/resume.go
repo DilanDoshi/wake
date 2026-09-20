@@ -183,22 +183,31 @@ func parkedList(parked []Agent) string {
 	return "parked: " + strings.Join(names, " ")
 }
 
-// transcriptFormat is what a conversation that has just come back says about
-// itself, and it is one sentence because two surfaces say it.
-//
-// `wake attach` has said it since Phase 1: a pane that opens empty over a
-// session with an hour behind it reads as a session that lost it, and the
-// truth is narrower and worth stating - claude keeps the transcript on disk and
-// Wake never had it. `/resume` produced the identical surprise and said
-// nothing.
-const transcriptFormat = "%s%s is back. What it said before now is not here - claude keeps the transcript, Wake does not"
+// resumedFormat is what a parked conversation says when `/resume` brings it
+// back. The transcript comes back with it - a woken DM re-reads it from disk
+// (history.go) and the room re-fetches its history (askRoomHistory) - so the
+// notice is the fact of the return, not the old caveat that the history was
+// claude's and gone.
+const resumedFormat = "%s%s has been resumed."
 
-// TranscriptNotice is that sentence, for the two callers that need it: this
-// package on a wake, and cmd/wake on an attach. Exported for the second, which
-// is ParkedNotice's arrangement and its reason - the sentence lives beside the
-// thing it describes rather than being written twice.
-func TranscriptNotice(name string) string {
-	return fmt.Sprintf(transcriptFormat, agentPrefix, name)
+// ResumedNotice is that sentence, for wakeArrived.
+func ResumedNotice(name string) string {
+	return fmt.Sprintf(resumedFormat, agentPrefix, name)
+}
+
+// attachedFormat is what `wake attach` says when it reconnects to a live
+// session. That session was never parked, so it is a reattachment rather than a
+// resume; its transcript loads from disk as the pane opens (history.go). The
+// word is deliberately hangup.go's own: `wake attach` is the manual counterpart
+// to the automatic socket-redial there (cmd/wake/attach.go's `reattach`), so the
+// shared "reattached" names one idea on two surfaces rather than colliding.
+const attachedFormat = "%s%s — reattached."
+
+// AttachedNotice is that sentence, exported for cmd/wake's attach path - two
+// events, so two sentences, rather than one that would say "resumed" about a
+// session nothing parked.
+func AttachedNotice(name string) string {
+	return fmt.Sprintf(attachedFormat, agentPrefix, name)
 }
 
 // wakeArrived says it the first time a report shows a session this client asked
@@ -228,10 +237,10 @@ func (a App) wakeArrived(st *rpc.Status) App {
 		// from before the park no longer describes it; if its login is still
 		// expired the next turn re-marks it. See apierror.go.
 		a = a.clearAuthFailed(s.ID)
-		notice.Report("%s", TranscriptNotice(s.Name))
+		notice.Report("%s", ResumedNotice(s.Name))
 		a = a.modeReverted(s.ID, s.Name)
 		// The room is missing everything this session said before it was
-		// parked, and this is the only report that says it is back. A fork is
+		// parked, and this is the only report that says it has been resumed. A fork is
 		// refused here as it is at the seed - its transcript is its parent's.
 		// See roomhistory.go.
 		if !isFork(s) {

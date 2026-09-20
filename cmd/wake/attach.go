@@ -333,7 +333,7 @@ func reattach(socket, sessionID string, out io.Writer) error {
 	// and drawn as a bare "@" in the DM header, which reads as two agents.
 	// converse now derives its half from the same session, so the two cannot
 	// drift apart by anyone editing one call site.
-	notice.Report("%s", ui.TranscriptNotice(displayName(sess)))
+	notice.Report("%s", ui.AttachedNotice(displayName(sess)))
 	return converse(socket, sess, &fleet, conn, stream, held, out)
 }
 
