@@ -396,8 +396,18 @@ func (a App) roomPane(width, height int) string {
 // `top`: a screen row is a transcript line with nothing to offset it by.
 func (a App) menuBlock(id string, width int) (string, bool) {
 	card := a.cardBlock(id, width)
-	stack := above(above(card, a.pickerView(width, id)), a.rewindView(width, id))
+	stack := above(above(above(card, a.pickerView(width, id)), a.rewindView(width, id)), a.resumeView(width, id))
 	return above(stack, a.completionView(width, id)), card != ""
+}
+
+// resumeView is the resume picker if it belongs to this pane, and "" otherwise -
+// pickerView's own reason: it is drawn over the composer that opened it (the
+// room, id "", or a DM), so its ↵ does not resume from a pane nobody chose it in.
+func (a App) resumeView(width int, id string) string {
+	if !a.resumePicker.Open() || a.focus != id {
+		return ""
+	}
+	return a.resumePicker.View(width)
 }
 
 // pickerView is the menu if it belongs to this pane, and "" otherwise.

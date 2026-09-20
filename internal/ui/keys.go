@@ -109,6 +109,11 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if next, cmd, handled := a.rewindKey(m); handled {
 		return next, cmd, true
 	}
+	// pickerKey's own placement and reason: the resume picker claims ↑↓, ↵, esc
+	// and ␣ (room only) while it is up. See resumepicker.go.
+	if next, cmd, handled := a.resumePickerKey(m); handled {
+		return next, cmd, true
+	}
 	// Read before the disarm below takes it, because the disarm is what makes
 	// "every other key takes the arm back" true without a call site per key.
 	// See escape.go.
