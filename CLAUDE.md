@@ -1,7 +1,7 @@
 # CLAUDE.md — Wake
 
-**Status: Phases 1–3 built and merged.** Core, daemon, room, DM, park/wake, fork, import, and the
-manager all work end to end. Phase 4 is next — see `docs/goals.md`.
+**Status: Phases 1–3 partially complete.** Core, daemon, room, DM, park/wake, fork, and the
+manager all work end to end. Session importing and pool management remain. Phase 4 is next — see `docs/goals.md` for current phase breakdown.
 
 The design lives in `docs/superpowers/specs/2026-08-08-wake-design.md`. **The spec is the source of
 truth for *what* Wake does; this file is the source of truth for *how we build it*.** When they
