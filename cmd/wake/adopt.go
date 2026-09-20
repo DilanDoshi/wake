@@ -98,3 +98,24 @@ func (machineSessions) Resolve(typed []string) ([]string, error) {
 	}
 	return ids, nil
 }
+
+// Resumable is the same walk as Listing, structured for the resume picker rather
+// than formatted for a block. One walk, one source of truth: the picker sorts
+// and dedups these rows, and the daemon still decides whether each may resume.
+func (machineSessions) Resumable() ([]ui.DiskSession, error) {
+	found, err := daemon.Discoverable()
+	if err != nil {
+		return nil, err
+	}
+	out := make([]ui.DiskSession, 0, len(found))
+	for _, f := range found {
+		out = append(out, ui.DiskSession{
+			ID:       f.ID,
+			Dir:      f.Dir,
+			Slug:     f.Slug,
+			Preview:  f.Preview,
+			Modified: f.Modified,
+		})
+	}
+	return out, nil
+}

@@ -81,6 +81,7 @@ package ui
 import (
 	"fmt"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
@@ -167,6 +168,22 @@ type Sessions interface {
 	// one - into full session ids, in the order they were typed. It answers
 	// with an error naming the first thing it could not resolve.
 	Resolve(typed []string) ([]string, error)
+
+	// Resumable is the same walk as Listing, structured rather than formatted:
+	// the resume picker needs fields (a directory, a preview, an mtime) to build
+	// and sort its rows, where /adopt only prints a block. Newest first.
+	Resumable() ([]DiskSession, error)
+}
+
+// DiskSession is one on-disk conversation the resume picker can offer, carried
+// across the ui↔cmd seam because internal/ui may not walk ~/.claude/projects
+// itself. Dir is empty when none could be proven (a row shown but not resumable).
+type DiskSession struct {
+	ID       string
+	Dir      string
+	Slug     string
+	Preview  string
+	Modified time.Time
 }
 
 // WithSessions returns an App that can see the claude sessions on this machine
