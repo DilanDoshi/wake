@@ -78,6 +78,24 @@ const (
 	// an ordinary Wake session.
 	FrameImport = "import" // client → daemon: adopt a transcript Wake did not write
 
+	// FrameResume brings an on-disk conversation back **in place**: a transcript
+	// in ~/.claude/projects is resumed under its own id with `--resume <id>`, so
+	// the session continues and appends to the same transcript.
+	//
+	// It carries only SessionID, the id to resume - no ParentID (it does not
+	// fork) and no Dir (the directory is the one discovery *proved*, never a
+	// client's guess, FrameImport's own reason).
+	//
+	// **A separate kind from FrameImport, and the difference is the whole point
+	// of this verb.** FrameImport mints a new id and forks (`--resume <src>
+	// --fork-session --session-id <new>`) precisely because it is the only
+	// primitive Wake could prove safe for a session it never started; FrameResume
+	// reuses the id (`--resume <id>`) and is deliberately *not* proven safe - its
+	// handler skips resumeSafe, the owner's "same as Claude Code, no guard"
+	// ruling (2026-09-20, docs/notes/decisions.md). Two verbs whose safety
+	// contracts differ are two kinds, exactly as FrameImport and FrameFork are.
+	FrameResume = "resume" // client → daemon: resume an on-disk conversation in place, under its own id
+
 	FrameHello = "hello" // daemon → client: handshake, sent on connect
 	FrameError = "error" // either direction: something went wrong
 
