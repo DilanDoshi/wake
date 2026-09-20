@@ -2,8 +2,6 @@ package main
 
 import (
 	"testing"
-
-	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 // Resumable is the structured half of the same discovery Listing formats: it
@@ -45,7 +43,4 @@ func TestResumableOnAnEmptyMachine(t *testing.T) {
 	if len(got) != 0 {
 		t.Errorf("Resumable found %d sessions on an empty machine", len(got))
 	}
-	// The seam type is ui.DiskSession, held here so a rename breaks this test
-	// rather than only the picker.
-	var _ []ui.DiskSession = got
 }
