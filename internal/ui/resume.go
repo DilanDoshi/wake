@@ -254,7 +254,16 @@ func resumableCmd(s Sessions) tea.Cmd {
 
 // resumeArrived folds the walk: the rows open the picker, and a read that failed
 // falls back to the parked half rather than to nothing.
+//
+// A slow ~/.claude/projects walk (hundreds of transcripts on NFS) can land after
+// the operator has moved on and started typing. Opening then would clear the
+// draft they began - openResume calls clearDraft - so a walk that returns to a
+// non-empty composer is dropped rather than stealing it. The common case is a
+// sub-second walk into a still-empty box, which opens.
 func (a App) resumeArrived(m resumeReadyMsg) (App, tea.Cmd) {
+	if a.composer().Value() != "" {
+		return a, nil
+	}
 	if m.err != nil {
 		notice.Report("could not read this machine's sessions, showing parked only: %v", m.err)
 		return a.showResume(nil)
@@ -297,10 +306,17 @@ func (a App) resumeRowsFrom(disk []DiskSession) (rows []resumeRow, more int) {
 	}
 
 	all := make([]resumeRow, 0, len(disk)+len(parked))
+	seen := map[string]bool{}
 	for _, d := range disk {
-		if live[d.ID] {
+		// One id, one row - discovery does not dedup across project slugs, so a
+		// transcript copied or resumed under a differently-slugging cwd can appear
+		// twice; the first (newest, since disk is newest-first) wins. Without this
+		// a second occurrence of a *parked* id misses the map (deleted below) and
+		// is drawn as a mislabeled stranger.
+		if live[d.ID] || seen[d.ID] {
 			continue
 		}
+		seen[d.ID] = true
 		if ag, isParked := parked[d.ID]; isParked {
 			all = append(all, parkedRow(ag, ago(d.Modified)))
 			delete(parked, d.ID)

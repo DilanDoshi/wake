@@ -5,6 +5,9 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
+
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // The happy path: a transcript with a proven directory is resumable, and the
@@ -59,6 +62,89 @@ func TestAResumeIsRefusedWhenThereIsNoTranscript(t *testing.T) {
 	_, err := s.resumeSource("cccccccc-3333-4333-8333-333333333333")
 	if err == nil || !strings.Contains(err.Error(), "no transcript") {
 		t.Errorf("the refusal is %v, which does not say the transcript is missing", err)
+	}
+}
+
+// End to end over a real socket and a real fake claude: a resume is **in place**
+// (the same id it resumed, not a fork to a new one) and has **no parent** - a
+// self-referential ParentID would read as a fork, so the room's history would
+// never backfill and the DM header would say "forked from" its own name.
+// unparkRecord passes "" for exactly this reason; resumeSession must too.
+func TestAResumedSessionIsInPlaceAndHasNoParent(t *testing.T) {
+	projects := t.TempDir()
+	t.Setenv("WAKE_PROJECTS", projects)
+	fakeClaudeOnPath(t, "")
+	real := t.TempDir()
+	id := "abcd0000-1111-4111-8111-111111111111"
+	writeTranscript(t, projects, slugOf(real), id, real)
+
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+
+	c.send(rpc.Frame{Kind: rpc.FrameResume, SessionID: id})
+	var got rpc.SessionStatus
+	f := c.await("the daemon's answer to a resume of "+id, func(f rpc.Frame) bool {
+		if f.Kind == rpc.FrameError && f.SessionID == id {
+			return true
+		}
+		if f.Kind != rpc.FrameStatusReply || f.Status == nil {
+			return false
+		}
+		for _, s := range f.Status.Sessions {
+			if s.ID == id && s.State != rpc.StateEnded {
+				got = s
+				return true
+			}
+		}
+		return false
+	})
+	if f.Kind == rpc.FrameError {
+		t.Fatalf("the daemon refused this resume: %s", f.Text)
+	}
+	if got.ID != id {
+		t.Errorf("the resumed session is %q, want the same id %q - a resume is in place, not a fork to a new id", got.ID, id)
+	}
+	if got.ParentID != "" {
+		t.Errorf("a resumed session reports ParentID %q, want empty: it is not a fork, and a self-referential "+
+			"parent would make isFork true - the room's history would never backfill and the DM header would "+
+			"read 'forked from' its own name", got.ParentID)
+	}
+}
+
+// A resume reuses the id, so a session already **live** in this fleet must not
+// be resumed as a stranger - that would put a second process on its id. The
+// picker drops a live row, so this is the daemon's own backstop for a stale
+// snapshot or a racing client.
+func TestResumeRefusesASessionAlreadyInTheFleet(t *testing.T) {
+	s, projects := importServer(t)
+	real := t.TempDir()
+	id := "dddddddd-4444-4444-8444-444444444444"
+	writeTranscript(t, projects, slugOf(real), id, real)
+	if !s.register(liveAgent(id, "alex", real)) {
+		t.Fatalf("could not put session %s in the fleet", id)
+	}
+	_, err := s.resumeSource(id)
+	if err == nil || !strings.Contains(err.Error(), "already in this fleet") {
+		t.Errorf("resumeSource of a live session gave %v, want a refusal naming that it is already here", err)
+	}
+}
+
+// A session the **park book** lists (a cross-restart record, not in s.agents) is
+// refused too - resuming it in place would put a live process under an id the
+// book reports parked, breaking the Parked/Sessions disjointness. This is the
+// path admit's own `parked && !wake` guard defends, which FrameResume's wake
+// bypass would otherwise skip with none of unparkRecord's reservation.
+func TestResumeRefusesABookParkedSession(t *testing.T) {
+	s, projects := importServer(t)
+	real := t.TempDir()
+	id := "eeee1111-4444-4444-8444-444444444444"
+	writeTranscript(t, projects, slugOf(real), id, real)
+	if err := s.parked.add(parkedRecord{ID: id, Name: "iris", Label: "feat/x", Dir: real, Parked: time.Now()}); err != nil {
+		t.Fatalf("seed a park-book record: %v", err)
+	}
+	_, err := s.resumeSource(id)
+	if err == nil || !strings.Contains(err.Error(), "parked in this fleet") {
+		t.Errorf("resumeSource of a book-parked session gave %v, want a refusal naming that it is parked", err)
 	}
 }
 

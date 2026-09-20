@@ -1,8 +1,11 @@
 package ui
 
 import (
+	"strings"
 	"testing"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -97,6 +100,75 @@ func TestResumeArgumentDoesNotOpenPicker(t *testing.T) {
 	}
 	if _, waiting := next.waking["parked1"]; !waiting {
 		t.Error("/resume all did not ask to wake the parked session")
+	}
+}
+
+// A key the picker declines dismisses it (the pickers' shared rule) and reaches
+// the composer - so a stray ↵ afterwards sends the draft rather than resuming a
+// cursor row nobody chose. Regression for the missing .closeResume() in the
+// App.update dismissal chain.
+func TestTypingDismissesTheResumePicker(t *testing.T) {
+	a := parkedFleetApp(t, DiskSession{ID: "abcd1234-5678-4abc-8def-000000000000", Dir: "/s", Modified: time.Now()})
+	got := openedResumePicker(t, a)
+	if !got.resumePicker.Open() {
+		t.Fatal("the picker did not open")
+	}
+	next, _ := pressKey(got, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	if next.resumePicker.Open() {
+		t.Error("a typed key did not dismiss the picker; a later ↵ would resume a cursor row instead of sending")
+	}
+	if !strings.Contains(next.composer().Value(), "x") {
+		t.Errorf("the typed character did not reach the composer: %q", next.composer().Value())
+	}
+}
+
+// A slow disk walk that lands after the operator has started typing is dropped,
+// not allowed to clear the draft they began. Regression for the stale-picker /
+// draft-theft gap.
+func TestASlowResumeWalkDoesNotStealADraft(t *testing.T) {
+	a := parkedFleetApp(t, DiskSession{ID: "abcd1234-5678-4abc-8def-000000000000", Dir: "/s", Modified: time.Now()})
+	next, cmd := a.resume("")
+	if cmd == nil {
+		t.Fatal("bare /resume did not kick the disk walk")
+	}
+	// The operator types while the walk is still out.
+	next = next.withComposer(next.composer().WithDraft("something else"))
+	m, _ := next.Update(cmd())
+	got := m.(App)
+	if got.resumePicker.Open() {
+		t.Error("the walk opened the picker over a draft the operator had started")
+	}
+	if got.composer().Value() != "something else" {
+		t.Errorf("the walk cleared the draft it landed over: %q", got.composer().Value())
+	}
+}
+
+// One id, one row. A transcript that discovery surfaces twice (copied, or
+// resumed under a differently-slugging cwd) must not produce two rows - and a
+// duplicated *parked* id must not have its second occurrence mislabeled as a
+// stranger. Regression for the missing id-dedup in resumeRowsFrom.
+func TestResumeRowsDedupByID(t *testing.T) {
+	now := time.Now()
+	a := parkedFleetApp(t)
+	disk := []DiskSession{
+		{ID: "parked1", Dir: "/p1", Modified: now},
+		{ID: "parked1", Dir: "/p2", Modified: now.Add(-time.Hour)},
+		{ID: "str", Dir: "/s1", Modified: now},
+		{ID: "str", Dir: "/s2", Modified: now.Add(-time.Hour)},
+	}
+	rows, _ := a.resumeRowsFrom(disk)
+	count := map[string]int{}
+	for _, r := range rows {
+		count[r.ID]++
+		if r.ID == "parked1" && !r.Parked {
+			t.Error("a duplicated parked id was drawn as a stranger row (FrameResume) on its second occurrence")
+		}
+	}
+	if count["parked1"] != 1 {
+		t.Errorf("parked1 appeared %d times, want 1", count["parked1"])
+	}
+	if count["str"] != 1 {
+		t.Errorf("stranger str appeared %d times, want 1", count["str"])
 	}
 }
 

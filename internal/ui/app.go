@@ -636,7 +636,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The board goes with them: a rune is somebody typing, and boardKey's
 		// own close on this path is discarded with the rest of the not-handled
 		// model - the disarm comment above is about exactly that.
-		a = a.disarmed().closePicker().closeBoard().closeRewind()
+		a = a.disarmed().closePicker().closeBoard().closeRewind().closeResume()
 	}
 
 	// Whatever the App did not take goes to the pane that has the focus.

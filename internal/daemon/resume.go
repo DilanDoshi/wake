@@ -48,30 +48,49 @@ func (s *server) resumeSession(ctx context.Context, c *client, f rpc.Frame) {
 	}
 	// ResumeFrom and the source's own id, where importSession sets ForkFrom and a
 	// minted id. Dir is the directory discovery proved, never one a client chose.
+	//
+	// **No parent** (unparkRecord's rule, and for its reason): this is an
+	// identity resume, not a fork, so `parent` is "" rather than src.ID. Passing
+	// the id as its own parent - importSession's shape, where the new id differs -
+	// would set a self-referential ParentID, which `isFork` reads as a fork: the
+	// room's history would never backfill (wakeArrived skips a fork) and the DM
+	// header would read "forked from" its own name.
 	s.launch(c, core.Config{
 		SessionID:      src.ID,
 		ResumeFrom:     src.ID,
 		Name:           name,
 		Dir:            src.Dir,
 		PermissionMode: spawnPermissionMode,
-	}, src.ID, nil, nil)
+	}, "", nil, nil)
 }
 
 // resumeSource is the transcript a `/resume` may take, or why it may not: it
-// needs a real session id, a transcript on this machine, and a provable
-// directory to run in.
+// needs a real session id not already in this fleet, a transcript on this
+// machine, and a provable directory to run in.
 //
-// It is importSource with the two guard steps removed — the fleet-holds check
-// and resumeSafe. The holds check is the picker's job (it dedups the live and
-// parked fleet out of the disk rows), and resumeSafe is the reversal in the
-// header. What stays is what a resume cannot do without: something to resume,
-// and somewhere to run it.
+// It is importSource with **`resumeSafe` removed** (the header's reversal) but
+// the **fleet-and-book check kept and widened**. A resume reuses the id, so a
+// session this daemon is already running - or one its park book still lists -
+// must not be resumed as if it were a stranger: that puts a second process on a
+// live id, or a live process under an id the book reports parked, breaking the
+// "Parked is disjoint from Sessions" invariant. The client routes a parked row
+// to FrameWake and drops a live one, so this is the daemon's backstop for a
+// stale picker snapshot or a racing window - and it is the daemon's own
+// definitely-known state, not the `ps` heuristic the ruling waived. Import needs
+// only the s.agents half because it forks to a *new* id; a resume reuses this
+// one, so it also checks the book, which s.agents does not hold across a restart.
 func (s *server) resumeSource(sourceID string) (FoundSession, error) {
 	if sourceID == "" {
 		return FoundSession{}, errors.New("a resume needs a session to resume")
 	}
 	if !mintedByWake(sourceID) {
 		return FoundSession{}, fmt.Errorf("a session id must be a UUID, got %q: claude names every transcript for the session's own id, so anything else is not one", sourceID)
+	}
+	if s.holds(sourceID) {
+		return FoundSession{}, fmt.Errorf("session %s is already in this fleet, so there is nothing to resume: attach it, or if it is parked bring it back with /resume", sourceID)
+	}
+	if _, parked := s.parked.record(sourceID); parked {
+		return FoundSession{}, fmt.Errorf("session %s is parked in this fleet; /resume brings a parked session back in place rather than resuming a second copy under its id", sourceID)
 	}
 	found, err := discover(ProjectsDir())
 	if err != nil {
