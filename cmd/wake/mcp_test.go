@@ -319,7 +319,7 @@ func TestADaemonThatHangsUpBeforeAnsweringIsNotReportedAsSent(t *testing.T) {
 func TestASpawnTheDaemonRefusesIsNotReportedAsStarted(t *testing.T) {
 	d := startRealDaemon(t)
 
-	id, err := (socketFleet{socket: d.socket}).Spawn(t.Context(), "not/absolute")
+	id, err := (socketFleet{socket: d.socket}).Spawn(t.Context(), "not/absolute", "")
 	if err == nil {
 		t.Fatalf("a spawn the daemon refuses was reported as started (id %q): act read the status "+
 			"reply as 'taken' because the refusal was enqueued behind it, so the manager believes in "+
@@ -340,18 +340,24 @@ func kinds(frames []rpc.Frame) []string {
 	return out
 }
 
-// A spawn reaches the socket as a FrameSpawn carrying an id this side minted
-// and the directory the tool was given.
+// A spawn reaches the socket as a FrameSpawn carrying an id this side minted,
+// the directory the tool was given, and the name the manager chose.
 //
 // The id is the half worth asserting. Wake originates identity - the daemon
 // refuses a spawn frame that arrives without one - so a tool that let the
 // daemon choose would be refused, and one that reused an existing id would be
 // refused as already held. It is also what the tool answers with, so the
 // manager can address the agent before the daemon has finished starting it.
+//
+// The name is the other half, and it is asserted here because this is the only
+// test that reads the real frame off the wire: socketFleet.Spawn puts the
+// manager's chosen name on Frame.Text and nothing else does, so a spawn that
+// dropped or swapped that field would name the agent from the pool with nothing
+// on any surface to catch it.
 func TestSpawnAgentPutsOneFrameOnTheSocketCarryingAFreshID(t *testing.T) {
 	d := startFakeDaemon(t, 0, oneAgentFleet(mcpPeter, "peter"))
 
-	out, isErr := toolCall(t, d.socket, "spawn_agent", map[string]any{"directory": "/repos/api"})
+	out, isErr := toolCall(t, d.socket, "spawn_agent", map[string]any{"directory": "/repos/api", "name": "x"})
 	if isErr {
 		t.Fatalf("spawn_agent failed: %s", out)
 	}
@@ -359,6 +365,9 @@ func TestSpawnAgentPutsOneFrameOnTheSocketCarryingAFreshID(t *testing.T) {
 	got := d.lastOfKind(rpc.FrameSpawn)
 	if got.Dir != "/repos/api" {
 		t.Errorf("the daemon was sent %+v, want the directory the tool was given: an agent started somewhere else edits the wrong tree", got)
+	}
+	if got.Text != "x" {
+		t.Errorf("the spawn frame carries name %q, want \"x\": Frame.Text is the only place the manager's chosen name reaches the daemon, and a spawn that drops it names the agent from the pool instead", got.Text)
 	}
 	if _, err := uuid.Parse(got.SessionID); err != nil {
 		t.Errorf("the spawn frame carries %q, which is not a UUID (%v). maySpawn refuses anything else", got.SessionID, err)

@@ -718,7 +718,11 @@ reached the text area and did nothing — the claim costs nothing and takes noth
 and is allowed now because `daemon.liveCap` exists: `maySpawn` refuses past 30 live sessions on every
 path, and the tool's directory must be one the fleet already occupies, so it adds no reach onto the
 machine. Send and interrupt are undoable by looking at the room; spawn is not, which is why its own
-cell calls it the weakest one there.
+cell calls it the weakest one there. **A spawn may name the new agent** — `spawn_agent`'s optional
+`name` rides `Frame.Text` to the daemon's own `claim`/`normalizeName` (the one process that sees the
+whole fleet, so the only one that can refuse a collision), an omitted name is a pooled one unchanged,
+and this is *not* the refused `rename`: a fresh agent has no `@name` an operator is already routing to,
+and the manager still addresses it by the id `spawn_agent` returns.
 Park, wake, fork, rename, label, import, stop, allow/deny and **mode** are refused with a recorded
 argument each in `cmd/wake/mcpguard_test.go`. Mode is the newest and the shortest path on the list: a
 manager that could set a permission mode would be the fleet deciding it will not be asked, in every

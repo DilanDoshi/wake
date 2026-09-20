@@ -36,8 +36,87 @@ func TestSpawnAgentStartsOneWhereTheFleetAlreadyIs(t *testing.T) {
 	if !strings.Contains(got, spawnedID) {
 		t.Errorf("spawn_agent answered %q without the new id. An agent the manager cannot address is one it cannot use, and every other tool takes an id", got)
 	}
-	if len(acts.spawned) != 1 || acts.spawned[0] != "/repo/api" {
+	if len(acts.spawned) != 1 || acts.spawned[0].dir != "/repo/api" {
 		t.Errorf("the fleet was asked to spawn in %v, want exactly [/repo/api]", acts.spawned)
+	}
+}
+
+// A name the manager chose reaches the fleet, so it can spawn "x", "y" and "z"
+// rather than three pool names.
+//
+// The name is not validated here on purpose: it travels as Frame.Text to the
+// daemon's own claim()/normalizeName, which is the only process that sees the
+// whole fleet and so the only one that can refuse a collision. The tool's job
+// is to carry it, and this is the whole of that job.
+func TestSpawnAgentPassesAChosenNameToTheFleet(t *testing.T) {
+	acts := &actions{}
+	f := fakeFleet{status: occupied("/repo/api"), acts: acts}
+
+	got := call(t, f, "spawn_agent", map[string]any{dirArg: "/repo/api", nameArg: "x"})
+
+	if !strings.Contains(got, spawnedID) {
+		t.Errorf("spawn_agent answered %q without the new id", got)
+	}
+	if len(acts.spawned) != 1 || acts.spawned[0].name != "x" {
+		t.Errorf("the fleet was asked to spawn %v, want name \"x\" in /repo/api. A name the manager typed that never reaches the wire is the feature doing nothing", acts.spawned)
+	}
+}
+
+// A spawn with no name still starts one, and asks the daemon for none - which
+// is what makes the name optional and keeps every existing manager spawn
+// working. An empty request is claim's own "pick one from the pool".
+func TestSpawnAgentWithoutANameLetsTheDaemonPick(t *testing.T) {
+	acts := &actions{}
+	f := fakeFleet{status: occupied("/repo/api"), acts: acts}
+
+	got := call(t, f, "spawn_agent", map[string]any{dirArg: "/repo/api"})
+
+	if !strings.Contains(got, spawnedID) {
+		t.Errorf("spawn_agent answered %q without the new id", got)
+	}
+	if len(acts.spawned) != 1 || acts.spawned[0].name != "" {
+		t.Errorf("a nameless spawn asked the fleet for %v, want an empty name so the daemon draws one from the pool", acts.spawned)
+	}
+}
+
+// A name that is present but not a string is a malformed call, refused before
+// anything starts rather than silently coerced into a pooled spawn the manager
+// did not ask for. Absent is the different, legitimate case - "pick one from
+// the pool" - and TestSpawnAgentWithoutANameLetsTheDaemonPick holds that.
+func TestSpawnAgentRefusesANonStringName(t *testing.T) {
+	acts := &actions{}
+	f := fakeFleet{status: occupied("/repo/api"), acts: acts}
+
+	_, err := callErr(t, f, "spawn_agent", map[string]any{dirArg: "/repo/api", nameArg: 7})
+	if err == nil {
+		t.Fatal("spawn_agent accepted a non-string name and started an agent under a pool name. A model that asked for a named agent and silently got an unnamed one believes in a name that does not exist")
+	}
+	if len(acts.spawned) != 0 {
+		t.Errorf("a refused-name spawn still started something in %v", acts.spawned)
+	}
+}
+
+// A name that reads as the operator, Wake, or a system authority is refused,
+// and **nothing is started** - it would put model-chosen text under the trusted
+// chrome an operator reads in the roster and the room's speaker heading, which
+// is the authorship hazard FrameLabel and FrameColor are refused for. The check
+// is case-folded and trimmed the way the daemon's normalizeName is, and it is
+// the manager's alone: a human's `wake new operator` is a deliberate choice the
+// daemon still accepts, so this cannot live in the daemon, which sees the two
+// spawns as one frame.
+func TestSpawnAgentRefusesAnImpersonationName(t *testing.T) {
+	acts := &actions{}
+	f := fakeFleet{status: occupied("/repo/api"), acts: acts}
+
+	for _, name := range []any{"operator", "System", "  wake  "} {
+		acts.spawned = nil
+		_, err := callErr(t, f, "spawn_agent", map[string]any{dirArg: "/repo/api", nameArg: name})
+		if err == nil {
+			t.Errorf("spawn_agent accepted the impersonation name %q. A manager that named an agent 'operator' or 'system' would place agent-authored words under a heading the operator reads as trusted", name)
+		}
+		if len(acts.spawned) != 0 {
+			t.Errorf("a refused impersonation-name spawn started something in %v", acts.spawned)
+		}
 	}
 }
 

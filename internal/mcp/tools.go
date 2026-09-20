@@ -452,10 +452,13 @@ func rollUp() Tool {
 	}
 }
 
-// dirArg is the one argument spawn_agent takes, and dirBytes bounds it in a
-// refusal - the path came off a report, which is text Wake did not write.
+// dirArg is the required argument spawn_agent takes, and dirBytes bounds it in
+// a refusal - the path came off a report, which is text Wake did not write.
+// nameArg is its optional second one: the display name to request, carried to
+// the daemon's own name validation and refused there, never here.
 const (
 	dirArg   = "directory"
+	nameArg  = "name"
 	dirBytes = 200
 )
 
@@ -471,15 +474,24 @@ const (
 // list_agents, so this adds no reach: it lets the manager put an agent where
 // work is already happening, and nowhere else.
 //
-// It takes no name and no label. The daemon owns naming - names are released
-// and reissued, and the manager addresses by id - and FrameLabel is refused on
-// this surface, so a label the manager chose would be agent-authored text in
-// the one column an operator reads as Wake's.
+// It takes an optional name and no label. A name the manager asks for rides on
+// Frame.Text to the daemon's own claim()/normalizeName, which stays the sole
+// authority on the charset, the length, uniqueness and the fleet-wide reserved
+// words - the daemon sees the whole fleet and this does not. This surface adds
+// only the two checks the daemon cannot: a present non-string name is refused,
+// and an impersonation name (operator, system, ...) is refused - a model
+// choosing operator-facing chrome is the hazard FrameLabel and FrameColor are
+// refused for, and only this surface knows the requester is the manager rather
+// than a human's trusted `wake new <name>`. See spawnname.go. An empty name is
+// "pick one from the pool". FrameLabel is still refused, and the manager still
+// addresses an agent by id, never by name - so naming at spawn is not naming as
+// an address.
 func spawnAgent() Tool {
 	return Tool{
 		Name: "spawn_agent",
 		Description: "Start one new agent in a directory the fleet is already working in, and return its id. " +
 			"The directory must be one list_agents shows - you cannot start an agent somewhere new. " +
+			"Optionally give it a name to call it (e.g. \"x\"); omit the name to have one assigned. " +
 			"This costs a process and money for as long as it runs, and there is a fleet-wide cap: " +
 			"prefer sending work to an agent that already exists.",
 		Schema: map[string]any{
@@ -488,6 +500,10 @@ func spawnAgent() Tool {
 				dirArg: map[string]any{
 					"type":        "string",
 					"description": "Where the agent runs. Exactly a directory from list_agents.",
+				},
+				nameArg: map[string]any{
+					"type":        "string",
+					"description": "Optional display name for the new agent, e.g. \"x\": letters, digits, - and _. Omit it to have one assigned. A name a live agent already has, or one that reads as the operator or the system (operator, system, admin, ...), is refused - address the agent by the id this returns, never by name.",
 				},
 			},
 			"required": []string{dirArg},
@@ -504,7 +520,19 @@ func spawnAgent() Tool {
 			if !fleetOccupies(st, dir) {
 				return "", fmt.Errorf("no agent is working in %s. Start one only where the fleet already is - list_agents has the directories", oneLine(dir, dirBytes))
 			}
-			id, err := f.Spawn(ctx, dir)
+			// The name is optional. Absent is "pick one from the pool"; a
+			// present non-string is a malformed call refused before a spawn;
+			// an impersonation name is refused here because only this surface
+			// knows the requester is the manager. Everything else the name has
+			// to pass is the daemon's - see spawnname.go.
+			name, err := optionalName(args)
+			if err != nil {
+				return "", err
+			}
+			if impersonatesChrome(name) {
+				return "", fmt.Errorf("%q reads as the operator or the system on the roster and in the room, which an operator reads as Wake's own; a name you give an agent must not be one of those - pick a plain name, or leave it out to have one assigned", name)
+			}
+			id, err := f.Spawn(ctx, dir, name)
 			if err != nil {
 				return "", err
 			}

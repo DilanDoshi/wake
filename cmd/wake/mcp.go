@@ -73,9 +73,15 @@ func (f socketFleet) Interrupt(_ context.Context, id string) error {
 // daemon refuses a frame that arrives without it. It also means the tool can
 // answer with an id the manager can address before the daemon has finished
 // starting anything.
-func (f socketFleet) Spawn(_ context.Context, dir string) (string, error) {
+//
+// name rides on Frame.Text, which is exactly where `wake new <name>` puts a
+// requested name: the daemon's spawn path reads it through spawnName ->
+// claim -> normalizeName, so an empty name means "pick one from the pool" and a
+// chosen one is validated and refused there. Nothing is spelled here that is not
+// already the daemon's rule for every other spawn.
+func (f socketFleet) Spawn(_ context.Context, dir, name string) (string, error) {
 	id := uuid.NewString()
-	if err := f.act(rpc.Frame{Kind: rpc.FrameSpawn, SessionID: id, Dir: dir}); err != nil {
+	if err := f.act(rpc.Frame{Kind: rpc.FrameSpawn, SessionID: id, Dir: dir, Text: name}); err != nil {
 		return "", err
 	}
 	return id, nil

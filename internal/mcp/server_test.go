@@ -77,21 +77,27 @@ type fakeFleet struct {
 type actions struct {
 	sent        []sentMessage
 	interrupted []string
-	spawned     []string
+	spawned     []spawnCall
 }
 
 type sentMessage struct{ id, text string }
+
+// spawnCall is one spawn as the fleet saw it: where, and the name the tool
+// asked for ("" when it asked for none). The name is recorded so a test can
+// see a model's chosen name actually reach the wire, which is the property
+// spawn-with-name adds.
+type spawnCall struct{ dir, name string }
 
 func (f fakeFleet) List(context.Context) (rpc.Status, error) { return f.status, f.err }
 
 // Spawn records the directory and hands back a fixed id, which is enough for
 // every assertion here: what the tool does with the id is return it.
-func (f fakeFleet) Spawn(_ context.Context, dir string) (string, error) {
+func (f fakeFleet) Spawn(_ context.Context, dir, name string) (string, error) {
 	if f.actErr != nil {
 		return "", f.actErr
 	}
 	if f.acts != nil {
-		f.acts.spawned = append(f.acts.spawned, dir)
+		f.acts.spawned = append(f.acts.spawned, spawnCall{dir: dir, name: name})
 	}
 	return spawnedID, nil
 }

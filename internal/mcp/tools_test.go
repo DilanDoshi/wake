@@ -107,8 +107,8 @@ func (f spyFleet) Send(ctx context.Context, id, text string) error {
 func (f spyFleet) Interrupt(ctx context.Context, id string) error {
 	return f.fleet.Interrupt(ctx, id)
 }
-func (f spyFleet) Spawn(ctx context.Context, dir string) (string, error) {
-	return f.fleet.Spawn(ctx, dir)
+func (f spyFleet) Spawn(ctx context.Context, dir, name string) (string, error) {
+	return f.fleet.Spawn(ctx, dir, name)
 }
 
 func TestAToolRefusesANameAndNeverAsksTheDaemonAboutIt(t *testing.T) {
