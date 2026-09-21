@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -161,4 +162,65 @@ func TestALongCrossSessionMessageCollapses(t *testing.T) {
 	if !roomCollapsible(ev, 60) {
 		t.Error("a long cross-session message should be collapsible")
 	}
+}
+
+// A received peer message reads in a dimmer grey (Subtle) than the agent's own
+// white replies, so the operator can tell at a glance what was said *to* their
+// agent from what the agent said back. Owner's request, 2026-09-20: the
+// cross-session body is Subtle on both the DM and the room, and an assistant
+// reply keeps Text - so the distinction is more than the head.
+func TestACrossSessionMessageBodyIsDimmed(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor - the exact hues render, so Subtle != Text
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	subtle := fgEscape(t, Subtle)
+
+	// The receiver's own 1:1 DM view.
+	dm := crossSessionBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}, 60)
+	if !strings.Contains(dm, subtle) {
+		t.Errorf("the DM cross-session body is not dimmed to Subtle:\n%q", dm)
+	}
+
+	// The group chat.
+	room := roomBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", ToName: "sydney", Text: "rerun the build"}, Agent{Name: "planner"}, 60, false).text
+	if !strings.Contains(room, subtle) {
+		t.Errorf("the room cross-session body is not dimmed to Subtle:\n%q", room)
+	}
+
+	// The distinction is real: an agent's own reply is never dimmed to Subtle,
+	// so it is told apart from an incoming peer message by more than the head.
+	reply := roomBlock(core.Event{Kind: core.KindAssistantText, Text: "rerun the build"}, Agent{Name: "planner"}, 60, false).text
+	if strings.Contains(reply, subtle) {
+		t.Errorf("an agent's own reply was dimmed to Subtle, erasing the distinction:\n%q", reply)
+	}
+}
+
+// crossSessionBody keeps its lines within the width it is given, so a peer
+// message never returns a line wider than the room's column - roomBlock's
+// invariant, an over-wide line shoves both sidebars out of place. The guarded
+// widths (at and below bodyIndent) are the ones a bare Width+PaddingLeft
+// overflowed on.
+func TestCrossSessionBodyNeverExceedsItsWidth(t *testing.T) {
+	body := "an incoming peer message long enough to wrap at any column width"
+	for _, w := range []int{1, 2, 3, 8, 20} {
+		for i, line := range strings.Split(crossSessionBody(body, w), "\n") {
+			if got := lipgloss.Width(line); got > w {
+				t.Errorf("width %d: line %d is %d cells, wider than the column: %q", w, i, got, line)
+			}
+		}
+	}
+}
+
+// fgEscape is the SGR sequence lipgloss emits for a foreground colour at the
+// forced profile - derived, not hard-coded, so the test is about whether the
+// colour is applied, not about how lipgloss spells it.
+func fgEscape(t *testing.T, c lipgloss.TerminalColor) string {
+	t.Helper()
+	rendered := lipgloss.NewStyle().Foreground(c).Render("x")
+	esc, _, ok := strings.Cut(rendered, "x")
+	if !ok || esc == "" {
+		t.Fatalf("lipgloss emitted no escape for the colour at this profile: %q", rendered)
+	}
+	return esc
 }
