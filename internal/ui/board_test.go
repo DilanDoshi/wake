@@ -81,7 +81,7 @@ func TestArrowsCloseTheBoardInRowMode(t *testing.T) {
 // boardKeyLine must never name a key that does not work in the geometry it is
 // drawn under - "the legend names only keys that work", one surface over. Row
 // mode has no working ←→ (the case above), so its key line must not claim it;
-// tile mode's ←→ is real (tileNav), so its key line must.
+// tile mode's ←→ is real (tileNavSection), so its key line must.
 func TestBoardKeyLineAdvertisesArrowsOnlyInTileMode(t *testing.T) {
 	a := boardApp(t) // rows by default
 	if strings.Contains(shown(a), "←→") {
@@ -90,7 +90,7 @@ func TestBoardKeyLineAdvertisesArrowsOnlyInTileMode(t *testing.T) {
 
 	a.board.Tiled = true
 	if !strings.Contains(shown(a), "←→") {
-		t.Errorf("the tile-mode board does not advertise ←→, which tileNav binds there:\n%s", shown(a))
+		t.Errorf("the tile-mode board does not advertise ←→, which tileNavSection binds there:\n%s", shown(a))
 	}
 }
 
@@ -132,7 +132,7 @@ func TestSlashBoardRefusesAnArgument(t *testing.T) {
 	}
 }
 
-// In tiles, → and ← walk the 2-D grid rather than the row list - tileNav's
+// In tiles, → and ← walk the 2-D grid rather than the row list - tileNavSection's
 // own geometry, driven off the frame width the tiles are laid out at.
 //
 // Guards a gross regression only, not the openHere→openRight change; it

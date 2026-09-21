@@ -94,7 +94,7 @@ const (
 	// surface is up belongs on the surface, plus "the legend names only keys
 	// that work" one surface over: rows have no working ←→ (boardKey's ←/→
 	// cases fall through to close the board there), so the row line must not
-	// claim it, where tiles' is real (tileNav). Neither brackets anything, so
+	// claim it, where tiles' is real (tileNavSection). Neither brackets anything, so
 	// the card-key bijection guard reads no rune from either - which makes the
 	// rest a judgment call, held to the same rule: never name a key that is
 	// not bound. Leaving, opening and parking lead; ⌃Y is folded into ↵'s
@@ -236,8 +236,7 @@ func (a App) stepBoard(dir tileDir) App {
 		return a
 	}
 	if a.board.Tiled {
-		at := tileNav(a.boardCursor(agents), a.boardTileGrid(len(agents)).cols, len(agents), dir)
-		a.board.Selected = agents[at].ID
+		a.board.Selected = tileNavSection(a.boardTileLayout(agents).rows, a.board.Selected, dir)
 		a.board.SelectedTask = "" // tiles have no subagent cursor
 		return a
 	}
@@ -306,27 +305,10 @@ func (a App) viewBoardDispatch(id, dispatch string) App {
 // a row cannot disagree - the row view's boardChromeRows rule, made subagent-aware.
 func (a App) boardHit(x, y int, agents []Agent) (int, string, bool) {
 	if a.board.Tiled {
-		g := a.boardTileGrid(len(agents))
-		start := tileWindowStart(a.boardCursor(agents), len(agents), g.cols, g.rows)
-		// The row view's own line < 0 check, taken before the division: Go
-		// truncates integer division toward zero rather than flooring, so
-		// (y-boardChromeRows)/g.cellH on the title row (y==0) computes 0 rather
-		// than a negative row, and a click there would have resolved to the
-		// first tile instead of nothing.
-		line := y - boardChromeRows
-		if line < 0 {
-			return -1, "", false
-		}
-		r := line / g.cellH
-		c := x / (g.cellW + tileGap)
-		if r < 0 || r >= g.rows || c < 0 || c >= g.cols {
-			return -1, "", false
-		}
-		i := start + r*g.cols + c
-		if i < 0 || i >= len(agents) {
-			return -1, "", false
-		}
-		return i, "", true
+		// The windowed shelves the draw used, so a click and a tile agree across a
+		// section break; the title row and a header band open nothing (tileHit).
+		i := a.boardTileLayout(agents).tileHit(x, y, agents)
+		return i, "", i >= 0
 	}
 	// Row view: bounded to the drawn window before the walk - Roster.At's rule.
 	// Without the upper bound a click on the key line, the strip or the notice
@@ -374,6 +356,18 @@ func (a App) boardCursor(agents []Agent) int {
 		}
 	}
 	return 0
+}
+
+// drawnBoardCursor is the tile the wall highlights and the action keys act on:
+// the selection when it still names a live agent, else the first agent -
+// boardCursor's "empty or gone -> top" recovery, so a fresh tiled open and row
+// mode agree on a default highlight where a raw a.board.Selected == "" lit
+// nothing. "" only when the fleet is empty.
+func (a App) drawnBoardCursor(agents []Agent) string {
+	if len(agents) == 0 {
+		return ""
+	}
+	return agents[a.boardCursor(agents)].ID
 }
 
 // openBoardRow is the jump the dashboard exists for, with the room's own
