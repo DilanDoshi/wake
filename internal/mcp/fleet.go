@@ -63,5 +63,11 @@ type Fleet interface {
 	// The id is minted by the caller, so it is knowable before the daemon has
 	// confirmed anything - which is what lets the tool answer with something
 	// the manager can address.
-	Spawn(ctx context.Context, dir string) (string, error)
+	//
+	// name is the display name to request, or "" to let the daemon draw one
+	// from the pool. It travels as Frame.Text, the same field `wake new
+	// <name>` uses, so the daemon's own claim()/normalizeName is the one
+	// authority on it: only the daemon sees the whole fleet, so only it can
+	// refuse a collision or an invalid word. The tool never validates a name.
+	Spawn(ctx context.Context, dir, name string) (string, error)
 }

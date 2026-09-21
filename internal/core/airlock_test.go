@@ -767,6 +767,16 @@ var allowed = map[string]map[string]bool{
 	// internal/daemon decodes no Claude JSON: everything it sees is a
 	// core.Event that already crossed the airlock.
 	"internal/daemon/manager.go": {"command": true},
+	// spawn_agent's impersonation denylist: the display names a *model* may not
+	// give an agent it spawns, because each reads in the roster and the room as
+	// operator-facing chrome. "system" is one of them and is also Claude's own
+	// role word - but the two never meet: this is a literal in a denylist, not a
+	// role decoded off a frame, and internal/mcp parses no Claude JSON (it is an
+	// rpc client). It is the agent_id case two files over - pay the entry rather
+	// than spell the word differently, since "system" is exactly the
+	// impersonation an operator would misread, and blocking only a near-miss of
+	// it would be the guard doing nothing.
+	"internal/mcp/spawnname.go": {"system": true},
 }
 
 // allowlistPairCount is the tripwire over the table above, and it exists for
@@ -775,7 +785,7 @@ var allowed = map[string]map[string]bool{
 // growing the exemption list is a deliberate two-place edit rather than
 // something that happens quietly in a rebase. CLAUDE.md quotes the same
 // figures and has to change with it.
-const allowlistPairCount = 20
+const allowlistPairCount = 21
 
 func TestTheAllowlistDoesNotGrowQuietly(t *testing.T) {
 	pairs := 0
