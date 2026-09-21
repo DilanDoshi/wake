@@ -71,3 +71,37 @@ func TestTeamSectionsRenderInTheRosterAndBoard(t *testing.T) {
 	}
 	t.Logf("SCREENSHOT board team sections:\n%s", s.dump())
 }
+
+// The tiled board (⇥ toggles it while /board is up) wraps each team's tiles
+// under its own `──── name ────` shelf rather than flowing them into a uniform
+// grid. This is the half a person sees; internal/ui tests the shelf arithmetic
+// in process. The rounded tile boxes (╭) prove the tile renderer drew, not the
+// row list.
+func TestTeamSectionsRenderInTheTiledBoard(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWakeInAConversation(t, 100, 30)
+	teamedFleet(t, s)
+
+	s.send("/board\r")
+	s.await("BOARD")
+	s.settle()
+	s.send("\t") // ⇥: toggle the rows overview into the tiled wall
+	s.settle()
+
+	board := s.text()
+	if !strings.Contains(board, "╭") {
+		t.Fatalf("the tiled wall drew no rounded tile box (╭); still in the row view?\n%s", s.dump())
+	}
+	for _, want := range []string{"backend", "frontend", "w1", "w3"} {
+		if !strings.Contains(board, want) {
+			t.Fatalf("the tiled board is missing %q after teams were assigned.\n%s", want, s.dump())
+		}
+	}
+	// Section order is creation order here too: backend's shelf above frontend's.
+	if strings.Index(board, "backend") > strings.Index(board, "frontend") {
+		t.Errorf("frontend's shelf is drawn before backend's, but backend was created first.\n%s", board)
+	}
+	t.Logf("SCREENSHOT tiled board team shelves:\n%s", s.dump())
+}
