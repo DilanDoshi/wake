@@ -94,3 +94,19 @@ func TestAParkedStatusReportsItsTeam(t *testing.T) {
 		t.Errorf("parkedStatus(...).Team = %q, want %q", got, "infra")
 	}
 }
+
+// A team is addressed as @team, so it may not wear a word the router already
+// spends: @all broadcasts and @manager reaches the service, and a team of either
+// name would be a section nothing could address. reservedNames is the router's
+// own set, checked here so a team cannot claim one.
+func TestATeamCannotBeAReservedRoutingWord(t *testing.T) {
+	for _, word := range []string{core.BroadcastName, core.ManagerName} {
+		a := teamAgent(t)
+		if err := a.setTeam(word); err == nil {
+			t.Errorf("setTeam(%q) was allowed; a team may not wear a reserved routing word", word)
+		}
+		if got := a.snapshot().Team; got != "" {
+			t.Errorf("a refused reserved team was stored: snapshot().Team = %q", got)
+		}
+	}
+}

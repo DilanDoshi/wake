@@ -397,6 +397,22 @@ var roomTargetCommands = map[string]struct{}{
 	quitCommand:  {},
 }
 
+// leadingRoomTargetCommand is the roomTargetCommand a draft leads with, if any:
+// the word after a leading slash when it is one of the @who commands. It is how a
+// team fan-out refuses `@backend /color` - a Wake target-command that would
+// otherwise reach N agents as literal text - while letting claude's own
+// `@backend /compact` fan out as an ordinary message. Only this file knows what a
+// leading slash means, so the lookup lives here beside the set it reads.
+func leadingRoomTargetCommand(text string) (string, bool) {
+	fields := strings.Fields(text)
+	if len(fields) == 0 || !strings.HasPrefix(fields[0], SlashPrefix) {
+		return "", false
+	}
+	word := strings.ToLower(strings.TrimPrefix(fields[0], SlashPrefix))
+	_, ok := roomTargetCommands[word]
+	return word, ok
+}
+
 // # The second kind of command, and why it is in this file
 //
 // `/resume`, `/new`, `/name` and `/task` are addressed to **Wake**: they are

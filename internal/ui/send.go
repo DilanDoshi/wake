@@ -202,6 +202,10 @@ func (a App) sendDM(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) 
 // The echo goes in once however many agents the message went to. One broadcast
 // is one thing you said, and thirty copies of it would be the room reporting
 // its own postage.
+// teamCommandRefused is said when a Wake target-command is aimed at a team,
+// which the per-agent bridge cannot fan out - see the ruling in sendRoom.
+const teamCommandRefused = "/%s can't fan out to @%s — it is per-agent; send it to one member instead"
+
 func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) {
 	// The manager is the default addressee when there is one, and nothing is
 	// when there is not - never whichever agent this window happens to have
@@ -238,6 +242,19 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 	if cr := r.configureRoute(); len(cr.Targets) > 0 {
 		if next, cmd, ok := a.configure(cr.Targets, cr.Text); ok {
 			return next, cmd
+		}
+	}
+	// A team fan-out carries claude's own command as an explicit N-way send
+	// (`@backend /compact` reaches every member), but a Wake target-command must
+	// not: `@backend /color` would reach N claude processes as the literal text,
+	// because the single-agent bridge below is gated on r.mentioned, which a team
+	// route is not. Refuse it and name the per-agent form. (`@all` has the same
+	// hole; a team does not inherit it. `/quit` is refused here too, which is right
+	// - a stop may not be aimed at a set, only at one member.)
+	if r.Team != "" {
+		if word, ok := leadingRoomTargetCommand(r.Text); ok {
+			notice.Report(teamCommandRefused, word, r.Resolved)
+			return a, nil
 		}
 	}
 	// A room mention can also aim a Wake target-command: `@thea /color green` is
@@ -404,7 +421,7 @@ func (a App) live() []core.Addressee {
 			agent.State == rpc.StateEnded || agent.State == rpc.StateParked {
 			continue
 		}
-		out = append(out, core.Addressee{ID: agent.ID, Name: agent.Name})
+		out = append(out, core.Addressee{ID: agent.ID, Name: agent.Name, Team: agent.Team})
 	}
 	return out
 }

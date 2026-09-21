@@ -18,6 +18,7 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -37,6 +38,15 @@ func (a *agent) setTeam(requested string) error {
 	team, err := rpc.NormalizeTeam(requested)
 	if err != nil {
 		return err
+	}
+	// A team is addressed as `@team`, so it may not wear a word the router spends
+	// on something else: `@all` broadcasts and `@manager` reaches the service, and
+	// a team of either name would be a section nothing could address. reservedNames
+	// is the router's own set, so this cannot drift from what routing actually
+	// claims. (A team that collides with a live *agent* name is refused too, but
+	// that check needs the fleet registry and lands with teamOrder - see deferred.md.)
+	if team != "" && reservedNames[team] {
+		return fmt.Errorf("%q is a reserved routing word, not a team name", team)
 	}
 	a.team = team
 	return nil

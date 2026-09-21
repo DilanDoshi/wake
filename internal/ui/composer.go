@@ -130,6 +130,11 @@ func targetLine(r roomRoute, turns int) string {
 		return fmt.Sprintf(openMention, agentPrefix, r.Resolved, r.mode, turns)
 	case r.mentioned:
 		return fmt.Sprintf(directMention, agentPrefix, r.Resolved, r.mode)
+	case r.Team != "":
+		// A team fan-out: `→ @backend · 3 turns`. broadcastFormat's shape because a
+		// team is N turns like @all; the team's own name in Resolved is what tells
+		// the two apart, which is the whole reason a team is not marked Broadcast.
+		return fmt.Sprintf(broadcastFormat, agentPrefix, r.Resolved, turns)
 	case r.Resolved != "":
 		return fmt.Sprintf(targetResolved, agentPrefix, r.Resolved)
 	default:

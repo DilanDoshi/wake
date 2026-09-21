@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -88,5 +90,60 @@ func TestTheTeamOnAReportFoldsOntoTheAgent(t *testing.T) {
 	}
 	if got.Team != "backend" {
 		t.Errorf("Agent.Team = %q, want %q: the report's team did not fold onto the agent", got.Team, "backend")
+	}
+}
+
+// `@team` fans a room draft out to its live members - a scoped broadcast, not a
+// single mention (so it does not narrow the room and does not bridge to a
+// per-agent command) and not @all (it carries its own team marker).
+func TestATeamDraftRoutesToItsMembersAndDoesNotNarrow(t *testing.T) {
+	fresh(t)
+	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withSize(200, 40).showRoom()
+	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateIdle},
+		{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
+		{ID: "s3", Name: "john", Team: "backend", State: rpc.StateIdle},
+		{ID: "s4", Name: "delta", Team: "frontend", State: rpc.StateIdle},
+	}})
+	r := a.route("@backend ship it")
+	if !slices.Equal(r.Targets, []string{"s2", "s3"}) {
+		t.Errorf("targets = %v, want backend's members s2,s3", r.Targets)
+	}
+	if r.Team != "backend" {
+		t.Errorf("route.Team = %q, want backend", r.Team)
+	}
+	if r.mentioned {
+		t.Error("a team route is marked mentioned; retarget would narrow to one member and the bridge would fire")
+	}
+	if r.Text != "ship it" {
+		t.Errorf("text = %q, want the @team stripped", r.Text)
+	}
+}
+
+// A Wake target-command aimed at a team is refused with the per-agent form named,
+// rather than reaching N claude processes as the literal text "/color blue".
+func TestATeamTargetCommandIsRefusedWithThePerAgentForm(t *testing.T) {
+	fresh(t)
+	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withSize(200, 40).showRoom()
+	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateIdle},
+		{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
+	}})
+	m, cmd := typeAndSubmit(a, "@backend /color blue")
+	if cmd != nil {
+		t.Fatalf("a team /color was acted on: %+v", sentFrames(t, m.(App), cmd))
+	}
+	if got := shown(m.(App)); !strings.Contains(got, "per-agent") {
+		t.Errorf("@backend /color was refused without naming the per-agent form:\n%s", got)
+	}
+}
+
+// The composer's target line names a team fan-out and its turn count, so the
+// operator sees `→ @backend · 3 turns` before ↵ rather than reading it as @all.
+func TestTheTargetLineShowsATeamFanout(t *testing.T) {
+	r := roomRoute{Route: core.Route{Team: "backend", Resolved: "backend", Targets: []string{"a", "b", "c"}}}
+	line := targetLine(r, 3)
+	if !strings.Contains(line, agentPrefix+"backend") || !strings.Contains(line, "3") {
+		t.Errorf("targetLine = %q, want it to name @backend and the turn count", line)
 	}
 }
