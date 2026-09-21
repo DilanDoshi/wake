@@ -42,41 +42,6 @@ const (
 	minTileTailRows = 1
 )
 
-// tileGrid is the tiled board's geometry for one frame: how many columns and
-// rows of tiles, and the width and height of each cell. One value, computed
-// once by tileGridFor, so the draw, the mouse and the cursor all measure the
-// same grid - the board's own "draw and mouse measure one number" invariant.
-type tileGrid struct {
-	cols, rows   int
-	cellW, cellH int
-}
-
-// tileGridFor chooses a near-square grid that fills the frame. A few agents get
-// big cells stretched across both axes; once there are more agents than fit at
-// the minimum cell size, the grid caps at that maximum and the overflow pages
-// through the cursor window. cellW keeps the fill-width split; cellH is the new
-// half - the rows stretch to fill the height the way the columns already fill
-// the width, so the wall auto-resizes with the window.
-func tileGridFor(width, availH, n int) tileGrid {
-	maxCols := max((width+tileGap)/(minTileWidth+tileGap), 1)
-	maxRows := max(availH/minTileHeight, 1)
-	cols, rows := 1, 1
-	switch {
-	case n <= 0:
-		// A degenerate but safe single cell rather than a divide-by-zero.
-	case n <= maxCols*maxRows:
-		cols = clamp(ceilSqrt(n), 1, maxCols)
-		rows = ceilDiv(n, cols)
-		if rows > maxRows { // a short frame forces a flatter grid
-			rows = maxRows
-			cols = min(ceilDiv(n, rows), maxCols)
-		}
-	default: // more agents than fit at min size: cap and page the rest
-		cols, rows = maxCols, maxRows
-	}
-	return tileGrid{cols: cols, rows: rows, cellW: tileCellWidth(width, cols), cellH: max(availH/rows, 1)}
-}
-
 // ceilSqrt is the smallest c with c*c >= n, the near-square column count for n
 // tiles. Zero for a non-positive n.
 func ceilSqrt(n int) int {
@@ -85,19 +50,6 @@ func ceilSqrt(n int) int {
 		c++
 	}
 	return c
-}
-
-// ceilDiv is a/b rounded up, for a >= 0 and b >= 1.
-func ceilDiv(a, b int) int { return (a + b - 1) / b }
-
-// boardTileGrid is the frame's tile geometry, computed from the width and the
-// available height the tiled board draws at - the pane less the title and the
-// key line. The draw, the mouse and the cursor all read this one grid, so a
-// click and a tile cannot disagree: the board's "measure one number" invariant,
-// in two dimensions.
-func (a App) boardTileGrid(n int) tileGrid {
-	availH := max(a.paneHeight()-boardChromeRows-1, 1)
-	return tileGridFor(a.layout.Width, availH, n)
 }
 
 // tileCellWidth is each tile's width once the column count is chosen: the frame
@@ -118,63 +70,39 @@ const (
 	tileRight
 )
 
-// tileNav is the cursor one step in the grid, without wrapping: up and down
-// move a whole row (± cols), left and right move one, and a step off an edge or
-// past the last agent stays put.
-func tileNav(cursor, cols, total int, dir tileDir) int {
-	switch dir {
-	case tileUp:
-		if cursor-cols >= 0 {
-			return cursor - cols
-		}
-	case tileDown:
-		if cursor+cols < total {
-			return cursor + cols
-		}
-	case tileLeft:
-		if cursor%cols != 0 {
-			return cursor - 1
-		}
-	case tileRight:
-		if cursor%cols != cols-1 && cursor+1 < total {
-			return cursor + 1
-		}
-	}
-	return cursor
-}
-
-// tileWindowStart is the index of the first tile drawn, so the cursor's row is
-// on screen. It pages by whole rows of `cols`, the cursor riding the bottom
-// edge once it is past the first window - boardWindowStart in two dimensions.
-func tileWindowStart(cursor, total, cols, visibleRows int) int {
-	row := cursor / cols
-	totalRows := (total + cols - 1) / cols
-	startRow := clamp(row-visibleRows+1, 0, max(totalRows-visibleRows, 0))
-	return startRow * cols
-}
-
 // tileView is the whole frame as a grid of tiles: the same title the row view
 // draws, tiles between them in attention order, and its own key line -
 // boardKeyLineTiles rather than the row view's, since ←→ really move the
 // cursor here.
 func (a App) tileView(agents []Agent, width int) string {
-	g := a.boardTileGrid(len(agents))
-	cursor := a.boardCursor(agents)
-	start := tileWindowStart(cursor, len(agents), g.cols, g.rows)
+	l := a.boardTileLayout(agents)
+	cursor := a.board.Selected
 
 	head := mutedLine(fmt.Sprintf("%s — %d agents", boardTitle, len(agents)), width)
-	body := make([]string, 0, g.rows)
-	for r := 0; r < g.rows; r++ {
-		cells := make([]string, 0, g.cols)
-		for c := 0; c < g.cols; c++ {
-			i := start + r*g.cols + c
-			if i >= len(agents) {
-				cells = append(cells, strings.Repeat(" ", g.cellW))
-				continue
-			}
-			cells = append(cells, a.tile(agents[i], g.cellW, g.cellH, i == cursor))
+	body := make([]string, 0, l.availH)
+	for ri := l.from; ri < l.to; ri++ {
+		row := l.rows[ri]
+		if row.isHeader() {
+			body = append(body, teamHeaderLine(row.header, width))
+			continue
 		}
-		body = append(body, joinTilesRow(cells))
+		cells := make([]string, 0, l.cols)
+		for c := 0; c < l.cols; c++ {
+			if c < len(row.tiles) {
+				ag := row.tiles[c]
+				cells = append(cells, a.tile(ag, l.cellW, l.cellH, ag.ID == cursor))
+			} else {
+				cells = append(cells, strings.Repeat(" ", l.cellW))
+			}
+		}
+		// One tile row is cellH lines; split so the body is a flat line list the
+		// headers (one line each) interleave into.
+		body = append(body, strings.Split(joinTilesRow(cells), "\n")...)
+	}
+	// Pad to the height the window was budgeted for, so the key line and the frame
+	// below it sit where every other view puts them.
+	for len(body) < l.availH {
+		body = append(body, "")
 	}
 	key := mutedLine(boardKeyLineTiles, width)
 	return head + "\n" + strings.Join(body, "\n") + "\n" + key

@@ -94,7 +94,7 @@ const (
 	// surface is up belongs on the surface, plus "the legend names only keys
 	// that work" one surface over: rows have no working ←→ (boardKey's ←/→
 	// cases fall through to close the board there), so the row line must not
-	// claim it, where tiles' is real (tileNav). Neither brackets anything, so
+	// claim it, where tiles' is real (tileNavSection). Neither brackets anything, so
 	// the card-key bijection guard reads no rune from either - which makes the
 	// rest a judgment call, held to the same rule: never name a key that is
 	// not bound. Leaving, opening and parking lead; ⌃Y is folded into ↵'s
@@ -236,8 +236,7 @@ func (a App) stepBoard(dir tileDir) App {
 		return a
 	}
 	if a.board.Tiled {
-		at := tileNav(a.boardCursor(agents), a.boardTileGrid(len(agents)).cols, len(agents), dir)
-		a.board.Selected = agents[at].ID
+		a.board.Selected = tileNavSection(a.boardTileLayout(agents).rows, a.board.Selected, dir)
 		a.board.SelectedTask = "" // tiles have no subagent cursor
 		return a
 	}
@@ -306,27 +305,34 @@ func (a App) viewBoardDispatch(id, dispatch string) App {
 // a row cannot disagree - the row view's boardChromeRows rule, made subagent-aware.
 func (a App) boardHit(x, y int, agents []Agent) (int, string, bool) {
 	if a.board.Tiled {
-		g := a.boardTileGrid(len(agents))
-		start := tileWindowStart(a.boardCursor(agents), len(agents), g.cols, g.rows)
-		// The row view's own line < 0 check, taken before the division: Go
-		// truncates integer division toward zero rather than flooring, so
-		// (y-boardChromeRows)/g.cellH on the title row (y==0) computes 0 rather
-		// than a negative row, and a click there would have resolved to the
-		// first tile instead of nothing.
+		l := a.boardTileLayout(agents)
+		// The title row's own guard, before the walk: y==0 is the title, so a click
+		// there is not a tile. Then walk the windowed shelves counting each band's
+		// height - header (one line) or tile row (cellH) - the one number the draw
+		// counts too, so a click and a tile cannot disagree across a section break.
 		line := y - boardChromeRows
 		if line < 0 {
 			return -1, "", false
 		}
-		r := line / g.cellH
-		c := x / (g.cellW + tileGap)
-		if r < 0 || r >= g.rows || c < 0 || c >= g.cols {
-			return -1, "", false
+		off := 0
+		for ri := l.from; ri < l.to; ri++ {
+			h := l.rowHeight(ri)
+			if line < off+h {
+				if l.rows[ri].isHeader() {
+					return -1, "", false // a header belongs to no agent
+				}
+				col := x / (l.cellW + tileGap)
+				if col < 0 || col >= len(l.rows[ri].tiles) {
+					return -1, "", false
+				}
+				if i := indexOf(agents, l.rows[ri].tiles[col].ID); i >= 0 {
+					return i, "", true
+				}
+				return -1, "", false
+			}
+			off += h
 		}
-		i := start + r*g.cols + c
-		if i < 0 || i >= len(agents) {
-			return -1, "", false
-		}
-		return i, "", true
+		return -1, "", false
 	}
 	// Row view: bounded to the drawn window before the walk - Roster.At's rule.
 	// Without the upper bound a click on the key line, the strip or the notice

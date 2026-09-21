@@ -23,85 +23,6 @@ func assistantBlock(text string) core.Event {
 	return core.Event{Kind: core.KindAssistantText, Text: text}
 }
 
-// tileGridFor chooses a near-square grid that fills the whole frame: a few
-// agents get big cells stretched across both axes, many agents pack down to
-// the minimum-size cells that fit and page the rest. One function, so the
-// draw, the mouse and the cursor all measure the same grid.
-func TestTileGridFillsTheWindow(t *testing.T) {
-	cases := []struct {
-		name             string
-		width, availH, n int
-		cols, rows       int
-		cellW, cellH     int
-	}{
-		// One agent fills the whole board.
-		{"one agent, whole frame", 120, 24, 1, 1, 1, 120, 24},
-		// Four agents on a roomy frame: a 2x2 of big cells, each half the
-		// width and half the height.
-		{"four agents, 2x2", 120, 24, 4, 2, 2, 59, 12},
-		// Nine agents: a 3x3, still one screen, cells shrink but stay big.
-		{"nine agents, 3x3", 120, 24, 9, 3, 3, 39, 8},
-		// More agents than fit at the minimum cell size: the grid caps at the
-		// max that fits (4x3=12 here) and the rest page.
-		{"twenty agents, capped grid", 120, 24, 20, 4, 3, 29, 8},
-		// A short wide frame forces a single flat row even for four agents -
-		// only one row of tiles fits vertically.
-		{"short frame forces one row", 200, 6, 4, 4, 1, 49, 6},
-		// A taller frame stretches the cells: same agents, double the height,
-		// double the cell height.
-		{"taller frame, taller cells", 120, 48, 4, 2, 2, 59, 24},
-		// No agents: a safe single cell rather than a divide-by-zero.
-		{"no agents", 120, 24, 0, 1, 1, 120, 24},
-	}
-	for _, tc := range cases {
-		g := tileGridFor(tc.width, tc.availH, tc.n)
-		if g.cols != tc.cols || g.rows != tc.rows || g.cellW != tc.cellW || g.cellH != tc.cellH {
-			t.Errorf("%s: tileGridFor(%d,%d,%d) = {cols:%d rows:%d cellW:%d cellH:%d}, want {cols:%d rows:%d cellW:%d cellH:%d}",
-				tc.name, tc.width, tc.availH, tc.n,
-				g.cols, g.rows, g.cellW, g.cellH, tc.cols, tc.rows, tc.cellW, tc.cellH)
-		}
-	}
-}
-
-func TestTileNavDoesNotWrap(t *testing.T) {
-	// A 2x2-ish grid over 5 agents (cols=2): indices 0..4.
-	cases := []struct {
-		name   string
-		cursor int
-		dir    tileDir
-		want   int
-	}{
-		{"right within row", 0, tileRight, 1},
-		{"right at row edge stays", 1, tileRight, 1},
-		{"left at row start stays", 0, tileLeft, 0},
-		{"down a row", 0, tileDown, 2},
-		{"up a row", 2, tileUp, 0},
-		{"up from top stays", 1, tileUp, 1},
-		{"down past the end stays", 4, tileDown, 4},
-		{"right onto nonexistent last stays", 4, tileRight, 4},
-	}
-	for _, tc := range cases {
-		if got := tileNav(tc.cursor, 2, 5, tc.dir); got != tc.want {
-			t.Errorf("%s: tileNav(%d,2,5,%v) = %d, want %d", tc.name, tc.cursor, tc.dir, got, tc.want)
-		}
-	}
-}
-
-func TestTileWindowStartRidesTheCursorRow(t *testing.T) {
-	// cols=2, visibleRows=2 → 4 tiles on screen. 10 agents = 5 rows.
-	cases := []struct{ cursor, want int }{
-		{0, 0}, // first row: window at 0
-		{2, 0}, // second row still fits
-		{4, 2}, // third row: window slides down one row (start index 2)
-		{9, 6}, // last agent: last two rows (start index 6)
-	}
-	for _, tc := range cases {
-		if got := tileWindowStart(tc.cursor, 10, 2, 2); got != tc.want {
-			t.Errorf("tileWindowStart(%d,10,2,2) = %d, want %d", tc.cursor, got, tc.want)
-		}
-	}
-}
-
 // The tiled board draws every agent boardApp seats - alex, sydney and robin,
 // per the fixture's real names (not the brief's placeholders) - each in its
 // own rounded box.
@@ -161,7 +82,7 @@ func TestATileNeverOvershootsItsCellHeightWhenTheTranscriptWraps(t *testing.T) {
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	g := a.boardTileLayout(a.boardAgents())
 
 	// A transcript long enough to wrap past the cell body and exercise the
 	// fill/truncate path.
@@ -187,7 +108,7 @@ func TestABigTileFillsWithTranscriptBeyondThePreviewCap(t *testing.T) {
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	g := a.boardTileLayout(a.boardAgents())
 	inner := max(g.cellW-boxFrameWidth, 1)
 
 	// Many wrapped rows of output, well past the three-row DM preview cap.
@@ -219,7 +140,7 @@ func TestATileNeverOvershootsAtNarrowWidthBelowTheWrapFloor(t *testing.T) {
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	g := a.boardTileLayout(a.boardAgents())
 	inner := max(g.cellW-boxFrameWidth, 1)
 	if inner >= minBlockWidth {
 		t.Fatalf("precondition: inner=%d is not below minBlockWidth(%d)", inner, minBlockWidth)
@@ -251,7 +172,7 @@ func TestATileNeverOvershootsAtNarrowWidthWithACompletedBlock(t *testing.T) {
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	g := a.boardTileLayout(a.boardAgents())
 	inner := max(g.cellW-boxFrameWidth, 1)
 	if inner >= minBlockWidth {
 		t.Fatalf("precondition: inner=%d is not below minBlockWidth(%d)", inner, minBlockWidth)
@@ -281,7 +202,7 @@ func TestATileNeverOvershootsWhenTheSubagentLineWraps(t *testing.T) {
 	if !ok || working.State != rpc.StateWorking {
 		t.Fatal("precondition: boardApp does not seat alex as the working agent")
 	}
-	g := a.boardTileGrid(len(a.fleet.OnRoster()))
+	g := a.boardTileLayout(a.boardAgents())
 	inner := max(g.cellW-boxFrameWidth, 1)
 
 	ag, _ := a.fleet.Agent(working.ID)
@@ -341,33 +262,34 @@ func TestTileTailControlBytesCannotForgeANeighbouringTile(t *testing.T) {
 	}
 }
 
-// boardHit in tiles reads the same geometry the draw used: cols, rows, the
-// cell size and the window start, so a click and a tile cannot disagree.
+// boardHit in tiles reads the same section-aware geometry the draw used: the
+// windowed shelves, each band's height and the cell size, so a click and a tile
+// cannot disagree across a section break.
 func TestBoardHitInTiledModeReadsTheDrawnGeometry(t *testing.T) {
 	a := boardApp(t) // 3 agents, width 120, height 30 (boardApp's own fixture)
 	a.board.Tiled = true
-	agents := a.fleet.OnRoster()
+	agents := a.boardAgents()
 
-	g := a.boardTileGrid(len(agents))
-	if g.cols < 2 {
-		t.Fatalf("precondition: this fixture must lay out at least two columns, got %d", g.cols)
+	l := a.boardTileLayout(agents)
+	if l.cols < 2 {
+		t.Fatalf("precondition: this fixture must lay out at least two columns, got %d", l.cols)
 	}
 
 	// A click inside the second tile (row 0, col 1) lands on agents[1].
-	x := g.cellW + tileGap + 1 // one column in, one cell past the gap
+	x := l.cellW + tileGap + 1 // one column in, one cell past the gap
 	y := boardChromeRows + 1   // inside the first tile row's body
 	if got, _, ok := a.boardHit(x, y, agents); !ok || got != 1 {
 		t.Errorf("boardHit(%d,%d) = (%d, ok=%v), want 1 (row 0, col 1)", x, y, got, ok)
 	}
 
-	// A click on the key line, past every tile row, opens nothing.
-	pastRow := boardChromeRows + g.rows*g.cellH
+	// A click on the key line, past the padded tile body, opens nothing.
+	pastRow := boardChromeRows + l.availH
 	if _, _, ok := a.boardHit(2, pastRow, agents); ok {
 		t.Error("a click past the last tile row resolved to a tile, want none")
 	}
 
 	// A click past the last column opens nothing.
-	pastCol := g.cols * (g.cellW + tileGap)
+	pastCol := l.cols * (l.cellW + tileGap)
 	if _, _, ok := a.boardHit(pastCol, boardChromeRows+1, agents); ok {
 		t.Error("a click past the last column resolved to a tile, want none")
 	}
@@ -383,10 +305,10 @@ func TestBoardHitInTiledModeReadsTheDrawnGeometry(t *testing.T) {
 func TestATileClickOpensTheAgentAsANewColumn(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
-	agents := a.fleet.OnRoster() // [sydney, alex, robin] in attention order
+	agents := a.boardAgents() // [sydney, alex, robin] in attention order
 
-	g := a.boardTileGrid(len(agents))
-	x := g.cellW + tileGap + 1 // second tile: agents[1], alex (s1)
+	l := a.boardTileLayout(agents)
+	x := l.cellW + tileGap + 1 // second tile: agents[1], alex (s1)
 	y := boardChromeRows + 1
 
 	next, _ := a.boardMouse(tea.MouseMsg{

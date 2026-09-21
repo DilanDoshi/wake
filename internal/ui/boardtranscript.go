@@ -17,21 +17,11 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// visibleBoardAgents is the agents whose tiles are drawn this frame - the same
-// window tileView draws, so the built set and the drawn set cannot disagree.
+// visibleBoardAgents is the agents whose tiles are drawn this frame - the tiles
+// in the windowed shelves tileView draws, so the built set and the drawn set
+// cannot disagree.
 func (a App) visibleBoardAgents() []Agent {
-	agents := a.boardAgents()
-	g := a.boardTileGrid(len(agents))
-	return boardWindow(agents, a.boardCursor(agents), g)
-}
-
-// boardWindow is the slice of agents whose tiles the grid draws this frame.
-func boardWindow(agents []Agent, cursor int, g tileGrid) []Agent {
-	if len(agents) == 0 {
-		return nil
-	}
-	start := tileWindowStart(cursor, len(agents), g.cols, g.rows)
-	return agents[start:min(start+g.cols*g.rows, len(agents))]
+	return a.boardTileLayout(a.boardAgents()).visibleTiles()
 }
 
 // ensureBoardDMs builds a board DM for each visible tile that lacks one and
@@ -50,11 +40,10 @@ func (a App) ensureBoardDMs() App {
 	if !a.board.Up || !a.board.Tiled {
 		return a
 	}
-	agents := a.boardAgents()
-	g := a.boardTileGrid(len(agents))
-	inner := max(g.cellW-boxFrameWidth, 1)
-	rows := max(g.cellH-tileFrameRows, minTileTailRows)
-	for _, ag := range boardWindow(agents, a.boardCursor(agents), g) {
+	l := a.boardTileLayout(a.boardAgents())
+	inner := max(l.cellW-boxFrameWidth, 1)
+	rows := max(l.cellH-tileFrameRows, minTileTailRows)
+	for _, ag := range l.visibleTiles() {
 		d, ok := a.boardDMs[ag.ID]
 		if !ok {
 			nd := NewDM(ag.ID, ag.Name)
