@@ -69,27 +69,35 @@ func adjacentTileRow(rows []tileRow, from, step int) int {
 func tileNavSection(rows []tileRow, cursorID string, dir tileDir) string {
 	tr, c := tileFind(rows, cursorID)
 	if tr < 0 {
-		return cursorID
+		// No selection yet (a fresh board open, Selected == "") or the cursor's
+		// agent has left the fleet: seed at the first tile, boardCursor's own
+		// "empty or gone → top" recovery, so an arrow lands on a tile rather than
+		// doing nothing (the flat grid seeded from boardCursor for this reason).
+		first := adjacentTileRow(rows, -1, +1)
+		if first < 0 {
+			return cursorID // no tiles at all
+		}
+		tr, c = first, 0
 	}
 	switch dir {
 	case tileLeft:
 		if c > 0 {
-			return rows[tr].tiles[c-1].ID
+			c--
 		}
 	case tileRight:
 		if c+1 < len(rows[tr].tiles) {
-			return rows[tr].tiles[c+1].ID
+			c++
 		}
 	case tileUp:
 		if i := adjacentTileRow(rows, tr, -1); i >= 0 {
-			return rows[i].tiles[min(c, len(rows[i].tiles)-1)].ID
+			tr, c = i, min(c, len(rows[i].tiles)-1)
 		}
 	case tileDown:
 		if i := adjacentTileRow(rows, tr, +1); i >= 0 {
-			return rows[i].tiles[min(c, len(rows[i].tiles)-1)].ID
+			tr, c = i, min(c, len(rows[i].tiles)-1)
 		}
 	}
-	return cursorID
+	return rows[tr].tiles[c].ID
 }
 
 // tileLayout is the tiled board's section-aware geometry for one frame: the

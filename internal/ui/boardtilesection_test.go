@@ -57,15 +57,46 @@ func TestTileNavSectionMovesWithinAndAcrossShelves(t *testing.T) {
 		{"a", tileRight, "b"},
 		{"b", tileRight, "b"}, // row end, stays
 		{"b", tileLeft, "a"},
-		{"a", tileDown, "c"},  // skips the header to the next tile row
-		{"c", tileUp, "a"},    // skips the header back up
-		{"d", tileDown, "e"},  // col 1 onto a one-tile row clamps to e
-		{"e", tileDown, "e"},  // last row, stays
-		{"a", tileUp, "a"},    // top, stays
+		{"a", tileDown, "c"}, // skips the header to the next tile row
+		{"c", tileUp, "a"},   // skips the header back up
+		{"d", tileDown, "e"}, // col 1 onto a one-tile row clamps to e
+		{"e", tileDown, "e"}, // last row, stays
+		{"a", tileUp, "a"},   // top, stays
 	} {
 		if got := tileNavSection(rows, tc.from, tc.dir); got != tc.want {
 			t.Errorf("nav(%q, %v) = %q, want %q", tc.from, tc.dir, got, tc.want)
 		}
+	}
+}
+
+// A fresh board open has Selected == "" and a departed agent leaves the cursor
+// naming nothing on the wall; an arrow must still land on a tile rather than
+// doing nothing - the flat grid seeded from boardCursor (empty/gone → top), and
+// the section walk has to keep that or the tiled board's arrows are dead until a
+// click.
+func TestTileNavSectionSeedsFromAnEmptyCursor(t *testing.T) {
+	rows := tileShelves([]Section{
+		{Agents: []Agent{{ID: "a"}, {ID: "b"}}},
+		{Team: "backend", Agents: []Agent{{ID: "c"}}},
+	}, 2) // row0 [a,b] · header · row2 [c]
+	for _, tc := range []struct {
+		from string
+		dir  tileDir
+		want string
+	}{
+		{"", tileRight, "b"},     // seed at a, then move right
+		{"", tileDown, "c"},      // seed at a, skip the header, land on c
+		{"", tileUp, "a"},        // seed at a, top row, stays
+		{"", tileLeft, "a"},      // seed at a, left edge, stays
+		{"gone", tileRight, "b"}, // a departed agent recovers the same way
+	} {
+		if got := tileNavSection(rows, tc.from, tc.dir); got != tc.want {
+			t.Errorf("nav(%q, %v) = %q, want %q (seed at the first tile)", tc.from, tc.dir, got, tc.want)
+		}
+	}
+	// No tiles at all: nothing to seed, so the cursor is returned unchanged.
+	if got := tileNavSection([]tileRow{{header: "backend"}}, "", tileDown); got != "" {
+		t.Errorf("nav on a header-only wall = %q, want \"\" (no tile to land on)", got)
 	}
 }
 
