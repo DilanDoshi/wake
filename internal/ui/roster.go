@@ -130,17 +130,22 @@ func (r Roster) View(agents []Agent, subs subsOf, width, height int) string {
 		return ""
 	}
 
+	rows := sectionRows(agents)
 	w := r.window(agents, subs, width, height)
 	lines := make([]string, 0, height)
-	for _, a := range agents[w.from:w.to] {
-		lines = append(lines, r.rows(a, subsFor(subs, a.ID), width)...)
+	drawn := 0
+	for _, row := range rows[w.from:w.to] {
+		if !row.isHeader() {
+			drawn++
+		}
+		lines = append(lines, r.rowLines(row, subs, width)...)
 	}
-	if hidden := len(agents) - (w.to - w.from); hidden > 0 {
-		// Cut to make room for the count rather than letting MaxHeight cut the
-		// count. window's fallback draws one agent taller than the whole column,
-		// so without this the line saying the fleet is bigger is the first thing
-		// off the bottom - at exactly the size where it is the only thing that
-		// could tell an operator so.
+	if hidden := len(agents) - drawn; hidden > 0 {
+		// The count is hidden *agents*, not hidden rows - a header the window did
+		// not reach is not an agent the operator is missing. Cut to make room for
+		// the count rather than letting MaxHeight cut it: window's fallback draws
+		// one row taller than the whole column, so without this the line saying the
+		// fleet is bigger is the first thing off the bottom.
 		lines = append(lines, moreRow(hidden, width))
 	}
 	// Width pads every row out to the column and Height pads the column out to
@@ -194,36 +199,41 @@ func moreRow(n, width int) string {
 // the walk: a window sized as though it were free is one row too tall, and
 // lipgloss wraps the row it cannot fit.
 func (r Roster) window(agents []Agent, subs subsOf, width, height int) span {
-	if len(agents) == 0 {
+	// Over the flattened rows - agents with a team header before each section -
+	// so the span [from, to) is row indices and View/At walk the same list. With
+	// no team the rows are one-to-one with agents and this is the flat window it
+	// always was.
+	rows := sectionRows(agents)
+	if len(rows) == 0 {
 		return span{}
 	}
 	total := 0
-	for _, a := range agents {
-		total += rowsFor(a, subsFor(subs, a.ID))
+	for _, row := range rows {
+		total += rowsForRow(row, subs)
 	}
 	if total <= height {
-		return span{from: 0, to: len(agents)}
+		return span{from: 0, to: len(rows)}
 	}
 	room := height - 1
 
-	cursor := indexOf(agents, r.Selected)
+	cursor := rowIndexOfSelected(rows, r.Selected)
 	if cursor < 0 {
 		cursor = 0
 	}
-	if rowsFor(agents[cursor], subsFor(subs, agents[cursor].ID)) > room {
-		// No whole agent fits. Drawn as the count alone, which is the honest
+	if rowsForRow(rows[cursor], subs) > room {
+		// No whole row fits. Drawn as the count alone, which is the honest
 		// answer: a cut agent implies the fleet is that agent, and the one thing
 		// this column must never do is understate the fleet.
 		return span{}
 	}
-	used, to := rowsFor(agents[cursor], subsFor(subs, agents[cursor].ID)), cursor+1
-	for to < len(agents) && used+rowsFor(agents[to], subsFor(subs, agents[to].ID)) <= room {
-		used += rowsFor(agents[to], subsFor(subs, agents[to].ID))
+	used, to := rowsForRow(rows[cursor], subs), cursor+1
+	for to < len(rows) && used+rowsForRow(rows[to], subs) <= room {
+		used += rowsForRow(rows[to], subs)
 		to++
 	}
 	from := cursor
-	for from > 0 && used+rowsFor(agents[from-1], subsFor(subs, agents[from-1].ID)) <= room {
-		used += rowsFor(agents[from-1], subsFor(subs, agents[from-1].ID))
+	for from > 0 && used+rowsForRow(rows[from-1], subs) <= room {
+		used += rowsForRow(rows[from-1], subs)
 		from--
 	}
 	return span{from: from, to: to}
@@ -257,19 +267,27 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (Agent, st
 	if width <= 0 || y < 0 {
 		return Agent{}, "", false
 	}
+	rows := sectionRows(agents)
 	w := r.window(agents, subs, width, height)
 	line := 0
-	for _, a := range agents[w.from:w.to] {
-		mine := subsFor(subs, a.ID)
-		rows := r.rows(a, mine, width)
-		if y >= line+len(rows) {
-			line += len(rows)
+	for _, row := range rows[w.from:w.to] {
+		rl := r.rowLines(row, subs, width)
+		if y >= line+len(rl) {
+			line += len(rl)
 			continue
 		}
+		// A header belongs to no agent, so a click on it opens nothing - the
+		// discriminator fable named, and the reason the rows are counted through
+		// one function.
+		if row.isHeader() {
+			return Agent{}, "", false
+		}
+		a := row.agent
+		mine := subsFor(subs, a.ID)
 		// The subagent rows are the last len(mine) of them, so which one was hit
 		// is measured from the bottom rather than from an offset that would have
 		// to restate whether this agent drew a tool call.
-		if from := len(rows) - len(mine); y-line >= from {
+		if from := len(rl) - len(mine); y-line >= from {
 			return a, mine[y-line-from].Dispatch, true
 		}
 		return a, "", true

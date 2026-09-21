@@ -174,7 +174,7 @@ func (a App) pickAgent(delta int) App {
 		a.layout.ShowRoster = true
 		a = a.resizePanes()
 	}
-	a.roster = a.roster.Move(agents, a.fleet.RunningTasks, delta)
+	a.roster = a.roster.Move(a.fleet.sectioned(agents), a.fleet.RunningTasks, delta)
 	return a
 }
 
@@ -199,7 +199,7 @@ func (a App) clickedAgent(y int) (Agent, string, bool) {
 	if r.Roster <= 0 {
 		return Agent{}, "", false
 	}
-	return a.roster.At(a.fleet.OnRoster(), a.fleet.RunningTasks, r.Roster-dividerWidth, a.paneHeight(), y)
+	return a.roster.At(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.paneHeight(), y)
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the
@@ -508,7 +508,7 @@ func (a App) withFocus(f string) App {
 // that lies about the fleet. So this says so rather than opening whichever
 // conversation the cursor happened to be resting on.
 func (a App) nextBlocked() App {
-	a.roster = a.roster.Next(a.fleet.Agents())
+	a.roster = a.roster.Next(a.fleet.sectioned(a.fleet.Agents()))
 	if a.roster.Selected == "" {
 		notice.Report("nothing is waiting on you")
 		return a

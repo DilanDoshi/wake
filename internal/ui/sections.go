@@ -22,6 +22,18 @@ type Section struct {
 	Agents []Agent
 }
 
+// sectioned reorders a ranked slice into section-draw order - the header-less top
+// block, then each team in the daemon's order, attention rank preserved within.
+// The roster and board hand this to their View, walk and hit so all three agree
+// on where a header falls. With no team it returns the slice unchanged in order.
+func (f Fleet) sectioned(ranked []Agent) []Agent {
+	out := make([]Agent, 0, len(ranked))
+	for _, s := range f.sections(ranked) {
+		out = append(out, s.Agents...)
+	}
+	return out
+}
+
 // sections partitions a ranked slice into the top block then the team sections.
 //
 // The caller hands in the slice it draws - the roster its Agents(), the board its
