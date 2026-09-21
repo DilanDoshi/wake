@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"net"
 	"slices"
 	"strings"
 	"testing"
@@ -120,22 +121,41 @@ func TestATeamDraftRoutesToItsMembersAndDoesNotNarrow(t *testing.T) {
 	}
 }
 
-// A Wake target-command aimed at a team is refused with the per-agent form named,
-// rather than reaching N claude processes as the literal text "/color blue".
-func TestATeamTargetCommandIsRefusedWithThePerAgentForm(t *testing.T) {
-	fresh(t)
-	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withSize(200, 40).showRoom()
-	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
-		{ID: "s1", Name: "alex", State: rpc.StateIdle},
-		{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
-	}})
-	m, cmd := typeAndSubmit(a, "@backend /color blue")
-	if cmd != nil {
-		t.Fatalf("a team /color was acted on: %+v", sentFrames(t, m.(App), cmd))
+// Every Wake target-command aimed at a team is refused with the per-agent form,
+// rather than reaching N claude processes as the literal text; claude's own
+// command (`/compact`) fans out to the team as an ordinary N-way send.
+func TestATeamTargetCommandIsRefusedButClaudesOwnFansOut(t *testing.T) {
+	teamed := func(conn net.Conn) App {
+		return dmApp(conn, Stream{}, "s1", "alex").withSize(200, 40).showRoom().
+			applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
+				{ID: "s1", Name: "alex", State: rpc.StateIdle},
+				{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
+			}})
 	}
-	if got := shown(m.(App)); !strings.Contains(got, "per-agent") {
-		t.Errorf("@backend /color was refused without naming the per-agent form:\n%s", got)
+	for _, draft := range []string{"@backend /color blue", "@backend /name x", "@backend /task ui", "@backend /quit"} {
+		t.Run(draft, func(t *testing.T) {
+			fresh(t)
+			m, cmd := typeAndSubmit(teamed(newRecorder(t)), draft)
+			if cmd != nil {
+				t.Fatalf("%q was acted on: %+v", draft, sentFrames(t, m.(App), cmd))
+			}
+			if got := shown(m.(App)); !strings.Contains(got, "per-agent") {
+				t.Errorf("%q was refused without naming the per-agent form:\n%s", draft, got)
+			}
+		})
 	}
+	t.Run("@backend /compact fans out", func(t *testing.T) {
+		fresh(t)
+		conn, sent := pipeClient(t)
+		_, cmd := typeAndSubmit(teamed(conn), "@backend /compact")
+		if cmd == nil {
+			t.Fatal("@backend /compact was refused; claude's own command should fan out to the team")
+		}
+		go func() { _ = runCmdQuietly(cmd) }()
+		if f := awaitFrame(t, sent); f.SessionID != "s2" {
+			t.Errorf("/compact fanned to %q, want thea (s2), backend's live member", f.SessionID)
+		}
+	})
 }
 
 // The composer's target line names a team fan-out and its turn count, so the

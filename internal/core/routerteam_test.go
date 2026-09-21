@@ -32,6 +32,23 @@ func TestATeamFansOutToItsLiveMembers(t *testing.T) {
 	}
 }
 
+// `@Backend` reaches team `backend`: a team is stored lower-case (NormalizeTeam),
+// so the mention is folded at the address side too. Without the fold the message
+// silently fell through to the manager - a reviewer-found HIGH.
+func TestATeamMentionIsCaseInsensitive(t *testing.T) {
+	live := []Addressee{
+		{ID: "id-thea", Name: "thea", Team: "backend"},
+		{ID: "id-john", Name: "john", Team: "backend"},
+	}
+	got := Resolve("@Backend ship it", live, manager)
+	if !slices.Equal(got.Targets, []string{"id-thea", "id-john"}) {
+		t.Errorf("targets = %v, want backend's members: @Backend must reach team backend", got.Targets)
+	}
+	if got.Team != "backend" || got.Resolved != "backend" {
+		t.Errorf("team=%q resolved=%q, want the canonical lower-case name so the room draws @backend", got.Team, got.Resolved)
+	}
+}
+
 // An agent name wins a collision with a team name - the header's own rule, and
 // why the daemon refuses a /team that equals a live name. Belt and braces here:
 // the agent-name loop runs before the team step, so even a slipped-through

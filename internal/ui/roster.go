@@ -133,19 +133,14 @@ func (r Roster) View(agents []Agent, subs subsOf, width, height int) string {
 	rows := sectionRows(agents)
 	w := r.window(agents, subs, width, height)
 	lines := make([]string, 0, height)
-	drawn := 0
-	for _, row := range rows[w.from:w.to] {
-		if !row.isHeader() {
-			drawn++
-		}
-		lines = append(lines, r.rowLines(row, subs, width)...)
+	for _, item := range rows[w.from:w.to] {
+		lines = append(lines, r.rowLines(item, subs, width)...)
 	}
-	if hidden := len(agents) - drawn; hidden > 0 {
-		// The count is hidden *agents*, not hidden rows - a header the window did
-		// not reach is not an agent the operator is missing. Cut to make room for
-		// the count rather than letting MaxHeight cut it: window's fallback draws
-		// one row taller than the whole column, so without this the line saying the
-		// fleet is bigger is the first thing off the bottom.
+	// One item per agent, so the hidden count is agents the window did not reach.
+	// Cut to make room for the count rather than letting MaxHeight cut it:
+	// window's fallback draws one row taller than the whole column, so without
+	// this the line saying the fleet is bigger is the first thing off the bottom.
+	if hidden := len(agents) - (w.to - w.from); hidden > 0 {
 		lines = append(lines, moreRow(hidden, width))
 	}
 	// Width pads every row out to the column and Height pads the column out to
@@ -270,25 +265,28 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (Agent, st
 	rows := sectionRows(agents)
 	w := r.window(agents, subs, width, height)
 	line := 0
-	for _, row := range rows[w.from:w.to] {
-		rl := r.rowLines(row, subs, width)
+	for _, item := range rows[w.from:w.to] {
+		rl := r.rowLines(item, subs, width)
 		if y >= line+len(rl) {
 			line += len(rl)
 			continue
 		}
-		// A header belongs to no agent, so a click on it opens nothing - the
-		// discriminator fable named, and the reason the rows are counted through
-		// one function.
-		if row.isHeader() {
-			return Agent{}, "", false
+		within := y - line
+		// The header is the item's first line and belongs to no agent, so a click
+		// on it opens nothing - the discriminator fable named. The agent's own rows
+		// follow it, which is why the offset shifts past a header before resolving.
+		if item.hasHeader() {
+			if within == 0 {
+				return Agent{}, "", false
+			}
 		}
-		a := row.agent
+		a := item.agent
 		mine := subsFor(subs, a.ID)
-		// The subagent rows are the last len(mine) of them, so which one was hit
-		// is measured from the bottom rather than from an offset that would have
-		// to restate whether this agent drew a tool call.
-		if from := len(rl) - len(mine); y-line >= from {
-			return a, mine[y-line-from].Dispatch, true
+		// The subagent rows are the last len(mine) of the item's lines, so which
+		// one was hit is measured from the bottom rather than from an offset that
+		// would have to restate whether this agent drew a header or a tool call.
+		if subFrom := len(rl) - len(mine); within >= subFrom {
+			return a, mine[within-subFrom].Dispatch, true
 		}
 		return a, "", true
 	}

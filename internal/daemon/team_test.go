@@ -146,3 +146,20 @@ func TestOrderTeamsIsCreationOrderFilteredToLiveTeams(t *testing.T) {
 		t.Errorf("teams = %v, want backend's original rank restored, not re-appended last", got)
 	}
 }
+
+// The order follows the /team assignment (noteTeam), not the UUID sort a report is
+// built in: two teams created between two status pushes must keep assignment
+// order, not session-id order - the concurrency both reviewers flagged.
+func TestTeamOrderFollowsAssignmentNotReportSort(t *testing.T) {
+	s := &server{}
+	s.noteTeam("frontend")
+	s.noteTeam("backend")
+	// A report whose sessions sort backend-first must still ship frontend first.
+	got := s.orderTeams([]rpc.SessionStatus{
+		{ID: "a-backend", Team: "backend"},
+		{ID: "z-frontend", Team: "frontend"},
+	})
+	if !slices.Equal(got, []string{"frontend", "backend"}) {
+		t.Errorf("teams = %v, want assignment order [frontend backend], not the report's sort", got)
+	}
+}

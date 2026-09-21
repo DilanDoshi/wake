@@ -20,7 +20,7 @@ import (
 // visibleBoardAgents is the agents whose tiles are drawn this frame - the same
 // window tileView draws, so the built set and the drawn set cannot disagree.
 func (a App) visibleBoardAgents() []Agent {
-	agents := a.fleet.OnRoster()
+	agents := a.boardAgents()
 	g := a.boardTileGrid(len(agents))
 	return boardWindow(agents, a.boardCursor(agents), g)
 }
@@ -50,7 +50,7 @@ func (a App) ensureBoardDMs() App {
 	if !a.board.Up || !a.board.Tiled {
 		return a
 	}
-	agents := a.fleet.OnRoster()
+	agents := a.boardAgents()
 	g := a.boardTileGrid(len(agents))
 	inner := max(g.cellW-boxFrameWidth, 1)
 	rows := max(g.cellH-tileFrameRows, minTileTailRows)

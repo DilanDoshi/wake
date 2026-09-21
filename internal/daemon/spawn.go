@@ -292,7 +292,12 @@ func (s *server) launch(c *client, cfg core.Config, parent string, replaces *age
 	a.budget = cfg.MaxBudgetUSD
 	a.fallback = cfg.FallbackModel
 	a.color = cfg.Color // display only, empty on a fresh spawn; set for the wake paths
-	a.team = cfg.Team   // team tag, empty on a fresh spawn; set for the wake paths
+	// Re-fenced rather than taken verbatim like the colour beside it: a colour is a
+	// closed seven-word set that internal/ui ignores when it is not one, but a team
+	// is free text and reaches teamHeaderLine, so a newline or control sequence in a
+	// hand-edited park book would forge a multi-row header the row count misses. An
+	// invalid restored tag is dropped (the shape fence, not the reserved-word one).
+	a.team, _ = rpc.NormalizeTeam(cfg.Team)
 
 	// Read before admit takes it, so a launch that fails can put it back. See
 	// withdraw.

@@ -52,7 +52,7 @@ func TestNormalizeTeamClearsOnNoneAndEmpty(t *testing.T) {
 // A team name has to be one token: it is addressed as `@team`, and splitWord
 // takes a whitespace-delimited word, so a two-word team could never be reached.
 func TestNormalizeTeamRefusesWhitespaceAndPunctuation(t *testing.T) {
-	for _, bad := range []string{"back end", "a/b", "team!", "front.end", "@backend"} {
+	for _, bad := range []string{"back end", "a/b", "team!", "front.end", "@backend", "back\nend", "a\tb", "x\x1b[0m"} {
 		if _, err := NormalizeTeam(bad); err == nil {
 			t.Errorf("NormalizeTeam(%q) was accepted; a team name must be one mention-safe token", bad)
 		}

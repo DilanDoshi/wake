@@ -178,8 +178,13 @@ func Resolve(text string, live []Addressee, service Addressee) Route {
 	// keep true; before the service, though `manager` is a reserved team name so
 	// the order is moot for it. Team and Resolved name it; Broadcast stays false,
 	// because that word means the whole fleet.
-	if ids := teamMembers(mention, live); len(ids) > 0 {
-		return Route{Targets: ids, Text: rest, Team: mention, Resolved: mention}
+	if members := teamMembers(mention, live); len(members) > 0 {
+		// Matched case-insensitively (a team is stored lower-case by NormalizeTeam),
+		// and Team/Resolved carry the canonical name so the room draws `→ @backend`
+		// whatever case was typed - the fold NormalizeTeam does at the set side, done
+		// here at the address side so `@Backend` reaches team backend.
+		canon := strings.ToLower(mention)
+		return Route{Targets: members, Text: rest, Team: canon, Resolved: canon}
 	}
 	// The service answers to its own name, after the fleet: it is not in live,
 	// and a mention that matches nothing there may still be it.
@@ -228,6 +233,7 @@ func splitWord(s string) (word, rest string) {
 // mention was not a team, so the caller falls through to the service or the CLI -
 // the same shape an ended agent's name takes.
 func teamMembers(team string, live []Addressee) []string {
+	team = strings.ToLower(team)
 	var ids []string
 	for _, a := range live {
 		if a.Team == team {

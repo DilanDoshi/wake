@@ -29,7 +29,17 @@ type Section struct {
 func (f Fleet) sectioned(ranked []Agent) []Agent {
 	out := make([]Agent, 0, len(ranked))
 	for _, s := range f.sections(ranked) {
-		out = append(out, s.Agents...)
+		for _, a := range s.Agents {
+			// A top-block agent draws teamless, so an agent whose team is not in the
+			// daemon's order (an ended row lingering after its team emptied, which
+			// sections() places in the top block) cannot forge a phantom header when
+			// sectionRows/teamHeaderAt derive boundaries from Team adjacency. a is a
+			// copy, so this mutates nothing the caller holds.
+			if s.Team == "" {
+				a.Team = ""
+			}
+			out = append(out, a)
+		}
 	}
 	return out
 }

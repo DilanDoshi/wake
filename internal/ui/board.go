@@ -511,11 +511,19 @@ func (a App) boardView(agents []Agent, width int) string {
 	blocks := make([]string, 0, visible)
 	for i := from; i < len(agents) && len(blocks) < visible; i++ {
 		ag := agents[i]
-		if hdr := teamHeaderAt(agents, i); hdr != "" {
+		hdr := teamHeaderAt(agents, i)
+		// A header and its section's first row are one atomic unit: if both do not
+		// fit the remaining budget, break before drawing the header, so it never
+		// dangles with no member under it. (Subagent rows below may still be cut.)
+		need := 1
+		if hdr != "" {
+			need = 2
+		}
+		if len(blocks)+need > visible {
+			break
+		}
+		if hdr != "" {
 			blocks = append(blocks, teamHeaderLine(hdr, width))
-			if len(blocks) >= visible {
-				break
-			}
 		}
 		blocks = append(blocks, boardRow(ag, nameW, stateW, width, i == cursor && a.board.SelectedTask == ""))
 		for _, t := range a.fleet.RunningTasks(ag.ID) {

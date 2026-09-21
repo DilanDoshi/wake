@@ -61,9 +61,35 @@ func (s *server) teamSession(c *client, f rpc.Frame) {
 		if err := a.setTeam(f.Text); err != nil {
 			return err
 		}
+		// Record the order here, at the successful assignment, rather than letting
+		// orderTeams discover it from a UUID-sorted report: two clients that each
+		// create a new team between two status pushes would otherwise take
+		// session-id order instead of the order the /team commands completed - the
+		// "creation order" the roster draws. setTeam already fenced it, so
+		// NormalizeTeam reproduces the canonical name it stored.
+		if team, err := rpc.NormalizeTeam(f.Text); err == nil {
+			s.noteTeam(team)
+		}
 		s.published(a)
 		return nil
 	})
+}
+
+// noteTeam records a team's first appearance in creation order, appending under
+// s.mu if it is new. orderTeams still discovers a team the *wake* path restores
+// (its config never reaches here), as a backstop; the two are idempotent.
+func (s *server) noteTeam(team string) {
+	if team == "" {
+		return
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, t := range s.teamOrder {
+		if t == team {
+			return
+		}
+	}
+	s.teamOrder = append(s.teamOrder, team)
 }
 
 // orderTeams is the live teams in creation order, and where s.teamOrder grows.
