@@ -214,6 +214,11 @@ var managerVerbs = map[string]verdict{
 			{kind: sourceDeclares, name: liveCapDecl, why: "the cap bounds how many sessions an import can create; without it this refusal's cost clause is load-bearing again"},
 		}},
 
+	rpc.FrameResume: {why: "FrameImport's refusal with a sharper edge, and refused for every clause of it: the source is **outside the fleet** (an on-disk conversation, other people's work in ~/.claude/projects), there is nothing on this surface to address one with, and it carries FrameSpawn's cost - a name, a process, somebody's money - without the cap. The edge is that unlike import it resumes **in place** with **no resumeSafe** (the 2026-09-20 no-guard ruling), so a manager reaching it could put a second process on a conversation that is still open in a terminal and branch it silently. That is the branching hazard the whole daemon is built to avoid, handed to a model with nobody watching - the exact combination this surface exists to refuse. `/resume` is a human's keystroke over a picker that lists the operator's own machine; the manager gets neither the picker nor the judgement it needs",
+		rests: []referent{
+			{kind: sourceDeclares, name: liveCapDecl, why: "the cap bounds how many sessions a resume can create; without it this refusal's cost clause is load-bearing again, as it is for FrameImport and FrameSpawn"},
+		}},
+
 	rpc.FrameHistory: {why: "the whole of one agent's conversation, which is the widest read on this socket and the one thing roll_up exists to avoid. The reading tools are bounded on purpose - a row per agent, a digest sized by arithmetic over a 30-agent fleet - because everything they return lands verbatim in this context and one agent's Bash heredoc is already a kilobyte. A transcript is unbounded and is *the operator's own words* as much as the agent's: what they asked for, what they pasted in, what they decided not to do. A manager that needed it would be a manager reading over somebody's shoulder to write a summary the digest already writes",
 		rests: []referent{
 			{kind: sourceDeclares, name: "internal/mcp/rollup.go#rollUpMaxBytes", why: "the digest is the bounded answer to the question a transcript would answer without a bound. If it goes, this refusal is leaving the manager with no way to be broadly aware at all"},

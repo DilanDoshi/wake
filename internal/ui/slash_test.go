@@ -10,7 +10,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/core"
-	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -269,8 +268,10 @@ func TestResumeRefusesASessionThatIsNotParkedAndSaysWhatIs(t *testing.T) {
 	}
 }
 
-// A bare /resume in the room refuses rather than picking one.
-func TestABareResumeInTheRoomAsksWhichOne(t *testing.T) {
+// A bare /resume in the room opens the picker over both sources, multi-select,
+// rather than picking one or refusing (owner's 2026-09-20 ruling: always the
+// picker). With no disk seam wired the picker holds the parked half alone.
+func TestABareResumeInTheRoomOpensThePicker(t *testing.T) {
 	a := newRoomApp(t).withSize(160, 30).withRoster(
 		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked},
 		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateParked},
@@ -281,20 +282,26 @@ func TestABareResumeInTheRoomAsksWhichOne(t *testing.T) {
 		t.Fatal("/resume was not taken by the router")
 	}
 	if cmd != nil {
-		t.Fatalf("the room picked one for the operator: %+v", sentFrames(t, next, cmd))
+		t.Fatalf("the room wrote a frame instead of opening a picker: %+v", sentFrames(t, next, cmd))
 	}
-	got := shown(next)
-	if !strings.Contains(got, noResumeTarget) {
-		t.Errorf("a bare /resume in the room does not say how to address it:\n%s", got)
+	if !next.resumePicker.Open() {
+		t.Fatal("a bare /resume did not open the picker")
 	}
-	if !strings.Contains(got, "@alex") || !strings.Contains(got, "@sydney") {
-		t.Errorf("the refusal does not name what could be brought back:\n%s", got)
+	if !next.resumePicker.Multi {
+		t.Error("the room's picker is not multi-select")
+	}
+	names := map[string]bool{}
+	for _, r := range next.resumePicker.Rows {
+		names[r.Name] = true
+	}
+	if !names["alex"] || !names["sydney"] {
+		t.Errorf("the picker does not name both parked sessions: %+v", next.resumePicker.Rows)
 	}
 }
 
-// A bare /resume in a parked conversation is unambiguous, because the pane
-// names its recipient in its own header - and it brings back that one alone.
-func TestABareResumeInAParkedConversationBringsBackThatOne(t *testing.T) {
+// A bare /resume inside a conversation opens the single-select picker too - the
+// old one-keypress "resume this pane's parked session" fast path is gone.
+func TestABareResumeInAConversationOpensSingleSelect(t *testing.T) {
 	a := newRoomApp(t).WithOpenDM("s1", "alex").withSize(160, 30).withRoster(
 		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked},
 		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateParked},
@@ -304,10 +311,14 @@ func TestABareResumeInAParkedConversationBringsBackThatOne(t *testing.T) {
 	if !handled {
 		t.Fatal("/resume was not taken by the router")
 	}
-	frames := sentFrames(t, next, cmd)
-	if len(frames) != 1 || frames[0].Kind != rpc.FrameWake || frames[0].SessionID != "s1" {
-		t.Errorf("a bare /resume in @alex's conversation wrote %+v, want one FrameWake for s1 alone: "+
-			"the other parked session belongs to /resume all", frames)
+	if cmd != nil {
+		t.Fatalf("the DM wrote a frame instead of opening a picker: %+v", sentFrames(t, next, cmd))
+	}
+	if !next.resumePicker.Open() {
+		t.Fatal("a bare /resume in a conversation did not open the picker")
+	}
+	if next.resumePicker.Multi {
+		t.Error("a conversation's picker is multi-select; it should be single")
 	}
 }
 
@@ -331,8 +342,17 @@ func TestABareResumeInALiveConversationDoesNotWakeIt(t *testing.T) {
 		t.Fatalf("a wake went out for the running session the operator happened to be reading: %+v",
 			sentFrames(t, next, cmd))
 	}
-	if got := shown(next); !strings.Contains(got, "parked: @sydney") {
-		t.Errorf("the refusal does not name the one that could be brought back:\n%s", got)
+	// The picker opens, and the live session the operator was reading is not in
+	// it - it is running, not resumable - while the parked one is.
+	inPicker := map[string]bool{}
+	for _, r := range next.resumePicker.Rows {
+		inPicker[r.ID] = true
+	}
+	if inPicker["s1"] {
+		t.Error("the running session the operator was reading appeared in the resume picker")
+	}
+	if !inPicker["s2"] {
+		t.Errorf("the parked session is missing from the picker: %+v", next.resumePicker.Rows)
 	}
 }
 
@@ -465,12 +485,21 @@ func TestSubmittingAWakeCommandDoesNotSendItToTheAgent(t *testing.T) {
 	)
 
 	m, cmd := typeAndSubmit(a, "/resume")
-	frames := sentFrames(t, m.(App), cmd)
-	if len(frames) != 1 || frames[0].Kind != rpc.FrameWake || frames[0].SessionID != "s1" {
-		t.Fatalf("↵ on /resume wrote %+v, want one FrameWake for s1: a FrameSend here is the command "+
-			"typed at an agent whose process is not running", frames)
+	got := m.(App)
+	// /resume is caught by the router: it opens the picker rather than reaching
+	// the agent as a message it would read as prose at a process that is not
+	// running. If the router were skipped, this would be a FrameSend.
+	if cmd != nil {
+		for _, f := range sentFrames(t, got, cmd) {
+			if f.Kind == rpc.FrameSend {
+				t.Fatalf("↵ on /resume sent it to the agent as a message: %+v", f)
+			}
+		}
 	}
-	if draft := m.(App).composer().Value(); draft != "" {
+	if !got.resumePicker.Open() {
+		t.Fatal("↵ on /resume did not open the picker; the router was skipped and it became a message")
+	}
+	if draft := got.composer().Value(); draft != "" {
 		t.Errorf("the draft survived the command it ran: %q", draft)
 	}
 }
@@ -567,32 +596,32 @@ func TestTheParkBookSurvivesAnEventArriving(t *testing.T) {
 	}
 }
 
-// And a bare /resume lists them, which is the only way to discover a name.
+// And a bare /resume lists them in the picker, which is the only way to discover
+// a name.
 //
 // The offer line that used to name them on the first frame was removed with the
 // restore, so nothing else on any surface says what is parked: not the roster,
-// not the awareness strip, not `wake status`. If this list goes, a fleet parked
-// by ⌃Q is reachable only by somebody who wrote the names down.
+// not the awareness strip, not `wake status`. The picker a bare /resume opens is
+// now that surface; if it stops naming them, a fleet parked by ⌃Q is reachable
+// only by somebody who wrote the names down.
 func TestABareResumeListsAParkBookNothingElseNames(t *testing.T) {
-	notice.Reset()
-	t.Cleanup(notice.Reset)
-
 	a := newRoomApp(t).withSize(160, 30).withParkBook(
 		rpc.SessionStatus{ID: "s1", Name: "kwame", State: rpc.StateParked},
 		rpc.SessionStatus{ID: "s2", Name: "jonas", State: rpc.StateParked},
 	)
 
-	if _, _, handled := a.slash("/resume"); !handled {
+	next, _, handled := a.slash("/resume")
+	if !handled {
 		t.Fatal("/resume was not taken by the router")
 	}
-	n, ok := notice.Latest()
-	if !ok {
-		t.Fatal("a bare /resume in a room with a full park book said nothing at all")
+	if !next.resumePicker.Open() {
+		t.Fatal("a bare /resume in a room with a full park book opened no picker")
 	}
+	view := next.resumePicker.View(160)
 	for _, want := range []string{"kwame", "jonas"} {
-		if !strings.Contains(n.Text, want) {
-			t.Errorf("a bare /resume said %q, which does not name %q: with the roster empty this is "+
-				"the only surface that can tell somebody what there is to bring back", n.Text, want)
+		if !strings.Contains(view, want) {
+			t.Errorf("the resume picker does not name %q: with the roster empty this is the only surface "+
+				"that can tell somebody what there is to bring back:\n%s", want, view)
 		}
 	}
 }

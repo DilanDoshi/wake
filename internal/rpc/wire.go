@@ -53,30 +53,22 @@ const (
 	// starts nothing, which is the safe end.
 	FrameFork = "fork" // client → daemon: start a session as a fork of another
 
-	// FrameImport adopts a session Wake never started: a transcript sitting in
-	// ~/.claude/projects, from a `claude` somebody ran in a terminal.
-	//
-	// It carries the same two ids FrameFork does - the new session's own
-	// SessionID, minted by Wake, and ParentID naming the transcript - and it
-	// carries **no Dir**, because the directory an import runs in is the one
-	// discovery *proved* and never one a client chose. claude locates a
-	// transcript by the directory the process was started in, so a directory on
-	// the wire would be a client's guess at the one fact that cannot be guessed
-	// at (2026-08-10 findings §12).
-	//
-	// **A separate kind from FrameFork, and the reason is the gate rather than
-	// the argv.** Both end in the same `--resume <src> --fork-session
-	// --session-id <new>`, so a shared kind is tempting. But forkSource refuses
-	// a parent this daemon has never held, deliberately - its own comment says
-	// discovery across ~/.claude/projects belongs to importing - and widening
-	// it would make every `wake fork <stranger-uuid>` reach into a tree of
-	// other people's conversations. Two verbs whose refusals differ are two
-	// kinds here, exactly as FrameStop and FrameKill are.
-	//
-	// It is confirmed with the FrameStatusReply a spawn and a fork are
-	// confirmed with, because from the moment it starts an imported session is
-	// an ordinary Wake session.
+	// FrameImport adopts a session Wake never started: a transcript in
+	// ~/.claude/projects, from a `claude` somebody ran in a terminal. It carries
+	// the new session's own minted SessionID and ParentID naming the transcript,
+	// and **no Dir** - the directory an import runs in is the one discovery
+	// *proved*, never a client's guess (2026-08-10 findings §12). A separate kind
+	// from FrameFork because forkSource refuses a parent this daemon never held,
+	// and widening it would reach into other people's conversations. Confirmed
+	// with a spawn's own FrameStatusReply. See internal/daemon/import.go.
 	FrameImport = "import" // client → daemon: adopt a transcript Wake did not write
+
+	// FrameResume resumes an on-disk conversation in place under its own id
+	// (`--resume <id>`, no fork), so the transcript continues. Unlike FrameImport
+	// it mints no new id, and its handler deliberately skips resumeSafe - the
+	// owner's "same as Claude Code, no guard" ruling. See internal/daemon/resume.go
+	// and docs/notes/decisions.md.
+	FrameResume = "resume" // client → daemon: resume an on-disk conversation in place, under its own id
 
 	FrameHello = "hello" // daemon → client: handshake, sent on connect
 	FrameError = "error" // either direction: something went wrong

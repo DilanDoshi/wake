@@ -12,7 +12,9 @@ package ui
 
 import (
 	"fmt"
+	"sort"
 	"strings"
+	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -35,11 +37,10 @@ const (
 	// legend - which is where "these keys exist" is decided.
 	noParkedSessions = "nothing is parked, so there is nothing to bring back. ⌃C parks the conversation you are in, and ⌃Q parks the fleet on the way out"
 
-	// noResumeTarget is /resume in the room with no name after it. It refuses
-	// rather than guessing, for the reason the room refuses an unaddressed
-	// draft: with several parked, picking one for somebody is not a
-	// recoverable mistake - they type into it.
-	noResumeTarget = "which one? " + resumeVerb + " <name>, or " + resumeVerb + " " + resumeAll
+	// noResumable is a bare /resume with nothing parked and nothing on disk to
+	// bring back - the picker's own empty state, wider than noParkedSessions
+	// because the picker offers on-disk conversations too.
+	noResumable = "nothing to resume: nothing is parked, and there are no claude sessions on this machine. ⌃C parks the conversation you are in, and ⌃Q parks the fleet on the way out"
 
 	// notParked is /resume aimed at something that is not parked.
 	notParked = "%s%s is not parked, so there is nothing to bring back"
@@ -66,6 +67,13 @@ const (
 // it: those sentences name *when* the operator can act, and a local "could not
 // resume" would replace the only useful half.
 func (a App) resume(arg string) (App, tea.Cmd) {
+	// Bare /resume opens the picker over the composer - always, on every surface
+	// (owner's 2026-09-20 ruling): the old one-keypress "resume this pane's parked
+	// session" fast path is gone. An argument stays the parked-only route below.
+	if strings.TrimSpace(arg) == "" {
+		return a.openResumePicker()
+	}
+
 	parked := a.parkedAgents()
 	if len(parked) == 0 {
 		notice.Report("%s", noParkedSessions)
@@ -75,16 +83,6 @@ func (a App) resume(arg string) (App, tea.Cmd) {
 	switch {
 	case strings.EqualFold(arg, resumeAll):
 		return a.bringBack(parked)
-
-	case arg == "":
-		// A DM names its recipient in its own header, so a bare /resume there
-		// is unambiguous. The room is not one conversation and does not guess.
-		agent, ok := a.parkedHere()
-		if !ok {
-			notice.Report("%s\n%s", noResumeTarget, parkedList(parked))
-			return a, nil
-		}
-		return a.bringBack([]Agent{agent})
 
 	default:
 		who := strings.TrimPrefix(arg, agentPrefix)
@@ -158,19 +156,6 @@ func (a App) parkedNamed(who string) (Agent, bool) {
 		}
 	}
 	return Agent{}, false
-}
-
-// parkedHere is the parked agent this conversation is with, when the focused
-// pane is a conversation at all.
-func (a App) parkedHere() (Agent, bool) {
-	if a.focus == "" {
-		return Agent{}, false
-	}
-	agent, ok := a.fleet.Agent(a.focus)
-	if !ok || agent.State != rpc.StateParked {
-		return Agent{}, false
-	}
-	return agent, true
 }
 
 // parkedList names what could be brought back, so a wrong name costs one line
@@ -248,6 +233,156 @@ func (a App) wakeArrived(st *rpc.Status) App {
 		}
 	}
 	return a
+}
+
+// resumeReadyMsg is what the disk walk hands back, folded by App.Update.
+type resumeReadyMsg struct {
+	disk []DiskSession
+	err  error
+}
+
+// openResumePicker gathers what can be resumed and opens the picker. The parked
+// half is local; the on-disk half needs the walk of ~/.claude/projects, so it
+// goes off the draw goroutine (adopt.go's rule) and the picker opens when it
+// returns. With no way to see the disk it opens on the parked half alone.
+func (a App) openResumePicker() (App, tea.Cmd) {
+	if a.sessions == nil {
+		return a.showResume(nil)
+	}
+	a = a.clearDraft()
+	return a, resumableCmd(a.sessions)
+}
+
+// resumableCmd walks the disk on its own goroutine, askMachine's arrangement.
+func resumableCmd(s Sessions) tea.Cmd {
+	return func() tea.Msg {
+		disk, err := s.Resumable()
+		return resumeReadyMsg{disk: disk, err: err}
+	}
+}
+
+// resumeArrived folds the walk: the rows open the picker, and a read that failed
+// falls back to the parked half rather than to nothing.
+//
+// A slow ~/.claude/projects walk (hundreds of transcripts on NFS) can land after
+// the operator has moved on and started typing. Opening then would clear the
+// draft they began - openResume calls clearDraft - so a walk that returns to a
+// non-empty composer is dropped rather than stealing it. The common case is a
+// sub-second walk into a still-empty box, which opens.
+func (a App) resumeArrived(m resumeReadyMsg) (App, tea.Cmd) {
+	if a.composer().Value() != "" {
+		return a, nil
+	}
+	if m.err != nil {
+		notice.Report("could not read this machine's sessions, showing parked only: %v", m.err)
+		return a.showResume(nil)
+	}
+	return a.showResume(m.disk)
+}
+
+// showResume merges the parked fleet and the disk rows and opens the picker, or
+// reports the empty machine.
+func (a App) showResume(disk []DiskSession) (App, tea.Cmd) {
+	rows, more := a.resumeRowsFrom(disk)
+	if len(rows) == 0 {
+		notice.Report("%s", noResumable)
+		return a, nil
+	}
+	return a.openResume(rows, more, a.focus == ""), nil
+}
+
+// resumeRowsFrom merges parked sessions and on-disk conversations into the
+// picker's rows, newest first.
+//
+// It is driven off the disk walk, which carries an mtime for **every**
+// transcript - including a parked session's own - so recency sorts the whole set
+// without a timestamp on any wire (no rpc.SessionStatus field, so no reflective
+// guard to satisfy). Each disk row is annotated from the fleet: a **live** id is
+// dropped (it is running, not resumable), a **parked** id becomes a FrameWake row
+// named by its @name, and anything else is an on-disk stranger that resumes in
+// place. A parked session whose transcript the walk missed is still appended, so
+// it stays resumable.
+func (a App) resumeRowsFrom(disk []DiskSession) (rows []resumeRow, more int) {
+	live := map[string]bool{}
+	for _, ag := range a.fleet.Agents() {
+		if ag.State != rpc.StateParked {
+			live[ag.ID] = true
+		}
+	}
+	parked := map[string]Agent{}
+	for _, ag := range a.parkedAgents() {
+		parked[ag.ID] = ag
+	}
+
+	all := make([]resumeRow, 0, len(disk)+len(parked))
+	seen := map[string]bool{}
+	for _, d := range disk {
+		// One id, one row - discovery does not dedup across project slugs, so a
+		// transcript copied or resumed under a differently-slugging cwd can appear
+		// twice; the first (newest, since disk is newest-first) wins. Without this
+		// a second occurrence of a *parked* id misses the map (deleted below) and
+		// is drawn as a mislabeled stranger.
+		if live[d.ID] || seen[d.ID] {
+			continue
+		}
+		seen[d.ID] = true
+		if ag, isParked := parked[d.ID]; isParked {
+			all = append(all, parkedRow(ag, ago(d.Modified)))
+			delete(parked, d.ID)
+			continue
+		}
+		all = append(all, resumeRow{
+			ID: d.ID, Dir: d.Dir, Preview: d.Preview,
+			Age: ago(d.Modified), Resumable: d.Dir != "",
+		})
+	}
+	// Parked sessions the walk did not surface (no transcript found, or no disk
+	// at all) still belong in the list - the daemon resumes them from the book.
+	// Sorted by name so the tail is deterministic, since a map is not.
+	leftover := make([]Agent, 0, len(parked))
+	for _, ag := range parked {
+		leftover = append(leftover, ag)
+	}
+	sort.Slice(leftover, func(i, j int) bool { return leftover[i].Name < leftover[j].Name })
+	for _, ag := range leftover {
+		all = append(all, parkedRow(ag, ""))
+	}
+
+	if len(all) > resumePickerCap {
+		more = len(all) - resumePickerCap
+		all = all[:resumePickerCap]
+	}
+	return all, more
+}
+
+// parkedRow is one parked session as a picker row: it wakes in place (FrameWake),
+// and it is always resumable here because the daemon holds its directory in the
+// park book - if that book row somehow has none, the daemon's own refusal shows.
+func parkedRow(ag Agent, age string) resumeRow {
+	return resumeRow{
+		ID: ag.ID, Name: ag.Name, Dir: ag.Cwd, Label: ag.Label,
+		Age: age, Parked: true, Resumable: true,
+	}
+}
+
+// ago is a coarse "how long since anything was written" for a row, discover.go's
+// own age one package over: the number says when the file was last touched, which
+// is not when the session ended and is certainly not whether it is running.
+func ago(t time.Time) string {
+	if t.IsZero() {
+		return ""
+	}
+	d := time.Since(t)
+	switch {
+	case d < time.Minute:
+		return "just now"
+	case d < time.Hour:
+		return fmt.Sprintf("%dm", int(d.Minutes()))
+	case d < 24*time.Hour:
+		return fmt.Sprintf("%dh", int(d.Hours()))
+	default:
+		return fmt.Sprintf("%dd", int(d.Hours()/24))
+	}
 }
 
 // awaitingWake remembers a wake this client asked for.

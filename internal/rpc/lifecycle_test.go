@@ -38,6 +38,7 @@ var frameKinds = map[string]string{
 	"FrameSpawn":              FrameSpawn,
 	"FrameFork":               FrameFork,
 	"FrameImport":             FrameImport,
+	"FrameResume":             FrameResume,
 	"FrameHello":              FrameHello,
 	"FrameError":              FrameError,
 	"FrameAllow":              FrameAllow,

@@ -160,8 +160,9 @@ type App struct {
 	// picker is the menu Wake draws for a bare /effort or /model, and the zero
 	// value is "there is not one". Beside cards rather than in them: it is
 	// Wake's own and appears in no fleet report. See picker.go.
-	picker Picker
-	rewind RewindPicker // esc esc's own picker, on an idle empty conversation; see rewind.go
+	picker       Picker
+	rewind       RewindPicker // esc esc's own picker, on an idle empty conversation; see rewind.go
+	resumePicker ResumePicker // a bare /resume's own picker, over the composer; see resumepicker.go
 
 	// completion is the menu under the focused draft: what could finish the
 	// word at the cursor. Rebuilt per keystroke, never per frame, and its `@`
@@ -553,6 +554,8 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case adoptedMsg:
 		return a.adoptArrived(m)
+	case resumeReadyMsg:
+		return a.resumeArrived(m)
 
 	case pathScanMsg:
 		return a.pathsScanned(m)
@@ -633,7 +636,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The board goes with them: a rune is somebody typing, and boardKey's
 		// own close on this path is discarded with the rest of the not-handled
 		// model - the disarm comment above is about exactly that.
-		a = a.disarmed().closePicker().closeBoard().closeRewind()
+		a = a.disarmed().closePicker().closeBoard().closeRewind().closeResume()
 	}
 
 	// Whatever the App did not take goes to the pane that has the focus.

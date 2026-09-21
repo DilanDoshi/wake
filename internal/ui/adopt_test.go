@@ -293,9 +293,10 @@ const (
 // fakeSessions is the seam with the answers written down. It records nothing;
 // countingSessions is for the one test that asks when it was called.
 type fakeSessions struct {
-	listing  string
-	resolved []string
-	err      error
+	listing   string
+	resolved  []string
+	resumable []DiskSession
+	err       error
 }
 
 func (f fakeSessions) Listing() (string, error) { return f.listing, f.err }
@@ -306,6 +307,8 @@ func (f fakeSessions) Resolve(typed []string) ([]string, error) {
 	}
 	return f.resolved, nil
 }
+
+func (f fakeSessions) Resumable() ([]DiskSession, error) { return f.resumable, f.err }
 
 type countingSessions struct {
 	listing string
@@ -318,6 +321,8 @@ func (c *countingSessions) Resolve(typed []string) ([]string, error) {
 	c.calls++
 	return nil, fmt.Errorf("no")
 }
+
+func (c *countingSessions) Resumable() ([]DiskSession, error) { c.calls++; return nil, nil }
 
 // adoptArrival runs one `/adopt` draft the way Bubble Tea does: the router
 // hands back a command, the command produces a message, and the model folds it.

@@ -3134,3 +3134,52 @@ later grew to the pane too — see the streaming-preview entry above — and `ro
 superseded by the transcript-window tile of 2026-09-01).
 `tileGridFor` is one function read by the draw, the mouse (`boardHit`) and the cursor (`stepBoard`),
 so a click and a tile cannot disagree.
+
+## 2026-09-20 — `/resume` resumes in place with no guard, the one deliberate reversal of the branching non-negotiable
+
+A bare `/resume` now opens a picker over both **parked** sessions and **on-disk** conversations, and
+resuming any of them continues the session **in place** (same id, same transcript) — "same as Claude
+Code's `/resume`". The owner asked for this and signed off three times, the last time choosing the
+un-guarded form over a safer middle ground (an in-place resume gated by a best-effort `resumeSafe`).
+
+**What it reverses.** CLAUDE.md's non-negotiable says two live processes on one id branch silently,
+and `import.go` implements the corollary: importing a stranger session is a *fork* (`--fork-session`,
+a new id) because a hand-started `claude`'s argv is just `claude`, invisible to `resumeSafe`, so Wake
+cannot prove the original is not still open in a terminal. `/resume`'s new `FrameResume` path resumes
+a stranger **under its own id** and **skips `resumeSafe` entirely** (`daemon/resume.go`'s
+`resumeSource` is `importSource` minus that `ps`-based call). If the source is still open elsewhere,
+the transcript branches — the exact risk the non-negotiable names, now accepted, because Claude Code
+accepts it too and performs no check at all.
+
+**What the reversal does *not* waive: the daemon's own definitely-known state.** `resumeSafe` is a
+`ps` heuristic; the fleet roster and the park book are facts the daemon holds. `resumeSource` keeps a
+**widened** fleet-and-book check (`s.holds` *and* `s.parked.record`) and refuses a resume of any id
+already live or parked here — because a resume reuses the id, and `admit` reads `ResumeFrom` as the
+`wake` bypass of its own `parked && !wake` guard. Without this check a `FrameResume` for a
+book-parked id (a cross-restart record, not in `s.agents`) would launch a live process under an id
+the book still reports parked, breaking Parked/Sessions disjointness with none of `unparkRecord`'s
+reservation. The client routes a parked row to `FrameWake` and drops a live one, so this is the
+daemon's backstop for a stale picker snapshot or a racing window — the trust-boundary defense every
+other mutating verb here performs. (Import needs only the `s.agents` half, because it forks to a *new*
+id; a resume reuses this one, so it checks the book too.) This was a code-review catch, 2026-09-20.
+
+**Why it is contained rather than a slide.** Parked rows still take `FrameWake`/`unparkRecord`, whose
+`resumeSafe` is intact and correct (Wake parked them, so it *can* prove they are idle). A resumed
+session carries **no parent** (`launch`'s `parent=""`, `unparkRecord`'s own rule): passing the id as
+its own parent — `importSession`'s shape, where the new id differs — would set a self-referential
+`ParentID` that `isFork` reads as a fork, so the room's history would never backfill and the DM header
+would read "forked from" its own name. `/adopt` and `wake import` are unchanged — a fork is still
+there for when a safe copy is what you want. So the reversal is one verb (`FrameResume`), one handler,
+and it is named as an exception in the amended non-negotiable rather than a weakening of the rule
+everywhere.
+
+**What did *not* have to change, and why the argv guards stayed green.** `--resume <id>` is an
+already-legal shape (`Config{ResumeFrom: id}`, argv.go's `ResumeFrom` arm), the same one `unparkRecord`
+uses, so no identity-flag guard moved. No `rpc.SessionStatus` field was added — the picker sorts by
+the disk walk's own mtimes (every transcript, parked ones included, carries one), so the reflective
+totality guards on that struct never entered into it. The `FrameResume` const cost `internal/rpc/wire.go`
+its headroom at the 800-line max, so both it and the `FrameImport` comment were trimmed to compact
+form (the full rationale lives in the daemon handlers), which shifted the "two largest non-test files"
+sentence off wire.go.
+
+Full argument: `internal/daemon/resume.go`, `internal/ui/resumepicker.go`, `internal/ui/resume.go`.
