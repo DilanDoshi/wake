@@ -129,6 +129,12 @@ func TestParkingAnAgentAndWakingItAgain(t *testing.T) {
 	// the frame goes quiet with `! bringing @name back…` under a strip still
 	// drawn from the report before it. See screen.awaitGone.
 	s.awaitGone("parked")
+	// And when the report lands, the notice is the fact of the return - it must
+	// render "has been resumed", not the old "…claude keeps the transcript"
+	// caveat, since a woken session re-reads its transcript from disk. The
+	// scripted agent wakes in its spawn mode, so modeReverted stays silent and
+	// this notice is the one that stands.
+	s.await("has been resumed")
 }
 
 // A conversation held in a DM stays in the DM. The room is for what needs the

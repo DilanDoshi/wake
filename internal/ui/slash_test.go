@@ -597,24 +597,20 @@ func TestABareResumeListsAParkBookNothingElseNames(t *testing.T) {
 	}
 }
 
-// A woken conversation says what it is, once, when it comes back.
+// A woken conversation says it has been resumed, once, when it comes back — and
+// only on the report, never on the keypress.
 //
-// `wake attach` has said this since Phase 1 — *"What it said before now is not
-// here - claude keeps the transcript, Wake does not"* — because a pane that
-// opens empty over a session with an hour of history behind it reads as a
-// session that lost it. `/resume` produced exactly that surprise and said
-// nothing: "bringing @alex back…", and then an empty pane.
-//
-// It is the same sentence for the same reason, so it is one sentence in one
-// place rather than two that can drift. `cmd/wake` had it inline; `TranscriptNotice`
-// is now the only copy, and `wake attach` reads it from here.
+// The transcript comes back with it: a woken DM re-reads it from disk
+// (history.go) and the room re-fetches its history (askRoomHistory), so the
+// notice is the fact of the return rather than the old caveat that the history
+// was claude's and gone. See resume.go.
 //
 // # Why the report and not the keypress
 //
 // parkArrived's reason, and ⌃F's before it: the daemon refuses a wake for real
 // reasons — something already holds the id, the record carries no directory —
 // and a sentence about a conversation that has come back is a lie until it has.
-func TestAWokenConversationSaysTheTranscriptIsNotHere(t *testing.T) {
+func TestAWokenConversationSaysItHasBeenResumed(t *testing.T) {
 	fresh(t)
 	a := newRoomApp(t).withSize(200, 40).
 		withRoster(rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked})
@@ -622,8 +618,8 @@ func TestAWokenConversationSaysTheTranscriptIsNotHere(t *testing.T) {
 	m, _ := typeAndSubmit(a, resumeVerb+" alex")
 	a = m.(App)
 
-	if got := latestNotice(t); strings.Contains(got, "transcript") {
-		t.Errorf("the keypress says %q, which describes a conversation that has not come back yet. "+
+	if got := latestNotice(t); strings.Contains(got, "resumed") {
+		t.Errorf("the keypress says %q, which claims a conversation that has not come back yet. "+
 			"A wake the daemon refuses makes that a sentence the next frame contradicts", got)
 	}
 
@@ -633,10 +629,12 @@ func TestAWokenConversationSaysTheTranscriptIsNotHere(t *testing.T) {
 		Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateIdle}}}})
 
 	got := latestNotice(t)
-	if !strings.Contains(got, "transcript") {
-		t.Errorf("a woken session came back and the notice is %q. The pane opens empty over a "+
-			"conversation with an hour behind it, and nothing says the history is claude's rather "+
-			"than gone", got)
+	if !strings.Contains(got, "resumed") {
+		t.Errorf("a woken session came back and the notice is %q; it should say the session has been resumed", got)
+	}
+	if strings.Contains(got, "transcript") {
+		t.Errorf("the notice is %q and still carries the stale caveat that the transcript is gone; "+
+			"a woken DM re-reads it from disk and the room re-fetches its history", got)
 	}
 	if !strings.Contains(got, "alex") {
 		t.Errorf("the notice is %q and does not name the session it is about: at 30 agents a sentence "+
@@ -644,12 +642,17 @@ func TestAWokenConversationSaysTheTranscriptIsNotHere(t *testing.T) {
 	}
 }
 
-// And the two surfaces say it with one sentence, so neither can drift.
-func TestAttachAndResumeShareTheTranscriptSentence(t *testing.T) {
-	if TranscriptNotice("alex") == "" {
-		t.Fatal("TranscriptNotice is empty, so the assertion below holds over nothing")
+// Resume and attach say different true things: a parked session is *resumed*, a
+// live one you reconnect to is *reattached*. Each names the session, and they
+// are two sentences rather than one, because they are two events.
+func TestResumeAndAttachNoticesEachNameTheSession(t *testing.T) {
+	if got := ResumedNotice("alex"); !strings.Contains(got, "alex") || !strings.Contains(got, "resumed") {
+		t.Errorf("ResumedNotice(%q) = %q; want it to name the session and say it was resumed", "alex", got)
 	}
-	if !strings.Contains(TranscriptNotice("alex"), "alex") {
-		t.Errorf("TranscriptNotice(%q) = %q and does not name the session", "alex", TranscriptNotice("alex"))
+	if got := AttachedNotice("alex"); !strings.Contains(got, "alex") {
+		t.Errorf("AttachedNotice(%q) = %q and does not name the session", "alex", got)
+	}
+	if ResumedNotice("alex") == AttachedNotice("alex") {
+		t.Error("resume and attach share one sentence again; a parked resume and a live reattach are not the same event")
 	}
 }
