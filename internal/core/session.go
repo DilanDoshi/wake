@@ -152,6 +152,12 @@ type Config struct {
 	// a Config field buildArgs never reads.
 	Color string
 
+	// Team is this session's team tag, carried so a woken session comes back
+	// grouped where it was. Display and routing only and **never an argv word**,
+	// like Color: a team is Wake's own grouping of the fleet, not something
+	// claude is told. See daemon/team.go.
+	Team string
+
 	// AddDir are directories outside Dir that this session's tools may reach,
 	// each fenced by rpc.ValidAddDir before it gets here because they reach the
 	// argv as written. Debug is a category filter for this session's logging

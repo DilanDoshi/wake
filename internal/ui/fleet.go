@@ -74,6 +74,13 @@ type Agent struct {
 	// identityStyle maps it to a hue at draw time.
 	Color string
 
+	// Team is this agent's team tag - the operator's own grouping of the fleet,
+	// chosen by /team and reported by the daemon. It heads the roster and board
+	// section this agent is drawn under and is addressed as `@team`. A string
+	// rather than a set so the field stays comparable for Observe; one team per
+	// agent, empty for the un-tagged block above the sections.
+	Team string
+
 	// Cwd is where this session is running now, which is not where it was
 	// started once an agent has used EnterWorktree. Every surface here wants
 	// the first; the startup directory is the daemon's business - park, unpark
@@ -314,7 +321,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 			a.ID = s.ID
 			f.order = append(f.order, s.ID)
 		}
-		a.Name, a.Label, a.Color, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, runningIn(s), s.ParentID
+		a.Name, a.Label, a.Color, a.Team, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, s.Team, runningIn(s), s.ParentID
 		a.Effort, a.Budget, a.ConfirmedModel = s.Effort, s.Budget, s.ConfirmedModel
 		// Only when the report names one, so a report assembled before the daemon
 		// saw an init does not blank a model the event stream already gave. Model
@@ -398,7 +405,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 	f.parked = nil
 	for _, s := range st.Parked {
 		f.parked = append(f.parked, Agent{
-			ID: s.ID, Name: s.Name, Label: s.Label, Color: s.Color, Cwd: runningIn(s),
+			ID: s.ID, Name: s.Name, Label: s.Label, Color: s.Color, Team: s.Team, Cwd: runningIn(s),
 			Effort: s.Effort, State: s.State,
 		})
 	}

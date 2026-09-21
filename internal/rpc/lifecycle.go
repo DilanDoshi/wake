@@ -302,6 +302,13 @@ type SessionStatus struct {
 	// no colour, which is every session before /color touches it.
 	Color string `json:"color,omitempty"`
 
+	// Team is this session's team tag - the operator's own grouping of the fleet,
+	// which heads a roster and board section and is addressed as `@team`.
+	// Client-chosen like Color and for the same reason: only the operator knows
+	// how they want the fleet grouped by hand. Empty means no team, which is
+	// where the manager and every un-tagged session sit, above the sections.
+	Team string `json:"team,omitempty"`
+
 	// Dir is the absolute directory this session runs in, and it is the
 	// workspace identity the room's left sidebar groups by.
 	//

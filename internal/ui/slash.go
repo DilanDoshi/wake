@@ -235,6 +235,13 @@ const renameCommand = "rename"
 const colorCommand = "color"
 const colorVerb = SlashPrefix + colorCommand // for resumeVerb's reason
 
+// teamCommand groups an agent under an operator-named team, which heads a roster
+// and board section and is addressed as `@team`. **The word is Wake's own** -
+// the recorded corpus advertises no `team` command on any init frame - so it is
+// claimed on the corpus rule rather than an override, unlike `color`.
+const teamCommand = "team"
+const teamVerb = SlashPrefix + teamCommand // for resumeVerb's reason
+
 // managerCommand is the switch for the one session that has tools over the
 // fleet: on when it is off, off when it is on.
 //
@@ -341,6 +348,15 @@ var (
 	noColorTarget = "which one? " + colorUsage
 )
 
+// teamUsage names the shape rather than a set, because a team is operator-named
+// and open, not a closed vocabulary like colour. noTeamTarget is noColorTarget's:
+// the room does not guess a target.
+var (
+	teamUsage = teamVerb + " <name>, or " + teamVerb + " " + agentPrefix + "<who> <name>" +
+		" (or " + rpc.TeamNone + " to clear)"
+	noTeamTarget = "which one? " + teamUsage
+)
+
 // commands is every slash command Wake owns. **Closed on purpose**: anything
 // not here is a message, which is what keeps claude's own commands working.
 //
@@ -352,6 +368,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	nameCommand:            App.renameAgent,
 	taskCommand:            App.labelAgent,
 	colorCommand:           App.colorAgent,
+	teamCommand:            App.teamAgent,
 	adoptCommand:           App.adopt,
 	mcpCommand:             App.mcp,
 	managerCommand:         App.manager,
@@ -376,6 +393,7 @@ var roomTargetCommands = map[string]struct{}{
 	nameCommand:  {},
 	taskCommand:  {},
 	colorCommand: {},
+	teamCommand:  {},
 	quitCommand:  {},
 }
 
@@ -564,7 +582,7 @@ func (a App) mentionCommand(who, text string) (App, tea.Cmd, bool) {
 //
 // Named for its half of the overload rather than `commandCount`, which this
 // package's tests already use for how many goroutines one tea.Cmd costs.
-const wakeCommandCount = 14
+const wakeCommandCount = 15
 
 // slash routes one draft, reporting whether Wake took it.
 //

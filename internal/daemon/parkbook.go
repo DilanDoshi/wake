@@ -123,6 +123,13 @@ type parkedRecord struct {
 	// because it is only ever written *by the park* - a running session's /color
 	// is refused once it is parked (see color.go), so the record is the one writer.
 	Color string `json:"color,omitempty"`
+
+	// Team is the team tag this session was grouped under, here for Color's
+	// reason: an operator's grouping is operator intent, and a wake that dropped
+	// it would bring the session back ungrouped with nothing saying why. Written
+	// only by the park, like Color - a running session's /team is refused once it
+	// is parked - so the record is the one writer.
+	Team string `json:"team,omitempty"`
 }
 
 // parkBook is the on-disk record, rewritten whole through a temp file and a
@@ -408,6 +415,7 @@ func parkedStatus(rec parkedRecord) rpc.SessionStatus {
 		Name:   rec.Name,
 		Label:  rec.Label,
 		Color:  rec.Color,
+		Team:   rec.Team,
 		Dir:    rec.Dir,
 		Effort: rec.Effort,
 		State:  rpc.StateParked,

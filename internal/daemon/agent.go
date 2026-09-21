@@ -86,6 +86,12 @@ type agent struct {
 	// rpc.ColorNames, or empty for none. See color.go.
 	color string
 
+	// team is this session's team tag, chosen by an operator's /team and carried
+	// onto the snapshot and into the park book. Display and routing only and
+	// never an argv word: a team is Wake's own grouping of the fleet. A single
+	// lower-case token, or empty for none. See team.go.
+	team string
+
 	// dir is where this session was **started**, and it never moves. park
 	// writes it down, unpark launches from it and a fork runs in it, because
 	// claude locates a transcript by the directory the process started in even
