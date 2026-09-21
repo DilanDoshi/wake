@@ -119,3 +119,75 @@ func TestTileWindowPagesAroundTheCursorRowWithItsHeader(t *testing.T) {
 		t.Errorf("window = [%d,%d), want the whole list [0,4) when it all fits", from, to)
 	}
 }
+
+// Paging must keep the cursor tile under its OWN team header, not the next
+// team's - the bug two reviewers found: growing down before up paged the cursor
+// under the following team's header, misclassifying it.
+func TestTileWindowKeepsTheCursorTileWithItsTeamHeader(t *testing.T) {
+	l := tileLayout{cellH: 7, rows: []tileRow{
+		{header: "A"},                // 0: 1
+		{tiles: []Agent{{ID: "a1"}}}, // 1: 7
+		{tiles: []Agent{{ID: "a2"}}}, // 2: 7 (cursor, team A's second row)
+		{header: "B"},                // 3: 1
+		{tiles: []Agent{{ID: "b1"}}}, // 4: 7
+	}}
+	// availH 15 fits A's header + both A rows (1+7+7); growing down-first would
+	// have paged the cursor under team B's header instead.
+	from, to := tileWindow(l, 2, 15)
+	if from != 0 || to != 3 {
+		t.Fatalf("window = [%d,%d), want [0,3): the cursor with team A's header, not B's", from, to)
+	}
+	if !l.rows[from].isHeader() || l.rows[from].header != "A" {
+		t.Errorf("the window's first row is %+v, want team A's header above the cursor", l.rows[from])
+	}
+}
+
+// A header must never be the last row in the window with its member paged off -
+// the row view's atomic rule (rostersection.go glues header to first member).
+func TestTileWindowDropsADanglingTrailingHeader(t *testing.T) {
+	l := tileLayout{cellH: 7, rows: []tileRow{
+		{tiles: []Agent{{ID: "x"}}}, // 0: 7 (cursor, top block)
+		{header: "B"},               // 1: 1
+		{tiles: []Agent{{ID: "b"}}}, // 2: 7
+	}}
+	// availH 8 fits the top row and B's header but not B's tile: the header would
+	// dangle at the bottom edge as an empty team without the drop.
+	from, to := tileWindow(l, 0, 8)
+	if from != 0 || to != 1 {
+		t.Fatalf("window = [%d,%d), want [0,1): team B's header must not dangle with its member paged off", from, to)
+	}
+}
+
+// A frame shorter than one cell still shows the cursor's row (View clips it),
+// never an empty window - the regression the down-first fill would leave when a
+// single row was taller than availH.
+func TestTileWindowAlwaysShowsTheCursorRowEvenTallerThanTheFrame(t *testing.T) {
+	l := tileLayout{cellH: 7, rows: []tileRow{
+		{tiles: []Agent{{ID: "a"}}},
+		{tiles: []Agent{{ID: "b"}}},
+	}}
+	from, to := tileWindow(l, 0, 6)
+	if from != 0 || to != 1 {
+		t.Fatalf("window = [%d,%d), want [0,1): the cursor row shows even when taller than availH", from, to)
+	}
+}
+
+// Columns widen to fit the frame height, the flat grid's short-frame flatten:
+// nine agents in a short wide frame lay out five-wide (two rows) rather than the
+// near-square three-wide (three rows) that would page a row off screen.
+func TestBoardTileColsWidensToFitAShortFrame(t *testing.T) {
+	top := []Section{{Agents: make([]Agent, 9)}}
+	if got := boardTileCols(top, 9, 200, 15); got != 5 {
+		t.Errorf("boardTileCols(short frame) = %d, want 5 (widen to fit two rows)", got)
+	}
+	// A tall frame keeps the near-square choice.
+	if got := boardTileCols(top, 9, 200, 100); got != 3 {
+		t.Errorf("boardTileCols(tall frame) = %d, want 3 (near-square)", got)
+	}
+	// A frame too short for even one full cell still flattens to one row so
+	// everyone is on screen (View clips), rather than a 2x2 that pages.
+	four := []Section{{Agents: make([]Agent, 4)}}
+	if got := boardTileCols(four, 4, 200, 6); got != 4 {
+		t.Errorf("boardTileCols(tiny frame) = %d, want 4 (one row, everyone on screen)", got)
+	}
+}

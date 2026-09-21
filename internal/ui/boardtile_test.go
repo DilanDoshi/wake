@@ -362,3 +362,24 @@ func BenchmarkTiledBoardFleetSecond(b *testing.B) {
 		_ = a.View()
 	}
 }
+
+// A fresh tiled open (Selected == "") and a departed selection both highlight
+// the first tile, and the action keys (boardCursor) act on that same tile - the
+// regression where a raw a.board.Selected lit no tile at all while ↵/⌃C still
+// hit tile 0.
+func TestTheTiledBoardHighlightsTheFirstTileOnAFreshOpen(t *testing.T) {
+	a := boardApp(t)
+	a.board = Board{Up: true, Tiled: true} // Selected == "", the fresh-open state
+	agents := a.boardAgents()
+	if got := a.drawnBoardCursor(agents); got != agents[0].ID {
+		t.Errorf("drawnBoardCursor on a fresh tiled open = %q, want the first tile %q", got, agents[0].ID)
+	}
+	a.board.Selected = "departed-id"
+	if got := a.drawnBoardCursor(agents); got != agents[0].ID {
+		t.Errorf("drawnBoardCursor with a departed selection = %q, want %q", got, agents[0].ID)
+	}
+	a.board.Selected = agents[1].ID
+	if got := a.drawnBoardCursor(agents); got != agents[1].ID {
+		t.Errorf("drawnBoardCursor with a live selection = %q, want %q", got, agents[1].ID)
+	}
+}

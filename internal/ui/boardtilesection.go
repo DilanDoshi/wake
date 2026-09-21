@@ -169,34 +169,115 @@ func tileWindow(l tileLayout, cursorRow, availH int) (from, to int) {
 	if cursorRow < 0 {
 		cursorRow = 0
 	}
+	// The cursor's tile row is always in the window - even alone taller than availH
+	// (a frame too short for one cell, which View then clips). Grow up first so the
+	// cursor's own section header pages into view with it rather than the next
+	// team's - the row view's boardRowFrom, the cursor riding the bottom edge -
+	// then fill down.
 	used := l.rowHeight(cursorRow)
 	from, to = cursorRow, cursorRow+1
-	for to < len(l.rows) && used+l.rowHeight(to) <= availH {
-		used += l.rowHeight(to)
-		to++
-	}
 	for from > 0 && used+l.rowHeight(from-1) <= availH {
 		used += l.rowHeight(from - 1)
 		from--
 	}
+	for to < len(l.rows) && used+l.rowHeight(to) <= availH {
+		used += l.rowHeight(to)
+		to++
+	}
+	// A header must not be the last row with no member below it - the row view's
+	// atomic rule (boardView breaks before a dangling header). to-1 is never the
+	// cursor row, which is a tile, so this never drops the cursor.
+	if l.rows[to-1].isHeader() {
+		to--
+	}
 	return from, to
 }
 
-// boardTileLayout is the frame's section-aware tile geometry: cols and cellW from
-// the width (near-square, the flat grid's own choice), the shelves from the
-// sectioned fleet, cellH to fill, and the window around the cursor.
+// ceilDiv is the number of rows of cols columns that hold n items (>= 1 col).
+func ceilDiv(n, cols int) int {
+	if cols < 1 {
+		cols = 1
+	}
+	return (n + cols - 1) / cols
+}
+
+// tileRowCount is the tile rows the sections wrap into at cols - each team's
+// members over cols columns, summed. Headers are counted separately (one line
+// each); this counts only the cellH-tall rows.
+func tileRowCount(sections []Section, cols int) int {
+	rows := 0
+	for _, s := range sections {
+		rows += ceilDiv(len(s.Agents), cols)
+	}
+	return rows
+}
+
+// boardTileCols is the near-square column count widened until the sectioned tile
+// rows fit the frame height - the flat grid's short-frame flatten (add a column
+// to drop a row), made section-aware and capped at what the width allows. The
+// header lines come off availH first; at least one tile row always fits, so a
+// frame too short for a full cell still lays everyone out on one row (View clips)
+// rather than paging tiles that could have shared a wider row.
+func boardTileCols(sections []Section, n, width, availH int) int {
+	maxCols := max((width+tileGap)/(minTileWidth+tileGap), 1)
+	headers := 0
+	for _, s := range sections {
+		if s.Team != "" {
+			headers++
+		}
+	}
+	maxRows := max((availH-headers)/minTileHeight, 1)
+	cols := clamp(ceilSqrt(n), 1, maxCols)
+	for cols < maxCols && tileRowCount(sections, cols) > maxRows {
+		cols++
+	}
+	return cols
+}
+
+// boardTileLayout is the frame's section-aware tile geometry: cols from the width
+// and the frame height (near-square, widened to fit like the flat grid), cellW to
+// share, the shelves from the sectioned fleet, cellH to fill, and the window
+// around the cursor.
 func (a App) boardTileLayout(agents []Agent) tileLayout {
 	availH := max(a.paneHeight()-boardChromeRows-1, 1)
-	maxCols := max((a.layout.Width+tileGap)/(minTileWidth+tileGap), 1)
-	cols := clamp(ceilSqrt(len(agents)), 1, maxCols)
+	sections := a.fleet.sections(agents)
+	cols := boardTileCols(sections, len(agents), a.layout.Width, availH)
 	l := tileLayout{
 		cols:   cols,
 		cellW:  tileCellWidth(a.layout.Width, cols),
 		availH: availH,
-		rows:   tileShelves(a.fleet.sections(agents), cols),
+		rows:   tileShelves(sections, cols),
 	}
 	l.cellH = tileCellHeight(l.rows, availH)
 	cursorRow, _ := tileFind(l.rows, a.board.Selected)
 	l.from, l.to = tileWindow(l, cursorRow, availH)
 	return l
+}
+
+// tileHit is boardHit's tiled branch: the agent index a click at (x, y) lands on,
+// or -1 for the title row, a header band, or past the last column. It walks the
+// windowed shelves counting each band's height - header (one line) or tile row
+// (cellH) - the one number the draw counts too, so a click and a tile cannot
+// disagree across a section break.
+func (l tileLayout) tileHit(x, y int, agents []Agent) int {
+	line := y - boardChromeRows
+	if line < 0 {
+		return -1 // the title row
+	}
+	off := 0
+	for ri := l.from; ri < l.to; ri++ {
+		h := l.rowHeight(ri)
+		if line < off+h {
+			if l.rows[ri].isHeader() {
+				return -1 // a header belongs to no agent
+			}
+			col := x / (l.cellW + tileGap)
+			if col < 0 || col >= len(l.rows[ri].tiles) {
+				return -1
+			}
+			return indexOf(agents, l.rows[ri].tiles[col].ID)
+		}
+		off += h
+	}
+	return -1
 }

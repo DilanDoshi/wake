@@ -76,7 +76,7 @@ const (
 // cursor here.
 func (a App) tileView(agents []Agent, width int) string {
 	l := a.boardTileLayout(agents)
-	cursor := a.board.Selected
+	cursor := a.drawnBoardCursor(agents)
 
 	head := mutedLine(fmt.Sprintf("%s — %d agents", boardTitle, len(agents)), width)
 	body := make([]string, 0, l.availH)

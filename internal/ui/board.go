@@ -305,34 +305,10 @@ func (a App) viewBoardDispatch(id, dispatch string) App {
 // a row cannot disagree - the row view's boardChromeRows rule, made subagent-aware.
 func (a App) boardHit(x, y int, agents []Agent) (int, string, bool) {
 	if a.board.Tiled {
-		l := a.boardTileLayout(agents)
-		// The title row's own guard, before the walk: y==0 is the title, so a click
-		// there is not a tile. Then walk the windowed shelves counting each band's
-		// height - header (one line) or tile row (cellH) - the one number the draw
-		// counts too, so a click and a tile cannot disagree across a section break.
-		line := y - boardChromeRows
-		if line < 0 {
-			return -1, "", false
-		}
-		off := 0
-		for ri := l.from; ri < l.to; ri++ {
-			h := l.rowHeight(ri)
-			if line < off+h {
-				if l.rows[ri].isHeader() {
-					return -1, "", false // a header belongs to no agent
-				}
-				col := x / (l.cellW + tileGap)
-				if col < 0 || col >= len(l.rows[ri].tiles) {
-					return -1, "", false
-				}
-				if i := indexOf(agents, l.rows[ri].tiles[col].ID); i >= 0 {
-					return i, "", true
-				}
-				return -1, "", false
-			}
-			off += h
-		}
-		return -1, "", false
+		// The windowed shelves the draw used, so a click and a tile agree across a
+		// section break; the title row and a header band open nothing (tileHit).
+		i := a.boardTileLayout(agents).tileHit(x, y, agents)
+		return i, "", i >= 0
 	}
 	// Row view: bounded to the drawn window before the walk - Roster.At's rule.
 	// Without the upper bound a click on the key line, the strip or the notice
@@ -380,6 +356,18 @@ func (a App) boardCursor(agents []Agent) int {
 		}
 	}
 	return 0
+}
+
+// drawnBoardCursor is the tile the wall highlights and the action keys act on:
+// the selection when it still names a live agent, else the first agent -
+// boardCursor's "empty or gone -> top" recovery, so a fresh tiled open and row
+// mode agree on a default highlight where a raw a.board.Selected == "" lit
+// nothing. "" only when the fleet is empty.
+func (a App) drawnBoardCursor(agents []Agent) string {
+	if len(agents) == 0 {
+		return ""
+	}
+	return agents[a.boardCursor(agents)].ID
 }
 
 // openBoardRow is the jump the dashboard exists for, with the room's own
