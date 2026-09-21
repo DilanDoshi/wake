@@ -304,6 +304,65 @@ func TestYourOwnRoomTurnAlignsWithAnAgentsReply(t *testing.T) {
 	}
 }
 
+// A multi-line room broadcast opens with a mention and carries ⌥↵ newlines -
+// the ordinary shape of a group-chat message. The mention tint must not change
+// how many rows the block occupies: the plain shaded block (the DM's own path,
+// shadedOwn on raw text) is the reference for the same words.
+//
+// The spill was colourMention running OwnStyle.Render over the whole multi-line
+// remainder, which padded every inner line out to the widest line's width; once
+// one line is wide enough to wrap, that padding pads every short line past the
+// wrap width too, so each spills into a run of shaded-blank rows. Every one of
+// those extra rows is still a solid w-cell rectangle, so the ground assertion
+// cannot see the bug - the row count is the discriminator, and it needs one line
+// long enough to wrap for the padding to bite.
+func TestAMultiLineRoomMentionDoesNotSpillIntoBlankRows(t *testing.T) {
+	forceColour(t)
+	const w = roomWidth
+	// Short lines, a blank line, then one line long enough to wrap - the shape of
+	// the reported draft (team headers, names, then a long trailing sentence).
+	tail := "and then report back everything you find about the 401 refresh retry path"
+	body := "@sydney first team\nagent one\nagent two\n\n" + tail
+
+	// The mention tint changes the first line's colour, never the block's height.
+	plain := strings.Count(shadedOwn(strings.TrimSpace(body), w), "\n")
+	got := strings.Count(youSaid(body, w), "\n")
+	if got != plain {
+		t.Fatalf("youSaid rendered %d rows against the plain block's %d - the extra rows are the bg-padding spill:\n%q", got+1, plain+1, youSaid(body, w))
+	}
+
+	// The short lines each keep their own row (no blank rows shoved between them),
+	// and the ground stays a solid w-cell rectangle throughout.
+	out := youSaid(body, w)
+	stripped := strings.Split(stripANSI(out), "\n")
+	for i, want := range []string{"first team", "agent one", "agent two", ""} {
+		if !strings.Contains(stripped[i], want) {
+			t.Errorf("row %d lost its text %q:\n%q", i, want, stripped[i])
+		}
+	}
+	bg := background(t)
+	for i, line := range strings.Split(out, "\n") {
+		if !strings.Contains(line, bg) {
+			t.Errorf("row %d lost its shaded ground:\n%q", i, line)
+		}
+		if cells := lipgloss.Width(line); cells != w {
+			t.Errorf("row %d is %d cells against width %d - the ground is ragged", i, cells, w)
+		}
+	}
+
+	// The leading @mention keeps its colour.
+	param := mentionParam(t)
+	idx := strings.Index(out, "@sydney")
+	if idx < 0 {
+		t.Fatalf("the @handle vanished:\n%q", out)
+	}
+	lead := out[:idx]
+	esc := lead[strings.LastIndex(lead, "\x1b["):]
+	if !strings.Contains(esc, param) {
+		t.Errorf("the leading @mention lost its colour: escape before it is %q, missing %q", esc, param)
+	}
+}
+
 // mentionParam is the SGR parameter lipgloss emits for the mention colour at the
 // forced profile - "94" for bright blue, say - derived rather than hard-coded so
 // the assertion is about whether the colour is applied, not how it is spelled.
