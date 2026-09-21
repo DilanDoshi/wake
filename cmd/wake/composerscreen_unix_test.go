@@ -122,6 +122,37 @@ func TestTheFirstLineOfAWrappingDraftStaysVisible(t *testing.T) {
 	}
 }
 
+// A draft with blank rows between its lines keeps what is being typed on screen.
+//
+// A typed blank line renders like the box's own padding, so the box's row count
+// fell short of the draft's true height and it scrolled the cursor's line off -
+// the report was a group-chat message with blank rows between its sections. One
+// byte at a time, each its own read, so it is the real per-keystroke path.
+// See Composer.draftRows.
+func TestTheComposerWithBlankRowsKeepsItsTail(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWakeInAConversation(t, 100, 30)
+	s.await("ready")
+	s.send("\x17") // ⌃W: back to the room, where the reported draft goes
+	s.await("group chat")
+	s.settle()
+
+	// Eight lines with a blank row after each (⌃J⌃J is the newline key twice),
+	// then the tail - past the cap, every other row a typed blank.
+	draft := "one\x0a\x0atwo\x0a\x0athree\x0a\x0afour\x0a\x0afive\x0a\x0asix\x0a\x0aseven\x0a\x0aeight\x0a\x0aZZTAIL"
+	for i := 0; i < len(draft); i++ {
+		s.send(draft[i : i+1])
+		time.Sleep(6 * time.Millisecond)
+	}
+	s.settle()
+
+	if !strings.Contains(s.text(), "ZZTAIL") {
+		t.Fatalf("a blank-line draft in the room scrolled the tail (ZZTAIL) off screen.\n%s", s.dump())
+	}
+}
+
 // boxRows is how many rows the composer's box spans on screen, read off its
 // border corners rather than from any model.
 func boxRows(s *screen) int {

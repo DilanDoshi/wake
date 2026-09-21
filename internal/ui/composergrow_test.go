@@ -60,6 +60,49 @@ func manyLines(n int) string {
 	return b.String()
 }
 
+// A draft with blank lines between its lines still scrolls to the cursor.
+//
+// draftRows sizes the box by finding the last rendered row that is not the bare
+// prompt - but a blank line somebody typed renders identically to the padding
+// the text area adds below the draft, so blank lines interleaved with content
+// let the count fall short of the draft's true height. The box was then sized
+// under the cap while the draft overflowed it, and reposition - which positions
+// the cursor for the cap and then restores that short height - dropped the
+// cursor's own row off the bottom. That is exactly what a group-chat message
+// with blank rows between its sections did: the tail being typed went off screen.
+func TestTheComposerFollowsTheCursorThroughBlankLines(t *testing.T) {
+	// Ten short lines with a blank row after each, then the tail - 21 display
+	// rows, well past the cap, and every other row a typed blank.
+	var b strings.Builder
+	for i := 1; i <= 10; i++ {
+		fmt.Fprintf(&b, "line %d\n\n", i)
+	}
+	b.WriteString("TAILMARK")
+
+	a := newRoomApp(t).withSize(120, 40).withAgents("sydney").withDraft(b.String())
+	if frame := stripANSI(a.View()); !strings.Contains(frame, "TAILMARK") {
+		t.Errorf("a blank-line-separated draft does not show the cursor's own line (TAILMARK): the box undercounted its rows and scrolled the tail off.\n%s", frame)
+	}
+}
+
+// The same holds when an early line wraps to many rows AND blank rows follow it.
+//
+// A clipped render undercounts the blank rows and the line count undercounts the
+// wrapping, and taking the larger of the two does not recombine what each lost -
+// so a draft with a deep wrap and a blank line still hid the cursor. draftRows
+// gives each blank line a sentinel instead, so the count holds for any mix. Both
+// the code review and the adversarial pass found this shape past the first fix.
+func TestTheComposerFollowsTheCursorPastAWrappedLineAndBlanks(t *testing.T) {
+	// A first line long enough to wrap several rows in a narrow room, then a blank
+	// row, then the tail - past the cap, with the wrap deep enough that the blank
+	// falls near the clip.
+	draft := strings.Repeat("word ", 50) + "\n\nTAILMARK"
+	a := newRoomApp(t).withSize(40, 40).withAgents("sydney").withDraft(draft)
+	if frame := stripANSI(a.View()); !strings.Contains(frame, "TAILMARK") {
+		t.Errorf("a wrapped first line followed by a blank row scrolled the cursor's line (TAILMARK) off:\n%s", frame)
+	}
+}
+
 // The box stops growing at the cap, and what you are typing stays visible past
 // it - the draft scrolls under the cursor instead.
 func TestTheComposerStopsGrowingAtTheCapAndKeepsTheCursorVisible(t *testing.T) {
