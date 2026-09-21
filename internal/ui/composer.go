@@ -59,6 +59,13 @@ const (
 	// fewer columns than this gets a block wider than it asked for.
 	minComposerWidth = 8
 
+	// blankLineProbe stands in for a blank line while draftRows measures the
+	// draft's height. A blank line renders as just the prompt, the same as the
+	// padding below the draft, so the probe cannot otherwise tell the two apart;
+	// one non-space cell makes a typed blank row count while leaving its height
+	// at one row. It is never drawn — the probe is thrown away.
+	blankLineProbe = "·"
+
 	// titleInset is the run of border kept between the pane's name and the
 	// top-right corner, and titleMinBorder is the least border a titled edge
 	// keeps in total - so a long name is cut rather than eating its own frame.
@@ -546,20 +553,36 @@ func (c Composer) bound() int {
 // run Update, so nothing repositions it.
 //
 // The text area pads to its height with rows carrying the prompt and nothing
-// else, and a blank line somebody typed renders identically. Interior blanks
-// survive because this keeps the last row with content; trailing ones are added
-// back from the value, which is the only place they can still be told apart.
+// else, and a blank line somebody typed renders identically - so the probe
+// cannot tell a typed blank row from the padding below the draft. That made a
+// draft mixing blank rows with content measure short: the box was sized under
+// the cap while the draft overflowed it, and reposition then scrolled the
+// cursor's own row off the bottom. Counting content rows and blank lines
+// separately does not recombine either - a first line wrapping to nine rows and
+// one blank line each hide information a max of the two cannot restore.
+//
+// So each blank line is given a one-cell sentinel in the probe (which is thrown
+// away and never drawn), making every typed row distinguishable from padding.
+// The sentinel is one cell, so a blank line still measures its one row, and the
+// count holds for any mix of blank and wrapped lines.
 func (c Composer) draftRows(bound int) int {
 	value := c.ta.Value()
 	if value == "" {
 		return 1
 	}
+	lines := strings.Split(value, "\n")
+	for i, ln := range lines {
+		if ln == "" {
+			lines[i] = blankLineProbe
+		}
+	}
+
 	probe := textarea.New()
 	probe.Prompt = c.ta.Prompt
 	probe.ShowLineNumbers = false
 	probe.SetWidth(c.taWidth)
 	probe.SetHeight(bound)
-	probe.SetValue(value)
+	probe.SetValue(strings.Join(lines, "\n"))
 
 	bare := strings.TrimRight(c.ta.Prompt, " ")
 	last := 0
@@ -568,8 +591,7 @@ func (c Composer) draftRows(bound int) int {
 			last = i + 1
 		}
 	}
-	trailing := len(value) - len(strings.TrimRight(value, "\n"))
-	return max(last, 1) + trailing
+	return max(last, 1)
 }
 
 // WithTitle names the pane this composer belongs to.
