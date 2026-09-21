@@ -372,12 +372,26 @@ func youSaid(text string, width int) string {
 var leadingMention = regexp.MustCompile(`^@[A-Za-z][A-Za-z0-9-]*`)
 
 // colourMention draws the address in Claude's blue and leaves the rest alone.
+//
+// OwnStyle re-establishes the shaded ground after MentionStyle's own reset, but
+// only on the first line: MentionStyle ends in a full reset, so without it the
+// rest of the opening line would lose its background. A *multi-line* remainder
+// run through OwnStyle.Render is a different thing - lipgloss pads every inner
+// line out to the widest one as a background rectangle, and feeding that to
+// shadedOwn's width-wrap defeats its trailing-space drop, spilling each line into
+// blank rows. So only the first line is re-grounded; the rest stay plain text and
+// shadedOwn shades them the way it shades any plain multi-line turn.
 func colourMention(line string) string {
 	m := leadingMention.FindString(line)
 	if m == "" {
 		return line
 	}
-	return MentionStyle.Render(m) + OwnStyle.Render(line[len(m):])
+	first, rest, multiline := strings.Cut(line[len(m):], "\n")
+	out := MentionStyle.Render(m) + OwnStyle.Render(first)
+	if multiline {
+		out += "\n" + rest
+	}
+	return out
 }
 
 // collapseWhitespaceOneLine flattens a multi-line string to one row, for the
