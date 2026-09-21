@@ -74,6 +74,13 @@ type Agent struct {
 	// identityStyle maps it to a hue at draw time.
 	Color string
 
+	// Team is this agent's team tag - the operator's own grouping of the fleet,
+	// chosen by /team and reported by the daemon. It heads the roster and board
+	// section this agent is drawn under and is addressed as `@team`. A string
+	// rather than a set so the field stays comparable for Observe; one team per
+	// agent, empty for the un-tagged block above the sections.
+	Team string
+
 	// Cwd is where this session is running now, which is not where it was
 	// started once an agent has used EnterWorktree. Every surface here wants
 	// the first; the startup directory is the daemon's business - park, unpark
@@ -257,6 +264,12 @@ type Fleet struct {
 	// attention rank do not swap places between frames. Rank sorts within it.
 	order []string
 
+	// teamOrder is the daemon's team creation order, off the report
+	// (rpc.Status.Teams), and the order sections() draws team headers in. Replaced
+	// wholesale on every WithStatus, never appended in place, so copy() carries the
+	// header - checklists' own rule.
+	teamOrder []string
+
 	// focused is the agent whose DM is open, or "" for none. Its arrivals are
 	// read the moment they land.
 	focused string
@@ -308,13 +321,17 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		return f
 	}
 	f = f.copy()
+	// The daemon's team order, replacing this fleet's wholesale: it is the whole
+	// live-team list every report, so a fold rather than an append is right, and a
+	// team that emptied stops drawing by leaving it. See sections().
+	f.teamOrder = st.Teams
 	for _, s := range st.Sessions {
 		a := f.agents[s.ID]
 		if a.ID == "" {
 			a.ID = s.ID
 			f.order = append(f.order, s.ID)
 		}
-		a.Name, a.Label, a.Color, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, runningIn(s), s.ParentID
+		a.Name, a.Label, a.Color, a.Team, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, s.Team, runningIn(s), s.ParentID
 		a.Effort, a.Budget, a.ConfirmedModel = s.Effort, s.Budget, s.ConfirmedModel
 		// Only when the report names one, so a report assembled before the daemon
 		// saw an init does not blank a model the event stream already gave. Model
@@ -398,7 +415,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 	f.parked = nil
 	for _, s := range st.Parked {
 		f.parked = append(f.parked, Agent{
-			ID: s.ID, Name: s.Name, Label: s.Label, Color: s.Color, Cwd: runningIn(s),
+			ID: s.ID, Name: s.Name, Label: s.Label, Color: s.Color, Team: s.Team, Cwd: runningIn(s),
 			Effort: s.Effort, State: s.State,
 		})
 	}

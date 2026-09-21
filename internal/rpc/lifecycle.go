@@ -235,6 +235,15 @@ type Status struct {
 	// would lose the one thing on screen saying where it went.
 	Parked []SessionStatus `json:"parked,omitempty"`
 
+	// Teams is the live teams in the order the roster and board draw their
+	// sections - creation order, held by the daemon because only it sees the whole
+	// fleet. A client's own order would differ: the report is UUID-sorted and
+	// ui.Fleet.order is first-seen, so two clients would draw sections in two
+	// orders (see the teams spec). Only teams a live session wears appear; the
+	// manager and un-tagged sessions carry none and sit in a header-less block
+	// above the sections.
+	Teams []string `json:"teams,omitempty"`
+
 	// ProbeIncomplete is a fail-closed signal owned SOLELY by FleetOnDisk: the
 	// roster/liveness half of this report is not authoritative, because the
 	// sweep hit its deadline before every record was verified. A consumer that
@@ -264,8 +273,8 @@ type GoalStatus struct {
 // that cadence, empty for self-paced. Value fields so ui.Agent stays comparable.
 // See internal/core/loop.go.
 type LoopStatus struct {
-	Active    bool   `json:"active,omitempty"`
-	SelfPaced bool   `json:"self_paced,omitempty"`
+	Active    bool `json:"active,omitempty"`
+	SelfPaced bool `json:"self_paced,omitempty"`
 	// Cron is the fixed cadence's expression. The json tag avoids the bare wire
 	// literal "cron" - that is Claude's CronCreate key, policed to the airlock, and
 	// this is Wake's own report wire, free to name its field anything.
@@ -301,6 +310,13 @@ type SessionStatus struct {
 	// a display string a client sets rather than the daemon derives. Empty means
 	// no colour, which is every session before /color touches it.
 	Color string `json:"color,omitempty"`
+
+	// Team is this session's team tag - the operator's own grouping of the fleet,
+	// which heads a roster and board section and is addressed as `@team`.
+	// Client-chosen like Color and for the same reason: only the operator knows
+	// how they want the fleet grouped by hand. Empty means no team, which is
+	// where the manager and every un-tagged session sit, above the sections.
+	Team string `json:"team,omitempty"`
 
 	// Dir is the absolute directory this session runs in, and it is the
 	// workspace identity the room's left sidebar groups by.

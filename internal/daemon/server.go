@@ -63,8 +63,8 @@ type server struct {
 	// s.agents until that process has started. See names.go.
 	names *nameRegistry
 
-	// mu guards the maps, debug files, quitting and taken, and nothing else. It
-	// is never held across a write to a client, a write to an agent's stdin, or
+	// mu guards the maps, debug files, quitting, taken and teamOrder, nothing
+	// else. It is never held across a write to a client, a write to an agent's stdin, or
 	// any other operation that can block: the failure that has appeared three
 	// times in this project is a lock held across a blocking call, and each
 	// time the operation that most needed the lock was "kill this thing".
@@ -78,6 +78,12 @@ type server struct {
 	clients    map[*client]struct{}
 	debugFiles map[string]string // session id to its normalized debug path
 	quitting   bool
+
+	// teamOrder is the team tags seen in first-appearance order, the order the
+	// roster and board draw their sections. Maintained and shipped by orderTeams
+	// (team.go); held here rather than derived by a client because only the daemon
+	// sees the whole fleet. Not persisted - see the teams spec.
+	teamOrder []string
 
 	// taken is set by takeAgents when shutdown snapshots the fleet. An agent
 	// admitted after that snapshot enters a map nothing reads again - its
@@ -625,6 +631,8 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		s.relabelSession(c, f)
 	case rpc.FrameColor:
 		s.colorSession(c, f)
+	case rpc.FrameTeam:
+		s.teamSession(c, f)
 	case rpc.FrameKill:
 		s.withAgent(c, f, func(a *agent) error { a.kill(); return nil })
 	case rpc.FrameQuit:
@@ -706,39 +714,6 @@ func (s *server) broadcast(f rpc.Frame) {
 
 func errorFrame(sessionID, text string) rpc.Frame {
 	return rpc.Frame{Kind: rpc.FrameError, SessionID: sessionID, Text: text}
-}
-
-// fleet is the whole fleet as one Status, and the sessions that recently left
-// it - so a client learns how one ended rather than watching a row vanish, and
-// can still learn it after the announcement it missed.
-//
-// The live agents and the remembered endings are read under one lock, which is
-// what makes the two halves consistent with each other: register and retire
-// each move an id between them in a single locked step, so no id is ever in
-// both and none is ever in neither.
-func (s *server) fleet() rpc.Status {
-	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: s.socket}
-
-	s.mu.Lock()
-	agents := make([]*agent, 0, len(s.agents))
-	for _, a := range s.agents {
-		agents = append(agents, a)
-	}
-	st.Sessions = append(st.Sessions, s.recent...)
-	s.mu.Unlock()
-
-	for _, a := range agents {
-		st.Sessions = append(st.Sessions, a.snapshot())
-	}
-	sortSessions(st.Sessions)
-
-	// The park book, on its own list. Read outside s.mu because it has its own
-	// lock and holds no agent - and reported by a *running* daemon rather than
-	// only by FleetOnDisk, because that is what makes /resume work in a room
-	// that has been open since before anything was parked.
-	st.Parked = parkedStatuses(s.parked.records())
-	sortSessions(st.Parked)
-	return st
 }
 
 // statusReply answers a request. It is never broadcast: a client waiting for

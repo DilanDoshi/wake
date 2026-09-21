@@ -80,6 +80,13 @@ const mentionPrefix = "@"
 type Addressee struct {
 	ID   string
 	Name string
+
+	// Team is the operator's grouping this addressee belongs to, "" for none, and
+	// it is what `@team` fans out over: a mention that is no live name and no
+	// service reaches every addressee that shares it. Carried on the Addressee so
+	// Resolve stays pure - it groups the list it is handed rather than reaching
+	// for fleet state it does not have.
+	Team string
 }
 
 // Route is where a message is going and what will be sent.
@@ -118,11 +125,17 @@ type Route struct {
 	// before it fires.
 	Broadcast bool
 
-	// Resolved is the name a leading mention matched - an agent's, or
+	// Resolved is the name a leading mention matched - an agent's, a team's, or
 	// BroadcastName - and "" when nothing was routed. It is what the room
 	// displays before sending, so `@alex` meaning a file is a visible mistake
 	// rather than a silent one. Never an id: this is for a person to read.
 	Resolved string
+
+	// Team is the team a mention fanned out to, and "" for every other route. It
+	// is not Broadcast: Broadcast means @all, which the composer target line reads
+	// as the whole fleet, where a team is a named subset the line draws as
+	// `→ @backend · 3`. A caller shows N turns when Team is set or Broadcast is.
+	Team string
 }
 
 // Resolve decides where text goes.
@@ -158,6 +171,20 @@ func Resolve(text string, live []Addressee, service Addressee) Route {
 		if a.Name == mention {
 			return Route{Targets: []string{a.ID}, Text: rest, Resolved: a.Name}
 		}
+	}
+	// A team fans out to its live members: a scoped broadcast, not @all and not
+	// one agent. After the name loop, so an agent named `backend` wins the team
+	// `backend` - the header's rule, and what the daemon refuses a collision to
+	// keep true; before the service, though `manager` is a reserved team name so
+	// the order is moot for it. Team and Resolved name it; Broadcast stays false,
+	// because that word means the whole fleet.
+	if members := teamMembers(mention, live); len(members) > 0 {
+		// Matched case-insensitively (a team is stored lower-case by NormalizeTeam),
+		// and Team/Resolved carry the canonical name so the room draws `→ @backend`
+		// whatever case was typed - the fold NormalizeTeam does at the set side, done
+		// here at the address side so `@Backend` reaches team backend.
+		canon := strings.ToLower(mention)
+		return Route{Targets: members, Text: rest, Team: canon, Resolved: canon}
 	}
 	// The service answers to its own name, after the fleet: it is not in live,
 	// and a mention that matches nothing there may still be it.
@@ -199,6 +226,21 @@ func splitWord(s string) (word, rest string) {
 		return s, ""
 	}
 	return s[:i], strings.TrimLeftFunc(s[i:], unicode.IsSpace)
+}
+
+// teamMembers is the live ids that share a team tag, in the order live is given,
+// and nil when the tag names no live member. nil rather than a route means the
+// mention was not a team, so the caller falls through to the service or the CLI -
+// the same shape an ended agent's name takes.
+func teamMembers(team string, live []Addressee) []string {
+	team = strings.ToLower(team)
+	var ids []string
+	for _, a := range live {
+		if a.Team == team {
+			ids = append(ids, a.ID)
+		}
+	}
+	return ids
 }
 
 // broadcast addresses every live agent, and nobody when there is nobody.

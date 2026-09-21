@@ -702,13 +702,46 @@ surfaced, and it is two `/new` flags rather than a profile). Teams stand alone. 
 `feat/profiles` branch (259 commits behind when last measured) is reference material for nobody and
 should be deleted rather than rebased.
 
-**Status, 2026-08-21: awaiting the owner's call — do not start it.** The owner reconfirmed the
-*concept* on 2026-08-20 while ruling profiles out, then held both this and the subagents-sidebar
-landing the next day: *"item 1 is okay but I'm not sure about 2 and 3 yet."* Item 1 is `/new`'s
-budget flags (the entry above); item 2 is the subagents landing, parked as draft PR #61; this is
-item 3. It stays the largest unbuilt piece of the original design, and everything in this entry
-still describes the tree — but building it before the owner says so would be scope nobody asked
-for this week.
+**Status, 2026-09-20: BUILDING on `feat/team-tags`.** The owner greenlit it with four scope
+decisions (one team per agent; manager + un-tagged pinned in a header-less top block; `@team`
+fan-out routing IS in; both board modes sectioned) and pointed design questions at the `@fable wake`
+session. It did NOT become `groups.go`'s directory grouping — teams are a per-agent tag on
+`rpc.SessionStatus.Team`, cloning the `/color` path end to end, with the daemon holding the section
+order (`teamOrder`, shipped on the report) because a client's own order would differ. The full design
+and every ruling live in `docs/superpowers/specs/2026-09-20-teams-design.md`.
+
+Built through Phase 5: the tag through the stack, `/team` + `@who` bridge + `/team none`, `@team`
+fan-out (with the `@team /<target-command>` refusal), park-persistence, the daemon team order, the
+roster team sections, and the board **rows** sections.
+
+**The manager sees teams and can message one (owner, 2026-09-20 — "every agent including the
+manager").** `Team` is now rendered in `list_agents` (the `(team)` after the name) and `agent_status`
+(`team: …`), out of `notInTheStatusReport`, so the manager can see which agents are one group; and
+`send_to_team` (a seventh MCP tool, `internal/mcp/sendteam.go`) fans a message out to every live
+member — N `rpc.FrameSend`s, the frame already allowed the manager, so it adds no new reach. **An
+*ordinary* agent reaches teams through the manager**, which is Wake's architecture: only the manager
+has a fleet view and fleet tools (spec §12); an ordinary agent has Claude Code's one-to-one peer
+channel and no fleet query. Giving every ordinary agent direct team tools is a separate, larger
+change (it would put fleet-command tools on every worker) and is not built.
+
+**The recorded cost (owner accepted with the mockups):** fixed section order weakens "blocked floats
+to the absolute top of the roster" to "top of its section" — now that the room pins no ask card, the
+awareness strip's `N need you` and `⌃X` are what carry urgency across sections. Keep the strip's
+count un-truncatable.
+
+**Remaining, deferred within the feature:**
+- The tiled board's **per-team shelves** — the wall groups tiles by team but draws no per-team header
+  (the grid rework: `tileGridFor`/`tileNav`/`tileWindowStart`/`boardHit` assume one flat index space).
+- Refusing a `/team` that collides with a **live agent name** (and a `/name` into a team name) — the
+  reserved words `all`/`manager` are refused; the fleet-registry collision check lands with a lock
+  ruling. The router's agent-name-wins rule keeps it safe meanwhile.
+- Team order across a full daemon restart reappears in `/resume` order, not creation order (not
+  persisted, by the "restore nothing" rule).
+- A team-of-one send is byte-identical to a private DM turn on disk, so it does not restore into the
+  room; a send to ≥2 members does (multiplicity).
+- `@` completion offering team names; a member count in section headers; refusing the manager a team;
+  the team-echo `to` stamp showing in an unrelated narrowed `@john` thread; direct team tools on
+  ordinary (non-manager) agents. Owner's calls.
 ---
 
 ## FROM `feat/expand-and-worktree`, 2026-08-15

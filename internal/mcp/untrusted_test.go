@@ -96,6 +96,14 @@ var agentAuthored = map[string]bool{
 	"Budget":     false,
 	"Color":      false,
 
+	// Team is the operator's like Color, and false for the same "no agent path"
+	// reason - but it earns it differently. Color is a closed seven-word set;
+	// a team is free text, so what makes it not agent-authored is not a narrow
+	// vocabulary but that there is no runtime path to it at all: /team is a TUI
+	// command a human types, and an agent has no tool, no frame and no self-serve
+	// command that sets a team, so nothing an agent wrote can become this value.
+	"Team": false,
+
 	// Cwd is the agent's, and it is the sharpest case in this table: an agent
 	// calls EnterWorktree and picks the directory itself. Dir stays false
 	// beside it because that one is the directory the *operator* spawned the
@@ -240,6 +248,7 @@ func TestNoFieldCanForgeALineOnAnySurface(t *testing.T) {
 				// rather than for carrying a newline, which is not what this
 				// test is about.
 				Effort: core.EffortMax,
+				Team:   "backend",
 			}
 			if field.Name == "State" {
 				// A state carrying anything is a state nothing has ruled on,

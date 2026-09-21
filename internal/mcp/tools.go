@@ -82,7 +82,7 @@ func agentIDSchema() map[string]any {
 // and somebody's money. A model calling tools in a loop with nobody watching is
 // the reader this list is drawn for.
 func Tools() []Tool {
-	return []Tool{listAgents(), agentStatus(), rollUp(), sendToAgent(), interruptAgent(), spawnAgent()}
+	return []Tool{listAgents(), agentStatus(), rollUp(), sendToAgent(), sendToTeam(), interruptAgent(), spawnAgent()}
 }
 
 // toolDescriptors is tools/list's payload: what a model chooses from.
@@ -168,10 +168,18 @@ func agentLine(s rpc.SessionStatus, w lineWidths) string {
 // rpc.SessionStatus.Label - and `peter <> ` reads as a bug rather than as an
 // absence.
 func title(s rpc.SessionStatus) string {
-	if s.Label == "" {
-		return s.Name
+	name := s.Name
+	// The team it is grouped under, so the manager can see which agents are one
+	// group and address them with send_to_team. Operator-chosen and fenced by
+	// NormalizeTeam, so unlike the name and label around it this is not an agent's
+	// own words - see agentAuthored.
+	if s.Team != "" {
+		name += " (" + s.Team + ")"
 	}
-	return s.Name + " <> " + s.Label
+	if s.Label == "" {
+		return name
+	}
+	return name + " <> " + s.Label
 }
 
 // activity is the tool call a session is inside.
@@ -385,6 +393,12 @@ func statusReport(s rpc.SessionStatus) string {
 		// here a reader can take at face value.
 		lines = append(lines, "thinking at: "+s.Effort)
 	}
+	if s.Team != "" {
+		// The operator's grouping, exposed on the owner's call so a manager can see
+		// which agents are one team and reach them with send_to_team. Operator's own
+		// (agentAuthored false), so it is a fact a reader can act on, not agent text.
+		lines = append(lines, "team: "+s.Team)
+	}
 	if s.Tool != "" {
 		lines = append(lines, "currently: "+activity(s))
 	}
@@ -426,8 +440,9 @@ func framed(lines []string) string {
 const statusReportMax = statusReportLines * (agentLineMax + 1)
 
 // statusReportLines is that shape's line count: the framing note, the five
-// unconditional lines and the three conditional ones.
-const statusReportLines = 10
+// unconditional lines and the conditional ones (thinking-at, team, current tool,
+// blocked, ended).
+const statusReportLines = 11
 
 // rollUp is the fleet as one digest, on demand.
 //

@@ -17,6 +17,7 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		Name:           a.name,
 		Label:          a.label,
 		Color:          a.color,
+		Team:           a.team,
 		Dir:            a.dir,
 		Cwd:            a.runningIn(),
 		ParentID:       a.parent,
