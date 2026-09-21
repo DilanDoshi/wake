@@ -231,7 +231,7 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 // stops; in tiles it is the 2-D walk, cols derived from the frame width the
 // tiles are laid out at.
 func (a App) stepBoard(dir tileDir) App {
-	agents := a.fleet.OnRoster()
+	agents := a.boardAgents()
 	if len(agents) == 0 {
 		return a
 	}
@@ -276,7 +276,7 @@ func (a App) boardMouse(m tea.MouseMsg) (App, tea.Cmd) {
 	case m.Button == tea.MouseButtonWheelDown:
 		return a.stepBoard(tileDown), nil
 	case m.Action == tea.MouseActionPress && m.Button == tea.MouseButtonLeft:
-		agents := a.fleet.OnRoster()
+		agents := a.boardAgents()
 		i, dispatch, ok := a.boardHit(m.X, m.Y, agents)
 		if !ok {
 			return a, nil
@@ -342,10 +342,19 @@ func (a App) boardHit(x, y int, agents []Agent) (int, string, bool) {
 	// it and a click one below resolves to the next agent.
 	off := 0
 	for i := a.boardRowFrom(agents, a.boardCursor(agents), visible); i < len(agents) && off < visible; i++ {
+		hdr := 0
+		if teamHeaderAt(agents, i) != "" {
+			hdr = 1
+		}
 		subs := a.fleet.RunningTasks(agents[i].ID)
-		h := 1 + len(subs)
+		h := hdr + 1 + len(subs)
 		if line < off+h {
-			if within := line - off; within > 0 {
+			within := line - off
+			if within < hdr {
+				return -1, "", false // clicked the team header, which opens nothing
+			}
+			within -= hdr
+			if within > 0 {
 				return i, subs[within-1].Dispatch, true
 			}
 			return i, "", true
@@ -374,7 +383,7 @@ func (a App) boardCursor(agents []Agent) int {
 // keys the conversation needs. All four act on the *cursored* row: unclaimed,
 // these keys fell through to the roster's pick, a different agent entirely.
 func (a App) openBoardRow(open func(App, string, string) App) (App, tea.Cmd, bool) {
-	agents := a.fleet.OnRoster()
+	agents := a.boardAgents()
 	if len(agents) == 0 {
 		return a.closeBoard(), nil, true
 	}
@@ -406,7 +415,7 @@ func (a App) openHere(sessionID, name string) App { return a.openDMWith(sessionI
 // parkBoardRow is ⌃C on the cursored row, through parkTarget so a blocked
 // agent is refused with park.go's own sentence rather than a second one.
 func (a App) parkBoardRow() (App, tea.Cmd, bool) {
-	agents := a.fleet.OnRoster()
+	agents := a.boardAgents()
 	if len(agents) == 0 {
 		return a, nil, true
 	}
@@ -435,6 +444,34 @@ func (a App) boardRowHeight(ag Agent) int {
 	return 1 + len(a.fleet.RunningTasks(ag.ID))
 }
 
+// boardAgents is the fleet in section-draw order: the board's own OnRoster
+// sectioned, so its rows, headers, scroll and hit all agree on where a team
+// header falls - Fleet.sectioned, the roster's own rule one surface over.
+func (a App) boardAgents() []Agent {
+	return a.fleet.sectioned(a.fleet.OnRoster())
+}
+
+// teamHeaderAt is the team header drawn before agents[i], or "" - a team's first
+// agent gets one, derived from the ordered (sectioned) slice the board walks, the
+// roster's sectionRows rule inlined for the board's index-based walk.
+func teamHeaderAt(agents []Agent, i int) string {
+	if agents[i].Team != "" && (i == 0 || agents[i-1].Team != agents[i].Team) {
+		return agents[i].Team
+	}
+	return ""
+}
+
+// boardBlockHeight is how many lines an agent's block draws including the team
+// header above it when it is the first of its section - the one number the draw,
+// the scroll (boardRowFrom) and the click (boardHit) all count by.
+func (a App) boardBlockHeight(agents []Agent, i int) int {
+	h := a.boardRowHeight(agents[i])
+	if teamHeaderAt(agents, i) != "" {
+		h++
+	}
+	return h
+}
+
 // boardRowFrom is the first agent index the window draws, derived from the
 // cursor rather than stored - the sidebars' rule, for the sidebars' reason: the
 // list re-ranks between frames, and a stored offset would need maintaining
@@ -447,10 +484,10 @@ func (a App) boardRowFrom(agents []Agent, cursor, budget int) int {
 	if cursor < 0 || cursor >= len(agents) {
 		return 0
 	}
-	used := a.boardRowHeight(agents[cursor])
+	used := a.boardBlockHeight(agents, cursor)
 	from := cursor
 	for from > 0 {
-		h := a.boardRowHeight(agents[from-1])
+		h := a.boardBlockHeight(agents, from-1)
 		if used+h > budget {
 			break
 		}
@@ -474,6 +511,12 @@ func (a App) boardView(agents []Agent, width int) string {
 	blocks := make([]string, 0, visible)
 	for i := from; i < len(agents) && len(blocks) < visible; i++ {
 		ag := agents[i]
+		if hdr := teamHeaderAt(agents, i); hdr != "" {
+			blocks = append(blocks, teamHeaderLine(hdr, width))
+			if len(blocks) >= visible {
+				break
+			}
+		}
 		blocks = append(blocks, boardRow(ag, nameW, stateW, width, i == cursor && a.board.SelectedTask == ""))
 		for _, t := range a.fleet.RunningTasks(ag.ID) {
 			if len(blocks) >= visible {

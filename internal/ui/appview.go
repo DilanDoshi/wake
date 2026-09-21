@@ -50,7 +50,7 @@ func (a App) assembleFrame() string {
 	// places: the strip is in every view by spec §8's own sentence, and the
 	// reserved row is where failures go under a TUI.
 	if a.board.Up {
-		frame := a.boardView(agents, a.layout.Width) + "\n" +
+		frame := a.boardView(a.fleet.sectioned(agents), a.layout.Width) + "\n" +
 			awarenessStrip(agents, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
 		// clipMidDrag for the grid path's reason: mid-resize the rows were
 		// built for the old width, and a row wider than the window wraps -
