@@ -34,6 +34,9 @@ func (f Fleet) copy() Fleet {
 	// subs follows the same rule: foldSub replaces one session's map wholesale.
 	maps.Copy(out.subs, f.subs)
 	out.order = append(make([]string, 0, len(f.order)+1), f.order...)
+	// Carried by header, not rebuilt: WithStatus replaces it wholesale off the
+	// report, so it is never appended in place - checklists' rule.
+	out.teamOrder = f.teamOrder
 	// Carried, not rebuilt: Observe copies for every event that moves an agent,
 	// and a book dropped there would take /resume's only index with it between
 	// one status report and the next.

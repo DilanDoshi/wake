@@ -65,3 +65,40 @@ func (s *server) teamSession(c *client, f rpc.Frame) {
 		return nil
 	})
 }
+
+// orderTeams is the live teams in creation order, and where s.teamOrder grows.
+// Every path that tags a session - /team, and a woken session's restored tag -
+// shows up in the report's sessions, so appending here as a new team first
+// appears catches them all in one place rather than at each mutation site. The
+// result is that order filtered to the teams a live session still wears, so an
+// emptied team stops shipping but keeps its rank for when a member returns.
+// Bounded by the distinct team names a human types. Under s.mu, which guards
+// teamOrder; the sessions are sorted, so a new team's rank is deterministic
+// across clients. Called from fleet().
+func (s *server) orderTeams(sessions []rpc.SessionStatus) []string {
+	present := make(map[string]bool)
+	for _, ss := range sessions {
+		if ss.Team != "" {
+			present[ss.Team] = true
+		}
+	}
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	seen := make(map[string]bool, len(s.teamOrder))
+	for _, t := range s.teamOrder {
+		seen[t] = true
+	}
+	for _, ss := range sessions {
+		if ss.Team != "" && !seen[ss.Team] {
+			s.teamOrder = append(s.teamOrder, ss.Team)
+			seen[ss.Team] = true
+		}
+	}
+	out := make([]string, 0, len(present))
+	for _, t := range s.teamOrder {
+		if present[t] {
+			out = append(out, t)
+		}
+	}
+	return out
+}

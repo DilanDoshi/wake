@@ -264,6 +264,12 @@ type Fleet struct {
 	// attention rank do not swap places between frames. Rank sorts within it.
 	order []string
 
+	// teamOrder is the daemon's team creation order, off the report
+	// (rpc.Status.Teams), and the order sections() draws team headers in. Replaced
+	// wholesale on every WithStatus, never appended in place, so copy() carries the
+	// header - checklists' own rule.
+	teamOrder []string
+
 	// focused is the agent whose DM is open, or "" for none. Its arrivals are
 	// read the moment they land.
 	focused string
@@ -315,6 +321,10 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		return f
 	}
 	f = f.copy()
+	// The daemon's team order, replacing this fleet's wholesale: it is the whole
+	// live-team list every report, so a fold rather than an append is right, and a
+	// team that emptied stops drawing by leaving it. See sections().
+	f.teamOrder = st.Teams
 	for _, s := range st.Sessions {
 		a := f.agents[s.ID]
 		if a.ID == "" {

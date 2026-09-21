@@ -6,6 +6,7 @@ package daemon
 // ended session is refused for the park book's reason.
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -108,5 +109,40 @@ func TestATeamCannotBeAReservedRoutingWord(t *testing.T) {
 		if got := a.snapshot().Team; got != "" {
 			t.Errorf("a refused reserved team was stored: snapshot().Team = %q", got)
 		}
+	}
+}
+
+// The report's team list is first-appearance order, kept as new teams append and
+// filtered to the teams a live session wears - an emptied team stops shipping but
+// keeps its rank for when a member returns. This is why the order is the daemon's
+// and not a client's: only here is it stable across every client and reattach.
+func TestOrderTeamsIsCreationOrderFilteredToLiveTeams(t *testing.T) {
+	s := &server{}
+	got := s.orderTeams([]rpc.SessionStatus{
+		{ID: "s1", Team: "backend"},
+		{ID: "s2", Team: "frontend"},
+		{ID: "s3"},
+	})
+	if !slices.Equal(got, []string{"backend", "frontend"}) {
+		t.Errorf("teams = %v, want [backend frontend] in first-appearance order", got)
+	}
+	got = s.orderTeams([]rpc.SessionStatus{
+		{ID: "s2", Team: "frontend"},
+		{ID: "s4", Team: "infra"},
+		{ID: "s1", Team: "backend"},
+	})
+	if !slices.Equal(got, []string{"backend", "frontend", "infra"}) {
+		t.Errorf("teams = %v, want the creation order kept as infra appends", got)
+	}
+	got = s.orderTeams([]rpc.SessionStatus{{ID: "s2", Team: "frontend"}})
+	if !slices.Equal(got, []string{"frontend"}) {
+		t.Errorf("teams = %v, want only the team a live session still wears", got)
+	}
+	got = s.orderTeams([]rpc.SessionStatus{
+		{ID: "s1", Team: "backend"},
+		{ID: "s2", Team: "frontend"},
+	})
+	if !slices.Equal(got, []string{"backend", "frontend"}) {
+		t.Errorf("teams = %v, want backend's original rank restored, not re-appended last", got)
 	}
 }
