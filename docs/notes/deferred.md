@@ -714,6 +714,16 @@ Built through Phase 5: the tag through the stack, `/team` + `@who` bridge + `/te
 fan-out (with the `@team /<target-command>` refusal), park-persistence, the daemon team order, the
 roster team sections, and the board **rows** sections.
 
+**The manager sees teams and can message one (owner, 2026-09-20 — "every agent including the
+manager").** `Team` is now rendered in `list_agents` (the `(team)` after the name) and `agent_status`
+(`team: …`), out of `notInTheStatusReport`, so the manager can see which agents are one group; and
+`send_to_team` (a seventh MCP tool, `internal/mcp/sendteam.go`) fans a message out to every live
+member — N `rpc.FrameSend`s, the frame already allowed the manager, so it adds no new reach. **An
+*ordinary* agent reaches teams through the manager**, which is Wake's architecture: only the manager
+has a fleet view and fleet tools (spec §12); an ordinary agent has Claude Code's one-to-one peer
+channel and no fleet query. Giving every ordinary agent direct team tools is a separate, larger
+change (it would put fleet-command tools on every worker) and is not built.
+
 **The recorded cost (owner accepted with the mockups):** fixed section order weakens "blocked floats
 to the absolute top of the roster" to "top of its section" — now that the room pins no ask card, the
 awareness strip's `N need you` and `⌃X` are what carry urgency across sections. Keep the strip's
@@ -730,8 +740,8 @@ count un-truncatable.
 - A team-of-one send is byte-identical to a private DM turn on disk, so it does not restore into the
   room; a send to ≥2 members does (multiplicity).
 - `@` completion offering team names; a member count in section headers; refusing the manager a team;
-  the team-echo `to` stamp showing in an unrelated narrowed `@john` thread. Owner's calls, and
-  whether to expose `Team` read-only to the manager (it routes work — `notInTheStatusReport`).
+  the team-echo `to` stamp showing in an unrelated narrowed `@john` thread; direct team tools on
+  ordinary (non-manager) agents. Owner's calls.
 ---
 
 ## FROM `feat/expand-and-worktree`, 2026-08-15

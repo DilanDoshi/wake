@@ -63,6 +63,41 @@ func TestTheTextTheManagerWroteIsWhatTheAgentGets(t *testing.T) {
 	}
 }
 
+// send_to_team is the set action the file above anticipated: a message to every
+// live member of a team and to nobody else, each byte for byte, addressed by the
+// team name list_agents shows rather than by id.
+func TestSendToTeamFansOutToEveryLiveMember(t *testing.T) {
+	const text = "ship the staging build"
+	const idFront = "1e5c1b8a-0000-4000-8000-000000000009"
+	f := actingFleet(
+		rpc.SessionStatus{ID: idPeter, Name: "peter", Team: "backend", State: rpc.StateWorking},
+		rpc.SessionStatus{ID: idMira, Name: "mira", Team: "backend", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: idFront, Name: "delta", Team: "frontend", State: rpc.StateIdle},
+	)
+	call(t, f, "send_to_team", map[string]any{teamArg: "Backend", messageArg: text}) // mixed case resolves
+
+	if len(f.acts.sent) != 2 {
+		t.Fatalf("send_to_team sent %d messages, want 2 (backend's members): %+v", len(f.acts.sent), f.acts.sent)
+	}
+	reached := map[string]bool{f.acts.sent[0].id: true, f.acts.sent[1].id: true}
+	if !reached[idPeter] || !reached[idMira] || reached[idFront] {
+		t.Errorf("send_to_team reached %+v, want peter and mira (backend), not delta (frontend)", f.acts.sent)
+	}
+	for _, s := range f.acts.sent {
+		if s.text != text {
+			t.Errorf("send_to_team altered the text to %q; a manager's message is the manager's words", s.text)
+		}
+	}
+}
+
+func TestSendToTeamWithNoLiveMemberSendsNothing(t *testing.T) {
+	f := actingFleet(rpc.SessionStatus{ID: idPeter, Name: "peter", Team: "backend", State: rpc.StateIdle})
+	call(t, f, "send_to_team", map[string]any{teamArg: "frontend", messageArg: "hi"})
+	if len(f.acts.sent) != 0 {
+		t.Errorf("send_to_team to a team nobody is in sent %+v, want nothing", f.acts.sent)
+	}
+}
+
 func TestInterruptIsATool(t *testing.T) {
 	f := onePeter()
 	call(t, f, "interrupt", map[string]any{agentIDArg: idPeter})

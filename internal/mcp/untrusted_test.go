@@ -248,6 +248,7 @@ func TestNoFieldCanForgeALineOnAnySurface(t *testing.T) {
 				// rather than for carrying a newline, which is not what this
 				// test is about.
 				Effort: core.EffortMax,
+				Team:   "backend",
 			}
 			if field.Name == "State" {
 				// A state carrying anything is a state nothing has ruled on,
