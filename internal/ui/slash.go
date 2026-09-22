@@ -506,6 +506,38 @@ func commandStem(draft string) (head, word string, ok bool) {
 	return draft[:at], word, true
 }
 
+// teamArgStem is a draft part-way through the team-name argument of `/team`: an
+// optional leading `@mention` (the room's `@who /team` bridge), then `/team`,
+// then the word at the cursor. It lets the completion menu offer existing team
+// names to finish the argument, the way it offers agents and skills.
+//
+// Here for commandStem's reason: recognising `/team` is knowing what a leading
+// slash means, and that is this file. It decides nothing - the caller in
+// completion.go offers what could finish the word and routes nothing, so a new
+// team name still sends.
+//
+// The head must be exactly the command (after an optional single `@name`), so
+// the word at the cursor is the first argument: `/team backend now` completing
+// `now` is a second token `/team` does not take, and gets no menu.
+func teamArgStem(draft string) (head, partial string, ok bool) {
+	at := strings.LastIndexAny(draft, wordBreak) + 1
+	if at == 0 {
+		return "", "", false // the cursor word is the first token: no command before it
+	}
+	head, partial = draft[:at], draft[at:]
+	cmd := SlashPrefix + teamCommand
+	switch fields := strings.Fields(head); len(fields) {
+	case 1:
+		ok = fields[0] == cmd
+	case 2:
+		ok = strings.HasPrefix(fields[0], agentPrefix) && fields[1] == cmd
+	}
+	if !ok {
+		return "", "", false
+	}
+	return head, partial, true
+}
+
 // leadingCommand reports whether a draft body is addressed to the agent as a
 // slash command: a leading prefix and a single name token, `/model`, `/clear`
 // or an operator's own `/my-command`. Wake's own or claude's alike - it does not

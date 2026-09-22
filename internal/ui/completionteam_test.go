@@ -2,6 +2,7 @@ package ui
 
 import (
 	"slices"
+	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -32,11 +33,112 @@ func TestTheRoomOffersATeamAsAMention(t *testing.T) {
 	if !slices.Contains(a.completion.offers, agentPrefix+"backend") {
 		t.Fatalf("`@back` in the room does not offer the team @backend: %v", a.completion.offers)
 	}
-	if got, want := a.completion.label(agentPrefix+"backend"), agentPrefix+"backend"+teamMenuSuffix; got != want {
+	if got, want := a.completion.rowLabel(agentPrefix+"backend", 200), agentPrefix+"backend"+teamMenuSuffix; got != want {
 		t.Errorf("the team offer is labelled %q, want %q", got, want)
 	}
-	if got := a.completion.label(agentPrefix + "alex"); got != agentPrefix+"alex" {
+	if got := a.completion.rowLabel(agentPrefix+"alex", 200); got != agentPrefix+"alex" {
 		t.Errorf("an agent offer is labelled %q, want it left alone", got)
+	}
+	// End to end through the render, not just the helper: a regression to
+	// optionRow(offer, …) would leave the pure helper right and the menu wrong.
+	if got := a.completionView(200, a.focus); !strings.Contains(got, agentPrefix+"backend"+teamMenuSuffix) {
+		t.Errorf("the rendered menu does not tag the team @backend (team):\n%s", got)
+	}
+}
+
+// The `(team)` tag is what tells a fan-out mention from an ordinary one, so it
+// must survive a narrow pane: optionRow truncates from the right, so a long team
+// name is trimmed while the tag is kept - and an accept still inserts the whole
+// bare mention that routes to the team.
+func TestATeamKeepsItsTagOnANarrowPane(t *testing.T) {
+	const longTeam = "backend-platform-infra-and-more" // 31 chars, under maxTeamName
+	a := newRoomApp(t).withSize(200, 40)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{
+		Running:  true,
+		Teams:    []string{longTeam},
+		Sessions: []rpc.SessionStatus{{ID: "s1", Name: "bob", Team: longTeam, State: rpc.StateIdle}},
+	}})
+	a = a.withDraft("@back")
+
+	if got := a.completion.View(24); !strings.Contains(got, teamMenuSuffix) || strings.Contains(got, longTeam) {
+		t.Errorf("at 24 columns the tag was dropped or the full name kept, so a fan-out reads as an ordinary mention:\n%s", got)
+	}
+	a, _, ok := a.completionKey(tea.KeyMsg{Type: tea.KeyTab})
+	if !ok {
+		t.Fatal("⇥ was not taken by the completion menu")
+	}
+	if got := a.composer().Value(); got != agentPrefix+longTeam+" " {
+		t.Errorf("a truncated row inserted %q, want the whole bare mention %q", got, agentPrefix+longTeam+" ")
+	}
+}
+
+// A live agent wins a name it shares with a team: one row, offered untagged, so
+// the deferred agent/team name collision cannot draw a duplicate or tag the
+// agent's own row as a team.
+func TestALiveAgentWinsANameSharedWithATeam(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{
+		Running: true,
+		Teams:   []string{"backend"},
+		Sessions: []rpc.SessionStatus{
+			{ID: "s1", Name: "backend", State: rpc.StateIdle},
+			{ID: "s2", Name: "bob", Team: "backend", State: rpc.StateIdle},
+		},
+	}})
+	a = a.withDraft("@back")
+
+	count := 0
+	for _, o := range a.completion.offers {
+		if o == agentPrefix+"backend" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Errorf("want one @backend row, got %d: %v", count, a.completion.offers)
+	}
+	if got := a.completion.rowLabel(agentPrefix+"backend", 200); got != agentPrefix+"backend" {
+		t.Errorf("the live agent's row was tagged %q, want it untagged - the agent won the name", got)
+	}
+}
+
+// The team-name argument of /team completes against the existing teams, the way
+// skills and @names do - the whole of the second half of the request.
+func TestTheTeamArgumentCompletesExistingTeams(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
+	a = a.withDraft("@alex /team back")
+
+	if !slices.Contains(a.completion.offers, "backend") {
+		t.Fatalf("`@alex /team back` does not offer the existing team backend: %v", a.completion.offers)
+	}
+	a, _, ok := a.completionKey(tea.KeyMsg{Type: tea.KeyTab})
+	if !ok {
+		t.Fatal("⇥ was not taken by the completion menu")
+	}
+	if got := a.composer().Value(); got != "@alex /team backend " {
+		t.Errorf("completing the team argument gave %q, want %q", got, "@alex /team backend ")
+	}
+}
+
+// A bare `/team ` in a DM offers every team: /team is valid in a DM, and the
+// argument completion is not the room-only @mention one.
+func TestTheTeamArgumentCompletesBareInADM(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
+	a = pick(a, "s2").openDMWith("s2", "bob").applyGeometry()
+	a = a.withDraft("/team ")
+
+	if !slices.Contains(a.completion.offers, "backend") {
+		t.Errorf("`/team ` in a DM does not offer the team backend: %v", a.completion.offers)
+	}
+}
+
+// The completion is the first argument only: a second token /team does not take
+// gets no team menu, so it cannot look completable when it is not.
+func TestTheTeamArgumentDoesNotCompleteASecondToken(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
+	a = a.withDraft("/team backend ba")
+
+	if slices.Contains(a.completion.offers, "backend") {
+		t.Errorf("`/team backend ba` offered a team for a second token /team does not take: %v", a.completion.offers)
 	}
 }
 

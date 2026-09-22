@@ -44,6 +44,8 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -190,6 +192,9 @@ func (a App) completing() completion {
 	if head, word, ok := commandStem(draft); ok {
 		return a.commandMenu(draft, head, word)
 	}
+	if head, partial, ok := teamArgStem(draft); ok {
+		return a.teamArgMenu(draft, head, partial)
+	}
 	if head, who, ok := mentionStem(draft); ok {
 		return a.mentionMenu(draft, head, who)
 	}
@@ -243,25 +248,48 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 func (a App) addressees(typed string) (names []string, teams map[string]bool) {
 	lower := strings.ToLower(typed)
 	names = make([]string, 0, completionRows)
+	agents := make(map[string]bool)
 	for _, agent := range a.fleet.OnRoster() {
 		if agent.Name != "" && strings.HasPrefix(strings.ToLower(agent.Name), lower) {
-			names = append(names, agentPrefix+agent.Name)
+			offer := agentPrefix + agent.Name
+			names = append(names, offer)
+			agents[offer] = true
 		}
 	}
 	for _, team := range a.fleet.teamOrder {
-		if strings.HasPrefix(team, lower) {
-			offer := agentPrefix + team
-			names = append(names, offer)
-			if teams == nil {
-				teams = make(map[string]bool)
-			}
-			teams[offer] = true
+		offer := agentPrefix + team
+		// A live agent of the same name wins the row: it is offered untagged and
+		// the team is dropped, so a name collision (the daemon does not yet refuse
+		// one, see deferred.md) cannot draw a duplicate row or tag the agent's own
+		// as a team. teamOrder is lower-case (NormalizeTeam), so no fold here.
+		if !strings.HasPrefix(team, lower) || agents[offer] {
+			continue
 		}
+		names = append(names, offer)
+		if teams == nil {
+			teams = make(map[string]bool)
+		}
+		teams[offer] = true
 	}
 	if strings.HasPrefix(core.BroadcastName, lower) {
 		names = append(names, agentPrefix+core.BroadcastName)
 	}
 	return names, teams
+}
+
+// teamArgMenu offers the fleet's existing teams to finish a `/team` argument, so
+// joining one is a completion rather than a retype. Plain names, not `@`-mentions:
+// the argument to `/team` is a bare team name, and a new one still sends - the
+// menu only offers. No paths and no `(team)` tag: the `/team` context is the tag.
+func (a App) teamArgMenu(draft, head, partial string) completion {
+	lower := strings.ToLower(partial)
+	names := make([]string, 0, len(a.fleet.teamOrder))
+	for _, team := range a.fleet.teamOrder {
+		if strings.HasPrefix(team, lower) {
+			names = append(names, team)
+		}
+	}
+	return completion{pane: a.focus, draft: draft, head: head, names: names}
 }
 
 // commandMenu is the session's advertised commands and skills, and then Wake's
@@ -466,21 +494,27 @@ func (a App) completionView(width int, id string) string {
 	return a.completion.View(width)
 }
 
-// label is what an offer is drawn as: a team gets the `(team)` tag, everything
-// else is drawn as it is inserted. Display only - acceptCompletion writes the
-// offer itself, so the tag never reaches the draft or the router.
-func (c completion) label(offer string) string {
-	if c.teams[offer] {
-		return offer + teamMenuSuffix
+// rowLabel is what an offer is drawn as at a given width. A plain offer is
+// handed to optionRow as-is (it truncates from the right); a team `@mention`
+// keeps its `(team)` tag by truncating the *name* first, with room reserved for
+// the row's lead and the tag. Without that reservation a long team name on a
+// narrow pane drops the tag and reads as an ordinary mention, while an accept
+// still inserts the bare mention and fans out to the team (the adversarial
+// review's finding). Display only - acceptCompletion writes the offer itself,
+// so neither the tag nor the truncation reaches the draft or the router.
+func (c completion) rowLabel(offer string, width int) string {
+	if !c.teams[offer] {
+		return offer
 	}
-	return offer
+	room := width - lipgloss.Width(cardCursor) - lipgloss.Width(teamMenuSuffix)
+	return ansi.Truncate(offer, max(room, 0), ellipsis) + teamMenuSuffix
 }
 
 // View draws it, through the same rows a card and the picker draw.
 func (c completion) View(width int) string {
 	rows := make([]string, 0, len(c.offers)+1)
 	for i, offer := range c.offers {
-		rows = append(rows, optionRow(c.label(offer), width, i == c.cursor, false, CompletionStyle))
+		rows = append(rows, optionRow(c.rowLabel(offer, width), width, i == c.cursor, false, CompletionStyle))
 	}
 	return strings.Join(append(rows, detailRow(c.keyLine(), width)), "\n")
 }
