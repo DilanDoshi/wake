@@ -193,8 +193,8 @@ func (a App) completing() completion {
 	if head, word, ok := commandStem(draft); ok {
 		return a.commandMenu(draft, head, word)
 	}
-	if head, partial, ok := teamArgStem(draft); ok {
-		return a.teamArgMenu(draft, head, partial)
+	if head, partial, who, bridge, ok := teamArgStem(draft); ok {
+		return a.teamArgMenu(draft, head, partial, who, bridge)
 	}
 	if head, who, ok := mentionStem(draft); ok {
 		return a.mentionMenu(draft, head, who)
@@ -305,7 +305,28 @@ func (a App) addressees(typed string) (names []string, teams map[string]bool) {
 // joining one is a completion rather than a retype. Plain names, not `@`-mentions:
 // the argument to `/team` is a bare team name, and a new one still sends - the
 // menu only offers. No paths and no `(team)` tag: the `/team` context is the tag.
-func (a App) teamArgMenu(draft, head, partial string) completion {
+//
+// Gated to where `/team` actually runs, so the menu never promises a command that
+// is sent as prose instead (the adversarial finding): the bare form only in a DM
+// (the focused agent is the target), the `@who` forms only for a single live
+// agent, and the room's `@who /team` bridge only in the room. Every team is
+// offered, dormant ones included, because joining a parked-only team is valid -
+// this is a tag assignment, not the fan-out route addressees gates.
+func (a App) teamArgMenu(draft, head, partial, who string, bridge bool) completion {
+	switch {
+	case bridge:
+		if a.focus != "" || !a.liveAgentNamed(who) {
+			return completion{pane: a.focus}
+		}
+	case who != "":
+		if !a.liveAgentNamed(who) {
+			return completion{pane: a.focus}
+		}
+	default:
+		if a.focus == "" {
+			return completion{pane: a.focus}
+		}
+	}
 	lower := strings.ToLower(partial)
 	names := make([]string, 0, len(a.fleet.teamOrder))
 	for _, team := range a.fleet.teamOrder {
@@ -314,6 +335,19 @@ func (a App) teamArgMenu(draft, head, partial string) completion {
 		}
 	}
 	return completion{pane: a.focus, draft: draft, head: head, names: names}
+}
+
+// liveAgentNamed reports whether name is a live routable agent - core.Resolve's
+// own live set (App.live), so a `/team @who` completion is gated exactly where
+// `@who` resolves to one agent, not @all, a team, the manager, or a parked or
+// ended session.
+func (a App) liveAgentNamed(name string) bool {
+	for _, addr := range a.live() {
+		if addr.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // commandMenu is the session's advertised commands and skills, and then Wake's

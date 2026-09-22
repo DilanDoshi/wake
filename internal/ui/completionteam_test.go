@@ -180,8 +180,8 @@ func TestTheTeamArgumentCompletesExistingTeams(t *testing.T) {
 	}
 }
 
-// A bare `/team ` in a DM offers every team: /team is valid in a DM, and the
-// argument completion is not the room-only @mention one.
+// A bare `/team ` in a DM offers every team: /team runs against the focused
+// agent there, and the argument completion is not the room-only @mention one.
 func TestTheTeamArgumentCompletesBareInADM(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
 	a = pick(a, "s2").openDMWith("s2", "bob").applyGeometry()
@@ -189,6 +189,60 @@ func TestTheTeamArgumentCompletesBareInADM(t *testing.T) {
 
 	if !slices.Contains(a.completion.offers, "backend") {
 		t.Errorf("`/team ` in a DM does not offer the team backend: %v", a.completion.offers)
+	}
+}
+
+// A bare `/team` in the room has no target, so it is not offered there - a
+// completion would promise a command that does not run.
+func TestTheBareTeamArgumentDoesNotCompleteInTheRoom(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
+	a = a.withDraft("/team back")
+
+	if slices.Contains(a.completion.offers, "backend") {
+		t.Errorf("a bare `/team` in the room offered a team, but it has no target there: %v", a.completion.offers)
+	}
+}
+
+// The `@who /team` bridge is the room's alone: in a DM `@who /team back` is sent
+// verbatim, never run, so it must not be offered there.
+func TestTheTeamBridgeDoesNotCompleteInADM(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
+	a = pick(a, "s1").openDMWith("s1", "alex").applyGeometry()
+	a = a.withDraft("@alex /team back")
+
+	if slices.Contains(a.completion.offers, "backend") {
+		t.Errorf("a DM offered the @who /team bridge, but it is sent verbatim there: %v", a.completion.offers)
+	}
+}
+
+// The bridge and the inline `@who` target run only for one live agent: @all
+// broadcasts (N literal turns, no team set) and an unresolved name reaches
+// nobody, so neither is offered.
+func TestTheTeamBridgeRequiresOneLiveAgent(t *testing.T) {
+	base := func() App { return newRoomApp(t).withSize(200, 40).withTeamFleet() }
+	for _, draft := range []string{"@all /team back", "@ghost /team back", "/team @all back"} {
+		a := base().withDraft(draft)
+		if slices.Contains(a.completion.offers, "backend") {
+			t.Errorf("%q offered a team, but it does not resolve to one live agent: %v", draft, a.completion.offers)
+		}
+	}
+}
+
+// `/team @who <partial>` is the documented inline-target form (teamUsage): it
+// completes for a live agent, in the room or a DM.
+func TestTheInlineTeamTargetCompletes(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
+	a = a.withDraft("/team @alex back")
+
+	if !slices.Contains(a.completion.offers, "backend") {
+		t.Fatalf("`/team @alex back` does not offer the team backend: %v", a.completion.offers)
+	}
+	a, _, ok := a.completionKey(tea.KeyMsg{Type: tea.KeyTab})
+	if !ok {
+		t.Fatal("⇥ was not taken by the completion menu")
+	}
+	if got := a.composer().Value(); got != "/team @alex backend " {
+		t.Errorf("completing the inline target gave %q, want %q", got, "/team @alex backend ")
 	}
 }
 
