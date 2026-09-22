@@ -81,7 +81,7 @@ const mcpConfigPerm = 0o600
 //
 // This session is an ordinary `claude` process in every respect but one: argv.go
 // emits `--tools ""` beside `--mcp-config`, from the same literal, so the
-// built-in set is empty and internal/mcp's five tools are all it has. Measured
+// built-in set is empty and internal/mcp's tools are all it has. Measured
 // at 2.1.228 - a session spawned that way reports exactly its MCP tools in
 // `init.tools`, and says out loud that it has no Write tool when asked to
 // create a file (docs/superpowers/notes/2026-08-12-tool-bounding-findings.md
@@ -111,6 +111,8 @@ const managerScope = `You are Wake's manager: a service that operates a fleet of
 - send_to_team starts a turn on every live member of a team at once. Address the team by name, not by id; a team is the operator's own grouping and list_agents shows which agents are in it.
 - spawn_agent starts one new agent, in a directory the fleet is already working in. It costs a process and money for as long as it runs, and there is a fleet-wide cap; an agent that already exists is nearly always the better answer.
 - interrupt stops the turn an agent is running. The agent stays alive and takes the next message. This is what "pause" means.
+- set_team groups one agent under a team, addressed by id. A team is a grouping of the fleet: naming one no agent wears yet makes it, an existing one adds to it, and @team (send_to_team) reaches its members. Use "none" to remove an agent from its team.
+- set_color sets one agent's identity colour, addressed by id, so the operator can tell agents apart by more than name. One of a fixed set of colour names, or "none" to clear.
 
 You cannot end, park or wake a session, and you cannot answer a permission request. A human does those. If you are asked for one, say so rather than approximating it with the tools you have. There is nothing else to reach for: this session is started with Claude Code's built-in tools removed, so you have no shell, no file access and no way to act on Wake, on its socket, or on any agent's work except through the tools above.
 

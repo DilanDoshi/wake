@@ -78,9 +78,16 @@ type actions struct {
 	sent        []sentMessage
 	interrupted []string
 	spawned     []spawnCall
+	teamed      []groupSet
+	colored     []groupSet
 }
 
 type sentMessage struct{ id, text string }
+
+// groupSet is one set_team or set_color as the fleet saw it: the id it was
+// aimed at and the raw tag or hue the tool passed through, so a test can see a
+// value reach the wire unedited exactly as spawnCall does for a name.
+type groupSet struct{ id, value string }
 
 // spawnCall is one spawn as the fleet saw it: where, and the name the tool
 // asked for ("" when it asked for none). The name is recorded so a test can
@@ -116,6 +123,20 @@ func (f fakeFleet) Send(_ context.Context, id, text string) error {
 func (f fakeFleet) Interrupt(_ context.Context, id string) error {
 	if f.acts != nil {
 		f.acts.interrupted = append(f.acts.interrupted, id)
+	}
+	return f.actErr
+}
+
+func (f fakeFleet) SetTeam(_ context.Context, id, team string) error {
+	if f.acts != nil {
+		f.acts.teamed = append(f.acts.teamed, groupSet{id: id, value: team})
+	}
+	return f.actErr
+}
+
+func (f fakeFleet) SetColor(_ context.Context, id, color string) error {
+	if f.acts != nil {
+		f.acts.colored = append(f.acts.colored, groupSet{id: id, value: color})
 	}
 	return f.actErr
 }

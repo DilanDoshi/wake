@@ -68,6 +68,19 @@ func (f socketFleet) Interrupt(_ context.Context, id string) error {
 	return f.act(rpc.Frame{Kind: rpc.FrameInterrupt, SessionID: id})
 }
 
+// SetTeam and SetColor carry a name (a team tag, a colour) on Frame.Text, the
+// same field send and spawn already use, so the daemon's own teamSession /
+// colorSession fences it - the reserved-word refusal, the colour set, the
+// parked-session refusal - and act's read-back surfaces that refusal to the
+// manager rather than reporting a grouping that did not happen.
+func (f socketFleet) SetTeam(_ context.Context, id, team string) error {
+	return f.act(rpc.Frame{Kind: rpc.FrameTeam, SessionID: id, Text: team})
+}
+
+func (f socketFleet) SetColor(_ context.Context, id, color string) error {
+	return f.act(rpc.Frame{Kind: rpc.FrameColor, SessionID: id, Text: color})
+}
+
 // Spawn mints the id here rather than reading one back, which is the rule every
 // other spawn path in this build follows: Wake originates identity, and the
 // daemon refuses a frame that arrives without it. It also means the tool can
