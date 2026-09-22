@@ -83,7 +83,7 @@ func (a App) tileView(agents []Agent, width int) string {
 	for ri := l.from; ri < l.to; ri++ {
 		row := l.rows[ri]
 		if row.isHeader() {
-			body = append(body, teamHeaderLine(row.header, width))
+			body = append(body, teamHeaderBand(row.header, width)...)
 			continue
 		}
 		cells := make([]string, 0, l.cols)

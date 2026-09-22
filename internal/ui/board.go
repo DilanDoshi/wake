@@ -108,6 +108,13 @@ const (
 	// number, so a selection cannot land on the wrong row.
 	boardChromeRows = 1
 
+	// teamHeaderRows is the lines a team header band draws before its section:
+	// a blank separator above the `──── team ────` divider, so each team reads
+	// as its own chunk. Both board views (rows and tiles) count a header by this
+	// one number - teamHeaderBand's height - so the draw, the scroll and the
+	// click stay in agreement.
+	teamHeaderRows = 2
+
 	// lastLineCap bounds what a fleet of thirty holds of each agent's prose:
 	// a row's worth to draw, not a paragraph to store.
 	lastLineCap = 120
@@ -326,14 +333,14 @@ func (a App) boardHit(x, y int, agents []Agent) (int, string, bool) {
 	for i := a.boardRowFrom(agents, a.boardCursor(agents), visible); i < len(agents) && off < visible; i++ {
 		hdr := 0
 		if teamHeaderAt(agents, i) != "" {
-			hdr = 1
+			hdr = teamHeaderRows
 		}
 		subs := a.fleet.RunningTasks(agents[i].ID)
 		h := hdr + 1 + len(subs)
 		if line < off+h {
 			within := line - off
 			if within < hdr {
-				return -1, "", false // clicked the team header, which opens nothing
+				return -1, "", false // clicked the team header band, which opens nothing
 			}
 			within -= hdr
 			if within > 0 {
@@ -455,13 +462,20 @@ func teamHeaderAt(agents []Agent, i int) string {
 	return ""
 }
 
+// teamHeaderBand is the lines a team header draws before its section: a blank
+// separator above the `──── team ────` divider, so each team reads as its own
+// chunk. teamHeaderRows tall, the one height both board views count a header by.
+func teamHeaderBand(team string, width int) []string {
+	return []string{"", teamHeaderLine(team, width)}
+}
+
 // boardBlockHeight is how many lines an agent's block draws including the team
-// header above it when it is the first of its section - the one number the draw,
-// the scroll (boardRowFrom) and the click (boardHit) all count by.
+// header band above it when it is the first of its section - the one number the
+// draw, the scroll (boardRowFrom) and the click (boardHit) all count by.
 func (a App) boardBlockHeight(agents []Agent, i int) int {
 	h := a.boardRowHeight(agents[i])
 	if teamHeaderAt(agents, i) != "" {
-		h++
+		h += teamHeaderRows
 	}
 	return h
 }
@@ -506,18 +520,18 @@ func (a App) boardView(agents []Agent, width int) string {
 	for i := from; i < len(agents) && len(blocks) < visible; i++ {
 		ag := agents[i]
 		hdr := teamHeaderAt(agents, i)
-		// A header and its section's first row are one atomic unit: if both do not
-		// fit the remaining budget, break before drawing the header, so it never
-		// dangles with no member under it. (Subagent rows below may still be cut.)
+		// A header band and its section's first row are one atomic unit: if they do
+		// not all fit the remaining budget, break before drawing the header, so it
+		// never dangles with no member under it. (Subagent rows below may still be cut.)
 		need := 1
 		if hdr != "" {
-			need = 2
+			need += teamHeaderRows
 		}
 		if len(blocks)+need > visible {
 			break
 		}
 		if hdr != "" {
-			blocks = append(blocks, teamHeaderLine(hdr, width))
+			blocks = append(blocks, teamHeaderBand(hdr, width)...)
 		}
 		blocks = append(blocks, boardRow(ag, nameW, stateW, width, i == cursor && a.board.SelectedTask == ""))
 		for _, t := range a.fleet.RunningTasks(ag.ID) {

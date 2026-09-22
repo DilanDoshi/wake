@@ -112,11 +112,12 @@ type tileLayout struct {
 	from, to int
 }
 
-// rowHeight is a header (one line) or a tile row (cellH), the one number the
-// draw, the hit and the window all count a band by.
+// rowHeight is a header band (teamHeaderRows: a blank then the divider) or a
+// tile row (cellH), the one number the draw, the hit and the window all count a
+// band by.
 func (l tileLayout) rowHeight(i int) int {
 	if l.rows[i].isHeader() {
-		return 1
+		return teamHeaderRows
 	}
 	return l.cellH
 }
@@ -133,12 +134,12 @@ func (l tileLayout) visibleTiles() []Agent {
 
 // tileCellHeight fills the frame when the shelves fit at their minimum, else
 // falls to the minimum and lets the window page the overflow - the flat grid's
-// stretch-or-cap rule, counting the header rows the shelves add.
+// stretch-or-cap rule, counting the header band lines the shelves add.
 func tileCellHeight(rows []tileRow, availH int) int {
-	headers, tileRows := 0, 0
+	headerLines, tileRows := 0, 0
 	for _, r := range rows {
 		if r.isHeader() {
-			headers++
+			headerLines += teamHeaderRows
 		} else {
 			tileRows++
 		}
@@ -146,8 +147,8 @@ func tileCellHeight(rows []tileRow, availH int) int {
 	if tileRows == 0 {
 		return minTileHeight
 	}
-	if headers+tileRows*minTileHeight <= availH {
-		return max((availH-headers)/tileRows, minTileHeight)
+	if headerLines+tileRows*minTileHeight <= availH {
+		return max((availH-headerLines)/tileRows, minTileHeight)
 	}
 	return minTileHeight
 }
@@ -167,7 +168,14 @@ func tileWindow(l tileLayout, cursorRow, availH int) (from, to int) {
 		return 0, len(l.rows)
 	}
 	if cursorRow < 0 {
-		cursorRow = 0
+		// No selection (a fresh board) or the cursor's agent left: seed at the first
+		// tile row, never a header - tileNavSection's own recovery. Row 0 can be a
+		// header (a team-only fleet), and seeding there collapsed the window to [0,0)
+		// via the dangling-header cleanup at a frame too short for the header + a cell.
+		cursorRow = adjacentTileRow(l.rows, -1, +1)
+		if cursorRow < 0 {
+			return 0, 0 // no tiles at all (a header-only wall)
+		}
 	}
 	// The cursor's tile row is always in the window - even alone taller than availH
 	// (a frame too short for one cell, which View then clips). Grow up first so the
@@ -220,13 +228,13 @@ func tileRowCount(sections []Section, cols int) int {
 // rather than paging tiles that could have shared a wider row.
 func boardTileCols(sections []Section, n, width, availH int) int {
 	maxCols := max((width+tileGap)/(minTileWidth+tileGap), 1)
-	headers := 0
+	headerLines := 0
 	for _, s := range sections {
 		if s.Team != "" {
-			headers++
+			headerLines += teamHeaderRows
 		}
 	}
-	maxRows := max((availH-headers)/minTileHeight, 1)
+	maxRows := max((availH-headerLines)/minTileHeight, 1)
 	cols := clamp(ceilSqrt(n), 1, maxCols)
 	for cols < maxCols && tileRowCount(sections, cols) > maxRows {
 		cols++

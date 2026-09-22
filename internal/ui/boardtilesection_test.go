@@ -1,6 +1,11 @@
 package ui
 
-import "testing"
+import (
+	"strings"
+	"testing"
+
+	"github.com/DilanDoshi/wake/internal/rpc"
+)
 
 // tileShelves wraps each team's tiles under its header and the top block's with
 // none, so the next team starts a fresh band rather than flowing into this one's
@@ -101,15 +106,15 @@ func TestTileNavSectionSeedsFromAnEmptyCursor(t *testing.T) {
 }
 
 // The window pages around the cursor's row and pulls its section header into view
-// with it, counting each band by its own height (header 1, tile row cellH).
+// with it, counting each band by its own height (header teamHeaderRows, tile row cellH).
 func TestTileWindowPagesAroundTheCursorRowWithItsHeader(t *testing.T) {
 	l := tileLayout{cellH: 3, rows: []tileRow{
 		{tiles: []Agent{{ID: "a"}}}, // 3
-		{header: "t1"},              // 1
+		{header: "t1"},              // 2 (blank + divider)
 		{tiles: []Agent{{ID: "b"}}}, // 3
 		{tiles: []Agent{{ID: "c"}}}, // 3
 	}}
-	// total 10 > availH 5: cursor in row 2 fits with its header (row 1), not row 0/3.
+	// total 11 > availH 5: cursor in row 2 fits with its header (row 1), not row 0/3.
 	from, to := tileWindow(l, 2, 5)
 	if from != 1 || to != 3 {
 		t.Errorf("window = [%d,%d), want [1,3): the cursor's tile row and the header above it", from, to)
@@ -125,15 +130,15 @@ func TestTileWindowPagesAroundTheCursorRowWithItsHeader(t *testing.T) {
 // under the following team's header, misclassifying it.
 func TestTileWindowKeepsTheCursorTileWithItsTeamHeader(t *testing.T) {
 	l := tileLayout{cellH: 7, rows: []tileRow{
-		{header: "A"},                // 0: 1
+		{header: "A"},                // 0: 2 (blank + divider)
 		{tiles: []Agent{{ID: "a1"}}}, // 1: 7
 		{tiles: []Agent{{ID: "a2"}}}, // 2: 7 (cursor, team A's second row)
-		{header: "B"},                // 3: 1
+		{header: "B"},                // 3: 2
 		{tiles: []Agent{{ID: "b1"}}}, // 4: 7
 	}}
-	// availH 15 fits A's header + both A rows (1+7+7); growing down-first would
+	// availH 16 fits A's header + both A rows (2+7+7); growing down-first would
 	// have paged the cursor under team B's header instead.
-	from, to := tileWindow(l, 2, 15)
+	from, to := tileWindow(l, 2, 16)
 	if from != 0 || to != 3 {
 		t.Fatalf("window = [%d,%d), want [0,3): the cursor with team A's header, not B's", from, to)
 	}
@@ -147,14 +152,30 @@ func TestTileWindowKeepsTheCursorTileWithItsTeamHeader(t *testing.T) {
 func TestTileWindowDropsADanglingTrailingHeader(t *testing.T) {
 	l := tileLayout{cellH: 7, rows: []tileRow{
 		{tiles: []Agent{{ID: "x"}}}, // 0: 7 (cursor, top block)
-		{header: "B"},               // 1: 1
+		{header: "B"},               // 1: 2 (blank + divider)
 		{tiles: []Agent{{ID: "b"}}}, // 2: 7
 	}}
-	// availH 8 fits the top row and B's header but not B's tile: the header would
-	// dangle at the bottom edge as an empty team without the drop.
-	from, to := tileWindow(l, 0, 8)
+	// availH 9 fits the top row (7) and B's header band (2) but not B's tile (7):
+	// the header would dangle at the bottom edge as an empty team without the drop.
+	from, to := tileWindow(l, 0, 9)
 	if from != 0 || to != 1 {
 		t.Fatalf("window = [%d,%d), want [0,1): team B's header must not dangle with its member paged off", from, to)
+	}
+}
+
+// A fresh team-only tiled board - no selection, so tileFind misses, and every
+// agent on a team, so row 0 is a header - must still show a tile at a frame too
+// short for the header band plus a full cell, never collapse to a blank window.
+// The widened header tipped availH=8 into the windowing path, where the -1 cursor
+// fell onto row 0's header and the dangling-header cleanup then emptied it.
+func TestTileWindowTeamOnlyEmptyCursorShowsATile(t *testing.T) {
+	l := tileLayout{cellH: 7, rows: []tileRow{
+		{header: "backend"},          // 0: 2 (blank + divider)
+		{tiles: []Agent{{ID: "w1"}}}, // 1: 7
+	}}
+	from, to := tileWindow(l, -1, 8) // fresh board: no cursor row
+	if from > 1 || to <= 1 {
+		t.Fatalf("window [%d,%d) excludes the tile row 1: a team-only board with no cursor drew no agent at availH=8", from, to)
 	}
 }
 
@@ -189,5 +210,35 @@ func TestBoardTileColsWidensToFitAShortFrame(t *testing.T) {
 	four := []Section{{Agents: make([]Agent, 4)}}
 	if got := boardTileCols(four, 4, 200, 6); got != 4 {
 		t.Errorf("boardTileCols(tiny frame) = %d, want 4 (one row, everyone on screen)", got)
+	}
+}
+
+// The tiled board draws the header band's blank above each `──── team ────`
+// divider too, so a team's tiles read as their own chunk (owner's 2026-09-21
+// request), the same gap the rows view draws.
+func TestTiledBoardDrawsABlankAboveEachTeamHeader(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 40)
+	a = a.applyStatus(&rpc.Status{
+		Teams: []string{"backend"},
+		Sessions: []rpc.SessionStatus{
+			{ID: "s1", Name: "alex", State: rpc.StateIdle},
+			{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
+		},
+	})
+	a.board = Board{Up: true, Tiled: true}
+	agents := a.boardAgents()
+
+	lines := strings.Split(a.tileView(agents, 120), "\n")
+	found := false
+	for i, ln := range lines {
+		if strings.Contains(ln, "backend") {
+			found = true
+			if i == 0 || strings.TrimSpace(lines[i-1]) != "" {
+				t.Errorf("no blank line above the tiled `backend` header (line %d):\n%s", i, strings.Join(lines, "\n"))
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("the tiled board drew no `backend` team header:\n%s", strings.Join(lines, "\n"))
 	}
 }
