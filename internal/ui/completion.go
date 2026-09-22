@@ -44,8 +44,11 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 const (
@@ -69,6 +72,12 @@ const (
 	// they were a literal space and a set of three, which agreed only because
 	// nothing either of them offers has a tab in it.
 	wordBreak = " \t\n"
+
+	// teamMenuSuffix marks a team offer in the `@` menu, so `@backend (team)`
+	// reads as a group rather than as an agent nobody can find in the roster. It
+	// is display only: the offer itself is the bare `@backend` the router fans
+	// out, so an accept inserts the routable mention and not the tag.
+	teamMenuSuffix = " (team)"
 )
 
 // completionRows is the most offers drawn at once: the floor above, or the
@@ -125,6 +134,12 @@ type completion struct {
 	// commands and skills, Wake's own commands, and the fleet's live names.
 	names []string
 
+	// teams is which of names are teams rather than agents, keyed by the offer
+	// value, so View can tag them without changing what an accept inserts. Nil
+	// for a command menu and for a fleet with no teams, which is the flat menu
+	// this build has always drawn.
+	teams map[string]bool
+
 	// paths is the `@` half, which is a directory read and so is not this
 	// goroutine's. See completionpath.go.
 	paths pathMenu
@@ -178,6 +193,9 @@ func (a App) completing() completion {
 	if head, word, ok := commandStem(draft); ok {
 		return a.commandMenu(draft, head, word)
 	}
+	if head, partial, who, bridge, ok := teamArgStem(draft); ok {
+		return a.teamArgMenu(draft, head, partial, who, bridge)
+	}
 	if head, who, ok := mentionStem(draft); ok {
 		return a.mentionMenu(draft, head, who)
 	}
@@ -211,30 +229,125 @@ func mentionStem(draft string) (head, rest string, ok bool) {
 func (a App) mentionMenu(draft, head, typed string) completion {
 	c := completion{pane: a.focus, draft: draft, head: head, paths: a.pathMenuFor(typed)}
 	if a.focus == "" {
-		c.names = a.addressees(typed)
+		c.names, c.teams = a.addressees(typed)
 	}
 	return c
 }
 
 // addressees is every name a mention could resolve to, in the roster's own
-// order, with the one that is not an agent last.
+// order: the live agents, then the teams, then the broadcast last. The `teams`
+// set names which offers are teams, keyed by the offer value, so View tags them
+// without changing what an accept inserts - a team offer is the bare `@backend`
+// the router fans out (core.Resolve's team step), never the display tag.
 //
 // The roster rather than the addressable set: these are the names on screen,
 // which are the names somebody types. A parked one is included for that reason
 // and refuses with a sentence naming `/resume`, which is more use than a name
-// that is drawn and cannot be completed.
-func (a App) addressees(typed string) []string {
+// that is drawn and cannot be completed. Teams sit between the agents and the
+// broadcast - narrowest to broadest - and are the daemon's own order (teamOrder,
+// off the report), the roster sections' order one surface over.
+func (a App) addressees(typed string) (names []string, teams map[string]bool) {
 	lower := strings.ToLower(typed)
-	out := make([]string, 0, completionRows)
-	for _, agent := range a.fleet.OnRoster() {
-		if agent.Name != "" && strings.HasPrefix(strings.ToLower(agent.Name), lower) {
-			out = append(out, agentPrefix+agent.Name)
+	// A team is mentionable only when it has a live member, mirroring
+	// core.Resolve's teamMembers(mention, a.live()): a team stays in teamOrder
+	// while its members are all parked or ended (orderTeams counts them), but
+	// `@team` then fans out to nobody, so tagging it would promise a fan-out that
+	// does not happen. a.live() is the router's own live set (no parked, ended or
+	// manager), so this cannot drift from where `@name` actually routes.
+	liveTeam := make(map[string]bool)
+	for _, addr := range a.live() {
+		if addr.Team != "" {
+			liveTeam[agentPrefix+addr.Team] = true
 		}
 	}
-	if strings.HasPrefix(core.BroadcastName, lower) {
-		out = append(out, agentPrefix+core.BroadcastName)
+	// A name collision (the daemon does not yet refuse one, see deferred.md) is
+	// resolved the way core.Resolve routes it - live agent, then live team, then a
+	// parked/passthrough name - so the tag always matches where `@name` goes:
+	//   - a *live* agent wins the name, offered untagged, the team dropped;
+	//   - else a routable team wins, offered `(team)`, and a *parked* agent of that
+	//     name is dropped rather than drawn untagged, since `@name` fans out to the
+	//     team (App.live excludes StateParked) and a plain row would lie.
+	names = make([]string, 0, completionRows)
+	live := make(map[string]bool)
+	for _, agent := range a.fleet.OnRoster() {
+		if agent.Name == "" || !strings.HasPrefix(strings.ToLower(agent.Name), lower) {
+			continue
+		}
+		offer := agentPrefix + agent.Name
+		routable := agent.State != rpc.StateParked
+		if !routable && liveTeam[offer] {
+			continue // the routable team below claims `@name`'s route
+		}
+		names = append(names, offer)
+		if routable {
+			live[offer] = true
+		}
 	}
-	return out
+	// teamOrder for the daemon's order; liveTeam for whether it fans out at all.
+	for _, team := range a.fleet.teamOrder {
+		offer := agentPrefix + team
+		if !strings.HasPrefix(team, lower) || live[offer] || !liveTeam[offer] {
+			continue
+		}
+		names = append(names, offer)
+		if teams == nil {
+			teams = make(map[string]bool)
+		}
+		teams[offer] = true
+	}
+	if strings.HasPrefix(core.BroadcastName, lower) {
+		names = append(names, agentPrefix+core.BroadcastName)
+	}
+	return names, teams
+}
+
+// teamArgMenu offers the fleet's existing teams to finish a `/team` argument, so
+// joining one is a completion rather than a retype. Plain names, not `@`-mentions:
+// the argument to `/team` is a bare team name, and a new one still sends - the
+// menu only offers. No paths and no `(team)` tag: the `/team` context is the tag.
+//
+// Gated to where `/team` actually runs, so the menu never promises a command that
+// is sent as prose instead (the adversarial finding): the bare form only in a DM
+// (the focused agent is the target), the `@who` forms only for a single live
+// agent, and the room's `@who /team` bridge only in the room. Every team is
+// offered, dormant ones included, because joining a parked-only team is valid -
+// this is a tag assignment, not the fan-out route addressees gates.
+func (a App) teamArgMenu(draft, head, partial, who string, bridge bool) completion {
+	switch {
+	case bridge:
+		if a.focus != "" || !a.liveAgentNamed(who) {
+			return completion{pane: a.focus}
+		}
+	case who != "":
+		if !a.liveAgentNamed(who) {
+			return completion{pane: a.focus}
+		}
+	default:
+		if a.focus == "" {
+			return completion{pane: a.focus}
+		}
+	}
+	lower := strings.ToLower(partial)
+	names := make([]string, 0, len(a.fleet.teamOrder))
+	for _, team := range a.fleet.teamOrder {
+		if strings.HasPrefix(team, lower) {
+			names = append(names, team)
+		}
+	}
+	return completion{pane: a.focus, draft: draft, head: head, names: names}
+}
+
+// liveAgentNamed reports whether name is a live routable agent - core.Resolve's
+// own live set (App.live), so a `/team @who` completion is gated exactly where
+// `@who` resolves to one agent, not @all, a team, the manager, or a parked or
+// ended session.
+func (a App) liveAgentNamed(name string) bool {
+	for _, addr := range a.live() {
+		if addr.Name == name {
+			return true
+		}
+	}
+	return false
 }
 
 // commandMenu is the session's advertised commands and skills, and then Wake's
@@ -439,11 +552,27 @@ func (a App) completionView(width int, id string) string {
 	return a.completion.View(width)
 }
 
+// rowLabel is what an offer is drawn as at a given width. A plain offer is
+// handed to optionRow as-is (it truncates from the right); a team `@mention`
+// keeps its `(team)` tag by truncating the *name* first, with room reserved for
+// the row's lead and the tag. Without that reservation a long team name on a
+// narrow pane drops the tag and reads as an ordinary mention, while an accept
+// still inserts the bare mention and fans out to the team (the adversarial
+// review's finding). Display only - acceptCompletion writes the offer itself,
+// so neither the tag nor the truncation reaches the draft or the router.
+func (c completion) rowLabel(offer string, width int) string {
+	if !c.teams[offer] {
+		return offer
+	}
+	room := width - lipgloss.Width(cardCursor) - lipgloss.Width(teamMenuSuffix)
+	return ansi.Truncate(offer, max(room, 0), ellipsis) + teamMenuSuffix
+}
+
 // View draws it, through the same rows a card and the picker draw.
 func (c completion) View(width int) string {
 	rows := make([]string, 0, len(c.offers)+1)
 	for i, offer := range c.offers {
-		rows = append(rows, optionRow(offer, width, i == c.cursor, false, CompletionStyle))
+		rows = append(rows, optionRow(c.rowLabel(offer, width), width, i == c.cursor, false, CompletionStyle))
 	}
 	return strings.Join(append(rows, detailRow(c.keyLine(), width)), "\n")
 }

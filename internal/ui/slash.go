@@ -108,6 +108,7 @@ package ui
 import (
 	"slices"
 	"strings"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -504,6 +505,50 @@ func commandStem(draft string) (head, word string, ok bool) {
 		return "", "", false
 	}
 	return draft[:at], word, true
+}
+
+// teamArgStem is a draft part-way through the team-name argument of `/team`, in
+// the three forms `/team` runs in (teamUsage, roomTargetCommands): the bare
+// `/team <partial>`, the `/team @who <partial>` inline target, and the room's
+// `@who /team <partial>` bridge (bridge=true). who is the target's name for the
+// two `@who` forms, "" for the bare one. The word at the cursor is the first
+// argument, so a second token gets no menu.
+//
+// It recognises; the caller in completion.go gates by context (which form runs
+// where) and offers - here for commandStem's reason, that recognising `/team` is
+// knowing what a leading slash means, and that is this file.
+func teamArgStem(draft string) (head, partial, who string, bridge, ok bool) {
+	at := strings.LastIndexAny(draft, wordBreak) + 1
+	if at == 0 {
+		return // the cursor word is the first token: no command before it
+	}
+	head, partial = draft[:at], draft[at:]
+	// ASCII space is the only separator the slash router splits on, so any other
+	// whitespace in the head (tab, newline, NBSP, CR, VT, FF) is a `/team` it will
+	// not run - it would be sent as prose (the adversarial finding). Reject it, and
+	// strings.Fields below then splits exactly as the router does. The command word
+	// is matched case-insensitively, as the router looks it up.
+	if strings.IndexFunc(head, func(r rune) bool { return r != ' ' && unicode.IsSpace(r) }) >= 0 {
+		return "", "", "", false, false
+	}
+	cmd := SlashPrefix + teamCommand
+	fields := strings.Fields(head)
+	switch len(fields) {
+	case 1: // /team <partial>; a partial starting with @ is the inline target
+		// being typed (`/team @al`), left to mentionStem's agent completion.
+		ok = strings.EqualFold(fields[0], cmd) && !strings.HasPrefix(partial, agentPrefix)
+	case 2:
+		switch {
+		case strings.EqualFold(fields[0], cmd) && strings.HasPrefix(fields[1], agentPrefix): // /team @who <partial>
+			who, ok = fields[1][len(agentPrefix):], true
+		case strings.HasPrefix(fields[0], agentPrefix) && strings.EqualFold(fields[1], cmd): // @who /team <partial>
+			who, bridge, ok = fields[0][len(agentPrefix):], true, true
+		}
+	}
+	if !ok {
+		return "", "", "", false, false
+	}
+	return head, partial, who, bridge, true
 }
 
 // leadingCommand reports whether a draft body is addressed to the agent as a
