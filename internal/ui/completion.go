@@ -248,20 +248,25 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 // off the report), the roster sections' order one surface over.
 func (a App) addressees(typed string) (names []string, teams map[string]bool) {
 	lower := strings.ToLower(typed)
-	// A name collision (the daemon does not yet refuse one, see deferred.md) is
-	// resolved the way core.Resolve routes it - live agent, then team, then a
-	// parked/passthrough name - so the tag always matches where `@name` goes:
-	//   - a *live* agent wins the name, offered untagged, the team dropped;
-	//   - else a team wins, offered `(team)`, and a *parked* agent of that name is
-	//     dropped rather than drawn untagged - `@name` fans out, not to the parked
-	//     session (App.live excludes StateParked), so a plain row would lie.
-	// teamOrder is lower-case (NormalizeTeam), so no fold on the team side.
-	teamMatch := make(map[string]bool)
-	for _, team := range a.fleet.teamOrder {
-		if strings.HasPrefix(team, lower) {
-			teamMatch[agentPrefix+team] = true
+	// A team is mentionable only when it has a live member, mirroring
+	// core.Resolve's teamMembers(mention, a.live()): a team stays in teamOrder
+	// while its members are all parked or ended (orderTeams counts them), but
+	// `@team` then fans out to nobody, so tagging it would promise a fan-out that
+	// does not happen. a.live() is the router's own live set (no parked, ended or
+	// manager), so this cannot drift from where `@name` actually routes.
+	liveTeam := make(map[string]bool)
+	for _, addr := range a.live() {
+		if addr.Team != "" {
+			liveTeam[agentPrefix+addr.Team] = true
 		}
 	}
+	// A name collision (the daemon does not yet refuse one, see deferred.md) is
+	// resolved the way core.Resolve routes it - live agent, then live team, then a
+	// parked/passthrough name - so the tag always matches where `@name` goes:
+	//   - a *live* agent wins the name, offered untagged, the team dropped;
+	//   - else a routable team wins, offered `(team)`, and a *parked* agent of that
+	//     name is dropped rather than drawn untagged, since `@name` fans out to the
+	//     team (App.live excludes StateParked) and a plain row would lie.
 	names = make([]string, 0, completionRows)
 	live := make(map[string]bool)
 	for _, agent := range a.fleet.OnRoster() {
@@ -270,17 +275,18 @@ func (a App) addressees(typed string) (names []string, teams map[string]bool) {
 		}
 		offer := agentPrefix + agent.Name
 		routable := agent.State != rpc.StateParked
-		if !routable && teamMatch[offer] {
-			continue // the team below claims `@name`'s route
+		if !routable && liveTeam[offer] {
+			continue // the routable team below claims `@name`'s route
 		}
 		names = append(names, offer)
 		if routable {
 			live[offer] = true
 		}
 	}
+	// teamOrder for the daemon's order; liveTeam for whether it fans out at all.
 	for _, team := range a.fleet.teamOrder {
 		offer := agentPrefix + team
-		if !strings.HasPrefix(team, lower) || live[offer] {
+		if !strings.HasPrefix(team, lower) || live[offer] || !liveTeam[offer] {
 			continue
 		}
 		names = append(names, offer)

@@ -130,6 +130,26 @@ func TestAParkedAgentDoesNotHideATeamFanOut(t *testing.T) {
 	}
 }
 
+// A team whose only members are parked fans out to nobody (App.live excludes
+// them), so the @ menu must not offer it as a tagged fan-out - the tag would
+// promise a route that reaches no one.
+func TestAParkedOnlyTeamIsNotOfferedAsAFanOut(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{
+		Running: true,
+		Teams:   []string{"backend"},
+		Sessions: []rpc.SessionStatus{
+			{ID: "s1", Name: "bob", Team: "backend", State: rpc.StateParked},
+			{ID: "s2", Name: "alex", State: rpc.StateIdle},
+		},
+	}})
+	a = a.withDraft("@back")
+
+	if slices.Contains(a.completion.offers, agentPrefix+"backend") {
+		t.Errorf("offered @backend for a team with no live member (a fan-out that reaches nobody): %v", a.completion.offers)
+	}
+}
+
 // A newline or tab between /team and its argument is a form the slash router
 // will not run (it splits on space), so the menu must not offer a completion
 // there - it would insert a `/team` that is sent as prose.
