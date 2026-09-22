@@ -74,10 +74,13 @@ import (
 // once at launch - there is no runtime command for it, so unlike effort there
 // is no second path by which anything an agent typed could become this value.
 //
-// Color is the operator's, and the narrowest of all: it is one of seven words
-// from rpc.ColorNames, folded and checked by rpc.NormalizeColor on both sides of
-// the socket, and set only by /color - a TUI command a human types. An agent
-// has no path to it at all, so nothing it wrote can become this value.
+// Color is the operator's and the manager's, and the narrowest of all: it is one
+// of seven words from rpc.ColorNames, folded and checked by rpc.NormalizeColor on
+// both sides of the socket. It is set by /color and, since the 2026-09-21
+// override, by the manager's set_color - so a model has a path to it, but not the
+// *described* agent, which is what false records here. And a talked-into manager
+// cannot forge a line with it: the value is a closed seven-word set, so nothing an
+// agent wrote can become anything but one of them.
 var agentAuthored = map[string]bool{
 	"Tool":    true,
 	"ToolArg": true,
@@ -96,12 +99,13 @@ var agentAuthored = map[string]bool{
 	"Budget":     false,
 	"Color":      false,
 
-	// Team is the operator's like Color, and false for the same "no agent path"
-	// reason - but it earns it differently. Color is a closed seven-word set;
-	// a team is free text, so what makes it not agent-authored is not a narrow
-	// vocabulary but that there is no runtime path to it at all: /team is a TUI
-	// command a human types, and an agent has no tool, no frame and no self-serve
-	// command that sets a team, so nothing an agent wrote can become this value.
+	// Team is the operator's and the manager's like Color, and false for the same
+	// reason the *described* agent has no path: /team is a human's TUI command and
+	// set_team is the manager's tool (the 2026-09-21 override), neither of which is
+	// the agent whose row this is. Unlike Color's closed set a team is free text, so
+	// what stops a talked-into manager forging a line with it is rpc.NormalizeTeam:
+	// one mention token, no whitespace, no control character, so it cannot carry the
+	// structure a row is made of.
 	"Team": false,
 
 	// Cwd is the agent's, and it is the sharpest case in this table: an agent
@@ -249,6 +253,7 @@ func TestNoFieldCanForgeALineOnAnySurface(t *testing.T) {
 				// test is about.
 				Effort: core.EffortMax,
 				Team:   "backend",
+				Color:  "blue",
 			}
 			if field.Name == "State" {
 				// A state carrying anything is a state nothing has ruled on,

@@ -70,4 +70,18 @@ type Fleet interface {
 	// authority on it: only the daemon sees the whole fleet, so only it can
 	// refuse a collision or an invalid word. The tool never validates a name.
 	Spawn(ctx context.Context, dir, name string) (string, error)
+
+	// SetTeam groups one agent under a team tag, addressed by id. The tag is
+	// the operator's own grouping - and the manager's now too (owner's
+	// 2026-09-21 override): a manager that coordinates the fleet groups it. It
+	// travels as Frame.Text, so the daemon's own rpc.NormalizeTeam is the one
+	// authority on the shape and its reserved-word refusal the one authority on
+	// the value; "none" or "" clears. The tool never validates the tag.
+	SetTeam(ctx context.Context, id, team string) error
+
+	// SetColor sets one agent's identity hue, addressed by id. It travels as
+	// Frame.Text like the team above, so the daemon's rpc.NormalizeColor is the
+	// one authority on it - the value is refused unless it is one of
+	// rpc.ColorNames, and "none" or "" clears. The tool never validates the hue.
+	SetColor(ctx context.Context, id, color string) error
 }

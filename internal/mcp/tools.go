@@ -65,23 +65,25 @@ func agentIDSchema() map[string]any {
 //
 // # What is on this surface, and what is deliberately not
 //
-// Five tools: three that read and two that act. The two that act are the two
-// verbs an operator can undo by looking at the room - a message the agent
-// answers in front of everybody, and a stopped turn the agent carries on
-// from - and every other verb this daemon serves is refused. `cmd/wake`'s
-// managerVerbs holds that decision per frame kind with the argument for each,
-// derived from the daemon's own dispatch so a new verb has to be ruled on
-// rather than inherited.
+// Three tools that read (list_agents, agent_status, roll_up) and the rest that
+// act. What every acting tool here has in common is that an operator can undo it
+// by looking: a message the agent answers in front of everybody, a stopped turn
+// the agent carries on from, a spawned agent that is a row in the roster, and a
+// team or colour that is a roster section and a name-tag hue (grouping.go, the
+// owner's 2026-09-21 override). Every other verb this daemon serves is refused.
+// `cmd/wake`'s managerVerbs holds that decision per frame kind with the argument
+// for each, derived from the daemon's own dispatch so a new verb has to be ruled
+// on rather than inherited.
 //
-// The short version, because the reason is the same shape three times: nothing
-// here ends a session, parks one, wakes one or starts one. `wake stop` is
-// irreversible and park is recoverable only through a *human's* `/resume`; a
-// wake puts a second process on an id whose first one may not be gone, which
-// branches a transcript silently; and a fork or a spawn is a name, a process
-// and somebody's money. A model calling tools in a loop with nobody watching is
-// the reader this list is drawn for.
+// The short version of what is not here, because the reason is the same shape
+// several times: nothing here ends a session, parks one, wakes one, imports one,
+// or renames one. `wake stop` is irreversible and park is recoverable only
+// through a *human's* `/resume`; a wake puts a second process on an id whose
+// first one may not be gone, which branches a transcript silently; and a rename
+// moves where the operator's own @name routing lands. A model calling tools in a
+// loop with nobody watching is the reader this list is drawn for.
 func Tools() []Tool {
-	return []Tool{listAgents(), agentStatus(), rollUp(), sendToAgent(), sendToTeam(), interruptAgent(), spawnAgent()}
+	return []Tool{listAgents(), agentStatus(), rollUp(), sendToAgent(), sendToTeam(), interruptAgent(), spawnAgent(), setTeam(), setColor()}
 }
 
 // toolDescriptors is tools/list's payload: what a model chooses from.
@@ -287,6 +289,13 @@ func statusReport(s rpc.SessionStatus) string {
 		// (agentAuthored false), so it is a fact a reader can act on, not agent text.
 		lines = append(lines, "team: "+s.Team)
 	}
+	if s.Color != "" {
+		// The identity hue, reported since the 2026-09-21 override gave the manager
+		// set_color: a manager that may change a colour is one that should see the
+		// current one first, so it does not overwrite a grouping already in place.
+		// One of rpc.ColorNames (agentAuthored false), so a reader can act on it.
+		lines = append(lines, "colour: "+s.Color)
+	}
 	if s.Tool != "" {
 		lines = append(lines, "currently: "+activity(s))
 	}
@@ -321,16 +330,17 @@ func framed(lines []string) string {
 
 // statusReportMax is what one agent's report can cost a manager's context.
 //
-// Derived rather than picked: statusReport's own longest shape is the eight
-// lines above, each bounded by agentLineMax and each followed by a newline. It
-// is asserted over a fixture built by reflection from rpc.SessionStatus, so a
-// field added to the report has to fit here or move the number deliberately.
+// Derived rather than picked: statusReport's own longest shape is
+// statusReportLines lines, each bounded by agentLineMax and each followed by a
+// newline. It is asserted over a fixture built by reflection from
+// rpc.SessionStatus, so a field added to the report has to fit here or move the
+// number deliberately.
 const statusReportMax = statusReportLines * (agentLineMax + 1)
 
 // statusReportLines is that shape's line count: the framing note, the five
-// unconditional lines and the conditional ones (thinking-at, team, current tool,
-// blocked, ended).
-const statusReportLines = 11
+// unconditional lines and the conditional ones (thinking-at, team, colour,
+// current tool, blocked, ended).
+const statusReportLines = 12
 
 // rollUp is the fleet as one digest, on demand.
 //
