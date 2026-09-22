@@ -87,6 +87,17 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if detachArmed || quitArmed {
 		a = a.disarmed()
 	}
+	// The resume picker is a modal search box, so it is routed above the card and
+	// the other pickers: while it is up it owns every key. That is what keeps a
+	// search character that happens to be a card's `a`/`d` from arming the
+	// permission behind it - cardKey would otherwise claim those before the picker
+	// and ↵ would settle the card instead of resuming. ⌃C is the one key it hands
+	// back visibly (its own case in resumePickerKey: close the picker and park), so
+	// its first press stays visible for killswitch.go's invariant. See
+	// resumepicker.go.
+	if next, cmd, handled := a.resumePickerKey(m); handled {
+		return next, cmd, true
+	}
 	// Not while the board was up when the key arrived: the card was on no
 	// screen then, and a rune answering it would arm a settle on an ask nobody
 	// saw - cardFullyDrawn cannot see this, because the board is already
@@ -107,11 +118,6 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	// pickerKey's own placement and reason: a rewind picker claims ↑↓ and ↵
 	// while it is up, which mean something else once it closes. See rewind.go.
 	if next, cmd, handled := a.rewindKey(m); handled {
-		return next, cmd, true
-	}
-	// pickerKey's own placement and reason: the resume picker claims ↑↓, ↵, esc
-	// and ␣ (room only) while it is up. See resumepicker.go.
-	if next, cmd, handled := a.resumePickerKey(m); handled {
 		return next, cmd, true
 	}
 	// Read before the disarm below takes it, because the disarm is what makes
