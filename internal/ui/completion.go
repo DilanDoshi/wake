@@ -69,6 +69,12 @@ const (
 	// they were a literal space and a set of three, which agreed only because
 	// nothing either of them offers has a tab in it.
 	wordBreak = " \t\n"
+
+	// teamMenuSuffix marks a team offer in the `@` menu, so `@backend (team)`
+	// reads as a group rather than as an agent nobody can find in the roster. It
+	// is display only: the offer itself is the bare `@backend` the router fans
+	// out, so an accept inserts the routable mention and not the tag.
+	teamMenuSuffix = " (team)"
 )
 
 // completionRows is the most offers drawn at once: the floor above, or the
@@ -124,6 +130,12 @@ type completion struct {
 	// names is the half this goroutine can answer: the session's advertised
 	// commands and skills, Wake's own commands, and the fleet's live names.
 	names []string
+
+	// teams is which of names are teams rather than agents, keyed by the offer
+	// value, so View can tag them without changing what an accept inserts. Nil
+	// for a command menu and for a fleet with no teams, which is the flat menu
+	// this build has always drawn.
+	teams map[string]bool
 
 	// paths is the `@` half, which is a directory read and so is not this
 	// goroutine's. See completionpath.go.
@@ -211,30 +223,45 @@ func mentionStem(draft string) (head, rest string, ok bool) {
 func (a App) mentionMenu(draft, head, typed string) completion {
 	c := completion{pane: a.focus, draft: draft, head: head, paths: a.pathMenuFor(typed)}
 	if a.focus == "" {
-		c.names = a.addressees(typed)
+		c.names, c.teams = a.addressees(typed)
 	}
 	return c
 }
 
 // addressees is every name a mention could resolve to, in the roster's own
-// order, with the one that is not an agent last.
+// order: the live agents, then the teams, then the broadcast last. The `teams`
+// set names which offers are teams, keyed by the offer value, so View tags them
+// without changing what an accept inserts - a team offer is the bare `@backend`
+// the router fans out (core.Resolve's team step), never the display tag.
 //
 // The roster rather than the addressable set: these are the names on screen,
 // which are the names somebody types. A parked one is included for that reason
 // and refuses with a sentence naming `/resume`, which is more use than a name
-// that is drawn and cannot be completed.
-func (a App) addressees(typed string) []string {
+// that is drawn and cannot be completed. Teams sit between the agents and the
+// broadcast - narrowest to broadest - and are the daemon's own order (teamOrder,
+// off the report), the roster sections' order one surface over.
+func (a App) addressees(typed string) (names []string, teams map[string]bool) {
 	lower := strings.ToLower(typed)
-	out := make([]string, 0, completionRows)
+	names = make([]string, 0, completionRows)
 	for _, agent := range a.fleet.OnRoster() {
 		if agent.Name != "" && strings.HasPrefix(strings.ToLower(agent.Name), lower) {
-			out = append(out, agentPrefix+agent.Name)
+			names = append(names, agentPrefix+agent.Name)
+		}
+	}
+	for _, team := range a.fleet.teamOrder {
+		if strings.HasPrefix(team, lower) {
+			offer := agentPrefix + team
+			names = append(names, offer)
+			if teams == nil {
+				teams = make(map[string]bool)
+			}
+			teams[offer] = true
 		}
 	}
 	if strings.HasPrefix(core.BroadcastName, lower) {
-		out = append(out, agentPrefix+core.BroadcastName)
+		names = append(names, agentPrefix+core.BroadcastName)
 	}
-	return out
+	return names, teams
 }
 
 // commandMenu is the session's advertised commands and skills, and then Wake's
@@ -439,11 +466,21 @@ func (a App) completionView(width int, id string) string {
 	return a.completion.View(width)
 }
 
+// label is what an offer is drawn as: a team gets the `(team)` tag, everything
+// else is drawn as it is inserted. Display only - acceptCompletion writes the
+// offer itself, so the tag never reaches the draft or the router.
+func (c completion) label(offer string) string {
+	if c.teams[offer] {
+		return offer + teamMenuSuffix
+	}
+	return offer
+}
+
 // View draws it, through the same rows a card and the picker draw.
 func (c completion) View(width int) string {
 	rows := make([]string, 0, len(c.offers)+1)
 	for i, offer := range c.offers {
-		rows = append(rows, optionRow(offer, width, i == c.cursor, false, CompletionStyle))
+		rows = append(rows, optionRow(c.label(offer), width, i == c.cursor, false, CompletionStyle))
 	}
 	return strings.Join(append(rows, detailRow(c.keyLine(), width)), "\n")
 }
