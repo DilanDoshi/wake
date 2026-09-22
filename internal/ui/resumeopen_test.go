@@ -103,22 +103,25 @@ func TestResumeArgumentDoesNotOpenPicker(t *testing.T) {
 	}
 }
 
-// A key the picker declines dismisses it (the pickers' shared rule) and reaches
-// the composer - so a stray ↵ afterwards sends the draft rather than resuming a
-// cursor row nobody chose. Regression for the missing .closeResume() in the
-// App.update dismissal chain.
-func TestTypingDismissesTheResumePicker(t *testing.T) {
+// Typing filters the picker rather than dismissing it - it is a search box now.
+// The character builds the query and does not reach the composer, and the picker
+// stays open. ⎋ is the one way out (TestResumePickerTypingBuildsTheQuery covers
+// the query mechanics; this pins the App-level routing that typing is captured).
+func TestTypingSearchesTheResumePicker(t *testing.T) {
 	a := parkedFleetApp(t, DiskSession{ID: "abcd1234-5678-4abc-8def-000000000000", Dir: "/s", Modified: time.Now()})
 	got := openedResumePicker(t, a)
 	if !got.resumePicker.Open() {
 		t.Fatal("the picker did not open")
 	}
 	next, _ := pressKey(got, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
-	if next.resumePicker.Open() {
-		t.Error("a typed key did not dismiss the picker; a later ↵ would resume a cursor row instead of sending")
+	if !next.resumePicker.Open() {
+		t.Error("a typed key dismissed the picker; typing should filter it")
 	}
-	if !strings.Contains(next.composer().Value(), "x") {
-		t.Errorf("the typed character did not reach the composer: %q", next.composer().Value())
+	if next.resumePicker.Query != "x" {
+		t.Errorf("the typed character did not build the query: %q", next.resumePicker.Query)
+	}
+	if strings.Contains(next.composer().Value(), "x") {
+		t.Errorf("the typed character leaked to the composer past the search box: %q", next.composer().Value())
 	}
 }
 

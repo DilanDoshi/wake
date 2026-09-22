@@ -44,6 +44,7 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -69,6 +70,18 @@ const previewBytes = 72
 // three keys this file wants are all short and all top-level, and a line too
 // long to scan is one this file has nothing to learn from.
 const transcriptScanBytes = 1 << 20
+
+// discoverWorkers bounds the concurrent transcript reads.
+//
+// Discovery reads every file on the machine to open the /resume picker, and a
+// session's directory proof needs a **full** scan of its transcript - a
+// slug-matching cwd can sit megabytes in - so the read cannot be shortened
+// without losing sessions (measured: 18 of a 358-file corpus have their proving
+// cwd 260KB-9MB deep). Read one after another that is a multi-second hang (3.5s
+// measured); read in parallel it is sub-second. A bound rather than one
+// goroutine per file: hundreds of open files at once buys nothing past
+// saturating the disk and the cores, and costs a file descriptor each.
+const discoverWorkers = 16
 
 // FoundSession is one transcript on disk, and what can and cannot be proven
 // about it.
@@ -182,6 +195,16 @@ func Discoverable() ([]FoundSession, error) {
 // A directory that cannot be read is skipped rather than fatal, for the same
 // reason one bad park book entry does not lose the other nineteen: one
 // unreadable project must not cost the operator the other eighty-two.
+//
+// # Why the transcript reads are parallel
+//
+// The directory listing is cheap, but every transcript is read whole to prove
+// its directory (readTranscript's own comment), and read one after another that
+// is the multi-second hang the /resume picker used to open with. So the listing
+// is gathered first - no content, one ReadDir per project - and the reads are
+// fanned across discoverWorkers. Each worker writes its own slot, so there is no
+// shared state to guard beyond the WaitGroup; logf goes through the standard
+// logger, which is safe under concurrency.
 func discover(projects string) ([]FoundSession, error) {
 	if projects == "" {
 		return nil, errors.New("no projects directory to look in: claude persists transcripts under ~/.claude/projects and this process cannot tell where home is")
@@ -193,12 +216,41 @@ func discover(projects string) ([]FoundSession, error) {
 	if err != nil {
 		return nil, err
 	}
-	var out []FoundSession
-	for _, e := range entries {
-		if !e.IsDir() {
-			continue
+
+	jobs := transcriptFiles(projects, entries)
+	found := make([]FoundSession, len(jobs))
+	ok := make([]bool, len(jobs))
+	sem := make(chan struct{}, discoverWorkers)
+	var wg sync.WaitGroup
+	for i, j := range jobs {
+		wg.Add(1)
+		sem <- struct{}{}
+		go func(i int, j transcriptFile) {
+			defer wg.Done()
+			defer func() { <-sem }()
+			info, isReg := regularTranscript(j.path)
+			if !isReg {
+				return
+			}
+			cwds, preview := readTranscript(j.path)
+			found[i] = FoundSession{
+				ID:       j.id,
+				Dir:      verifiedDir(j.slug, cwds),
+				Slug:     j.slug,
+				Path:     j.path,
+				Modified: info.ModTime(),
+				Preview:  preview,
+			}
+			ok[i] = true
+		}(i, j)
+	}
+	wg.Wait()
+
+	out := make([]FoundSession, 0, len(jobs))
+	for i := range found {
+		if ok[i] {
+			out = append(out, found[i])
 		}
-		out = append(out, sessionsUnder(projects, e.Name())...)
 	}
 	// Newest first, and by id where two share a timestamp so the order is
 	// stable rather than whatever the filesystem said.
@@ -211,37 +263,33 @@ func discover(projects string) ([]FoundSession, error) {
 	return out, nil
 }
 
-// sessionsUnder reads one project directory.
-func sessionsUnder(projects, slug string) []FoundSession {
-	dir := filepath.Join(projects, slug)
-	entries, err := os.ReadDir(dir)
-	if err != nil {
-		logf("wake: session %s could not be read while looking for importable sessions: %v", dir, err)
-		return nil
-	}
-	var out []FoundSession
+// transcriptFile is one candidate the parallel reads will open: found by a
+// directory listing alone, so gathering the whole set costs no content read.
+type transcriptFile struct{ slug, path, id string }
+
+// transcriptFiles is every transcript under the projects tree, by filename.
+// A directory that cannot be read is skipped with a log, not fatal.
+func transcriptFiles(projects string, entries []os.DirEntry) []transcriptFile {
+	var out []transcriptFile
 	for _, e := range entries {
-		if e.IsDir() {
+		if !e.IsDir() {
 			continue
 		}
-		id, ok := sessionIDOf(e.Name())
-		if !ok {
+		slug := e.Name()
+		dir := filepath.Join(projects, slug)
+		files, err := os.ReadDir(dir)
+		if err != nil {
+			logf("wake: session %s could not be read while looking for importable sessions: %v", dir, err)
 			continue
 		}
-		path := filepath.Join(dir, e.Name())
-		info, ok := regularTranscript(path)
-		if !ok {
-			continue
+		for _, f := range files {
+			if f.IsDir() {
+				continue
+			}
+			if id, ok := sessionIDOf(f.Name()); ok {
+				out = append(out, transcriptFile{slug: slug, path: filepath.Join(dir, f.Name()), id: id})
+			}
 		}
-		cwds, preview := readTranscript(path)
-		out = append(out, FoundSession{
-			ID:       id,
-			Dir:      verifiedDir(slug, cwds),
-			Slug:     slug,
-			Path:     path,
-			Modified: info.ModTime(),
-			Preview:  preview,
-		})
 	}
 	return out
 }
@@ -329,6 +377,11 @@ func readTranscript(path string) (cwds []string, preview string) {
 
 	seen := map[string]bool{}
 	var title string
+	// The whole file, on purpose: verifiedDir needs every top-level cwd to prove
+	// a directory - a slug-matching cwd can appear deep in a transcript (measured
+	// 260KB-9MB into 18 of a 358-file corpus), so a head-only read loses those
+	// sessions. The cost of reading every file is paid off the draw goroutine and
+	// in parallel - see discover, which fans these reads across discoverWorkers.
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 0, 64*1024), transcriptScanBytes)
 	for sc.Scan() {

@@ -4,6 +4,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // openedResumePicker runs a bare /resume the way Bubble Tea does - the router
@@ -19,15 +21,39 @@ func openedResumePicker(t *testing.T, a App) App {
 	return m.(App).withSize(200, 40).applyGeometry()
 }
 
-// The room draws the multi-select picker over its own composer: a parked session
-// by @name, an on-disk stranger by short id, and the ␣-select key line.
+// The room draws the multi-select picker over its own composer: the count
+// header, the search line, a parked session by @name, an on-disk stranger by
+// short id, and the ⇥-select key line.
 func TestTheResumePickerDrawsOverTheRoomComposer(t *testing.T) {
 	a := parkedFleetApp(t, DiskSession{ID: "abcd1234-5678-4abc-8def-000000000000", Dir: "/dev/x", Modified: time.Now()})
 	frame := stripANSI(openedResumePicker(t, a).View())
-	for _, want := range []string{"resume ·", "@iris", "abcd1234", "␣ select"} {
+	for _, want := range []string{"resume session ·", "› search…", "@iris", "abcd1234", "⇥ select"} {
 		if !strings.Contains(frame, want) {
 			t.Errorf("the room frame does not draw %q:\n%s", want, frame)
 		}
+	}
+}
+
+// Typing into an open picker filters the drawn frame to the matches and updates
+// the count - the search box end to end, through the App key path.
+func TestTheResumePickerFiltersAsYouType(t *testing.T) {
+	a := parkedFleetApp(t,
+		DiskSession{ID: "abcd1234-5678-4abc-8def-000000000000", Dir: "/dev/alpha", Modified: time.Now()},
+		DiskSession{ID: "ffffffff-5678-4abc-8def-000000000000", Dir: "/dev/beta", Modified: time.Now().Add(-time.Hour)},
+	)
+	got := openedResumePicker(t, a)
+	for _, r := range "alpha" {
+		got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	frame := stripANSI(got.withSize(200, 40).applyGeometry().View())
+	if !strings.Contains(frame, "/dev/alpha") {
+		t.Errorf("the filtered frame dropped the matching row:\n%s", frame)
+	}
+	if strings.Contains(frame, "/dev/beta") {
+		t.Errorf("the filtered frame still shows a non-matching row:\n%s", frame)
+	}
+	if !strings.Contains(frame, "1 of 1") {
+		t.Errorf("the count header does not reflect the filter:\n%s", frame)
 	}
 }
 
@@ -43,7 +69,7 @@ func TestTheResumePickerDrawsSingleSelectInADM(t *testing.T) {
 	if !strings.Contains(frame, "↑↓ move") {
 		t.Errorf("the DM frame is missing the single-select key line:\n%s", frame)
 	}
-	if strings.Contains(frame, "␣ select") {
+	if strings.Contains(frame, "⇥ select") {
 		t.Errorf("the DM frame drew the multi-select key line:\n%s", frame)
 	}
 }

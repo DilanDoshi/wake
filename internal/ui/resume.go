@@ -348,9 +348,9 @@ func (a App) resumeRowsFrom(disk []DiskSession) (rows []resumeRow, more int) {
 		all = append(all, parkedRow(ag, ""))
 	}
 
-	if len(all) > resumePickerCap {
-		more = len(all) - resumePickerCap
-		all = all[:resumePickerCap]
+	if len(all) > resumePickerMax {
+		more = len(all) - resumePickerMax
+		all = all[:resumePickerMax]
 	}
 	return all, more
 }
