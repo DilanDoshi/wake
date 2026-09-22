@@ -330,10 +330,11 @@ func framed(lines []string) string {
 
 // statusReportMax is what one agent's report can cost a manager's context.
 //
-// Derived rather than picked: statusReport's own longest shape is the eight
-// lines above, each bounded by agentLineMax and each followed by a newline. It
-// is asserted over a fixture built by reflection from rpc.SessionStatus, so a
-// field added to the report has to fit here or move the number deliberately.
+// Derived rather than picked: statusReport's own longest shape is
+// statusReportLines lines, each bounded by agentLineMax and each followed by a
+// newline. It is asserted over a fixture built by reflection from
+// rpc.SessionStatus, so a field added to the report has to fit here or move the
+// number deliberately.
 const statusReportMax = statusReportLines * (agentLineMax + 1)
 
 // statusReportLines is that shape's line count: the framing note, the five
