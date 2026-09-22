@@ -534,8 +534,9 @@ func teamArgStem(draft string) (head, partial, who string, bridge, ok bool) {
 	cmd := SlashPrefix + teamCommand
 	fields := strings.Fields(head)
 	switch len(fields) {
-	case 1: // /team <partial>
-		ok = strings.EqualFold(fields[0], cmd)
+	case 1: // /team <partial>; a partial starting with @ is the inline target
+		// being typed (`/team @al`), left to mentionStem's agent completion.
+		ok = strings.EqualFold(fields[0], cmd) && !strings.HasPrefix(partial, agentPrefix)
 	case 2:
 		switch {
 		case strings.EqualFold(fields[0], cmd) && strings.HasPrefix(fields[1], agentPrefix): // /team @who <partial>

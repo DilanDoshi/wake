@@ -239,6 +239,18 @@ func TestTheTeamBridgeRequiresOneLiveAgent(t *testing.T) {
 	}
 }
 
+// Typing the inline target (`/team @al`) offers agents, not teams: the @who is
+// still being typed, so mentionStem's agent completion should reach it rather
+// than teamArgStem claiming it as a bare team argument.
+func TestTypingTheInlineTeamTargetOffersAgents(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
+	a = a.withDraft("/team @al")
+
+	if !slices.Contains(a.completion.offers, agentPrefix+"alex") {
+		t.Errorf("`/team @al` does not offer @alex as the inline target: %v", a.completion.offers)
+	}
+}
+
 // `/team @who <partial>` is the documented inline-target form (teamUsage): it
 // completes for a live agent, in the room or a DM.
 func TestTheInlineTeamTargetCompletes(t *testing.T) {
