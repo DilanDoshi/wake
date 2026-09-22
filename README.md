@@ -80,11 +80,13 @@ Flags on the verbs that start a session (`new`, `manager`):
 ```
 
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
-slash commands are `/resume`, `/name`, `/task`, `/color`, `/quit`, `/adopt`, `/mcp`, `/login`,
+slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
 `/reauth`, `/manager`, `/manager-stop`, `/board` and `/groupchat-filter`; `/effort` and `/model`
 configure the session they are addressed to. Everything else you type is passed to the agent byte for
 byte. A lone `@name` narrows the room to that agent's thread; `⌃A` widens it back to everyone while
-still addressing them, and `/groupchat-filter off` flips that default.
+still addressing them, and `/groupchat-filter off` flips that default. `/team <name>` groups an agent
+under an operator-named team — heading a roster/board section, addressed as `@team` — and the manager
+can fan a message out to one with its own tool.
 
 ## Development
 

@@ -118,6 +118,7 @@ Wake owns a short, closed list of slash commands:
 /name [@who] <new-name>        rename a session
 /task [@who] <what it is on>   set the label beside its name
 /color [@who] <colour>|none    an identity hue — seven named colours, or none to clear
+/team [@who] <name>|none       group a session under a named team, or none to clear
 /quit [@who]                   end one session for good and drop its row (irreversible)
 /adopt                         adopt a claude session this machine already has, from the room
 /manager                       the switch: start one, wake a parked one, or park a running one
@@ -217,3 +218,6 @@ something you can mean.
 `@` is overloaded exactly as in Claude Code: a live session name wins, and anything else — like
 `@src/main.go` — is a file path and passes through to the agent, which resolves it the way you are
 used to. Wake completes both as you type them (above) and shows you what it resolved to.
+
+`@team` addresses everyone `/team <name>` has grouped under that name — a section heading in the
+roster and the board, not a routing word you have to spell out per agent.
