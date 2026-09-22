@@ -101,6 +101,47 @@ func TestALiveAgentWinsANameSharedWithATeam(t *testing.T) {
 	}
 }
 
+// A parked agent must not hide a team fan-out: it shares the name but does not
+// win the route (App.live excludes StateParked), so `@backend` fans out to the
+// team - the menu must show the one tagged team row, not a plain parked row.
+func TestAParkedAgentDoesNotHideATeamFanOut(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{
+		Running: true,
+		Teams:   []string{"backend"},
+		Sessions: []rpc.SessionStatus{
+			{ID: "s1", Name: "backend", State: rpc.StateParked},
+			{ID: "s2", Name: "bob", Team: "backend", State: rpc.StateIdle},
+		},
+	}})
+	a = a.withDraft("@back")
+
+	count := 0
+	for _, o := range a.completion.offers {
+		if o == agentPrefix+"backend" {
+			count++
+		}
+	}
+	if count != 1 {
+		t.Fatalf("want one @backend row, got %d: %v", count, a.completion.offers)
+	}
+	if got := a.completion.rowLabel(agentPrefix+"backend", 200); got != agentPrefix+"backend"+teamMenuSuffix {
+		t.Errorf("the row is %q, want it tagged as a team - @backend fans out, it does not reach the parked session", got)
+	}
+}
+
+// A newline or tab between /team and its argument is a form the slash router
+// will not run (it splits on space), so the menu must not offer a completion
+// there - it would insert a `/team` that is sent as prose.
+func TestTheTeamArgumentIgnoresANewlineSeparator(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
+	a = a.withDraft("/team\nback")
+
+	if slices.Contains(a.completion.offers, "backend") {
+		t.Errorf("`/team\\nback` offered a team, but a newline draft does not run /team: %v", a.completion.offers)
+	}
+}
+
 // The team-name argument of /team completes against the existing teams, the way
 // skills and @names do - the whole of the second half of the request.
 func TestTheTeamArgumentCompletesExistingTeams(t *testing.T) {

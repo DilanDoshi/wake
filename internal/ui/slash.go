@@ -525,6 +525,14 @@ func teamArgStem(draft string) (head, partial string, ok bool) {
 		return "", "", false // the cursor word is the first token: no command before it
 	}
 	head, partial = draft[:at], draft[at:]
+	// The command line must be space-separated, the one separator the slash
+	// router splits on: `/team\nback` would offer a completion that is sent as
+	// prose rather than run (the adversarial finding), so a tab or newline in the
+	// head is not a `/team` the menu may complete. partial is one token already
+	// (after the last word break).
+	if strings.ContainsAny(head, "\t\n") {
+		return "", "", false
+	}
 	cmd := SlashPrefix + teamCommand
 	switch fields := strings.Fields(head); len(fields) {
 	case 1:

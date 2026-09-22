@@ -48,6 +48,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 const (
@@ -247,22 +248,39 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 // off the report), the roster sections' order one surface over.
 func (a App) addressees(typed string) (names []string, teams map[string]bool) {
 	lower := strings.ToLower(typed)
+	// A name collision (the daemon does not yet refuse one, see deferred.md) is
+	// resolved the way core.Resolve routes it - live agent, then team, then a
+	// parked/passthrough name - so the tag always matches where `@name` goes:
+	//   - a *live* agent wins the name, offered untagged, the team dropped;
+	//   - else a team wins, offered `(team)`, and a *parked* agent of that name is
+	//     dropped rather than drawn untagged - `@name` fans out, not to the parked
+	//     session (App.live excludes StateParked), so a plain row would lie.
+	// teamOrder is lower-case (NormalizeTeam), so no fold on the team side.
+	teamMatch := make(map[string]bool)
+	for _, team := range a.fleet.teamOrder {
+		if strings.HasPrefix(team, lower) {
+			teamMatch[agentPrefix+team] = true
+		}
+	}
 	names = make([]string, 0, completionRows)
-	agents := make(map[string]bool)
+	live := make(map[string]bool)
 	for _, agent := range a.fleet.OnRoster() {
-		if agent.Name != "" && strings.HasPrefix(strings.ToLower(agent.Name), lower) {
-			offer := agentPrefix + agent.Name
-			names = append(names, offer)
-			agents[offer] = true
+		if agent.Name == "" || !strings.HasPrefix(strings.ToLower(agent.Name), lower) {
+			continue
+		}
+		offer := agentPrefix + agent.Name
+		routable := agent.State != rpc.StateParked
+		if !routable && teamMatch[offer] {
+			continue // the team below claims `@name`'s route
+		}
+		names = append(names, offer)
+		if routable {
+			live[offer] = true
 		}
 	}
 	for _, team := range a.fleet.teamOrder {
 		offer := agentPrefix + team
-		// A live agent of the same name wins the row: it is offered untagged and
-		// the team is dropped, so a name collision (the daemon does not yet refuse
-		// one, see deferred.md) cannot draw a duplicate row or tag the agent's own
-		// as a team. teamOrder is lower-case (NormalizeTeam), so no fold here.
-		if !strings.HasPrefix(team, lower) || agents[offer] {
+		if !strings.HasPrefix(team, lower) || live[offer] {
 			continue
 		}
 		names = append(names, offer)
