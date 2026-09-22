@@ -108,6 +108,7 @@ package ui
 import (
 	"slices"
 	"strings"
+	"unicode"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -522,10 +523,12 @@ func teamArgStem(draft string) (head, partial, who string, bridge, ok bool) {
 		return // the cursor word is the first token: no command before it
 	}
 	head, partial = draft[:at], draft[at:]
-	// Space-separated only: the slash router splits on space, so a tab or newline
-	// in the head is a `/team` it will not run (the adversarial finding). The
-	// command word is matched case-insensitively, as the router looks it up.
-	if strings.ContainsAny(head, "\t\n") {
+	// ASCII space is the only separator the slash router splits on, so any other
+	// whitespace in the head (tab, newline, NBSP, CR, VT, FF) is a `/team` it will
+	// not run - it would be sent as prose (the adversarial finding). Reject it, and
+	// strings.Fields below then splits exactly as the router does. The command word
+	// is matched case-insensitively, as the router looks it up.
+	if strings.IndexFunc(head, func(r rune) bool { return r != ' ' && unicode.IsSpace(r) }) >= 0 {
 		return "", "", "", false, false
 	}
 	cmd := SlashPrefix + teamCommand

@@ -150,15 +150,26 @@ func TestAParkedOnlyTeamIsNotOfferedAsAFanOut(t *testing.T) {
 	}
 }
 
-// A newline or tab between /team and its argument is a form the slash router
-// will not run (it splits on space), so the menu must not offer a completion
-// there - it would insert a `/team` that is sent as prose.
-func TestTheTeamArgumentIgnoresANewlineSeparator(t *testing.T) {
-	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
-	a = a.withDraft("/team\nback")
-
-	if slices.Contains(a.completion.offers, "backend") {
-		t.Errorf("`/team\\nback` offered a team, but a newline draft does not run /team: %v", a.completion.offers)
+// Only ASCII space separates /team from its argument, because that is the one
+// separator the slash router splits on. Any other whitespace - tab, newline,
+// NBSP, CR, VT, FF, reachable through a paste - makes a form sent as prose rather
+// than run, so teamArgStem must reject it (strings.Fields would otherwise split
+// them). Tested on the pure stem with exact bytes, since the text area normalises
+// some whitespace on the way in and would mask the tokenizer under test.
+func TestTeamArgStemRequiresAsciiSpaceSeparators(t *testing.T) {
+	for name, sep := range map[string]string{
+		"tab": "\t", "newline": "\n", "nbsp": " ",
+		"carriage-return": "\r", "vertical-tab": "\v", "form-feed": "\f",
+	} {
+		if _, _, _, _, ok := teamArgStem("/team" + sep + "@alex back"); ok {
+			t.Errorf("teamArgStem accepted a %s separator, but the slash router splits only on ASCII space", name)
+		}
+	}
+	// The ASCII-space forms still parse - the three /team runs in.
+	for _, draft := range []string{"/team back", "/team @alex back", "@alex /team back"} {
+		if _, _, _, _, ok := teamArgStem(draft); !ok {
+			t.Errorf("teamArgStem rejected the valid form %q", draft)
+		}
 	}
 }
 
