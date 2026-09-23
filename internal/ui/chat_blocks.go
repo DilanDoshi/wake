@@ -192,7 +192,7 @@ func agentSaid(text string, count int, a Agent, width int, expanded bool) string
 // crossSaid draws a peer's cross-session message: the sender's name-tag with a
 // lead marking it as a message from another session - so it is not mistaken for
 // the sender's own turn in the room - the receiving session after an arrow when
-// it is known (toName), then the body in Subtle, folded past roomInlineRows the
+// it is known (toName), then the body in Muted, folded past roomInlineRows the
 // way a reply is. Dimmer than a reply so an incoming message reads apart from
 // the agent's own words (crossSessionBody); no token count, since a peer message
 // is not this fleet's spend.
@@ -208,7 +208,7 @@ func crossSaid(text, toName string, a Agent, width int, expanded bool) string {
 // saidBlock is the shared body of agentSaid and crossSaid: a head, then a
 // pre-rendered body whole if it is short or a pointer if it is taller than the
 // room shows inline. The body is rendered by the caller - markdown for a reply,
-// Subtle plain text for a peer message - and passed in once, so a long message
+// Muted plain text for a peer message - and passed in once, so a long message
 // never goes through glamour's process-global mutex twice: the height decision
 // and the collapsed preview share the one render.
 func saidBlock(head, body, label string, width int, expanded bool) string {
@@ -230,7 +230,7 @@ func roomCollapsible(ev core.Event, width int) bool {
 	case core.KindAssistantText:
 		return renderedRows(render.Markdown(strings.TrimSpace(ev.Text), w)) > roomInlineRows
 	case core.KindCrossSession:
-		// The same Subtle body crossSaid draws, so the two agree on which
+		// The same Muted body crossSaid draws, so the two agree on which
 		// peer messages fold to a pointer.
 		return renderedRows(crossSessionBody(ev.Text, w)) > roomInlineRows
 	default:

@@ -164,35 +164,36 @@ func TestALongCrossSessionMessageCollapses(t *testing.T) {
 	}
 }
 
-// A received peer message reads in a dimmer grey (Subtle) than the agent's own
+// A received peer message reads in a dimmer grey (Muted) than the agent's own
 // white replies, so the operator can tell at a glance what was said *to* their
-// agent from what the agent said back. Owner's request, 2026-09-20: the
-// cross-session body is Subtle on both the DM and the room, and an assistant
+// agent from what the agent said back. Owner's request, 2026-09-20, lightened
+// from Subtle to Muted on 2026-09-23 because Subtle was too dark to read: the
+// cross-session body is Muted on both the DM and the room, and an assistant
 // reply keeps Text - so the distinction is more than the head.
 func TestACrossSessionMessageBodyIsDimmed(t *testing.T) {
 	prev := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(0) // termenv.TrueColor - the exact hues render, so Subtle != Text
+	lipgloss.SetColorProfile(0) // termenv.TrueColor - the exact hues render, so Muted != Text
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 
-	subtle := fgEscape(t, Subtle)
+	muted := fgEscape(t, Muted)
 
 	// The receiver's own 1:1 DM view.
 	dm := crossSessionBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}, 60)
-	if !strings.Contains(dm, subtle) {
-		t.Errorf("the DM cross-session body is not dimmed to Subtle:\n%q", dm)
+	if !strings.Contains(dm, muted) {
+		t.Errorf("the DM cross-session body is not dimmed to Muted:\n%q", dm)
 	}
 
 	// The group chat.
 	room := roomBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", ToName: "sydney", Text: "rerun the build"}, Agent{Name: "planner"}, 60, false).text
-	if !strings.Contains(room, subtle) {
-		t.Errorf("the room cross-session body is not dimmed to Subtle:\n%q", room)
+	if !strings.Contains(room, muted) {
+		t.Errorf("the room cross-session body is not dimmed to Muted:\n%q", room)
 	}
 
-	// The distinction is real: an agent's own reply is never dimmed to Subtle,
+	// The distinction is real: an agent's own reply is never dimmed to Muted,
 	// so it is told apart from an incoming peer message by more than the head.
 	reply := roomBlock(core.Event{Kind: core.KindAssistantText, Text: "rerun the build"}, Agent{Name: "planner"}, 60, false).text
-	if strings.Contains(reply, subtle) {
-		t.Errorf("an agent's own reply was dimmed to Subtle, erasing the distinction:\n%q", reply)
+	if strings.Contains(reply, muted) {
+		t.Errorf("an agent's own reply was dimmed to Muted, erasing the distinction:\n%q", reply)
 	}
 }
 
