@@ -1501,9 +1501,26 @@ about it. How, so nothing private reaches a public PR:
   a reused directory inherits the last take's orphans and the next `wake new` hangs or refuses).
 - **A neutral project path** (e.g. `/tmp/<name>`), because the banner and status bar draw the
   working directory — a path under the home directory puts the operator's name in the image.
-- **Host the images on an orphan branch, `pr-assets/<branch-name>`**, and link them by
-  `raw.githubusercontent.com` URL — never commit a PNG to the feature branch, or it lands in `main`.
-  Delete that branch after the merge.
+- **Host the images on an orphan branch, `pr-assets/<head-branch>`** — the PR's head branch name
+  verbatim (`pr-assets/fix/cross-session-text-lighter`), so the sweep below can find its PR — one
+  parentless commit holding only the images, and link them by `raw.githubusercontent.com` URL.
+  Never commit a PNG to the feature branch, or it lands in `main`.
+- **Sweep before pushing a new one, so the images never accumulate.** Every pushed image is in every
+  clone for as long as a branch points at it, so an assets branch lives only while its PR is open;
+  a merged or closed PR losing its screenshots is accepted (owner's ruling, 2026-09-23). Delete the
+  rest — a new clone stops downloading them at once, and GitHub reclaims the space on its own GC:
+
+  ```sh
+  git ls-remote --heads origin 'pr-assets/*' | sed 's#.*refs/heads/pr-assets/##' |
+  while read -r b; do
+    s=$(gh pr list --head "$b" --state all --json state --jq '.[0].state // "NONE"')
+    case "$s" in MERGED|CLOSED) git push -q origin --delete "pr-assets/$b" ;; esac
+  done
+  ```
+
+  A `NONE` (no PR for that head) is reported, not deleted — it may be one being opened right now.
+  Replacing an image means force-pushing a fresh parentless commit, never committing on top: a
+  deletion committed on top keeps the old PNG in history and every clone.
 - A change with nothing visible to show says so in the section, with the reason. Silence reads as
   skipped.
 
