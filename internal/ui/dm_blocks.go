@@ -387,21 +387,22 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 }
 
 // crossSessionBlock renders a peer's cross-session message in a DM: the sender's
-// from-name with the room's ↪ lead, then the body in Subtle. Not shadedOwn -
+// from-name with the room's ↪ lead, then the body in Muted. Not shadedOwn -
 // these are not the operator's words - and the sender's identity colour is the
 // room's alone, since a DM has no fleet to resolve from-name into an agent.
 func crossSessionBlock(ev core.Event, width int) string {
 	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), crossSessionBody(ev.Text, width))
 }
 
-// crossSessionBody draws a received peer message's body in Subtle - Claude's
-// dimmest grey - so an incoming cross-session message reads apart from the
+// crossSessionBody draws a received peer message's body in Muted - Claude's
+// inactive grey - so an incoming cross-session message reads apart from the
 // agent's own white replies (owner's request, both this DM and the room's
-// crossSaid). Plain text, not markdown, for thinkingBlock's reason: a
-// foreground wrapped around glamour's output ends at glamour's first SGR reset,
-// so a dim body has to be plain to stay dim to the last line. Width wraps and
-// pads each line and PaddingLeft aligns it under the head, the way thinkingBlock
-// draws its own muted body one indent in.
+// crossSaid); Subtle was too dark to read (2026-09-23). Plain text, not
+// markdown, for thinkingBlock's reason: a foreground wrapped around glamour's
+// output ends at glamour's first SGR reset, so a dim body has to be plain to
+// stay dim to the last line. Width wraps and pads each line and PaddingLeft
+// aligns it under the head, the way thinkingBlock draws its own muted body one
+// indent in.
 func crossSessionBody(text string, width int) string {
 	body := strings.TrimSpace(text)
 	if body == "" {
@@ -414,9 +415,9 @@ func crossSessionBody(text string, width int) string {
 	// invariant). Unreachable while every caller floors at minBlockWidth, but
 	// the bound belongs on the function, not the callers that happen to floor.
 	if width < 1 {
-		return SubtleStyle.Render(body)
+		return HintStyle.Render(body)
 	}
-	style := SubtleStyle.Width(width)
+	style := HintStyle.Width(width)
 	if width > bodyIndent {
 		style = style.PaddingLeft(bodyIndent)
 	}
