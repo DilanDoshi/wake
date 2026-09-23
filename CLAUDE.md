@@ -1489,6 +1489,24 @@ bound, guards that passed while the keys they guarded did nothing on macOS.
 
 **Say which passes ran.** A PR that skipped one says so, in the body. Silence reads as done.
 
+**Every PR carries before/after screenshots of the real binary.** Owner's rule, 2026-09-23, after
+PR #115. A `## Screenshots` section with a **Before** and an **After** image, taken from the `main`
+build and the branch build doing the same thing, so the reviewer sees the change rather than reads
+about it. How, so nothing private reaches a public PR:
+
+- **Record with VHS against the real `wake`**, driven by a scripted fake `claude` on a shim `PATH`
+  (`demo/agent/claude` is the model; a scratch copy may add a step for a frame shape it lacks, copied
+  from `testdata/stream/`). Never a live LLM, and never the owner's fleet — a scratch `HOME` and a
+  scratch `WAKE_SOCKET`, **a fresh socket directory per take** (the roster lives beside the socket, so
+  a reused directory inherits the last take's orphans and the next `wake new` hangs or refuses).
+- **A neutral project path** (e.g. `/tmp/<name>`), because the banner and status bar draw the
+  working directory — a path under the home directory puts the operator's name in the image.
+- **Host the images on an orphan branch, `pr-assets/<branch-name>`**, and link them by
+  `raw.githubusercontent.com` URL — never commit a PNG to the feature branch, or it lands in `main`.
+  Delete that branch after the merge.
+- A change with nothing visible to show says so in the section, with the reason. Silence reads as
+  skipped.
+
 **GitHub Actions is out of funds, so `make ci` on this machine is the only gate there is.** Runs
 have failed on billing before starting a job since 2026-08-12. Nothing checks a PR after it is
 opened, and a red X nobody is watching for cannot appear — so a branch that was never gated locally
