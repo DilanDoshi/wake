@@ -24,6 +24,10 @@ func TestTeamCarriesTheTargetAndTheTag(t *testing.T) {
 		{name: "team another agent", draft: "/team @sydney frontend", session: "s2", text: "frontend"},
 		{name: "team from the room", draft: "/team @sydney infra", session: "s2", text: "infra", room: true},
 		{name: "clear a team", draft: "/team none", session: "s1", text: "none"},
+		// A spaced team name is hyphenated, the way /name folds one: `@front-end`.
+		{name: "multi-word team", draft: "/team front end", session: "s1", text: "front-end"},
+		{name: "multi-word team collapses a run", draft: "/team @sydney data   infra team", session: "s2", text: "data-infra-team"},
+		{name: "multi-word team from the room", draft: "@sydney /team front end", session: "s2", text: "front-end", room: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			fresh(t)

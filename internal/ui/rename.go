@@ -121,7 +121,8 @@ func (a App) renameAgent(arg string) (App, tea.Cmd) {
 // rule, this only spares the operator the one character it was certain to reject.
 // strings.Fields collapses any run of whitespace, so "foo   bar" is one hyphen
 // too, and a single word is returned unchanged. A label is prose and is never
-// hyphenated, which is the whole of why these are two verbs.
+// hyphenated, which is the whole of why these are two verbs. `/team` folds its
+// tag the same way, since a team is an `@`-token too.
 func hyphenateName(name string) string {
 	return strings.Join(strings.Fields(name), "-")
 }
