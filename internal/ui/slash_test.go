@@ -617,7 +617,7 @@ func TestABareResumeListsAParkBookNothingElseNames(t *testing.T) {
 	if !next.resumePicker.Open() {
 		t.Fatal("a bare /resume in a room with a full park book opened no picker")
 	}
-	view := next.resumePicker.View(160)
+	view := next.resumePicker.View(160, 100)
 	for _, want := range []string{"kwame", "jonas"} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the resume picker does not name %q: with the roster empty this is the only surface "+

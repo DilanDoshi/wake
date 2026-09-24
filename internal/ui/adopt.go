@@ -183,6 +183,7 @@ type DiskSession struct {
 	Dir      string
 	Slug     string
 	Preview  string
+	Title    string // the session's name, or ""
 	Modified time.Time
 }
 

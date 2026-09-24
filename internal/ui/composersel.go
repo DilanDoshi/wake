@@ -62,7 +62,7 @@ func (a App) composerRegion(id string, width, top, height int) (draftTop, draftR
 // (a DM's status bar, and nothing for the room), and the pane's minimum height,
 // which is what says whether the composer fits inside its allocation.
 func (a App) drawnComposer(id string, width, height int) (c Composer, below, minH int) {
-	menu, _ := a.menuBlock(id, width)
+	menu, _ := a.menuBlock(id, width, height)
 	if id == "" {
 		room := a.roomFor().WithMenu(menu).SetSize(width, height)
 		// The room bar rides inside the composer as a draw-time overlay

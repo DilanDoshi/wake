@@ -231,3 +231,32 @@ func TestDiscoveryProvesNoDirectoryForARelativeCwd(t *testing.T) {
 			"working directory rather than anywhere the session ran", got.Dir)
 	}
 }
+
+// A session's name is its custom title - what `--name` or `/rename` wrote, the
+// newest winning - and claude's generated title stands in only when nobody
+// named it, whichever order the two were written in.
+func TestDiscoveryReadsTheSessionsName(t *testing.T) {
+	for _, tc := range []struct {
+		name, want string
+		lines      []string
+	}{
+		{name: "the newest custom title wins", want: "gmail helper", lines: []string{
+			`{"type":"custom-title","customTitle":"alex"}`, `{"type":"custom-title","customTitle":"gmail helper"}`}},
+		{name: "a generated title stands in", want: "Fix the parser", lines: []string{
+			`{"type":"ai-title","aiTitle":"Fix the parser"}`}},
+		{name: "a chosen name beats a later generated one", want: "alex", lines: []string{
+			`{"type":"custom-title","customTitle":"alex"}`, `{"type":"ai-title","aiTitle":"Fix the parser"}`}},
+		{name: "an unnamed session has none", want: "", lines: []string{
+			`{"type":"last-prompt","lastPrompt":"hello"}`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "s.jsonl")
+			if err := os.WriteFile(p, []byte(strings.Join(tc.lines, "\n")+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, got := readTranscript(p); got != tc.want {
+				t.Errorf("title = %q, want %q", got, tc.want)
+			}
+		})
+	}
+}

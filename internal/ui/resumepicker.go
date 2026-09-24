@@ -34,15 +34,23 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// resumeWindow is how many rows are drawn at once. The picker holds every match
-// but the pane over the composer is a handful of rows tall, so the display is a
-// window around the cursor and the count header says where in the set it is.
-const resumeWindow = 8
+// resumeWindow is how many sessions are drawn at once. The picker holds every
+// match but the pane over the composer is a handful of rows tall, so the display
+// is a window around the cursor and the count header says where in the set it
+// is. Four at most, because each session is two rows and a blank one before the
+// next; fewer when the pane has less room (sessionsFit).
+const resumeWindow = 4
+
+// resumeFrameRows is the picker's rows that are not sessions: its own top and
+// bottom edges and the three rows of the search box.
+const resumeFrameRows = 5
 
 // resumePickerMax bounds the rows the picker holds - not what it draws (that is
 // resumeWindow), but what search can reach. A heavy user has hundreds of
@@ -68,6 +76,7 @@ type resumeRow struct {
 	Dir       string
 	Label     string // branch, where known
 	Preview   string // first-prompt snippet, for a disk row
+	Title     string // the session's name on disk, for a disk row
 	Age       string // coarse relative time
 	Parked    bool   // FrameWake vs FrameResume on confirm
 	Resumable bool   // false when Dir == "" (shown, but the daemon refuses)
@@ -86,7 +95,7 @@ func (r resumeRow) label() string {
 // separated term must appear somewhere in the row's own text. AND rather than OR
 // so a second word narrows, which is what a search box is for.
 func (r resumeRow) matches(query string) bool {
-	hay := strings.ToLower(strings.Join([]string{r.label(), r.Name, r.Dir, r.Label, r.Preview, r.ID}, " "))
+	hay := strings.ToLower(strings.Join([]string{r.label(), r.Name, r.Title, r.Dir, r.Label, r.Preview, r.ID}, " "))
 	for _, term := range strings.Fields(query) {
 		if !strings.Contains(hay, term) {
 			return false
@@ -302,40 +311,62 @@ func (a App) confirmResume() (App, tea.Cmd) {
 	return a.awaitingWake(ids...), a.write(resumeFailed, resumeFrames(chosen)...)
 }
 
-// View draws it through the same rows a card and the other pickers draw: a count
-// header, the search line, a window of the matches around the cursor, and the
-// key hint. The keys are advertised on the menu itself (the completion menu's
-// own reason), so the picker earns no legend entry for them.
-func (p ResumePicker) View(width int) string {
+// View draws the picker as a box - the count in its top edge, the keys in its
+// bottom - holding a search box of its own and a window of the matches around
+// the cursor, each a name row over a dimmed details row with a blank row before
+// the next. The keys are advertised on the menu itself (the completion menu's
+// own reason), so the picker earns no legend entry for them. maxRows is what the
+// pane can give it, which bounds how many sessions are drawn.
+func (p ResumePicker) View(width, maxRows int) string {
 	if !p.Open() {
 		return ""
 	}
+	w := max(width, minBlockWidth)
+	inner := max(w-cardFrameWidth, 1)
 	f := p.filtered()
-	rows := make([]string, 0, resumeWindow+4)
-	rows = append(rows, detailRow(p.header(f), width))
-	rows = append(rows, detailRow(p.searchLine(), width))
-	if len(f) == 0 {
-		rows = append(rows, detailRow("no session matches — ⌫ to widen the search", width))
+	if maxRows < resumeFrameRows+2 {
+		return p.compactView(f, w, maxRows)
 	}
-	start, end := p.window(len(f))
+	rows := []string{p.searchBox(inner)}
+	if len(f) == 0 {
+		rows = append(rows, detailRow("no session matches — ⌫ to widen the search", inner))
+	}
+	start, end := p.window(len(f), p.sessionsFit(maxRows))
 	for i := start; i < end; i++ {
-		rows = append(rows, optionRow(p.rowLabel(f[i]), width, i == p.Cursor, false, AccentStyle))
+		if i > start {
+			rows = append(rows, "")
+		}
+		rows = append(rows, p.sessionRows(f[i], i == p.Cursor, inner)...)
 	}
 	if p.More > 0 {
-		rows = append(rows, detailRow(fmt.Sprintf("… %d more, older", p.More), width))
+		rows = append(rows, detailRow(fmt.Sprintf("… %d more, older", p.More), inner))
 	}
-	rows = append(rows, detailRow(p.keyHint(), width))
-	return strings.Join(rows, "\n")
+	// Border-only, with the side padding added here: titledBox clips a padded
+	// style to its edge, which shaves the right wall off.
+	body := lipgloss.NewStyle().PaddingLeft(1).Render(strings.Join(rows, "\n"))
+	return titledBox(body, w, BoxStyle.Padding(0), p.header(f), p.keyHint(), AccentStyle, HintStyle)
 }
 
-// window is the slice of the match set the pane draws, kept around the cursor so
-// walking off the visible end pages the list rather than losing the cursor.
-func (p ResumePicker) window(n int) (start, end int) {
-	if n <= resumeWindow {
+// sessionsFit is how many sessions maxRows holds - n of them take 3n-1 rows -
+// never fewer than the one the cursor is on, which is drawn first under the
+// search box so a pane that clips the rest still shows what ↵ resumes.
+func (p ResumePicker) sessionsFit(maxRows int) int {
+	spare := maxRows - resumeFrameRows
+	if p.More > 0 {
+		spare--
+	}
+	return clamp((spare+1)/3, 1, resumeWindow)
+}
+
+// window is the slice of the match set the pane draws, size sessions around the
+// cursor, so walking off the visible end pages the list rather than losing the
+// cursor.
+func (p ResumePicker) window(n, size int) (start, end int) {
+	if n <= size {
 		return 0, n
 	}
-	start = clamp(p.Cursor-resumeWindow/2, 0, n-resumeWindow)
-	return start, start + resumeWindow
+	start = clamp(p.Cursor-size/2, 0, n-size)
+	return start, start + size
 }
 
 // header is the Claude-style count: which match the cursor is on, of how many.
@@ -347,13 +378,42 @@ func (p ResumePicker) header(f []resumeRow) string {
 	return fmt.Sprintf("resume session · %d of %d", p.Cursor+1, len(f))
 }
 
-// searchLine shows the query being typed, so it is clear where the keys are
-// going; empty, it is the box's own prompt.
-func (p ResumePicker) searchLine() string {
+// compactView is the picker in a pane with too few rows for its box - one
+// session needs seven - the count and query on one row over the cursored
+// session, cut to maxRows from the details up so ↵ never resumes a session the
+// pane did not draw.
+func (p ResumePicker) compactView(f []resumeRow, width, maxRows int) string {
+	status := HintStyle.Render(ansi.Truncate(p.header(f)+" · "+p.searchText(), width, ellipsis))
+	if len(f) == 0 {
+		return status
+	}
+	session := p.sessionRows(f[clamp(p.Cursor, 0, len(f)-1)], true, width)
+	switch {
+	case maxRows <= 1:
+		return session[0]
+	case maxRows == 2:
+		return status + "\n" + session[0]
+	}
+	return strings.Join(append([]string{status}, session...), "\n")
+}
+
+// searchText is the query being typed, or the search box's own prompt.
+func (p ResumePicker) searchText() string {
 	if p.Query == "" {
 		return "› search…"
 	}
 	return "› " + p.Query
+}
+
+// searchBox is the query framed like the composer, because it is where the keys
+// are going.
+func (p ResumePicker) searchBox(width int) string {
+	style := TextStyle
+	if p.Query == "" {
+		style = HintStyle
+	}
+	line := style.Render(ansi.Truncate(p.searchText(), max(width-cardFrameWidth, 1), ellipsis))
+	return ComposerStyle.Width(max(width-boxFrameWidth, 1)).Render(line)
 }
 
 // keyHint is the key line the menu advertises, and it names ⇥ only where it does
@@ -365,12 +425,48 @@ func (p ResumePicker) keyHint() string {
 	return "↑↓ move · type to search · ↵ resume · esc cancel"
 }
 
-// rowLabel is one match as the operator reads it: the checkbox (room only), then
-// the @name or short id, a coarse age, the directory (or the no-dir note), the
-// branch and a preview snippet - joined by · so a whitespace-collapsing
-// optionRow keeps them apart.
-func (p ResumePicker) rowLabel(r resumeRow) string {
-	fields := []string{r.label()}
+// sessionRows is one match as the operator reads it: the cursor, the checkbox
+// (room only) and what the session is called, then its details dimmed beneath,
+// aligned under the name.
+func (p ResumePicker) sessionRows(r resumeRow, cursored bool, width int) []string {
+	lead, style := cardUnchosen, TextStyle
+	if cursored {
+		lead, style = cardCursor, AccentStyle
+	}
+	if p.Multi {
+		box := "[ ] "
+		if p.Selected[r.ID] {
+			box = "[x] "
+		}
+		lead += box
+	}
+	indent := strings.Repeat(" ", ansi.StringWidth(lead))
+	return []string{
+		style.Render(ansi.Truncate(lead+collapseWhitespaceOneLine(r.heading()), width, ellipsis)),
+		HintStyle.Render(ansi.Truncate(indent+collapseWhitespaceOneLine(r.details()), width, ellipsis)),
+	}
+}
+
+// heading is what a session is called: a parked session's @name, else its name
+// on disk, else its last prompt, else its short id.
+func (r resumeRow) heading() string {
+	switch {
+	case r.Name != "":
+		return agentPrefix + r.Name
+	case r.Title != "":
+		return r.Title
+	case r.Preview != "":
+		return r.Preview
+	}
+	return shortSource(r.ID)
+}
+
+// details is the row beneath the name: the short id, a coarse age, the
+// directory (or the no-dir note), the branch and the last prompt - joined by ·
+// so a whitespace-collapsing row keeps them apart, and without the prompt when
+// the heading already is it.
+func (r resumeRow) details() string {
+	fields := []string{shortSource(r.ID)}
 	if r.Age != "" {
 		fields = append(fields, r.Age)
 	}
@@ -382,16 +478,8 @@ func (p ResumePicker) rowLabel(r resumeRow) string {
 	if r.Label != "" {
 		fields = append(fields, r.Label)
 	}
-	if r.Preview != "" {
+	if r.Preview != "" && r.Preview != r.heading() {
 		fields = append(fields, "\""+r.Preview+"\"")
 	}
-	body := strings.Join(fields, " · ")
-	if p.Multi {
-		box := "[ ] "
-		if p.Selected[r.ID] {
-			box = "[x] "
-		}
-		return box + body
-	}
-	return body
+	return strings.Join(fields, " · ")
 }

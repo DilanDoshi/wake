@@ -114,6 +114,7 @@ func (machineSessions) Resumable() ([]ui.DiskSession, error) {
 			Dir:      f.Dir,
 			Slug:     f.Slug,
 			Preview:  f.Preview,
+			Title:    f.Title,
 			Modified: f.Modified,
 		})
 	}

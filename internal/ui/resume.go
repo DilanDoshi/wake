@@ -332,7 +332,7 @@ func (a App) resumeRowsFrom(disk []DiskSession) (rows []resumeRow, more int) {
 			continue
 		}
 		all = append(all, resumeRow{
-			ID: d.ID, Dir: d.Dir, Preview: d.Preview,
+			ID: d.ID, Dir: d.Dir, Preview: d.Preview, Title: d.Title,
 			Age: ago(d.Modified), Resumable: d.Dir != "",
 		})
 	}

@@ -709,7 +709,7 @@ func (r Room) menuRows() int {
 	if r.menu == "" {
 		return 0
 	}
-	return max(min(lipgloss.Height(r.menu), r.height-r.baseChrome()-minTranscriptHeight), 0)
+	return max(min(lipgloss.Height(r.menu), r.menuRoom()), 0)
 }
 
 // minHeight is the shortest pane this room draws: its chrome, plus one row of

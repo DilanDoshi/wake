@@ -369,7 +369,7 @@ func (a App) roomPane(width, height int) string {
 
 	// Handed over whole: the pane clips it, because only the pane knows what is
 	// left after the rest of its chrome. See Room.menuRows.
-	menu, ask := a.menuBlock("", width)
+	menu, ask := a.menuBlock("", width, height)
 	return room.WithMenu(menu).WithAsk(ask).View(width, height)
 }
 
@@ -394,20 +394,29 @@ func (a App) roomPane(width, height int) string {
 // knows what its transcript can spare; it clips and draws it. Nothing goes above
 // the transcript any more, which is what keeps mouse.go's startSelection a plain
 // `top`: a screen row is a transcript line with nothing to offset it by.
-func (a App) menuBlock(id string, width int) (string, bool) {
+func (a App) menuBlock(id string, width, height int) (string, bool) {
 	card := a.cardBlock(id, width)
-	stack := above(above(above(card, a.pickerView(width, id)), a.rewindView(width, id)), a.resumeView(width, id))
+	stack := above(above(card, a.pickerView(width, id)), a.rewindView(width, id))
+	stack = above(stack, a.resumeView(id, width, height, stack))
 	return above(stack, a.completionView(width, id)), card != ""
 }
 
 // resumeView is the resume picker if it belongs to this pane, and "" otherwise -
 // pickerView's own reason: it is drawn over the composer that opened it (the
 // room, id "", or a DM), so its ↵ does not resume from a pane nobody chose it in.
-func (a App) resumeView(width int, id string) string {
+//
+// It is told the rows left under what is stacked over it, because the pane clips
+// a menu from the bottom and a picker drawn taller than that would hide the
+// session ↵ resumes.
+func (a App) resumeView(id string, width, height int, over string) string {
 	if !a.resumePicker.Open() || a.focus != id {
 		return ""
 	}
-	return a.resumePicker.View(width)
+	room := a.menuRoom(id, width, height)
+	if over != "" {
+		room -= lipgloss.Height(over)
+	}
+	return a.resumePicker.View(width, room)
 }
 
 // pickerView is the menu if it belongs to this pane, and "" otherwise.
@@ -455,7 +464,7 @@ func above(top, bottom string) string {
 // on no surface at all, and the agent stayed blocked with nothing to answer.
 func (a App) dmPane(id string, width, height int) string {
 	// Handed over whole, for roomPane's reason. See DM.menuRows.
-	menu, ask := a.menuBlock(id, width)
+	menu, ask := a.menuBlock(id, width, height)
 	return a.dmFor(id).WithSelection(a.selectionIn(id)).WithComposerSelection(a.composerSelectionIn(id)).
 		WithMenu(menu).WithAsk(ask).WithWriting(a.answerTitle(id)).WithCompacting(a.compactingSince(id)).View(width, height)
 }
@@ -473,7 +482,7 @@ func (a App) transcriptRows(id string, width, height int) int {
 	// The ask flag is the draw's business, not the measurement's: this needs the
 	// rows the menu takes, and a card contributes those whether or not the pane
 	// goes on to treat it as answerable.
-	menu, _ := a.menuBlock(id, width)
+	menu, _ := a.menuBlock(id, width, height)
 	if id == "" {
 		return a.roomFor().WithMenu(menu).SetSize(width, height).tr.height
 	}
