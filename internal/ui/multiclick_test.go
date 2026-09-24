@@ -294,3 +294,19 @@ func TestAnOlderCopyDoesNotOverwriteTheTerminalsClipboard(t *testing.T) {
 		t.Errorf("the terminal was written %q, want only the newest copy, %q", got, "row")
 	}
 }
+
+// A divider drag ends the run as a text drag does, so a click where the divider
+// was, once the panes have settled, is a first click rather than a second.
+func TestADividerDragEndsAClickRun(t *testing.T) {
+	frozenClock(t)
+	a := splitApp(t, 120, 40, 4) // narrow, so the divider's cell is room text once it settles
+	x := dividerColumnOf(a)
+	a, _ = a.mouse(pressAt(x, textRow))
+	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft, X: x + 30, Y: textRow})
+	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: x + 30, Y: textRow})
+	a = a.applyGeometry()
+	a, cmd := click(a, x, textRow)
+	if a.sel.span || cmd != nil {
+		t.Errorf("a click where the divider was selected %q; the drag ended the run", selectedNow(a))
+	}
+}

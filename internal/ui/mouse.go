@@ -48,6 +48,9 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 	if a.board.Up {
 		return a.boardMouse(m)
 	}
+	if m.Action == tea.MouseActionMotion {
+		a.clicks = clickRun{} // any drag - text or divider - ends a click run; see multiclick.go
+	}
 	switch {
 	case m.Button == tea.MouseButtonWheelUp:
 		return a.scroll(wheelLines, m.X, m.Y), nil
@@ -83,7 +86,6 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 			// one: end it here rather than extending a selection nobody holds.
 			return a.endSelection()
 		}
-		a.clicks = clickRun{} // a drag ends a click run; see multiclick.go
 		return a.extendSelection(m.X, m.Y), nil
 	}
 	return a, nil
