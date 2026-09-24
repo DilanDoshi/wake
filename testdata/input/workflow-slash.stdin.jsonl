@@ -1,0 +1,4 @@
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "/workflows"}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "/workflow-launch-exec"}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "/workflow-launch-exec count the lines of a.txt"}]}}
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "/__remote-workflow"}]}}
