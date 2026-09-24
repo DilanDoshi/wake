@@ -83,8 +83,9 @@ func withProgress(ev core.Event, progress *core.WorkflowSnapshot) core.Event {
 }
 
 // runningWorkflow reports whether id names a running workflow dispatch - the
-// fact FrameStopRun may act on. stop_task no-ops on a subagent or shell id
-// (findings.md §6 §2), so a workflow's own kind is the whole of the check.
+// fact FrameStopRun may act on. Its own Kind check is the whole gate: a
+// subagent or shell id is refused for being a different dispatch kind, not
+// for anything the wire is known to do with one.
 func (a *agent) runningWorkflow(id string) bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()

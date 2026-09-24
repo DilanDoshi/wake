@@ -194,6 +194,37 @@ func TestAReplayedWorkflowCarriesItsLatestSnapshot(t *testing.T) {
 	}
 }
 
+// TestATaskProgressSnapshotIsIgnoredForARetainedNonWorkflowTask: withProgress
+// dereferences the *retained* started event's own Workflow, and a task_started
+// this agent retained for a non-workflow dispatch (or a malformed one) never
+// had one. A task_progress that still carries a snapshot for that id - a
+// wire shape nothing here is known to produce, but not one observe may take
+// on faith - must be ignored rather than crash the fan-out goroutine that
+// would otherwise take the whole daemon down with it (no recover in
+// internal/daemon).
+func TestATaskProgressSnapshotIsIgnoredForARetainedNonWorkflowTask(t *testing.T) {
+	a := newAgent(idAlpha, "sydney", "dev-1", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
+
+	started := core.Event{Task: &core.TaskUpdate{
+		ID: "t1", Dispatch: "toolu_1", Kind: core.TaskAgent, Phase: core.TaskStarted, Status: core.TaskRunning,
+	}}
+	a.observe(started)
+
+	progress := core.Event{Task: &core.TaskUpdate{
+		ID: "t1", Phase: core.TaskProgress, Status: core.TaskRunning,
+		Workflow: &core.WorkflowUpdate{Progress: &core.WorkflowSnapshot{Phases: []core.WorkflowPhase{{Index: 1, Title: "Count"}}}},
+	}}
+	a.observe(progress) // must not panic
+
+	frames := a.runningTaskFrames()
+	if len(frames) != 1 {
+		t.Fatalf("runningTaskFrames() = %d frames, want 1", len(frames))
+	}
+	if !reflect.DeepEqual(*frames[0].Event, started) {
+		t.Fatalf("retained event = %+v, want it untouched by a snapshot its own kind cannot carry: %+v", *frames[0].Event, started)
+	}
+}
+
 // decodeStreamFixture decodes a recorded stream-json fixture directly off
 // testdata/stream, in arrival order - the same corpus internal/core's own
 // tests read, reached here rather than through readFixture's env var because

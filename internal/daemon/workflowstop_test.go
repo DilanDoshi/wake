@@ -1,12 +1,12 @@
 // Stopping a running dynamic Workflow() from the client side.
 //
-// FrameStopRun addresses a task id rather than a session id, and stop_task
-// no-ops on anything that is not a running workflow (findings.md §6 §2) - so
-// the daemon has to refuse an id that never named one, a subagent's own id,
-// and a workflow that has already ended, and reach only the one still
-// running. Over the same live-process harness apply_test.go's own FrameRewind
-// tests use, because the positive case has to prove the control request
-// crossed the real stdin pipe.
+// FrameStopRun addresses a task id rather than a session id, and
+// runningWorkflow's own Kind check is the whole gate - so the daemon has to
+// refuse an id that never named a task, a subagent's own id (a different
+// dispatch kind), and a workflow that has already ended, and reach only the
+// one still running. Over the same live-process harness apply_test.go's own
+// FrameRewind tests use, because the positive case has to prove the control
+// request crossed the real stdin pipe.
 
 package daemon
 
