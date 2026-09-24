@@ -45,6 +45,39 @@ func claudeSessionDir(transcript string) string {
 	return strings.TrimSuffix(transcript, ".jsonl")
 }
 
+// resolvedSessionDir is claudeSessionDir(path) with every symlink in it
+// resolved - the baseline withinSessionDir checks a matched file against. Its
+// own absence is not an error: a session that has never run a workflow has no
+// <uuid>/ directory at all, which WorkflowRuns/WorkflowAgentHistory read the
+// same way History reads a session with no transcript - nothing to read.
+func resolvedSessionDir(path string) (string, bool) {
+	resolved, err := filepath.EvalSymlinks(claudeSessionDir(path))
+	return resolved, err == nil
+}
+
+// withinSessionDir resolves every symlink in path - an intermediate
+// directory as well as a final component - and reports whether the result is
+// still inside dir, which is already resolved.
+//
+// regularTranscript's Lstat alone is not this fence: Lstat refuses only a
+// symlinked *final* component, but it still follows a symlinked intermediate
+// directory to reach whatever the final component names, so filepath.Glob
+// under a symlinked workflows/ or a symlinked subagents/workflows/<run>/
+// returns a path whose Lstat reports an ordinary regular file - a match this
+// package used to accept from anywhere on the machine. EvalSymlinks resolves
+// the whole path, which is what a directory-level escape needs caught on.
+func withinSessionDir(dir, path string) (string, bool) {
+	resolved, err := filepath.EvalSymlinks(path)
+	if err != nil {
+		return "", false
+	}
+	rel, err := filepath.Rel(dir, resolved)
+	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
+		return "", false
+	}
+	return resolved, true
+}
+
 // WorkflowRuns is a session's own dynamic Workflow() runs, read back off
 // their wf_*.json records - newest first, capped at maxWorkflowRuns. A
 // session with no transcript answers with nothing rather than an error,
@@ -53,6 +86,10 @@ func WorkflowRuns(id string) ([]core.WorkflowRun, error) {
 	path, ok := transcriptPath(id)
 	if !ok {
 		return nil, nil
+	}
+	dir, ok := resolvedSessionDir(path)
+	if !ok {
+		return nil, nil // no workflow has ever run under this session
 	}
 	matches, err := filepath.Glob(filepath.Join(claudeSessionDir(path), "workflows", "wf_*.json"))
 	if err != nil {
@@ -63,13 +100,18 @@ func WorkflowRuns(id string) ([]core.WorkflowRun, error) {
 	for _, m := range matches {
 		info, ok := regularTranscript(m)
 		if !ok {
-			continue // a symlink, or gone since Glob listed it
+			continue // a symlinked final component, or gone since Glob listed it
+		}
+		resolved, ok := withinSessionDir(dir, m)
+		if !ok {
+			logf("wake: workflow run record %s resolves outside its session directory, skipped", m)
+			continue
 		}
 		if info.Size() > maxRunBytes {
 			logf("wake: workflow run record %s is %d bytes, over the %d bound, skipped", m, info.Size(), maxRunBytes)
 			continue
 		}
-		raw, err := os.ReadFile(m)
+		raw, err := os.ReadFile(resolved)
 		if err != nil {
 			logf("wake: could not read workflow run record %s: %v", m, err)
 			continue
@@ -105,6 +147,10 @@ func WorkflowAgentHistory(id, agentID string) ([]core.Event, error) {
 	if !ok {
 		return nil, nil
 	}
+	dir, ok := resolvedSessionDir(path)
+	if !ok {
+		return nil, nil // no workflow has ever run under this session
+	}
 	pattern := filepath.Join(claudeSessionDir(path), "subagents", "workflows", "*", "agent-"+agentID+".jsonl")
 	matches, err := filepath.Glob(pattern)
 	if err != nil {
@@ -112,10 +158,16 @@ func WorkflowAgentHistory(id, agentID string) ([]core.Event, error) {
 	}
 	var agentPath string
 	for _, m := range matches {
-		if _, ok := regularTranscript(m); ok {
-			agentPath = m
-			break
+		if _, ok := regularTranscript(m); !ok {
+			continue // a symlinked final component, or gone since Glob listed it
 		}
+		resolved, ok := withinSessionDir(dir, m)
+		if !ok {
+			logf("wake: workflow agent transcript %s resolves outside its session directory, skipped", m)
+			continue
+		}
+		agentPath = resolved
+		break
 	}
 	if agentPath == "" {
 		return nil, nil
@@ -140,8 +192,12 @@ func WorkflowAgentHistory(id, agentID string) ([]core.Event, error) {
 			}
 			for _, ev := range events {
 				ev.Raw = nil
-				// Stamped to the session the caller asked with, the way
-				// answerHistory stamps an ordinary conversation's events.
+				// Stamped to the id this function was called with - which is
+				// s.transcriptID's *translated* post-/clear id at the
+				// sendWorkflowAgent call site, not the id the client knows.
+				// sendWorkflowAgent restamps with the client-facing one
+				// afterward, the way answerHistory restamps History's own
+				// events for the same reason.
 				ev.SessionID = id
 				total += len(ev.Text)
 				ring = append(ring, ev)
@@ -174,6 +230,13 @@ func (s *server) sendWorkflowAgent(c *client, id, agentID string) {
 	if err != nil {
 		c.enqueue(errorFrame(id, "could not read that workflow agent's transcript: "+err.Error()))
 		return
+	}
+	// Addressed by the id the client knows, whatever file it came out of -
+	// answerHistory's own reason: s.transcriptID(id) above may be the
+	// post-/clear claude id, and WorkflowAgentHistory stamped every event
+	// with that one.
+	for i := range events {
+		events[i].SessionID = id
 	}
 	c.enqueue(rpc.Frame{Kind: rpc.FrameWorkflowAgentReply, SessionID: id,
 		Workflow: &rpc.WorkflowFrame{Agent: agentID}, Events: events})

@@ -246,3 +246,110 @@ func TestTheDaemonAnswersAWorkflowAgentFrame(t *testing.T) {
 		t.Fatal("the workflow agent reply carries no events")
 	}
 }
+
+// TestWorkflowRunsSkipsARecordThroughASymlinkedIntermediateDirectory proves
+// containment is checked on the whole resolved path, not just the final
+// component: regularTranscript's Lstat follows a symlinked *directory* to
+// reach the file it names and reports it an ordinary regular file, which is
+// exactly what let a symlinked workflows/ read a record from anywhere on the
+// machine before withinSessionDir existed.
+func TestWorkflowRunsSkipsARecordThroughASymlinkedIntermediateDirectory(t *testing.T) {
+	path := plantTranscript(t, wfID, userLine("hello"))
+	sessionDir := strings.TrimSuffix(path, ".jsonl")
+	if err := os.MkdirAll(sessionDir, 0o700); err != nil {
+		t.Fatalf("mkdir %s: %v", sessionDir, err)
+	}
+
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "wf_a.json"), []byte(runRecordA), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	// workflows/ itself is the symlink, not a file under it.
+	if err := os.Symlink(outside, filepath.Join(sessionDir, "workflows")); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	runs, err := WorkflowRuns(wfID)
+	if err != nil {
+		t.Fatalf("WorkflowRuns: %v", err)
+	}
+	if len(runs) != 0 {
+		t.Fatalf("runs = %+v, want none: a record reached through a symlinked workflows/ directory was read", runs)
+	}
+}
+
+// TestWorkflowAgentHistoryDoesNotFollowASymlinkedIntermediateDirectory is
+// the same escape one level deeper: a symlinked run directory under
+// subagents/workflows/ rather than a symlinked file.
+func TestWorkflowAgentHistoryDoesNotFollowASymlinkedIntermediateDirectory(t *testing.T) {
+	path := plantTranscript(t, wfID, userLine("hello"))
+	sessionDir := strings.TrimSuffix(path, ".jsonl")
+
+	outsideRun := t.TempDir()
+	raw, err := os.ReadFile(filepath.Join("..", "..", "testdata", "transcript", "workflow-agent.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(outsideRun, "agent-abc123.jsonl"), raw, 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	subagentsWorkflows := filepath.Join(sessionDir, "subagents", "workflows")
+	if err := os.MkdirAll(subagentsWorkflows, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	// wf_a itself is the symlink - "evil -> outsideRun" in the reviewer's terms.
+	if err := os.Symlink(outsideRun, filepath.Join(subagentsWorkflows, "wf_a")); err != nil {
+		t.Fatalf("symlink: %v", err)
+	}
+
+	events, err := WorkflowAgentHistory(wfID, "abc123")
+	if err != nil {
+		t.Fatalf("WorkflowAgentHistory: %v", err)
+	}
+	if len(events) != 0 {
+		t.Fatalf("read %d events through a symlinked run directory, want 0: the escape was not caught", len(events))
+	}
+}
+
+// TestWorkflowAgentHistoryStampsTheClientFacingSessionID plants the agent
+// transcript under a *different* id than the one the client asked with -
+// simulating a /clear the way history_test.go's
+// TestAClearedSessionReadsTheTranscriptClaudeIsWritingNow does - and checks
+// the reply's events carry the id the client asked with, not the translated
+// one WorkflowAgentHistory read the file under.
+func TestWorkflowAgentHistoryStampsTheClientFacingSessionID(t *testing.T) {
+	s := newServer(filepath.Join(t.TempDir(), "s"))
+	a := &agent{id: wfID, name: "alex"}
+	s.agents[wfID] = a
+
+	const cleared = "77777777-8888-9999-0000-111111111111"
+	a.observe(core.Event{Kind: core.KindAssistantText, SessionID: cleared, Text: "after the clear"})
+	if got := s.transcriptID(wfID); got != cleared {
+		t.Fatalf("transcriptID = %q, want %q: the fixture below is planted under this id", got, cleared)
+	}
+
+	dir := workflowSessionDir(t, cleared)
+	plantWorkflowAgentTranscript(t, dir, "wf_a", "abc123")
+
+	c := newClient(nil)
+	s.sendWorkflowAgent(c, wfID, "abc123")
+
+	var f rpc.Frame
+	select {
+	case f = <-c.out:
+	default:
+		t.Fatal("sendWorkflowAgent enqueued nothing")
+	}
+	if f.Kind != rpc.FrameWorkflowAgentReply || f.SessionID != wfID {
+		t.Fatalf("reply = %+v, want FrameWorkflowAgentReply addressed to %q", f, wfID)
+	}
+	if len(f.Events) == 0 {
+		t.Fatal("the reply carries no events")
+	}
+	for i, ev := range f.Events {
+		if ev.SessionID != wfID {
+			t.Errorf("event %d carries session %q, want the client-facing %q (not the translated claude id %q)",
+				i, ev.SessionID, wfID, cleared)
+		}
+	}
+}
