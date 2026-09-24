@@ -1040,10 +1040,10 @@ func TestEverySlashCommandAnySentenceNamesIsOneThisPackageAnswers(t *testing.T) 
 //	Use `/mcp` in the terminal for details.
 //
 // That is not a feature being replaced - it is a signpost, and the place it
-// points is an interactive TUI Wake's agents do not have. The panel behind it
-// is reachable from a shell (`claude mcp list`), so Wake draws the screen the
-// signpost names instead of forwarding somebody to a terminal they are already
-// sitting in front of.
+// points is an interactive TUI Wake's agents do not have. The data behind it is
+// reachable through the session's own MCP control requests, so Wake draws the
+// screen the signpost names instead of forwarding somebody to a terminal they are
+// already sitting in front of.
 var redirectOnlyCommands = map[string]string{
 	mcpCommand: "bare-mcp.jsonl",
 }

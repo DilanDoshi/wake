@@ -34,13 +34,10 @@ func TestTheMCPRowAppearsOnlyWhenSomethingNeedsAuthenticating(t *testing.T) {
 			t.Errorf("with %d needing auth the row reads %q, want it to contain %q",
 				tc.needsAuth, got, tc.want)
 		}
-		// And it names no command. Claude Code says "· run /mcp"; Wake cannot,
-		// because every session here is headless and the bare interactive
-		// commands anybody has recorded there are inert. A surface may not
-		// advertise something that does nothing - see mcpWarning.
-		if strings.Contains(got, "/") {
-			t.Errorf("the row %q names a command; nothing has recorded one that works from a "+
-				"headless session, and the legend's rule binds this surface too", got)
+		// And it names the command that fixes it, as Claude Code's own row does:
+		// Wake's /mcp signs a server in (mcpauth.go).
+		if !strings.Contains(got, "run "+mcpVerb) {
+			t.Errorf("the row %q does not say where to sign in", got)
 		}
 	}
 }

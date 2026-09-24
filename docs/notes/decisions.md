@@ -3183,3 +3183,48 @@ form (the full rationale lives in the daemon handlers), which shifted the "two l
 sentence off wire.go.
 
 Full argument: `internal/daemon/resume.go`, `internal/ui/resumepicker.go`, `internal/ui/resume.go`.
+
+## 2026-09-24 — `/mcp` is live, and its sign-in hands the terminal over rather than emulating one
+
+**What changed.** `/mcp` used to run `claude mcp list` in the agent's directory and print a static
+panel. It now asks the running session (`mcp_status`) and draws Claude Code's own menu, with
+Reconnect and Enable/Disable as the session's own `mcp_reconnect`/`mcp_toggle`. The old panel
+re-dialled every server from a fresh process reading the same config, so it could call a server
+connected while the agent's own connection to it was dead — the live answer is the truer one, and
+the one the actions act on.
+
+**Ruling 1 — an MCP receipt is labelled by the id the session minted, not by its shape.** A
+reconnect or toggle is answered with the bare `{"subtype":"success"}` or `error` string a
+`set_permission_mode` receipt uses. Decoded by shape alone it is `KindControlReceipt`, which
+`observedMode` reads as a mode refusal in **every** window — so an MCP error would have surfaced as
+"@x refused that" about a permission mode nobody changed. The session is the one place that knows
+which ids it sent as MCP asks, so `Session.answeredMCP` relabels those receipts `KindMCPReply`. The
+airlock still decodes the *status* reply by its payload (`mcpServers`, rewind's presence rule).
+
+**Ruling 2 — Authenticate hands the operator's own terminal to `claude mcp login`.** There is no
+headless control request for an MCP sign-in, and `claude mcp login` refuses a pipe even in its
+browser-opening form (probed). The non-negotiable is "no PTY, no VT100" — Wake must not *emulate* a
+terminal. Handing the real one over for the length of a child, the way `git commit` hands it to an
+editor, emulates nothing: Bubble Tea's `ExecProcess` stops drawing and reading, and
+`cmd/wake/handover.go` pauses the kill switch (cancellable read, cooked mode, signals muted) so the
+child's keys are the child's and a ⌃C⌃C at its prompt cannot fire the emergency exit. The account
+`/login` is unchanged — it still hands the command over as text.
+
+**Ruling 3 — a sign-in reconnects the fleet, not only the asking agent.** The token lands where
+every session reads it, but a running session picks it up only on reconnect. So a finished sign-in
+reconnects the asking agent, asks every other live agent for its servers, and reconnects the ones
+stuck `needs-auth` on that server, then reports once. **Unverified:** that `mcp_reconnect` in a live
+session actually picks up a token another process wrote — `docs/live-testing.md` holds the check.
+
+**Ruling 4 — the manager is refused all four MCP frames.** Status is the operator's machine
+(command lines, URLs, errors) and answers on the event stream, invisible to the manager's tools; a
+reconnect can fail another agent's turn in flight; a toggle persists into `~/.claude.json`, changing
+what every future agent in that directory can reach — FrameMode's argument one file over.
+
+**Found on the way.** A headless session does not load claude.ai connectors at all (before or after a
+turn, with or without `ENABLE_CLAUDEAI_MCP_SERVERS`), so the menu says so rather than showing a
+section it cannot fill; and `mcp_status` carries no tool descriptions, so View tools shows names and
+the read-only annotation only.
+
+Full argument: `internal/ui/mcpmenu.go`, `internal/ui/mcpauth.go`, `internal/core/mcpask.go`,
+`cmd/wake/handover.go`.

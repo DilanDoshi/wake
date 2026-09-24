@@ -195,7 +195,7 @@ func TestReconnectAsksAndItsAnswerIsShown(t *testing.T) {
 
 func TestDisableAndEnableSwitchTheServer(t *testing.T) {
 	a, rec := loadedMenu(t)
-	a = openDetail(t, a, 2)                // firecrawl: View tools, Reconnect, Disable
+	a = openDetail(t, a, 2)                       // firecrawl: View tools, Reconnect, Disable
 	a = pressMenu(pressMenu(a, keyDown), keyDown) // onto Disable
 	a = pressMenu(a, keyEnter)
 	if got := rec.taken(t); len(got) != 1 || got[0].Kind != rpc.FrameMCPDisable || got[0].Text != "firecrawl" {

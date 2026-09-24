@@ -199,7 +199,7 @@ func field(label, value string, width int) string {
 func (m MCPMenu) detailLines(width int) ([]string, int) {
 	s, _ := m.server()
 	glyph, style, word := mcpLook(s.State)
-	status := style.Render(glyph+" "+word)
+	status := style.Render(glyph + " " + word)
 	if s.Info != "" {
 		status += HintStyle.Render(" · " + s.Info)
 	}

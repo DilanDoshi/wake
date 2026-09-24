@@ -201,24 +201,9 @@ func dmBanner(a Agent, width int) block {
 // hold no MCP servers, and a row reserved for a warning nobody has would be
 // spent on every conversation in the fleet, forever.
 //
-// # Why it does not say `· run /mcp`, which is what Claude Code says
-//
-// **Not because the command is inert - it works.** That was the guess, and it
-// was wrong. Recorded from a headless session (2026-08-14 config-surface
-// findings, `testdata/stream/bare-mcp.jsonl`), `/mcp` answers at zero cost and
-// with no model turn:
-//
-//	6 MCP server(s): 2 connected, 2 connecting, 2 not connected, 0 disabled.
-//	Use `/mcp` in the terminal for details.
-//
-// It is **read-only from here, and says so itself**. Authenticating needs a
-// terminal. So naming it would send somebody to a command that reports the same
-// counts this row is already showing them and then tells them to go elsewhere -
-// advice given at exactly the moment they had already failed once.
-//
-// The row states the fact and stops. What would license the other half is a way
-// to authenticate *from* a headless session, which is a thing claude does not
-// currently have rather than a thing Wake has not built.
+// It ends `· run /mcp`, as Claude Code's own row does: Wake's /mcp signs a
+// server in by handing the terminal to claude's own sign-in (mcpauth.go). It
+// used to name no command, because a headless session's /mcp only redirects.
 //
 // warnStyle is dm_blocks.go's, reused rather than redeclared: one style for
 // "something needs attention" across the pane, which is what stops this row and
@@ -231,7 +216,7 @@ func mcpWarning(needsAuth int) string {
 	if needsAuth == 1 {
 		noun = "server needs"
 	}
-	return warnStyle.Render(fmt.Sprintf("%s %d MCP %s authentication", warnGlyph, needsAuth, noun))
+	return warnStyle.Render(fmt.Sprintf("%s %d MCP %s authentication · run %s", warnGlyph, needsAuth, noun, mcpVerb))
 }
 
 // sessionLine is what this session is: the agent's name, then - once the model

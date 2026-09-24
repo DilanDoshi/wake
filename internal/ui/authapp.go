@@ -3,8 +3,7 @@ package ui
 // `/login` from the outside: the command, the shell it runs, and the panel that
 // comes back into the conversation it was typed into.
 //
-// It is the `/mcp` path (mcpapp.go) one subcommand over, and it reuses runBang
-// for the same reason: bangRun already bounds a shell line off the draw goroutine
+// It reuses runBang because bangRun already bounds a shell line off the draw goroutine
 // and kills it by process group, and a second copy of that is the parallel
 // implementation this project forbids. What differs is only the command and the
 // renderer - `claude auth status --json`, parsed by authpanel.go.
@@ -34,9 +33,7 @@ const (
 )
 
 // authResultMsg is a finished `claude auth status`, addressed to the
-// conversation that asked. Separate from mcpResultMsg for its own reason: the two
-// are parsed and rendered by different code, and a shared shape with a mode is
-// how the wrong one gets drawn.
+// conversation that asked.
 type authResultMsg struct {
 	ID   string
 	Text string

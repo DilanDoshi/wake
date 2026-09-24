@@ -839,6 +839,23 @@ command line only best-effort (it may be wrapped on disk). Two things a real ses
       `@`-agent you are addressing, or the manager) and in a DM. A default-effort agent should still
       show a level once probed — that is the whole point.
 
+## The /mcp menu — a real sign-in is owed
+
+The menu's data and actions are recorded (`testdata/stream/mcp-control.jsonl`) and the terminal
+hand-off is proven on a pty (`cmd/wake/mcpscreen_unix_test.go`) — against a fake `claude mcp
+login`. What only a real server and a real browser can settle:
+
+- [ ] **Authenticate a server that needs it** (`/mcp`, pick a `⚠ needs authentication` row, `↵`
+      on Authenticate). Wake steps aside, `Signing in to <server> for Wake` heads Claude's own
+      sign-in, the browser opens, and approving it brings Wake back with the row `✔ connected`
+      and `<server> signed in · reconnected on …` on the notice row. **The unverified half:** that
+      a *running* agent picks the fresh token up on `mcp_reconnect` rather than needing a restart
+      — the reconnect after a sign-in rests on it. If the row stays `⚠`, park and resume the
+      agent and report it.
+- [ ] **⌃C at the sign-in** cancels the sign-in only: Wake comes back with `✘ sign-in did not
+      finish`, the fleet untouched.
+- [ ] **Two agents stuck on the same server**: signing in from one reconnects both.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:
