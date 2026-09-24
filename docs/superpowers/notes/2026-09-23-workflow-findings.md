@@ -1,13 +1,15 @@
 # Workflow findings — what a headless `Workflow` run puts on the wire
 
 Recorded 2026-09-23 against **2.1.281**, with Wake's own argv (every visibility flag, `--permission-prompt-tool
-stdio`, `--permission-mode auto`). Three sessions, one fixture each:
+stdio`, `--permission-mode auto`). Five sessions, one fixture each:
 
 | Fixture | What it is |
 |---|---|
 | `testdata/stream/workflow-run.jsonl` | A 2-phase, 3-agent workflow (`count-lines`) that completes |
 | `testdata/stream/workflow-failed.jsonl` | 3 phases, a 6-wide parallel phase, then a deliberate `throw` — ends `failed` |
 | `testdata/stream/workflow-slash.jsonl` | `/workflows`, `/workflow-launch-exec` (bare and with an argument), `/__remote-workflow` |
+| `testdata/stream/workflow-saved-command.jsonl` | `/deep-research` bare, then a saved `.claude/workflows/slow-probe.js` run as `/slow-probe`, then `pause_task` and `stop_task` control requests (both after the run ended) |
+| `testdata/stream/workflow-stop.jsonl` | A saved 12-agent sequential workflow stopped mid-run: `stop_task` at one agent's `agentId`, then at the run's `task_id` |
 | `testdata/transcript/workflow-agent.jsonl` | One workflow agent's on-disk transcript, **trimmed to its `user`/`assistant` lines** |
 
 ## Provenance caveats
@@ -61,8 +63,34 @@ notification's `status` is `"failed"`, its `summary` beginning `Dynamic workflow
 The notification then starts a **new turn** (the second `result` in each fixture) on which the parent
 reports the outcome. `background_tasks_changed` brackets the run with the live set.
 
-## 5. No native launch outside the tool
+## 5. Launching one: a saved workflow is a slash command
 
-All four slash probes are no-op receipts (`num_turns:0`, `$0`): `/workflows` "isn't available in this
+The four internal slash probes are no-op receipts (`num_turns:0`, `$0`): `/workflows` "isn't available in this
 environment"; `workflow-launch-exec` is an internal hand-off with nothing pending; `__remote-workflow` runs only
-in a remote session. **The only way to start a workflow headless is a prompt asking the agent to use one.**
+in a remote session. But a **saved** workflow — a script in `.claude/workflows/<name>.js` (or
+`~/.claude/workflows/`) — is advertised in headless `init.slash_commands` under its name, and sending `/<name>`
+makes the agent call `Workflow` with it (`workflow-saved-command.jsonl`). The bundled `/deep-research` is
+advertised too (it asked for a topic when sent bare, and spent a model turn doing it). Nothing in
+`slash_commands` marks which entries are workflows. Otherwise, a workflow starts when a prompt asks for one.
+
+## 6. Controlling one: stop exists, pause does not
+
+- **`control_request {subtype:"stop_task", task_id:<workflow task id>}`** — the wire form of the Agent SDK's
+  documented `stopTask(taskId)` — stops the run: `task_updated {patch:{status:"killed"}}`, then
+  `task_notification {status:"stopped"}`, then a `success` receipt (`workflow-stop.jsonl`).
+- The same request at a **workflow agent's `agentId`** is answered `success` and **does nothing** — that agent
+  finished normally. Success is not a verdict, as for every other receipt here.
+- **`pause_task`** is refused: `subtype:"error"`, `"Unsupported control request subtype: pause_task"`. The
+  SDK documents no pause, resume or restart.
+
+## 7. Claude Code's own `/workflows` view, as behaviour
+
+Observed by driving an interactive session in a pty, and per the public workflows docs (not the binary). A
+header (name, description, `N/M agents · elapsed · state`); a **Phases** column (`✔ Count 2/2`, a number while
+a phase is unfinished) beside the selected phase's agents (`✔ label  model · tokens  duration`, `⏺` while
+running); `↵`/`→` drills into an agent, whose detail shows status and model, tokens · tool calls · duration,
+**Prompt**, **Activity** (its tool calls) and **Outcome**, and `↵` there expands Activity to each call's input
+and result. `esc`/`←` backs out a level. Keys: `f` filter agents by status, `j`/`k` scroll the detail, `p`
+pause/resume, `x` stop (an agent, or the run when focus is on it), `r` restart a running agent, `s` save the
+script as `/<name>` (project or user scope). Of those, headless reaches only **stop on the whole run** (§6);
+save is a file write with no control request.

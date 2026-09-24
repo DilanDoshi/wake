@@ -1,0 +1,3 @@
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "/seq-probe"}]}}
+{"type": "control_request", "request_id": "probe-0", "request": {"subtype": "stop_task", "task_id": "a9c7d0beb56b36024"}}
+{"type": "control_request", "request_id": "probe-1", "request": {"subtype": "stop_task", "task_id": "wbu5972hq"}}
