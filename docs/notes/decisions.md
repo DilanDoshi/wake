@@ -3183,3 +3183,70 @@ form (the full rationale lives in the daemon handlers), which shifted the "two l
 sentence off wire.go.
 
 Full argument: `internal/daemon/resume.go`, `internal/ui/resumepicker.go`, `internal/ui/resume.go`.
+
+---
+
+## 2026-09-24 — Workflows: what headless claude refuses, what a run costs a fork, and what the save wire may not carry
+
+Recorded facts, not guesses: `docs/superpowers/notes/2026-09-23-workflow-findings.md`. Design:
+`docs/superpowers/specs/2026-09-24-workflows-design.md`.
+
+**A drawn key does what it says, so several of Claude Code's own interactive `/workflows` keys are
+simply absent rather than disabled.** Headless claude's control-request channel answers `pause_task`
+with a refusal (`subtype:"error"`) and answers `stop_task` addressed at a *workflow agent's own* id
+with a bare `success` that changes nothing — that agent already finished, and "success is not a
+verdict" applies here exactly as it does to every other receipt on this wire. Restart has no wire form
+either; the SDK's own documentation names no pause, resume or restart at all (findings §6). So `p`ause,
+`r`estart and an agent-scoped `x` — three of Claude Code's own interactive keys, observed §7 — are not
+drawn greyed out or refused with a notice: they are not bound. A key this build advertises has to do
+what it says, and a key that silently did nothing — or worse, looked like it worked because the
+receipt read `success` — would be exactly the failure a headless-only surface has to avoid. The one
+control kept is stopping the *run* at its own task id, which really does end it.
+
+**A running workflow does not block a fork, because it is not the hazard `subagenttrack.go` exists to
+catch.** `forkSource` refuses a fork while a background *subagent* is still writing the parent's own
+transcript — an unrecorded concurrent-flush race between the fork's copy and the write in flight. A
+workflow's own agents write nothing into the parent's transcript, ever: their words exist only in
+their own sidechain files (findings §3), the same position a background *shell* is already in.
+`subagenttrack.go`'s `trackSub` keys on `core.TaskAgent` alone, so a workflow dispatch was already
+outside `runningSubs` under the existing guard's own domain — no daemon change needed, one test
+(`forksubagent_test.go`) pinning that a running workflow is not mistaken for the case that matters.
+
+**The save wire carries a name and a scope; the daemon owns the path and the bytes.** `--debug-file`'s
+ruling, reused rather than rediscovered: a path on the wire is a file anything that can dial the
+socket could choose, so `FrameSaveWorkflow` names only `Name` (fenced by `rpc.ValidWorkflowName`, one
+path segment) and `Scope`, and `internal/daemon/workflowsave.go` resolves the directory itself.
+**Project scope is bounded to the repository root, and the bound has to be found before the
+existing-directory search runs, not after.** Claude Code's own documented rule is the nearest existing
+`.claude/workflows` walking up from cwd; searching upward before knowing where the repository ends
+lets a cwd with no repository at all walk all the way to the filesystem root and return the *first*
+ancestor that happens to have one — almost always `~/.claude/workflows`, the personal-scope directory
+this same feature creates, crossing project and personal scope silently. `projectWorkflowDir` finds
+the root first (`repositoryRoot`, a `.git` entry, no git subprocess) so a cwd with no repository never
+searches its ancestors at all, and one with a repository never searches past its root. **The write
+itself is `O_EXCL`** — atomic create-or-refuse rather than a stat-then-write race — because
+overwriting a saved workflow is not a keystroke Wake will perform silently; a project-scope save also
+refuses a symlinked `.claude` or `.claude/workflows`, and the target file is refused as a symlink in
+either scope, for `--add-dir`'s reason: a name chosen on the wire must not redirect the write outside
+the directory it names.
+
+**The scope's wire word is `"personal"`, not Claude's own `"user"`.** The corpus rule — a Claude word
+may be claimed only in a form Claude is recorded doing nothing with — does not stretch to reusing one
+of Claude's words for an unrelated idea: `"user"` on this wire would collide with the message role
+Claude's own frames already spell that word for, which `internal/core/airlock_test.go` polices.
+Claude Code's own documentation calls the location "personal" (beside "project"), so the save dialog's
+label and the wire value are the same word Claude's docs use, and the Go constant's own name
+(`rpc.ScopeUser`) is free to stay readable without spelling anything Claude's wire does.
+
+**An unreadable workflow agent transcript answers empty, not an error.** `WorkflowAgentHistory` logs
+daemon-side and returns `nil, nil` for a transcript it cannot read, and `FrameWorkflowAgentReply`
+carries no events rather than a `FrameError` — the agent level then says its activity is unavailable,
+the same shape it already draws for a transcript that has not been written yet. The alternative was
+rejected: a `FrameError` on every re-ask (the agent level re-asks on each snapshot that moves the open
+agent) would put a notice on screen once per progress frame for a condition the operator cannot act
+on — the file is gone or unreadable, not a request that failed. This is `History`'s own ruling for a
+session with no transcript at all, arriving here because a missing file and an unreadable one are not
+different enough to draw differently.
+
+Full argument: `internal/daemon/workflowdisk.go`, `internal/daemon/workflowsave.go`,
+`internal/daemon/subagenttrack.go`, `internal/ui/workflowview.go`.
