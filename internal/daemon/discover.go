@@ -48,17 +48,20 @@ import (
 	"time"
 )
 
-// The transcript's own key names. Wake reads three of them and no more, and
+// The transcript's own key names. Wake reads four of them and no more, and
 // this const block is the whole of what this package knows about that format.
 //
 // keyCwd is a directory a message was written from. keyLastPrompt and
 // keyCustomTitle are the two preview sources, measured on 2026-08-12 at 379 and
 // 390 of 428 transcripts, 424 with either - so a session with neither is a real
-// case and is listed with no preview rather than skipped.
+// case and is listed with no preview rather than skipped. keyCustomTitle is also
+// the session's name (`--name`, `/rename`), and keyAITitle is claude's generated
+// title, the name of a session nobody named.
 const (
 	keyCwd         = "cwd"
 	keyLastPrompt  = "lastPrompt"
 	keyCustomTitle = "customTitle"
+	keyAITitle     = "aiTitle"
 )
 
 // previewBytes bounds one preview line. A prompt is unbounded text somebody
@@ -119,6 +122,10 @@ type FoundSession struct {
 	// empty. Contained by oneLine: it is text somebody typed and it is drawn on
 	// a row beside other sessions' rows.
 	Preview string
+
+	// Title is the session's name - its newest custom title, else claude's
+	// generated one - or empty. Contained by oneLine, for Preview's reason.
+	Title string
 }
 
 // slugOf is how a directory becomes the name of the directory its transcripts
@@ -232,7 +239,7 @@ func discover(projects string) ([]FoundSession, error) {
 			if !isReg {
 				return
 			}
-			cwds, preview := readTranscript(j.path)
+			cwds, preview, title := readTranscript(j.path)
 			found[i] = FoundSession{
 				ID:       j.id,
 				Dir:      verifiedDir(j.slug, cwds),
@@ -240,6 +247,7 @@ func discover(projects string) ([]FoundSession, error) {
 				Path:     j.path,
 				Modified: info.ModTime(),
 				Preview:  preview,
+				Title:    title,
 			}
 			ok[i] = true
 		}(i, j)
@@ -367,16 +375,16 @@ func verifiedDir(slug string, cwds []string) string {
 // appended to by a live process, so the last line of a file being read may be a
 // partial write - 2026-08-12 findings §7 records that no torn line was observed
 // in 428 files and that this is therefore not designed around, only survived.
-func readTranscript(path string) (cwds []string, preview string) {
+func readTranscript(path string) (cwds []string, preview, title string) {
 	f, err := os.Open(path)
 	if err != nil {
 		logf("wake: transcript %s could not be opened: %v", path, err)
-		return nil, ""
+		return nil, "", ""
 	}
 	defer func() { _ = f.Close() }()
 
 	seen := map[string]bool{}
-	var title string
+	var generated string
 	// The whole file, on purpose: verifiedDir needs every top-level cwd to prove
 	// a directory - a slug-matching cwd can appear deep in a transcript (measured
 	// 260KB-9MB into 18 of a 358-file corpus), so a head-only read loses those
@@ -401,14 +409,20 @@ func readTranscript(path string) (cwds []string, preview string) {
 		if t, ok := decodeString(line, keyCustomTitle); ok {
 			title = t
 		}
+		if t, ok := decodeString(line, keyAITitle); ok {
+			generated = t
+		}
+	}
+	if title == "" {
+		title = generated
 	}
 	if preview == "" {
-		// 379 of 428 carry a prompt and 390 carry a title; 424 carry either. A
-		// title is a name somebody chose, which is a worse "what is this doing"
-		// and a better nothing.
+		// 379 of 428 carry a prompt and 390 carry a custom title; 424 carry
+		// either. A title is a name, which is a worse "what is this doing" and a
+		// better nothing.
 		preview = title
 	}
-	return cwds, oneLine(preview, previewBytes)
+	return cwds, oneLine(preview, previewBytes), oneLine(title, previewBytes)
 }
 
 // decodeString reads one top-level string key, treating any other shape as

@@ -31,7 +31,7 @@ func TestResumeRowsMergeAndDedup(t *testing.T) {
 	disk := []DiskSession{
 		{ID: "parked1", Dir: "/p", Modified: now},
 		{ID: "live1", Dir: "/l", Modified: now},
-		{ID: "stranger1", Dir: "/s", Preview: "hi", Modified: now},
+		{ID: "stranger1", Dir: "/s", Preview: "hi", Title: "gmail helper", Modified: now},
 	}
 	rows, _ := a.resumeRowsFrom(disk)
 	if len(rows) != 2 {
@@ -49,6 +49,9 @@ func TestResumeRowsMergeAndDedup(t *testing.T) {
 	}
 	if s := byID["stranger1"]; s.Parked {
 		t.Errorf("stranger row = %+v, want a non-parked (resume-in-place) row", s)
+	}
+	if s := byID["stranger1"]; s.Title != "gmail helper" {
+		t.Errorf("stranger row = %+v, want the session's name carried as its Title", s)
 	}
 }
 

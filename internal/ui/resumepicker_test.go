@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -237,5 +238,69 @@ func TestResumePickerView(t *testing.T) {
 	}
 	if !strings.Contains(sv, "↑↓ move") {
 		t.Errorf("the single-select view is missing its key hint:\n%s", sv)
+	}
+}
+
+// boxInterior is a drawn row with the picker's own frame taken off, so a test
+// can read what is inside the box rather than its walls.
+func boxInterior(line string) string {
+	return strings.TrimSpace(strings.Trim(strings.TrimSpace(line), "│"))
+}
+
+// The picker is a box - the count in its top edge, the keys in its bottom -
+// holding a search box of its own, and each session is two rows: its name on
+// top, then its short id, age, directory, branch and last prompt beneath, with a
+// blank row before the next session so the list is not one crowded block.
+func TestResumePickerDrawsABoxedListOfNamedSessions(t *testing.T) {
+	rows := append(twoRows(), resumeRow{
+		ID: "cccccccc-3333-4333-8333-333333333333", Title: "gmail helper", Dir: "/dev/mail",
+		Preview: "connect gmail", Age: "just now", Resumable: true,
+	})
+	lines := strings.Split(stripANSI(ResumePicker{Rows: rows}.View(100)), "\n")
+
+	if top := lines[0]; !strings.HasPrefix(top, "╭") || !strings.Contains(top, "resume session · 1 of 3") {
+		t.Errorf("the top edge is not a box carrying the count: %q", top)
+	}
+	if bottom := lines[len(lines)-1]; !strings.HasPrefix(bottom, "╰") || !strings.Contains(bottom, "↑↓ move") {
+		t.Errorf("the bottom edge is not a box carrying the keys: %q", bottom)
+	}
+	for _, l := range lines {
+		if !strings.HasSuffix(l, "│") && !strings.HasSuffix(l, "╮") && !strings.HasSuffix(l, "╯") {
+			t.Errorf("a row of the box has lost its right wall: %q", l)
+		}
+	}
+	search := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "› search…") })
+	if search < 1 || !strings.Contains(lines[search-1], "╭") || !strings.Contains(lines[search+1], "╰") {
+		t.Fatalf("the search line is not inside a box of its own:\n%s", strings.Join(lines, "\n"))
+	}
+
+	for _, s := range []struct{ name, details, notDetails string }{
+		{name: "@iris", details: "aaaaaaaa · 12m · /dev/wake · feat/x"},
+		{name: "fix the parser", details: "bbbbbbbb · 5d · (no directory", notDetails: "fix the parser"},
+		{name: "gmail helper", details: `cccccccc · just now · /dev/mail · "connect gmail"`},
+	} {
+		at := slices.IndexFunc(lines, func(l string) bool { return strings.HasSuffix(boxInterior(l), s.name) })
+		if at < 0 || at+1 >= len(lines) {
+			t.Fatalf("no row is headed %q:\n%s", s.name, strings.Join(lines, "\n"))
+		}
+		details := boxInterior(lines[at+1])
+		if !strings.HasPrefix(details, s.details) {
+			t.Errorf("%q's details row = %q, want it to start %q", s.name, details, s.details)
+		}
+		if s.notDetails != "" && strings.Contains(details, s.notDetails) {
+			t.Errorf("%q's details row repeats the name it is headed by: %q", s.name, details)
+		}
+		if next := lines[at+2]; boxInterior(next) != "" && !strings.HasPrefix(next, "╰") {
+			t.Errorf("%q is not followed by a blank row before the next session: %q", s.name, next)
+		}
+	}
+}
+
+// Search reaches a session's name, since the name is now what a row is headed by.
+func TestResumePickerSearchesTheSessionName(t *testing.T) {
+	rows := append(twoRows(), resumeRow{ID: "cccccccc-3333-4333-8333-333333333333", Title: "gmail helper", Resumable: true})
+	p := ResumePicker{Rows: rows, Query: "gmail"}
+	if f := p.filtered(); len(f) != 1 || f[0].Title != "gmail helper" {
+		t.Errorf("searching the name found %+v, want only the gmail helper row", f)
 	}
 }
