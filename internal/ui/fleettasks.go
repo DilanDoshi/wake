@@ -74,11 +74,16 @@ func (f Fleet) named(sessionID string, ev core.Event) core.Event {
 // rows are walked by a cursor that refuses the ones with nothing behind them.
 // Task.Openable is the one place that decides which have a conversation, so
 // this asks it rather than restating it.
+//
+// **A running workflow is the one exception to Openable**: it has no
+// transcript of its own to view (Openable's Kind check excludes it, same as a
+// shell), but it is background work an operator is spending on same as a
+// subagent, so it earns the row - just never a click into it.
 func (f Fleet) RunningTasks(sessionID string) []Task {
 	rows := f.tasks[sessionID].Rows()
 	out := make([]Task, 0, len(rows))
 	for _, row := range rows {
-		if row.Status == core.TaskRunning && row.Openable() {
+		if row.Status == core.TaskRunning && (row.Openable() || row.Kind == core.TaskWorkflow) {
 			out = append(out, row)
 		}
 	}

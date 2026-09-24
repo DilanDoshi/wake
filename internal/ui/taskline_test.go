@@ -313,3 +313,105 @@ func TestEnrichmentResolvesTheRowByTaskID(t *testing.T) {
 		t.Errorf("the ending was named after another task:\n%s", out)
 	}
 }
+
+// A workflow's own ending reads "Workflow", never "Subagent" - taskLineKind's
+// own word for the kind, and the row's short name (never its description).
+func TestAWorkflowEndingLine(t *testing.T) {
+	line := taskLine(&core.TaskUpdate{
+		ID: "w1", Dispatch: "toolu_1", Kind: core.TaskWorkflow, Phase: core.TaskEnded,
+		Status: core.TaskDone, Label: "count-lines", Elapsed: 9 * time.Second,
+	}, 80)
+
+	for _, want := range []string{"Workflow", `"count-lines"`, "finished", "9s"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the line is missing %q: %q", want, line)
+		}
+	}
+}
+
+// A failed workflow says so and shows the first line of its own thrown
+// error, under the ending - the one status this build attaches a second line
+// to, since it is the one ending a script deliberately caused and explained.
+func TestAFailedWorkflowEndingLineShowsItsError(t *testing.T) {
+	line := taskLine(&core.TaskUpdate{
+		ID: "w1", Dispatch: "toolu_1", Kind: core.TaskWorkflow, Phase: core.TaskEnded,
+		Status: core.TaskFailed, Label: "wide-then-fail", Elapsed: 10 * time.Second,
+		Workflow: &core.WorkflowUpdate{Error: "Error: deliberate probe failure\n    at <anonymous> (workflow.js:8:7)"},
+	}, 80)
+
+	for _, want := range []string{"Workflow", `"wide-then-fail"`, "failed", "10s", "Error: deliberate probe failure"} {
+		if !strings.Contains(line, want) {
+			t.Errorf("the line is missing %q:\n%s", want, line)
+		}
+	}
+	if strings.Contains(line, "at <anonymous>") {
+		t.Errorf("the line carries more than the error's first line:\n%s", line)
+	}
+}
+
+// An ending that is not a failure carries no second line at all - a done or
+// a halted workflow has nothing thrown to show.
+func TestAWorkflowEndingThatDidNotFailShowsNoErrorLine(t *testing.T) {
+	line := taskLine(&core.TaskUpdate{
+		ID: "w1", Dispatch: "toolu_1", Kind: core.TaskWorkflow, Phase: core.TaskEnded,
+		Status: core.TaskDone, Label: "count-lines", Elapsed: 8 * time.Second,
+	}, 80)
+
+	if strings.Count(line, "\n") != 0 {
+		t.Errorf("a successful workflow's line carries more than one row: %q", line)
+	}
+}
+
+// The controller's ruling: a failed ending uses the theme's own ErrorStyle
+// rather than a new colour invented for this one status.
+func TestAFailedTaskUsesTheThemesErrorStyle(t *testing.T) {
+	forceColour(t)
+	want := ErrorStyle.Render("x")
+	if got := taskLineStyle(core.TaskFailed).Render("x"); got != want {
+		t.Errorf("a failed ending does not render in ErrorStyle: got %q, want %q", got, want)
+	}
+}
+
+// A failed workflow's error line is styled the same as the line above it -
+// both are the one outcome, not two.
+func TestTheErrorLineSharesTheEndingsColour(t *testing.T) {
+	forceColour(t)
+	line := taskLine(&core.TaskUpdate{
+		ID: "w1", Dispatch: "toolu_1", Kind: core.TaskWorkflow, Phase: core.TaskEnded,
+		Status: core.TaskFailed, Label: "wide-then-fail", Elapsed: 10 * time.Second,
+		Workflow: &core.WorkflowUpdate{Error: "boom"},
+	}, 80)
+	rows := strings.Split(line, "\n")
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want 2: the ending and its error", len(rows))
+	}
+	// Every row carries the same SGR opener, i.e. the same style: comparing
+	// the whole rendered row would fail on the different text, so this checks
+	// only the escape sequence each one opens with.
+	openOf := func(s string) string {
+		if i := strings.IndexByte(s, 'm'); i >= 0 && strings.HasPrefix(s, "\x1b[") {
+			return s[:i+1]
+		}
+		return ""
+	}
+	if openOf(rows[0]) == "" || openOf(rows[0]) != openOf(rows[1]) {
+		t.Errorf("the two rows do not share a style: %q vs %q", rows[0], rows[1])
+	}
+}
+
+// The full pipeline: a workflow's row is enriched by named() the way an
+// ordinary subagent's is, so the transcript line names the workflow and shows
+// its error though task_notification carries neither.
+func TestAFailedWorkflowsEndingLineNamesItAndShowsItsErrorThroughTheRealFold(t *testing.T) {
+	d := ingested(conversation(t),
+		workflowStarted("w1", "toolu_1", "Six parallel echo agents, one reducer, then a deliberate failure", "wide-then-fail"),
+		workflowFailedUpdate("w1", "Error: deliberate probe failure"),
+		core.Event{Kind: core.KindSystem, Task: workflowNotification("w1", "toolu_1", core.TaskFailed)})
+
+	out := conversationRegion(t, d, 90, 24)
+	for _, want := range []string{"Workflow", `"wide-then-fail"`, "failed", "Error: deliberate probe failure"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the transcript is missing %q:\n%s", want, out)
+		}
+	}
+}

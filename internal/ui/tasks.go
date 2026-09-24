@@ -50,6 +50,17 @@ type Task struct {
 	Tool    string
 	Tokens  int
 	Elapsed time.Duration
+
+	// Workflow is the latest workflow_progress snapshot for a workflow task,
+	// and the zero value for every other kind. task_progress sends a whole
+	// replacement each time, never a delta, so the row just takes the newest
+	// one. See core.WorkflowSnapshot.
+	Workflow core.WorkflowSnapshot
+
+	// Error is a failed workflow's own thrown error, from the task_updated
+	// that ends it - the one ending frame that carries it. task_notification,
+	// the frame taskLine actually draws from, does not; see Tasks.named.
+	Error string
 }
 
 // Openable says whether this row has a conversation behind it.
@@ -145,6 +156,21 @@ func (t Task) updated(u *core.TaskUpdate) Task {
 	if u.Elapsed > 0 {
 		t.Elapsed = u.Elapsed
 	}
+	// A workflow's own short name wins over the sentence Claude wrote about it
+	// - task_started carries both (workflow_name and description), and this
+	// is what a script authored. Placed after the Label/Name block above so
+	// it runs second and overwrites what that block just set.
+	if u.Workflow != nil {
+		if u.Workflow.Name != "" {
+			t.Name = u.Workflow.Name
+		}
+		if u.Workflow.Progress != nil {
+			t.Workflow = *u.Workflow.Progress
+		}
+		if u.Workflow.Error != "" {
+			t.Error = u.Workflow.Error
+		}
+	}
 	return t
 }
 
@@ -199,6 +225,15 @@ func (t Tasks) named(u *core.TaskUpdate) *core.TaskUpdate {
 	}
 	if filled.Elapsed <= 0 {
 		filled.Elapsed = row.Elapsed
+	}
+	// A failed workflow's error arrives on task_updated, never on
+	// task_notification - the frame this whole function exists to fill in
+	// for - so the row is where it survives to reach the line that draws.
+	// A new struct rather than editing u.Workflow: that pointer is nil on
+	// every recorded task_notification, so there is nothing to alias, but a
+	// caller that ever changes has nothing here to trip over.
+	if filled.Workflow == nil && row.Error != "" {
+		filled.Workflow = &core.WorkflowUpdate{Error: row.Error}
 	}
 	return &filled
 }

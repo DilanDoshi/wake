@@ -167,6 +167,18 @@ func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 		// with nothing at all. On the surface somebody supervising a fleet sits
 		// on, an agent stopping is exactly what has to be visible.
 		return block{text: warnLine(cardLead+speaker(a)+markerSep+askHeadline(ev), w)}
+	case core.KindSystem:
+		// A workflow's own ending, admitted by fold's Observe-level enrichment
+		// (fleet.go) and drawn here through the same taskLine a conversation's
+		// transcript uses, so the two can never disagree about what a
+		// dispatch's ending says - just headed by who ran it. An ordinary
+		// subagent's or a shell's ending never reaches here at all
+		// (workflowRoomEvent's own gate), so taskLine only ever draws nothing
+		// for a KindSystem frame that is not one.
+		if line := taskLine(ev.Task, w); line != "" {
+			return block{text: clip(speakerStyle(a).Render(speaker(a))+" "+line, w)}
+		}
+		return block{}
 	default:
 		// Cards are drawn by cards.go, which owns their pinning and their
 		// keys; everything else the fold already dropped.

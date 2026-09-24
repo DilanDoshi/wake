@@ -29,9 +29,12 @@ package ui
 // figure on screen is worse than no figure.
 
 import (
+	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/DilanDoshi/wake/internal/core"
 )
 
 // subsOf answers an agent's running dispatches, and nil for an agent with none.
@@ -47,12 +50,43 @@ type subsOf func(sessionID string) []Task
 // that" rather than two.
 const subGlyph = "⎿"
 
+// workflowGlyph marks a running dispatch as a workflow rather than a single
+// subagent - several agents under one row, not one an operator chose a type
+// for.
+const workflowGlyph = "◈"
+
 // subagentRow is one running dispatch: what kind of agent it is, and what it
 // has spent if the column can hold the figure whole.
 func subagentRow(t Task, width int) string {
+	if t.Kind == core.TaskWorkflow {
+		return workflowRow(t, width)
+	}
 	head := strings.Repeat(" ", toolIndent) + subGlyph + " " + subagentName(t)
 	count := tokenArrow + " " + humanTokens(t.Tokens)
 	if t.Tokens <= 0 || lipgloss.Width(head)+1+lipgloss.Width(count) > width {
+		return clip(head, width)
+	}
+	return clip(head+" "+count, width)
+}
+
+// workflowRow is a running workflow's row: its own short name - never the
+// sentence Claude wrote about it, see Task.Name - and how many of its agents
+// are done, dropped whole when the pair does not fit. Reached through
+// subagentRow's own call sites (roster.go's rows, board.go's boardSubRow)
+// rather than a second row-drawing site, so the sidebar and the board can
+// never disagree about what a workflow's row says.
+func workflowRow(t Task, width int) string {
+	head := strings.Repeat(" ", toolIndent) + subGlyph + " " + workflowGlyph + " " + oneLine(t.Name)
+	if len(t.Workflow.Agents) == 0 {
+		return clip(head, width)
+	}
+	// Sprintf rather than a "/"-joined concatenation: slashguard_test.go holds
+	// that literal to slash.go alone, on the grounds that a second place
+	// spelling it is a second place that could decide a draft is a command -
+	// which a workflow's own done/total count has nothing to do with, but the
+	// scan is blunt on purpose and does not tell the two apart.
+	count := fmt.Sprintf("%d/%d", t.Workflow.Done(), len(t.Workflow.Agents))
+	if lipgloss.Width(head)+1+lipgloss.Width(count) > width {
 		return clip(head, width)
 	}
 	return clip(head+" "+count, width)
