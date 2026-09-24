@@ -79,7 +79,7 @@ func (k *killSwitch) suspend() error {
 	case <-k.held:
 	case <-time.After(suspendWait):
 		k.quiet.Store(false)
-		return errors.New("Wake's terminal reader did not let go")
+		return errors.New("the terminal reader did not let go")
 	}
 	if k.state != nil {
 		if err := term.Restore(k.tty.Fd(), k.state); err != nil {

@@ -203,7 +203,7 @@ func TestDisableAndEnableSwitchTheServer(t *testing.T) {
 	}
 	a = pressMenu(a, keyEsc)
 	a = openDetail(t, pressMenu(pressMenu(a, keyUp), keyUp), 1) // echo, from the top
-	a = pressMenu(a, keyEnter)
+	pressMenu(a, keyEnter)
 	if got := rec.taken(t); len(got) != 1 || got[0].Kind != rpc.FrameMCPEnable || got[0].Text != "echo" {
 		t.Fatalf("wrote %v, want echo enabled", sentKinds(got))
 	}
