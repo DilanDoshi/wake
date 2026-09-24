@@ -56,6 +56,13 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	} else {
 		a = next
 	}
+	// The workflow view is a modal over its own pane: while that pane holds the
+	// keys it takes every one, and ⌃C closes it and goes on to park. See
+	// workflowview.go.
+	a, wfCmd, took := a.workflowKey(m)
+	if took {
+		return a, wfCmd, true
+	}
 	// Read before the disarm takes it, because the disarm is what makes "every
 	// other key takes the arm back" true without a call site per key. See
 	// detach.go.
@@ -191,7 +198,7 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// A card takes ↵ before this; see cardKey.
 		if a.composerEmpty() {
 			if agent, ok := a.pickedAgent(); ok {
-				return a.openDMWith(agent.ID, agent.Name), nil, true
+				return a.openDMWith(agent.ID, agent.Name).viewingWorkflow(agent.ID), nil, true
 			}
 		}
 		model, cmd := a.submit()

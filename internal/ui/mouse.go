@@ -134,6 +134,11 @@ func (a App) press(x, y int) App {
 			a.dragAt, a.dragRows = at, true
 			return a
 		}
+		// The workflow view is drawn over this pane's transcript, so a press is
+		// the view's and never an anchor into text nobody can see.
+		if a.workflowIn(id) {
+			return a.workflowPress(id, at, top, height, x, y, r)
+		}
 		// The anchor is taken before the keys move, because the frame that was
 		// clicked is the one drawn *before* the move: refocus re-sizes the panes,
 		// and a picker belongs to whichever pane holds the keys - so measuring

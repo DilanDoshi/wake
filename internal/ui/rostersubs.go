@@ -148,6 +148,10 @@ func (a App) viewingPicked(id string) App {
 	if !ok {
 		return a
 	}
+	// A workflow forwards nothing, so its dispatch would view a blank pane.
+	if t, ok := a.pickedWorkflow(id); ok {
+		return a.openWorkflow(id, t.ID)
+	}
 	task := a.roster.SelectedTask
 	return a.withDM(id, d.withSubBacklog(task, a.fleet.SubBacklog(id, task)).Viewing(task))
 }

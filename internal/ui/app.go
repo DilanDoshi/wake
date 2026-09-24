@@ -157,12 +157,12 @@ type App struct {
 	roster Roster
 	groups Groups
 
-	// picker is the menu Wake draws for a bare /effort or /model, and the zero
-	// value is "there is not one". Beside cards rather than in them: it is
-	// Wake's own and appears in no fleet report. See picker.go.
+	// picker is the menu Wake draws for a bare /effort or /model; the zero value is none. Beside
+	// cards rather than in them: it is Wake's own and appears in no fleet report. See picker.go.
 	picker       Picker
-	rewind       RewindPicker // esc esc's own picker, on an idle empty conversation; see rewind.go
-	resumePicker ResumePicker // a bare /resume's own picker, over the composer; see resumepicker.go
+	rewind       RewindPicker  // esc esc's own picker, on an idle empty conversation; see rewind.go
+	resumePicker ResumePicker  // a bare /resume's own picker, over the composer; see resumepicker.go
+	workflow     workflowState // the /workflows view and the runs it draws; see workflowview.go
 
 	// completion is the menu under the focused draft: what could finish the
 	// word at the cursor. Rebuilt per keystroke, never per frame, and its `@`
@@ -746,6 +746,8 @@ func (a App) apply(f rpc.Frame) App {
 		return a.roomHistoryArrived(f)
 	case rpc.FrameRewindTargetsReply:
 		return a.rewindTargetsArrived(f)
+	case rpc.FrameWorkflowsReply:
+		return a.workflowReplied(f)
 
 	case rpc.FrameError:
 		// The daemon's own queue overflowed: it dropped frames for this client
@@ -758,14 +760,12 @@ func (a App) apply(f rpc.Frame) App {
 			return a.notedGap(f.Dropped)
 		}
 
-		// A refused spawn arrives this way rather than as a dropped
-		// connection, so a client that ignored these would show an empty
-		// conversation for a session that never started.
+		// A refused spawn arrives this way rather than as a dropped connection, so a client that
+		// ignored these would show an empty conversation for a session that never started.
 		//
-		// Every one of them is reported now, not only this client's own. A DM
-		// filtered these because it was 1:1 and another agent's failure was
-		// somebody else's window; the room is every agent, so an error about
-		// any of them is about something on this screen.
+		// Every one of them is reported now, not only this client's own. A DM filtered these because it
+		// was 1:1 and another agent's failure was somebody else's window; the room is every agent, so an
+		// error about any of them is about something on this screen.
 		// If this refusal names a fork, stop waiting for a conversation that
 		// will never arrive - most often because the parent is mid-turn. Keyed
 		// on the id and nothing else: an error about *another* agent must leave

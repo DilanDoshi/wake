@@ -61,6 +61,10 @@ type Task struct {
 	// that ends it - the one ending frame that carries it. task_notification,
 	// the frame taskLine actually draws from, does not; see Tasks.named.
 	Error string
+
+	// Summary is a workflow's description, kept because Name gives it up to
+	// the workflow's own short name. The /workflows header draws both.
+	Summary string
 }
 
 // Openable says whether this row has a conversation behind it.
@@ -161,6 +165,9 @@ func (t Task) updated(u *core.TaskUpdate) Task {
 	// is what a script authored. Placed after the Label/Name block above so
 	// it runs second and overwrites what that block just set.
 	if u.Workflow != nil {
+		if u.Phase == core.TaskStarted && u.Label != "" {
+			t.Summary = u.Label
+		}
 		if u.Workflow.Name != "" {
 			t.Name = u.Workflow.Name
 		}

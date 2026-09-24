@@ -358,11 +358,9 @@ var (
 	noTeamTarget = "which one? " + teamUsage
 )
 
-// commands is every slash command Wake owns. **Closed on purpose**: anything
-// not here is a message, which is what keeps claude's own commands working.
-//
-// A map from the bare word to what it does, so adding /new is one entry rather
-// than an arm in a switch somebody has to find.
+// commands is every slash command Wake owns. **Closed on purpose**: anything not here is a message,
+// which is what keeps claude's own commands working. A map from the bare word to what it does, so
+// adding /new is one entry rather than an arm in a switch somebody has to find.
 var commands = map[string]func(App, string) (App, tea.Cmd){
 	resumeCommand:          App.resume,
 	newCommand:             App.newAgent,
@@ -379,6 +377,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	loginCommand:           App.login,
 	groupchatFilterCommand: App.groupchatFilter,
 	reauthCommand:          App.reauth,
+	workflowsCommand:       App.openWorkflows,
 }
 
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
@@ -636,14 +635,13 @@ func (a App) mentionCommand(who, text string) (App, tea.Cmd, bool) {
 	return next, cmd, true
 }
 
-// wakeCommandCount holds that map to its size. The list is hand-written - it
-// is a vocabulary rather than something the code declares elsewhere - and
-// docs/notes/decisions.md's rule for one of those is that it carries a count,
-// so a command cannot be added without the passthrough guard being looked at.
+// wakeCommandCount holds that map to its size. The list is hand-written - it is a vocabulary rather
+// than something the code declares elsewhere - and docs/notes/decisions.md's rule for one of those is
+// that it carries a count, so a command cannot be added without the passthrough guard being looked at.
 //
 // Named for its half of the overload rather than `commandCount`, which this
 // package's tests already use for how many goroutines one tea.Cmd costs.
-const wakeCommandCount = 15
+const wakeCommandCount = 16
 
 // slash routes one draft, reporting whether Wake took it.
 //
@@ -755,11 +753,12 @@ func (a App) renameMirrorArg(agent Agent, text string) tea.Cmd {
 // it never runs the login, which is the no-PTY non-negotiable. See authapp.go.
 const loginCommand = "login"
 
-// reauthCommand recovers the sessions a shared-login expiry knocked out. The
-// corpus advertises no `reauth` (nor `auth`), so Wake owns it on `login`'s own
-// evidence - TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising. See
-// reauth.go.
+// reauthCommand recovers the sessions a shared-login expiry knocked out. The corpus advertises no
+// `reauth` (nor `auth`), so Wake owns it on `login`'s own evidence -
+// TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising. See reauth.go.
 const reauthCommand = "reauth"
+
+const workflowsCommand = "workflows" // no recorded headless init advertises it; see workflowview.go
 
 // adoptCommand is the room's half of session importing, and the word is a
 // finding rather than a preference.

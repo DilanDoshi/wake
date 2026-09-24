@@ -157,6 +157,9 @@ func (a App) column(col, width, height int) string {
 // pane draws one conversation, the room included. "" is the room, which is the
 // same convention the grid and the focus both use.
 func (a App) pane(id string, width, height int) string {
+	if a.workflowIn(id) {
+		return a.workflowPane(width, height)
+	}
 	if id == "" {
 		return a.roomPane(width, height)
 	}
