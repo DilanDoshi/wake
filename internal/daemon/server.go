@@ -674,6 +674,10 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 			agentID = f.Workflow.Agent
 		}
 		s.start(func() { s.sendWorkflowAgent(c, f.SessionID, agentID) })
+	case rpc.FrameSaveWorkflow:
+		// Off its own goroutine, FrameHistory's reason: saveWorkflow writes a
+		// file to disk.
+		s.start(func() { s.saveWorkflowFrame(c, f) })
 	default:
 		// Unrecognized rather than guessed at. The whole reason stop, kill
 		// and quit are separate kinds is that no default is safe.
