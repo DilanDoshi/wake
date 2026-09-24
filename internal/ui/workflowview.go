@@ -107,11 +107,13 @@ func (a App) openWorkflows(arg string) (App, tea.Cmd) {
 }
 
 // openWorkflow opens one run's level in its agent's pane - the sidebar row's
-// way in. It returns no command because the open keys and the click that reach
-// it cannot pass one on; its disk ask waits for Update's drain (takeHistoryAsks).
+// way in, once an open key or a click has given that pane the keys. A placement
+// that refused (⌃B from a lower pane) left them elsewhere, and opening the pane
+// here would be ⌃D's replace under ⌃B's name. It returns no command because its
+// callers cannot pass one on; its disk ask waits for Update's drain.
 func (a App) openWorkflow(session, task string) App {
 	if a.focus != session {
-		a = a.openDMWith(session, a.agentName(session))
+		return a
 	}
 	a.workflow.view = WorkflowView{Up: true, Pane: session, Session: session, Task: task, Level: levelRun}
 	return a.askWorkflows(session)
@@ -170,15 +172,30 @@ func (a App) workflowKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	if m.Type == tea.KeyCtrlC {
 		return a.closeWorkflow(), nil, false
 	}
-	v.Settling = false
-	runs := a.workflowRuns(v.Session)
-	if v.Level == levelRun {
-		v = v.runKey(m, runs)
-	} else {
-		v = v.listKey(m, runs)
-	}
-	a.workflow.view = v
+	a.workflow.view = v.keyed(m, a.workflowRuns(v.Session))
 	return a, nil, true
+}
+
+// workflowWheel is the wheel over the view: it walks the rows as ↑↓ do, since
+// the transcript under the view is not drawn and scrolling it would leave it
+// silently scrolled back once the view closes. Like any wheel, it moves no keys.
+func (a App) workflowWheel(up bool) App {
+	k := tea.KeyMsg{Type: tea.KeyDown}
+	if up {
+		k.Type = tea.KeyUp
+	}
+	v := a.workflow.view
+	a.workflow.view = v.keyed(k, a.workflowRuns(v.Session))
+	return a
+}
+
+// keyed is one key against the view at its level; any key ends settling.
+func (v WorkflowView) keyed(m tea.KeyMsg, runs []workflowRunView) WorkflowView {
+	v.Settling = false
+	if v.Level == levelRun {
+		return v.runKey(m, runs)
+	}
+	return v.listKey(m, runs)
 }
 
 func (v WorkflowView) listKey(m tea.KeyMsg, runs []workflowRunView) WorkflowView {

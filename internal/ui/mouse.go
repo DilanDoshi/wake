@@ -209,10 +209,18 @@ func (a App) paneAt(col, y int) (id string, top, height int, ok bool) {
 // A pointer over a sidebar, a divider or a rule scrolls the focused pane, which
 // is the honest fallback: there is no transcript under it to move.
 func (a App) scroll(lines, x, y int) App {
+	id, under := a.focus, false
 	if region, at := a.layout.Hit(a.regions(), x); region == RegionPane {
-		if id, _, _, ok := a.paneAt(at, y); ok {
-			return a.scrollPane(id, lines)
+		id, _, _, under = a.paneAt(at, y)
+		if !under {
+			id = a.focus
 		}
+	}
+	if a.workflowIn(id) { // the view covers that transcript; see workflowWheel
+		return a.workflowWheel(lines > 0)
+	}
+	if under {
+		return a.scrollPane(id, lines)
 	}
 	return a.scrollFocused(lines)
 }

@@ -4,6 +4,8 @@ package ui
 // into it. The drawing itself is workflowdraw_test.go's.
 
 import (
+	"fmt"
+	"reflect"
 	"strings"
 	"testing"
 	"time"
@@ -461,4 +463,92 @@ func viewCell(a App, s string) (x, y int, ok bool) {
 		}
 	}
 	return 0, 0, false
+}
+
+// ⌃B from a lower pane is refused by name, and a workflow row under the cursor
+// must not turn the refusal into ⌃D's replace: the grid holds and no view opens.
+func TestARefusedCtrlBOnAWorkflowRowOpensNothing(t *testing.T) {
+	a := workflowFleet(t).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateWorking},
+		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s3", Name: "carol", State: rpc.StateIdle},
+	)
+	a = a.openDMWith("s1", "alex").openDMWith("s2", "sydney").openBelow("s3", "carol")
+	if a.focus != "s3" {
+		t.Fatalf("carol's lower pane does not hold the keys (%q): the refusal is never reached", a.focus)
+	}
+	a = onWorkflowRow(t, a)
+	before := a.grid
+	a, _ = pressKey(a, wfKey(tea.KeyCtrlB))
+	if !reflect.DeepEqual(a.grid, before) {
+		t.Errorf("a refused ⌃B moved the grid from %+v to %+v", before, a.grid)
+	}
+	if a.workflow.view.Open() || a.focus != "s3" {
+		t.Errorf("a refused ⌃B opened %+v with the keys on %q, want nothing and carol", a.workflow.view, a.focus)
+	}
+}
+
+// chatty gives alex n lines of prose, enough to overflow a pane, so a scroll of
+// the room or alex's conversation is a real move rather than a clamp.
+func chatty(a App, n int) App {
+	for i := range n {
+		a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &core.Event{
+			Kind: core.KindAssistantText, SessionID: "s1", Text: fmt.Sprintf("line %d", i),
+		}})
+	}
+	return a
+}
+
+func wheel(a App, up bool, x, y int) App {
+	button := tea.MouseButtonWheelDown
+	if up {
+		button = tea.MouseButtonWheelUp
+	}
+	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionPress, Button: button, X: x, Y: y})
+	return a
+}
+
+// The wheel over the view walks its rows; the transcript under it is not drawn,
+// so scrolling it would leave it silently scrolled back after esc.
+func TestTheWheelOverTheViewInADMWalksItsRowsNotTheTranscript(t *testing.T) {
+	a, _ := openedWorkflows(t, chatty(workflowFleet(t).openDMWith("s1", "alex"), 80))
+	if tr := a.dms["s1"].tr; !tr.atBottom() || tr.bottom() <= tr.first() {
+		t.Fatal("alex's transcript does not overflow its pane, so a scroll would prove nothing")
+	}
+	x, y, ok := viewCell(a, "2 Sum")
+	if !ok {
+		t.Fatalf("the view is not drawn:\n%s", stripANSI(a.View()))
+	}
+	a = wheel(a, false, x, y)
+	if a.workflow.view.Cursor != 1 {
+		t.Errorf("the wheel down left the phase cursor on %d, want 1", a.workflow.view.Cursor)
+	}
+	a = wheel(a, true, x, y)
+	a = wheel(a, true, a.layout.Width-2, y) // over the sidebar: the focused pane's
+	if a.workflow.view.Cursor != 0 {
+		t.Errorf("the wheel up left the phase cursor on %d, want 0", a.workflow.view.Cursor)
+	}
+	if !a.dms["s1"].tr.atBottom() {
+		t.Error("the wheel scrolled alex's transcript under the view")
+	}
+}
+
+func TestTheWheelOverTheViewInTheRoomWalksItsRowsNotTheGroupChat(t *testing.T) {
+	a, _ := openedWorkflows(t, chatty(secondRun(workflowFleet(t)), 80))
+	if tr := a.room.tr; !tr.atBottom() || tr.bottom() <= tr.first() {
+		t.Fatal("the group chat does not overflow its pane, so a scroll would prove nothing")
+	}
+	x, y, ok := viewCell(a, "deploy")
+	if !ok {
+		t.Fatalf("the room's list is not drawn:\n%s", stripANSI(a.View()))
+	}
+	a = wheel(a, false, x, y)
+	if a.workflow.view.Cursor != 1 {
+		t.Errorf("the wheel down left the list cursor on %d, want 1", a.workflow.view.Cursor)
+	}
+	a = wheel(a, true, x, y)
+	if a.workflow.view.Cursor != 0 || !a.room.tr.atBottom() {
+		t.Errorf("the wheel up left cursor %d and the group chat at bottom=%v, want 0 and true",
+			a.workflow.view.Cursor, a.room.tr.atBottom())
+	}
 }

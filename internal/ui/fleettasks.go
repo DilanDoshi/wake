@@ -78,7 +78,8 @@ func (f Fleet) named(sessionID string, ev core.Event) core.Event {
 // **A running workflow is the one exception to Openable**: it has no
 // transcript of its own to view (Openable's Kind check excludes it, same as a
 // shell), but it is background work an operator is spending on same as a
-// subagent, so it earns the row - just never a click into it.
+// subagent, so it earns the row - and ↵, ⌃D or a click on it opens the
+// /workflows view rather than a transcript (viewingPicked).
 func (f Fleet) RunningTasks(sessionID string) []Task {
 	rows := f.tasks[sessionID].Rows()
 	out := make([]Task, 0, len(rows))
