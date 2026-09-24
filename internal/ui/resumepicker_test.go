@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -318,6 +319,24 @@ func TestResumePickerFitsTheRowsItIsGiven(t *testing.T) {
 		}
 		if h := lipgloss.Height(v); maxRows >= 7 && h > maxRows {
 			t.Errorf("at %d rows the picker drew %d:\n%s", maxRows, h, v)
+		}
+	}
+}
+
+// With room to spare the window is four sessions, and it slides with the cursor
+// so the cursored session is always among them.
+func TestResumePickerPagesFourSessionsAtATime(t *testing.T) {
+	var rows []resumeRow
+	for i := range 7 {
+		rows = append(rows, resumeRow{ID: fmt.Sprintf("%08d-0000-4000-8000-000000000000", i), Title: fmt.Sprintf("session %d", i), Resumable: true})
+	}
+	for cursor := range rows {
+		v := stripANSI(ResumePicker{Rows: rows, Cursor: cursor}.View(100, 100))
+		if n := strings.Count(v, "  session ") + strings.Count(v, "› session "); n != resumeWindow {
+			t.Errorf("cursor %d: drew %d sessions, want %d:\n%s", cursor, n, resumeWindow, v)
+		}
+		if !strings.Contains(v, fmt.Sprintf("› session %d", cursor)) {
+			t.Errorf("cursor %d: the cursored session is not in the window:\n%s", cursor, v)
 		}
 	}
 }
