@@ -323,18 +323,17 @@ func systemNoticeFor(f wireFrame) Notice {
 //
 // The fields are read unconditionally within those four because absent decodes
 // to the zero value and every zero here already means "this frame did not
-// say". A per-subtype switch would be four branches asserting what the key
-// sets already establish, and it would have to be corrected every time Claude
-// moved a key.
+// say", and Kind is read once and reused rather than resolved twice.
 func taskUpdate(f wireFrame) *TaskUpdate {
 	phase, ok := taskPhases[f.Subtype]
 	if !ok {
 		return nil
 	}
+	kind := taskKind(f.TaskType)
 	return &TaskUpdate{
 		ID:       f.TaskID,
 		Dispatch: f.ToolUseID,
-		Kind:     taskKind(f.TaskType),
+		Kind:     kind,
 		Phase:    phase,
 		Status:   taskStatus(phase, f),
 		Label:    f.Description,
@@ -342,6 +341,7 @@ func taskUpdate(f wireFrame) *TaskUpdate {
 		Tool:     f.LastToolName,
 		Tokens:   taskTokens(f.Usage),
 		Elapsed:  taskElapsed(f.Usage),
+		Workflow: workflowOf(f, kind),
 	}
 }
 

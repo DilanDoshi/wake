@@ -19,6 +19,7 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
 
 // ErrNotWritten wraps every error this file returns, and the wrapping is the
@@ -654,4 +655,78 @@ func intArg(input map[string]any, key string) int {
 		return 0
 	}
 	return int(v)
+}
+
+// wireWorkflowItem is one workflow_progress entry: a phase or an agent, told
+// apart by type. It reads, not writes - wire.go's own reason for encode.go
+// holding the room, beside goalOp.
+type wireWorkflowItem struct {
+	Type          string `json:"type"`
+	Index         int    `json:"index"`
+	Title         string `json:"title"`
+	Label         string `json:"label"`
+	PhaseIndex    int    `json:"phaseIndex"`
+	AgentID       string `json:"agentId"`
+	Model         string `json:"model"`
+	State         string `json:"state"`
+	Attempt       int    `json:"attempt"`
+	Tokens        int    `json:"tokens"`
+	ToolCalls     int    `json:"toolCalls"`
+	DurationMs    int    `json:"durationMs"`
+	PromptPreview string `json:"promptPreview"`
+	ResultPreview string `json:"resultPreview"`
+}
+
+const (
+	workflowPhaseItem = "workflow_phase"
+	workflowAgentItem = "workflow_agent"
+)
+
+// Recorded agent states are start and done; failed is Claude Code's
+// documented word for a failed agent.
+var workflowAgentStates = map[string]WorkflowAgentState{
+	"start": WorkflowAgentRunning, "done": WorkflowAgentDone, "failed": WorkflowAgentFailed,
+}
+
+// workflowSnapshotOf resolves one workflow_progress array into a snapshot,
+// and nil when the frame carried none - every task_progress but the ones
+// that changed the phase or agent list.
+func workflowSnapshotOf(items []wireWorkflowItem) *WorkflowSnapshot {
+	if items == nil {
+		return nil
+	}
+	s := &WorkflowSnapshot{}
+	for _, it := range items {
+		switch it.Type {
+		case workflowPhaseItem:
+			s.Phases = append(s.Phases, WorkflowPhase{Index: it.Index, Title: it.Title})
+		case workflowAgentItem:
+			state, ok := workflowAgentStates[it.State]
+			if !ok {
+				state = WorkflowAgentUnknown
+			}
+			s.Agents = append(s.Agents, WorkflowAgent{Index: it.Index, Phase: it.PhaseIndex, Label: it.Label,
+				AgentID: it.AgentID, Model: it.Model, State: state, Attempt: it.Attempt, Tokens: it.Tokens,
+				ToolCalls: it.ToolCalls, Duration: time.Duration(it.DurationMs) * time.Millisecond,
+				Prompt: it.PromptPreview, Result: it.ResultPreview})
+		}
+	}
+	return s
+}
+
+// workflowOf is a task frame's workflow half, and nil on every frame that
+// says nothing about one - every task frame but a workflow's task_started, a
+// task_progress carrying a snapshot, and the task_updated that ends one.
+func workflowOf(f wireFrame, kind TaskKind) *WorkflowUpdate {
+	w := WorkflowUpdate{Progress: workflowSnapshotOf(f.WorkflowProgress)}
+	if kind == TaskWorkflow {
+		w.Name, w.Script = f.WorkflowName, f.Prompt
+	}
+	if f.Patch != nil {
+		w.Error = f.Patch.Error
+	}
+	if w == (WorkflowUpdate{}) {
+		return nil
+	}
+	return &w
 }

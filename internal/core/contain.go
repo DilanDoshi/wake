@@ -236,6 +236,39 @@ func containedTask(t *TaskUpdate) *TaskUpdate {
 	c.Label, c.Type, c.Tool = Contained(c.Label), Contained(c.Type), Contained(c.Tool)
 	c.Kind, c.Phase = TaskKind(Contained(string(c.Kind))), TaskPhase(Contained(string(c.Phase)))
 	c.Status = TaskStatus(Contained(string(c.Status)))
+	c.Workflow = containedWorkflow(c.Workflow)
+	return &c
+}
+
+// containedWorkflow contains a workflow update's child-authored text: the
+// script's own name, the script itself, a failed run's error, and each
+// snapshot's phase titles and agent fields - new slices, never the decoded
+// ones.
+func containedWorkflow(w *WorkflowUpdate) *WorkflowUpdate {
+	if w == nil {
+		return nil
+	}
+	c := *w
+	c.Name, c.Script, c.Error = Contained(c.Name), Contained(c.Script), Contained(c.Error)
+	c.Progress = containedWorkflowSnapshot(c.Progress)
+	return &c
+}
+
+func containedWorkflowSnapshot(s *WorkflowSnapshot) *WorkflowSnapshot {
+	if s == nil {
+		return nil
+	}
+	c := WorkflowSnapshot{}
+	for _, p := range s.Phases {
+		p.Title = Contained(p.Title)
+		c.Phases = append(c.Phases, p)
+	}
+	for _, a := range s.Agents {
+		a.Label, a.AgentID, a.Model = Contained(a.Label), Contained(a.AgentID), Contained(a.Model)
+		a.State = WorkflowAgentState(Contained(string(a.State)))
+		a.Prompt, a.Result = Contained(a.Prompt), Contained(a.Result)
+		c.Agents = append(c.Agents, a)
+	}
 	return &c
 }
 

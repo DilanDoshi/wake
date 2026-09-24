@@ -85,10 +85,11 @@ func TestABackgroundShellIsNotASubagent(t *testing.T) {
 	}
 }
 
-// Two task types are recorded and the binary's own wording hints at more. An
-// unrecorded one must not inherit either reading: shown, never entered.
+// Three task types are recorded and the binary's own wording hints at more.
+// An unrecorded one must not inherit any of the three readings: shown, never
+// entered.
 func TestAnUnrecordedTaskTypeIsNeitherAgentNorShell(t *testing.T) {
-	for _, tt := range []string{"local_workflow", "monitor", ""} {
+	for _, tt := range []string{"local_monitor", ""} {
 		t.Run(tt, func(t *testing.T) {
 			line := `{"type":"system","subtype":"task_started","task_id":"a1","tool_use_id":"toolu_1","description":"d","task_type":"` + tt + `"}`
 			ev := onlyEvent(t, line, 0)
@@ -179,16 +180,16 @@ func TestTaskNotificationEndsATaskAndNamesIt(t *testing.T) {
 	}
 }
 
-// Four status words across the two terminal frames, and three of them come
-// from one recording each. A task that stopped did not finish: a row saying
-// "done" about a killed shell is a claim nothing on the wire supports.
+// Five status words across the two terminal frames, and all but "completed"
+// come from one recording each. A task that stopped did not finish: a row
+// saying "done" about a killed shell is a claim nothing on the wire supports.
 func TestAnEndingIsResolvedOnlyAsFarAsItWasRecorded(t *testing.T) {
 	cases := map[string]TaskStatus{
 		"completed": TaskDone,
 		"stopped":   TaskStopped,
 		"killed":    TaskStopped,
-		"failed":    TaskStatusUnknown,
-		"":          TaskStatusUnknown,
+		"failed":    TaskFailed,
+		"paused":    TaskStatusUnknown,
 	}
 	for status, want := range cases {
 		t.Run("notification/"+status, func(t *testing.T) {

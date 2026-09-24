@@ -193,8 +193,18 @@ var claudeWireVocabulary = wordSet([]string{
 	// "tasks" and "patch" are the two that look generic and are not. Both are
 	// wire keys with one meaning each here, and Wake's own words for what
 	// they carry are TaskSet.Live and TaskUpdate.Status.
-	"task_type", "local_agent", "local_bash",
+	"task_type", "local_agent", "local_bash", "local_workflow",
 	"tasks", "patch", "stopped", "killed",
+
+	// A workflow's own progress payload, recorded 2026-09-23. workflow_name
+	// and workflow_progress are task_started/task_progress's own keys;
+	// workflow_phase and workflow_agent are how one workflow_progress entry
+	// tells a phase from an agent; phaseIndex, toolCalls, durationMs,
+	// promptPreview and resultPreview are camelCase entry fields no Go
+	// program writes by accident, the "acceptEdits"/"dontAsk" argument.
+	// Wake's own words for all of it are workflow.go's types.
+	"workflow_name", "workflow_progress", "workflow_phase", "workflow_agent",
+	"phaseIndex", "toolCalls", "durationMs", "promptPreview", "resultPreview",
 
 	// The live checklist tools and their input keys. TodoWrite is retired in
 	// 2.1.240 and its replacement builds a list across TaskCreate/TaskUpdate
@@ -319,6 +329,12 @@ var claudeWireVocabulary = wordSet([]string{
 	"permission-rule", "task-notification", "allowed", "success", "interrupt",
 	"allow", "deny", "user",
 
+	// A workflow_agent's own state word for still running - unlike its
+	// siblings "done" and "failed", which sit in deliberatelyGeneric because
+	// core.TaskDone and core.TaskFailed already spell those two literally and
+	// neither file is an airlock file.
+	"start",
+
 	// Tool names. Task is here even though no recorded tool_use block is
 	// named Task - init.tools advertises it, so a file guessing at the
 	// dispatch tool's name would guess this one, and that guess is exactly
@@ -384,6 +400,21 @@ var deliberatelyGeneric = wordSet([]string{
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",
+
+	// A workflow_agent's own fields, the plainest English among them:
+	// "index" and "title" are a workflow_phase's, "attempt" and "tokens" a
+	// workflow_agent's. Policing any would fire across the tree - Wake's own
+	// vocabulary already has a dozen counters and titles - and none is a
+	// route in on its own, since a file cannot reach one without first
+	// naming "workflow_progress", which is policed above.
+	"index", "title", "attempt", "tokens",
+
+	// A workflow_agent's other two state words, "start"'s siblings. Both are
+	// policed nowhere: core.TaskDone and core.TaskFailed already spell
+	// "done" and "failed" literally in task.go, which is not an airlock
+	// file, so policing either would fail the leak check on Wake's own
+	// vocabulary rather than catch one.
+	"failed", "done",
 
 	// The character that ends the cross-session envelope's opening tag, used to
 	// find where the body begins. Punctuation, not a wire word.
@@ -577,7 +608,14 @@ var notNamedByTheAirlock = map[string]string{
 // 175 → 180: the compact_boundary summary keys wireFrame.compaction reads -
 // "compact_metadata", "trigger", "pre_tokens", "post_tokens" and
 // "cumulative_dropped_tokens" (duration_ms was already policed). compaction.jsonl.
-const policedWordCount = 180
+// 180 → 191: a workflow task's own vocabulary - "local_workflow",
+// "workflow_name", "workflow_progress", "workflow_phase", "workflow_agent",
+// "phaseIndex", "toolCalls", "durationMs", "promptPreview", "resultPreview"
+// and the still-running state word "start" (its siblings "done" and "failed"
+// sit in deliberatelyGeneric instead, since task.go already spells both
+// literally and is not an airlock file). Recorded in
+// docs/superpowers/notes/2026-09-23-workflow-findings.md.
+const policedWordCount = 191
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -777,6 +815,11 @@ var allowed = map[string]map[string]bool{
 	// impersonation an operator would misread, and blocking only a near-miss of
 	// it would be the guard doing nothing.
 	"internal/mcp/spawnname.go": {"system": true},
+	// WorkflowAgent.Prompt's own json tag, the preview of the same concept
+	// "prompt" already names on the wire - a workflow agent's own
+	// instruction, shortened. workflow.go is Wake's vocabulary and decodes
+	// nothing; encode.go's workflowSnapshotOf does the reading.
+	"internal/core/workflow.go": {"prompt": true},
 }
 
 // allowlistPairCount is the tripwire over the table above, and it exists for
@@ -785,7 +828,10 @@ var allowed = map[string]map[string]bool{
 // growing the exemption list is a deliberate two-place edit rather than
 // something that happens quietly in a rebase. CLAUDE.md quotes the same
 // figures and has to change with it.
-const allowlistPairCount = 21
+// 21 → 22: WorkflowAgent.Prompt's own json tag, "prompt" - the preview of a
+// workflow agent's instruction, spelled the same as the tool-input key by
+// coincidence of subject rather than reuse of the wire.
+const allowlistPairCount = 22
 
 func TestTheAllowlistDoesNotGrowQuietly(t *testing.T) {
 	pairs := 0

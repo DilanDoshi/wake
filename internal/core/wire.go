@@ -220,21 +220,25 @@ type wireFrame struct {
 	// status, task_updated a patch object - and nothing on the wire lets one
 	// stand in for the other.
 	//
-	// Prompt, OutputFile and Summary are deliberately not here. The first is
-	// the subagent's whole instruction, the second names an on-disk
-	// transcript nothing yet opens, and the third repeats prose the reader
-	// has already seen. This file's rule is that a field arrives when
-	// something needs it.
+	// OutputFile and Summary are deliberately not here: the first names an
+	// on-disk transcript nothing yet opens, and the second repeats prose the
+	// reader has already seen. Prompt is read only for a workflow's own
+	// script - task_started's ordinary subagent instruction still reaches
+	// nothing, because workflowOf copies it to Script only when TaskType
+	// resolves to TaskWorkflow.
 	// ToolUseID is top-level here and on system/permission_denied, which is
 	// not a task frame - so it is read only inside the task branch. It is a
 	// different key from the ToolUseID nested in a control request.
-	TaskID       string         `json:"task_id"`
-	ToolUseID    string         `json:"tool_use_id"`
-	TaskType     string         `json:"task_type"`
-	Description  string         `json:"description"`
-	LastToolName string         `json:"last_tool_name"`
-	Status       string         `json:"status"`
-	Patch        *wireTaskPatch `json:"patch"`
+	TaskID           string             `json:"task_id"`
+	ToolUseID        string             `json:"tool_use_id"`
+	TaskType         string             `json:"task_type"`
+	Description      string             `json:"description"`
+	LastToolName     string             `json:"last_tool_name"`
+	Status           string             `json:"status"`
+	Patch            *wireTaskPatch     `json:"patch"`
+	WorkflowName     string             `json:"workflow_name"`
+	Prompt           string             `json:"prompt"`
+	WorkflowProgress []wireWorkflowItem `json:"workflow_progress"`
 
 	// CompactResult is the outcome a compaction's terminal system/status frame
 	// carries - "success" or "failed". Its presence is what tells that frame from
@@ -450,16 +454,19 @@ type wireIteration struct {
 	CacheReadTokens     int `json:"cache_read_input_tokens"`
 }
 
-// wireTaskPatch is task_updated's whole payload beyond the id. Ten frames,
-// one shape, and §11 of the subagent findings note lists anything beyond
-// these two keys as unverified - so a reader must not assume a patch means
-// "ended" because it exists; it means ended because of what Status says.
+// wireTaskPatch is task_updated's whole payload beyond the id. §11 of the
+// subagent findings note lists anything beyond Status as unverified for an
+// ordinary subagent - so a reader must not assume a patch means "ended"
+// because it exists; it means ended because of what Status says. Error is a
+// workflow's own addition, recorded 2026-09-23: the failure message plus a
+// JS stack, present only when Status is "failed".
 //
 // EndTime is not read. It is an epoch millisecond stamp of when the task
 // finished, and nothing draws it: a finished row shows the elapsed time the
 // usage already reported, which is the number that was on screen while it ran.
 type wireTaskPatch struct {
 	Status string `json:"status"`
+	Error  string `json:"error"`
 }
 
 // wireModel is one entry of a result frame's modelUsage map. ContextWindow is
