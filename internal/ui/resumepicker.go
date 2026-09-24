@@ -44,8 +44,13 @@ import (
 // resumeWindow is how many sessions are drawn at once. The picker holds every
 // match but the pane over the composer is a handful of rows tall, so the display
 // is a window around the cursor and the count header says where in the set it
-// is. Four, because each session is two rows and a blank one before the next.
+// is. Four at most, because each session is two rows and a blank one before the
+// next; fewer when the pane has less room (sessionsFit).
 const resumeWindow = 4
+
+// resumeFrameRows is the picker's rows that are not sessions: its own top and
+// bottom edges and the three rows of the search box.
+const resumeFrameRows = 5
 
 // resumePickerMax bounds the rows the picker holds - not what it draws (that is
 // resumeWindow), but what search can reach. A heavy user has hundreds of
@@ -310,8 +315,9 @@ func (a App) confirmResume() (App, tea.Cmd) {
 // bottom - holding a search box of its own and a window of the matches around
 // the cursor, each a name row over a dimmed details row with a blank row before
 // the next. The keys are advertised on the menu itself (the completion menu's
-// own reason), so the picker earns no legend entry for them.
-func (p ResumePicker) View(width int) string {
+// own reason), so the picker earns no legend entry for them. maxRows is what the
+// pane can give it, which bounds how many sessions are drawn.
+func (p ResumePicker) View(width, maxRows int) string {
 	if !p.Open() {
 		return ""
 	}
@@ -322,7 +328,7 @@ func (p ResumePicker) View(width int) string {
 	if len(f) == 0 {
 		rows = append(rows, detailRow("no session matches — ⌫ to widen the search", inner))
 	}
-	start, end := p.window(len(f))
+	start, end := p.window(len(f), p.sessionsFit(maxRows))
 	for i := start; i < end; i++ {
 		if i > start {
 			rows = append(rows, "")
@@ -338,14 +344,26 @@ func (p ResumePicker) View(width int) string {
 	return titledBox(body, w, BoxStyle.Padding(0), p.header(f), p.keyHint(), AccentStyle, HintStyle)
 }
 
-// window is the slice of the match set the pane draws, kept around the cursor so
-// walking off the visible end pages the list rather than losing the cursor.
-func (p ResumePicker) window(n int) (start, end int) {
-	if n <= resumeWindow {
+// sessionsFit is how many sessions maxRows holds - n of them take 3n-1 rows -
+// never fewer than the one the cursor is on, which is drawn first under the
+// search box so a pane that clips the rest still shows what ↵ resumes.
+func (p ResumePicker) sessionsFit(maxRows int) int {
+	spare := maxRows - resumeFrameRows
+	if p.More > 0 {
+		spare--
+	}
+	return clamp((spare+1)/3, 1, resumeWindow)
+}
+
+// window is the slice of the match set the pane draws, size sessions around the
+// cursor, so walking off the visible end pages the list rather than losing the
+// cursor.
+func (p ResumePicker) window(n, size int) (start, end int) {
+	if n <= size {
 		return 0, n
 	}
-	start = clamp(p.Cursor-resumeWindow/2, 0, n-resumeWindow)
-	return start, start + resumeWindow
+	start = clamp(p.Cursor-size/2, 0, n-size)
+	return start, start + size
 }
 
 // header is the Claude-style count: which match the cursor is on, of how many.

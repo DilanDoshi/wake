@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -221,7 +222,7 @@ func TestResumeFramesByParked(t *testing.T) {
 // search line, and advertises its own keys - ⇥ for select only in multi.
 func TestResumePickerView(t *testing.T) {
 	multi := ResumePicker{Rows: twoRows(), Multi: true, Selected: map[string]bool{irisID: true}}
-	v := multi.View(100)
+	v := multi.View(100, 100)
 	for _, want := range []string{"resume session · 1 of 2", "› search…", "@iris", "[x] ", "[ ] ", "bbbbbbbb", "no directory", "⇥ select"} {
 		if !strings.Contains(v, want) {
 			t.Errorf("the multi view is missing %q:\n%s", want, v)
@@ -229,7 +230,7 @@ func TestResumePickerView(t *testing.T) {
 	}
 
 	single := ResumePicker{Rows: twoRows()}
-	sv := single.View(100)
+	sv := single.View(100, 100)
 	if strings.Contains(sv, "[x]") || strings.Contains(sv, "[ ]") {
 		t.Errorf("the single-select view drew checkboxes:\n%s", sv)
 	}
@@ -256,7 +257,7 @@ func TestResumePickerDrawsABoxedListOfNamedSessions(t *testing.T) {
 		ID: "cccccccc-3333-4333-8333-333333333333", Title: "gmail helper", Dir: "/dev/mail",
 		Preview: "connect gmail", Age: "just now", Resumable: true,
 	})
-	lines := strings.Split(stripANSI(ResumePicker{Rows: rows}.View(100)), "\n")
+	lines := strings.Split(stripANSI(ResumePicker{Rows: rows}.View(100, 100)), "\n")
 
 	if top := lines[0]; !strings.HasPrefix(top, "╭") || !strings.Contains(top, "resume session · 1 of 3") {
 		t.Errorf("the top edge is not a box carrying the count: %q", top)
@@ -302,5 +303,21 @@ func TestResumePickerSearchesTheSessionName(t *testing.T) {
 	p := ResumePicker{Rows: rows, Query: "gmail"}
 	if f := p.filtered(); len(f) != 1 || f[0].Title != "gmail helper" {
 		t.Errorf("searching the name found %+v, want only the gmail helper row", f)
+	}
+}
+
+// A pane clips a menu from the bottom, so the picker draws only the sessions the
+// rows it is given hold - and always the one the cursor is on, or ↵ would resume
+// a session nobody can see.
+func TestResumePickerFitsTheRowsItIsGiven(t *testing.T) {
+	rows := append(twoRows(), resumeRow{ID: "cccccccc-3333-4333-8333-333333333333", Title: "gmail helper", Resumable: true})
+	for _, maxRows := range []int{3, 7, 10, 13, 100} {
+		v := stripANSI(ResumePicker{Rows: rows, Cursor: 2}.View(100, maxRows))
+		if !strings.Contains(v, "› gmail helper") {
+			t.Errorf("at %d rows the cursored session is not drawn:\n%s", maxRows, v)
+		}
+		if h := lipgloss.Height(v); maxRows >= 7 && h > maxRows {
+			t.Errorf("at %d rows the picker drew %d:\n%s", maxRows, h, v)
+		}
 	}
 }

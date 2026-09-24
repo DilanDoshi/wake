@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"strings"
 	"testing"
 	"time"
@@ -71,5 +72,30 @@ func TestTheResumePickerDrawsSingleSelectInADM(t *testing.T) {
 	}
 	if strings.Contains(frame, "⇥ select") {
 		t.Errorf("the DM frame drew the multi-select key line:\n%s", frame)
+	}
+}
+
+// In a short terminal every session the cursor walks onto is drawn, and the
+// frame stays the terminal's height - the pane clips the picker from the bottom,
+// so a window that ignored the pane's room hid what ↵ resumes.
+func TestTheResumePickerKeepsTheCursorOnScreenInAShortPane(t *testing.T) {
+	var disk []DiskSession
+	for i := range 9 {
+		disk = append(disk, DiskSession{
+			ID: fmt.Sprintf("abcd123%d-5678-4abc-8def-000000000000", i), Dir: "/dev/x",
+			Title: fmt.Sprintf("session %d", i), Modified: time.Now().Add(-time.Duration(i) * time.Minute),
+		})
+	}
+	const height = 16
+	got := openedResumePicker(t, parkedFleetApp(t, disk...)).withSize(120, height).applyGeometry()
+	for i := range len(got.resumePicker.filtered()) {
+		frame := stripANSI(got.View())
+		if n := strings.Count(frame, "\n") + 1; n != height {
+			t.Fatalf("with the cursor on row %d the frame is %d rows, want %d:\n%s", i, n, height, frame)
+		}
+		if want := "› [ ] " + got.resumePicker.filtered()[i].heading(); !strings.Contains(frame, want) {
+			t.Fatalf("the cursored session %q is not drawn:\n%s", want, frame)
+		}
+		got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyDown})
 	}
 }
