@@ -44,7 +44,7 @@ func TestAuthResultPutsThePanelInTheRoom(t *testing.T) {
 }
 
 // A result for a conversation that has since closed lands nowhere and does not
-// panic - the same drop mcpResult makes for an id it no longer holds.
+// panic - the drop every per-conversation result makes for an id it no longer holds.
 func TestAuthResultForAClosedConversationIsDropped(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40)
 	if got := a.authResult(authResultMsg{ID: "ghost", Text: loggedOutJSON}); len(got.dms) != len(a.dms) {

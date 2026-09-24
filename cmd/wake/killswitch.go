@@ -202,11 +202,12 @@ type killSwitch struct {
 	// The pause a hand-over takes (handover.go). reader is the pump's current
 	// read of tty, replaced on each resume; held and resumed are the pump's
 	// half of the pause; quiet mutes watchSignals while a child owns the
-	// terminal, whose ⌃C is its own.
+	// terminal, whose ⌃C is its own; done closes when the pump has exited.
 	mu      sync.Mutex
 	reader  cancelreader.CancelReader
 	held    chan struct{}
 	resumed chan cancelreader.CancelReader
+	done    chan struct{}
 	quiet   atomic.Bool
 }
 
@@ -243,7 +244,7 @@ func newKillSwitch(tty, out *os.File, state *term.State, pipe, feed *os.File) *k
 		tty: tty, out: out, state: state,
 		pipe: pipe, feed: feed,
 		queue: make(chan []byte, forwardQueue),
-		held:  make(chan struct{}), resumed: make(chan cancelreader.CancelReader),
+		held:  make(chan struct{}), resumed: make(chan cancelreader.CancelReader), done: make(chan struct{}),
 	}
 	k.exit = k.emergencyExit
 	return k
@@ -389,6 +390,7 @@ func (c *chunker) step(read []byte, full bool) []byte {
 // before the bytes are handed anywhere. A hand-off that could block would put
 // the wedged consumer back in front of the key that exists to escape it.
 func (k *killSwitch) pump() {
+	defer close(k.done)
 	defer close(k.queue)
 	var trigger killTrigger
 	var chunks chunker
@@ -421,7 +423,7 @@ func (k *killSwitch) pump() {
 			_ = r.Close()
 			k.held <- struct{}{}
 			if r = <-k.resumed; r == nil {
-				return
+				return // resumed closed: shut down rather than read again
 			}
 			continue
 		}
@@ -521,7 +523,7 @@ func (k *killSwitch) watchSignals() {
 				continue // a child holds the terminal; its ⌃C is not Wake's to act on
 			}
 			if grace == nil {
-				grace = time.AfterFunc(killSignalGrace, k.exit)
+				grace = time.AfterFunc(killSignalGrace, k.exitAfterHandOver)
 				continue
 			}
 			if grace.Stop() {

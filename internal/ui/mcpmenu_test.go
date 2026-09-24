@@ -403,3 +403,48 @@ func TestASignInRefusesANameThatReadsAsAFlag(t *testing.T) {
 		t.Errorf("ran %v for a server named like a flag", ran[0].Args)
 	}
 }
+
+// An action the daemon refused is never going to be answered, so the menu
+// stops waiting on it and says why, and the next action is not blocked.
+func TestARefusedActionStopsWaiting(t *testing.T) {
+	a, rec := loadedMenu(t)
+	a = pressMenu(openDetail(t, a, 0), keyEnter) // reconnect github
+	rec.taken(t)
+	a = deliver(a, rpc.Frame{Kind: rpc.FrameError, SessionID: "s1", Text: "session s1 is not accepting input"})
+	if view := shown(a); strings.Contains(view, "reconnecting") || !strings.Contains(view, "not accepting input") {
+		t.Fatalf("the refused reconnect is still waiting, or the refusal is not shown:\n%s", view)
+	}
+	pressMenu(a, keyEnter)
+	if got := rec.taken(t); len(got) != 1 || got[0].Kind != rpc.FrameMCPReconnect {
+		t.Errorf("after a refusal the next reconnect wrote %v", sentKinds(got))
+	}
+}
+
+// A gap may have eaten the answer: the menu stops waiting, re-asks for its
+// list, and a sweep reports what it has rather than waiting forever.
+func TestAGapSettlesEveryWaitingMCPAsk(t *testing.T) {
+	a, rec := loadedMenu(t)
+	var ran []*exec.Cmd
+	a = a.WithHandOver(fakeHandOver{&ran}.handOver)
+	a = pressMenu(openDetail(t, a, 0), keyEnter) // reconnect github: busy
+	m, cmd := a.Update(mcpSignedInMsg{Session: "s1", Server: "higgsfield"})
+	drainBatch(cmd)
+	a = m.(App)
+	rec.taken(t)
+
+	a = a.notedGap(3)
+	a, cmd = a.settle()
+	drainBatch(cmd)
+	if got := sentKinds(rec.taken(t)); !contains(got, rpc.FrameMCPList+" s1 ") {
+		t.Errorf("after the gap the menu did not re-ask for its list: %v", got)
+	}
+	if view := shown(a); strings.Contains(view, "reconnecting") {
+		t.Errorf("the menu still waits on an answer the gap may have eaten:\n%s", view)
+	}
+	if a.mcpUI.sweep.active() {
+		t.Error("the sign-in's sweep still waits after the gap")
+	}
+	if n := latestNotice(t); !strings.Contains(n, "higgsfield signed in") || strings.Contains(n, "failing") {
+		t.Errorf("the sweep's line = %q; after a gap it may not claim a failure it never saw", n)
+	}
+}

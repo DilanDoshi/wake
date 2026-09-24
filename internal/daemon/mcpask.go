@@ -1,10 +1,17 @@
 package daemon
 
-import "github.com/DilanDoshi/wake/internal/rpc"
+import (
+	"github.com/google/uuid"
 
-// askMCP writes the MCP ask a client's frame names. The answer is the session's
-// KindMCPReply on the event stream, which reaches every client the way a mode
-// receipt does, so nothing is held here.
+	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
+)
+
+// askMCP writes the MCP ask a client's frame names, remembering which client
+// asked so fanOut can send the answer to it alone: every window matches an
+// answer by agent, server and ask, so two windows asking the same thing at once
+// would each take the other's. The id is minted and the asker recorded before
+// the write, because the answer can arrive before the write returns.
 //
 // Not refused while a permission ask is outstanding, unlike FrameMode:
 // reading, reconnecting or switching a server changes nothing about the ask,
@@ -12,14 +19,45 @@ import "github.com/DilanDoshi/wake/internal/rpc"
 // server comes back ErrNotWritten, which apply refuses to the asker.
 func (a *agent) askMCP(p pending) error {
 	f := p.frame
+	id := uuid.NewString()
+	a.noteMCPAsker(id, p.from)
 	var err error
 	switch f.Kind {
 	case rpc.FrameMCPList:
-		_, err = a.sess.MCPServers()
+		err = a.sess.MCPServers(id)
 	case rpc.FrameMCPReconnect:
-		_, err = a.sess.MCPReconnect(f.Text)
+		err = a.sess.MCPReconnect(id, f.Text)
 	default:
-		_, err = a.sess.MCPSetEnabled(f.Text, f.Kind == rpc.FrameMCPEnable)
+		err = a.sess.MCPSetEnabled(id, f.Text, f.Kind == rpc.FrameMCPEnable)
+	}
+	if err != nil {
+		a.takeMCPAsker(id)
 	}
 	return err
+}
+
+func (a *agent) noteMCPAsker(id string, c *client) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.mcpAskers == nil {
+		a.mcpAskers = map[string]*client{}
+	}
+	a.mcpAskers[id] = c
+}
+
+func (a *agent) takeMCPAsker(id string) *client {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	c := a.mcpAskers[id]
+	delete(a.mcpAskers, id)
+	return c
+}
+
+// mcpAsker is the client that asked the MCP question ev answers, or nil for
+// every other event - which is broadcast as before.
+func (a *agent) mcpAsker(ev core.Event) *client {
+	if ev.Kind != core.KindMCPReply || ev.RequestID == "" {
+		return nil
+	}
+	return a.takeMCPAsker(ev.RequestID)
 }

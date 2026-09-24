@@ -577,6 +577,19 @@ const (
 	MCPDisabled = "disabled"
 )
 
+// The config scopes an mcp_status row names, as MCPServerStatus.Scope carries
+// them - an open set; a scope not listed here arrives intact.
+const (
+	MCPScopeLocal      = "local"
+	MCPScopeProject    = "project"
+	MCPScopeUser       = "user"
+	MCPScopePlugin     = "plugin"
+	MCPScopeClaudeAI   = "claudeai"
+	MCPScopeManaged    = "managed"
+	MCPScopeEnterprise = "enterprise"
+	MCPScopeDynamic    = "dynamic"
+)
+
 // wireMCPStatus is one row of an mcp_status receipt's mcpServers. Here rather
 // than in wire.go for room; the reply's other fields (source, the tools'
 // _meta) are not read.

@@ -106,3 +106,31 @@ func TestAnAgentBlockedOnAnAskStillReportsItsServers(t *testing.T) {
 		t.Errorf("the first refusal was %q; the status ask was refused while blocked", f.Text)
 	}
 }
+
+// An MCP answer goes to the window that asked and no other: every window
+// matches an answer by agent, server and ask, so two windows asking the same
+// thing at once would otherwise each take the other's.
+func TestAnMCPAnswerGoesOnlyToTheWindowThatAsked(t *testing.T) {
+	fakeClaudeOnPath(t, "mcp")
+	d := startDaemon(t)
+	asker := attach(t, d.socket)
+	other := attach(t, d.socket)
+	asker.spawn(idAlpha, "sydney")
+	asker.awaitEvent(idAlpha, "ready")
+	other.awaitEvent(idAlpha, "ready")
+
+	asker.send(rpc.Frame{Kind: rpc.FrameMCPList, SessionID: idAlpha})
+	asker.await("its MCP answer", func(f rpc.Frame) bool {
+		return f.Kind == rpc.FrameEvent && f.Event != nil && f.Event.Kind == core.KindMCPReply
+	})
+
+	// Anything the session says afterwards still reaches both, so once the
+	// other window has it, it would have had the answer too.
+	asker.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "after"})
+	other.awaitEvent(idAlpha, "after")
+	for _, f := range other.seen {
+		if f.Event != nil && f.Event.Kind == core.KindMCPReply {
+			t.Fatalf("another window received the asker's MCP answer: %+v", f.Event.MCP)
+		}
+	}
+}

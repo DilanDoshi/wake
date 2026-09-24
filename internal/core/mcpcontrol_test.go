@@ -186,19 +186,19 @@ func sentRequest(t *testing.T, buf *bytes.Buffer) (id string, req map[string]any
 
 func TestTheSessionWritesEachMCPRequest(t *testing.T) {
 	s, buf := mcpSession(t)
-	if _, err := s.MCPServers(); err != nil {
+	if err := s.MCPServers("q1"); err != nil {
 		t.Fatal(err)
 	}
 	if _, req := sentRequest(t, buf); req["subtype"] != "mcp_status" {
 		t.Errorf("servers wrote %v", req)
 	}
-	if _, err := s.MCPReconnect("linear"); err != nil {
+	if err := s.MCPReconnect("q2", "linear"); err != nil {
 		t.Fatal(err)
 	}
 	if _, req := sentRequest(t, buf); req["subtype"] != "mcp_reconnect" || req["serverName"] != "linear" {
 		t.Errorf("reconnect wrote %v", req)
 	}
-	if _, err := s.MCPSetEnabled("echo", false); err != nil {
+	if err := s.MCPSetEnabled("q3", "echo", false); err != nil {
 		t.Fatal(err)
 	}
 	if _, req := sentRequest(t, buf); req["subtype"] != "mcp_toggle" || req["enabled"] != false {
@@ -211,7 +211,7 @@ func TestTheSessionWritesEachMCPRequest(t *testing.T) {
 // reading as a permission-mode refusal in every window.
 func TestAReceiptForAnMCPRequestIsLabelledByTheAsk(t *testing.T) {
 	s, buf := mcpSession(t)
-	if _, err := s.MCPReconnect("linear"); err != nil {
+	if err := s.MCPReconnect("q2", "linear"); err != nil {
 		t.Fatal(err)
 	}
 	id, _ := sentRequest(t, buf)
@@ -234,7 +234,7 @@ func TestAReceiptForAnMCPRequestIsLabelledByTheAsk(t *testing.T) {
 func TestADisableAndAnEnableAreToldApart(t *testing.T) {
 	s, buf := mcpSession(t)
 	for _, enabled := range []bool{false, true} {
-		if _, err := s.MCPSetEnabled("echo", enabled); err != nil {
+		if err := s.MCPSetEnabled("q4", "echo", enabled); err != nil {
 			t.Fatal(err)
 		}
 		id, _ := sentRequest(t, buf)
@@ -262,7 +262,7 @@ func TestAnUnrelatedReceiptIsLeftAlone(t *testing.T) {
 // left waiting for an answer that cannot come.
 func TestAnUnwrittenAskIsNotRemembered(t *testing.T) {
 	s := NewSession(Config{SessionID: "s1"})
-	if _, err := s.MCPReconnect("linear"); err == nil {
+	if err := s.MCPReconnect("q5", "linear"); err == nil {
 		t.Fatal("a session that never started accepted a write")
 	}
 	if n := s.pendingMCPAsks(); n != 0 {

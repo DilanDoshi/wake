@@ -29,14 +29,14 @@ const (
 // mcpScopes is the list's grouping, closest scope first - the precedence
 // Claude Code resolves a name clash by. where is the file a scope lives in.
 var mcpScopes = []struct{ scope, title, where string }{
-	{"local", "Local MCPs", "~/.claude.json, this project"},
-	{"project", "Project MCPs", ".mcp.json"},
-	{"user", "User MCPs", "~/.claude.json"},
-	{"plugin", "Plugin MCPs", ""},
-	{"claudeai", "claude.ai", ""},
-	{"managed", "Managed MCPs", ""},
-	{"enterprise", "Managed MCPs", ""},
-	{"dynamic", "Session MCPs", ""},
+	{core.MCPScopeLocal, "Local MCPs", "~/.claude.json, this project"},
+	{core.MCPScopeProject, "Project MCPs", ".mcp.json"},
+	{core.MCPScopeUser, "User MCPs", "~/.claude.json"},
+	{core.MCPScopePlugin, "Plugin MCPs", ""},
+	{core.MCPScopeClaudeAI, "claude.ai", ""},
+	{core.MCPScopeManaged, "Managed MCPs", ""},
+	{core.MCPScopeEnterprise, "Managed MCPs", ""},
+	{core.MCPScopeDynamic, "Session MCPs", ""},
 }
 
 type mcpGroup struct {

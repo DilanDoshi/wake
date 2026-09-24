@@ -1,7 +1,5 @@
 package core
 
-import "github.com/google/uuid"
-
 // The write half of the MCP asks, and the one piece of state they need.
 //
 // A reconnect or toggle is answered with the bare receipt a permission-mode
@@ -11,37 +9,39 @@ import "github.com/google/uuid"
 // arrives and labels that answer KindMCPReply. Without this an MCP refusal
 // reads as a permission-mode refusal in every attached window.
 
+// The caller mints the request id, unlike Interrupt and SetMode: the daemon
+// has to know it before the write, to send the answer to the client that asked.
+
 // MCPServers asks for every MCP server's live status.
-func (s *Session) MCPServers() (string, error) {
-	return s.askMCP(MCPResult{Ask: MCPAskServers}, EncodeMCPStatus)
+func (s *Session) MCPServers(id string) error {
+	return s.askMCP(id, MCPResult{Ask: MCPAskServers}, EncodeMCPStatus)
 }
 
 // MCPReconnect reconnects one server.
-func (s *Session) MCPReconnect(server string) (string, error) {
-	return s.askMCP(MCPResult{Ask: MCPAskReconnect, Server: server}, func(id string) ([]byte, error) {
+func (s *Session) MCPReconnect(id, server string) error {
+	return s.askMCP(id, MCPResult{Ask: MCPAskReconnect, Server: server}, func(id string) ([]byte, error) {
 		return EncodeMCPReconnect(id, server)
 	})
 }
 
 // MCPSetEnabled switches one server on or off, persistently.
-func (s *Session) MCPSetEnabled(server string, enabled bool) (string, error) {
+func (s *Session) MCPSetEnabled(id, server string, enabled bool) error {
 	ask := MCPResult{Ask: MCPAskDisable, Server: server}
 	if enabled {
 		ask.Ask = MCPAskEnable
 	}
-	return s.askMCP(ask, func(id string) ([]byte, error) {
+	return s.askMCP(id, ask, func(id string) ([]byte, error) {
 		return EncodeMCPToggle(id, server, enabled)
 	})
 }
 
-// askMCP writes one ask and returns its request id. The ask is remembered
-// before the write - its answer can come back before writeLine returns - and
-// forgotten again if nothing was written.
-func (s *Session) askMCP(ask MCPResult, encode func(string) ([]byte, error)) (string, error) {
-	id := uuid.NewString()
+// askMCP writes one ask. It is remembered before the write - its answer can
+// come back before writeLine returns - and forgotten again if nothing was
+// written.
+func (s *Session) askMCP(id string, ask MCPResult, encode func(string) ([]byte, error)) error {
 	line, err := encode(id)
 	if err != nil {
-		return "", err
+		return err
 	}
 	s.mu.Lock()
 	if s.mcpAsks == nil {
@@ -51,9 +51,9 @@ func (s *Session) askMCP(ask MCPResult, encode func(string) ([]byte, error)) (st
 	s.mu.Unlock()
 	if err := s.writeLine(line); err != nil {
 		s.takeMCPAsk(id)
-		return "", err
+		return err
 	}
-	return id, nil
+	return nil
 }
 
 // takeMCPAsk removes and returns the ask id answers, if this session sent it.

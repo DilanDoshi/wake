@@ -29,10 +29,8 @@ import (
 	"github.com/DilanDoshi/wake/internal/ui"
 )
 
-// suspendWait bounds how long a hand-over waits for the pump to let go of the
-// terminal. A cancelled read returns at once; this is for a pump that has
-// already exited, which will never answer.
-const suspendWait = time.Second
+// restoreTTY is term.Restore, a variable so a test can make it fail.
+var restoreTTY = term.Restore
 
 var errNoTerminal = errors.New("there is no terminal to hand over")
 
@@ -75,18 +73,34 @@ func (k *killSwitch) suspend() error {
 		k.quiet.Store(false)
 		return errors.New("this terminal's read cannot be paused, so it cannot be handed over")
 	}
+	// A cancelled read returns at once, so the pump either lets go or has
+	// already exited - never neither, so there is no timer to lose a race to.
 	select {
 	case <-k.held:
-	case <-time.After(suspendWait):
+	case <-k.done:
 		k.quiet.Store(false)
-		return errors.New("the terminal reader did not let go")
+		return errNoTerminal
 	}
 	if k.state != nil {
-		if err := term.Restore(k.tty.Fd(), k.state); err != nil {
+		if err := restoreTTY(k.tty.Fd(), k.state); err != nil {
+			// All or nothing: the pump is parked, so give it the terminal back
+			// rather than leave Wake with no keyboard and no way out.
+			_ = k.resume()
 			return fmt.Errorf("restoring the terminal for the child: %w", err)
 		}
 	}
 	return nil
+}
+
+// exitAfterHandOver is the signal grace's exit, deferred while a child holds
+// the terminal: a grace armed just before a hand-over must not tear the window
+// down under the child's prompt. It fires once the terminal is Wake's again.
+func (k *killSwitch) exitAfterHandOver() {
+	if k.quiet.Load() {
+		time.AfterFunc(killSignalGrace, k.exitAfterHandOver)
+		return
+	}
+	k.exit()
 }
 
 // resume is suspend undone, in reverse: raw mode, a fresh reader, then the

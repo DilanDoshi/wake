@@ -232,6 +232,10 @@ type agent struct {
 	// the bounded residual internal/ui's own Tasks.Rows() already carries.
 	runningTasks map[string]core.Event
 
+	// mcpAskers is the client behind each MCP ask not yet answered, by request
+	// id, so the answer goes to it alone. See askMCP.
+	mcpAskers map[string]*client
+
 	tool    string
 	toolArg string
 

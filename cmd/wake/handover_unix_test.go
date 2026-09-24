@@ -3,6 +3,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
@@ -58,8 +59,29 @@ func newHandOverRig(t *testing.T) handOverRig {
 			}
 		}
 	}()
-	t.Cleanup(func() { _ = ptmx.Close(); _ = tty.Close(); _ = pipe.Close() })
+	t.Cleanup(func() {
+		stopPump(r.k)
+		_ = ptmx.Close()
+		_ = tty.Close()
+		_ = pipe.Close()
+	})
 	return r
+}
+
+// stopPump ends a rig's pump before its terminal is closed under it: cancel the
+// read, wait for the pump to park, and close resumed, which it takes as shut down.
+func stopPump(k *killSwitch) {
+	k.mu.Lock()
+	rd := k.reader
+	k.mu.Unlock()
+	if rd.Cancel() {
+		select {
+		case <-k.held:
+			close(k.resumed)
+		case <-k.done:
+		}
+	}
+	<-k.done
 }
 
 func (r handOverRig) type_(t *testing.T, s string) {
@@ -240,4 +262,92 @@ func TestThereIsNoHandOverWithoutAKillSwitch(t *testing.T) {
 	if err := k.handOver(exec.Command("true"), "x").Run(); err == nil {
 		t.Fatal("a hand-over with no terminal claimed to run")
 	}
+}
+
+// A pause that parks the pump and then cannot restore the terminal must give
+// the pump back: failing halfway would leave Wake with no keyboard and no way
+// out, the state the kill switch exists to rescue.
+func TestASuspendThatCannotRestoreTheTerminalGivesItBack(t *testing.T) {
+	was := restoreTTY
+	restoreTTY = func(uintptr, *term.State) error { return errors.New("tcsetattr refused") }
+	t.Cleanup(func() { restoreTTY = was })
+
+	r := newHandOverRig(t)
+	if err := r.k.suspend(); err == nil {
+		t.Fatal("a suspend that could not restore the terminal reported success")
+	}
+	if r.k.quiet.Load() {
+		t.Error("the signal watcher was left muted")
+	}
+	r.type_(t, "x")
+	r.awaitForwarded(t, "x")
+}
+
+// A pump that has already exited cannot let go of anything; asking it must
+// fail at once rather than wait on an answer that cannot come.
+func TestASuspendAfterThePumpExitedFailsAtOnce(t *testing.T) {
+	keysRead, keysWrite, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("keys pipe: %v", err)
+	}
+	pipe, feed, err := os.Pipe()
+	if err != nil {
+		t.Fatalf("input pipe: %v", err)
+	}
+	t.Cleanup(func() { _ = pipe.Close() })
+	k := newKillSwitch(keysRead, os.Stderr, nil, pipe, feed)
+	k.startReading()
+	go k.pump()
+	go k.forward()
+	_ = keysWrite.Close()
+	<-k.done
+
+	errc := make(chan error, 1)
+	go func() { errc <- k.suspend() }()
+	select {
+	case err := <-errc:
+		if err == nil {
+			t.Error("suspending a pump that had exited reported success")
+		}
+	case <-time.After(testTimeout):
+		t.Fatal("suspend waited on a pump that had already exited")
+	}
+	if k.quiet.Load() {
+		t.Error("the signal watcher was left muted")
+	}
+}
+
+// A signal's grace armed just before a hand-over must not end the window under
+// the child's prompt; it ends it once the terminal is Wake's again.
+func TestAGraceArmedBeforeAHandOverWaitsForIt(t *testing.T) {
+	was := killSignalGrace
+	killSignalGrace = 100 * time.Millisecond
+	t.Cleanup(func() { killSignalGrace = was })
+
+	r := newHandOverRig(t)
+	r.k.watchSignals()
+	if err := syscall.Kill(os.Getpid(), syscall.SIGHUP); err != nil {
+		t.Fatalf("signal: %v", err)
+	}
+	time.Sleep(20 * time.Millisecond) // the grace is armed
+	if err := r.k.suspend(); err != nil {
+		t.Fatalf("suspend: %v", err)
+	}
+	time.Sleep(250 * time.Millisecond) // past the grace, with the child still holding the terminal
+	if n := r.exits.Load(); n != 0 {
+		t.Fatalf("the grace ended the window under the child (%d)", n)
+	}
+	if err := r.k.resume(); err != nil {
+		t.Fatalf("resume: %v", err)
+	}
+	deadline := time.Now().Add(testTimeout)
+	for r.exits.Load() == 0 && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	if r.exits.Load() != 1 {
+		t.Fatal("the deferred exit never fired once the terminal came back")
+	}
+	// The second signal ends the watcher so it cannot outlive this test.
+	_ = syscall.Kill(os.Getpid(), syscall.SIGHUP)
+	time.Sleep(50 * time.Millisecond)
 }

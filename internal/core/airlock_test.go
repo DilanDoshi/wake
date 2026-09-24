@@ -397,6 +397,8 @@ var deliberatelyGeneric = wordSet([]string{
 	// config file it hands the manager.
 	"enabled", "failed", "disabled", "scope", "version", "args", "config",
 	"annotations", "tools", "mcpServers", "serverInfo",
+	// And the config scopes a row names ("user" is policed already, as a role).
+	"local", "project", "plugin", "claudeai", "managed", "enterprise", "dynamic",
 
 	// The character that ends the cross-session envelope's opening tag, used to
 	// find where the body begins. Punctuation, not a wire word.

@@ -366,6 +366,54 @@ func (a App) reconciledMCP() App {
 	return a.prunedSweep()
 }
 
+// mcpNoAnswer is a menu action whose answer may have been lost in a gap.
+const mcpNoAnswer = "no answer came back; the list below is fresh - try again"
+
+// forgotMCP settles every MCP ask whose answer may have been lost - a frame gap
+// or a reattach - so nothing waits forever on it: the menu stops waiting and
+// re-asks for its list, and a sweep reports what it has.
+func (a App) forgotMCP() App {
+	menu := a.mcpUI.menu
+	if menu.Open() {
+		if menu.Busy != "" && menu.Busy != mcpAskSignIn {
+			menu.Busy, menu.Result, menu.Failed = "", mcpNoAnswer, true
+			a.mcpUI.menu = menu
+		}
+		a = a.oweMCP(rpc.Frame{Kind: rpc.FrameMCPList, SessionID: menu.Session})
+	}
+	// Not reported as failing: their answers are unknown, not refusals.
+	sw := a.mcpUI.sweep
+	for id := range sw.asked {
+		sw = sw.without(id)
+	}
+	for id := range sw.redial {
+		sw = sw.without(id)
+	}
+	a.mcpUI.sweep = sw
+	return a.finishedSweep()
+}
+
+// mcpRefused is the daemon refusing an ask about id (the session ended, its
+// queue was full, a server name was blank): the ask will never be answered, so
+// it stops being waited on. The refusal itself reaches the notice row as ever.
+func (a App) mcpRefused(id, why string) App {
+	menu := a.mcpUI.menu
+	switch {
+	case !menu.Open() || menu.Session != id:
+	case !menu.Loaded:
+		a = a.closeMCP()
+	case menu.Busy != "" && menu.Busy != mcpAskSignIn:
+		menu.Busy, menu.Result, menu.Failed = "", why, true
+		a.mcpUI.menu = menu
+	}
+	sw := a.mcpUI.sweep
+	if sw.asked[id] || sw.redial[id] {
+		a.mcpUI.sweep = sw.without(id).failing(a.agentName(id))
+		return a.finishedSweep()
+	}
+	return a
+}
+
 func (a App) mcpLive(id string) bool {
 	agent, ok := a.fleet.Agent(id)
 	return ok && agent.State != rpc.StateParked && agent.State != rpc.StateEnded

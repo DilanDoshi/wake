@@ -120,6 +120,12 @@ type mcpSweep struct {
 
 func (sw mcpSweep) active() bool { return sw.server != "" }
 
+// failing is sw with name among the agents the reconnect did not reach.
+func (sw mcpSweep) failing(name string) mcpSweep {
+	sw.failed = append(append([]string(nil), sw.failed...), name)
+	return sw
+}
+
 // without is sw with id no longer waited on, maps copied rather than edited.
 func (sw mcpSweep) without(id string) mcpSweep {
 	asked, redial := make(map[string]bool, len(sw.asked)), make(map[string]bool, len(sw.redial))
@@ -160,7 +166,7 @@ func (a App) sweepSaw(id string, r core.MCPResult) App {
 		if r.Error == "" {
 			sw.done = append(append([]string(nil), sw.done...), name)
 		} else {
-			sw.failed = append(append([]string(nil), sw.failed...), name)
+			sw = sw.failing(name)
 		}
 	default:
 		return a
