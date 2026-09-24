@@ -662,6 +662,18 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		// The same file read as FrameHistory, on its own goroutine for the
 		// same reason, answered under its own kind for FrameRewindTargets'.
 		s.start(func() { s.sendRewindTargets(c, f.SessionID) })
+	case rpc.FrameWorkflows:
+		// Off its own goroutine, FrameHistory's reason: workflowdisk.go
+		// globs and reads a session's own wf_*.json records off disk.
+		s.start(func() { s.sendWorkflows(c, f.SessionID) })
+	case rpc.FrameWorkflowAgent:
+		// Same reason. Workflow may be nil on a malformed frame; Agent then
+		// defaults to "" and sendWorkflowAgent's own id check answers it.
+		var agentID string
+		if f.Workflow != nil {
+			agentID = f.Workflow.Agent
+		}
+		s.start(func() { s.sendWorkflowAgent(c, f.SessionID, agentID) })
 	default:
 		// Unrecognized rather than guessed at. The whole reason stop, kill
 		// and quit are separate kinds is that no default is safe.
