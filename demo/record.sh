@@ -14,11 +14,19 @@ tries=${TRIES:-3}
 for tape in "$@"; do
   name=$(basename "$tape" .tape)
   for attempt in $(seq 1 "$tries"); do
+    rm -f "$here/.work/take-socket"
     vhs "$tape" >/dev/null 2>&1 || { echo "$name: vhs failed"; exit 1; }
 
     # shellcheck disable=SC1091
     source "$here/.work/env.sh"
+    # A workflow scene mints a fresh socket per take (tapes/_workflow-take.tape)
+    # and leaves its path behind; its fleet is checked there, then ended, since
+    # nothing will ever reuse that socket to stop it.
+    fresh=""
+    [ -f "$here/.work/take-socket" ] && fresh=$(cat "$here/.work/take-socket")
+    [ -n "$fresh" ] && export WAKE_SOCKET="$fresh"
     got=$("$here/.work/bin/wake" status 2>/dev/null | grep -c ' <> ' || true)
+    [ -n "$fresh" ] && "$here/.work/bin/wake" stop >/dev/null 2>&1 || true
 
     if [ "$got" -ge "$want" ]; then
       echo "$name: ok ($got agents)"

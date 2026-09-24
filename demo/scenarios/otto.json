@@ -1,0 +1,244 @@
+{
+  "_note": "The workflow scenes' long sequential run, the one the stop tape halts (testdata/stream/workflow-stop.jsonl's shape).",
+  "model": "claude-opus-5",
+  "opening": {
+    "tokens": 300,
+    "steps": [
+      {
+        "after": 0.5,
+        "text": "Ready. Eight packages under `pkg/`, none linted since the move."
+      }
+    ]
+  },
+  "turns": [
+    {
+      "match": "lint",
+      "tokens": 400,
+      "steps": [
+        {
+          "after": 0.8,
+          "text": "Sweeping them one at a time; the linter's cache fights itself in parallel."
+        },
+        {
+          "after": 0.6,
+          "workflow": "lint-sweep"
+        },
+        {
+          "after": 0.7,
+          "text": "`lint-sweep` is running in the background."
+        }
+      ]
+    }
+  ],
+  "default": {
+    "tokens": 300,
+    "steps": [
+      {
+        "after": 0.7,
+        "text": "Noted."
+      }
+    ]
+  },
+  "workflows": {
+    "lint-sweep": {
+      "description": "Lint every package in sequence, then summarize the findings",
+      "script": "export const meta = {\n  name: 'lint-sweep',\n  description: 'Lint every package in sequence, then summarize the findings',\n  phases: [{ title: 'Lint', detail: 'one package at a time' }, { title: 'Report' }],\n}\nconst PKGS = ['api', 'auth', 'billing', 'cache', 'db', 'events', 'jobs', 'web']\nphase('Lint')\nconst found = []\nfor (const p of PKGS) {\n  found.push(await agent(`Run golangci-lint on ./pkg/${p}/... and return every finding as file:line: message.`, { label: `lint pkg/${p}`, phase: 'Lint', model: 'haiku' }))\n}\nphase('Report')\nreturn await agent(`Summarize these lint findings by severity: ${found.join('\\n')}`, { label: 'report', phase: 'Report', model: 'haiku' })",
+      "phases": [
+        "Lint",
+        "Report"
+      ],
+      "agents": [
+        {
+          "label": "lint pkg/api",
+          "phase": 1,
+          "at": 0.3,
+          "takes": 3.2,
+          "tokens": 18200,
+          "prompt": "Run golangci-lint on ./pkg/api/... and return every finding as file:line: message.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "golangci-lint run ./pkg/api/...",
+                "description": "Lint pkg/api"
+              },
+              "result": "pkg/api/handler.go:42:2: ineffectual assignment to err (ineffassign)\n1 issues."
+            }
+          ],
+          "output": {
+            "issues": 1
+          }
+        },
+        {
+          "label": "lint pkg/auth",
+          "phase": 1,
+          "at": 3.9,
+          "takes": 3.2,
+          "tokens": 18511,
+          "prompt": "Run golangci-lint on ./pkg/auth/... and return every finding as file:line: message.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "golangci-lint run ./pkg/auth/...",
+                "description": "Lint pkg/auth"
+              },
+              "result": "0 issues."
+            }
+          ],
+          "output": {
+            "issues": 0
+          }
+        },
+        {
+          "label": "lint pkg/billing",
+          "phase": 1,
+          "at": 7.5,
+          "takes": 3.2,
+          "tokens": 18822,
+          "prompt": "Run golangci-lint on ./pkg/billing/... and return every finding as file:line: message.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "golangci-lint run ./pkg/billing/...",
+                "description": "Lint pkg/billing"
+              },
+              "result": "pkg/billing/invoice.go:88:9: error strings should not be capitalized (ST1005)\npkg/billing/plan.go:17:1: exported type Plan should have comment (revive)\n2 issues."
+            }
+          ],
+          "output": {
+            "issues": 2
+          }
+        },
+        {
+          "label": "lint pkg/cache",
+          "phase": 1,
+          "at": 11.100000000000001,
+          "takes": 3.2,
+          "tokens": 19133,
+          "prompt": "Run golangci-lint on ./pkg/cache/... and return every finding as file:line: message.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "golangci-lint run ./pkg/cache/...",
+                "description": "Lint pkg/cache"
+              },
+              "result": "0 issues."
+            }
+          ],
+          "output": {
+            "issues": 0
+          }
+        },
+        {
+          "label": "lint pkg/db",
+          "phase": 1,
+          "at": 14.700000000000001,
+          "takes": 3.2,
+          "tokens": 19444,
+          "prompt": "Run golangci-lint on ./pkg/db/... and return every finding as file:line: message.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "golangci-lint run ./pkg/db/...",
+                "description": "Lint pkg/db"
+              },
+              "result": "pkg/db/tx.go:51:3: SA4006: this value of rows is never used (staticcheck)\n1 issues."
+            }
+          ],
+          "output": {
+            "issues": 1
+          }
+        },
+        {
+          "label": "lint pkg/events",
+          "phase": 1,
+          "at": 18.3,
+          "takes": 3.2,
+          "tokens": 19755,
+          "prompt": "Run golangci-lint on ./pkg/events/... and return every finding as file:line: message.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "golangci-lint run ./pkg/events/...",
+                "description": "Lint pkg/events"
+              },
+              "result": "0 issues."
+            }
+          ],
+          "output": {
+            "issues": 0
+          }
+        },
+        {
+          "label": "lint pkg/jobs",
+          "phase": 1,
+          "at": 21.900000000000002,
+          "takes": 3.2,
+          "tokens": 20066,
+          "prompt": "Run golangci-lint on ./pkg/jobs/... and return every finding as file:line: message.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "golangci-lint run ./pkg/jobs/...",
+                "description": "Lint pkg/jobs"
+              },
+              "result": "pkg/jobs/retry.go:30:14: unnecessary conversion (unconvert)\n1 issues."
+            }
+          ],
+          "output": {
+            "issues": 1
+          }
+        },
+        {
+          "label": "lint pkg/web",
+          "phase": 1,
+          "at": 25.5,
+          "takes": 3.2,
+          "tokens": 20377,
+          "prompt": "Run golangci-lint on ./pkg/web/... and return every finding as file:line: message.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "golangci-lint run ./pkg/web/...",
+                "description": "Lint pkg/web"
+              },
+              "result": "0 issues."
+            }
+          ],
+          "output": {
+            "issues": 0
+          }
+        },
+        {
+          "label": "report",
+          "phase": 2,
+          "at": 29.1,
+          "takes": 2.4,
+          "tokens": 14020,
+          "prompt": "Summarize these lint findings by severity.",
+          "output": {
+            "issues": 5,
+            "blocking": 0
+          }
+        }
+      ],
+      "settle": 0.8,
+      "then": {
+        "tokens": 90,
+        "steps": [
+          {
+            "after": 1.0,
+            "text": "Swept all eight packages: 5 findings, none blocking."
+          }
+        ]
+      }
+    }
+  }
+}
