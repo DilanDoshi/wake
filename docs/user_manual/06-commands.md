@@ -220,4 +220,6 @@ something you can mean.
 used to. Wake completes both as you type them (above) and shows you what it resolved to.
 
 `@team` addresses everyone `/team <name>` has grouped under that name — a section heading in the
-roster and the board, not a routing word you have to spell out per agent.
+roster and the board, not a routing word you have to spell out per agent. A name typed with spaces —
+`/team front end`, `/name foo bar` — is saved with hyphens (`front-end`, `foo-bar`), so it stays one
+`@`-token.

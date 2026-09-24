@@ -6,8 +6,9 @@ package ui
 //
 // The tag is not validated here. rpc.NormalizeTeam is the one fence and the
 // daemon owns it, so the client sends what was typed - `none` included, which
-// the daemon reads as clear - and a bad tag comes back as the daemon's own
-// refusal. A copy of that check here would be the parallel implementation this
+// the daemon reads as clear - with only its spaces hyphenated, /name's fold, so
+// `/team front end` asks for `front-end`. A bad tag comes back as the daemon's
+// own refusal. A copy of that check here would be the parallel implementation this
 // project forbids, stale the day the fence moves.
 
 import (
@@ -37,5 +38,5 @@ func (a App) teamAgent(arg string) (App, tea.Cmd) {
 	}
 	a = a.clearDraft()
 	notice.Report(teamAsked, agentPrefix, agent.Name)
-	return a, a.write(teamFailed, rpc.Frame{Kind: rpc.FrameTeam, SessionID: agent.ID, Text: team})
+	return a, a.write(teamFailed, rpc.Frame{Kind: rpc.FrameTeam, SessionID: agent.ID, Text: hyphenateName(team)})
 }
