@@ -298,6 +298,7 @@ type App struct {
 	selecting bool
 	cdrag     composerDrag // query-box drag geometry, captured at its start; see composersel.go
 	rosterHit rosterHit    // the roster row resolved at a press, opened on an empty release; see screensel.go
+	clicks    clickRun     // the presses landing on one cell in quick succession; see multiclick.go
 
 	// out is the terminal, for the one thing Wake writes that is not a frame.
 	// Nil writes nowhere. See clipboard.go and cmd/wake/output.go.
@@ -613,6 +614,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.copied(m)
 
 	case tea.KeyMsg:
+		a.clicks = clickRun{} // every keystroke ends a click run; see multiclick.go
 		// A live query-box selection turns ⌫/delete into "remove what is
 		// highlighted" - read before cleared() wipes the selection, since that
 		// runs on every keystroke. See deleteSelectedDraft.

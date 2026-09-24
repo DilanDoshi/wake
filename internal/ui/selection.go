@@ -53,6 +53,10 @@ type selection struct {
 	// screen, so nothing follows it and the highlight is drawn once over the
 	// whole frame. See screensel.go.
 	onScreen bool
+
+	// span marks a selection a double- or triple-click took - a word or a row -
+	// which is a selection even when it is one cell wide. See multiclick.go.
+	span bool
 }
 
 // marked is a selection with its ends ordered, half-open in both axes.
@@ -67,7 +71,7 @@ const lineEnd = -1
 
 // empty reports a press and release on one cell: a click, which focuses a pane
 // and selects nothing.
-func (s selection) empty() bool { return s.anchor == s.head }
+func (s selection) empty() bool { return s.anchor == s.head && !s.span }
 
 // marked orders the two ends and makes the range half-open.
 //
