@@ -3199,7 +3199,10 @@ reconnect or toggle is answered with the bare `{"subtype":"success"}` or `error`
 `observedMode` reads as a mode refusal in **every** window — so an MCP error would have surfaced as
 "@x refused that" about a permission mode nobody changed. The session is the one place that knows
 which ids it sent as MCP asks, so `Session.answeredMCP` relabels those receipts `KindMCPReply`. The
-airlock still decodes the *status* reply by its payload (`mcpServers`, rewind's presence rule).
+airlock still decodes the *status* reply by its payload (`mcpServers`, rewind's presence rule). And
+the answer goes only to the window that asked: the daemon mints the id, records the asking client
+before the write, and `fanOut` routes the `KindMCPReply` to it - every window matches by agent, server
+and ask, so two windows asking the same thing at once would otherwise each take the other's.
 
 **Ruling 2 — Authenticate hands the operator's own terminal to `claude mcp login`.** There is no
 headless control request for an MCP sign-in, and `claude mcp login` refuses a pipe even in its
