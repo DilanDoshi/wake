@@ -54,10 +54,14 @@ var modelFamilies = []string{"opus", "sonnet", "haiku", "fable"}
 
 func keyLine(keys ...string) string { return HintStyle.Render(strings.Join(keys, " · ")) }
 
-// runKeyLine offers x only while there is a run to stop.
-func runKeyLine(run workflowRunView) string {
+// runKeyLine offers x only while there is a run to stop, and while x has armed
+// that stop it is the cue: the one tell that ↵ now stops the run.
+func (v WorkflowView) runKeyLine(run workflowRunView) string {
 	keys := []string{"↑↓ select", "↵ open", "f filter"}
 	if run.Status == core.TaskRunning {
+		if v.Armed {
+			return keyLine("↵ stop "+oneLine(run.Name), "any key cancels")
+		}
 		keys = append(keys, "x stop")
 	}
 	return keyLine(append(keys, "s save", "esc back")...)
@@ -82,15 +86,22 @@ func (a App) workflowPane(width, height int) string {
 	return head + "\n" + v.render(a.workflowRuns(v.Session), width, height-workflowTitleRows)
 }
 
-// render is the list or run level in exactly w by h cells.
+// render is the list or run level in exactly w by h cells, with the save
+// dialog drawn over its foot while one is open.
 func (v WorkflowView) render(runs []workflowRunView, w, h int) string {
 	if w <= 0 || h <= 0 {
 		return ""
 	}
+	var rows []string
 	if v.Level == levelRun {
-		return fitBlock(v.runRows(runs, w, h), w)
+		rows = v.runRows(runs, w, h)
+	} else {
+		rows = v.listRows(runs, w, h)
 	}
-	return fitBlock(v.listRows(runs, w, h), w)
+	if v.Save != nil {
+		rows = v.Save.over(rows, w)
+	}
+	return fitBlock(rows, w)
 }
 
 // agentLevel is the agent level in w by h cells, windowing its kept layout.
@@ -222,7 +233,7 @@ func (v WorkflowView) runRows(runs []workflowRunView, w, h int) []string {
 		return stacked([]string{HintStyle.Render(workflowGone)}, nil, []string{keyLine("esc back")}, h)
 	}
 	g := v.runGeometry(run, w, h)
-	return stacked(g.head, v.runBody(run, g, w), []string{runKeyLine(run)}, h)
+	return stacked(g.head, v.runBody(run, g, w), []string{v.runKeyLine(run)}, h)
 }
 
 func (v WorkflowView) runBody(run workflowRunView, g runGeom, w int) []string {

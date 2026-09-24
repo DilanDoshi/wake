@@ -120,8 +120,11 @@ func runFor(runs []workflowRunView, task string) (workflowRunView, bool) {
 // workflowReplied folds a workflow reply. Every workflow reply kind comes
 // through here, so app.go's apply spends one line on all of them.
 func (a App) workflowReplied(f rpc.Frame) App {
-	if f.Kind == rpc.FrameWorkflowAgentReply {
+	switch f.Kind {
+	case rpc.FrameWorkflowAgentReply:
 		return a.workflowAgentReplied(f)
+	case rpc.FrameWorkflowSaved:
+		return a.workflowSaved(f)
 	}
 	var runs []core.WorkflowRun
 	if f.Workflow != nil {
@@ -194,14 +197,15 @@ func (a App) reaskWorkflowAgent() App {
 	return a
 }
 
-// onWorkflowProgress is observe's half of the agent level: only a task frame
-// carries a snapshot, so every other event - a streamed token above all - costs
-// nothing, and one that moved the open agent re-asks and re-lays it out.
+// onWorkflowProgress is observe's half of the view: only a task frame carries a
+// snapshot or an ending, so every other event - a streamed token above all -
+// costs nothing. One that ended the open run takes its armed stop back, and one
+// that moved the open agent re-asks and re-lays it out.
 func (a App) onWorkflowProgress(ev core.Event) App {
 	if ev.Task == nil {
 		return a
 	}
-	return a.reaskWorkflowAgent().relaidAgent()
+	return a.settledArm().reaskWorkflowAgent().relaidAgent()
 }
 
 // sameProgress is the part of an agent's entry that says its transcript grew.

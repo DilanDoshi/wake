@@ -22,6 +22,9 @@ import (
 // workflowsTakeNoArgument refuses an argument rather than ignoring it.
 const workflowsTakeNoArgument = workflowsCommand + " opens this pane's workflow runs and takes no argument"
 
+// workflowStopFailed names the write that could not happen, sendFailed's pattern.
+const workflowStopFailed = "stopping a workflow"
+
 type workflowLevel int
 
 const (
@@ -78,6 +81,11 @@ type WorkflowView struct {
 	Detail   int
 	Expanded bool // Activity draws each call's input and the start of its result
 	Scroll   int  // the agent level's first body row
+
+	// Armed is a stop x has armed on the open run, drawn until ↵ confirms it,
+	// any other key takes it back, or the run ends under it.
+	Armed bool
+	Save  *saveDialog // the save dialog over the run level, nil while closed
 
 	// Settling is a /workflows view nothing has been pressed in yet. Until then
 	// its level follows the run count, because the runs on disk arrive after it
@@ -186,7 +194,8 @@ func (a App) workflowKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	if m.Type == tea.KeyCtrlC {
 		return a.closeWorkflow(), nil, false
 	}
-	return a.workflowKeyed(m), nil, true
+	a, cmd := a.workflowKeyed(m)
+	return a, cmd, true
 }
 
 // workflowWheel is the wheel over the view: it walks the rows as ↑↓ do, since
@@ -197,23 +206,33 @@ func (a App) workflowWheel(up bool) App {
 	if up {
 		k.Type = tea.KeyUp
 	}
-	return a.workflowKeyed(k)
+	a, _ = a.workflowKeyed(k) // ↑↓ write nothing, armed or not
+	return a
 }
 
-// workflowKeyed is one key against the view. The agent level scrolls against
-// what it draws, and arriving there asks for that agent's own transcript.
-func (a App) workflowKeyed(m tea.KeyMsg) App {
+// workflowKeyed is one key against the view. The save dialog and an armed
+// stop take it first - an arm whose run has gone by a path no task frame
+// reports (/clear, /quit) is let go first, so it swallows no key - and the
+// agent level scrolls against what it draws, and arriving there asks for that
+// agent's own transcript.
+func (a App) workflowKeyed(m tea.KeyMsg) (App, tea.Cmd) {
+	a = a.settledArm()
 	v := a.workflow.view
-	if v.Level == levelAgent {
+	switch {
+	case v.Save != nil:
+		return a.saveKey(m)
+	case v.Armed:
+		return a.armedKey(m)
+	case v.Level == levelAgent:
 		a.workflow.view = v.agentKey(m, a.agentScrollLimit())
-		return a.relaidAgent()
+		return a.relaidAgent(), nil
 	}
 	a.workflow.view = v.keyed(m, a.workflowRuns(v.Session))
 	if a.workflow.view.Level == levelAgent {
 		a.workflow.asked = core.WorkflowAgent{}
 		a = a.reaskWorkflowAgent()
 	}
-	return a.relaidAgent()
+	return a.relaidAgent(), nil
 }
 
 // keyed is one key against the view at its level; any key ends settling.
@@ -253,6 +272,10 @@ func (v WorkflowView) runKey(m tea.KeyMsg, runs []workflowRunView) WorkflowView 
 	switch {
 	case m.Type == tea.KeyRunes && string(m.Runes) == "f":
 		v.Filter, v.Agent = v.Filter.next(), 0
+	case m.Type == tea.KeyRunes && string(m.Runes) == "x" && run.Status == core.TaskRunning:
+		v.Armed = true
+	case m.Type == tea.KeyRunes && string(m.Runes) == "s":
+		v.Save = &saveDialog{Name: run.Name, Scope: rpc.ScopeProject}
 	case m.Type == tea.KeyUp:
 		return v.step(run.Snap, -1)
 	case m.Type == tea.KeyDown:
@@ -319,6 +342,51 @@ func (v WorkflowView) back(runs []workflowRunView) WorkflowView {
 	return WorkflowView{}
 }
 
+// --- the stop -------------------------------------------------------------
+
+// armedKey is a key against an armed stop: ↵ confirms it, and anything else
+// takes it back and does nothing more - the cue said any key cancels. The
+// confirm is a different key from the arm for detach.go's reason.
+func (a App) armedKey(m tea.KeyMsg) (App, tea.Cmd) {
+	a.workflow.view.Armed = false
+	if m.Type != tea.KeyEnter {
+		return a, nil
+	}
+	return a.stopWorkflow()
+}
+
+// stopWorkflow writes the open run's FrameStopRun, to the run's own agent - the
+// room's view names none. The daemon's gate is the authority and its answer is
+// the run's own ending frames, not a receipt.
+func (a App) stopWorkflow() (App, tea.Cmd) {
+	run, ok := a.stoppable()
+	if !ok {
+		return a, nil
+	}
+	return a, a.write(workflowStopFailed, rpc.Frame{Kind: rpc.FrameStopRun, SessionID: run.Session,
+		Workflow: &rpc.WorkflowFrame{Task: run.Task}})
+}
+
+// settledArm takes an armed stop back once its run has left running, so an
+// ending that folds in under the arm leaves ↵ nothing to confirm.
+func (a App) settledArm() App {
+	if a.workflow.view.Armed {
+		_, a.workflow.view.Armed = a.stoppable()
+	}
+	return a
+}
+
+// openRun is the run the view's run level is on.
+func (a App) openRun() (workflowRunView, bool) {
+	return runFor(a.workflowRuns(a.workflow.view.Session), a.workflow.view.Task)
+}
+
+// stoppable is the open run while it is still running: what ↵ may stop.
+func (a App) stoppable() (workflowRunView, bool) {
+	run, ok := a.openRun()
+	return run, ok && run.Status == core.TaskRunning
+}
+
 // step moves the cursor of the column with the keys, without wrapping.
 func (v WorkflowView) step(s core.WorkflowSnapshot, by int) WorkflowView {
 	if v.Column == 0 {
@@ -380,6 +448,7 @@ func (v WorkflowView) agentsOf(s core.WorkflowSnapshot) []core.WorkflowAgent {
 // the regions the press landed in, before the keys move (startSelection's rule).
 func (a App) workflowPress(id string, col, top, height, x, y int, r Regions) App {
 	v := a.workflow.view
+	v.Armed = false // a press is not the confirm
 	runs := a.workflowRuns(v.Session)
 	a.workflow.view = v.hit(runs, r.Cols[col], height-workflowTitleRows,
 		x-a.layout.PaneLeft(r, col), y-top-workflowTitleRows)
