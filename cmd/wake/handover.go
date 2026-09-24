@@ -25,6 +25,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/term"
 	"github.com/muesli/cancelreader"
+
+	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 // suspendWait bounds how long a hand-over waits for the pump to let go of the
@@ -114,6 +116,15 @@ func (k *killSwitch) resume() error {
 // pipe, and header is printed first so the screen says whose prompt it is.
 func (k *killSwitch) handOver(cmd *exec.Cmd, header string) tea.ExecCommand {
 	return handOver{k: k, cmd: cmd, header: header}
+}
+
+// handOverFunc is the hand-off as the UI takes it, and nil with no terminal -
+// so /mcp says what to run instead of offering a hand-over that cannot happen.
+func (k *killSwitch) handOverFunc() ui.HandOver {
+	if k == nil {
+		return nil
+	}
+	return k.handOver
 }
 
 type handOver struct {

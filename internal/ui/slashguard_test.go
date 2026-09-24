@@ -265,7 +265,7 @@ func TestABareOnlyCommandIsOnlyTakenBare(t *testing.T) {
 // the vocabulary's own guard, so a sixth cannot be added without this rule being
 // looked at - the same reason wakeCommandCount and bareOnlyCommandCount carry one.
 func TestRoomTargetCommandsAreASubsetOfCommands(t *testing.T) {
-	const roomTargetCommandCount = 5
+	const roomTargetCommandCount = 6
 	if len(roomTargetCommands) != roomTargetCommandCount {
 		t.Errorf("roomTargetCommands has %d entries, want %d: a change to the set of @who commands has to be "+
 			"looked at, not slipped in", len(roomTargetCommands), roomTargetCommandCount)

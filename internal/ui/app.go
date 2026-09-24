@@ -163,6 +163,7 @@ type App struct {
 	picker       Picker
 	rewind       RewindPicker // esc esc's own picker, on an idle empty conversation; see rewind.go
 	resumePicker ResumePicker // a bare /resume's own picker, over the composer; see resumepicker.go
+	mcpUI        mcpState     // /mcp's menu and its sign-in; see mcpmenu.go
 
 	// completion is the menu under the focused draft: what could finish the
 	// word at the cursor. Rebuilt per keystroke, never per frame, and its `@`
@@ -563,8 +564,11 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case imageDropMsg:
 		return a.imageDropped(m)
 
-	case mcpResultMsg, authResultMsg:
-		return a.panelResult(m), nil
+	case authResultMsg:
+		return a.authResult(m), nil
+
+	case mcpSignedInMsg:
+		return a.mcpSignedIn(m)
 
 	case frameMsg:
 		// The frame is folded first, then two things read the result: the

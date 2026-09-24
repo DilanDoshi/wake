@@ -174,6 +174,10 @@ func runFakeAgent() int {
 	// spawns, and the trap is cheap enough to close anyway.
 	_ = os.Unsetenv(fakeAgentEnv)
 
+	// `claude mcp …` is a subcommand run from a shell, not a session.
+	if len(os.Args) > 1 && os.Args[1] == "mcp" {
+		return fakeClaudeMCP(os.Args[2:])
+	}
 	sid := agentArg(os.Args, "--session-id")
 	// A session that runs leaves a transcript on disk, so a parked record for it
 	// is offered back (parkedStatuses drops one with none). Behind an explicit
@@ -205,6 +209,8 @@ func runFakeAgent() int {
 		return fakeAgentDispatches(sid)
 	case scriptDispatchesLive:
 		return fakeAgentDispatchesLive(sid)
+	case scriptMCP:
+		return fakeAgentMCP(sid)
 	}
 	return fakeAgentEcho(sid)
 }

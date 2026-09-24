@@ -60,22 +60,9 @@ func runAuthStatus(id, dir string) tea.Cmd {
 	}
 }
 
-// panelResult folds either subcommand panel into the conversation that asked -
-// /mcp's server rows or /login's sign-in status. They share one Update case
-// because they are one subject: a claude subcommand run in the bounded shell,
-// parsed, and drawn where it was typed. The case reaches here with one of the two
-// and nothing else, so the trailing assertion is the mcp result by elimination.
-func (a App) panelResult(m tea.Msg) App {
-	if r, ok := m.(authResultMsg); ok {
-		return a.authResult(r)
-	}
-	return a.mcpResult(m.(mcpResultMsg))
-}
-
-// authResult puts the panel into the conversation that asked, the way mcpResult
-// does and for its reason: a window holds the room and every open conversation,
-// so a panel that landed in whichever was on screen would answer under the wrong
-// one.
+// authResult puts the panel into the conversation that asked: a window holds
+// the room and every open conversation, so a panel that landed in whichever was
+// on screen would answer under the wrong one.
 func (a App) authResult(m authResultMsg) App {
 	st, ok := parseAuthStatus(m.Text)
 	if m.ID == "" {

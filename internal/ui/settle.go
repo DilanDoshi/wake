@@ -13,5 +13,6 @@ func (a App) settle() (App, tea.Cmd) {
 	a, tick := a.beat()
 	a, rl := a.armRateLimitClear()
 	a, park := a.autoParkStalled()
-	return a, tea.Batch(flush, tick, rl, park)
+	a, mcp := a.mcpFollowUp()
+	return a, tea.Batch(flush, tick, rl, park, mcp)
 }
