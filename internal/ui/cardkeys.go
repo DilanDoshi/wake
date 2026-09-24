@@ -320,12 +320,15 @@ func (a App) confirmCard(c Card) (tea.Model, tea.Cmd, bool) {
 //
 // ⌃O's and ⎋'s own arms ride here rather than in disarms beside it: the
 // property is the same one - every input that is not the confirm - and the four
-// paths are the same four. See detach.go and escape.go.
+// paths are the same four. See detach.go and escape.go. So does the workflow
+// view's armed stop: a key the view takes never gets here, so anything that
+// does is an input somewhere else. See workflowview.go.
 func (a App) disarmed() App {
 	a.cards = a.cards.disarm()
 	a.detachArmed = false
 	a.escArmed = false
 	a.quitArmed = false
+	a.workflow.view.Armed = false
 	return a
 }
 

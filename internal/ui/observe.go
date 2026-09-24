@@ -56,8 +56,8 @@ func (a App) observe(sessionID string, ev core.Event) App {
 
 	var forRoom []core.Event
 	a.fleet, forRoom = a.fleet.Observe(ev, sessionID)
-	// A snapshot that moved the workflow agent open in the view re-reads it and
-	// lays it out again.
+	// A task frame settles the workflow view: an ending takes its armed stop
+	// back, and a snapshot that moved the open agent re-reads it and lays it out.
 	a = a.onWorkflowProgress(ev)
 	agent, _ := a.fleet.Agent(sessionID)
 	if ev.Session != nil {

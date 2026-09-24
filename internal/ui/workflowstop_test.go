@@ -199,6 +199,82 @@ func TestAPressOnTheViewDisarms(t *testing.T) {
 	}
 }
 
+// Through Update, where every mouse message takes every arm back first, a press
+// on the view still does the view's own job: the row under it is the cursor.
+func TestAPressOnTheViewThroughUpdateStillSelectsItsRow(t *testing.T) {
+	a := armed(t, runOpen(t))
+	x, y, ok := viewCell(a, "2 Sum")
+	if !ok {
+		t.Fatalf("the Sum phase is not on screen:\n%s", stripANSI(a.View()))
+	}
+	m, _ := a.Update(pressAt(x, y))
+	a = m.(App)
+	if v := a.workflow.view; v.Armed || !v.Open() || v.Column != 0 || v.Cursor != 1 || a.focus != "s1" {
+		t.Errorf("a press on the view left %+v with the keys on %q, want it disarmed on the Sum phase in alex's pane",
+			v, a.focus)
+	}
+}
+
+// requireDisarmedOnReturn holds a view the keys have come back to: no cue
+// drawn, and ↵ is the view's own - it opens, and stops nothing.
+func requireDisarmedOnReturn(t *testing.T, a App, how string) {
+	t.Helper()
+	if a.focus != "s1" || !a.workflow.view.Open() {
+		t.Fatalf("%s: the keys are on %q with the view %+v, want them back on alex's open view", how, a.focus, a.workflow.view)
+	}
+	if keys := keyRow(drawnView(t, a)); strings.Contains(keys, "↵ stop") {
+		t.Errorf("%s: the cue is still drawn: %q", how, keys)
+	}
+	a, cmd := pressKey(a, wfKey(tea.KeyEnter))
+	if got := stopsWritten(t, a, cmd); len(got) != 0 {
+		t.Errorf("%s: a ↵ after coming back wrote %d stops - the run was stopped by a key meant to open", how, len(got))
+	}
+}
+
+// The reviewer's probe: x arms, a click takes the keys to the room, something
+// is typed and cleared there, and ⇥ comes back. Every one of those was an input
+// that was not the confirm, so the ↵ that follows opens rather than stops.
+func TestAnArmLeftForAnotherPaneIsGoneOnReturn(t *testing.T) {
+	a := armed(t, runOpen(t))
+	r := a.regions()
+	m, _ := a.Update(pressAt(midOf(r, 0), textRow))
+	m, _ = m.(App).Update(tea.MouseMsg{Action: tea.MouseActionRelease, X: midOf(r, 0), Y: textRow})
+	a = m.(App)
+	if a.focus != "" {
+		t.Fatalf("the click left the keys on %q, want the room", a.focus)
+	}
+	a = a.withDraft("hi")
+	a, _ = pressKey(a, wfKey(tea.KeyEsc))
+	a, _ = pressKey(a, wfKey(tea.KeyTab))
+	requireDisarmedOnReturn(t, a, "a click away, typing, ⇥ back")
+}
+
+// A wheel over the room moves no keys, so the focus never leaves the view - but
+// it is still an input that is not the confirm, and it takes the arm back.
+func TestAWheelOverAnotherPaneTakesTheArmBack(t *testing.T) {
+	a := armed(t, runOpen(t))
+	r := a.regions()
+	m, _ := a.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown, X: midOf(r, 0), Y: textRow})
+	requireDisarmedOnReturn(t, m.(App), "a wheel over the room")
+}
+
+// ⇧←→ are the view's while it holds the keys, so they take the arm back like
+// any other key rather than moving it with the focus.
+func TestShiftArrowsUnderTheArmTakeItBack(t *testing.T) {
+	a := armed(t, runOpen(t))
+	a, _ = pressKey(a, wfKey(tea.KeyShiftRight))
+	a, _ = pressKey(a, wfKey(tea.KeyShiftLeft))
+	requireDisarmedOnReturn(t, a, "⇧→ then ⇧←")
+}
+
+// A focus move no key or click made - an arriving spawn or fork takes the keys
+// through refocus - still leaves the pane, so it takes the arm back too.
+func TestAFocusMoveNoInputMadeTakesTheArmBack(t *testing.T) {
+	a := armed(t, runOpen(t))
+	a = a.refocus("s2").refocus("s1")
+	requireDisarmedOnReturn(t, a, "the keys moved away and back")
+}
+
 func TestTheArmedKeyLineRendersWithinThePane(t *testing.T) {
 	v := runLevel(midRun())
 	v.Armed = true

@@ -489,6 +489,11 @@ func (a App) withFocus(f string) App {
 		// resurrect it rather than asking fresh. See rewind.go.
 		a = a.closeRewind()
 	}
+	if f != a.workflow.view.Pane {
+		// The keys leaving the view's pane leave its armed stop behind them: a ↵
+		// pressed after they come back is the view's own, not a confirm.
+		a.workflow.view.Armed = false
+	}
 	a.focus = f
 	a.room = a.room.WithComposer(a.room.Composer().Focused(f == ""))
 	for _, id := range a.grid.Panes() {
