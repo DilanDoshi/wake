@@ -3238,15 +3238,22 @@ Claude Code's own documentation calls the location "personal" (beside "project")
 label and the wire value are the same word Claude's docs use, and the Go constant's own name
 (`rpc.ScopeUser`) is free to stay readable without spelling anything Claude's wire does.
 
-**An unreadable workflow agent transcript answers empty, not an error.** `WorkflowAgentHistory` logs
-daemon-side and returns `nil, nil` for a transcript it cannot read, and `FrameWorkflowAgentReply`
-carries no events rather than a `FrameError` — the agent level then says its activity is unavailable,
-the same shape it already draws for a transcript that has not been written yet. The alternative was
-rejected: a `FrameError` on every re-ask (the agent level re-asks on each snapshot that moves the open
-agent) would put a notice on screen once per progress frame for a condition the operator cannot act
-on — the file is gone or unreadable, not a request that failed. This is `History`'s own ruling for a
-session with no transcript at all, arriving here because a missing file and an unreadable one are not
-different enough to draw differently.
+**An unreadable workflow agent transcript answers empty, not an error — and the two failure shapes
+are told apart, not conflated.** `WorkflowAgentHistory` returns `nil, nil` for the *never existed*
+cases — no session transcript, no workflow ever run under it, no matching agent id off the glob
+(which includes a matched file resolving outside the session directory, its own logged skip — a
+symlink-escape fence, not a read failure). A transcript that **exists but cannot be read** —
+`os.Open` fails, or a mid-scan read hits a non-EOF error — is a different shape, `nil, err`, and
+`WorkflowAgentHistory` itself logs neither case: it hands the error up. **The caller does the logging
+and the conversion**: `sendWorkflowAgent` is where `"wake: could not read workflow agent …"` is
+written, and where that `err` becomes empty `Events` on `FrameWorkflowAgentReply` rather than a
+`FrameError` — the agent level then says its activity is unavailable, the same shape it already draws
+for the never-existed case. The alternative was rejected: a `FrameError` on every re-ask (the agent
+level re-asks on each snapshot that moves the open agent) would put a notice on screen once per
+progress frame for a condition the operator cannot act on — the file is gone or unreadable, not a
+request that failed. This is `History`'s own ruling for a session with no transcript at all, arriving
+here because a missing file and an unreadable one are not different enough to draw differently, even
+though only one of them is `WorkflowAgentHistory`'s own error to report rather than its caller's.
 
 Full argument: `internal/daemon/workflowdisk.go`, `internal/daemon/workflowsave.go`,
 `internal/daemon/subagenttrack.go`, `internal/ui/workflowview.go`.
