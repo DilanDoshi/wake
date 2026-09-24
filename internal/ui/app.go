@@ -614,15 +614,15 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.copied(m)
 
 	case tea.KeyMsg:
+		a.clicks = clickRun{} // every keystroke ends a click run; see multiclick.go
 		// A live query-box selection turns ⌫/delete into "remove what is
 		// highlighted" - read before cleared() wipes the selection, since that
 		// runs on every keystroke. See deleteSelectedDraft.
 		if next, cmd, handled := a.deleteSelectedDraft(m); handled {
 			return next, cmd
 		}
-		// Clears the highlight and ends a click run, then does its own job - see cleared.
+		// Clears the highlight and then does its own job - see cleared.
 		a = a.cleared()
-		a.clicks = clickRun{}
 		if model, cmd, handled := a.key(m); handled {
 			return model, cmd
 		}

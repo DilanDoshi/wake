@@ -243,3 +243,40 @@ func TestAKeystrokeEndsAClickRun(t *testing.T) {
 		t.Errorf("a click after a keystroke selected %q; it starts a run of its own", selectedNow(a))
 	}
 }
+
+// Copies write in the order they were asked for: a double-click's word and the
+// triple-click's row run as two commands at once, and the row - asked for last
+// - must be what the clipboard keeps even when the word's command runs later.
+func TestTheNewestCopyIsTheOneThatStays(t *testing.T) {
+	var turns copyTurns
+	word, row := turns.take(), turns.take()
+	var wrote []string
+	if !turns.write(row, func() { wrote = append(wrote, "row") }) {
+		t.Fatal("the newest copy was refused")
+	}
+	if turns.write(word, func() { wrote = append(wrote, "word") }) {
+		t.Errorf("an older copy wrote after a newer one: %v", wrote)
+	}
+}
+
+// A handled ⌫ on a highlighted draft ends the run too, like any keystroke.
+func TestDeletingASelectionEndsAClickRun(t *testing.T) {
+	frozenClock(t)
+	a := splitApp(t, 200, 40, 4)
+	for _, r := range "hello brave world" {
+		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+	}
+	y := -1
+	for i := range a.layout.Height {
+		if strings.Contains(frameRow(a, i), "> hello brave world") {
+			y = i
+		}
+	}
+	x := strings.Index(frameRow(a, y), "brave") + 1
+	a, _ = clicks(a, x, y, 2)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyBackspace})
+	a, _ = click(a, x, y)
+	if a.sel.span {
+		t.Errorf("a click after deleting a double-clicked word selected %q; it is a first click", selectedNow(a))
+	}
+}

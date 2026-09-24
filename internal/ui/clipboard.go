@@ -17,6 +17,7 @@ import (
 	"os/exec"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -108,13 +109,50 @@ func copyToClipboard(text string) tea.Cmd {
 	if text == "" {
 		return nil
 	}
+	turn := clipboardTurns.take()
 	return func() tea.Msg {
-		return copiedMsg{
-			seq:   clipboardSequence(text, multiplexer(os.Getenv)),
-			chars: len([]rune(text)),
-			err:   nativeCopy(text),
-		}
+		var msg tea.Msg // nil when a newer copy wrote first, which Bubble Tea drops
+		clipboardTurns.write(turn, func() {
+			msg = copiedMsg{
+				seq:   clipboardSequence(text, multiplexer(os.Getenv)),
+				chars: len([]rune(text)),
+				err:   nativeCopy(text),
+			}
+		})
+		return msg
 	}
+}
+
+// copyTurns keeps overlapping copies in the order they were asked for. A
+// double-click's word and the triple-click's row a moment later are two commands
+// running at once, and whichever finished last was what the clipboard kept. Each
+// copy takes a turn when asked and writes under one lock; one that finds a
+// newer copy already written skips its own, so the newest request stays.
+type copyTurns struct {
+	mu             sync.Mutex
+	asked, written uint64
+}
+
+var clipboardTurns copyTurns
+
+// take is a copy's turn, in the order the copies were asked for.
+func (c *copyTurns) take() uint64 {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.asked++
+	return c.asked
+}
+
+// write runs f as the copy whose turn it is, unless a newer copy has written.
+func (c *copyTurns) write(turn uint64, f func()) bool {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if turn < c.written {
+		return false
+	}
+	c.written = turn
+	f()
+	return true
 }
 
 // copied confirms a clipboard write, in one notice: notice keeps a single slot,
