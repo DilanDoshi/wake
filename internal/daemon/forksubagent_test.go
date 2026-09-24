@@ -51,6 +51,19 @@ func TestABackgroundShellIsNotTrackedAsARunningSubagent(t *testing.T) {
 	}
 }
 
+// A running workflow forwards nothing into the parent's own transcript
+// either - its agents write only their own sidechain transcripts
+// (2026-09-23-workflow-findings.md §3), the same distinction that excuses a
+// background shell. So it is not tracked as a running subagent and a fork of
+// an idle parent with one still running is not refused.
+func TestARunningWorkflowDoesNotBlockAFork(t *testing.T) {
+	a := newAgent(idAlpha, "alex", "dev", "/repo/api", "", nil, func() {})
+	a.observe(core.Event{Task: &core.TaskUpdate{ID: "w1", Kind: core.TaskWorkflow, Phase: core.TaskStarted, Status: core.TaskRunning}})
+	if a.hasRunningSubagent() {
+		t.Error("a running workflow is tracked as a running subagent; it writes nothing into the parent's transcript")
+	}
+}
+
 // Two concurrent subagents are two ids: the set is keyed on the task id, so one
 // ending leaves the parent guarded while the other runs. The recorded shape is
 // testdata/stream/subagent-parallel.jsonl.

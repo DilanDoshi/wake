@@ -17,6 +17,8 @@ package daemon
 import (
 	"fmt"
 	"os"
+	"path/filepath"
+	"reflect"
 	"strings"
 	"testing"
 
@@ -144,4 +146,75 @@ func TestASecondClientAttachingMidDispatchSeesItRunning(t *testing.T) {
 	if task.Kind != core.TaskAgent || task.Dispatch == "" {
 		t.Fatalf("the replayed dispatch is not an openable running row: %+v - the sidebar would draw nothing", task)
 	}
+}
+
+// TestAReplayedWorkflowCarriesItsLatestSnapshot: a workflow's task_started
+// carries no progress at all (it precedes every task_progress), so replaying
+// it unchanged would hand a late client a dispatch with an empty sidebar -
+// no phase, no agent, nothing running. withProgress keeps the retained row
+// current as each task_progress arrives, the way a live client's own fold
+// already is.
+func TestAReplayedWorkflowCarriesItsLatestSnapshot(t *testing.T) {
+	a := newAgent(idAlpha, "sydney", "dev-1", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
+
+	var lastSnapshot *core.WorkflowSnapshot
+	progressSeen := 0
+	for _, ev := range decodeStreamFixture(t, "workflow-run.jsonl") {
+		if ev.Task == nil {
+			continue
+		}
+		a.observe(ev)
+		if ev.Task.Workflow != nil && ev.Task.Workflow.Progress != nil {
+			lastSnapshot = ev.Task.Workflow.Progress
+		}
+		if ev.Task.Phase == core.TaskProgress {
+			progressSeen++
+			if progressSeen == 3 {
+				break
+			}
+		}
+	}
+	if progressSeen != 3 {
+		t.Fatalf("the fixture carried %d task_progress frames, want at least 3", progressSeen)
+	}
+	if lastSnapshot == nil {
+		t.Fatal("no task_progress before the third carried a snapshot to replay")
+	}
+
+	frames := a.runningTaskFrames()
+	if len(frames) != 1 {
+		t.Fatalf("runningTaskFrames() = %d frames, want 1", len(frames))
+	}
+	task := frames[0].Event.Task
+	if task.Phase != core.TaskStarted || task.Kind != core.TaskWorkflow || task.Workflow == nil || task.Workflow.Name != "count-lines" {
+		t.Fatalf("replayed task = %+v, want the started count-lines workflow", task)
+	}
+	if !reflect.DeepEqual(task.Workflow.Progress, lastSnapshot) {
+		t.Fatalf("replayed snapshot = %+v, want the latest observed %+v", task.Workflow.Progress, lastSnapshot)
+	}
+}
+
+// decodeStreamFixture decodes a recorded stream-json fixture directly off
+// testdata/stream, in arrival order - the same corpus internal/core's own
+// tests read, reached here rather than through readFixture's env var because
+// that one only exists for the fake claude subprocess to find its own script.
+func decodeStreamFixture(t *testing.T, name string) []core.Event {
+	t.Helper()
+	path := filepath.Join(fixtureDir(t), name)
+	b, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatalf("read fixture %s: %v", path, err)
+	}
+	var out []core.Event
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		evs, err := core.DecodeLine([]byte(line))
+		if err != nil {
+			t.Fatalf("decode %s: %v", path, err)
+		}
+		out = append(out, evs...)
+	}
+	return out
 }

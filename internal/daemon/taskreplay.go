@@ -6,6 +6,7 @@ package daemon
 import (
 	"sort"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -66,4 +67,27 @@ func (a *agent) runningTaskFrames() []rpc.Frame {
 		frames[i] = rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev}
 	}
 	return frames
+}
+
+// withProgress returns a copy of a retained started event with a copied Task
+// and Workflow whose Progress is the latest snapshot - never mutating the
+// retained event (agent.observe still holds the old one under a.mu until this
+// returns) or the one already fanned out to a live client.
+func withProgress(ev core.Event, progress *core.WorkflowSnapshot) core.Event {
+	task := *ev.Task
+	workflow := *task.Workflow
+	workflow.Progress = progress
+	task.Workflow = &workflow
+	ev.Task = &task
+	return ev
+}
+
+// runningWorkflow reports whether id names a running workflow dispatch - the
+// fact FrameStopRun may act on. stop_task no-ops on a subagent or shell id
+// (findings.md §6 §2), so a workflow's own kind is the whole of the check.
+func (a *agent) runningWorkflow(id string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	ev, ok := a.runningTasks[id]
+	return ok && ev.Task != nil && ev.Task.Kind == core.TaskWorkflow
 }

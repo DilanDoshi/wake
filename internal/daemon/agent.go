@@ -416,6 +416,13 @@ func (a *agent) observe(ev core.Event) {
 		switch ev.Task.Phase {
 		case core.TaskStarted:
 			a.runningTasks[ev.Task.ID] = ev
+		case core.TaskProgress:
+			// A workflow's snapshot is whole and replaces wholesale (workflow.go),
+			// so the retained started row is kept current rather than frozen at
+			// spawn - the started task_started carries no progress at all.
+			if started, ok := a.runningTasks[ev.Task.ID]; ok && ev.Task.Workflow != nil && ev.Task.Workflow.Progress != nil {
+				a.runningTasks[ev.Task.ID] = withProgress(started, ev.Task.Workflow.Progress)
+			}
 		case core.TaskEnded:
 			delete(a.runningTasks, ev.Task.ID)
 		}
