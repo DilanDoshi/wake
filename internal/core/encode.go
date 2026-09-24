@@ -362,17 +362,16 @@ func encodeControlResponse(requestID string, d outPermDecision) ([]byte, error) 
 // envelope here, exactly where wireFrame.RequestID reads it on the inbound
 // can_use_tool ask; a control_response is the one that nests it a level
 // further, under "response".
-// Request is any because Wake sends two subtypes with disjoint payloads. A
-// struct holding both would put cancel_queued on a mode change and mode on an
-// interrupt, and omitempty cannot hide the first: interrupt's cancel_queued
-// tracks presence, not truth.
+// Request is any because each subtype Wake sends has its own payload. One
+// struct holding them all would put cancel_queued on a mode change, and
+// omitempty cannot hide it: interrupt's cancel_queued tracks presence, not truth.
 type outControlRequest struct {
 	Type      string `json:"type"`
 	RequestID string `json:"request_id"`
 	Request   any    `json:"request"`
 }
 
-// outInterruptRequest is the only control_request subtype Wake sends today.
+// outInterruptRequest aborts the running turn.
 //
 // CancelQueued is omitempty on purpose. interrupt-queued-survives.jsonl and
 // interrupt-cancel-queued.jsonl differ only in whether cancel_queued rode the
@@ -519,6 +518,132 @@ func EncodeRewind(requestID, targetUUID, lastSeenUUID string) ([]byte, error) {
 			InterruptIfRunning: false,
 		},
 	}, "encode rewind")
+}
+
+// The three MCP asks, recorded against 2.1.281 in mcp-control.stdin.jsonl.
+// None needs a model turn. A refusal comes back as a subtype "error" receipt
+// with the reason top-level - "Server not found: x", "Server status:
+// needs-auth" - never as an error here.
+type outMCPStatusRequest struct {
+	Subtype string `json:"subtype"`
+}
+
+type outMCPReconnectRequest struct {
+	Subtype    string `json:"subtype"`
+	ServerName string `json:"serverName"`
+}
+
+// outMCPToggleRequest persists: a disabled server is written into the
+// project's disabledMcpServers in ~/.claude.json, so it stays off across a
+// restart, exactly as the interactive /mcp's Disable does.
+type outMCPToggleRequest struct {
+	Subtype    string `json:"subtype"`
+	ServerName string `json:"serverName"`
+	Enabled    bool   `json:"enabled"`
+}
+
+// EncodeMCPStatus asks for every server's live status. The empty check is
+// EncodeSetMode's: an id-less receipt could not be matched to its ask.
+func EncodeMCPStatus(requestID string) ([]byte, error) {
+	if requestID == "" {
+		return nil, fmt.Errorf("%w: encode mcp status: empty request id", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{Type: "control_request", RequestID: requestID,
+		Request: outMCPStatusRequest{Subtype: "mcp_status"}}, "encode mcp status")
+}
+
+// EncodeMCPReconnect reconnects one server by the name the status reply gave.
+func EncodeMCPReconnect(requestID, server string) ([]byte, error) {
+	if requestID == "" || server == "" {
+		return nil, fmt.Errorf("%w: encode mcp reconnect: empty request id or server", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{Type: "control_request", RequestID: requestID,
+		Request: outMCPReconnectRequest{Subtype: "mcp_reconnect", ServerName: server}}, "encode mcp reconnect")
+}
+
+// EncodeMCPToggle switches one server on or off.
+func EncodeMCPToggle(requestID, server string, enabled bool) ([]byte, error) {
+	if requestID == "" || server == "" {
+		return nil, fmt.Errorf("%w: encode mcp toggle: empty request id or server", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{Type: "control_request", RequestID: requestID,
+		Request: outMCPToggleRequest{Subtype: "mcp_toggle", ServerName: server, Enabled: enabled}}, "encode mcp toggle")
+}
+
+// The two states the init frame's roster never showed, beside the three
+// vocabulary.go names.
+const (
+	MCPFailed   = "failed"
+	MCPDisabled = "disabled"
+)
+
+// The config scopes an mcp_status row names, as MCPServerStatus.Scope carries
+// them - an open set; a scope not listed here arrives intact.
+const (
+	MCPScopeLocal      = "local"
+	MCPScopeProject    = "project"
+	MCPScopeUser       = "user"
+	MCPScopePlugin     = "plugin"
+	MCPScopeClaudeAI   = "claudeai"
+	MCPScopeManaged    = "managed"
+	MCPScopeEnterprise = "enterprise"
+	MCPScopeDynamic    = "dynamic"
+)
+
+// wireMCPStatus is one row of an mcp_status receipt's mcpServers. Here rather
+// than in wire.go for room; the reply's other fields (source, the tools'
+// _meta) are not read.
+type wireMCPStatus struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Error      string `json:"error"`
+	Scope      string `json:"scope"`
+	ServerInfo struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	} `json:"serverInfo"`
+	Config struct {
+		Type    string   `json:"type"`
+		URL     string   `json:"url"`
+		Command string   `json:"command"`
+		Args    []string `json:"args"`
+	} `json:"config"`
+	Tools []struct {
+		Name        string `json:"name"`
+		Annotations struct {
+			ReadOnly bool `json:"readOnly"`
+		} `json:"annotations"`
+	} `json:"tools"`
+}
+
+// mcpStatusReply is a control_response that carries mcpServers, known by the
+// key's presence the way a rewind receipt is known by rewound's.
+func mcpStatusReply(ev Event, r *wireControlResp) (Event, bool) {
+	rows := r.Response.MCPServers
+	if rows == nil {
+		return ev, false
+	}
+	servers := make([]MCPServerStatus, 0, len(*rows))
+	for _, w := range *rows {
+		servers = append(servers, mcpServerStatus(w))
+	}
+	ev.Kind = KindMCPReply
+	ev.Text = r.Subtype
+	ev.MCP = &MCPResult{Ask: MCPAskServers, Servers: servers, Error: r.Error}
+	return ev, true
+}
+
+func mcpServerStatus(w wireMCPStatus) MCPServerStatus {
+	s := MCPServerStatus{Name: w.Name, State: w.Status, Error: w.Error, Scope: w.Scope,
+		Transport: w.Config.Type, Target: w.Config.URL,
+		Info: strings.TrimSpace(w.ServerInfo.Name + " " + w.ServerInfo.Version)}
+	if s.Target == "" {
+		s.Target = strings.TrimSpace(strings.Join(append([]string{w.Config.Command}, w.Config.Args...), " "))
+	}
+	for _, t := range w.Tools {
+		s.Tools = append(s.Tools, MCPTool{Name: t.Name, ReadOnly: t.Annotations.ReadOnly})
+	}
+	return s
 }
 
 // marshalLine renders one outbound frame as a single newline-terminated

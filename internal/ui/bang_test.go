@@ -490,7 +490,6 @@ func TestACommandsOutputCannotDriveTheTerminal(t *testing.T) {
 // actsOnATerminal is these tests' own predicate, written out rather than
 // reached through core's fence: a class narrowed by mistake would narrow the
 // assertion with it. core's contain_test.go states that rule and is why.
-// mcppanel_test.go's own BUG-9 test reads it from here.
 func actsOnATerminal(r rune) bool {
 	if r == '\n' || r == '\t' {
 		return false

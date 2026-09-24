@@ -3,8 +3,7 @@ package ui
 // `/login` from the outside: the command, the shell it runs, and the panel that
 // comes back into the conversation it was typed into.
 //
-// It is the `/mcp` path (mcpapp.go) one subcommand over, and it reuses runBang
-// for the same reason: bangRun already bounds a shell line off the draw goroutine
+// It reuses runBang because bangRun already bounds a shell line off the draw goroutine
 // and kills it by process group, and a second copy of that is the parallel
 // implementation this project forbids. What differs is only the command and the
 // renderer - `claude auth status --json`, parsed by authpanel.go.
@@ -34,9 +33,7 @@ const (
 )
 
 // authResultMsg is a finished `claude auth status`, addressed to the
-// conversation that asked. Separate from mcpResultMsg for its own reason: the two
-// are parsed and rendered by different code, and a shared shape with a mode is
-// how the wrong one gets drawn.
+// conversation that asked.
 type authResultMsg struct {
 	ID   string
 	Text string
@@ -60,22 +57,9 @@ func runAuthStatus(id, dir string) tea.Cmd {
 	}
 }
 
-// panelResult folds either subcommand panel into the conversation that asked -
-// /mcp's server rows or /login's sign-in status. They share one Update case
-// because they are one subject: a claude subcommand run in the bounded shell,
-// parsed, and drawn where it was typed. The case reaches here with one of the two
-// and nothing else, so the trailing assertion is the mcp result by elimination.
-func (a App) panelResult(m tea.Msg) App {
-	if r, ok := m.(authResultMsg); ok {
-		return a.authResult(r)
-	}
-	return a.mcpResult(m.(mcpResultMsg))
-}
-
-// authResult puts the panel into the conversation that asked, the way mcpResult
-// does and for its reason: a window holds the room and every open conversation,
-// so a panel that landed in whichever was on screen would answer under the wrong
-// one.
+// authResult puts the panel into the conversation that asked: a window holds
+// the room and every open conversation, so a panel that landed in whichever was
+// on screen would answer under the wrong one.
 func (a App) authResult(m authResultMsg) App {
 	st, ok := parseAuthStatus(m.Text)
 	if m.ID == "" {

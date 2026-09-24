@@ -489,6 +489,9 @@ func (a App) withFocus(f string) App {
 		// resurrect it rather than asking fresh. See rewind.go.
 		a = a.closeRewind()
 	}
+	if a.mcpUI.menu.Open() && a.mcpUI.menu.Pane != f {
+		a = a.closeMCP() // rewindKey's hygiene: a menu belongs to the pane that opened it
+	}
 	a.focus = f
 	a.room = a.room.WithComposer(a.room.Composer().Focused(f == ""))
 	for _, id := range a.grid.Panes() {

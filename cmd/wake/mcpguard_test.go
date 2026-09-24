@@ -238,10 +238,19 @@ var managerVerbs = map[string]verdict{
 
 	rpc.FrameRewind: {why: "moves which turns of a conversation are there to read, not merely how a session behaves going forward - a step past FrameMode's own refusal rather than the same argument again. A rewound turn does not stay in view on the next look: a reopened conversation reconstructs only the surviving branch and a reopened room drops a rewound broadcast, so the operator's own read of an agent can lose turns between one look and the next - exactly the shape of cover an injected instruction would want, on the hop this file's own header already describes. It fails FrameMode's test a second way too: the receipt is a KindRewindReceipt on the event stream, in no row list_agents or roll_up returns, so a manager that triggered one has no way to learn whether it took. And there is nothing here to aim it at - RewindTarget and RewindLastSeen are a transcript message's own uuid, which core.Event never carries onto this socket, and neither reading tool carries one either. A manager cannot address a verb whose whole argument is an id nothing on this surface has ever handed it"},
 
+	rpc.FrameMCPList: {why: "an agent's MCP servers are the operator's own machine: each row carries the command line or URL a server is reached at, its config scope and its error text, none of which any reading tool here returns and none of which the manager needs to send, interrupt, spawn or group. Its answer is also a KindMCPReply on the event stream, in no row list_agents or roll_up returns - the same reason FrameRewind's cell gives for a verb whose outcome the manager could not see. And it exists to aim the three refused below"},
+
+	rpc.FrameMCPReconnect: {why: "a reconnect drops and re-dials a live server under whatever tool call is using it, so it can fail another agent's turn in flight - not undoable by looking, the test send and interrupt pass. Its target is a name only FrameMCPList hands out, which is refused above"},
+	rpc.FrameMCPEnable:    {why: mcpToggleIsTheOperators},
+	rpc.FrameMCPDisable:   {why: mcpToggleIsTheOperators},
+
 	rpc.FrameAllow:  {why: permissionsAreAHumans},
 	rpc.FrameDeny:   {why: permissionsAreAHumans},
 	rpc.FrameAnswer: {why: permissionsAreAHumans},
 }
+
+// mcpToggleIsTheOperators is one reason for the two halves of one switch.
+const mcpToggleIsTheOperators = "switching a server on or off is written into the project's disabledMcpServers in ~/.claude.json, so it outlives the session and silently changes what every future agent in that directory can reach - a change to the operator's configuration rather than to one turn, and one no row on this surface shows, which is FrameMode's argument one file over"
 
 // permissionsAreAHumans is one reason for three kinds, which is the one place a
 // shared argument is right: they are the three answers to a single question, and

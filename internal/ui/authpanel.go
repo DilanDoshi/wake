@@ -3,12 +3,11 @@ package ui
 // The `/login` panel: whether this machine is signed in to claude, and - when it
 // is not - the command to sign in from a terminal.
 //
-// It is the `/mcp` panel (mcppanel.go) one subject over: `claude auth status
-// --json` in place of `claude mcp list`, run through the same bounded shell
-// (authapp.go), parsed here, and drawn as a transcript block. Wake never runs the
-// login itself - the flow wants a TTY and a browser, which is the no-PTY
-// non-negotiable - so the panel hands the command over the way mcppanel.go hands
-// over `claude mcp login`.
+// `claude auth status --json`, run through the bounded shell (authapp.go),
+// parsed here, and drawn as a transcript block. Wake does not run the account
+// login itself - the flow wants a terminal and a browser - so the panel hands the
+// command over. (An MCP server's sign-in is different: /mcp hands the terminal
+// itself to `claude mcp login`, see mcpauth.go.)
 
 import (
 	"encoding/json"
@@ -94,8 +93,7 @@ const (
 	authSignedOut  = "Not signed in"
 	authUnreadable = "Could not read authentication status"
 
-	// authOK and authNeeds are claude's own status glyphs, the pair mcppanel.go
-	// draws for the same job.
+	// authOK and authNeeds are claude's own status glyphs.
 	authOK    = "✔"
 	authNeeds = "!"
 )

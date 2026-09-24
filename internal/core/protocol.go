@@ -575,10 +575,11 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 		return ev
 	}
 	ev.RequestID = f.Response.RequestID
-	// A rewind receipt is discriminated by Rewound's *presence*, not its
-	// truth: it always carries the key, true or false, and a
-	// set_permission_mode receipt never does. Checked before the mode/generic
-	// path so a rewind never falls through to it.
+	// Rewind and MCP status receipts are known by a payload key's presence, and
+	// are checked first so neither falls through to the mode/generic path.
+	if ev, ok := mcpStatusReply(ev, f.Response); ok {
+		return ev
+	}
 	if b := f.Response.Response.Rewound; b != nil {
 		ev.Kind = KindRewindReceipt
 		ev.Text = f.Response.Subtype
@@ -593,9 +594,8 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 	}
 	ev.Kind = KindControlReceipt
 	ev.Text = f.Response.Subtype
-	// The mode a set_permission_mode landed on, doubly nested like the rest of
-	// the payload. Empty on every other receipt and on a refusal, which moved
-	// nothing - the reason travels in Control.Error instead.
+	// The mode a set_permission_mode landed on; empty on every other receipt and
+	// on a refusal, whose reason travels in Control.Error instead.
 	ev.PermissionMode = f.Response.Response.Mode
 	ev.Control = &ControlResult{
 		StillQueued: f.Response.Response.StillQueued,

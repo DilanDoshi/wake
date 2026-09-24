@@ -126,7 +126,7 @@ Wake owns a short, closed list of slash commands:
 /board                         the fleet as one row per agent; ⇥ tiles it into a live wall
 /groupchat-filter [on|off]     whether a lone @name narrows the room by default (bare reports)
 /reauth                        recover a fleet knocked out by an expired shared login
-/mcp                           the MCP panel claude cannot draw headless
+/mcp [@who]                    an agent's MCP servers: status, sign in, reconnect, on/off, tools
 /login                         the auth panel — sign in or check status
 /effort                        pick a reasoning level — bare, no argument
 /model                         pick a model — bare, no argument

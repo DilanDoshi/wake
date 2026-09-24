@@ -239,6 +239,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// rewound is the discriminator itself - see wireControlBody.Rewound.
 	"rewound", "targetMessageUuid", "prefillText", "precedingAssistantUuid",
 
+	// The three MCP control requests, the server they name, and the one
+	// Claude-spelled key of the status receipt Wake reads (a tool's readOnly
+	// annotation, which the MCP spec itself calls readOnlyHint).
+	"mcp_status", "mcp_reconnect", "mcp_toggle", "serverName", "readOnly",
+
 	// Two of the five permission modes, and the two that are *not* in
 	// deliberatelyGeneric with "auto" and "default". The argument there was that
 	// policing the plainest English in the corpus would fire across the tree;
@@ -384,6 +389,16 @@ var deliberatelyGeneric = wordSet([]string{
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",
+
+	// An mcp_status receipt's plain words: a toggle's flag, the two states the
+	// init roster never showed, and a server's config, scope, info and tools.
+	// mcpServers and serverInfo are the MCP ecosystem's own terms rather than
+	// stream-json's - daemon/manager.go writes mcpServers as the key of the MCP
+	// config file it hands the manager.
+	"enabled", "failed", "disabled", "scope", "version", "args", "config",
+	"annotations", "tools", "mcpServers", "serverInfo",
+	// And the config scopes a row names ("user" is policed already, as a role).
+	"local", "project", "plugin", "claudeai", "managed", "enterprise", "dynamic",
 
 	// The character that ends the cross-session envelope's opening tag, used to
 	// find where the body begins. Punctuation, not a wire word.
@@ -577,7 +592,7 @@ var notNamedByTheAirlock = map[string]string{
 // 175 → 180: the compact_boundary summary keys wireFrame.compaction reads -
 // "compact_metadata", "trigger", "pre_tokens", "post_tokens" and
 // "cumulative_dropped_tokens" (duration_ms was already policed). compaction.jsonl.
-const policedWordCount = 180
+const policedWordCount = 185
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -595,6 +610,12 @@ var notWireVocabulary = wordSet([]string{
 	"decode transcript line: %w",
 	"encode user message",
 	"%w: encode user message: nothing to send",
+	"encode mcp status", "encode mcp reconnect", "encode mcp toggle",
+	"%w: encode mcp status: empty request id",
+	"%w: encode mcp reconnect: empty request id or server",
+	"%w: encode mcp toggle: empty request id or server",
+	// The separator a stdio server's command line is joined with.
+	" ",
 	// The text a decoded image block carries up in place of its bytes.
 	ImagePlaceholder,
 	// Wake's own surfacing text for a 401 api_retry, which carries no message of
@@ -861,7 +882,6 @@ var notInTheCorpus = map[string]string{
 	"new_string": "Edit is advertised but never called; occurs only in prose",
 
 	// primaryArg keys for tools the corpus never exercised, alongside Edit's.
-	"url":     "WebFetch is advertised but never called",
 	"pattern": "Glob and Grep are neither advertised here nor called",
 
 	// The token stream's five words moved out of this list on 2026-08-21:
@@ -894,6 +914,10 @@ var notInTheCorpus = map[string]string{
 	"target_message_uuid":         "outbound only; rewind request field Wake writes",
 	"last_seen_user_message_uuid": "outbound only; rewind request field Wake writes",
 	"interrupt_if_running":        "outbound only; rewind request field Wake writes",
+	"mcp_status":                  "outbound only; the corpus holds its receipts, not the requests",
+	"mcp_reconnect":               "outbound only; the corpus holds its receipts, not the requests",
+	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
+	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
 }
 
 // embeddedMarkers never appear as a JSON key or as a whole value: the

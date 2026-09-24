@@ -247,7 +247,6 @@ func TestGeneratedTextIsNotAPrompt(t *testing.T) {
 		ev   core.Event
 	}{
 		{"a bang line's output", bangEvent(bangResultMsg{ID: "s1", Cmd: "ls", Text: "one\ntwo"})},
-		{"an /mcp panel", mcpEvent("s1", []mcpRow{{Name: "wake", Status: "connected"}}, "/tmp", 80)},
 		{"a compaction summary, from the recording", recordedEcho(t, compactionFixture)},
 	} {
 		if got := promptsIn([]core.Event{tc.ev}); len(got) != 0 {

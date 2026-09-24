@@ -115,6 +115,11 @@ const (
 	// KindRewindReceipt is Claude's rewind_conversation receipt. See Event.Rewind.
 	KindRewindReceipt EventKind = "rewind_receipt"
 
+	// KindMCPReply answers an MCP ask Wake sent: a status reply is known by its
+	// payload, a reconnect or toggle only by the request id the session minted
+	// (Session.MCPReconnect). See Event.MCP.
+	KindMCPReply EventKind = "mcp_reply"
+
 	// KindRequestWithdrawn is Claude retiring a control_request it sent -
 	// today, in every recording, the permission ask an interrupt landed on.
 	// RequestID names the dead request and is the whole payload: the frame
@@ -707,6 +712,9 @@ type Event struct {
 	// again for KindRewindReceipt; see RewindResult.
 	Control *ControlResult `json:"control,omitempty"`
 	Rewind  *RewindResult  `json:"rewind,omitempty"`
+
+	// MCP is a KindMCPReply's payload, nil on every other kind.
+	MCP *MCPResult `json:"mcp_reply,omitempty"`
 
 	// Raw is the whole stream-json line this event was decoded from, kept
 	// for in-process debugging. It is excluded from JSON on purpose, so it

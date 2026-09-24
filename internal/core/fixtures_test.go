@@ -515,7 +515,7 @@ func TestInterruptFrameTypesMapOneToOneOntoTheirKinds(t *testing.T) {
 	// other two wire types here still own exactly one kind each.
 	want := map[string][]EventKind{
 		"command_lifecycle":      {KindMessageState},
-		"control_response":       {KindControlReceipt, KindRewindReceipt},
+		"control_response":       {KindControlReceipt, KindRewindReceipt, KindMCPReply},
 		"control_cancel_request": {KindRequestWithdrawn},
 	}
 	owned := map[EventKind]string{}
