@@ -180,6 +180,23 @@ func (s *Session) SetMode(mode string) (string, error) {
 	return requestID, nil
 }
 
+// StopTask stops a running dynamic Workflow(), addressed by its own task id
+// (never a workflow agent's - findings.md §6 §2: the same request at an
+// agent's agentId is answered success and does nothing). Records nothing
+// afterward, SetMode's own reason: stopping a workflow aborts no turn of
+// *this* session and is owed no forgive-the-exit licence.
+func (s *Session) StopTask(taskID string) (string, error) {
+	requestID := uuid.NewString()
+	line, err := EncodeStopTask(requestID, taskID)
+	if err != nil {
+		return "", err
+	}
+	if err := s.writeLine(line); err != nil {
+		return "", err
+	}
+	return requestID, nil
+}
+
 // Rewind asks this session to rewind its conversation to targetUUID, declaring
 // lastSeenUUID as the tip, and returns the request_id its receipt will carry.
 // The receipt (KindRewindReceipt) is the authority on whether it rewound; a

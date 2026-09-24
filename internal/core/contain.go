@@ -272,6 +272,16 @@ func containedWorkflowSnapshot(s *WorkflowSnapshot) *WorkflowSnapshot {
 	return &c
 }
 
+// containedRun contains a WorkflowRun read back off its own wf_*.json record -
+// containedTask's fields for TaskID and containedWorkflow's for the rest,
+// reusing containedWorkflowSnapshot rather than walking the progress twice.
+func containedRun(r WorkflowRun) WorkflowRun {
+	r.TaskID, r.Name, r.Summary = Contained(r.TaskID), Contained(r.Name), Contained(r.Summary)
+	r.Error, r.Script = Contained(r.Error), Contained(r.Script)
+	r.Progress = containedWorkflowSnapshot(r.Progress)
+	return r
+}
+
 func containedControl(r *ControlResult) *ControlResult {
 	if r == nil {
 		return nil

@@ -99,3 +99,20 @@ type WorkflowAgent struct {
 	Prompt    string             `json:"prompt,omitempty"` // promptPreview
 	Result    string             `json:"result,omitempty"` // resultPreview
 }
+
+// WorkflowRun is one finished (or killed) run, read back off its own
+// wf_*.json record on disk - a second source from the live task_progress
+// snapshot, for a run whose session has moved on or ended. DecodeWorkflowRun
+// in encode.go builds one; internal/daemon reads the file.
+type WorkflowRun struct {
+	TaskID   string            `json:"task"`
+	Name     string            `json:"name"`
+	Summary  string            `json:"summary,omitempty"`
+	Status   TaskStatus        `json:"status"`
+	Error    string            `json:"error,omitempty"`
+	Started  time.Time         `json:"started"`
+	Duration time.Duration     `json:"duration,omitempty"`
+	Tokens   int               `json:"tokens,omitempty"`
+	Script   string            `json:"script,omitempty"`
+	Progress *WorkflowSnapshot `json:"progress,omitempty"`
+}

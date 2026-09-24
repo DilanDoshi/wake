@@ -206,6 +206,19 @@ var claudeWireVocabulary = wordSet([]string{
 	"workflow_name", "workflow_progress", "workflow_phase", "workflow_agent",
 	"phaseIndex", "toolCalls", "durationMs", "promptPreview", "resultPreview",
 
+	// A run's own wf_*.json record on disk (task 2, 2026-09-24): workflowName,
+	// summary, startTime and totalTokens are the record's own top-level keys -
+	// camelCase, distinct from the stream's snake_case workflow_name; script
+	// is the Workflow tool's own input key, also on the record; workflowProgress
+	// is the record's snapshot wrapper, distinct from the stream's
+	// workflow_progress above. Wake's own word for the whole record is
+	// WorkflowRun. See DecodeWorkflowRun.
+	"workflowName", "summary", "startTime", "totalTokens", "script", "workflowProgress",
+
+	// The Agent SDK's stopTask(taskId) (findings.md §6), the wire form of the
+	// control_request EncodeStopTask sends. "task_id" is already policed above.
+	"stop_task",
+
 	// The live checklist tools and their input keys. TodoWrite is retired in
 	// 2.1.240 and its replacement builds a list across TaskCreate/TaskUpdate
 	// calls (task-checklist.jsonl). "subject" and "taskId" are policed for
@@ -615,7 +628,13 @@ var notNamedByTheAirlock = map[string]string{
 // sit in deliberatelyGeneric instead, since task.go already spells both
 // literally and is not an airlock file). Recorded in
 // docs/superpowers/notes/2026-09-23-workflow-findings.md.
-const policedWordCount = 191
+// 191 → 198: task 2's stop and run-record vocabulary - "stop_task" (the Agent
+// SDK's stopTask(taskId), outbound only); "workflowName", "summary",
+// "startTime", "totalTokens", "script" and "workflowProgress", the run's own
+// wf_*.json record on disk, camelCase and distinct from the stream's
+// snake_case workflow_name/workflow_progress. See EncodeStopTask and
+// DecodeWorkflowRun.
+const policedWordCount = 198
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -648,6 +667,11 @@ var notWireVocabulary = wordSet([]string{
 	"encode rewind",
 	"%w: encode rewind: empty request id",
 	"%w: encode rewind: empty target or last-seen uuid",
+	"encode stop task",
+	"%w: encode stop task: empty request id",
+	"%w: encode stop task: empty task id",
+	"decode workflow run: %w",
+	"decode workflow run: no task id",
 	defaultDenyReason,
 
 	// EncodeAnswer's refusals: Wake's own English, telling whoever gave an
@@ -819,7 +843,12 @@ var allowed = map[string]map[string]bool{
 	// "prompt" already names on the wire - a workflow agent's own
 	// instruction, shortened. workflow.go is Wake's vocabulary and decodes
 	// nothing; encode.go's workflowSnapshotOf does the reading.
-	"internal/core/workflow.go": {"prompt": true},
+	//
+	// "script", "status" and "summary" are the same case three times more:
+	// WorkflowRun's own script, TaskStatus and one-line summary (task 2) -
+	// json tags reusing a word the wire also carries, decoded nowhere in this
+	// file (encode.go's DecodeWorkflowRun does that).
+	"internal/core/workflow.go": {"prompt": true, "script": true, "status": true, "summary": true},
 }
 
 // allowlistPairCount is the tripwire over the table above, and it exists for
@@ -831,7 +860,9 @@ var allowed = map[string]map[string]bool{
 // 21 → 22: WorkflowAgent.Prompt's own json tag, "prompt" - the preview of a
 // workflow agent's instruction, spelled the same as the tool-input key by
 // coincidence of subject rather than reuse of the wire.
-const allowlistPairCount = 22
+// 22 → 25: WorkflowRun's own "script", "status" and "summary" json tags
+// (task 2), reusing three more words the wire also carries.
+const allowlistPairCount = 25
 
 func TestTheAllowlistDoesNotGrowQuietly(t *testing.T) {
 	pairs := 0
@@ -940,6 +971,17 @@ var notInTheCorpus = map[string]string{
 	"target_message_uuid":         "outbound only; rewind request field Wake writes",
 	"last_seen_user_message_uuid": "outbound only; rewind request field Wake writes",
 	"interrupt_if_running":        "outbound only; rewind request field Wake writes",
+	"stop_task":                   "outbound only; a recording of stdout cannot contain it",
+
+	// The run record's own two keys with no counterpart on the stream: the
+	// start time (task_progress carries only elapsed usage, never a start
+	// clock) and the snapshot wrapper's camelCase spelling (contrast the
+	// recorded workflow_progress, its snake_case sibling on task_progress).
+	// Both are hand-trimmed into workflow_test.go's runRecordFixture (task
+	// wsmc7r0xw, workflow-failed.jsonl) rather than recorded as a testdata/
+	// file of its own.
+	"startTime":        "recorded only in workflow_test.go's runRecordFixture, not testdata/",
+	"workflowProgress": "recorded only in workflow_test.go's runRecordFixture, not testdata/",
 }
 
 // embeddedMarkers never appear as a JSON key or as a whole value: the

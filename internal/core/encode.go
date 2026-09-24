@@ -522,6 +522,37 @@ func EncodeRewind(requestID, targetUUID, lastSeenUUID string) ([]byte, error) {
 	}, "encode rewind")
 }
 
+// outStopTaskRequest stops a running dynamic Workflow() by its own task id -
+// the wire form of the Agent SDK's documented stopTask(taskId)
+// (findings.md §6). The same request at a workflow *agent's* agentId is
+// answered success and does nothing, since that agent already finished; Wake
+// never sends one there.
+type outStopTaskRequest struct {
+	Subtype string `json:"subtype"`
+	TaskID  string `json:"task_id"`
+}
+
+// EncodeStopTask stops a running workflow, addressed by its task id. Pause and
+// resume have no wire form (findings.md §6: pause_task is refused outright),
+// so this is the only control Wake can offer over a running workflow. The
+// empty checks are EncodeRewind's, for its reason.
+func EncodeStopTask(requestID, taskID string) ([]byte, error) {
+	if requestID == "" {
+		return nil, fmt.Errorf("%w: encode stop task: empty request id", ErrNotWritten)
+	}
+	if taskID == "" {
+		return nil, fmt.Errorf("%w: encode stop task: empty task id", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request: outStopTaskRequest{
+			Subtype: "stop_task",
+			TaskID:  taskID,
+		},
+	}, "encode stop task")
+}
+
 // marshalLine renders one outbound frame as a single newline-terminated
 // line, because stdin is newline-delimited JSON in exactly the way stdout
 // is. json.Marshal escapes embedded newlines and quotes, which is what keeps
@@ -571,22 +602,6 @@ func goalOp(frameType string, m wireMessage) (GoalOp, bool) {
 		}
 	}
 	return GoalOp{}, false
-}
-
-// goalProgress parses a "Stop hook feedback" refresh: the condition sits in the
-// first [..] and the evaluator's latest reason follows "]: ".
-func goalProgress(text string) (GoalOp, bool) {
-	open := strings.Index(text, "[")
-	if open < 0 {
-		return GoalOp{}, false
-	}
-	cond, reason, closed := strings.Cut(text[open+1:], "]")
-	cond = strings.TrimSpace(cond)
-	if !closed || cond == "" {
-		return GoalOp{}, false
-	}
-	reason = strings.TrimSpace(strings.TrimPrefix(reason, ":"))
-	return GoalOp{Op: GoalProgress, Condition: cond, Reason: reason}, true
 }
 
 // The bundled scheduler tools a headless session reaches for when it reproduces
@@ -645,16 +660,6 @@ func toolLoopOp(name string, input map[string]any) *LoopOp {
 		return &LoopOp{Stop: true}
 	}
 	return nil
-}
-
-// intArg is one input value as an int, and 0 for a key a tool omits or whose
-// value is not a number - JSON numbers decode as float64 through encoding/json.
-func intArg(input map[string]any, key string) int {
-	v, ok := input[key].(float64)
-	if !ok {
-		return 0
-	}
-	return int(v)
 }
 
 // wireWorkflowItem is one workflow_progress entry: a phase or an agent, told
@@ -729,4 +734,51 @@ func workflowOf(f wireFrame, kind TaskKind) *WorkflowUpdate {
 		return nil
 	}
 	return &w
+}
+
+// DecodeSidechainLine decodes one line of a workflow agent's own on-disk
+// transcript - the isSidechain:true lines decodeTranscript otherwise drops,
+// kept here because a workflow agent forwards nothing live (findings.md §3):
+// its words exist only on this tree. Reads, not writes - decodeTranscript's
+// own reason for sitting here rather than in protocol.go, which is at the
+// 800-line hard max.
+func DecodeSidechainLine(line []byte) ([]Event, error) {
+	return decodeTranscript(line, true)
+}
+
+// wireWorkflowRun is one run's own wf_*.json record on disk - a second source
+// from the live task_progress snapshot, camelCase like every key a workflow's
+// own JS runtime writes (contrast task_progress's workflow_progress, the
+// stream's snake_case wrapper key).
+type wireWorkflowRun struct {
+	TaskID           string             `json:"taskId"`
+	WorkflowName     string             `json:"workflowName"`
+	Summary          string             `json:"summary"`
+	Status           string             `json:"status"`
+	Error            string             `json:"error"`
+	StartTime        int64              `json:"startTime"`
+	DurationMs       int                `json:"durationMs"`
+	TotalTokens      int                `json:"totalTokens"`
+	Script           string             `json:"script"`
+	WorkflowProgress []wireWorkflowItem `json:"workflowProgress"`
+}
+
+// DecodeWorkflowRun decodes one run record. An unrecognised status resolves
+// to TaskStatusUnknown, taskStatus's own ruling: a word this corpus has never
+// seen is not "done" wearing a guess.
+func DecodeWorkflowRun(raw []byte) (WorkflowRun, error) {
+	var w wireWorkflowRun
+	if err := json.Unmarshal(raw, &w); err != nil {
+		return WorkflowRun{}, fmt.Errorf("decode workflow run: %w", err)
+	}
+	if w.TaskID == "" {
+		return WorkflowRun{}, errors.New("decode workflow run: no task id")
+	}
+	status, ok := taskStatuses[w.Status]
+	if !ok {
+		status = TaskStatusUnknown
+	}
+	return containedRun(WorkflowRun{TaskID: w.TaskID, Name: w.WorkflowName, Summary: w.Summary, Status: status,
+		Error: w.Error, Started: time.UnixMilli(w.StartTime), Duration: time.Duration(w.DurationMs) * time.Millisecond,
+		Tokens: w.TotalTokens, Script: w.Script, Progress: workflowSnapshotOf(w.WorkflowProgress)}), nil
 }

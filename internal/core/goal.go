@@ -3,7 +3,10 @@ package core
 // Wake's own vocabulary for Claude Code's native /goal, decoded from the wire by
 // wire.go's goalOp and folded onto a session by the daemon and internal/ui. This
 // file names none of Claude's JSON - the recognizer that does is behind the
-// airlock; here are only the Wake types it produces.
+// airlock; here are only the Wake types it produces, and goalProgress, which
+// reads none of Claude's vocabulary either (see its own comment).
+
+import "strings"
 
 // KindGoal is one /goal lifecycle signal, carried as Event.Goal. Claude runs the
 // goal inside the agent process (a session-scoped Stop hook); Wake forwards the
@@ -37,4 +40,24 @@ type GoalOp struct {
 	Op        GoalOpKind
 	Condition string
 	Reason    string
+}
+
+// goalProgress parses a "Stop hook feedback" refresh: the condition sits in
+// the first [..] and the evaluator's latest reason follows "]: ".
+//
+// Moved from encode.go (2026-09-24, workflow task 2) to hold that file under
+// the 800-line hard max; unchanged, and reads no Claude JSON of its own - the
+// three punctuation marks it matches on are Wake's own parse, not a wire word.
+func goalProgress(text string) (GoalOp, bool) {
+	open := strings.Index(text, "[")
+	if open < 0 {
+		return GoalOp{}, false
+	}
+	cond, reason, closed := strings.Cut(text[open+1:], "]")
+	cond = strings.TrimSpace(cond)
+	if !closed || cond == "" {
+		return GoalOp{}, false
+	}
+	reason = strings.TrimSpace(strings.TrimPrefix(reason, ":"))
+	return GoalOp{Op: GoalProgress, Condition: cond, Reason: reason}, true
 }

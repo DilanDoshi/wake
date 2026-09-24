@@ -177,14 +177,15 @@ func turnTokensEvent(f wireFrame) []Event {
 // `session_id`, and the caller knows which session's file it opened - stamping
 // it there is one fact in one place rather than two spellings in the airlock.
 //
-// A sidechain line is a subagent's, and it is dropped: the conversation being
-// restored is the one the operator was having.
-// It reads one on-disk-only key: `timestamp`. That is the exception to the
-// paragraph above and it has to be, because the caller cannot supply what only
-// the line knows - and the room needs it, being a fold over several transcripts
-// that has to interleave them. A record with no readable time keeps its turn and
-// loses only the stamp; see Event.At.
-func DecodeTranscriptLine(line []byte) ([]Event, error) {
+// A sidechain line is a subagent's; dropped here, kept by DecodeSidechainLine.
+// It reads one on-disk-only key: `timestamp` - the exception above, since the
+// caller cannot supply what only the line knows, and the room needs it to
+// interleave several transcripts. A record with no readable time keeps its
+// turn and loses only the stamp; see Event.At.
+func DecodeTranscriptLine(line []byte) ([]Event, error) { return decodeTranscript(line, false) }
+
+// decodeTranscript is the shared body; keepSidechain true is DecodeSidechainLine's (encode.go).
+func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 	var f struct {
 		Type      string `json:"type"`
 		Sidechain bool   `json:"isSidechain"`
@@ -201,7 +202,7 @@ func DecodeTranscriptLine(line []byte) ([]Event, error) {
 	if err := json.Unmarshal(line, &f); err != nil {
 		return nil, fmt.Errorf("decode transcript line: %w", err)
 	}
-	if f.APIError || f.Sidechain || (f.Type != "assistant" && f.Type != "user") {
+	if f.APIError || (f.Sidechain && !keepSidechain) || (f.Type != "assistant" && f.Type != "user") {
 		return nil, nil
 	}
 	events, err := DecodeLine(line)

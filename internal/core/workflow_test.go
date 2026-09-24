@@ -126,3 +126,52 @@ func TestANonWorkflowTaskCarriesNoWorkflow(t *testing.T) {
 		}
 	}
 }
+
+// TestASidechainLineDecodesWhereATranscriptLineDoesNot is DecodeSidechainLine's
+// whole reason: a workflow agent forwards nothing live (findings.md §3), so its
+// words exist only in its own on-disk transcript, whose lines are all
+// isSidechain:true - the one shape DecodeTranscriptLine drops.
+func TestASidechainLineDecodesWhereATranscriptLineDoesNot(t *testing.T) {
+	var side, plain int
+	for _, line := range fixtureLines(t, "../../testdata/transcript/workflow-agent.jsonl") {
+		evs, err := DecodeSidechainLine([]byte(line))
+		if err != nil {
+			t.Fatal(err)
+		}
+		side += len(evs)
+		p, _ := DecodeTranscriptLine([]byte(line))
+		plain += len(p)
+	}
+	if side == 0 || plain != 0 {
+		t.Fatalf("sidechain %d events, transcript %d; want >0 and 0", side, plain)
+	}
+}
+
+// runRecordFixture is a hand-trimmed, scrubbed copy of the failed run's own
+// wf_*.json record (task wsmc7r0xw, workflow-failed.jsonl): the keys are
+// copied verbatim from the recording, with every path dropped and the
+// snapshot cut to one phase and two agents.
+const runRecordFixture = `{
+	"taskId": "wsmc7r0xw",
+	"workflowName": "wide-then-fail",
+	"summary": "Six parallel echo agents, one reducer, then a deliberate failure",
+	"status": "failed",
+	"error": "Error: deliberate probe failure\n    at <anonymous> (workflow.js:8:7)",
+	"startTime": 1790224377827,
+	"durationMs": 10402,
+	"totalTokens": 106361,
+	"script": "phase('Fan')\n",
+	"workflowProgress": [
+		{"type": "workflow_phase", "index": 1, "title": "Fan"},
+		{"type": "workflow_agent", "index": 1, "label": "echo red", "phaseIndex": 1, "phaseTitle": "Fan", "agentId": "ad377aac14ee2acea", "model": "claude-haiku-4-5-20251001", "state": "done", "tokens": 15194},
+		{"type": "workflow_agent", "index": 2, "label": "echo green", "phaseIndex": 1, "phaseTitle": "Fan", "agentId": "aa81ac9dab30431e5", "model": "claude-haiku-4-5-20251001", "state": "done", "tokens": 15192}
+	]
+}`
+
+func TestARunRecordDecodes(t *testing.T) {
+	run, err := DecodeWorkflowRun([]byte(runRecordFixture))
+	if err != nil || run.TaskID != "wsmc7r0xw" || run.Status != TaskFailed || run.Error == "" ||
+		run.Progress == nil || len(run.Progress.Agents) != 2 || run.Started.IsZero() {
+		t.Fatalf("run = %+v err = %v", run, err)
+	}
+}
