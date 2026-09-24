@@ -415,3 +415,90 @@ func TestAPressOnTheAgentLevelLeavesTheRunLevelsCursors(t *testing.T) {
 		t.Errorf("a press on the agent level left %+v, want %+v", v, before)
 	}
 }
+
+// --- laid out once per change ---------------------------------------------
+
+const cacheSentinel = "SENTINEL-ROW"
+
+// sentinelled is the agent level with a marker planted in its cached body: a
+// frame that draws the marker windowed the cache, and one that does not re-laid
+// the agent out.
+func sentinelled(t *testing.T) App {
+	t.Helper()
+	a, _ := agentOpen(t, 0, 1)
+	if len(a.workflow.agent.rows.body) == 0 {
+		t.Fatal("entering the agent level laid nothing out: every frame until the reply lays it out")
+	}
+	a = agentReply(a, bTxtAgentID, bTxtEvents(t))
+	a.workflow.agent.rows.body = []string{cacheSentinel}
+	return a
+}
+
+func drawsSentinel(a App) bool { return strings.Contains(stripANSI(a.View()), cacheSentinel) }
+
+// Nothing that changes what the agent level draws, nothing laid out again:
+// frames, scroll keys, and snapshots that leave this agent alone all window
+// the rows already laid out.
+func TestTheAgentLevelIsNotLaidOutAgainWhileNothingChanges(t *testing.T) {
+	a := sentinelled(t)
+	for i := range 3 {
+		if !drawsSentinel(a) {
+			t.Fatalf("frame %d re-laid the agent level out with nothing changed", i)
+		}
+	}
+	a, _ = pressKey(a, wfRune('j'))
+	a, _ = pressKey(a, wfRune('k'))
+	a = progressedTo(a, countLinesSnap())
+	other := countLinesSnap()
+	other.Agents[2].Tokens++
+	a = progressedTo(a, other)
+	if !drawsSentinel(a) {
+		t.Error("a scroll key or a snapshot that left count b.txt alone re-laid it out")
+	}
+}
+
+// Every change to what the agent level draws lays it out again once, where the
+// change lands: the old layout is gone, and the frames after it window the new
+// one rather than each laying it out afresh.
+func TestEveryChangeToTheAgentLevelLaysItOutAgain(t *testing.T) {
+	changes := map[string]func(t *testing.T, a App) App{
+		"a transcript reply": func(t *testing.T, a App) App { return agentReply(a, bTxtAgentID, bTxtEvents(t)) },
+		"a snapshot that moves it": func(_ *testing.T, a App) App {
+			s := countLinesSnap()
+			s.Agents[1].Result = `{"n":6}`
+			return progressedTo(a, s)
+		},
+		"↵": func(_ *testing.T, a App) App {
+			a, _ = pressKey(a, wfKey(tea.KeyEnter))
+			return a
+		},
+		"a width change": func(_ *testing.T, a App) App {
+			m, _ := a.Update(tea.WindowSizeMsg{Width: 140, Height: 40})
+			a = m.(App)
+			return a.settled(a.geoGen)
+		},
+	}
+	for name, change := range changes {
+		a := change(t, sentinelled(t))
+		if drawsSentinel(a) {
+			t.Errorf("%s left the old layout drawn", name)
+		}
+		if out := stripANSI(a.View()); !strings.Contains(out, "count b.txt") || !strings.Contains(out, "Activity") {
+			t.Errorf("after %s the agent level is not drawn:\n%s", name, out)
+		}
+		a.workflow.agent.rows.body = []string{cacheSentinel}
+		if !drawsSentinel(a) {
+			t.Errorf("%s was not laid out where it landed: every frame after it lays the agent out again", name)
+		}
+	}
+}
+
+// A layout for some other state is never drawn: a frame no hook re-laid out for
+// is drawn right, only not cheaply.
+func TestAStaleLayoutIsNeverDrawn(t *testing.T) {
+	a := sentinelled(t)
+	a.workflow.agent.key.width++
+	if drawsSentinel(a) {
+		t.Error("a layout laid out for another width was drawn")
+	}
+}

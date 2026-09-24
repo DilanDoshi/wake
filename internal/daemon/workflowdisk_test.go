@@ -353,3 +353,58 @@ func TestWorkflowAgentHistoryStampsTheClientFacingSessionID(t *testing.T) {
 		}
 	}
 }
+
+// sentFrame is the one frame a direct send* call enqueued.
+func sentFrame(t *testing.T, c *client) rpc.Frame {
+	t.Helper()
+	select {
+	case f := <-c.out:
+		return f
+	default:
+		t.Fatal("nothing was enqueued")
+		return rpc.Frame{}
+	}
+}
+
+// An agent transcript that is there but cannot be read answers as a missing
+// one - an empty reply the client draws the snapshot's previews for - never an
+// error frame, which the client reports as a notice on every re-ask.
+func TestAnUnreadableWorkflowAgentTranscriptIsAnEmptyReplyAndNoErrorFrame(t *testing.T) {
+	dir := workflowSessionDir(t, wfID)
+	agentDir := filepath.Join(dir, "subagents", "workflows", "wf_a")
+	if err := os.MkdirAll(agentDir, 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	path := filepath.Join(agentDir, "agent-abc123.jsonl")
+	if err := os.WriteFile(path, []byte(`{"type":"user"}`+"\n"), 0o000); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+	if f, err := os.Open(path); err == nil {
+		_ = f.Close()
+		t.Skip("this user can read a mode-000 file (root, or no POSIX modes), so nothing here is unreadable")
+	}
+
+	s := newServer(filepath.Join(t.TempDir(), "s"))
+	c := newClient(nil)
+	s.sendWorkflowAgent(c, wfID, "abc123")
+
+	f := sentFrame(t, c)
+	if f.Kind != rpc.FrameWorkflowAgentReply || f.SessionID != wfID {
+		t.Fatalf("an unreadable transcript was answered %+v, want an empty FrameWorkflowAgentReply", f)
+	}
+	if f.Workflow == nil || f.Workflow.Agent != "abc123" || len(f.Events) != 0 {
+		t.Errorf("reply echoes %+v with %d events, want agent \"abc123\" and none", f.Workflow, len(f.Events))
+	}
+}
+
+// A malformed agent id is the request's fault, not the disk's: it stays an error.
+func TestAMalformedWorkflowAgentIDIsStillAnErrorFrame(t *testing.T) {
+	workflowSessionDir(t, wfID)
+	s := newServer(filepath.Join(t.TempDir(), "s"))
+	c := newClient(nil)
+	s.sendWorkflowAgent(c, wfID, "../x")
+
+	if f := sentFrame(t, c); f.Kind != rpc.FrameError || f.SessionID != wfID {
+		t.Fatalf("a malformed agent id was answered %+v, want a FrameError", f)
+	}
+}

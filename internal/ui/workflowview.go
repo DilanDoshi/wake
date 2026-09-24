@@ -96,6 +96,8 @@ type workflowState struct {
 	transcripts map[[2]string][]core.Event // each agent's own transcript by transcriptKey, replaced per reply
 	asked       core.WorkflowAgent         // the open agent as it stood when it was last asked for
 	agentAsk    rpc.Frame                  // the FrameWorkflowAgent owed, if Kind is set; Update's drain writes it
+	replies     uint64                     // agent replies folded, so a kept layout knows its transcript is stale
+	agent       agentCache                 // the open agent laid out; see relaidAgent
 }
 
 // workflowIn reports whether the view is drawn in this pane.
@@ -204,14 +206,14 @@ func (a App) workflowKeyed(m tea.KeyMsg) App {
 	v := a.workflow.view
 	if v.Level == levelAgent {
 		a.workflow.view = v.agentKey(m, a.agentScrollLimit())
-		return a
+		return a.relaidAgent()
 	}
 	a.workflow.view = v.keyed(m, a.workflowRuns(v.Session))
-	if a.workflow.view.Level != levelAgent {
-		return a
+	if a.workflow.view.Level == levelAgent {
+		a.workflow.asked = core.WorkflowAgent{}
+		a = a.reaskWorkflowAgent()
 	}
-	a.workflow.asked = core.WorkflowAgent{}
-	return a.reaskWorkflowAgent()
+	return a.relaidAgent()
 }
 
 // keyed is one key against the view at its level; any key ends settling.

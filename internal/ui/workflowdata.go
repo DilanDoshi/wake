@@ -194,13 +194,14 @@ func (a App) reaskWorkflowAgent() App {
 	return a
 }
 
-// reaskOnProgress is observe's half of the re-ask: only a task frame carries a
-// snapshot, so every other event - a streamed token above all - costs nothing.
-func (a App) reaskOnProgress(ev core.Event) App {
+// onWorkflowProgress is observe's half of the agent level: only a task frame
+// carries a snapshot, so every other event - a streamed token above all - costs
+// nothing, and one that moved the open agent re-asks and re-lays it out.
+func (a App) onWorkflowProgress(ev core.Event) App {
 	if ev.Task == nil {
 		return a
 	}
-	return a.reaskWorkflowAgent()
+	return a.reaskWorkflowAgent().relaidAgent()
 }
 
 // sameProgress is the part of an agent's entry that says its transcript grew.
@@ -219,17 +220,82 @@ func (a App) workflowAgentReplied(f rpc.Frame) App {
 	maps.Copy(kept, a.workflow.transcripts)
 	kept[transcriptKey(f.SessionID, f.Workflow.Agent)] = f.Events
 	a.workflow.transcripts = kept
-	return a
+	a.workflow.replies++
+	return a.relaidAgent()
 }
 
 // agentScrollLimit is how far the open agent scrolls in the pane the view is
 // drawn in - the one measure the draw clamps by.
 func (a App) agentScrollLimit() int {
-	run, ag, ok := a.openAgent()
 	w, h, drawn := a.paneSize(a.workflow.view.Pane)
-	if !ok || !drawn {
+	if !drawn {
 		return 0
 	}
-	events := a.workflow.transcripts[transcriptKey(run.Session, ag.AgentID)]
-	return agentLayout(ag, events, a.workflow.view.Expanded, w, h-workflowTitleRows).limit
+	rows, ok := a.agentRowsAt(w)
+	if !ok {
+		return 0
+	}
+	return rows.limit(h - workflowTitleRows)
+}
+
+// --- laid out once per change -------------------------------------------------
+
+// agentCache is the open agent laid out, and the state it was laid out for.
+type agentCache struct {
+	key  agentLayoutKey
+	rows agentRows
+}
+
+// agentLayoutKey is everything the agent level's layout reads.
+type agentLayoutKey struct {
+	agent    core.WorkflowAgent // the snapshot entry: the head and both previews
+	session  string             // whose transcript, with agent.AgentID
+	replies  uint64             // workflowState.replies when laid out: which transcript was read
+	expanded bool
+	width    int
+}
+
+// agentLayoutFor is the key the open agent would be laid out under at width w.
+func (a App) agentLayoutFor(w int) (agentLayoutKey, bool) {
+	run, ag, ok := a.openAgent()
+	return agentLayoutKey{agent: ag, session: run.Session, replies: a.workflow.replies,
+		expanded: a.workflow.view.Expanded, width: w}, ok
+}
+
+func (a App) layOut(key agentLayoutKey) agentRows {
+	events := a.workflow.transcripts[transcriptKey(key.session, key.agent.AgentID)]
+	return layAgent(key.agent, events, key.expanded, key.width)
+}
+
+// agentRowsAt is the open agent's rows at width w: the kept layout when it was
+// laid out for exactly this, else a fresh one - a change no hook saw is still
+// drawn right, only not cheaply.
+func (a App) agentRowsAt(w int) (agentRows, bool) {
+	key, ok := a.agentLayoutFor(w)
+	switch {
+	case !ok:
+		return agentRows{}, false
+	case key == a.workflow.agent.key:
+		return a.workflow.agent.rows, true
+	}
+	return a.layOut(key), true
+}
+
+// relaidAgent lays the open agent out again when what it draws has changed. It
+// runs where such a change lands - a view key, a reply, a snapshot, a resize -
+// so a frame only windows the rows; leaving the agent level lets them go.
+func (a App) relaidAgent() App {
+	if a.workflow.view.Level != levelAgent {
+		a.workflow.agent = agentCache{}
+		return a
+	}
+	w, _, drawn := a.paneSize(a.workflow.view.Pane)
+	key, ok := a.agentLayoutFor(w)
+	switch {
+	case !ok || !drawn:
+		a.workflow.agent = agentCache{}
+	case key != a.workflow.agent.key:
+		a.workflow.agent = agentCache{key: key, rows: a.layOut(key)}
+	}
+	return a
 }

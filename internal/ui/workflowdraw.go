@@ -93,15 +93,13 @@ func (v WorkflowView) render(runs []workflowRunView, w, h int) string {
 	return fitBlock(v.listRows(runs, w, h), w)
 }
 
-// agentLevel is the agent level in w by h cells, off the last reply for it.
+// agentLevel is the agent level in w by h cells, windowing its kept layout.
 func (a App) agentLevel(w, h int) string {
-	run, ag, ok := a.openAgent()
+	rows, ok := a.agentRowsAt(w)
 	if !ok {
 		return fitBlock(stacked([]string{HintStyle.Render(workflowAgentGone)}, nil, []string{keyLine("esc back")}, h), w)
 	}
-	v := a.workflow.view
-	events := a.workflow.transcripts[transcriptKey(run.Session, ag.AgentID)]
-	return renderWorkflowAgent(ag, events, v.Expanded, w, h, v.Scroll)
+	return rows.render(w, h, a.workflow.view.Scroll)
 }
 
 // --- the list -------------------------------------------------------------
@@ -424,33 +422,36 @@ func workflowModel(id string) string {
 
 // --- the agent -------------------------------------------------------------
 
-// agentGeom is the agent level laid out once, so the draw and the scroll keys
-// agree where the end is: a fixed head, the body that scrolls, the keys.
-type agentGeom struct {
-	head, body, foot []string
-	rows             int // body rows the pane leaves
-	limit            int // the furthest the body scrolls
-}
+// agentRows is the agent level laid out at one width: a fixed head, the body
+// that scrolls, the keys. It costs a render per tool call, so it is laid out
+// once per change and kept (App.relaidAgent); a frame only windows it.
+type agentRows struct{ head, body, foot []string }
 
-func agentLayout(ag core.WorkflowAgent, events []core.Event, expanded bool, w, h int) agentGeom {
-	g := agentGeom{
+func layAgent(ag core.WorkflowAgent, events []core.Event, expanded bool, w int) agentRows {
+	return agentRows{
 		head: []string{TextStyle.Bold(true).Render(oneLine(ag.Label)), agentStatus(ag), HintStyle.Render(agentFigures(ag))},
 		body: agentBody(ag, events, expanded, w),
 		foot: []string{agentKeyLine(expanded)},
 	}
-	g.rows = max(h-len(g.head)-len(g.foot), 0)
-	g.limit = max(len(g.body)-g.rows, 0)
-	return g
 }
 
-// renderWorkflowAgent is one agent in exactly w by h cells, its body scrolled
-// by scroll rows - clamped here, so a scroll past either end draws that end.
-func renderWorkflowAgent(ag core.WorkflowAgent, events []core.Event, expanded bool, w, h, scroll int) string {
+// shown is how many body rows an h-row block leaves, and limit how far the body
+// then scrolls - the one measure the draw and the scroll keys share.
+func (r agentRows) shown(h int) int { return max(h-len(r.head)-len(r.foot), 0) }
+func (r agentRows) limit(h int) int { return max(len(r.body)-r.shown(h), 0) }
+
+// render is the rows in exactly w by h cells, the body scrolled by scroll -
+// clamped here, so a scroll past either end draws that end.
+func (r agentRows) render(w, h, scroll int) string {
 	if w <= 0 || h <= 0 {
 		return ""
 	}
-	g := agentLayout(ag, events, expanded, w, h)
-	return fitBlock(stacked(g.head, windowRows(g.body, clamp(scroll, 0, g.limit), g.rows), g.foot, h), w)
+	return fitBlock(stacked(r.head, windowRows(r.body, clamp(scroll, 0, r.limit(h)), r.shown(h)), r.foot, h), w)
+}
+
+// renderWorkflowAgent is one agent laid out and drawn in exactly w by h cells.
+func renderWorkflowAgent(ag core.WorkflowAgent, events []core.Event, expanded bool, w, h, scroll int) string {
+	return layAgent(ag, events, expanded, w).render(w, h, scroll)
 }
 
 // agentStatus is the agent's state and model: "✔ Completed · haiku".

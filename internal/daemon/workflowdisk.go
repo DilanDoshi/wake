@@ -226,10 +226,18 @@ func (s *server) sendWorkflows(c *client, id string) {
 // sendWorkflowAgent answers a client's FrameWorkflowAgent: one workflow
 // agent's own transcript, echoing back the agent id it was asked for.
 func (s *server) sendWorkflowAgent(c *client, id, agentID string) {
+	// A malformed id is the request's fault, so it is refused; everything past
+	// it is the disk's.
+	if err := rpc.ValidWorkflowAgentID(agentID); err != nil {
+		c.enqueue(errorFrame(id, err.Error()))
+		return
+	}
 	events, err := WorkflowAgentHistory(s.transcriptID(id), agentID)
 	if err != nil {
-		c.enqueue(errorFrame(id, "could not read that workflow agent's transcript: "+err.Error()))
-		return
+		// Unreadable answers as missing: the client draws the snapshot's previews,
+		// where an error frame would be a notice on every re-ask.
+		logf("wake: could not read workflow agent %s's transcript for session %s: %v", agentID, id, err)
+		events = nil
 	}
 	// Addressed by the id the client knows, whatever file it came out of -
 	// answerHistory's own reason: s.transcriptID(id) above may be the
