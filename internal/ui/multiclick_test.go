@@ -310,3 +310,20 @@ func TestADividerDragEndsAClickRun(t *testing.T) {
 		t.Errorf("a click where the divider was selected %q; the drag ended the run", selectedNow(a))
 	}
 }
+
+// A fourth press is still a press: dragged, it selects what it crosses, as any
+// drag does; released where it went down, it leaves the row highlighted.
+func TestAFourthPressCanStillDrag(t *testing.T) {
+	frozenClock(t)
+	a := splitApp(t, 200, 40, 4)
+	a, _ = clicks(a, 16, textRow, 3)
+	row := a.sel
+	a, cmd := click(a, 16, textRow)
+	if a.sel != row || cmd != nil {
+		t.Errorf("a fourth click changed the selection from %+v to %+v; it leaves the row", row, a.sel)
+	}
+	a, cmd = drag(a, 16, 24, textRow)
+	if got := selectedNow(a); got != "ick brown" || cmd == nil {
+		t.Errorf("a fourth press dragged selected %q (copy %v), want the cells it crossed, %q", got, cmd != nil, "ick brown")
+	}
+}

@@ -62,7 +62,7 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 		// The button may be reported as None here: X10 encoding loses which one
 		// was let go of, and there is only one drag to end.
 		a.dragAt, a.dragRows = noDrag, false
-		return a.endSelection()
+		return a.released()
 	case m.Action == tea.MouseActionMotion && a.dragAt != noDrag:
 		if m.Button == tea.MouseButtonNone {
 			// 1002 reports motion only while a button is held, so this is a

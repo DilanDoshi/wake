@@ -18,6 +18,7 @@ import (
 	"unicode"
 	"unicode/utf8"
 
+	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -31,6 +32,7 @@ type clickRun struct {
 	x, y, n int
 	at      time.Time
 	on      surface
+	kept    selection // the row a fourth press leaves standing if it does not move
 }
 
 // surface is what a press selected on: a pane's transcript or query box, or the
@@ -55,12 +57,15 @@ func (c clickRun) next(x, y int, now time.Time) clickRun {
 	return clickRun{x: x, y: y, n: 1, at: now}
 }
 
-// pressed is a left press, counted into the run before it is routed: a fourth
-// click or later does nothing, and a second or third on the surface the run
-// began on widens the anchor the press took into the word or the row under it.
+// pressed is a left press, counted into the run before it is routed: a second
+// or third on the surface the run began on widens the anchor the press took into
+// the word or the row under it. A fourth or later is routed like any press, so
+// it can still become a drag, and keeps the row to restore if it does not.
 func (a App) pressed(x, y int) App {
 	run := a.clicks.next(x, y, clock())
 	if run.n > 3 {
+		run.kept = a.sel
+		a = a.press(x, y)
 		a.clicks = run
 		return a
 	}
@@ -74,6 +79,16 @@ func (a App) pressed(x, y int) App {
 		a = a.widen(run.n == 3)
 	}
 	return a
+}
+
+// released ends a press. A fourth click that did not move changes nothing: the
+// row the third one took stays highlighted, and the click does no job of its own.
+func (a App) released() (App, tea.Cmd) {
+	if a.clicks.n > 3 && a.selecting && a.sel.empty() {
+		a.sel, a.selecting = a.clicks.kept, false
+		return a, nil
+	}
+	return a.endSelection()
 }
 
 // widen turns the anchor a run's press just took into the word under it, or
