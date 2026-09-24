@@ -327,3 +327,21 @@ func TestAFourthPressCanStillDrag(t *testing.T) {
 		t.Errorf("a fourth press dragged selected %q (copy %v), want the cells it crossed, %q", got, cmd != nil, "ick brown")
 	}
 }
+
+// Room lines that move between a fourth press and its release - history landing
+// above - leave the saved row pointing at a line that is no longer it, so the
+// release restores nothing rather than highlighting the wrong line.
+func TestAFourthClickDoesNotRestoreAMovedRow(t *testing.T) {
+	frozenClock(t)
+	a := splitApp(t, 200, 40, 4)
+	a, _ = clicks(a, 16, textRow, 3)
+	stale := a.sel
+	a, _ = a.mouse(pressAt(16, textRow))
+	room := a.room
+	room.lineMoves = roomLineMoves{{from: 0, to: 5, rows: 1000}}
+	a = a.withRoom(room)
+	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: 16, Y: textRow})
+	if a.sel == stale {
+		t.Errorf("the fourth click restored the row at its old line %d after the room's lines moved", stale.anchor.line)
+	}
+}
