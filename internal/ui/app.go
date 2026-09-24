@@ -570,14 +570,8 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The frame is folded first, then two things read the result: the
 		// heartbeat, which may need starting, and ⌃Q's ask, which this frame
 		// may have settled. See park.go's closing.
-		next := a.apply(m.Frame)
-		// A message held for an agent goes out if this frame freed it (inflight
-		// reconciled per report inside apply, or a completed lifecycle in observe).
-		next, flush := next.flushQueued()
-		next, cmd := next.beat()
-		next, rl := next.armRateLimitClear()
-		next, park := next.autoParkStalled()
-		return next, tea.Batch(flush, cmd, rl, park, next.closing())
+		next, cmd := a.apply(m.Frame).settle()
+		return next, tea.Batch(cmd, next.closing())
 
 	case heartbeatMsg:
 		return a.beatArrived()
@@ -677,21 +671,16 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 	for _, f := range m.frames {
 		a = a.apply(f)
 	}
-	// A message held for an agent goes out once the batch has folded and the agent
-	// is free (inflight reconciled per report inside apply). At most one per agent
-	// per read - two in one batch would race each other mid-turn. See queue.go.
-	a, flush := a.flushQueued()
-	if !m.done {
-		// The heartbeat starts here because this is the path production frames
-		// take: a status that put an agent into a turn schedules the first
-		// tick. frameMsg's own beat covers only the single-frame form.
-		next, tick := a.beat()
-		next, rl := next.armRateLimitClear()
-		next, park := next.autoParkStalled()
-		// Re-armed unconditionally, unless one of those frames was ⌃Q's answer.
-		return next, tea.Batch(flush, tick, rl, park, next.reading())
+	if m.done {
+		// The held message is dequeued but not sent: the connection is gone.
+		a, _ = a.flushQueued()
+		return a.hungUp(m.err)
 	}
-	return a.hungUp(m.err)
+	// Once per batch, not per frame: at most one held message goes out per agent
+	// per read - two in one batch would race each other mid-turn. See queue.go.
+	next, cmd := a.settle()
+	// Re-armed unconditionally, unless one of those frames was ⌃Q's answer.
+	return next, tea.Batch(cmd, next.reading())
 }
 
 // notedGap reports a frame gap and drops the per-turn beliefs a missing frame
