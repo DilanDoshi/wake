@@ -63,6 +63,59 @@ func TestProjectWorkflowDirWithNoRepositoryUsesCwd(t *testing.T) {
 	}
 }
 
+// TestProjectWorkflowDirWithNoRepositoryNeverCrossesIntoAnAncestorsDirectory
+// is the regression for the scope-crossing bug: a non-git cwd whose ancestor
+// (standing in for $HOME) already has an existing .claude/workflows must
+// still resolve to <cwd>/.claude/workflows, not the ancestor's - a
+// project-scope save from a repository-less directory under $HOME must never
+// silently land in the personal-scope directory.
+func TestProjectWorkflowDirWithNoRepositoryNeverCrossesIntoAnAncestorsDirectory(t *testing.T) {
+	base := t.TempDir()
+	ancestorWorkflows := filepath.Join(base, ".claude", "workflows")
+	if err := os.MkdirAll(ancestorWorkflows, 0o755); err != nil {
+		t.Fatalf("mkdir ancestor's .claude/workflows: %v", err)
+	}
+	cwd := filepath.Join(base, "a", "b")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+
+	want := filepath.Join(cwd, ".claude", "workflows")
+	if got := projectWorkflowDir(cwd); got != want {
+		t.Fatalf("projectWorkflowDir(%q) = %q, want %q (an ancestor's existing .claude/workflows must not be used with no repository)",
+			cwd, got, want)
+	}
+}
+
+// TestProjectWorkflowDirNeverReturnsAboveTheRepositoryRoot is the same
+// bound the other direction: an ancestor *above* the repository root having
+// an existing .claude/workflows must not be found either, even though it is
+// the nearer one on disk once the boundary is ignored.
+func TestProjectWorkflowDirNeverReturnsAboveTheRepositoryRoot(t *testing.T) {
+	outer := t.TempDir()
+	outerWorkflows := filepath.Join(outer, ".claude", "workflows")
+	if err := os.MkdirAll(outerWorkflows, 0o755); err != nil {
+		t.Fatalf("mkdir outer .claude/workflows: %v", err)
+	}
+	repo := filepath.Join(outer, "repo")
+	if err := os.Mkdir(repo, 0o755); err != nil {
+		t.Fatalf("mkdir repo: %v", err)
+	}
+	if err := os.Mkdir(filepath.Join(repo, ".git"), 0o755); err != nil {
+		t.Fatalf("mkdir .git: %v", err)
+	}
+	cwd := filepath.Join(repo, "a", "b")
+	if err := os.MkdirAll(cwd, 0o755); err != nil {
+		t.Fatalf("mkdir cwd: %v", err)
+	}
+
+	want := filepath.Join(repo, ".claude", "workflows")
+	if got := projectWorkflowDir(cwd); got != want {
+		t.Fatalf("projectWorkflowDir(%q) = %q, want the repository's own %q (an ancestor above the root must not be searched)",
+			cwd, got, want)
+	}
+}
+
 // --- userWorkflowDir: $CLAUDE_CONFIG_DIR, else ~/.claude/workflows ---
 
 func TestUserWorkflowDirUsesConfigDirWhenSet(t *testing.T) {

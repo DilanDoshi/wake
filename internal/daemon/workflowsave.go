@@ -55,25 +55,48 @@ func workflowScript(a *agent, id, taskID string) (string, error) {
 // projectWorkflowDir is Claude Code's own documented project-scope rule: the
 // closest existing .claude/workflows walking up from cwd to the repository
 // root, else <root>/.claude/workflows, else <cwd>/.claude/workflows when cwd
-// is not inside a repository at all. No git subprocess - a repository root
-// is wherever a .git entry sits, a directory for an ordinary checkout or a
-// file for a worktree, and os.Stat resolves either.
+// is not inside a repository at all.
+//
+// The repository root has to be found *first* and the existing-directory
+// search bounded to it: searching upward for an existing .claude/workflows
+// before knowing where the root is (or whether one exists) lets a cwd with
+// no repository at all walk all the way to the filesystem root and return
+// the first ancestor that happens to have one - almost always
+// $HOME/.claude/workflows, the personal-scope directory this same feature
+// creates, which would cross project/personal scope silently. So a cwd with
+// no repository never searches its ancestors at all, and a cwd with one
+// never searches past it.
 func projectWorkflowDir(cwd string) string {
-	dir := cwd
-	for {
+	root, ok := repositoryRoot(cwd)
+	if !ok {
+		return filepath.Join(cwd, ".claude", "workflows")
+	}
+	for dir := cwd; ; dir = filepath.Dir(dir) {
 		if candidate := filepath.Join(dir, ".claude", "workflows"); existingDir(candidate) {
 			return candidate
 		}
+		if dir == root {
+			break
+		}
+	}
+	return filepath.Join(root, ".claude", "workflows")
+}
+
+// repositoryRoot walks up from cwd looking for the nearest ancestor with a
+// .git entry - file or directory, no git subprocess (hasGitEntry's own
+// reason). ok is false when no ancestor up to the filesystem root has one.
+func repositoryRoot(cwd string) (string, bool) {
+	dir := cwd
+	for {
 		if hasGitEntry(dir) {
-			return filepath.Join(dir, ".claude", "workflows")
+			return dir, true
 		}
 		parent := filepath.Dir(dir)
 		if parent == dir {
-			break // reached the filesystem root; no repository found
+			return "", false // reached the filesystem root; no repository found
 		}
 		dir = parent
 	}
-	return filepath.Join(cwd, ".claude", "workflows")
 }
 
 // userWorkflowDir is Claude Code's own personal scope:
