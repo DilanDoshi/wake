@@ -124,6 +124,7 @@ func (e Event) contained() Event {
 	e.Task = containedTask(e.Task)
 	e.Control = containedControl(e.Control)
 	e.Rewind = containedRewind(e.Rewind)
+	e.MCP = containedMCP(e.MCP)
 	e.Goal = containedGoal(e.Goal)
 	e.Compaction = containedCompaction(e.Compaction)
 	e.Session = containedFacts(e.Session)
@@ -262,6 +263,36 @@ func containedRewind(r *RewindResult) *RewindResult {
 	c.PrefillText = Contained(c.PrefillText)
 	c.PrecedingAssistantUUID = Contained(c.PrecedingAssistantUUID)
 	c.Error = Contained(c.Error)
+	return &c
+}
+
+// containedMCP contains every string of an MCP reply. The server names, errors,
+// commands and tool names are the servers' own words; Ask and Server are Wake's,
+// contained anyway because Server round-trips through a client.
+func containedMCP(r *MCPResult) *MCPResult {
+	if r == nil {
+		return nil
+	}
+	c := *r
+	c.Ask, c.Server, c.Error = Contained(c.Ask), Contained(c.Server), Contained(c.Error)
+	if c.Servers != nil {
+		servers := make([]MCPServerStatus, len(c.Servers))
+		for i, s := range c.Servers {
+			s.Name, s.State, s.Error = Contained(s.Name), Contained(s.State), Contained(s.Error)
+			s.Scope, s.Transport = Contained(s.Scope), Contained(s.Transport)
+			s.Target, s.Info = Contained(s.Target), Contained(s.Info)
+			if s.Tools != nil {
+				tools := make([]MCPTool, len(s.Tools))
+				for j, t := range s.Tools {
+					t.Name = Contained(t.Name)
+					tools[j] = t
+				}
+				s.Tools = tools
+			}
+			servers[i] = s
+		}
+		c.Servers = servers
+	}
 	return &c
 }
 

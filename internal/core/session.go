@@ -271,6 +271,10 @@ type Session struct {
 	// expires with it.
 	interrupted bool
 
+	// mcpAsks is every MCP ask written and not yet answered, by request id.
+	// See answeredMCP.
+	mcpAsks map[string]MCPResult
+
 	// err is why the process ended. Written once, as the events channel
 	// closes; see Err.
 	err error
@@ -440,7 +444,7 @@ func (s *Session) attribute(ev Event) Event {
 	if ev.SessionID == "" {
 		ev.SessionID = s.cfg.SessionID
 	}
-	return ev
+	return s.answeredMCP(ev)
 }
 
 // send hands one event to the consumer, and gives up on it once ctx is done.

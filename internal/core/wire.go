@@ -385,6 +385,10 @@ type wireControlBody struct {
 	PrefillText            string `json:"prefillText"`
 	PrecedingAssistantUUID string `json:"precedingAssistantUuid"`
 	Error                  string `json:"error"`
+
+	// An mcp_status receipt's payload; a pointer so presence, even of an empty
+	// list, is the discriminator. See mcpStatusReply.
+	MCPServers *[]wireMCPStatus `json:"mcpServers"`
 }
 
 // wireRateLimit is rate_limit_info. The frame also carries resetsAt (Unix
