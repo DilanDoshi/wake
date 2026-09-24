@@ -112,13 +112,21 @@ func TestTheResumePickerShowsTheCursorAtEveryPaneHeight(t *testing.T) {
 			Title: fmt.Sprintf("session %d", i), Modified: time.Now().Add(-time.Duration(i) * time.Minute),
 		})
 	}
+	long := strings.Repeat("a streamed answer that runs on ", 40)
 	for _, pane := range []struct {
-		name, id, lead string
-	}{{name: "room", id: "", lead: "› [ ] "}, {name: "conversation", id: "live1", lead: "› "}} {
+		name, id, lead, streaming string
+	}{
+		{name: "room", id: "", lead: "› [ ] "},
+		{name: "conversation", id: "live1", lead: "› "},
+		{name: "streaming conversation", id: "live1", lead: "› ", streaming: long},
+	} {
 		for height := 8; height <= 24; height++ {
 			a := parkedFleetApp(t, disk...)
 			if pane.id != "" {
 				a = a.openDMWith(pane.id, "alex")
+			}
+			if pane.streaming != "" {
+				a = a.applyFrame(tokenFrame(pane.id, pane.streaming))
 			}
 			got := openedResumePicker(t, a).withSize(120, height).applyGeometry()
 			got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyDown})
