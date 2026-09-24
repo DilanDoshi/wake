@@ -101,6 +101,62 @@ func TestEveryWorkflowSnapshotIsWholeAndResolved(t *testing.T) {
 	}
 }
 
+// TestAWorkflowAgentMidToolDecodesAsRunning pins the one recorded "progress"
+// state (an agent mid-tool, workflow-run.jsonl) to WorkflowAgentRunning. The
+// line's other agent is already "done", so a Running agent in this decode
+// can only be the "progress" one - workflowAgentStates once mapped it to
+// WorkflowAgentUnknown, which showed as "· unknown" and dropped the agent
+// from the running filter.
+func TestAWorkflowAgentMidToolDecodesAsRunning(t *testing.T) {
+	line, at := findFixtureLine(t, "workflow-run.jsonl", `"state":"progress"`)
+	evs, err := DecodeLine([]byte(line))
+	if err != nil {
+		t.Fatalf("workflow-run.jsonl:%d: %v", at, err)
+	}
+	var found bool
+	for _, ev := range evs {
+		if ev.Task == nil || ev.Task.Workflow == nil || ev.Task.Workflow.Progress == nil {
+			continue
+		}
+		for _, a := range ev.Task.Workflow.Progress.Agents {
+			if a.State == WorkflowAgentRunning {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("workflow-run.jsonl:%d: no agent decoded as WorkflowAgentRunning for the recorded \"progress\" state", at)
+	}
+}
+
+// TestNoWorkflowAgentStateIsUnknownInTheCorpus is the corpus-wide guard: every
+// recorded workflow_agent state word must resolve to something other than
+// WorkflowAgentUnknown, so the next word Claude records that
+// workflowAgentStates has not classified fails the build rather than
+// silently drawing "· unknown".
+func TestNoWorkflowAgentStateIsUnknownInTheCorpus(t *testing.T) {
+	files, err := filepath.Glob("../../testdata/stream/workflow-*.jsonl")
+	if err != nil {
+		t.Fatalf("glob workflow fixtures: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("no workflow-*.jsonl fixtures found")
+	}
+	for _, path := range files {
+		fixture := filepath.Base(path)
+		for _, task := range fixtureTasks(t, fixture) {
+			if task.Workflow == nil || task.Workflow.Progress == nil {
+				continue
+			}
+			for _, a := range task.Workflow.Progress.Agents {
+				if a.State == WorkflowAgentUnknown {
+					t.Errorf("%s: agent %q (id %s) decodes to WorkflowAgentUnknown - an unmapped recorded state word", fixture, a.Label, a.AgentID)
+				}
+			}
+		}
+	}
+}
+
 func TestAFailedWorkflowCarriesItsError(t *testing.T) {
 	end := endings(t, "workflow-failed.jsonl")
 	if end[0].Status != TaskFailed || end[0].Workflow == nil || !strings.Contains(end[0].Workflow.Error, "deliberate probe failure") {

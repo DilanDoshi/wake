@@ -66,9 +66,9 @@ type WorkflowPhase struct {
 }
 
 // WorkflowAgentState is a workflow_agent entry's state, resolved from
-// Claude's own words. Only "start" and "done" are recorded; failed is the
-// SDK's documented word for a run this corpus has not seen fail an
-// individual agent, and unknown is every other word - see
+// Claude's own words. "start", "progress" (mid-tool) and "done" are
+// recorded; failed is the SDK's documented word for a run this corpus has
+// not seen fail an individual agent, and unknown is every other word - see
 // workflowAgentStates.
 type WorkflowAgentState string
 

@@ -422,12 +422,12 @@ var deliberatelyGeneric = wordSet([]string{
 	// naming "workflow_progress", which is policed above.
 	"index", "title", "attempt", "tokens",
 
-	// A workflow_agent's other two state words, "start"'s siblings. Both are
-	// policed nowhere: core.TaskDone and core.TaskFailed already spell
-	// "done" and "failed" literally in task.go, which is not an airlock
-	// file, so policing either would fail the leak check on Wake's own
-	// vocabulary rather than catch one.
-	"failed", "done",
+	// A workflow_agent's other state words, "start"'s siblings. None is
+	// policed: core.TaskProgress, core.TaskDone and core.TaskFailed already
+	// spell "progress", "done" and "failed" literally in task.go, which is
+	// not an airlock file, so policing any would fail the leak check on
+	// Wake's own vocabulary rather than catch one.
+	"failed", "done", "progress",
 
 	// The character that ends the cross-session envelope's opening tag, used to
 	// find where the body begins. Punctuation, not a wire word.

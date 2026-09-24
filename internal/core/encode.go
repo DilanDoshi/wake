@@ -687,10 +687,11 @@ const (
 	workflowAgentItem = "workflow_agent"
 )
 
-// Recorded agent states are start and done; failed is Claude Code's
-// documented word for a failed agent.
+// Recorded agent states are start, progress (mid-tool) and done; failed is
+// Claude Code's documented word for a failed agent.
 var workflowAgentStates = map[string]WorkflowAgentState{
-	"start": WorkflowAgentRunning, "done": WorkflowAgentDone, "failed": WorkflowAgentFailed,
+	"start": WorkflowAgentRunning, "progress": WorkflowAgentRunning,
+	"done": WorkflowAgentDone, "failed": WorkflowAgentFailed,
 }
 
 // workflowSnapshotOf resolves one workflow_progress array into a snapshot,

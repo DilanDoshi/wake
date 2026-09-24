@@ -43,8 +43,8 @@ A `workflow_agent` entry: `index`, `label`, `phaseIndex`, `phaseTitle`, `agentId
 subagent id), `model`, `state`, `attempt`, `queuedAt`/`startedAt`/`lastProgressAt` (epoch ms), `tokens`,
 `toolCalls`, `durationMs`, `lastToolName`, `promptPreview`, `resultPreview`.
 
-`state` is recorded as **`start`** and **`done`** only. A queued agent, a failed agent and a retried one
-(`attempt` > 1) are unrecorded.
+`state` is recorded as **`start`**, **`progress`** (mid-tool, `workflow-run.jsonl`/`workflow-saved-command.jsonl`)
+and **`done`**. A queued agent, a failed agent and a retried one (`attempt` > 1) are unrecorded.
 
 ## 3. Nothing a workflow agent says reaches stdout
 
