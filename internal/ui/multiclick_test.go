@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"bytes"
 	"strings"
 	"testing"
 	"time"
@@ -248,13 +249,13 @@ func TestAKeystrokeEndsAClickRun(t *testing.T) {
 // triple-click's row run as two commands at once, and the row - asked for last
 // - must be what the clipboard keeps even when the word's command runs later.
 func TestTheNewestCopyIsTheOneThatStays(t *testing.T) {
-	var turns copyTurns
-	word, row := turns.take(), turns.take()
+	var order inOrder
+	word, row := uint64(1), uint64(2)
 	var wrote []string
-	if !turns.write(row, func() { wrote = append(wrote, "row") }) {
+	if !order.write(row, func() { wrote = append(wrote, "row") }) {
 		t.Fatal("the newest copy was refused")
 	}
-	if turns.write(word, func() { wrote = append(wrote, "word") }) {
+	if order.write(word, func() { wrote = append(wrote, "word") }) {
 		t.Errorf("an older copy wrote after a newer one: %v", wrote)
 	}
 }
@@ -278,5 +279,18 @@ func TestDeletingASelectionEndsAClickRun(t *testing.T) {
 	a, _ = click(a, x, y)
 	if a.sel.span {
 		t.Errorf("a click after deleting a double-clicked word selected %q; it is a first click", selectedNow(a))
+	}
+}
+
+// The terminal's copy keeps the same order: an older copy's OSC 52 reaching the
+// writer after a newer one's is dropped, so it cannot restore the older text.
+func TestAnOlderCopyDoesNotOverwriteTheTerminalsClipboard(t *testing.T) {
+	var out bytes.Buffer
+	a := App{out: &out}
+	older, newer := clipboardAsked.Add(1), clipboardAsked.Add(1)
+	a.writeSequence(newer, "row")()
+	a.writeSequence(older, "word")()
+	if got := out.String(); got != "row" {
+		t.Errorf("the terminal was written %q, want only the newest copy, %q", got, "row")
 	}
 }

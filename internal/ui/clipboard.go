@@ -18,6 +18,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -49,6 +50,7 @@ type copiedMsg struct {
 	seq   string
 	chars int
 	err   error
+	turn  uint64 // the copy's place in the order asked; see inOrder
 }
 
 // multiplexer names what sits between wake and the terminal, "" for nothing.
@@ -109,48 +111,46 @@ func copyToClipboard(text string) tea.Cmd {
 	if text == "" {
 		return nil
 	}
-	turn := clipboardTurns.take()
+	turn := clipboardAsked.Add(1)
 	return func() tea.Msg {
 		var msg tea.Msg // nil when a newer copy wrote first, which Bubble Tea drops
-		clipboardTurns.write(turn, func() {
+		nativeOrder.write(turn, func() {
 			msg = copiedMsg{
 				seq:   clipboardSequence(text, multiplexer(os.Getenv)),
 				chars: len([]rune(text)),
 				err:   nativeCopy(text),
+				turn:  turn,
 			}
 		})
 		return msg
 	}
 }
 
-// copyTurns keeps overlapping copies in the order they were asked for. A
+// clipboardAsked numbers copies in the order they were asked for. Atomic, so
+// asking never waits on a copy still writing - the asking is on the Update loop.
+var clipboardAsked atomic.Uint64
+
+// inOrder keeps overlapping copies in the order they were asked for. A
 // double-click's word and the triple-click's row a moment later are two commands
 // running at once, and whichever finished last was what the clipboard kept. Each
-// copy takes a turn when asked and writes under one lock; one that finds a
-// newer copy already written skips its own, so the newest request stays.
-type copyTurns struct {
-	mu             sync.Mutex
-	asked, written uint64
+// write runs under one lock, and one that finds a newer copy already written
+// skips its own, so the newest request stays. The machine's clipboard and the
+// terminal's OSC 52 are two writes, so each has its own.
+type inOrder struct {
+	mu      sync.Mutex
+	written uint64
 }
 
-var clipboardTurns copyTurns
+var nativeOrder, terminalOrder inOrder
 
-// take is a copy's turn, in the order the copies were asked for.
-func (c *copyTurns) take() uint64 {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.asked++
-	return c.asked
-}
-
-// write runs f as the copy whose turn it is, unless a newer copy has written.
-func (c *copyTurns) write(turn uint64, f func()) bool {
-	c.mu.Lock()
-	defer c.mu.Unlock()
-	if turn < c.written {
+// write runs f as copy turn, unless a newer copy has written.
+func (o *inOrder) write(turn uint64, f func()) bool {
+	o.mu.Lock()
+	defer o.mu.Unlock()
+	if turn < o.written {
 		return false
 	}
-	c.written = turn
+	o.written = turn
 	f()
 	return true
 }
@@ -165,7 +165,7 @@ func (a App) copied(m copiedMsg) (tea.Model, tea.Cmd) {
 	} else {
 		notice.Report(copiedFormat, m.chars)
 	}
-	return a, a.writeSequence(m.seq)
+	return a, a.writeSequence(m.turn, m.seq)
 }
 
 // cleared drops a selection, which every keystroke does before doing its own
@@ -193,15 +193,17 @@ func (a App) WithOutput(w io.Writer) App {
 // A Cmd rather than a write from Update because Update is the goroutine that
 // renders, and this is the one thing in the package that touches the terminal
 // without being a frame.
-func (a App) writeSequence(seq string) tea.Cmd {
+func (a App) writeSequence(turn uint64, seq string) tea.Cmd {
 	if a.out == nil || seq == "" {
 		return nil
 	}
 	out := a.out
 	return func() tea.Msg {
-		if _, err := io.WriteString(out, seq); err != nil {
-			notice.Report("clipboard: %v", err)
-		}
+		terminalOrder.write(turn, func() {
+			if _, err := io.WriteString(out, seq); err != nil {
+				notice.Report("clipboard: %v", err)
+			}
+		})
 		return nil
 	}
 }
