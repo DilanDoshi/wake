@@ -763,10 +763,6 @@ func (d DM) menuRows() int {
 	return max(min(lipgloss.Height(d.menu), d.menuRoom()), 0)
 }
 
-// menuRoom is the most rows this pane can give a menu block: what is left after
-// the rest of the chrome and one row of transcript.
-func (d DM) menuRoom() int { return d.height - d.baseChrome() - minTranscriptHeight }
-
 // baseChrome is the chrome that is not the menu, which is what the menu's own
 // allowance is measured against. The task board is counted rather than drawn -
 // rendering it costs a truncation per row and this runs on every re-lay.

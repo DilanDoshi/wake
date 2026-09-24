@@ -712,16 +712,6 @@ func (r Room) menuRows() int {
 	return max(min(lipgloss.Height(r.menu), r.menuRoom()), 0)
 }
 
-// menuRoom is the most rows this pane can give a menu block: what is left after
-// the rest of the chrome and one row of transcript. It is asked with a menu up,
-// since a drawn menu takes the composerGap's row.
-func (r Room) menuRoom() int {
-	if r.menu == "" {
-		return r.height - r.baseChrome() + composerGap - minTranscriptHeight
-	}
-	return r.height - r.baseChrome() - minTranscriptHeight
-}
-
 // minHeight is the shortest pane this room draws: its chrome, plus one row of
 // conversation. Below it the room stops shrinking rather than drawing a broken
 // box, which is the discipline the DM applies at minDMHeight.

@@ -7,6 +7,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 )
 
 // openedResumePicker runs a bare /resume the way Bubble Tea does - the router
@@ -97,5 +98,72 @@ func TestTheResumePickerKeepsTheCursorOnScreenInAShortPane(t *testing.T) {
 			t.Fatalf("the cursored session %q is not drawn:\n%s", want, frame)
 		}
 		got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyDown})
+	}
+}
+
+// The same holds in a pane too short for the picker's box: every height the
+// room and a conversation can be drawn at shows the cursored session in the
+// frame the pane actually draws, not only in the picker's own output.
+func TestTheResumePickerShowsTheCursorAtEveryPaneHeight(t *testing.T) {
+	var disk []DiskSession
+	for i := range 5 {
+		disk = append(disk, DiskSession{
+			ID: fmt.Sprintf("abcd123%d-5678-4abc-8def-000000000000", i), Dir: "/dev/x",
+			Title: fmt.Sprintf("session %d", i), Modified: time.Now().Add(-time.Duration(i) * time.Minute),
+		})
+	}
+	for _, pane := range []struct {
+		name, id, lead string
+	}{{name: "room", id: "", lead: "› [ ] "}, {name: "conversation", id: "live1", lead: "› "}} {
+		for height := 8; height <= 24; height++ {
+			a := parkedFleetApp(t, disk...)
+			if pane.id != "" {
+				a = a.openDMWith(pane.id, "alex")
+			}
+			got := openedResumePicker(t, a).withSize(120, height).applyGeometry()
+			got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyDown})
+			w, h, _ := got.focusedPane()
+			if got.menuRoom(pane.id, w, h) < 1 {
+				continue
+			}
+			frame := stripANSI(got.View())
+			if want := pane.lead + got.resumePicker.filtered()[1].heading(); !strings.Contains(frame, want) {
+				t.Errorf("%s at %d rows: the cursored session %q is not drawn:\n%s", pane.name, height, want, frame)
+			}
+		}
+	}
+}
+
+// A card stacked over the picker takes its rows first, so the picker is fitted
+// to what the card leaves rather than to the pane.
+func TestTheResumePickerFitsUnderACard(t *testing.T) {
+	var disk []DiskSession
+	for i := range 6 {
+		disk = append(disk, DiskSession{
+			ID: fmt.Sprintf("abcd123%d-5678-4abc-8def-000000000000", i), Dir: "/dev/x",
+			Title: fmt.Sprintf("session %d", i), Modified: time.Now().Add(-time.Duration(i) * time.Minute),
+		})
+	}
+	checked := 0
+	for height := 14; height <= 40; height++ {
+		got := openedResumePicker(t, blockedPane(t).WithSessions(fakeSessions{resumable: disk})).withSize(200, height).applyGeometry()
+		for range disk {
+			got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyDown})
+		}
+		w, h, _ := got.focusedPane()
+		if got.menuRoom("s2", w, h)-lipgloss.Height(got.cardBlock("s2", w)) < 1 {
+			continue
+		}
+		checked++
+		frame := stripANSI(got.View())
+		if !strings.Contains(frame, "› session 5") {
+			t.Errorf("at %d rows under a card the cursored session is not drawn:\n%s", height, frame)
+		}
+		if got.menuRoom("s2", w, h)-lipgloss.Height(got.cardBlock("s2", w)) >= resumeFrameRows+2 && !strings.Contains(frame, "╰─ ↑↓ move") {
+			t.Errorf("at %d rows under a card the picker was clipped:\n%s", height, frame)
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no height left the picker any room under the card, so nothing was checked")
 	}
 }

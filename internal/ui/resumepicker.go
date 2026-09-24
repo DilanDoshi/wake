@@ -324,6 +324,9 @@ func (p ResumePicker) View(width, maxRows int) string {
 	w := max(width, minBlockWidth)
 	inner := max(w-cardFrameWidth, 1)
 	f := p.filtered()
+	if maxRows < resumeFrameRows+2 {
+		return p.compactView(f, w, maxRows)
+	}
 	rows := []string{p.searchBox(inner)}
 	if len(f) == 0 {
 		rows = append(rows, detailRow("no session matches — ⌫ to widen the search", inner))
@@ -375,14 +378,41 @@ func (p ResumePicker) header(f []resumeRow) string {
 	return fmt.Sprintf("resume session · %d of %d", p.Cursor+1, len(f))
 }
 
-// searchBox is the query being typed, framed like the composer because it is
-// where the keys are going; empty, it is the box's own prompt.
-func (p ResumePicker) searchBox(width int) string {
-	room := max(width-cardFrameWidth, 1)
-	line := HintStyle.Render(ansi.Truncate("› search…", room, ellipsis))
-	if p.Query != "" {
-		line = TextStyle.Render(ansi.Truncate("› "+p.Query, room, ellipsis))
+// compactView is the picker in a pane with too few rows for its box - one
+// session needs seven - the count and query on one row over the cursored
+// session, cut to maxRows from the details up so ↵ never resumes a session the
+// pane did not draw.
+func (p ResumePicker) compactView(f []resumeRow, width, maxRows int) string {
+	status := HintStyle.Render(ansi.Truncate(p.header(f)+" · "+p.searchText(), width, ellipsis))
+	if len(f) == 0 {
+		return status
 	}
+	session := p.sessionRows(f[clamp(p.Cursor, 0, len(f)-1)], true, width)
+	switch {
+	case maxRows <= 1:
+		return session[0]
+	case maxRows == 2:
+		return status + "\n" + session[0]
+	}
+	return strings.Join(append([]string{status}, session...), "\n")
+}
+
+// searchText is the query being typed, or the search box's own prompt.
+func (p ResumePicker) searchText() string {
+	if p.Query == "" {
+		return "› search…"
+	}
+	return "› " + p.Query
+}
+
+// searchBox is the query framed like the composer, because it is where the keys
+// are going.
+func (p ResumePicker) searchBox(width int) string {
+	style := TextStyle
+	if p.Query == "" {
+		style = HintStyle
+	}
+	line := style.Render(ansi.Truncate(p.searchText(), max(width-cardFrameWidth, 1), ellipsis))
 	return ComposerStyle.Width(max(width-boxFrameWidth, 1)).Render(line)
 }
 

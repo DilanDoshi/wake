@@ -312,12 +312,12 @@ func TestResumePickerSearchesTheSessionName(t *testing.T) {
 // a session nobody can see.
 func TestResumePickerFitsTheRowsItIsGiven(t *testing.T) {
 	rows := append(twoRows(), resumeRow{ID: "cccccccc-3333-4333-8333-333333333333", Title: "gmail helper", Resumable: true})
-	for _, maxRows := range []int{3, 7, 10, 13, 100} {
+	for maxRows := 1; maxRows <= 14; maxRows++ {
 		v := stripANSI(ResumePicker{Rows: rows, Cursor: 2}.View(100, maxRows))
 		if !strings.Contains(v, "› gmail helper") {
 			t.Errorf("at %d rows the cursored session is not drawn:\n%s", maxRows, v)
 		}
-		if h := lipgloss.Height(v); maxRows >= 7 && h > maxRows {
+		if h := lipgloss.Height(v); h > maxRows {
 			t.Errorf("at %d rows the picker drew %d:\n%s", maxRows, h, v)
 		}
 	}

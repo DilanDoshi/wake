@@ -419,15 +419,6 @@ func (a App) resumeView(id string, width, height int, over string) string {
 	return a.resumePicker.View(width, room)
 }
 
-// menuRoom is the most rows pane id can give its menu block at this size, asked
-// of the pane the way transcriptRows asks it for its transcript.
-func (a App) menuRoom(id string, width, height int) int {
-	if id == "" {
-		return a.roomFor().SetSize(width, height).menuRoom()
-	}
-	return a.dmFor(id).WithCompacting(a.compactingSince(id)).SetSize(width, height).menuRoom()
-}
-
 // pickerView is the menu if it belongs to this pane, and "" otherwise.
 //
 // It is drawn over the composer that opened it, which is the pane holding the
