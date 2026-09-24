@@ -113,6 +113,8 @@ Wake selects text itself, anywhere on screen: drag across it and the release cop
 Double-click a word to select and copy it, and triple-click to take its whole row. The first click
 still does its usual job, such as opening a folded block or a roster row, and a fourth click changes
 nothing. A word is any run of characters that are not spaces, so a path or an `@name` comes whole.
+Your terminal's own selection is still there with a modifier held (often `⌥` or `⇧`), since Wake
+has mouse reporting on.
 
 ## Keys that are deliberately absent
 

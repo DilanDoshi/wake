@@ -620,8 +620,9 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if next, cmd, handled := a.deleteSelectedDraft(m); handled {
 			return next, cmd
 		}
-		// Clears the highlight and then does its own job - see cleared.
+		// Clears the highlight and ends a click run, then does its own job - see cleared.
 		a = a.cleared()
+		a.clicks = clickRun{}
 		if model, cmd, handled := a.key(m); handled {
 			return model, cmd
 		}

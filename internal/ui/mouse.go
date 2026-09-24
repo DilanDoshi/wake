@@ -59,7 +59,7 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 		// The button may be reported as None here: X10 encoding loses which one
 		// was let go of, and there is only one drag to end.
 		a.dragAt, a.dragRows = noDrag, false
-		return a.released()
+		return a.endSelection()
 	case m.Action == tea.MouseActionMotion && a.dragAt != noDrag:
 		if m.Button == tea.MouseButtonNone {
 			// 1002 reports motion only while a button is held, so this is a
@@ -83,6 +83,7 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 			// one: end it here rather than extending a selection nobody holds.
 			return a.endSelection()
 		}
+		a.clicks = clickRun{} // a drag ends a click run; see multiclick.go
 		return a.extendSelection(m.X, m.Y), nil
 	}
 	return a, nil

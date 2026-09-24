@@ -194,10 +194,52 @@ func TestAWordIsMeasuredInCells(t *testing.T) {
 		{"日本語 text", 8, 7, 11, true},
 		{"a  b", 1, 0, 0, false},
 		{"path/to/file.go:44, then", 3, 0, 19, true},
+		{"👨‍💻 hello", 4, 3, 8, true}, // a ZWJ sequence is one character, two cells wide
+		{"👨‍💻 hello", 0, 0, 2, true},
+		{"e\u0301te x", 1, 0, 3, true}, // a combining accent is part of its letter
 	} {
 		c0, c1, ok := wordAt(tc.line, tc.col, 0, 100)
 		if c0 != tc.c0 || c1 != tc.c1 || ok != tc.ok {
 			t.Errorf("wordAt(%q, %d) = %d, %d, %v, want %d, %d, %v", tc.line, tc.col, c0, c1, ok, tc.c0, tc.c1, tc.ok)
 		}
+	}
+}
+
+// A drag after the second click ends the run too, so the press after it is a
+// first click rather than a third.
+func TestADragAfterADoubleClickEndsTheRun(t *testing.T) {
+	frozenClock(t)
+	a := splitApp(t, 200, 40, 4)
+	a, _ = click(a, 16, textRow)
+	a, _ = drag(a, 16, 24, textRow)
+	a, _ = click(a, 16, textRow)
+	if !a.sel.empty() {
+		t.Errorf("the click after a double-click-and-drag selected %q; it starts a run of its own", selectedNow(a))
+	}
+}
+
+// A run belongs to the surface it began on. When the cell under the pointer
+// belongs to another one by the next press - a narrow grid slides to show the
+// pane a click focused - that press is a first click there, not a second.
+func TestAClickRunEndsWhenTheCellChangesSurface(t *testing.T) {
+	now := frozenClock(t)
+	a := splitApp(t, 200, 40, 4)
+	a.clicks = clickRun{x: 16, y: textRow, n: 1, at: *now, on: surface{pane: "s1"}}
+	a, cmd := click(a, 16, textRow) // the room's cell now
+	if !a.sel.empty() || cmd != nil {
+		t.Errorf("a second press on another surface selected %q; it is a first click there", selectedNow(a))
+	}
+}
+
+// A keystroke between two clicks ends the run, the way it clears a highlight:
+// the press after it is a first click.
+func TestAKeystrokeEndsAClickRun(t *testing.T) {
+	frozenClock(t)
+	a := splitApp(t, 200, 40, 4)
+	a, _ = click(a, 16, textRow)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'x'}})
+	a, _ = click(a, 16, textRow)
+	if !a.sel.empty() {
+		t.Errorf("a click after a keystroke selected %q; it starts a run of its own", selectedNow(a))
 	}
 }

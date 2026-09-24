@@ -3,8 +3,9 @@ package ui
 // Double- and triple-click: a second click on the same cell selects the word
 // under it, a third the whole row, and any more leave that row highlighted.
 //
-// A run is counted at press, on one cell, within multiClickWindow of the press
-// before it. It is the only timer in selection, and it counts clicks rather
+// A run is counted at press, on one cell and one surface - the same pane, the
+// same query box, the same chrome - within multiClickWindow of the press before
+// it, and any drag ends it. It is the only timer in selection, and it counts clicks rather
 // than telling a click from a drag, which head != anchor still does alone. The
 // first click of a run does whatever a click does where it lands - opens a
 // fold, places the caret, opens a roster row - and only the presses after it
@@ -15,8 +16,8 @@ import (
 	"strings"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
-	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -24,43 +25,55 @@ import (
 // to be one run - about the double-click interval a desktop defaults to.
 const multiClickWindow = 500 * time.Millisecond
 
-// clickRun is the presses so far that landed on one cell in quick succession.
+// clickRun is the presses so far that landed on one cell in quick succession,
+// and the surface the last of them selected on.
 type clickRun struct {
 	x, y, n int
 	at      time.Time
+	on      surface
+}
+
+// surface is what a press selected on: a pane's transcript or query box, or the
+// frame's chrome. A cell that belongs to another surface by the next press - a
+// narrow grid slides to show the pane a click focused - starts a new run.
+type surface struct {
+	pane               string
+	inComposer, screen bool
+}
+
+// surfaceOf is the surface the selection a press just took lies on.
+func (s selection) surfaceOf() surface {
+	return surface{pane: s.pane, inComposer: s.inComposer, screen: s.onScreen}
 }
 
 // next folds a press into the run: the same cell within the window continues
 // it, anything else starts a new one.
 func (c clickRun) next(x, y int, now time.Time) clickRun {
 	if c.n > 0 && c.x == x && c.y == y && now.Sub(c.at) <= multiClickWindow {
-		return clickRun{x: x, y: y, n: c.n + 1, at: now}
+		return clickRun{x: x, y: y, n: c.n + 1, at: now, on: c.on}
 	}
 	return clickRun{x: x, y: y, n: 1, at: now}
 }
 
 // pressed is a left press, counted into the run before it is routed: a fourth
-// click or later does nothing, and a second or third widens the anchor the
-// press took into the word or the row under it.
+// click or later does nothing, and a second or third on the surface the run
+// began on widens the anchor the press took into the word or the row under it.
 func (a App) pressed(x, y int) App {
-	a.clicks = a.clicks.next(x, y, clock())
-	if a.clicks.n > 3 {
+	run := a.clicks.next(x, y, clock())
+	if run.n > 3 {
+		a.clicks = run
 		return a
 	}
 	a = a.press(x, y)
-	if a.clicks.n > 1 && a.selecting {
-		a = a.widen(a.clicks.n == 3)
+	if run.n > 1 && a.sel.surfaceOf() != run.on {
+		run.n = 1
+	}
+	run.on = a.sel.surfaceOf()
+	a.clicks = run
+	if run.n > 1 && a.selecting {
+		a = a.widen(run.n == 3)
 	}
 	return a
-}
-
-// released ends a press. A drag breaks the run, so the press after it is a
-// first click rather than a second.
-func (a App) released() (App, tea.Cmd) {
-	if a.selecting && !a.sel.empty() && !a.sel.span {
-		a.clicks = clickRun{}
-	}
-	return a.endSelection()
 }
 
 // widen turns the anchor a run's press just took into the word under it, or
@@ -130,17 +143,22 @@ type cell struct {
 	gap    bool
 }
 
-// cellsOf lays a stripped row out in columns. A zero-width rune joins the
-// character before it; a space, or a box-drawing rune - a border or a divider,
+// cellsOf lays a stripped row out in columns, one cell per grapheme cluster at
+// the width ansi draws it - the unit highlighted cuts by, so an emoji sequence
+// is one character. A space, or a box-drawing rune - a border or a divider,
 // which is chrome and never part of what is written - is a gap.
 func cellsOf(text string) []cell {
 	var cells []cell
-	col := 0
-	for _, r := range text {
-		w := ansi.StringWidth(string(r))
-		if w == 0 && len(cells) > 0 {
+	for col := 0; text != ""; {
+		g, w := ansi.FirstGraphemeCluster(text, ansi.GraphemeWidth)
+		if g == "" {
+			break
+		}
+		text = text[len(g):]
+		if w == 0 {
 			continue
 		}
+		r, _ := utf8.DecodeRuneInString(g)
 		cells = append(cells, cell{c0: col, c1: col + w, gap: unicode.IsSpace(r) || (r >= '─' && r <= '╿')})
 		col += w
 	}
