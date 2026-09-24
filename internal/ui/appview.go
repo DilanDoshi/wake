@@ -207,10 +207,14 @@ func (a App) cardFullyDrawn() bool {
 }
 
 // focusedPane is the width and height of the pane holding the keys, and whether
-// it is drawn at all. A column the window slid past has no width, and neither
-// has the lower half of a column too short to split.
-func (a App) focusedPane() (width, height int, ok bool) {
-	col := a.focusedCol()
+// it is drawn at all.
+func (a App) focusedPane() (width, height int, ok bool) { return a.paneSize(a.focus) }
+
+// paneSize is one pane's width and height, and whether it is drawn at all. A
+// column the window slid past has no width, and neither has the lower half of
+// a column too short to split.
+func (a App) paneSize(id string) (width, height int, ok bool) {
+	col := a.columnOf(id)
 	r := a.regions()
 	if col >= len(r.Cols) || r.Cols[col] <= 0 {
 		return 0, 0, false
@@ -219,7 +223,7 @@ func (a App) focusedPane() (width, height int, ok bool) {
 		return r.Cols[col], a.paneHeight(), true
 	}
 	top, bottom := a.rowsOf(col)
-	if a.grid.Cols[col].Bottom == a.focus {
+	if a.grid.Cols[col].Bottom == id {
 		return r.Cols[col], bottom, bottom > 0
 	}
 	return r.Cols[col], top, true

@@ -18,19 +18,21 @@ import (
 )
 
 // countLinesSnap is the recorded count-lines run mid-flight - both counts done,
-// the sum still running - with the ids, model and figures workflow-run.jsonl
-// carries.
+// the sum still running - with the ids, model, figures and previews
+// workflow-run.jsonl carries.
 func countLinesSnap() core.WorkflowSnapshot {
 	const haiku = "claude-haiku-4-5-20251001"
 	return core.WorkflowSnapshot{
 		Phases: []core.WorkflowPhase{{Index: 1, Title: "Count"}, {Index: 2, Title: "Sum"}},
 		Agents: []core.WorkflowAgent{
 			{Index: 1, Phase: 1, Label: "count a.txt", AgentID: "adc8cb9f8b7dc021f", Model: haiku,
-				State: core.WorkflowAgentDone, Tokens: 16497, ToolCalls: 2, Duration: 4587 * time.Millisecond},
+				State: core.WorkflowAgentDone, Tokens: 16497, ToolCalls: 2, Duration: 4587 * time.Millisecond,
+				Prompt: "Count the lines in ./a.txt with wc -l. Return just the number.", Result: `{"n":3}`},
 			{Index: 2, Phase: 1, Label: "count b.txt", AgentID: "a4d025ad4f589bce7", Model: haiku,
-				State: core.WorkflowAgentDone, Tokens: 16459, ToolCalls: 2, Duration: 4015 * time.Millisecond},
+				State: core.WorkflowAgentDone, Tokens: 16459, ToolCalls: 2, Duration: 4015 * time.Millisecond,
+				Prompt: "Count the lines in ./b.txt with wc -l. Return just the number.", Result: `{"n":5}`},
 			{Index: 3, Phase: 2, Label: "sum", AgentID: "a8ca1238d00df98a5", Model: haiku,
-				State: core.WorkflowAgentRunning},
+				State: core.WorkflowAgentRunning, Prompt: "Add 3 and 5. Return just the sum."},
 		},
 	}
 }

@@ -56,6 +56,8 @@ func (a App) observe(sessionID string, ev core.Event) App {
 
 	var forRoom []core.Event
 	a.fleet, forRoom = a.fleet.Observe(ev, sessionID)
+	// A snapshot that moved the workflow agent open in the view re-reads it.
+	a = a.reaskOnProgress(ev)
 	agent, _ := a.fleet.Agent(sessionID)
 	if ev.Session != nil {
 		// The model and the context figures reach the fleet on an init or a

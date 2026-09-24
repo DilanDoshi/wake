@@ -1,10 +1,11 @@
 package ui
 
 // The /workflows view drawn: a list of runs, or one run's header over a box of
-// two columns - its phases beside the cursored phase's agents - with the keys
-// under it (Claude Code's own layout, matched by hand). Every row is cut and
-// padded to the pane's width and the block is exactly the pane's height, so
-// the column keeps its place in the frame and never scrolls the alt screen.
+// two columns - its phases beside the cursored phase's agents - or one agent's
+// prompt, activity and outcome, with the keys under it (Claude Code's own
+// layout, matched by hand). Every row is cut and padded to the pane's width
+// and the block is exactly the pane's height, so the column keeps its place in
+// the frame and never scrolls the alt screen.
 
 import (
 	"fmt"
@@ -23,10 +24,13 @@ const (
 	workflowTitleRows   = 1 // the pane's own title, over the view
 	workflowTitleSuffix = " › workflows"
 
-	noWorkflowsSession = "No workflows in this session."
-	noWorkflowsFleet   = "No workflows in this fleet."
-	workflowGone       = "This run is no longer listed."
-	noAgentsStarted    = "no agents started"
+	noWorkflowsSession  = "No workflows in this session."
+	noWorkflowsFleet    = "No workflows in this fleet."
+	workflowGone        = "This run is no longer listed."
+	workflowAgentGone   = "This agent is no longer listed."
+	noAgentsStarted     = "no agents started"
+	activityUnavailable = "Activity unavailable"
+	noToolCalls         = "no tool calls"
 
 	glyphDone    = "✔"
 	glyphRunning = "⏺"
@@ -72,24 +76,32 @@ func (a App) workflowPane(width, height int) string {
 	if height <= workflowTitleRows {
 		return firstRows(head, height)
 	}
+	if v.Level == levelAgent {
+		return head + "\n" + a.agentLevel(width, height-workflowTitleRows)
+	}
 	return head + "\n" + v.render(a.workflowRuns(v.Session), width, height-workflowTitleRows)
 }
 
-// render is the view in exactly w by h cells.
+// render is the list or run level in exactly w by h cells.
 func (v WorkflowView) render(runs []workflowRunView, w, h int) string {
 	if w <= 0 || h <= 0 {
 		return ""
 	}
-	var rows []string
 	if v.Level == levelRun {
-		rows = v.runRows(runs, w, h)
-	} else {
-		rows = v.listRows(runs, w, h)
+		return fitBlock(v.runRows(runs, w, h), w)
 	}
-	for i := range rows {
-		rows[i] = fitRow(rows[i], w)
+	return fitBlock(v.listRows(runs, w, h), w)
+}
+
+// agentLevel is the agent level in w by h cells, off the last reply for it.
+func (a App) agentLevel(w, h int) string {
+	run, ag, ok := a.openAgent()
+	if !ok {
+		return fitBlock(stacked([]string{HintStyle.Render(workflowAgentGone)}, nil, []string{keyLine("esc back")}, h), w)
 	}
-	return strings.Join(rows, "\n")
+	v := a.workflow.view
+	events := a.workflow.transcripts[transcriptKey(run.Session, ag.AgentID)]
+	return renderWorkflowAgent(ag, events, v.Expanded, w, h, v.Scroll)
 }
 
 // --- the list -------------------------------------------------------------
@@ -261,18 +273,11 @@ func (v WorkflowView) agentsTitle(s core.WorkflowSnapshot, phases []core.Workflo
 	if !ok {
 		return "Agents"
 	}
-	title := phaseTitle(p) + " · " + agentCount(len(s.PhaseAgents(p.Index)))
+	title := phaseTitle(p) + " · " + plural(len(s.PhaseAgents(p.Index)), "agent")
 	if v.Filter != filterAll {
 		title += " · " + workflowFilterWords[v.Filter]
 	}
 	return title
-}
-
-func agentCount(n int) string {
-	if n == 1 {
-		return "1 agent"
-	}
-	return strconv.Itoa(n) + " agents"
 }
 
 func phaseTitle(p core.WorkflowPhase) string {
@@ -417,7 +422,152 @@ func workflowModel(id string) string {
 	return oneLine(id)
 }
 
+// --- the agent -------------------------------------------------------------
+
+// agentGeom is the agent level laid out once, so the draw and the scroll keys
+// agree where the end is: a fixed head, the body that scrolls, the keys.
+type agentGeom struct {
+	head, body, foot []string
+	rows             int // body rows the pane leaves
+	limit            int // the furthest the body scrolls
+}
+
+func agentLayout(ag core.WorkflowAgent, events []core.Event, expanded bool, w, h int) agentGeom {
+	g := agentGeom{
+		head: []string{TextStyle.Bold(true).Render(oneLine(ag.Label)), agentStatus(ag), HintStyle.Render(agentFigures(ag))},
+		body: agentBody(ag, events, expanded, w),
+		foot: []string{agentKeyLine(expanded)},
+	}
+	g.rows = max(h-len(g.head)-len(g.foot), 0)
+	g.limit = max(len(g.body)-g.rows, 0)
+	return g
+}
+
+// renderWorkflowAgent is one agent in exactly w by h cells, its body scrolled
+// by scroll rows - clamped here, so a scroll past either end draws that end.
+func renderWorkflowAgent(ag core.WorkflowAgent, events []core.Event, expanded bool, w, h, scroll int) string {
+	if w <= 0 || h <= 0 {
+		return ""
+	}
+	g := agentLayout(ag, events, expanded, w, h)
+	return fitBlock(stacked(g.head, windowRows(g.body, clamp(scroll, 0, g.limit), g.rows), g.foot, h), w)
+}
+
+// agentStatus is the agent's state and model: "✔ Completed · haiku".
+func agentStatus(ag core.WorkflowAgent) string {
+	word := string(ag.State)
+	switch ag.State {
+	case core.WorkflowAgentDone:
+		word = "Completed"
+	case core.WorkflowAgentRunning:
+		word = "Running"
+	case core.WorkflowAgentFailed:
+		word = "Failed"
+	}
+	line := agentGlyph(ag.State) + " " + TextStyle.Render(word)
+	if ag.Model != "" {
+		line += HintStyle.Render(" · " + workflowModel(ag.Model))
+	}
+	return line
+}
+
+// agentFigures is what the agent has spent, and how long it took once done.
+func agentFigures(ag core.WorkflowAgent) string {
+	var parts []string
+	if ag.Tokens > 0 {
+		parts = append(parts, humanTokens(ag.Tokens)+" tok")
+	}
+	parts = append(parts, plural(ag.ToolCalls, "tool call"))
+	if ag.Duration > 0 {
+		parts = append(parts, elapsedText(ag.Duration))
+	}
+	return strings.Join(parts, " · ")
+}
+
+func agentKeyLine(expanded bool) string {
+	toggle := "↵ expand"
+	if expanded {
+		toggle = "↵ collapse"
+	}
+	return keyLine("j/k scroll", toggle, "esc back")
+}
+
+// agentBody is what scrolls. The Prompt and the Outcome are the snapshot's own
+// previews - the task text alone, where the transcript's first turn wraps it
+// in the harness's framing - so they stand when the transcript does not.
+func agentBody(ag core.WorkflowAgent, events []core.Event, expanded bool, w int) []string {
+	body := agentSection("Prompt", ag.Prompt, w)
+	body = append(body, agentActivity(events, expanded, w)...)
+	return append(body, agentSection("Outcome", ag.Result, w)...)
+}
+
+// agentSection is a titled block of the agent's own words after a blank row,
+// and nothing while there are none - a running agent has no outcome yet.
+func agentSection(title, text string, w int) []string {
+	if strings.TrimSpace(text) == "" {
+		return nil
+	}
+	words := TextStyle.Width(max(w, bodyIndent+1)).PaddingLeft(bodyIndent).Render(text)
+	return append([]string{"", sectionTitle(title)}, strings.Split(words, "\n")...)
+}
+
+func sectionTitle(s string) string { return TextStyle.Bold(true).Render(s) }
+
+// agentActivity is one headline per tool call, drawn by the conversation's own
+// tool blocks; expanded adds each call's input and the start of its result.
+// No events is a transcript missing, unreadable or not read yet.
+func agentActivity(events []core.Event, expanded bool, w int) []string {
+	if len(events) == 0 {
+		return []string{"", HintStyle.Render(activityUnavailable)}
+	}
+	results := map[string]core.Event{}
+	for _, ev := range events {
+		if ev.Kind == core.KindToolResult && ev.Tool != nil {
+			results[ev.Tool.ID] = ev
+		}
+	}
+	iw := max(w-bodyIndent, 1)
+	out := []string{"", sectionTitle("Activity")}
+	for _, ev := range events {
+		if ev.Kind != core.KindToolUse || ev.Tool == nil {
+			continue
+		}
+		res, settled := results[ev.Tool.ID]
+		bullet := outcomeBullet(settled && res.Tool.IsError, settled)
+		block := toolHeadline(ev.Tool, bullet, iw)
+		if expanded {
+			// No fold key: every key here is the view's, and ⌃E is the conversation's.
+			block = joinBlock(toolUseBlock(ev.Tool, bullet, iw), toolResultBlock(res, ev.Tool, false, "", iw))
+		}
+		out = append(out, indented(block)...)
+	}
+	if len(out) == 2 {
+		out = append(out, indented(HintStyle.Render(noToolCalls))...)
+	}
+	return out
+}
+
+// indented is a block's rows under its section title.
+func indented(block string) []string {
+	if block == "" {
+		return nil
+	}
+	rows := strings.Split(block, "\n")
+	for i := range rows {
+		rows[i] = strings.Repeat(" ", bodyIndent) + rows[i]
+	}
+	return rows
+}
+
 // --- rows -----------------------------------------------------------------
+
+// fitBlock joins rows cut and padded to exactly w cells each.
+func fitBlock(rows []string, w int) string {
+	for i := range rows {
+		rows[i] = fitRow(rows[i], w)
+	}
+	return strings.Join(rows, "\n")
+}
 
 // stacked lays head, body and foot one under the next in exactly h rows, blank
 // below: the body is cut to what the pane leaves it, and a pane too short for

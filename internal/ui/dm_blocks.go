@@ -343,9 +343,9 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		return toolUseBlock(ev.Tool, d.bulletFor(ev.Tool.ID), w)
 	case core.KindToolResult:
 		if ev.Tool == nil {
-			return toolResultBlock(ev, nil, d.expanded, w)
+			return toolResultBlock(ev, nil, d.expanded, expandKey, w)
 		}
-		return toolResultBlock(ev, d.calls[ev.Tool.ID], d.expandedTool(ev.Tool.ID), w)
+		return toolResultBlock(ev, d.calls[ev.Tool.ID], d.expandedTool(ev.Tool.ID), expandKey, w)
 	case core.KindPermissionRequest:
 		return permissionBlock(ev, w)
 	case core.KindRequestWithdrawn:

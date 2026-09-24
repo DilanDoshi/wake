@@ -16,6 +16,7 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // workflowsTakeNoArgument refuses an argument rather than ignoring it.
@@ -24,8 +25,9 @@ const workflowsTakeNoArgument = workflowsCommand + " opens this pane's workflow 
 type workflowLevel int
 
 const (
-	levelList workflowLevel = iota // the runs in scope
-	levelRun                       // one run's phases beside the cursored phase's agents
+	levelList  workflowLevel = iota // the runs in scope
+	levelRun                        // one run's phases beside the cursored phase's agents
+	levelAgent                      // one agent's prompt, activity and outcome
 )
 
 // workflowFilter narrows the agents column; f cycles it.
@@ -71,6 +73,12 @@ type WorkflowView struct {
 	Agent   int // the agent row within the cursored phase, after the filter
 	Filter  workflowFilter
 
+	// Detail is the agent open at levelAgent, by its snapshot Index: a row
+	// number would move to another agent when the filter stops admitting it.
+	Detail   int
+	Expanded bool // Activity draws each call's input and the start of its result
+	Scroll   int  // the agent level's first body row
+
 	// Settling is a /workflows view nothing has been pressed in yet. Until then
 	// its level follows the run count, because the runs on disk arrive after it
 	// opened and exactly one run in scope skips the list.
@@ -84,6 +92,10 @@ type workflowState struct {
 	view WorkflowView
 	disk map[string][]core.WorkflowRun // each session's runs off disk, replaced per reply
 	asks []string                      // sessions owed a FrameWorkflows; Update's drain writes them
+
+	transcripts map[[2]string][]core.Event // each agent's own transcript by transcriptKey, replaced per reply
+	asked       core.WorkflowAgent         // the open agent as it stood when it was last asked for
+	agentAsk    rpc.Frame                  // the FrameWorkflowAgent owed, if Kind is set; Update's drain writes it
 }
 
 // workflowIn reports whether the view is drawn in this pane.
@@ -172,8 +184,7 @@ func (a App) workflowKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	if m.Type == tea.KeyCtrlC {
 		return a.closeWorkflow(), nil, false
 	}
-	a.workflow.view = v.keyed(m, a.workflowRuns(v.Session))
-	return a, nil, true
+	return a.workflowKeyed(m), nil, true
 }
 
 // workflowWheel is the wheel over the view: it walks the rows as ↑↓ do, since
@@ -184,9 +195,23 @@ func (a App) workflowWheel(up bool) App {
 	if up {
 		k.Type = tea.KeyUp
 	}
+	return a.workflowKeyed(k)
+}
+
+// workflowKeyed is one key against the view. The agent level scrolls against
+// what it draws, and arriving there asks for that agent's own transcript.
+func (a App) workflowKeyed(m tea.KeyMsg) App {
 	v := a.workflow.view
-	a.workflow.view = v.keyed(k, a.workflowRuns(v.Session))
-	return a
+	if v.Level == levelAgent {
+		a.workflow.view = v.agentKey(m, a.agentScrollLimit())
+		return a
+	}
+	a.workflow.view = v.keyed(m, a.workflowRuns(v.Session))
+	if a.workflow.view.Level != levelAgent {
+		return a
+	}
+	a.workflow.asked = core.WorkflowAgent{}
+	return a.reaskWorkflowAgent()
 }
 
 // keyed is one key against the view at its level; any key ends settling.
@@ -231,8 +256,44 @@ func (v WorkflowView) runKey(m tea.KeyMsg, runs []workflowRunView) WorkflowView 
 	case m.Type == tea.KeyDown:
 		return v.step(run.Snap, 1)
 	case m.Type == tea.KeyEnter || m.Type == tea.KeyRight:
-		v.Column = 1
+		return v.drill(run.Snap)
 	}
+	return v
+}
+
+// drill is ↵/→ at the run level: from the phases to their agents, and from an
+// agent into its own detail.
+func (v WorkflowView) drill(s core.WorkflowSnapshot) WorkflowView {
+	agents := v.agentsOf(s)
+	if v.Column == 0 || len(agents) == 0 {
+		v.Column = 1
+		return v
+	}
+	v.Level, v.Detail = levelAgent, agents[clamp(v.Agent, 0, len(agents)-1)].Index
+	v.Expanded, v.Scroll = false, 0
+	return v
+}
+
+// agentKey is one key at the agent level: ↵ toggles and → opens the Activity's
+// detail, j/k and ↑↓ scroll within limit, and esc/← go back to the run level.
+func (v WorkflowView) agentKey(m tea.KeyMsg, limit int) WorkflowView {
+	by := 0
+	switch {
+	case m.Type == tea.KeyEsc || m.Type == tea.KeyLeft:
+		v.Level, v.Detail, v.Expanded, v.Scroll = levelRun, 0, false, 0
+		return v
+	case m.Type == tea.KeyEnter:
+		v.Expanded = !v.Expanded
+	case m.Type == tea.KeyRight:
+		v.Expanded = true
+	case m.Type == tea.KeyDown || m.Type == tea.KeyRunes && string(m.Runes) == "j":
+		by = 1
+	case m.Type == tea.KeyUp || m.Type == tea.KeyRunes && string(m.Runes) == "k":
+		by = -1
+	}
+	// Taken from where the draw clamped it, so a scroll left past a shorter
+	// body - after a collapse or a resize - moves from what is on screen.
+	v.Scroll = clamp(min(v.Scroll, limit)+by, 0, limit)
 	return v
 }
 
@@ -325,9 +386,11 @@ func (a App) workflowPress(id string, col, top, height, x, y int, r Regions) App
 }
 
 // hit makes the row at (x, y) - view-local, in a w by h view - the cursor of
-// its column. Anything that is not a row leaves the view as it was.
+// its column. Anything that is not a row leaves the view as it was, and so
+// does the agent level, which has none: the run level's cursors are what esc
+// goes back to.
 func (v WorkflowView) hit(runs []workflowRunView, w, h, x, y int) WorkflowView {
-	if x < 0 || y < 0 {
+	if x < 0 || y < 0 || v.Level == levelAgent {
 		return v
 	}
 	v.Settling = false

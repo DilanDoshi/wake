@@ -2,7 +2,8 @@ package ui
 
 // What the /workflows view draws from: the workflow rows this client has
 // folded live (Fleet.tasks) and each session's run records the daemon reads
-// off disk (FrameWorkflows / FrameWorkflowsReply), one run per task id.
+// off disk (FrameWorkflows / FrameWorkflowsReply), one run per task id - and,
+// at the agent level, that agent's own transcript (FrameWorkflowAgent / Reply).
 
 import (
 	"cmp"
@@ -17,8 +18,12 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// workflowRunsFailed names the write that could not happen, sendFailed's pattern.
-const workflowRunsFailed = "asking for workflow runs"
+// workflowRunsFailed and workflowAgentFailed name the write that could not
+// happen, sendFailed's pattern.
+const (
+	workflowRunsFailed  = "asking for workflow runs"
+	workflowAgentFailed = "asking for a workflow agent's transcript"
+)
 
 // workflowRunView is one run as the view draws it: a live row or a record.
 type workflowRunView struct {
@@ -115,6 +120,9 @@ func runFor(runs []workflowRunView, task string) (workflowRunView, bool) {
 // workflowReplied folds a workflow reply. Every workflow reply kind comes
 // through here, so app.go's apply spends one line on all of them.
 func (a App) workflowReplied(f rpc.Frame) App {
+	if f.Kind == rpc.FrameWorkflowAgentReply {
+		return a.workflowAgentReplied(f)
+	}
 	var runs []core.WorkflowRun
 	if f.Workflow != nil {
 		runs = f.Workflow.Runs
@@ -133,13 +141,95 @@ func (a App) askWorkflows(ids ...string) App {
 }
 
 func (a App) takeWorkflowAsks() (App, tea.Cmd) {
+	var agent tea.Cmd
+	if a.workflow.agentAsk.Kind != "" {
+		agent = a.write(workflowAgentFailed, a.workflow.agentAsk)
+		a.workflow.agentAsk = rpc.Frame{}
+	}
 	if len(a.workflow.asks) == 0 {
-		return a, nil
+		return a, agent
 	}
 	frames := make([]rpc.Frame, 0, len(a.workflow.asks))
 	for _, id := range a.workflow.asks {
 		frames = append(frames, rpc.Frame{Kind: rpc.FrameWorkflows, SessionID: id})
 	}
 	a.workflow.asks = nil
-	return a, a.write(workflowRunsFailed, frames...)
+	return a, tea.Batch(a.write(workflowRunsFailed, frames...), agent)
+}
+
+// --- the agent level --------------------------------------------------------
+
+// transcriptKey is one agent's transcript: its session, then its own id.
+func transcriptKey(session, agentID string) [2]string { return [2]string{session, agentID} }
+
+// openAgent is the agent the view's agent level is on, and the run it is in.
+func (a App) openAgent() (workflowRunView, core.WorkflowAgent, bool) {
+	v := a.workflow.view
+	if v.Level != levelAgent {
+		return workflowRunView{}, core.WorkflowAgent{}, false
+	}
+	run, ok := runFor(a.workflowRuns(v.Session), v.Task)
+	if !ok {
+		return workflowRunView{}, core.WorkflowAgent{}, false
+	}
+	at := slices.IndexFunc(run.Snap.Agents, func(ag core.WorkflowAgent) bool { return ag.Index == v.Detail })
+	if at < 0 {
+		return run, core.WorkflowAgent{}, false
+	}
+	return run, run.Snap.Agents[at], true
+}
+
+// reaskWorkflowAgent owes one FrameWorkflowAgent while the open agent has moved
+// since its last - so the re-read is an event, a new snapshot, never a timer.
+// An agent with no id yet cannot be asked for; its first snapshot with one is
+// a move, so it is asked for then.
+func (a App) reaskWorkflowAgent() App {
+	run, ag, ok := a.openAgent()
+	if !ok || ag.AgentID == "" || sameProgress(ag, a.workflow.asked) {
+		return a
+	}
+	a.workflow.asked = ag
+	a.workflow.agentAsk = rpc.Frame{Kind: rpc.FrameWorkflowAgent, SessionID: run.Session,
+		Workflow: &rpc.WorkflowFrame{Agent: ag.AgentID}}
+	return a
+}
+
+// reaskOnProgress is observe's half of the re-ask: only a task frame carries a
+// snapshot, so every other event - a streamed token above all - costs nothing.
+func (a App) reaskOnProgress(ev core.Event) App {
+	if ev.Task == nil {
+		return a
+	}
+	return a.reaskWorkflowAgent()
+}
+
+// sameProgress is the part of an agent's entry that says its transcript grew.
+func sameProgress(x, y core.WorkflowAgent) bool {
+	return x.AgentID == y.AgentID && x.ToolCalls == y.ToolCalls && x.State == y.State && x.Tokens == y.Tokens
+}
+
+// workflowAgentReplied keeps one agent's transcript in place of the last. An
+// empty one is kept too - a transcript missing or not yet written - and the
+// agent level says its activity is unavailable rather than reporting anything.
+func (a App) workflowAgentReplied(f rpc.Frame) App {
+	if f.Workflow == nil {
+		return a
+	}
+	kept := make(map[[2]string][]core.Event, len(a.workflow.transcripts)+1)
+	maps.Copy(kept, a.workflow.transcripts)
+	kept[transcriptKey(f.SessionID, f.Workflow.Agent)] = f.Events
+	a.workflow.transcripts = kept
+	return a
+}
+
+// agentScrollLimit is how far the open agent scrolls in the pane the view is
+// drawn in - the one measure the draw clamps by.
+func (a App) agentScrollLimit() int {
+	run, ag, ok := a.openAgent()
+	w, h, drawn := a.paneSize(a.workflow.view.Pane)
+	if !ok || !drawn {
+		return 0
+	}
+	events := a.workflow.transcripts[transcriptKey(run.Session, ag.AgentID)]
+	return agentLayout(ag, events, a.workflow.view.Expanded, w, h-workflowTitleRows).limit
 }
