@@ -128,7 +128,9 @@ def say_init(sc):
     `/`, and `model` is what the conversation's status bar draws — so a demo
     that skipped this frame would have an empty status bar in every pane.
     A saved workflow is advertised here under its own name, the way headless
-    claude advertises `.claude/workflows/<name>.js` (workflow findings §5).
+    claude advertises `.claude/workflows/<name>.js` (workflow findings §5) -
+    read once, at startup: a workflow saved mid-session runs as `/<name>` in
+    future sessions, not in the one that saved it.
     """
     ADVERTISED[0] = slash_commands(sc)
     emit({
@@ -149,7 +151,7 @@ def say_init(sc):
     })
 
 
-# What the last init advertised, so a turn can tell whether the set moved.
+# What this session's init advertised: the only commands it will resolve.
 ADVERTISED = [None]
 
 
@@ -159,13 +161,6 @@ def slash_commands(sc):
         "effort", "review", "pr-comments", "release-notes",
     ])
     return base + [n for n in saved_workflows() if n not in base]
-
-
-def refresh_init(sc):
-    """claude opens every turn with an init; this opens one only when the
-    advertised set has moved, since that is all a repeat would tell Wake."""
-    if slash_commands(sc) != ADVERTISED[0]:
-        say_init(sc)
 
 
 def say_text(text):
@@ -484,11 +479,25 @@ def launched_text(run):
                 run.task, run.spec["description"], run.agents_dir(), script, run.run_id))
 
 
+def workflow_spec(sc, name):
+    """A workflow's script: this scenario's own, else any scenario's - a saved
+    workflow is a file on disk, so a session that never ran it can still."""
+    if name in sc.get("workflows", {}):
+        return sc["workflows"][name]
+    for f in sorted(os.listdir(SCENARIO_DIR)):
+        if f.endswith(".json"):
+            with open(os.path.join(SCENARIO_DIR, f)) as fh:
+                spec = json.load(fh).get("workflows", {}).get(name)
+            if spec:
+                return spec
+    return None
+
+
 def start_workflow(sc, step):
     """The launch: a Workflow tool call, task_started, and the receipt — then
     the run goes on in the background while the turn ends."""
     name = step["workflow"]
-    spec = sc["workflows"][name]
+    spec = workflow_spec(sc, name)
     run = Run(name, spec, step.get("pace", 1.0))
     # A saved workflow is called by name; an ad-hoc one carries its script.
     tool_input = {"name": name} if step.get("saved") else {"script": spec["script"]}
@@ -580,8 +589,8 @@ def agent_started(run, i):
 
 
 # claude marks an agent that has made a tool call `progress` in the next
-# snapshot (workflow-run.jsonl line 93). Off by default: the scenes were filmed
-# on `start`/`done` alone, and this build draws `progress` as an unknown word.
+# snapshot (workflow-run.jsonl line 93). Off by default so the scenes filmed on
+# `start`/`done` alone keep reproducing; tapes/14-workflow-view.tape turns it on.
 PROGRESS_STATE = os.environ.get("WAKE_DEMO_PROGRESS_STATE") == "1"
 
 
@@ -675,7 +684,6 @@ def end_workflow(sc, run, status, error=None):
     then = run.spec.get("then")
     if then:
         with TURN_LOCK:
-            refresh_init(sc)
             finish(run_steps(then.get("steps", [])), then.get("tokens", 80))
 
 
@@ -929,10 +937,10 @@ SCENARIO = [None]
 def saved_turn(sc, text):
     """`/<name>` for a saved workflow: claude resolves the file to a command
     and calls Workflow with it by name (workflow-saved-command.jsonl). Only a
-    workflow saved on this disk answers, and only one this scenario scripts."""
+    workflow this session advertised at startup answers."""
     name = text.strip()[1:] if text.strip().startswith("/") else ""
-    spec = sc.get("workflows", {}).get(name)
-    if not spec or name not in saved_workflows():
+    spec = workflow_spec(sc, name) if name in (ADVERTISED[0] or []) else None
+    if not spec:
         return None
     return {"tokens": 240, "steps": [
         {"after": 0.6, "workflow": name, "saved": True, "pace": spec.get("saved_pace", 1.0)},
@@ -985,7 +993,6 @@ def main():
             say_model_reply(sc)
             continue
         with TURN_LOCK:
-            refresh_init(sc)
             t = saved_turn(sc, payload) or pick_turn(sc, payload, used)
             ok = run_steps(t.get("steps", []))
             finish(ok, t.get("tokens", 1180))

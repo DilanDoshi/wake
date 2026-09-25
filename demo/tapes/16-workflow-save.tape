@@ -1,10 +1,12 @@
-# Workflow scene 4: s saves the run's script as /count-lines, and it runs again.
+# Workflow scene 4: s saves the run's script as /count-lines, and a new
+# session runs it.
 #
-# The save is a file write the daemon owns; the notice names the path. The
-# fake advertises a saved .claude/workflows/<name>.js in the next turn's init
-# (workflow findings §5), which the run's own follow-up turn provides - so
-# `/count` then offers `/count-lines`, and sending it launches the workflow by
-# name, the way workflow-saved-command.jsonl records it.
+# The save is a file write the daemon owns; the notice names the path. A saved
+# workflow runs as /<name> in *future* sessions (Claude Code's docs, and Wake's
+# own notice), so the fake reads .claude/workflows once, into its startup init
+# (workflow findings §5): iris, which saved it, never offers it, and rhea,
+# started after the save, does - `@rhea /count` offers `/count-lines`, and
+# sending it launches the workflow by name (workflow-saved-command.jsonl).
 Output .work/out/16-workflow-save.mp4
 Source .work/head.tape
 Hide
@@ -30,12 +32,20 @@ Sleep 1400ms
 Tab
 Sleep 1200ms
 Enter
-Sleep 4s
+Sleep 3500ms
 Escape
-Sleep 9s
+Sleep 800ms
+# A new session, from the room: its init is the first to see the saved file.
+Tab
+Sleep 800ms
+Type "/new rhea in /tmp/tally"
+Sleep 400ms
+Enter
+Sleep 6s
+# /new drafts `@rhea ` into the room; the command completes against rhea's own.
 Type "/count"
 Sleep 2500ms
 Tab
 Sleep 900ms
 Enter
-Sleep 8s
+Sleep 9s

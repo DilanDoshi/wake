@@ -4,12 +4,14 @@
 # sequence reaches the tty on its own read, so it lands as a bare ⎋), so the
 # tape reaches the same row through /board's rows view, which draws it with
 # the sidebar's own row function and opens it the same way (viewingPicked).
+# WAKE_DEMO_PROGRESS_STATE marks an agent that has made a tool call `progress`,
+# as claude does (workflow-run.jsonl line 93); the view draws it running.
 Output .work/out/14-workflow-view.mp4
 Source .work/head.tape
 Hide
 Source tapes/_workflow-take.tape
 Set TypingSpeed 8ms
-Type "wake new iris"
+Type "export WAKE_DEMO_PROGRESS_STATE=1 && wake new iris"
 Enter
 Sleep 7s
 Ctrl+W

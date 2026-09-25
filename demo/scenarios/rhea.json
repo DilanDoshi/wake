@@ -1,0 +1,7 @@
+{
+  "_note": "The workflow save scene's second session (tapes/16-workflow-save.tape): started after count-lines is saved, so its init advertises /count-lines and it runs the saved workflow by name.",
+  "model": "claude-sonnet-5",
+  "opening": {"tokens": 280, "steps": [{"after": 0.4, "text": "Ready, in `/tmp/tally`."}]},
+  "turns": [],
+  "default": {"tokens": 300, "steps": [{"after": 0.7, "text": "Noted."}]}
+}
