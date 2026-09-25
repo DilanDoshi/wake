@@ -130,3 +130,24 @@ func TestAnUnrecordedStateDrawsItsOwnWord(t *testing.T) {
 		}
 	}
 }
+
+// An id the daemon's fence would refuse is never asked for: the refusal would
+// be an error notice on every re-ask, for a transcript that cannot be named.
+func TestAnAgentIDTheFenceRefusesIsNeverAskedFor(t *testing.T) {
+	for _, id := range []string{"", "Not/An-Id"} {
+		a := workflowFleet(t)
+		a = a.applyFrame(taskFrame("s1", workflowProgressed(wfTask, wfDispatch, snapWith(func(ag *core.WorkflowAgent) { ag.AgentID = id }))))
+		a, _ = openedWorkflows(t, a.openDMWith("s1", "alex"))
+		a, _ = pressKey(a, wfKey(tea.KeyDown)) // the Sum phase
+		a, _ = pressKey(a, wfKey(tea.KeyRight))
+		a, cmd := pressKey(a, wfKey(tea.KeyEnter))
+		frames := writtenFrames(t, a, cmd)
+		a, more := agentAsks(t, a)
+		if asks := kindsFor(append(frames, more...), rpc.FrameWorkflowAgent); len(asks) != 0 {
+			t.Errorf("id %q: entering the agent wrote %d FrameWorkflowAgent", id, len(asks))
+		}
+		if _, ok := wfLine(wfLines(a.View()), activityUnavailable); !ok {
+			t.Errorf("id %q: the agent level does not say its activity is unavailable", id)
+		}
+	}
+}

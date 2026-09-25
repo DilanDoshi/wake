@@ -184,11 +184,13 @@ func (a App) openAgent() (workflowRunView, core.WorkflowAgent, bool) {
 
 // reaskWorkflowAgent owes one FrameWorkflowAgent while the open agent has moved
 // since its last - so the re-read is an event, a new snapshot, never a timer.
-// An agent with no id yet cannot be asked for; its first snapshot with one is
-// a move, so it is asked for then.
+// An id the daemon's fence would refuse is never asked for: an agent with none
+// yet (its first snapshot with one is a move, so it is asked for then), one
+// refused before it started, or a malformed one, whose refusal would be a
+// notice on every re-ask.
 func (a App) reaskWorkflowAgent() App {
 	run, ag, ok := a.openAgent()
-	if !ok || ag.AgentID == "" || sameProgress(ag, a.workflow.asked) {
+	if !ok || rpc.ValidWorkflowAgentID(ag.AgentID) != nil || sameProgress(ag, a.workflow.asked) {
 		return a
 	}
 	a.workflow.asked = ag
