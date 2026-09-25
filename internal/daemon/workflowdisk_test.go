@@ -248,11 +248,11 @@ func TestTheDaemonAnswersAWorkflowAgentFrame(t *testing.T) {
 }
 
 // TestWorkflowRunsSkipsARecordThroughASymlinkedIntermediateDirectory proves
-// containment is checked on the whole resolved path, not just the final
-// component: regularTranscript's Lstat follows a symlinked *directory* to
-// reach the file it names and reports it an ordinary regular file, which is
-// exactly what let a symlinked workflows/ read a record from anywhere on the
-// machine before withinSessionDir existed.
+// containment covers the whole path, not just the final component: an Lstat
+// of the file follows a symlinked *directory* to reach it and reports an
+// ordinary regular file, which is exactly what once let a symlinked workflows/
+// read a record from anywhere on the machine. Reads go through the session's
+// own os.Root now, which refuses the escape.
 func TestWorkflowRunsSkipsARecordThroughASymlinkedIntermediateDirectory(t *testing.T) {
 	path := plantTranscript(t, wfID, userLine("hello"))
 	sessionDir := strings.TrimSuffix(path, ".jsonl")

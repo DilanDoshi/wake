@@ -3272,8 +3272,12 @@ ancestor that happens to have one — almost always `~/.claude/workflows`, the p
 this same feature creates, crossing project and personal scope silently. `projectWorkflowDir` finds
 the root first (`repositoryRoot`, a `.git` entry, no git subprocess) so a cwd with no repository never
 searches its ancestors at all, and one with a repository never searches past its root. **The write
-itself is `O_EXCL`** — atomic create-or-refuse rather than a stat-then-write race — because
-overwriting a saved workflow is not a keystroke Wake will perform silently; a project-scope save also
+itself is a synced temp file linked into place** — `Link` fails on an existing file, so
+create-or-refuse stays atomic rather than a stat-then-write race, and a write that fails part-way
+leaves nothing a retry would call "already exists" — because overwriting a saved workflow is not a
+keystroke Wake will perform silently. **Every write goes through an `os.Root`** on the project base
+(the personal workflows directory at personal scope), so a directory swapped for a symlink between
+the checks below and the write still cannot take it outside that root; a project-scope save also
 refuses a symlinked `.claude` or `.claude/workflows`, and the target file is refused as a symlink in
 either scope, for `--add-dir`'s reason: a name chosen on the wire must not redirect the write outside
 the directory it names.
@@ -3289,7 +3293,8 @@ label and the wire value are the same word Claude's docs use, and the Go constan
 **An unreadable workflow agent transcript answers empty, not an error — and the two failure shapes
 are told apart, not conflated.** `WorkflowAgentHistory` returns `nil, nil` for the *never existed*
 cases — no session transcript, no workflow ever run under it, no matching agent id off the glob
-(which includes a matched file resolving outside the session directory, its own logged skip — a
+(every read goes through an `os.Root` on the session directory, so a symlink leading out of it
+matches nothing, and a session directory that is itself a symlink is refused and logged — a
 symlink-escape fence, not a read failure). A transcript that **exists but cannot be read** —
 `os.Open` fails, or a mid-scan read hits a non-EOF error — is a different shape, `nil, err`, and
 `WorkflowAgentHistory` itself logs neither case: it hands the error up. **The caller does the logging

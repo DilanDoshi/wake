@@ -17,6 +17,7 @@ import (
 	"bufio"
 	"errors"
 	"io"
+	"io/fs"
 	"os"
 	"path/filepath"
 	"sort"
@@ -26,15 +27,15 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// maxWorkflowRuns bounds how many of a session's own runs WorkflowRuns hands
-// back, newest first - a long-lived session's older runs are simply never
-// read rather than read and then truncated.
+// maxWorkflowRuns bounds how many of a session's own runs WorkflowRuns reads:
+// the newest by modification time, chosen before any record is opened, so a
+// long-lived session's older runs cost a directory entry each and no read.
 const maxWorkflowRuns = 50
 
-// maxRunBytes bounds one run record. Its progress snapshot carries a
-// prompt/result preview per agent, so a wide fan-out is not a fixed size -
-// and unlike a conversation's tail-bounded scan, a record is read whole.
-const maxRunBytes = 8 << 20
+// maxRunsBytes bounds what one WorkflowRuns reads in all, historyBytes's reason
+// one reply over: a record carries a preview per agent, so a wide fan-out is
+// not a fixed size, and every run read travels in the one reply.
+const maxRunsBytes = historyBytes
 
 // claudeSessionDir is a session's own directory beside its transcript file -
 // <projects>/<slug>/<uuid> with ".jsonl" trimmed off - where claude's dynamic
@@ -45,143 +46,181 @@ func claudeSessionDir(transcript string) string {
 	return strings.TrimSuffix(transcript, ".jsonl")
 }
 
-// resolvedSessionDir is claudeSessionDir(path) with every symlink in it
-// resolved - the baseline withinSessionDir checks a matched file against. Its
-// own absence is not an error: a session that has never run a workflow has no
-// <uuid>/ directory at all, which WorkflowRuns/WorkflowAgentHistory read the
-// same way History reads a session with no transcript - nothing to read.
-func resolvedSessionDir(path string) (string, bool) {
-	resolved, err := filepath.EvalSymlinks(claudeSessionDir(path))
-	return resolved, err == nil
+// sessionRoot opens id's own session directory as the os.Root every read
+// under it goes through, so no symlinked directory or file inside can lead a
+// read outside it. Its absence is not an error: a session that has never run
+// a workflow has no <uuid>/ directory, which reads as nothing to read -
+// History's own ruling for a session with no transcript. A session directory
+// that is itself a symlink is refused, since it would make wherever it points
+// the root; the directory opened is checked to be the one Lstat saw, so a swap
+// between the two is refused too.
+func sessionRoot(id string) (*os.Root, bool) {
+	path, ok := transcriptPath(id)
+	if !ok {
+		return nil, false
+	}
+	dir := claudeSessionDir(path)
+	seen, err := os.Lstat(dir)
+	if err != nil || !seen.IsDir() {
+		if err == nil {
+			logf("wake: session directory %s is not a directory (%s), not read", dir, seen.Mode().Type())
+		}
+		return nil, false
+	}
+	root, err := os.OpenRoot(dir)
+	if err != nil {
+		logf("wake: could not open session directory %s: %v", dir, err)
+		return nil, false
+	}
+	if opened, err := root.Stat("."); err != nil || !os.SameFile(seen, opened) {
+		logf("wake: session directory %s changed while it was opened, not read", dir)
+		closeRoot(root)
+		return nil, false
+	}
+	return root, true
 }
 
-// withinSessionDir resolves every symlink in path - an intermediate
-// directory as well as a final component - and reports whether the result is
-// still inside dir, which is already resolved.
-//
-// regularTranscript's Lstat alone is not this fence: Lstat refuses only a
-// symlinked *final* component, but it still follows a symlinked intermediate
-// directory to reach whatever the final component names, so filepath.Glob
-// under a symlinked workflows/ or a symlinked subagents/workflows/<run>/
-// returns a path whose Lstat reports an ordinary regular file - a match this
-// package used to accept from anywhere on the machine. EvalSymlinks resolves
-// the whole path, which is what a directory-level escape needs caught on.
-func withinSessionDir(dir, path string) (string, bool) {
-	resolved, err := filepath.EvalSymlinks(path)
+// runRecord is one wf_*.json record found under a session, before it is read.
+type runRecord struct {
+	file string
+	info fs.FileInfo
+}
+
+// runRecords is the session's regular wf_*.json records, newest modified
+// first. A workflows/ it cannot list - missing, unreadable, or a symlink out
+// of the root - reads as none, the way a failed Glob did.
+func runRecords(root *os.Root) []runRecord {
+	entries, err := fs.ReadDir(root.FS(), "workflows")
 	if err != nil {
-		return "", false
+		if !errors.Is(err, fs.ErrNotExist) {
+			logf("wake: could not list %s/workflows: %v", root.Name(), err)
+		}
+		return nil
 	}
-	rel, err := filepath.Rel(dir, resolved)
-	if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-		return "", false
+	var out []runRecord
+	for _, e := range entries {
+		if ok, _ := filepath.Match("wf_*.json", e.Name()); !ok || !e.Type().IsRegular() {
+			continue // a symlinked record is never followed
+		}
+		if info, err := e.Info(); err == nil {
+			out = append(out, runRecord{file: filepath.Join("workflows", e.Name()), info: info})
+		}
 	}
-	return resolved, true
+	sort.Slice(out, func(i, j int) bool { return out[i].info.ModTime().After(out[j].info.ModTime()) })
+	return out
 }
 
 // WorkflowRuns is a session's own dynamic Workflow() runs, read back off
-// their wf_*.json records - newest first, capped at maxWorkflowRuns. A
+// their wf_*.json records - the maxWorkflowRuns newest, read until the next
+// would take the reply past maxRunsBytes, and answered newest first. A
 // session with no transcript answers with nothing rather than an error,
 // History's own ruling for one that has never taken a turn.
 func WorkflowRuns(id string) ([]core.WorkflowRun, error) {
-	path, ok := transcriptPath(id)
+	root, ok := sessionRoot(id)
 	if !ok {
 		return nil, nil
 	}
-	dir, ok := resolvedSessionDir(path)
-	if !ok {
-		return nil, nil // no workflow has ever run under this session
-	}
-	matches, err := filepath.Glob(filepath.Join(claudeSessionDir(path), "workflows", "wf_*.json"))
-	if err != nil {
-		return nil, err
-	}
+	defer closeRoot(root)
 
 	var runs []core.WorkflowRun
-	for _, m := range matches {
-		info, ok := regularTranscript(m)
-		if !ok {
-			continue // a symlinked final component, or gone since Glob listed it
-		}
-		resolved, ok := withinSessionDir(dir, m)
-		if !ok {
-			logf("wake: workflow run record %s resolves outside its session directory, skipped", m)
+	read := 0
+	for _, rec := range firstN(runRecords(root), maxWorkflowRuns) {
+		if rec.info.Size() > maxRunsBytes {
+			logf("wake: workflow run record %s is %d bytes, over the %d bound, skipped", rec.file, rec.info.Size(), maxRunsBytes)
 			continue
 		}
-		if info.Size() > maxRunBytes {
-			logf("wake: workflow run record %s is %d bytes, over the %d bound, skipped", m, info.Size(), maxRunBytes)
-			continue
+		raw, err := readRecord(root, rec.file, maxRunsBytes-read)
+		if errors.Is(err, errOverBound) {
+			break // the rest are older still
 		}
-		raw, err := os.ReadFile(resolved)
 		if err != nil {
-			logf("wake: could not read workflow run record %s: %v", m, err)
+			logf("wake: could not read workflow run record %s: %v", rec.file, err)
 			continue
 		}
+		read += len(raw)
 		run, err := core.DecodeWorkflowRun(raw)
 		if err != nil {
 			// One bad record costs itself, never the rest of the list.
-			logf("wake: workflow run record %s could not be decoded: %v", m, err)
+			logf("wake: workflow run record %s could not be decoded: %v", rec.file, err)
 			continue
 		}
 		runs = append(runs, run)
 	}
-
-	sort.Slice(runs, func(i, j int) bool { return runs[i].Started.After(runs[j].Started) })
-	if len(runs) > maxWorkflowRuns {
-		runs = runs[:maxWorkflowRuns]
-	}
+	sort.SliceStable(runs, func(i, j int) bool { return runs[i].Started.After(runs[j].Started) })
 	return runs, nil
 }
 
+// errOverBound is a record that would take the reply past its bound.
+var errOverBound = errors.New("over the reply bound")
+
+// readRecord reads one record through root, refusing it if it holds more than
+// limit bytes - read through a LimitReader, so a record that grew since it was
+// listed is refused rather than read whole.
+func readRecord(root *os.Root, name string, limit int) ([]byte, error) {
+	f, err := root.Open(name)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }() // read-only: nothing a Close error could lose
+	raw, err := io.ReadAll(io.LimitReader(f, int64(limit)+1))
+	if err == nil && len(raw) > limit {
+		return nil, errOverBound
+	}
+	return raw, err
+}
+
+func firstN[T any](s []T, n int) []T { return s[:min(len(s), n)] }
+
 // WorkflowAgentHistory is one workflow agent's own transcript - the
 // isSidechain:true lines under <sessiondir>/subagents/workflows/wf_*/agent-
-// <agentID>.jsonl, read through the same bounded scanner and
-// historyEvents/historyBytes ring History reads an ordinary conversation's
-// tail through. An unknown agent id is not an error: the run may have named
-// an agent this session never reached - the caller draws nothing, which is
-// what it would have drawn anyway.
+// <agentID>.jsonl, read through the session's own root and the same bounded
+// scanner and historyEvents/historyBytes ring History reads an ordinary
+// conversation's tail through. An unknown agent id is not an error: the run
+// may have named an agent this session never reached - the caller draws
+// nothing, which is what it would have drawn anyway.
 func WorkflowAgentHistory(id, agentID string) ([]core.Event, error) {
 	if err := rpc.ValidWorkflowAgentID(agentID); err != nil {
 		return nil, err
 	}
-	path, ok := transcriptPath(id)
+	root, ok := sessionRoot(id)
 	if !ok {
 		return nil, nil
 	}
-	dir, ok := resolvedSessionDir(path)
+	defer closeRoot(root)
+	name, ok := agentTranscript(root, agentID)
 	if !ok {
-		return nil, nil // no workflow has ever run under this session
+		return nil, nil
 	}
-	pattern := filepath.Join(claudeSessionDir(path), "subagents", "workflows", "*", "agent-"+agentID+".jsonl")
-	matches, err := filepath.Glob(pattern)
+	f, err := root.Open(name)
 	if err != nil {
 		return nil, err
 	}
-	var agentPath string
+	defer func() { _ = f.Close() }() // read-only: nothing a Close error could lose
+	return sidechainTail(f, id, agentID)
+}
+
+// agentTranscript is agentID's own transcript under root: the first regular
+// file matching, since a symlinked one is never followed. fs.Glob reads through
+// the root, so a symlinked run directory leading out of it matches nothing.
+func agentTranscript(root *os.Root, agentID string) (string, bool) {
+	matches, err := fs.Glob(root.FS(), "subagents/workflows/*/agent-"+agentID+".jsonl")
+	if err != nil {
+		return "", false // only a malformed pattern, and the id fence rules that out
+	}
 	for _, m := range matches {
-		if _, ok := regularTranscript(m); !ok {
-			continue // a symlinked final component, or gone since Glob listed it
+		if info, err := root.Lstat(m); err == nil && info.Mode().IsRegular() {
+			return m, true
 		}
-		resolved, ok := withinSessionDir(dir, m)
-		if !ok {
-			logf("wake: workflow agent transcript %s resolves outside its session directory, skipped", m)
-			continue
-		}
-		agentPath = resolved
-		break
 	}
-	if agentPath == "" {
-		return nil, nil
-	}
+	return "", false
+}
 
-	f, err := os.Open(agentPath)
-	if err != nil {
-		return nil, err
-	}
-	defer func() { _ = f.Close() }()
-
+// sidechainTail decodes a workflow agent's transcript into the tail History's
+// ring keeps.
+func sidechainTail(r io.Reader, id, agentID string) ([]core.Event, error) {
 	var ring []core.Event
 	total := 0
-	br := bufio.NewReaderSize(f, 64*1024)
+	br := bufio.NewReaderSize(r, 64*1024)
 	for {
 		line, lineErr := readTranscriptLine(br)
 		if len(line) > 0 {
@@ -219,6 +258,9 @@ func (s *server) sendWorkflows(c *client, id string) {
 	if err != nil {
 		c.enqueue(errorFrame(id, "could not read workflows: "+err.Error()))
 		return
+	}
+	for i := range runs {
+		runs[i].Script = "" // the daemon's alone: save reads it here, and no client draws one
 	}
 	c.enqueue(rpc.Frame{Kind: rpc.FrameWorkflowsReply, SessionID: id, Workflow: &rpc.WorkflowFrame{Runs: runs}})
 }
