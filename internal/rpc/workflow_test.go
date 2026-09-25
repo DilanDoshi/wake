@@ -58,7 +58,7 @@ func TestWorkflowFrameRoundTrips(t *testing.T) {
 		Kind: FrameWorkflowsReply,
 		Workflow: &WorkflowFrame{
 			Runs: []core.WorkflowRun{
-				{TaskID: "wsmc7r0xw", Name: "count-lines", Status: core.TaskDone, Tokens: 15194},
+				{TaskID: "wsmc7r0xw", Name: "count-lines", Status: core.TaskDone, Duration: 4 * time.Second},
 			},
 		},
 	}
@@ -79,7 +79,7 @@ func TestWorkflowFrameRoundTrips(t *testing.T) {
 			t.Fatalf("Workflow = %+v, want one run", got.Workflow)
 		}
 		run := got.Workflow.Runs[0]
-		if run.TaskID != "wsmc7r0xw" || run.Name != "count-lines" || run.Status != core.TaskDone || run.Tokens != 15194 {
+		if run.TaskID != "wsmc7r0xw" || run.Name != "count-lines" || run.Status != core.TaskDone || run.Duration != 4*time.Second {
 			t.Fatalf("run = %+v, not round-tripped", run)
 		}
 	case err := <-errs:

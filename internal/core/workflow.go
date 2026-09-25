@@ -112,8 +112,7 @@ type WorkflowRun struct {
 	Error    string            `json:"error,omitempty"`
 	Started  time.Time         `json:"started"`
 	Duration time.Duration     `json:"duration,omitempty"`
-	Tokens   int               `json:"tokens,omitempty"`
-	Script   string            `json:"script,omitempty"`
+	Script   string            `json:"script,omitempty"` // the daemon's, for a save; never sent to a client
 	Progress *WorkflowSnapshot `json:"progress,omitempty"`
 }
 

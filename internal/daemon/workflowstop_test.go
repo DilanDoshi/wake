@@ -12,6 +12,7 @@ package daemon
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 
@@ -38,11 +39,15 @@ func fakeWorkflowFleet(sid string) int {
 	return 0
 }
 
+// emitTaskStarted carries fakeScript as the prompt, which a workflow's start
+// uses for its script.
 func emitTaskStarted(sid, taskID, taskType, workflowName string) {
 	fmt.Printf(`{"type":"system","subtype":"task_started","session_id":%q,"task_id":%q,`+
-		`"tool_use_id":"toolu_%s","description":"probe","task_type":%q,"workflow_name":%q}`+"\n",
-		sid, taskID, taskID, taskType, workflowName)
+		`"tool_use_id":"toolu_%s","description":"probe","task_type":%q,"workflow_name":%q,"prompt":%q}`+"\n",
+		sid, taskID, taskID, taskType, workflowName, fakeScript)
 }
+
+const fakeScript = "phase('Probe')\n"
 
 func emitTaskEnded(sid, taskID string) {
 	fmt.Printf(`{"type":"system","subtype":"task_updated","session_id":%q,"task_id":%q,"status":"completed"}`+"\n",
@@ -87,5 +92,34 @@ func TestStopRunReachesOnlyARunningWorkflow(t *testing.T) {
 	})
 	if !strings.Contains(got.Event.Text, `"task_id":"w1"`) {
 		t.Fatalf("stdin did not carry the stop_task request: %s", got.Event.Text)
+	}
+}
+
+// A workflow's script is the daemon's alone: no client draws one, live or
+// replayed, and the save still finds it on the retained start.
+func TestAWorkflowsScriptNeverReachesAClient(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv("CLAUDE_CONFIG_DIR", "")
+	fakeClaudeOnPath(t, "stoprun")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	started := func(f rpc.Frame) bool {
+		return f.Kind == rpc.FrameEvent && f.SessionID == idAlpha && f.Event != nil && f.Event.Task != nil &&
+			f.Event.Task.ID == "w1" && f.Event.Task.Phase == core.TaskStarted
+	}
+	live := c.await("w1's start, live", started)
+	late := attach(t, d.socket).await("w1's start, replayed", started)
+	for how, f := range map[string]rpc.Frame{"live": live, "replayed": late} {
+		if w := f.Event.Task.Workflow; w == nil || w.Name != "count-lines" || w.Script != "" {
+			t.Errorf("%s: w1's start reached a client as %+v, want its name and no script", how, w)
+		}
+	}
+
+	c.send(rpc.Frame{Kind: rpc.FrameSaveWorkflow, SessionID: idAlpha,
+		Workflow: &rpc.WorkflowFrame{Task: "w1", Name: "probe", Scope: rpc.ScopeUser}})
+	saved := c.await("the save", func(f rpc.Frame) bool { return f.Kind == rpc.FrameWorkflowSaved })
+	if raw, err := os.ReadFile(saved.Workflow.Path); err != nil || string(raw) != fakeScript {
+		t.Errorf("the save wrote %q (%v), want the script the client never saw", raw, err)
 	}
 }

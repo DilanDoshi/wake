@@ -151,7 +151,7 @@ func TestASecondClientAttachingMidDispatchSeesItRunning(t *testing.T) {
 // TestAReplayedWorkflowCarriesItsLatestSnapshot: a workflow's task_started
 // carries no progress at all (it precedes every task_progress), so replaying
 // it unchanged would hand a late client a dispatch with an empty sidebar -
-// no phase, no agent, nothing running. withProgress keeps the retained row
+// no phase, no agent, nothing running. withWorkflow keeps the retained row
 // current as each task_progress arrives, the way a live client's own fold
 // already is.
 func TestAReplayedWorkflowCarriesItsLatestSnapshot(t *testing.T) {
@@ -194,7 +194,7 @@ func TestAReplayedWorkflowCarriesItsLatestSnapshot(t *testing.T) {
 	}
 }
 
-// TestATaskProgressSnapshotIsIgnoredForARetainedNonWorkflowTask: withProgress
+// TestATaskProgressSnapshotIsIgnoredForARetainedNonWorkflowTask: withWorkflow
 // dereferences the *retained* started event's own Workflow, and a task_started
 // this agent retained for a non-workflow dispatch (or a malformed one) never
 // had one. A task_progress that still carries a snapshot for that id - a

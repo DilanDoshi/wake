@@ -226,7 +226,7 @@ func TestClosingTheViewDropsWhatItRead(t *testing.T) {
 // --- what it draws ----------------------------------------------------------
 
 func TestTheAgentLevelDrawsStatusFiguresPromptActivityAndOutcome(t *testing.T) {
-	block := renderWorkflowAgent(bTxtAgent(), bTxtEvents(t), false, 90, 30, 0)
+	block := layAgent(bTxtAgent(), bTxtEvents(t), false, 90).render(90, 30, 0)
 	requireFits(t, block, 90, 30)
 	lines := wfLines(block)
 	for _, want := range []string{
@@ -263,7 +263,7 @@ func headlines(lines []string) int {
 }
 
 func TestExpandedActivityAddsEachCallsInputAndTheStartOfItsResult(t *testing.T) {
-	block := renderWorkflowAgent(bTxtAgent(), bTxtEvents(t), true, 90, 40, 0)
+	block := layAgent(bTxtAgent(), bTxtEvents(t), true, 90).render(90, 40, 0)
 	requireFits(t, block, 90, 40)
 	lines := wfLines(block)
 	for _, want := range []string{
@@ -290,7 +290,7 @@ func TestExpandedActivityShowsOnlyTheStartOfALongResult(t *testing.T) {
 		{Kind: core.KindToolUse, Tool: call},
 		{Kind: core.KindToolResult, Text: body, Tool: &core.ToolCall{ID: "toolu_x"}},
 	}
-	block := stripANSI(renderWorkflowAgent(bTxtAgent(), events, true, 90, 60, 0))
+	block := stripANSI(layAgent(bTxtAgent(), events, true, 90).render(90, 60, 0))
 	if n := strings.Count(block, "a line of the file"); n == 0 || n >= 30 {
 		t.Errorf("the result drew %d of its 30 lines, want only its start:\n%s", n, block)
 	}
@@ -302,7 +302,7 @@ func TestExpandedActivityShowsOnlyTheStartOfALongResult(t *testing.T) {
 // Review Focus 5: a transcript that is missing, unreadable or not yet read
 // leaves the snapshot's own previews and says the activity is unavailable.
 func TestWithNoTranscriptTheAgentLevelFallsBackToThePreviews(t *testing.T) {
-	lines := wfLines(renderWorkflowAgent(bTxtAgent(), nil, false, 90, 30, 0))
+	lines := wfLines(layAgent(bTxtAgent(), nil, false, 90).render(90, 30, 0))
 	for _, want := range []string{
 		"Prompt", "Count the lines in ./b.txt with wc -l. Return just the number.",
 		"Activity unavailable",
@@ -315,7 +315,7 @@ func TestWithNoTranscriptTheAgentLevelFallsBackToThePreviews(t *testing.T) {
 }
 
 func TestARunningAgentReadsRunningAndHasNoOutcomeYet(t *testing.T) {
-	lines := wfLines(renderWorkflowAgent(countLinesSnap().Agents[2], nil, false, 90, 30, 0))
+	lines := wfLines(layAgent(countLinesSnap().Agents[2], nil, false, 90).render(90, 30, 0))
 	if _, ok := wfLine(lines, "⏺ Running · haiku"); !ok {
 		t.Errorf("a running agent does not say so:\n%s", strings.Join(lines, "\n"))
 	}
@@ -356,7 +356,7 @@ func TestTheAgentLevelFitsEveryHeightAndClampsItsScroll(t *testing.T) {
 		for _, w := range []int{1, 12, 40, 90} {
 			for _, h := range []int{1, 2, 4, 6, 9, 40} {
 				for _, scroll := range []int{-3, 0, 2, 1000} {
-					requireFits(t, renderWorkflowAgent(bTxtAgent(), events, expanded, w, h, scroll), w, h)
+					requireFits(t, layAgent(bTxtAgent(), events, expanded, w).render(w, h, scroll), w, h)
 					if t.Failed() {
 						t.Fatalf("expanded=%v %dx%d scroll %d", expanded, w, h, scroll)
 					}
@@ -364,11 +364,11 @@ func TestTheAgentLevelFitsEveryHeightAndClampsItsScroll(t *testing.T) {
 			}
 		}
 	}
-	top := renderWorkflowAgent(bTxtAgent(), events, false, 60, 8, 0)
-	if got := renderWorkflowAgent(bTxtAgent(), events, false, 60, 8, -3); got != top {
+	top := layAgent(bTxtAgent(), events, false, 60).render(60, 8, 0)
+	if got := layAgent(bTxtAgent(), events, false, 60).render(60, 8, -3); got != top {
 		t.Errorf("a scroll above the top drew something other than the top")
 	}
-	end := renderWorkflowAgent(bTxtAgent(), events, false, 60, 8, 1000)
+	end := layAgent(bTxtAgent(), events, false, 60).render(60, 8, 1000)
 	if !strings.Contains(stripANSI(end), `{"n":5}`) {
 		t.Errorf("scrolled to the end, the outcome is not drawn:\n%s", stripANSI(end))
 	}

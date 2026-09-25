@@ -71,7 +71,7 @@ func TestObservingAWorkflowFixtureYieldsOneRowDoneAtTheEnd(t *testing.T) {
 }
 
 // The replay shape - a started frame that already carries a snapshot, the way
-// a late-attaching client is handed one (taskreplay.go's withProgress) - sets
+// a late-attaching client is handed one (taskreplay.go's withWorkflow) - sets
 // it immediately rather than waiting on a task_progress this client will
 // never see again.
 func TestAReplayedWorkflowStartSetsItsSnapshotOnTheFirstFold(t *testing.T) {

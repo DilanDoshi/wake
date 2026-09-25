@@ -788,5 +788,5 @@ func DecodeWorkflowRun(raw []byte) (WorkflowRun, error) {
 	}
 	return containedRun(WorkflowRun{TaskID: w.TaskID, Name: w.WorkflowName, Summary: w.Summary, Status: status,
 		Error: w.Error, Started: time.UnixMilli(w.StartTime), Duration: time.Duration(w.DurationMs) * time.Millisecond,
-		Tokens: w.TotalTokens, Script: w.Script, Progress: workflowSnapshotOf(w.WorkflowProgress)}), nil
+		Script: w.Script, Progress: workflowSnapshotOf(w.WorkflowProgress)}), nil
 }

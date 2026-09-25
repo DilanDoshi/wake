@@ -480,7 +480,6 @@ type wireWorkflowRun struct {
 	Error            string             `json:"error"`
 	StartTime        int64              `json:"startTime"`
 	DurationMs       int                `json:"durationMs"`
-	TotalTokens      int                `json:"totalTokens"`
 	Script           string             `json:"script"`
 	WorkflowProgress []wireWorkflowItem `json:"workflowProgress"`
 }

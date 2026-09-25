@@ -461,11 +461,6 @@ func (r agentRows) render(w, h, scroll int) string {
 	return fitBlock(stacked(r.head, windowRows(r.body, clamp(scroll, 0, r.limit(h)), r.shown(h)), r.foot, h), w)
 }
 
-// renderWorkflowAgent is one agent laid out and drawn in exactly w by h cells.
-func renderWorkflowAgent(ag core.WorkflowAgent, events []core.Event, expanded bool, w, h, scroll int) string {
-	return layAgent(ag, events, expanded, w).render(w, h, scroll)
-}
-
 // stateWord is an unresolved state as the wire spelled it.
 func stateWord(ag core.WorkflowAgent) string { return oneLine(cmp.Or(ag.StateWord, string(ag.State))) }
 

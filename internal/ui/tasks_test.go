@@ -356,7 +356,7 @@ func TestAWorkflowSnapshotReplacesWholesale(t *testing.T) {
 
 // A replayed row - a late attach's task_started, standing in for one the
 // daemon has re-dated with the workflow's latest snapshot already attached
-// (taskreplay.go's withProgress) - sets the snapshot on the very first fold,
+// (taskreplay.go's withWorkflow) - sets the snapshot on the very first fold,
 // with no separate task_progress required.
 func TestAStartedFrameCarryingProgressSetsTheSnapshotImmediately(t *testing.T) {
 	replayed := core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{
