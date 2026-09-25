@@ -1,91 +1,87 @@
 # CLAUDE.md — Wake
 
 **Status: Phases 1–3 partially complete.** Core, daemon, room, DM, park/wake, fork, and the
-manager all work end to end. Session importing and pool management remain. Phase 4 is next — see `docs/goals.md` for current phase breakdown.
+manager work end to end. Session importing and pool management remain; Phase 4 is next — see
+`docs/goals.md`.
 
 The design lives in `docs/superpowers/specs/2026-08-08-wake-design.md`. **The spec is the source of
 truth for *what* Wake does; this file is the source of truth for *how we build it*.** When they
 disagree, the spec wins and this file gets fixed.
 
-> The long design rationale (every ruling, every recorded failure) lives in `docs/notes/decisions.md`
-> and in the file headers themselves. This file is the operating manual, not the archive.
+This file is the operating manual, not the archive. Every ruling's full argument lives in the named
+file's header or in `docs/notes/decisions.md`; read those before changing a rule below.
 
 ## Public repository hygiene
 
-Wake is a **public** repository sitting directly beside Anthropic's own product. Two habits are
-load-bearing, and both nearly went wrong before the first cut — treat them as non-negotiable:
+Wake is **public** and sits beside Anthropic's own product. Non-negotiable:
 
-- **Never reproduce Claude Code's binary in this tree.** Do not run `strings` on the Claude binary,
-  do not paste verbatim minified source (`function M6i(e,t){…}`), do not cite byte offsets, do not
-  write "read out of the binary". Anthropic's terms forbid reducing the product to human-readable
-  form, and reproducing its compiled source is a copyright problem. Document **behaviour** — what a
-  value is, how the CLI acts — never the extraction. A value that matches Claude Code is "matched
-  against Claude Code, maintained by hand", not "extracted from the binary".
-- **Never paste a raw Claude frame into a doc or comment.** The `init` frame is an environment dump —
-  installed skills, plugins, socket paths, the home directory. Cite a fixture and a line instead.
+- **Never reproduce Claude Code's binary.** No `strings` on it, no pasted minified source, no byte
+  offsets, no "read out of the binary". Document **behaviour**. A value that matches Claude Code is
+  "matched against Claude Code, maintained by hand".
+- **Never paste a raw Claude frame into a doc or comment.** `init` is an environment dump (skills,
+  plugins, paths, home dir). Cite a fixture and a line.
+- **Recordings:** capture into a sterile `HOME`, then run `scripts/scrub-fixtures.py`.
+  `internal/core/corpus_test.go` fails CI on home-shaped paths, machine env keys, or unknown
+  `slash_commands`. Fix a failure with the scrubber, never by editing the guard or allowlist.
+- **Attribution:** Wake is not affiliated with Anthropic (`README.md`, `NOTICE`). No Anthropic logo,
+  no Clawd, no `claude-*` project name.
 
-**Recordings.** Capture into a sterile `HOME` (or one holding only credentials, with empty `skills/`
-and `commands/`), then run `scripts/scrub-fixtures.py`. `internal/core/corpus_test.go` is the guard:
-it fails CI on a home-shaped path, a machine environment key, or a `slash_commands` entry that is not
-a Claude built-in, a public plugin, a Wake verb, or a registered placeholder — so an operator's own
-command names cannot slip into the corpus. Fix a failure by running the scrubber, never by editing
-the guard or the allowlist.
-
-**Attribution.** Wake is not affiliated with Anthropic; `README.md` and `NOTICE` say so. No Anthropic
-logo, no Clawd, no `claude-*` project name. Keep the disclaimer.
-
-**Gate and flow.** `make ci` exit 0 is the only gate (no CI release/PR automation). A feature
-branches and gets a PR; a docs-only change may go straight to `main`. Run the suite from a normal
-checkout **under your home directory** — the screen tests (`cmd/wake/*_unix_test.go`) render the
-working directory and assume a sane path, so they fail under `/tmp` or a 100-character temp path.
-
-**Releasing is manual** — `goreleaser release --clean`, on your command. See
-[docs/RELEASING.md](docs/RELEASING.md).
+**Gate:** `make ci` exit 0 is the only gate. Run it from a checkout **under your home directory** —
+the screen tests fail under `/tmp` or very long paths. **Releasing is manual** (`goreleaser release
+--clean`, on the owner's command) — see `docs/RELEASING.md`.
 
 ## Project overview
 
-Wake is a terminal app for developers running 15–30 Claude Code sessions at once. It turns the fleet
-into a room: a filtered group chat as the primary surface, `@name` routing, a manager session, and
-an attention-ranked roster. Any agent opens as a full 1:1 DM at Claude Code fidelity.
+A terminal app for developers running 15–30 Claude Code sessions at once. The fleet is a room: a
+filtered group chat as the primary surface, `@name` routing, a manager session, an attention-ranked
+roster. Any agent opens as a full 1:1 DM at Claude Code fidelity.
 
-An agent is a headless `claude` process in stream-json mode with a Wake-assigned session UUID.
-**Wake never screen-scrapes.** All state comes from structured JSON on stdout.
+An agent is a headless `claude` in stream-json mode with a Wake-assigned session UUID. **Wake never
+screen-scrapes** — all state comes from structured JSON on stdout.
 
-### What it does today
+### Surfaces (details in the named files)
 
-| Surface | Behaviour |
-|---|---|
-| `wake` | **Starts a new fleet**, names it, and opens it **on the room**. Running it again gives you another one, which is claude's model - so the obvious command is no longer the way back, and `wake --fleet <name>` is. It still spawns an agent when it finds nothing at all, because a new user's first command has to produce one - but that agent is a **roster row and not a pane**. Opening it beside the room made the one surface `wake` is a request about the narrower half of a split, and below `dmTakeoverColumns` the only pane drawn at all, which is every ordinary terminal |
-| `wake new [name]` · `wake fork <who>` · `wake import [<id>]` | Start, branch, or adopt a session — and **open it**, which is the whole of what `wake new` has that a bare `wake` on an empty machine does not |
-| `wake attach <who>` | Back into one conversation, by name or session-id prefix |
-| The manager | **Started by default**, by every verb that opens the room, so `@manager` and an unaddressed message always have somewhere to go. `wake manager` still starts one from a shell |
-| `--effort <level>` · `--model <model>` | What a session thinks with, on the verbs that start one (`new`, `manager`) |
-| `--max-budget-usd <amt>` · `--fallback-model <m,m>` | What a session may spend, and what it fails over to when its model is overloaded. Same two verbs. Both matter at fleet scale and nowhere else: thirty unbudgeted agents, and one overloaded model stopping all thirty at once. Both survive a park, because there is no runtime command for either |
-| `--worktree <name>` | Wake creates a git worktree of that name under the repository root and runs the session in it. Same token on `/new`. **Wake never passes claude's own `--worktree`** — see `internal/daemon/worktree.go` |
-| `--add-dir <dir>` | A directory outside its own that this session's tools may reach, **repeatable**, on the two verbs that start a session and on `/new`. Wake confined every agent to its spawn directory and had no way to widen it, which matters more now that an agent can move itself into a worktree |
-| `--debug-file <name>` · `--debug <categories>` | Per-session debug logging, so one agent of thirty can be diagnosed. **The wire carries a name and the daemon owns the directory** — `filepath.Dir(socket)/debug/<name>.log`, beside `mcp.json` and `parked.json` — because a path on the wire is a file anything that can dial the socket could choose. `--debug` only narrows the categories and is refused without a file: on its own it writes no log anywhere that can be read |
-| `wake status` · `wake stop` | What is running; end everything (irreversible) |
-| `wake fleets` · `--fleet <name>` | The fleets, and which one a verb is addressed to. `--fleet default` is the reserved word for the **unnamed** fleet at `~/.wake` - every fleet that existed before fleets did is that one, so without it a whole existing Wake would be reachable only through `$WAKE_SOCKET`. Only a bare `wake` makes a new fleet; every other verb with no `--fleet` still means the unnamed one. **Several fleets can run in one directory** — each is a directory under `~/.wake/fleets/` holding its own socket, and every other per-fleet file is `filepath.Dir(socket)` plus a name, so isolation is the layout rather than a rule anything enforces. A bare `wake` is the unnamed fleet at `~/.wake/`, unchanged. `$WAKE_SOCKET` still wins, and naming a fleet beside it is refused rather than one being ignored |
-| Room keys | `↵` send, open the picked agent, or confirm an armed detach · `esc` interrupt (clears the draft in the room; leaves answer mode while a card is taking one) · `esc esc` clear a conversation's draft, or — idle and empty — open a rewind picker to an earlier prompt · `↑↓` walk this pane's prompt history when the draft has no row to move into, else move the query cursor · `⇧↑↓` pick agent · `⌃O` arm detach — `↵` leaves, a second `⌃O` cancels · `⌃C` park focused · `⌃Q` arm park all & quit — a second `⌃Q` confirms, any other key cancels · **`⌃C⌃C` emergency quit** — read off the tty *before* Bubble Tea, so it is the one exit that still works when the window has stopped drawing · `⇥` focus · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move the keys to the pane that way · `⌥↵`/`⌃J` newline · `⌃F` fork · `⌃D` open here · `⌃Y` open in a new column · `⌃B` open below · `⌃W` close pane · `⌃A` show all — widen a group chat a lone `@name` has narrowed, back to every agent's lines, while still addressing that agent; a second `⌃A` re-narrows · `⌃E` expand tool results, the room's folded responses, or a question card's clipped option description (a click opens a folded run) |
-| Slash commands | `/resume`, `/new` (optionally `--worktree <name>`, `--add-dir <dir>`, `--debug-file <name>`, `--debug <categories>`, `--max-budget-usd <usd>`, `--fallback-model <m,m>`), `/name`, `/task`, `/color`, `/team` (group an agent under an operator-named team — `/team <name>`, `@who /team <name>`, `/team none` to clear; a spaced name is hyphenated, `/name`'s fold — which heads a roster/board section and is addressed as `@team`), `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board` (`⇥` toggles a tiled live wall of live transcripts, view-only, while the board is up), `/workflows` (opens this pane's dynamic-workflow runs, or the room's every agent's — see below), `/groupchat-filter on\|off` (whether a lone `@name` narrows the room by default; bare reports it) — everything else is passed to the agent byte for byte |
-| `/color` | Sets an agent's identity hue — one of seven named colours — so its turns in the room, the composer it types into, and its roster row are told apart by more than name text. **The status bar deliberately does not take the hue** — it recedes as chrome. `/color <colour>` or `/color @who <colour>` — and **`@who /color <colour>` from the room** works too, since the mention is the target (the same bridge `/name` and `/task` take). `/color none` clears. In the roster the hue **survives the cursor**: an open agent's row is the selected one, so the selection shows as bold rather than the accent hiding the colour. The **manager** defaults to yellow — the one session with a hue the fleet does not share (`identityStyleFor`) — so on it `/color none` returns to yellow rather than to no hue, since its empty colour is its default. A session attribute that survives a park. **The word is Claude's own** (its theme command, advertised on 71 corpus inits); Wake claims it on the owner's 2026-08-27 override rather than the corpus rule — `slashguard_test.go`'s `ownerClaimedCommands`, retired if a recording ever shows Claude's headless `/color` is a redirect |
-| `/manager` | The switch: starts one when there is none, wakes a parked one, parks a running one. A command rather than a key — see `internal/ui/slash.go` for why every remaining chord is worse than a legend slot |
-| `/manager-stop` | The ending, where `/manager` only parks: `rpc.FrameStop`, so the name goes back to the pool and the next `/manager` starts a fresh one. Refuses a **parked** manager (a stop reaches only a session with a process) and refuses when there is none |
-| `/quit` | `/manager-stop` for an ordinary agent: `rpc.FrameStop` ends one session (irreversible, releases the name), and this window **drops its row** once the report confirms the ending — off the roster, the group chat, the ⇥ ring and the sidebar. Bare `/quit` ends the conversation you are in; `@who /quit` from the room ends that agent (the same mention→target bridge `/color` takes). The stop lets the in-flight turn finish, so a busy agent stays until it ends. Reaches a **blocked** agent (a stop has no wake — `/manager-stop`'s inversion of ⌃C); refuses a **parked** one with advice; **refuses the manager** and points at `/manager-stop`, which is its one ending. The daemon still keeps the ended row in its recent ring, so **another window shows the `·`** — the hide is per-window, since only the operator who typed it knows it ended |
-| `/reauth` | Recovery for a fleet-wide auth failure. A Max-plan OAuth token expires for every session at once; the ones that lose the shared-credential refresh race hold a dead login and every turn ends `401` — an **upstream Claude Code bug** (#48786), not Wake's, triggered because Wake runs 15–30 concurrent sessions. A running `claude` process never picks up a fresh token, so an external `/login` cannot heal a live one. So the airlock decodes the synthetic API-error frame to `core.KindAPIError` (**not** agent text — `is_api_error_message`, not `api_error_status`, which is null), `observe` pops a notice and marks the session, and `/reauth` **parks the marked sessions in place** (stopping the stale process, keeping the transcript) so `/resume all` brings them back on a fresh login — no full-fleet kill. Wake never runs `claude auth login` (no-PTY). See `internal/ui/apierror.go`, `reauth.go`, `docs/notes/bugs.md` |
-| `/mcp` | One agent's MCP servers, drawn as **Claude Code's own `/mcp` menu**: grouped by where each is configured (local, project, user, …), a `✔ ⚠ ✘ ⊘` glyph and a status or tool count per row, then a detail view with numbered actions — **View tools**, **Authenticate**, **Reconnect**, **Enable/Disable** — offered only where they can help. Bare `/mcp` is the conversation you are in (or the roster pick in the room); `@who /mcp` aims it. **Live, not a health check**: the menu asks the running session (`mcp_status`) rather than re-dialling from a fresh `claude mcp list`, and every action moves on the agent's reply (`mcp_reconnect`, `mcp_toggle` — a disable persists in `~/.claude.json` as Claude's does), which the daemon sends **only to the window that asked** (`daemon/mcpask.go`), so two windows asking at once cannot take each other's. **Authenticate hands the operator's real terminal to `claude mcp login <server>`** — Wake stops drawing and reading, the browser opens as it does from Claude's menu — then reconnects every live agent stuck on that server. Tools show names and read-only only (no descriptions headless), and claude.ai connectors are not listed because a headless session does not load them. See `internal/ui/mcpmenu.go`, `mcpauth.go` |
-| Inline completion | A draft whose word **at the cursor** starts a `/command` or an `@` offers what could finish it: the target session's own commands **and skills** (both ride in `init.slash_commands`), then Wake's own commands, then live agent names, the fleet's teams (drawn `@backend (team)`, an `@`-mention like an agent's, room-only since a team only routes there — and only a team with a **live** member, since that is what `@team` fans out to; a live agent wins a shared name, a parked one loses it to the team, mirroring `core.Resolve`) and paths under that session's directory. A **`/team <name>`** argument completes against the existing teams too — bare in a DM, `/team @who <name>` for a live agent, or the room's `@who /team <name>` bridge — so joining one is a completion rather than a retype. **The session's come first** (owner's 2026-08-28 override): Wake's own verbs filling the bound first was a bare `/` that never showed the operator's own Claude Code skills — they sat in the "N more" overflow. Wake's follow, still reached by their first letters and shown whole whenever the session advertises fewer than the bound. **Behind a resolved lone `@name`, only that agent's own** — Wake's fleet verbs are not the addressed agent's. `⇥` completes · `↑↓` walk (on a single-line draft, where the cursor has no row to climb; a multi-line draft keeps the arrows for its own cursor) · `⌃N`/`⌃P` walk too, as aliases · `↵` still sends. Move the cursor off that word and the completion keys go back to the text area |
-| A lone `@name` in the room | **narrows the group chat to that agent's thread** — their lines, the manager's, every broadcast, and your own messages to them — for as long as it is the composer's target, widening again when the target changes or the draft clears. A *view* filter over the room's own, not a route or a mode: `@john hi` still routes and `@john /effort` still configures, open mode does not narrow (it widens the message, not the view), and the pane header reads `group chat › @john`. **`⌃A` overrides the narrowing per target** — it widens a narrowed room back to every agent while still addressing `@john`, and a second `⌃A` re-narrows; the override lives as long as the target does and resets to the default when the addressee changes or the draft clears. **`/groupchat-filter off` flips the default** so a lone `@name` no longer narrows and `⌃A` narrows on demand (`on` restores it, bare reports it) — window-scoped, so a fresh `wake` starts back at on, the shape `⌃T` mention mode takes |
-| Bare `/effort` · `/model` | Wake draws the menu claude cannot draw headless; with an argument they pass through untouched. The menu **names the value the session is already at** (`Picker.Current`): `/effort` opens the cursor on the current level and marks it (the options are the level words); `/model` shows the current model as a `current:` line rather than a mark, since a display name does not reverse-map to one of the aliases offered |
-| A dispatch ending | Leaves one line in the conversation — `● Subagent "Counting lines" finished · 24s` — coloured by outcome. The `⏺ Agent(…)` tool call above it is the start marker, so there is no started line |
-| A subagent | Its work is a conversation of its own, not a paragraph in yours. **The right sidebar lists the ones still running**, indented under the agent that dispatched them, named by `subagent_type` with what each has spent; `↑↓` walk onto one and `⌃D` (or a click) opens its transcript in the pane. Running only — a finished one drops off the list and leaves the `● Subagent "…" finished` line in the transcript |
-| A dynamic workflow | Any agent running Claude Code's `Workflow` tool, a saved `/<name>`, or `/deep-research` gets **one sidebar row** beside its running subagents — `⎿ ◈ count-lines 2/3` (`◈` marks it; the figure is agents done/started, dropped whole rather than cut). `↵`, `⌃D` or a click opens the run in that agent's pane; **`/workflows`** opens the same view — that agent's runs in a conversation, every agent's grouped under their names in the room — skipping straight to the run when exactly one is in scope. The **run level**: a header, then Phases beside the cursored phase's Agents in a two-column box — `↑↓` select, `↵`/`→` drill in, `f` cycles the agent filter (all → running → done → failed), `x` then `↵` stops the run (armed; any other key cancels), `s` opens a **save** dialog (`⇥` toggles project/personal scope, `↵` saves as a reusable `/<name>`), `esc`/`←` backs out. The **agent level**: status and model, tokens · tool calls · duration, Prompt, Activity (each tool call as its headline, `↵` expands it), Outcome (a failed agent's error when it has no result) — read off that agent's own on-disk transcript, since a workflow agent forwards nothing live. Keys are read above `App.key`'s switch, like the resume picker, so none takes a legend entry; `⌃C` closes the view but is never swallowed by it, still doing its usual job of parking the focused agent — except in the save dialog, where it cancels the dialog alone, since parking would end the run being saved. The view's keys reach it ahead of anything that acts on a draft (a highlight's `⌫`, a pasted image path), because the draft under it is not drawn. A run leaves `● Workflow "count-lines" finished · 9s` (green), `… halted · 4s` (stopped) or `… failed · 10s` (red, the error's first line) in the conversation **and the room**, headed by the agent — a fleet's workflow ending is room news where a subagent's stays conversation-only. Pausing, stopping one agent, and restarting are absent: headless claude refuses or ignores them (a key Wake draws does what it says) |
-| An agent's question | Answered in the pane that put it, in a framed prompt with the transcript behind it drawn quiet. A tab strip across the top names every question and the submit step, checking the ones that have an answer; then the question, its options, an `Other…` row, and the cursored option's consequence — one line, or the whole of it when **`⌃E`** has expanded it, since the card does not scroll. `↑↓` walk the options — **draft or not** · `←→` walk the questions · `↵` chooses and advances · `1-9` pick · `d` refuses · `⌃E` opens the cursored option's full description. The last question advances to a **review**: every answer laid out, `Submit answers` / `Cancel`. Picking `Other…` or pressing `d` puts the composer into **answer mode**, where `↵` sends what you typed and `⎋` abandons it |
-| An answer being written | A conversation shows the block as it is generated, under the transcript and above the working line. A preview, never a record — the completed block replaces it |
-| The task board | The `TaskCreate`/`TaskUpdate` checklist an agent keeps for itself — its steps, with the one in flight marked — is **pinned above the composer** where Claude Code draws it, folded live from the ops. The ops draw nothing in the transcript: the board is the one place the list shows, and it shrinks when items are deleted. A subagent's own list draws inline in its dispatch transcript, since a subagent has no board of its own |
-| `!cmd` | A bounded shell line whose output lands in the conversation |
-| The mouse | Wheel scrolls the pane under the pointer · click focuses · **click a typed character in the query box to move the caret onto it** (a drag still selects; a scrolled draft keeps the arrow keys) · drag a divider to resize · **drag across text to select it, and the release copies it** — in the transcript, the query box, **and every other rendered surface** (the roster, the sidebars, the status bar, a card), where a drag highlights the cells it crosses and the release copies them — **except the `/workflows` view**, where a press only moves its cursor · **double-click a word to select and copy it, triple-click to take its whole row** — a word is any run of characters that are not spaces, bounded by the surface clicked; the first click still does its own job (opens a fold, places the caret, opens a roster row), and a fourth changes nothing · **click a folded tool result to open that one**, which is the gesture Claude Code spends the same way · **click a run's rollup line to open that whole run** |
-| A folded tool run | A message's tool calls draw as one dimmed line — `28 tool uses · 24 bash · 1 read · 3 linear-server` — the way Claude Code shows a turn's activity rather than every ⏺ and ⎿. `⌃E` opens every run in the conversation; a **click** on one rollup opens that run alone, and `⌃E` folds everything back. A `TaskCreate`/`TaskUpdate` draws nothing in the transcript at all — its checklist is live status, not activity, so it is the **task board pinned above the composer** rather than a block or a count. An **`Edit` draws its diff whole**, out of the run the way a checklist is (`foldExempt` on `Diff`) — the diff is the point of the edit, so it shows by default rather than only under `⌃E`/a click (owner's 2026-08-28 request) — and its successful `has been updated` confirmation is suppressed, since the diff and the green ⏺ already say so; a **failed** edit still shows its result, which is the error |
+- **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room (spawns one
+  agent as a roster row if the machine has nothing); `wake --fleet <name>` returns to one
+  (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status`, `stop`
+  (irreversible), `fleets`, `manager`, `setup-terminal`. `$WAKE_SOCKET` wins; naming a fleet beside
+  it is refused. Each fleet is a directory under `~/.wake/fleets/`; per-fleet files are
+  `filepath.Dir(socket)` plus a name.
+- **Spawn flags** (`new`, `manager`, `/new`): `--effort`, `--model`, `--max-budget-usd`,
+  `--fallback-model` (both survive a park), `--worktree <name>` (Wake runs `git worktree add`; never
+  passes claude's `--worktree`), `--add-dir` (repeatable), `--debug-file <name>` / `--debug`
+  (the daemon owns the directory; `--debug` without a file is refused).
+- **Room keys:** `↵` send/open/confirm · `esc` interrupt · `esc esc` clear draft, or idle+empty →
+  rewind picker · `↑↓` prompt history (or cursor on a multi-line draft) · `⇧↑↓` pick agent · `⌃O`
+  arm detach (`↵` confirms, `⌃O` cancels) · `⌃C` park focused · `⌃Q` arm park-all & quit (second
+  `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus ·
+  `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
+  `⌃F` fork · `⌃D` open here · `⌃Y` new column · `⌃B` open below · `⌃W` close pane · `⌃A` toggle the
+  lone-`@name` narrowing · `⌃E` expand folded results / card descriptions.
+- **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
+  `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
+  `/workflows`, `/groupchat-filter`, plus bare `/effort`/`/model` menus. Everything else passes to the agent byte
+  for byte. `@who /cmd` in the room aims a target-command at that agent. A spaced `/team` or
+  `/name` argument is hyphenated.
+- **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
+  (`mcp_status`/`mcp_reconnect`/`mcp_toggle`, replies sent only to the asking window). Authenticate
+  hands the real terminal to `claude mcp login <server>`, then reconnects every live agent stuck on
+  that server. claude.ai connectors aren't listed — headless sessions don't load them.
+  `internal/ui/mcpmenu.go`, `mcpauth.go`.
+- **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
+  (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
+  conversation, every agent's in the room) — draws Wake's own view in that pane, since headless claude
+  cannot draw its `/workflows` menu: list → run (phases | agents) → agent (prompt, activity off the
+  agent's disk transcript, outcome). `f` filters, `x` then `↵` stops (`stop_task`), `s` saves the
+  script as `/<name>` (project or personal scope; the daemon owns the path, no overwrite). Endings land
+  in the conversation and the room. No pause, restart or per-agent stop — headless refuses or ignores
+  them. `internal/ui/workflowview.go`, `workflowdraw.go`, `workflowdata.go`, `workflowsave.go`.
+- **Manager:** started by default by every verb that opens the room. `/manager` toggles
+  (absent→spawn, parked→wake, running→park); `/manager-stop` ends it.
+- **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
+  above the composer, running subagents in the right sidebar, streamed preview tail, DM done line
+  (`✻ Cooked for 1m 59s · done 6:48 PM`), compacting line, loop line, question cards as a wizard
+  with a review step, drag-to-select-and-copy on every surface but the `/workflows` view.
 
 ## Non-negotiables
 
@@ -93,1188 +89,253 @@ Violating one is a design regression, not a style nit.
 
 | Rule | Why |
 |---|---|
-| **Not a terminal emulator or multiplexer.** No PTY, no VT100, no browser panes, no arbitrary shells. | That's the host terminal's job. Chasing it is how this project dies at 40%. |
-| **Cheap to leave open.** No work per frame that could be work per change, no poll where a wait will do, no process on a timer. | A per-agent cost on a ticker multiplies by 30 next to 30 `claude` processes. |
-| **Only `internal/core`'s four airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`. Everything above sees Wake's own `Event`. | Four reviewable files are the whole cost of staying Codex-ready. Enforced by `airlock_test.go`, which also holds the file set so a fifth cannot be added quietly. |
-| **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Ask `core.SessionArgvMarkers` instead. | Enforced by `argv_test.go` tree-wide. A `--resume` grown beside a `--session-id` is refused at startup with nothing on stdout. |
-| **`attention.go` stays a pure function.** Events in, ranked state out. No processes, no I/O. | Hardest logic in the app; must be testable without spawning anything. |
-| **The UI never touches an agent's process.** It receives messages and renders. | Keeps the daemon boundary real rather than aspirational. |
-| **Wake owns almost no state.** Claude persists transcripts to `~/.claude/projects/<cwd>/<uuid>.jsonl`, and Wake *reads* one back when a conversation opens (`internal/daemon/history.go`) rather than keeping its own. Wake stores only roster, park book, groups, layout. | Wake can crash and lose nothing. The park book holds the minimum that can do the job: id, directory, name, label, parked-at. Never a PID, never a ParentID. It is read on demand rather than back into live state — a daemon restores nothing, so ⌃Q then `wake` is an empty room. |
-| **Never copy cmux source.** Reach it only through its CLI. | cmux is GPL-3.0-or-later. Copying one file makes Wake GPL forever. |
-| **No parallel implementations.** Extend the existing code in place, or delete and replace it. Never a second version beside the first. | Find the existing code first (grep/read it), then name what you extend or remove. |
+| **Not a terminal emulator or multiplexer.** No PTY, no VT100, no browser panes, no arbitrary shells. | Chasing it is how this project dies at 40%. |
+| **Cheap to leave open.** No per-frame work that could be per-change, no poll where a wait will do, no process on a timer. | A per-agent cost multiplies by 30. |
+| **Only `internal/core`'s four airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`. | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
+| **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Use `core.SessionArgvMarkers`. | Enforced by `argv_test.go` tree-wide. |
+| **`attention.go` stays a pure function.** | Hardest logic; testable without spawning. |
+| **The UI never touches an agent's process.** | Keeps the daemon boundary real. |
+| **Wake owns almost no state.** Transcripts are Claude's (`~/.claude/projects/…`); Wake reads them back (`internal/daemon/history.go`). Wake stores roster, park book, groups, layout. The park book holds id, directory, name, label, parked-at — never a PID or ParentID. | Wake can crash and lose nothing. |
+| **Never copy cmux source.** CLI only. | cmux is GPL-3.0-or-later. |
+| **No parallel implementations.** Extend in place, or delete and replace. | Grep first; name what you extend or remove. |
 
 ## Load-bearing design rules
 
-Short version of decisions that are expensive to rediscover. Each one has its full argument in the
-named file's header or in `docs/notes/decisions.md`.
-
-**Naming and addressing.** A session's name comes from the daemon (a 64-name pool), never from the
-client — only the daemon can see the whole fleet. **A name is never an address:** `rpc.Frame` carries
-`SessionID`, and the reaper proves a process group by finding that UUID in an argv. Names are
-released when a session ends and reissued, which is why a rename has no alias and `@old` stops
-resolving.
-
-**The legend is drawn only while an arm is live, and then it is only the armed cue.** The always-on
-row of key hints under the composer is gone — it was redundant with the status bar, which already
-names the permission mode and the rest of what a pane is (owner's request, "keep armed cues, drop
-static hints"). What survives is the safety confirmation: while a detach is armed the composer draws
-`↵ detach   ⌃O cancel`, while a clear-draft arm is live it draws `esc clear draft`, an idle,
-empty conversation's second `⎋` draws `esc rewind`, and while a `⌃Q` park is armed it draws
-`⌃Q park all & quit` — a second `⌃Q` confirms it. That row is the only on-screen tell that the next
-keypress is irreversible, which is why it stays where the static hints went. An unarmed composer
-draws no legend row at all, and the permission mode is the status bar's alone now. `ui.legendEntries`
-still holds the (glyph, label) pairs and is still the canonical list of what this build binds:
-`TestEveryKeyTheLegendNamesIsBoundAndEveryBoundKeyIsNamed` requires a bijection with the `tea.Key…`
-cases in `App.key`, so **a key added to `App.key` without a `legendEntries` entry is still a build
-failure** even though the entry is no longer drawn. The cue's labels are derived from `legendEntries`
-by `TestCLAUDEmdDescribesTheLegendItDraws`, which holds this paragraph to what the composer actually
-draws; re-derive rather than hand-edit. The height that row costs is counted only when it is drawn —
-`Composer.showsCue` is the one predicate `overhead` counts by and `View` draws by, the `hasBeat`
-pattern one surface over, so a pane is never sized without the row and then drawn with it.
-
-**The permission mode moves on the receipt, never on the keystroke.** `⇧⇥` cycles
-`default` → `acceptEdits` → `plan` → `auto` for the agent `pickedAgent` names, writing an
-`rpc.FrameMode`; the label changes when the daemon's answer arrives. This is not belt-and-braces —
-`manual` is accepted by the CLI and silently normalizes to `default`, so a label built on the string
-that was *sent* is wrong on a real cycle position. Every turn's `init` is a second observable and
-corrects a stale belief, which is the only thing that can see a mode changed through
-`updatedPermissions`, a path that emits **no receipt**.
-**A mode does not survive a park**: `--resume` carries none, so a woken session comes back in its
-spawn mode and `modeReverted` says so — `parked.json` gains no field. The words are core's
-(`PermissionModePlan`/`Auto`/`Default`/`AcceptEdits`/`DontAsk`); `internal/ui` never spells one.
-
-**That order is Claude Code's own rather than chosen.** `chat:cycleMode`'s
-switch is asserted against as
-`internal/ui/testdata/claude-mode-cycle.json`, so ⇧⇥ — the one key this build and Claude Code
-agree on — walks the same positions in the same order. It costs no branch: with `default` at
-position 0, `nextMode`'s off-the-cycle fallback *is* the switch's own `dontAsk` and `default:` arms,
-and `auto` sits last so wrapping gives the answer its unlisted `auto` case does. **`dontAsk` is an
-exit and not a position**, which is Claude Code's answer as well as the one Wake reached alone;
-`bypassPermissions` is unreachable while nothing here passes `--dangerously-skip-permissions`. What
-this cost is the old traversal's monotonicity — the second press now loosens — and what it kept is
-that the first press from the spawn mode still tightens. Full argument: `internal/ui/mode.go`,
-`docs/superpowers/notes/2026-08-12-permission-mode-findings.md` and `2026-08-16-mode-cycle-findings.md`.
-
-**The grid is bounded, and the bound is the design.** `ui.Grid` is columns left to right, each
-holding one conversation or two stacked — spec §8's "columns, each optionally split once vertically.
-Not a pane tree." `⌃Y` opens a conversation in a new column, `⌃B` stacks it under the focused pane,
-`⌃D` still opens *into* the focused pane, and `⌃W` closes it. A second `⌃B` takes the lower slot
-rather than growing a third row, and `⌃B` from a lower pane is refused by name. **The room is
-`Cols[0]` and cannot be closed** — that is what "the group chat is the product; the panes are
-substrate" means structurally. Going past this into arbitrary tiling is §17's "Out" list and the
-multiplexer the non-negotiables rule against.
-
-**The mouse reaches every pane, and both axes resize.** A click focuses whichever pane it lands in,
-including the halves of a stacked column — only the row tells those apart. Each vertical divider is
-its own drag (`Layout.Weights`, one per column) and the rule inside a stacked column is a drag too
-(`Layout.Rows`); both store a *fraction*, so a terminal resize keeps the proportion instead of
-pinning one pane. **Column widths are allocated on a running total rather than per column**, which is
-what makes a drag local: an edge nobody moved lands on the same cell whatever happened beyond it, and
-rounding each column separately used to shift the room by a cell when the divider two columns over
-moved. A width drag goes through the 80ms settle; a *row* drag does not, because only a width change
-re-wraps. The wheel scrolls the transcript **under the pointer**, not the focused one — with four
-panes on screen those differ, and scrolling never moves the keys.
-
-**A drag across text selects it and the release copies it, because Wake owns the mouse and cannot
-hand selection back.** Mode 1002 takes the host terminal's own drag-select away, and giving it back
-would cost the divider drag and click-to-focus — and a native selection is a rectangle over the whole
-terminal, so a paragraph in column 2 of a four-column grid comes with columns 1 and 3 attached on
-every row. Claude Code 2.1.232 reached the same answer: it enables mouse tracking, carries its own
-selection engine with a column `scope`, and ships `copyOnSelect` defaulting to on — read out of the
-binary, recorded in `docs/superpowers/specs/2026-08-14-select-copy-design.md` §2. **A selection is
-anchored to absolute `transcript.lines` indices**, which never renumber, so it needs no maintenance
-as events arrive and the highlight rides up the screen while the pane keeps following its agent.
-Three rulings, each with a test named for it: **every keystroke clears the highlight and then does
-its own job** — `esc` clears *and* interrupts, because a stale highlight swallowing the press that
-stops a runaway agent is an agent that does not stop; **a width change clears it and a height change
-does not**, since only a re-wrap renumbers the lines it is anchored to; and **a click copies
-nothing** — `head != anchor` is the whole discriminator, not a timer or a distance. A double- or
-triple-click is counted by a timer (`multiClickWindow`, presses on one cell), but that timer counts
-clicks and never tells a click from a drag; its selection is a `span`, so a one-character word still
-copies (`internal/ui/multiclick.go`). The write is
-layered `pbcopy` → `tmux load-buffer` → OSC 52 (DCS-wrapped under tmux, one continued string under
-screen), and it reaches the terminal through the **one writer Bubble Tea draws through** — which
-must embed `*os.File`, or termenv stops recognising a terminal and the whole app silently loses its
-colour. `cmd/wake/selectscreen_unix_test.go` is the only thing that can see that happen.
-
-**The query box is selectable too, and it is the transcript's own rule one surface over.** A drag on
-a draft row highlights the typed characters and the release copies them; the border, the `> ` prompt
-and lipgloss's trailing pad are all stripped off, so only what you typed reaches the clipboard. The
-geometry is fixed by `theme.BoxStyle` and the prompt rather than measured — text starts
-`composerTextLeft` columns in and stops `composerRightInset` short of the far edge — and it is
-**gated to the text**: an empty box and the blank past a short line take nothing, which is what
-preserves the old fence that a query-bar drag must never clamp into a transcript line. Unlike the
-transcript it does not scroll under a drag — the box is a handful of rows, all on screen.
-`internal/ui/composersel.go` is the whole of it; the highlight is drawn by `DM`/`Room.View` through
-`highlightComposerBlock`, and `cmd/wake/selectscreen_unix_test.go` proves a real drag lands a
-background on the typed cells.
-
-**And every other rendered surface is selectable too, as a frame-wide screen selection.** The
-transcript and the query box each anchor to what they draw — `transcript.lines` indices, draft-row
-indices — so a highlight follows its text as the pane scrolls and events arrive; everything else Wake
-draws neither scrolls nor renumbers, so a drag over it (the roster, the sidebars, the status bar, the
-awareness strip, a card, a menu, a preview, the box's own borders) anchors to an absolute
-`(row, column)` on screen and the highlight is drawn once over the assembled frame. It reuses
-`selection`/`marked`/`selectedText` unchanged — only the anchor's meaning differs, which
-`selection.onScreen` records. A press routes here when it is neither a transcript row nor a query-box
-draft row nor a divider — the three surfaces with a gesture of their own — so a **divider still drags
-to resize** and a **roster click still opens** its conversation, resolved on release now so a drag
-copies a name and a click opens. The query box's blank interior still takes nothing, because blank
-space is not text — the one fence that survives. It reads the frame **live** rather than snapshotting
-it — chrome redraws on every fleet report, so like a terminal's own selection it follows the cells and
-copies whatever stands under them at release. The one thing resolved at *press* is a **roster click's
-target** (`rosterHit`): the roster reorders by attention, so a click must open the row that was
-pressed, not whoever slid onto it before the button came up. `internal/ui/screensel.go` is the whole
-of it; `View` lays the overlay over `assembleFrame`, and `endSelection` copies off that same frame, so
-the copy is exactly the cells the overlay highlighted at release. **The one surface that takes no
-selection is the `/workflows` view:** a press there moves its cursor (`workflowPress`) and never
-anchors a drag, so its text cannot be copied yet — `deferred.md`, 2026-09-24.
-
-**The grid keys are letters because two prior answers were unpressable, in two different ways.**
-`⇧↵` and `⌃⇧↵` are what was asked for and bubbletea v1.3.10 names neither — probed in both the Kitty
-CSI-u and xterm `modifyOtherKeys` encodings, and neither produces a `KeyMsg` — while a terminal with
-no keyboard protocol sends `⇧↵` as the byte it sends for `↵`, which is *send*. Same wall as `⌃⇧A`.
-`⌃⇧→`/`⌃⇧↓` replaced them and failed the other way: **named by the library, sent by every terminal,
-and delivered by no macOS**, because the window server spends all four ctrl+shift+arrows on spaces
-and Mission Control before a terminal sees one. Every guard in this tree passed while the keys did
-nothing, which is why `⌃Y` and `⌃B` are single bytes — 0x19 and 0x02, which nothing between the
-keyboard and Wake claims. `keyprobe_test.go` holds the chord findings and
-`TestNoKeyIsACtrlArrow` holds the macOS one; the measurement is in `docs/notes/decisions.md`.
-
-**Moving the keys between panes is `⇧←→`, because it is the only arrow family free at every
-layer** — and `⇧↑↓` move the roster instead, the job plain `↑↓` gave up to prompt history.
-`⌘`+arrow is what was asked for and is dead twice: bubbletea's arrow table knows modifier
-params 2–8, cmd is bit 8, so `⌘→` is param 9 and the library names *nothing* for it — and no macOS
-terminal transmits `⌘` to a tty anyway. `⌃`+arrow is named and delivered and still wrong, for the
-`⌃⇧`+arrow reason one paragraph up: macOS spends all four on spaces and Mission Control, so
-`TestNoKeyIsACtrlArrow` refuses the whole `KeyCtrl…`+arrow class rather than the `⌃⇧` half it used
-to. `⌥←/→` are the text area's word-movement. That leaves `⇧`+arrow, which `App.key` did not take
-and `bubbles` does not bind. **`⇧←→` move among panes that are already *drawn* and open nothing** —
-that is the whole difference from `⇥`, which walks the chat ring and will open a conversation that
-is off screen, and it is why a direction with no pane in it names `⇥` instead of wrapping. A wrap in
-a two-pane grid makes `⇧←` and `⇧→` the same key. `ui.Grid.Toward` is the pure half and returns
-`(id, ok)` because `""` is both the room and "nothing that way". **Vertical pane movement has no key**
-— `⇧↑↓` are the roster's now, so the lower slot of a split column is reached by `⇥` or a click.
-
-**Plain `↑↓` walk the prompt history on an empty or single-line draft and move the query cursor on a
-multi-line one — Claude Code's own `↑↓`, which recall the previous prompt.** `←→` have always reached
-the text area; `↑↓` were the roster's unconditionally, so a hand arriving with Claude Code's
-history reflex got the roster, and a multi-line draft had no way to move the cursor between its own
-lines. Now `App.key` asks the focused composer first: `Composer.CanCursorUp`/`CanCursorDown` run
-bubbles' own `CursorUp`/`CursorDown` on a *copy* of the text area and report whether the cursor
-actually moved — the same move `App.key` delegates to, so the two can never disagree. It is a
-simulated move rather than a row count on purpose: bubbles' `wrap` adds a synthetic trailing row at
-exact wrap width (its `>=`) that `LineInfo.Height` counts but the cursor cannot occupy, so a
-count-based predicate reported a move `CursorDown` never makes and **swallowed `↓`** — moving neither
-the cursor nor the history (found by the Codex adversarial pass; pinned by
-`TestCanCursorMatchesRealMovementAcrossWidths`, which sweeps widths and lengths across the exact-width
-boundary). When the cursor has somewhere to go the arrow falls through to the composer (Update
-rebuilds the completion menu after, `App.recompleted`); only an empty, single-line, or top/bottom-edge
-cursor reaches `walkPrompts`, which is why the common case is a history recall on an empty box.
-**`⌥↑↓` carry no binding of their own**: the switch is on `m.Type` alone, so a `⌥` arrow behaves
-exactly as the bare one does — it is the same `walkPrompts`/cursor path, not a second key.
-**The roster moved to `⇧↑↓`**, because there is no other free arrow family for it: on macOS
-`⌃`+arrow and `⌃⇧`+arrow never arrive (the rule above), `⌥↑↓` are the bare arrows and `⌥←→` is
-word-movement, and `⇧←→` is *pane* movement. The legend is `{"↑↓","prompt history"}` and
-`{"⇧↑↓","pick agent"}`; cursor movement is a composer fall-through the legend never advertises, so the
-bijection guard names `KeyUp`/`KeyDown` and the four shift-arrows exactly once each.
-`internal/ui/keys.go`, `internal/ui/composer.go`.
-
-**Wake shares a keyboard with Claude Code, and nothing of Wake's moves for it.** An operator arrives
-with Claude Code's reflexes, and several chords mean something else here.
-Claude's bindings are kept by hand in `internal/ui/testdata/claude-keymap.json`, and
-`internal/ui/keymap_test.go` holds every collision to a written ruling — **one nobody has ruled on is
-a build failure**, and the Wake side is derived from `legendEntries` so a key added later is caught by
-construction. No count is written down, because a number nothing asserts drifts; the two maps in that
-file are the record. Only one collision is destructive: **⌃O expands a tool result there and detaches
-here**, so it is armed — the paragraph below is the whole mechanism. The rest are
-one-press confusions with a visible, reversible result (⌃T, ⌃R, ⌃B, ⌃E), and **⇧⇥ and ⌃E are not
-tolerated but asserted**: both sides cycle a permission mode and both reveal what a pane folded away,
-so they sit in `agrees`, where a rebinding on either side fails as an alignment that broke.
-
-**The detach is armed by ⌃O, confirmed by ↵, and cancelled by a second ⌃O — and it is *drawn* for as
-long as it is live.** Two properties, and each closes a failure the first version shipped with.
-**The confirm is a different key** because a same-key confirm fires on exactly the reflex the arm
-exists to catch: there is no key release, no timing and no distinct signal in a `KeyMsg`, so terminal
-auto-repeat — and the human reply to a key that appeared to do nothing, which is to press it again —
-are the same bytes as intent. Measured rather than assumed: two ⌃O sharing one read arrive as **two
-plain messages** (`keyprobe_test.go`), where two ⎋ collapse into one `alt+esc` (`escprobe_test.go`).
-**And the arm is on screen** because `App.disarmed` is reached from key and mouse paths only — a
-stream frame, a heartbeat, a resize, a settle and a reattach all leave it standing — while its only
-other tell was a `notice.Report`, and `internal/notice` is one most-recent-message slot that routine
-fleet activity takes within seconds. Broadening the disarm to those messages was considered and is
-**worse**: at fleet size a frame lands between the two presses constantly, so ↵ would mean *send* on
-the press aimed at *detach*, decided by socket timing. So while a detach is armed every pane draws
-the cue `↵ detach   ⌃O cancel` — the composer's only legend row now, since the static hints are gone
-— the way the armed pane draws `⎋ clear draft`, and `↵` leads it so it survives a narrow cue's own
-truncation. It adds **no legend glyph**, for `escape.go`'s reason. A drawn
-*question* card still wins ↵ and takes the arm back, which is the cheap way round: `chooseCursored`
-writes no frame. Full argument: `internal/ui/detach.go`. **Prompt history is
-`↑↓`** on an empty or single-line draft, Claude Code's own recall key: the history is *derived* from
-the pane's own events, so it works on a reattach and on a conversation this client has never opened,
-and the room's is what was typed into the room. The roster moved to `⇧↑↓` for it.
-
-**A pane that holds the keys is always a pane that is drawn.** Below `dmTakeoverColumns` only one
-column fits, and `Layout.window` slides the drawn range to keep the focused one on screen rather than
-swapping the room out for the conversation. Going off screen that way still counts as *leaving* — the
-last-read boundary is anchored to it — so every focus change routes through `App.refocus`, which
-marks whatever stopped being drawn.
-
-**`⎋⎋` clears a conversation's draft, and the second press is an arm rather than a timer.** The room
-has cleared its draft on one press since `3f8c662`; a conversation pane's `⎋` stops the turn and the
-draft deliberately survives, which left no way to clear one short of holding `⌫`. So `⎋` in a
-conversation interrupts *and arms*, and a second one clears — with `App.disarmed` taking the arm back
-on every other input, which is the card keys' own rule and reaches the same four paths. It arms only
-when there is something to clear, so mashing `⎋` at a runaway agent still stops it every time.
-**A fast `⎋⎋` is one message, not two**: two escapes sharing a read reach bubbletea as `alt+esc`, so
-`App.key` passes `m.Alt` as a collapsed press and does both halves on it — measured by
-`escprobe_test.go`, and a build without that branch works for slow presses and silently fails under a
-finger. It adds **no legend glyph**, because it adds no `tea.Key…` case and the bijection guard would
-refuse one; the armed pane swaps `⎋`'s label to `clear draft` instead. Full argument:
-`internal/ui/escape.go`.
-
-**`esc esc`'s idle case sends `rewind_conversation`, a `control_request` on the same stdin channel as
-`interrupt` and `set_permission_mode` — Claude Code's own mechanism, read off the wire rather than
-invented.** The request carries `target_message_uuid` and `last_seen_user_message_uuid`, both
-mandatory — omitting the second is exactly what a `"stale target"` refusal means — and the receipt is
-a `control_response` whose nested payload is `{rewound, targetMessageUuid, prefillText,
-precedingAssistantUuid, error}`, the same "success is not a verdict" shape the permission and interrupt
-receipts already have. **`session_id` never changes** — no `init`, no `conversation_reset` — so Wake
-never re-keys the session over a rewind.
-
-**On disk the transcript is an append-only tree, and a rewind does not delete.** Claude's lines carry
-`uuid`/`parentUuid`; rewinding appends a `last-prompt{rewound,leafUuid}` marker and repoints the active
-leaf, but the rewound turns stay in the file as a dead branch. So **the transcript reader had to become
-tree-aware**: `core.ActiveBranch` (`internal/core/activebranch.go`) walks `parentUuid` from the live
-leaf to the root, resolving every fork as "newest branch wins" — the child written after the latest
-rewind marker. `internal/daemon/history.go` is the one caller for both a DM and the room
-(`sendHistory`/`sendRoomHistory` share `answerHistory`), and `internal/daemon/rewindtargets.go`'s
-`RewindTargets` reuses the same reconstruction to answer the picker's own options and its `last_seen`
-tip — one reconstruction, so a reopened DM, a reattached pane and a restored room can never disagree
-about which turns are gone.
-
-**The trigger is gated to idle + empty, scoped to the focused pane, and adds no legend glyph.**
-`App.rewindArmable` (`internal/ui/rewind.go`) is read fresh on every `esc` rather than cached, the same
-way a card is read through `a.cardOf(a.focus)` and never `Cards.Top`: a running agent always eats `esc`
-as interrupt, so mashing it at a runaway agent still stops it, and a picker left open on a conversation
-the operator tabbed away from claims no keys at all. `internal/ui/escape.go`'s `escape` is what re-runs
-the gate on both the slow and the collapsed press rather than trusting a stale arm. It is still
-`tea.KeyEsc` — no new case, no legend entry — `⎋⎋` clear-draft's own reason. On `rewound:true`,
-`noteRewind` (`internal/ui/rewind.go`) makes the pane **re-read itself tree-aware** — the same
-`askHistory` a reopen already takes — and drops `prefillText` into the composer; this is deliberately
-the *only* mechanism, so a live prune and a reopen can never disagree. The manager is refused both
-`FrameRewind` and `FrameRewindTargets`, on `FrameMode`'s own grounds plus one of its own: nothing on
-that surface can address a message uuid, and a rewound turn does not stay in view on the manager's own
-read either (`cmd/wake/mcpguard_test.go`).
-
-**The room comes back with what was said, re-derived from claude's transcripts rather than kept.**
-`⌃Q` then `wake` then `/resume all` used to be a working fleet above an empty group chat. The room
-asks at exactly two moments — `NewRoomApp`'s seed and `wakeArrived` — which between them are every way
-a session arrives into a room missing its history; **a spawn has no transcript and a fork's is its
-parent's**, already drawn under the parent. It is a **second frame kind and a second ledger**
-(`rpc.FrameRoomHistory`), because `askHistory` is once per session per client and a shared one would
-spend the ask a conversation opened later needs. Three rulings hold the fold together.
-`core.Event.At` is stamped by `DecodeTranscriptLine` and nothing else — **the zero value is
-load-bearing**, since a live event never gets a time and that is what lets `Room.Before` merge history
-without re-ordering a line somebody is reading. **A batch is dropped whole if its session has said
-anything since the ask**, per session rather than for the room: the cutoff alone cannot do it, because
-it is stamped before the frame is written and a reattach replays frames it read *before* the model
-existed — so a pre-cutoff event still reaches the room afterwards and both copies get drawn. And **a
-turn you typed comes back only when two transcripts prove it was a broadcast**: on disk a room
-broadcast and a private DM turn are the same bytes, so multiplicity is the only sound discriminator
-and the rule errs toward silence. That rule runs in `Room.Before` over `Room.raw` — **every**
-transcript restored so far — because the daemon answers **one transcript per frame**, so a collapse
-applied where a reply lands can never see a second session.
-
-**The turn is the unit, and an agent's prose is restored only inside a public one.** Deciding it line
-by line hid the question and showed the answer: the private turn was dropped and the agent's reply to
-it — the same conversation, in the agent's words — went into the group chat anyway. Live,
-`App.observe` keeps a DM-sent turn out of the room through `Fleet.inDM` **only while its DM is
-drawn** — once the reader leaves it (the pane stops being drawn, `drawnConversations`), the rest of
-the turn's prose promotes to the room, so someone watching the group chat does not miss a reply to a
-DM they walked away from; the DM stays the record and gets everything either way. That promotion is
-**live-only** (a promoted reply is not a proven broadcast, so a restore does not reconstruct it).
-Nothing on disk records which surface a turn was typed on, so the restore carries provenance itself:
-prose is kept while its session's last user turn was a proven broadcast, and the next user turn
-closes it. **Prose
-with no initiator in the window is dropped**, which is most of a 400-event tail — and that is why
-there are two bounds. `roomRawEvents` is a memory backstop on `Room.raw`; `roomHistoryEvents` is
-applied *after* the rule, because trimming `raw` takes the oldest line of a turn and the oldest line
-of a turn is the broadcast that made it public. Full argument: `internal/ui/roomhistory.go`.
-
-**The room's working line is one row or none, and every figure on it belongs to one agent.**
-`heartbeatLine` has been Claude Code's `✻ Calculating… (1m 51s · ↓ 11.6k tokens)` since PR #15 and was
-only ever hung on `DM.View`, so the surface somebody supervising a fleet sits on said nothing while
-three agents worked. A row per working agent is thirty rows taken from the transcript at fleet size,
-and a block of rows that comes and goes changes a pane's height at an arbitrary moment — so
-`roomWorkingLine` names the **oldest running turn** and counts the rest (`+2 more working`). Summing a
-fleet's tokens beside one turn's age would be two agents' numbers in one sentence. `Room.chrome` is
-`DM.chrome`'s field for `DM.chrome`'s reason: the row appears on a status push rather than on a
-resize, so a `View` guarded on width and height alone drew one row more than it was given.
-**The room draws its own minimal form of the line** — `✻ Sailed for 49s`, `roomHeartbeatLine`, a
-past-tense word and no parenthesised token clause — where the DM keeps the fuller one. The room is
-the glance, so it leans on the word and drops the tokens; the words are Wake's own nautical-and-dawn
-pool in `internal/ui/roomwords.go`, short because the room shows exactly one at a time. The head
-still shimmers; `roomWorkingWord` keeps an agent's own `activeForm` when it wrote one.
-
-**A DM's working line becomes a done line rather than vanishing.** When a turn finishes the row above
-the composer stops being the spinner and reads `✻ Cooked for 1m 59s · done 6:48 PM` — a past-tense
-word, the turn's duration, and the wall-clock time it landed — static and dim, because the turn is
-not alive and nothing about it animates. It stands until the next turn (which shows the spinner
-again) or a park, an end or a gap that forgets it. **DM only**: the room is the glance and draws many
-agents, so a per-agent done line there is noise. The word pool is Wake's own past-tense list
-(`internal/ui/donewords.go`), authored for the same reason `heartbeatwords.go` argues and shorter for
-the reason it is longer — the done line is one agent's own in its DM, never thirty side by side. The
-duration and the done time are **captured at the working→idle edge** in `Fleet.WithStatus` onto
-`Agent.doneAt`/`turnDur`, not derived live, and gated on `Agent.watchedStart`: an agent whose *first*
-report was already working began its turn before this client attached, so the start is unknown and it
-gets no line rather than one whose duration is really only the time since attach. **A park, an end and
-a gap each forget it** — the first two in `WithStatus`, the gap in `ForgetTurns` — because a woken
-session reports idle directly, with no working report in between, so the pre-park summary would
-otherwise reappear the instant the pane reopened. **And the agent's own new-turn content forgets it
-too** (`Agent.notDone`, in `fold` on `KindToolUse`, `KindToolResult`, `KindAssistantText` and
-`KindThinking`, all `ev.Subagent==nil`): a turn Wake did not initiate — `--brief` self-starts one, a
-long job goes idle between turns, and **an unowed turn answered off a permission flips `blocked→idle`
-rather than `blocked→working`** (which `WithStatus` then wrongly captures a done line on) — reports
-idle while it works, so `stateLocked` never returns to working and the working line's own replacement
-of the summary never fires. The event stream is that turn's only observable here, the mirror of
-`WithStatus` reconciling `inDM` off the report because a gap can eat the `KindTurnEnd`; a
-**subagent's** frame is excluded, since it streams past the parent's result and is not the agent's
-turn. A **streaming preview** forgets it on `DM.showsDone` instead — a partial never reaches `fold`.
-**And a running subagent suppresses the done line** on `DM.showsDone` too (`subRunning`, set by
-`dmFor` off `Fleet.RunningTasks`): because `fold` keeps a subagent's frames from clearing the
-parent's `doneAt`, an agent that dispatched a **background** subagent and went idle would otherwise
-show `✻ … done` while that subagent edited on beneath it. The parent's own turn genuinely ended, so
-`fold` is right to keep it; the *display* gate is what says the agent is not done while work it
-launched runs.
-Without all this a pane showed `✻ … done 10:41 PM` while tools streamed in below it, and stranded a
-done line for the length of a granted tool after a permission was accepted. `DM.hasBeat` is the one predicate `baseChrome` and
-`SetSize` both count the row by —
-it is the working line's row that stays occupied through the done line, so the transition costs no
-height change, the alt-screen hazard `DM.chrome` exists for.
-
-**While a `/compact` runs the DM draws a third form of that row — an animated
-`✻ Compacting conversation ▮▮▯▯▯▯▯▯▯▯ · 14s` — and the bar is indeterminate because the wire gives it
-nothing else to be.** A compaction announces itself with two `system/status` frames: a
-`status:"compacting"` start flag and a terminal one carrying a `compact_result`, resolved in the airlock
-to `NoticeCompacting`/`NoticeCompacted` (`systemNoticeFor`, off the payload — both share subtype
-`status`). **The end keys on `compact_result`, never the `compact_boundary`**, because a *failed*
-compaction emits the former and no boundary at all (`slash-commands.jsonl`). There is **no progress
-figure while it runs** — Claude Code's own `2%` bar is computed inside its interactive TUI, off nothing a
-headless session emits (verified against the recorded stream: only hook noise falls between the start and
-the end) — so the bar is a sweeping block that says the work is live (`compactBar`, off the one shimmer
-ticker via `sweepPos`), never a percentage Wake would invent or scrape (the non-negotiable); the elapsed
-timer beside it is what the operator watches, and both drop widest-first on a narrow pane so the word
-survives. The state lives on `App.compacting` (session id → start), folded by `observeCompaction` and
-read at draw time through `WithCompacting`, keyed by id for `tails.go`'s reason. It **wins over the done
-line**: a compaction runs *between* turns — each of its several result frames clears the turn — so the
-agent is idle exactly when the stale `✻ Cooked …` would otherwise show. **DM only** for the done line's
-reason, and it keeps the ticker alive (`anyCompacting`) the way a working agent does. `pruneCompacting`
-on every report is the backstop for a compaction cut short by a crash, which never sends its outcome.
-**The real figures arrive only at the end, and only then a line shows them.** The `compact_boundary`
-carries `compact_metadata` — context before and after, tokens dropped, duration and trigger — surfaced by
-the airlock as `core.CompactSummary` (`systemEvent`, `wire.go`'s field) and drawn in the DM transcript as
-`✻ Compacted · 50.8k → 4.5k tokens · freed 46.3k · 16s` (`compactedSummaryLine`), with `· auto` only for
-a context-limit trigger — **the `"auto"` wire value is expected but unverified**, only `manual` being
-recorded, so the clause simply does not draw if the real word differs (record one to confirm). The
-bracketing `NoticeCompacting`/`NoticeCompacted` still leave **no transcript
-block** (the pinned line is their only place); the boundary's `NoticeContextCompacted` is the one that
-does, falling back to the plain `✻ Compacted` label for a live boundary that carried no metadata. The
-rich line is **live-only**: a `compact_boundary` is a `system` frame and `DecodeTranscriptLine` keeps
-only `assistant`/`user`, so it never returns off disk — on reopen no compacted line is redrawn at all
-(`docs/notes/deferred.md`, 2026-08-15). Full argument: `internal/ui/compacting.go`, `beat.go`.
-
-**Every ordinary exit is a key the Update loop reads, so the emergency one is a byte read before it.**
-⌃Q arms and a second ⌃Q parks the fleet and quits, ⌃O then ↵ detaches, ⌃C parks one agent — all are `tea.KeyMsg`,
-and all are gone the moment the loop is what has stopped. It can be: `Update` calls `View`,
-`View` goes through one `os.File`, and a terminal that stops draining that file parks the write
-inside the renderer's mutex — which is the goroutine that reads every message. **And a signal does
-not rescue it**: bubbletea's `handleSignals` does `p.msgs <- InterruptMsg{}` on an *unbuffered*
-channel only the wedged loop reads, so **SIGINT and SIGTERM are both swallowed**, leaving SIGHUP,
-SIGQUIT and SIGKILL — none of which run its terminal restore, so the operator gets a shell back
-inside an alt screen with mouse reporting on and the tty still raw. Measured, not reasoned about:
-`TestAWedgedProgramSurvivesTheSignalsBubbleTeaHandles`. So `cmd/wake/killswitch.go` reads the tty on
-a goroutine of its own and decides before Bubble Tea has seen the byte — `inbox.go`'s rule about the
-socket, one layer further out. **Two of the same key**, which `detach.go` rules out for ⌃O and which
-is right here for the reason that ruling turns on: a same-key confirm is wrong when the *first* press
-is invisible, and ⌃C has a visible first press — it parks the focused agent and says so — so a second
-is never the reflex that follows silence, it is the reflex that follows the first press not having
-worked. Anything at all between them disarms, which is what keeps ⌃C meaning park. **⌃C alone now,
-and ⌃Q dropped from the escape hatch.** This watched ⌃Q⌃Q as well, for redundancy — ⌃Q is XON and ⌃C
-is INTR, and if a layer that is not the tty driver (tmux, screen, ssh, cmux) ate one the other still
-arrived. But ⌃Q is the TUI's park-and-quit, and it is now *armed*: the first press arms, the second
-confirms, and the confirmed park waits up to three seconds for the daemon's answer before the window
-closes. A held ⌃Q auto-repeating, or an impatient second tap during that visible delay, arrived as
-⌃Q⌃Q in one read and fired *this* exit — which asks the daemon for nothing and leaves the fleet
-untouched — so a healthy park was pre-empted into a bare exit and every agent was left running. That
-is the fleet-still-running-after-⌃Q failure, and dropping ⌃Q from the watched set is its fix: ⌃C is
-the reliable chord (not flow control) and parks one agent rather than quitting, so it cannot collide
-with a park and is the whole of the escape hatch now. It adds **no legend glyph and no `tea.Key…`
-case**, which is ⎋⎋'s reason: it is not in `App.key` at all. Arming it takes raw mode off Bubble Tea — `initInput`
-claims it only for a reader that is itself a terminal, and the reader it gets is a pipe — so
-`converseModel` owns the restore. **And it pauses for a hand-over** (`cmd/wake/handover.go`): `/mcp`'s
-Authenticate gives the real terminal to `claude mcp login`, which refuses a pipe, so the pump reads
-through a cancellable reader and `suspend` stops it, restores cooked mode and mutes the signal watcher
-for as long as the child runs — otherwise the child's keys would replay into Wake and a ⌃C⌃C at its
-prompt would fire this exit. The pause is **all or nothing**: a failure after the read is cancelled
-resumes the pump, and a signal grace armed just before a hand-over waits for it to end. That is handing the terminal over, the way `git commit` does to an
-editor — not a PTY and not emulation, so the non-negotiable stands.
-
-**Park is recoverable; stop is not.** `⌃C` parks the focused agent, `⌃Q⌃Q` parks the fleet and exits
-(the first `⌃Q` arms), `wake stop` ends everything and clears the park book. A parked session keeps its id, name, label and
-directory in `parked.json` beside the socket.
-
-**`⌃Q` waits for the daemon to say it took the park before the window closes**, and the exit line
-says which of those happened. It used to write `FrameParkAll` and `tea.Quit` in one `tea.Sequence`
-and print `Parking N agents.` off a flag the *keypress* set, so a write the daemon refused, dropped
-or never received was indistinguishable from one it took - reachable three ways, including a nil
-connection, where `a.write` hands back a nil command that a sequence runs as a success. The
-instrument is a `FrameStatus` written **behind** the `FrameParkAll` on the same connection:
-`serveClient` dispatches one connection's frames in order, so that reply cannot come back before
-the verb was taken. **This is the one `FrameStatus` `ui.App` ever writes**, and `parkAllTaken` is
-the single place a reply and a push are told apart. The residual is a window one round trip wide -
-`launch` confirms every spawn, fork and wake with the same `FrameStatusReply` and no correlator, so
-a `/new`, `⌃F` or `/resume` in flight when `⌃Q` is pressed has a reply of its own coming and this
-takes the first. Closing that needs a correlator on the frame, which is a daemon change, and the
-point of this instrument is that it is not one.
-
-**A daemon restores none of it, and that is the design.** ⌃Q then `wake` is a **fresh room**: the
-book is carried on `rpc.Status.Parked`, which is disjoint from `Sessions`, so a parked session draws
-no roster row, opens no conversation, claims no name and takes no cursor. It is *addressable and
-nothing else* — `/resume <name>` resolves against that list and `unparkRecord` launches from the
-record. Restoring them into the fleet is what handed somebody back the whole roster and every
-transcript one keypress after they quit it, which is the opposite of what ⌃Q means. The **id** is
-still protected across the restart, because nothing else can be: `admit` refuses a spawn under an id
-the book holds, since a second process on that transcript branches it with no error on any wire. The
-**name** is not, deliberately — a daemon holding every parked name is a daemon holding the fleet — so
-a resume whose name has been taken since comes back under a pooled one. Bare `wake` still opens a
-room rather than spawning when the book is non-empty (`reopensRoom`); only a machine with *nothing*
-at all is first run. **`⌃C` refuses a blocked agent** and names `⎋` instead: parking closes stdin,
-and a permission ask that dies that way is indistinguishable from an operator deny — it survives the
-wake as a "no" nobody said.
-
-**Two live processes on one session id do not collide — they branch**, with last-writer-wins and no
-error on any wire. There is nothing to detect afterwards, so every check is Wake's own and happens
-before the second process exists: `resumeSafe` asks the OS (one `ps`, matched on a flag *and* its
-value), every error is a refusal, and `launch` takes the row **before** it starts anything.
-
-**Forks and imports are snapshots.** A fork is `--resume <parent> --fork-session --session-id <new>`
-emitted as one literal; the parent's transcript is byte-identical afterwards. Import (`/adopt`, `wake
-import`) is a fork rather than a resume — it costs the original id, and it is the only *guaranteed*
-safe primitive, because a `claude` somebody started by hand carries no id in its argv for
-`resumeSafe` to find.
-
-**`/resume` resumes in place, and it is the one deliberate exception to that guarantee** (owner's
-2026-09-20 ruling, "same as Claude Code, no guard"). Its picker resumes an on-disk conversation under
-its **own** id via `FrameResume` → `--resume <id>` (no fork), so the transcript continues — and the
-handler **skips `resumeSafe`**, exactly as Claude Code's own `/resume` performs no such check. This
-accepts the branch-if-still-open-elsewhere risk the non-negotiable above names; `/adopt` remains for
-when a safe copy is wanted. Parked rows still take `FrameWake`/`unparkRecord` with `resumeSafe`
-intact — Wake parked them, so that path is genuinely safe. Full argument:
-`internal/daemon/resume.go`, `docs/notes/decisions.md`.
-
-**Anything waiting on a spawn waits on the id it minted, never the parent's.** A client waiting on
-the wrong id does not fail — it waits forever with nothing printed. The daemon addresses every fork
-refusal to the fork's own id for exactly this reason.
-
-**The socket is drained by a goroutine that does not draw** (`internal/ui/inbox.go`). Bubble Tea has
-one Update goroutine and it renders; the daemon hangs up on a client whose write blocks for 5s, so a
-window drag used to disconnect a live conversation. Nothing that renders may sit between the socket
-and the ring. Geometry changes go through one pending value and one 80ms settle
-(`internal/ui/geometry.go`) — measured 93ms against 4,681ms without it.
-
-**A preview may never cost the record a slot, and it is never called a gap.**
-`--include-partial-messages` makes every output token an ordinary `rpc.Frame` — ~1,300/s across a
-fleet at the corpus median and ~2,800/s at its maximum, against ~100/s of everything else — so a
-token taking a ring slot spent a 250ms stall's whole buffer on previews and evicted **completed
-blocks, permission requests, receipts and turn endings**. Nothing on the permission wire times out,
-so an evicted `can_use_tool` is an agent blocked forever with nothing on screen, and `App.wants`
-cannot help because it runs only *after* frames leave the ring. Two rules close it, both in
-`inbox.go`: a partial **folds** into its session's unconsumed one rather than taking a slot — deltas
-are additive, so occupancy stops depending on the token rate and a frame of any other kind for that
-session closes the fold — and a partial **never evicts**, so one arriving into a full ring is dropped
-where it stands. It is **not counted as `dropped`** at either end of that, because the notice says
-the conversation above has a gap and then calls `forgotModes`, and a lost token is neither: the
-completed block follows it. `internal/daemon/client.go` holds the same rule for its own queue —
-`partialCeiling` reserves half of `clientQueue` for the record, and a dropped preview is not
-confessed. Measured rather than asserted: the fold costs ~100ns and ~350 bytes a token
-(`BenchmarkInboxStall`, 161–192µs per fleet-second against 54–62µs for the same frames as record),
-and a preview on a full client queue got *cheaper* to refuse, 4.4ns against 8.9ns
-(`BenchmarkClientEnqueue`).
-
-**The composer grows with the draft, and the pane decides how far.** An empty box is one row and gains one per wrapped row of what is typed, up to `maxComposerRows` — but the bound handed to it is `composerRowsIn`, which is what the pane has left after the transcript's floor and the chrome the draft does not own. **The composer never bounds itself**: a box that grew to its own cap in a short pane, or in one of four grid panes, would make the frame taller than the terminal, which is the alt-screen failure the rule below exists for. Three findings paid for in `docs/notes/decisions.md`: typed runes reach the draft through `InsertString`, which is the one path that does *not* end in bubbles' `repositionView`; that reposition is a silent no-op until something has rendered the text area, because `viewport.ScrollDown` returns early while it holds no lines; and it runs against the height the box had *before* the fit, so an update that adds a row is given the bound first and fitted back down after. Measuring the draft uses a text area of its own — the real one shares a scrolled viewport by pointer, and measuring through it reported one row for a three-line draft.
-
-**A pane's chrome is the third thing its transcript's height depends on, and the only one that is not an argument.** `DM.chrome` records what `chromeHeight` returned when the transcript was last sized, and `View` re-sizes when it moves. The heartbeat's row appears when an agent starts a turn and the status bar's when the first fact about a session arrives — neither is a resize, so a `View` guarded on width and height alone drew **one row more than it was given**, and a frame one row too tall scrolls the alt screen away on every draw. Caught by the pty harness with an empty screen and by nothing else; `TestThePaneStaysInBoundsWhenItsAgentArrivesAfterSizing` holds the order `App.dmPane` really uses — size first, agent second.
-
-**A streamed answer is a preview and never a record, and that is what makes it affordable.**
-`--include-partial-messages` multiplies a session's frame rate by its output token rate — the
-recorded corpus's median is **43.5 tokens a second** and its fastest 93.9 — so the only question is
-what may be done per token at thirty of those at once. The obvious answer, re-rendering the block
-that is growing, is measured and dead: `internal/render` runs behind **one process-global mutex
-shared by every session**, and streaming a block through it costs the integral rather than one
-render — **303ms for a single 1,024-token block against 4.6ms for the preview, 65×**, and visibly
-superlinear (7× at 64 tokens, 19× at 256). A tick does not fix it either; it lowers the rate and
-not the growth, and it is a poll where a wait will do. So `core.KindPartialText` never enters
-`DM.events` or the transcript: it is a **plain-text tail**, bounded to `DM.previewCap` rows, wrapped on
-change and never through glamour, cleared by the completed block or by the turn ending — which is
-the interrupted case where no block ever arrives. **That cap is the pane's, not a fixed three:** over
-a full transcript it is `minPreviewRows` (3) so the preview pushes nothing read off screen, and over
-an empty or short one it grows into the rows the transcript is not using, so a long answer streaming
-into a blank pane fills it rather than scrolling inside a three-row box. It is re-measured in
-`SetSize` and when a block lands (`Append`), never per token, so the cost stays flat in the block's
-length — the pane bounds it, the answer never does. The transcript is byte-identical to what it was;
-the completed block still goes through glamour exactly once, as it always did. **And a token is
-accumulated only for a pane on screen** (`App.wants`): `App.dms` holds every conversation ever
-*opened* and `withDM` copies the whole map of `DM` values per write, so an operator who had looked
-at all thirty agents was paying thirty large struct copies per token — measured at 106–123ms per
-fleet-second before that gate and **10.3–10.6ms after it**, with allocation down from 530MB/s to
-19MB/s. The *clear* is deliberately not gated, or a conversation closed mid-turn would come back
-showing a sentence that finished long ago. **And leaving drops the tail outright** (`DM.Leave`),
-because freezing it without dropping it is worse than either: a pane reopened *before* its block
-landed appended the new tokens to the old ones and drew a sentence the agent never wrote. Leaving is
-the one event on every path a pane stops being drawn on, which is exactly the set `App.wants` stops
-accumulating for, so the two halves are one rule. One second of a
-thirty-agent fleet streaming at the corpus median costs **7.4–8.3ms, under 1% of one core** — against
-62ms for per-token rendering *of an average-length block*, which is a floor rather than a
-worst case. `BenchmarkStreamingFleetSecond` and `BenchmarkOneBlockStreamed` are the pairing; the
-full argument is `internal/ui/partial.go`'s header. Two things get **no** preview, for one reason
-between them — a preview is replaceable only on a surface that follows one speaker: **the room**,
-which interleaves thirty agents, and **a subagent's tokens**, which `partialEvent` drops on
-`parent_tool_use_id` the way `fold` already drops a subagent's tool calls. Both still draw the
-completed blocks, with the attribution `dm_blocks.go` gives them.
-
-**Only a *width* change returns a reader to the newest line.** Both panes re-wrap on width, so a
-scrolled offset stops pointing at what was being read. A height change does not. For the same
-reason, the last-read marker is anchored to an **event**, never a scroll offset, and a conversation
-keeps the newest three.
-
-**Card keys are runes, and a permission or a plan is settled by the rune then `↵`.** `a`/`d` exist
-only while a card is up and are read only when the composer is empty — but the *first* character of
-every draft is typed into an empty composer, so the arm-then-confirm is what turns an accident into a
-lost character instead of a granted tool call. A settled card cannot be unsettled. Every input that
-is not the confirm takes the arm back, and that needs four call sites (key, composer, **mouse**,
-digit). The key line is honest in both directions: it offers `esc interrupt` beside the answer keys —
-the one key that destroys the ask, dropped first when the line will not fit — and while a draft makes
-the runes unreadable **the focused pane's** line advertises none of them, saying instead what brings
-them back; an unfocused pane's card keeps its labels, because its keys were never the draft's to
-pause.
-
-**A question is settled by a review step instead, which is strictly stronger than the arm it
-replaces.** `ShapeQuestion` walks `N+1` steps — the questions, then `stepReview` — and the last one
-lists every answer that is about to travel beside `Submit answers` / `Cancel`. The arm named a verb;
-the review names the answers, so `[a]nswer` is gone from a question's key line and `[d]eny` stays.
-`ShapePermission` and `ShapePlan` keep the arm: they have one named action and nothing to review.
-**The review earns no binding of its own** — it is drawn through the questions' own `optionRow`, so
-`↑↓`, `↵` and the digits reach it unchanged, which is what keeps the card a bijection with what
-`cardkeys.go` binds. Submit with a question unanswered takes the operator *to* that question rather
-than writing a short answer the encoder refuses beneath them. Full argument: `internal/ui/cardsteps.go`.
-
-**Free text is a mode, entered deliberately, and it is the one place `↵` on a draft is not a
-message.** `Other…` is a synthetic row past the options the model supplied; picking it — or pressing
-`[d]eny` — titles the composer for what it holds and puts the card into answer mode. A typed answer
-costs nothing on the wire: `Card.answers` is already question text to a *label*, and the operator's
-own words are a label the list did not contain. An empty refusal still sends `cardDenyReason`,
-because a blank one reads as a tool that failed for no reason. **In answer mode the card takes `↵`
-and nothing else** — every other key goes to the draft, which is not tidiness: a digit that still
-reached the options while a refusal was being written was the disarm rule's own accident arriving
-through the box that replaced the arm (`d`, then `1` to choose instead, and the `↵` after it denied
-the agent). `⎋` abandons the draft and leaves the turn alone. Full argument:
-`internal/ui/cardanswer.go`.
-
-**An ask belongs to its agent's conversation, and the room draws none.** `Cards.For` is the only way
-a card reaches a surface: a conversation puts its own agent's ask (`App.cardOf`), and `id == ""` — the
-room — puts nothing. The room used to take the oldest ask whose agent had no pane on screen, and
-**that is the rule this reverses**, on the owner's report: leaving iris's conversation moved the
-question being answered into the group chat. It is wrong for that surface twice over — the room holds
-one card's worth of rows, so a fleet with several agents blocked at once (the case this build exists
-for) saw one of them and `+N more waiting`; and it interleaves thirty agents, so the question arrived
-stripped of the turn that raised it. **Drawn-ness no longer enters into it**: a conversation puts its
-ask whether its column is on screen or slid past, so moving the keys moves nothing else.
-What the room shows instead is **nothing** — deliberately, and it is the trade: an agent blocked with
-its conversation closed is announced by the roster row and the awareness strip's `N need you`, and
-`⌃X` opens the next one. Nothing on that wire times out (the corpus records one ask blocked 342
-seconds with zero bytes out), so those two tells are load-bearing rather than decoration.
-`cardKey` reads `App.cardOf(a.focus)`, never `Cards.Top`; only two blocked agents can tell those
-apart, which is what `TestTheKeysAnswerTheCardTheFocusedPaneDraws` is. `interruptTarget` lost its
-middle case with the room's card — from the room, `⎋` and `⌃C` act on the roster's pick, which is
-the only thing on that surface naming an agent.
-
-**And a card is drawn over the composer, which gives the mouse a second reader.** A screen row is
-only a transcript line once you know how many of a pane's rows are conversation, and the pane cannot
-be asked: its transcript is sized by the last *geometry* change, while its chrome moves without one —
-a card goes up, a completion menu follows the word being typed, an answer streams a preview, the
-draft grows a row — and `View` re-lays a **copy** for the frame and drops it. So the stored height is
-too big by exactly the rows that chrome took, and `pointIn` clamps any row under the transcript into
-a real line: a drag across the **query bar** highlighted and copied an answer nobody dragged over,
-landing further from the pointer the further back the reader had scrolled, because `extendSelection`
-reads those same rows as "the drag has left the bottom edge" and scrolls one line per motion message.
-`App.transcriptRows` sizes the menu-carrying copy through the draw's own `SetSize` and reads the
-height back, so the two cannot disagree; `startSelection` fences the anchor on it and keeps it as
-`App.selRows`. Below that fence a press now falls to `startComposerSelection` rather than being
-discarded — the query box's own draft rows take a selection, and the chrome around them takes a
-frame-wide screen selection instead of nothing (see `composersel.go` and `screensel.go`). Two rulings
-hold it together. **The anchor is taken before the keys move** — `refocus`
-re-sizes the panes and a picker belongs to whichever pane holds them, so a measurement after it
-measures a frame nobody clicked. And **a drag's edge stays the window it was taken in**, which is
-`selTop`'s own rule: a motion message arrives per cell crossed, and re-rendering a pane's chrome on
-each one is the work per mouse pixel `mouse.go` is written to avoid. Each producer of that chrome has
-a test that goes red without the measurement — the card, the completion menu and the preview — and
-each finds its rows on the pane as it is **drawn** rather than trusting the arithmetic under test.
-
-**`↑↓`, `←→` and `↵` belong to a question card only while one is drawn in the focused pane — and the
-arrows are read whether or not there is a draft.** `↑↓` walks the options, `←→` walks the steps, and
-`↵` chooses the cursored option — claude's own question keys — all handed back on every other shape,
-because `↑↓` is the roster's and a yes/no has nothing for a cursor to walk. The digits still pick,
-and they are what a narrow pane keeps: `questionKeys` drops the move keys first when the line will
-not fit, because the digits and the refusal are the only way to answer and the only way out.
-
-**`cardKey`'s composer gate is an argument about characters, so it applies to characters only.** `a`,
-`d` and the digits are letters people type and keep it; **the arrows never needed it**, and applying
-it to them meant a card's own keys reverted to the roster the moment anything was typed — with the
-agent still blocked and still asking, which is the state somebody is most likely to be in, because
-they had started writing a reply to the thing that stopped them. `↵` keeps the gate outside answer
-mode, since a draft is a message to send. `←→` are claimed **only on an empty composer**: a draft
-needs them for its own cursor, and they were in no `App.key` case at all, so on an empty one they
-reached the text area and did nothing — the claim costs nothing and takes nothing.
-
-**The manager can send, interrupt, spawn, and group the fleet — team and colour — and nothing else.**
-Spawn was refused until 2026-08-12
-and is allowed now because `daemon.liveCap` exists: `maySpawn` refuses past 30 live sessions on every
-path, and the tool's directory must be one the fleet already occupies, so it adds no reach onto the
-machine. Send and interrupt are undoable by looking at the room; spawn is not, which is why its own
-cell calls it the weakest one there. **A spawn may name the new agent** — `spawn_agent`'s optional
-`name` rides `Frame.Text` to the daemon's own `claim`/`normalizeName` (the one process that sees the
-whole fleet, so the only one that can refuse a collision), an omitted name is a pooled one unchanged,
-and this is *not* the refused `rename`: a fresh agent has no `@name` an operator is already routing to,
-and the manager still addresses it by the id `spawn_agent` returns.
-**And it may group the fleet** — `set_team` and `set_color`, allowed on the owner's 2026-09-21
-override: a manager that coordinates the fleet groups it (the ask was "put test-x and test-y in a
-testing team", "change the colour of test-x to orange"). Both are **undoable by looking** — a team is a
-roster section and a colour a name-tag hue the operator sees the instant it changes and retypes with
-`/team`/`/color` — and neither carries an injection vector the daemon does not already fence
-(`rpc.NormalizeTeam` to one mention token, `rpc.NormalizeColor` to seven words). The value rides
-`Frame.Text` and the daemon owns the fence, `spawn_agent`'s rule; `agent_status` reports the colour now
-so the manager can see the current one before overwriting it. **`rename` and `label` stay refused**:
-a rename silently redirects the `@name` an operator is already routing to, and a label is the free-text
-description column they scan — a model authoring either writes chrome the operator reads as their own,
-where a bounded grouping token does not. See `internal/mcp/grouping.go`.
-Park, wake, fork, rename, label, import, stop, allow/deny, **mode** and the four **MCP** frames are refused with a recorded
-argument each in `cmd/wake/mcpguard_test.go`. Mode is the newest and the shortest path on the list: a
-manager that could set a permission mode would be the fleet deciding it will not be asked, in every
-future decision that session makes rather than one, and unlike a message it shows up in no row this
-surface returns. Everything the tools return is text an agent's model wrote, so every
-emitted line goes through `mcp.oneLine` — a newline in a tool argument used to forge a row and let one
-agent speak in Wake's voice about another. **And it is bounded on the machine too, as of
-2026-08-12**: `argv.go` emits `--tools ""` from the same literal as `--mcp-config`, which empties the
-built-in set — no `Bash`, no `Write`, no `Edit` — while MCP tools pass through untouched. It is
-**not** `--allowed-tools`, which this project planned to use and which bounds nothing at all
-(`docs/superpowers/notes/2026-08-12-tool-bounding-findings.md` §3).
-
-**The room seats a manager by default, and `/manager` is the switch.** Spec §12 gives the manager "a
-permanent seat in every group" and the build had no way to seat it: `wake manager` at a shell was the
-only thing that produced one, so the room refused every unaddressed draft and pointed the operator
-*out* of the room to fix it. Every verb that opens the TUI now writes `ui.ManagerFrames` on its
-connection before Bubble Tea exists — `requestFleet`'s slot and its argument — and `/manager` is the
-same decision under a command: **absent → spawn, parked → wake, running → park**, with ⌃C's own
-`parkTarget` refusing the one state park must not touch. One `Fleet.manager` decides which row is the
-manager (ended is not — the name went back to the pool, so a spawn gets it and a wake has nothing to
-address), one `spawnManagerFrame` spells starting one, and the parked arm goes through `/resume`'s
-`bringBack`. **A manager start opens no pane**, which is `cmd/wake/manager.go`'s service ruling
-arriving in `startArrived`. Two consequences worth knowing: the off switch does not persist, because
-`parkedRecord` carries no reason and "parked by `/manager`" is the same record as "parked by ⌃Q", so
-the next `wake` turns it back on — and **the manager is an ordinary row on every surface**, so it
-takes a roster row, a place in the attention ranking and a slot in the strip's count. That last one
-is `deferred.md`'s open question, and it is now unavoidable rather than rare. It is a **command
-rather than a key**: with the default on, this is the rarest verb in the build, `legendEntries` is a
-bijection with `App.key` so a chord still costs a `legendEntries` entry to add, and every remaining
-ctrl byte is worse — `⌃M`/`⌃I` are Enter and Tab, `⌃J` is the composer's newline, and `⌃S`
-is XOFF beside a `⌃Q` already bound to *park the fleet and quit*.
-
-**`/manager-stop` is the ending, and it is a second word rather than an argument.** `/manager` parks;
-this writes `rpc.FrameStop`, so the session ends and the name returns to the pool — which is why the
-next `/manager` *spawns* rather than waking. A separate verb because `managerTakesNoArgument` already
-refuses `/manager off` on the grounds that a toggle firing under a word it did not read does the
-opposite of what was typed half the time. Two arms refuse: **a parked manager**, because the daemon
-refuses a stop at a session with no process in two different shapes — `has ended` for a ⌃C row whose
-`gone` channel is closed, `unknown session` for a park-book record after a restart, which has no row
-at all — so the refusal names `/manager`, which wakes it first; and **no manager at all**,
-which is where an *ended* one lands too, since `Fleet.manager` reads ended as absent. **It does not
-borrow `parkTarget`'s blocked refusal**, and that inversion is deliberate: park refuses a blocked
-agent because the denial nobody made *survives the wake*, and a stop has no wake. See
-`docs/notes/decisions.md`.
-
-**`/quit` is `/manager-stop` for an ordinary agent, and its removal is a client-side fold rather
-than a daemon change.** The stop half is identical — `rpc.FrameStop`, irreversible, releases the
-name, reaches a blocked agent and refuses a parked one — so `internal/ui/quit.go` mirrors
-`service.go`'s rulings. What is new is the *removal*: an ended session is deliberately kept as a `·`
-row (`Fleet.WithStatus`, the daemon's `recentEndings`) so a client learns of an ending it **missed**,
-and a `/quit` is an ending the operator **typed**. So `awaitingQuit` remembers the ask and
-`departedQuit` — run from `applyStatus` on every report, because the daemon re-reports the ending
-until it leaves the recent ring — drops the agent from the fleet, the ⇥ ring, the grid and the roster
-cursor once the ending is **confirmed**, never on the keystroke (⌃C park's own rule: a stop lets the
-turn finish, so a working agent stays until it ends). It is the one place a live-reported agent
-*leaves* `Fleet.Agents()`, so `Fleet.drop` and `forgetConversation` are the whole of it; the hide is
-**per-window** (the `quitting` set is on `App`, not the wire), so another operator's roster keeps the
-`·`. `quitting` is pruned once the daemon stops reporting an id (it has left the recent ring), so the watch
-set stays bounded rather than growing one entry per `/quit`. Both entry points reach one handler: bare
-`/quit` targets the focused conversation, `@who /quit` rides the `mentionCommand` bridge, so `quit` is a
-`roomTargetCommand`. **The manager is refused** and pointed at `/manager-stop` — one ending path for
-the manager, not a second verb that also drops its row. Full argument: `internal/ui/quit.go`'s header.
-
-**The manager's configuration is a function of its name**, applied in `launch`, never a field on the
-wire — a path on the wire would let anything that can dial the socket choose that session's command
-line, and a wire field cannot survive a park. `--mcp-config` is emitted only ever beside
-`--strict-mcp-config` and `--tools ""`: without the first the manager inherits every MCP server on
-the machine, and without the second it inherits Claude Code's whole built-in toolset.
-
-**A routed message is echoed into the room and into every *held* conversation it reached, spelled as
-it was typed.** `sendRoom` writes the room's one echo — one broadcast is one thing you said — and
-`echoToRouted` writes the same text into each addressed agent's DM, mention included, marked
-`core.Event.FromRoom` so `userBlock` can head it `› you · from the room`. The mention is kept
-because it is the *only* thing separating it from a turn typed into that composer: `r.Text` strips a
-leading `@name` before sending, since Claude Code expands one before the model sees it, while a DM
-sends what you typed verbatim. **Only conversations `App.dms` already holds** — the same rule
-`App.observe` uses for the agent's own events, which is what makes the two halves symmetric. An
-unopened one is filled from claude's transcript, `DecodeTranscriptLine` keeps user lines, and
-neither pane de-duplicates, so materializing would draw one turn twice in two spellings.
-`FromRoom` is presentation only, for `Echoed`'s reason. Full argument: `docs/notes/decisions.md`.
-
-**A peer's cross-session message shows in the room, headed by the sender.** Claude Code's own
-peer channel injects one session's message into another wrapped as a `<cross-session-message
-from-name="…">…</cross-session-message>` envelope. Probed 2026-08-31: without `--replay-user-messages`
-the envelope reaches only the recipient's on-disk transcript, so the room — fed by the live stream —
-never saw it; with the flag it replays live as a `user` frame carrying the envelope. So Wake now emits
-the flag (`argv.go`), the airlock resolves the envelope to `core.KindCrossSession` (`wire.go`'s
-`crossSession`, one decoder for the live stream and the transcript both), and the room admits it
-(`fold`) headed **`↪ sender → recipient`** — `Fleet.crossSpeaker` resolves `from-name` to a fleet
-agent for the sender's identity colour (else a bare name for an outside session), and the **recipient
-is this stream's own session**, resolved to its fleet name and carried on the presentation-only
-`core.Event.ToName` (`observe`), so the line reads `↪ planner → sydney` and is not mistaken for the
-sender's own room turn — folded past `roomInlineRows` like a reply. The receiver is named because a
-peer message the room shows once, attributed to the sender alone, read like the sender just spoke in
-the room; the arrow says who it was *for* (owner's report, `<agent_name>` was missing). The arrow is
-**dropped when the receiver is unknown** (`ToName` empty), falling back to the sender alone. It
-survives a room restore too: `collapseBroadcasts` keeps a `KindCrossSession` line unconditionally (a
-first-class room event, not agent prose gated by an open broadcast) and `roomHistoryLines` heads it
-`sender → recipient`, the receiver being the transcript the frame came off (`ToName`, before the
-sender override).
-**The discriminator is the envelope on *string* content, not a wire flag:** `crossSession` fires only
-where a user frame's content is a bare string — which is what Claude injects a peer message as — and
-never on the array content `EncodeUserMessage` writes, so a message that merely *contains* the
-envelope (pasted, quoted, or composed by an agent through the manager's `send`) stays the user's own
-turn and cannot forge a peer line. **The one place the flag would have double-rendered is the DM**,
-whose live feed `observe` now drops every replayed `KindUserText` from (`replayedUserEcho`): the
-operator's own send has `sendDM`'s local echo as its single source, and the manager's sends, a
-compaction summary and `<local-command-stdout>` are replayed echoes the room already drops too — they
-return on reopen off disk. `event.go`'s `Echoed` comment reserves that single-source call for the App
-that owns the local echo, which is `observe`. Full argument:
-`docs/superpowers/specs/2026-08-31-cross-session-messages-in-room-design.md`.
-
-**Slash commands resolve against a closed set Wake owns; anything else is text.** Claude's own
-`/model`, `/clear`, `/compact` and a user's `~/.claude/commands/*.md` all have to keep reaching the
-agent, and nothing can enumerate the latter at the moment the question is asked. `/add-<agent-name>`
-is refused: it is not decidable from the draft, and every live agent is already in the room.
-
-**There are two kinds of command, and the second may claim one of claude's own words in one form.**
-`/resume`, `/new`, `/name`, `/task`, `/mcp`, `/manager`, `/manager-stop`, `/board`, `/reauth` are addressed to **Wake** —
-target-independent, routed before anything else, because `/resume` has to work on a parked session
-(and `/reauth` on whichever sessions an auth failure marked, not a target the operator names)
-and `/manager` on a fleet that has none. `/manager-stop` is target-independent for a sharper reason:
-stop is the one verb nothing brings back, so it may not be aimed by a roster cursor. `/effort` and
-`/model` are
-addressed to a **session**, so they run after `App.route` has resolved one, on the remainder it
-produced. Both are words claude advertises, and the corpus rule narrows rather than bends: **a word
-claude advertises may be claimed only in a form claude is recorded doing nothing with**, and
-`bareOnlyCommands` names the fixture that earned each one — checked to exist, so a word cannot be
-exempted by assertion. Anything with an argument passes through byte for byte. Both routers live in
-`slash.go` because `TestNothingButTheRouterKnowsWhatASlashMeans` holds *what a leading slash means*
-to one file; a surface that must build a command takes `configureVerb` instead.
-
-**The completion menu offers; it never routes, and it never takes `↵`.** Every `init` frame
-carries `slash_commands` — the session's own commands and the operator's `.claude/commands` files
-together, 133 across the corpus — and the airlock dropped the key until now. Decoded onto
-`core.SessionFacts` and folded onto `ui.Agent`, it is what the composer offers under a draft that
-begins a `/command` or an `@`. **It rides the fleet report as well as the init event**
-(`rpc.SessionStatus.Commands`, folded by `withCommands`): the event alone leaves a client that
-attached after an agent's init with an empty menu for it, so the report carries it too — the only
-route to a late attach, the same one `Effort` and `Budget` take. **It cannot decide routing** for `slash.go`'s own reason: the list is
-per session and arrives after the first frame, while a draft is judged per keystroke — a menu may be
-wrong about a machine that has started nothing, a fence may not. The keys are `⇥` to complete, `↑↓`
-to walk (on a single-line draft, where the cursor has no row to climb — a multi-line draft keeps the
-arrows for its own cursor), and `⌃N`/`⌃P` to walk too as aliases; the `⌃` pair are read above
-`App.key`'s switch the way `cardKey` and `pickerKey` are, the arrows in the `KeyUp`/`KeyDown` cases
-after the cursor-move guard, so none takes a legend entry and the menu advertises them on itself. The
-menu never takes `↵`: the menu arrives while somebody types rather than because they asked, so it may
-not give the one irreversible key a second meaning. It is rebuilt on a keystroke and on a fleet report
-and never per frame.
-
-**The menu belongs to a cursor and to a pane, and its directory read is not on the goroutine that
-draws.** All three were the trailing token of a string. **The cursor:** `⌃N`/`⌃P` shadow the text
-area's line keys, so a menu claimed by an `@` at the end of the buffer would take them from every
-cursor position in it. A menu exists only while the cursor is at the end of the word it
-describes (`Composer.AtEnd`), which is what the "it costs one space" trade always claimed. Plain `↑↓`
-walk the menu while one is up and the cursor has no row to climb — the single-line `/`or`@` draft;
-because a menu is only up while the cursor is already at the end of its word, `↑` on a multi-line draft
-climbs to the line above instead — off the trailing token, closing the menu on the rebuild — and the
-arrows stay the text cursor's there. Prompt history and within-draft cursor movement (see below) are
-what `↑↓` mean once the menu is gone.
-**The pane:** `completion.pane` is the conversation it was built for, because two panes holding the
-same characters are not holding the same menu — two repositories with a `README.md` each completed
-one from the other, and that reference *resolves*. **The read:** `pathScanMax` bounds the entry count
-and nothing bounds the latency, so a hard NFS mount or a stalled sshfs on the Update goroutine is a
-window that stops drawing and stops answering the keys that would quit it. It is a `tea.Cmd` tagged
-with the directory it read, one at a time — a directory that never answers costs one goroutine, not
-one per character — and a read is a *listing*, narrowed per keystroke, so a path costs one read per
-directory rather than one per character. One directory, never a walk.
-
-**Open mention mode widens a message; it does not widen a knob — and a knob is any slash command.**
-`@john hello` in open mode reaches the fleet and keeps the name in the text, which is a property of
-something being *said*. `@john /model opus`, `@john /clear`, `@john /effort xhigh` — every command,
-Wake's own or one claude owns, with an argument or bare — configures or controls one session, so it
-stays with john: `route` (`internal/ui/mention.go`) resolves a resolved single `@name` followed by a
-`leadingCommand` (`slash.go`) to `MentionDirect` whatever the mode, so the mention is stripped and the
-command reaches john alone exactly as it would in his DM. Widening one would retune, clear or rename
-thirty sessions off one keystroke. This is the whole of "every `/` command that works in a DM works in
-the room". **A command is a *name*, not just a leading slash** — `leadingCommand` narrows only a `/`
-plus a single name token (Wake's, claude's, or an operator's own `.claude/commands` file, since
-claude's set is not enumerable here), so slash-prefixed *prose* — a path `/etc/hosts`, a `//resume`, a
-bare `/` — stays a message open mode widens. `roomRoute.direct` still carries the pre-widening reading
-for a message, which is what the completion menu (`addressedAgent`) resolves the one named agent
-through so it offers that agent's own commands and paths even while a message to them fans out. The
-old build widened a slash command with an argument (a bare `/model` was already a knob), so `@john
-/model opus` in open mode broadcast `@john /model opus` to the fleet and every agent read it as prose.
-Fixed 2026-09-01.
-
-**A `Picker` is not a `Card`, and the reason is mechanical.** `Cards.Reconcile` rebuilds the open set
-from every fleet report and drops what is absent; a picker has no request id and is in no report, so
-one held there would be deleted by the next status push. It shares `optionRow` and is dismissed
-where an armed card is — in `App.update`, on the keys that go on to the composer.
-
-**A session's directory moves, and it is two fields because two questions have
-two answers.** `EnterWorktree` and `ExitWorktree` are on the tools list of every session Wake spawns
-— only the manager's built-in set is bounded — so the spawn directory stops being the running one
-without Wake doing anything. `init.cwd` is decoded in the airlock, carried on
-`core.SessionFacts.Dir`, and folded by `agent.observe` into **`a.cwd`**, which the fleet report
-carries as `rpc.SessionStatus.Cwd` for the roster row, the status bar's branch and the workspaces
-sidebar. `internal/ui` reads only that one — `Agent.Cwd`, folded by `runningIn`.
-
-**`a.dir` is where the session was *started*, and it never moves.** park writes it down, `unpark`
-launches from it, and a fork runs in it, because **claude locates a transcript by the directory the
-process started in even when every frame names a worktree** — `discover.go`'s 58-of-428 case, and
-`forkSource`'s own refusal says so in as many words. The first version of this followed the cwd into
-`a.dir` and had one field, which made park record the worktree and a wake resume against the wrong
-project slug: an empty conversation under a live session id, which is the branching hazard arriving
-through the display half. **And `internal/mcp`'s `fleetOccupies` bounds the manager's spawn tool on
-`Dir` precisely because an operator chose it** — one field would have let an agent widen where a
-manager may spawn by moving itself.
-
-The cwd is **absolute or refused**: it arrives on the child's own stdout rather than on a Frame, so
-it passes no wire fence, and `agentAuthored["Cwd"]` records it as the agent's own. `launch` refuses a
-non-absolute `Config.Dir` for every caller — spawn, fork, import and wake — where `maySpawn` reached
-only the spawn frame.
-
-**Wake creates a worktree; Wake never removes one, and it never passes `--worktree`.** The path is
-`<repo>/.wake/worktrees/<name>` on branch `wake/<name>`, anchored to the repository root rather than
-to the client's directory. A name that is not one path segment is refused before git is reached, on
-both sides of the socket. A `git worktree add` that fails **refuses the spawn** rather than falling
-back to the repository — an agent in the shared tree is exactly what asking for a worktree meant to
-avoid. Removal is left to `git worktree remove`: a worktree holds uncommitted work, so removing one
-automatically would be a second irreversible verb, and `wake stop` is meant to be the only one.
-
-**A path on the wire is fenced by what it becomes, and the two spawn paths become
-different things.** `--add-dir` names directories a session's tools may reach, and a client that can
-dial this socket already chooses `Frame.Dir` — so an added directory names nothing it could not have
-named there, and it gets `Dir`'s fence and no narrower one: **absolute or refused**, which is also
-what stops a word that reads as a flag, since `-rf` is not an absolute path. A separate dash test was
-written, found to have an empty domain and deleted; three comments had already credited it with the
-absoluteness test's work. `..` is deliberately allowed for the same reason in reverse: refusing it
-reads like a fence and is not one, since it grants the same directory its cleaned form does while
-refusing `$PWD/../lib`. **`--debug-file` is the opposite case and absolute is no fence at all for
-it**:
-`/Users/someone/.zshrc` is absolute, and this one becomes a file the daemon's child creates and truncates,
-with no transcript, no room line and no permission ask to see it happen. So it is
-`--mcp-config`'s ruling one field over — the wire carries a **name**, `rpc.ValidDebugFileName` is
-`ValidWorktreeName`'s sibling, and the daemon places it. Both are refused before a name is claimed
-(`configRefusal`) and again at `launch` (`launchRefusal`), which is the door `Config.Dir` already
-goes through for every caller. **Neither survives a park**, and as of 2026-08-21 the two halves of
-that are established in opposite directions (`testdata/stream/add-dir-runtime.jsonl`,
-`debug-runtime.jsonl`): `/add-dir` **does not exist at runtime** — the CLI refuses it — so nothing
-can restore an added directory after a park, which is the budget's own argument for a
-`parkedRecord` field; `/debug` **works at runtime**, so the debug flags may drop and be re-asked.
-Adding the field is a feature decision the owner holds; see `deferred.md`.
-
-**Effort was the one thing Wake set and could not confirm, and now the daemon confirms it.** A model
-is on every `init` frame, so a wrong label is wrong for one turn. Effort is on no frame Wake receives
-*unasked* — so the pane once showed only the level Wake **asked for**, with nothing saying "applied".
-The fix is a probe: the daemon sends a bare `/model`, whose reply names the level
-(`Current model: … (effort: xhigh)`, `num_turns:0`/`$0`), reads it back, and carries it on the report
-as `confirmedEffort`. The status bar prefers the confirmed level, falls back to the asked-for one
-until the probe answers, and shows nothing when Wake chose none and no probe has returned. The reply
-is **suppressed** at `fanOut` (`internal/daemon/fanout.go` — `absorbProbe`, a counter so overlapping
-probes both suppress) so it reaches no client, and the on-disk reply is **filtered** out of restored
-history on its own `Current model:` shape (`internal/daemon/history.go`). The parse lives in the
-airlock (`core.EffortFromModelReply`). The probe fires once on `init` and again after an `/effort`
-change. See `internal/daemon/effort.go` and
-`docs/notes/decisions.md`.
-
-**The same probe confirms the *model*, for the same reason effort needed it.** A model is on every
-`init` frame, but `/model <arg>` changes it with no turn and so no new `init` — the id on the wire is
-a turn stale, and the status bar showed the old model until the next query. So `/model` fires the
-same bare-`/model` probe `/effort` does, its reply also names the model
-(`core.ModelFromModelReply` reads `Current model: Opus 5 (1M context)` off the same line as the
-effort clause), and the daemon carries it as `rpc.SessionStatus.ConfirmedModel`. The status bar
-**prefers the confirmed model over the init-frame id**, falling back to the id until the probe
-answers. Not park-persisted (a woken session re-probes) and not written to `a.model` — the park
-book's model is the alias Wake asked for at spawn, a separate fact from the rendered name. Detected
-by `noteModel` in `apply`, beside `noteEffort`.
-
-**Discovery verifies a directory; it never decodes one.** The project-dir slug is lossy, so
-`verifiedDir` holds three facts against each other and answers exactly one directory or none.
-`slugOf` may only ever appear as an operand of `==` or `!=` — constructing a path from a slug is what
-runs a session in the wrong place.
-
-**`wake stop` never claims more than it can see.** The EOF on its connection has two producers and
-nothing on the wire separates them, so it waits for the socket file to be unlinked (a stat, not a
-dial) and then asks `daemon.Status`, whose third case is the on-disk roster filtered by which
-processes still exist.
+One line each; the full argument is in the named file or `docs/notes/decisions.md`.
+
+**Identity and lifecycle**
+- A session's name comes from the daemon's 64-name pool. **A name is never an address** — frames
+  carry `SessionID`; names are released and reissued, so a rename has no alias.
+- **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
+  everything and clears the park book (`parked.json` beside the socket).
+- `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
+  before closing — `internal/ui/park.go`.
+- **A daemon restores nothing.** ⌃Q then `wake` is a fresh room; parked sessions are addressable only
+  via `/resume` (`rpc.Status.Parked`, disjoint from `Sessions`). `admit` still refuses a spawn under a
+  parked id. `⌃C` refuses a blocked agent (closing stdin reads as an operator deny).
+- **Two live processes on one session id branch silently.** Every check happens before the second
+  process exists: `resumeSafe` asks the OS; `launch` takes the row before starting anything.
+- **Forks and imports are snapshots** (`--resume <parent> --fork-session --session-id <new>`).
+  Import is a fork, the only guaranteed-safe primitive for a hand-started `claude`.
+- **`/resume` resumes in place and skips `resumeSafe`** — the one deliberate exception, matching
+  Claude Code (owner's 2026-09-20 ruling). Parked rows keep `resumeSafe`. `internal/daemon/resume.go`.
+- **Anything waiting on a spawn waits on the id it minted**, never the parent's.
+- `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
+  confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
+- `/manager-stop` refuses a parked manager and a missing one; it does not borrow park's
+  blocked-agent refusal (a stop has no wake).
+- `/reauth` parks sessions marked by a 401 (upstream bug #48786, shared-OAuth refresh race) so
+  `/resume` brings them back on a fresh login. Wake never runs `claude auth login`.
+  `internal/ui/apierror.go`, `reauth.go`.
+
+**Keys and the legend**
+- **The legend is drawn only while an arm is live, and then it is only the armed cue:**
+  `↵ detach` / `⌃O cancel`, `esc clear draft`, `esc rewind`, `⌃Q park all & quit`. `legendEntries`
+  is still the canonical list and must be a bijection with `App.key`'s cases
+  (`TestEveryKeyTheLegendNamesIsBoundAndEveryBoundKeyIsNamed`); this paragraph is held to the
+  renderer by `TestCLAUDEmdDescribesTheLegendItDraws`. `Composer.showsCue` is the one predicate both
+  sizing and drawing use.
+- **The permission mode moves on the receipt, never the keystroke.** `⇧⇥` cycles
+  `default → acceptEdits → plan → auto` (Claude Code's own order,
+  `internal/ui/testdata/claude-mode-cycle.json`); `init` corrects stale beliefs; a mode does not
+  survive a park. `internal/ui` never spells a mode word — use core's constants. `internal/ui/mode.go`.
+- **Grid keys are single bytes (`⌃Y`, `⌃B`)** because `⇧↵`/`⌃⇧↵` are unnamed by bubbletea and macOS
+  eats every `⌃`/`⌃⇧`+arrow (`TestNoKeyIsACtrlArrow`, `keyprobe_test.go`). `⇧←→` move among drawn
+  panes only; vertical pane movement has no key.
+- **Plain `↑↓`** recall prompt history unless the cursor can move within a multi-line draft —
+  decided by simulating bubbles' move on a copy (`Composer.CanCursorUp/Down`), not by counting rows.
+  The roster is `⇧↑↓`. `internal/ui/keys.go`, `composer.go`.
+- **Claude Code's keymap is kept by hand** in `internal/ui/testdata/claude-keymap.json`;
+  `keymap_test.go` fails on any unruled collision. Only ⌃O is destructive, hence armed.
+- **Detach is armed by ⌃O, confirmed by ↵, cancelled by ⌃O**, and the cue stays drawn while armed.
+  Only key/mouse input disarms (a frame arriving must not flip ↵ to *send*). `internal/ui/detach.go`.
+- **`⎋⎋` clears a draft; two fast escapes arrive as one `alt+esc`** and are handled as both halves
+  (`escprobe_test.go`). Idle+empty → rewind picker, gated fresh on every `esc`. `internal/ui/escape.go`.
+- **The emergency exit is `⌃C⌃C`, read off the tty before Bubble Tea** (`cmd/wake/killswitch.go`),
+  because a wedged renderer swallows SIGINT/SIGTERM. ⌃Q is deliberately not watched (it collided with
+  the armed park). **It pauses for a terminal hand-over** (`cmd/wake/handover.go`): while
+  `claude mcp login` owns the tty, the pump stops, cooked mode is restored and signals are muted —
+  all or nothing. Handing the terminal over (like `git commit` to an editor) is not a PTY.
+- **A pane that holds the keys is always drawn**; every focus change goes through `App.refocus`.
+
+**Rewind**
+- `esc esc` idle sends `rewind_conversation` (a `control_request`) with `target_message_uuid` and
+  the mandatory `last_seen_user_message_uuid`. `session_id` never changes.
+- The on-disk transcript is an append-only tree; `core.ActiveBranch` walks `parentUuid` from the live
+  leaf. History, room restore and `RewindTargets` share that one reconstruction. On `rewound:true`
+  the pane re-reads itself (`noteRewind`) — the only mechanism. The manager is refused both frames.
+
+**Layout, mouse, selection**
+- **The grid is bounded:** columns, each split once (spec §8). The room is `Cols[0]` and cannot be
+  closed. Arbitrary tiling is out of scope.
+- Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
+  through the 80ms settle; row drags don't. The wheel scrolls the pane under the pointer.
+- **Drag selects, release copies**, on every surface but the `/workflows` view (a press there moves
+  its cursor; `deferred.md`): transcript (anchored to `transcript.lines`
+  indices), query box (`composersel.go`), everything else as a frame-wide screen selection
+  (`screensel.go`). Every keystroke clears the highlight *and* does its job; width change clears,
+  height doesn't; a click copies nothing. Roster click targets are resolved at press.
+- **Double-click selects a word, triple-click its row**, on any selectable surface; the first click
+  still does its own job. A timer (`multiClickWindow`) counts clicks but never tells a click from a
+  drag. `internal/ui/multiclick.go`.
+- Clipboard: `pbcopy` → `tmux load-buffer` → OSC 52, through the writer Bubble Tea draws through,
+  which **must embed `*os.File`** or colour silently disappears (`cmd/wake/output.go`).
+- `App.transcriptRows` measures the pane as drawn (cards, menus and previews move chrome without a
+  resize); `startSelection` fences on it.
+- **Only a width change returns a reader to the newest line.** Last-read markers anchor to events.
+
+**Rendering and cost**
+- **The socket is drained by a goroutine that does not draw** (`internal/ui/inbox.go`); geometry goes
+  through one 80ms settle (`geometry.go`).
+- **A streamed preview never costs the record a slot**: partials fold into one slot and never evict,
+  and a dropped partial is not a gap (`inbox.go`, daemon `client.go`'s `partialCeiling`).
+- **A preview is never a record**: plain-text tail, bounded by the pane, never through glamour,
+  accumulated only for panes on screen (`App.wants`), dropped on leave. No preview in the room or for
+  subagents. `internal/ui/partial.go`.
+- The composer grows with the draft; the pane bounds it (`composerRowsIn`), never itself. A pane's
+  chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
+  screen.
+- **The room's working line is one row**: oldest running turn, `+N more working`
+  (`roomWorkingLine`, `roomwords.go`).
+- **The DM's done line** is captured at the working→idle edge (`Fleet.WithStatus`), only for turns
+  this client watched start; forgotten on park/end/gap, on new agent content (`notDone`), and hidden
+  while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate.
+- **Compacting line** (`compacting.go`): indeterminate bar (the wire has no progress figure); end
+  keys on `compact_result`, not the boundary. The `compact_boundary` metadata draws
+  `✻ Compacted · A → B tokens · …`, live-only.
+
+**Room and routing**
+- **The room re-derives its history from claude's transcripts** (`FrameRoomHistory`,
+  `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
+  if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
+  broadcast; agent prose is restored only inside a public turn.
+- A routed message is echoed into the room and into every *held* DM it reached, mention included,
+  marked `FromRoom`.
+- **A lone `@name` narrows the room** to that thread (`roomfocus.go`); `⌃A` overrides per target;
+  `/groupchat-filter off` flips the default per window (`roomfilter.go`).
+- **Peer cross-session messages** show in the room as `↪ sender → recipient`
+  (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*
+  content, so pasted text can't forge one. DM replays of Wake's own sends are dropped.
+- **Slash commands resolve against a closed set Wake owns; anything else is text.** A word claude
+  advertises may be claimed only in a form claude is recorded doing nothing with
+  (`bareOnlyCommands` names the fixture). `/color` is the owner-claimed exception
+  (`ownerClaimedCommands`). Only `slash.go` decides what a leading slash means.
+- **Open mention mode widens a message, never a command**: `@john /anything` always goes to john
+  alone (`mention.go`, `leadingCommand`).
+- **Completion offers, never routes, never takes `↵`.** Session commands/skills first, then Wake's,
+  agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads run off
+  the draw goroutine (`completion.go`, `completionpath.go`). It must mirror `core.Resolve`.
+
+**Cards and asks**
+- **An ask belongs to its agent's conversation; the room draws none** (`Cards.For`, `App.cardOf`).
+  The roster row, the strip's `N need you` and `⌃X` announce it. Nothing on that wire times out.
+- Permissions/plans: rune then `↵`, read only on an empty composer; any other input disarms (key,
+  composer, mouse, digit).
+- Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer
+  mode, where the card takes only `↵` (`cardanswer.go`). Arrows reach the card with or without a
+  draft; `←→` only on an empty composer.
+- A `Picker` is not a `Card` — `Cards.Reconcile` would delete it on the next report.
+
+**Manager**
+- **May send, interrupt, spawn (optionally named, under `daemon.liveCap`, into a directory the fleet
+  already occupies), and group (`set_team`, `set_color`)** — nothing else. Rename, label, park,
+  wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each argued in
+  `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
+- Its config is a function of its name, applied in `launch`: `--mcp-config` only ever beside
+  `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing).
+- The daemon socket has no caller auth; `managerVerbs` bounds the manager's tool surface, not what
+  the daemon accepts.
+
+**Directories and paths**
+- `a.cwd` (from `init.cwd`, absolute or refused) is where a session *runs*; `a.dir` is where it was
+  *started* and never moves — park, wake and fork use `a.dir` because claude locates transcripts by
+  the start directory. The manager's spawn bound uses `Dir`.
+- Wake creates worktrees at `<repo>/.wake/worktrees/<name>` on `wake/<name>`, never removes one, and
+  refuses the spawn if `git worktree add` fails.
+- `--add-dir` gets `Frame.Dir`'s fence (absolute or refused). `--debug-file` is a **name**
+  (`rpc.ValidDebugFileName`); the daemon places it. Checked at `configRefusal` and `launchRefusal`.
+  Neither survives a park (`/add-dir` doesn't exist at runtime).
+- **Discovery verifies a directory, never decodes one**: `slugOf` appears only as an operand of
+  `==`/`!=`. Transcripts are read whole (cwd can sit megabytes in), fanned across workers.
+- **`wake stop` never claims more than it can see**: it waits for the socket unlink, then asks
+  `daemon.Status`.
+
+**Effort and model confirmation**
+- The daemon sends a bare `/model` probe on `init` and after `/effort`/`/model` changes; its reply
+  names the effort and model (`core.EffortFromModelReply`, `ModelFromModelReply`). The reply is
+  suppressed at `fanOut` (`absorbProbe`) and filtered from restored history. The status bar prefers
+  confirmed values. `internal/daemon/probe.go`, `effort.go`.
 
 ## Key locations
 
 Update this table in the same commit that creates a path. **A row naming a path that does not exist
-yet says so in bold** — a table that cannot be told apart from a build is worse than no table.
+yet says so in bold.**
 
 | What | Where |
 |---|---|
-| Entrypoint and verb dispatch | `cmd/wake/main.go` — eleven verbs, two not user commands |
-| Bare `wake`: the front door and its branch | `cmd/wake/openroom.go` — `openRoom` (the bool), `seedRoom` (the frame the bool chooses) · `openroomguard_test.go` for the per-state verdicts · `openroomscreen_unix_test.go` for which pane has the terminal, which nothing in process can see |
-| Attach, spawn handshake, the detach line | `cmd/wake/attach.go` |
-| Resolving "which session did they mean" | `cmd/wake/match.go` |
-| `wake fork` | `cmd/wake/fork.go` |
-| `wake import` — the picker and adopting one | `cmd/wake/import.go` |
-| `wake setup-terminal` — the CLI shape: detect, confirm, apply/undo | `cmd/wake/setupterminal.go` |
-| Host-terminal detection, per-terminal knowledge, file I/O, the first-run marker | `internal/termsetup/` — `terminal.go` (`Detect`, pure over an env map) · `multiplexer.go` · `knowledge.go` (`Info`, the verified snippets — Ghostty's `\x1b\r`, Alacritty/VS Code's TOML/JSON-safe Unicode escape for ESC, plus the Cmd+Left/Right → Home/End bindings that move the composer cursor to line start/end) · `apply.go` (`Apply`/`Undo`/`Status`, append-only and idempotent, auto-writable only for Ghostty/Kitty/Alacritty) · `firstrun.go` (`PromptSeen`/`MarkPromptSeen`, the one-time marker under `$XDG_CONFIG_HOME/wake/`) |
-| The one-time first-run offer | `cmd/wake/termsetupprompt.go` — `promptTerminalSetupOnce`, called from `converseModel` so every path that opens a TUI passes through it once |
-| Adopting sessions from inside the room | `internal/ui/adopt.go` — `adopt`/`adoptArrived`/`adoptAll` (why the word is not `/import`, why the machine is read from a `tea.Cmd`, why the picker goes to the room and never to a DM, and why the whole set is refused when one name does not resolve) · `adoptguard_test.go`, where the minted id and the frame kind are held statically because both failures are silent |
-| The seam a room is handed to see this machine | `cmd/wake/adopt.go` — `machineSessions` (holds no state, caches nothing) · `adoptRows` (why a pane is capped and a terminal is not) |
-| `wake status` · `wake stop` | `cmd/wake/status.go` · `cmd/wake/stop.go` |
-| `wake manager` · `wake mcp` | `cmd/wake/manager.go` · `cmd/wake/mcp.go` (+ `mcpguard_test.go`) |
-| Seating a manager on the way into the room | `cmd/wake/ensuremanager.go` — called by `openroom.go` and `attach.go` |
-| The manager switch, and what a fleet with none needs | `internal/ui/service.go` — `ManagerFrames` (pure, both callers) · `Fleet.manager` · `App.manager` · `App.managerStop` |
-| Ending one agent and dropping its row | `internal/ui/quit.go` — `quitAgent`, `quitTarget` (bare = the focused conversation, `@who` = that agent), `awaitingQuit`, `departedQuit` (the confirm-on-report drop, run from `applyStatus`), `forgetConversation`, `Fleet.drop` (the one place a live-reported agent leaves the fleet) · `quit_test.go` |
-| A turn that failed on the API, surfaced not as agent speech | `internal/core/protocol.go` — `messageEvents`' `IsAPIErrorMessage` branch → `core.KindAPIError`/`NoticeAPIError` (live stream, snake_case), and `DecodeTranscriptLine`'s `isApiErrorMessage` **drop** (on disk it is camelCase, a different wire — without it a `/resume` restores the 401 as agent speech) · `internal/core/wire.go` — `apiErrorText` (the synthetic frame's message), `wireFrame.IsAPIErrorMessage`, and `authFailedRetry`/`systemKind`/`systemText`/`apiRetryNotice` — a **401 `system/api_retry`** (on the live stream from attempt 1) is surfaced as `KindAPIError` too, so the fleet-wide 401 shows in a second rather than at Claude Code's give-up ~5 min later (a non-401 overload retry is left a plain system event) · `internal/ui/apierror.go` — `apiErrored` (the notice + the `authFailed` mark), `markAuthFailed`/`clearAuthFailed`/`clearedAuthFailedOn` (a healthy turn drops the mark), and `bumpAuthRetries`/`autoParkStalled` (`authRetryParkAttempt`) — once a 401 has repeated enough to be a dead login rather than a blip, Wake **auto-parks** the session to end the retry hang, derived after the fold like `armRateLimitClear` because `observe` returns only `App` · `internal/ui/observe.go` routes it like a rate-limit and clears on recovery, `resume.go` clears on wake · `apierror_test.go`, `internal/core/apiretry_test.go`, `testdata/stream/api-error-auth.jsonl`, `testdata/stream/api-retry-auth.jsonl`, `testdata/transcript/api-error-auth.jsonl` |
-| Recovering a fleet knocked out by an expired shared login | `internal/ui/reauth.go` — `/reauth`, `authFailedLive` (parks the marked live sessions in place so `/resume` brings them back on a fresh login; why it parks rather than parks-and-wakes) · `reauth_test.go` |
-| Claude JSON airlock | `internal/core/protocol.go` (decode) · `wire.go` · `vocabulary.go` · `encode.go` — start at `protocol.go` |
-| Airlock tests | `internal/core/protocol*_test.go`, `fixtures*_test.go`, `encode_test.go`, `airlock_test.go` |
-| Raw-JSON helpers the airlock decodes with, outside it | `internal/core/rawjson.go` — `jsonString`, `firstJSONByte`/`isJSONObject`/`isJSONArray`: generic JSON, no Claude key or word, moved out when the `/mcp` and workflow merge filled all four airlock files to the hard max |
-| One agent: spawn · events · lifecycle · stop | `internal/core/session.go` |
-| One agent's write path: send · permission answers · interrupt · mode · rewind | `internal/core/write.go` — split from session.go once `Rewind` crossed the 800-line hard max |
-| How a session names itself on the command line | `internal/core/argv.go` — `identityArgs`, `SessionArgvMarkers` |
-| How a session ends | `internal/core/ending.go` |
-| Asks: kind, payload, answers | `internal/core/vocabulary.go` · `event.go` · `encode.go` |
-| The child's environment, stderr, process group | `internal/core/process.go`, `procgroup_*.go` |
+| Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
+| Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` · `handover.go` |
+| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` |
+| One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
-| Routing: `@name` · manager · broadcast | `internal/core/router.go` |
-| Daemon ↔ client transport | `internal/rpc/wire.go` (frames) · `lifecycle.go` (ending verbs, fleet report) |
-| Socket, start-or-attach, status | `internal/daemon/daemon.go` — `Status`, `FleetOnDisk` |
-| Test-only parent-death lease | `internal/daemon/lease_*.go` — inherited pipe EOF cancels `Serve`; normal product daemons receive no lease |
-| Accept loop, dispatch, shutdown | `internal/daemon/server.go` — `quitVerb`, `beginQuit`, `reconsiderEmptyExit`, `shutdown` |
-| One supervised session, liveness policy | `internal/daemon/agent.go` — `stateLocked` |
-| The permission asks an agent is blocked on | `internal/daemon/agentask.go` — the `ask` type, `addPending`, `noteAnswered`, `awaitsChoice`, `blockedOnAsk`, `pendingIDsLocked`, `withoutAsk` (split from `agent.go`, whose subject is the liveness policy) |
-| Which dispatches a session has running, for fork-safety | `internal/daemon/subagenttrack.go` — `trackSub`, `hasRunningSubagent` (the running-and-openable subset of `ui.Tasks`; `forkSource` refuses a fork off it while a background subagent still writes the parent's transcript). `trackSub` keys on `core.TaskAgent` alone, so a running **workflow** is never in the set and never blocks a fork — its own agents write only their own sidechain files, never the parent's transcript, the shell's own position · `forksubagent_test.go` |
-| One agent's stdin path: queue, drain, apply | `internal/daemon/apply.go` — `submit`, `serveInput`, `apply` |
-| Spawn, fork, wake, watchdog | `internal/daemon/spawn.go` — `launch`, `forkRefusal`, `admit` |
-| Fan-out: one session's events to every client | `internal/daemon/fanout.go` — `fanOut`, where the effort probe's reply is consumed (`absorbProbe`) and the startup probe fires (`firstInit`). Split from `spawn.go` to keep it under the hard max |
-| Handing a newly attached client the fleet's outstanding asks | `internal/daemon/askreplay.go` — `replayPendingAsks`, called *after* `addClient` in `server.go`'s `run` (subscribe first, then replay: an ask arriving in that window is delivered live *and* in the snapshot, a double both the card and the room dedup, where replaying first would let it fall between snapshot and subscribe and be missed) · `internal/daemon/agentask.go` — the `ask` type and `ask.event` (the retained `core.Event`), with `pendingAskFrames` in `askreplay.go`. Without this a client that attached after an ask went past learned only `rpc.SessionStatus.RequestIDs`, from which `internal/ui.Cards.Reconcile` could build only a bare permission stand-in — silently wrong for a question, whose `Allow` is then a bare `FrameAllow`. The double's room half is deduped by `internal/ui/observe.go`'s `App.roomAsked` — keyed on what the room has actually announced, never on whether a card exists, so a `Cards.Reconcile` stand-in (a report's `RequestIDs`, a card with no room line) does not suppress the one announce the canonical reattach has. Covers an ask outstanding *at attach*, not one a live client later drops from its own queue |
-| Handing a newly attached client the fleet's running dispatches | `internal/daemon/taskreplay.go` — `replayRunningTasks`, called *after* `addClient` in `server.go`'s `run` beside `replayPendingAsks` (subscribe first) · `internal/daemon/agent.go` — `runningTasks` (the retained `task_started` per still-running dispatch, folded in `observe`, cleared on `KindSessionReset`), `runningTaskFrames`. Without this a client that attached after a subagent started drew no sidebar row for it: `task_*` frames are live-only — never on the on-disk transcript (bugs.md BUG-33) and no `rpc.SessionStatus` field — so the replayed `task_started` is the only route by which a reattach or a second window learns a dispatch is running. Covers a dispatch running *at attach*, not one a live client later drops; the sub-millisecond race where a racing ending folds ahead of the replayed start leaves a stuck row, BUG-35's own bounded residual |
-| The supervisor a launch runs under | `internal/daemon/launcher.go` — `newAgentLauncher`, `DirectAgentLauncherEnv` (why tests default to the direct path) |
-| May this spawn happen at all: boundary, cap | `internal/daemon/mayspawn.go` — `maySpawn`, `liveCount`, `capRefusal` |
-| The worktree a session runs in | `internal/daemon/worktree.go` — `sessionDir`, `addWorktree`, and `git`, whose command is bounded by a WaitDelay and a process group (`worktreeproc_{unix,other}.go`) so a post-checkout hook cannot hang it forever. The name fence is `internal/rpc/worktree.go`'s `ValidWorktreeName`, because both sides check it and `internal/ui` may not import the daemon. Wake creates it; Wake never removes it. A **worktree** spawn runs off the dispatch goroutine so a slow git cannot hold a client's other frames — `server.go`'s `dispatch`, where a no-worktree spawn stays in line to keep `mcp.go`'s `act` ordering |
-| What `⌃Q` asked for and what came back | `internal/ui/park.go` — `parkAll` (the ask), `parkAllSettled`, `parkAllTaken` (the reply, told apart from a push), `closing` · `internal/ui/hangup.go` — the EOF route |
-| Park, wake, and what survives both | `internal/daemon/park.go` — `unpark` (a live ⌃C row) · `unparkRecord` (a book entry, the only path across a restart) · `parkbook.go` — `parkedStatuses`, which is what `rpc.Status.Parked` carries |
-| Is anything still running this id | `internal/daemon/liveid_unix.go` (vs `reap_unix.go`, which asks about a pid) |
-| Session discovery and import | `internal/daemon/discover.go` — every transcript is read **whole** (`verifiedDir` needs a slug-matching cwd that can sit megabytes in), but the reads are fanned across `discoverWorkers`, so a full-machine walk for the `/resume` picker is sub-second rather than the ~3.5s hang a sequential full read of every 8MB file costs (`transcriptFiles` lists cheaply first, then a bounded pool reads) · `import.go` |
-| Reading a conversation back off claude's disk | `internal/daemon/history.go` — `History`, `transcriptPath` (found by filename, never built from a slug), `answerHistory` behind two verbs · `internal/core/protocol.go` — `DecodeTranscriptLine`, a filter in front of `DecodeLine` rather than a second decoder, and the one on-disk key it reads · `internal/ui/history.go` — the ask and the fold |
-| Reading the **room** back off the same disk | `internal/ui/roomhistory.go` — `roomHistoryLines` (the merge, the filter, the broadcast rule), `roomAsk` (the room's own ledger) · `internal/ui/chat.go` — `Room.Before` |
-| Narrowing the room to one agent's thread | `internal/ui/roomfocus.go` — `focusAdmits` (pure, id-comparison) · `internal/ui/chat.go` — `Room.focus`/`WithFocus`, `narrowed`/`narrowDefault`, the `roomLine.to` stamp, the subset render (a hidden line stays in `said` at `rows == 0`) · `internal/ui/send.go` — `retarget` sets focus off the composer's lone direct `@name`, and stamps `to` on the echo |
-| Toggling that narrowing off | `internal/ui/roomfilter.go` — `Room.effectiveFocus` (the id the render paths filter on), `ToggleNarrow` (`⌃A`, the per-target override), `WithNarrowDefault`, `App.toggleRoomFilter` (the key, with its two refusals) and `App.groupchatFilter` (the `/groupchat-filter on\|off` default) · `roomfilter_test.go` |
-| A peer's cross-session message | `internal/core/wire.go` — `crossSession` (the envelope recogniser, beside the wire shapes it is one of) · `internal/core/event.go` — `KindCrossSession`, `FromName` (the sender, decoder-set and contained), `ToName` (the recipient, App-set from the receiving session's validated fleet name, so excused in `contain.go`'s `notAuthoredByTheChild`) · `internal/ui/fleet.go` — `fold`'s admit · `internal/ui/fleetquery.go` — `Fleet.crossSpeaker` (sender attribution) · `internal/ui/observe.go` — the room append (resolves `ToName` from the receiving session) and `replayedOwnSend` (the DM single-source) · `internal/ui/chat_blocks.go` — `crossSaid`/`crossSessionLead`/`crossSessionArrow` (heads `sender → recipient`), `roomCollapsible` · `internal/ui/roomhistory.go` — the restore heads it `sender → recipient` · `internal/ui/dm_blocks.go` — `crossSessionBlock` · `internal/ui/crosssession_test.go` · `testdata/{stream,transcript}/cross-session.jsonl` |
-| ⎋, and the second one | `internal/ui/escape.go` — `escape`, `clearsOnEscape` (+ `escprobe_test.go` for what two escapes in one read actually are) |
-| The rewind picker: trigger, tree-aware read, receipt | `internal/ui/rewind.go` — `rewindArmable`, `RewindPicker`, `noteRewind` (the receipt fold and re-read) · `internal/core/activebranch.go` — `ActiveBranch`, the tree walk · `internal/daemon/rewindtargets.go` — `RewindTargets`, the daemon's own query behind `FrameRewindTargets` |
-| The manager's config and scope | `internal/daemon/manager.go` |
-| What a session thinks with | `internal/core/effort.go` (two vocabularies) · `internal/core/model.go` · `internal/daemon/effort.go` — `noteEffort`, `argvEffort` |
-| What a session may spend, and what it falls back to | `internal/core/spend.go` — `ValidBudget`, `ValidFallbackModel`, and what neither of them confirms · `internal/daemon/spawnconfig.go` — `configRefusal`, the checks a spawn frame passes before a name is claimed, and `launchRefusal`, the last door before the argv for every caller |
-| What a session may reach, and what it logs about itself | `internal/rpc/paths.go` — `ValidAddDir` (a path, `Frame.Dir`'s fence) · `ValidDebugFileName` (a name, `ValidWorktreeName`'s), both here for `worktree.go`'s reason: both sides check them and `internal/ui` may not import the daemon · `internal/core/debug.go` — `ValidDebugFilter`, and why a filter never reaches an argv without a file · `internal/daemon/debuglog.go` — `debugFilePath`, the directory Wake owns |
-| The flags `/new` takes | `internal/ui/newflags.go` — `takeNewFlags`, one table for `--worktree`, `--add-dir` and the two debug flags, stripped before `new.go` counts a name and a directory |
-| The two lists, extracted rather than typed | `scripts/extract-claude-flags.py` → `internal/core/testdata/claude-flags.json` · `testdata/stream/bare-model.jsonl` is the authority for the models |
-| Names, labels, roster, reaping, locking | `internal/daemon/names.go` · `label.go` · `roster.go` · `reap*.go` · `lock*.go` |
-| Rename and re-label | `internal/daemon/rename.go` · `internal/ui/rename.go` |
-| A per-agent identity colour | `internal/rpc/color.go` — `ColorNames`, `NormalizeColor` (the fence both sides apply) · `internal/daemon/color.go` — `setColor`, `colorSession` · `internal/ui/color.go` — `App.colorAgent` · `internal/ui/theme.go` — `identityColors`/`identityStyle`/`identityColor` (Wake's own bolder set, not in `claude-palette.json`). Rendered by `speakerStyle` (room name-tag), `Composer.boxStyle`/`titleStyle` (the composer border and @name, set by the DM pane via `WithColor`) and `Roster.headStyle` (roster row, bold under the cursor). **The status bar does not take it** — `statusBar` recedes to `HintStyle` and `barKey` omits the colour. `@who /color` routing is the `mentionCommand` bridge in `internal/ui/slash.go`, dispatched from `sendRoom`. Survives a park via `parkedRecord.Color` |
-| A per-agent team tag, and the sections it draws | `internal/rpc/team.go` — `NormalizeTeam`, `TeamNone`, `FrameTeam` (the fence and the frame kind, declared here rather than `wire.go` because that file is at the 800-line hard max) · `internal/daemon/team.go` — `setTeam` (refuses a reserved routing word; the live-agent-name collision refusal is deferred, see `deferred.md`), `teamSession`, `orderTeams` (the daemon's team creation order, since only it sees the whole fleet) · `internal/daemon/report.go` — `fleet`, where `orderTeams` ships `rpc.Status.Teams` · `internal/ui/team.go` — `App.teamAgent` (`/team`, the `@who` bridge, `/team none`) · `internal/ui/sections.go` — `Fleet.sections`/`sectioned` (stable-partition of the already-ranked slice into the header-less top block, then teams in the daemon's order) · `internal/ui/rostersection.go` — `sectionRows`, `teamHeaderLine` (the `──── team ────` divider through `titledEdge`), the one row-count `View`/`window`/`At` share so a header-click opens nothing · `internal/ui/board.go` — `boardAgents`, `teamHeaderAt`, `boardBlockHeight` (the board rows' own header-aware count) · `internal/ui/boardtilesection.go` — the **tiled** board's per-team shelves: `tileShelves` (a header band then each team's tiles wrapped within it, top block header-less), `tileNavSection` (the 2-D cursor walk that skips headers and clamps, no wrap), `tileLayout`/`boardTileLayout` (one measured geometry the draw, the mouse and the cursor all read), `tileWindow` (pages around the cursor's row, pulling its header into view). `@team` fan-out is `core.Resolve`'s team step (`router.go`, `Addressee.Team`/`Route.Team`); a Wake target-command aimed at a team is refused (`send.go`, `leadingRoomTargetCommand`). Survives a park via `parkedRecord.Team`. **The manager sees teams** in `list_agents`/`agent_status` (`Team` out of `notInTheStatusReport`, on the owner's 2026-09-20 call), **sets one with `set_team`** (the 2026-09-21 override, `internal/mcp/grouping.go` — `FrameTeam`, already fenced by `teamSession`), and fans a message out to one with **`send_to_team`** (`internal/mcp/sendteam.go`, writes N `FrameSend`s — the frame already allowed the manager); ordinary agents reach teams through the manager |
-| MCP server exposed to the manager | `internal/mcp/` — `tools.go` (the reading tools and send/interrupt/spawn), `sendteam.go` (`send_to_team`), `grouping.go` (`set_team`/`set_color`, the 2026-09-21 override) — all held to `managerScope` in both directions — `rollup.go`, `fleet.go`, `stateguard_test.go`, `cmd/wake/mcpguard_test.go` (the per-frame verdicts) |
-| Bubble Tea root model | `internal/ui/app.go` — start at `apply` |
-| Folding one agent's event into the model | `internal/ui/observe.go` — `observe` (the room/DM fold, and where a rate-limit event is routed away), `appendEvent`; split from `app.go` |
-| The rate-limit warning as a timed pop-up | `internal/ui/ratelimit.go` — `rateLimited` (a warning to the notice row, a benign `allowed` to nothing), `armRateLimitClear`/`rateLimitCleared` (the one-shot linger, `gen`-guarded against an overlapping warning clearing early) · `internal/notice/notice.go` — `ClearIf` (clears only while it is still the notice showing) |
-| What a fleet report does to the model | `internal/ui/report.go` — `applyStatus`, `noteEnding` |
-| The `Agent` type and the event fold that writes it | `internal/ui/fleet.go` — `Agent`, `Fleet.WithStatus`, `fold`, `withFacts` |
-| Reading the fleet: the immutability copy and the accessors | `internal/ui/fleetquery.go` — `Fleet.copy` (copies `subs` too, once a missing line here left a subagent's transcript blank), `Agent`, `OnRoster`, `ByName`, `Agents`, `Focus` (split from `fleet.go` at the write/read seam) |
-| The keys the App owns, and the legend bijection | `internal/ui/keys.go` |
-| The drain that is not the draw loop | `internal/ui/inbox.go` — the ring, the fold that keeps a preview off a slot, and what `dropped` counts (+ `inbox_bench_test.go` for the fold's price) |
-| Which conversations are on screen and where | `internal/ui/grid.go` — bounded: columns, each split once |
-| Pane focus, placement, and the DM ring | `internal/ui/panes.go` |
-| Frame layout, breakpoints, divider, mouse | `internal/ui/layout.go` · `appview.go` · `geometry.go` · `mouse.go` |
-| Selecting text, and what a drag copies | `internal/ui/selection.go` (the value, pure) · `mouse.go` (the gesture) · `transcript.go`'s `highlighted` (the draw) · `internal/ui/composersel.go` (the same, over the query box's own draft rows) · `internal/ui/screensel.go` (the same again, over every other rendered surface as a frame-wide screen selection; `appview.go`'s `View` lays the overlay over `assembleFrame`) · `internal/ui/composerdelete.go` (⌫/delete removing the highlighted draft text, mapped back to raw runes through bubbles' own wrap) · `internal/ui/multiclick.go` (double-/triple-click: the `clickRun`, `wordAt`/`rowSpan` over cells, and `screenBounds`, which keeps a chrome word inside the surface it was clicked in) |
-| Placing the query-box caret from a click | `internal/ui/composercursor.go` — `caretAtPoint`, reusing `composerdelete.go`'s display↔rune map (`composerRowStarts`/`rawOffset`/`runesInto`) and its `placeCursor` · `mouse.go`'s `clickedComposer` (the release-time click) · `composersel.go`'s `drawnComposer` counts `barRows`, not a hardcoded one, so a two-row status bar does not anchor the draft rows a row too high |
-| A DM reader told they have drifted off the newest line | `internal/ui/followbanner.go` — `followLine` (the absolute line the banner overlays, `-1` while following), `withFollowBanner` (the overlay, applied in `DM.View` after `transcript.view`) · `internal/ui/selection.go`'s `bannerHit` (decided at press time in `mouse.go`'s `startSelection`, from the same freshly measured height `transcriptRows` uses — not re-derived at release, where the DM's own stored transcript can be stale) · `DM.JumpToLatest` in `dm.go`. The streamed preview and the working line update regardless of scroll position (`dm.go`'s `View`); the transcript deliberately does not follow a scrolled reader (`Append`'s own comment) — this is the missing signal that a reader has silently detached, not a change to either rule |
-| The clipboard, in three layers | `internal/ui/clipboard.go` · `cmd/wake/output.go` — the writer Bubble Tea draws through, which **must** embed `*os.File` |
-| Sending: routes, echoes, one command per draft | `internal/ui/send.go` |
-| Type-ahead: a message typed while an agent works waits, then flushes on its working→idle edge | `internal/ui/queue.go` — `shouldQueue`, `enqueue`/`dequeue`/`dropQueue`, `flushQueued` (the edge-triggered delivery, one per turn so a burst never coalesces), `deliver`, and the `queuedPin` above the composer · wired in `send.go`'s `sendDM`/`sendRoom` and `app.go`'s `frameMsg` case · `queue_test.go` |
-| Dropping an image into the composer | `internal/ui/imagedrop.go` — `droppedImage` (the paste hijack, read at the top of `App.key`), `imageDropPaths` (shape only, no I/O), `readDroppedImages` (the off-goroutine read, sniff, base64), `imageDropped` (fold to a chip, or path back on failure) · `internal/ui/composerimage.go` — `Attach`, `Images` (only the chips still in the draft), `stripImageChips`. The wire shape is `core.ImageBlock` → `rpc.Frame.Images` → `EncodeUserMessage` (images first, text last) |
-| Cards and their keys | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` |
-| A question ask as a wizard | `internal/ui/cardsteps.go` — the step model (`OnReview`, `optionsAt`, `firstUnanswered`) and the tab strip · `cardreview.go` — the review page and `reviewChoose`, drawn through the questions' own `optionRow` so it earns no binding · `cardanswer.go` — answer mode: the `Other…` row, the refusal's reason, and the one state in which `↵` on a draft is not a message |
-| A bordered box with a label in an edge | `internal/ui/titledbox.go` — `titledEdge`, `titledBox`. Two surfaces draw one: the composer names its pane in the top edge, a card names the agent in the top and its keys in the bottom |
-| The transcript behind an ask | `internal/ui/askdim.go` — `quieted`, and why the SGR pair is taken from `HintStyle` once rather than rendered per row (`askdim_bench_test.go` for both numbers) |
-| What App sets on a pane for the draw | `internal/ui/panedraw.go` — `WithAsk`, `WithWriting`, `WithSelection`, `WithMenu`; set on the way to `View`, never folded into |
-| Which pane draws an ask | `internal/ui/appview.go` — `cardOf` (a conversation puts its own agent's; **the room puts none**), `cardBlock`, `drawnConversations`, `focusedPane` · `internal/ui/cardhome_test.go` for the four placements |
-| The room's record that a question was resolved | `internal/ui/cardroom.go` — `recordQuestionResolved` (authored above the airlock, questions only), called from `cardreview.go` (answered) and `cardanswer.go` (cancelled) · `internal/ui/chat_blocks.go` — `resolvedLine` (green for an answer, muted for a refusal) · `core.NoticeQuestionAnswered`/`NoticeQuestionCancelled` · `askroom_test.go` for both, beside the ask announcement it closes |
-| What a pane pins over its composer, and how many rows are left | `internal/ui/appview.go` — `menuBlock` (the card, then the picker, then the completion menu) · `transcriptRows`, sized by the draw's own `SetSize` and read by `mouse.go`'s `startSelection` |
-| The sample beside an option | `internal/ui/preview.go` — three tiers: beside, stacked, dropped |
-| Which key means what | `internal/ui/keys.go` — `App.key`, held to `legendEntries` in both directions |
-| Leaving takes ⌃O then ↵ | `internal/ui/detach.go` — the arm, why the confirm is a different key, and why the legend carries it |
-| The way out of a Wake that has stopped answering | `cmd/wake/killswitch.go` — `killTrigger` (pure, so the one thing that can close somebody's window is testable without a terminal) · `killSwitch.pump` (the read that never waits on the consumer it exists to escape) · `alignedCut`/`chunker` (pure: the pump forwards only escape-sequence-aligned chunks, so a drop when Bubble Tea falls behind a fast scroll cannot split a mouse report into runes typed into the composer) · `emergencyExit` · `watchSignals`. Wired in `attach.go`'s `converseModel`, which is the one place a program runs · `handover.go` — `suspend`/`resume`/`handOver`, the pause a terminal hand-over takes |
-| The legend, the armed cue it has become, and the labels an arm swaps | `internal/ui/legend.go` — `legendEntries` (the bijection's canonical list, no longer drawn on every frame), `legendArms`, `armedLabel`/`armedCueParts`/`armedCue` (the only thing drawn now, and only while an arm is live) · `internal/ui/composer.go` — `showsCue` (`View` draws the cue row and `overhead` counts it by the one predicate) · `legend_test.go` for the bijection and the cue |
-| Walking back through what you typed | `internal/ui/prompts.go` — `↑↓` on an empty or single-line draft, derived from the pane's own events |
-| Where Wake's keyboard collides with Claude Code's | `internal/ui/testdata/claude-keymap.json`, maintained by hand (asserted by `keymap_test.go`, which holds the eight accepted collisions and fails on a ninth) |
-| `⇧⇥`, the cycle, and the label | `internal/ui/mode.go` |
-| Fork · park · resume · slash · new · starts · last-read | `internal/ui/fork.go` · `park.go` · `resume.go` (`/resume`, the wake bookkeeping, and `resumeRowsFrom` — the merge of parked + on-disk that a bare `/resume` opens) · `slash.go` · `new.go` · `starts.go` · `lastread.go` |
-| The `/resume` picker: search, rows, keys, the mixed-batch confirm | `internal/ui/resumepicker.go` — a **type-to-search** box (Claude Code's own resume-picker shape): it holds the whole recency-sorted set (`resumePickerMax`), printable keys build a `Query` that filters live (`filtered`/`matches`, term-AND over name/dir/branch/preview/id), and a `resumeWindow` of the matches draws around the cursor under a `n of m` count. Typing no longer dismisses — `⎋` is the way out. `ResumePicker`, `resumeRow`, `resumePickerKey` (↑↓ move · type to search · **⇥ toggles a row in the room only** — `␣` is a search character now · ↵ resume · ⎋ cancel; above `App.key`'s switch so no legend entry), `Selected` keyed by row **id** so a tick survives a filter, `confirmResume`, `resumeFrames` (parked → `FrameWake`, disk → `FrameResume`) · `internal/daemon/resume.go` — `resumeSession`/`resumeSource` (in place, no `resumeSafe` — the reversal) · `internal/ui/adopt.go`'s `Sessions.Resumable()` seam · `resumepicker_test.go`, `resumeopen_test.go`, `resumeframe_test.go` |
-| The command kinds, and the fence | `internal/ui/slash.go` — `slash` (Wake-addressed) · `configure` (session-addressed, bare) · `mentionCommand`/`roomTargetCommands` (a room mention aiming a target-command, `@who /color`) · `bareOnlyCommands` (+ `slashguard_test.go`) |
-| The `/login` auth panel | `internal/ui/authapp.go` — `login`, `runAuthStatus`, `authResult` · `authpanel.go` — `parseAuthStatus`, `authPanel`. Runs `claude auth status --json` through `bangRun` and hands `claude auth login` over rather than running the account login. Decodes only `loggedIn`/`authMethod`, never the account email or org (public repo) |
-| The `/mcp` menu: live MCP status, actions, sign-in | `internal/core/encode.go` — `EncodeMCPStatus`/`EncodeMCPReconnect`/`EncodeMCPToggle`, `mcpStatusReply` (known by the `mcpServers` payload key) · `internal/core/mcpcontrol.go` — Wake's vocabulary (`MCPResult`, `MCPServerStatus`, `MCPAsk*`) · `internal/core/mcpask.go` — `Session.MCPServers`/`MCPReconnect`/`MCPSetEnabled` and `answeredMCP`, which labels a bare reconnect/toggle receipt `KindMCPReply` **by the request id the session minted** (the shape alone is a mode receipt's, which every window used to misread as a mode refusal) · `internal/rpc/mcp.go` — the four frame kinds (`Frame.Text` names the server) · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` (state, keys, the reply fold) · `mcpmenuview.go` (the draw) · `mcpauth.go` (Authenticate, the `HandOver` seam, the fleet sweep) · `cmd/wake/handover.go` (the kill switch's pause) · `testdata/stream/mcp-control.jsonl` + `testdata/input/mcp-control.stdin.jsonl` · `cmd/wake/mcpscreen_unix_test.go` |
-| The menu Wake draws | `internal/ui/picker.go` — drawn through `cards_blocks.go`'s `optionRow` · `pickerCurrent` (the value the one target is already at, marked for `/effort` and lined for `/model`) |
-| The board: the fleet as one row per agent, or a tiled live wall | `internal/ui/board.go` — `/board`, an overview and never panes you *operate* (the owner's 2026-08-12 ruling, narrowed 2026-08-27 for the tile view, guardrail 2 revised 2026-09-01 to a transcript window); drawn instead of the grid, closed by any key it does not claim · `internal/ui/boardtile.go` — the tile render (each tile a live transcript window, `tileMiddle`) drawn over the shelves `boardtilesection.go` lays out, toggled by `⇥` |
-| The tiled board's per-tile transcripts | `internal/ui/boardtranscript.go` — `App.boardDMs`/`boardHistoryAsked`, `ensureBoardDMs`, `foldBoard`, `boardHistoryArrived`; one rendered DM per on-screen tile, seeded from disk (the shared `FrameHistory` wire) and fed live, dropped whole on close. `DM.transcriptWindow` (in `boardtranscript.go`) so no glamour runs per frame — `board.go`'s revised guardrail 2, `docs/superpowers/specs/2026-09-01-board-tile-transcripts-design.md` |
-| Inline completion, and the directory read that is not on the draw goroutine | `internal/ui/completion.go` — `completing`, `completionUp` (pane *and* draft), `completionKey` (⇥ · ⌃N/⌃P, read above `App.key`'s switch so they take no legend entry; `↑↓` walk it too, in keys.go's `KeyUp`/`KeyDown` after the cursor-move guard), `addressees` (the `@` menu's names: agents, then the fleet's teams, then `@all`; `completion.teams`/`rowLabel` tag a team `@backend (team)` in the draw — truncating the name not the tag on a narrow pane — without changing what an accept inserts; a live agent wins a name it shares with a team), `teamArgMenu` (the `/team <name>` argument completing against the teams) · `completionpath.go` — `scanning`, `pathsScanned`, one directory, `pathScanMax` entries, one read at a time · `slash.go`'s `commandStem`/`teamArgStem`/`wakeVerbs`, because only that file knows what a leading slash means · `completionteam_test.go` |
+| Routing | `internal/core/router.go` |
+| Transport | `internal/rpc/wire.go` · `lifecycle.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go` |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `color.go`, `team.go` |
+| MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go` · verdicts in `cmd/wake/mcpguard_test.go` |
+| Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
+| Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `sections.go` |
+| Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
+| Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
+| `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl` |
+| Sending | `internal/ui/send.go` · `queue.go` (type-ahead) · `mention.go` · `imagedrop.go` |
+| Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `picker.go` |
+| Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
+| Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomfocus.go` · `roomfilter.go` |
+| DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
+| Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
+| Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
+| Completion | `internal/ui/completion.go` · `completionpath.go` |
+| Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
+| Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
-| Hang-up and the way back | `internal/ui/hangup.go` |
-| Attention derivation | `internal/ui/attention.go` (**not** `internal/core/attention.go`, which the spec names) |
-| The awareness strip: the fleet in one row | `internal/ui/awareness.go` — `awarenessStrip`, `stateLabel` (a word per state, derived from `stateGlyph`), `stripWorkspace` |
-| Views and theme | `internal/ui/{chat,dm,cards,groups,roster,composer,theme}.go` — `groups.go` is the left workspaces sidebar, **hidden for now**: the code and its geometry (`Layout.ShowGroups`, `Regions`) are kept, but the app never enables it and there is no `⌃G`, until the multi-groupchat version. `⌃R` (activity/roster) is unaffected |
-| What a roster row spends 24 columns on | `internal/ui/roster.go` — `headLine`'s budget: the unread badge cuts the name, and the token count is dropped whole rather than cutting it. `rowTokens` draws on a **working** row only |
-| What the turn in flight has produced | `internal/core/protocol.go` — `turnTokensEvent`, off `message_delta`'s usage · `internal/ui/fleet.go` — `Agent.TurnTokens`, summed as the turn runs and cleared when it ends. **Never added to `Agent.Tokens`**, which is every *completed* turn: the result frame restates the same tokens |
-| The palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json`, maintained by hand (asserted by `palette_test.go`) |
-| The working line, and the one ticker | `internal/ui/heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `beat.go` — start at `beat.go` for the cost argument, and for `roomWorkingLine`, the same line for a surface with many agents on it · `roomwords.go` — the room's own minimal `✻ Sailed for 49s` (`roomHeartbeatLine`) and its past-tense nautical-and-dawn pool, drawn without the DM's token clause |
-| The DM's done line, once a turn finishes | `internal/ui/beat.go` — `doneLine` (`✻ Cooked for 1m 59s · done 6:48 PM`, static and dim) · `internal/ui/donewords.go` — the Wake-authored past-tense pool · `internal/ui/dmbeat.go` — `DM.heartbeat` (working line or done line), `showsDone` (also false while `subRunning`), `hasBeat` (the one row `baseChrome`/`SetSize` count) · `internal/ui/panedraw.go` — `WithRunningSub`, set by `appview.go`'s `dmFor` off `Fleet.RunningTasks` so a background subagent's parent does not read "done" · `internal/ui/fleet.go` — `Agent.doneAt`/`turnDur`, captured at the working→idle edge; `notDone`, the event-side forget for a self-started turn the daemon reports idle |
-| The DM's compacting line, while `/compact` runs, and its completion line | `internal/ui/compacting.go` — the App-owned `compacting` map (session id → start), `observeCompaction` (fold on the bracketing notices), `anyCompacting`, `compactingSince`, `pruneCompacting` (the backstop for a compaction cut short) · `internal/ui/beat.go` — `compactingLine` (`✻ Compacting conversation` + `compactBar`, an indeterminate sweep off the shimmer ticker, plus the elapsed timer — the wire carries no mid-compaction progress figure) and `compactedSummaryLine` (`✻ Compacted · 50.8k → 4.5k tokens · freed 46.3k · 16s`, the transcript block a finished compaction leaves) · `internal/ui/dmbeat.go` — `DM.heartbeat`/`hasBeat` (the compacting line wins over the done line: a compaction runs between turns, so the agent is idle) · `internal/ui/dm_blocks.go` — `noticeBlock` (the boundary's block, `compactedSummaryLine` when its metadata is present, the plain `compactedLabel` otherwise) · `internal/ui/panedraw.go` — `WithCompacting` · `internal/core/protocol.go`/`vocabulary.go` — `systemNoticeFor` resolves the two subtype-`status` frames to `NoticeCompacting`/`NoticeCompacted` off the payload (the end keys on `compact_result`, not the boundary a failed compaction never emits), and `systemEvent` surfaces the `compact_boundary`'s `compact_metadata` as `core.CompactSummary` (`internal/core/event.go`, decoded by `wire.go`'s `CompactMetadata`; contained by `contain.go`'s `containedCompaction`) · `testdata/stream/compaction.jsonl` |
-| An answer as it is written | `internal/core/protocol.go` — `partialEvent` · `wire.go` — `wireStreamEvent` · `internal/ui/partial.go` — start there for the cost argument, and `partial_bench_test.go` for the numbers |
-| A dispatch's lifecycle, decoded | `internal/core/task.go` (Wake's vocabulary) · `protocol.go` — `taskUpdate` · `vocabulary.go` — `taskPhases`, `taskKinds`, `taskStatuses` |
-| The native `/goal` lifecycle, decoded | `internal/core/goal.go` (Wake's vocabulary — `KindGoal`, `GoalOp`, the op kinds) · `wire.go` — the synthetic-frame markers and `messageText` · `encode.go` — `goalOp`/`goalProgress` (the recogniser; here for room, since the airlock is four files and wire.go is at the hard max) · `protocol.go` — `messageEvents`' hook · `goal_test.go` · `testdata/stream/goal-*.jsonl`. Achieve is silent on the wire, so an achieved goal reads active until an explicit clear (spec §6) |
-| The native `/loop`, decoded and rendered | `internal/core/loop.go` (Wake's vocabulary — `LoopKind`, `LoopOp`) · `encode.go` — `toolLoopOp` (the recogniser: a recurring `CronCreate` is fixed, `ScheduleWakeup` is self-paced, `CronDelete` ends a fixed loop and `ScheduleWakeup {stop:true}` ends a self-paced one — a self-paced wakeup is one-shot, so there is no cron to delete; here for room, beside `goalOp`) · `internal/daemon/loop.go` — `foldLoop` (the self-paced accumulator: each `ScheduleWakeup` is one iteration, `Noop` runs the quiet streak, the delay stamps the next fire), `loopStatus` · `internal/rpc/lifecycle.go` — `LoopStatus` (`Iter`/`Quiet`/`NextFire`, carried for a late attach) · `internal/ui/loop.go` — `LoopState`, `withLoop` (the same accumulator for the watching client, off `clock()`), `loopLine`/`loopCadence`, the `↻` glyph · rendered by `roster.go` (marker + activity line), `statusbar.go` (segment, on the DM and room bars), `board.go`, `awareness.go` (`loopingCount`, the strip's cross-cutting `N looping`) · `testdata/stream/loop-{fixed,selfpaced}.jsonl`, `loop-selfpaced-run.jsonl` (a recorded multi-tick run). Headless the `/loop` slash is not a command — the model reproduces it with the scheduler tools — so Wake reads those tool calls; a fixed loop stays cadence-only (a cron-fire carries no wire marker to count), and an ended loop is silent beyond a `CronDelete` (the loop half of the goal's §6) |
-| The DM's loop-waiting line, between self-paced iterations | `internal/ui/beat.go` — `loopWaitLine` (`✻ Looping · iter 4 done · next 6:48 PM`, static, the next fire a wall-clock time not a ticking countdown — a countdown would need the ticker alive through an idle wait), `loopWorkingClause` (the `· ↻ looping` a working iteration appends) · `internal/ui/dmbeat.go` — `DM.heartbeat` (precedence compacting > working > loop-wait > done), `showsLoopWait`, `hasBeat` · `cmd/wake/fakeagent_test.go` — the `loops` script · `cmd/wake/loopscreen_unix_test.go` — the pty test that drives it through a real turn |
-| A dynamic workflow, decoded | `internal/core/workflow.go` (Wake's own vocabulary, not an airlock file — `WorkflowUpdate`, `WorkflowSnapshot` (`Done`, `PhaseAgents`), `WorkflowPhase`, `WorkflowAgentState` (`Running`/`Done`/`Failed`/`Unknown` — `Running` covers both recorded in-progress words, `start` and `progress`; `Failed` is the recorded `error`, whose reason rides `WorkflowAgent.Error`; `Unknown` keeps the wire's own word as `StateWord`, drawn as itself), `WorkflowAgent` (an agent refused before it started has no `AgentID`, so no transcript is asked for), `WorkflowRun`, the disk record's own shape) · `encode.go` — `wireWorkflowItem` (here for room — `goalOp`/`toolLoopOp`'s precedent), `DecodeWorkflowRun` (one `workflows/wf_*.json` record), `EncodeStopTask` (`stop_task`, addressed by the run's own task id — pause and restart have no wire form at all, findings §6) · `write.go` — `Session.StopTask`, remembered as an ask the way an MCP ask is (`mcpask.go`), so its bare receipt comes back `KindStopReceipt` and a refusal is the stop's own notice (`ui.observedStop`), never a mode refusal that settles a pending `⇧⇥` · `wire.go` — `wireWorkflowRun`, that record's own shape · `protocol.go` — `taskUpdate`'s one added field, `workflowSnapshotOf` (a `workflow_progress` array to a snapshot; every frame is a full replacement, never a delta), `workflowOf` (the recogniser) · `vocabulary.go` — `taskKinds`' `local_workflow` and `taskStatuses`' `failed`, both recorded words, resolving to `task.go`'s `TaskWorkflow`/`TaskFailed` · `workflow.go`'s `DecodeSidechainLine` — `DecodeTranscriptLine` minus the sidechain drop, one shared body, since every line of a workflow agent's own transcript is `isSidechain:true` · `internal/rpc/workflow.go` — the seven frame kinds and `WorkflowFrame`, `ValidWorkflowName`/`ValidWorkflowAgentID` (the two fences), `ScopeProject`/`ScopeUser` (spelled `"personal"` on the wire, not Claude's own `"user"` — the message role's word, policed by `airlock_test.go`) |
-| Reading a workflow's own runs and its agents' own transcripts off claude's disk, and stopping one | `internal/daemon/workflowdisk.go` — `WorkflowRuns`, `WorkflowAgentHistory`, `claudeSessionDir` (named for `worktree.go`'s `sessionDir`, a different idea one field over), `sessionRoot` (every read goes through an `os.Root` on the session directory, so no symlinked directory or file inside leads out of it; a session directory that is itself a symlink is refused), `runRecords` (the newest `maxWorkflowRuns` by modification time, chosen before any is opened, and read until the next would take the reply past `maxRunsBytes`), `sendWorkflows` (the reply carries no script — only the daemon's save reads one)/`sendWorkflowAgent` · `internal/daemon/apply.go` — the `FrameStopRun` case, gated on `runningWorkflow` alone so an unknown id, a non-workflow dispatch and an already-ended run all refuse alike · `internal/daemon/taskreplay.go` — `withWorkflow` (a copy of a retained `task_started` with its workflow edited: its latest snapshot swapped in, so `replayRunningTasks` hands a late attach the run *and* where it is), `forClients` (a workflow's script stays the daemon's — live and replayed alike, no client receives one; the save reads it off the retained start), `runningWorkflow` |
-| Saving a workflow's script as a reusable command | `internal/daemon/workflowsave.go` — `saveWorkflowFrame`, `workflowScript` (the retained start event's script while running, else the matching `wf_*.json` record's), `projectWorkflowDir` (Claude Code's own documented walk-up rule — the repository root is found *first*, so a cwd with none never searches its ancestors and inherits `~/.claude/workflows` by accident), `userWorkflowDir` (`$CLAUDE_CONFIG_DIR` or `~/.claude/workflows`), `saveWorkflow` (every write goes through `workflowRoot`'s `os.Root` — the project base at project scope, the workflows directory at personal — so a directory swapped for a symlink after the checks cannot take the write outside it; `publish` writes a synced temp file and links it into place, so an existing file is refused atomically and a failed save leaves nothing behind; a project-scope save also refuses a symlinked `.claude` or `.claude/workflows`, and the target file is refused as a symlink in either scope) · `internal/ui/workflowsave.go` — `saveDialog`, `saveKey`, `saveWorkflow`, `workflowSaved` (the notice off the daemon's own answer, since the wire carries a name and a scope and the daemon owns the path) |
-| The `/workflows` view: list, run, agent | `internal/ui/workflowview.go` — `WorkflowView` (the state), `workflowState` (the one `App` field), `openWorkflows` (`/workflows`), `openWorkflow` (the sidebar row's own way in), `viewingWorkflow`/`pickedWorkflow`, `workflowKey`/`workflowKeyed` (read above `App.key`'s switch like the resume picker, so no legend entry), `stopWorkflow`/`armedKey`/`settledArm` (`x` arms, `↵` confirms, any other key or the run itself ending cancels — `detach.go`'s own reason for a different confirm key) · `internal/ui/workflowdraw.go` — the render, `runGeom`/`agentRows` (laid out once per change and kept, `App.relaidAgent`, because it costs a render per tool call) · `internal/ui/workflowdata.go` — `workflowRunView`, `agentRuns` (live `Tasks` rows ∪ disk records, de-duplicated by task id, live winning), `reaskWorkflowAgent`/`onWorkflowProgress` (the open agent's transcript re-read on an event, never a timer) · `internal/ui/workflowroom.go` — `workflowRoomEvent` (`fold`'s room-admission for a workflow's own ending, read off the row's own enrichment since `task_notification` carries no kind of its own) · wired in from `keys.go`/`mouse.go`/`panes.go`/`rostersubs.go` (↵/⌃D/click) and `slash.go` (`workflowsCommand`) |
-| The one agent event a subagent authored | `internal/core/subagent.go` — `Subagent`, `SubagentResult` (split from `event.go` when the `Goal` field pushed it past the hard max) |
-| One agent's status snapshot, and the fleet's event predicates | `internal/daemon/agentstatus.go` — `snapshot` (split from `agent.go` when the `Loop` field pushed it past the hard max) · `internal/ui/fleetpredicates.go` — `turnInFlight`, `countsAsUnread`, `blank` (split from `fleet.go` for the same reason) |
-| What a conversation has dispatched | `internal/ui/tasks.go` — the fold, pure, and `named` (the ending frame does not say what ended); `Task.Workflow` is a workflow dispatch's latest snapshot, replaced wholesale rather than merged, the wire's own rule · `taskline.go` — the line an ending leaves in the transcript; `taskLineKind` names `Workflow`, `taskLineWord`/`Style` add `failed` (red, the error's first line under it). The running subagents are drawn in the **right sidebar** (`rostersubs.go`), not a list under the pane — the pane space is the task board (`checklistpin.go`) |
-| Who owns that fold, and why it is not on `Agent` | `internal/ui/fleettasks.go` — `Fleet.tasks` keyed on session id, `RunningTasks` (the sidebar's filter, admitting a running workflow beside an openable subagent — `core.TaskWorkflow` has no transcript of its own to open), `named` (ingest-time enrichment for the ending line). It is a second map because `Agent` must stay comparable for `Observe`'s `now == was`. The sidebar reads it directly; nothing projects it onto the DM any more |
-| Subagents in the right sidebar | `internal/ui/rostersubs.go` — `subagentRow` dispatches a workflow row to `workflowRow` (its own short name, agents done/started, dropped whole rather than cut — every height/walk/click function already counts `RunningTasks`, so it participates for free on the roster, the board rows and the tiles, where `boardtile.go`'s `tileSubagents` counts it apart — `⤷ 1 subagent · 1 workflow`, never one more subagent), then the count if what is left holds it whole, `subsOf`, `viewingPicked` (what `⌃D` and a click do with one — a workflow row goes to `openWorkflow`, `ui/workflowview.go`'s `viewingWorkflow`, never `DM.Viewing`, which would draw a blank pane: a workflow forwards no frames of its own). The walk is `roster.go`'s `walkable`; `Roster.SelectedTask` names the dispatch while `Selected` stays the **agent**, so `⌃C`, `⎋` and `↵` keep targeting a session |
-| Where a subagent's frames are drawn | `internal/ui/dm.go` — `forwardedTo` (which transcript a frame belongs to) · `appendForwarded` · `Viewing` · `renderForwarded` |
-| A dispatch's speech, for an agent nobody has opened yet | `internal/ui/fleetsubs.go` — `Fleet.foldSub`/`SubBacklog` (folded unconditionally in `Fleet.Observe`, the same move `fleettasks.go` made for the row that names a dispatch) · `DM.withSubBacklog` (seeds a DM's own `subs` from it once, only when the DM holds nothing yet for that dispatch). Without this, opening a dispatch under an agent this client never watched live drew an empty transcript — indistinguishable from the wire's own floor for a dispatch that truly forwarded nothing |
-| The conversation's status bar | `internal/ui/statusbar.go` — path, branch, model, context left, **effort**, **PRs opened**, and the permission mode; cached on `DM.bar` (`barKey`), drawn per change, and drawn inside the composer below the box (above the armed cue on the rare frame one is up). **The permission mode is the bar's alone now** — the always-on legend that used to carry it is gone, so `modeFormat` lives here. Effort is the level `confirmedEffort` reads back, or the asked-for one until then; the **model** is the name `ConfirmedModel` reads back, or the init-frame id until then — the id rides both the init event and `rpc.SessionStatus.Model` (`agent.observedModel`), so a client that attached without witnessing an init still names it. `prSegment` names them `PR #29`/`PR #29, #30`. The mode is **drawn whole or dropped**, never right-cut into `permissions: …`. **A conversation/room bar too narrow for one row wraps the overflow onto a second** (`statusBar`'s `rows`, `dmBarRows`=2) rather than dropping the model and context; `chromeHeight` counts the real height (`barRows`) so the second row costs a row of transcript, not the alt screen. The **board tile keeps one row** (`tileBarRows`=1) — its tiles are fixed height |
-| The PRs a session has opened | `internal/daemon/prs.go` — `recordPRs`, `prURL` (scraped from a `gh pr create` tool result, carried on `rpc.SessionStatus.PRs`, no subprocess or poll) · `internal/ui/prs.go` — `prSet`/`withPRs` (a pointer for `commandSet`'s reason, folded in `Fleet.WithStatus`) · drawn by `statusbar.go`'s `prSegment` |
-| The room's info bar | `internal/ui/chat.go` — `Room.bar`/`Room.withBar` · `internal/ui/send.go` — `App.withRoomBar`, which draws it for the agent the composer is addressing (a lone `@name`, else the manager) and nothing for an empty room. Cached like a DM's; the room *banner* stays fact-free (`banner_test.go`) — this is a different row |
-| The composer's info line and armed cue | `internal/ui/composer.go` — `WithBar` places a pre-rendered bar below the box (above the armed cue when one is drawn); the pane builds the bar (it reads the filesystem). `View` draws the cue row only while `showsCue` |
-| The effort/model probe | `internal/daemon/probe.go` — `tryProbe` (the atomic idle-gated send), `wantProbe`/`probeIfWanted` (request and fire), `absorbProbe` (a `pendingProbes` counter, records both `confirmedEffort` and `confirmedModel`), `firstInit`, `incProbe`/`decProbe` · `internal/daemon/effort.go` — `noteEffort` and `noteModel` (each returns whether to re-probe), the `/model` compose · `internal/daemon/agent.go` — the `confirmedEffort`/`confirmedModel`/`pendingProbes` fields · `internal/daemon/fanout.go` — the fan-out loop that consumes the reply · `internal/core/vocabulary.go` — `IsModelReply`, `EffortFromModelReply`, `ModelFromModelReply` (asserted against `testdata/stream/bare-model.jsonl`) · `internal/daemon/history.go` — the disk filter |
-| Which branch a directory is on | `internal/gitref/` — one implementation, shared by the daemon's label and the status bar |
-| What a session runs as, and how full it is | `internal/core/protocol.go` — `initFacts`, `resultFacts` → `core.SessionFacts` → `ui.Agent.withFacts`. `initFacts` also carries `slash_commands`, which is what the completion menu offers |
-| Markdown · diffs · tool blocks · task lists | `internal/render/` — `todo.go` for the checklist · `tool.go` owns the layout and takes its palette from the caller, so `theme.go` stays the one place a colour is written down |
-| The live checklist: decode, fold, pin | `internal/core/vocabulary.go` — `toolChecklistOp` (one `TaskCreate`/`TaskUpdate` op, `TodoWrite` retired) · `internal/ui/checklist.go` — the `checklist` type (id-keyed on claude's monotonic counter, not position), `Fleet.foldChecklist` (the live working line) and `DM.foldChecklist` (the board, folded in `Append` and re-derived in `Before` so a list survives a restore off disk), plus `DM.isChecklistOp`, which decides an op is the board and never a transcript block · `internal/ui/checklistpin.go` — `checklistPin` (the board pinned above the composer, the one place the list shows), `checklistRows` (its height, counted in `chromeHeight`) and `resettleBoard` (re-wrap once on a create/delete, `withTasks`' old rule). A parent op draws nothing — `eventBlock`'s `isChecklistOp` guard — while a **subagent's** op still draws its list inline in its own forwarded transcript (`todoBlock`), because a subagent has no board of its own |
-| A tool call in a conversation: the fold, the click, the settle | `internal/ui/toolblocks.go` — `toolHeadline` (**one line**, because it is the row a result rewrites in place), `bulletFor` (dim → green or red, read out of Claude Code's own bullet component), `settled` (one line rewritten, never a re-render), `openTool` (what a click toggles), `toolResultBlock` (a **successful edit's** confirmation is suppressed — the diff and the green ⏺ carry it; a failed one still shows) · `transcript.go`'s `mark`/`restyle`/`headLine` for where a call sits in the scrollback |
-| A run of tool calls folded to one line | `internal/ui/rollup.go` — `rollupSummary` (the count, MCP grouped by server), `isToolUse`/`runEnd` (what a run is), `foldExempt` (why `TodoWrite`, a checklist, **and an edit's diff** stay whole out of the run), `openRun` (a click), `trailingRun`/`runKey` (the live run a new event restyles) · `internal/ui/dmtranscript.go` — `renderAll` (re-derived) and `drawFold` (incremental), the two paths held to the same run boundary · `internal/render/tool.go` — `ToolRollup` · `transcript.go`'s `runs`/`runHeads` for where a rollup sits |
-| Assembling a DM's transcript from events | `internal/ui/dmtranscript.go` — the `block` type, `renderAll`, `renderForwarded`, `drawFold`; split from `dm.go`, which keeps the model and the sizing |
-| Failure reporting under a TUI | `internal/notice/notice.go` |
-| Markdown wrapping, and where the greedy-wrap fix lives | `internal/render/markdown.go` — `Markdown`, `reflowProse` (re-wraps glamour's rendered prose with `x/ansi.Wrap` so glamour can use upstream `muesli/reflow` — no `replace`, so `go install` works), `fitToWidth` · `internal/render/wrap_test.go` |
-| Recorded stream-json fixtures | `testdata/stream/` · `testdata/transcript/` is the **on-disk** format, which is a different one. `testdata/input/` is a third kind: a line Wake would *write*, kept out of `stream/` because `TestDecodeRecordedFixtures` requires every line there to decode |
-| The demo film: a scripted fleet, recorded | `demo/` — `agent/claude` (a **Python** stand-in on a shim PATH, because `argv_test.go` and `airlock_test.go` walk every non-test .go file and a Go one would need an exemption in both) · `agent/wakemcp.py`, so the manager's fan-out really goes through `wake mcp` · `tapes/*.tape` (VHS) · `setup.sh`, which **generates** the staging tape because `/new … in <dir>` resolves against the session's directory · `build.sh`. Every frame is the real binary; only what the models say is scripted |
-| Taking the recording machine back out of a fixture | `scripts/scrub-fixtures.py` (`--check` is a gate) · `internal/core/corpus_test.go` is the guard it satisfies, and is tree-wide via `git ls-files` |
+| Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
+| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix |
+| Notices under a TUI | `internal/notice/notice.go` |
+| Git branch lookup | `internal/gitref/` |
+| Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) |
+| Demo film | `demo/` (Python stand-in agent, VHS tapes) |
+| Fixture scrubber | `scripts/scrub-fixtures.py` · guard `internal/core/corpus_test.go` |
 
 ## Toolchain
 
-Go 1.26+.
+Go 1.26+. Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, Charm).
 
 ```bash
 make build     # go build ./cmd/wake
 make test      # go test ./... -race, then again without it
 make cover     # coverage report; gate is 80%
 make lint      # golangci-lint run
-make ci        # every step the workflow runs, for when CI cannot
+make ci        # every step the workflow runs
 make soak      # 20 fake sessions replaying fixtures; SOAK_DURATION=1h for the long one
 make run       # build and start
 ```
 
-Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, Charm).
-
-**glamour's greedy-wrap defect is fixed wake-side, not by a fork.** glamour wraps every paragraph
-*twice* and its first pass writes a breakpoint rune (`-`) without counting it or checking that it
-fits, so the second pass re-breaks the over-long line it was handed and strands the word after the
-break on a line of its own - on any hyphen, which here means `--resume`, a date or a ticket id.
-Nothing in glamour's API reaches it. Wake once fixed this with a forked `muesli/reflow` reached
-through a `replace` in `go.mod`, but a `replace` makes `go install …/cmd/wake@version` **refuse the
-module** - so the fix moved into `internal/render`'s `reflowProse`, which re-wraps glamour's rendered
-prose with `x/ansi.Wrap` (it checks the limit before a breakpoint, where `x/ansi.Wordwrap` and
-upstream muesli do not). glamour keeps laying out tables, lists and block quotes at the real width;
-only paragraph and list-item text is re-wrapped, so nothing but the stranding changes. glamour now
-uses upstream `muesli/reflow` and `go install` works. The guard is
-`internal/render.TestProseWrapsGreedily`.
+glamour's greedy-wrap defect (a word stranded after a hyphen) is fixed wake-side in
+`internal/render`'s `reflowProse`, not via a `replace` — a `replace` breaks `go install`. Guard:
+`TestProseWrapsGreedily`.
 
 ## Testing
 
-**80% coverage minimum. TDD: write the failing test first.**
+**80% coverage minimum. TDD: write the failing test first. Never test against a live LLM** — record
+real sessions once, commit the JSONL to `testdata/`, replay forever. A session that misbehaves gets
+recorded and becomes a regression test.
 
-**Never test against a live LLM.** It's slow, nondeterministic, and costs money per CI run. Record
-real sessions once with `--output-format stream-json`, commit the JSONL to `testdata/`, replay
-forever. Any session that misbehaves in real use gets recorded and becomes a regression test.
-
-**Record into a sterile `HOME`, because a recording is a photograph of the machine that took it.**
-`system/init` is an environment dump — `tools`, `slash_commands`, `skills`, `plugins`,
-`mcp_servers`, `agents`, `memory_paths`, `cwd` — and it is the *first line of every recording*. It
-names every skill installed, every MCP server connected, and the absolute path of a home directory.
-Nobody chooses to commit any of it; it arrives before the frame anybody wanted. This instruction
-used to stop at "commit the JSONL", which is how 62 of 65 fixtures came to carry one.
-
-So a capture runs under a throwaway `HOME` with an empty `~/.claude`, which makes the init frame
-boring at birth rather than something to clean up later:
+Record into a sterile `HOME`:
 
 ```sh
 HOME=$(mktemp -d) claude --print --input-format stream-json --output-format stream-json --verbose …
 ```
-
-**And a doc never pastes a raw frame** — the findings notes in `docs/superpowers/notes/` did, which
-is why scrubbing `testdata/` alone would not have been enough. Cite the fixture and the line.
-
-### The corpus: what is in `testdata/`, and why it is checked in
-
-Three directories, and Go ignores every one of them for builds — a directory named `testdata` is
-invisible to the toolchain, which is why they can hold megabytes without touching the binary.
-
-| Where | What | Read by |
-|---|---|---|
-| `testdata/stream/` | Recorded `stream-json` **on stdout** — what Wake's airlock decodes live | 25 test files |
-| `testdata/transcript/` | The **on-disk** JSONL Claude writes to `~/.claude/projects/…` — a *different* format, with its own keys | `DecodeTranscriptLine`, `history.go` |
-| `internal/{core,ui}/testdata/` | `claude-flags.json`, `claude-palette.json` — extracted, not recorded | `palette_test.go`, flag guards |
-
-**Why it exists at all:** the rule above. A decoder proved against what a developer *imagined* the
-format was is a decoder that works until the first real session. Every trap in the CLI-surface
-section below was found by recording one and is now pinned by a file here — `result` being
-per-turn rather than per-process, `new_conversation_id` naming the id that *died*, a client deny
-being a different shape from an interrupt. None of those are guessable, and each one cost a real
-session to discover. That is what the 2.9MB buys: they are discovered once and can never regress.
-
-**The two formats are not interchangeable**, which is the mistake the split directory exists to
-prevent. `testdata/transcript/` is what a conversation is read back from when a pane opens; its
-lines carry keys the stream never emits. One decoder in front of the other (`DecodeTranscriptLine`
-filters into `DecodeLine`) rather than two decoders, but two corpora, because they are two wires.
 
 | Layer | Approach |
 |---|---|
@@ -1282,367 +343,164 @@ filters into `DecodeLine`) rather than two decoders, but two corpora, because th
 | `attention`, `router` | Pure functions, table tests |
 | `session` | Fake process behind the same interface |
 | `rpc`, `daemon` | Contract tests over a real socket |
-| `ui` | in-process assertions, plus `internal/ui/frame_test.go` reading `App.View`'s characters |
-| screen | **a real pty, the real binary, `vt10x`** — `cmd/wake/screen_unix_test.go` is the harness, 40 tests use it. Reach for this for anything about layout, keys or the mouse |
-| `cmd/wake` | Fake daemon for ordering, `daemon.Serve` in-process, and `detach_unix_test.go` for the detached fork |
-| soak | Build tag `soak`; goroutines, child processes, on-disk roster |
+| `ui` | In-process assertions, plus `internal/ui/frame_test.go` reading `App.View` |
+| screen | **A real pty, the real binary, `vt10x`** (`cmd/wake/screen_unix_test.go`) — use for layout, keys, mouse |
+| `cmd/wake` | Fake daemon, in-process `daemon.Serve`, `detach_unix_test.go` |
+| soak | Build tag `soak` |
 
-**`make test` runs the suite twice — with `-race` and without** — because the detector changes
-scheduling enough to mask real ordering bugs. It has happened twice here. A green race run is not
-evidence on its own.
+`make test` runs twice (with and without `-race`) — the detector masks ordering bugs. `make ci` may
+not drift from the workflow (`internal/core/citarget_test.go`). A goroutine leak is a bug.
 
-**`make ci` may not drift from the workflow.** `internal/core/citarget_test.go` requires the same
-command set in both directions; a step that genuinely cannot run off a runner goes in `ciOnlySteps`
-by name with its reason.
-
-A goroutine leak is a bug, not a warning.
-
-### Guards worth knowing about
-
-Several tests derive claims rather than restate them, and they fail with the correction in their own
-message. Do not "fix" one by editing the number:
-
-- `TestCLAUDEmdNamesTheTwoLargestNonTestFiles` and `TestCLAUDEmdDescribesTheLegendItDraws` read *this
-  file* and hold it to the tree.
-- `TestNoNonTestFileCrossesTheHardMax` — the 800-line rule, tree-wide.
-- `airlock_test.go` / `argv_test.go` — the two leak boundaries above.
-- Totality guards derive their domain from the **producer** (e.g. `agent.stateLocked`), not from the
-  constant block, because the declared set is wider than what can arrive. A new state is a build
-  failure until somebody rules on it in `parkStates`, `forkParentStates`, `forkArrivalStates`,
-  `renameableStates`, `managerVerbs`.
+**Guards that derive claims — never "fix" one by editing the number:**
+`TestCLAUDEmdNamesTheTwoLargestNonTestFiles` and `TestCLAUDEmdDescribesTheLegendItDraws` read this
+file; `TestNoNonTestFileCrossesTheHardMax` (800 lines); `airlock_test.go` / `argv_test.go`; totality
+guards derive their domain from the producer (`parkStates`, `forkParentStates`, `forkArrivalStates`,
+`renameableStates`, `managerVerbs`). Adding an `rpc.SessionStatus` field trips three reflective
+guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13). Re-verify before assuming a behavior change.
-The recorded corpus in `testdata/stream/` was captured at 2.1.226–2.1.238; a fixture's own `init`
-frame names its version.
+**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.240. A
+fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 
 | Need | Flag |
 |---|---|
-| Programmatic control | `--print --input-format stream-json --output-format stream-json` |
-| Legal invocation at all | `--verbose` — without it stream-json exits 1 |
-| Seeing a permission request | `--permission-prompt-tool stdio` — without it every ask is auto-denied. Undocumented; absent from `--help` |
-| Identity | `--session-id <uuid>` · `--resume <uuid>` · `--fork-session` (**only** as `--resume <parent> --fork-session --session-id <new>`) |
-| Display name · mode | `--name` · `--permission-mode manual\|auto\|acceptEdits\|plan\|dontAsk\|bypassPermissions` — six, of which Wake spawns `auto` and `⇧⇥` reaches four |
-| Spend and failover | `--max-budget-usd <amount>` · `--fallback-model <model,model>` — **both emitted**, both documented "only works with `--print`", which is the mode every agent runs in. The chain is tried in order and the primary is re-tried at the start of each user turn |
-| What a session thinks with | `--effort low\|medium\|high\|xhigh\|max` (five — the command takes seven) · `--model <alias or full id>` |
-| Changing the mode after spawn | Not a flag: a `set_permission_mode` control request on stdin. The flag is the mode a session *starts* in and nothing more |
-| Visibility | `--include-hook-events`, `--include-partial-messages`, `--replay-user-messages`, `--forward-subagent-text`, `--brief` — **Wake emits all five** as of 2026-08-31. `--replay-user-messages` is what puts a peer's cross-session message on the live stream (without it that message reaches only the on-disk transcript); its replays of Wake's own sends carry `isReplay` and stay dropped as `Echoed`. `--include-partial-messages` is refused without `--print` and `--output-format stream-json` |
-| What a session's tools may reach | `--add-dir <directories...>` — variadic, and **both spellings are recorded as equivalent** (2026-08-16: repeated and variadic, two directories outside the session's tree, identical either way). Wake emits the **repeated** one, for a local reason: the variadic form has to ask whether a directory is the first, and `argvguard_test.go` refuses a question about a Config field's value on that path |
-| Logging one agent of thirty | `--debug-file <path>`, which *implicitly enables debug mode* · `-d, --debug [filter]`, `api,hooks` or `!1p,!file`. Wake carries a **name** for the first and places the file itself — see the paths ruling above |
-| Isolation | `--worktree [name]` — **read and not used.** It is a managed subsystem (paths under `.claude/worktrees`, a lock keyed on pid, persisted session state, a sweep that removes stale ones), so passing it would make claude the owner of the directory Wake's park book, discovery and groups all key on. Wake runs `git worktree add` itself and passes the path as `Dir` |
-| The manager's tools | `--mcp-config <path>` — **only ever** beside `--strict-mcp-config` and `--tools ""` |
-| Bounding the built-in set | `--tools <tools...>` — membership, and `""` is none. **Not** `--allowed-tools`, which bounds nothing and in `auto` does nothing at all. MCP tools pass through it whether named or not |
-| The manager's scope | `--append-system-prompt` (not `--system-prompt`, which replaces) |
+| Programmatic control | `--print --input-format stream-json --output-format stream-json` + `--verbose` (required) |
+| Permission requests | `--permission-prompt-tool stdio` (undocumented; without it every ask is auto-denied) |
+| Identity | `--session-id` · `--resume` · `--fork-session` (only as `--resume <parent> --fork-session --session-id <new>`) |
+| Name · mode | `--name` · `--permission-mode` (Wake spawns `auto`; ⇧⇥ reaches four). Changing mode later is a `set_permission_mode` control request |
+| Spend, failover | `--max-budget-usd` · `--fallback-model` |
+| Thinking | `--effort low\|medium\|high\|xhigh\|max` (the `/effort` command takes seven) · `--model` |
+| Visibility | Wake emits all five: `--include-hook-events`, `--include-partial-messages`, `--replay-user-messages`, `--forward-subagent-text`, `--brief` |
+| Tool reach | `--add-dir` (Wake emits the repeated form) |
+| Debug | `--debug-file <path>`; `--debug` alone logs nothing observable headless |
+| Isolation | `--worktree` — **not used**; Wake runs `git worktree add` itself |
+| Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools ""`; `--append-system-prompt` |
 
-### Traps — do not design around the naive reading
+### Traps
 
-- **`init.permissionMode` is normalized, not an echo — and the trap is one-directional.** At spawn
-  it does not confirm the flag took: spawning `manual` reports `"default"`. *After* a
-  `set_permission_mode` it reports the mode the session is genuinely in, so it is the right thing to
-  reconcile a belief against, and it arrives on every turn.
-- **`set_permission_mode`'s receipt is the authority, not the mode requested.** `manual` is accepted
-  and silently becomes `default`; a refusal is a *different shape* — subtype `"error"` with a
-  top-level `error` string, not a `success` carrying a failure. `bypassPermissions` is refused unless
-  the process was launched `--dangerously-skip-permissions`, which nothing here passes.
-- **`result` and `system/init` are per-turn, not per-process.** One process emitted seven of each.
-  Treating `result` as "the agent exited" tears down live sessions.
-- **`control_request`/`control_response` carry their subtype nested**, and a permission request
-  carries **no `session_id`** — correlate on `request_id`. Inbound, the id and payload are nested
-  twice. Reading the top level yields nothing.
-- **`new_conversation_id` is not the new session id.** `conversation_reset` names the id that *died*.
-  Re-key on `session_id` changing between events, not on `init`.
-- **A client deny is `non_execution_kind: "permission-rule"`; `"user-rejected"` is two different
-  things.** Read `subtype` first: a denial ends `success`/`completed`/`is_error: false`, an interrupt
-  ends `error_during_execution`/`aborted_tools`/`is_error: true`. `permission_denials` answers "did a
-  tool fail to run", not "was this denied or interrupted". **A denial is not a turn failure.**
-- **Spend cannot be derived from `num_turns` or `duration_api_ms`** (`/compact` bills while reporting
-  zero) — and `total_cost_usd`/`modelUsage` **reset to zero on `/clear`**, so a naive delta silently
-  loses everything before the reset. Accumulate per session-id epoch.
-- **`result.subtype` is not always `"success"`.** An interrupted turn has no `result` key at all.
-- **An interrupted process exits 1 with empty stderr**, byte-identical to a startup rejection. The
-  session remembers it sent an interrupt and `ending.go`'s `interruptedExit` suppresses exactly that
-  ending — cleared by the next successful `Send`, because the excuse expires with the turn.
-- **Claude's `[Request interrupted by user]` marker arrives as an ordinary `user` frame.** Text is the
-  only discriminator; resolved in the airlock to `NoticeTurnInterrupted`.
-- **One `can_use_tool` carries three questions.** A bare allow is right for a permission and a plan
-  and *wrong* for `AskUserQuestion` — the answer rides in `updatedInput.answers`, and without it the
-  model is told "the user did not answer" on a turn that still ends `success`. Resolved by
-  `core.askKind` from the payload shape, never from the tool's name.
-- **A question that dies because Wake closed stdin is indistinguishable from an operator deny.** If
-  Wake ever renders "you denied this", it will say so about a question nobody saw.
-- **An image reaches a headless session, and a *broken* one is not an error.** A user frame whose
-  `content` array carries an `image` block with a base64 `source` is accepted and read - recorded
-  2026-08-15, `testdata/stream/image-block.jsonl` and `testdata/input/image-block.stdin.jsonl`. Images go first and text last, because
-  the prompt is derived from the last block. But an image claude cannot decode or shrink
-  **degrades to a text block** - `[Image could not be processed: …]` - and the turn ends `success`
-  with nothing on stdout saying so. There is no frame to detect it from.
-- **A malformed stream-json input line is echoed to stderr in full, then the process exits 1.** With
-  a multi-MB base64 line that is megabytes into whatever is reading stderr. `internal/core` bounds
-  its *output* lines at `maxLineBytes`; nothing bounds what a rejection prints back.
-- **Answered:** `/model`, `/clear`, `/compact`, `/context` survive stream-json; `/resume` does not.
-- **A *bare* `/effort` or `/model` does nothing at all**, and the receipt says so three ways: one
-  assistant line, `num_turns: 0`, `$0`. Handled by the CLI without a model turn — which is what
-  makes them forms Wake may claim. Recorded in `testdata/stream/bare-{effort,model}.jsonl`.
-- **`stream_event` is recorded as of 2026-08-21** — `testdata/stream/partial-turn.jsonl`, one
-  streamed turn against 2.1.238, closing what was the airlock's only unrecorded inbound shape. The
-  envelope is `{type:"stream_event", event, parent_tool_use_id, uuid, session_id, ttft_ms?}` with
-  `ttft_ms` on the `message_start` alone; a text delta is `event.type=="content_block_delta" &&
-  event.delta.type=="text_delta"` → `event.delta.text`, and **the completed `assistant` frame
-  arrives byte-identical to its deltas** — the claim the whole preview design rests on, now bytes.
-  `partialEvent` still yields **no event** for every shape it does not recognise (`thinking_delta`
-  and `signature_delta` stream beside the text, correctly dropped), so a moved schema costs the
-  preview and never the transcript. Findings and provenance caveats:
-  `docs/superpowers/notes/2026-08-21-partial-messages-findings.md`.
-- **`--debug` alone does nothing observable in the mode every agent runs in.** Recorded 2026-08-16
-  against 2.1.233 — `docs/superpowers/notes/2026-08-16-spawn-flag-findings.md` §1 has the probe:
-  under `--print --output-format stream-json` it exits 0 with **zero bytes on stderr** and a stdout
-  the length of the same spawn without the flag, while `--debug-file` on the same session wrote
-  17KB. So a filter with no file is not a weaker log — it is logging somebody turned on and no log
-  anywhere, which is why Wake refuses the pair rather than emitting half of it. **Whether
-  `--debug-file` creates its own parent directories is not recorded**; `daemon/debuglog.go` makes
-  them rather than finding out.
-- **The checklist is `TaskCreate`/`TaskUpdate`, and `TodoWrite` is retired.** Recorded 2026-08-22
-  against 2.1.240 — `testdata/stream/task-checklist.jsonl`, `2026-08-22-task-checklist-findings.md`.
-  `TodoWrite` is enabled only when `CLAUDE_CODE_ENABLE_TASKS` is not explicitly `false`,
-  so the tool is off by default and no fixture calls it. The live checklist is built across a run of
-  `TaskCreate {subject, description, activeForm}` and `TaskUpdate {taskId, status, subject?,
-  activeForm?}` calls — a **different subsystem** from the `task_*` system frames the dispatch list
-  draws — where `TodoWrite` sent the whole list each call. The id is a **monotonic per-session
-  counter** ("1","2","3", reported only in the create's `tool_result` text), not a position — a
-  delete does not renumber the survivors — so the fold keys on it, never on slice index. `status` is
-  `pending|in_progress|completed`, with a fourth `deleted` in the bundle schema and no recording.
-  `core.toolChecklistOp` decodes one op; the `ui.checklist` type accumulates it, folded on the Fleet
-  (the live working line) and on the DM (the transcript, so it survives a restore off disk).
-- **`--effort` takes five levels and `/effort` takes seven** (`ultracode`, `auto` on top). Two
-  surfaces, two constants: `core.EffortLevels` for the argv, `core.EffortCommands` for the text.
-  `daemon.argvEffort` is the one place a level is narrowed for a command line.
-- **The bare `/model` reply is the only thing that enumerates the models** — the `init` frame names
-  the one in use, `--help` gives an `e.g.` — and it also reports the session's **effort**, which is
-  the one known way to read a level back. Wake does not ask; see `deferred.md`.
-  `/clear` changes the session id.
-- **A headless session answers `mcp_status`, `mcp_reconnect` and `mcp_toggle`**, with no model turn
-  and no user message first (recorded 2026-09-23 against 2.1.281, `testdata/stream/mcp-control.jsonl`).
-  A reconnect or toggle is answered with the **bare** `{"subtype":"success"}` a mode change gets, or
-  an `error` string (`Server not found: x`, `Server status: needs-auth`) — so only the request id says
-  what it answers. `mcp_toggle` **persists** into the project's `disabledMcpServers`. **The status
-  carries no tool descriptions**, tool search on or off.
-- **`claude mcp login` refuses anything but a terminal on stdin** — even in its browser-opening form
-  (`stdin isn't a terminal`) — and there is no headless control request for an MCP sign-in. Given a
-  terminal it opens the browser itself and waits for the redirect. Hence `/mcp`'s hand-over.
-- **A headless session does not load claude.ai connectors** — not before a turn, not after one, not
-  with `ENABLE_CLAUDEAI_MCP_SERVERS=true` (probed 2026-09-23 under a claude.ai login). Gmail or Slack
-  added at claude.ai reach an interactive Claude Code and **not a Wake agent**.
-- **A dynamic `Workflow()` run is `task_type:"local_workflow"`, reusing the five `task_*` subtypes**
-  rather than a shape of its own. Its `task_progress` carries `workflow_progress`, and **every one is
-  a full snapshot** — every phase and every agent started so far, never a delta (one recorded run
-  repeats every earlier agent on 10 of its 18 progress frames). **A workflow agent's own words never
-  reach stdout** — no frame carries a `parent_tool_use_id`, so `--forward-subagent-text` forwards
-  nothing — they exist only on disk, at `subagents/workflows/<runId>/agent-<agentId>.jsonl`,
-  `isSidechain:true`; the run id itself (`wf_…`) is on no system frame, named only in the `Workflow`
-  tool result's own text. **`stop_task` stops the run at its own task id, but is accepted (`success`)
-  and does nothing at a workflow agent's own id** — that agent already finished, so success is not a
-  verdict here either. **`pause_task` is refused outright** (`subtype:"error"`); the SDK documents no
-  pause, resume or restart. **A failed workflow agent's state is `error`, never `failed`**, beside an
-  `error` field; one refused before it started carries no `agentId` at all.
-  `docs/superpowers/notes/2026-09-23-workflow-findings.md` §1–3, §6.
-
-Recordings and verbatim frames: `docs/superpowers/notes/2026-08-08-stream-json-findings.md`,
-`2026-08-08-interrupt-findings.md`, `2026-08-09-interrupt-permission-findings.md`,
-`2026-08-09-question-findings.md`, `2026-08-09-resume-fork-findings.md`,
-`2026-08-10-live-fork-findings.md`, `2026-08-12-*`, `2026-08-15-image-input-findings.md`,
-`2026-08-16-spawn-flag-findings.md`.
+- `init.permissionMode` is normalized (`manual` → `default`); after `set_permission_mode` it is
+  authoritative. The receipt, not the request, is the truth; a refusal is subtype `"error"`.
+- **`result` and `system/init` are per-turn, not per-process.** Treating `result` as exit kills live
+  sessions.
+- `control_request`/`control_response` nest their subtype; a permission request has **no
+  `session_id`** — correlate on `request_id`.
+- `new_conversation_id` names the id that *died*. Re-key on `session_id` changing. `/clear` changes
+  the session id.
+- A client deny ends `success` with `non_execution_kind: "permission-rule"`; an interrupt ends
+  `error_during_execution`. **A denial is not a turn failure.**
+- Spend: `total_cost_usd`/`modelUsage` reset on `/clear` — accumulate per session-id epoch. Not
+  derivable from `num_turns`/`duration_api_ms`.
+- An interrupted turn has no `result` key; an interrupted process exits 1 with empty stderr
+  (`interruptedExit` suppresses it). `[Request interrupted by user]` arrives as a `user` frame.
+- One `can_use_tool` carries three shapes; `AskUserQuestion` answers ride in
+  `updatedInput.answers` (`core.askKind`, decided by payload shape, never tool name).
+- A question killed by closing stdin is indistinguishable from an operator deny.
+- Images: first in the content array, text last. An undecodable image silently degrades to text.
+- A malformed stdin line is echoed to stderr in full, then exit 1.
+- `/model`, `/clear`, `/compact`, `/context` survive stream-json; `/resume` does not. Bare
+  `/effort`/`/model` do nothing (`num_turns: 0`, `$0`).
+- `stream_event` text deltas are byte-identical to the completed `assistant` block
+  (`testdata/stream/partial-turn.jsonl`); unrecognised shapes yield no event.
+- The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id; `TodoWrite` is retired.
+- A `Workflow` run is `task_type:"local_workflow"` on the `task_*` frames; every `workflow_progress`
+  is a **full snapshot**. Agent states are `start`/`progress`/`done`/**`error`** (never `failed`; an
+  agent refused before starting has no `agentId`). A workflow agent's words never reach stdout — only
+  its sidechain transcript on disk. `stop_task` stops the run but is accepted-and-ignored at an agent
+  id; `pause_task` is refused. `docs/superpowers/notes/2026-09-23-workflow-findings.md`.
+- A headless session answers `mcp_status`/`mcp_reconnect`/`mcp_toggle` with no model turn
+  (2.1.281, `testdata/stream/mcp-control.jsonl`). Reconnect/toggle reply with the bare `success` a
+  mode change gets — only the request id says what it answers. `mcp_toggle` persists. The status
+  carries no tool descriptions.
+- `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
+  hand-over. **A headless session does not load claude.ai connectors**, even with
+  `ENABLE_CLAUDEAI_MCP_SERVERS=true`.
 
 ## Conventions
 
-**Surgical code, brief comments, nothing extra.** Owner's rule, 2026-08-12, and it binds every change:
+**Surgical code, brief comments, nothing extra** (owner's rule, 2026-08-12):
 
-- **Write the smallest change that does the job.** No scaffolding for a future caller, no options
-  nobody passes, no helper with one call site that reads fine inline.
-- **Comments are brief.** One or two lines on what is not obvious — usually *why*, not *what*. The
-  long essays in this tree are history, not a template. A comment restating the code is deleted.
-- **Nothing parallel.** One implementation of a thing. Find the existing code before writing new code.
-- **No unnecessary code.** Dead branches, unused fields, unreachable guards and speculative
-  abstractions are defects, not slack. A guard's domain must be what can *arrive*, not what the type
-  declares.
-- **Immutable by default.** Return new values; don't mutate in place. Especially in `attention` and
-  `router`, which must stay pure.
+- **Smallest change that does the job.** No scaffolding, no unused options, no one-call helpers.
+- **Comments are brief** — one or two lines, usually *why*. The long essays in this tree are history,
+  not a template.
+- **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
+- **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/vocabulary.go` at 800 and `internal/ui/dm.go` at 799 — that sentence is
-  derived by `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`, so a stale count fails with the correction
-  in its own message. Split by subject, never by line count.
+  `internal/core/vocabulary.go` at 800 and `internal/ui/dm.go` at 799 — derived by
+  `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
-- **Handle every error explicitly.** Never silently swallow. A malformed JSON line logs and skips — it
-  never crashes the render loop. Under a TUI, failures go to `internal/notice`, never to stderr.
-- **No hardcoded values.** Config or constants.
-- **Reference code by symbol, not line number.**
-- **A number nothing asserts is wrong by default.** This has been broken five times in this file
-  alone. Derive it or delete it.
+- **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go
+  to `internal/notice`, never stderr.
+- **No hardcoded values. Reference code by symbol, not line number.**
+- **A number nothing asserts is wrong by default.** Derive it or delete it.
 
 ## Running Wake from this working tree
 
-**Never run `wake` — any verb — from this repository without `WAKE_SOCKET` set.** The default socket
-is `~/.wake/daemon.sock`, which is the *real* fleet: the owner's own sessions doing their own work.
-
-`make` targets are safe — the Makefile exports a scratch `WAKE_SOCKET`. A bare `go run ./cmd/wake …`
-or `./bin/wake …` is **not**, and neither is `wake` on your `PATH`.
+**Never run `wake` — any verb — from this repository without `WAKE_SOCKET` set.** The default
+`~/.wake/daemon.sock` is the owner's real fleet. `make` targets are safe; `go run ./cmd/wake`,
+`./bin/wake` and `wake` on `PATH` are not.
 
 ```sh
 WAKE_SOCKET=$(mktemp -d)/wake.sock go run ./cmd/wake status
 ```
 
-**`wake stop` is the only irreversible verb in this project.** Nothing brings a *stopped* session
-back — that is the whole reason park exists. This rule is written down because an agent cleaning up a
-leaked test daemon ran `go run ./cmd/wake stop` with no `WAKE_SOCKET`, stopped the owner's fleet of
-three, and reported afterwards that it had verified the real daemon untouched. It had not looked. Two
-of those transcripts were not on disk to recover.
-
-**Look before a destructive verb, in the same command.** `wake status` first, and read it. A daemon
-you did not start is a daemon somebody is using.
+**`wake stop` is the only irreversible verb.** An agent once stopped the owner's fleet with it and
+reported it had checked. **Look before a destructive verb, in the same command** — `wake status`
+first, and read it.
 
 ## Git
 
-**A feature goes on a branch and gets a PR. Always, without being asked.** Owner's rule,
-2026-08-12, after nine `feat:` commits reached `main` directly in one session — each green, each
-pushed, none of them reviewable as a unit. *Branch, commit, PR, merge freely* has never meant push
-to `main`; the freedom is in not needing permission to branch.
+- **A feature goes on a branch and gets a PR, always.** For a bug fix, ask where it goes. Branch at
+  the first edit; when green, say it is a PR awaiting merge.
+- **Two reviews before opening the PR:** a code review (*is this diff sound*) and an adversarial one
+  (*what would make its claims false* — check that a passing test can go red). Say which ran in the
+  PR body.
+- **Actions is unfunded: `make ci` on this machine is the only gate.** Run it before opening the PR
+  and put the exit code in the body.
+- **Every fix or feature PR carries videos of the real binary** (owner's rule, 2026-09-24; it
+  extends the 2026-09-23 screenshot rule): a `## Videos` section with one short clip per user-facing
+  flow the change adds or fixes, each a GIF inline plus a link to its MP4, captioned with the flow.
+  **Where a video cannot capture something, include screenshots instead** — a gesture VHS cannot
+  send (mouse clicks, ⇧+arrows) is a still from the pty harness, and a `## Screenshots` section keeps
+  the before/after pair (`main` build vs branch build doing the same thing). A change with nothing
+  visible says so, with the reason.
+  - Record with VHS against the real `wake` and a scripted fake `claude` on a shim `PATH`
+    (`demo/agent/claude`). Never a live LLM or the owner's fleet: scratch `HOME`, and a **fresh
+    `WAKE_SOCKET` directory per take** (a reused one inherits orphans and hangs `wake new`).
+  - Use a neutral project path (e.g. `/tmp/<name>`) — a home path puts the operator's name in the image.
+  - Record the videos against the PR's final head, not an earlier commit, and check their frames by eye.
+  - Host videos and images on an orphan branch `pr-assets/<head-branch>` (head branch verbatim, one
+    parentless commit, linked by `raw.githubusercontent.com`). Never commit a GIF, MP4 or PNG to the
+    feature branch. To replace media, force-push a fresh parentless commit.
+  - Before pushing a new one, delete assets branches whose PR merged or closed (report, don't
+    delete, a head with no PR):
 
-**For a bug fix, ask where it goes** if the owner has not already said. Do not assume `main`.
-
-Create the branch at the first edit rather than at the end, and when the work is green say plainly
-that it is a PR awaiting a merge rather than letting "pushed" stand in for "landed".
-
-**Two reviews before the PR is opened, not after.** Owner's rule, 2026-08-16. `make ci` proves the
-tree still works; it cannot tell you the work is *right*, and with Actions unfunded there is no
-second reader downstream — the PR is opened into a repository where nothing else will look at it.
-So both passes run first, and their findings go in the PR body beside the exit code:
-
-1. **A code review** — the `code-reviewer` agent, or an equivalent read of the diff for
-   correctness, the non-negotiables above, and the conventions below. Its job is *this diff is
-   sound*.
-2. **An adversarial review** — a separate pass whose job is the opposite: **try to break the
-   claim.** Not "does this look fine" but "what does this diff assert, and what would make that
-   assertion false?" Run it against the strongest claims in the change — the derived numbers, the
-   guards that say a thing cannot happen, the tests that pass. A test passing is not evidence the
-   test can fail; check that it ever went red.
-
-They are two passes because they fail differently: a code review reads what is there, and an
-adversarial review asks what is missing or overstated. This project has been wrong the second way
-far more often — five hardcoded numbers in `CLAUDE.md` alone, a legend that named keys nothing
-bound, guards that passed while the keys they guarded did nothing on macOS.
-
-**Say which passes ran.** A PR that skipped one says so, in the body. Silence reads as done.
-
-**Every PR carries before/after screenshots of the real binary.** Owner's rule, 2026-09-23, after
-PR #115. A `## Screenshots` section with a **Before** and an **After** image, taken from the `main`
-build and the branch build doing the same thing, so the reviewer sees the change rather than reads
-about it. How, so nothing private reaches a public PR:
-
-- **Record with VHS against the real `wake`**, driven by a scripted fake `claude` on a shim `PATH`
-  (`demo/agent/claude` is the model; a scratch copy may add a step for a frame shape it lacks, copied
-  from `testdata/stream/`). Never a live LLM, and never the owner's fleet — a scratch `HOME` and a
-  scratch `WAKE_SOCKET`, **a fresh socket directory per take** (the roster lives beside the socket, so
-  a reused directory inherits the last take's orphans and the next `wake new` hangs or refuses).
-- **A neutral project path** (e.g. `/tmp/<name>`), because the banner and status bar draw the
-  working directory — a path under the home directory puts the operator's name in the image.
-- **Host the images on an orphan branch, `pr-assets/<head-branch>`** — the PR's head branch name
-  verbatim (`pr-assets/fix/cross-session-text-lighter`), so the sweep below can find its PR — one
-  parentless commit holding only the images, and link them by `raw.githubusercontent.com` URL.
-  Never commit a PNG to the feature branch, or it lands in `main`.
-- **Sweep before pushing a new one, so the images never accumulate.** Every pushed image is in every
-  clone for as long as a branch points at it, so an assets branch lives only while its PR is open;
-  a merged or closed PR losing its screenshots is accepted (owner's ruling, 2026-09-23). Delete the
-  rest — a new clone stops downloading them at once, and GitHub reclaims the space on its own GC:
-
-  ```sh
-  git ls-remote --heads origin 'pr-assets/*' | sed 's#.*refs/heads/pr-assets/##' |
-  while read -r b; do
-    s=$(gh pr list --head "$b" --state all --json state --jq '.[0].state // "NONE"')
-    case "$s" in MERGED|CLOSED) git push -q origin --delete "pr-assets/$b" ;; esac
-  done
-  ```
-
-  A `NONE` (no PR for that head) is reported, not deleted — it may be one being opened right now.
-  Replacing an image means force-pushing a fresh parentless commit, never committing on top: a
-  deletion committed on top keeps the old PNG in history and every clone.
-- A change with nothing visible to show says so in the section, with the reason. Silence reads as
-  skipped.
-
-**GitHub Actions is out of funds, so `make ci` on this machine is the only gate there is.** Runs
-have failed on billing before starting a job since 2026-08-12. Nothing checks a PR after it is
-opened, and a red X nobody is watching for cannot appear — so a branch that was never gated locally
-is a branch merged on somebody's word.
-
-Which makes the rule the reverse of the usual one: **run `make ci` and read its exit code before
-opening the PR, not after.** Not `go test ./...`, which skips the lint, the coverage floors, the
-cross-compile and the second non-race pass — `make ci` is the whole of what the workflow would have
-done, and it takes about six minutes. Say the exit code in the PR, because it is the only evidence
-anybody gets.
-
-It cannot replicate a clean checkout or a second machine, and it never could; that gap is the same
-one it has always had and is not what this rule is about.
-
-Side project — branch, commit, PR, merge freely.
-
-Conventional commits: `feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`, `ci:`.
-
-**A branch takes the same type as a prefix:** `<type>/<short-kebab-description>` — the commit type
-above, a slash, then what the branch is (`feat/conversation-rewind`, `fix/commands-on-report`,
-`refactor/…`, `docs/…`). It is the type verbatim, not a synonym — `fix/`, never `bugfix/` — and a
-slash rather than a colon, because a colon is not a legal git ref character.
-
-**A development worktree lives *inside* the repo, under `.worktrees/<name>`, never in `$HOME`,
-`~/Documents`, `/tmp`, or beside the repo.** Owner's rule, 2026-08-29, after worktrees for this
-project had scattered across the home directory, `~/Documents` and the project root — impossible to
-find, and clutter nobody could tell stale from live. `.gitignore` already reserves `/.worktrees/`
-for exactly this ("Parallel subagent worktrees"), so a worktree there is organized *and* uncommittable
-by construction; put every `git worktree add` for working on Wake under it (`git worktree add
-.worktrees/<name>`). This is **not** Wake's own `--worktree` feature, which is a product path
-(`<repo>/.wake/worktrees/<name>`, `internal/daemon/worktree.go`) and unchanged. Remove a dev worktree
-with `git worktree remove` when its branch has merged; the branch survives the removal, so nothing is
-lost.
-
-**Never add Claude attribution** — no `Co-Authored-By`, no generated-with footer, in commits, PR
-titles, or PR bodies.
+    ```sh
+    git ls-remote --heads origin 'pr-assets/*' | sed 's#.*refs/heads/pr-assets/##' |
+    while read -r b; do
+      s=$(gh pr list --head "$b" --state all --json state --jq '.[0].state // "NONE"')
+      case "$s" in MERGED|CLOSED) git push -q origin --delete "pr-assets/$b" ;; esac
+    done
+    ```
+- Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`, `ci:`);
+  branches are `<type>/<kebab-description>` (`fix/`, never `bugfix/`).
+- **Dev worktrees live in `.worktrees/<name>`** inside the repo (gitignored) — never `$HOME`,
+  `~/Documents`, `/tmp` or beside the repo. Remove with `git worktree remove` after merge.
+- **Never add Claude attribution** in commits, PR titles or bodies.
+- **Docs-only commits go straight to `main` and are pushed immediately** so other worktrees see them.
+  Read another worktree's notes via `git fetch origin main && git show origin/main:<path>`.
 
 ## Working notes
 
-- `docs/goals.md` — what was asked for, the four phases, and every original ask traced to built or
-  not-built.
-- `docs/live-testing.md` — what only a human at a real terminal can check. `go test` has no TTY, no
-  font, no mouse, no window manager, and no `claude` binary it will spend money on. **Anything there
-  that turns out to be testable is a bug in the file** — move it into the suite.
-- `docs/notes/deferred.md` — everything consciously put off, triaged by what it blocks. **Read it
-  before starting a task**; several entries are addressed to a specific one.
-- `docs/notes/decisions.md` — rulings not obvious from the code, plus recurring failure modes worth
-  recognising on sight.
-- `docs/notes/bugs.md` — defects somebody **watched go wrong** running the build, as against work put
-  off (`deferred.md`). Each entry separates the symptom from
-  the rulings it collided with, because most of these are a decision meeting a case it did not
-  anticipate rather than a mechanism that failed.
-
-### Notes are shared through `origin/main`, not through a branch
-
-Work happens in several worktrees at once, and a note written in one is invisible to every other
-until it lands. That is the wrong latency for a note — the whole value of `decisions.md` is that
-the *next* agent reads it, and the next agent is usually running right now in a different
-directory.
-
-So **a docs-only commit goes straight to `main` and is pushed immediately.** It is not a feature,
-it does not need the branch-and-PR rule, and holding one on a feature branch for review is holding
-it away from the readers it was written for. Mixed commits still branch: the rule is about
-docs-only ones.
-
-**To read what another worktree has written, ask the remote rather than the filesystem** — no
-`cd` to the main checkout, no merge, nothing to clean up:
-
-```sh
-git fetch origin main --quiet
-git show origin/main:docs/notes/decisions.md
-```
+- `docs/goals.md` — the asks, the four phases, built vs not-built.
+- `docs/live-testing.md` — what only a human at a real terminal can check. Anything testable there
+  is a bug in that file.
+- `docs/notes/deferred.md` — consciously put off. **Read it before starting a task.**
+- `docs/notes/decisions.md` — rulings not obvious from the code, and recurring failure modes.
+- `docs/notes/bugs.md` — defects somebody watched go wrong.
 
 ## Scope discipline
 
-The v1 boundary is §17 of the spec. Before adding anything not on the "in" list, check §2 (non-goals)
-and §17 (out). The failure mode for this project is drifting toward being a worse cmux. **The group
-chat is the product; the panes are substrate.**
+The v1 boundary is spec §17. Before adding anything not on the "in" list, check §2 (non-goals) and
+§17 (out). The failure mode is drifting toward a worse cmux. **The group chat is the product; the
+panes are substrate.**
