@@ -13,6 +13,8 @@ import (
 	"os"
 	"path/filepath"
 
+	"github.com/google/uuid"
+
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -23,6 +25,7 @@ import (
 const (
 	workflowDirPerm  = 0o755
 	workflowFilePerm = 0o644
+	workflowExt      = ".js"
 )
 
 // workflowScript is one workflow dispatch's own script: the retained
@@ -125,56 +128,115 @@ func hasGitEntry(dir string) bool {
 	return err == nil
 }
 
-// isSymlink reports whether path exists and is itself a symlink. A path
-// that does not exist yet is not refused here - creating it is
-// saveWorkflow's own job - which is why this is Lstat rather than the
-// followed-through Stat existingDir uses.
-func isSymlink(path string) bool {
-	info, err := os.Lstat(path)
-	return err == nil && info.Mode()&os.ModeSymlink != 0
-}
-
 // saveWorkflow writes script to <dir>/<name>.js, matching Claude Code's
-// documented /workflows save. project gates the two checks that only apply
-// to a project-scope save: .claude and .claude/workflows are refused if
-// either is a symlink, since a name chosen on the wire must not redirect the
-// write outside the repository it names. The target file is refused as a
-// symlink in both scopes, and an existing file is refused too - overwriting
-// a saved workflow is not a keystroke - made atomic by O_EXCL rather than a
-// stat-then-write race.
+// documented /workflows save, and says where only once the file is whole.
+// Every write goes through workflowRoot's os.Root, so a directory swapped for
+// a symlink after the checks below cannot take the write outside it. The
+// target is refused as a symlink in both scopes, and an existing file is
+// refused too - overwriting a saved workflow is not a keystroke - made atomic
+// by publish's link rather than a stat-then-write race.
 func saveWorkflow(dir, name, script string, project bool) (string, error) {
 	if err := rpc.ValidWorkflowName(name); err != nil {
 		return "", err
 	}
-	if project {
-		claudeDir := filepath.Dir(dir)
-		if isSymlink(claudeDir) {
-			return "", fmt.Errorf("%s is a symlink, refusing to save a workflow through it", claudeDir)
-		}
-		if isSymlink(dir) {
-			return "", fmt.Errorf("%s is a symlink, refusing to save a workflow through it", dir)
-		}
+	root, rel, err := workflowRoot(dir, project)
+	if err != nil {
+		return "", err
 	}
-	if err := os.MkdirAll(dir, workflowDirPerm); err != nil {
-		return "", fmt.Errorf("create %s: %w", dir, err)
-	}
-
-	path := filepath.Join(dir, name+".js")
-	if isSymlink(path) {
+	defer closeRoot(root)
+	path, file := filepath.Join(dir, name+workflowExt), filepath.Join(rel, name+workflowExt)
+	if rootSymlink(root, file) {
 		return "", fmt.Errorf("%s is a symlink, refusing to overwrite it", path)
 	}
-	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_EXCL, workflowFilePerm)
-	if err != nil {
-		if errors.Is(err, os.ErrExist) {
-			return "", fmt.Errorf("%s already exists", path)
-		}
-		return "", fmt.Errorf("create %s: %w", path, err)
+	afterWorkflowChecks()
+	if err := root.MkdirAll(rel, workflowDirPerm); err != nil {
+		return "", fmt.Errorf("create %s: %w", dir, err)
 	}
-	defer func() { _ = f.Close() }()
-	if _, err := f.WriteString(script); err != nil {
-		return "", fmt.Errorf("write %s: %w", path, err)
+	if err := publish(root, file, script, path); err != nil {
+		return "", err
 	}
 	return path, nil
+}
+
+// workflowRoot opens the directory a save writes through, and where the
+// workflows directory sits inside it. At project scope that is the project
+// base above .claude, whose .claude and .claude/workflows are refused if
+// either is a symlink - a name chosen on the wire must not redirect the write
+// outside the repository it names. At personal scope it is the workflows
+// directory itself, which may sit behind the operator's own symlinked
+// ~/.claude, so only the target is fenced there.
+func workflowRoot(dir string, project bool) (*os.Root, string, error) {
+	base, rel := dir, "."
+	if project {
+		base, rel = filepath.Dir(filepath.Dir(dir)), filepath.Join(filepath.Base(filepath.Dir(dir)), filepath.Base(dir))
+	} else if err := os.MkdirAll(dir, workflowDirPerm); err != nil {
+		return nil, "", fmt.Errorf("create %s: %w", dir, err)
+	}
+	root, err := os.OpenRoot(base)
+	if err != nil {
+		return nil, "", fmt.Errorf("open %s: %w", base, err)
+	}
+	if !project {
+		return root, rel, nil
+	}
+	for _, p := range []string{filepath.Dir(rel), rel} {
+		if rootSymlink(root, p) {
+			closeRoot(root)
+			return nil, "", fmt.Errorf("%s is a symlink, refusing to save a workflow through it", filepath.Join(base, p))
+		}
+	}
+	return root, rel, nil
+}
+
+// publish writes script to a temp file beside file, syncs and closes it, and
+// links it into place: the link fails if file exists, so the no-overwrite
+// rule stays atomic, and every path out removes the temp - a failed save
+// leaves nothing a retry would call "already exists". path is file as the
+// operator knows it, for the errors.
+func publish(root *os.Root, file, script, path string) error {
+	tmp := filepath.Join(filepath.Dir(file), "."+filepath.Base(file)+"."+uuid.NewString()+".tmp")
+	f, err := root.OpenFile(tmp, os.O_WRONLY|os.O_CREATE|os.O_EXCL, workflowFilePerm)
+	if err != nil {
+		return fmt.Errorf("create %s: %w", path, err)
+	}
+	defer func() {
+		if err := root.Remove(tmp); err != nil && !errors.Is(err, os.ErrNotExist) {
+			logf("wake: could not remove %s's temp file %s: %v", path, tmp, err)
+		}
+	}()
+	_, err = writeWorkflowScript(f, script)
+	if err == nil {
+		err = f.Sync()
+	}
+	if closeErr := f.Close(); err == nil {
+		err = closeErr
+	}
+	if err != nil {
+		return fmt.Errorf("write %s: %w", path, err)
+	}
+	if err := root.Link(tmp, file); err != nil {
+		if errors.Is(err, os.ErrExist) {
+			return fmt.Errorf("%s already exists", path)
+		}
+		return fmt.Errorf("save %s: %w", path, err)
+	}
+	return nil
+}
+
+// rootSymlink reports whether name exists under root and is itself a
+// symlink. A name that does not exist yet is not refused - creating it is
+// saveWorkflow's own job - which is why this is Lstat.
+func rootSymlink(root *os.Root, name string) bool {
+	info, err := root.Lstat(name)
+	return err == nil && info.Mode()&os.ModeSymlink != 0
+}
+
+// closeRoot closes a save's directory handle. A failure is logged rather than
+// returned: by then the save it served has already succeeded or failed.
+func closeRoot(root *os.Root) {
+	if err := root.Close(); err != nil {
+		logf("wake: could not close %s: %v", root.Name(), err)
+	}
 }
 
 // saveWorkflowFrame answers a client's FrameSaveWorkflow: write one of this
@@ -220,3 +282,10 @@ func (s *server) saveWorkflowFrame(c *client, f rpc.Frame) {
 	}
 	c.enqueue(rpc.Frame{Kind: rpc.FrameWorkflowSaved, SessionID: f.SessionID, Workflow: &rpc.WorkflowFrame{Path: path}})
 }
+
+// Test seams (workflowsaverace_test.go): the moment between the symlink checks
+// and the writes, and the write itself.
+var (
+	afterWorkflowChecks = func() {}
+	writeWorkflowScript = (*os.File).WriteString
+)
