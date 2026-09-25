@@ -751,7 +751,7 @@ type wireWorkflowItem struct {
 	AgentID       string `json:"agentId"`
 	Model         string `json:"model"`
 	State         string `json:"state"`
-	Attempt       int    `json:"attempt"`
+	Error         string `json:"error"`
 	Tokens        int    `json:"tokens"`
 	ToolCalls     int    `json:"toolCalls"`
 	DurationMs    int    `json:"durationMs"`
@@ -764,11 +764,11 @@ const (
 	workflowAgentItem = "workflow_agent"
 )
 
-// Recorded agent states are start, progress (mid-tool) and done; failed is
-// Claude Code's documented word for a failed agent.
+// Every recorded agent state: start, progress (mid-tool), done, and error -
+// an agent that failed, or was refused before it started (workflow-agent-error.jsonl).
 var workflowAgentStates = map[string]WorkflowAgentState{
 	"start": WorkflowAgentRunning, "progress": WorkflowAgentRunning,
-	"done": WorkflowAgentDone, "failed": WorkflowAgentFailed,
+	"done": WorkflowAgentDone, "error": WorkflowAgentFailed,
 }
 
 // DecodeWorkflowRun decodes one run record. An unrecognised status resolves

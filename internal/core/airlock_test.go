@@ -348,9 +348,10 @@ var claudeWireVocabulary = wordSet([]string{
 	"allow", "deny", "user",
 
 	// A workflow_agent's own state word for still running - unlike its
-	// siblings "done" and "failed", which sit in deliberatelyGeneric because
-	// core.TaskDone and core.TaskFailed already spell those two literally and
-	// neither file is an airlock file.
+	// siblings "progress", "done" and "error", which sit in deliberatelyGeneric
+	// because Wake's own vocabulary already spells each literally outside the
+	// airlock (core.TaskProgress and core.TaskDone in task.go; "error" is the
+	// mode receipt's generic word below).
 	"start",
 
 	// Tool names. Task is here even though no recorded tool_use block is
@@ -420,19 +421,19 @@ var deliberatelyGeneric = wordSet([]string{
 	"cancelled", "label", "model",
 
 	// A workflow_agent's own fields, the plainest English among them:
-	// "index" and "title" are a workflow_phase's, "attempt" and "tokens" a
+	// "index" and "title" are a workflow_phase's, "tokens" a
 	// workflow_agent's. Policing any would fire across the tree - Wake's own
 	// vocabulary already has a dozen counters and titles - and none is a
 	// route in on its own, since a file cannot reach one without first
 	// naming "workflow_progress", which is policed above.
-	"index", "title", "attempt", "tokens",
+	"index", "title", "tokens",
 
-	// A workflow_agent's other state words, "start"'s siblings. None is
-	// policed: core.TaskProgress, core.TaskDone and core.TaskFailed already
-	// spell "progress", "done" and "failed" literally in task.go, which is
-	// not an airlock file, so policing any would fail the leak check on
-	// Wake's own vocabulary rather than catch one.
-	"failed", "done", "progress",
+	// A workflow_agent's other state words, "start"'s siblings. Neither is
+	// policed: core.TaskProgress and core.TaskDone already spell "progress"
+	// and "done" literally in task.go, which is not an airlock file, so
+	// policing either would fail the leak check on Wake's own vocabulary
+	// rather than catch one. The fourth, "error", is generic below.
+	"done", "progress",
 
 	// An mcp_status receipt's plain words: a toggle's flag, the two states the
 	// init roster never showed, and a server's config, scope, info and tools.

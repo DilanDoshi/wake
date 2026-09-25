@@ -395,14 +395,14 @@ func workflowSnapshotOf(items []wireWorkflowItem) *WorkflowSnapshot {
 		case workflowPhaseItem:
 			s.Phases = append(s.Phases, WorkflowPhase{Index: it.Index, Title: it.Title})
 		case workflowAgentItem:
-			state, ok := workflowAgentStates[it.State]
-			if !ok {
-				state = WorkflowAgentUnknown
+			ag := WorkflowAgent{Index: it.Index, Phase: it.PhaseIndex, Label: it.Label, AgentID: it.AgentID,
+				Model: it.Model, State: WorkflowAgentUnknown, StateWord: it.State, Error: it.Error,
+				Tokens: it.Tokens, ToolCalls: it.ToolCalls, Duration: time.Duration(it.DurationMs) * time.Millisecond,
+				Prompt: it.PromptPreview, Result: it.ResultPreview}
+			if state, ok := workflowAgentStates[it.State]; ok {
+				ag.State, ag.StateWord = state, "" // the word is kept only when nothing resolves it
 			}
-			s.Agents = append(s.Agents, WorkflowAgent{Index: it.Index, Phase: it.PhaseIndex, Label: it.Label,
-				AgentID: it.AgentID, Model: it.Model, State: state, Attempt: it.Attempt, Tokens: it.Tokens,
-				ToolCalls: it.ToolCalls, Duration: time.Duration(it.DurationMs) * time.Millisecond,
-				Prompt: it.PromptPreview, Result: it.ResultPreview})
+			s.Agents = append(s.Agents, ag)
 		}
 	}
 	return s

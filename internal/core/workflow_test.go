@@ -8,6 +8,7 @@
 package core
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 	"testing"
@@ -145,15 +146,100 @@ func TestNoWorkflowAgentStateIsUnknownInTheCorpus(t *testing.T) {
 	for _, path := range files {
 		fixture := filepath.Base(path)
 		for _, task := range fixtureTasks(t, fixture) {
-			if task.Workflow == nil || task.Workflow.Progress == nil {
-				continue
-			}
-			for _, a := range task.Workflow.Progress.Agents {
-				if a.State == WorkflowAgentUnknown {
-					t.Errorf("%s: agent %q (id %s) decodes to WorkflowAgentUnknown - an unmapped recorded state word", fixture, a.Label, a.AgentID)
-				}
+			if task.Workflow != nil && task.Workflow.Progress != nil {
+				noUnknownAgent(t, fixture, *task.Workflow.Progress)
 			}
 		}
+	}
+	// The run records on disk carry the same entries, camelCase.
+	records, err := filepath.Glob("../../testdata/workflow/*.json")
+	if err != nil || len(records) == 0 {
+		t.Fatalf("no run records under testdata/workflow (err %v)", err)
+	}
+	for _, path := range records {
+		run := decodeRunRecord(t, path)
+		if run.Progress == nil {
+			t.Fatalf("%s: a run record with no snapshot", path)
+		}
+		noUnknownAgent(t, filepath.Base(path), *run.Progress)
+	}
+}
+
+func noUnknownAgent(t *testing.T, fixture string, s WorkflowSnapshot) {
+	t.Helper()
+	for _, a := range s.Agents {
+		if a.State == WorkflowAgentUnknown {
+			t.Errorf("%s: agent %q (id %s) decodes to WorkflowAgentUnknown (%q) - an unmapped recorded state word",
+				fixture, a.Label, a.AgentID, a.StateWord)
+		}
+	}
+}
+
+func decodeRunRecord(t *testing.T, path string) WorkflowRun {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := DecodeWorkflowRun(raw)
+	if err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	return run
+}
+
+// requireErroredAgents holds run-agent-error's two failures to what the
+// recording carries: "bad model" started and failed on the model, "bad schema"
+// was never started - no agentId - and "fine" finished.
+func requireErroredAgents(t *testing.T, where string, s WorkflowSnapshot) {
+	t.Helper()
+	want := map[string]struct {
+		state   WorkflowAgentState
+		started bool
+		error   string
+	}{
+		"bad model":  {WorkflowAgentFailed, true, "There's an issue with the selected model"},
+		"bad schema": {WorkflowAgentFailed, false, "received an unusable JSON Schema"},
+		"fine":       {WorkflowAgentDone, true, ""},
+	}
+	if len(s.Agents) != len(want) {
+		t.Fatalf("%s: %d agents, want %d", where, len(s.Agents), len(want))
+	}
+	for _, a := range s.Agents {
+		w := want[a.Label]
+		if a.State != w.state || (a.AgentID != "") != w.started || !strings.Contains(a.Error, w.error) ||
+			(w.error == "") != (a.Error == "") {
+			t.Errorf("%s: agent %q = state %q id %q error %.50q; want %q, started %v, error %q...",
+				where, a.Label, a.State, a.AgentID, a.Error, w.state, w.started, w.error)
+		}
+	}
+}
+
+func TestAnErroredAgentDecodesFailedWithItsError(t *testing.T) {
+	requireErroredAgents(t, "workflow-agent-error.jsonl", lastSnapshot(t, "workflow-agent-error.jsonl"))
+}
+
+func TestARunRecordsErroredAgentsDecodeFailedWithTheirErrors(t *testing.T) {
+	run := decodeRunRecord(t, filepath.Join("..", "..", "testdata", "workflow", "run-agent-error.json"))
+	if run.TaskID != "wppv13f2b" || run.Progress == nil {
+		t.Fatalf("run = %+v", run)
+	}
+	requireErroredAgents(t, "run-agent-error.json", *run.Progress)
+}
+
+// No recording carries an unmapped word - the guard above keeps it so - so
+// this line is built by hand: an unmapped word keeps itself, so the view can
+// name it rather than calling it unknown.
+func TestAnUnrecordedAgentStateKeepsItsWord(t *testing.T) {
+	line := `{"type":"system","subtype":"task_progress","task_id":"w1","tool_use_id":"t1",` +
+		`"workflow_progress":[{"type":"workflow_agent","index":1,"label":"x","phaseIndex":1,"state":"queued"}]}`
+	evs, err := DecodeLine([]byte(line))
+	if err != nil || len(evs) == 0 || evs[0].Task == nil || evs[0].Task.Workflow == nil {
+		t.Fatalf("decode: %+v, %v", evs, err)
+	}
+	a := evs[0].Task.Workflow.Progress.Agents[0]
+	if a.State != WorkflowAgentUnknown || a.StateWord != "queued" {
+		t.Errorf("agent = state %q word %q, want unknown carrying %q", a.State, a.StateWord, "queued")
 	}
 }
 

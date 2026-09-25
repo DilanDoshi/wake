@@ -8,6 +8,7 @@ package ui
 // the frame and never scrolls the alt screen.
 
 import (
+	"cmp"
 	"fmt"
 	"slices"
 	"strconv"
@@ -411,7 +412,7 @@ func agentGlyph(s core.WorkflowAgentState) string {
 func agentMeta(ag core.WorkflowAgent) string {
 	var parts []string
 	if ag.State == core.WorkflowAgentUnknown {
-		parts = append(parts, string(ag.State))
+		parts = append(parts, stateWord(ag))
 	}
 	if ag.Model != "" {
 		parts = append(parts, workflowModel(ag.Model))
@@ -465,9 +466,12 @@ func renderWorkflowAgent(ag core.WorkflowAgent, events []core.Event, expanded bo
 	return layAgent(ag, events, expanded, w).render(w, h, scroll)
 }
 
+// stateWord is an unresolved state as the wire spelled it.
+func stateWord(ag core.WorkflowAgent) string { return oneLine(cmp.Or(ag.StateWord, string(ag.State))) }
+
 // agentStatus is the agent's state and model: "✔ Completed · haiku".
 func agentStatus(ag core.WorkflowAgent) string {
-	word := string(ag.State)
+	word := stateWord(ag)
 	switch ag.State {
 	case core.WorkflowAgentDone:
 		word = "Completed"
@@ -506,20 +510,24 @@ func agentKeyLine(expanded bool) string {
 
 // agentBody is what scrolls. The Prompt and the Outcome are the snapshot's own
 // previews - the task text alone, where the transcript's first turn wraps it
-// in the harness's framing - so they stand when the transcript does not.
+// in the harness's framing - so they stand when the transcript does not. A
+// failed agent with no result has its error for an outcome.
 func agentBody(ag core.WorkflowAgent, events []core.Event, expanded bool, w int) []string {
-	body := agentSection("Prompt", ag.Prompt, w)
+	body := agentSection("Prompt", ag.Prompt, TextStyle, w)
 	body = append(body, agentActivity(events, expanded, w)...)
-	return append(body, agentSection("Outcome", ag.Result, w)...)
+	if strings.TrimSpace(ag.Result) == "" && ag.Error != "" {
+		return append(body, agentSection("Outcome", firstErrorLine(ag.Error), ErrorStyle, w)...)
+	}
+	return append(body, agentSection("Outcome", ag.Result, TextStyle, w)...)
 }
 
 // agentSection is a titled block of the agent's own words after a blank row,
 // and nothing while there are none - a running agent has no outcome yet.
-func agentSection(title, text string, w int) []string {
+func agentSection(title, text string, style lipgloss.Style, w int) []string {
 	if strings.TrimSpace(text) == "" {
 		return nil
 	}
-	words := TextStyle.Width(max(w, bodyIndent+1)).PaddingLeft(bodyIndent).Render(text)
+	words := style.Width(max(w, bodyIndent+1)).PaddingLeft(bodyIndent).Render(text)
 	return append([]string{"", sectionTitle(title)}, strings.Split(words, "\n")...)
 }
 

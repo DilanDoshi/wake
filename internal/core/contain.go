@@ -266,8 +266,8 @@ func containedWorkflowSnapshot(s *WorkflowSnapshot) *WorkflowSnapshot {
 	}
 	for _, a := range s.Agents {
 		a.Label, a.AgentID, a.Model = Contained(a.Label), Contained(a.AgentID), Contained(a.Model)
-		a.State = WorkflowAgentState(Contained(string(a.State)))
-		a.Prompt, a.Result = Contained(a.Prompt), Contained(a.Result)
+		a.State, a.StateWord = WorkflowAgentState(Contained(string(a.State))), Contained(a.StateWord)
+		a.Prompt, a.Result, a.Error = Contained(a.Prompt), Contained(a.Result), Contained(a.Error)
 		c.Agents = append(c.Agents, a)
 	}
 	return &c

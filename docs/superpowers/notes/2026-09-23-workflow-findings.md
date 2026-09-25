@@ -11,6 +11,8 @@ stdio`, `--permission-mode auto`). Five sessions, one fixture each:
 | `testdata/stream/workflow-saved-command.jsonl` | `/deep-research` bare, then a saved `.claude/workflows/slow-probe.js` run as `/slow-probe`, then `pause_task` and `stop_task` control requests (both after the run ended) |
 | `testdata/stream/workflow-stop.jsonl` | A saved 12-agent sequential workflow stopped mid-run: `stop_task` at one agent's `agentId`, then at the run's `task_id` |
 | `testdata/transcript/workflow-agent.jsonl` | One workflow agent's on-disk transcript, **trimmed to its `user`/`assistant` lines** |
+| `testdata/stream/workflow-agent-error.jsonl` | Recorded 2026-09-24 against **2.1.282**: a 1-phase, 3-agent workflow (`two-fail`) in which two agents fail and are caught — one on a model that does not exist, one refused for an unusable schema — and one succeeds |
+| `testdata/workflow/run-agent-error.json` | That run's own `workflows/wf_<runId>.json` record on disk, scrubbed |
 
 ## Provenance caveats
 
@@ -43,8 +45,18 @@ A `workflow_agent` entry: `index`, `label`, `phaseIndex`, `phaseTitle`, `agentId
 subagent id), `model`, `state`, `attempt`, `queuedAt`/`startedAt`/`lastProgressAt` (epoch ms), `tokens`,
 `toolCalls`, `durationMs`, `lastToolName`, `promptPreview`, `resultPreview`.
 
-`state` is recorded as **`start`**, **`progress`** (mid-tool, `workflow-run.jsonl`/`workflow-saved-command.jsonl`)
-and **`done`**. A queued agent, a failed agent and a retried one (`attempt` > 1) are unrecorded.
+`state` is recorded as **`start`**, **`progress`** (mid-tool, `workflow-run.jsonl`/`workflow-saved-command.jsonl`),
+**`done`** and **`error`** — never `failed` (`workflow-agent-error.jsonl`). An errored entry adds an **`error`**
+field: the reason in one line (`There's an issue with the selected model (…)`). An agent refused **before it
+started** — `agent({schema})` with a schema no output can satisfy — is still an entry, `state:"error"`, but with
+**no `agentId`**, `startedAt`, `attempt`, `tokens` or `durationMs`: there is no transcript to read for it. The
+run itself still ends `completed` when the script catches both failures. A queued agent and a retried one
+(`attempt` > 1) are unrecorded.
+
+The run's own record is written to `<session>/workflows/wf_<runId>.json` once it ends (`run-agent-error.json`).
+Its `workflowProgress` holds the same entries as the stream's `workflow_progress`, the same `state` and `error`
+words included, beside the run's `taskId`, `workflowName`, `summary`, `status`, `startTime`, `durationMs`,
+`totalTokens` and `script`.
 
 ## 3. Nothing a workflow agent says reaches stdout
 

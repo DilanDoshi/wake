@@ -66,10 +66,8 @@ type WorkflowPhase struct {
 }
 
 // WorkflowAgentState is a workflow_agent entry's state, resolved from
-// Claude's own words. "start", "progress" (mid-tool) and "done" are
-// recorded; failed is the SDK's documented word for a run this corpus has
-// not seen fail an individual agent, and unknown is every other word - see
-// workflowAgentStates.
+// Claude's own words - see workflowAgentStates for the four recorded ones.
+// Unknown is every other word, whose own spelling WorkflowAgent.StateWord keeps.
 type WorkflowAgentState string
 
 const (
@@ -84,7 +82,8 @@ const (
 //
 // AgentID is the only decoded route to that agent's own words: a workflow
 // agent forwards nothing (no parent_tool_use_id on either recording), so its
-// transcript lives only on disk, keyed by this id.
+// transcript lives only on disk, keyed by this id. An agent refused before it
+// started has none (workflow-agent-error.jsonl's "bad schema").
 type WorkflowAgent struct {
 	Index     int                `json:"index"`
 	Phase     int                `json:"phase"`
@@ -92,7 +91,8 @@ type WorkflowAgent struct {
 	AgentID   string             `json:"agent"`
 	Model     string             `json:"model,omitempty"`
 	State     WorkflowAgentState `json:"state"`
-	Attempt   int                `json:"attempt,omitempty"`
+	StateWord string             `json:"state_word,omitempty"` // the wire's own word, when State is unknown
+	Error     string             `json:"error,omitempty"`      // why a failed agent failed, as the wire gives it
 	Tokens    int                `json:"tokens,omitempty"`
 	ToolCalls int                `json:"tool_calls,omitempty"`
 	Duration  time.Duration      `json:"duration,omitempty"`
