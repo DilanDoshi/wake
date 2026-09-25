@@ -8,7 +8,7 @@ stdio`, `--permission-mode auto`). Five sessions, one fixture each:
 | `testdata/stream/workflow-run.jsonl` | A 2-phase, 3-agent workflow (`count-lines`) that completes |
 | `testdata/stream/workflow-failed.jsonl` | 3 phases, a 6-wide parallel phase, then a deliberate `throw` — ends `failed` |
 | `testdata/stream/workflow-slash.jsonl` | `/workflows`, `/workflow-launch-exec` (bare and with an argument), `/__remote-workflow` |
-| `testdata/stream/workflow-saved-command.jsonl` | `/deep-research` bare, then a saved `.claude/workflows/slow-probe.js` run as `/slow-probe`, then `pause_task` and `stop_task` control requests (both after the run ended) |
+| `testdata/stream/workflow-saved-command.jsonl` | a saved `.claude/workflows/slow-probe.js` run as `/slow-probe`, then `pause_task` and `stop_task` control requests (both after the run ended) |
 | `testdata/stream/workflow-stop.jsonl` | A saved 12-agent sequential workflow stopped mid-run: `stop_task` at one agent's `agentId`, then at the run's `task_id` |
 | `testdata/transcript/workflow-agent.jsonl` | One workflow agent's on-disk transcript, **trimmed to its `user`/`assistant` lines** |
 | `testdata/stream/workflow-agent-error.jsonl` | Recorded 2026-09-24 against **2.1.282**: a 1-phase, 3-agent workflow (`two-fail`) in which two agents fail and are caught — one on a model that does not exist, one refused for an unusable schema — and one succeeds |
@@ -16,6 +16,9 @@ stdio`, `--permission-mode auto`). Five sessions, one fixture each:
 
 ## Provenance caveats
 
+- **Every init frame's `mcp_servers` is emptied and its `mcp__…` tools removed**, and the saved-command
+  recording's opening `/deep-research` turn is cut: under the real `HOME` they named the recording
+  machine's own MCP servers, which the scrubber does not strip. Nothing workflow-related was in them.
 - **Recorded under the real `HOME`, then scrubbed**, for the partial-messages note's reason (credentials live
   in the keychain). Every `hook_*` frame was then **deleted** from all three stream fixtures: under the real
   `HOME` they carried the operator's own SessionStart hook output, and none of them bears on workflows.
