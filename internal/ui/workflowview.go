@@ -120,7 +120,7 @@ func (a App) openWorkflows(arg string) (App, tea.Cmd) {
 		notice.Report("%s", workflowsTakeNoArgument)
 		return a, nil
 	}
-	a.workflow.view = WorkflowView{Up: true, Pane: a.focus, Session: a.focus, Settling: true}
+	a = a.showWorkflow(WorkflowView{Up: true, Pane: a.focus, Session: a.focus, Settling: true})
 	var ids []string
 	for _, ag := range a.workflowScope(a.focus) {
 		ids = append(ids, ag.ID)
@@ -137,8 +137,21 @@ func (a App) openWorkflow(session, task string) App {
 	if a.focus != session {
 		return a
 	}
-	a.workflow.view = WorkflowView{Up: true, Pane: session, Session: session, Task: task, Level: levelRun}
+	a = a.showWorkflow(WorkflowView{Up: true, Pane: session, Session: session, Task: task, Level: levelRun})
 	return a.askWorkflows(session)
+}
+
+// showWorkflow opens v, closing first the pane-scoped modal it would cover in
+// that pane: esc on the view would otherwise uncover it still open.
+func (a App) showWorkflow(v WorkflowView) App {
+	if a.mcpUI.menu.Open() && a.mcpUI.menu.Pane == v.Pane {
+		a = a.closeMCP()
+	}
+	if a.rewind.Session != "" && a.rewind.Session == v.Pane {
+		a = a.closeRewind()
+	}
+	a.workflow.view = v
+	return a
 }
 
 func (a App) closeWorkflow() App {

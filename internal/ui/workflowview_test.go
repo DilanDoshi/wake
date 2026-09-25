@@ -420,15 +420,15 @@ func TestKeysTypedIntoTheViewNeverReachTheComposer(t *testing.T) {
 	}
 }
 
-// With the keys elsewhere the view is left alone and the keys do their own job.
+// The keys leaving the view's pane take the view with them, and do their own job.
 func TestTheViewTakesNoKeysWhileItsPaneIsNotFocused(t *testing.T) {
 	a := runOpen(t).refocus("")
 	a, _ = pressKey(a, wfRune('x'))
 	if got := a.composer().Value(); got != "x" {
 		t.Errorf("the room's draft is %q: the view took a key its pane does not hold", got)
 	}
-	if !a.workflow.view.Open() {
-		t.Error("typing in another pane closed the view")
+	if a.workflow.view.Open() {
+		t.Error("the view outlived the keys leaving its pane")
 	}
 }
 

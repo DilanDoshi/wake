@@ -489,10 +489,11 @@ func (a App) withFocus(f string) App {
 		// resurrect it rather than asking fresh. See rewind.go.
 		a = a.closeRewind()
 	}
-	if f != a.workflow.view.Pane {
-		// The keys leaving the view's pane leave its armed stop behind them: a ↵
-		// pressed after they come back is the view's own, not a confirm.
-		a.workflow.view.Armed = false
+	if a.workflow.view.Open() && a.workflow.view.Pane != f {
+		// The view is the keys' pane's, rewindKey's hygiene: left open, it came
+		// back - armed stop or save dialog and all - over whatever that slot drew
+		// next. Every way a pane leaves the grid moves the keys through here.
+		a = a.closeWorkflow()
 	}
 	if a.mcpUI.menu.Open() && a.mcpUI.menu.Pane != f {
 		a = a.closeMCP() // rewindKey's hygiene: a menu belongs to the pane that opened it

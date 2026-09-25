@@ -231,9 +231,22 @@ func requireDisarmedOnReturn(t *testing.T, a App, how string) {
 	}
 }
 
+// requireClosedOnReturn holds a pane the keys have come back to after leaving
+// its view: the view went with them, so ↵ is the conversation's and stops nothing.
+func requireClosedOnReturn(t *testing.T, a App, how string) {
+	t.Helper()
+	if a.focus != "s1" || a.workflow.view.Open() {
+		t.Fatalf("%s: the keys are on %q with the view %+v, want them back on alex with it closed", how, a.focus, a.workflow.view)
+	}
+	a, cmd := pressKey(a, wfKey(tea.KeyEnter))
+	if got := stopsWritten(t, a, cmd); len(got) != 0 {
+		t.Errorf("%s: a ↵ after coming back wrote %d stops", how, len(got))
+	}
+}
+
 // The reviewer's probe: x arms, a click takes the keys to the room, something
-// is typed and cleared there, and ⇥ comes back. Every one of those was an input
-// that was not the confirm, so the ↵ that follows opens rather than stops.
+// is typed and cleared there, and ⇥ comes back. The keys leaving closed the
+// view, arm and all, so the ↵ that follows stops nothing.
 func TestAnArmLeftForAnotherPaneIsGoneOnReturn(t *testing.T) {
 	a := armed(t, runOpen(t))
 	r := a.regions()
@@ -246,7 +259,7 @@ func TestAnArmLeftForAnotherPaneIsGoneOnReturn(t *testing.T) {
 	a = a.withDraft("hi")
 	a, _ = pressKey(a, wfKey(tea.KeyEsc))
 	a, _ = pressKey(a, wfKey(tea.KeyTab))
-	requireDisarmedOnReturn(t, a, "a click away, typing, ⇥ back")
+	requireClosedOnReturn(t, a, "a click away, typing, ⇥ back")
 }
 
 // A wheel over the room moves no keys, so the focus never leaves the view - but
@@ -268,11 +281,11 @@ func TestShiftArrowsUnderTheArmTakeItBack(t *testing.T) {
 }
 
 // A focus move no key or click made - an arriving spawn or fork takes the keys
-// through refocus - still leaves the pane, so it takes the arm back too.
+// through refocus - still leaves the pane, so it closes the view, arm and all.
 func TestAFocusMoveNoInputMadeTakesTheArmBack(t *testing.T) {
 	a := armed(t, runOpen(t))
 	a = a.refocus("s2").refocus("s1")
-	requireDisarmedOnReturn(t, a, "the keys moved away and back")
+	requireClosedOnReturn(t, a, "the keys moved away and back")
 }
 
 func TestTheArmedKeyLineRendersWithinThePane(t *testing.T) {
