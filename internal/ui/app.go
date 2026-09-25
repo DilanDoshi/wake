@@ -307,10 +307,7 @@ type App struct {
 
 	beating bool // a heartbeat tick is already scheduled; see beat.go
 
-	// rl is the timed rate-limit notice: what it last showed and a generation
-	// counter, so an overlapping warning's expiry cannot clear a newer one
-	// early. See ratelimit.go.
-	rl rateLimitState
+	notices noticeState // the notice row's linger and pins; see noticelinger.go
 
 	// ended records that the daemon has reported this client's own session
 	// gone. It is what stops its composer from accepting messages nothing will
@@ -534,10 +531,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, ask := next.takeHistoryAsks()
 	next, roomAsk := next.takeRoomHistoryAsks()
 	next, blink := next.refocusBlink(a.focus)
-	if ask == nil && roomAsk == nil && blink == nil {
+	next, linger := next.armNoticeLinger()
+	if ask == nil && roomAsk == nil && blink == nil && linger == nil {
 		return next, cmd
 	}
-	return next, tea.Batch(cmd, ask, roomAsk, blink)
+	return next, tea.Batch(cmd, ask, roomAsk, blink, linger)
 }
 
 func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -581,8 +579,8 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case heartbeatMsg:
 		return a.beatArrived()
 
-	case rateLimitClearMsg:
-		return a.rateLimitCleared(m), nil
+	case noticeExpiredMsg:
+		return a.noticeExpired(m), nil
 
 	case parkAllMsg:
 		return a.parkAllSettled(m.err)

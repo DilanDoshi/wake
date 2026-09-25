@@ -13,6 +13,10 @@ package ui
 // the upstream bug: docs/notes/bugs.md.
 
 import (
+	"fmt"
+	"slices"
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -28,22 +32,83 @@ func (a App) apiErrored(sessionID string, ev core.Event) App {
 	if ev.Notice != core.NoticeAPIError {
 		return a
 	}
-	a = a.markAuthFailed(sessionID).bumpAuthRetries(sessionID)
-	who := sessionID
-	if agent, ok := a.fleet.Agent(sessionID); ok && agent.Name != "" {
-		who = agentPrefix + agent.Name
-	}
 	msg := apiErrorFallback
 	if ev.Text != "" {
 		msg = ev.Text
 	}
-	notice.Report("%s: %s — /reauth to bring it back", who, msg)
+	a = a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, msg)
+	who := sessionID
+	if agent, ok := a.fleet.Agent(sessionID); ok && agent.Name != "" {
+		who = agentPrefix + agent.Name
+	}
+	notice.Report(apiErrorFormat, who, msg, SlashPrefix+reauthCommand)
 	return a
 }
 
-// apiErrorFallback stands in when the frame carried no message, so the notice
-// still says which agent needs attention rather than nothing.
-const apiErrorFallback = "the API rejected a turn"
+const (
+	// apiErrorFallback stands in when the frame carried no message, so the
+	// notice still says which agent needs attention rather than nothing.
+	apiErrorFallback = "the API rejected a turn"
+
+	// apiErrorFormat is who, what the API said, and the command that recovers
+	// it - /reauth while the session runs, /resume once it is parked.
+	apiErrorFormat = "%s: %s — %s to bring it back"
+)
+
+// pinAPIError keeps a session's failure on the notice row until it recovers:
+// a session limit or a dead login stops the agent until it is resumed, and a
+// linger would let that fact go while it is still true. See noticelinger.go.
+func (a App) pinAPIError(id, msg string) App {
+	next := make(map[string]string, len(a.notices.stuck)+1)
+	for held, m := range a.notices.stuck {
+		next[held] = m
+	}
+	next[id] = msg
+	a.notices.stuck = next
+	return a
+}
+
+// unpinAPIError drops a session that has recovered: a healthy turn or a resume.
+// /reauth does not unpin - its park is the step before the resume, not a return.
+func (a App) unpinAPIError(id string) App {
+	if _, held := a.notices.stuck[id]; !held {
+		return a
+	}
+	next := make(map[string]string, len(a.notices.stuck))
+	for held, m := range a.notices.stuck {
+		if held != id {
+			next[held] = m
+		}
+	}
+	a.notices.stuck = next
+	return a
+}
+
+// pinnedNotice is the row under every timed notice: the first stuck session by
+// name, and a count of the rest. A session the fleet no longer holds, or one
+// that ended, has nothing to recover and pins nothing.
+func (a App) pinnedNotice() string {
+	var stuck []Agent
+	for id := range a.notices.stuck {
+		if agent, ok := a.fleet.Agent(id); ok && agent.State != rpc.StateEnded {
+			stuck = append(stuck, agent)
+		}
+	}
+	if len(stuck) == 0 {
+		return ""
+	}
+	slices.SortFunc(stuck, func(x, y Agent) int { return strings.Compare(x.Name, y.Name) })
+	first := stuck[0]
+	verb := SlashPrefix + reauthCommand
+	if first.State == rpc.StateParked {
+		verb = resumeVerb
+	}
+	text := fmt.Sprintf(apiErrorFormat, agentPrefix+first.Name, a.notices.stuck[first.ID], verb)
+	if more := len(stuck) - 1; more > 0 {
+		text += fmt.Sprintf(" · +%d more", more)
+	}
+	return text
+}
 
 // markAuthFailed adds one session to the copy-on-write set /reauth reads.
 // awaitingQuit's shape, for its reason: the map is shared by value, so a fold
@@ -77,7 +142,7 @@ func (a App) bumpAuthRetries(id string) App {
 
 // autoParkStalled parks every auth-failed session that has 401'd enough times to
 // be a dead login rather than a blip. It is derived after a frame fold the way
-// armRateLimitClear is: observe returns only App and a park is a write, so the
+// beat is: observe returns only App and a park is a write, so the
 // command cannot be issued from the fold. The parking guard makes it fire once
 // per session; the count and mark clear on recovery, a wake, or /reauth.
 //
@@ -115,7 +180,7 @@ func (a App) autoParkStalled() (App, tea.Cmd) {
 // that had already recovered (a resume elsewhere, or the API coming back).
 func (a App) clearedAuthFailedOn(sessionID string, ev core.Event) App {
 	if ev.Kind == core.KindAssistantText {
-		return a.clearAuthFailed(sessionID)
+		return a.clearAuthFailed(sessionID).unpinAPIError(sessionID)
 	}
 	return a
 }

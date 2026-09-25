@@ -51,6 +51,11 @@ type Notice struct {
 	// Count is how many times this exact text has been reported, including
 	// the first. It is always at least one on a Notice that exists.
 	Count int
+
+	// Seq names the report that put this notice up. Every Report takes the
+	// next one, a repeat included, so whoever times the row can tell a fresh
+	// report from the one it armed a clear for.
+	Seq uint64
 }
 
 // String is the notice as a reader sees it: the message, and the repeat count
@@ -67,6 +72,7 @@ var (
 	counts  = map[string]int{}
 	newest  string
 	present bool
+	seq     uint64
 )
 
 // Report records one failure. It is safe to call from any goroutine, from a
@@ -85,6 +91,7 @@ func Report(format string, args ...any) {
 		counts = map[string]int{}
 	}
 	counts[text]++
+	seq++
 	newest, present = text, true
 }
 
@@ -99,22 +106,23 @@ func Latest() (Notice, bool) {
 	if !present {
 		return Notice{}, false
 	}
-	return Notice{Text: newest, Count: counts[newest]}, true
+	return Notice{Text: newest, Count: counts[newest], Seq: seq}, true
 }
 
-// ClearIf forgets the current notice only if it is still the given text.
+// ClearIf forgets the current notice only if it is still the report seq names.
 //
-// A timed notice (see internal/ui/ratelimit.go) uses it so its own expiry
-// clears the warning it set, and never a fresher failure that overwrote the
-// slot in the meantime. The count is dropped with it, so the same message
-// reported again starts counting from one rather than resuming a stale total.
-func ClearIf(text string) {
+// The UI's linger (internal/ui/noticelinger.go) uses it so an expiry clears the
+// report it was armed for, and never a fresher one - a different message, or a
+// repeat of the same one - that took the slot in the meantime. The count is
+// dropped with it, so the same message reported again starts counting from one
+// rather than resuming a stale total.
+func ClearIf(s uint64) {
 	mu.Lock()
 	defer mu.Unlock()
-	if newest != text {
+	if !present || seq != s {
 		return
 	}
-	delete(counts, text)
+	delete(counts, newest)
 	newest, present = "", false
 }
 
