@@ -276,9 +276,9 @@ type Session struct {
 	// expires with it.
 	interrupted bool
 
-	// mcpAsks is every MCP ask written and not yet answered, by request id.
-	// See answeredMCP.
-	mcpAsks map[string]MCPResult
+	// asks is every MCP ask and workflow stop written and not yet answered,
+	// by request id. See answeredMCP.
+	asks map[string]sentAsk
 
 	// err is why the process ended. Written once, as the events channel
 	// closes; see Err.

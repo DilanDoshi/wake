@@ -10,6 +10,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -298,5 +299,22 @@ func TestTheArmedKeyLineRendersWithinThePane(t *testing.T) {
 	}
 	if keys := keyRow(wfLines(v.render([]workflowRunView{midRun()}, 90, 20))); keys != stopCue {
 		t.Errorf("the armed key line is %q, want %q", keys, stopCue)
+	}
+}
+
+// A refused stop is the stop's own notice, and never a mode refusal: the
+// receipt says nothing about a mode, and a pending ⇧⇥ must stay pending.
+func TestARefusedStopReceiptLeavesTheModeAloneAndSaysSo(t *testing.T) {
+	notice.Reset()
+	a := runOpen(t)
+	a = a.asked("s1", "plan")
+	a = a.applyFrame(taskFrame("s1", core.Event{Kind: core.KindStopReceipt, RequestID: "r1",
+		Control: &core.ControlResult{Error: "No task found"}}))
+	if got := a.asking["s1"]; got != "plan" {
+		t.Errorf("a stop receipt settled the pending mode ask: %q", got)
+	}
+	n, ok := notice.Latest()
+	if !ok || !strings.Contains(n.String(), "stop") || !strings.Contains(n.String(), "No task found") {
+		t.Errorf("the refused stop reported %q, want a stop refusal naming the reason", n.String())
 	}
 }

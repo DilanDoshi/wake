@@ -23,8 +23,12 @@ import (
 // workflowsTakeNoArgument refuses an argument rather than ignoring it.
 const workflowsTakeNoArgument = workflowsCommand + " opens this pane's workflow runs and takes no argument"
 
-// workflowStopFailed names the write that could not happen, sendFailed's pattern.
-const workflowStopFailed = "stopping a workflow"
+// workflowStopFailed names the write that could not happen, sendFailed's pattern;
+// workflowStopRefused carries the CLI's own reason, modeRefusedFormat's shape.
+const (
+	workflowStopFailed  = "stopping a workflow"
+	workflowStopRefused = "%s%s refused the workflow stop: %s"
+)
 
 type workflowLevel int
 
@@ -386,6 +390,16 @@ func (a App) stopWorkflow() (App, tea.Cmd) {
 	}
 	return a, a.write(workflowStopFailed, rpc.Frame{Kind: rpc.FrameStopRun, SessionID: run.Session,
 		Workflow: &rpc.WorkflowFrame{Task: run.Task}})
+}
+
+// observedStop reports a refused stop: a stop that took is told by the run's
+// own ending frames, so a refusal is the one receipt worth a word - and only
+// the request id tells it from a mode's (core.KindStopReceipt).
+func (a App) observedStop(sessionID string, ev core.Event) App {
+	if ev.Kind == core.KindStopReceipt && ev.Control != nil && ev.Control.Error != "" {
+		notice.Report(workflowStopRefused, agentPrefix, a.agentName(sessionID), ev.Control.Error)
+	}
+	return a
 }
 
 // settledArm takes an armed stop back once its run has left running, so an

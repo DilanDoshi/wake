@@ -120,6 +120,10 @@ const (
 	// (Session.MCPReconnect). See Event.MCP.
 	KindMCPReply EventKind = "mcp_reply"
 
+	// KindStopReceipt answers a workflow stop Wake sent, known only by the
+	// request id the session minted (Session.StopTask). Control carries it.
+	KindStopReceipt EventKind = "stop_receipt"
+
 	// KindRequestWithdrawn is Claude retiring a control_request it sent -
 	// today, in every recording, the permission ask an interrupt landed on.
 	// RequestID names the dead request and is the whole payload: the frame

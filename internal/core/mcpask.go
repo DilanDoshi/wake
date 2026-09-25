@@ -1,13 +1,15 @@
 package core
 
-// The write half of the MCP asks, and the one piece of state they need.
+// The write half of the MCP asks, and the one piece of state they need -
+// shared by a workflow stop, whose receipt is just as bare.
 //
-// A reconnect or toggle is answered with the bare receipt a permission-mode
-// change gets - {"subtype":"success"} or an error string - so the airlock
-// cannot say what a receipt answers. Only the request id can, and only this
-// session minted it. So the session remembers each MCP ask until its answer
-// arrives and labels that answer KindMCPReply. Without this an MCP refusal
-// reads as a permission-mode refusal in every attached window.
+// A reconnect, a toggle or a stop_task is answered with the bare receipt a
+// permission-mode change gets - {"subtype":"success"} or an error string - so
+// the airlock cannot say what a receipt answers. Only the request id can, and
+// only this session minted it. So the session remembers each such ask until
+// its answer arrives and labels that answer KindMCPReply or KindStopReceipt.
+// Without this a refusal reads as a permission-mode refusal in every attached
+// window, and clears a mode change still waiting on its own receipt.
 
 // The caller mints the request id, unlike Interrupt and SetMode: the daemon
 // has to know it before the write, to send the answer to the client that asked.
@@ -15,6 +17,13 @@ package core
 // MCPServers asks for every MCP server's live status.
 func (s *Session) MCPServers(id string) error {
 	return s.askMCP(id, MCPResult{Ask: MCPAskServers}, EncodeMCPStatus)
+}
+
+// sentAsk is what a remembered ask's receipt is labelled as: KindMCPReply,
+// with what was asked, or KindStopReceipt.
+type sentAsk struct {
+	kind EventKind
+	mcp  MCPResult
 }
 
 // MCPReconnect reconnects one server.
@@ -35,52 +44,62 @@ func (s *Session) MCPSetEnabled(id, server string, enabled bool) error {
 	})
 }
 
-// askMCP writes one ask. It is remembered before the write - its answer can
-// come back before writeLine returns - and forgotten again if nothing was
-// written.
 func (s *Session) askMCP(id string, ask MCPResult, encode func(string) ([]byte, error)) error {
+	return s.ask(id, sentAsk{kind: KindMCPReply, mcp: ask}, encode)
+}
+
+// ask writes one labelled ask. It is remembered before the write - its answer
+// can come back before writeLine returns - and forgotten again if nothing was
+// written.
+func (s *Session) ask(id string, sent sentAsk, encode func(string) ([]byte, error)) error {
 	line, err := encode(id)
 	if err != nil {
 		return err
 	}
 	s.mu.Lock()
-	if s.mcpAsks == nil {
-		s.mcpAsks = map[string]MCPResult{}
+	if s.asks == nil {
+		s.asks = map[string]sentAsk{}
 	}
-	s.mcpAsks[id] = ask
+	s.asks[id] = sent
 	s.mu.Unlock()
 	if err := s.writeLine(line); err != nil {
-		s.takeMCPAsk(id)
+		s.takeAsk(id)
 		return err
 	}
 	return nil
 }
 
-// takeMCPAsk removes and returns the ask id answers, if this session sent it.
-func (s *Session) takeMCPAsk(id string) (MCPResult, bool) {
+// takeAsk removes and returns the ask id answers, if this session sent it.
+func (s *Session) takeAsk(id string) (sentAsk, bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	ask, ok := s.mcpAsks[id]
-	delete(s.mcpAsks, id)
-	return ask, ok
+	sent, ok := s.asks[id]
+	delete(s.asks, id)
+	return sent, ok
 }
 
-func (s *Session) pendingMCPAsks() int {
+func (s *Session) pendingAsks() int {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return len(s.mcpAsks)
+	return len(s.asks)
 }
 
-// answeredMCP labels a receipt for an MCP ask this session sent: what was
-// asked, of which server, and the verdict. Anything else passes untouched.
+// answeredMCP labels a receipt for an ask this session sent: a stop's as a
+// stop's, and an MCP ask's with what was asked, of which server, and the
+// verdict. Anything else passes untouched.
 func (s *Session) answeredMCP(ev Event) Event {
 	if ev.RequestID == "" || (ev.Kind != KindControlReceipt && ev.Kind != KindMCPReply) {
 		return ev
 	}
-	ask, ok := s.takeMCPAsk(ev.RequestID)
+	sent, ok := s.takeAsk(ev.RequestID)
 	if !ok {
 		return ev
 	}
+	if sent.kind == KindStopReceipt {
+		ev.Kind = KindStopReceipt // Control keeps the verdict
+		return ev
+	}
+	ask := sent.mcp
 	if ev.MCP != nil {
 		ask.Servers = ev.MCP.Servers
 		ask.Error = ev.MCP.Error

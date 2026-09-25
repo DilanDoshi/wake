@@ -232,16 +232,16 @@ func (s *Session) SetMode(mode string) (string, error) {
 
 // StopTask stops a running dynamic Workflow(), addressed by its own task id
 // (never a workflow agent's - findings.md §6 §2: the same request at an
-// agent's agentId is answered success and does nothing). Records nothing
-// afterward, SetMode's own reason: stopping a workflow aborts no turn of
-// *this* session and is owed no forgive-the-exit licence.
+// agent's agentId is answered success and does nothing). Remembered as an ask
+// so its bare receipt comes back KindStopReceipt, never read as a mode's
+// (mcpask.go). It aborts no turn of *this* session, so it is owed no
+// forgive-the-exit licence.
 func (s *Session) StopTask(taskID string) (string, error) {
 	requestID := uuid.NewString()
-	line, err := EncodeStopTask(requestID, taskID)
+	err := s.ask(requestID, sentAsk{kind: KindStopReceipt}, func(id string) ([]byte, error) {
+		return EncodeStopTask(id, taskID)
+	})
 	if err != nil {
-		return "", err
-	}
-	if err := s.writeLine(line); err != nil {
 		return "", err
 	}
 	return requestID, nil
