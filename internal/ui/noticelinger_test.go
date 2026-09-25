@@ -192,6 +192,26 @@ func TestTheFailureStaysPinnedThroughReauthUntilTheResume(t *testing.T) {
 	}
 }
 
+// The failed turn ends and its session reports idle; that is not a recovery.
+// A resume is, whichever window asked for it: this one never populated waking,
+// yet the park-then-live transition still unpins (Codex review, 2026-09-24).
+func TestAResumeFromAnyWindowUnpinsButAnIdleReportDoesNot(t *testing.T) {
+	a, _ := apiFailedApp(t)
+	report := func(state string) {
+		a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: state}}})
+	}
+
+	report(rpc.StateIdle)
+	if a.pinnedNotice() == "" {
+		t.Fatal("the failed turn's idle report unpinned a session that has not recovered")
+	}
+	report(rpc.StateParked)
+	report(rpc.StateIdle)
+	if pin := a.pinnedNotice(); pin != "" {
+		t.Errorf("another window's resume left the failure pinned: %q", pin)
+	}
+}
+
 // Several failures pin one row: the first by name, and a count of the rest. An
 // ended session is nothing to recover and pins nothing.
 func TestSeveralFailuresPinOneRowAndAnEndedOneNone(t *testing.T) {

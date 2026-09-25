@@ -260,6 +260,26 @@ def say_result(output_tokens=1180):
     emit(frame)
 
 
+def say_api_error(text, error):
+    """A turn the API refused: Claude's synthetic assistant frame, shaped on
+    testdata/stream/api-error-auth.jsonl. On disk the marker is camelCase, so the
+    journal gets that spelling and a restore drops it as claude's own does."""
+    frame = {
+        "type": "assistant",
+        "session_id": SID,
+        "message": {"role": "assistant", "model": "<synthetic>", "stop_reason": "stop_sequence",
+                    "content": [{"type": "text", "text": text}]},
+        "error": error,
+        "is_api_error_message": True,
+    }
+    with EMIT_LOCK:
+        sys.stdout.write(json.dumps(frame) + "\n")
+        sys.stdout.flush()
+        on_disk = {k: v for k, v in frame.items() if k != "is_api_error_message"}
+        on_disk["isApiErrorMessage"] = True
+        journal(on_disk)
+
+
 def say_aborted_result():
     """How an interrupted turn ends: no `result` key, is_error true."""
     emit({
@@ -826,6 +846,9 @@ def run_steps(steps):
         elif "fanout" in step:
             if not fanout(step["fanout"]):
                 return False
+        elif "api_error" in step:
+            e = step["api_error"]
+            say_api_error(e["text"], e.get("error", "authentication_failed"))
         elif "sleep" in step:
             if not nap(step["sleep"]):
                 return False

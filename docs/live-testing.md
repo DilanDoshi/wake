@@ -419,6 +419,10 @@ component that logs corrupts the frame it is drawing.
 - [ ] The message appears on the reserved row and **the frame does not tear or scroll**.
 - [ ] It is one line. A newline in that text makes the frame a row too tall and the alt screen
       scrolls on every draw, which looks like the whole app shaking.
+- [ ] `/name` an agent: `renaming @x…` clears itself about ten seconds later on a quiet fleet. Say
+      whether ten seconds reads as too short for a long error at your width.
+- [ ] After an API failure (a session limit, a 401), the row falls back to `@x: … — /reauth to bring
+      it back` once newer notices clear, reads `/resume` after `/reauth`, and goes on the resume.
 
 ---
 

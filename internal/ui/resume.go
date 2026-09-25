@@ -221,7 +221,7 @@ func (a App) wakeArrived(st *rpc.Status) App {
 		// A woken session comes back on a fresh process, so any auth-failed mark
 		// from before the park no longer describes it; if its login is still
 		// expired the next turn re-marks it. See apierror.go.
-		a = a.clearAuthFailed(s.ID).unpinAPIError(s.ID)
+		a = a.clearAuthFailed(s.ID)
 		notice.Report("%s", ResumedNotice(s.Name))
 		a = a.modeReverted(s.ID, s.Name)
 		// The room is missing everything this session said before it was

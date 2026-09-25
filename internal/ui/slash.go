@@ -760,6 +760,8 @@ const loginCommand = "login"
 // TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising. See reauth.go.
 const reauthCommand = "reauth"
 
+const reauthVerb = SlashPrefix + reauthCommand // for resumeVerb's reason
+
 const workflowsCommand = "workflows" // no recorded headless init advertises it; see workflowview.go
 const workflowsVerb = SlashPrefix + workflowsCommand
 

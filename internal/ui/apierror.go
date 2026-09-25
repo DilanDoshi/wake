@@ -41,7 +41,7 @@ func (a App) apiErrored(sessionID string, ev core.Event) App {
 	if agent, ok := a.fleet.Agent(sessionID); ok && agent.Name != "" {
 		who = agentPrefix + agent.Name
 	}
-	notice.Report(apiErrorFormat, who, msg, SlashPrefix+reauthCommand)
+	notice.Report(apiErrorFormat, who, msg, reauthVerb)
 	return a
 }
 
@@ -59,26 +59,47 @@ const (
 // a session limit or a dead login stops the agent until it is resumed, and a
 // linger would let that fact go while it is still true. See noticelinger.go.
 func (a App) pinAPIError(id, msg string) App {
-	next := make(map[string]string, len(a.notices.stuck)+1)
-	for held, m := range a.notices.stuck {
-		next[held] = m
+	next := make(map[string]stuckPin, len(a.notices.stuck)+1)
+	for held, p := range a.notices.stuck {
+		next[held] = p
 	}
-	next[id] = msg
+	next[id] = stuckPin{msg: msg}
 	a.notices.stuck = next
 	return a
 }
 
-// unpinAPIError drops a session that has recovered: a healthy turn or a resume.
-// /reauth does not unpin - its park is the step before the resume, not a return.
+// unpinAPIError drops a session a healthy turn has proved recovered.
 func (a App) unpinAPIError(id string) App {
 	if _, held := a.notices.stuck[id]; !held {
 		return a
 	}
-	next := make(map[string]string, len(a.notices.stuck))
-	for held, m := range a.notices.stuck {
+	next := make(map[string]stuckPin, len(a.notices.stuck))
+	for held, p := range a.notices.stuck {
 		if held != id {
-			next[held] = m
+			next[held] = p
 		}
+	}
+	a.notices.stuck = next
+	return a
+}
+
+// reconciledPins reads recovery off a fleet report: a pinned session seen parked
+// and then live again was resumed, by this window or any other, onto a fresh
+// process. /reauth's park alone does not unpin - it is the step before a resume.
+func (a App) reconciledPins() App {
+	if len(a.notices.stuck) == 0 {
+		return a
+	}
+	next := make(map[string]stuckPin, len(a.notices.stuck))
+	for id, p := range a.notices.stuck {
+		agent, ok := a.fleet.Agent(id)
+		switch {
+		case ok && agent.State == rpc.StateParked:
+			p.parked = true
+		case ok && agent.State != rpc.StateEnded && p.parked:
+			continue
+		}
+		next[id] = p
 	}
 	a.notices.stuck = next
 	return a
@@ -99,11 +120,11 @@ func (a App) pinnedNotice() string {
 	}
 	slices.SortFunc(stuck, func(x, y Agent) int { return strings.Compare(x.Name, y.Name) })
 	first := stuck[0]
-	verb := SlashPrefix + reauthCommand
+	verb := reauthVerb
 	if first.State == rpc.StateParked {
 		verb = resumeVerb
 	}
-	text := fmt.Sprintf(apiErrorFormat, agentPrefix+first.Name, a.notices.stuck[first.ID], verb)
+	text := fmt.Sprintf(apiErrorFormat, agentPrefix+first.Name, a.notices.stuck[first.ID].msg, verb)
 	if more := len(stuck) - 1; more > 0 {
 		text += fmt.Sprintf(" · +%d more", more)
 	}

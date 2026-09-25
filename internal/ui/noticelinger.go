@@ -39,9 +39,16 @@ type noticeExpiredMsg struct{ seq uint64 }
 // armed for, and the API failures pinned until their sessions recover.
 type noticeState struct {
 	armed uint64
-	// stuck is session id → the API's message, copy-on-write like authFailed.
-	// Unlike that mark, /reauth does not clear it: a parked session is not back.
-	stuck map[string]string
+	// stuck is copy-on-write like authFailed. Unlike that mark, /reauth does not
+	// clear it: a parked session is not back until it is resumed.
+	stuck map[string]stuckPin
+}
+
+// stuckPin is one pinned failure: the API's message, and whether its session
+// has been parked since - so its next live report is the resume.
+type stuckPin struct {
+	msg    string
+	parked bool
 }
 
 // armNoticeLinger times the newest report, once. Run after every message, so a

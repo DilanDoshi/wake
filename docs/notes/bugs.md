@@ -90,7 +90,9 @@ root — the failure has one tell, it is transient, and it is not where the oper
   the single slot `CLAUDE.md` says routine fleet activity overwrites within seconds — and the durable
   `authFailed` mark renders **nowhere** (only `apierror.go`/`reauth.go`/`app.go`): no roster row,
   status bar, awareness strip, or the failed agent's own pane. So the one signal is displaceable and
-  has nothing behind it.
+  has nothing behind it. **Partly closed (`fix/notice-expiry`, 2026-09-24):** the failure is now
+  pinned under the timed notices and redrawn whenever none is up, until a healthy turn or a resume
+  (`pinnedNotice`, `noticelinger.go`); it is still one row, not the failed agent's own pane.
 - **The failed turn still paints a done line.** pablo's DM read `✻ Ferried for 3m 2s · done 10:44 PM`
   over the 401'd turn: `doneAt`/`turnDur` are captured at the working→idle edge (`Fleet.WithStatus`)
   with no knowledge of `authFailed` (absent from `beat.go`/`dmbeat.go`/`fleet.go`/`report.go`) —
