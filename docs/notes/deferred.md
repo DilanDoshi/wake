@@ -36,6 +36,77 @@ So: before acting on an entry, check it still describes the tree. Four of the la
 
 ---
 
+## KNOWN GAPS, 2026-09-24 — dynamic workflows: what `feat/workflow-sidebar` shipped without
+
+The workflow sidebar row, the `/workflows` view, stop and save shipped after a final review wave
+(`docs/superpowers/specs/2026-09-24-workflows-design.md`; the build ledger is gitignored, so what it
+triaged as deferred is recorded here rather than lost with it). Each item was checked against the
+tree when this entry was written; check again before acting on one.
+
+**Deferred features, owner's triage.**
+- **`@who /workflows` from the room** (M6). `/workflows` in the room lists every agent's runs; there is
+  no way to aim it at one agent the way `@who /mcp` aims the MCP menu. *Closes with:* a
+  `roomTargetCommands` entry and `openWorkflows` taking the resolved id.
+- **The view's text cannot be selected or copied** (M7). A press on the view moves its cursor
+  (`workflowPress`) and never starts a selection, and it leaves an earlier highlight standing. It is the
+  one rendered surface CLAUDE.md's "every other surface is selectable" does not cover, and says so.
+- **The room's list has no way to jump between agents' groups** (M12) — a long fleet list is walked a
+  row at a time.
+
+**Known imprecision, accepted.**
+- **"Newest first" is approximate:** `agentRuns` puts an agent's live rows before its disk-only rows
+  whatever their start times; sorting by `Started` once a record supplies it would make it exact.
+- **An out-of-order transcript reply is not self-correcting.** The daemon serves each
+  `FrameWorkflowAgent` on its own goroutine, so a reply to an earlier ask can land after a later one's;
+  the agent level then shows the older read until the next snapshot moves the agent. A correlator on
+  the frame, or per-agent serialisation daemon-side, would close it.
+- **Unverifiable: the harness may write the final `Done` snapshot before it flushes the agent's
+  sidechain file**, so the last re-read can miss the last tool call. Needs a recording, not code.
+- **The agent level's layout is not re-laid on a fleet report or a `KindSessionReset`** — only on a view
+  key, a reply, a task frame and a resize — so a change arriving by those paths is laid out per frame
+  (correct, not cached) until the next hook.
+- **A `DM` covered by the view still counts as drawn**, so a DM-sent turn's prose is neither promoted
+  to the room nor visible, and no last-read boundary is taken while the view is up.
+- **The view captures `⇧←→`/`⇥`** like every key, so moving between panes while it is focused needs esc
+  or a click; the resume picker is the precedent, but it was never weighed for a pane-scoped view.
+- **Expanded Activity shows a receipt rather than the result's start** for a call whose result is a
+  receipt, and checklist ops (`TaskCreate`/`TaskUpdate`) get headlines where a DM draws none.
+- **The room's workflow ending line clips twice:** `taskLine` is cut to the width and then the speaker
+  prefix is added and cut again (`chat_blocks.go`'s `KindSystem` case), and a failed run's error line
+  under it is unattributed in the room.
+- **The save dialog:** `↵` closes it silently if the run left the list underneath; an invalid name is
+  refused in the notice slot rather than in the dialog; a `FrameWorkflowSaved` with no payload is
+  dropped silently; the personal-scope path hint ignores `$CLAUDE_CONFIG_DIR`; a one-row body hides the
+  dialog's cue.
+- **`⌃C` in the save dialog closes the dialog alone** (the ruling: parking would end the run being
+  saved). A second `⌃C` straight after is the kill switch's `⌃C⌃C` emergency exit, not a park — to park
+  from there, press anything else first. The kill switch is deliberately untouched.
+- **With `/board` drawn over an open view, a pasted image path** still reaches `droppedImage` before
+  the view, closing the board and landing a chip in the composer the view hides; without the board the
+  view takes the paste first.
+- **A save needs hard links:** `publish` links the synced temp file into place so no-overwrite stays
+  atomic, and a filesystem without them refuses the save rather than falling back.
+
+**Small code debts.**
+- `stopWorkflow`'s `!ok` branch is unreachable (`workflowKeyed` runs `settledArm` first, so `armedKey`
+  only ever sees a stoppable run); `FrameStopRun` with an empty task id refuses with a trailing space
+  (`"no running workflow "`); `saveWorkflowFrame`'s own unknown-session refusal wants a comment on why it
+  does not go through `withAgent`.
+- `workflowdraw.go`'s `modelFamilies` restates what `core.ModelAliases` knows; `workflowdraw.go` is
+  ~620 lines and its agent level could be its own file.
+- The airlock is full: `vocabulary.go` 800, `protocol.go` 798, `wire.go` 797, `encode.go` 792. The next
+  decoded field pays for its line by moving Claude-free code out (`rawjson.go`'s precedent), never by a
+  fifth airlock file.
+- Tests: `workflowstop_test.go`'s `emitTaskEnded` puts `status` at the top level where recordings nest
+  it under `patch`; the e2e fake's frames omit `last_tool_name`/`uuid`; the sidechain transcript fixture
+  is hand-built rather than recording-derived; the open-key tests that check an ask was written cover
+  `⌃D` and `/workflows`, not `↵`/`⌃Y`/`⌃B`/click/board; the wheel over the view itself under an armed
+  stop is untested.
+- Demo (`demo/`): `pick_turn` falls through to prose matching for an unadvertised `/<name>`, and
+  `workflow_spec` rescans the scenarios on every call.
+
+*Blocks:* nothing shipped. *Closes with:* each item on its own; none is a prerequisite of another.
+
 ## KNOWN GAP, 2026-09-15 — a DM reply can miss room-promotion during the 80ms resize settle
 
 **Shipped:** `feat/promote-dm-reply-on-leave` promotes a DM-sent turn's prose into the room once its
