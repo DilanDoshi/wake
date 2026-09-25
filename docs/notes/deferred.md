@@ -5007,3 +5007,16 @@ nicety, not load-bearing.
 *Blocks:* nothing. *Closes with:* threading a `tea.Cmd` through the report chain (or a small
 command-queue on `App` drained after `applyStatus`), then auto-waking each `reauthing` session as its
 park is confirmed.
+
+## 2026-09-24 — the API-failure pin infers a resume from report order
+
+`reconciledPins` (`internal/ui/apierror.go`) unpins a failure when its session is reported parked
+and then live again. Codex's review of `fix/notice-expiry` noted that the daemon assembles a status
+snapshot before taking the broadcast lock, so an older `idle` snapshot could in principle arrive
+after a newer `parked` one and clear the pin early. The same reorder would already mis-draw the
+roster, since `Fleet.WithStatus` trusts report order too, so the pin adds no new hazard. The worst
+case is a hint that goes away too soon, never a wrong action.
+
+*Closes with:* a daemon-issued process-incarnation id on `rpc.SessionStatus` (it trips the three
+reflective field guards), unpinning only on a report that proves a newer process than the one that
+failed.

@@ -212,6 +212,17 @@ func TestAResumeFromAnyWindowUnpinsButAnIdleReportDoesNot(t *testing.T) {
 	}
 }
 
+// After a reattach a parked session can be reported only in the park book
+// (rpc.Status.Parked); that park counts too, so the resume after it unpins.
+func TestAParkBookEntryCountsAsTheParkBeforeAResume(t *testing.T) {
+	a, _ := apiFailedApp(t)
+	a = a.applyStatus(&rpc.Status{Parked: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateParked}}})
+	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateIdle}}})
+	if pin := a.pinnedNotice(); pin != "" {
+		t.Errorf("a resume out of the park book left the failure pinned: %q", pin)
+	}
+}
+
 // Several failures pin one row: the first by name, and a count of the rest. An
 // ended session is nothing to recover and pins nothing.
 func TestSeveralFailuresPinOneRowAndAnEndedOneNone(t *testing.T) {
