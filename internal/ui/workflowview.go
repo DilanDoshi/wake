@@ -106,11 +106,25 @@ type workflowState struct {
 	disk map[string][]core.WorkflowRun // each session's runs off disk, replaced per reply
 	asks []string                      // sessions owed a FrameWorkflows; Update's drain writes them
 
-	transcripts map[[2]string][]core.Event // each agent's own transcript by transcriptKey, replaced per reply
-	asked       core.WorkflowAgent         // the open agent as it stood when it was last asked for
-	agentAsk    rpc.Frame                  // the FrameWorkflowAgent owed, if Kind is set; Update's drain writes it
-	replies     uint64                     // agent replies folded, so a kept layout knows its transcript is stale
-	agent       agentCache                 // the open agent laid out; see relaidAgent
+	transcript agentTranscript    // the open agent's own transcript, its latest reply; nothing else's is kept
+	asked      core.WorkflowAgent // the open agent as it stood when it was last asked for
+	agentAsk   rpc.Frame          // the FrameWorkflowAgent owed, if Kind is set; Update's drain writes it
+	replies    uint64             // agent replies folded, so a kept layout knows its transcript is stale
+	agent      agentCache         // the open agent laid out; see relaidAgent
+}
+
+// agentTranscript is one agent's own transcript, keyed by transcriptKey.
+type agentTranscript struct {
+	key    [2]string
+	events []core.Event
+}
+
+// of is the transcript when it is session's agentID's, else none.
+func (t agentTranscript) of(session, agentID string) []core.Event {
+	if t.key != transcriptKey(session, agentID) {
+		return nil
+	}
+	return t.events
 }
 
 // workflowIn reports whether the view is drawn in this pane.
@@ -159,8 +173,11 @@ func (a App) showWorkflow(v WorkflowView) App {
 	return a
 }
 
+// closeWorkflow closes the view and lets go of everything it read for it: the
+// runs off disk and the open agent's transcript go with it, and a /workflows
+// or a sidebar open asks again.
 func (a App) closeWorkflow() App {
-	a.workflow.view = WorkflowView{}
+	a.workflow = workflowState{}
 	return a
 }
 
@@ -220,6 +237,9 @@ func (a App) workflowKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a.closeWorkflow(), nil, false
 	}
 	a, cmd := a.workflowKeyed(m)
+	if !a.workflow.view.Open() {
+		a = a.closeWorkflow() // esc out of its last level
+	}
 	return a, cmd, true
 }
 

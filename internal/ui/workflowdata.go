@@ -126,6 +126,9 @@ func (a App) workflowReplied(f rpc.Frame) App {
 	case rpc.FrameWorkflowSaved:
 		return a.workflowSaved(f)
 	}
+	if !a.workflow.view.Open() {
+		return a // asked for a view since closed: nothing draws it
+	}
 	var runs []core.WorkflowRun
 	if f.Workflow != nil {
 		runs = f.Workflow.Runs
@@ -215,17 +218,16 @@ func sameProgress(x, y core.WorkflowAgent) bool {
 	return x.AgentID == y.AgentID && x.ToolCalls == y.ToolCalls && x.State == y.State && x.Tokens == y.Tokens
 }
 
-// workflowAgentReplied keeps one agent's transcript in place of the last. An
-// empty one is kept too - a transcript missing or not yet written - and the
-// agent level says its activity is unavailable rather than reporting anything.
+// workflowAgentReplied keeps the open agent's transcript in place of its last,
+// and drops a reply for any other: an agent's transcript can be megabytes, and
+// only the open one is drawn. An empty one is kept too - a transcript missing
+// or not yet written - and the agent level says its activity is unavailable.
 func (a App) workflowAgentReplied(f rpc.Frame) App {
-	if f.Workflow == nil {
+	run, ag, ok := a.openAgent()
+	if f.Workflow == nil || !ok || transcriptKey(f.SessionID, f.Workflow.Agent) != transcriptKey(run.Session, ag.AgentID) {
 		return a
 	}
-	kept := make(map[[2]string][]core.Event, len(a.workflow.transcripts)+1)
-	maps.Copy(kept, a.workflow.transcripts)
-	kept[transcriptKey(f.SessionID, f.Workflow.Agent)] = f.Events
-	a.workflow.transcripts = kept
+	a.workflow.transcript = agentTranscript{key: transcriptKey(f.SessionID, f.Workflow.Agent), events: f.Events}
 	a.workflow.replies++
 	return a.relaidAgent()
 }
@@ -269,8 +271,7 @@ func (a App) agentLayoutFor(w int) (agentLayoutKey, bool) {
 }
 
 func (a App) layOut(key agentLayoutKey) agentRows {
-	events := a.workflow.transcripts[transcriptKey(key.session, key.agent.AgentID)]
-	return layAgent(key.agent, events, key.expanded, key.width)
+	return layAgent(key.agent, a.workflow.transcript.of(key.session, key.agent.AgentID), key.expanded, key.width)
 }
 
 // agentRowsAt is the open agent's rows at width w: the kept layout when it was
@@ -292,7 +293,7 @@ func (a App) agentRowsAt(w int) (agentRows, bool) {
 // so a frame only windows the rows; leaving the agent level lets them go.
 func (a App) relaidAgent() App {
 	if a.workflow.view.Level != levelAgent {
-		a.workflow.agent = agentCache{}
+		a.workflow.agent, a.workflow.transcript = agentCache{}, agentTranscript{}
 		return a
 	}
 	w, _, drawn := a.paneSize(a.workflow.view.Pane)

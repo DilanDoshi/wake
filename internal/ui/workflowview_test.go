@@ -227,7 +227,7 @@ func TestADiskRunArrivingIntoAnUntouchedViewOpensItsRunLevel(t *testing.T) {
 // Live wins over the disk record of the same run, and disk fills what live
 // lacks: one row per task id.
 func TestWorkflowRunsDeduplicatesByTaskIDWithLiveWinning(t *testing.T) {
-	a := workflowFleet(t)
+	a := workflowFleet(t).openDMWith("s1", "alex").openWorkflow("s1", wfTask) // runs off disk are kept for an open view
 	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameWorkflowsReply, SessionID: "s1", Workflow: &rpc.WorkflowFrame{
 		Runs: []core.WorkflowRun{
 			{TaskID: wfTask, Name: "stale-name", Status: core.TaskDone, Started: time.Unix(100, 0)},

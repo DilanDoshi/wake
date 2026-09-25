@@ -166,20 +166,60 @@ func TestLeavingTheAgentLevelStopsAsking(t *testing.T) {
 	}
 }
 
-// A reply is kept under its session and agent, replaced by the next one.
+// The open agent's reply is kept, replaced by its next one.
 func TestAReplyIsKeptPerAgentAndReplacedByTheNext(t *testing.T) {
 	a, _ := agentOpen(t, 0, 1)
 	events := bTxtEvents(t)
 	a = agentReply(a, bTxtAgentID, events)
-	if got := a.workflow.transcripts[transcriptKey("s1", bTxtAgentID)]; len(got) != len(events) {
+	if got := a.workflow.transcript.of("s1", bTxtAgentID); len(got) != len(events) {
 		t.Fatalf("the reply kept %d events, want %d", len(got), len(events))
 	}
 	a = agentReply(a, bTxtAgentID, events[:1])
-	if got := a.workflow.transcripts[transcriptKey("s1", bTxtAgentID)]; len(got) != 1 {
+	if got := a.workflow.transcript.of("s1", bTxtAgentID); len(got) != 1 {
 		t.Errorf("a second reply did not replace the first: %d events", len(got))
 	}
 	if out := stripANSI(a.View()); !strings.Contains(out, "no tool calls") || strings.Contains(out, "Activity unavailable") {
 		t.Errorf("a transcript with no tool call in it does not say so:\n%s", out)
+	}
+}
+
+// Only the open agent's transcript is held - one agent's can be megabytes -
+// and it goes when the agent level does.
+func TestOnlyTheOpenAgentsTranscriptIsKept(t *testing.T) {
+	a, _ := agentOpen(t, 0, 1)
+	a = agentReply(a, bTxtAgentID, bTxtEvents(t))
+	a = agentReply(a, sumAgentID, bTxtEvents(t))
+	if got := a.workflow.transcript.of("s1", sumAgentID); len(got) != 0 {
+		t.Errorf("a reply for an agent that is not open was kept: %d events", len(got))
+	}
+	if got := a.workflow.transcript.of("s1", bTxtAgentID); len(got) == 0 {
+		t.Fatal("another agent's reply displaced the open one's transcript")
+	}
+	a, _ = pressKey(a, wfKey(tea.KeyEsc))
+	if got := a.workflow.transcript.of("s1", bTxtAgentID); len(got) != 0 {
+		t.Errorf("leaving the agent level kept its transcript: %d events", len(got))
+	}
+}
+
+// Closing the view lets go of what it read off disk, and a reply arriving for
+// a closed view is not kept either.
+func TestClosingTheViewDropsWhatItRead(t *testing.T) {
+	a := agentReply(func() App { a, _ := agentOpen(t, 0, 1); return a }(), bTxtAgentID, bTxtEvents(t))
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameWorkflowsReply, SessionID: "s1",
+		Workflow: &rpc.WorkflowFrame{Runs: []core.WorkflowRun{{TaskID: "wold", Name: "old"}}}})
+	for range 4 { // agent → agents → phases → the list → closed
+		a, _ = pressKey(a, wfKey(tea.KeyEsc))
+	}
+	if a.workflow.view.Open() {
+		t.Fatalf("four escs left %+v open", a.workflow.view)
+	}
+	if len(a.workflow.disk) != 0 || len(a.workflow.transcript.events) != 0 {
+		t.Errorf("the closed view kept %d sessions' runs and %d transcript events", len(a.workflow.disk), len(a.workflow.transcript.events))
+	}
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameWorkflowsReply, SessionID: "s1",
+		Workflow: &rpc.WorkflowFrame{Runs: []core.WorkflowRun{{TaskID: "wold", Name: "old"}}}})
+	if len(a.workflow.disk) != 0 {
+		t.Errorf("a runs reply for a closed view was kept")
 	}
 }
 
