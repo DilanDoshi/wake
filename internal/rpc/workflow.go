@@ -114,7 +114,7 @@ func ValidWorkflowAgentID(id string) error {
 		return fmt.Errorf("a workflow agent id is at most %d characters, got %d", maxWorkflowAgentID, len(id))
 	}
 	for _, r := range id {
-		if !(r >= 'a' && r <= 'z' || r >= '0' && r <= '9') {
+		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
 			return fmt.Errorf("%q cannot be a workflow agent id: lower-case letters and digits only", id)
 		}
 	}
