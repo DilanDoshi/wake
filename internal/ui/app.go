@@ -163,6 +163,7 @@ type App struct {
 	rewind       RewindPicker  // esc esc's own picker, on an idle empty conversation; see rewind.go
 	resumePicker ResumePicker  // a bare /resume's own picker, over the composer; see resumepicker.go
 	workflow     workflowState // the /workflows view and the runs it draws; see workflowview.go
+	mcpUI        mcpState      // /mcp's menu and its sign-in; see mcpmenu.go
 
 	// completion is the menu under the focused draft: what could finish the
 	// word at the cursor. Rebuilt per keystroke, never per frame, and its `@`
@@ -298,6 +299,7 @@ type App struct {
 	selecting bool
 	cdrag     composerDrag // query-box drag geometry, captured at its start; see composersel.go
 	rosterHit rosterHit    // the roster row resolved at a press, opened on an empty release; see screensel.go
+	clicks    clickRun     // the presses landing on one cell in quick succession; see multiclick.go
 
 	// out is the terminal, for the one thing Wake writes that is not a frame.
 	// Nil writes nowhere. See clipboard.go and cmd/wake/output.go.
@@ -563,21 +565,18 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case imageDropMsg:
 		return a.imageDropped(m)
 
-	case mcpResultMsg, authResultMsg:
-		return a.panelResult(m), nil
+	case authResultMsg:
+		return a.authResult(m), nil
+
+	case mcpSignedInMsg:
+		return a.mcpSignedIn(m)
 
 	case frameMsg:
 		// The frame is folded first, then two things read the result: the
 		// heartbeat, which may need starting, and ⌃Q's ask, which this frame
 		// may have settled. See park.go's closing.
-		next := a.apply(m.Frame)
-		// A message held for an agent goes out if this frame freed it (inflight
-		// reconciled per report inside apply, or a completed lifecycle in observe).
-		next, flush := next.flushQueued()
-		next, cmd := next.beat()
-		next, rl := next.armRateLimitClear()
-		next, park := next.autoParkStalled()
-		return next, tea.Batch(flush, cmd, rl, park, next.closing())
+		next, cmd := a.apply(m.Frame).settle()
+		return next, tea.Batch(cmd, next.closing())
 
 	case heartbeatMsg:
 		return a.beatArrived()
@@ -613,6 +612,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.copied(m)
 
 	case tea.KeyMsg:
+		a.clicks = clickRun{} // every keystroke ends a click run; see multiclick.go
 		// A live query-box selection turns ⌫/delete into "remove what is
 		// highlighted" - read before cleared() wipes the selection, since that
 		// runs on every keystroke. See deleteSelectedDraft.
@@ -677,21 +677,16 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 	for _, f := range m.frames {
 		a = a.apply(f)
 	}
-	// A message held for an agent goes out once the batch has folded and the agent
-	// is free (inflight reconciled per report inside apply). At most one per agent
-	// per read - two in one batch would race each other mid-turn. See queue.go.
-	a, flush := a.flushQueued()
-	if !m.done {
-		// The heartbeat starts here because this is the path production frames
-		// take: a status that put an agent into a turn schedules the first
-		// tick. frameMsg's own beat covers only the single-frame form.
-		next, tick := a.beat()
-		next, rl := next.armRateLimitClear()
-		next, park := next.autoParkStalled()
-		// Re-armed unconditionally, unless one of those frames was ⌃Q's answer.
-		return next, tea.Batch(flush, tick, rl, park, next.reading())
+	if m.done {
+		// The held message is dequeued but not sent: the connection is gone.
+		a, _ = a.flushQueued()
+		return a.hungUp(m.err)
 	}
-	return a.hungUp(m.err)
+	// Once per batch, not per frame: at most one held message goes out per agent
+	// per read - two in one batch would race each other mid-turn. See queue.go.
+	next, cmd := a.settle()
+	// Re-armed unconditionally, unless one of those frames was ⌃Q's answer.
+	return next, tea.Batch(cmd, next.reading())
 }
 
 // notedGap reports a frame gap and drops the per-turn beliefs a missing frame
@@ -775,7 +770,7 @@ func (a App) apply(f rpc.Frame) App {
 		//
 		// The text says when it could be forked instead; that is the daemon's
 		// sentence and it is reported below unchanged.
-		a = a.startSettled(f.SessionID)
+		a = a.startSettled(f.SessionID).mcpRefused(f.SessionID, f.Text)
 		notice.Report("%s", a.errorText(f))
 		return a
 

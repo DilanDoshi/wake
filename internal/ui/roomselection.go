@@ -6,6 +6,9 @@ func (a App) withRoom(room Room) App {
 	moves := room.lineMoves
 	room.lineMoves = nil
 	a.room = room
+	if moves != nil && a.clicks.kept.pane == "" && !a.clicks.kept.inComposer && !a.clicks.kept.onScreen {
+		a.clicks.kept = selection{} // a row a fourth click would restore may no longer be that line
+	}
 	// A composer selection (draft rows) and a screen selection (absolute screen
 	// rows) are not anchored to the room's transcript lines, so the
 	// reconciliation below - which translates and bounds line indices against

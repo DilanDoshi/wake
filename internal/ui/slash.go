@@ -134,14 +134,15 @@ const SlashPrefix = "/"
 // reach. What buys this one is that the thing being taken over is not a working
 // feature: `/mcp` in a headless session answers with a count and *"Use `/mcp` in
 // the terminal for details"* - it is a redirection, and Wake is not a terminal
-// claude can open a picker in. The real panel's data is reachable from a shell
-// (`claude mcp list`, which health-checks every server), so Wake can draw the
-// screen the redirection points at.
+// claude can open a picker in. The real menu's data is reachable another way -
+// the session's own mcp_status, reconnect and toggle control requests - so Wake
+// draws the screen the redirection points at.
 //
 // It is the only such word, and the bar for a second one is this same paragraph
 // written again with evidence: a recording showing the passthrough does not work,
-// and a shell route that does. See internal/ui/mcppanel.go.
+// and a route that does. See internal/ui/mcpmenu.go.
 const mcpCommand = "mcp"
+const mcpVerb = SlashPrefix + mcpCommand // for resumeVerb's reason
 
 // resumeCommand is the first citizen. Named as a constant because two places
 // need it - the router and the sentence the room says about a parked fleet -
@@ -395,6 +396,7 @@ var roomTargetCommands = map[string]struct{}{
 	colorCommand: {},
 	teamCommand:  {},
 	quitCommand:  {},
+	mcpCommand:   {},
 }
 
 // leadingRoomTargetCommand is the roomTargetCommand a draft leads with, if any:

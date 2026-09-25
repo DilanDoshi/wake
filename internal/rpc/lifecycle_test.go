@@ -59,6 +59,11 @@ var frameKinds = map[string]string{
 	"FrameColor":              FrameColor,
 	"FrameMode":               FrameMode,
 	"FrameRewind":             FrameRewind,
+	"FrameTeam":               FrameTeam,
+	"FrameMCPList":            FrameMCPList,
+	"FrameMCPReconnect":       FrameMCPReconnect,
+	"FrameMCPEnable":          FrameMCPEnable,
+	"FrameMCPDisable":         FrameMCPDisable,
 }
 
 // The verbs must not collide with each other or with the existing kinds. A
@@ -87,7 +92,7 @@ func TestEveryFrameKindIsDistinct(t *testing.T) {
 // It is the guard that stops that test from being one more of the shape this
 // project keeps finding: a check whose subject can walk out from under it.
 func TestNoFrameKindIsMissingFromTheDistinctnessMap(t *testing.T) {
-	declared := frameKindConstants(t, "wire.go", "lifecycle.go", "history.go")
+	declared := frameKindConstants(t, "wire.go", "lifecycle.go", "history.go", "team.go", "mcp.go")
 	if len(declared) < len(frameKinds) {
 		t.Fatalf("found %d Frame* constants across the package, but the map holds %d: the scan is broken and this test is asserting nothing", len(declared), len(frameKinds))
 	}

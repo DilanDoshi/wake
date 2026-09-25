@@ -6,7 +6,7 @@ package core
 // this resolves.
 //
 // It is not an airlock file. It holds no wire spelling and no JSON tags read
-// from Claude - workflowSnapshotOf and workflowOf in encode.go do that
+// from Claude - workflowSnapshotOf and workflowOf in protocol.go do that
 // reading and build these values.
 
 import "time"
@@ -115,4 +115,15 @@ type WorkflowRun struct {
 	Tokens   int               `json:"tokens,omitempty"`
 	Script   string            `json:"script,omitempty"`
 	Progress *WorkflowSnapshot `json:"progress,omitempty"`
+}
+
+// DecodeSidechainLine decodes one line of a workflow agent's own on-disk
+// transcript - the isSidechain:true lines decodeTranscript otherwise drops,
+// kept here because a workflow agent forwards nothing live (findings.md §3):
+// its words exist only on this tree. A wrapper, not a decoder: decodeTranscript
+// in protocol.go does the reading, so this names no wire word and sits outside
+// the airlock, whose four files the /mcp and workflow merge filled to the
+// 800-line hard max.
+func DecodeSidechainLine(line []byte) ([]Event, error) {
+	return decodeTranscript(line, true)
 }

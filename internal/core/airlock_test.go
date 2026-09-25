@@ -262,6 +262,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// rewound is the discriminator itself - see wireControlBody.Rewound.
 	"rewound", "targetMessageUuid", "prefillText", "precedingAssistantUuid",
 
+	// The three MCP control requests, the server they name, and the one
+	// Claude-spelled key of the status receipt Wake reads (a tool's readOnly
+	// annotation, which the MCP spec itself calls readOnlyHint).
+	"mcp_status", "mcp_reconnect", "mcp_toggle", "serverName", "readOnly",
+
 	// Two of the five permission modes, and the two that are *not* in
 	// deliberatelyGeneric with "auto" and "default". The argument there was that
 	// policing the plainest English in the corpus would fire across the tree;
@@ -428,6 +433,16 @@ var deliberatelyGeneric = wordSet([]string{
 	// not an airlock file, so policing any would fail the leak check on
 	// Wake's own vocabulary rather than catch one.
 	"failed", "done", "progress",
+
+	// An mcp_status receipt's plain words: a toggle's flag, the two states the
+	// init roster never showed, and a server's config, scope, info and tools.
+	// mcpServers and serverInfo are the MCP ecosystem's own terms rather than
+	// stream-json's - daemon/manager.go writes mcpServers as the key of the MCP
+	// config file it hands the manager.
+	"enabled", "failed", "disabled", "scope", "version", "args", "config",
+	"annotations", "tools", "mcpServers", "serverInfo",
+	// And the config scopes a row names ("user" is policed already, as a role).
+	"local", "project", "plugin", "claudeai", "managed", "enterprise", "dynamic",
 
 	// The character that ends the cross-session envelope's opening tag, used to
 	// find where the body begins. Punctuation, not a wire word.
@@ -621,20 +636,23 @@ var notNamedByTheAirlock = map[string]string{
 // 175 → 180: the compact_boundary summary keys wireFrame.compaction reads -
 // "compact_metadata", "trigger", "pre_tokens", "post_tokens" and
 // "cumulative_dropped_tokens" (duration_ms was already policed). compaction.jsonl.
-// 180 → 191: a workflow task's own vocabulary - "local_workflow",
+// 180 → 185: the three MCP control requests "mcp_status", "mcp_reconnect" and
+// "mcp_toggle", the "serverName" they carry, and "readOnly", the one
+// Claude-spelled key of the status receipt Wake reads. mcp-control.jsonl.
+// 185 → 196: a workflow task's own vocabulary - "local_workflow",
 // "workflow_name", "workflow_progress", "workflow_phase", "workflow_agent",
 // "phaseIndex", "toolCalls", "durationMs", "promptPreview", "resultPreview"
 // and the still-running state word "start" (its siblings "done" and "failed"
 // sit in deliberatelyGeneric instead, since task.go already spells both
 // literally and is not an airlock file). Recorded in
 // docs/superpowers/notes/2026-09-23-workflow-findings.md.
-// 191 → 198: task 2's stop and run-record vocabulary - "stop_task" (the Agent
+// 196 → 203: task 2's stop and run-record vocabulary - "stop_task" (the Agent
 // SDK's stopTask(taskId), outbound only); "workflowName", "summary",
 // "startTime", "totalTokens", "script" and "workflowProgress", the run's own
 // wf_*.json record on disk, camelCase and distinct from the stream's
 // snake_case workflow_name/workflow_progress. See EncodeStopTask and
 // DecodeWorkflowRun.
-const policedWordCount = 198
+const policedWordCount = 203
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -652,6 +670,12 @@ var notWireVocabulary = wordSet([]string{
 	"decode transcript line: %w",
 	"encode user message",
 	"%w: encode user message: nothing to send",
+	"encode mcp status", "encode mcp reconnect", "encode mcp toggle",
+	"%w: encode mcp status: empty request id",
+	"%w: encode mcp reconnect: empty request id or server",
+	"%w: encode mcp toggle: empty request id or server",
+	// The separator a stdio server's command line is joined with.
+	" ",
 	// The text a decoded image block carries up in place of its bytes.
 	ImagePlaceholder,
 	// Wake's own surfacing text for a 401 api_retry, which carries no message of
@@ -842,7 +866,7 @@ var allowed = map[string]map[string]bool{
 	// WorkflowAgent.Prompt's own json tag, the preview of the same concept
 	// "prompt" already names on the wire - a workflow agent's own
 	// instruction, shortened. workflow.go is Wake's vocabulary and decodes
-	// nothing; encode.go's workflowSnapshotOf does the reading.
+	// nothing; protocol.go's workflowSnapshotOf does the reading.
 	//
 	// "script", "status" and "summary" are the same case three times more:
 	// WorkflowRun's own script, TaskStatus and one-line summary (task 2) -
@@ -938,7 +962,6 @@ var notInTheCorpus = map[string]string{
 	"new_string": "Edit is advertised but never called; occurs only in prose",
 
 	// primaryArg keys for tools the corpus never exercised, alongside Edit's.
-	"url":     "WebFetch is advertised but never called",
 	"pattern": "Glob and Grep are neither advertised here nor called",
 
 	// The token stream's five words moved out of this list on 2026-08-21:
@@ -971,6 +994,10 @@ var notInTheCorpus = map[string]string{
 	"target_message_uuid":         "outbound only; rewind request field Wake writes",
 	"last_seen_user_message_uuid": "outbound only; rewind request field Wake writes",
 	"interrupt_if_running":        "outbound only; rewind request field Wake writes",
+	"mcp_status":                  "outbound only; the corpus holds its receipts, not the requests",
+	"mcp_reconnect":               "outbound only; the corpus holds its receipts, not the requests",
+	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
+	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
 	"stop_task":                   "outbound only; a recording of stdout cannot contain it",
 
 	// The run record's own two keys with no counterpart on the stream: the

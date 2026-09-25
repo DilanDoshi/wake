@@ -286,6 +286,8 @@ func runFakeClaude() int {
 		return fakeInterruptible(sid)
 	case "mode":
 		return fakeMode(sid)
+	case "mcp":
+		return fakeMCP(sid)
 	case "probe":
 		return fakeModelProbe(sid)
 	case "tool":
@@ -571,6 +573,30 @@ func fakeMode(sid string) int {
 		fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"mode":%q}}}`+"\n",
 			controlRequestID(line), normalizeFakeMode(modeAsked(line)))
 		emitResult(sid)
+	}
+	return 0
+}
+
+// fakeMCP answers the three MCP asks in the shapes mcp-control.jsonl recorded:
+// a status payload, a bare success for a toggle, and a reconnect refused the
+// way a server that needs authenticating refuses it.
+func fakeMCP(sid string) int {
+	emitText(sid, "ready")
+	emitResult(sid)
+	for line := range stdinLines() {
+		id := controlRequestID(line)
+		switch {
+		case strings.Contains(line, `"subtype":"mcp_status"`):
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"mcpServers":[`+
+				`{"name":"linear","status":"needs-auth","scope":"user","config":{"type":"http","url":"https://mcp.linear.app/mcp"}}]}}}`+"\n", id)
+		case strings.Contains(line, `"subtype":"mcp_reconnect"`):
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"error","request_id":%q,"error":"Server status: needs-auth"}}`+"\n", id)
+		case strings.Contains(line, `"subtype":"mcp_toggle"`):
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q}}`+"\n", id)
+		default:
+			emitText(sid, "echo: "+line)
+			emitResult(sid)
+		}
 	}
 	return 0
 }

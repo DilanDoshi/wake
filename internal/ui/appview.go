@@ -405,6 +405,7 @@ func (a App) menuBlock(id string, width, height int) (string, bool) {
 	card := a.cardBlock(id, width)
 	stack := above(above(card, a.pickerView(width, id)), a.rewindView(width, id))
 	stack = above(stack, a.resumeView(id, width, height, stack))
+	stack = above(stack, a.mcpView(id, width, height, stack))
 	return above(stack, a.completionView(width, id)), card != ""
 }
 

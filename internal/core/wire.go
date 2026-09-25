@@ -26,11 +26,6 @@ import (
 	"strings"
 )
 
-// maxLineBytes bounds one stream-json line. Frames carrying a large tool
-// result or a compaction summary comfortably exceed bufio's 64KB default,
-// so both the decoder's tests and the session pump size their buffers here.
-const maxLineBytes = 16 * 1024 * 1024
-
 // wireFrame is the envelope every stream-json line shares.
 type wireFrame struct {
 	Type      string `json:"type"`
@@ -389,6 +384,10 @@ type wireControlBody struct {
 	PrefillText            string `json:"prefillText"`
 	PrecedingAssistantUUID string `json:"precedingAssistantUuid"`
 	Error                  string `json:"error"`
+
+	// An mcp_status receipt's payload; a pointer so presence, even of an empty
+	// list, is the discriminator. See mcpStatusReply.
+	MCPServers *[]wireMCPStatus `json:"mcpServers"`
 }
 
 // wireRateLimit is rate_limit_info. The frame also carries resetsAt (Unix
@@ -469,6 +468,23 @@ type wireTaskPatch struct {
 	Error  string `json:"error"`
 }
 
+// wireWorkflowRun is one run's own wf_*.json record on disk - a second source
+// from the live task_progress snapshot, camelCase like every key a workflow's
+// own JS runtime writes (contrast task_progress's workflow_progress, the
+// stream's snake_case wrapper key).
+type wireWorkflowRun struct {
+	TaskID           string             `json:"taskId"`
+	WorkflowName     string             `json:"workflowName"`
+	Summary          string             `json:"summary"`
+	Status           string             `json:"status"`
+	Error            string             `json:"error"`
+	StartTime        int64              `json:"startTime"`
+	DurationMs       int                `json:"durationMs"`
+	TotalTokens      int                `json:"totalTokens"`
+	Script           string             `json:"script"`
+	WorkflowProgress []wireWorkflowItem `json:"workflowProgress"`
+}
+
 // wireModel is one entry of a result frame's modelUsage map. ContextWindow is
 // the field this type exists for; the rest of the entry is spend accounting,
 // which nothing here reads for the reasons CLAUDE.md gives.
@@ -537,22 +553,6 @@ const (
 	blockTypeToolResult = "tool_result"
 	blockTypeImage      = "image"
 )
-
-// jsonString unquotes a JSON string, falling back to the raw bytes so a
-// shape we have not seen still reaches a human instead of vanishing.
-//
-// The fallback is for shapes that are genuinely unrecorded. It used to catch
-// a tool_result's array content as well, which was not unrecorded at all -
-// 10 of the 44 recorded results carry it - and printed a JSON literal in the
-// transcript. toolResultText handles that shape properly now, and this is
-// left to cover what is still unknown.
-func jsonString(raw json.RawMessage) string {
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return s
-	}
-	return string(raw)
-}
 
 // messageText joins a message's text blocks, or returns its bare string content
 // (a compaction summary, a Stop-hook frame). A shape it does not recognise

@@ -35,7 +35,12 @@ func (s *server) fanOut(a *agent) {
 		// frame. Nothing mutates an Event after the airlock decodes it, and
 		// at 30 sessions a copy per client per event is the difference
 		// between fan-out being free and being the bottleneck.
-		s.broadcast(rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev})
+		f := rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev}
+		if c := a.mcpAsker(ev); c != nil {
+			c.enqueue(f) // an MCP answer is its asker's alone; see askMCP
+		} else {
+			s.broadcast(f)
+		}
 
 		// An ask, an answer and a turn end each change what the roster draws
 		// and what ⇧⇥ can find. Left to watchLiveness, that took up to one

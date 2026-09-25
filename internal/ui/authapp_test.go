@@ -44,7 +44,7 @@ func TestAuthResultPutsThePanelInTheRoom(t *testing.T) {
 }
 
 // A result for a conversation that has since closed lands nowhere and does not
-// panic - the same drop mcpResult makes for an id it no longer holds.
+// panic - the drop every per-conversation result makes for an id it no longer holds.
 func TestAuthResultForAClosedConversationIsDropped(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40)
 	if got := a.authResult(authResultMsg{ID: "ghost", Text: loggedOutJSON}); len(got.dms) != len(a.dms) {
@@ -52,15 +52,11 @@ func TestAuthResultForAClosedConversationIsDropped(t *testing.T) {
 	}
 }
 
-// panelResult routes each subcommand result to its own fold - the one Update
-// case /mcp and /login share.
-func TestPanelResultRoutesEachKind(t *testing.T) {
+// A /login typed in the room answers in the room.
+func TestAnAuthResultForTheRoomLandsInTheRoom(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40)
-	if out := shown(a.panelResult(authResultMsg{ID: "", Text: loggedOutJSON})); !strings.Contains(out, authSignedOut) {
-		t.Errorf("panelResult did not route an auth result to the auth panel:\n%s", out)
-	}
-	if out := shown(a.panelResult(mcpResultMsg{ID: ""})); !strings.Contains(out, mcpNone) {
-		t.Errorf("panelResult did not route an mcp result to the mcp panel:\n%s", out)
+	if out := shown(a.authResult(authResultMsg{ID: "", Text: loggedOutJSON})); !strings.Contains(out, authSignedOut) {
+		t.Errorf("the room did not show the auth panel:\n%s", out)
 	}
 }
 

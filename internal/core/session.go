@@ -122,6 +122,11 @@ const eventBuffer = 256
 // the ceiling it may grow to.
 const initialLineBytes = 64 * 1024
 
+// maxLineBytes bounds one stream-json line. Frames carrying a large tool
+// result or a compaction summary comfortably exceed bufio's 64KB default,
+// so both the decoder's tests and the session pump size their buffers here.
+const maxLineBytes = 16 * 1024 * 1024
+
 // Config describes one agent. Zero values are omitted from the command line.
 type Config struct {
 	SessionID string
@@ -270,6 +275,10 @@ type Session struct {
 	// new turn goes in the aborted one is no longer last and the excuse
 	// expires with it.
 	interrupted bool
+
+	// mcpAsks is every MCP ask written and not yet answered, by request id.
+	// See answeredMCP.
+	mcpAsks map[string]MCPResult
 
 	// err is why the process ended. Written once, as the events channel
 	// closes; see Err.
@@ -440,7 +449,7 @@ func (s *Session) attribute(ev Event) Event {
 	if ev.SessionID == "" {
 		ev.SessionID = s.cfg.SessionID
 	}
-	return ev
+	return s.answeredMCP(ev)
 }
 
 // send hands one event to the consumer, and gives up on it once ctx is done.

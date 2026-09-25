@@ -315,7 +315,7 @@ func (a App) notedMode(sessionID, mode string) App {
 // pin the key to a position the session never reached.
 func (a App) forgotModes() App {
 	a.modes, a.asking = nil, nil
-	return a
+	return a.forgotMCP() // the MCP asks' answers may have been in the gap too
 }
 
 // observedMode folds either observable into the belief.

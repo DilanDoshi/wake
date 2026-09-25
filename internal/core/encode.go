@@ -22,22 +22,6 @@ import (
 	"time"
 )
 
-// ErrNotWritten wraps every error this file returns, and the wrapping is the
-// point rather than any of the messages.
-//
-// Encoding happens before a byte reaches a process, so a failure here means
-// stdin was never touched: the session is exactly as it was, the ask is still
-// outstanding, and the agent is still blocked on it. That is a different fact
-// from a *write* that failed, which internal/daemon reads as proof the process
-// is gone (agent.noteUnreachable) - and reading a refused answer that way
-// would report a perfectly healthy agent as silent and invite a kill nobody
-// meant.
-//
-// It matters most for EncodeAnswer, whose refusals are routine rather than
-// exceptional: an answer is assembled from what an operator did, so it is the
-// one frame in this file a caller can get wrong at runtime.
-var ErrNotWritten = errors.New("nothing was written")
-
 // --- encoding ---------------------------------------------------------------
 //
 // PROBE-DERIVED, NOT FIXTURE-DERIVED - unlike everything the other three
@@ -262,38 +246,6 @@ func askedQuestions(asked map[string]any) ([]string, error) {
 	return texts, nil
 }
 
-// checkAnswers requires one non-blank choice per question asked, and no
-// choices beyond them.
-//
-// Every question, because a missing one is the defect this file exists to
-// close, arriving one question at a time: the tool asks 1-4 at once, the
-// answers map has no way to say "skipped", and the model is given the same
-// empty-ish map either way. Non-blank, because "" is what a UI produces when
-// nobody chose. And nothing extra, because a choice keyed on a question this
-// ask did not put reaches the model attached to nothing - it is a lost answer
-// wearing the shape of a delivered one.
-//
-// A choice is not required to match one of the option labels. The 2.1.226
-// binary phrases the tool result differently for a value it cannot match
-// rather than rejecting it, and no recording ever sent one, so refusing here
-// would forbid a shape the CLI tolerates on the strength of a guess.
-func checkAnswers(questions []string, answers map[string]string) error {
-	for _, q := range questions {
-		choice, ok := answers[q]
-		if !ok {
-			return fmt.Errorf("%w: nothing was chosen for %q", ErrNotWritten, q)
-		}
-		if strings.TrimSpace(choice) == "" {
-			return fmt.Errorf("%w: the choice for %q is blank", ErrNotWritten, q)
-		}
-	}
-	if len(answers) != len(questions) {
-		return fmt.Errorf("%w: %d choices for %d questions - one of them names a question this ask did not put",
-			ErrNotWritten, len(answers), len(questions))
-	}
-	return nil
-}
-
 // defaultDenyReason stands in when a caller denies without saying why.
 //
 // Message is omitempty, so an empty reason leaves the key off the wire
@@ -363,17 +315,16 @@ func encodeControlResponse(requestID string, d outPermDecision) ([]byte, error) 
 // envelope here, exactly where wireFrame.RequestID reads it on the inbound
 // can_use_tool ask; a control_response is the one that nests it a level
 // further, under "response".
-// Request is any because Wake sends two subtypes with disjoint payloads. A
-// struct holding both would put cancel_queued on a mode change and mode on an
-// interrupt, and omitempty cannot hide the first: interrupt's cancel_queued
-// tracks presence, not truth.
+// Request is any because each subtype Wake sends has its own payload. One
+// struct holding them all would put cancel_queued on a mode change, and
+// omitempty cannot hide it: interrupt's cancel_queued tracks presence, not truth.
 type outControlRequest struct {
 	Type      string `json:"type"`
 	RequestID string `json:"request_id"`
 	Request   any    `json:"request"`
 }
 
-// outInterruptRequest is the only control_request subtype Wake sends today.
+// outInterruptRequest aborts the running turn.
 //
 // CancelQueued is omitempty on purpose. interrupt-queued-survives.jsonl and
 // interrupt-cancel-queued.jsonl differ only in whether cancel_queued rode the
@@ -553,6 +504,132 @@ func EncodeStopTask(requestID, taskID string) ([]byte, error) {
 	}, "encode stop task")
 }
 
+// The three MCP asks, recorded against 2.1.281 in mcp-control.stdin.jsonl.
+// None needs a model turn. A refusal comes back as a subtype "error" receipt
+// with the reason top-level - "Server not found: x", "Server status:
+// needs-auth" - never as an error here.
+type outMCPStatusRequest struct {
+	Subtype string `json:"subtype"`
+}
+
+type outMCPReconnectRequest struct {
+	Subtype    string `json:"subtype"`
+	ServerName string `json:"serverName"`
+}
+
+// outMCPToggleRequest persists: a disabled server is written into the
+// project's disabledMcpServers in ~/.claude.json, so it stays off across a
+// restart, exactly as the interactive /mcp's Disable does.
+type outMCPToggleRequest struct {
+	Subtype    string `json:"subtype"`
+	ServerName string `json:"serverName"`
+	Enabled    bool   `json:"enabled"`
+}
+
+// EncodeMCPStatus asks for every server's live status. The empty check is
+// EncodeSetMode's: an id-less receipt could not be matched to its ask.
+func EncodeMCPStatus(requestID string) ([]byte, error) {
+	if requestID == "" {
+		return nil, fmt.Errorf("%w: encode mcp status: empty request id", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{Type: "control_request", RequestID: requestID,
+		Request: outMCPStatusRequest{Subtype: "mcp_status"}}, "encode mcp status")
+}
+
+// EncodeMCPReconnect reconnects one server by the name the status reply gave.
+func EncodeMCPReconnect(requestID, server string) ([]byte, error) {
+	if requestID == "" || server == "" {
+		return nil, fmt.Errorf("%w: encode mcp reconnect: empty request id or server", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{Type: "control_request", RequestID: requestID,
+		Request: outMCPReconnectRequest{Subtype: "mcp_reconnect", ServerName: server}}, "encode mcp reconnect")
+}
+
+// EncodeMCPToggle switches one server on or off.
+func EncodeMCPToggle(requestID, server string, enabled bool) ([]byte, error) {
+	if requestID == "" || server == "" {
+		return nil, fmt.Errorf("%w: encode mcp toggle: empty request id or server", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{Type: "control_request", RequestID: requestID,
+		Request: outMCPToggleRequest{Subtype: "mcp_toggle", ServerName: server, Enabled: enabled}}, "encode mcp toggle")
+}
+
+// The two states the init frame's roster never showed, beside the three
+// vocabulary.go names.
+const (
+	MCPFailed   = "failed"
+	MCPDisabled = "disabled"
+)
+
+// The config scopes an mcp_status row names, as MCPServerStatus.Scope carries
+// them - an open set; a scope not listed here arrives intact.
+const (
+	MCPScopeLocal      = "local"
+	MCPScopeProject    = "project"
+	MCPScopeUser       = "user"
+	MCPScopePlugin     = "plugin"
+	MCPScopeClaudeAI   = "claudeai"
+	MCPScopeManaged    = "managed"
+	MCPScopeEnterprise = "enterprise"
+	MCPScopeDynamic    = "dynamic"
+)
+
+// wireMCPStatus is one row of an mcp_status receipt's mcpServers. Here rather
+// than in wire.go for room; the reply's other fields (source, the tools'
+// _meta) are not read.
+type wireMCPStatus struct {
+	Name       string `json:"name"`
+	Status     string `json:"status"`
+	Error      string `json:"error"`
+	Scope      string `json:"scope"`
+	ServerInfo struct {
+		Name    string `json:"name"`
+		Version string `json:"version"`
+	} `json:"serverInfo"`
+	Config struct {
+		Type    string   `json:"type"`
+		URL     string   `json:"url"`
+		Command string   `json:"command"`
+		Args    []string `json:"args"`
+	} `json:"config"`
+	Tools []struct {
+		Name        string `json:"name"`
+		Annotations struct {
+			ReadOnly bool `json:"readOnly"`
+		} `json:"annotations"`
+	} `json:"tools"`
+}
+
+// mcpStatusReply is a control_response that carries mcpServers, known by the
+// key's presence the way a rewind receipt is known by rewound's.
+func mcpStatusReply(ev Event, r *wireControlResp) (Event, bool) {
+	rows := r.Response.MCPServers
+	if rows == nil {
+		return ev, false
+	}
+	servers := make([]MCPServerStatus, 0, len(*rows))
+	for _, w := range *rows {
+		servers = append(servers, mcpServerStatus(w))
+	}
+	ev.Kind = KindMCPReply
+	ev.Text = r.Subtype
+	ev.MCP = &MCPResult{Ask: MCPAskServers, Servers: servers, Error: r.Error}
+	return ev, true
+}
+
+func mcpServerStatus(w wireMCPStatus) MCPServerStatus {
+	s := MCPServerStatus{Name: w.Name, State: w.Status, Error: w.Error, Scope: w.Scope,
+		Transport: w.Config.Type, Target: w.Config.URL,
+		Info: strings.TrimSpace(w.ServerInfo.Name + " " + w.ServerInfo.Version)}
+	if s.Target == "" {
+		s.Target = strings.TrimSpace(strings.Join(append([]string{w.Config.Command}, w.Config.Args...), " "))
+	}
+	for _, t := range w.Tools {
+		s.Tools = append(s.Tools, MCPTool{Name: t.Name, ReadOnly: t.Annotations.ReadOnly})
+	}
+	return s
+}
+
 // marshalLine renders one outbound frame as a single newline-terminated
 // line, because stdin is newline-delimited JSON in exactly the way stdout
 // is. json.Marshal escapes embedded newlines and quotes, which is what keeps
@@ -692,76 +769,6 @@ const (
 var workflowAgentStates = map[string]WorkflowAgentState{
 	"start": WorkflowAgentRunning, "progress": WorkflowAgentRunning,
 	"done": WorkflowAgentDone, "failed": WorkflowAgentFailed,
-}
-
-// workflowSnapshotOf resolves one workflow_progress array into a snapshot,
-// and nil when the frame carried none - every task_progress but the ones
-// that changed the phase or agent list.
-func workflowSnapshotOf(items []wireWorkflowItem) *WorkflowSnapshot {
-	if items == nil {
-		return nil
-	}
-	s := &WorkflowSnapshot{}
-	for _, it := range items {
-		switch it.Type {
-		case workflowPhaseItem:
-			s.Phases = append(s.Phases, WorkflowPhase{Index: it.Index, Title: it.Title})
-		case workflowAgentItem:
-			state, ok := workflowAgentStates[it.State]
-			if !ok {
-				state = WorkflowAgentUnknown
-			}
-			s.Agents = append(s.Agents, WorkflowAgent{Index: it.Index, Phase: it.PhaseIndex, Label: it.Label,
-				AgentID: it.AgentID, Model: it.Model, State: state, Attempt: it.Attempt, Tokens: it.Tokens,
-				ToolCalls: it.ToolCalls, Duration: time.Duration(it.DurationMs) * time.Millisecond,
-				Prompt: it.PromptPreview, Result: it.ResultPreview})
-		}
-	}
-	return s
-}
-
-// workflowOf is a task frame's workflow half, and nil on every frame that
-// says nothing about one - every task frame but a workflow's task_started, a
-// task_progress carrying a snapshot, and the task_updated that ends one.
-func workflowOf(f wireFrame, kind TaskKind) *WorkflowUpdate {
-	w := WorkflowUpdate{Progress: workflowSnapshotOf(f.WorkflowProgress)}
-	if kind == TaskWorkflow {
-		w.Name, w.Script = f.WorkflowName, f.Prompt
-	}
-	if f.Patch != nil {
-		w.Error = f.Patch.Error
-	}
-	if w == (WorkflowUpdate{}) {
-		return nil
-	}
-	return &w
-}
-
-// DecodeSidechainLine decodes one line of a workflow agent's own on-disk
-// transcript - the isSidechain:true lines decodeTranscript otherwise drops,
-// kept here because a workflow agent forwards nothing live (findings.md §3):
-// its words exist only on this tree. Reads, not writes - decodeTranscript's
-// own reason for sitting here rather than in protocol.go, which is at the
-// 800-line hard max.
-func DecodeSidechainLine(line []byte) ([]Event, error) {
-	return decodeTranscript(line, true)
-}
-
-// wireWorkflowRun is one run's own wf_*.json record on disk - a second source
-// from the live task_progress snapshot, camelCase like every key a workflow's
-// own JS runtime writes (contrast task_progress's workflow_progress, the
-// stream's snake_case wrapper key).
-type wireWorkflowRun struct {
-	TaskID           string             `json:"taskId"`
-	WorkflowName     string             `json:"workflowName"`
-	Summary          string             `json:"summary"`
-	Status           string             `json:"status"`
-	Error            string             `json:"error"`
-	StartTime        int64              `json:"startTime"`
-	DurationMs       int                `json:"durationMs"`
-	TotalTokens      int                `json:"totalTokens"`
-	Script           string             `json:"script"`
-	WorkflowProgress []wireWorkflowItem `json:"workflowProgress"`
 }
 
 // DecodeWorkflowRun decodes one run record. An unrecognised status resolves

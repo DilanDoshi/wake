@@ -54,7 +54,7 @@ func (a App) applyStatus(st *rpc.Status) App {
 	// under an open rewind picker too - Cards.Reconcile's own reason, one
 	// picker over. See rewind.go's reconcileRewind, and the adversarial
 	// review CRITICAL finding it closes, 2026-08-26.
-	a = a.reconcileRewind()
+	a = a.reconcileRewind().reconciledMCP()
 	return a.renamed(st).startArrived(st).parkArrived(st).wakeArrived(st).noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
 }
 

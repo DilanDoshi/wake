@@ -28,7 +28,6 @@
 package core
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
 	"time"
@@ -184,7 +183,7 @@ func turnTokensEvent(f wireFrame) []Event {
 // turn and loses only the stamp; see Event.At.
 func DecodeTranscriptLine(line []byte) ([]Event, error) { return decodeTranscript(line, false) }
 
-// decodeTranscript is the shared body; keepSidechain true is DecodeSidechainLine's (encode.go).
+// decodeTranscript is the shared body; keepSidechain true is DecodeSidechainLine's (workflow.go).
 func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 	var f struct {
 		Type      string `json:"type"`
@@ -217,18 +216,6 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 		events[i].At = at
 	}
 	return events, nil
-}
-
-// TranscriptNode is one on-disk transcript line's place in the tree - its own
-// identity and its parent's - or, for a last-prompt line, the rewind marker
-// it carries instead. It holds no message content; DecodeTranscriptLine
-// still reads that for the lines the active-branch walk in daemon/history.go
-// keeps.
-type TranscriptNode struct {
-	UUID, ParentUUID string
-	Kind             string // "user" | "assistant" | "last-prompt" | other
-	Rewound          bool   // true only on a last-prompt rewind marker
-	LeafUUID         string // the active leaf, on a last-prompt marker
 }
 
 // DecodeTranscriptNode reads only the tree structure of one on-disk
@@ -395,6 +382,49 @@ func taskElapsed(u *wireUsage) time.Duration {
 	return time.Duration(u.DurationMS) * time.Millisecond
 }
 
+// workflowSnapshotOf resolves one workflow_progress array into a snapshot,
+// and nil when the frame carried none - every task_progress but the ones
+// that changed the phase or agent list.
+func workflowSnapshotOf(items []wireWorkflowItem) *WorkflowSnapshot {
+	if items == nil {
+		return nil
+	}
+	s := &WorkflowSnapshot{}
+	for _, it := range items {
+		switch it.Type {
+		case workflowPhaseItem:
+			s.Phases = append(s.Phases, WorkflowPhase{Index: it.Index, Title: it.Title})
+		case workflowAgentItem:
+			state, ok := workflowAgentStates[it.State]
+			if !ok {
+				state = WorkflowAgentUnknown
+			}
+			s.Agents = append(s.Agents, WorkflowAgent{Index: it.Index, Phase: it.PhaseIndex, Label: it.Label,
+				AgentID: it.AgentID, Model: it.Model, State: state, Attempt: it.Attempt, Tokens: it.Tokens,
+				ToolCalls: it.ToolCalls, Duration: time.Duration(it.DurationMs) * time.Millisecond,
+				Prompt: it.PromptPreview, Result: it.ResultPreview})
+		}
+	}
+	return s
+}
+
+// workflowOf is a task frame's workflow half, and nil on every frame that
+// says nothing about one - every task frame but a workflow's task_started, a
+// task_progress carrying a snapshot, and the task_updated that ends one.
+func workflowOf(f wireFrame, kind TaskKind) *WorkflowUpdate {
+	w := WorkflowUpdate{Progress: workflowSnapshotOf(f.WorkflowProgress)}
+	if kind == TaskWorkflow {
+		w.Name, w.Script = f.WorkflowName, f.Prompt
+	}
+	if f.Patch != nil {
+		w.Error = f.Patch.Error
+	}
+	if w == (WorkflowUpdate{}) {
+		return nil
+	}
+	return &w
+}
+
 // taskSet is the live set background_tasks_changed carries, and nil on every
 // other frame. It is deliberately not folded into taskUpdate: that frame
 // reports no phase, no status and no dispatch for any of its members, so a
@@ -416,16 +446,6 @@ func initFacts(f wireFrame) *SessionFacts {
 		MCPServers:    mcpServers(f.MCPServers),
 		SlashCommands: nonEmpty(f.SlashCommands),
 	}
-}
-
-// nonEmpty is nil for a list the frame did not carry, for mcpServers' reason:
-// "this session advertises none" and "no init has arrived yet" must not be two
-// values a consumer folds the same way.
-func nonEmpty(words []string) []string {
-	if len(words) == 0 {
-		return nil
-	}
-	return words
 }
 
 // mcpServers is the wire's rows as Wake's, and nil for a frame that named none.
@@ -576,10 +596,11 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 		return ev
 	}
 	ev.RequestID = f.Response.RequestID
-	// A rewind receipt is discriminated by Rewound's *presence*, not its
-	// truth: it always carries the key, true or false, and a
-	// set_permission_mode receipt never does. Checked before the mode/generic
-	// path so a rewind never falls through to it.
+	// Rewind and MCP status receipts are known by a payload key's presence, and
+	// are checked first so neither falls through to the mode/generic path.
+	if ev, ok := mcpStatusReply(ev, f.Response); ok {
+		return ev
+	}
 	if b := f.Response.Response.Rewound; b != nil {
 		ev.Kind = KindRewindReceipt
 		ev.Text = f.Response.Subtype
@@ -594,9 +615,8 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 	}
 	ev.Kind = KindControlReceipt
 	ev.Text = f.Response.Subtype
-	// The mode a set_permission_mode landed on, doubly nested like the rest of
-	// the payload. Empty on every other receipt and on a refusal, which moved
-	// nothing - the reason travels in Control.Error instead.
+	// The mode a set_permission_mode landed on; empty on every other receipt and
+	// on a refusal, whose reason travels in Control.Error instead.
 	ev.PermissionMode = f.Response.Response.Mode
 	ev.Control = &ControlResult{
 		StillQueued: f.Response.Response.StillQueued,
@@ -676,15 +696,6 @@ func blockEvents(f wireFrame, raws []json.RawMessage, raw json.RawMessage, usage
 	}
 	return evs
 }
-
-// ImagePlaceholder is the text a decoded image block carries up in place of
-// its bytes: the transcript cannot draw the image, and a user turn rendering
-// this reads far better than one rendering nothing.
-//
-// Exported because internal/ui's room-history reconstruction must recognise it:
-// every image shares this one text, so it can never be sound proof that a turn
-// was broadcast, and roomhistory.go excludes it from that rule.
-const ImagePlaceholder = "[Image]"
 
 // blockEvent decodes one content block. A block that fails to decode
 // degrades to KindUnknown on its own, leaving its siblings intact.
@@ -785,16 +796,3 @@ func textKind(frameType string) EventKind {
 	}
 	return KindAssistantText
 }
-
-// firstJSONByte is the cheapest way to tell a JSON string from an array or
-// object without a second full unmarshal.
-func firstJSONByte(raw json.RawMessage) byte {
-	t := bytes.TrimLeft(raw, " \t\r\n")
-	if len(t) == 0 {
-		return 0
-	}
-	return t[0]
-}
-
-func isJSONObject(raw json.RawMessage) bool { return firstJSONByte(raw) == '{' }
-func isJSONArray(raw json.RawMessage) bool  { return firstJSONByte(raw) == '[' }

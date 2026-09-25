@@ -173,6 +173,12 @@ func (a *agent) apply(p pending) {
 			return
 		}
 		_, err = a.sess.StopTask(id)
+	case rpc.FrameMCPList, rpc.FrameMCPReconnect, rpc.FrameMCPEnable, rpc.FrameMCPDisable:
+		err = a.askMCP(p)
+		if errors.Is(err, core.ErrNotWritten) {
+			a.refuse(p, err)
+			return
+		}
 	case rpc.FrameStop:
 		// Here rather than on the connection's goroutine so it lands behind
 		// the messages already queued for this agent - see dispatch.

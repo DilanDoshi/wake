@@ -1,0 +1,11 @@
+{"type":"control_request","request_id":"mcp-01","request":{"subtype":"mcp_status"}}
+{"type":"control_request","request_id":"mcp-02","request":{"subtype":"mcp_status"}}
+{"type":"control_request","request_id":"mcp-03","request":{"subtype":"mcp_toggle","serverName":"echo","enabled":false}}
+{"type":"control_request","request_id":"mcp-04","request":{"subtype":"mcp_status"}}
+{"type":"control_request","request_id":"mcp-05","request":{"subtype":"mcp_toggle","serverName":"echo","enabled":true}}
+{"type":"control_request","request_id":"mcp-06","request":{"subtype":"mcp_reconnect","serverName":"echo"}}
+{"type":"control_request","request_id":"mcp-07","request":{"subtype":"mcp_reconnect","serverName":"broken"}}
+{"type":"control_request","request_id":"mcp-08","request":{"subtype":"mcp_reconnect","serverName":"linear"}}
+{"type":"control_request","request_id":"mcp-09","request":{"subtype":"mcp_reconnect","serverName":"nosuch"}}
+{"type":"control_request","request_id":"mcp-10","request":{"subtype":"mcp_toggle","serverName":"nosuch","enabled":false}}
+{"type":"control_request","request_id":"mcp-11","request":{"subtype":"mcp_status"}}

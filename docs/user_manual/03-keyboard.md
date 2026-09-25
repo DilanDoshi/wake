@@ -109,8 +109,12 @@ room and a conversation can be grabbed and dragged. Clicking a folded block open
 tool result or a run's rollup in a conversation, or a folded response in the room — where `⌃E`
 opens all of them.
 
-Mouse reporting is on, which may mean your terminal needs a modifier (often `⌥` or `⇧`) to select
-text for copying.
+Wake selects text itself, anywhere on screen: drag across it and the release copies it.
+Double-click a word to select and copy it, and triple-click to take its whole row. The first click
+still does its usual job, such as opening a folded block or a roster row, and a fourth click changes
+nothing. A word is any run of characters that are not spaces, so a path or an `@name` comes whole.
+Your terminal's own selection is still there with a modifier held (often `⌥` or `⇧`), since Wake
+has mouse reporting on.
 
 ## Keys that are deliberately absent
 

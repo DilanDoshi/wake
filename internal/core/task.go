@@ -138,6 +138,6 @@ type TaskUpdate struct {
 	Elapsed time.Duration `json:"elapsed,omitempty"`
 
 	// Workflow is this task's workflow half, and nil for every other kind -
-	// see workflow.go and encode.go's workflowOf.
+	// see workflow.go and protocol.go's workflowOf.
 	Workflow *WorkflowUpdate `json:"workflow,omitempty"`
 }

@@ -70,14 +70,17 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"fmt"
 	"io"
 	"os"
 	"os/signal"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/charmbracelet/x/term"
+	"github.com/muesli/cancelreader"
 )
 
 const (
@@ -195,6 +198,17 @@ type killSwitch struct {
 	exit func()
 
 	once sync.Once
+
+	// The pause a hand-over takes (handover.go). reader is the pump's current
+	// read of tty, replaced on each resume; held and resumed are the pump's
+	// half of the pause; quiet mutes watchSignals while a child owns the
+	// terminal, whose ⌃C is its own; done closes when the pump has exited.
+	mu      sync.Mutex
+	reader  cancelreader.CancelReader
+	held    chan struct{}
+	resumed chan cancelreader.CancelReader
+	done    chan struct{}
+	quiet   atomic.Bool
 }
 
 // armKillSwitch puts Wake in front of the terminal, or reports that there is no
@@ -217,6 +231,7 @@ func armKillSwitch() (*killSwitch, error) {
 		return nil, fmt.Errorf("opening the input pipe: %w", err)
 	}
 	k := newKillSwitch(os.Stdin, os.Stdout, state, pipe, feed)
+	k.startReading()
 	go k.pump()
 	go k.forward()
 	return k, nil
@@ -229,6 +244,7 @@ func newKillSwitch(tty, out *os.File, state *term.State, pipe, feed *os.File) *k
 		tty: tty, out: out, state: state,
 		pipe: pipe, feed: feed,
 		queue: make(chan []byte, forwardQueue),
+		held:  make(chan struct{}), resumed: make(chan cancelreader.CancelReader), done: make(chan struct{}),
 	}
 	k.exit = k.emergencyExit
 	return k
@@ -374,12 +390,14 @@ func (c *chunker) step(read []byte, full bool) []byte {
 // before the bytes are handed anywhere. A hand-off that could block would put
 // the wedged consumer back in front of the key that exists to escape it.
 func (k *killSwitch) pump() {
+	defer close(k.done)
 	defer close(k.queue)
 	var trigger killTrigger
 	var chunks chunker
 	buf := make([]byte, readChunk)
+	r := k.startReading()
 	for {
-		n, err := k.tty.Read(buf)
+		n, err := r.Read(buf)
 		if n > 0 {
 			var fired bool
 			if trigger, fired = trigger.saw(buf[:n], time.Now()); fired {
@@ -399,6 +417,15 @@ func (k *killSwitch) pump() {
 					// boundary, so the gap it leaves cannot split a report.
 				}
 			}
+		}
+		if errors.Is(err, cancelreader.ErrCanceled) {
+			// A hand-over paused this read; wait for the terminal back.
+			_ = r.Close()
+			k.held <- struct{}{}
+			if r = <-k.resumed; r == nil {
+				return // resumed closed: shut down rather than read again
+			}
+			continue
 		}
 		if err != nil {
 			return
@@ -490,11 +517,19 @@ func (k *killSwitch) watchSignals() {
 	sig := make(chan os.Signal, 1)
 	signal.Notify(sig, killSignals...)
 	go func() {
-		<-sig
-		grace := time.AfterFunc(killSignalGrace, k.exit)
-		<-sig
-		if grace.Stop() {
-			k.exit()
+		var grace *time.Timer
+		for range sig {
+			if k.quiet.Load() {
+				continue // a child holds the terminal; its ⌃C is not Wake's to act on
+			}
+			if grace == nil {
+				grace = time.AfterFunc(killSignalGrace, k.exitAfterHandOver)
+				continue
+			}
+			if grace.Stop() {
+				k.exit()
+			}
+			return
 		}
 	}()
 }
