@@ -442,16 +442,21 @@ first, and read it.
   PR body.
 - **Actions is unfunded: `make ci` on this machine is the only gate.** Run it before opening the PR
   and put the exit code in the body.
-- **Every PR carries before/after screenshots of the real binary** (owner's rule, 2026-09-23) in a
-  `## Screenshots` section — `main` build vs branch build doing the same thing. A change with nothing
+- **Every fix or feature PR carries videos of the real binary** (owner's rule, 2026-09-24; it
+  extends the 2026-09-23 screenshot rule): a `## Videos` section with one short clip per user-facing
+  flow the change adds or fixes, each a GIF inline plus a link to its MP4, captioned with the flow.
+  **Where a video cannot capture something, include screenshots instead** — a gesture VHS cannot
+  send (mouse clicks, ⇧+arrows) is a still from the pty harness, and a `## Screenshots` section keeps
+  the before/after pair (`main` build vs branch build doing the same thing). A change with nothing
   visible says so, with the reason.
   - Record with VHS against the real `wake` and a scripted fake `claude` on a shim `PATH`
     (`demo/agent/claude`). Never a live LLM or the owner's fleet: scratch `HOME`, and a **fresh
     `WAKE_SOCKET` directory per take** (a reused one inherits orphans and hangs `wake new`).
   - Use a neutral project path (e.g. `/tmp/<name>`) — a home path puts the operator's name in the image.
-  - Host images on an orphan branch `pr-assets/<head-branch>` (head branch verbatim, one parentless
-    commit, linked by `raw.githubusercontent.com`). Never commit a PNG to the feature branch. To
-    replace an image, force-push a fresh parentless commit.
+  - Record the videos against the PR's final head, not an earlier commit, and check their frames by eye.
+  - Host videos and images on an orphan branch `pr-assets/<head-branch>` (head branch verbatim, one
+    parentless commit, linked by `raw.githubusercontent.com`). Never commit a GIF, MP4 or PNG to the
+    feature branch. To replace media, force-push a fresh parentless commit.
   - Before pushing a new one, delete assets branches whose PR merged or closed (report, don't
     delete, a head with no PR):
 
