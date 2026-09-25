@@ -613,6 +613,12 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case tea.KeyMsg:
 		a.clicks = clickRun{} // every keystroke ends a click run; see multiclick.go
+		// Before anything acts on a draft - the view hides its pane's. See workflowKey.
+		next, cmd, took := a.workflowKey(m)
+		if took {
+			return next.cleared(), cmd
+		}
+		a = next
 		// A live query-box selection turns ⌫/delete into "remove what is
 		// highlighted" - read before cleared() wipes the selection, since that
 		// runs on every keystroke. See deleteSelectedDraft.

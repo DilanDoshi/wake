@@ -9,7 +9,8 @@ package ui
 // while that pane holds them - and key-capturing like the resume picker: read
 // above App.key's switch, it owns every key while it is up, so it adds no
 // legendEntries entry and advertises its keys on itself. ⌃C is the one key it
-// hands back, after closing, for cmd/wake/killswitch.go's invariant.
+// hands back, after closing, for cmd/wake/killswitch.go's invariant - except in
+// the save dialog, where closing the dialog is ⌃C's whole, visible, job.
 
 import (
 	tea "github.com/charmbracelet/bubbletea"
@@ -198,13 +199,20 @@ func (a App) viewingWorkflow(id string) App {
 	return a
 }
 
-// workflowKey owns every key while the view's pane holds them.
+// workflowKey owns every key while the view's pane holds them and the board
+// is not drawn over it. ⌃C in the save dialog cancels the dialog alone - a
+// visible first press, and parking would end the run being saved; anywhere
+// else ⌃C closes the view and is handed on to park.
 func (a App) workflowKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	v := a.workflow.view
-	if !v.Open() || a.focus != v.Pane {
+	if !v.Open() || a.focus != v.Pane || a.board.Up {
 		return a, nil, false
 	}
 	if m.Type == tea.KeyCtrlC {
+		if v.Save != nil {
+			a.workflow.view.Save = nil
+			return a, nil, true
+		}
 		return a.closeWorkflow(), nil, false
 	}
 	a, cmd := a.workflowKeyed(m)
