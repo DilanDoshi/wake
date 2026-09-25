@@ -158,6 +158,21 @@ func (a *agent) apply(p pending) {
 		// receipt reaches every attached client on the event stream carrying
 		// that id, and a client that wants to correlate one has it.
 		_, err = a.sess.Rewind(p.frame.RewindTarget, p.frame.RewindLastSeen)
+	case rpc.FrameStopRun:
+		// Addressed by task id, and runningWorkflow is the one gate: an unknown
+		// id, a dispatch of a different kind (a subagent, a shell) and an
+		// already-ended workflow all fail it alike, so none of them reaches
+		// stdin - only a task this agent still holds as a running workflow gets
+		// a stop_task.
+		var id string
+		if p.frame.Workflow != nil {
+			id = p.frame.Workflow.Task
+		}
+		if !a.runningWorkflow(id) {
+			a.refuse(p, fmt.Errorf("no running workflow %s", id))
+			return
+		}
+		_, err = a.sess.StopTask(id)
 	case rpc.FrameMCPList, rpc.FrameMCPReconnect, rpc.FrameMCPEnable, rpc.FrameMCPDisable:
 		err = a.askMCP(p)
 		if errors.Is(err, core.ErrNotWritten) {

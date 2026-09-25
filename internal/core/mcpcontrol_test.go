@@ -265,7 +265,7 @@ func TestAnUnwrittenAskIsNotRemembered(t *testing.T) {
 	if err := s.MCPReconnect("q5", "linear"); err == nil {
 		t.Fatal("a session that never started accepted a write")
 	}
-	if n := s.pendingMCPAsks(); n != 0 {
+	if n := s.pendingAsks(); n != 0 {
 		t.Errorf("%d asks remembered after a failed write", n)
 	}
 }

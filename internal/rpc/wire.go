@@ -588,17 +588,17 @@ type Frame struct {
 	MaxBudgetUSD  string `json:"max_budget_usd,omitempty"`
 	FallbackModel string `json:"fallback_model,omitempty"`
 
-	// Status is the fleet report, carried by the two kinds that report one -
-	// FrameStatusReply, which answers a request, and FrameStatusPush, which
-	// is the daemon announcing a change nobody asked about. Nil on every
-	// other kind. Which of the two a frame is matters to a client that has a
-	// question outstanding, and lifecycle.go is where that distinction is
-	// explained.
-	//
-	// A pointer for the same reason Event is one: an event frame crosses
-	// this socket thousands of times per session and must not carry an empty
-	// object for a field it never uses.
+	// Status is the fleet report, carried by FrameStatusReply (an answer) and
+	// FrameStatusPush (unasked) - lifecycle.go explains the distinction. Nil
+	// on every other kind, and a pointer for Event's own reason: an empty
+	// object on every frame that never uses it is not free at this rate.
 	Status *Status `json:"status,omitempty"`
+
+	// Workflow carries a dynamic Workflow() run's own frames - FrameStopRun,
+	// FrameWorkflows/Reply, FrameWorkflowAgent/Reply and
+	// FrameSaveWorkflow/FrameWorkflowSaved - declared in workflow.go for its
+	// own header's reason.
+	Workflow *WorkflowFrame `json:"workflow,omitempty"`
 }
 
 // writeMu serializes every write in this package. Sessions fan out to one

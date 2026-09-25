@@ -8,6 +8,18 @@ package core
 // to choose the live one - or the rewound turns come back. The choice is file
 // order: among a node's children the one written last is the live one.
 
+// TranscriptNode is one on-disk transcript line's place in the tree - its own
+// identity and its parent's - or, for a last-prompt line, the rewind marker
+// it carries instead. It holds no message content; DecodeTranscriptLine
+// still reads that for the lines the active-branch walk in daemon/history.go
+// keeps.
+type TranscriptNode struct {
+	UUID, ParentUUID string
+	Kind             string // "user" | "assistant" | "last-prompt" | other
+	Rewound          bool   // true only on a last-prompt rewind marker
+	LeafUUID         string // the active leaf, on a last-prompt marker
+}
+
 // ActiveBranch returns the uuids on the live path of a conversation's tree,
 // from the root down to the live leaf. The leaf is found by descending from
 // the latest rewind marker whose leaf resolves to a node - or, with no

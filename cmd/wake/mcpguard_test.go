@@ -238,6 +238,14 @@ var managerVerbs = map[string]verdict{
 
 	rpc.FrameRewind: {why: "moves which turns of a conversation are there to read, not merely how a session behaves going forward - a step past FrameMode's own refusal rather than the same argument again. A rewound turn does not stay in view on the next look: a reopened conversation reconstructs only the surviving branch and a reopened room drops a rewound broadcast, so the operator's own read of an agent can lose turns between one look and the next - exactly the shape of cover an injected instruction would want, on the hop this file's own header already describes. It fails FrameMode's test a second way too: the receipt is a KindRewindReceipt on the event stream, in no row list_agents or roll_up returns, so a manager that triggered one has no way to learn whether it took. And there is nothing here to aim it at - RewindTarget and RewindLastSeen are a transcript message's own uuid, which core.Event never carries onto this socket, and neither reading tool carries one either. A manager cannot address a verb whose whole argument is an id nothing on this surface has ever handed it"},
 
+	rpc.FrameStopRun: {why: "ends a running workflow dispatch, and it is refused for FrameStop's reason one layer down: internal/mcp reads no task frame at all, so no tool here - list_agents, agent_status, roll_up - reports that a workflow is running, let alone its phases and agents. A manager that could stop one would be silencing work nothing here reports was ever started"},
+
+	rpc.FrameSaveWorkflow: {why: "writes a script to disk - .claude/workflows or the operator's own ~/.claude/workflows - and nothing on this surface reads either directory back. FrameStopRun's own reason: it writes something the manager's tools report nowhere, so it stays the operator's, the way FrameRename and FrameLabel stay the operator's for what they write to a row the model cannot check"},
+
+	rpc.FrameWorkflows: {why: "the whole of a session's own workflow runs - every phase, every agent, every prompt and result a script has produced - and FrameHistory's ruling reaches it exactly: no manager tool reads a transcript, and a run's own progress is the operator's read of an agent's work in the same way a conversation is"},
+
+	rpc.FrameWorkflowAgent: {why: "one workflow agent's own transcript, read off disk - the same widest read FrameHistory is refused for, and with less standing than an ordinary conversation: a workflow agent forwards nothing live, so this file is the only route to its words at all, and FrameHistory's ruling refuses a manager that route for an agent Wake itself is watching"},
+
 	rpc.FrameMCPList: {why: "an agent's MCP servers are the operator's own machine: each row carries the command line or URL a server is reached at, its config scope and its error text, none of which any reading tool here returns and none of which the manager needs to send, interrupt, spawn or group. Its answer is also a KindMCPReply on the event stream, in no row list_agents or roll_up returns - the same reason FrameRewind's cell gives for a verb whose outcome the manager could not see. And it exists to aim the three refused below"},
 
 	rpc.FrameMCPReconnect: {why: "a reconnect drops and re-dials a live server under whatever tool call is using it, so it can fail another agent's turn in flight - not undoable by looking, the test send and interrupt pass. Its target is a name only FrameMCPList hands out, which is refused above"},
@@ -270,6 +278,9 @@ var notAClientVerb = map[string]string{
 	rpc.FrameHistoryReply:       "daemon to client: the conversation a session already had",
 	rpc.FrameRoomHistoryReply:   "daemon to client: the same conversation, answered for the room",
 	rpc.FrameRewindTargetsReply: "daemon to client: what could this session be rewound to",
+	rpc.FrameWorkflowsReply:     "daemon to client: a session's own workflow runs off disk",
+	rpc.FrameWorkflowAgentReply: "daemon to client: one workflow agent's own transcript",
+	rpc.FrameWorkflowSaved:      "daemon to client: where FrameSaveWorkflow's script landed",
 }
 
 // The verbs the daemon serves are the ones dispatch names, and every one of

@@ -47,15 +47,18 @@ func (a App) askHistory(id string) App {
 // signatures, and it is the same shape App.write already has: one command,
 // however many frames.
 func (a App) takeHistoryAsks() (App, tea.Cmd) {
+	// A workflow view opened from the sidebar owes a read off disk the same way
+	// and for the same reason: its open keys and its click return no command.
+	a, runs := a.takeWorkflowAsks()
 	if len(a.pendingHistory) == 0 {
-		return a, nil
+		return a, runs
 	}
 	frames := make([]rpc.Frame, 0, len(a.pendingHistory))
 	for _, id := range a.pendingHistory {
 		frames = append(frames, rpc.Frame{Kind: rpc.FrameHistory, SessionID: id})
 	}
 	a.pendingHistory = nil
-	return a, a.write(historyFailed, frames...)
+	return a, tea.Batch(a.write(historyFailed, frames...), runs)
 }
 
 // historyArrived folds the answer into the conversation it names.

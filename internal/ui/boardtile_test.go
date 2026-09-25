@@ -383,3 +383,19 @@ func TestTheTiledBoardHighlightsTheFirstTileOnAFreshOpen(t *testing.T) {
 		t.Errorf("drawnBoardCursor with a live selection = %q, want %q", got, agents[1].ID)
 	}
 }
+
+// A workflow is not a subagent: the tile counts it on its own, never as one
+// more subagent.
+func TestATileCountsAWorkflowApartFromItsSubagents(t *testing.T) {
+	a := boardApp(t)
+	a.board.Tiled = true
+	alex, ok := a.fleet.ByName("alex")
+	if !ok {
+		t.Fatal("precondition: boardApp seats alex")
+	}
+	a = a.applyFrame(taskFrame(alex.ID, workflowStarted("wf1", "toolu_wf1", "Count the lines", "count-lines")))
+	out := stripANSI(a.View())
+	if !strings.Contains(out, "⤷ 1 subagent · 1 workflow") || strings.Contains(out, "⤷ 2 subagents") {
+		t.Errorf("alex's tile does not count its workflow apart from its subagent:\n%s", out)
+	}
+}

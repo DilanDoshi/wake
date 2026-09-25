@@ -1,0 +1,270 @@
+{
+  "_note": "The workflow scenes' failing run (testdata/stream/workflow-failed.jsonl's shape: every agent done, then the script throws).",
+  "model": "claude-opus-5",
+  "opening": {
+    "tokens": 300,
+    "steps": [
+      {
+        "after": 0.6,
+        "text": "Ready. The fixtures under `fixtures/` are still on the v1 schema."
+      }
+    ]
+  },
+  "turns": [
+    {
+      "match": "migrate",
+      "tokens": 400,
+      "steps": [
+        {
+          "after": 0.8,
+          "text": "Converting all six sets in parallel, then merging and validating."
+        },
+        {
+          "after": 0.6,
+          "workflow": "migrate-fixtures"
+        },
+        {
+          "after": 0.7,
+          "text": "`migrate-fixtures` is running in the background."
+        }
+      ]
+    }
+  ],
+  "default": {
+    "tokens": 300,
+    "steps": [
+      {
+        "after": 0.7,
+        "text": "Noted."
+      }
+    ]
+  },
+  "workflows": {
+    "migrate-fixtures": {
+      "description": "Convert six fixture sets to v2 in parallel, merge them, then validate",
+      "script": "export const meta = {\n  name: 'migrate-fixtures',\n  description: 'Convert six fixture sets to v2 in parallel, merge them, then validate',\n  phases: [{ title: 'Convert' }, { title: 'Merge' }, { title: 'Validate' }],\n}\nconst SETS = ['users', 'orders', 'invoices', 'refunds', 'plans', 'events']\nphase('Convert')\nconst out = await parallel(SETS.map(s => () => agent(`Convert fixtures/${s}.json to the v2 schema. Return the ids you rewrote.`, { label: `convert ${s}`, phase: 'Convert', model: 'haiku' })))\nphase('Merge')\nawait agent(`Merge the converted sets into fixtures/v2.json: ${out.join(' ')}`, { label: 'merge', phase: 'Merge', model: 'haiku' })\nphase('Validate')\nconst stale = await agent('List every fixture that still references a v1 id.', { label: 'validate', phase: 'Validate', model: 'haiku' })\nif (stale && stale.length) throw new Error(`${stale.length} fixtures still reference v1 ids`)",
+      "phases": [
+        "Convert",
+        "Merge",
+        "Validate"
+      ],
+      "agents": [
+        {
+          "label": "convert users",
+          "phase": 1,
+          "at": 0.3,
+          "takes": 2.6,
+          "tokens": 15100,
+          "prompt": "Convert fixtures/users.json to the v2 schema. Return the ids you rewrote.",
+          "tools": [
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "fixtures/users.json"
+              },
+              "result": "[{\"id\": \"use_1\", \"v\": 1}]"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "fixtures/users.v2.json"
+              },
+              "result": "File created successfully at: fixtures/users.v2.json"
+            }
+          ],
+          "output": {
+            "rewrote": 12
+          }
+        },
+        {
+          "label": "convert orders",
+          "phase": 1,
+          "at": 0.42,
+          "takes": 5.35,
+          "tokens": 15197,
+          "prompt": "Convert fixtures/orders.json to the v2 schema. Return the ids you rewrote.",
+          "tools": [
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "fixtures/orders.json"
+              },
+              "result": "[{\"id\": \"ord_1\", \"v\": 1}]"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "fixtures/orders.v2.json"
+              },
+              "result": "File created successfully at: fixtures/orders.v2.json"
+            }
+          ],
+          "output": {
+            "rewrote": 13
+          }
+        },
+        {
+          "label": "convert invoices",
+          "phase": 1,
+          "at": 0.54,
+          "takes": 4.800000000000001,
+          "tokens": 15294,
+          "prompt": "Convert fixtures/invoices.json to the v2 schema. Return the ids you rewrote.",
+          "tools": [
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "fixtures/invoices.json"
+              },
+              "result": "[{\"id\": \"inv_1\", \"v\": 1}]"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "fixtures/invoices.v2.json"
+              },
+              "result": "File created successfully at: fixtures/invoices.v2.json"
+            }
+          ],
+          "output": {
+            "rewrote": 14
+          }
+        },
+        {
+          "label": "convert refunds",
+          "phase": 1,
+          "at": 0.6599999999999999,
+          "takes": 4.25,
+          "tokens": 15391,
+          "prompt": "Convert fixtures/refunds.json to the v2 schema. Return the ids you rewrote.",
+          "tools": [
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "fixtures/refunds.json"
+              },
+              "result": "[{\"id\": \"ref_1\", \"v\": 1}]"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "fixtures/refunds.v2.json"
+              },
+              "result": "File created successfully at: fixtures/refunds.v2.json"
+            }
+          ],
+          "output": {
+            "rewrote": 15
+          }
+        },
+        {
+          "label": "convert plans",
+          "phase": 1,
+          "at": 0.78,
+          "takes": 3.7,
+          "tokens": 15488,
+          "prompt": "Convert fixtures/plans.json to the v2 schema. Return the ids you rewrote.",
+          "tools": [
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "fixtures/plans.json"
+              },
+              "result": "[{\"id\": \"pla_1\", \"v\": 1}]"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "fixtures/plans.v2.json"
+              },
+              "result": "File created successfully at: fixtures/plans.v2.json"
+            }
+          ],
+          "output": {
+            "rewrote": 16
+          }
+        },
+        {
+          "label": "convert events",
+          "phase": 1,
+          "at": 0.8999999999999999,
+          "takes": 3.1500000000000004,
+          "tokens": 15585,
+          "prompt": "Convert fixtures/events.json to the v2 schema. Return the ids you rewrote.",
+          "tools": [
+            {
+              "name": "Read",
+              "input": {
+                "file_path": "fixtures/events.json"
+              },
+              "result": "[{\"id\": \"eve_1\", \"v\": 1}]"
+            },
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "fixtures/events.v2.json"
+              },
+              "result": "File created successfully at: fixtures/events.v2.json"
+            }
+          ],
+          "output": {
+            "rewrote": 17
+          }
+        },
+        {
+          "label": "merge",
+          "phase": 2,
+          "at": 6.2,
+          "takes": 2.0,
+          "tokens": 17340,
+          "prompt": "Merge the converted sets into fixtures/v2.json.",
+          "tools": [
+            {
+              "name": "Write",
+              "input": {
+                "file_path": "fixtures/v2.json"
+              },
+              "result": "File created successfully at: fixtures/v2.json"
+            }
+          ],
+          "output": {
+            "merged": 6
+          }
+        },
+        {
+          "label": "validate",
+          "phase": 3,
+          "at": 8.6,
+          "takes": 2.2,
+          "tokens": 16020,
+          "prompt": "List every fixture that still references a v1 id.",
+          "tools": [
+            {
+              "name": "Grep",
+              "input": {
+                "pattern": "\"v\": 1",
+                "path": "fixtures/v2.json"
+              },
+              "result": "fixtures/v2.json:212: orders_7\nfixtures/v2.json:388: refunds_2"
+            }
+          ],
+          "output": [
+            "orders_7",
+            "refunds_2"
+          ]
+        }
+      ],
+      "settle": 0.6,
+      "fail": "Error: 2 fixtures still reference v1 ids\n    at <anonymous> (workflow.js:13:31)\n    at <anonymous> (evalmachine.<anonymous>:1:42)\n    at processTicksAndRejections (native)",
+      "then": {
+        "tokens": 90,
+        "steps": [
+          {
+            "after": 1.0,
+            "text": "`migrate-fixtures` failed at validation: `orders_7` and `refunds_2` still reference v1 ids. The other sets converted cleanly. Want me to fix those two by hand?"
+          }
+        ]
+      }
+    }
+  }
+}

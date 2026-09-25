@@ -26,11 +26,6 @@ import (
 	"strings"
 )
 
-// maxLineBytes bounds one stream-json line. Frames carrying a large tool
-// result or a compaction summary comfortably exceed bufio's 64KB default,
-// so both the decoder's tests and the session pump size their buffers here.
-const maxLineBytes = 16 * 1024 * 1024
-
 // wireFrame is the envelope every stream-json line shares.
 type wireFrame struct {
 	Type      string `json:"type"`
@@ -220,21 +215,25 @@ type wireFrame struct {
 	// status, task_updated a patch object - and nothing on the wire lets one
 	// stand in for the other.
 	//
-	// Prompt, OutputFile and Summary are deliberately not here. The first is
-	// the subagent's whole instruction, the second names an on-disk
-	// transcript nothing yet opens, and the third repeats prose the reader
-	// has already seen. This file's rule is that a field arrives when
-	// something needs it.
+	// OutputFile and Summary are deliberately not here: the first names an
+	// on-disk transcript nothing yet opens, and the second repeats prose the
+	// reader has already seen. Prompt is read only for a workflow's own
+	// script - task_started's ordinary subagent instruction still reaches
+	// nothing, because workflowOf copies it to Script only when TaskType
+	// resolves to TaskWorkflow.
 	// ToolUseID is top-level here and on system/permission_denied, which is
 	// not a task frame - so it is read only inside the task branch. It is a
 	// different key from the ToolUseID nested in a control request.
-	TaskID       string         `json:"task_id"`
-	ToolUseID    string         `json:"tool_use_id"`
-	TaskType     string         `json:"task_type"`
-	Description  string         `json:"description"`
-	LastToolName string         `json:"last_tool_name"`
-	Status       string         `json:"status"`
-	Patch        *wireTaskPatch `json:"patch"`
+	TaskID           string             `json:"task_id"`
+	ToolUseID        string             `json:"tool_use_id"`
+	TaskType         string             `json:"task_type"`
+	Description      string             `json:"description"`
+	LastToolName     string             `json:"last_tool_name"`
+	Status           string             `json:"status"`
+	Patch            *wireTaskPatch     `json:"patch"`
+	WorkflowName     string             `json:"workflow_name"`
+	Prompt           string             `json:"prompt"`
+	WorkflowProgress []wireWorkflowItem `json:"workflow_progress"`
 
 	// CompactResult is the outcome a compaction's terminal system/status frame
 	// carries - "success" or "failed". Its presence is what tells that frame from
@@ -454,16 +453,35 @@ type wireIteration struct {
 	CacheReadTokens     int `json:"cache_read_input_tokens"`
 }
 
-// wireTaskPatch is task_updated's whole payload beyond the id. Ten frames,
-// one shape, and §11 of the subagent findings note lists anything beyond
-// these two keys as unverified - so a reader must not assume a patch means
-// "ended" because it exists; it means ended because of what Status says.
+// wireTaskPatch is task_updated's whole payload beyond the id. §11 of the
+// subagent findings note lists anything beyond Status as unverified for an
+// ordinary subagent - so a reader must not assume a patch means "ended"
+// because it exists; it means ended because of what Status says. Error is a
+// workflow's own addition, recorded 2026-09-23: the failure message plus a
+// JS stack, present only when Status is "failed".
 //
 // EndTime is not read. It is an epoch millisecond stamp of when the task
 // finished, and nothing draws it: a finished row shows the elapsed time the
 // usage already reported, which is the number that was on screen while it ran.
 type wireTaskPatch struct {
 	Status string `json:"status"`
+	Error  string `json:"error"`
+}
+
+// wireWorkflowRun is one run's own wf_*.json record on disk - a second source
+// from the live task_progress snapshot, camelCase like every key a workflow's
+// own JS runtime writes (contrast task_progress's workflow_progress, the
+// stream's snake_case wrapper key).
+type wireWorkflowRun struct {
+	TaskID           string             `json:"taskId"`
+	WorkflowName     string             `json:"workflowName"`
+	Summary          string             `json:"summary"`
+	Status           string             `json:"status"`
+	Error            string             `json:"error"`
+	StartTime        int64              `json:"startTime"`
+	DurationMs       int                `json:"durationMs"`
+	Script           string             `json:"script"`
+	WorkflowProgress []wireWorkflowItem `json:"workflowProgress"`
 }
 
 // wireModel is one entry of a result frame's modelUsage map. ContextWindow is
@@ -534,22 +552,6 @@ const (
 	blockTypeToolResult = "tool_result"
 	blockTypeImage      = "image"
 )
-
-// jsonString unquotes a JSON string, falling back to the raw bytes so a
-// shape we have not seen still reaches a human instead of vanishing.
-//
-// The fallback is for shapes that are genuinely unrecorded. It used to catch
-// a tool_result's array content as well, which was not unrecorded at all -
-// 10 of the 44 recorded results carry it - and printed a JSON literal in the
-// transcript. toolResultText handles that shape properly now, and this is
-// left to cover what is still unknown.
-func jsonString(raw json.RawMessage) string {
-	var s string
-	if err := json.Unmarshal(raw, &s); err == nil {
-		return s
-	}
-	return string(raw)
-}
 
 // messageText joins a message's text blocks, or returns its bare string content
 // (a compaction summary, a Stop-hook frame). A shape it does not recognise

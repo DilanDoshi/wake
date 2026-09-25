@@ -106,6 +106,18 @@ func activeBranchOf(r io.Reader) (map[string]bool, error) {
 	}
 }
 
+// trimRing drops events from the front of ring - and the bytes it counted for
+// them - until both are back within historyEvents/historyBytes. The one
+// tail-keeping rule a session's own history and a workflow agent's own
+// transcript (workflowdisk.go) both read back under.
+func trimRing(ring []core.Event, bytes int) ([]core.Event, int) {
+	for len(ring) > historyEvents || (bytes > historyBytes && len(ring) > 1) {
+		bytes -= len(ring[0].Text)
+		ring = ring[1:]
+	}
+	return ring, bytes
+}
+
 // liveHistory emits the events of the live branch's lines, tail-bounded. A line
 // whose node uuid is not in active is a rewound dead-branch turn: it is skipped
 // whole and its content is never decoded. A line with no tree node - the
@@ -128,12 +140,7 @@ func liveHistory(r io.Reader, id string, active map[string]bool) ([]core.Event, 
 		ev.SessionID = id
 		bytes += len(ev.Text)
 		ring = append(ring, ev)
-		// Trimmed from the front, which is what makes both bounds keep the
-		// *tail*: somebody reopening a conversation wants where it got to.
-		for len(ring) > historyEvents || (bytes > historyBytes && len(ring) > 1) {
-			bytes -= len(ring[0].Text)
-			ring = ring[1:]
-		}
+		ring, bytes = trimRing(ring, bytes)
 	}
 
 	// The effort probe leaves a /model command and its "Current model: … (effort:

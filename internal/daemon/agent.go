@@ -420,6 +420,19 @@ func (a *agent) observe(ev core.Event) {
 		switch ev.Task.Phase {
 		case core.TaskStarted:
 			a.runningTasks[ev.Task.ID] = ev
+		case core.TaskProgress:
+			// A workflow's snapshot is whole and replaces wholesale (workflow.go),
+			// so the retained started row is kept current rather than frozen at
+			// spawn - the started task_started carries no progress at all. Also
+			// requires the *retained* event to have a Workflow of its own:
+			// withWorkflow dereferences it, and a task_progress naming a snapshot
+			// for a task this agent retained as something else (or a malformed
+			// start) must not fold into a Workflow that was never there.
+			if started, ok := a.runningTasks[ev.Task.ID]; ok && ev.Task.Workflow != nil && ev.Task.Workflow.Progress != nil &&
+				started.Task.Workflow != nil {
+				progress := ev.Task.Workflow.Progress
+				a.runningTasks[ev.Task.ID] = withWorkflow(started, func(w *core.WorkflowUpdate) { w.Progress = progress })
+			}
 		case core.TaskEnded:
 			delete(a.runningTasks, ev.Task.ID)
 		}

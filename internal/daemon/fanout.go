@@ -34,8 +34,10 @@ func (s *server) fanOut(a *agent) {
 		// One Event, one pointer, shared by every client's copy of the
 		// frame. Nothing mutates an Event after the airlock decodes it, and
 		// at 30 sessions a copy per client per event is the difference
-		// between fan-out being free and being the bottleneck.
-		f := rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev}
+		// between fan-out being free and being the bottleneck. A workflow's
+		// start is the one copied, to keep its script here (forClients).
+		out := forClients(ev)
+		f := rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &out}
 		if c := a.mcpAsker(ev); c != nil {
 			c.enqueue(f) // an MCP answer is its asker's alone; see askMCP
 		} else {

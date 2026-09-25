@@ -115,6 +115,27 @@ const scriptDispatches = "dispatches"
 // row is stable enough for a screen test to wait for.
 const scriptDispatchesLive = "dispatches-live"
 
+// scriptWorkflows runs a dynamic Workflow() on `go` and holds it open, and
+// stops it on a stop_task control request - the only end-to-end source of a
+// running workflow, the way scriptDispatchesLive is for a subagent.
+const scriptWorkflows = "workflows"
+
+// What scriptWorkflows runs, as testdata/stream/workflow-run.jsonl recorded it
+// (ids, labels, snapshots) around a two-line script, so a test can find each
+// part on screen and on disk.
+const (
+	workflowName    = "count-lines"
+	workflowSummary = "Count lines of a.txt and b.txt in parallel, then sum them"
+	workflowTaskID  = "w557669ss"
+	workflowToolUse = "toolu_01J9YBDeSNADj1bmeC3cgnRQ"
+	workflowRunID   = "wf_b0435426-65b"
+	workflowAgentA  = "adc8cb9f8b7dc021f" // count a.txt, the agent whose transcript is on disk
+	workflowScript  = "export const meta = { name: 'count-lines', description: '" + workflowSummary + "' }\n" +
+		"return await agent('Count the lines in ./a.txt with wc -l. Return just the number.', { label: 'count a.txt' })\n"
+	// workflowAgentCommand is what count a.txt ran, and only its transcript says so.
+	workflowAgentCommand = "wc -l ./a.txt"
+)
+
 // What scriptDispatches says about its subagent, so a test can find each part
 // on screen: the row's own words, and the line only the subagent's transcript
 // holds.
@@ -209,6 +230,8 @@ func runFakeAgent() int {
 		return fakeAgentDispatches(sid)
 	case scriptDispatchesLive:
 		return fakeAgentDispatchesLive(sid)
+	case scriptWorkflows:
+		return fakeAgentWorkflows(sid)
 	case scriptMCP:
 		return fakeAgentMCP(sid)
 	}
@@ -231,11 +254,14 @@ func plantTranscript(t *testing.T, id string) {
 	}
 }
 
+// fakeProjectSlug is the project directory every fake transcript lands under.
+const fakeProjectSlug = "-Users-someone-repo"
+
 // writeFakeTranscript is plantTranscript's disk half, shared with the fake agent
 // - which runs in a subprocess with no *testing.T and writes its own transcript
 // so the session it stood in for is offered back after a park.
 func writeFakeTranscript(projects, id string) error {
-	dir := filepath.Join(projects, "-Users-someone-repo")
+	dir := filepath.Join(projects, fakeProjectSlug)
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
 	}
@@ -412,6 +438,130 @@ func sayForwarded(sid, tool, text string) {
 	fmt.Printf(`{"type":"assistant","session_id":%q,"message":{"role":"assistant","content":`+
 		`[{"type":"text","text":%q}]},"parent_tool_use_id":%q,"subagent_type":%q,`+
 		`"task_description":%q}`+"\n", sid, text, dispatchToolUse, dispatchType, dispatchLabel)
+}
+
+// fakeAgentWorkflows launches one workflow on `go`, in the recorded order - the
+// Workflow tool call, task_started, the tool's result, then three snapshots -
+// and ends the turn with the run still going, which is what a background run
+// does. A stop_task naming it ends it the way workflow-stop.jsonl records; one
+// naming anything else is answered success and does nothing, as the CLI does.
+func fakeAgentWorkflows(sid string) int {
+	sayText(sid, "ready")
+	sayResult(sid)
+
+	running := false
+	for line := range agentStdin() {
+		if id, task, ok := stopTaskRequested(line); ok {
+			if running && task == workflowTaskID {
+				running = false
+				sayWorkflowStopped(sid)
+			}
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{}}}`+"\n", id)
+			continue
+		}
+		text, ok := userTextOf(line)
+		if !ok {
+			continue
+		}
+		if text != "go" || running {
+			sayText(sid, heardPrefix+text)
+			sayResult(sid)
+			continue
+		}
+		// The agent's transcript is on disk before any snapshot names it, so
+		// the first read finds it.
+		if projects := os.Getenv("WAKE_PROJECTS"); projects != "" {
+			_ = writeWorkflowAgentTranscript(projects, sid)
+		}
+		running = true
+		sayWorkflowLaunched(sid)
+		sayText(sid, heardPrefix+"workflow launched")
+		sayResult(sid)
+	}
+	return 0
+}
+
+// The recorded snapshots' parts: the two phases, then each agent as it stood.
+const (
+	wfPhases   = `{"type":"workflow_phase","index":1,"title":"Count"},{"type":"workflow_phase","index":2,"title":"Sum"}`
+	wfAStarted = `{"type":"workflow_agent","index":1,"label":"count a.txt","phaseIndex":1,"phaseTitle":"Count","agentId":"adc8cb9f8b7dc021f","model":"claude-haiku-4-5-20251001","state":"start","startedAt":1790224563440,"queuedAt":1790224563429,"attempt":1,"promptPreview":"Count the lines in ./a.txt with wc -l. Return just the number.","promptFramed":true,"lastProgressAt":1790224563441}`
+	wfBStarted = `{"type":"workflow_agent","index":2,"label":"count b.txt","phaseIndex":1,"phaseTitle":"Count","agentId":"a4d025ad4f589bce7","model":"claude-haiku-4-5-20251001","state":"start","startedAt":1790224563441,"queuedAt":1790224563429,"attempt":1,"promptPreview":"Count the lines in ./b.txt with wc -l. Return just the number.","promptFramed":true,"lastProgressAt":1790224563938}`
+	wfADone    = `{"type":"workflow_agent","index":1,"label":"count a.txt","phaseIndex":1,"phaseTitle":"Count","agentId":"adc8cb9f8b7dc021f","model":"claude-haiku-4-5-20251001","state":"done","startedAt":1790224563440,"queuedAt":1790224563429,"attempt":1,"lastToolName":"StructuredOutput","promptPreview":"Count the lines in ./a.txt with wc -l. Return just the number.","promptFramed":true,"lastProgressAt":1790224568028,"tokens":16497,"toolCalls":2,"durationMs":4587,"resultPreview":"{\"n\":3}"}`
+	wfBDone    = `{"type":"workflow_agent","index":2,"label":"count b.txt","phaseIndex":1,"phaseTitle":"Count","agentId":"a4d025ad4f589bce7","model":"claude-haiku-4-5-20251001","state":"done","startedAt":1790224563441,"queuedAt":1790224563429,"attempt":1,"lastToolName":"StructuredOutput","promptPreview":"Count the lines in ./b.txt with wc -l. Return just the number.","promptFramed":true,"lastProgressAt":1790224567953,"tokens":16459,"toolCalls":2,"durationMs":4015,"resultPreview":"{\"n\":5}"}`
+	wfSumStart = `{"type":"workflow_agent","index":3,"label":"sum","phaseIndex":2,"phaseTitle":"Sum","agentId":"a8ca1238d00df98a5","model":"claude-haiku-4-5-20251001","state":"start","startedAt":1790224569038,"queuedAt":1790224569037,"attempt":1,"promptPreview":"Add 3 and 5. Return just the sum.","promptFramed":true,"lastProgressAt":1790224569038}`
+)
+
+func sayWorkflowLaunched(sid string) {
+	fmt.Printf(`{"type":"assistant","session_id":%q,"message":{"role":"assistant","content":`+
+		`[{"type":"tool_use","id":%q,"name":"Workflow","input":{"script":%q}}]}}`+"\n", sid, workflowToolUse, workflowScript)
+	fmt.Printf(`{"type":"system","subtype":"task_started","task_id":%q,"tool_use_id":%q,"description":%q,`+
+		`"task_type":"local_workflow","workflow_name":%q,"prompt":%q,"session_id":%q}`+"\n",
+		workflowTaskID, workflowToolUse, workflowSummary, workflowName, workflowScript, sid)
+	fmt.Printf(`{"type":"user","session_id":%q,"message":{"role":"user","content":[{"tool_use_id":%q,`+
+		`"type":"tool_result","content":%q,"is_error":false}]}}`+"\n", sid, workflowToolUse,
+		"Workflow launched in background. Task ID: "+workflowTaskID+"\nSummary: "+workflowSummary+"\nRun ID: "+workflowRunID)
+	sayWorkflowProgress(sid, "Count: count b.txt", 0, 0, 540, wfAStarted+","+wfBStarted)
+	sayWorkflowProgress(sid, "Count: count a.txt", 32956, 4, 4613, wfADone+","+wfBDone)
+	sayWorkflowProgress(sid, "Sum: sum", 32956, 4, 5634, wfADone+","+wfBDone+","+wfSumStart)
+}
+
+func sayWorkflowProgress(sid, doing string, tokens, tools, ms int, agents string) {
+	fmt.Printf(`{"type":"system","subtype":"task_progress","task_id":%q,"tool_use_id":%q,"description":%q,`+
+		`"usage":{"total_tokens":%d,"tool_uses":%d,"duration_ms":%d},"summary":%q,`+
+		`"workflow_progress":[%s],"session_id":%q}`+"\n",
+		workflowTaskID, workflowToolUse, doing, tokens, tools, ms, workflowSummary, wfPhases+","+agents, sid)
+}
+
+// sayWorkflowStopped is a stop's two ending frames, killed then stopped.
+func sayWorkflowStopped(sid string) {
+	fmt.Printf(`{"type":"system","subtype":"task_updated","task_id":%q,`+
+		`"patch":{"status":"killed","end_time":1790229131852},"session_id":%q}`+"\n", workflowTaskID, sid)
+	fmt.Printf(`{"type":"system","subtype":"task_notification","task_id":%q,"tool_use_id":%q,`+
+		`"status":"stopped","output_file":"/tmp/x.output","summary":%q,"session_id":%q}`+"\n",
+		workflowTaskID, workflowToolUse, workflowSummary, sid)
+}
+
+// stopTaskRequested reads the task id out of a stop_task control request,
+// one level down beside its subtype - modeRequested's nesting.
+func stopTaskRequested(line string) (id, task string, ok bool) {
+	var f struct {
+		Type      string `json:"type"`
+		RequestID string `json:"request_id"`
+		Request   struct {
+			Subtype string `json:"subtype"`
+			TaskID  string `json:"task_id"`
+		} `json:"request"`
+	}
+	if err := json.Unmarshal([]byte(line), &f); err != nil {
+		return "", "", false
+	}
+	if f.Type != "control_request" || f.Request.Subtype != "stop_task" {
+		return "", "", false
+	}
+	return f.RequestID, f.Request.TaskID, true
+}
+
+// writeWorkflowAgentTranscript lays count a.txt's own sidechain transcript
+// where claude's runtime writes it - beside the session's transcript, which
+// has to exist for the daemon to find the session's directory - in the shape
+// testdata/transcript/workflow-agent.jsonl records.
+func writeWorkflowAgentTranscript(projects, sid string) error {
+	if err := writeFakeTranscript(projects, sid); err != nil {
+		return err
+	}
+	dir := filepath.Join(projects, fakeProjectSlug, sid, "subagents", "workflows", workflowRunID)
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	head := `{"isSidechain":true,"agentId":"` + workflowAgentA + `",`
+	lines := []string{
+		head + `"type":"user","uuid":"wf-1","message":{"role":"user","content":"Count the lines in ./a.txt with wc -l. Return just the number."}}`,
+		head + `"type":"assistant","uuid":"wf-2","parentUuid":"wf-1","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_wf_a1","name":"Bash","input":{"command":"` + workflowAgentCommand + `"}}]}}`,
+		head + `"type":"user","uuid":"wf-3","parentUuid":"wf-2","message":{"role":"user","content":[{"tool_use_id":"toolu_wf_a1","type":"tool_result","content":"       3 ./a.txt","is_error":false}]}}`,
+		head + `"type":"assistant","uuid":"wf-4","parentUuid":"wf-3","message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_wf_a2","name":"StructuredOutput","input":{"n":3}}]}}`,
+		head + `"type":"user","uuid":"wf-5","parentUuid":"wf-4","message":{"role":"user","content":[{"tool_use_id":"toolu_wf_a2","type":"tool_result","content":"Structured output provided successfully"}]}}`,
+	}
+	return os.WriteFile(filepath.Join(dir, "agent-"+workflowAgentA+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o600)
 }
 
 // fakeAgentAsks blocks on a permission request per turn and ends the turn once

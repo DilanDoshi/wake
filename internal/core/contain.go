@@ -237,7 +237,50 @@ func containedTask(t *TaskUpdate) *TaskUpdate {
 	c.Label, c.Type, c.Tool = Contained(c.Label), Contained(c.Type), Contained(c.Tool)
 	c.Kind, c.Phase = TaskKind(Contained(string(c.Kind))), TaskPhase(Contained(string(c.Phase)))
 	c.Status = TaskStatus(Contained(string(c.Status)))
+	c.Workflow = containedWorkflow(c.Workflow)
 	return &c
+}
+
+// containedWorkflow contains a workflow update's child-authored text: the
+// script's own name, the script itself, a failed run's error, and each
+// snapshot's phase titles and agent fields - new slices, never the decoded
+// ones.
+func containedWorkflow(w *WorkflowUpdate) *WorkflowUpdate {
+	if w == nil {
+		return nil
+	}
+	c := *w
+	c.Name, c.Script, c.Error = Contained(c.Name), Contained(c.Script), Contained(c.Error)
+	c.Progress = containedWorkflowSnapshot(c.Progress)
+	return &c
+}
+
+func containedWorkflowSnapshot(s *WorkflowSnapshot) *WorkflowSnapshot {
+	if s == nil {
+		return nil
+	}
+	c := WorkflowSnapshot{}
+	for _, p := range s.Phases {
+		p.Title = Contained(p.Title)
+		c.Phases = append(c.Phases, p)
+	}
+	for _, a := range s.Agents {
+		a.Label, a.AgentID, a.Model = Contained(a.Label), Contained(a.AgentID), Contained(a.Model)
+		a.State, a.StateWord = WorkflowAgentState(Contained(string(a.State))), Contained(a.StateWord)
+		a.Prompt, a.Result, a.Error = Contained(a.Prompt), Contained(a.Result), Contained(a.Error)
+		c.Agents = append(c.Agents, a)
+	}
+	return &c
+}
+
+// containedRun contains a WorkflowRun read back off its own wf_*.json record -
+// containedTask's fields for TaskID and containedWorkflow's for the rest,
+// reusing containedWorkflowSnapshot rather than walking the progress twice.
+func containedRun(r WorkflowRun) WorkflowRun {
+	r.TaskID, r.Name, r.Summary = Contained(r.TaskID), Contained(r.Name), Contained(r.Summary)
+	r.Error, r.Script = Contained(r.Error), Contained(r.Script)
+	r.Progress = containedWorkflowSnapshot(r.Progress)
+	return r
 }
 
 func containedControl(r *ControlResult) *ControlResult {

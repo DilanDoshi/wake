@@ -765,3 +765,23 @@ func TestEncodeRewindRefusesEmptyIdsAndUuids(t *testing.T) {
 		}
 	}
 }
+
+// TestStopTaskEncodesTheRecordedRequest is pinned against
+// testdata/input/workflow-stop.stdin.jsonl line 3 (probe-1, wbu5972hq),
+// findings.md §6.
+func TestStopTaskEncodesTheRecordedRequest(t *testing.T) {
+	got, err := EncodeStopTask("probe-1", "wbu5972hq")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := `{"type":"control_request","request_id":"probe-1","request":{"subtype":"stop_task","task_id":"wbu5972hq"}}` + "\n"
+	if string(got) != want {
+		t.Fatalf("got %s want %s", got, want)
+	}
+	if _, err := EncodeStopTask("", "x"); !errors.Is(err, ErrNotWritten) {
+		t.Fatalf("empty request id: err = %v, want ErrNotWritten", err)
+	}
+	if _, err := EncodeStopTask("r", ""); !errors.Is(err, ErrNotWritten) {
+		t.Fatalf("empty task id: err = %v, want ErrNotWritten", err)
+	}
+}

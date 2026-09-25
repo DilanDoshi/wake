@@ -137,6 +137,11 @@ func (a App) press(x, y int) App {
 			a.dragAt, a.dragRows = at, true
 			return a
 		}
+		// The workflow view is drawn over this pane's transcript, so a press is
+		// the view's and never an anchor into text nobody can see.
+		if a.workflowIn(id) {
+			return a.workflowPress(id, at, top, height, x, y, r)
+		}
 		// The anchor is taken before the keys move, because the frame that was
 		// clicked is the one drawn *before* the move: refocus re-sizes the panes,
 		// and a picker belongs to whichever pane holds the keys - so measuring
@@ -207,10 +212,18 @@ func (a App) paneAt(col, y int) (id string, top, height int, ok bool) {
 // A pointer over a sidebar, a divider or a rule scrolls the focused pane, which
 // is the honest fallback: there is no transcript under it to move.
 func (a App) scroll(lines, x, y int) App {
+	id, under := a.focus, false
 	if region, at := a.layout.Hit(a.regions(), x); region == RegionPane {
-		if id, _, _, ok := a.paneAt(at, y); ok {
-			return a.scrollPane(id, lines)
+		id, _, _, under = a.paneAt(at, y)
+		if !under {
+			id = a.focus
 		}
+	}
+	if a.workflowIn(id) { // the view covers that transcript; see workflowWheel
+		return a.workflowWheel(lines > 0)
+	}
+	if under {
+		return a.scrollPane(id, lines)
 	}
 	return a.scrollFocused(lines)
 }

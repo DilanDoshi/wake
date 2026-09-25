@@ -40,11 +40,15 @@ const (
 	// TaskShell is a background shell command.
 	TaskShell TaskKind = "shell"
 
-	// TaskKindUnknown is a task_type this decoder does not model. Two are
-	// recorded and the CLI's own wording mentions monitors and workflows, so
-	// a third is expected rather than hypothetical. It must degrade to shown
-	// and not enterable: guessing "agent" opens an empty transcript, and
-	// guessing "shell" hides a subagent's work entirely.
+	// TaskWorkflow is a dynamic Workflow() run - see workflow.go. It carries
+	// no subagent_type of its own; task_started names it by workflow_name.
+	TaskWorkflow TaskKind = "workflow"
+
+	// TaskKindUnknown is a task_type this decoder does not model. Three are
+	// recorded and the CLI's own wording mentions monitors too, so a fourth
+	// is expected rather than hypothetical. It must degrade to shown and not
+	// enterable: guessing "agent" opens an empty transcript, and guessing
+	// "shell" hides a subagent's work entirely.
 	TaskKindUnknown TaskKind = "unknown"
 )
 
@@ -62,12 +66,13 @@ const (
 
 // TaskStatus is how a task ended, and TaskRunning until one says.
 //
-// Four words are recorded across the two terminal frames - `completed` nine
-// times, and `stopped` and `killed` once each, both from the one background
-// shell that was interrupted. Nothing records how a *subagent* fails, so
-// TaskStatusUnknown is not a placeholder: it is the honest reading of a word
-// this corpus has never seen, and a row drawing "done" for one would be
-// claiming something no frame said.
+// Five words are recorded across the two terminal frames - `completed` nine
+// times, `stopped` and `killed` once each from the one background shell that
+// was interrupted, and `failed` from a workflow's own deliberate throw.
+// Nothing records how a *subagent* fails, so TaskStatusUnknown is not a
+// placeholder: it is the honest reading of a word this corpus has never
+// seen, and a row drawing "done" for one would be claiming something no
+// frame said.
 type TaskStatus string
 
 // "halted" rather than Claude's own "stopped"/"killed": both are policed
@@ -78,6 +83,7 @@ const (
 	TaskRunning       TaskStatus = "running"
 	TaskDone          TaskStatus = "done"
 	TaskStopped       TaskStatus = "halted"
+	TaskFailed        TaskStatus = "failed"
 	TaskStatusUnknown TaskStatus = "unknown"
 )
 
@@ -130,4 +136,8 @@ type TaskUpdate struct {
 	// what the last frame said rather than a clock this process started.
 	Tokens  int           `json:"tokens,omitempty"`
 	Elapsed time.Duration `json:"elapsed,omitempty"`
+
+	// Workflow is this task's workflow half, and nil for every other kind -
+	// see workflow.go and protocol.go's workflowOf.
+	Workflow *WorkflowUpdate `json:"workflow,omitempty"`
 }

@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -176,7 +177,7 @@ func (a App) tileBody(ag Agent, width, rows int) string {
 
 	bottom := make([]string, 0, 2)
 	if rows >= 2 {
-		bottom = append(bottom, tileSubagents(len(a.fleet.RunningTasks(ag.ID)), inner))
+		bottom = append(bottom, tileSubagents(a.fleet.RunningTasks(ag.ID), inner))
 	}
 	if rows >= 3 {
 		// One row: a tile has a fixed height, so the bar never wraps here.
@@ -240,15 +241,25 @@ func dropTrailingBlank(lines []string) []string {
 	return lines
 }
 
-// tileSubagents is the "⤷ N subagents" line, dim and truncated to the tile's
-// inner width - titledBox's Width(edge) word-wraps an over-wide line into a
-// second physical row that would overshoot the cell.
-func tileSubagents(count, inner int) string {
-	word := "subagents"
-	if count == 1 {
-		word = "subagent"
+// tileSubagents is the "⤷ N subagents" line - with its running workflows
+// counted apart, since a workflow is not a subagent - dim and truncated to the
+// tile's inner width: titledBox's Width(edge) word-wraps an over-wide line into
+// a second physical row that would overshoot the cell.
+func tileSubagents(running []Task, inner int) string {
+	flows := 0
+	for _, t := range running {
+		if t.Kind == core.TaskWorkflow {
+			flows++
+		}
 	}
-	return HintStyle.Render(ansi.Truncate(fmt.Sprintf("⤷ %d %s", count, word), inner, ellipsis))
+	var parts []string
+	if subs := len(running) - flows; subs > 0 || flows == 0 {
+		parts = append(parts, plural(subs, "subagent"))
+	}
+	if flows > 0 {
+		parts = append(parts, plural(flows, "workflow"))
+	}
+	return HintStyle.Render(ansi.Truncate("⤷ "+strings.Join(parts, " · "), inner, ellipsis))
 }
 
 // tailLines splits a live tail's wrapped view into its physical rows and

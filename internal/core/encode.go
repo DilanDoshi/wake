@@ -19,23 +19,8 @@ import (
 	"errors"
 	"fmt"
 	"strings"
+	"time"
 )
-
-// ErrNotWritten wraps every error this file returns, and the wrapping is the
-// point rather than any of the messages.
-//
-// Encoding happens before a byte reaches a process, so a failure here means
-// stdin was never touched: the session is exactly as it was, the ask is still
-// outstanding, and the agent is still blocked on it. That is a different fact
-// from a *write* that failed, which internal/daemon reads as proof the process
-// is gone (agent.noteUnreachable) - and reading a refused answer that way
-// would report a perfectly healthy agent as silent and invite a kill nobody
-// meant.
-//
-// It matters most for EncodeAnswer, whose refusals are routine rather than
-// exceptional: an answer is assembled from what an operator did, so it is the
-// one frame in this file a caller can get wrong at runtime.
-var ErrNotWritten = errors.New("nothing was written")
 
 // --- encoding ---------------------------------------------------------------
 //
@@ -259,38 +244,6 @@ func askedQuestions(asked map[string]any) ([]string, error) {
 		texts = append(texts, text)
 	}
 	return texts, nil
-}
-
-// checkAnswers requires one non-blank choice per question asked, and no
-// choices beyond them.
-//
-// Every question, because a missing one is the defect this file exists to
-// close, arriving one question at a time: the tool asks 1-4 at once, the
-// answers map has no way to say "skipped", and the model is given the same
-// empty-ish map either way. Non-blank, because "" is what a UI produces when
-// nobody chose. And nothing extra, because a choice keyed on a question this
-// ask did not put reaches the model attached to nothing - it is a lost answer
-// wearing the shape of a delivered one.
-//
-// A choice is not required to match one of the option labels. The 2.1.226
-// binary phrases the tool result differently for a value it cannot match
-// rather than rejecting it, and no recording ever sent one, so refusing here
-// would forbid a shape the CLI tolerates on the strength of a guess.
-func checkAnswers(questions []string, answers map[string]string) error {
-	for _, q := range questions {
-		choice, ok := answers[q]
-		if !ok {
-			return fmt.Errorf("%w: nothing was chosen for %q", ErrNotWritten, q)
-		}
-		if strings.TrimSpace(choice) == "" {
-			return fmt.Errorf("%w: the choice for %q is blank", ErrNotWritten, q)
-		}
-	}
-	if len(answers) != len(questions) {
-		return fmt.Errorf("%w: %d choices for %d questions - one of them names a question this ask did not put",
-			ErrNotWritten, len(answers), len(questions))
-	}
-	return nil
 }
 
 // defaultDenyReason stands in when a caller denies without saying why.
@@ -520,6 +473,37 @@ func EncodeRewind(requestID, targetUUID, lastSeenUUID string) ([]byte, error) {
 	}, "encode rewind")
 }
 
+// outStopTaskRequest stops a running dynamic Workflow() by its own task id -
+// the wire form of the Agent SDK's documented stopTask(taskId)
+// (findings.md §6). The same request at a workflow *agent's* agentId is
+// answered success and does nothing, since that agent already finished; Wake
+// never sends one there.
+type outStopTaskRequest struct {
+	Subtype string `json:"subtype"`
+	TaskID  string `json:"task_id"`
+}
+
+// EncodeStopTask stops a running workflow, addressed by its task id. Pause and
+// resume have no wire form (findings.md §6: pause_task is refused outright),
+// so this is the only control Wake can offer over a running workflow. The
+// empty checks are EncodeRewind's, for its reason.
+func EncodeStopTask(requestID, taskID string) ([]byte, error) {
+	if requestID == "" {
+		return nil, fmt.Errorf("%w: encode stop task: empty request id", ErrNotWritten)
+	}
+	if taskID == "" {
+		return nil, fmt.Errorf("%w: encode stop task: empty task id", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request: outStopTaskRequest{
+			Subtype: "stop_task",
+			TaskID:  taskID,
+		},
+	}, "encode stop task")
+}
+
 // The three MCP asks, recorded against 2.1.281 in mcp-control.stdin.jsonl.
 // None needs a model turn. A refusal comes back as a subtype "error" receipt
 // with the reason top-level - "Server not found: x", "Server status:
@@ -697,22 +681,6 @@ func goalOp(frameType string, m wireMessage) (GoalOp, bool) {
 	return GoalOp{}, false
 }
 
-// goalProgress parses a "Stop hook feedback" refresh: the condition sits in the
-// first [..] and the evaluator's latest reason follows "]: ".
-func goalProgress(text string) (GoalOp, bool) {
-	open := strings.Index(text, "[")
-	if open < 0 {
-		return GoalOp{}, false
-	}
-	cond, reason, closed := strings.Cut(text[open+1:], "]")
-	cond = strings.TrimSpace(cond)
-	if !closed || cond == "" {
-		return GoalOp{}, false
-	}
-	reason = strings.TrimSpace(strings.TrimPrefix(reason, ":"))
-	return GoalOp{Op: GoalProgress, Condition: cond, Reason: reason}, true
-}
-
 // The bundled scheduler tools a headless session reaches for when it reproduces
 // /loop: a recurring CronCreate is a fixed cadence, ScheduleWakeup is self-paced,
 // and CronDelete ends a fixed one. Claude's names, so they are recognised behind
@@ -771,12 +739,54 @@ func toolLoopOp(name string, input map[string]any) *LoopOp {
 	return nil
 }
 
-// intArg is one input value as an int, and 0 for a key a tool omits or whose
-// value is not a number - JSON numbers decode as float64 through encoding/json.
-func intArg(input map[string]any, key string) int {
-	v, ok := input[key].(float64)
-	if !ok {
-		return 0
+// wireWorkflowItem is one workflow_progress entry: a phase or an agent, told
+// apart by type. It reads, not writes - wire.go's own reason for encode.go
+// holding the room, beside goalOp.
+type wireWorkflowItem struct {
+	Type          string `json:"type"`
+	Index         int    `json:"index"`
+	Title         string `json:"title"`
+	Label         string `json:"label"`
+	PhaseIndex    int    `json:"phaseIndex"`
+	AgentID       string `json:"agentId"`
+	Model         string `json:"model"`
+	State         string `json:"state"`
+	Error         string `json:"error"`
+	Tokens        int    `json:"tokens"`
+	ToolCalls     int    `json:"toolCalls"`
+	DurationMs    int    `json:"durationMs"`
+	PromptPreview string `json:"promptPreview"`
+	ResultPreview string `json:"resultPreview"`
+}
+
+const (
+	workflowPhaseItem = "workflow_phase"
+	workflowAgentItem = "workflow_agent"
+)
+
+// Every recorded agent state: start, progress (mid-tool), done, and error -
+// an agent that failed, or was refused before it started (workflow-agent-error.jsonl).
+var workflowAgentStates = map[string]WorkflowAgentState{
+	"start": WorkflowAgentRunning, "progress": WorkflowAgentRunning,
+	"done": WorkflowAgentDone, "error": WorkflowAgentFailed,
+}
+
+// DecodeWorkflowRun decodes one run record. An unrecognised status resolves
+// to TaskStatusUnknown, taskStatus's own ruling: a word this corpus has never
+// seen is not "done" wearing a guess.
+func DecodeWorkflowRun(raw []byte) (WorkflowRun, error) {
+	var w wireWorkflowRun
+	if err := json.Unmarshal(raw, &w); err != nil {
+		return WorkflowRun{}, fmt.Errorf("decode workflow run: %w", err)
 	}
-	return int(v)
+	if w.TaskID == "" {
+		return WorkflowRun{}, errors.New("decode workflow run: no task id")
+	}
+	status, ok := taskStatuses[w.Status]
+	if !ok {
+		status = TaskStatusUnknown
+	}
+	return containedRun(WorkflowRun{TaskID: w.TaskID, Name: w.WorkflowName, Summary: w.Summary, Status: status,
+		Error: w.Error, Started: time.UnixMilli(w.StartTime), Duration: time.Duration(w.DurationMs) * time.Millisecond,
+		Script: w.Script, Progress: workflowSnapshotOf(w.WorkflowProgress)}), nil
 }

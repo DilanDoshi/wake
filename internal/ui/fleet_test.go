@@ -73,6 +73,9 @@ func roomCases() []roomCase {
 		// acknowledging its own request rather than conversation content.
 		{"a rewind receipt", core.Event{Kind: core.KindRewindReceipt}, false},
 		{"an MCP reply, which only the /mcp menu reads", core.Event{Kind: core.KindMCPReply}, false},
+		// A stop's receipt: Wake acknowledging its own request, the rewind
+		// receipt's non-decision. A refusal is a notice (observedStop).
+		{"a workflow stop's receipt", core.Event{Kind: core.KindStopReceipt}, false},
 		{"the fate of a message Wake sent", core.Event{Kind: core.KindMessageState, MessageID: "m1"}, false},
 		{"a quota report", core.Event{Kind: core.KindRateLimit, Text: "fine"}, false},
 		// A turn that failed on the API is infrastructure, not conversation:

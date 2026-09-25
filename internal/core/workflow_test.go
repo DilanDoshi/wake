@@ -1,0 +1,319 @@
+// The workflow dimension of the airlock: a dynamic Workflow() run, decoded
+// through the same five task_* subtypes an ordinary subagent uses, and told
+// apart by TaskUpdate.Kind and the fields only it carries.
+//
+// Fixtures recorded 2026-09-23 against 2.1.281; see
+// docs/superpowers/notes/2026-09-23-workflow-findings.md.
+
+package core
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+)
+
+// fixtureTasks decodes one fixture in arrival order and keeps only the
+// events that carry a task, so every helper below reads a short list rather
+// than filtering a whole fixture itself.
+func fixtureTasks(t *testing.T, fixture string) []*TaskUpdate {
+	t.Helper()
+	path := filepath.Join("..", "..", "testdata", "stream", fixture)
+	var out []*TaskUpdate
+	for _, d := range decodeFixture(t, path) {
+		if d.Task != nil {
+			out = append(out, d.Task)
+		}
+	}
+	return out
+}
+
+// firstTask returns the first task frame at the given phase, and fails the
+// test if the fixture never reaches it.
+func firstTask(t *testing.T, fixture string, phase TaskPhase) *TaskUpdate {
+	t.Helper()
+	for _, task := range fixtureTasks(t, fixture) {
+		if task.Phase == phase {
+			return task
+		}
+	}
+	t.Fatalf("%s: no task frame at phase %q", fixture, phase)
+	return nil
+}
+
+// lastSnapshot returns the most recent workflow_progress snapshot in a
+// fixture - every one is whole, so the last is also the most resolved.
+func lastSnapshot(t *testing.T, fixture string) WorkflowSnapshot {
+	t.Helper()
+	var last *WorkflowSnapshot
+	for _, task := range fixtureTasks(t, fixture) {
+		if task.Workflow != nil && task.Workflow.Progress != nil {
+			last = task.Workflow.Progress
+		}
+	}
+	if last == nil {
+		t.Fatalf("%s: no workflow snapshot in this fixture", fixture)
+	}
+	return *last
+}
+
+// endings returns every task_updated/task_notification frame, in arrival
+// order - a workflow's run ends on both, one after the other.
+func endings(t *testing.T, fixture string) []*TaskUpdate {
+	t.Helper()
+	var out []*TaskUpdate
+	for _, task := range fixtureTasks(t, fixture) {
+		if task.Phase == TaskEnded {
+			out = append(out, task)
+		}
+	}
+	return out
+}
+
+// allTasks returns every task frame in a fixture, in arrival order.
+func allTasks(t *testing.T, fixture string) []*TaskUpdate {
+	t.Helper()
+	return fixtureTasks(t, fixture)
+}
+
+func TestAWorkflowStartsAsAWorkflowAndNamesItself(t *testing.T) {
+	start := firstTask(t, "workflow-run.jsonl", TaskStarted)
+	if start.Kind != TaskWorkflow || start.Workflow == nil || start.Workflow.Name != "count-lines" {
+		t.Fatalf("start = %+v, want a workflow named count-lines", start)
+	}
+	if !strings.HasPrefix(start.Workflow.Script, "export const meta") {
+		t.Fatalf("script = %.40q, want the script task_started carries", start.Workflow.Script)
+	}
+}
+
+func TestEveryWorkflowSnapshotIsWholeAndResolved(t *testing.T) {
+	last := lastSnapshot(t, "workflow-failed.jsonl")
+	if len(last.Phases) != 3 || len(last.Agents) != 7 {
+		t.Fatalf("phases/agents = %d/%d, want 3/7", len(last.Phases), len(last.Agents))
+	}
+	for _, a := range last.Agents {
+		if a.State != WorkflowAgentDone || a.AgentID == "" || a.Phase == 0 {
+			t.Fatalf("agent %+v: want done, with an id and a phase", a)
+		}
+	}
+	if got := last.Done(); got != 7 {
+		t.Fatalf("Done() = %d, want 7", got)
+	}
+}
+
+// TestAWorkflowAgentMidToolDecodesAsRunning pins the one recorded "progress"
+// state (an agent mid-tool, workflow-run.jsonl) to WorkflowAgentRunning. The
+// line's other agent is already "done", so a Running agent in this decode
+// can only be the "progress" one - workflowAgentStates once mapped it to
+// WorkflowAgentUnknown, which showed as "· unknown" and dropped the agent
+// from the running filter.
+func TestAWorkflowAgentMidToolDecodesAsRunning(t *testing.T) {
+	line, at := findFixtureLine(t, "workflow-run.jsonl", `"state":"progress"`)
+	evs, err := DecodeLine([]byte(line))
+	if err != nil {
+		t.Fatalf("workflow-run.jsonl:%d: %v", at, err)
+	}
+	var found bool
+	for _, ev := range evs {
+		if ev.Task == nil || ev.Task.Workflow == nil || ev.Task.Workflow.Progress == nil {
+			continue
+		}
+		for _, a := range ev.Task.Workflow.Progress.Agents {
+			if a.State == WorkflowAgentRunning {
+				found = true
+			}
+		}
+	}
+	if !found {
+		t.Fatalf("workflow-run.jsonl:%d: no agent decoded as WorkflowAgentRunning for the recorded \"progress\" state", at)
+	}
+}
+
+// TestNoWorkflowAgentStateIsUnknownInTheCorpus is the corpus-wide guard: every
+// recorded workflow_agent state word must resolve to something other than
+// WorkflowAgentUnknown, so the next word Claude records that
+// workflowAgentStates has not classified fails the build rather than
+// silently drawing "· unknown".
+func TestNoWorkflowAgentStateIsUnknownInTheCorpus(t *testing.T) {
+	files, err := filepath.Glob("../../testdata/stream/workflow-*.jsonl")
+	if err != nil {
+		t.Fatalf("glob workflow fixtures: %v", err)
+	}
+	if len(files) == 0 {
+		t.Fatalf("no workflow-*.jsonl fixtures found")
+	}
+	for _, path := range files {
+		fixture := filepath.Base(path)
+		for _, task := range fixtureTasks(t, fixture) {
+			if task.Workflow != nil && task.Workflow.Progress != nil {
+				noUnknownAgent(t, fixture, *task.Workflow.Progress)
+			}
+		}
+	}
+	// The run records on disk carry the same entries, camelCase.
+	records, err := filepath.Glob("../../testdata/workflow/*.json")
+	if err != nil || len(records) == 0 {
+		t.Fatalf("no run records under testdata/workflow (err %v)", err)
+	}
+	for _, path := range records {
+		run := decodeRunRecord(t, path)
+		if run.Progress == nil {
+			t.Fatalf("%s: a run record with no snapshot", path)
+		}
+		noUnknownAgent(t, filepath.Base(path), *run.Progress)
+	}
+}
+
+func noUnknownAgent(t *testing.T, fixture string, s WorkflowSnapshot) {
+	t.Helper()
+	for _, a := range s.Agents {
+		if a.State == WorkflowAgentUnknown {
+			t.Errorf("%s: agent %q (id %s) decodes to WorkflowAgentUnknown (%q) - an unmapped recorded state word",
+				fixture, a.Label, a.AgentID, a.StateWord)
+		}
+	}
+}
+
+func decodeRunRecord(t *testing.T, path string) WorkflowRun {
+	t.Helper()
+	raw, err := os.ReadFile(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+	run, err := DecodeWorkflowRun(raw)
+	if err != nil {
+		t.Fatalf("%s: %v", path, err)
+	}
+	return run
+}
+
+// requireErroredAgents holds run-agent-error's two failures to what the
+// recording carries: "bad model" started and failed on the model, "bad schema"
+// was never started - no agentId - and "fine" finished.
+func requireErroredAgents(t *testing.T, where string, s WorkflowSnapshot) {
+	t.Helper()
+	want := map[string]struct {
+		state   WorkflowAgentState
+		started bool
+		error   string
+	}{
+		"bad model":  {WorkflowAgentFailed, true, "There's an issue with the selected model"},
+		"bad schema": {WorkflowAgentFailed, false, "received an unusable JSON Schema"},
+		"fine":       {WorkflowAgentDone, true, ""},
+	}
+	if len(s.Agents) != len(want) {
+		t.Fatalf("%s: %d agents, want %d", where, len(s.Agents), len(want))
+	}
+	for _, a := range s.Agents {
+		w := want[a.Label]
+		if a.State != w.state || (a.AgentID != "") != w.started || !strings.Contains(a.Error, w.error) ||
+			(w.error == "") != (a.Error == "") {
+			t.Errorf("%s: agent %q = state %q id %q error %.50q; want %q, started %v, error %q...",
+				where, a.Label, a.State, a.AgentID, a.Error, w.state, w.started, w.error)
+		}
+	}
+}
+
+func TestAnErroredAgentDecodesFailedWithItsError(t *testing.T) {
+	requireErroredAgents(t, "workflow-agent-error.jsonl", lastSnapshot(t, "workflow-agent-error.jsonl"))
+}
+
+func TestARunRecordsErroredAgentsDecodeFailedWithTheirErrors(t *testing.T) {
+	run := decodeRunRecord(t, filepath.Join("..", "..", "testdata", "workflow", "run-agent-error.json"))
+	if run.TaskID != "wppv13f2b" || run.Progress == nil {
+		t.Fatalf("run = %+v", run)
+	}
+	requireErroredAgents(t, "run-agent-error.json", *run.Progress)
+}
+
+// No recording carries an unmapped word - the guard above keeps it so - so
+// this line is built by hand: an unmapped word keeps itself, so the view can
+// name it rather than calling it unknown.
+func TestAnUnrecordedAgentStateKeepsItsWord(t *testing.T) {
+	line := `{"type":"system","subtype":"task_progress","task_id":"w1","tool_use_id":"t1",` +
+		`"workflow_progress":[{"type":"workflow_agent","index":1,"label":"x","phaseIndex":1,"state":"queued"}]}`
+	evs, err := DecodeLine([]byte(line))
+	if err != nil || len(evs) == 0 || evs[0].Task == nil || evs[0].Task.Workflow == nil {
+		t.Fatalf("decode: %+v, %v", evs, err)
+	}
+	a := evs[0].Task.Workflow.Progress.Agents[0]
+	if a.State != WorkflowAgentUnknown || a.StateWord != "queued" {
+		t.Errorf("agent = state %q word %q, want unknown carrying %q", a.State, a.StateWord, "queued")
+	}
+}
+
+func TestAFailedWorkflowCarriesItsError(t *testing.T) {
+	end := endings(t, "workflow-failed.jsonl")
+	if end[0].Status != TaskFailed || end[0].Workflow == nil || !strings.Contains(end[0].Workflow.Error, "deliberate probe failure") {
+		t.Fatalf("task_updated = %+v, want failed with the error", end[0])
+	}
+	if end[1].Status != TaskFailed {
+		t.Fatalf("task_notification status = %q, want failed", end[1].Status)
+	}
+}
+
+func TestAStoppedWorkflowEndsHalted(t *testing.T) {
+	for _, u := range endings(t, "workflow-stop.jsonl") {
+		if u.Status != TaskStopped {
+			t.Fatalf("ending %+v, want TaskStopped (killed/stopped)", u)
+		}
+	}
+}
+
+func TestANonWorkflowTaskCarriesNoWorkflow(t *testing.T) {
+	for _, u := range allTasks(t, "subagent-background.jsonl") {
+		if u.Workflow != nil {
+			t.Fatalf("%+v: a subagent frame carries no workflow", u)
+		}
+	}
+}
+
+// TestASidechainLineDecodesWhereATranscriptLineDoesNot is DecodeSidechainLine's
+// whole reason: a workflow agent forwards nothing live (findings.md §3), so its
+// words exist only in its own on-disk transcript, whose lines are all
+// isSidechain:true - the one shape DecodeTranscriptLine drops.
+func TestASidechainLineDecodesWhereATranscriptLineDoesNot(t *testing.T) {
+	var side, plain int
+	for _, line := range fixtureLines(t, "../../testdata/transcript/workflow-agent.jsonl") {
+		evs, err := DecodeSidechainLine([]byte(line))
+		if err != nil {
+			t.Fatal(err)
+		}
+		side += len(evs)
+		p, _ := DecodeTranscriptLine([]byte(line))
+		plain += len(p)
+	}
+	if side == 0 || plain != 0 {
+		t.Fatalf("sidechain %d events, transcript %d; want >0 and 0", side, plain)
+	}
+}
+
+// runRecordFixture is a hand-trimmed, scrubbed copy of the failed run's own
+// wf_*.json record (task wsmc7r0xw, workflow-failed.jsonl): the keys are
+// copied verbatim from the recording, with every path dropped and the
+// snapshot cut to one phase and two agents.
+const runRecordFixture = `{
+	"taskId": "wsmc7r0xw",
+	"workflowName": "wide-then-fail",
+	"summary": "Six parallel echo agents, one reducer, then a deliberate failure",
+	"status": "failed",
+	"error": "Error: deliberate probe failure\n    at <anonymous> (workflow.js:8:7)",
+	"startTime": 1790224377827,
+	"durationMs": 10402,
+	"totalTokens": 106361,
+	"script": "phase('Fan')\n",
+	"workflowProgress": [
+		{"type": "workflow_phase", "index": 1, "title": "Fan"},
+		{"type": "workflow_agent", "index": 1, "label": "echo red", "phaseIndex": 1, "phaseTitle": "Fan", "agentId": "ad377aac14ee2acea", "model": "claude-haiku-4-5-20251001", "state": "done", "tokens": 15194},
+		{"type": "workflow_agent", "index": 2, "label": "echo green", "phaseIndex": 1, "phaseTitle": "Fan", "agentId": "aa81ac9dab30431e5", "model": "claude-haiku-4-5-20251001", "state": "done", "tokens": 15192}
+	]
+}`
+
+func TestARunRecordDecodes(t *testing.T) {
+	run, err := DecodeWorkflowRun([]byte(runRecordFixture))
+	if err != nil || run.TaskID != "wsmc7r0xw" || run.Status != TaskFailed || run.Error == "" ||
+		run.Progress == nil || len(run.Progress.Agents) != 2 || run.Started.IsZero() {
+		t.Fatalf("run = %+v err = %v", run, err)
+	}
+}

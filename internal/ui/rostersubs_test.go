@@ -511,3 +511,118 @@ func TestADispatchFinishingUnderTheCursorLeavesItOnItsAgent(t *testing.T) {
 		t.Errorf("one step down landed on %+v, want the row after alex's - not a reset to the top", got)
 	}
 }
+
+// workflowTask is a running workflow: its own short name and a snapshot of n
+// of total agents done - all workflowRow ever reads.
+func workflowTask(dispatch, name string, done, total int) Task {
+	return Task{
+		ID: dispatch, Dispatch: dispatch, Kind: core.TaskWorkflow,
+		Status: core.TaskRunning, Name: name, Workflow: workflowSnapshot(done, total),
+	}
+}
+
+// The row the interface promises: the glyph, the workflow's own short name,
+// and how far it has gotten, whole when the column has room.
+func TestWorkflowRowAtWidthTwentyThreeShowsTheFullPair(t *testing.T) {
+	task := workflowTask("toolu_1", "count-lines", 2, 3)
+	if got, want := workflowRow(task, 23), "  ⎿ ◈ count-lines 2/3"; got != want {
+		t.Errorf("workflowRow = %q, want %q", got, want)
+	}
+}
+
+// The done/total pair is dropped whole rather than cut - a partial "2/" reads
+// as a different number, rostersubs.go's own rule for the token count and
+// applied here the same way.
+func TestWorkflowRowDropsTheFigureWholeWhenItDoesNotFit(t *testing.T) {
+	task := workflowTask("toolu_1", "count-lines", 2, 3)
+
+	wide := workflowRow(task, 23)
+	if !strings.Contains(wide, "2/3") {
+		t.Fatalf("the figure is missing at full width, so this test measures nothing: %q", wide)
+	}
+
+	narrow := workflowRow(task, 16)
+	for _, frag := range []string{"2/3", "2/", "/3"} {
+		if strings.Contains(narrow, frag) {
+			t.Errorf("a fragment of the count survived (%q), which reads as a different number: %q", frag, narrow)
+		}
+	}
+	if !strings.Contains(narrow, "count-lin") {
+		t.Errorf("the name was cut to make room for a figure that then did not fit: %q", narrow)
+	}
+	if got := lipgloss.Width(narrow); got > 16 {
+		t.Errorf("the row measured %d columns, want at most 16: %q", got, narrow)
+	}
+}
+
+// A workflow's row draws under its agent the same way a subagent's does -
+// glyph, name, progress - reached through the same subagentRow call sites
+// (roster.go's rows, board.go's boardSubRow) rather than a second row-drawing
+// path.
+func TestARunningWorkflowDrawsARowUnderItsAgent(t *testing.T) {
+	agents, subs := alexWith(workflowTask("toolu_1", "count-lines", 2, 3))
+	out := stripANSI(Roster{}.View(agents, subs, rosterWidth, 10))
+
+	lines := strings.Split(strings.TrimRight(out, "\n"), "\n")
+	agentAt, workflowAt := -1, -1
+	for i, l := range lines {
+		if strings.Contains(l, "alex") {
+			agentAt = i
+		}
+		if strings.Contains(l, "count-lines") {
+			workflowAt = i
+		}
+	}
+	if agentAt < 0 {
+		t.Fatalf("the agent's own row is gone:\n%s", out)
+	}
+	if workflowAt < 0 {
+		t.Fatalf("the workflow is not listed:\n%s", out)
+	}
+	if workflowAt <= agentAt {
+		t.Errorf("the workflow is drawn above its agent, at %d against %d:\n%s", workflowAt, agentAt, out)
+	}
+	if !strings.Contains(lines[workflowAt], "2/3") {
+		t.Errorf("the workflow's row is missing its progress: %q", lines[workflowAt])
+	}
+
+	// rowsFor is the height oracle window is chosen with, and this is its own
+	// guard: a row it does not count is a column sized for a sidebar somebody
+	// else is drawing. TestRowsDrawsExactlyTheLinesRowsForPromises makes the
+	// same promise for the agents that test file covers; this is the
+	// workflow's own case.
+	if got, want := len(Roster{}.rows(agents[0], subs(agents[0].ID), rosterWidth)), rowsFor(agents[0], subs(agents[0].ID)); got != want {
+		t.Errorf("rows() drew %d lines, rowsFor promised %d", got, want)
+	}
+}
+
+// A running workflow is listed in the sidebar though it has no transcript of
+// its own to open - background work an operator is spending on, same as a
+// subagent - and it leaves once it ends, same as any other dispatch.
+func TestARunningWorkflowIsListedAndLeavesOnceItEnds(t *testing.T) {
+	f := NewFleet()
+	f, _ = f.Observe(workflowStarted("w1", "toolu_1", "desc", "count-lines"), "s1")
+
+	live := f.RunningTasks("s1")
+	if len(live) != 1 || live[0].Kind != core.TaskWorkflow {
+		t.Fatalf("RunningTasks() = %+v, want the one running workflow", live)
+	}
+
+	f, _ = f.Observe(core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{
+		ID: "w1", Kind: core.TaskKindUnknown, Phase: core.TaskEnded, Status: core.TaskDone,
+	}}, "s1")
+	if got := f.RunningTasks("s1"); len(got) != 0 {
+		t.Errorf("RunningTasks() = %+v after the workflow ended, want none", got)
+	}
+}
+
+// A running shell stays excluded from RunningTasks - widening it for a
+// workflow must not widen it for every kind with no transcript.
+func TestARunningShellStaysExcludedFromRunningTasks(t *testing.T) {
+	f := NewFleet()
+	f, _ = f.Observe(started("b1", "toolu_2", "waiting for the sentinel", "", core.TaskShell), "s1")
+
+	if got := f.RunningTasks("s1"); len(got) != 0 {
+		t.Errorf("RunningTasks() = %+v, want a running shell excluded", got)
+	}
+}

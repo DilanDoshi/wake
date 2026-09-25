@@ -621,7 +621,7 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		s.importSession(ctx, c, f)
 	case rpc.FrameResume:
 		s.resumeSession(ctx, c, f)
-	case rpc.FrameSend, rpc.FrameAllow, rpc.FrameAnswer, rpc.FrameDeny, rpc.FrameInterrupt, rpc.FrameMode, rpc.FrameRewind, rpc.FrameStop, rpc.FramePark,
+	case rpc.FrameSend, rpc.FrameAllow, rpc.FrameAnswer, rpc.FrameDeny, rpc.FrameInterrupt, rpc.FrameMode, rpc.FrameRewind, rpc.FrameStop, rpc.FramePark, rpc.FrameStopRun,
 		rpc.FrameMCPList, rpc.FrameMCPReconnect, rpc.FrameMCPEnable, rpc.FrameMCPDisable:
 		s.submit(c, f)
 	case rpc.FrameWake:
@@ -663,6 +663,22 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		// The same file read as FrameHistory, on its own goroutine for the
 		// same reason, answered under its own kind for FrameRewindTargets'.
 		s.start(func() { s.sendRewindTargets(c, f.SessionID) })
+	case rpc.FrameWorkflows:
+		// Off its own goroutine, FrameHistory's reason: workflowdisk.go
+		// globs and reads a session's own wf_*.json records off disk.
+		s.start(func() { s.sendWorkflows(c, f.SessionID) })
+	case rpc.FrameWorkflowAgent:
+		// Same reason. Workflow may be nil on a malformed frame; Agent then
+		// defaults to "" and sendWorkflowAgent's own id check answers it.
+		var agentID string
+		if f.Workflow != nil {
+			agentID = f.Workflow.Agent
+		}
+		s.start(func() { s.sendWorkflowAgent(c, f.SessionID, agentID) })
+	case rpc.FrameSaveWorkflow:
+		// Off its own goroutine, FrameHistory's reason: saveWorkflow writes a
+		// file to disk.
+		s.start(func() { s.saveWorkflowFrame(c, f) })
 	default:
 		// Unrecognized rather than guessed at. The whole reason stop, kill
 		// and quit are separate kinds is that no default is safe.

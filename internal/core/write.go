@@ -14,11 +14,29 @@
 package core
 
 import (
+	"errors"
 	"fmt"
 	"io"
+	"strings"
 
 	"github.com/google/uuid"
 )
+
+// ErrNotWritten wraps every error encode.go returns, and the wrapping is the
+// point rather than any of the messages.
+//
+// Encoding happens before a byte reaches a process, so a failure there means
+// stdin was never touched: the session is exactly as it was, the ask is still
+// outstanding, and the agent is still blocked on it. That is a different fact
+// from a *write* that failed, which internal/daemon reads as proof the process
+// is gone (agent.noteUnreachable) - and reading a refused answer that way
+// would report a perfectly healthy agent as silent and invite a kill nobody
+// meant.
+//
+// It matters most for EncodeAnswer, whose refusals are routine rather than
+// exceptional: an answer is assembled from what an operator did, so it is the
+// one frame encode.go writes that a caller can get wrong at runtime.
+var ErrNotWritten = errors.New("nothing was written")
 
 // Send writes one user turn to the process.
 //
@@ -77,6 +95,38 @@ func (s *Session) AnswerQuestion(requestID string, asked map[string]any, answers
 		return err
 	}
 	return s.writeLine(line)
+}
+
+// checkAnswers requires one non-blank choice per question asked, and no
+// choices beyond them.
+//
+// Every question, because a missing one is the defect this file exists to
+// close, arriving one question at a time: the tool asks 1-4 at once, the
+// answers map has no way to say "skipped", and the model is given the same
+// empty-ish map either way. Non-blank, because "" is what a UI produces when
+// nobody chose. And nothing extra, because a choice keyed on a question this
+// ask did not put reaches the model attached to nothing - it is a lost answer
+// wearing the shape of a delivered one.
+//
+// A choice is not required to match one of the option labels. The 2.1.226
+// binary phrases the tool result differently for a value it cannot match
+// rather than rejecting it, and no recording ever sent one, so refusing here
+// would forbid a shape the CLI tolerates on the strength of a guess.
+func checkAnswers(questions []string, answers map[string]string) error {
+	for _, q := range questions {
+		choice, ok := answers[q]
+		if !ok {
+			return fmt.Errorf("%w: nothing was chosen for %q", ErrNotWritten, q)
+		}
+		if strings.TrimSpace(choice) == "" {
+			return fmt.Errorf("%w: the choice for %q is blank", ErrNotWritten, q)
+		}
+	}
+	if len(answers) != len(questions) {
+		return fmt.Errorf("%w: %d choices for %d questions - one of them names a question this ask did not put",
+			ErrNotWritten, len(answers), len(questions))
+	}
+	return nil
 }
 
 // DenyTool answers a KindPermissionRequest with no. The reason reaches the
@@ -175,6 +225,23 @@ func (s *Session) SetMode(mode string) (string, error) {
 		return "", err
 	}
 	if err := s.writeLine(line); err != nil {
+		return "", err
+	}
+	return requestID, nil
+}
+
+// StopTask stops a running dynamic Workflow(), addressed by its own task id
+// (never a workflow agent's - findings.md §6 §2: the same request at an
+// agent's agentId is answered success and does nothing). Remembered as an ask
+// so its bare receipt comes back KindStopReceipt, never read as a mode's
+// (mcpask.go). It aborts no turn of *this* session, so it is owed no
+// forgive-the-exit licence.
+func (s *Session) StopTask(taskID string) (string, error) {
+	requestID := uuid.NewString()
+	err := s.ask(requestID, sentAsk{kind: KindStopReceipt}, func(id string) ([]byte, error) {
+		return EncodeStopTask(id, taskID)
+	})
+	if err != nil {
 		return "", err
 	}
 	return requestID, nil

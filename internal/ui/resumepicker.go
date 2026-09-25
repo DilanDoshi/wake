@@ -361,11 +361,15 @@ func (p ResumePicker) sessionsFit(maxRows int) int {
 // window is the slice of the match set the pane draws, size sessions around the
 // cursor, so walking off the visible end pages the list rather than losing the
 // cursor.
-func (p ResumePicker) window(n, size int) (start, end int) {
+func (p ResumePicker) window(n, size int) (start, end int) { return windowAround(p.Cursor, n, size) }
+
+// windowAround is the [start, end) of n rows a size-row window draws so the
+// cursor stays in it: centred where it can be, pinned at either end.
+func windowAround(cursor, n, size int) (start, end int) {
 	if n <= size {
 		return 0, n
 	}
-	start = clamp(p.Cursor-size/2, 0, n-size)
+	start = clamp(cursor-size/2, 0, n-size)
 	return start, start + size
 }
 

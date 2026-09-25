@@ -193,8 +193,31 @@ var claudeWireVocabulary = wordSet([]string{
 	// "tasks" and "patch" are the two that look generic and are not. Both are
 	// wire keys with one meaning each here, and Wake's own words for what
 	// they carry are TaskSet.Live and TaskUpdate.Status.
-	"task_type", "local_agent", "local_bash",
+	"task_type", "local_agent", "local_bash", "local_workflow",
 	"tasks", "patch", "stopped", "killed",
+
+	// A workflow's own progress payload, recorded 2026-09-23. workflow_name
+	// and workflow_progress are task_started/task_progress's own keys;
+	// workflow_phase and workflow_agent are how one workflow_progress entry
+	// tells a phase from an agent; phaseIndex, toolCalls, durationMs,
+	// promptPreview and resultPreview are camelCase entry fields no Go
+	// program writes by accident, the "acceptEdits"/"dontAsk" argument.
+	// Wake's own words for all of it are workflow.go's types.
+	"workflow_name", "workflow_progress", "workflow_phase", "workflow_agent",
+	"phaseIndex", "toolCalls", "durationMs", "promptPreview", "resultPreview",
+
+	// A run's own wf_*.json record on disk (task 2, 2026-09-24): workflowName,
+	// summary, startTime and totalTokens are the record's own top-level keys -
+	// camelCase, distinct from the stream's snake_case workflow_name; script
+	// is the Workflow tool's own input key, also on the record; workflowProgress
+	// is the record's snapshot wrapper, distinct from the stream's
+	// workflow_progress above. Wake's own word for the whole record is
+	// WorkflowRun. See DecodeWorkflowRun.
+	"workflowName", "summary", "startTime", "totalTokens", "script", "workflowProgress",
+
+	// The Agent SDK's stopTask(taskId) (findings.md §6), the wire form of the
+	// control_request EncodeStopTask sends. "task_id" is already policed above.
+	"stop_task",
 
 	// The live checklist tools and their input keys. TodoWrite is retired in
 	// 2.1.240 and its replacement builds a list across TaskCreate/TaskUpdate
@@ -324,6 +347,13 @@ var claudeWireVocabulary = wordSet([]string{
 	"permission-rule", "task-notification", "allowed", "success", "interrupt",
 	"allow", "deny", "user",
 
+	// A workflow_agent's own state word for still running - unlike its
+	// siblings "progress", "done" and "error", which sit in deliberatelyGeneric
+	// because Wake's own vocabulary already spells each literally outside the
+	// airlock (core.TaskProgress and core.TaskDone in task.go; "error" is the
+	// mode receipt's generic word below).
+	"start",
+
 	// Tool names. Task is here even though no recorded tool_use block is
 	// named Task - init.tools advertises it, so a file guessing at the
 	// dispatch tool's name would guess this one, and that guess is exactly
@@ -389,6 +419,21 @@ var deliberatelyGeneric = wordSet([]string{
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",
+
+	// A workflow_agent's own fields, the plainest English among them:
+	// "index" and "title" are a workflow_phase's, "tokens" a
+	// workflow_agent's. Policing any would fire across the tree - Wake's own
+	// vocabulary already has a dozen counters and titles - and none is a
+	// route in on its own, since a file cannot reach one without first
+	// naming "workflow_progress", which is policed above.
+	"index", "title", "tokens",
+
+	// A workflow_agent's other state words, "start"'s siblings. Neither is
+	// policed: core.TaskProgress and core.TaskDone already spell "progress"
+	// and "done" literally in task.go, which is not an airlock file, so
+	// policing either would fail the leak check on Wake's own vocabulary
+	// rather than catch one. The fourth, "error", is generic below.
+	"done", "progress",
 
 	// An mcp_status receipt's plain words: a toggle's flag, the two states the
 	// init roster never showed, and a server's config, scope, info and tools.
@@ -521,6 +566,11 @@ var notNamedByTheAirlock = map[string]string{
 	// because a file guessing the dispatch tool's name would guess this one.
 	"Task": "advertised, never on the wire; the guess this test exists to catch",
 
+	// A run record's own total, left unread: nothing draws a run's tokens,
+	// and a field decoded for nobody is a defect. Policed still, since the
+	// record's other keys are.
+	"totalTokens": "a run record's key, deliberately not decoded",
+
 	// control_request fields the decoder deliberately does not read.
 	"display_name":           "control_request field, deliberately not decoded",
 	"permission_suggestions": "control_request field, deliberately not decoded",
@@ -592,7 +642,23 @@ var notNamedByTheAirlock = map[string]string{
 // 175 → 180: the compact_boundary summary keys wireFrame.compaction reads -
 // "compact_metadata", "trigger", "pre_tokens", "post_tokens" and
 // "cumulative_dropped_tokens" (duration_ms was already policed). compaction.jsonl.
-const policedWordCount = 185
+// 180 → 185: the three MCP control requests "mcp_status", "mcp_reconnect" and
+// "mcp_toggle", the "serverName" they carry, and "readOnly", the one
+// Claude-spelled key of the status receipt Wake reads. mcp-control.jsonl.
+// 185 → 196: a workflow task's own vocabulary - "local_workflow",
+// "workflow_name", "workflow_progress", "workflow_phase", "workflow_agent",
+// "phaseIndex", "toolCalls", "durationMs", "promptPreview", "resultPreview"
+// and the still-running state word "start" (its siblings "done" and "failed"
+// sit in deliberatelyGeneric instead, since task.go already spells both
+// literally and is not an airlock file). Recorded in
+// docs/superpowers/notes/2026-09-23-workflow-findings.md.
+// 196 → 203: task 2's stop and run-record vocabulary - "stop_task" (the Agent
+// SDK's stopTask(taskId), outbound only); "workflowName", "summary",
+// "startTime", "totalTokens", "script" and "workflowProgress", the run's own
+// wf_*.json record on disk, camelCase and distinct from the stream's
+// snake_case workflow_name/workflow_progress. See EncodeStopTask and
+// DecodeWorkflowRun.
+const policedWordCount = 203
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -631,6 +697,11 @@ var notWireVocabulary = wordSet([]string{
 	"encode rewind",
 	"%w: encode rewind: empty request id",
 	"%w: encode rewind: empty target or last-seen uuid",
+	"encode stop task",
+	"%w: encode stop task: empty request id",
+	"%w: encode stop task: empty task id",
+	"decode workflow run: %w",
+	"decode workflow run: no task id",
 	defaultDenyReason,
 
 	// EncodeAnswer's refusals: Wake's own English, telling whoever gave an
@@ -798,6 +869,16 @@ var allowed = map[string]map[string]bool{
 	// impersonation an operator would misread, and blocking only a near-miss of
 	// it would be the guard doing nothing.
 	"internal/mcp/spawnname.go": {"system": true},
+	// WorkflowAgent.Prompt's own json tag, the preview of the same concept
+	// "prompt" already names on the wire - a workflow agent's own
+	// instruction, shortened. workflow.go is Wake's vocabulary and decodes
+	// nothing; protocol.go's workflowSnapshotOf does the reading.
+	//
+	// "script", "status" and "summary" are the same case three times more:
+	// WorkflowRun's own script, TaskStatus and one-line summary (task 2) -
+	// json tags reusing a word the wire also carries, decoded nowhere in this
+	// file (encode.go's DecodeWorkflowRun does that).
+	"internal/core/workflow.go": {"prompt": true, "script": true, "status": true, "summary": true},
 }
 
 // allowlistPairCount is the tripwire over the table above, and it exists for
@@ -806,7 +887,12 @@ var allowed = map[string]map[string]bool{
 // growing the exemption list is a deliberate two-place edit rather than
 // something that happens quietly in a rebase. CLAUDE.md quotes the same
 // figures and has to change with it.
-const allowlistPairCount = 21
+// 21 → 22: WorkflowAgent.Prompt's own json tag, "prompt" - the preview of a
+// workflow agent's instruction, spelled the same as the tool-input key by
+// coincidence of subject rather than reuse of the wire.
+// 22 → 25: WorkflowRun's own "script", "status" and "summary" json tags
+// (task 2), reusing three more words the wire also carries.
+const allowlistPairCount = 25
 
 func TestTheAllowlistDoesNotGrowQuietly(t *testing.T) {
 	pairs := 0
@@ -918,6 +1004,17 @@ var notInTheCorpus = map[string]string{
 	"mcp_reconnect":               "outbound only; the corpus holds its receipts, not the requests",
 	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
 	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
+	"stop_task":                   "outbound only; a recording of stdout cannot contain it",
+
+	// The run record's own two keys with no counterpart on the stream: the
+	// start time (task_progress carries only elapsed usage, never a start
+	// clock) and the snapshot wrapper's camelCase spelling (contrast the
+	// recorded workflow_progress, its snake_case sibling on task_progress).
+	// Both are hand-trimmed into workflow_test.go's runRecordFixture (task
+	// wsmc7r0xw, workflow-failed.jsonl) rather than recorded as a testdata/
+	// file of its own.
+	"startTime":        "recorded only in workflow_test.go's runRecordFixture, not testdata/",
+	"workflowProgress": "recorded only in workflow_test.go's runRecordFixture, not testdata/",
 }
 
 // embeddedMarkers never appear as a JSON key or as a whole value: the

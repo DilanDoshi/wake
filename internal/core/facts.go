@@ -111,3 +111,13 @@ type SessionFacts struct {
 	// on a shape no recording covers. See KindTurnTokens.
 	TurnOutputTokens int `json:"progress_output_tokens,omitempty"`
 }
+
+// nonEmpty is nil for a list the frame did not carry, for mcpServers' reason:
+// "this session advertises none" and "no init has arrived yet" must not be two
+// values a consumer folds the same way.
+func nonEmpty(words []string) []string {
+	if len(words) == 0 {
+		return nil
+	}
+	return words
+}

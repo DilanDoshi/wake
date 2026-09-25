@@ -1,0 +1,3 @@
+{"type": "user", "message": {"role": "user", "content": [{"type": "text", "text": "/slow-probe"}]}}
+{"type": "control_request", "request_id": "probe-0", "request": {"subtype": "pause_task", "task_id": "wwcu6r8aa"}}
+{"type": "control_request", "request_id": "probe-1", "request": {"subtype": "stop_task", "task_id": "wwcu6r8aa"}}

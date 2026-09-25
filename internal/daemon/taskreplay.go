@@ -6,6 +6,7 @@ package daemon
 import (
 	"sort"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -62,8 +63,41 @@ func (a *agent) runningTaskFrames() []rpc.Frame {
 	sort.Strings(ids)
 	frames := make([]rpc.Frame, len(ids))
 	for i, id := range ids {
-		ev := a.runningTasks[id]
+		ev := forClients(a.runningTasks[id])
 		frames[i] = rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev}
 	}
 	return frames
+}
+
+// withWorkflow returns a copy of ev with a copied Task and Workflow, edited by
+// edit - never mutating the retained event (agent.observe holds it under a.mu)
+// or the one already fanned out to a live client.
+func withWorkflow(ev core.Event, edit func(*core.WorkflowUpdate)) core.Event {
+	task := *ev.Task
+	workflow := *task.Workflow
+	edit(&workflow)
+	task.Workflow = &workflow
+	ev.Task = &task
+	return ev
+}
+
+// forClients is ev as a client receives it: a workflow's script stays the
+// daemon's - its save reads it off the retained start - since no client draws
+// one and it is the largest thing a start carries.
+func forClients(ev core.Event) core.Event {
+	if ev.Task == nil || ev.Task.Workflow == nil || ev.Task.Workflow.Script == "" {
+		return ev
+	}
+	return withWorkflow(ev, func(w *core.WorkflowUpdate) { w.Script = "" })
+}
+
+// runningWorkflow reports whether id names a running workflow dispatch - the
+// fact FrameStopRun may act on. Its own Kind check is the whole gate: a
+// subagent or shell id is refused for being a different dispatch kind, not
+// for anything the wire is known to do with one.
+func (a *agent) runningWorkflow(id string) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	ev, ok := a.runningTasks[id]
+	return ok && ev.Task != nil && ev.Task.Kind == core.TaskWorkflow
 }

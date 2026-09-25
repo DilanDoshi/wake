@@ -444,7 +444,12 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 		was = Agent{ID: sessionID}
 	}
 
-	now, out := fold(was, ev, sessionID)
+	// A copy enriched from the row (named, fleettasks.go) rather than ev
+	// itself: fold's own KindSystem case needs to know a workflow ending's
+	// Kind, which the wire frame does not carry, but foldTask below must still
+	// see exactly what the frame said, or an ending with no label of its own
+	// would overwrite the row's live status text.
+	now, out := fold(was, f.named(sessionID, ev), sessionID)
 	// Attribute room events by the spawn id, not the id they carried: /clear
 	// re-keys it (fanout.go) and a permission ask carries none, so focusAdmits
 	// and linesFor - which key on the spawn id - would hide a focused agent's
@@ -704,6 +709,10 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 			a = a.withGoal(*ev.Goal)
 		}
 		return a, nil
+
+	case core.KindSystem:
+		// workflowroom.go, kept out of this file for the hard max.
+		return a, workflowRoomEvent(ev)
 
 	case core.KindSessionReset:
 		// /clear. The conversation the totals describe is gone, so the totals

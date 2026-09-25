@@ -60,7 +60,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   lone-`@name` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
   `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
-  `/groupchat-filter`, plus bare `/effort`/`/model` menus. Everything else passes to the agent byte
+  `/workflows`, `/groupchat-filter`, plus bare `/effort`/`/model` menus. Everything else passes to the agent byte
   for byte. `@who /cmd` in the room aims a target-command at that agent. A spaced `/team` or
   `/name` argument is hyphenated.
 - **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
@@ -68,12 +68,20 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   hands the real terminal to `claude mcp login <server>`, then reconnects every live agent stuck on
   that server. claude.ai connectors aren't listed — headless sessions don't load them.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
+- **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
+  (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
+  conversation, every agent's in the room) — draws Wake's own view in that pane, since headless claude
+  cannot draw its `/workflows` menu: list → run (phases | agents) → agent (prompt, activity off the
+  agent's disk transcript, outcome). `f` filters, `x` then `↵` stops (`stop_task`), `s` saves the
+  script as `/<name>` (project or personal scope; the daemon owns the path, no overwrite). Endings land
+  in the conversation and the room. No pause, restart or per-agent stop — headless refuses or ignores
+  them. `internal/ui/workflowview.go`, `workflowdraw.go`, `workflowdata.go`, `workflowsave.go`.
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
   (absent→spawn, parked→wake, running→park); `/manager-stop` ends it.
 - **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
   above the composer, running subagents in the right sidebar, streamed preview tail, DM done line
   (`✻ Cooked for 1m 59s · done 6:48 PM`), compacting line, loop line, question cards as a wizard
-  with a review step, drag-to-select-and-copy on every surface.
+  with a review step, drag-to-select-and-copy on every surface but the `/workflows` view.
 
 ## Non-negotiables
 
@@ -162,7 +170,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   closed. Arbitrary tiling is out of scope.
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
   through the 80ms settle; row drags don't. The wheel scrolls the pane under the pointer.
-- **Drag selects, release copies**, on every surface: transcript (anchored to `transcript.lines`
+- **Drag selects, release copies**, on every surface but the `/workflows` view (a press there moves
+  its cursor; `deferred.md`): transcript (anchored to `transcript.lines`
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
   (`screensel.go`). Every keystroke clears the highlight *and* does its job; width change clears,
   height doesn't; a click copies nothing. Roster click targets are resolved at press.
@@ -287,13 +296,14 @@ yet says so in bold.**
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` |
+| Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
 | Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix |
 | Notices under a TUI | `internal/notice/notice.go` |
 | Git branch lookup | `internal/gitref/` |
-| Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) |
+| Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) |
 | Demo film | `demo/` (Python stand-in agent, VHS tapes) |
 | Fixture scrubber | `scripts/scrub-fixtures.py` · guard `internal/core/corpus_test.go` |
 
@@ -393,6 +403,11 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - `stream_event` text deltas are byte-identical to the completed `assistant` block
   (`testdata/stream/partial-turn.jsonl`); unrecognised shapes yield no event.
 - The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id; `TodoWrite` is retired.
+- A `Workflow` run is `task_type:"local_workflow"` on the `task_*` frames; every `workflow_progress`
+  is a **full snapshot**. Agent states are `start`/`progress`/`done`/**`error`** (never `failed`; an
+  agent refused before starting has no `agentId`). A workflow agent's words never reach stdout — only
+  its sidechain transcript on disk. `stop_task` stops the run but is accepted-and-ignored at an agent
+  id; `pause_task` is refused. `docs/superpowers/notes/2026-09-23-workflow-findings.md`.
 - A headless session answers `mcp_status`/`mcp_reconnect`/`mcp_toggle` with no model turn
   (2.1.281, `testdata/stream/mcp-control.jsonl`). Reconnect/toggle reply with the bare `success` a
   mode change gets — only the request id says what it answers. `mcp_toggle` persists. The status
@@ -411,7 +426,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/protocol.go` at 799 and `internal/core/vocabulary.go` at 799 — derived by
+  `internal/core/vocabulary.go` at 800 and `internal/ui/dm.go` at 799 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

@@ -45,8 +45,10 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	a = a.observedMode(sessionID, ev)
 	// A rewind receipt is the same non-decision, one kind over. See rewind.go.
 	a = a.noteRewind(sessionID, ev)
-	// And an MCP reply, which only the /mcp menu and a sign-in's sweep read.
+	// And an MCP reply, which only the /mcp menu and a sign-in's sweep read, and a
+	// workflow stop's receipt, which only a refusal makes worth a word.
 	a = a.observedMCP(sessionID, ev)
+	a = a.observedStop(sessionID, ev)
 	a = a.forgetHistoryOnReset(sessionID, ev)
 	// A compaction brackets itself with two status frames; the DM draws a
 	// "compacting…" line between them. See compacting.go.
@@ -58,6 +60,9 @@ func (a App) observe(sessionID string, ev core.Event) App {
 
 	var forRoom []core.Event
 	a.fleet, forRoom = a.fleet.Observe(ev, sessionID)
+	// A task frame settles the workflow view: an ending takes its armed stop
+	// back, and a snapshot that moved the open agent re-reads it and lays it out.
+	a = a.onWorkflowProgress(ev)
 	agent, _ := a.fleet.Agent(sessionID)
 	if ev.Session != nil {
 		// The model and the context figures reach the fleet on an init or a

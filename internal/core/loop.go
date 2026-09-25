@@ -32,3 +32,17 @@ type LoopOp struct {
 	Stop         bool
 	Noop         bool
 }
+
+// intArg is one input value as an int, and 0 for a key a tool omits or whose
+// value is not a number - JSON numbers decode as float64 through encoding/json.
+//
+// Moved from encode.go (2026-09-24, workflow task 2) to hold that file under
+// the 800-line hard max; unchanged, and reads no Claude JSON of its own - it
+// is toolLoopOp's own helper, so this is its ordinary home.
+func intArg(input map[string]any, key string) int {
+	v, ok := input[key].(float64)
+	if !ok {
+		return 0
+	}
+	return int(v)
+}

@@ -15,6 +15,7 @@ package ui
 
 import (
 	"strconv"
+	"strings"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -37,28 +38,32 @@ const (
 	// *agent* is already a fleet member - the thing `@name` addresses, the
 	// thing a roster row is - so a transcript line calling a dispatch an Agent
 	// names the one word this product has already spent.
-	taskLineAgent = "Subagent"
-	taskLineShell = "Shell"
+	taskLineAgent    = "Subagent"
+	taskLineShell    = "Shell"
+	taskLineWorkflow = "Workflow"
 
-	// The three endings, in Wake's words. "ended" is the honest reading of a
-	// status this build does not model: the binary names `failed` and `paused`
-	// that no recording carries, so an unmodelled ending is expected traffic,
-	// and reporting one as either "finished" or "halted" is a claim no frame
-	// made.
+	// The four endings, in Wake's words. "ended" is the honest reading of a
+	// status this build does not otherwise model - a subagent's own failure
+	// mode, which no recording carries.
 	taskLineFinished = "finished"
 	taskLineHalted   = "halted"
+	taskLineFailed   = "failed"
 	taskLineEnded    = "ended"
 )
 
 // taskLineStyle is the colour of an ending, and it is Claude's own mapping:
-// completed reads as success, anything stopped as a warning, and an ending
-// nobody has recorded recedes rather than claiming either.
+// completed reads as success, anything stopped as a warning, a workflow's own
+// deliberate failure as an error, and an ending nobody has recorded recedes
+// rather than claiming any of them. ErrorStyle is the theme's own - a failed
+// workflow is not a new colour, just the first ending to need this one.
 func taskLineStyle(s core.TaskStatus) lipgloss.Style {
 	switch s {
 	case core.TaskDone:
 		return lipgloss.NewStyle().Foreground(Success)
 	case core.TaskStopped:
 		return warnStyle
+	case core.TaskFailed:
+		return ErrorStyle
 	default:
 		return HintStyle
 	}
@@ -71,6 +76,8 @@ func taskLineWord(s core.TaskStatus) string {
 		return taskLineFinished
 	case core.TaskStopped:
 		return taskLineHalted
+	case core.TaskFailed:
+		return taskLineFailed
 	default:
 		return taskLineEnded
 	}
@@ -85,6 +92,8 @@ func taskLineKind(k core.TaskKind) string {
 		return taskLineAgent
 	case core.TaskShell:
 		return taskLineShell
+	case core.TaskWorkflow:
+		return taskLineWorkflow
 	default:
 		return ""
 	}
@@ -113,7 +122,24 @@ func taskLine(u *core.TaskUpdate, width int) string {
 	if u.Elapsed > 0 {
 		line += metaSep + elapsedText(u.Elapsed)
 	}
-	return taskLineStyle(u.Status).MaxWidth(width).Render(line)
+	out := taskLineStyle(u.Status).MaxWidth(width).Render(line)
+	// A failed workflow's own thrown error, one line under the ending - the
+	// only status this build ever attaches one to, and Workflow.Error is the
+	// one place a failure carries it (Tasks.named backfills it from the row
+	// onto the frame that draws, since task_notification never carries it
+	// itself).
+	if u.Status == core.TaskFailed && u.Workflow != nil && u.Workflow.Error != "" {
+		out += "\n" + clip(taskLineStyle(u.Status).Render("  "+firstErrorLine(u.Workflow.Error)), width)
+	}
+	return out
+}
+
+// firstErrorLine is a failed workflow's error, cut to its own first line and
+// defensively flattened - a script's own thrown message is exactly as
+// untrusted as a dispatch's description, oneLine's own reason.
+func firstErrorLine(text string) string {
+	first, _, _ := strings.Cut(text, "\n")
+	return oneLine(strings.TrimSpace(first))
 }
 
 // taskLineSubject is what ended: what it is called and what it was doing.

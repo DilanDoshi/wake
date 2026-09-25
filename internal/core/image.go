@@ -15,3 +15,12 @@ type ImageBlock struct {
 	MediaType string `json:"mediaType"`
 	Data      string `json:"data"`
 }
+
+// ImagePlaceholder is the text a decoded image block carries up in place of
+// its bytes: the transcript cannot draw the image, and a user turn rendering
+// this reads far better than one rendering nothing.
+//
+// Exported because internal/ui's room-history reconstruction must recognise it:
+// every image shares this one text, so it can never be sound proof that a turn
+// was broadcast, and roomhistory.go excludes it from that rule.
+const ImagePlaceholder = "[Image]"

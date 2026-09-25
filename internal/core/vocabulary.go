@@ -65,27 +65,28 @@ var taskPhases = map[string]TaskPhase{
 	"task_notification": TaskEnded,
 }
 
-// What a task_type means. Two are recorded, and the CLI's own wording names
+// What a task_type means. Three are recorded, and the CLI's own wording names
 // kinds this corpus has never produced - so an absent key is expected traffic
 // rather than a defect, and resolves to TaskKindUnknown by the zero value
 // being the wrong answer: see taskKind, which cannot use the bare lookup.
 var taskKinds = map[string]TaskKind{
-	"local_agent": TaskAgent,
-	"local_bash":  TaskShell,
+	"local_agent":    TaskAgent,
+	"local_bash":     TaskShell,
+	"local_workflow": TaskWorkflow,
 }
 
 // How a task ended. `completed` rides nine frames; `stopped` and `killed` ride
-// one each, both from the single background shell that was interrupted, and
-// they are the same event reported by the two different terminal frames.
-//
-// Nothing else may be added here without a recording. An unmapped word is
-// TaskStatusUnknown, which is the only honest reading of an ending nobody has
-// seen - and unlike a Notice, where the cost of an unknown is a missing label,
-// the cost here is a row claiming a subagent succeeded when it did not.
+// one each, from the single interrupted background shell; `failed` rides a
+// workflow's own deliberate throw. Nothing else may be added without a
+// recording. An unmapped word is TaskStatusUnknown, the only honest reading
+// of an ending nobody has seen - and unlike a Notice, where the cost of an
+// unknown is a missing label, the cost here is a row claiming a subagent
+// succeeded when it did not.
 var taskStatuses = map[string]TaskStatus{
 	"completed": TaskDone,
 	"stopped":   TaskStopped,
 	"killed":    TaskStopped,
+	"failed":    TaskFailed,
 }
 
 // The permission modes Wake sets a running session to.

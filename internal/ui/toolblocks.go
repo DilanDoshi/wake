@@ -48,8 +48,9 @@ func toolHeadline(tool *core.ToolCall, bullet lipgloss.Style, width int) string 
 
 // toolResultBlock renders the body under a call. call is the invocation this
 // result answers, or nil for one whose call this pane never saw - which
-// degrades to a plain fold rather than guessing at a receipt.
-func toolResultBlock(ev core.Event, call *core.ToolCall, expanded bool, width int) string {
+// degrades to a plain fold rather than guessing at a receipt. expand names the
+// key a fold offers, "" for a surface that binds none.
+func toolResultBlock(ev core.Event, call *core.ToolCall, expanded bool, expand string, width int) string {
 	failed := ev.Tool != nil && ev.Tool.IsError
 	// A successful edit's result is pure confirmation - "the file has been
 	// updated" - and the diff drawn above it (foldExempt) with the ⏺ now green
@@ -62,7 +63,7 @@ func toolResultBlock(ev core.Event, call *core.ToolCall, expanded bool, width in
 	r := render.Result{
 		Body:      ev.Text,
 		Collapsed: !expanded,
-		Expand:    expandKey,
+		Expand:    expand,
 		Failed:    failed,
 	}
 	if call != nil {
@@ -86,10 +87,15 @@ func toolStyle(bullet lipgloss.Style) render.ToolStyle {
 	}
 }
 
-// bulletFor is the ⏺ style for a call: dim while its result is outstanding,
-// green when it landed, red when it failed. See theme.go for the source.
+// bulletFor is the ⏺ style for a call this conversation has seen.
 func (d DM) bulletFor(id string) lipgloss.Style {
 	failed, settled := d.outcomes[id]
+	return outcomeBullet(failed, settled)
+}
+
+// outcomeBullet is the ⏺ style for a call: dim while its result is outstanding,
+// green when it landed, red when it failed. See theme.go for the source.
+func outcomeBullet(failed, settled bool) lipgloss.Style {
 	switch {
 	case !settled:
 		return ToolRunningStyle

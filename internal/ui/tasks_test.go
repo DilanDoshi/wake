@@ -268,3 +268,163 @@ func TestTheDispatchNameIsSetOnceAndTheStatusMoves(t *testing.T) {
 		t.Errorf("Label = %q, want the newest status", row.Label)
 	}
 }
+
+// workflowStarted is a workflow's own task_started: like started, but Kind is
+// always core.TaskWorkflow and it carries the script's own short name -
+// distinct from Label, which is the sentence Claude wrote about the run.
+func workflowStarted(id, dispatch, description, name string) core.Event {
+	return core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{
+		ID: id, Dispatch: dispatch, Kind: core.TaskWorkflow, Phase: core.TaskStarted,
+		Status: core.TaskRunning, Label: description, Workflow: &core.WorkflowUpdate{Name: name},
+	}}
+}
+
+// workflowSnapshot is a small hand-built snapshot: n of total agents done,
+// which is all workflowRow and Done() ever read.
+func workflowSnapshot(done, total int) core.WorkflowSnapshot {
+	agents := make([]core.WorkflowAgent, total)
+	for i := range agents {
+		state := core.WorkflowAgentRunning
+		if i < done {
+			state = core.WorkflowAgentDone
+		}
+		agents[i] = core.WorkflowAgent{Index: i + 1, State: state}
+	}
+	return core.WorkflowSnapshot{Agents: agents}
+}
+
+// workflowProgressed is a workflow's task_progress: task_type never repeats
+// (TaskKindUnknown on the wire, task.go's own reason), and the snapshot is a
+// whole replacement each call, never a delta.
+func workflowProgressed(id, dispatch string, snap core.WorkflowSnapshot) core.Event {
+	return core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{
+		ID: id, Dispatch: dispatch, Kind: core.TaskKindUnknown, Phase: core.TaskProgress,
+		Status: core.TaskRunning, Workflow: &core.WorkflowUpdate{Progress: &snap},
+	}}
+}
+
+// workflowFailedUpdate is the bare task_updated that ends a failed workflow:
+// no dispatch, no label, no kind - and the one ending frame that carries the
+// error at all.
+func workflowFailedUpdate(id, errText string) core.Event {
+	return core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{
+		ID: id, Kind: core.TaskKindUnknown, Phase: core.TaskEnded, Status: core.TaskFailed,
+		Workflow: &core.WorkflowUpdate{Error: errText},
+	}}
+}
+
+// workflowNotification is the task_notification that names the dispatch -
+// the frame taskLine actually draws from, and the one that carries neither a
+// label nor a kind nor (for a failed run) the error, all of which must come
+// from the row.
+func workflowNotification(id, dispatch string, status core.TaskStatus) *core.TaskUpdate {
+	return &core.TaskUpdate{ID: id, Dispatch: dispatch, Kind: core.TaskKindUnknown, Phase: core.TaskEnded, Status: status}
+}
+
+// A workflow's own short name - meta.name, what a script author chose - wins
+// over the sentence Claude wrote describing the run. task_started carries
+// both, and workflowRow and the ending line both want the shorter one.
+func TestAWorkflowsShortNameWinsOverItsDescription(t *testing.T) {
+	tasks := folded(workflowStarted("w1", "toolu_1", "Count lines of a.txt and b.txt, then sum them", "count-lines"))
+
+	row := tasks.Rows()[0]
+	if row.Name != "count-lines" {
+		t.Errorf("Name = %q, want the workflow's own short name, not the description", row.Name)
+	}
+	if row.Kind != core.TaskWorkflow {
+		t.Errorf("Kind = %q, want %q", row.Kind, core.TaskWorkflow)
+	}
+}
+
+// Each task_progress snapshot is a whole replacement, so the row just takes
+// the newest one - never merged, never accumulated.
+func TestAWorkflowSnapshotReplacesWholesale(t *testing.T) {
+	tasks := folded(
+		workflowStarted("w1", "toolu_1", "desc", "count-lines"),
+		workflowProgressed("w1", "toolu_1", workflowSnapshot(1, 3)),
+		workflowProgressed("w1", "toolu_1", workflowSnapshot(2, 3)),
+	)
+
+	row := tasks.Rows()[0]
+	if got := row.Workflow.Done(); got != 2 {
+		t.Errorf("Done() = %d, want 2: the row must hold the newest snapshot, not an accumulation", got)
+	}
+	if len(row.Workflow.Agents) != 3 {
+		t.Errorf("got %d agents, want 3", len(row.Workflow.Agents))
+	}
+}
+
+// A replayed row - a late attach's task_started, standing in for one the
+// daemon has re-dated with the workflow's latest snapshot already attached
+// (taskreplay.go's withWorkflow) - sets the snapshot on the very first fold,
+// with no separate task_progress required.
+func TestAStartedFrameCarryingProgressSetsTheSnapshotImmediately(t *testing.T) {
+	replayed := core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{
+		ID: "w1", Dispatch: "toolu_1", Kind: core.TaskWorkflow, Phase: core.TaskStarted,
+		Status: core.TaskRunning, Label: "desc", Workflow: &core.WorkflowUpdate{
+			Name: "count-lines", Progress: ptrSnapshot(workflowSnapshot(2, 3)),
+		},
+	}}
+	tasks := folded(replayed)
+
+	row := tasks.Rows()[0]
+	if got := row.Workflow.Done(); got != 2 {
+		t.Errorf("Done() = %d, want 2: a single started frame carrying Progress must set it immediately", got)
+	}
+}
+
+func ptrSnapshot(s core.WorkflowSnapshot) *core.WorkflowSnapshot { return &s }
+
+// A failed workflow's error arrives on task_updated, the bare ending with no
+// dispatch - and it has to survive on the row, because task_notification (the
+// frame taskLine draws from) never carries it at all.
+func TestAFailedWorkflowsErrorSurvivesOnTheRow(t *testing.T) {
+	tasks := folded(
+		workflowStarted("w1", "toolu_1", "desc", "wide-then-fail"),
+		workflowFailedUpdate("w1", "Error: deliberate probe failure\nsecond line"),
+	)
+
+	row := tasks.Rows()[0]
+	if row.Error != "Error: deliberate probe failure\nsecond line" {
+		t.Errorf("Error = %q, want the full error task_updated carried", row.Error)
+	}
+	if row.Status != core.TaskFailed {
+		t.Errorf("Status = %q, want %q", row.Status, core.TaskFailed)
+	}
+}
+
+// named fills task_notification's missing Workflow.Error from the row -
+// task_updated carried it, task_notification does not, and taskLine only ever
+// draws from the second.
+func TestNamedFillsTheWorkflowErrorOntoTheNotification(t *testing.T) {
+	tasks := folded(
+		workflowStarted("w1", "toolu_1", "desc", "wide-then-fail"),
+		workflowFailedUpdate("w1", "Error: deliberate probe failure"),
+	)
+
+	u := workflowNotification("w1", "toolu_1", core.TaskFailed)
+	filled := tasks.named(u)
+
+	if filled.Workflow == nil || filled.Workflow.Error != "Error: deliberate probe failure" {
+		t.Errorf("named() = %+v, want the row's error filled onto Workflow.Error", filled.Workflow)
+	}
+	if u.Workflow != nil {
+		t.Errorf("named() edited the event it was given: Workflow = %+v, want nil", u.Workflow)
+	}
+	if filled.Kind != core.TaskWorkflow {
+		t.Errorf("Kind = %q, want %q filled from the row", filled.Kind, core.TaskWorkflow)
+	}
+}
+
+// A successful or halted workflow's row carries no error, and named must not
+// fabricate a Workflow where the ending frame and the row both have none.
+func TestNamedAttachesNoWorkflowWhenTheRowHasNoError(t *testing.T) {
+	tasks := folded(workflowStarted("w1", "toolu_1", "desc", "count-lines"))
+
+	u := workflowNotification("w1", "toolu_1", core.TaskDone)
+	filled := tasks.named(u)
+
+	if filled.Workflow != nil {
+		t.Errorf("named() attached %+v, want nil - nothing on this row or frame ever carried an error", filled.Workflow)
+	}
+}

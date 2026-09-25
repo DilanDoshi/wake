@@ -1,0 +1,199 @@
+{
+  "_note": "The workflow scenes' runner (tapes 13-18). count-lines is authored; every frame it drives is testdata/stream/workflow-run.jsonl's shape.",
+  "model": "claude-sonnet-5",
+  "opening": {
+    "tokens": 320,
+    "steps": [
+      {
+        "after": 0.4,
+        "text": "Ready. Four text files here, `a.txt` through `d.txt`."
+      }
+    ]
+  },
+  "turns": [
+    {
+      "match": "take your time",
+      "tokens": 420,
+      "steps": [
+        {
+          "after": 0.8,
+          "text": "Fanning it out as a workflow: one agent per file, then one to add them up."
+        },
+        {
+          "after": 0.6,
+          "workflow": "count-lines",
+          "pace": 2.6
+        },
+        {
+          "after": 0.7,
+          "text": "`count-lines` is running in the background. I'll report the total when it lands."
+        }
+      ]
+    },
+    {
+      "match": "no rush",
+      "tokens": 420,
+      "steps": [
+        {
+          "after": 0.8,
+          "text": "Fanning it out as a workflow: one agent per file, then one to add them up."
+        },
+        {
+          "after": 0.6,
+          "workflow": "count-lines",
+          "pace": 2.0
+        },
+        {
+          "after": 0.7,
+          "text": "`count-lines` is running in the background. I'll report the total when it lands."
+        }
+      ]
+    },
+    {
+      "match": "count",
+      "tokens": 420,
+      "steps": [
+        {
+          "after": 0.8,
+          "text": "Fanning it out as a workflow: one agent per file, then one to add them up."
+        },
+        {
+          "after": 0.6,
+          "workflow": "count-lines"
+        },
+        {
+          "after": 0.7,
+          "text": "`count-lines` is running in the background. I'll report the total when it lands."
+        }
+      ]
+    }
+  ],
+  "default": {
+    "tokens": 300,
+    "steps": [
+      {
+        "after": 0.7,
+        "text": "Noted."
+      }
+    ]
+  },
+  "workflows": {
+    "count-lines": {
+      "description": "Count lines of every .txt file in parallel, then sum them",
+      "script": "export const meta = {\n  name: 'count-lines',\n  description: 'Count lines of every .txt file in parallel, then sum them',\n  phases: [{ title: 'Count', detail: 'one agent per file' }, { title: 'Sum', detail: 'add the counts' }],\n}\nconst NUM = { type: 'object', properties: { n: { type: 'number' } }, required: ['n'] }\nconst FILES = ['a.txt', 'b.txt', 'c.txt', 'd.txt']\nphase('Count')\nconst counts = await parallel(FILES.map(f => () =>\n  agent(`Count the lines in ./${f} with wc -l. Return just the number.`, { label: `count ${f}`, phase: 'Count', model: 'haiku', schema: NUM })))\nphase('Sum')\nconst total = await agent(`Add ${counts.map(c => c && c.n).join(', ')}. Return just the sum.`, { label: 'sum', phase: 'Sum', model: 'haiku', schema: NUM })\nreturn { total: total && total.n }",
+      "phases": [
+        "Count",
+        "Sum"
+      ],
+      "agents": [
+        {
+          "label": "count a.txt",
+          "phase": 1,
+          "at": 0.3,
+          "takes": 3.6,
+          "tokens": 16497,
+          "prompt": "Count the lines in ./a.txt with wc -l. Return just the number.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "wc -l a.txt",
+                "description": "Count lines in a.txt"
+              },
+              "result": "       3 a.txt"
+            }
+          ],
+          "output": {
+            "n": 3
+          }
+        },
+        {
+          "label": "count b.txt",
+          "phase": 1,
+          "at": 0.5,
+          "takes": 4.4,
+          "tokens": 16459,
+          "prompt": "Count the lines in ./b.txt with wc -l. Return just the number.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "wc -l b.txt",
+                "description": "Count lines in b.txt"
+              },
+              "result": "       5 b.txt"
+            }
+          ],
+          "output": {
+            "n": 5
+          }
+        },
+        {
+          "label": "count c.txt",
+          "phase": 1,
+          "at": 0.6,
+          "takes": 5.2,
+          "tokens": 16610,
+          "prompt": "Count the lines in ./c.txt with wc -l. Return just the number.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "wc -l c.txt",
+                "description": "Count lines in c.txt"
+              },
+              "result": "      12 c.txt"
+            }
+          ],
+          "output": {
+            "n": 12
+          }
+        },
+        {
+          "label": "count d.txt",
+          "phase": 1,
+          "at": 0.8,
+          "takes": 3.9,
+          "tokens": 16522,
+          "prompt": "Count the lines in ./d.txt with wc -l. Return just the number.",
+          "tools": [
+            {
+              "name": "Bash",
+              "input": {
+                "command": "wc -l d.txt",
+                "description": "Count lines in d.txt"
+              },
+              "result": "       8 d.txt"
+            }
+          ],
+          "output": {
+            "n": 8
+          }
+        },
+        {
+          "label": "sum",
+          "phase": 2,
+          "at": 6.4,
+          "takes": 2.6,
+          "tokens": 15284,
+          "prompt": "Add 3, 5, 12, 8. Return just the sum.",
+          "output": {
+            "n": 28
+          }
+        }
+      ],
+      "settle": 0.8,
+      "saved_pace": 1.4,
+      "saved_say": "Running the saved `count-lines` workflow in the background.",
+      "then": {
+        "tokens": 60,
+        "steps": [
+          {
+            "after": 1.0,
+            "text": "28 lines in total: `a.txt` 3, `b.txt` 5, `c.txt` 12, `d.txt` 8."
+          }
+        ]
+      }
+    }
+  }
+}
