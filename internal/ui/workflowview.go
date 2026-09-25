@@ -21,7 +21,7 @@ import (
 )
 
 // workflowsTakeNoArgument refuses an argument rather than ignoring it.
-const workflowsTakeNoArgument = workflowsCommand + " opens this pane's workflow runs and takes no argument"
+const workflowsTakeNoArgument = workflowsVerb + " opens this pane's workflow runs and takes no argument"
 
 // workflowStopFailed names the write that could not happen, sendFailed's pattern;
 // workflowStopRefused carries the CLI's own reason, modeRefusedFormat's shape.

@@ -5,7 +5,7 @@ package rpc
 // hard max, so the constants sit with the payload type and the functions
 // that check it.
 //
-// Three verbs, seven kinds. FrameStopRun ends a running workflow dispatch.
+// FrameStopRun ends a running workflow dispatch.
 // FrameWorkflows/FrameWorkflowsReply ask for and answer a session's own
 // runs - core.WorkflowRun read back off disk, on WorkflowFrame.Runs.
 // FrameWorkflowAgent/FrameWorkflowAgentReply ask for and answer one workflow

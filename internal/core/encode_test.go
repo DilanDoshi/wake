@@ -767,7 +767,7 @@ func TestEncodeRewindRefusesEmptyIdsAndUuids(t *testing.T) {
 }
 
 // TestStopTaskEncodesTheRecordedRequest is pinned against
-// testdata/input/workflow-stop.stdin.jsonl line 2 (probe-1, wbu5972hq),
+// testdata/input/workflow-stop.stdin.jsonl line 3 (probe-1, wbu5972hq),
 // findings.md §6.
 func TestStopTaskEncodesTheRecordedRequest(t *testing.T) {
 	got, err := EncodeStopTask("probe-1", "wbu5972hq")

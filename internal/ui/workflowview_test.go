@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -552,5 +553,17 @@ func TestTheWheelOverTheViewInTheRoomWalksItsRowsNotTheGroupChat(t *testing.T) {
 	if a.workflow.view.Cursor != 0 || !a.room.tr.atBottom() {
 		t.Errorf("the wheel up left cursor %d and the group chat at bottom=%v, want 0 and true",
 			a.workflow.view.Cursor, a.room.tr.atBottom())
+	}
+}
+
+// The refusal names the command as it is typed, slash and all, its siblings' way.
+func TestWorkflowsWithAnArgumentIsRefusedByItsTypedName(t *testing.T) {
+	notice.Reset()
+	a, _, _ := workflowFleet(t).openDMWith("s1", "alex").slash("/workflows now")
+	if a.workflow.view.Open() {
+		t.Error("/workflows with an argument opened the view")
+	}
+	if n, ok := notice.Latest(); !ok || !strings.HasPrefix(n.String(), "/workflows ") {
+		t.Errorf("the refusal reads %q, want it to start with the command as typed", n.String())
 	}
 }

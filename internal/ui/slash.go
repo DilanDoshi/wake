@@ -761,6 +761,7 @@ const loginCommand = "login"
 const reauthCommand = "reauth"
 
 const workflowsCommand = "workflows" // no recorded headless init advertises it; see workflowview.go
+const workflowsVerb = SlashPrefix + workflowsCommand
 
 // adoptCommand is the room's half of session importing, and the word is a
 // finding rather than a preference.
