@@ -35,12 +35,9 @@ import (
 	"sync"
 
 	"github.com/charmbracelet/lipgloss"
-)
 
-// Version is what the banner claims to be. A var, not a const, so a release
-// build stamps it from the git tag with -ldflags -X (see .goreleaser.yaml); the
-// "0.1.5" default is what a plain `go build`/`go install` reports off a tag.
-var Version = "0.1.5"
+	"github.com/DilanDoshi/wake/internal/version"
+)
 
 const (
 	// bannerName is the product, and the one word in the banner set in Text.
@@ -261,7 +258,7 @@ func sessionLine(a Agent) string {
 // cannot scroll past to ignore because it is the first thing there is.
 func bannerBlock(sprite string, facts []string, width int) block {
 	lines := make([]string, 0, len(facts)+1)
-	lines = append(lines, bannerNameStyle.Render(bannerName)+"  "+bannerFactStyle.Render("v"+Version))
+	lines = append(lines, bannerNameStyle.Render(bannerName)+"  "+bannerFactStyle.Render("v"+version.Version))
 	for _, f := range facts {
 		if f != "" {
 			lines = append(lines, bannerFactStyle.Render(f))

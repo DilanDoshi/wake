@@ -3,11 +3,14 @@ package main
 import (
 	"bytes"
 	"io"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // Three answers, not two. A daemon that answered, a machine with no daemon,
@@ -131,7 +134,7 @@ func TestUnknownCommandsAreRefused(t *testing.T) {
 		want string
 	}{
 		{args: []string{"stat"}, want: "unknown command"},
-		{args: []string{"--help"}, want: "unknown command"},
+		{args: []string{"--halp"}, want: "unknown command"},
 		// The verb is checked before the arity. The other way round this
 		// reports that "bogus" takes no arguments, which quietly asserts that
 		// bogus is a command.
@@ -236,5 +239,44 @@ func TestAStatusRowCannotDriveTheTerminal(t *testing.T) {
 		if !strings.Contains(got, want) {
 			t.Errorf("containment ate %q out of the row: %q", want, got)
 		}
+	}
+}
+
+// --version and help are answers, not refusals: they print to stdout and
+// succeed, and neither touches a fleet - so no socket is set here, and a
+// ~/.wake they created would be the bug.
+func TestVersionAndHelpAnswerWithoutTouchingAFleet(t *testing.T) {
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(daemon.SocketEnv, "")
+
+	for _, args := range [][]string{{"--version"}, {"version"}} {
+		var out strings.Builder
+		if err := run(args, &out); err != nil {
+			t.Fatalf("run(%q): %v", args, err)
+		}
+		if want := "wake " + version.Build() + "\n"; out.String() != want {
+			t.Errorf("run(%q) printed %q, want %q", args, out.String(), want)
+		}
+	}
+	for _, args := range [][]string{{"help"}, {"--help"}, {"-h"}} {
+		var out strings.Builder
+		if err := run(args, &out); err != nil {
+			t.Fatalf("run(%q): %v", args, err)
+		}
+		if out.String() != usage+"\n" {
+			t.Errorf("run(%q) printed %q, want the usage", args, out.String())
+		}
+	}
+	if _, err := os.Stat(filepath.Join(os.Getenv("HOME"), ".wake")); !os.IsNotExist(err) {
+		t.Errorf("--version or help created ~/.wake (stat: %v)", err)
+	}
+}
+
+// The first line of the usage is what bare `wake` does, and bare `wake` makes
+// a new fleet every time - so the line may not promise to reopen one.
+func TestTheUsageSaysBareWakeStartsANewFleet(t *testing.T) {
+	first := strings.SplitN(usage, "\n", 3)[1]
+	if !strings.Contains(first, "new fleet") || strings.Contains(first, "reopen") {
+		t.Errorf("bare wake's usage line = %q", first)
 	}
 }

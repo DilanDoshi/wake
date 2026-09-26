@@ -3,8 +3,8 @@
 // Eleven verbs, and the split between them is the product rather than a CLI
 // convention:
 //
-//   - wake                  the front door: reopen the room over whatever
-//     fleet there is, and start an agent when there is not one.
+//   - wake                  the front door: start a new fleet, name it, and
+//     open its room with a first agent in it.
 //   - wake new [name]       spawn: a new agent, with a name chosen rather
 //     than drawn.
 //   - wake attach <who>     the same conversation with an agent already
@@ -65,11 +65,13 @@ import (
 	"io"
 	"os"
 	"os/signal"
+	"slices"
 	"strings"
 	"syscall"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/daemon"
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // The subcommands. `daemon` is spelled by internal/daemon as well, which forks
@@ -114,6 +116,12 @@ const (
 	cmdSetupTerminal = "setup-terminal"
 )
 
+// The answers that touch no fleet: which build this is, and the usage.
+var (
+	versionArgs = []string{"--version", "version"}
+	helpArgs    = []string{"help", "--help", "-h"}
+)
+
 // The description column is a column. `wake fork <who> [name]` is five
 // characters wider than the widest verb before it, so every line moved rather
 // than one line hanging off the end of a block somebody reads by scanning down
@@ -123,7 +131,7 @@ const (
 // would be the second spelling core/effort.go's own guard exists to prevent,
 // and a hand-written list of verbs would drift from the one that is enforced.
 var usage = `usage:
-  wake                    reopen the room, or start an agent if nothing is running
+  wake                    start a new fleet, name it, and open it
   wake new [name]         open a conversation with a new agent, with a name you choose
   wake attach <who>       open a conversation with one already running, by name or id
   wake fork <who> [name]  branch a conversation: a new agent with the same history so far
@@ -133,6 +141,7 @@ var usage = `usage:
   wake stop               stop every session and the daemon
   wake fleets             the named fleets on this machine
   wake setup-terminal     Shift+Enter newline, Cmd+Left/Right line start/end, via your terminal
+  wake --version          which build of wake this is
 
 flags, anywhere:
   --fleet <name>          which fleet to talk to; several can run in one directory
@@ -174,6 +183,13 @@ func main() {
 // than reading os.Args and writing to os.Stdout so the commands that print
 // something are testable without a subprocess.
 func run(args []string, out io.Writer) error {
+	// Before the fleet flag, because resolving a fleet creates its directory.
+	if len(args) == 1 && slices.Contains(versionArgs, args[0]) {
+		return say(out, "wake %s", version.Build())
+	}
+	if len(args) == 1 && slices.Contains(helpArgs, args[0]) {
+		return say(out, "%s", usage)
+	}
 	// The fleet comes off before anything else, including the verb: it decides
 	// *which daemon* every verb below is about, so a flag read after dispatch
 	// would be a flag half the paths had already ignored. It is also the one

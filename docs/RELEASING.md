@@ -12,7 +12,7 @@ release should go out. There is no CI release trigger; the timing is entirely yo
    ```
 
 2. Bump the checked-in banner default to the release number, so a plain `go
-   build`/`go install` reports it. Update `Version` in `internal/ui/banner.go`
+   build`/`go install` reports it. Update `Version` in `internal/version/version.go`
    and the `bannerVersion` constant in `internal/ui/menuposition_test.go` (they
    must match — the screen tests assert the banner draws `v<Version>`), then
    re-run `make ci`. A release build stamps the version from the tag via
@@ -43,7 +43,7 @@ release should go out. There is no CI release trigger; the timing is entirely yo
 
 That builds `wake` for **macOS and Linux, amd64 and arm64**, stamps the version from the tag, and
 publishes a **GitHub Release** with the binaries and a `checksums.txt`. The version the banner
-reports comes from the tag, via `-ldflags -X …/internal/ui.Version` (this is why `Version` is a
+reports comes from the tag, via `-ldflags -X …/internal/version.Version` (this is why `Version` is a
 `var`, not a `const` — a `const` can't be stamped).
 
 ## Release notes format
@@ -81,7 +81,7 @@ section that has nothing in it rather than writing "None" under a heading.
   and a cross-compile. Run it from a normal checkout under your home directory — not `/tmp` and not a
   very long temp path, because the screen tests render the working directory and assume a sane path.
 - Follow semver for the tag.
-- The checked-in banner default (`internal/ui.Version`, and its `bannerVersion` test twin) matches the
+- The checked-in banner default (`internal/version.Version`, and its `bannerVersion` test twin) matches the
   tag — that is step 2 above. A tag ahead of the default means every non-release build under-reports.
 
 ## After you cut
