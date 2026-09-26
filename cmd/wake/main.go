@@ -116,6 +116,10 @@ const (
 	cmdSetupTerminal = "setup-terminal"
 )
 
+// claudeOnPath is the check a verb that starts agents makes first; a seam so
+// the suite, whose daemons are fakes, does not need claude installed.
+var claudeOnPath = core.ClaudeOnPath
+
 // The answers that touch no fleet: which build this is, and the usage.
 var (
 	versionArgs = []string{"--version", "version"}
@@ -224,6 +228,13 @@ func run(args []string, out io.Writer) error {
 	// scratch-socket rule in CLAUDE.md keeps a test off the owner's own fleet.
 	// The pty suite caught this: nine tests timed out talking to a daemon that
 	// was never on the socket they had started one on.
+	// Bare `wake` starts agents on every path: a first one, or the manager the
+	// room seats.
+	if len(args) == 0 {
+		if err := claudeOnPath(); err != nil {
+			return err
+		}
+	}
 	if makesNewFleet(args, fleet, os.Getenv(daemon.SocketEnv)) {
 		return openNewFleet(out)
 	}
@@ -278,6 +289,11 @@ func run(args []string, out io.Writer) error {
 	}
 	if err := checkArity(args); err != nil {
 		return err
+	}
+	if startsAgents(args) {
+		if err := claudeOnPath(); err != nil {
+			return err
+		}
 	}
 
 	switch args[0] {
@@ -356,6 +372,18 @@ func checkArity(args []string) error {
 		}
 	}
 	return nil
+}
+
+// startsAgents is whether a verb can start a claude: a spawn, or a room that
+// seats the manager. Listing importable sessions starts nothing.
+func startsAgents(args []string) bool {
+	switch args[0] {
+	case cmdNew, cmdAttach, cmdFork, cmdManager:
+		return true
+	case cmdImport:
+		return len(args) > 1
+	}
+	return false
 }
 
 // chosenName is the name `wake new` was given, or nothing.
