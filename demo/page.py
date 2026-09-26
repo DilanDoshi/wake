@@ -252,6 +252,8 @@ header{padding:104px 0 56px;border-bottom:1px solid var(--rule)}
   border:1px solid var(--rule);border-radius:999px;padding:6px 13px;color:var(--muted)}
 .pill b{color:var(--accent);font-weight:500}
 .pill.req{border-color:var(--accent);color:var(--ink)}
+a.pill{text-decoration:none;background:var(--accent);border-color:var(--accent);color:var(--ground)}
+a.pill b{color:inherit}
 
 /* Sections -------------------------------------------------------------- */
 section{padding:76px 0;border-bottom:1px solid var(--rule)}
@@ -291,8 +293,8 @@ figcaption{max-width:64ch;font-family:"JetBrains Mono",monospace;font-size:12px;
 
 footer{padding:64px 0 96px}
 footer p{max-width:66ch}
-footer a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-soft)}
-footer a:hover,footer a:focus-visible{border-bottom-color:var(--accent)}
+footer a,.note a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-soft)}
+footer a:hover,footer a:focus-visible,.note a:hover,.note a:focus-visible{border-bottom-color:var(--accent)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
 @media (max-width:640px){ body{font-size:17.5px} section{padding:56px 0} .wrap{padding:0 20px} }
@@ -378,6 +380,7 @@ def main():
       a roster that ranks agents by whether they need you, and any agent openable as a full
       conversation at Claude&nbsp;Code fidelity. Currently in beta; the V1 release is coming soon.</p>
     <div class="meta">
+      <a class="pill" href="https://github.com/DilanDoshi/wake/releases/latest"><b>Download</b> — latest release&nbsp;→</a>
       <span class="pill req"><b>requires Claude&nbsp;Code</b> — installed and signed in</span>
       <span class="pill"><b>Go</b> · Bubble&nbsp;Tea</span>
       <span class="pill">no screen-scraping — <b>structured JSON only</b></span>
@@ -403,9 +406,10 @@ def main():
            <code>/login</code> inside the room shows the auth status it found.</p>
       </div>
       <div class="note">
-        <h3>Go 1.26+</h3>
-        <p>There is no packaged release yet. <code>make build</code> produces <code>./bin/wake</code>;
-           run it and a daemon, a first agent and the room appear.</p>
+        <h3>Install</h3>
+        <p>Builds for macOS and Linux are on the <a href="https://github.com/DilanDoshi/wake/releases/latest">latest release</a>. The
+           <a href="https://github.com/DilanDoshi/wake#install">install steps</a> put <code>wake</code> on
+           your <code>PATH</code>; run it in a project and a daemon, a first agent and the room appear.</p>
       </div>
       <div class="note">
         <h3>Any terminal</h3>
