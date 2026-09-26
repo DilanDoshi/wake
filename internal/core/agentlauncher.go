@@ -1,6 +1,9 @@
 package core
 
-import "os"
+import (
+	"errors"
+	"os"
+)
 
 const (
 	agentLauncherArg        = "--wake-agent-launcher"
@@ -8,6 +11,8 @@ const (
 	agentLauncherDirEnv     = "WAKE_AGENT_LAUNCHER_DIR"
 	agentLauncherProtocol   = "1"
 	agentLauncherControlFD  = 3
+	// The status fd and its ERROR frame are frozen across protocols: a binary
+	// replaced under a running daemon reports the mismatch through them.
 	agentLauncherStatusFD   = 4
 	agentLauncherLifetimeFD = 5
 	agentLauncherRelease    = byte('R')
@@ -41,4 +46,31 @@ type agentLauncherPipes struct {
 var agentLauncherEnv = []string{
 	agentLauncherMarkerEnv,
 	agentLauncherDirEnv,
+}
+
+// errAgentLauncherReplaced is a launch from a daemon older or newer than this
+// binary: the file was replaced while that daemon kept running.
+var errAgentLauncherReplaced = errors.New("this wake binary was replaced while its fleet's daemon kept running, " +
+	"and the two start agents differently: ⌃Q⌃Q the fleet, then reopen it, to run it on this build")
+
+// AgentLauncherMismatch is the error for a launch this binary cannot serve, or
+// nil when it is not one.
+// It is also written to the status fd as an ERROR frame, which is what the
+// daemon that started this process reads as the spawn's error.
+func AgentLauncherMismatch() error {
+	err := agentLauncherMismatch(os.Args, os.LookupEnv)
+	if err != nil {
+		if status := os.NewFile(agentLauncherStatusFD, "Wake agent launcher status"); status != nil {
+			_ = reportAgentLauncherFailure(status, err)
+		}
+	}
+	return err
+}
+
+func agentLauncherMismatch(args []string, lookup func(string) (string, bool)) error {
+	marker, set := lookup(agentLauncherMarkerEnv)
+	if set && marker != agentLauncherProtocol && len(args) >= 2 && args[1] == agentLauncherArg {
+		return errAgentLauncherReplaced
+	}
+	return nil
 }

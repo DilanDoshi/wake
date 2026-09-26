@@ -173,6 +173,10 @@ func main() {
 		}
 		return
 	}
+	if err := core.AgentLauncherMismatch(); err != nil {
+		fmt.Fprintln(os.Stderr, "wake:", err)
+		os.Exit(1)
+	}
 	if err := run(os.Args[1:], os.Stdout); err != nil {
 		fmt.Fprintln(os.Stderr, "wake:", err)
 		os.Exit(1)
