@@ -123,23 +123,46 @@ func TestTheSinkIsBounded(t *testing.T) {
 }
 
 // A timed notice clears itself, but only while it is still the one showing:
-// its own expiry must not wipe a fresher failure that overwrote the slot.
-func TestClearIfOnlyClearsTheMatchingNotice(t *testing.T) {
+// its own expiry must not wipe a fresher report that took the slot - including
+// a repeat of the same text, which restarts the clock.
+func TestClearIfOnlyClearsTheReportItWasArmedFor(t *testing.T) {
 	fresh(t)
 
-	Report("usage limit approaching")
-	ClearIf("usage limit approaching")
+	Report("renaming @alex…")
+	first, _ := Latest()
+	ClearIf(first.Seq)
 	if n, ok := Latest(); ok {
 		t.Errorf("ClearIf left %q showing; want the slot empty", n.Text)
 	}
 
-	// A different, newer failure is not the timed notice's to clear.
 	Report("usage limit approaching")
+	stale, _ := Latest()
 	Report("the daemon hung up")
-	ClearIf("usage limit approaching")
-	n, ok := Latest()
-	if !ok || n.Text != "the daemon hung up" {
-		t.Errorf("ClearIf wiped a fresher failure: Latest = %q, %v", n.Text, ok)
+	ClearIf(stale.Seq)
+	if n, ok := Latest(); !ok || n.Text != "the daemon hung up" {
+		t.Errorf("ClearIf wiped a fresher notice: Latest = %q, %v", n.Text, ok)
+	}
+
+	Report("forking @alex…")
+	once, _ := Latest()
+	Report("forking @alex…")
+	ClearIf(once.Seq)
+	if n, ok := Latest(); !ok || n.Count != 2 {
+		t.Errorf("the first report's expiry cleared its repeat: Latest = %v, %v", n, ok)
+	}
+}
+
+// Every report takes a new sequence number, a repeat included, so a repeat is
+// a fresh report to whoever times the row.
+func TestEveryReportTakesANewSeq(t *testing.T) {
+	fresh(t)
+
+	Report("copied 3 chars")
+	a, _ := Latest()
+	Report("copied 3 chars")
+	b, _ := Latest()
+	if a.Seq == 0 || b.Seq <= a.Seq {
+		t.Errorf("seqs %d then %d; want non-zero and rising", a.Seq, b.Seq)
 	}
 }
 
@@ -150,7 +173,8 @@ func TestClearIfForgetsTheCount(t *testing.T) {
 
 	Report("close to the limit")
 	Report("close to the limit")
-	ClearIf("close to the limit")
+	n, _ := Latest()
+	ClearIf(n.Seq)
 
 	Report("close to the limit")
 	if got := Count("close to the limit"); got != 1 {

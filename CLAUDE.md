@@ -200,6 +200,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The DM's done line** is captured at the working→idle edge (`Fleet.WithStatus`), only for turns
   this client watched start; forgotten on park/end/gap, on new agent content (`notDone`), and hidden
   while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate.
+- **Every notice times out**: `max(10s, drawn cells × 100ms)`, one tick per `notice.Seq`, armed in
+  `App.Update`. An API failure stays pinned under them until a healthy turn or a resume
+  (`noticelinger.go`, `apierror.go`'s `pinnedNotice`).
 - **Compacting line** (`compacting.go`): indeterminate bar (the wire has no progress figure); end
   keys on `compact_result`, not the boundary. The `compact_boundary` metadata draws
   `✻ Compacted · A → B tokens · …`, live-only.
@@ -301,7 +304,7 @@ yet says so in bold.**
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
 | Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix |
-| Notices under a TUI | `internal/notice/notice.go` |
+| Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Git branch lookup | `internal/gitref/` |
 | Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) |
 | Demo film | `demo/` (Python stand-in agent, VHS tapes) |

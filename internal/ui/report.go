@@ -55,7 +55,7 @@ func (a App) applyStatus(st *rpc.Status) App {
 	// picker over. See rewind.go's reconcileRewind, and the adversarial
 	// review CRITICAL finding it closes, 2026-08-26.
 	a = a.reconcileRewind().reconciledMCP()
-	return a.renamed(st).startArrived(st).parkArrived(st).wakeArrived(st).noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
+	return a.renamed(st).startArrived(st).parkArrived(st).wakeArrived(st).reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
 }
 
 // refreshedAgents folds each live agent into the conversation this client holds

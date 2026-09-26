@@ -545,7 +545,8 @@ func (a App) clipMidDrag(frame string) string {
 	return frame
 }
 
-// noticeLine is the reserved row: empty when nothing has failed.
+// noticeLine is the reserved row: the newest notice while its linger runs, else
+// the pinned API failure (noticelinger.go), else empty.
 //
 // One row means one row. lipgloss's MaxWidth truncates each line but preserves
 // the line *count*, so a notice carrying a newline would make the frame one
@@ -553,9 +554,15 @@ func (a App) clipMidDrag(frame string) string {
 // text is not ours: it is a daemon's error frame, which reaches it from an
 // agent's stderr. See oneLine.
 func (a App) noticeLine() string {
-	n, ok := notice.Latest()
-	if !ok {
+	text := a.pinnedNotice()
+	if n, ok := notice.Latest(); ok {
+		text = n.String()
+	}
+	if text == "" {
 		return ""
 	}
-	return warnStyle.MaxWidth(max(a.layout.Width, minComposerWidth)).Render(oneLine(noticePrefix + n.String()))
+	return warnStyle.MaxWidth(a.noticeWidth()).Render(oneLine(noticePrefix + text))
 }
+
+// noticeWidth is the cells the notice row draws before it truncates.
+func (a App) noticeWidth() int { return max(a.layout.Width, minComposerWidth) }
