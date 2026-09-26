@@ -161,3 +161,82 @@ func TestAssetNameMatchesTheReleaseConfig(t *testing.T) {
 		t.Errorf("scripts/install.sh does not build the asset name as wake_${version}_${os}_${arch}.tar.gz")
 	}
 }
+
+// releaseOf is a release whose checksums vouch for exactly this archive, so a
+// test can hand Install a well-signed archive that is wrong in some other way.
+func releaseOf(archive []byte) fakeRelease {
+	sum := sha256.Sum256(archive)
+	return fakeRelease{archive: archive,
+		sums: hex.EncodeToString(sum[:]) + "  " + AssetName(testTag, runtime.GOOS, runtime.GOARCH) + "\n"}
+}
+
+func existingBinary(t *testing.T) string {
+	t.Helper()
+	dest := filepath.Join(t.TempDir(), "wake")
+	if err := os.WriteFile(dest, []byte("old build"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	return dest
+}
+
+func assertUntouched(t *testing.T, dest string) {
+	t.Helper()
+	if got, _ := os.ReadFile(dest); string(got) != "old build" {
+		t.Errorf("a failed install changed the binary to %q", got)
+	}
+}
+
+func TestLatestRefusesAnAnswerThatNamesNoRelease(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		_, _ = fmt.Fprint(w, "no redirect here")
+	}))
+	t.Cleanup(srv.Close)
+	if tag, err := (Releases{Base: srv.URL, Client: srv.Client()}).Latest(context.Background()); err == nil {
+		t.Errorf("Latest = %q with no redirect to a tag", tag)
+	}
+}
+
+func TestInstallRefusesAWellSignedArchiveWithNoWakeInIt(t *testing.T) {
+	rel := serve(t, releaseOf(tarball(t, "LICENSE.txt", []byte("just a license"))))
+	dest := existingBinary(t)
+	if err := rel.Install(context.Background(), testTag, dest); err == nil || !strings.Contains(err.Error(), "no wake") {
+		t.Errorf("Install = %v, want a refusal naming the missing binary", err)
+	}
+	assertUntouched(t, dest)
+}
+
+func TestInstallRefusesAnArchiveThatIsNotOne(t *testing.T) {
+	rel := serve(t, releaseOf([]byte("not gzip at all")))
+	dest := existingBinary(t)
+	if err := rel.Install(context.Background(), testTag, dest); err == nil {
+		t.Error("Install accepted an archive that does not open")
+	}
+	assertUntouched(t, dest)
+}
+
+func TestInstallSaysWhichDownloadWasMissing(t *testing.T) {
+	r := release(t, []byte("new build"))
+	rel := serve(t, r)
+	rel.Base += "/elsewhere"
+	err := rel.Install(context.Background(), testTag, existingBinary(t))
+	if err == nil || !strings.Contains(err.Error(), checksumsName) || !strings.Contains(err.Error(), "404") {
+		t.Errorf("Install = %v, want it to name %s and the 404", err, checksumsName)
+	}
+}
+
+func TestInstallIntoADirectoryItCannotWriteChangesNothing(t *testing.T) {
+	if os.Geteuid() == 0 {
+		t.Skip("root writes through directory permissions")
+	}
+	rel := serve(t, release(t, []byte("new build")))
+	dest := existingBinary(t)
+	dir := filepath.Dir(dest)
+	if err := os.Chmod(dir, 0o500); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(dir, 0o700) })
+	if err := rel.Install(context.Background(), testTag, dest); err == nil || !strings.Contains(err.Error(), "writable") {
+		t.Errorf("Install = %v, want it to say the directory is not writable", err)
+	}
+	assertUntouched(t, dest)
+}
