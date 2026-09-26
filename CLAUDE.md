@@ -44,8 +44,9 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room (spawns one
   agent as a roster row if the machine has nothing); `wake --fleet <name>` returns to one
   (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status`, `stop`
-  (irreversible), `fleets`, `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. Verbs that
-  can start an agent check `claude` is on `PATH` first (`core.ClaudeOnPath`). `$WAKE_SOCKET` wins;
+  (irreversible), `fleets`, `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. A new fleet
+  checks `claude` is on this `PATH` first (its daemon inherits it); a spawn from any daemon without
+  one says how to install it (`core.claudeMissing`). `$WAKE_SOCKET` wins;
   naming a fleet beside it is refused. Each fleet is a directory under `~/.wake/fleets/`; per-fleet
   files are `filepath.Dir(socket)` plus a name.
 - **Spawn flags** (`new`, `manager`, `/new`): `--effort`, `--model`, `--max-budget-usd`,

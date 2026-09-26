@@ -430,7 +430,9 @@ func Status(socket string) (rpc.Status, error) {
 // listening is not running, off one failed dial, so a listing can ask every
 // fleet without paying FleetOnDisk's sweep for each stopped one.
 func runningStatus(socket string) (rpc.Status, bool, error) {
-	conn, err := Dial(socket)
+	// The dial is bounded too: a listener that has stopped accepting must not
+	// hold the listing past the one timeout it promises.
+	conn, err := net.DialTimeout("unix", socket, statusTimeout)
 	if err != nil {
 		return rpc.Status{}, false, nil
 	}

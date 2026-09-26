@@ -2,6 +2,7 @@ package main
 
 import (
 	"io"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -9,26 +10,31 @@ import (
 	"github.com/DilanDoshi/wake/internal/daemon"
 )
 
-// Every verb that can start an agent - bare `wake` included, since the room
-// seats a manager - refuses up front when there is no claude to start, rather
-// than failing inside the daemon at the first spawn. The verbs that only look
-// at a fleet do not ask.
-func TestVerbsThatStartAgentsRefuseWithoutClaude(t *testing.T) {
+// Bare `wake` makes a new fleet, whose daemon is forked from this process and
+// inherits this PATH - so here, and only here, the terminal's PATH is the one
+// that counts, and a missing claude is refused before anything is made. Every
+// other verb talks to a daemon whose own PATH decides, and the daemon says so
+// at the spawn (core.claudeMissing): a terminal without claude may still
+// reattach to a fleet that has it.
+func TestOnlyANewFleetChecksThisTerminalForClaude(t *testing.T) {
 	t.Setenv("PATH", t.TempDir())
-	t.Setenv(daemon.SocketEnv, tempSocket(t))
+	t.Setenv("HOME", filepath.Dir(tempSocket(t)))
+	t.Setenv(daemon.SocketEnv, "")
 	claudeOnPath = core.ClaudeOnPath
 	t.Cleanup(func() { claudeOnPath = func() error { return nil } })
 
-	for _, args := range [][]string{nil, {"new"}, {"new", "--effort", "max"}, {"attach", "sydney"},
-		{"fork", "sydney"}, {"import", "a11a0000-0000-4000-8000-00000000a11a"}, {"manager"}} {
-		err := run(args, io.Discard)
-		if err == nil || !strings.Contains(err.Error(), "not on your PATH") {
-			t.Errorf("run(%q) = %v, want the missing-claude refusal", args, err)
-		}
+	if err := run(nil, io.Discard); err == nil || !strings.Contains(err.Error(), "not on your PATH") {
+		t.Errorf("bare wake = %v, want the missing-claude refusal", err)
 	}
-	for _, args := range [][]string{{"status"}, {"fleets"}, {"--version"}, {"help"}} {
+	fleets, err := daemon.Fleets()
+	if err != nil || len(fleets) != 0 {
+		t.Errorf("a refused bare wake left fleets behind: %v, %v", fleets, err)
+	}
+
+	t.Setenv(daemon.SocketEnv, tempSocket(t))
+	for _, args := range [][]string{{"status"}, {"attach", "nobody"}} {
 		if err := run(args, io.Discard); err != nil && strings.Contains(err.Error(), "not on your PATH") {
-			t.Errorf("run(%q) asked for claude: %v", args, err)
+			t.Errorf("run(%q) checked this terminal for claude: %v", args, err)
 		}
 	}
 }

@@ -134,7 +134,7 @@ func (s *Session) startAgent(ctx context.Context) (*agentProcess, error) {
 		_ = stdout.Close()
 		_ = stdoutW.Close()
 		discardAgentCommand(cmd, launcher)
-		return nil, fmt.Errorf("start claude for session %s in %s: %w", s.cfg.SessionID, s.cfg.Dir, err)
+		return nil, fmt.Errorf("start claude for session %s in %s: %w", s.cfg.SessionID, s.cfg.Dir, claudeMissing(err))
 	}
 	// The supervisor's protocol fds are the child's now; Wake's copies go, or a
 	// read on one never EOFs. The stdout write end is the child's dup for the

@@ -2,6 +2,7 @@ package version
 
 import (
 	"runtime/debug"
+	"strings"
 	"testing"
 )
 
@@ -71,5 +72,21 @@ func TestADirtyBuildNamesItsExecutable(t *testing.T) {
 	clean := info("(devel)", vcs("44a0a92c0ffee", "false")...)
 	if got := build("0.1.5", clean, func() string { t.Error("a clean build read its executable"); return "" }); got != "0.1.5+44a0a92" {
 		t.Errorf("clean build = %q", got)
+	}
+}
+
+// The digest is of the running test binary itself: seven hex digits, the same
+// on every call, and what Build names when the build is dirty.
+func TestTheExecutableDigestIsThisBinarys(t *testing.T) {
+	d := executableDigest()
+	if len(d) != shortRevision || strings.Trim(d, "0123456789abcdef") != "" {
+		t.Fatalf("executableDigest = %q", d)
+	}
+	if again := executableDigest(); again != d {
+		t.Errorf("digest changed between calls: %q then %q", d, again)
+	}
+	info, _ := debug.ReadBuildInfo()
+	if got := Build(); got != build(Version, info, executableDigest) {
+		t.Errorf("Build = %q", got)
 	}
 }
