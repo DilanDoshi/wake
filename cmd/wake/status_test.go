@@ -134,7 +134,7 @@ func TestUnknownCommandsAreRefused(t *testing.T) {
 		want string
 	}{
 		{args: []string{"stat"}, want: "unknown command"},
-		{args: []string{"--halp"}, want: "unknown command"},
+		{args: []string{"--info"}, want: "unknown command"},
 		// The verb is checked before the arity. The other way round this
 		// reports that "bogus" takes no arguments, which quietly asserts that
 		// bogus is a command.

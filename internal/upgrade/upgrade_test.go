@@ -69,9 +69,9 @@ func serve(t *testing.T, r fakeRelease) Releases {
 		case "/releases/latest":
 			http.Redirect(w, req, "/releases/tag/"+testTag, http.StatusFound)
 		case "/releases/tag/" + testTag:
-			fmt.Fprint(w, "the release page")
+			_, _ = fmt.Fprint(w, "the release page")
 		case dl + checksumsName:
-			fmt.Fprint(w, r.sums)
+			_, _ = fmt.Fprint(w, r.sums)
 		case dl + AssetName(testTag, runtime.GOOS, runtime.GOARCH):
 			_, _ = w.Write(r.archive)
 		default:
