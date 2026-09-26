@@ -5,14 +5,14 @@ import (
 	"os"
 )
 
+// agentLauncherStatusFD and its ERROR frame are frozen across protocols: a
+// binary replaced under a running daemon reports the mismatch through them.
 const (
 	agentLauncherArg        = "--wake-agent-launcher"
 	agentLauncherMarkerEnv  = "WAKE_AGENT_LAUNCHER"
 	agentLauncherDirEnv     = "WAKE_AGENT_LAUNCHER_DIR"
 	agentLauncherProtocol   = "1"
 	agentLauncherControlFD  = 3
-	// The status fd and its ERROR frame are frozen across protocols: a binary
-	// replaced under a running daemon reports the mismatch through them.
 	agentLauncherStatusFD   = 4
 	agentLauncherLifetimeFD = 5
 	agentLauncherRelease    = byte('R')
