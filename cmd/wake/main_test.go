@@ -63,6 +63,12 @@ func TestMain(m *testing.M) {
 	// The suite's daemons are fakes or start the fake agent, so no test needs
 	// the operator's claude; claudecheck_test.go restores the real check.
 	claudeOnPath = func() error { return nil }
+	// Nor may any wake this suite starts - the pty tests run the real binary,
+	// which inherits this - ask GitHub for the latest release.
+	if err := os.Setenv(noUpdateCheckEnv, "1"); err != nil {
+		fmt.Fprintln(os.Stderr, "turn off the update check:", err)
+		os.Exit(1)
+	}
 	if err := os.Setenv(daemon.DirectAgentLauncherEnv, "1"); err != nil {
 		fmt.Fprintln(os.Stderr, "set direct launcher:", err)
 		os.Exit(1)

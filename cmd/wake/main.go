@@ -145,7 +145,8 @@ var usage = `usage:
   wake stop               stop every session and the daemon
   wake fleets             the named fleets on this machine
   wake setup-terminal     Shift+Enter newline, Cmd+Left/Right line start/end, via your terminal
-  wake --version          which build of wake this is
+  wake upgrade            install the newest release over this binary
+  wake --version          the build installed here
 
 flags, anywhere:
   --fleet <name>          which fleet to talk to; several can run in one directory
@@ -239,12 +240,15 @@ func run(args []string, out io.Writer) error {
 		return openNewFleet(out)
 	}
 
-	// wake setup-terminal touches no fleet at all - handled here, before
+	// wake upgrade and wake setup-terminal touch no fleet at all - handled here, before
 	// daemon.FleetSocketPath below, because that call creates the fleet's
 	// state directory (mkdir -p ~/.wake or a named fleet's own directory)
 	// as a side effect of resolving a path this verb has no use for. Every
 	// other verb needs that path; this is the one that would otherwise
 	// leave a directory behind for a fleet that was never started.
+	if len(args) > 0 && args[0] == cmdUpgrade {
+		return runUpgrade(args, out)
+	}
 	if len(args) > 0 && args[0] == cmdSetupTerminal {
 		if _, err := setupTerminalFlags(args[1:]); err != nil {
 			return err

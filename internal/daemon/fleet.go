@@ -103,15 +103,15 @@ func FleetSocketPath(name string) (string, error) {
 // fleetDir is where one fleet keeps everything: its socket and every file
 // beside it.
 func fleetDir(name string) (string, error) {
-	root, err := stateRoot()
+	root, err := StateRoot()
 	if err != nil {
 		return "", err
 	}
 	return fleetDirFor(root, name)
 }
 
-// stateRoot is ~/.wake, the directory every fleet lives under.
-func stateRoot() (string, error) {
+// StateRoot is ~/.wake, the directory every fleet lives under.
+func StateRoot() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("locate home directory: %w", err)
@@ -169,7 +169,7 @@ func checkFleetName(name string) error {
 // `/resume` reads - and leaving it out would make a stopped fleet unfindable by
 // exactly the person looking for how to bring it back.
 func Fleets() ([]string, error) {
-	root, err := stateRoot()
+	root, err := StateRoot()
 	if err != nil {
 		return nil, err
 	}
