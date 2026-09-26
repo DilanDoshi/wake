@@ -34,10 +34,11 @@ const (
 	binaryName    = "wake"
 	tagPrefix     = "v"
 
-	// maxBinaryBytes bounds what one archive entry may write: far above a real
-	// build, far below a disk.
-	maxBinaryBytes = 512 << 20
 )
+
+// maxBinaryBytes bounds the binary an archive may hold: far above a real
+// build, far below a disk. A var so a test can lower it.
+var maxBinaryBytes int64 = 512 << 20
 
 // Releases is where builds are published: GitHub, or a test server.
 type Releases struct {
@@ -147,11 +148,16 @@ func replace(archive []byte, dest string) error {
 			return fmt.Errorf("read the release archive: %w", err)
 		}
 		if hdr.Typeflag == tar.TypeReg && hdr.Name == binaryName {
+			if hdr.Size > maxBinaryBytes {
+				return fmt.Errorf("the release's wake is %d bytes, over the %d this will install", hdr.Size, maxBinaryBytes)
+			}
 			return writeOver(tr, dest)
 		}
 	}
 }
 
+// writeOver writes src beside dest and renames it over dest. A tar entry
+// reads as exactly its declared size or fails, so a short copy is an error.
 func writeOver(src io.Reader, dest string) (err error) {
 	tmp, err := os.CreateTemp(filepath.Dir(dest), ".wake-upgrade-*")
 	if err != nil {
@@ -162,7 +168,7 @@ func writeOver(src io.Reader, dest string) (err error) {
 			_ = os.Remove(tmp.Name())
 		}
 	}()
-	if _, err := io.Copy(tmp, io.LimitReader(src, maxBinaryBytes)); err != nil {
+	if _, err := io.Copy(tmp, src); err != nil {
 		_ = tmp.Close()
 		return fmt.Errorf("write the new wake: %w", err)
 	}

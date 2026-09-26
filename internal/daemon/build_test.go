@@ -1,7 +1,9 @@
 package daemon
 
 import (
+	"net"
 	"testing"
+	"time"
 
 	"github.com/DilanDoshi/wake/internal/version"
 )
@@ -52,5 +54,41 @@ func TestRunningBuildsNamesOnlyTheFleetsThatAreUp(t *testing.T) {
 	got := RunningBuilds([]string{"canyon", "mesa"})
 	if len(got) != 1 || got["canyon"] != version.Build() {
 		t.Errorf("RunningBuilds = %v, want only canyon on %q", got, version.Build())
+	}
+}
+
+// A daemon that takes the dial and never answers - mid-shutdown, or wedged -
+// costs statusTimeout, so the fleets are asked together: three such fleets
+// cost one timeout, not three.
+func TestRunningBuildsAsksEveryFleetAtOnce(t *testing.T) {
+	t.Setenv("HOME", tempHome(t))
+	t.Setenv(SocketEnv, "")
+	names := []string{"a", "b", "c"}
+	for _, name := range names {
+		sock, err := FleetSocketPath(name)
+		if err != nil {
+			t.Fatal(err)
+		}
+		ln, err := net.Listen("unix", sock)
+		if err != nil {
+			t.Fatal(err)
+		}
+		t.Cleanup(func() { _ = ln.Close() })
+		go func() {
+			for {
+				conn, err := ln.Accept()
+				if err != nil {
+					return
+				}
+				t.Cleanup(func() { _ = conn.Close() })
+			}
+		}()
+	}
+	start := time.Now()
+	if got := RunningBuilds(names); len(got) != 0 {
+		t.Errorf("silent daemons reported builds: %v", got)
+	}
+	if took := time.Since(start); took >= 2*statusTimeout {
+		t.Errorf("three silent fleets took %v; asked together they cost one %v", took, statusTimeout)
 	}
 }

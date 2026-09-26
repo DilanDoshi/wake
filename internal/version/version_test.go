@@ -30,7 +30,7 @@ func TestBuildNamesTheCommitAndWhetherTheTreeWasDirty(t *testing.T) {
 		{"devel without vcs", info("(devel)"), "0.1.5"},
 	}
 	for _, c := range cases {
-		if got := build("0.1.5", c.info); got != c.want {
+		if got := build("0.1.5", c.info, func() string { return "" }); got != c.want {
 			t.Errorf("%s: build = %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -56,5 +56,20 @@ func TestNewerComparesReleaseNumbersNotStrings(t *testing.T) {
 		if got := Newer(c.latest, c.current); got != c.want {
 			t.Errorf("Newer(%q, %q) = %v, want %v", c.latest, c.current, got, c.want)
 		}
+	}
+}
+
+// Two dirty builds of one commit run different code, so a dirty build names
+// its own executable too - and only a dirty one pays for reading it.
+func TestADirtyBuildNamesItsExecutable(t *testing.T) {
+	digest := func(d string) func() string { return func() string { return d } }
+	dirty := info("(devel)", vcs("44a0a92c0ffee", "true")...)
+	a, b := build("0.1.5", dirty, digest("aaaaaaa")), build("0.1.5", dirty, digest("bbbbbbb"))
+	if a == b || a != "0.1.5+44a0a92-dirty.aaaaaaa" {
+		t.Errorf("dirty builds %q and %q", a, b)
+	}
+	clean := info("(devel)", vcs("44a0a92c0ffee", "false")...)
+	if got := build("0.1.5", clean, func() string { t.Error("a clean build read its executable"); return "" }); got != "0.1.5+44a0a92" {
+		t.Errorf("clean build = %q", got)
 	}
 }

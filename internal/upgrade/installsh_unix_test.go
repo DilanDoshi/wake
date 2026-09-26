@@ -8,6 +8,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"runtime"
 	"strings"
 	"sync"
 	"syscall"
@@ -143,4 +144,60 @@ func (b *lockedBuffer) String() string {
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	return b.buf.String()
+}
+
+// The binary is staged in the install directory itself, so the last step is a
+// rename on one filesystem and never a copy over a binary somebody may be
+// running. A logging mv first on PATH shows where every move starts from.
+func TestInstallScriptStagesBesideTheInstallNotInTmp(t *testing.T) {
+	env, _, dir := installEnv(t, serve(t, release(t, []byte("new build"))))
+	shims, log := t.TempDir(), filepath.Join(t.TempDir(), "mv.log")
+	shim := "#!/bin/sh\nprintf '%s\\n' \"$*\" >> \"$MV_LOG\"\nexec /bin/mv \"$@\"\n"
+	if err := os.WriteFile(filepath.Join(shims, "mv"), []byte(shim), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	for i, kv := range env {
+		if strings.HasPrefix(kv, "PATH=") {
+			env[i] = "PATH=" + shims + ":" + strings.TrimPrefix(kv, "PATH=")
+		}
+	}
+	out, err := runDetached(t, append(env, "MV_LOG="+log))
+	if err != nil {
+		t.Fatalf("install.sh: %v\n%s", err, out)
+	}
+	moves, err := os.ReadFile(log)
+	if err != nil || len(moves) == 0 {
+		t.Fatalf("no move was made: %v", err)
+	}
+	for _, m := range strings.Split(strings.TrimSpace(string(moves)), "\n") {
+		if !strings.Contains(m, " "+dir+"/.wake-install") {
+			t.Errorf("a move starts outside %s: %q", dir, m)
+		}
+	}
+	if left, _ := filepath.Glob(filepath.Join(dir, ".wake-install*")); len(left) != 0 {
+		t.Errorf("staging left behind: %v", left)
+	}
+}
+
+// Each shell is pointed at the file it reads: a login bash on macOS reads
+// ~/.bash_profile, and fish reads neither that nor a Bourne export line.
+func TestInstallScriptNamesTheStartupFileEachShellReads(t *testing.T) {
+	bashrc := ".bashrc"
+	if runtime.GOOS == "darwin" {
+		bashrc = ".bash_profile"
+	}
+	for shell, want := range map[string]string{"/bin/bash": bashrc, "/opt/homebrew/bin/fish": "fish_add_path"} {
+		env, home, _ := installEnv(t, serve(t, release(t, []byte("new build"))))
+		env = append(env, "SHELL="+shell)
+		out, err := runDetached(t, env)
+		if err != nil {
+			t.Fatalf("%s: install.sh: %v\n%s", shell, err, out)
+		}
+		if !strings.Contains(out, want) {
+			t.Errorf("%s: output does not name %q:\n%s", shell, want, out)
+		}
+		if _, err := os.Stat(filepath.Join(home, ".profile")); !os.IsNotExist(err) {
+			t.Errorf("%s: install.sh wrote ~/.profile", shell)
+		}
+	}
 }

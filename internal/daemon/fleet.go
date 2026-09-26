@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"sync"
 )
 
 // fleetsDirName holds the named fleets, beside the default fleet's own files
@@ -188,18 +189,29 @@ func Fleets() ([]string, error) {
 
 // RunningBuilds is the build each named fleet's daemon reports, for the fleets
 // with one up. A stopped fleet, or a daemon that will not answer, is absent;
-// an empty build is a daemon from before builds were reported.
+// an empty build is a daemon from before builds were reported. The fleets are
+// asked together, so a daemon that takes the dial and never answers costs one
+// statusTimeout for the whole listing rather than one each.
 func RunningBuilds(names []string) map[string]string {
-	builds := map[string]string{}
+	var (
+		mu     sync.Mutex
+		wg     sync.WaitGroup
+		builds = map[string]string{}
+	)
 	for _, name := range names {
 		dir, err := fleetDir(name)
 		if err != nil {
 			continue
 		}
-		if st, running, err := runningStatus(filepath.Join(dir, socketFileName)); running && err == nil {
-			builds[name] = st.Build
-		}
+		wg.Go(func() {
+			if st, running, err := runningStatus(filepath.Join(dir, socketFileName)); running && err == nil {
+				mu.Lock()
+				builds[name] = st.Build
+				mu.Unlock()
+			}
+		})
 	}
+	wg.Wait()
 	return builds
 }
 

@@ -98,25 +98,32 @@ func TestUpgradeTakesNoArguments(t *testing.T) {
 	}
 }
 
-// The check asks GitHub at most once a day: a fresh answer on disk is used as
-// is, a stale or missing one is asked for again and kept.
-func TestTheUpdateCheckAsksAtMostOnceADay(t *testing.T) {
+// The check asks GitHub at most once a day, and the notice is given at most
+// once a day however many rooms open - it shares one row with notices that
+// matter more, like a stale daemon.
+func TestTheUpdateNoticeIsCheckedAndGivenAtMostOnceADay(t *testing.T) {
 	cache := filepath.Join(t.TempDir(), updateCacheFile)
 	now := time.Date(2026, 9, 25, 12, 0, 0, 0, time.UTC)
-	rel := &fakeReleases{latest: "v0.2.0"}
+	rel := &fakeReleases{latest: "v99.0.0"}
 
-	for i, at := range []time.Time{now, now.Add(time.Hour), now.Add(updateCheckEvery + time.Minute)} {
-		tag, err := latestRelease(context.Background(), rel, cache, at)
-		if err != nil || tag != "v0.2.0" {
-			t.Fatalf("check %d: %q, %v", i, tag, err)
+	for i, step := range []struct {
+		at     time.Time
+		notice bool
+	}{{now, true}, {now.Add(time.Hour), false}, {now.Add(updateCheckEvery + time.Minute), true}} {
+		text, err := dueUpdateNotice(context.Background(), rel, cache, step.at, version.Version)
+		if err != nil {
+			t.Fatalf("open %d: %v", i, err)
+		}
+		if (text != "") != step.notice {
+			t.Errorf("open %d: notice %q, want one: %v", i, text, step.notice)
 		}
 	}
 	if rel.asked != 2 {
 		t.Errorf("asked GitHub %d times over a day and a minute, want 2", rel.asked)
 	}
 	rel.err = errors.New("offline")
-	if _, err := latestRelease(context.Background(), rel, cache, now.Add(3*updateCheckEvery)); err == nil {
-		t.Error("an offline check reported an answer")
+	if text, err := dueUpdateNotice(context.Background(), rel, cache, now.Add(3*updateCheckEvery), version.Version); err == nil || text != "" {
+		t.Errorf("an offline check: %q, %v", text, err)
 	}
 	if _, err := os.Stat(cache); err != nil {
 		t.Errorf("the answer was not kept: %v", err)

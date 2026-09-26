@@ -57,6 +57,7 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // SocketEnv names the socket explicitly, overriding the default path.
@@ -144,6 +145,9 @@ func Dial(socket string) (net.Conn, error) {
 // its agents ran would leave exactly the orphans the reaper below exists to
 // clean up.
 func Serve(ctx context.Context, socket string) error {
+	// Before anything can replace this binary on disk: a dirty build names a
+	// digest of its executable, and the daemon reports the one it started as.
+	version.Build()
 	leaseCtx, releaseLease, err := withTestParentLease(ctx)
 	if releaseLease != nil {
 		defer releaseLease()

@@ -4,9 +4,14 @@
 package version
 
 import (
+	"crypto/sha256"
+	"encoding/hex"
+	"io"
+	"os"
 	"runtime/debug"
 	"strconv"
 	"strings"
+	"sync"
 )
 
 // Version is the release number. A var, not a const, so a release build stamps
@@ -18,15 +23,18 @@ var Version = "0.1.5"
 const shortRevision = 7
 
 // Build names this exact binary. Two binaries with one Build run the same code,
-// so it is what a client compares against its daemon's.
-func Build() string {
+// so it is what a client compares against its daemon's. Worked out once, so a
+// daemon reports the binary it started as even after the file is replaced.
+var Build = sync.OnceValue(func() string {
 	info, _ := debug.ReadBuildInfo()
-	return build(Version, info)
-}
+	return build(Version, info, executableDigest)
+})
 
 // build prefers the commit Go stamped from a checkout, then the module version
-// `go install pkg@ref` records, then the bare release number.
-func build(version string, info *debug.BuildInfo) string {
+// `go install pkg@ref` records, then the bare release number. A build from an
+// uncommitted tree also names a digest of its executable, since two of those
+// from one commit can run different code.
+func build(version string, info *debug.BuildInfo, digest func() string) string {
 	if info == nil {
 		return version
 	}
@@ -43,6 +51,9 @@ func build(version string, info *debug.BuildInfo) string {
 		b := version + "+" + rev[:min(len(rev), shortRevision)]
 		if dirty {
 			b += "-dirty"
+			if d := digest(); d != "" {
+				b += "." + d
+			}
 		}
 		return b
 	}
@@ -50,6 +61,25 @@ func build(version string, info *debug.BuildInfo) string {
 		return strings.TrimPrefix(m, "v")
 	}
 	return version
+}
+
+// executableDigest is a short sha256 of this process's executable, or nothing
+// when it cannot be read - which leaves the build as "-dirty" alone.
+func executableDigest() string {
+	exe, err := os.Executable()
+	if err != nil {
+		return ""
+	}
+	f, err := os.Open(exe)
+	if err != nil {
+		return ""
+	}
+	defer func() { _ = f.Close() }()
+	h := sha256.New()
+	if _, err := io.Copy(h, f); err != nil {
+		return ""
+	}
+	return hex.EncodeToString(h.Sum(nil))[:shortRevision]
 }
 
 // Newer reports whether release latest is after current. Both are plain

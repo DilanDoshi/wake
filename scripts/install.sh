@@ -45,7 +45,10 @@ esac
 version=${tag#v}
 asset="wake_${version}_${os}_${arch}.tar.gz"
 
-tmp=$(mktemp -d)
+# Staged inside the install directory, so the last step is a rename on one
+# filesystem: a running wake is replaced whole, never copied over.
+mkdir -p "$dir"
+tmp=$(mktemp -d "$dir/.wake-install.XXXXXX")
 trap 'rm -rf "$tmp"' EXIT
 curl -fsSL -o "$tmp/$asset" "$releases/releases/download/$tag/$asset" ||
 	fail "release $tag has no build for ${os}_${arch}"
@@ -62,7 +65,6 @@ fi
 	fail "$asset does not match its checksum in $tag; nothing was installed"
 
 tar -xzf "$tmp/$asset" -C "$tmp" wake
-mkdir -p "$dir"
 chmod 755 "$tmp/wake"
 mv -f "$tmp/wake" "$dir/wake"
 say "Installed wake $version to $dir/wake."
@@ -75,13 +77,18 @@ case ":$PATH:" in
 *) on_path=no ;;
 esac
 if [ "$on_path" = no ]; then
+	# The file each shell reads at startup: a macOS terminal starts bash as a
+	# login shell, which reads ~/.bash_profile and not ~/.bashrc.
 	case "${SHELL:-}" in
 	*/zsh) rc="$HOME/.zshrc" ;;
-	*/bash) rc="$HOME/.bashrc" ;;
+	*/bash) [ "$os" = darwin ] && rc="$HOME/.bash_profile" || rc="$HOME/.bashrc" ;;
+	*/fish) rc="" ;;
 	*) rc="$HOME/.profile" ;;
 	esac
 	line="export PATH=\"$dir:\$PATH\""
-	if [ -f "$rc" ] && grep -qxF "$line" "$rc"; then
+	if [ -z "$rc" ]; then
+		say "$dir is not on your PATH. To run wake by name, run: fish_add_path $dir"
+	elif [ -f "$rc" ] && grep -qxF "$line" "$rc"; then
 		say "$dir is added to your PATH in $rc; open a new terminal to pick it up."
 	elif { : </dev/tty; } 2>/dev/null; then
 		printf 'Add %s to your PATH in %s? [Y/n] ' "$dir" "$rc" >/dev/tty

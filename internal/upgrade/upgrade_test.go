@@ -240,3 +240,18 @@ func TestInstallIntoADirectoryItCannotWriteChangesNothing(t *testing.T) {
 	}
 	assertUntouched(t, dest)
 }
+
+// An entry larger than the bound is refused, never copied up to the bound and
+// installed truncated: the archive's checksum vouches for the archive, not for
+// what a short copy of it would be.
+func TestInstallRefusesABinaryLargerThanTheBound(t *testing.T) {
+	bound := maxBinaryBytes
+	maxBinaryBytes = 4
+	t.Cleanup(func() { maxBinaryBytes = bound })
+	rel := serve(t, release(t, []byte("far more than four bytes")))
+	dest := existingBinary(t)
+	if err := rel.Install(context.Background(), testTag, dest); err == nil {
+		t.Error("Install accepted a binary larger than the bound")
+	}
+	assertUntouched(t, dest)
+}
