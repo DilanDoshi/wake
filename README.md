@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.5
+**Current version:** 0.1.5 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -18,11 +18,39 @@ and you're running a fleet.
 Wake never screen-scrapes. Every agent is a headless `claude` process in stream-json mode with a
 Wake-assigned session id, and all state comes from structured JSON on stdout.
 
+## Install
+
+Wake runs on your own Claude Code, so `claude` has to be installed, signed in and on your `PATH`
+first. Wake builds for macOS and Linux (Apple Silicon/arm64 and Intel/amd64) are on the
+**[releases page](https://github.com/DilanDoshi/wake/releases/latest)**. To install the latest one
+into `~/.local/bin`, paste this into a terminal:
+
+```sh
+tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/DilanDoshi/wake/releases/latest); tag=${tag##*/}
+os=$(uname -s | tr A-Z a-z); arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
+curl -fsSL "https://github.com/DilanDoshi/wake/releases/download/$tag/wake_${tag#v}_${os}_${arch}.tar.gz" | tar -xzf - wake
+mkdir -p ~/.local/bin && mv wake ~/.local/bin/
+```
+
+Then run `wake status`. If the shell says `command not found`, `~/.local/bin` is not on your `PATH`
+yet (Claude Code's own installer uses it, so it usually is). Add it and open a new terminal:
+
+```sh
+echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc    # bash: ~/.bashrc
+```
+
+The binary is not signed. Downloaded with `curl` as above, macOS runs it. If you downloaded the
+archive in a browser instead, macOS blocks it until you run
+`xattr -d com.apple.quarantine ~/.local/bin/wake`.
+
+With Go 1.26+ you can instead run `go install github.com/DilanDoshi/wake/cmd/wake@latest`, which
+puts `wake` in `$(go env GOPATH)/bin`.
+
 ## Getting started
 
 ```sh
-make build
-./bin/wake
+cd ~/your-project
+wake
 ```
 
 That starts a daemon, spawns an agent, and opens **the room** — the agent is a roster row, and `↵`
@@ -91,6 +119,7 @@ can fan a message out to one with its own tool.
 ## Development
 
 ```sh
+make build   # from source: ./bin/wake
 make test    # the suite, twice: with and without -race
 make lint    # golangci-lint
 make cover   # coverage gate, 80% per package
