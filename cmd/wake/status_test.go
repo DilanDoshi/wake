@@ -280,3 +280,16 @@ func TestTheUsageSaysBareWakeStartsANewFleet(t *testing.T) {
 		t.Errorf("bare wake's usage line = %q", first)
 	}
 }
+
+// `wake status` names the daemon's build, and says what to do when it is not
+// this one - the same words the room uses.
+func TestStatusNamesTheDaemonsBuildAndWhenItIsStale(t *testing.T) {
+	current := formatStatus(rpc.Status{Running: true, PID: 1, Socket: "/tmp/w.sock", Build: version.Build()})
+	if !strings.Contains(current, "wake "+version.Build()) || strings.Contains(current, "⌃Q⌃Q") {
+		t.Errorf("a current daemon reads as %q", current)
+	}
+	stale := formatStatus(rpc.Status{Running: true, PID: 1, Socket: "/tmp/w.sock", Build: "0.0.1+0000000"})
+	if !strings.Contains(stale, "0.0.1+0000000") || !strings.Contains(stale, "⌃Q⌃Q") {
+		t.Errorf("a stale daemon reads as %q", stale)
+	}
+}

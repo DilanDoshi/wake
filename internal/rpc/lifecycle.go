@@ -213,6 +213,11 @@ type Status struct {
 	PID    int    `json:"pid,omitempty"`
 	Socket string `json:"socket,omitempty"`
 
+	// Build is the running daemon's version.Build(). A client with another
+	// build is talking to older or newer code; empty is a daemon from before
+	// builds were reported.
+	Build string `json:"build,omitempty"`
+
 	// Sessions is every session the daemon holds, or - when Running is
 	// false - every one the last daemon recorded before it died, each
 	// StateOrphaned.

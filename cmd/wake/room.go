@@ -46,6 +46,7 @@ import (
 // them peers, and the pane you were asking for is the one that should have the
 // cursor in it.
 func conversation(socket string, sess rpc.SessionStatus, seed *rpc.Status, conn net.Conn, stream ui.Stream, held *connection) ui.App {
+	warnIfStaleDaemon(seed)
 	return ui.NewRoomApp(conn, stream, seed).
 		WithOpenDM(sess.ID, displayName(sess)).
 		WithSessions(machineSessions{}).
@@ -63,6 +64,7 @@ func conversation(socket string, sess rpc.SessionStatus, seed *rpc.Status, conn 
 // the *room* rather than to a session, because App.sessionID is empty here:
 // redial asks liveSession about an id, and there is no id to ask about.
 func conversationRoom(socket string, seed *rpc.Status, conn net.Conn, stream ui.Stream, held *connection) ui.App {
+	warnIfStaleDaemon(seed)
 	return ui.NewRoomApp(conn, stream, seed).
 		WithSessions(machineSessions{}).
 		WithDialer(func() (net.Conn, ui.Stream, rpc.SessionStatus, *rpc.Status, error) {

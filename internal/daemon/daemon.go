@@ -419,6 +419,23 @@ func Status(socket string) (rpc.Status, error) {
 	if err != nil {
 		return FleetOnDisk(socket), nil
 	}
+	return askStatus(conn)
+}
+
+// RunningStatus is Status without the on-disk answer: a fleet with nothing
+// listening is not running, off one failed dial, so a listing can ask every
+// fleet without paying FleetOnDisk's sweep for each stopped one.
+func RunningStatus(socket string) (rpc.Status, bool, error) {
+	conn, err := Dial(socket)
+	if err != nil {
+		return rpc.Status{}, false, nil
+	}
+	st, err := askStatus(conn)
+	return st, err == nil, err
+}
+
+// askStatus is Status's question on a connection already made.
+func askStatus(conn net.Conn) (rpc.Status, error) {
 	if err := conn.SetDeadline(time.Now().Add(statusTimeout)); err != nil {
 		_ = conn.Close()
 		return rpc.Status{}, fmt.Errorf("set status deadline: %w", err)
