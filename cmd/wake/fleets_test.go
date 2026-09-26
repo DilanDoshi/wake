@@ -114,3 +114,24 @@ func TestOnlyABareWakeWithNoSocketStartsANewFleet(t *testing.T) {
 		})
 	}
 }
+
+// A running fleet names its build, and one on another build than this wake
+// says how to move it; a stopped fleet is only its name.
+func TestFleetsNameEachRunningFleetsBuild(t *testing.T) {
+	const ours = "0.1.6+bbbbbbb"
+	got := formatFleets([]string{"canyon", "mesa", "summit"},
+		map[string]string{"canyon": "0.1.5+aaaaaaa", "summit": ours}, ours)
+	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
+	if len(lines) != 3 {
+		t.Fatalf("listing = %q", got)
+	}
+	if !strings.Contains(lines[0], "0.1.5+aaaaaaa") || !strings.Contains(lines[0], "wake --fleet canyon") {
+		t.Errorf("stale fleet line = %q", lines[0])
+	}
+	if lines[1] != "mesa" {
+		t.Errorf("stopped fleet line = %q", lines[1])
+	}
+	if !strings.Contains(lines[2], ours) || strings.Contains(lines[2], "⌃Q⌃Q") {
+		t.Errorf("current fleet line = %q", lines[2])
+	}
+}

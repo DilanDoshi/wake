@@ -9,6 +9,7 @@ import (
 	"os"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // fleet is the whole fleet as one Status, and the sessions that recently left
@@ -20,7 +21,7 @@ import (
 // each move an id between them in a single locked step, so no id is ever in
 // both and none is ever in neither.
 func (s *server) fleet() rpc.Status {
-	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: s.socket}
+	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: s.socket, Build: version.Build()}
 
 	s.mu.Lock()
 	agents := make([]*agent, 0, len(s.agents))

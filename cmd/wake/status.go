@@ -11,6 +11,7 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // The columns a session's line is laid out in. Padded rather than tabbed so
@@ -58,7 +59,10 @@ func formatStatus(st rpc.Status) string {
 
 	switch {
 	case st.Running:
-		fmt.Fprintf(&b, "wake daemon running (pid %d) on %s\n", st.PID, st.Socket)
+		fmt.Fprintf(&b, "wake daemon running (pid %d, wake %s) on %s\n", st.PID, daemonBuild(st.Build), st.Socket)
+		if text, stale := staleDaemonNotice(&st, version.Build()); stale {
+			b.WriteString(text + "\n")
+		}
 
 	case len(st.Sessions) > 0:
 		// Not "nothing is running". This is a fleet whose daemon died, read

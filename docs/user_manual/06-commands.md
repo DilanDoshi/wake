@@ -16,6 +16,9 @@ wake manager            start the manager from a shell (the room seats one by de
 wake setup-terminal     configure your terminal: Shift+Enter → a newline, Cmd+←/→ → line start/end
 wake status             what is running
 wake stop               stop every session and the daemon
+wake upgrade            install the newest release over this one
+wake --version          which build you have
+wake help               this list
 ```
 
 **`wake` starts a fleet and opens the room; `wake new` opens a conversation.** A bare `wake` makes a
@@ -107,6 +110,9 @@ nothing alive, or — the interesting one — no daemon but processes it left be
 as orphans rather than pretending they are gone.
 
 **`wake stop` is irreversible.** See [chapter 4](04-lifecycle.md).
+
+**`wake upgrade`** replaces this binary with the newest release; running fleets keep their build
+until you restart them. See [chapter 4](04-lifecycle.md#upgrading).
 
 ## `/…` — in the composer
 

@@ -14,7 +14,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/DilanDoshi/wake/internal/ui"
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // A bare /effort draws the menu, headed with who it is for.
@@ -59,7 +59,7 @@ func TestThePickerDrawsAtTheQueryBarNotThePaneTop(t *testing.T) {
 	lines := s.lines()
 	banner, picker, composer := -1, -1, -1
 	for i, row := range lines {
-		if banner < 0 && strings.Contains(row, "v"+ui.Version) {
+		if banner < 0 && strings.Contains(row, "v"+version.Version) {
 			banner = i
 		}
 		if picker < 0 && strings.Contains(row, "ultracode") {

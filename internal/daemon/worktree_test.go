@@ -3,6 +3,7 @@ package daemon
 // Creating the worktree a session runs in.
 
 import (
+	"context"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -175,5 +176,34 @@ func TestAWorktreeThatCannotBeCreatedRefusesTheSpawnRatherThanFallingBack(t *tes
 	}
 	if got != "" {
 		t.Errorf("a refusal carried the directory %q, which a caller ignoring the error would spawn in", got)
+	}
+}
+
+// A worktree is the one spawn side effect that outlives a failed start: made
+// and then abandoned, its branch stays checked out and refuses the retry. So a
+// daemon with no claude on its PATH refuses a worktree spawn before git runs.
+func TestAWorktreeSpawnWithoutClaudeMakesNoWorktree(t *testing.T) {
+	repo := tempRepo(t)
+	gitPath, err := exec.LookPath("git")
+	if err != nil {
+		t.Fatal(err)
+	}
+	// git and nothing else: the machine this is about has git and no claude.
+	onlyGit := t.TempDir()
+	if err := os.Symlink(gitPath, filepath.Join(onlyGit, "git")); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("PATH", onlyGit)
+	s := newServer(filepath.Join(t.TempDir(), "wake.sock"))
+	c := newClient(nil)
+	s.spawn(context.Background(), c, rpc.Frame{Kind: rpc.FrameSpawn, SessionID: idAlpha, Dir: repo, Worktree: "iso"})
+	if got := <-c.out; got.Kind != rpc.FrameError || !strings.Contains(got.Text, "Install Claude Code") {
+		t.Fatalf("a worktree spawn without claude answered %q: %q", got.Kind, got.Text)
+	}
+	if _, err := os.Stat(filepath.Join(repo, worktreeRoot, "iso")); !os.IsNotExist(err) {
+		t.Errorf("the refused spawn made the worktree (stat: %v)", err)
+	}
+	if out, _ := exec.Command(gitPath, "-C", repo, "branch", "--list", worktreeBranchPrefix+"iso").Output(); len(out) != 0 {
+		t.Errorf("the refused spawn made the branch %q", out)
 	}
 }

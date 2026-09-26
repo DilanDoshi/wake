@@ -12,7 +12,7 @@ release should go out. There is no CI release trigger; the timing is entirely yo
    ```
 
 2. Bump the checked-in banner default to the release number, so a plain `go
-   build`/`go install` reports it. Update `Version` in `internal/ui/banner.go`
+   build`/`go install` reports it. Update `Version` in `internal/version/version.go`
    and the `bannerVersion` constant in `internal/ui/menuposition_test.go` (they
    must match — the screen tests assert the banner draws `v<Version>`), then
    re-run `make ci`. A release build stamps the version from the tag via
@@ -43,7 +43,7 @@ release should go out. There is no CI release trigger; the timing is entirely yo
 
 That builds `wake` for **macOS and Linux, amd64 and arm64**, stamps the version from the tag, and
 publishes a **GitHub Release** with the binaries and a `checksums.txt`. The version the banner
-reports comes from the tag, via `-ldflags -X …/internal/ui.Version` (this is why `Version` is a
+reports comes from the tag, via `-ldflags -X …/internal/version.Version` (this is why `Version` is a
 `var`, not a `const` — a `const` can't be stamped).
 
 ## Release notes format
@@ -68,8 +68,10 @@ The shape, in order:
 4. **`## Fixes`** — same bullet shape as Improvements: `- **Short name** (#PR).` then a paragraph.
    Name the user-visible symptom and the mechanism, the way the PR title and body would, not just
    "fixed a bug."
-5. **`## Install`** — the `go install github.com/DilanDoshi/wake/cmd/wake@<tag or latest>` command,
-   plus a line pointing at the prebuilt binaries below and `checksums.txt`.
+5. **`## Install`** — the install line (`curl -fsSL
+   https://raw.githubusercontent.com/DilanDoshi/wake/main/scripts/install.sh | sh`), `wake upgrade`
+   for an existing install, the `go install github.com/DilanDoshi/wake/cmd/wake@<tag or latest>`
+   command, plus a line pointing at the prebuilt binaries below and `checksums.txt`.
 6. **`**Full changelog:**`** — one line, `https://github.com/DilanDoshi/wake/compare/<prev>...<tag>`.
 
 Every named change gets its PR number in parentheses — a reader can always jump to the diff. Skip a
@@ -81,14 +83,17 @@ section that has nothing in it rather than writing "None" under a heading.
   and a cross-compile. Run it from a normal checkout under your home directory — not `/tmp` and not a
   very long temp path, because the screen tests render the working directory and assume a sane path.
 - Follow semver for the tag.
-- The checked-in banner default (`internal/ui.Version`, and its `bannerVersion` test twin) matches the
+- The checked-in banner default (`internal/version.Version`, and its `bannerVersion` test twin) matches the
   tag — that is step 2 above. A tag ahead of the default means every non-release build under-reports.
 
 ## After you cut
 
 - **Install from the published artifact on a machine that has never built Wake, and run it.** A
-  release nobody has installed from is a release nobody has tested. `go install
-  github.com/DilanDoshi/wake/cmd/wake@latest` also works once the Go module proxy has indexed the tag.
+  release nobody has installed from is a release nobody has tested. The install line
+  (`curl -fsSL https://raw.githubusercontent.com/DilanDoshi/wake/main/scripts/install.sh | sh`) and
+  `wake upgrade` both fetch whatever `/releases/latest` points at, so this is also the check that
+  they work; `go install github.com/DilanDoshi/wake/cmd/wake@latest` works once the Go module proxy
+  has indexed the tag.
 
 ## Dry runs (safe — publish nothing)
 

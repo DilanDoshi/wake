@@ -31,6 +31,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"sync"
 )
 
 // fleetsDirName holds the named fleets, beside the default fleet's own files
@@ -103,15 +104,15 @@ func FleetSocketPath(name string) (string, error) {
 // fleetDir is where one fleet keeps everything: its socket and every file
 // beside it.
 func fleetDir(name string) (string, error) {
-	root, err := stateRoot()
+	root, err := StateRoot()
 	if err != nil {
 		return "", err
 	}
 	return fleetDirFor(root, name)
 }
 
-// stateRoot is ~/.wake, the directory every fleet lives under.
-func stateRoot() (string, error) {
+// StateRoot is ~/.wake, the directory every fleet lives under.
+func StateRoot() (string, error) {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return "", fmt.Errorf("locate home directory: %w", err)
@@ -169,7 +170,7 @@ func checkFleetName(name string) error {
 // `/resume` reads - and leaving it out would make a stopped fleet unfindable by
 // exactly the person looking for how to bring it back.
 func Fleets() ([]string, error) {
-	root, err := stateRoot()
+	root, err := StateRoot()
 	if err != nil {
 		return nil, err
 	}
@@ -184,6 +185,34 @@ func Fleets() ([]string, error) {
 		return append([]string{LegacyFleet}, named...), nil
 	}
 	return named, nil
+}
+
+// RunningBuilds is the build each named fleet's daemon reports, for the fleets
+// with one up. A stopped fleet, or a daemon that will not answer, is absent;
+// an empty build is a daemon from before builds were reported. The fleets are
+// asked together, so a daemon that takes the dial and never answers costs one
+// statusTimeout for the whole listing rather than one each.
+func RunningBuilds(names []string) map[string]string {
+	var (
+		mu     sync.Mutex
+		wg     sync.WaitGroup
+		builds = map[string]string{}
+	)
+	for _, name := range names {
+		dir, err := fleetDir(name)
+		if err != nil {
+			continue
+		}
+		wg.Go(func() {
+			if st, running, err := runningStatus(filepath.Join(dir, socketFileName)); running && err == nil {
+				mu.Lock()
+				builds[name] = st.Build
+				mu.Unlock()
+			}
+		})
+	}
+	wg.Wait()
+	return builds
 }
 
 // fleetsIn is Fleets against a given root. Split for fleetDirIn's reason.

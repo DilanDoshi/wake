@@ -57,6 +57,7 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // SocketEnv names the socket explicitly, overriding the default path.
@@ -144,6 +145,9 @@ func Dial(socket string) (net.Conn, error) {
 // its agents ran would leave exactly the orphans the reaper below exists to
 // clean up.
 func Serve(ctx context.Context, socket string) error {
+	// Before anything can replace this binary on disk: a dirty build names a
+	// digest of its executable, and the daemon reports the one it started as.
+	version.Build()
 	leaseCtx, releaseLease, err := withTestParentLease(ctx)
 	if releaseLease != nil {
 		defer releaseLease()
@@ -419,6 +423,25 @@ func Status(socket string) (rpc.Status, error) {
 	if err != nil {
 		return FleetOnDisk(socket), nil
 	}
+	return askStatus(conn)
+}
+
+// runningStatus is Status without the on-disk answer: a fleet with nothing
+// listening is not running, off one failed dial, so a listing can ask every
+// fleet without paying FleetOnDisk's sweep for each stopped one.
+func runningStatus(socket string) (rpc.Status, bool, error) {
+	// The dial is bounded too: a listener that has stopped accepting must not
+	// hold the listing past the one timeout it promises.
+	conn, err := net.DialTimeout("unix", socket, statusTimeout)
+	if err != nil {
+		return rpc.Status{}, false, nil
+	}
+	st, err := askStatus(conn)
+	return st, err == nil, err
+}
+
+// askStatus is Status's question on a connection already made.
+func askStatus(conn net.Conn) (rpc.Status, error) {
 	if err := conn.SetDeadline(time.Now().Add(statusTimeout)); err != nil {
 		_ = conn.Close()
 		return rpc.Status{}, fmt.Errorf("set status deadline: %w", err)

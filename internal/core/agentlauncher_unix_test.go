@@ -863,3 +863,11 @@ func TestDirectStartWithoutLauncherUsesClaudeCommand(t *testing.T) {
 		t.Fatalf("execCommand name = %q, want %q", gotName, claudeBinary)
 	}
 }
+
+func TestTheSupervisorWithoutClaudeSaysHowToInstallIt(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv(agentLauncherDirEnv, t.TempDir())
+	if _, err := agentLauncherTarget(); err == nil || !strings.Contains(err.Error(), claudeInstallURL) {
+		t.Errorf("supervised spawn: %v", err)
+	}
+}

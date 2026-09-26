@@ -386,6 +386,7 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 	kill.watchSignals()
 
 	promptTerminalSetupOnce()
+	checkForUpdate()
 
 	term := &guardedOutput{File: os.Stdout}
 	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithOutput(term)}

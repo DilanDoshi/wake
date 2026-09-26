@@ -81,7 +81,7 @@ func nextFleetName(root string) (string, error) {
 // never shown is one that can be found again only through `wake fleets`. See
 // cmd/wake, which prints it.
 func NewFleetSocketPath() (sock, name string, err error) {
-	root, err := stateRoot()
+	root, err := StateRoot()
 	if err != nil {
 		return "", "", err
 	}

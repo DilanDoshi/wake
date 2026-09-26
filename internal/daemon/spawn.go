@@ -57,6 +57,14 @@ func (s *server) spawn(ctx context.Context, c *client, f rpc.Frame) {
 	// the one most likely to fail on a real machine. A failure is a refusal
 	// rather than a spawn in the shared tree - falling back to the repository
 	// would put an agent exactly where the operator asked for it not to be.
+	// A worktree outlives a start that fails, and its branch then refuses the
+	// retry: with no claude on this daemon's PATH, refuse before git runs.
+	if f.Worktree != "" {
+		if err := core.ClaudeOnPath(); err != nil {
+			c.enqueue(errorFrame(f.SessionID, err.Error()))
+			return
+		}
+	}
 	dir, err := sessionDir(f)
 	if err != nil {
 		c.enqueue(errorFrame(f.SessionID, err.Error()))

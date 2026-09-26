@@ -131,7 +131,7 @@ func readAgentLauncherRelease(control *os.File) error {
 func agentLauncherTarget() (*exec.Cmd, error) {
 	target, err := exec.LookPath(claudeBinary)
 	if err != nil {
-		return nil, fmt.Errorf("resolve %s: %w", claudeBinary, err)
+		return nil, fmt.Errorf("resolve %s: %w", claudeBinary, claudeMissing(err))
 	}
 	target, err = filepath.Abs(target)
 	if err != nil {

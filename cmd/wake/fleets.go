@@ -12,6 +12,7 @@ import (
 	"strings"
 
 	"github.com/DilanDoshi/wake/internal/daemon"
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // fleetFlagName is the flag, spelled once.
@@ -62,12 +63,11 @@ func fleetFlag(args []string) (rest []string, fleet string, err error) {
 	return rest, fleet, nil
 }
 
-// printFleets lists the named fleets.
+// printFleets lists the named fleets, and the build each running one is on.
 //
-// Names only, and no status: asking each one what it is running means dialling
-// every socket on the machine, and `wake status --fleet <name>` is the question
-// that already answers that for one. A list that took a second per stopped
-// fleet would be a list nobody waits for.
+// Only a fleet with a daemon listening is asked (daemon.RunningBuilds): a
+// stopped one costs one failed dial rather than FleetOnDisk's sweep, so the
+// listing stays as fast as the names alone were.
 func printFleets(out io.Writer) error {
 	names, err := daemon.Fleets()
 	if err != nil {
@@ -76,17 +76,31 @@ func printFleets(out io.Writer) error {
 	// One checked write rather than a line at a time, which is printStatus's
 	// shape: a listing half-written to a closed pipe is worse than one that
 	// says it could not be written.
-	_, err = io.WriteString(out, formatFleets(names))
+	_, err = io.WriteString(out, formatFleets(names, daemon.RunningBuilds(names), version.Build()))
 	return err
 }
 
-// formatFleets is the listing, separated from the write so a test reads a
-// string rather than driving an io.Writer.
-func formatFleets(names []string) string {
+// staleFleetFormat follows a running fleet on another build than this wake.
+const staleFleetFormat = " - not this build (wake %s): ⌃Q⌃Q it, then `wake --fleet %s`, to upgrade it"
+
+// formatFleets is the listing, separated from the dialling so a test reads a
+// string. builds holds only the fleets that are running.
+func formatFleets(names []string, builds map[string]string, ours string) string {
 	if len(names) == 0 {
 		return noFleetsYet + "\n"
 	}
-	return strings.Join(names, "\n") + "\n"
+	var b strings.Builder
+	for _, name := range names {
+		b.WriteString(name)
+		if build, running := builds[name]; running {
+			fmt.Fprintf(&b, "  running wake %s", daemonBuild(build))
+			if build != ours {
+				fmt.Fprintf(&b, staleFleetFormat, ours, name)
+			}
+		}
+		b.WriteString("\n")
+	}
+	return b.String()
 }
 
 // newFleetLine is what a fresh fleet says about itself before the room opens.

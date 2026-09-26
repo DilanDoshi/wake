@@ -85,6 +85,28 @@ and it refuses to claim success unless it can prove the fleet is actually down.
 **It also forgets the park book** — a deliberate ending ends the parked half too. So `wake stop`
 does not leave you a fleet to resume tomorrow. `⌃Q` does.
 
+## Upgrading
+
+```sh
+wake upgrade
+```
+
+Installs the newest release over the `wake` you ran it as, checked against the release's checksums.
+Wake also looks once a day, when the room opens, and says so in the room when a newer release is
+out; `WAKE_NO_UPDATE_CHECK=1` turns that off.
+
+**A fleet that is already running keeps the build it started from.** Its daemon is a process, and
+replacing the file on disk does not change a process that is running. `wake upgrade` names the
+fleets this applies to; a room opened over one says so, and so do `wake status` and `wake fleets`.
+To move a fleet onto the new build:
+
+1. `⌃Q⌃Q` in its room — parks everything and ends the daemon.
+2. `wake --fleet <name>` — a fresh daemon on the new build.
+3. `/resume` — bring back what you parked.
+
+Nothing is lost on the way: parking keeps every transcript, and `/resume` picks each one up where it
+stopped.
+
 ## What survives what
 
 | | Transcript on disk | Resumable |

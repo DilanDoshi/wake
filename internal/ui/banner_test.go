@@ -5,6 +5,8 @@ import (
 	"testing"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 // The banner is the *first* block, which is what makes it scroll away.
@@ -102,7 +104,7 @@ func TestTheRoomBannerCarriesNoSessionFacts(t *testing.T) {
 			t.Errorf("the room banner mentions %q:\n%s", forbidden, got)
 		}
 	}
-	if !strings.Contains(got, "v"+Version) {
+	if !strings.Contains(got, "v"+version.Version) {
 		t.Errorf("the room banner does not name the version:\n%s", got)
 	}
 }
