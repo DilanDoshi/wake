@@ -1,10 +1,23 @@
 # 1. Getting started
 
+## Install
+
+Wake runs on your own Claude Code, so install that first and sign in
+([Claude Code setup](https://code.claude.com/docs/en/setup)). Then:
+
+```sh
+curl -fsSL https://raw.githubusercontent.com/DilanDoshi/wake/main/scripts/install.sh | sh
+```
+
+That installs the latest release for your machine to `~/.local/bin`, checked against the release's
+checksums, and offers to put that directory on your `PATH` if it is not there already. `wake
+--version` says which build you have; [chapter 4](04-lifecycle.md#upgrading) covers upgrading.
+
 ## Your first agent
 
 ```sh
-make build
-./bin/wake
+cd ~/your-project
+wake
 ```
 
 One command does four things: starts a background daemon, spawns a `claude` process, gives it a

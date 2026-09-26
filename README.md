@@ -21,30 +21,27 @@ Wake-assigned session id, and all state comes from structured JSON on stdout.
 ## Install
 
 Wake runs on your own Claude Code, so `claude` has to be installed, signed in and on your `PATH`
-first. Wake builds for macOS and Linux (Apple Silicon/arm64 and Intel/amd64) are on the
-**[releases page](https://github.com/DilanDoshi/wake/releases/latest)**. To install the latest one
-into `~/.local/bin`, paste this into a terminal:
+first. Then paste this into a terminal:
 
 ```sh
-tag=$(curl -fsSLI -o /dev/null -w '%{url_effective}' https://github.com/DilanDoshi/wake/releases/latest); tag=${tag##*/}
-os=$(uname -s | tr A-Z a-z); arch=$(uname -m | sed 's/x86_64/amd64/; s/aarch64/arm64/')
-curl -fsSL "https://github.com/DilanDoshi/wake/releases/download/$tag/wake_${tag#v}_${os}_${arch}.tar.gz" | tar -xzf - wake
-mkdir -p ~/.local/bin && mv wake ~/.local/bin/
+curl -fsSL https://raw.githubusercontent.com/DilanDoshi/wake/main/scripts/install.sh | sh
 ```
 
-Then run `wake status`. If the shell says `command not found`, `~/.local/bin` is not on your `PATH`
-yet (Claude Code's own installer uses it, so it usually is). Add it and open a new terminal:
+It downloads the latest build for your Mac or Linux machine from the
+**[releases page](https://github.com/DilanDoshi/wake/releases/latest)**, checks it against the
+release's checksums, and installs it to `~/.local/bin`. If that directory is not on your `PATH` it
+offers to add it (Claude Code's own installer uses it, so it usually is already). It also tells you
+if `claude` is missing.
 
-```sh
-echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.zshrc    # bash: ~/.bashrc
-```
-
-The binary is not signed. Downloaded with `curl` as above, macOS runs it. If you downloaded the
-archive in a browser instead, macOS blocks it until you run
-`xattr -d com.apple.quarantine ~/.local/bin/wake`.
+**Upgrading:** `wake upgrade` installs the newest release over the one you have (a build older than
+the verb upgrades by re-running the install line). Wake checks once a day and says in the room when
+a newer release is out; `WAKE_NO_UPDATE_CHECK=1` turns that off.
+Fleets that are already running keep the old build until you `⌃Q⌃Q` and reopen them — see
+[the lifecycle chapter](docs/user_manual/04-lifecycle.md#upgrading).
 
 With Go 1.26+ you can instead run `go install github.com/DilanDoshi/wake/cmd/wake@latest`, which
-puts `wake` in `$(go env GOPATH)/bin`.
+puts `wake` in `$(go env GOPATH)/bin`. The binaries are not signed: one downloaded in a browser is
+blocked by macOS until you run `xattr -d com.apple.quarantine <path-to-wake>`.
 
 ## Getting started
 
@@ -89,6 +86,8 @@ wake attach <who>       open a conversation with one already running, by name or
 wake fork <who> [name]  branch a conversation: a new agent with the same history so far
 wake import [<id>]      adopt a claude session this machine already has
 wake setup-terminal     configure your terminal: Shift+Enter → a newline, Cmd+←/→ → line start/end
+wake upgrade            install the newest release over this one
+wake --version          which build you have
 wake manager            start the manager from a shell (the room seats one by default)
 wake status             what is running
 wake stop               stop every session and the daemon — the one irreversible verb

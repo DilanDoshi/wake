@@ -407,9 +407,10 @@ def main():
       </div>
       <div class="note">
         <h3>Install</h3>
-        <p>Builds for macOS and Linux are on the <a href="https://github.com/DilanDoshi/wake/releases/latest">latest release</a>. The
-           <a href="https://github.com/DilanDoshi/wake#install">install steps</a> put <code>wake</code> on
-           your <code>PATH</code>; run it in a project and a daemon, a first agent and the room appear.</p>
+        <p><code>curl -fsSL https://raw.githubusercontent.com/DilanDoshi/wake/main/scripts/install.sh | sh</code>
+           installs the <a href="https://github.com/DilanDoshi/wake/releases/latest">latest release</a> for
+           macOS or Linux and puts <code>wake</code> on your <code>PATH</code>; <code>wake upgrade</code>
+           keeps it current. Run it in a project and a daemon, a first agent and the room appear.</p>
       </div>
       <div class="note">
         <h3>Any terminal</h3>

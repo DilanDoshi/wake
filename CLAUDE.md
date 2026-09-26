@@ -44,9 +44,10 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room (spawns one
   agent as a roster row if the machine has nothing); `wake --fleet <name>` returns to one
   (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status`, `stop`
-  (irreversible), `fleets`, `manager`, `setup-terminal`. `$WAKE_SOCKET` wins; naming a fleet beside
-  it is refused. Each fleet is a directory under `~/.wake/fleets/`; per-fleet files are
-  `filepath.Dir(socket)` plus a name.
+  (irreversible), `fleets`, `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. Verbs that
+  can start an agent check `claude` is on `PATH` first (`core.ClaudeOnPath`). `$WAKE_SOCKET` wins;
+  naming a fleet beside it is refused. Each fleet is a directory under `~/.wake/fleets/`; per-fleet
+  files are `filepath.Dir(socket)` plus a name.
 - **Spawn flags** (`new`, `manager`, `/new`): `--effort`, `--model`, `--max-budget-usd`,
   `--fallback-model` (both survive a park), `--worktree <name>` (Wake runs `git worktree add`; never
   passes claude's `--worktree`), `--add-dir` (repeatable), `--debug-file <name>` / `--debug`
@@ -305,6 +306,7 @@ yet says so in bold.**
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
 | Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
+| Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · daily notice `updatecheck.go` · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
 | Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) |
 | Demo film | `demo/` (Python stand-in agent, VHS tapes) |

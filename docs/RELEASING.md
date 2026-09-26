@@ -68,8 +68,10 @@ The shape, in order:
 4. **`## Fixes`** — same bullet shape as Improvements: `- **Short name** (#PR).` then a paragraph.
    Name the user-visible symptom and the mechanism, the way the PR title and body would, not just
    "fixed a bug."
-5. **`## Install`** — the `go install github.com/DilanDoshi/wake/cmd/wake@<tag or latest>` command,
-   plus a line pointing at the prebuilt binaries below and `checksums.txt`.
+5. **`## Install`** — the install line (`curl -fsSL
+   https://raw.githubusercontent.com/DilanDoshi/wake/main/scripts/install.sh | sh`), `wake upgrade`
+   for an existing install, the `go install github.com/DilanDoshi/wake/cmd/wake@<tag or latest>`
+   command, plus a line pointing at the prebuilt binaries below and `checksums.txt`.
 6. **`**Full changelog:**`** — one line, `https://github.com/DilanDoshi/wake/compare/<prev>...<tag>`.
 
 Every named change gets its PR number in parentheses — a reader can always jump to the diff. Skip a
@@ -87,8 +89,11 @@ section that has nothing in it rather than writing "None" under a heading.
 ## After you cut
 
 - **Install from the published artifact on a machine that has never built Wake, and run it.** A
-  release nobody has installed from is a release nobody has tested. `go install
-  github.com/DilanDoshi/wake/cmd/wake@latest` also works once the Go module proxy has indexed the tag.
+  release nobody has installed from is a release nobody has tested. The install line
+  (`curl -fsSL https://raw.githubusercontent.com/DilanDoshi/wake/main/scripts/install.sh | sh`) and
+  `wake upgrade` both fetch whatever `/releases/latest` points at, so this is also the check that
+  they work; `go install github.com/DilanDoshi/wake/cmd/wake@latest` works once the Go module proxy
+  has indexed the tag.
 
 ## Dry runs (safe — publish nothing)
 

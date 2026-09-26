@@ -3,6 +3,18 @@
 Wake tries to make every refusal say **when** you can do the thing, rather than only that you
 cannot. If you get a message that just says no, that is a bug worth reporting.
 
+## "`claude` is not on your PATH"
+
+Every Wake agent is a Claude Code session, so Wake checks for `claude` before it starts one. Install
+Claude Code ([setup](https://code.claude.com/docs/en/setup)), sign in, open a new terminal, and run
+`wake` again.
+
+## "this fleet's daemon runs wake … and this is wake …"
+
+You upgraded while that fleet was running, and its daemon is still the old build. `⌃Q⌃Q`, then
+`wake --fleet <name>` and `/resume` — see [Upgrading](04-lifecycle.md#upgrading). "The wake binary
+was replaced while its fleet's daemon kept running" on a spawn is the same thing, found by an agent.
+
 ## "session … is parked, so its process has stopped"
 
 You tried to `wake attach` a parked session. Parking stops the process, so there is no live
