@@ -422,10 +422,10 @@ func Status(socket string) (rpc.Status, error) {
 	return askStatus(conn)
 }
 
-// RunningStatus is Status without the on-disk answer: a fleet with nothing
+// runningStatus is Status without the on-disk answer: a fleet with nothing
 // listening is not running, off one failed dial, so a listing can ask every
 // fleet without paying FleetOnDisk's sweep for each stopped one.
-func RunningStatus(socket string) (rpc.Status, bool, error) {
+func runningStatus(socket string) (rpc.Status, bool, error) {
 	conn, err := Dial(socket)
 	if err != nil {
 		return rpc.Status{}, false, nil

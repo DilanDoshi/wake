@@ -20,15 +20,37 @@ func TestTheFleetReportNamesTheDaemonsBuild(t *testing.T) {
 	}
 }
 
-// RunningStatus asks only a daemon that is there: a stopped fleet answers
+// runningStatus asks only a daemon that is there: a stopped fleet answers
 // "not running" off one failed dial, never off the on-disk sweep.
 func TestRunningStatusAsksOnlyALiveDaemon(t *testing.T) {
-	if _, running, err := RunningStatus(tempSocket(t)); running || err != nil {
+	if _, running, err := runningStatus(tempSocket(t)); running || err != nil {
 		t.Errorf("a socket nothing listens on: running = %v, err = %v", running, err)
 	}
 	d := startDaemon(t)
-	st, running, err := RunningStatus(d.socket)
+	st, running, err := runningStatus(d.socket)
 	if err != nil || !running || st.Build != version.Build() {
 		t.Errorf("a live daemon: build %q, running %v, err %v", st.Build, running, err)
+	}
+}
+
+// RunningBuilds names the build of each fleet with a daemon up and leaves out
+// the rest - and derives each socket itself, so a $WAKE_SOCKET naming one
+// exact daemon does not stop a listing of all of them.
+func TestRunningBuildsNamesOnlyTheFleetsThatAreUp(t *testing.T) {
+	t.Setenv("HOME", tempHome(t))
+	t.Setenv(SocketEnv, "")
+	up, err := FleetSocketPath("canyon")
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err := FleetSocketPath("mesa"); err != nil {
+		t.Fatal(err)
+	}
+	startDaemonOn(t, up)
+	t.Setenv(SocketEnv, tempSocket(t))
+
+	got := RunningBuilds([]string{"canyon", "mesa"})
+	if len(got) != 1 || got["canyon"] != version.Build() {
+		t.Errorf("RunningBuilds = %v, want only canyon on %q", got, version.Build())
 	}
 }

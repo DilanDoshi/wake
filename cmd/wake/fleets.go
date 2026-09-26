@@ -65,7 +65,7 @@ func fleetFlag(args []string) (rest []string, fleet string, err error) {
 
 // printFleets lists the named fleets, and the build each running one is on.
 //
-// Only a fleet with a daemon listening is asked (daemon.RunningStatus): a
+// Only a fleet with a daemon listening is asked (daemon.RunningBuilds): a
 // stopped one costs one failed dial rather than FleetOnDisk's sweep, so the
 // listing stays as fast as the names alone were.
 func printFleets(out io.Writer) error {
@@ -73,22 +73,10 @@ func printFleets(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	builds := map[string]string{}
-	for _, name := range names {
-		socket, err := daemon.FleetSocketPath(name)
-		if err != nil {
-			return err
-		}
-		// A daemon that will not answer is listed by name alone; `wake status
-		// --fleet` is the question that reports why.
-		if st, running, err := daemon.RunningStatus(socket); running && err == nil {
-			builds[name] = daemonBuild(st.Build)
-		}
-	}
 	// One checked write rather than a line at a time, which is printStatus's
 	// shape: a listing half-written to a closed pipe is worse than one that
 	// says it could not be written.
-	_, err = io.WriteString(out, formatFleets(names, builds, version.Build()))
+	_, err = io.WriteString(out, formatFleets(names, daemon.RunningBuilds(names), version.Build()))
 	return err
 }
 
@@ -105,7 +93,7 @@ func formatFleets(names []string, builds map[string]string, ours string) string 
 	for _, name := range names {
 		b.WriteString(name)
 		if build, running := builds[name]; running {
-			fmt.Fprintf(&b, "  running wake %s", build)
+			fmt.Fprintf(&b, "  running wake %s", daemonBuild(build))
 			if build != ours {
 				fmt.Fprintf(&b, staleFleetFormat, ours, name)
 			}

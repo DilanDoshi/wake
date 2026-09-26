@@ -186,6 +186,23 @@ func Fleets() ([]string, error) {
 	return named, nil
 }
 
+// RunningBuilds is the build each named fleet's daemon reports, for the fleets
+// with one up. A stopped fleet, or a daemon that will not answer, is absent;
+// an empty build is a daemon from before builds were reported.
+func RunningBuilds(names []string) map[string]string {
+	builds := map[string]string{}
+	for _, name := range names {
+		dir, err := fleetDir(name)
+		if err != nil {
+			continue
+		}
+		if st, running, err := runningStatus(filepath.Join(dir, socketFileName)); running && err == nil {
+			builds[name] = st.Build
+		}
+	}
+	return builds
+}
+
 // fleetsIn is Fleets against a given root. Split for fleetDirIn's reason.
 func fleetsIn(root string) ([]string, error) {
 	entries, err := os.ReadDir(filepath.Join(root, fleetsDirName))
