@@ -164,6 +164,12 @@ var claudeWireVocabulary = wordSet([]string{
 	// which are Wake's words for them.
 	"uuid", "parentUuid", "leafUuid", "last-prompt",
 
+	// A user line's provenance on disk, which DecodeTranscriptLine reads to drop
+	// the note claude injects when a background task ends ("task-notification",
+	// policed below). Policed for "timestamp"'s reason: no file outside this
+	// package names the literal.
+	"origin",
+
 	// system subtypes.
 	"compact_boundary", "permission_denied", "hook_started",
 	"hook_response", "thinking_tokens", "task_started",
@@ -605,14 +611,12 @@ var notNamedByTheAirlock = map[string]string{
 	"AskUserQuestion": "askKind reads the wire, never the tool's name",
 	"ExitPlanMode":    "askKind reads the wire, never the tool's name",
 
-	// Field *values*, not keys. The first three are the deny-vs-interrupt
-	// discriminators CLAUDE.md's traps section is built on; the last marks the
-	// unprompted turn an async subagent causes. Nothing reads them yet, and
-	// whatever does must be behind the airlock.
+	// Field *values*, not keys: the deny-vs-interrupt discriminators CLAUDE.md's
+	// traps section is built on. Nothing reads them yet, and whatever does must
+	// be behind the airlock.
 	"user-rejected":          "deny/interrupt discriminator, not decoded yet",
 	"permission-rule":        "deny/interrupt discriminator, not decoded yet",
 	"error_during_execution": "deny/interrupt discriminator, not decoded yet",
-	"task-notification":      "unprompted-turn marker, not decoded yet",
 }
 
 // policedWordCount is a tripwire, not a fact worth knowing. Any change to the
@@ -658,7 +662,9 @@ var notNamedByTheAirlock = map[string]string{
 // wf_*.json record on disk, camelCase and distinct from the stream's
 // snake_case workflow_name/workflow_progress. See EncodeStopTask and
 // DecodeWorkflowRun.
-const policedWordCount = 203
+// 203 → 204: "origin", the on-disk provenance key DecodeTranscriptLine reads to
+// drop a task-notification line from restored history.
+const policedWordCount = 204
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

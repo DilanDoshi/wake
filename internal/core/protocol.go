@@ -189,19 +189,19 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 		Type      string `json:"type"`
 		Sidechain bool   `json:"isSidechain"`
 		Timestamp string `json:"timestamp"`
-		// On disk the API-error marker is camelCase (isApiErrorMessage), where
-		// the live stream spells it is_api_error_message - a different wire, so a
-		// different key. A failed turn's synthetic frame is a `type:"assistant"`
-		// line, so without this it would restore through the normal text path and
-		// render "Not logged in · Please run /login" (or "401 …") as agent speech
-		// on the /resume that recovery drives. Dropped, like a sidechain line: it
-		// is not conversation content. See KindAPIError and testdata/transcript.
-		APIError bool `json:"isApiErrorMessage"`
+		// Two on-disk markers of a line that is not conversation, dropped like a
+		// sidechain line. isApiErrorMessage (is_api_error_message on the stream) is
+		// a failed turn's synthetic assistant frame, which would restore as agent
+		// speech (see KindAPIError); origin.kind "task-notification" is claude's
+		// note that a background task ended, injected as a user line, which
+		// would restore as a turn the operator typed.
+		APIError bool                  `json:"isApiErrorMessage"`
+		Origin   struct{ Kind string } `json:"origin"`
 	}
 	if err := json.Unmarshal(line, &f); err != nil {
 		return nil, fmt.Errorf("decode transcript line: %w", err)
 	}
-	if f.APIError || (f.Sidechain && !keepSidechain) || (f.Type != "assistant" && f.Type != "user") {
+	if f.APIError || f.Origin.Kind == "task-notification" || (f.Sidechain && !keepSidechain) || (f.Type != "assistant" && f.Type != "user") {
 		return nil, nil
 	}
 	events, err := DecodeLine(line)
