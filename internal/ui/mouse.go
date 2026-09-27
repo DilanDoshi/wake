@@ -15,8 +15,8 @@ const (
 	// noDrag is App.dragAt with no hand on any divider.
 	noDrag = -1
 
-	// edgeLines is how far a drag past a pane's edge scrolls it per motion, so
-	// a selection can reach further than the window it started in.
+	// edgeLines is how far a drag at a pane's edge scrolls it per motion or
+	// tick, so a selection can reach further than the window it started in.
 	edgeLines = 1
 )
 
@@ -86,7 +86,7 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 			// one: end it here rather than extending a selection nobody holds.
 			return a.endSelection()
 		}
-		return a.extendSelection(m.X, m.Y), nil
+		return a.extendSelection(m.X, m.Y)
 	}
 	return a, nil
 }
@@ -293,6 +293,7 @@ func (a App) startSelection(id string, col, top, height, x, y int, r Regions, re
 		return a.startComposerSelection(id, col, top, height, x, y, r)
 	}
 	a.selTop, a.selRows = top, rows
+	a.edge.x, a.edge.y = x, y // a tick left by the last drag serves this one from here
 	p := a.pointIn(id, x-a.layout.PaneLeft(r, col), y)
 	a.sel, a.selecting = selection{
 		pane: id, anchor: p, head: p, refocused: refocused,
@@ -316,7 +317,8 @@ func (a App) bannerShowing(id string, rows int) bool {
 }
 
 // extendSelection moves the end the pointer is on, scrolling the pane when the
-// drag has left it so a selection can reach further than one window.
+// drag reaches its edge so a selection can reach further than one window, and
+// keeps scrolling while it is held there - see edgescroll.go.
 //
 // The edge is selRows, the window the drag was *taken* in - selTop's own rule -
 // rather than a fresh measurement: a motion message arrives per cell crossed,
@@ -324,27 +326,27 @@ func (a App) bannerShowing(id string, rows int) bool {
 // file is written to avoid. Chrome that moves mid-drag (a preview growing a
 // row) leaves the edge a row or two out for the rest of that drag, which is
 // where the stored height it used to read was already.
-func (a App) extendSelection(x, y int) App {
+func (a App) extendSelection(x, y int) (App, tea.Cmd) {
 	if a.sel.onScreen {
-		return a.extendScreenSelection(x, y)
+		return a.extendScreenSelection(x, y), nil
 	}
 	if a.sel.inComposer {
-		return a.extendComposerSelection(x, y)
+		return a.extendComposerSelection(x, y), nil
 	}
 	r := a.regions()
 	col := a.columnOf(a.sel.pane)
 	if col >= len(r.Cols) || r.Cols[col] <= 0 {
-		return a
+		return a, nil
 	}
-	switch {
-	case y < a.selTop:
-		a = a.scrollPane(a.sel.pane, edgeLines)
-	case y >= a.selTop+a.selRows:
-		a = a.scrollPane(a.sel.pane, -edgeLines)
+	left := a.layout.PaneLeft(r, col)
+	a.edge.x, a.edge.y = x, y
+	was := a.transcriptIn(a.sel.pane).scroll
+	if pull := a.edgePull(y, a.pointIn(a.sel.pane, x-left, y)); pull != 0 {
+		a = a.scrollPane(a.sel.pane, pull)
 	}
-	a.sel.head = a.pointIn(a.sel.pane, x-a.layout.PaneLeft(r, col), y)
+	a.sel.head = a.pointIn(a.sel.pane, x-left, y)
 	a.sel = a.sel.clampedTo(r.Cols[col])
-	return a
+	return a.holdAtEdge(a.transcriptIn(a.sel.pane).scroll != was)
 }
 
 // endSelection puts what the drag took on the clipboard and leaves the
@@ -470,7 +472,11 @@ func (a App) clickedComposer() (App, tea.Cmd) {
 // a few rows above the pointer. Mirrors SetSize+transcript.view exactly:
 // following is sampled on the stored height, then the top clamps against the
 // drawn one. See transcriptRows and Room.chrome.
+//
+// A row off the pane lands on its nearest edge line, so a drag past an edge
+// ends the highlight on a line on screen rather than on one nobody has seen.
 func (a App) pointIn(id string, col, y int) point {
+	y = min(max(y, a.selTop), a.selTop+a.selRows-1)
 	tr := a.transcriptIn(id)
 	following := tr.atBottom()
 	drawn := tr.sized(tr.width, a.selRows)

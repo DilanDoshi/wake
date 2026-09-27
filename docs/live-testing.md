@@ -246,7 +246,9 @@ cell crossed, at whatever rate your hardware produces, which is the thing that c
       stray character on the clipboard.
 - [ ] **Drag off the right-hand edge into the next column.** The selection stays in the pane it
       started in; it must never take the neighbouring column's text with it.
-- [ ] **Drag past the top of a pane** and it scrolls back through the conversation, still selecting.
+- [ ] **Drag to the top row of the window and hold still** and it keeps scrolling back through the
+      conversation, still selecting; the same below the transcript scrolls forward. Letting go or
+      moving back inside stops it at once. A drag along the top row it started on does not scroll.
 - [ ] **Press a key with a highlight up.** It clears, *and* the key still does its own job — `esc`
       must still interrupt.
 - [ ] **Resize the terminal's width with a highlight up.** It clears. Changing only the height
