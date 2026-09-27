@@ -74,10 +74,11 @@ const (
 	FramePark = "park" // client → daemon: stop a session's process, keep the session
 
 	// FrameWake brings a parked session back: the same process argv it had,
-	// with a bare `--resume <its own id>` in place of `--session-id`. It keeps
-	// its id, its name, its label and the directory it ran in, because
-	// --resume reuses the id it is given and because resuming anywhere else is
-	// unrecorded.
+	// with a bare `--resume <id>` in place of `--session-id`. It keeps its name,
+	// its label and the directory it ran in, because resuming anywhere else is
+	// unrecorded - and its id, unless a /clear moved it onto a new conversation:
+	// then it resumes that one and comes back under its id, which
+	// SessionStatus.Conversation named.
 	//
 	// It carries only a SessionID, for FramePark's reason: where it resumes is
 	// the daemon's memory and not a client's to supply.

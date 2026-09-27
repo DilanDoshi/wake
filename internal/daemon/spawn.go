@@ -508,8 +508,8 @@ func (s *server) record(a *agent, pgid int) {
 // labelFor is what a launched session is working on.
 //
 // A woken session keeps the label it parked with; only a fresh one derives it.
-// That is the same rule as its id, its name and its directory - a wake is not a
-// new session - and it is what rpc.FrameWake's own doc comment promises.
+// That is the same rule as its name and its directory - a wake is not a new
+// session - and it is what rpc.FrameWake's own doc comment promises.
 // Re-deriving re-reads .git/HEAD, so a checkout while the session was parked
 // would silently relabel a conversation nobody moved, on the surface an
 // operator scans thirty rows of.

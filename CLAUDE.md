@@ -122,6 +122,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **`/resume` resumes in place and skips `resumeSafe`** — the one deliberate exception, matching
   Claude Code (owner's 2026-09-20 ruling). Parked rows keep `resumeSafe`. `internal/daemon/resume.go`.
 - **Anything waiting on a spawn waits on the id it minted**, never the parent's.
+- **A `/clear` moves an agent onto a new claude conversation** (`a.claudeID`, via
+  `agent.conversation()`). Park records it, a wake resumes it and files the woken agent under it
+  (clients follow via `rpc.SessionStatus.Conversation`), and ⌃F forks it. `resumeSafe` cannot see
+  it — the process's argv still names the spawn id — so `conversationRow` is the only fence, and
+  `/resume` refuses a conversation a held agent is writing. `internal/daemon/park.go`.
 - `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
   confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
 - `/manager-stop` refuses a parked manager and a missing one; it does not borrow park's
