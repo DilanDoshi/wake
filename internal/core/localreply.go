@@ -25,6 +25,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // A bare /model reply names the session's model and reasoning level:
@@ -93,18 +94,24 @@ func EffortFromModelReply(text string) (string, bool) {
 //	Other Claude sessions (<n>):
 //	  [<state>]  ·  <name>  ·  <cwd>  ·  started <age>
 //
-// or, with nobody else, one line opening with listAgentsNone. It is human text
-// rather than a schema, so exactly these shapes parse and anything else is
-// refused whole: a wrong row is worse than none.
+// or, with nobody else, one line opening with listAgentsNone. Claude's docs name
+// subagent and teammate sections too; any `<Title> (<n>):` section of n
+// indented rows is counted and skipped, so a background subagent does not hide
+// the machine's sessions. It is human text rather than a schema, so any other
+// line refuses the reply whole: a wrong row is worse than none.
 const (
 	listAgentsSelf   = "This session: "
-	listAgentsOthers = "Other Claude sessions ("
+	listAgentsOthers = "Other Claude sessions"
 	listAgentsNone   = "No subagents, teammates or other Claude sessions"
 	listAgentsColumn = "  ·  "
 )
 
-// listAgentsSelfName is the name before the short id on the self line.
-var listAgentsSelfName = regexp.MustCompile(`^(.+?) \[[0-9a-f]+\]`)
+// listAgentsSelfName is the name before the short id on the self line, and
+// listAgentsHeader a section's unindented title and count.
+var (
+	listAgentsSelfName = regexp.MustCompile(`^(.+?) \[[0-9a-f]+\]`)
+	listAgentsHeader   = regexp.MustCompile(`^(\S.*) \(([0-9]+)\):$`)
+)
 
 // IsListAgentsReply reports whether text opens like a /list-agents reply, so a
 // body PeersFromListAgents refuses is still suppressed as the probe's own.
@@ -118,24 +125,36 @@ func IsListAgentsReply(text string) bool {
 // nothing else, for any line it does not recognise.
 func PeersFromListAgents(text string) (self string, peers []Peer, ok bool) {
 	var lines []string
-	for line := range strings.Lines(text) {
-		if line = strings.TrimSpace(line); line != "" {
-			lines = append(lines, line)
-		}
+	for line := range strings.Lines(strings.TrimSpace(text)) {
+		lines = append(lines, strings.TrimRightFunc(line, unicode.IsSpace))
 	}
-	if len(lines) < 2 {
+	if len(lines) == 0 {
 		return "", nil, false
 	}
 	if self, ok = selfFromListAgents(lines[0]); !ok {
 		return "", nil, false
 	}
-	if len(lines) == 2 && strings.HasPrefix(lines[1], listAgentsNone) {
+	if onlyNoPeers(lines[1:]) {
 		return self, nil, true
 	}
-	if peers, ok = peersFromListAgents(lines[1], lines[2:]); !ok {
+	if peers, ok = peersFromSections(lines[1:]); !ok {
 		return "", nil, false
 	}
 	return self, peers, true
+}
+
+// onlyNoPeers reports whether the body is the no-peers line and nothing else.
+func onlyNoPeers(body []string) bool {
+	said := 0
+	for _, line := range body {
+		if line != "" {
+			said++
+			if !strings.HasPrefix(line, listAgentsNone) {
+				return false
+			}
+		}
+	}
+	return said == 1
 }
 
 func selfFromListAgents(line string) (string, bool) {
@@ -147,18 +166,48 @@ func selfFromListAgents(line string) (string, bool) {
 	return m[1], true
 }
 
-// peersFromListAgents reads the rows under the count header; a count that
-// disagrees with the rows is a shape this parse was not shown.
-func peersFromListAgents(header string, rows []string) ([]Peer, bool) {
-	count, opened := strings.CutPrefix(header, listAgentsOthers)
-	count, closed := strings.CutSuffix(count, "):")
-	n, err := strconv.Atoi(count)
-	if !opened || !closed || err != nil || n != len(rows) {
-		return nil, false
+// peersFromSections walks the sections under the self line. Each header's
+// count must match the indented rows that follow it up to the next blank line
+// or header; rows are read only under listAgentsOthers, the rest only counted.
+func peersFromSections(lines []string) ([]Peer, bool) {
+	var peers []Peer
+	sections := 0
+	for i := 0; i < len(lines); i++ {
+		if lines[i] == "" {
+			continue
+		}
+		m := listAgentsHeader.FindStringSubmatch(lines[i])
+		rows := indentedRun(lines[i+1:])
+		// The count as written, so "02" is a shape this was not shown.
+		if m == nil || strconv.Itoa(len(rows)) != m[2] {
+			return nil, false
+		}
+		if m[1] == listAgentsOthers {
+			found, ok := peersFromRows(rows)
+			if !ok {
+				return nil, false
+			}
+			peers = append(peers, found...)
+		}
+		sections++
+		i += len(rows)
 	}
+	return peers, sections > 0
+}
+
+// indentedRun is the run of indented lines that opens lines: a section's rows.
+func indentedRun(lines []string) []string {
+	n := 0
+	for n < len(lines) && strings.TrimLeftFunc(lines[n], unicode.IsSpace) != lines[n] {
+		n++
+	}
+	return lines[:n]
+}
+
+func peersFromRows(rows []string) ([]Peer, bool) {
 	var peers []Peer
 	for _, row := range rows {
-		p, ok := peerFromRow(row)
+		p, ok := peerFromRow(strings.TrimSpace(row))
 		if !ok {
 			return nil, false
 		}

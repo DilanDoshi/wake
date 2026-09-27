@@ -140,6 +140,33 @@ const (
 	alphaRow = "  [idle]  ·  wf-alpha  ·  /private/tmp/wake-rec/alpha  ·  started 19s ago"
 )
 
+// others is the recorded Other-sessions section, both rows under its header.
+const others = "Other Claude sessions (2):\n" + betaRow + "\n" + alphaRow
+
+// Any other `<Title> (<n>):` section - the subagents and teammates the listing
+// also names - is counted and skipped, so an agent with a background subagent
+// still reports the machine's sessions. Its rows are never parsed.
+func TestOtherSectionsAreCountedAndSkipped(t *testing.T) {
+	const subagents = "Subagents (1):\n  explorer (running, 2s)"
+	for _, tc := range []struct {
+		name, text string
+		peers      []Peer
+	}{
+		{"a section before the peers", selfLine + "\n\n" + subagents + "\n\n" + others, recordedPeers},
+		{"a section after the peers", selfLine + "\n\n" + others + "\n\n" + subagents, recordedPeers},
+		{"sections back to back, ended by the next header", selfLine + "\n\n" + subagents +
+			"\nTeammates (2):\n  a\n  b\n\n" + others, recordedPeers},
+		{"a skipped section alone", selfLine + "\n\n" + subagents, nil},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			self, peers, ok := PeersFromListAgents(tc.text)
+			if !ok || self != "wf-gamma" || !reflect.DeepEqual(peers, tc.peers) {
+				t.Errorf("PeersFromListAgents = (%q, %+v, %v), want (\"wf-gamma\", %+v, true)", self, peers, ok, tc.peers)
+			}
+		})
+	}
+}
+
 // A shape the parser was not shown is refused whole: no self, no rows - never
 // the rows it could read beside one it could not.
 func TestAnUnrecognisedListingIsRefusedWhole(t *testing.T) {
@@ -151,13 +178,17 @@ func TestAnUnrecognisedListingIsRefusedWhole(t *testing.T) {
 		{"no short id", "This session: wf-gamma (the name other sessions use to message it)\n\nOther Claude sessions (1):\n" + betaRow},
 		{"the count disagrees", selfLine + "\n\nOther Claude sessions (3):\n" + betaRow + "\n" + alphaRow},
 		{"a count that is no number", selfLine + "\n\nOther Claude sessions (two):\n" + betaRow + "\n" + alphaRow},
-		{"a future section", selfLine + "\n\nSubagents (1):\n  [busy]  ·  explorer  ·  /private/tmp/wake-rec/gamma  ·  started 2s ago"},
-		{"a section after the peers", selfLine + "\n\nOther Claude sessions (1):\n" + betaRow + "\n\nTeammates (1):\n" + alphaRow},
+		{"a skipped section's count disagrees", selfLine + "\n\nSubagents (2):\n  explorer\n\n" + others},
+		{"an unknown line after the sections", selfLine + "\n\n" + others + "\n\nTip: message a session by its name."},
+		{"an unknown line inside a section", selfLine + "\n\nOther Claude sessions (2):\n" + betaRow + "\nand one more\n" + alphaRow},
+		{"a row under no header", selfLine + "\n\nOther Claude sessions (1):\n" + betaRow + "\n\n" + alphaRow},
+		{"rows parted from their header", selfLine + "\n\nOther Claude sessions (2):\n\n" + betaRow + "\n" + alphaRow},
 		{"a row with a column missing", selfLine + "\n\nOther Claude sessions (1):\n  [idle]  ·  wf-beta  ·  started 19s ago"},
 		{"a row with a column more", selfLine + "\n\nOther Claude sessions (1):\n" + betaRow + "  ·  remote"},
 		{"a state unbracketed", selfLine + "\n\nOther Claude sessions (1):\n  idle  ·  wf-beta  ·  /private/tmp/wake-rec/beta  ·  started 19s ago"},
 		{"a relative directory", selfLine + "\n\nOther Claude sessions (1):\n  [idle]  ·  wf-beta  ·  tmp/beta  ·  started 19s ago"},
 		{"a blank name", selfLine + "\n\nOther Claude sessions (1):\n  [idle]  ·    ·  /private/tmp/wake-rec/beta  ·  started 19s ago"},
+		{"the empty form with more before it", selfLine + "\n\n" + others + "\n\nNo subagents, teammates or other Claude sessions — nobody."},
 		{"the empty form with more after it", selfLine + "\n\nNo subagents, teammates or other Claude sessions — nobody.\n" + betaRow},
 	} {
 		t.Run(tc.name, func(t *testing.T) {

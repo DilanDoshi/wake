@@ -14,7 +14,7 @@
 // CLI flags: the transcript's keys are spelled **in this file and nowhere else
 // in the tree**, held by TestTheTranscriptKeysAreSpelledOnlyInDiscover, and
 // anything outside asks FoundSession. docs/notes/deferred.md carries the ruling
-// this wants next - whether the airlock's file set should grow a fifth member.
+// this wants next - whether the airlock's file set should grow a further member.
 //
 // # Why a directory is verified rather than decoded
 //
