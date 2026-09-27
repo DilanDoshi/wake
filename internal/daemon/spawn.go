@@ -605,11 +605,11 @@ func (s *server) withdraw(a, replaces *agent, ending *rpc.SessionStatus) {
 	if rerr := s.roster.remove(a.id); rerr != nil {
 		logf("wake: could not undo the roster record for the failed start of %s: %v", a.id, rerr)
 	}
+	delete(s.agents, a.id)
 	if replaces != nil {
-		s.agents[a.id] = replaces
+		s.agents[replaces.id] = replaces // under its own id: a wake after /clear re-keyed it
 		return
 	}
-	delete(s.agents, a.id)
 	if ending != nil {
 		s.rememberLocked(*ending)
 	}
@@ -634,27 +634,6 @@ func (s *server) endingFor(id string) *rpc.SessionStatus {
 		}
 	}
 	return nil
-}
-
-// replaceParked swaps a woken agent in for the parked one it came from.
-//
-// Pointer identity rather than a state check, and that is what keeps it atomic:
-// asking the old agent whether it is still parked would mean taking its lock
-// under s.mu, which nothing in this package does, and the answer would be stale
-// the moment the lock was released. `was` is the exact agent unpark inspected,
-// so this either replaces that one or refuses.
-//
-// forgetLocked for register's reason: a woken session must not be reported
-// alive and ended in one report.
-func (s *server) replaceParked(a, was *agent) bool {
-	s.mu.Lock()
-	defer s.mu.Unlock()
-	if s.quitting || s.taken || s.agents[a.id] != was {
-		return false
-	}
-	s.agents[a.id] = a
-	s.forgetLocked(a.id)
-	return true
 }
 
 // register puts the agent in the map and drops any memory of it having ended

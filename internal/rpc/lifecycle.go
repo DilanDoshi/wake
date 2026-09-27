@@ -299,6 +299,11 @@ type SessionStatus struct {
 	ID   string `json:"id"`
 	Name string `json:"name,omitempty"`
 
+	// Conversation is the claude conversation this session is writing, when a
+	// /clear has moved it off ID. A park records it and a wake resumes it, so a
+	// woken session comes back under this id - the one join a client holds.
+	Conversation string `json:"conversation,omitempty"`
+
 	// Label is what this session is working on - the branch or the directory
 	// it was started in - so a row reads `sydney <> dev-5748` rather than a
 	// bare name. Display only, and separate from Name rather than folded into

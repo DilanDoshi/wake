@@ -527,7 +527,7 @@ func (s *server) reconsiderEmptyExit() {
 		logf("wake: pending park-book update could not be retried: %v", err)
 	} else {
 		for id, rec := range published {
-			if a, held := s.agent(id); held {
+			if a, held := s.conversationRow(id); held {
 				a.markParkDurable(rec)
 			}
 		}

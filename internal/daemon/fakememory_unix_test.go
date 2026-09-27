@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+
+	"github.com/google/uuid"
 )
 
 // A fake `claude` that remembers, because until this existed nothing in the
@@ -52,6 +54,9 @@ const (
 	// notedPrefix acknowledges a turn was stored. A test waits for it before
 	// parking, so the park cannot race the write it depends on.
 	notedPrefix = "noted:"
+
+	// clearCommand starts a new conversation, the way claude's own /clear does.
+	clearCommand = "/clear"
 )
 
 // rememberingClaudeOnPath puts the remembering fake on PATH, with a transcript
@@ -95,6 +100,10 @@ func fakeMemory(sid string, resumed bool) int {
 
 	for line := range stdinLines() {
 		switch {
+		case strings.Contains(line, clearCommand):
+			sid = clearMemory(sid)
+			path, history = memoryPath(sid), nil
+			continue
 		case strings.Contains(line, recallWord):
 			// Answer from what is held, not from what was just asked. The
 			// question does not carry the passphrase, so an empty history
@@ -108,6 +117,18 @@ func fakeMemory(sid string, resumed bool) int {
 		emitResult(sid)
 	}
 	return 0
+}
+
+// clearMemory is /clear in claude's recorded shape (slash-commands.jsonl): a
+// reset under the id that dies, whose new_conversation_id is NOT the successor,
+// then an init and a zero-turn result under the successor. It returns the
+// successor, which starts with no memory.
+func clearMemory(dying string) string {
+	successor := uuid.NewString()
+	fmt.Printf(`{"type":"conversation_reset","session_id":%q,"new_conversation_id":%q}`+"\n", dying, uuid.NewString())
+	emitInit(successor)
+	emitResult(successor)
+	return successor
 }
 
 // readMemory is every turn a previous process wrote for this session, or

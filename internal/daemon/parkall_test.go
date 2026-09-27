@@ -563,9 +563,10 @@ func TestTheBookingDecisionReadsNothingButTheParkFlags(t *testing.T) {
 
 	// The other place a predicate can live. Written as printed source rather
 	// than as a shape, because the set is three: a call to the predicate above,
-	// the lookup that leaves an entry already in the book alone, and the error
+	// the lookup that leaves an entry already in the book alone - keyed by the
+	// conversation a record names, which a /clear moves off a.id - and the error
 	// check on the write itself.
-	allowedTests := map[string]bool{"!a.bookable()": true, "held[a.id]": true, "err != nil": true}
+	allowedTests := map[string]bool{"!a.bookable()": true, "held[a.conversation()]": true, "err != nil": true}
 	// The whole fleet, and each range subject named: a `range agents[1:]` is a
 	// narrowing with no condition in it for the check above to see.
 	allowedRanges := map[string]bool{"agents": true, "s.parked.records()": true}
