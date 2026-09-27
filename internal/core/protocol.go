@@ -189,14 +189,14 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 		Type      string `json:"type"`
 		Sidechain bool   `json:"isSidechain"`
 		Timestamp string `json:"timestamp"`
-		// Two on-disk markers of a line that is not conversation, dropped like a
-		// sidechain line. isApiErrorMessage (is_api_error_message on the stream) is
-		// a failed turn's synthetic assistant frame, which would restore as agent
-		// speech (see KindAPIError); origin.kind "task-notification" is claude's
-		// note that a background task ended, injected as a user line, which
-		// would restore as a turn the operator typed.
-		APIError bool                  `json:"isApiErrorMessage"`
-		Origin   struct{ Kind string } `json:"origin"`
+		// On-disk markers of lines that are not conversation, dropped: a failed
+		// turn's synthetic frame (see KindAPIError), which would restore as agent
+		// speech, and claude's injected task-ending note, as the operator's turn.
+		// isApiErrorMessage is is_api_error_message on the stream.
+		APIError bool `json:"isApiErrorMessage"`
+		Origin   struct {
+			Kind string `json:"kind"`
+		} `json:"origin"`
 	}
 	if err := json.Unmarshal(line, &f); err != nil {
 		return nil, fmt.Errorf("decode transcript line: %w", err)

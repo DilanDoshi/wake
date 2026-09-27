@@ -5031,3 +5031,13 @@ task's ending reaches the live stream only as `task_*` frames, which never reach
 because it restored as a turn the operator typed. So a reopened DM has no `● Subagent "…"
 finished` line for a dispatch that ended while it was closed. The better end state is decoding
 that line as the ending it is, in the airlock, rather than dropping it.
+
+**Residuals of the resume-after-clear re-key** (2026-09-26, `fix/resume-after-clear`). A wake after
+`/clear` files the agent under its new conversation id; what still keys on the old one is display
+only. Room lines said before the wake stay attributed to the old id, so a lone `@name` narrowing
+on the woken agent hides them. A fork whose `ParentID` is the old id loses its `forked from`
+line. And one behaviour is unrecorded: rewind's `last_seen_user_message_uuid` is the newest
+genuine typed prompt, so with task-notification lines dropped it is never the injected
+notification line - whether claude counts that line when it checks for a stale target is not
+known. Record a rewind after a background task ends to settle it.
+

@@ -704,7 +704,6 @@ func clearMemory(dying string) string {
 	return successor
 }
 
-
 // fakeDeaf never reads its stdin, so it outlives the daemon that spawned it.
 //
 // That is what makes it the reaper's case. A daemon dying closes the stdin it

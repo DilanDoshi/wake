@@ -162,14 +162,16 @@ func (a App) parkedAgents() []Agent {
 // pane and this window's wake ask move to it; the fleet never drops a row a
 // report stops listing, so the old one would otherwise stay parked forever.
 func (a App) rekeyed(st *rpc.Status) App {
-	reported := map[string]bool{}
+	reported, running := map[string]bool{}, map[string]bool{}
 	for _, s := range st.Sessions {
-		reported[s.ID] = true
+		reported[s.ID], running[s.ID] = true, s.PID > 0
 	}
 	gone := map[string]struct{}{}
 	for _, ag := range a.fleet.Agents() {
 		conv := ag.Conversation
-		if conv == "" || reported[ag.ID] || !reported[conv] {
+		// Only once the woken process exists: a wake reports its row before it
+		// starts, and one that fails to start puts the old row back.
+		if conv == "" || reported[ag.ID] || !running[conv] {
 			continue
 		}
 		gone[ag.ID] = struct{}{}
@@ -181,12 +183,9 @@ func (a App) rekeyed(st *rpc.Status) App {
 		}
 		old, held := a.dms[ag.ID]
 		if a.grid.Has(ag.ID) {
-			focus := a.focus
-			a = a.show(conv, ag.Name, func(g Grid) Grid { return g.Replace(ag.ID, conv) })
-			if focus != ag.ID {
-				a = a.refocus(focus)
-			}
+			a = a.rekeyPane(ag.ID, conv, ag.Name)
 		}
+		a = a.roomAskedAs(ag.ID, conv)
 		if held {
 			// The draft survives a park, so it survives the re-key: the fresh
 			// pane loads the resumed conversation and keeps what was typed.
@@ -367,10 +366,15 @@ func (a App) showResume(disk []DiskSession) (App, tea.Cmd) {
 func (a App) resumeRowsFrom(disk []DiskSession) (rows []resumeRow, more int) {
 	live := map[string]bool{}
 	for _, ag := range a.fleet.Agents() {
-		if ag.State != rpc.StateParked {
+		switch {
+		case ag.State != rpc.StateParked:
 			// And the conversation a cleared agent is writing: resuming it in
 			// place would put a second process on it.
 			live[ag.ID], live[ag.Conversation] = true, true
+		case ag.Conversation != "":
+			// A parked cleared agent is offered by its conversation below; its
+			// own id is the pre-clear transcript, refused while the row is held.
+			live[ag.ID] = true
 		}
 	}
 	delete(live, "")
@@ -462,4 +466,21 @@ func (a App) awaitingWake(ids ...string) App {
 	}
 	a.waking = next
 	return a
+}
+
+// rekeyPane puts conversation conv in the pane showing from, moving nothing the
+// operator pointed at: the keys, the roster cursor and the fleet's focus stay
+// where they were unless they were on from, so ⌃C still parks whoever was picked.
+func (a App) rekeyPane(from, conv, name string) App {
+	follow := func(id string) string {
+		if id == from {
+			return conv
+		}
+		return id
+	}
+	focus, sel, task, focused := follow(a.focus), follow(a.roster.Selected), a.roster.SelectedTask, follow(a.fleet.Focused())
+	a = a.show(conv, name, func(g Grid) Grid { return g.Replace(from, conv) })
+	a.roster.Selected, a.roster.SelectedTask = sel, task
+	a.fleet = a.fleet.Focus(focused)
+	return a.refocus(focus)
 }

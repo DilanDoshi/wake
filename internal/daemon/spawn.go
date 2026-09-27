@@ -609,7 +609,11 @@ func (s *server) withdraw(a, replaces *agent, ending *rpc.SessionStatus) {
 	}
 	delete(s.agents, a.id)
 	if replaces != nil {
-		s.agents[replaces.id] = replaces // under its own id: a wake after /clear re-keyed it
+		// Under its own id, which a wake after /clear re-keyed away from - and
+		// only while nothing has taken that id since.
+		if _, taken := s.agents[replaces.id]; !taken {
+			s.agents[replaces.id] = replaces
+		}
 		return
 	}
 	if ending != nil {

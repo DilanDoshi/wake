@@ -2,7 +2,6 @@ package ui
 
 import (
 	"errors"
-	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -13,7 +12,9 @@ import (
 
 // A wake after /clear comes back under the conversation it resumed, so the row
 // the report stops naming is the same agent: its pane follows it, the resumed
-// notice and the room's history ask still fire, and the old row is gone.
+// notice fires and the old row is gone. The room is not asked about the new id:
+// it already restored that conversation under the old one at the seed, and a
+// second restore would draw it twice and read every private turn as public.
 func TestAWokenAgentIsFollowedOntoTheConversationItResumed(t *testing.T) {
 	fresh(t)
 	a := NewRoomApp(newRecorder(t), Stream{}, seedOf(
@@ -22,7 +23,7 @@ func TestAWokenAgentIsFollowedOntoTheConversationItResumed(t *testing.T) {
 	a = a.openDMWith("s1", "alex").awaitingWake("s1")
 
 	m, cmd := a.Update(frameMsg{Frame: rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
-		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle, PID: 4242},
 	)}})
 	got := m.(App)
 
@@ -38,14 +39,10 @@ func TestAWokenAgentIsFollowedOntoTheConversationItResumed(t *testing.T) {
 	if n, ok := notice.Latest(); !ok || !strings.Contains(n.String(), ResumedNotice("alex")) {
 		t.Errorf("no resumed notice after the wake arrived, got %q", n.String())
 	}
-	var asked []string
 	for _, f := range batchFrames(t, got, cmd) {
-		if f.Kind == rpc.FrameRoomHistory {
-			asked = append(asked, f.SessionID)
+		if f.Kind == rpc.FrameRoomHistory && f.SessionID == "c1" {
+			t.Error("the room asked about c1 again after restoring the same conversation under s1")
 		}
-	}
-	if !slices.Contains(asked, "c1") {
-		t.Errorf("the room asked about %v after the wake, want the conversation c1 it came back under", asked)
 	}
 }
 
@@ -57,7 +54,7 @@ func TestAnotherWindowDropsTheRowAWakeReKeyed(t *testing.T) {
 		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked, Conversation: "c1"},
 	)).withSize(200, 40)
 	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
-		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle, PID: 4242},
 	)})
 	if _, still := a.fleet.Agent("s1"); still {
 		t.Error("the re-keyed row lingers in a window that did not ask for the wake")
@@ -79,6 +76,7 @@ func TestTheResumePickerKnowsWhatConversationAClearedAgentIsWriting(t *testing.T
 	rows, _ := a.resumeRowsFrom([]DiskSession{
 		{ID: "c-live", Dir: "/l", Modified: now},
 		{ID: "c-park", Dir: "/p", Modified: now},
+		{ID: "park1", Dir: "/p", Modified: now.Add(-time.Hour)},
 		{ID: "stranger", Dir: "/s", Modified: now},
 	})
 	byID := map[string]resumeRow{}
@@ -90,6 +88,15 @@ func TestTheResumePickerKnowsWhatConversationAClearedAgentIsWriting(t *testing.T
 	}
 	if r, ok := byID["park1"]; !ok || !r.Parked {
 		t.Errorf("the parked cleared agent is not one parked row: %+v", rows)
+	}
+	parkedRows := 0
+	for _, r := range rows {
+		if r.ID == "park1" {
+			parkedRows++
+		}
+	}
+	if parkedRows != 1 {
+		t.Errorf("the parked agent's pre-clear transcript was offered beside its row (%d rows for park1): the daemon refuses it while the agent is held", parkedRows)
 	}
 	if _, listed := byID["c-park"]; listed {
 		t.Error("the parked agent's conversation was listed a second time as a stranger")
@@ -122,7 +129,7 @@ func TestAReKeyedPaneKeepsItsDraft(t *testing.T) {
 	)).withSize(200, 40)
 	a = a.openDMWith("s1", "alex").withDraft("half a thought")
 	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
-		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle, PID: 4242},
 	)})
 	if got := a.dms["c1"].Composer().Value(); got != "half a thought" {
 		t.Errorf("the draft on the re-keyed pane is %q, want what was typed before the wake", got)
@@ -138,7 +145,7 @@ func TestAReKeyedAttachmentReattachesToTheConversation(t *testing.T) {
 		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked, Conversation: "c1"},
 	)).withSize(200, 40).WithOpenDM("s1", "alex").WithDialer(d.dial)
 	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
-		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle, PID: 4242},
 	)})
 	_, cmd := a.hungUp(errors.New("hung up"))
 	if cmd == nil {
@@ -147,5 +154,41 @@ func TestAReKeyedAttachmentReattachesToTheConversation(t *testing.T) {
 	cmd()
 	if d.asked != "c1" {
 		t.Errorf("the reattach asked for %q, want the conversation c1 the agent was re-keyed onto", d.asked)
+	}
+}
+
+// A woken row is reported before its process exists, and a wake that then fails
+// puts the old row back - so the re-key waits for the woken process.
+func TestAWakeIsNotFollowedBeforeItsProcessExists(t *testing.T) {
+	fresh(t)
+	a := NewRoomApp(newRecorder(t), Stream{}, seedOf(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked, Conversation: "c1"},
+	)).withSize(200, 40)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
+		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle},
+	)})
+	if _, still := a.fleet.Agent("s1"); !still {
+		t.Error("the row was re-keyed onto a woken session with no process yet; a failed wake would leave a ghost")
+	}
+}
+
+// Following a woken agent onto its conversation moves nothing the operator
+// pointed at: the keys, the roster cursor and the fleet's focus stay where they
+// were, so ⌃C still parks whoever was picked.
+func TestAReKeyDoesNotMoveTheKeysOrTheCursor(t *testing.T) {
+	fresh(t)
+	a := NewRoomApp(newRecorder(t), Stream{}, seedOf(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked, Conversation: "c1"},
+		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateIdle, PID: 7},
+	)).withSize(200, 40)
+	a = a.openDMWith("s1", "alex").refocus("")
+	a.fleet = a.fleet.Focus("")
+	a.roster.Selected = "s2"
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
+		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle, PID: 4242},
+		rpc.SessionStatus{ID: "s2", Name: "sydney", State: rpc.StateIdle, PID: 7},
+	)})
+	if a.focus != "" || a.roster.Selected != "s2" || a.fleet.Focused() != "" {
+		t.Errorf("the re-key moved focus %q, roster %q, fleet focus %q; want the room, s2 and none", a.focus, a.roster.Selected, a.fleet.Focused())
 	}
 }

@@ -434,6 +434,10 @@ var deliberatelyGeneric = wordSet([]string{
 	// naming "workflow_progress", which is policed above.
 	"index", "title", "tokens",
 
+	// origin.kind's own key, the plainest English there is: Wake's own code names
+	// kinds everywhere, and "origin" beside it is policed, so it is no route in.
+	"kind",
+
 	// A workflow_agent's other state words, "start"'s siblings. Neither is
 	// policed: core.TaskProgress and core.TaskDone already spell "progress"
 	// and "done" literally in task.go, which is not an airlock file, so
