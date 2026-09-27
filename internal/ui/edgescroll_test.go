@@ -2,6 +2,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"testing"
 	"time"
 
@@ -230,6 +231,31 @@ func TestATickDoesNotMoveAFrameWideSelection(t *testing.T) {
 	}
 }
 
+// Nor on a query-box drag: a draft is all on screen, and its point is a draft
+// row, not a line of scrollback.
+func TestATickDoesNotMoveAQueryBoxSelection(t *testing.T) {
+	countEdgeTicks(t)
+	a := splitApp(t, 200, 40, 40)
+	a, _ = a.mouse(pressAt(10, textRow))
+	a, _ = a.mouse(motion(10, 0))
+	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: 10, Y: 0})
+	a = a.withDraft("hello world")
+	r := a.regions()
+	draftTop, _, _, _, ok := a.composerRegion("", r.Room(), 0, a.paneHeight())
+	if !ok {
+		t.Fatal("the room drew no composer region")
+	}
+	a, _ = a.mouse(pressAt(a.layout.PaneLeft(r, 0)+composerTextLeft+1, draftTop))
+	if !a.sel.inComposer {
+		t.Fatalf("the press on the draft took %+v, want a query-box selection", a.sel)
+	}
+	sel := a.sel
+	a, cmd := edgeTick(t, a)
+	if a.sel != sel || cmd != nil {
+		t.Errorf("a tick moved a query-box selection from %+v to %+v (rearmed %v)", sel, a.sel, cmd != nil)
+	}
+}
+
 // Past an edge the highlight ends on the last line on screen, not on a line as
 // far below it as the pointer is - which was copied without ever being seen.
 //
@@ -248,6 +274,21 @@ func TestPastTheBottomTheHighlightEndsOnTheLastLineOnScreen(t *testing.T) {
 // ends the highlight on this pane's own first line on screen.
 func TestAboveAStackedPaneTheHighlightEndsOnItsFirstLineOnScreen(t *testing.T) {
 	countEdgeTicks(t)
+	a, top := stackedApp(t)
+	a, _ = a.mouse(pressAt(10, top+2))
+	if a.sel.pane != "s2" {
+		t.Fatalf("the press took %+v, want a selection in the lower pane", a.sel)
+	}
+	a, _ = a.mouse(motion(10, top-3))
+	if want := a.transcriptIn("s2").scroll; a.sel.head.line != want {
+		t.Errorf("the highlight ends on line %d, want the lower pane's top line on screen, %d", a.sel.head.line, want)
+	}
+}
+
+// stackedApp is splitApp with s2 open under the room and long enough to scroll,
+// and the screen row s2's pane starts on.
+func stackedApp(t *testing.T) (App, int) {
+	t.Helper()
 	a := splitApp(t, 200, 40, 40).openBelow("s2", "jesse")
 	for i := range 60 {
 		a = said(a, "s2", fmt.Sprintf("line %d", i))
@@ -256,12 +297,123 @@ func TestAboveAStackedPaneTheHighlightEndsOnItsFirstLineOnScreen(t *testing.T) {
 	if !ok || top == 0 {
 		t.Fatalf("no pane stacked under the room: top %d, height %d", top, height)
 	}
-	a, _ = a.mouse(pressAt(10, top+2))
-	if a.sel.pane != "s2" {
-		t.Fatalf("the press took %+v, want a selection in the lower pane", a.sel)
+	return a, top
+}
+
+// heldInDM is a drag in s1's conversation brought to its top row and held, with
+// a tick in flight.
+func heldInDM(t *testing.T) App {
+	t.Helper()
+	a := splitApp(t, 200, 40, 4)
+	for i := range 60 {
+		a = said(a, "s1", fmt.Sprintf("line %d", i))
 	}
-	a, _ = a.mouse(motion(10, top-3))
-	if want := a.transcriptIn("s2").scroll; a.sel.head.line != want {
-		t.Errorf("the highlight ends on line %d, want the lower pane's top line on screen, %d", a.sel.head.line, want)
+	x := midOf(a.regions(), 1)
+	a, _ = a.mouse(pressAt(x, 10))
+	a, cmd := a.mouse(motion(x, 0))
+	if a.sel.pane != "s1" || cmd == nil {
+		t.Fatalf("no held drag in s1: sel %+v, armed %v", a.sel, cmd != nil)
+	}
+	return a
+}
+
+// A conversation can leave mid-drag - a /quit confirmed by the daemon - and the
+// tick in flight, or the release, then reached for a DM that is gone: a nil
+// dereference that took Wake down with no key pressed.
+//
+// Mutation check: dropping the selection clear from forgetConversation panics
+// here.
+func TestAConversationLeavingMidDragEndsTheDrag(t *testing.T) {
+	countEdgeTicks(t)
+	a := heldInDM(t).forgetConversation("s1")
+	a, cmd := edgeTick(t, a)
+	if cmd != nil {
+		t.Error("a tick for a conversation that has gone armed another")
+	}
+	if _, cmd = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: 10, Y: 0}); cmd != nil {
+		t.Error("the release copied out of a conversation that has gone")
+	}
+}
+
+// A fork arriving replaces the pane it was asked from, and the drag held in it
+// must not go on scrolling a conversation that is no longer drawn.
+//
+// Mutation check: dropping the grid check from extendSelection fails this.
+func TestAPaneReplacedMidDragIsNotScrolled(t *testing.T) {
+	countEdgeTicks(t)
+	a := heldInDM(t)
+	a = a.openDMWith("s9", "sam")
+	if a.grid.Has("s1") {
+		t.Fatalf("s1 is still drawn; the replace did not happen: %+v", a.grid)
+	}
+	was := a.transcriptIn("s1").scroll
+	a, cmd := edgeTick(t, a)
+	if now := a.transcriptIn("s1").scroll; now != was || cmd != nil {
+		t.Errorf("a tick scrolled a pane no longer drawn from line %d to %d (rearmed %v)", was, now, cmd != nil)
+	}
+}
+
+// A window too short for two stacked panes stops drawing the lower one but
+// keeps it in the grid, and a drag held in it must stop with it - not go on
+// scrolling a conversation nobody can see.
+//
+// Mutation check: guarding on grid.Has rather than drawn fails this.
+func TestAPaneHiddenByAShorterWindowMidDragIsNotScrolled(t *testing.T) {
+	countEdgeTicks(t)
+	a, top := stackedApp(t)
+	a, _ = a.mouse(pressAt(10, top+2))
+	a, cmd := a.mouse(motion(10, top-3))
+	if a.sel.pane != "s2" || cmd == nil {
+		t.Fatalf("no held drag in s2: sel %+v, armed %v", a.sel, cmd != nil)
+	}
+	a, _ = a.resized(200, 12)
+	if slices.Contains(a.drawn(), "s2") || !a.grid.Has("s2") {
+		t.Fatalf("want s2 in the grid but not drawn at 12 rows: drawn %v", a.drawn())
+	}
+	was := a.transcriptIn("s2").scroll
+	a, cmd = edgeTick(t, a)
+	if now := a.transcriptIn("s2").scroll; now != was || cmd != nil {
+		t.Errorf("a tick scrolled a pane the window no longer draws from line %d to %d (rearmed %v)", was, now, cmd != nil)
+	}
+}
+
+// A width change settles 80ms later, and until it does drawn() reads the old
+// layout - a pane the narrower frame already clips passes it. The settle clears
+// the selection anyway, so a drag with one on its way extends nothing.
+//
+// Mutation check: dropping the pending-width test from extendSelection fails
+// this.
+func TestADragHeldThroughAWidthChangeIsNotScrolled(t *testing.T) {
+	countEdgeTicks(t)
+	a := heldInDM(t)
+	a, _ = a.resized(80, 40)
+	if a.pending.width == a.layout.Width {
+		t.Fatal("the width change applied at once; there is no pending window to test")
+	}
+	was := a.transcriptIn("s1").scroll
+	a, cmd := edgeTick(t, a)
+	if now := a.transcriptIn("s1").scroll; now != was || cmd != nil {
+		t.Errorf("a tick scrolled a pane mid-resize from line %d to %d (rearmed %v)", was, now, cmd != nil)
+	}
+}
+
+// A terminal can swallow a release. The next press begins a new gesture, so a
+// divider press must not leave the lost drag live - scrolled on by its tick,
+// and copied by the divider's own release.
+//
+// Mutation check: dropping the selecting reset from press fails this.
+func TestAPressOnTheDividerEndsADragWhoseReleaseWasLost(t *testing.T) {
+	countEdgeTicks(t)
+	a := splitApp(t, 200, 40, 40)
+	a, _ = a.mouse(pressAt(10, textRow))
+	a, _ = a.mouse(motion(10, 0))
+	a = grab(t, a, dividerColumnOf(a))
+	was := roomScroll(a)
+	a, cmd := edgeTick(t, a)
+	if now := roomScroll(a); now != was || cmd != nil {
+		t.Errorf("a divider press left the lost drag live: line %d -> %d (rearmed %v)", was, now, cmd != nil)
+	}
+	if _, cmd = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: dividerColumnOf(a)}); cmd != nil {
+		t.Error("the divider's release copied the drag whose release was lost")
 	}
 }

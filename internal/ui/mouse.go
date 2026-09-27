@@ -116,6 +116,7 @@ func (a App) rowsOf(col int) (top, bottom int) {
 // workspace is not a conversation and there is no verb for one yet.
 func (a App) press(x, y int) App {
 	a.rosterHit = rosterHit{} // a fresh press; only a roster press below re-arms it
+	a.selecting = false       // and a new gesture: a drag whose release was lost is over
 	r := a.regions()
 	switch region, at := a.layout.Hit(r, x); region {
 	case RegionDivider:
@@ -333,11 +334,13 @@ func (a App) extendSelection(x, y int) (App, tea.Cmd) {
 	if a.sel.inComposer {
 		return a.extendComposerSelection(x, y), nil
 	}
-	r := a.regions()
-	col := a.columnOf(a.sel.pane)
-	if col >= len(r.Cols) || r.Cols[col] <= 0 {
+	// Replaced, hidden, or about to be cleared by a width change still settling
+	// (drawn reads the old layout until then): nothing on screen to extend.
+	if a.pending.width != a.layout.Width || !slices.Contains(a.drawn(), a.sel.pane) {
 		return a, nil
 	}
+	r := a.regions()
+	col := a.columnOf(a.sel.pane)
 	left := a.layout.PaneLeft(r, col)
 	a.edge.x, a.edge.y = x, y
 	was := a.transcriptIn(a.sel.pane).scroll

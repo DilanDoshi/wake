@@ -273,7 +273,7 @@ func TestADragHeldAtTheTopOfTheWindowKeepsScrollingBack(t *testing.T) {
 	}
 
 	s.send(fmt.Sprintf("\x1b[<0;%d;%dM", x+1, row+1)) // press
-	s.send(fmt.Sprintf("\x1b[<32;%d;1M", x+1))       // one motion onto the top row, then rest
+	s.send(fmt.Sprintf("\x1b[<32;%d;1M", x+1))        // one motion onto the top row, then rest
+	// No release: it would copy the whole run onto this machine's clipboard.
 	s.await(first)
-	s.send(fmt.Sprintf("\x1b[<0;%d;1m", x+1)) // release
 }

@@ -202,6 +202,9 @@ func (a App) departedQuit() App {
 // a quit agent has left the fleet, so nothing can reopen its conversation and a
 // kept transcript is only a leak.
 func (a App) forgetConversation(id string) App {
+	if a.sel.pane == id {
+		a = a.cleared() // a drag held in it would reach for a DM that is gone
+	}
 	if _, held := a.dms[id]; held {
 		next := maps.Clone(a.dms)
 		delete(next, id)
