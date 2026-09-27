@@ -11,7 +11,9 @@ package ui
 // from; everything that does not spell a slash is here.
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"time"
@@ -137,12 +139,60 @@ func wakeFrames(agents []Agent) []rpc.Frame {
 // a record out of the book as it launches, and a live row is one it is holding.
 func (a App) parkedAgents() []Agent {
 	var out []Agent
+	held := map[string]bool{}
 	for _, agent := range a.fleet.Agents() {
 		if agent.State == rpc.StateParked {
 			out = append(out, agent)
+			held[agent.ID], held[cmp.Or(agent.Conversation, agent.ID)] = true, true
 		}
 	}
-	return append(out, a.fleet.Parked()...)
+	// A report may still list a ⌃C row's own book record beside it, under the
+	// conversation it parked with; one agent, so one entry and one wake.
+	for _, rec := range a.fleet.Parked() {
+		if !held[rec.ID] {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+// rekeyed follows an agent a wake brought back under the conversation it
+// resumed - a /clear had moved it off the id it was filed under. The report
+// stops naming the old id and names the conversation instead, so the row, the
+// pane and this window's wake ask move to it; the fleet never drops a row a
+// report stops listing, so the old one would otherwise stay parked forever.
+func (a App) rekeyed(st *rpc.Status) App {
+	reported := map[string]bool{}
+	for _, s := range st.Sessions {
+		reported[s.ID] = true
+	}
+	gone := map[string]struct{}{}
+	for _, ag := range a.fleet.Agents() {
+		conv := ag.Conversation
+		if conv == "" || reported[ag.ID] || !reported[conv] {
+			continue
+		}
+		gone[ag.ID] = struct{}{}
+		if _, asked := a.waking[ag.ID]; asked {
+			a = a.awaitingWake(conv)
+		}
+		if a.grid.Has(ag.ID) {
+			focus := a.focus
+			a = a.show(conv, ag.Name, func(g Grid) Grid { return g.Replace(ag.ID, conv) })
+			if focus != ag.ID {
+				a = a.refocus(focus)
+			}
+		}
+		a = a.forgetConversation(ag.ID)
+	}
+	if len(gone) > 0 {
+		a.waking = maps.Clone(a.waking)
+		for id := range gone {
+			delete(a.waking, id)
+		}
+		a.fleet = a.fleet.drop(gone)
+	}
+	return a
 }
 
 // parkedNamed resolves a name to a parked agent. Exact and folded, the way
@@ -306,12 +356,16 @@ func (a App) resumeRowsFrom(disk []DiskSession) (rows []resumeRow, more int) {
 	live := map[string]bool{}
 	for _, ag := range a.fleet.Agents() {
 		if ag.State != rpc.StateParked {
-			live[ag.ID] = true
+			// And the conversation a cleared agent is writing: resuming it in
+			// place would put a second process on it.
+			live[ag.ID], live[ag.Conversation] = true, true
 		}
 	}
+	delete(live, "")
 	parked := map[string]Agent{}
 	for _, ag := range a.parkedAgents() {
-		parked[ag.ID] = ag
+		// Keyed by the conversation its wake resumes, which is the disk row.
+		parked[cmp.Or(ag.Conversation, ag.ID)] = ag
 	}
 
 	all := make([]resumeRow, 0, len(disk)+len(parked))
