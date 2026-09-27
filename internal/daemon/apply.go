@@ -23,13 +23,14 @@ const agentQueue = 64
 // pending is one stdin-bound frame and the client that asked for it, so a
 // failure is reported to whoever can do something about it.
 //
-// probe marks a daemon-originated effort probe: a bare /model with no client
-// behind it. It is sent like any other line but reports to nobody, counts as no
-// turn, and opens the suppression window that keeps its reply off every client.
+// probe marks a daemon-originated probe (probe.go) and says which: a bare
+// local command with no client behind it. It is sent like any other line but
+// reports to nobody, counts as no turn, and opens the suppression window that
+// keeps its reply off every client.
 type pending struct {
 	from  *client
 	frame rpc.Frame
-	probe bool
+	probe probeKind
 }
 
 // submit queues one stdin-bound frame for this agent.
@@ -75,15 +76,15 @@ func (a *agent) apply(p pending) {
 	var err error
 	switch p.frame.Kind {
 	case rpc.FrameSend:
-		if p.probe {
+		if p.probe != notProbe {
 			// A probe is not an operator turn: no noteSent (so the agent is not
 			// marked owed and never looks busy), no noteEffort, and no client to
 			// report a failure to. incProbe before the write opens the window
 			// fanOut uses to swallow the reply; a failed write closes it again.
-			a.incProbe()
+			a.incProbe(p.probe)
 			if err := a.sess.Send(p.frame.Text, nil, ""); err != nil {
-				a.decProbe()
-				logf("wake: session %s: effort probe not sent: %v", a.id, err)
+				a.decProbe(p.probe)
+				logf("wake: session %s: probe %q not sent: %v", a.id, p.frame.Text, err)
 			}
 			return
 		}

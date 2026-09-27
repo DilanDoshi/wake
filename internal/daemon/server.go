@@ -85,6 +85,8 @@ type server struct {
 	// sees the whole fleet. Not persisted - see the teams spec.
 	teamOrder []string
 
+	peers peerBook // the /list-agents ask in flight and the last listing; its own lock
+
 	// taken is set by takeAgents when shutdown snapshots the fleet. An agent
 	// admitted after that snapshot enters a map nothing reads again - its
 	// process outlives the grace, the kill and the roster clear - so register
@@ -642,6 +644,8 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		s.beginQuit(quitPark)
 	case rpc.FrameStatus:
 		c.enqueue(s.statusReply())
+	case rpc.FramePeers:
+		s.askPeers(c) // never blocks: a queued probe, or an answer at once
 	case rpc.FrameHistory:
 		// On its own goroutine: dispatch is serial per connection and this
 		// reads a file off disk - measured at 740ms for a 50MB transcript -

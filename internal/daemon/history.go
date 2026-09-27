@@ -143,29 +143,13 @@ func liveHistory(r io.Reader, id string, active map[string]bool) ([]core.Event, 
 		ring, bytes = trimRing(ring, bytes)
 	}
 
-	// The effort probe leaves a /model command and its "Current model: … (effort:
-	// …)" reply on disk; Wake suppresses them live and drops them here on the way
-	// back, so a reopened conversation never shows the question Wake asked on its
-	// own. The harmful half - the reply, which reads as an agent turn and names
-	// the level - is dropped on the reply's own shape, not on the command line
-	// above it: the on-disk form of a slash command is not pinned by any
-	// transcript fixture (Claude may wrap it), so matching the command is
-	// best-effort, but the reply is Claude's own rendered line and only a /model
-	// produces it. An operator's /model is intercepted by internal/ui and never
-	// sent, so any such line on disk is a Wake probe's. See docs/live-testing.md
-	// for the fixture this still owes.
+	// A probe (probe.go) leaves its command and its reply on disk; Wake
+	// suppresses them live and drops them here on the way back, so a reopened
+	// conversation never shows a question Wake asked on its own. See probeLine.
 	keepFiltered := func(ev core.Event) {
-		if ev.Kind == core.KindAssistantText && core.IsModelReply(ev.Text) {
-			// Prefix and effort clause both, so a coincidental "Current model:"
-			// line an agent wrote is not mistaken for the probe's reply.
-			if _, ok := core.EffortFromModelReply(ev.Text); ok {
-				return
-			}
+		if !probeLine(ev) {
+			keep(ev)
 		}
-		if ev.Kind == core.KindUserText && strings.TrimSpace(ev.Text) == slashPrefix+modelVerb {
-			return
-		}
-		keep(ev)
 	}
 
 	// bufio.Reader rather than Scanner: a Scanner *stops* on a line longer than
@@ -195,6 +179,32 @@ func liveHistory(r io.Reader, id string, active map[string]bool) ([]core.Event, 
 			return nil, err
 		}
 	}
+}
+
+// probeLine reports whether a restored event is a probe's own: its bare command,
+// or a reply only that command produces.
+//
+// The harmful half - the reply, which reads as an agent turn - is matched on its
+// own shape, not on the command line above it: the on-disk form of a slash
+// command is not pinned by any transcript fixture (Claude may wrap it), so
+// matching the command is best-effort, but the reply is Claude's own rendered
+// text. A /list-agents reply is matched on either side, since its stdout
+// envelope decodes as user text. An operator's /model is intercepted by
+// internal/ui and never sent, so any such line is a probe's; an operator's own
+// /list-agents is not, and is dropped with the probe's - on disk the two are
+// the same. See docs/live-testing.md for the fixture this still owes.
+func probeLine(ev core.Event) bool {
+	text := strings.TrimSpace(ev.Text)
+	switch ev.Kind {
+	case core.KindUserText:
+		return text == slashPrefix+modelVerb || text == slashPrefix+listAgentsVerb || core.IsListAgentsReply(text)
+	case core.KindAssistantText:
+		// Prefix and effort clause both, so a coincidental "Current model:"
+		// line an agent wrote is not mistaken for the probe's reply.
+		_, effort := core.EffortFromModelReply(text)
+		return core.IsModelReply(text) && effort || core.IsListAgentsReply(text)
+	}
+	return false
 }
 
 // readTranscriptLine returns one line, or nothing at all for a line longer than

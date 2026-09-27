@@ -57,7 +57,7 @@ func TestProbeEnqueuesBareModel(t *testing.T) {
 	a.tryProbe()
 	select {
 	case p := <-a.in:
-		if !p.probe {
+		if p.probe != modelProbe {
 			t.Error("the probe pending is not marked as a probe")
 		}
 		if p.frame.Kind != rpc.FrameSend || p.frame.Text != "/model" {
@@ -97,7 +97,7 @@ func TestProbeSkipsABlockedOrGoneAgent(t *testing.T) {
 // real turn draining on the same goroutine is untouched.
 func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 	a := effortAgent(t)
-	a.incProbe()
+	a.incProbe(modelProbe)
 
 	// A real assistant frame that is not a /model reply passes through, even
 	// mid-window: suppression is keyed on the reply's shape, not the flag alone.
@@ -106,9 +106,9 @@ func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 	}
 
 	// The reply: suppressed, level recorded, one publish.
-	suppress, publish := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)"})
-	if !suppress || !publish {
-		t.Fatalf("the reply must be suppressed and publish the effort: suppress=%v publish=%v", suppress, publish)
+	suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)"})
+	if !suppress || answered != modelProbe {
+		t.Fatalf("the reply must be suppressed and publish the effort: suppress=%v answered=%v", suppress, answered)
 	}
 	if a.confirmedEffort != core.EffortMax {
 		t.Fatalf("effort not recorded: %q", a.confirmedEffort)
@@ -120,8 +120,8 @@ func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 
 	// The probe turn's end: a local command (num_turns==0), so suppressed, no
 	// second publish, window closed.
-	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress || publish {
-		t.Fatalf("the probe turn end: suppress=%v publish=%v, want true/false", suppress, publish)
+	if suppress, answered := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress || answered != notProbe {
+		t.Fatalf("the probe turn end: suppress=%v answered=%v, want true/none", suppress, answered)
 	}
 
 	// After the window, an ordinary turn end passes through.
@@ -135,8 +135,8 @@ func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 // transcript; the counter closes that.
 func TestAbsorbProbeSuppressesBothOfTwoOverlappingProbes(t *testing.T) {
 	a := effortAgent(t)
-	a.incProbe()
-	a.incProbe() // two /model sends went out before either answered
+	a.incProbe(modelProbe)
+	a.incProbe(modelProbe) // two /model sends went out before either answered
 
 	reply := func(level string) {
 		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: " + level + ")"}); !suppress {
@@ -216,7 +216,7 @@ func TestStartupProbeWaitsForTheFirstTurnEndBeforeFiring(t *testing.T) {
 	a.probeIfWanted()
 	select {
 	case p := <-a.in:
-		if !p.probe {
+		if p.probe != modelProbe {
 			t.Error("the deferred probe pending is not marked as a probe")
 		}
 	default:
@@ -232,7 +232,7 @@ func TestWantProbeFiresAtOnceWhenAlreadyIdle(t *testing.T) {
 	a.wantProbe() // a.owed is false: the zero value, same as a freshly spawned agent
 	select {
 	case p := <-a.in:
-		if !p.probe {
+		if p.probe != modelProbe {
 			t.Error("the immediate probe pending is not marked as a probe")
 		}
 	default:
@@ -249,10 +249,10 @@ func TestWantProbeFiresAtOnceWhenAlreadyIdle(t *testing.T) {
 // idle for a whole turn it was actually working.
 func TestAbsorbProbeSwallowsTheProbesOwnEndEvenWhenARealTurnHasStarted(t *testing.T) {
 	a := effortAgent(t)
-	a.incProbe()
+	a.incProbe(modelProbe)
 
-	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: high)"}); !suppress || !publish {
-		t.Fatalf("the probe's own reply was not suppressed and published: suppress=%v publish=%v", suppress, publish)
+	if suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: high)"}); !suppress || answered != modelProbe {
+		t.Fatalf("the probe's own reply was not suppressed and published: suppress=%v answered=%v", suppress, answered)
 	}
 
 	// A real send landed right behind the probe and marked the turn owed before
@@ -261,14 +261,14 @@ func TestAbsorbProbeSwallowsTheProbesOwnEndEvenWhenARealTurnHasStarted(t *testin
 
 	// The probe's OWN result (a local command, num_turns==0) is the next turn
 	// end, and must be swallowed even though a real turn is now owed.
-	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the probe's own result", LocalCommand: true}); !suppress || publish {
-		t.Fatalf("the probe's own end was not swallowed while a real turn was owed: suppress=%v publish=%v", suppress, publish)
+	if suppress, answered := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "the probe's own result", LocalCommand: true}); !suppress || answered != notProbe {
+		t.Fatalf("the probe's own end was not swallowed while a real turn was owed: suppress=%v answered=%v", suppress, answered)
 	}
 	if a.confirmedEffort != core.EffortHigh {
 		t.Fatalf("the confirmed level was lost: %q", a.confirmedEffort)
 	}
-	if a.pendingProbes != 0 {
-		t.Fatalf("the suppression window did not close: pendingProbes = %d", a.pendingProbes)
+	if a.pendingProbes[modelProbe] != 0 {
+		t.Fatalf("the suppression window did not close: pendingProbes = %d", a.pendingProbes[modelProbe])
 	}
 
 	// The real turn's own end follows with the window closed, and reaches
@@ -286,7 +286,7 @@ func TestAbsorbProbeSwallowsTheProbesOwnEndEvenWhenARealTurnHasStarted(t *testin
 // confirms cleanly. Keying the swallow on the arm alone ate this real end.
 func TestAbsorbProbeDoesNotEatARealTurnThatLooksLikeAProbeReply(t *testing.T) {
 	a := effortAgent(t)
-	a.incProbe() // a probe is in flight behind this real turn
+	a.incProbe(modelProbe) // a probe is in flight behind this real turn
 
 	// The real turn's assistant frame happens to start "Current model:", so it
 	// arms the window and is (pre-existing) suppressed.
@@ -302,14 +302,14 @@ func TestAbsorbProbeDoesNotEatARealTurnThatLooksLikeAProbeReply(t *testing.T) {
 	}
 
 	// The actual probe's reply and its local-command end still confirm cleanly.
-	if suppress, publish := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)"}); !suppress || !publish {
-		t.Fatalf("the real probe reply did not confirm after the look-alike: suppress=%v publish=%v", suppress, publish)
+	if suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)"}); !suppress || answered != modelProbe {
+		t.Fatalf("the real probe reply did not confirm after the look-alike: suppress=%v answered=%v", suppress, answered)
 	}
 	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "probe end", LocalCommand: true}); !suppress {
 		t.Fatal("the probe's own local-command end was not swallowed")
 	}
-	if a.confirmedEffort != core.EffortMax || a.pendingProbes != 0 {
-		t.Fatalf("probe did not confirm/close after the look-alike: effort=%q pending=%d", a.confirmedEffort, a.pendingProbes)
+	if a.confirmedEffort != core.EffortMax || a.pendingProbes[modelProbe] != 0 {
+		t.Fatalf("probe did not confirm/close after the look-alike: effort=%q pending=%d", a.confirmedEffort, a.pendingProbes[modelProbe])
 	}
 }
 
@@ -320,13 +320,13 @@ func TestAbsorbProbeDoesNotEatARealTurnThatLooksLikeAProbeReply(t *testing.T) {
 // legitimately close again.
 func TestAbsorbProbeClosesTheWindowOnAnUnrecognizedReply(t *testing.T) {
 	a := effortAgent(t)
-	a.incProbe()
+	a.incProbe(modelProbe)
 
-	suppress, publish := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: something this build does not recognise"})
+	suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: something this build does not recognise"})
 	if !suppress {
 		t.Fatal("an unrecognized /model reply was not suppressed")
 	}
-	if publish {
+	if answered != notProbe {
 		t.Fatal("an unrecognized reply must not publish - nothing new was confirmed")
 	}
 	if a.confirmedEffort != "" {
@@ -336,8 +336,8 @@ func TestAbsorbProbeClosesTheWindowOnAnUnrecognizedReply(t *testing.T) {
 	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress {
 		t.Fatal("the probe's own turn end was not suppressed")
 	}
-	if a.pendingProbes != 0 {
-		t.Fatalf("the suppression window did not close: pendingProbes = %d", a.pendingProbes)
+	if a.pendingProbes[modelProbe] != 0 {
+		t.Fatalf("the suppression window did not close: pendingProbes = %d", a.pendingProbes[modelProbe])
 	}
 }
 

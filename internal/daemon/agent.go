@@ -135,16 +135,17 @@ type agent struct {
 	contextTokens int
 	contextWindow int
 
-	// pendingProbes counts effort-probe /model replies still expected; fanOut
-	// swallows a reply while it is positive. A counter rather than a bool
-	// because two probes can be in flight at once - two quick /effort changes,
-	// or a change racing the startup probe - and a bool cleared by the first
-	// reply would let the second leak. swallowTurnEnd carries the window one
-	// frame past each reply so the probe turn's end is swallowed too, and
-	// decrements the counter - see absorbProbe. probed is set once the first
-	// probe has fired, so a per-turn init does not re-probe on every turn.
-	pendingProbes  int
-	swallowTurnEnd bool
+	// pendingProbes counts, per kind, probe replies still expected; fanOut
+	// swallows a reply of that kind while it is positive. A counter rather than
+	// a bool because two probes can be in flight at once - two quick /effort
+	// changes, or a change racing the startup probe - and a bool cleared by the
+	// first reply would let the second leak. swallowTurnEnd is the kind whose
+	// reply carries the window one frame further, so the probe turn's end is
+	// swallowed too and decrements its counter - see absorbProbe. probed is set
+	// once the first /model probe has fired, so a per-turn init does not
+	// re-probe on every turn.
+	pendingProbes  [probeKinds]int
+	swallowTurnEnd probeKind
 	probed         bool
 
 	// probeWanted records that a startup or re-probe is due once this agent is

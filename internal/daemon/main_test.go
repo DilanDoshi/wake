@@ -290,6 +290,9 @@ func runFakeClaude() int {
 		return fakeMCP(sid)
 	case "probe":
 		return fakeModelProbe(sid)
+	case "peers", "peersgone":
+		// Replays a recorded /list-agents reply, or exits on one - see peers_test.go.
+		return fakePeers(sid, os.Getenv(fakeScriptEnv) == "peersgone")
 	case "tool":
 		return fakeTool(sid)
 	case "name":

@@ -21,13 +21,10 @@ import (
 func (s *server) fanOut(a *agent) {
 	defer s.retire(a)
 	for ev := range a.sess.Events() {
-		// An effort probe's reply is consumed here, before observe and before
-		// the broadcast, so it never touches this agent's state and never
-		// reaches a client. The one push it earns carries the confirmed level.
-		if suppress, publish := a.absorbProbe(ev); suppress {
-			if publish {
-				s.broadcast(s.statusPush())
-			}
+		// A probe's reply is consumed here, before observe and before the
+		// broadcast, so it never touches this agent's state and never reaches a
+		// client. What it was asked for is carried out by absorbed.
+		if s.absorbed(a, ev) {
 			continue
 		}
 		a.observe(ev)
@@ -72,4 +69,6 @@ func (s *server) fanOut(a *agent) {
 			a.probeIfWanted()
 		}
 	}
+	// The session ended; a /list-agents it never answered must not hold its askers.
+	s.peersGone(a)
 }

@@ -47,6 +47,9 @@ const (
 	// reason: slashguard_test.go refuses a literal naming a slash command in this
 	// package, and Wake claims /model's bare form (the picker) in internal/ui.
 	modelVerb = "model"
+	// listAgentsVerb composes the bare /list-agents probe that asks an idle agent
+	// for the machine's other sessions (peers.go), for modelVerb's reason.
+	listAgentsVerb = "list-agents"
 )
 
 // noteEffort records the level if this message is claude's effort command.
