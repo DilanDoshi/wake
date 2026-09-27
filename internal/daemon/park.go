@@ -354,6 +354,10 @@ func (s *server) bookParked(agents []*agent) {
 // any wire: two processes under one id each answer correctly from their own
 // history, the file branches in place, and whoever resumes it next silently
 // does not have half of it (2026-08-09 findings §5).
+//
+// It is blind to a /clear: the process writing the new conversation still has
+// the id it was spawned with in its argv. The fleet's own record is the only
+// fence for that one - conversationRow, which resumeSource asks first.
 func (s *server) resumeSafe(id string) error {
 	if !mintedByWake(id) {
 		return fmt.Errorf("%q is not an id Wake minted, so nothing recorded under it can be matched to a process", id)

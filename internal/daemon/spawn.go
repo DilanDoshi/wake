@@ -10,6 +10,7 @@
 package daemon
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -162,8 +163,9 @@ func (s *server) fork(ctx context.Context, c *client, f rpc.Frame) {
 		return
 	}
 	s.launch(c, core.Config{
-		SessionID:      f.SessionID,
-		ForkFrom:       parent.ID,
+		SessionID: f.SessionID,
+		// The conversation the parent is writing, which a /clear moves off its id.
+		ForkFrom:       cmp.Or(parent.Conversation, parent.ID),
 		Name:           name,
 		Dir:            parent.Dir,
 		PermissionMode: spawnPermissionMode,

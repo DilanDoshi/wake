@@ -126,3 +126,18 @@ func TestASessionClearedTwiceIsWokenIntoItsLastConversationAcrossADaemon(t *test
 	}
 	recalled(t, back, last)
 }
+
+// ⌃F after a /clear forks the conversation the parent is writing, not the one
+// the clear left behind; the fork still names the parent's own id as its parent.
+func TestAForkOfAClearedParentCopiesTheConversationItIsWriting(t *testing.T) {
+	fakeClaudeOnPath(t, "argv")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	spawnFor(c, idAlpha, "alex", t.TempDir())
+	c.pollState(idAlpha, rpc.StateIdle)
+	conv := clearSession(c, idAlpha)
+	c.pollState(idAlpha, rpc.StateIdle)
+
+	forkOf(c, idAlpha, idGamma, "")
+	c.awaitEvent(idGamma, "--resume "+conv+" --fork-session --session-id "+idGamma)
+}
