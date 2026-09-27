@@ -178,8 +178,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`screensel.go`). Every keystroke clears the highlight *and* does its job; width change clears,
   height doesn't; a click copies nothing. Roster click targets are resolved at press.
 - **A transcript drag at a pane's edge scrolls, and keeps scrolling while held** — the first
-  transcript row is the top edge (a pane can start on the window's first row) unless the drag is
-  still on the line it was pressed on; below the last row is the bottom. A one-shot tick
+  transcript row is the top edge (a pane can start on the window's first row) unless the drag has
+  not left the line it was pressed on; below the last row is the bottom. A one-shot tick
   (`edgeScrollEvery`) re-arms only while the pane moved; the highlight ends on a line on screen.
   `internal/ui/edgescroll.go`.
 - **Double-click selects a word, triple-click its row**, on any selectable surface; the first click

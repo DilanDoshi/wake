@@ -36,11 +36,12 @@ type edgeScroll struct {
 
 // edgePull is how far the pointer at y, over the line under, pulls the dragged
 // pane: back at or above its first row, forward past its last, else nothing. A
-// drag still on the line it was pressed on is selecting within it, so the top
-// row does not pull that.
+// drag that has not left the line it was pressed on is selecting within it, so
+// the top row does not pull that; one coming back to it does.
 func (a App) edgePull(y int, under point) int {
+	left := under.line != a.sel.anchor.line || a.sel.head.line != a.sel.anchor.line
 	switch {
-	case y < a.selTop, y == a.selTop && under.line != a.sel.anchor.line:
+	case y < a.selTop, y == a.selTop && left:
 		return edgeLines
 	case y >= a.selTop+a.selRows:
 		return -edgeLines

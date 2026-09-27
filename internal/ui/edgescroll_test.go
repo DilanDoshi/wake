@@ -88,6 +88,22 @@ func TestADragAlongTheTopRowItWasPressedOnDoesNotScroll(t *testing.T) {
 	}
 }
 
+// Coming back to the top row after leaving it is reaching for the edge, not
+// selecting within the row, so it pulls even where the drag began.
+//
+// Mutation check: dropping the head test from edgePull fails this.
+func TestADragReturningToTheTopRowItBeganOnScrollsBack(t *testing.T) {
+	countEdgeTicks(t)
+	a := splitApp(t, 200, 40, 40).scrollPane("", 5)
+	was := roomScroll(a)
+	a, _ = a.mouse(pressAt(10, 0))
+	a, _ = a.mouse(motion(10, 3))
+	a, cmd := a.mouse(motion(10, 0))
+	if now := roomScroll(a); now >= was || cmd == nil {
+		t.Errorf("returning to the top row left the reader on line %d (armed %v): it has left its row, so the edge pulls", now, cmd != nil)
+	}
+}
+
 // A pointer resting at the edge sends no motion, so without a tick the scroll
 // stopped the moment the hand did.
 //
