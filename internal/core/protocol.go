@@ -1,24 +1,24 @@
 // AIRLOCK. Wake's knowledge of Claude Code's stream-json wire format lives in
-// four files in this package and nowhere else in the tree. Everything above
+// five files in this package and nowhere else in the tree. Everything above
 // them consumes core.Event.
 //
 //	protocol.go    decoding - one wire line in, core.Events out (this file)
 //	wire.go        the shapes it decodes into
 //	vocabulary.go  Claude's words resolved into Wake's
 //	encode.go      the frames Wake writes back
+//	localreply.go  the text replies of local commands Wake parses
 //
 // It was one file until it reached 1031 lines against this project's 800-line
 // hard max. docs/notes/decisions.md ruled ahead of time what to do when that
 // happened: restate the rule to name the airlock *files*, and restate it
 // **before** the change that overflows it lands rather than during. This is
-// that restatement. The boundary has not moved - the same declarations sit
-// behind the same rule - and internal/core/airlock_test.go enforces it over
-// the whole tree from the same list, so the set cannot quietly grow a fifth
-// member either.
+// that restatement. internal/core/airlock_test.go enforces it over the whole
+// tree from the same list, so the set grows only by a ruling - localreply.go
+// was the owner's, 2026-09-27.
 //
 // The split is by direction and by job rather than by size, so a port has
-// four reviewable units instead of one unreadable one: what arrives, what it
-// becomes, what Wake calls it, and what Wake sends.
+// five reviewable units instead of one unreadable one: what arrives, what it
+// becomes, what Wake calls it, what Wake sends, and what a command replies.
 //
 // Every *inbound* shape is transcribed from testdata/stream/*.jsonl, recorded
 // from live sessions in Task 1 - not from documentation. The outbound shapes
@@ -434,9 +434,8 @@ func workflowOf(f wireFrame, kind TaskKind) *WorkflowUpdate {
 // frame. Only init carries one; reading f.Model unconditionally would stamp an
 // empty model onto every other system subtype.
 func initFacts(f wireFrame) *SessionFacts {
-	// Either fact is enough. The gate was the model alone, which is the wrong
-	// domain for a decoder: this says what the wire said, and a frame naming one
-	// of the two is not a frame naming neither.
+	// Either fact is enough: this says what the wire said, and a frame naming
+	// one of the two is not a frame naming neither.
 	if f.Subtype != subtypeInit || (f.Model == "" && f.Cwd == "") {
 		return nil
 	}
@@ -445,6 +444,7 @@ func initFacts(f wireFrame) *SessionFacts {
 		Dir:           f.Cwd,
 		MCPServers:    mcpServers(f.MCPServers),
 		SlashCommands: nonEmpty(f.SlashCommands),
+		Agents:        nonEmpty(f.Agents),
 	}
 }
 

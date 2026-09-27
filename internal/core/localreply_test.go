@@ -1,0 +1,211 @@
+package core
+
+import (
+	"reflect"
+	"testing"
+)
+
+func TestIsModelReply(t *testing.T) {
+	cases := map[string]bool{
+		"Current model: Opus 5 (1M context) (effort: xhigh)\nUsage: /model <name>.": true,
+		"Current model: Sonnet 5 (effort: medium)":                                  true,
+		"  Current model: Fable 5 (effort: low)":                                    true,
+		"Sure, the current model is opus":                                           false,
+		"":                                                                          false,
+	}
+	for in, want := range cases {
+		if got := IsModelReply(in); got != want {
+			t.Errorf("IsModelReply(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+func TestModelFromModelReply(t *testing.T) {
+	for _, tc := range []struct {
+		name, in, want string
+		ok             bool
+	}{
+		// The recorded shape: a model name that itself carries a parenthesised
+		// note, the effort clause, and a second usage line - all of which the
+		// parse must strip off without eating the "(1M context)" the name owns.
+		{"the recorded reply", "Current model: Opus 5 (1M context) (effort: xhigh)\nUsage: /model <name>.", "Opus 5 (1M context)", true},
+		{"no note", "Current model: Sonnet 5 (effort: medium)", "Sonnet 5", true},
+		{"leading space", "  Current model: Fable 5 (effort: low)", "Fable 5", true},
+		{"not a model reply", "Sure, the current model is opus", "", false},
+		{"the prefix and nothing else", "Current model:", "", false},
+		{"empty", "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := ModelFromModelReply(tc.in)
+			if ok != tc.ok || got != tc.want {
+				t.Errorf("ModelFromModelReply(%q) = (%q,%v), want (%q,%v)", tc.in, got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}
+
+func TestEffortFromModelReply(t *testing.T) {
+	lvl, ok := EffortFromModelReply("Current model: Opus 5 (1M context) (effort: xhigh)")
+	if !ok || lvl != "xhigh" {
+		t.Fatalf("got (%q,%v), want (\"xhigh\",true)", lvl, ok)
+	}
+	if _, ok := EffortFromModelReply("Current model: Opus 5"); ok {
+		t.Error("a reply with no effort clause must not parse")
+	}
+	if _, ok := EffortFromModelReply("Current model: X (effort: bogus)"); ok {
+		t.Error("an effort not in EffortCommands must not parse")
+	}
+}
+
+// recordedResults is every result text a fixture carries, read through the
+// decoder so the parse sees exactly what the daemon would.
+func recordedResults(t *testing.T, path string) []string {
+	t.Helper()
+	var out []string
+	for n, line := range fixtureLines(t, path) {
+		evs, err := DecodeLine([]byte(line))
+		if err != nil {
+			t.Fatalf("%s line %d: %v", path, n, err)
+		}
+		for _, ev := range evs {
+			if ev.Kind == KindTurnEnd {
+				out = append(out, ev.Text)
+			}
+		}
+	}
+	return out
+}
+
+// listing is one parsed /list-agents reply.
+type listing struct {
+	self  string
+	peers []Peer
+}
+
+// The two recorded peers, in the order the listing printed them.
+var recordedPeers = []Peer{
+	{Name: "wf-beta", Dir: "/private/tmp/wake-rec/beta", State: "idle"},
+	{Name: "wf-alpha", Dir: "/private/tmp/wake-rec/alpha", State: "idle"},
+}
+
+// Every result the recordings carry is read: the listings as listings, the
+// rename as a rename, and neither as the other.
+func TestEveryRecordedLocalReplyParses(t *testing.T) {
+	for _, tc := range []struct {
+		fixture  string
+		listings []listing // in order; nil marks the rename reply
+		renamed  string
+	}{
+		{"../../testdata/stream/list-agents.jsonl",
+			[]listing{{"wf-gamma", recordedPeers}, {}, {"wf-delta", recordedPeers}}, "wf-delta"},
+		{"../../testdata/stream/list-agents-empty.jsonl", []listing{{"proj-7d", nil}}, ""},
+	} {
+		results := recordedResults(t, tc.fixture)
+		if len(results) != len(tc.listings) {
+			t.Fatalf("%s carries %d results, want %d", tc.fixture, len(results), len(tc.listings))
+		}
+		for i, text := range results {
+			want := tc.listings[i]
+			if want.self == "" {
+				assertRename(t, text, tc.renamed)
+				continue
+			}
+			if !IsListAgentsReply(text) {
+				t.Errorf("%s result %d is not recognised as a /list-agents reply", tc.fixture, i)
+			}
+			self, peers, ok := PeersFromListAgents(text)
+			if !ok || self != want.self || !reflect.DeepEqual(peers, want.peers) {
+				t.Errorf("%s result %d = (%q, %+v, %v), want (%q, %+v, true)", tc.fixture, i, self, peers, ok, want.self, want.peers)
+			}
+		}
+	}
+}
+
+func assertRename(t *testing.T, text, want string) {
+	t.Helper()
+	if got, ok := RenamedFromReply(text); !ok || got != want {
+		t.Errorf("RenamedFromReply(%q) = (%q, %v), want (%q, true)", text, got, ok, want)
+	}
+	if IsListAgentsReply(text) {
+		t.Errorf("the rename reply %q reads as a /list-agents reply", text)
+	}
+	if _, _, ok := PeersFromListAgents(text); ok {
+		t.Errorf("the rename reply %q parses as a listing", text)
+	}
+}
+
+const (
+	selfLine = "This session: wf-gamma [68bfa0] (the name other sessions use to message it)"
+	betaRow  = "  [idle]  ·  wf-beta  ·  /private/tmp/wake-rec/beta  ·  started 19s ago"
+	alphaRow = "  [idle]  ·  wf-alpha  ·  /private/tmp/wake-rec/alpha  ·  started 19s ago"
+)
+
+// A shape the parser was not shown is refused whole: no self, no rows - never
+// the rows it could read beside one it could not.
+func TestAnUnrecognisedListingIsRefusedWhole(t *testing.T) {
+	for _, tc := range []struct{ name, text string }{
+		{"empty", ""},
+		{"prose", "I can list the other sessions if you like."},
+		{"the model reply", "Current model: Opus 5 (effort: xhigh)"},
+		{"the self line alone", selfLine},
+		{"no short id", "This session: wf-gamma (the name other sessions use to message it)\n\nOther Claude sessions (1):\n" + betaRow},
+		{"the count disagrees", selfLine + "\n\nOther Claude sessions (3):\n" + betaRow + "\n" + alphaRow},
+		{"a count that is no number", selfLine + "\n\nOther Claude sessions (two):\n" + betaRow + "\n" + alphaRow},
+		{"a future section", selfLine + "\n\nSubagents (1):\n  [busy]  ·  explorer  ·  /private/tmp/wake-rec/gamma  ·  started 2s ago"},
+		{"a section after the peers", selfLine + "\n\nOther Claude sessions (1):\n" + betaRow + "\n\nTeammates (1):\n" + alphaRow},
+		{"a row with a column missing", selfLine + "\n\nOther Claude sessions (1):\n  [idle]  ·  wf-beta  ·  started 19s ago"},
+		{"a row with a column more", selfLine + "\n\nOther Claude sessions (1):\n" + betaRow + "  ·  remote"},
+		{"a state unbracketed", selfLine + "\n\nOther Claude sessions (1):\n  idle  ·  wf-beta  ·  /private/tmp/wake-rec/beta  ·  started 19s ago"},
+		{"a relative directory", selfLine + "\n\nOther Claude sessions (1):\n  [idle]  ·  wf-beta  ·  tmp/beta  ·  started 19s ago"},
+		{"a blank name", selfLine + "\n\nOther Claude sessions (1):\n  [idle]  ·    ·  /private/tmp/wake-rec/beta  ·  started 19s ago"},
+		{"the empty form with more after it", selfLine + "\n\nNo subagents, teammates or other Claude sessions — nobody.\n" + betaRow},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			self, peers, ok := PeersFromListAgents(tc.text)
+			if ok || self != "" || peers != nil {
+				t.Errorf("PeersFromListAgents = (%q, %+v, %v), want (\"\", nil, false)", self, peers, ok)
+			}
+		})
+	}
+}
+
+func TestIsListAgentsReply(t *testing.T) {
+	cases := map[string]bool{
+		selfLine + "\n\nOther Claude sessions (1):\n" + betaRow: true,
+		"  " + selfLine: true,
+		// Recognised on its first line alone, so a body the parser refuses is
+		// still known for the probe's reply it is.
+		selfLine + "\n\nSubagents (1):\n  [busy]  ·  explorer": true,
+		"Session renamed to: wf-delta":                         false,
+		"Current model: Opus 5 (effort: xhigh)":                false,
+		"In this session: I listed three files":                false,
+		"This session: is busy, so I will wait":                false,
+		"":                                                     false,
+	}
+	for in, want := range cases {
+		if got := IsListAgentsReply(in); got != want {
+			t.Errorf("IsListAgentsReply(%q) = %v, want %v", in, got, want)
+		}
+	}
+}
+
+func TestRenamedFromReply(t *testing.T) {
+	for _, tc := range []struct {
+		name, in, want string
+		ok             bool
+	}{
+		{"the recorded reply", "Session renamed to: wf-delta", "wf-delta", true},
+		{"leading space", "  Session renamed to: wf-delta\n", "wf-delta", true},
+		{"a second line", "Session renamed to: wf-delta\nnote", "wf-delta", true},
+		{"no name", "Session renamed to: ", "", false},
+		{"prose", "I renamed the session to wf-delta", "", false},
+		{"empty", "", "", false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got, ok := RenamedFromReply(tc.in)
+			if ok != tc.ok || got != tc.want {
+				t.Errorf("RenamedFromReply(%q) = (%q,%v), want (%q,%v)", tc.in, got, ok, tc.want, tc.ok)
+			}
+		})
+	}
+}

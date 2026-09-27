@@ -121,7 +121,7 @@ type WorkflowRun struct {
 // kept here because a workflow agent forwards nothing live (findings.md §3):
 // its words exist only on this tree. A wrapper, not a decoder: decodeTranscript
 // in protocol.go does the reading, so this names no wire word and sits outside
-// the airlock, whose four files the /mcp and workflow merge filled to the
+// the airlock, whose files the /mcp and workflow merge filled to the
 // 800-line hard max.
 func DecodeSidechainLine(line []byte) ([]Event, error) {
 	return decodeTranscript(line, true)

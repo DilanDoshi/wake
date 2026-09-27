@@ -77,13 +77,15 @@ const repoRoot = "../.."
 // It was one file until protocol.go passed the project's 800-line hard max.
 // docs/notes/decisions.md ruled ahead of time that the rule would then be restated
 // to name the airlock *files* - and this list is what makes that restatement
-// checkable rather than a sentence in a header: a fifth member cannot be
-// added without editing it, and the set is what the leak check exempts.
+// checkable rather than a sentence in a header: a member cannot be added
+// without editing it, and the set is what the leak check exempts. The fifth,
+// localreply.go, is the owner's 2026-09-27 ruling: local commands' reply text.
 var airlockFiles = wordSet([]string{
 	"internal/core/protocol.go",
 	"internal/core/wire.go",
 	"internal/core/vocabulary.go",
 	"internal/core/encode.go",
+	"internal/core/localreply.go",
 })
 
 // claudeWireVocabulary is what a file must not name outside the airlock.
@@ -398,6 +400,13 @@ var claudeWireVocabulary = wordSet([]string{
 	// embeddedMarkers below.
 	"Current model:",
 
+	// The bare /list-agents and /rename replies' rendered English, which
+	// localreply.go reads the machine's sessions and a new name out of. Policed
+	// for "Current model:"'s reason, and each is a longer value's leading or
+	// inner phrase, so all four are in embeddedMarkers below.
+	"This session: ", "Other Claude sessions (",
+	"No subagents, teammates or other Claude sessions", "Session renamed to: ",
+
 	// Claude Code's /goal lifecycle, the rendered English wire.go's goalOp reads.
 	// "<synthetic>" (the announcement's model) and "No goal set" are whole values;
 	// the three prefixes are a longer value's leading phrase, so they are in
@@ -419,6 +428,11 @@ var deliberatelyGeneric = wordSet([]string{
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",
+
+	// init's subagent types. Generic for "model"'s reason: an agent is Wake's
+	// own subject, and core.SessionFacts.Agents keeps the spelling. Not a route
+	// in on its own - a file cannot reach the list without naming "init".
+	"agents",
 
 	// A workflow_agent's own fields, the plainest English among them:
 	// "index" and "title" are a workflow_phase's, "tokens" a
@@ -520,7 +534,7 @@ var deliberatelyGeneric = wordSet([]string{
 	"auto", "default",
 })
 
-// notNamedByTheAirlock is every policed word that appears in none of the four
+// notNamedByTheAirlock is every policed word that appears in none of the
 // airlock files, with the reason it is policed anyway.
 //
 // It closes the fourth route to the exemption this file keeps having to
@@ -658,14 +672,18 @@ var notNamedByTheAirlock = map[string]string{
 // wf_*.json record on disk, camelCase and distinct from the stream's
 // snake_case workflow_name/workflow_progress. See EncodeStopTask and
 // DecodeWorkflowRun.
-const policedWordCount = 203
+// 203 → 207: the /list-agents and /rename replies' rendered English that
+// localreply.go reads - "This session: ", "Other Claude sessions (", "No
+// subagents, teammates or other Claude sessions" and "Session renamed to: ".
+// Recorded in list-agents.jsonl and list-agents-empty.jsonl.
+const policedWordCount = 207
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
 // structurally rather than listed.
 //
 // It exists so the coverage check below can be exhaustive. Every string
-// literal in the four airlock files is either Claude's (policed), too generic
+// literal in the airlock files is either Claude's (policed), too generic
 // to police, or here - and a new one is a build failure until somebody says
 // which. That is what makes the vocabulary self-maintaining for *values* and
 // not only for field names.
@@ -732,6 +750,11 @@ var notWireVocabulary = wordSet([]string{
 	// the reason follows the "]: " of a Stop-hook feedback frame. Punctuation
 	// Wake matches on, not wire words.
 	"[", "]", ":",
+
+	// localreply.go's delimiters and pattern: a /list-agents row's column
+	// separator, the count header's close, and the self line's name before its
+	// short id. Punctuation and Wake's construction; the phrases are policed.
+	"  ·  ", "):", `^(.+?) \[[0-9a-f]+\]`,
 })
 
 func wordSet(words []string) map[string]bool {
@@ -1036,6 +1059,11 @@ var embeddedMarkers = map[string]bool{
 	"Goal set: ":          true,
 	"Goal cleared: ":      true,
 	"Stop hook feedback:": true,
+	// The /list-agents and /rename replies' phrases, inside a result value.
+	"This session: ":          true,
+	"Other Claude sessions (": true,
+	"No subagents, teammates or other Claude sessions": true,
+	"Session renamed to: ":                             true,
 }
 
 // The vocabulary has to be a real description of the corpus, or the test
@@ -1177,8 +1205,8 @@ func TestTheThreeListsDoNotOverlap(t *testing.T) {
 
 // The airlock is a set of files in one package, and saying so is what stops
 // the set being widened into an exemption for somewhere else.
-func TestTheAirlockIsFourFilesInInternalCore(t *testing.T) {
-	const want = 4
+func TestTheAirlockIsFiveFilesInInternalCore(t *testing.T) {
+	const want = 5
 	if len(airlockFiles) != want {
 		t.Errorf("the airlock is %d files, want %d - if that is deliberate, CLAUDE.md's rule and protocol.go's header both name the set and must change with it", len(airlockFiles), want)
 	}

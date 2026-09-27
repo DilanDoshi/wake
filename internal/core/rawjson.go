@@ -4,8 +4,8 @@ package core
 // what shape it is, and what string it holds. The airlock decodes with them,
 // but they name no key, no tag and no wire word, so they are not the airlock's
 // to hold - they moved out of protocol.go and wire.go when merging /mcp and
-// workflows filled all four airlock files to the 800-line hard max, and the
-// airlock is a fixed four (airlock_test.go's TestTheAirlockIsFourFilesInInternalCore).
+// workflows filled the four airlock files of the day to the 800-line hard max,
+// and the set is fixed (airlock_test.go's TestTheAirlockIsFiveFilesInInternalCore).
 
 import (
 	"bytes"

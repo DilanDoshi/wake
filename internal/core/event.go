@@ -71,7 +71,7 @@ const (
 	//
 	// Its value is Wake's word rather than Claude's - `message_began` - because
 	// a Kind is this package's own vocabulary and the airlock's guard polices
-	// Claude's spelling everywhere outside the four files. The wire word lives
+	// Claude's spelling everywhere outside the airlock files. The wire word lives
 	// in wire.go as streamMessageStart.
 	// It carries nothing at all: it exists so a reader can tell one message's
 	// cumulative count from the next one's, which is the whole of what makes a

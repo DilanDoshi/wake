@@ -345,7 +345,7 @@ func containedFacts(f *SessionFacts) *SessionFacts {
 	}
 	c := *f
 	c.Model, c.Dir = Contained(c.Model), Contained(c.Dir)
-	c.SlashCommands = containedAll(c.SlashCommands)
+	c.SlashCommands, c.Agents = containedAll(c.SlashCommands), containedAll(c.Agents)
 	if c.MCPServers != nil {
 		servers := make([]MCPServer, len(c.MCPServers))
 		for i, s := range c.MCPServers {
