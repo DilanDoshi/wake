@@ -146,3 +146,15 @@ func TestAParkedRowIsNotAlsoReportedFromTheParkBook(t *testing.T) {
 		})
 	}
 }
+
+// Every conversation a /clear ended stays ended, not only the last: after
+// A -> B -> C a late frame still carrying A must not make it current.
+func TestALateFrameFromAnyEndedConversationIsIgnored(t *testing.T) {
+	a := &agent{id: idAlpha, name: "alex"}
+	clearTo(a, idAlpha, idBeta)
+	clearTo(a, idBeta, idGamma)
+	a.observe(core.Event{Kind: core.KindAssistantText, SessionID: idAlpha, Text: "late, from before the first clear"})
+	if got := a.conversation(); got != idGamma {
+		t.Errorf("a late frame from the first conversation made %s current, want %s", got, idGamma)
+	}
+}

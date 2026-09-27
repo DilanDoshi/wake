@@ -176,12 +176,21 @@ func (a App) rekeyed(st *rpc.Status) App {
 		if _, asked := a.waking[ag.ID]; asked {
 			a = a.awaitingWake(conv)
 		}
+		old, held := a.dms[ag.ID]
 		if a.grid.Has(ag.ID) {
 			focus := a.focus
 			a = a.show(conv, ag.Name, func(g Grid) Grid { return g.Replace(ag.ID, conv) })
 			if focus != ag.ID {
 				a = a.refocus(focus)
 			}
+		}
+		if held {
+			// The draft survives a park, so it survives the re-key: the fresh
+			// pane loads the resumed conversation and keeps what was typed.
+			if _, ok := a.dms[conv]; !ok {
+				a = a.withDM(conv, NewDM(conv, ag.Name))
+			}
+			a = a.withComposerFor(conv, old.Composer())
 		}
 		a = a.forgetConversation(ag.ID)
 	}

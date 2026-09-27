@@ -111,3 +111,19 @@ func TestAParkedAgentIsListedOnceWhateverItsRecordIsCalled(t *testing.T) {
 		t.Errorf("one parked agent is listed %d times: %+v", len(got), got)
 	}
 }
+
+// A park keeps what was typed in the composer, and so does the wake that
+// re-keys the pane: the draft moves with the agent onto its conversation.
+func TestAReKeyedPaneKeepsItsDraft(t *testing.T) {
+	fresh(t)
+	a := NewRoomApp(newRecorder(t), Stream{}, seedOf(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked, Conversation: "c1"},
+	)).withSize(200, 40)
+	a = a.openDMWith("s1", "alex").withDraft("half a thought")
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
+		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle},
+	)})
+	if got := a.dms["c1"].Composer().Value(); got != "half a thought" {
+		t.Errorf("the draft on the re-keyed pane is %q, want what was typed before the wake", got)
+	}
+}

@@ -215,9 +215,9 @@ type agent struct {
 	// under, which is the one its transcript is named after. Equal to the
 	// agent's own id until a /clear mints a new one. See observe.
 	claudeID string
-	// endedID is the id the last /clear ended, which a late frame still
-	// carrying it must not make current again.
-	endedID string
+	// endedIDs is every id a /clear ended in this process, none of which a late
+	// frame still carrying it may make current again.
+	endedIDs map[string]bool
 
 	// pending is every ask this agent is blocked on, oldest first. A slice
 	// because concurrent asks are real - parallel tool calls, or two subagents
@@ -359,7 +359,7 @@ func (a *agent) observe(ev core.Event) {
 	// a fresh silence is worth asking about promptly.
 	a.probeEvery, a.probeAfter = 0, time.Time{}
 
-	if ev.SessionID != "" && ev.SessionID != a.claudeID && ev.SessionID != a.endedID {
+	if ev.SessionID != "" && ev.SessionID != a.claudeID && !a.endedIDs[ev.SessionID] {
 		// Claude's own id for this conversation, which is what its transcript
 		// is named after - the agent's own until a /clear mints a new one.
 		// Re-keyed on session_id changing between events, which is the rule
@@ -469,7 +469,11 @@ func (a *agent) observe(ev core.Event) {
 		// *pre-clear* conversation and shows it as the context of an agent whose
 		// memory was cleared. The successor is not on this frame - it arrives on
 		// the next one - so this only forgets, and the arm below relearns.
-		a.claudeID, a.endedID = "", ev.SessionID
+		a.claudeID = ""
+		if a.endedIDs == nil {
+			a.endedIDs = map[string]bool{}
+		}
+		a.endedIDs[ev.SessionID] = true
 		// The context figure describes the conversation /clear just emptied, so
 		// the used half goes with it - the UI's fleet.go reset. The window stays:
 		// the model, and so its window, is unchanged.
