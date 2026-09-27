@@ -1,9 +1,11 @@
 package daemon
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // clearTo is a /clear as the daemon sees it: a reset naming the id that died,
@@ -156,5 +158,28 @@ func TestALateFrameFromAnyEndedConversationIsIgnored(t *testing.T) {
 	a.observe(core.Event{Kind: core.KindAssistantText, SessionID: idAlpha, Text: "late, from before the first clear"})
 	if got := a.conversation(); got != idGamma {
 		t.Errorf("a late frame from the first conversation made %s current, want %s", got, idGamma)
+	}
+}
+
+// Between a /clear's reset and the first frame under its successor, the agent's
+// conversation is unknown - the fallback would be the id it was spawned with -
+// so a fork in that gap is refused rather than copying the wrong conversation.
+func TestAForkInTheGapAfterAClearIsRefused(t *testing.T) {
+	s := newServer(tempSocket(t))
+	a := liveAgent(idAlpha, "alex", t.TempDir())
+	if !s.register(a) {
+		t.Fatal("could not put the agent in the fleet")
+	}
+	a.observe(core.Event{Kind: core.KindSystem, SessionID: idAlpha})
+	if st := stateOf(s.fleet(), idAlpha); st != rpc.StateIdle {
+		t.Skipf("the agent reports %q, not idle, so this cannot reach the fork check", st)
+	}
+	a.observe(core.Event{Kind: core.KindSessionReset, SessionID: idAlpha})
+	if _, err := s.forkSource(idAlpha); err == nil || !strings.Contains(err.Error(), "clear") {
+		t.Errorf("a fork between a reset and its successor gave %v, want a refusal naming the /clear", err)
+	}
+	a.observe(core.Event{Kind: core.KindSystem, SessionID: idBeta})
+	if _, err := s.forkSource(idAlpha); err != nil {
+		t.Errorf("once the successor is known the fork is still refused: %v", err)
 	}
 }

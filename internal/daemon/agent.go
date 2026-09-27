@@ -339,6 +339,14 @@ func (a *agent) conversation() string {
 	return a.conversationLocked()
 }
 
+// midClear reports the gap between a /clear's reset and the first frame under
+// its successor, when the conversation this agent is writing is not yet known.
+func (a *agent) midClear() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.claudeID == "" && len(a.endedIDs) > 0
+}
+
 func (a *agent) conversationLocked() string {
 	if mintedByWake(a.claudeID) {
 		return a.claudeID

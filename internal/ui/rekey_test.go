@@ -192,3 +192,24 @@ func TestAReKeyDoesNotMoveTheKeysOrTheCursor(t *testing.T) {
 		t.Errorf("the re-key moved focus %q, roster %q, fleet focus %q; want the room, s2 and none", a.focus, a.roster.Selected, a.fleet.Focused())
 	}
 }
+
+// A window that missed the report re-keying its agent still gets back: the old
+// id is gone, so it reattaches to the conversation it last knew the agent held.
+func TestAWindowThatMissedTheReKeyReattachesToTheConversation(t *testing.T) {
+	fresh(t)
+	fleet := seedOf(rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle, PID: 4242})
+	d := &stubDialer{only: "c1", session: fleet.Sessions[0], fleet: fleet}
+	a := NewRoomApp(newRecorder(t), Stream{}, seedOf(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked, Conversation: "c1"},
+	)).withSize(200, 40).WithOpenDM("s1", "alex").WithDialer(d.dial)
+
+	_, cmd := a.hungUp(errors.New("hung up"))
+	msg, ok := cmd().(reattachedMsg)
+	if !ok {
+		t.Fatalf("the reattach did not come back after the old id was refused (asked %q)", d.asked)
+	}
+	m, _ := a.reattached(msg)
+	if got := m.(App).sessionID; got != "c1" {
+		t.Errorf("the window is attached to %q after reattaching, want the conversation c1", got)
+	}
+}

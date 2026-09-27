@@ -392,6 +392,11 @@ func (s *server) forkSource(parentID string) (rpc.SessionStatus, error) {
 		// working parent for, so it is refused here, off the live agent. Only for
 		// idle: an ended or parked parent's process is gone, so nothing is writing.
 		if p.State == rpc.StateIdle {
+			// Between a /clear's reset and its successor's first frame the
+			// conversation is unknown, and forking the fallback copies the wrong one.
+			if a, ok := s.agent(parentID); ok && a.midClear() {
+				return rpc.SessionStatus{}, errors.New(p.Name + " was just cleared and is starting a new conversation. Fork it in a moment.")
+			}
 			if a, ok := s.agent(parentID); ok && a.hasRunningSubagent() {
 				who := p.Name
 				if who == "" {
