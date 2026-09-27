@@ -64,7 +64,7 @@ func (a App) hungUp(err error) (tea.Model, tea.Cmd) {
 	dial := a.dial
 	id := a.sessionID
 	return a, func() tea.Msg {
-		conn, stream, sess, fleet, err := dial()
+		conn, stream, sess, fleet, err := dial(id)
 		if err != nil {
 			return errMsg{Err: fmt.Errorf("%w. %s", err, reattachAdvice(id))}
 		}

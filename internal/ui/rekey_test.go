@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -125,5 +126,26 @@ func TestAReKeyedPaneKeepsItsDraft(t *testing.T) {
 	)})
 	if got := a.dms["c1"].Composer().Value(); got != "half a thought" {
 		t.Errorf("the draft on the re-keyed pane is %q, want what was typed before the wake", got)
+	}
+}
+
+// A window attached to an agent reattaches to it after a hang-up, so once a wake
+// re-keys the agent the window reattaches to its conversation, not the dead id.
+func TestAReKeyedAttachmentReattachesToTheConversation(t *testing.T) {
+	fresh(t)
+	d := &stubDialer{err: errors.New("stop here")}
+	a := NewRoomApp(newRecorder(t), Stream{}, seedOf(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked, Conversation: "c1"},
+	)).withSize(200, 40).WithOpenDM("s1", "alex").WithDialer(d.dial)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
+		rpc.SessionStatus{ID: "c1", Name: "alex", State: rpc.StateIdle},
+	)})
+	_, cmd := a.hungUp(errors.New("hung up"))
+	if cmd == nil {
+		t.Fatal("a hang-up with a dialer wired did not try to reattach")
+	}
+	cmd()
+	if d.asked != "c1" {
+		t.Errorf("the reattach asked for %q, want the conversation c1 the agent was re-keyed onto", d.asked)
 	}
 }

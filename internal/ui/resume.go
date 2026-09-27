@@ -173,6 +173,9 @@ func (a App) rekeyed(st *rpc.Status) App {
 			continue
 		}
 		gone[ag.ID] = struct{}{}
+		if a.sessionID == ag.ID {
+			a.sessionID = conv // what a hang-up reattaches to, and whose ending closes this window
+		}
 		if _, asked := a.waking[ag.ID]; asked {
 			a = a.awaitingWake(conv)
 		}
