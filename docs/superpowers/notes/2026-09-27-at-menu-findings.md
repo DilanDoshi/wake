@@ -7,6 +7,8 @@ The behaviour of Claude Code's own `@` typeahead is from its public docs (cross-
 |---|---|
 | `testdata/stream/list-agents.jsonl` | `wf-gamma` sends `/list-agents`, `/rename wf-delta`, `/list-agents` with two idle peers (`wf-alpha`, `wf-beta`) |
 | `testdata/stream/list-agents-empty.jsonl` | `/list-agents` with no peers |
+| `testdata/stream/list-agents-bare.jsonl` | a `--bare --no-session-persistence` one-shot `/list-agents` with two idle peers |
+| `testdata/stream/list-agents-bare-empty.jsonl` | the same one-shot with no peers |
 
 ## Provenance
 
@@ -29,6 +31,23 @@ Per the docs, the listing is every session that binds an inbox socket on this ma
 other terminals, background sessions, and `claude -p` sessions (so Wake's own agents list each other), plus
 Remote Control and cloud sessions while this session is connected to Remote Control. It is human text, not a
 schema — a parser must be tolerant and degrade to "no outside sessions", never to a wrong row.
+
+### 1a. Asking a live agent costs that agent context; a bare one-shot costs nothing
+
+A `/list-agents` sent to a live session **persists** in its transcript: a meta caveat line, the
+`<command-name>` user line, and a `system`/`local_command` entry holding the listing (with `commandRun`).
+A follow-up model turn in the same session quoted the listing back, so **the listing enters the model's context
+on the next turn**. Probing an idle agent would add the whole machine listing to some agent's context on every
+menu opening.
+
+`claude --print --bare --no-session-persistence --input-format stream-json --output-format stream-json
+--verbose` answers the same bare `/list-agents` in about 0.7s, with `num_turns: 0`, `$0`, no hook frames, no
+MCP servers and no transcript. Every stream frame names its command: the assistant frame carries
+`local_command_run: {command: "list-agents"}`, and the result carries `local_command: "list_agents"`. A bare
+session registers no inbox, so the listing **omits the `This session:` line** and the one-shot is not listed.
+The empty form is `No subagents, teammates or other Claude sessions.`
+(`testdata/stream/list-agents-bare.jsonl`, `list-agents-bare-empty.jsonl`). Peers register at startup, before
+their first turn.
 
 ## 2. `/rename` is local and takes effect at once
 
