@@ -5053,6 +5053,11 @@ works (`internal/ui/apirecover.go`). Left out, each on purpose:
   `invalid_request` parks after three and wakes on proof like a 401. A deterministic failure wakes
   once, fails again, and then waits for `/login`; the pin's wording is the login's. Narrowing this
   needs the error kind (`authentication_failed`) carried past the airlock as a `Notice` of its own.
+- **Proof is counted per output block, not per API request.** One response streams several frames
+  (thinking, then a tool call), so a response that began before a park and lands a later block after
+  it reads as post-park proof: the wake can land on a login that expired mid-response. It costs one
+  wasted wake - the session fails again and then waits for `/login`. *Closes with:* the API response
+  id carried out of the airlock, so a response counts once and only if it began after the park.
 - **Nothing watches the login while every agent is parked.** With no agent live, only `/login`
   (signed in) or `/resume` brings them back — Wake cannot poll `claude auth status` without a timer.
 - **A usage limit's timed notice outlives the turn that proves the reset** for its ~10s linger; the
