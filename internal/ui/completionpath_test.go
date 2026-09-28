@@ -106,6 +106,7 @@ func TestAConversationNeverOffersItsOwnNameAndStillOffersPaths(t *testing.T) {
 	fresh(t)
 	a := dmApp(nil, Stream{}, "s1", "alex").withSize(200, 40).withRoster(
 		rpc.SessionStatus{ID: "s1", Name: "alex", Dir: dir, State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s2", Name: "alexa", State: rpc.StateIdle},
 	).applyFrame(rpc.Frame{Kind: rpc.FramePeersReply, Peers: &rpc.PeersFrame{
 		Peers: []core.Peer{{Name: "alex", Dir: dir}},
 	}}).withDraft("@alex")
@@ -113,6 +114,9 @@ func TestAConversationNeverOffersItsOwnNameAndStillOffersPaths(t *testing.T) {
 	got := a.completion.offers
 	if slices.Contains(got, agentPrefix+"alex") {
 		t.Errorf("a conversation offered the agent's own name: %q", got)
+	}
+	if !slices.Contains(got, agentPrefix+"alexa") {
+		t.Errorf("a conversation offered %q and not its live peer alexa: a DM offers names now", got)
 	}
 	if !slices.Contains(got, agentPrefix+"alexander.md") {
 		t.Errorf("a conversation offered %q, want the path that is what `@` means to the agent", got)

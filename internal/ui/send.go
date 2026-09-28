@@ -322,9 +322,13 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 	return a, tea.Sequence(now, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
 }
 
-// clearDraft empties the focused composer and re-reads where ↵ would now send.
+// clearDraft empties the focused composer, re-reads where ↵ would now send, and
+// closes the menu, so a send or ⎋⎋ ends its opening. An empty draft's menu is
+// the closed one; see completion.carried for why this is not recompleted.
 func (a App) clearDraft() App {
-	return a.withComposer(a.composer().Reset()).retarget()
+	a = a.withComposer(a.composer().Reset()).retarget()
+	a.completion = completion{pane: a.focus}.carried(a.completion)
+	return a
 }
 
 // retarget recomputes the room composer's target line.

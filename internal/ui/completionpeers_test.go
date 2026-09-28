@@ -6,6 +6,7 @@ package ui
 // typed, and claude resolves the mention.
 
 import (
+	"os"
 	"path/filepath"
 	"slices"
 	"strings"
@@ -354,20 +355,29 @@ func TestAReplyReplacesTheListingWhole(t *testing.T) {
 	}
 }
 
-// The manager's own conversation offers peers too (owner's decision 1): it is a
-// conversation like any other, and asks like one.
-func TestTheManagersConversationOffersPeers(t *testing.T) {
-	fresh(t)
-	a := dmApp(newRecorder(t), Stream{}, "m1", core.ManagerName).withSize(200, 40).withRoster(
-		rpc.SessionStatus{ID: "m1", Name: core.ManagerName, State: rpc.StateIdle},
-		rpc.SessionStatus{ID: "s2", Name: "jane", State: rpc.StateIdle},
-	)
-	a, asked := typedAsking(t, a, runes("@j")...)
-	if got, want := a.completion.offers, []string{"@jane"}; !slices.Equal(got, want) {
-		t.Errorf("the manager's `@j` offered %q, want %q", got, want)
+// The manager's own conversation offers its fleet peers (owner's decision 1) and
+// paths, and nothing else: it runs with `--tools ""`, so it has no SendMessage
+// and no Agent tool. It reaches a peer by Wake name through its send tool, and it
+// can reach neither an outside session nor a subagent - so it offers neither,
+// even from a listing another conversation asked for, and asks for none.
+func TestTheManagersConversationOffersOnlyItsFleetPeers(t *testing.T) {
+	manager := func(t *testing.T) App {
+		t.Helper()
+		fresh(t)
+		return dmApp(newRecorder(t), Stream{}, "m1", core.ManagerName).withSize(200, 40).withRoster(
+			rpc.SessionStatus{ID: "m1", Name: core.ManagerName, State: rpc.StateIdle, Agents: []string{"Explore"}},
+			rpc.SessionStatus{ID: "s2", Name: "jane", State: rpc.StateIdle},
+		).applyFrame(peersReply(core.Peer{Name: "jalen", Dir: "/tmp/j"}))
 	}
-	if asked != 1 {
-		t.Errorf("the manager's `@j` asked %d times, want once", asked)
+	a, asked := typedAsking(t, manager(t), runes("@j")...)
+	if got, want := a.completion.offers, []string{"@jane"}; !slices.Equal(got, want) {
+		t.Errorf("the manager's `@j` offered %q, want its fleet peer alone %q", got, want)
+	}
+	if asked != 0 {
+		t.Errorf("the manager's `@j` asked %d times, want none: it cannot message what the listing names", asked)
+	}
+	if a, _ = typedAsking(t, manager(t), runes("@agent-")...); a.completion.open() {
+		t.Errorf("the manager's `@agent-` offered %q, want nothing: it has no Agent tool", a.completion.offers)
 	}
 }
 
@@ -398,5 +408,151 @@ func TestALongDirectoryNeverPushesOutTheName(t *testing.T) {
 	row := strings.SplitN(a.completion.View(30), "\n", 2)[0]
 	if !strings.Contains(row, "@wf-alpha") {
 		t.Errorf("at 30 columns the row is %q: the directory pushed out the name the accept inserts", row)
+	}
+}
+
+// The ask is for a name, and a typed text that cannot begin one is a path: a
+// Wake name starts with a letter (daemon/names.go), and none holds a separator.
+// So none of these asks, pasted or typed, nor does ⇥ stepping into a directory.
+func TestAPathShapedMentionAsksNothing(t *testing.T) {
+	paste := func(text string) tea.KeyMsg { return tea.KeyMsg{Type: tea.KeyRunes, Paste: true, Runes: []rune(text)} }
+	for name, keys := range map[string][]tea.KeyMsg{
+		"dot":           runes("@."),
+		"slash":         runes("@/"),
+		"tilde":         runes("@~"),
+		"pasted path":   {paste("@src/")},
+		"tab into src/": append(runes("@"), tea.KeyMsg{Type: tea.KeyTab}),
+	} {
+		t.Run(name, func(t *testing.T) {
+			dir := workdir(t)
+			if err := os.MkdirAll(filepath.Join(dir, "src"), 0o755); err != nil {
+				t.Fatalf("mkdir: %v", err)
+			}
+			a, asked := typedAsking(t, peerFleet(t, dir), keys...)
+			if asked != 0 {
+				t.Errorf("%q asked for the machine's sessions %d times, want none: it is a path", a.composer().Value(), asked)
+			}
+			if name == "tab into src/" && a.composer().Value() != "@src/" {
+				t.Fatalf("⇥ left %q, want @src/: the fixture did not step into the directory", a.composer().Value())
+			}
+		})
+	}
+}
+
+// A name holding whitespace is not offered - an outside session's or a
+// subagent type's. The mention ends at the first space claude reads, so ⇥ would
+// insert one mention and some prose; and the row collapses whitespace, so it
+// would not even be drawn as what it inserts.
+func TestANameHoldingWhitespaceIsNotOffered(t *testing.T) {
+	spaced := func(t *testing.T) App {
+		t.Helper()
+		return peerFleet(t, "", "my helper", "my-helper").applyFrame(peersReply(
+			core.Peer{Name: "foo bar", Dir: "/tmp/a"},
+			core.Peer{Name: "foo\u00a0baz", Dir: "/tmp/b"},
+			core.Peer{Name: "foobar", Dir: "/tmp/c"},
+		))
+	}
+	if got, want := spaced(t).withDraft("@f").completion.offers, []string{"@foobar"}; !slices.Equal(got, want) {
+		t.Errorf("`@f` offered %q, want %q: a spaced name is not one mention", got, want)
+	}
+	if got, want := spaced(t).withDraft("@agent-my").completion.offers, []string{"@agent-my-helper"}; !slices.Equal(got, want) {
+		t.Errorf("`@agent-my` offered %q, want %q: a spaced type is not one mention", got, want)
+	}
+}
+
+// ⎋⎋ closes the menu for real: the next `@` is a new opening, and asks.
+func TestClearingTheDraftEndsTheOpening(t *testing.T) {
+	a, asked := typedAsking(t, peerFleet(t, ""), runes("@j")...)
+	if asked != 1 {
+		t.Fatalf("`@j` asked %d times, want once", asked)
+	}
+	esc := tea.KeyMsg{Type: tea.KeyEsc}
+	a, _ = typedAsking(t, a, esc, esc)
+	if a.composer().Value() != "" {
+		t.Fatalf("⎋⎋ left %q, want the draft cleared", a.composer().Value())
+	}
+	if _, asked = typedAsking(t, a, tea.KeyMsg{Type: tea.KeyRunes, Paste: true, Runes: []rune("@wf")}); asked != 1 {
+		t.Errorf("a pasted `@wf` after ⎋⎋ asked %d times, want once: a cleared draft is a closed menu", asked)
+	}
+}
+
+// The fleet's names are lower-case and claude's listing need not be, so the
+// fleet wins a name whatever its case - and a listing naming one session twice
+// in two cases offers it once.
+func TestTheFleetWinsANameWhateverItsCase(t *testing.T) {
+	a := peerFleet(t, "").applyFrame(peersReply(
+		core.Peer{Name: "Jane", Dir: "/tmp/elsewhere"},
+		core.Peer{Name: "Jalen", Dir: "/tmp/j1"},
+		core.Peer{Name: "jalen", Dir: "/tmp/j2"},
+	)).withDraft("@j")
+	if got, want := a.completion.offers, []string{"@jane", "@Jalen"}; !slices.Equal(got, want) {
+		t.Errorf("`@j` offered %q, want %q", got, want)
+	}
+}
+
+// A directory is cut from the left, so its tail - the part naming the project -
+// survives, and the name keeps all the row but the parentheses' own room.
+func TestADirectoryKeepsItsTailAndTheNameItsWidth(t *testing.T) {
+	const name = "a-rather-long-session-name-x"
+	a := peerFleet(t, "").applyFrame(peersReply(core.Peer{Name: name, Dir: "/tmp/deep/deep/deep/wf"})).withDraft("@a-")
+	want := "@" + name + " (…ep/wf)"
+	if got := a.completion.rowLabel("@"+name, 40); got != want {
+		t.Errorf("at 40 columns the row is %q, want %q", got, want)
+	}
+	if drawn := a.completion.View(40); !strings.Contains(drawn, want) {
+		t.Errorf("the drawn menu cut the label further:\n%s", drawn)
+	}
+}
+
+// A rebuild that leaves the draft alone - the peers reply landing while
+// somebody walks the menu, a fleet report - keeps the cursor on the offer it was
+// on, or clamps where that offer went. ⇥ then takes what was walked to.
+func TestTheCursorStaysOnItsOfferAcrossARebuild(t *testing.T) {
+	a, _ := typedAsking(t, peerFleet(t, workdir(t, "jot.md", "jump.md")), runes("@j")...)
+	if got, want := a.completion.offers, []string{"@jane", "@jot.md", "@jump.md"}; !slices.Equal(got, want) {
+		t.Fatalf("the fixture offers %q, want %q", got, want)
+	}
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlN})
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlN}) // on @jump.md
+
+	a = a.applyFrame(peersReply(core.Peer{Name: "jalen", Dir: "/tmp/j"}))
+	if got := a.completion.offers[a.completion.cursor]; got != "@jump.md" {
+		t.Errorf("the reply moved the cursor to %q, want it still on @jump.md: offers %q", got, a.completion.offers)
+	}
+	a = a.withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "jade", Dir: a.completionAgent().Cwd, State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s2", Name: "jane", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s6", Name: "jasper", State: rpc.StateIdle},
+	)
+	if got := a.completion.offers[a.completion.cursor]; got != "@jump.md" {
+		t.Errorf("a fleet report moved the cursor to %q, want it still on @jump.md: offers %q", got, a.completion.offers)
+	}
+	if took, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyTab}); took.composer().Value() != "@jump.md " {
+		t.Errorf("⇥ inserted %q, want the walked-to @jump.md", took.composer().Value())
+	}
+
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlP})
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlP}) // on @jalen, index 2
+	if a.completion.offers[a.completion.cursor] != "@jalen" {
+		t.Fatalf("the walk landed on %q, want @jalen: offers %q", a.completion.offers[a.completion.cursor], a.completion.offers)
+	}
+	a = a.applyFrame(peersReply())
+	if got := a.completion.cursor; got != 2 {
+		t.Errorf("with @jalen gone the cursor is at %d, want it clamped where it was (2): offers %q", got, a.completion.offers)
+	}
+}
+
+// A keystroke's menu is a menu for a new draft, and starts at the top as it
+// always has: the cursor is held only across a rebuild that left the draft alone.
+func TestANewDraftsMenuStartsAtTheTop(t *testing.T) {
+	a, _ := typedAsking(t, peerFleet(t, workdir(t, "jolt.md", "jot.md", "jump.md")), runes("@j")...)
+	for range 3 {
+		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlN})
+	}
+	if got := a.completion.offers[a.completion.cursor]; got != "@jump.md" {
+		t.Fatalf("the walk landed on %q, want @jump.md: offers %q", got, a.completion.offers)
+	}
+	if a, _ = typedAsking(t, a, runes("o")...); a.completion.cursor != 0 {
+		t.Errorf("`@jo` put the cursor at %d, want the top: offers %q", a.completion.cursor, a.completion.offers)
 	}
 }
