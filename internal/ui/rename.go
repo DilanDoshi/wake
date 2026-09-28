@@ -94,11 +94,11 @@ const (
 // The shared tail of `/name` and the `/rename` mirror in slash.go: the two
 // resolve differently - an `@who` handle or the conversation you are in - and
 // write the same frame, so a second copy would be one that goes stale the day
-// rpc.FrameRename changes. claudeRenames is the mirror's: its keystroke also
+// rpc.FrameRename changes. selfRenames is the mirror's: its keystroke also
 // sends claude its own /rename, so the daemon must not send a second.
-func (a App) renameTo(agent Agent, name string, claudeRenames bool) tea.Cmd {
+func (a App) renameTo(agent Agent, name string, selfRenames bool) tea.Cmd {
 	notice.Report(renameAsked, agentPrefix, agent.Name)
-	return a.write(renameFailed, rpc.Frame{Kind: rpc.FrameRename, SessionID: agent.ID, Text: name, ClaudeRenames: claudeRenames})
+	return a.write(renameFailed, rpc.Frame{Kind: rpc.FrameRename, SessionID: agent.ID, Text: name, SelfRenames: selfRenames})
 }
 
 // renameAgent changes what one agent is called.

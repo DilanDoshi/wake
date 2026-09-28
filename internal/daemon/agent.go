@@ -159,9 +159,11 @@ type agent struct {
 
 	// claudeName is claude's own session name, "" while an operator's /rename
 	// is unanswered; renameHeld keeps a mirrored rename's want from firing until
-	// claude's next rename reply. See renamesync.go.
-	claudeName string
-	renameHeld bool
+	// claude's next rename reply, and renameAsked is what that /rename asked
+	// for. See renamesync.go.
+	claudeName  string
+	renameHeld  bool
+	renameAsked string
 
 	// model is what this session runs as, or "" for none. Display and the park
 	// book only, like effort. Read through currentModel: launch writes it and

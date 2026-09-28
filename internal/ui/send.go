@@ -144,14 +144,16 @@ func (a App) submit() (tea.Model, tea.Cmd) {
 	// message - and Wake mirrors it onto its own handle in the same keystroke,
 	// so the roster and claude's title do not drift, which was the reported
 	// confusion. mirror is nil for every other draft, so an ordinary send is
-	// still one command. See renameMirror.
+	// still one command. See renameMirror. Sequenced, never batched: the mirror
+	// must reach the daemon before its passthrough (renamesync.go), and park.go
+	// is the precedent.
 	mirror := a.renameMirror(text)
 	if a.focus != "" {
 		model, cmd := a.sendDM(text, images)
-		return model, tea.Batch(mirror, cmd)
+		return model, tea.Sequence(mirror, cmd)
 	}
 	model, cmd := a.sendRoom(text, images)
-	return model, tea.Batch(mirror, cmd)
+	return model, tea.Sequence(mirror, cmd)
 }
 
 // sendDM writes one message to the one agent a DM is with. There is nothing to
@@ -312,7 +314,7 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		to = r.Targets[0]
 	}
 	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
-	return a, tea.Batch(mirror, a.write(sendFailed, frames...))
+	return a, tea.Sequence(mirror, a.write(sendFailed, frames...)) // the mirror first, as in submit
 }
 
 // clearDraft empties the focused composer and re-reads where ↵ would now send.

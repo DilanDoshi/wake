@@ -213,7 +213,7 @@ func (a *agent) rosterRecord(pgid int) record {
 // dies.
 func (s *server) renameSession(c *client, f rpc.Frame) {
 	s.withAgent(c, f, func(a *agent) error {
-		if err := a.rename(s.names, f.Text, f.ClaudeRenames); err != nil {
+		if err := a.rename(s.names, f.Text, f.SelfRenames); err != nil {
 			return err
 		}
 		s.published(a)

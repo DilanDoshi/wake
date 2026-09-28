@@ -5,6 +5,8 @@ package ui
 // `alex <> ui fixes`"*, from the outside.
 
 import (
+	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -487,34 +489,28 @@ func TestARenameWithSpacesIsHyphenatedRatherThanRefused(t *testing.T) {
 	}
 }
 
-// batchFrames runs a command - each member of a tea.Batch in turn - and returns
-// every frame it wrote to the recorder. sentFrames cannot: it runs the batch
-// once and reads before the members it holds have run.
+// batchFrames runs a command - each member of a tea.Batch or tea.Sequence in
+// turn - and returns every frame it wrote to the recorder. sentFrames cannot:
+// it runs the command once and reads before the members it holds have run.
 func batchFrames(t *testing.T, a App, cmd tea.Cmd) []rpc.Frame {
 	t.Helper()
 	if cmd == nil {
 		t.Fatal("no command: nothing was sent")
 	}
-	if batch, ok := cmd().(tea.BatchMsg); ok {
-		for _, c := range batch {
-			if c != nil {
-				c()
-			}
-		}
-	}
+	runLikeTheLoop(cmd)
 	return recorderOf(t, a).taken(t)
 }
 
 // The `/rename` mirror says its keystroke also sends claude its own /rename, so
 // the daemon waits for claude's reply instead of sending a second one; `/name`
 // sends claude nothing, so it never says so.
-func TestOnlyTheRenameMirrorSaysClaudeRenamesItself(t *testing.T) {
+func TestOnlyTheRenameMirrorSaysTheAgentRenamesItself(t *testing.T) {
 	for _, tc := range []struct {
 		name, draft, session string
-		room, claudeRenames  bool
+		room, selfRenames    bool
 	}{
-		{name: "mirror in a conversation", draft: "/rename bob", session: "s1", claudeRenames: true},
-		{name: "mirror from the room", draft: "@sydney /rename bob", session: "s2", room: true, claudeRenames: true},
+		{name: "mirror in a conversation", draft: "/rename bob", session: "s1", selfRenames: true},
+		{name: "mirror from the room", draft: "@sydney /rename bob", session: "s2", room: true, selfRenames: true},
 		{name: "name this conversation", draft: "/name bob", session: "s1"},
 		{name: "name another agent", draft: "/name @sydney bob", session: "s2"},
 		{name: "name from the room", draft: "/name @sydney bob", session: "s2", room: true},
@@ -535,8 +531,55 @@ func TestOnlyTheRenameMirrorSaysClaudeRenamesItself(t *testing.T) {
 			if len(renames) != 1 || renames[0].SessionID != tc.session || renames[0].Text != "bob" {
 				t.Fatalf("%q wrote renames %+v, want one of %s to bob", tc.draft, renames, tc.session)
 			}
-			if renames[0].ClaudeRenames != tc.claudeRenames {
-				t.Errorf("%q wrote ClaudeRenames=%v, want %v", tc.draft, renames[0].ClaudeRenames, tc.claudeRenames)
+			if renames[0].SelfRenames != tc.selfRenames {
+				t.Errorf("%q wrote SelfRenames=%v, want %v", tc.draft, renames[0].SelfRenames, tc.selfRenames)
+			}
+		})
+	}
+}
+
+// The /rename mirror is written before its passthrough, in a conversation and
+// from the room: tea.Sequence, whose members run one at a time, never
+// tea.Batch, whose members race to the socket. The daemon dispatches one
+// connection serially, so the hold is armed before the passthrough is read.
+// Expanding the message and running its members in order passes against a
+// Batch too (runLikeTheLoop's own caveat), so the kind is asserted first.
+func TestTheRenameMirrorIsWrittenBeforeItsPassthrough(t *testing.T) {
+	for _, tc := range []struct {
+		name, draft, session string
+		room                 bool
+	}{
+		{name: "conversation", draft: "/rename bob", session: "s1"},
+		{name: "room", draft: "@sydney /rename bob", session: "s2", room: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fresh(t)
+			a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(200, 40)
+			if tc.room {
+				a = a.showRoom()
+			}
+			_, cmd := typeAndSubmit(a, tc.draft)
+			if cmd == nil {
+				t.Fatalf("%q wrote nothing", tc.draft)
+			}
+			msg := cmd()
+			v := reflect.ValueOf(msg)
+			if !v.IsValid() || v.Kind() != reflect.Slice || v.Type().Name() != "sequenceMsg" {
+				t.Fatalf("%q built a %T: only tea.Sequence writes the mirror before its passthrough, "+
+					"and a tea.Batch lets claude's reply beat the mirror to the daemon", tc.draft, msg)
+			}
+			var kinds []string
+			for i := range v.Len() {
+				c, _ := v.Index(i).Interface().(tea.Cmd)
+				runLikeTheLoop(c)
+				for _, f := range recorderOf(t, a).taken(t) {
+					if f.SessionID == tc.session {
+						kinds = append(kinds, f.Kind)
+					}
+				}
+			}
+			if want := []string{rpc.FrameRename, rpc.FrameSend}; !slices.Equal(kinds, want) {
+				t.Fatalf("%q wrote %v, want the mirror then its passthrough %v", tc.draft, kinds, want)
 			}
 		})
 	}

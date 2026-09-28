@@ -1,11 +1,11 @@
 package daemon
 
-// Keeping claude's own session name in step with Wake's (renamesync.go).
+// Keeping claude's own session name in step with Wake's (renamesync.go): the
+// agent-level half, driven without a process.
 
 import (
-	"context"
-	"fmt"
 	"os"
+	"path/filepath"
 	"slices"
 	"strings"
 	"testing"
@@ -109,9 +109,9 @@ func TestRenamesDuringATurnAreOneRenameOfTheLatestAtItsEnd(t *testing.T) {
 	}
 }
 
-// The operator's /rename passthrough renames claude itself; its reply, seen
-// first, leaves the mirrored Wake rename with nothing to tell - and the reply
-// is not suppressed, since Wake sent no /rename of its own.
+// The operator's /rename passthrough renames claude itself, its reply shown -
+// Wake sent no /rename of its own - and a /name afterwards to the name claude
+// already took has nothing to tell it.
 func TestTheOperatorsRenameRepliedFirstLeavesNothingToSend(t *testing.T) {
 	a, r := renamingAgent(t)
 	a.noteRenameSent("/rename bob")
@@ -249,35 +249,6 @@ func TestAVariantNameIsNeverChasedIntoALoop(t *testing.T) {
 	}
 }
 
-// apply marks claude's name unknown when it writes an operator's /rename, and
-// only then - driven through a real process, since apply writes to one.
-func TestWritingTheOperatorsRenameLeavesClaudesNameUnknown(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	ctx, cancel := context.WithCancel(context.Background())
-	sess := core.NewSession(core.Config{SessionID: idAlpha, Name: "sydney"})
-	if err := sess.Start(ctx); err != nil {
-		cancel()
-		t.Fatalf("start: %v", err)
-	}
-	t.Cleanup(func() {
-		_ = sess.Stop()
-		for range sess.Events() {
-		}
-		cancel()
-	})
-	a := newAgent(idAlpha, "sydney", "dev-1", "/repo/api", "", sess, cancel)
-	claude := func() string { a.mu.Lock(); defer a.mu.Unlock(); return a.claudeName }
-
-	a.apply(pending{frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "please /rename yourself"}})
-	if got := claude(); got != "sydney" {
-		t.Fatalf("an ordinary message moved claude's name to %q", got)
-	}
-	a.apply(pending{frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"}})
-	if got := claude(); got != "" {
-		t.Fatalf("after writing the operator's /rename claude's name is %q, want unknown until its reply", got)
-	}
-}
-
 // A want still pending when the agent is stopped or parked never fires into
 // what is left of it.
 func TestAStoppedOrParkedAgentsPendingRenameNeverFires(t *testing.T) {
@@ -346,230 +317,18 @@ func TestARenameNeverWaitsOnAFullQueue(t *testing.T) {
 	}
 }
 
-// fakeRenameSync answers a bare /rename the way 2.1.283 does
-// (list-agents.jsonl:7-8): the name as the assistant's text, then a local
-// command result. "clash" takes a variant, as a colliding name does. "hold"
-// keeps a turn open, buffering what arrives, until "release"; "renames?"
-// reports every /rename received, and the --name it was started with.
-func fakeRenameSync(sid string) int {
-	var renames, held []string
-	holding := false
-	answer := func(line string) {
-		switch name := argAskedIn(line, "/rename "); {
-		case name != "":
-			renames = append(renames, name)
-			if name == "clash" {
-				name += "-2"
-			}
-			emitText(sid, "Session renamed to: "+name)
-			fmt.Printf(`{"type":"result","subtype":"success","is_error":false,"num_turns":0,"session_id":%q,"result":%q}`+"\n",
-				sid, "Session renamed to: "+name)
-		case strings.Contains(line, `"text":"renames?"`):
-			emitText(sid, fmt.Sprintf("renames: %d %v name=%s", len(renames), renames, argValue(os.Args, "--name")))
-			emitResult(sid)
-		default:
-			emitText(sid, "echo: "+line)
-			emitResult(sid)
-		}
-	}
-	for line := range stdinLines() {
-		switch {
-		case strings.Contains(line, `"text":"hold"`):
-			holding = true
-		case strings.Contains(line, `"text":"release"`):
-			holding = false
-			emitResult(sid) // the held turn ends, then what waited behind it runs
-			for _, l := range held {
-				answer(l)
-			}
-			held = nil
-		case holding:
-			held = append(held, line)
-		default:
-			answer(line)
-		}
-	}
-	return 0
-}
-
-// askRenames asks the fake what it has been sent and returns its answer.
-func askRenames(c *testClient, id string) string {
-	c.t.Helper()
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: id, Text: "renames?"})
-	return c.await("the fake's count of renames", func(f rpc.Frame) bool {
-		return f.Kind == rpc.FrameEvent && f.SessionID == id && f.Event != nil &&
-			strings.HasPrefix(f.Event.Text, "renames: ")
-	}).Event.Text
-}
-
-func renameTo(c *testClient, id, name string) {
-	c.t.Helper()
-	sendRename(c, rpc.Frame{Kind: rpc.FrameRename, SessionID: id, Text: name})
-}
-
-// mirrorTo is the UI's /rename mirror over the wire.
-func mirrorTo(c *testClient, id, name string) {
-	c.t.Helper()
-	sendRename(c, rpc.Frame{Kind: rpc.FrameRename, SessionID: id, Text: name, ClaudeRenames: true})
-}
-
-func sendRename(c *testClient, f rpc.Frame) {
-	c.t.Helper()
-	id, name := f.SessionID, f.Text
-	c.send(f)
-	c.await("the rename to "+name+" published", func(f rpc.Frame) bool {
-		return f.Kind == rpc.FrameStatusPush && f.Status != nil && sessionRow(*f.Status, id).Name == name
-	})
-}
-
-// renameRepliesSeen counts the /rename replies that reached this client.
-func renameRepliesSeen(c *testClient) int {
-	n := 0
-	for _, f := range c.seen {
-		if f.Kind == rpc.FrameEvent && f.Event != nil && f.Event.Kind == core.KindAssistantText {
-			if _, ok := core.RenamedFromReply(f.Event.Text); ok {
-				n++
-			}
-		}
-	}
-	return n
-}
-
-// The whole round trip over a real process: a Wake rename reaches claude as one
-// bare /rename, and its reply reaches no client.
-func TestAWakeRenameTellsClaudeOnceAndItsReplyReachesNoClient(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
-
-	renameTo(c, idAlpha, "bob")
-	askRenames(c, idAlpha)
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [bob]") {
-		t.Fatalf("claude was sent %q, want exactly one /rename bob", got)
-	}
-	if n := renameRepliesSeen(c); n != 0 {
-		t.Fatalf("%d /rename replies reached a client\nsaw: %s", n, c.transcript())
-	}
-}
-
-// Over a real process: renames while a turn runs send nothing into it, and its
-// end sends one /rename of the latest.
-func TestRenamesDuringATurnReachClaudeAsOneRenameAfterIt(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
-
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
-	renameTo(c, idAlpha, "ann")
-	renameTo(c, idAlpha, "zed")
-	// Asked inside the held turn, answered after it: anything written mid-turn
-	// is ahead of the question.
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "renames?"})
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "release"})
-	during := c.await("the count asked mid-turn", func(f rpc.Frame) bool {
-		return f.Kind == rpc.FrameEvent && f.Event != nil && strings.HasPrefix(f.Event.Text, "renames: ")
-	}).Event.Text
-	if !strings.HasPrefix(during, "renames: 0 ") {
-		t.Fatalf("claude was sent a /rename during its turn: %q", during)
-	}
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [zed]") {
-		t.Fatalf("after the turn claude was sent %q, want one /rename zed", got)
-	}
-}
-
-// Over a real process, the reply-first order: the operator's /rename bob
-// renames claude and its reply is shown, so the mirrored Wake rename sends
-// nothing.
-func TestTheOperatorsRenameAnsweredFirstIsTheOnlyRename(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
-
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
-	c.awaitEvent(idAlpha, "Session renamed to: bob")
-	renameTo(c, idAlpha, "bob")
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [bob]") {
-		t.Fatalf("claude was sent %q, want only the operator's /rename bob", got)
-	}
-}
-
-// Over a real process, the mirror-first order: the Wake rename arrives while a
-// turn runs and the operator's /rename is written behind it. The turn's end
-// does not send a second /rename, and the operator's reply is shown.
-func TestTheMirroredRenameArrivingFirstSendsNoSecondRename(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
-
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
-	renameTo(c, idAlpha, "bob")
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "release"})
-	c.awaitEvent(idAlpha, "Session renamed to: bob")
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [bob]") {
-		t.Fatalf("claude was sent %q, want only the operator's /rename bob", got)
-	}
-	if n := renameRepliesSeen(c); n != 1 {
-		t.Fatalf("%d /rename replies reached a client, want the operator's one\nsaw: %s", n, c.transcript())
-	}
-}
-
-// Over a real process: claude answers a variant, and later turns never ask
-// again.
-func TestAVariantNameIsAskedForOnce(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
-
-	renameTo(c, idAlpha, "clash")
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hello"})
-	c.awaitEvent(idAlpha, "echo: ")
-	askRenames(c, idAlpha)
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [clash]") {
-		t.Fatalf("claude took clash-2 and was sent %q, want the one /rename clash", got)
-	}
-}
-
-// Restored history drops a /rename line and its reply, on their own shape -
-// Wake's and the operator's alike, since the disk cannot tell them apart - and
-// keeps a message that only mentions the command.
-func TestHistoryDropsTheRenamePair(t *testing.T) {
-	plantTranscript(t, histID,
-		userLine("run the tests"),
-		userLine("/rename bob"),
-		assistantLine("Session renamed to: bob"),
-		userLine("please /rename yourself when done"),
-		assistantLine("done"),
-	)
-	events, err := History(histID)
-	if err != nil {
-		t.Fatalf("History: %v", err)
-	}
-	var got []string
-	for _, ev := range events {
-		got = append(got, ev.Text)
-	}
-	want := []string{"run the tests", "please /rename yourself when done", "done"}
-	if !slices.Equal(got, want) {
-		t.Fatalf("restored %q, want %q", got, want)
-	}
-}
-
-// The on-disk form recorded for a /rename (at-menu findings §1a) - a caveat, the
-// command envelope and a system/local_command entry - restores as nothing.
+// A /rename as claude writes it to disk (testdata/transcript/rename.jsonl) - the
+// custom-title and agent-name lines, the caveat, the <command-name> envelope and
+// the system/local_command entry holding the reply - restores as nothing, and
+// core drops every line of it itself, so probeLine needs no /rename arm. The
+// turn after it is kept, so the read is not simply empty.
 func TestHistoryDropsTheRecordedOnDiskRename(t *testing.T) {
-	plantTranscript(t, histID,
-		userLine("before"),
-		`{"type":"user","isMeta":true,"isSidechain":false,"message":{"role":"user","content":"<local-command-caveat>Caveat: The messages below were generated by the user while running local commands.</local-command-caveat>"}}`,
-		`{"type":"user","isSidechain":false,"message":{"role":"user","content":"<command-name>/rename</command-name>\n            <command-message>rename</command-message>\n            <command-args>bob</command-args>"}}`,
-		`{"type":"system","subtype":"local_command","isSidechain":false,"content":"<local-command-stdout>Session renamed to: bob</local-command-stdout>"}`,
-		userLine("after"),
-	)
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "transcript", "rename.jsonl"))
+	if err != nil {
+		t.Fatalf("read the fixture: %v", err)
+	}
+	recorded := strings.Split(strings.TrimSpace(string(data)), "\n")
+	plantTranscript(t, histID, append(recorded, userLine("after"))...)
 	events, err := History(histID)
 	if err != nil {
 		t.Fatalf("History: %v", err)
@@ -578,7 +337,7 @@ func TestHistoryDropsTheRecordedOnDiskRename(t *testing.T) {
 	for _, ev := range events {
 		got = append(got, ev.Text)
 	}
-	if want := []string{"before", "after"}; !slices.Equal(got, want) {
+	if want := []string{"after"}; !slices.Equal(got, want) {
 		t.Fatalf("restored %q, want %q", got, want)
 	}
 }
@@ -668,135 +427,85 @@ func TestANameOverAHeldRenameWaitsForItsReply(t *testing.T) {
 	}
 }
 
-// A held want dies with a parked agent, reply or not - idle, so nothing but
-// the agent being gone stands in the way.
+// A held want dies with a parked agent. Wake holds foo-bar and the passthrough
+// asked "foo bar", so claude's reply leaves a /rename due - and the agent is
+// idle, so nothing but its being gone stands in the way.
 func TestAHeldWantOfAParkedAgentNeverFires(t *testing.T) {
 	a, r := renamingAgent(t)
-	mustMirror(t, a, r, "bob")
+	mustMirror(t, a, r, "foo-bar")
+	a.noteRenameSent("/rename foo bar")
 	a.beginPark()
 	a.finish(nil)
 	a.markParked()
-	a.noteRenamed(renamedEvent("sydney"))
+	a.noteRenamed(renamedEvent("foo bar"))
 	a.probeIfWanted()
 	if got := queuedRenames(a); len(got) != 0 {
 		t.Fatalf("a parked agent's held rename fired: %q", got)
 	}
 }
 
-// Over a real process, the concern this fixes: the UI's mirror arrives while
-// the agent works, its passthrough held in type-ahead until the turn ends. The
-// turn's end sends nothing, the passthrough renames claude, and its reply is
-// the only one a client sees.
-func TestAMirrorAheadOfItsHeldBackPassthroughSendsNothing(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
-
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
-	mirrorTo(c, idAlpha, "bob")
-	// Answered after the held turn ends, so anything the end queued is ahead of
-	// the passthrough below.
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "renames?"})
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "release"})
-	c.await("the count after the turn", func(f rpc.Frame) bool {
-		return f.Kind == rpc.FrameEvent && f.Event != nil && strings.HasPrefix(f.Event.Text, "renames: ")
-	})
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
-	c.awaitEvent(idAlpha, "Session renamed to: bob")
-	askRenames(c, idAlpha)
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [bob]") {
-		t.Fatalf("claude was sent %q, want only the operator's /rename bob", got)
-	}
-	if n := renameRepliesSeen(c); n != 1 {
-		t.Fatalf("%d /rename replies reached a client, want the operator's one\nsaw: %s", n, c.transcript())
+// apply marks claude's name unknown before it writes the operator's /rename,
+// so the reply - which can reach fanOut before apply returns - lands after the
+// mark and is never overwritten by it. Driven with a write that fails: only a
+// mark made before the write leaves the name unknown, which is fail-safe.
+func TestTheOperatorsRenameIsMarkedBeforeItsWrite(t *testing.T) {
+	a, _ := renamingAgent(t) // an unstarted session, so the write fails
+	a.apply(pending{from: newClient(nil), frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: "/rename bob"}})
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.claudeName != "" {
+		t.Fatalf("after the operator's /rename was attempted claude's name is %q, want unknown", a.claudeName)
 	}
 }
 
-// The same with the agent idle: the mirror lands first and sends nothing.
-func TestAMirrorOfAnIdleAgentSendsNothing(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
+// A rename probe's own reply never releases a held want (review O9): Wake's
+// /rename cat is in flight when the operator's /rename bob mirror lands, its
+// passthrough still in type-ahead, and a /name dan follows before that
+// passthrough. The probe's reply and the turn ending after it send nothing;
+// the passthrough's own reply releases the want, and one /rename dan follows.
+func TestAProbesOwnReplyDoesNotReleaseAHeldWant(t *testing.T) {
+	a, r := renamingAgent(t)
+	mustRename(t, a, r, "cat")
+	if got := queuedRenames(a); len(got) != 1 {
+		t.Fatalf("the idle /name queued %q, want one probe", got)
+	}
+	if text := a.renameWrite(); text != "/rename cat" {
+		t.Fatalf("the probe wrote %q", text)
+	}
+	a.incProbe(renameProbe) // written, its reply not yet read
 
-	mirrorTo(c, idAlpha, "bob")
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
-	c.awaitEvent(idAlpha, "Session renamed to: bob")
-	askRenames(c, idAlpha)
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [bob]") {
-		t.Fatalf("claude was sent %q, want only the operator's /rename bob", got)
+	a.noteSent() // a message the operator sent behind it: the UI now thinks it busy
+	mustMirror(t, a, r, "bob")
+	streamed(a, renamedEvent("cat"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: cat", LocalCommand: true})
+	mustRename(t, a, r, "dan")
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "the message's turn"})
+	a.probeIfWanted()
+	if got := queuedRenames(a); len(got) != 0 {
+		t.Fatalf("the probe's own reply released the mirror's hold, and Wake queued %q ahead of the passthrough", got)
+	}
+
+	a.noteSent()
+	a.noteRenameSent("/rename bob")
+	streamed(a, renamedEvent("bob"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: bob", LocalCommand: true})
+	a.probeIfWanted()
+	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename dan"}) {
+		t.Fatalf("after the passthrough's reply Wake queued %q, want one [/rename dan]", got)
 	}
 }
 
-// Over a real process: Wake holds foo-bar, claude took "foo bar", and one
-// /rename foo-bar brings claude to Wake's name.
-func TestAHyphenatedMirrorIsSentOnceInWakesForm(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
-
-	mirrorTo(c, idAlpha, "foo-bar")
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename foo bar"})
-	c.awaitEvent(idAlpha, "Session renamed to: foo bar")
-	askRenames(c, idAlpha)
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 2 [foo bar foo-bar]") {
-		t.Fatalf("claude was sent %q, want the operator's /rename foo bar and one /rename foo-bar", got)
-	}
-}
-
-// Over a real process: a mirrored bob, then /name cat, both before claude's
-// reply to bob. Wake sends one /rename cat, after that reply.
-func TestANameBeforeTheMirroredReplyIsTheOneRenameSent(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
-
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
-	mirrorTo(c, idAlpha, "bob")
-	renameTo(c, idAlpha, "cat")
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "release"})
-	c.awaitEvent(idAlpha, "Session renamed to: bob")
-	askRenames(c, idAlpha)
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 2 [bob cat]") {
-		t.Fatalf("claude was sent %q, want the operator's /rename bob, then one /rename cat", got)
-	}
-}
-
-// The gap fix round 1 left, over a real process: /rename bob while the agent
-// works (its passthrough held in type-ahead), then /name cat, then the turn
-// ends and the passthrough flushes. Nothing goes before claude's reply to bob;
-// after it, one /rename cat, and both end as cat.
-func TestANameWhileTheMirroredPassthroughWaitsEndsBothAsTheName(t *testing.T) {
-	fakeClaudeOnPath(t, "renamesync")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "sydney")
-
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
-	mirrorTo(c, idAlpha, "bob")
-	renameTo(c, idAlpha, "cat")
-	// Answered after the held turn ends, so anything that end queued is ahead
-	// of the flushed passthrough.
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "renames?"})
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "release"})
-	after := c.await("the count after the turn", func(f rpc.Frame) bool {
-		return f.Kind == rpc.FrameEvent && f.Event != nil && strings.HasPrefix(f.Event.Text, "renames: ")
-	}).Event.Text
-	if !strings.HasPrefix(after, "renames: 0 ") {
-		t.Fatalf("the turn's end sent claude a /rename before the passthrough: %q", after)
-	}
-
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
-	c.awaitEvent(idAlpha, "Session renamed to: bob")
-	askRenames(c, idAlpha)
-	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 2 [bob cat]") {
-		t.Fatalf("claude was sent %q, want the operator's /rename bob and then one /rename cat", got)
-	}
-	if name := sessionRow(c.status(), idAlpha).Name; name != "cat" {
-		t.Fatalf("Wake calls the agent %q, want cat", name)
+// A variant claude chose for the operator's own /rename is never chased: the
+// reply differs from what the passthrough asked, so the release settles.
+func TestAVariantForTheOperatorsRenameIsNeverChased(t *testing.T) {
+	a, r := renamingAgent(t)
+	mustMirror(t, a, r, "bob")
+	a.noteSent()
+	a.noteRenameSent("/rename bob")
+	streamed(a, renamedEvent("bob-2"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: bob-2", LocalCommand: true})
+	a.probeIfWanted()
+	if got := queuedRenames(a); len(got) != 0 {
+		t.Fatalf("claude chose bob-2 for the operator's /rename bob, and Wake queued %q", got)
 	}
 }

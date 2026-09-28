@@ -5020,3 +5020,13 @@ case is a hint that goes away too soon, never a wrong action.
 *Closes with:* a daemon-issued process-incarnation id on `rpc.SessionStatus` (it trips the three
 reflective field guards), unpinning only on a report that proves a newer process than the one that
 failed.
+
+## 2026-09-28 — `noteSent` marks a turn owed only after its write
+
+`apply` (`internal/daemon/apply.go`) calls `noteSent` once `Send` has returned, so a turn's end can in
+principle reach fanOut before the turn is marked owed, and `owed` is then left set for a turn that
+has already ended. `noteRenameSent` was moved ahead of the write for exactly this window (at-menu
+Task 3 review, M1). `noteSent` keeps the shape it has always had.
+
+*Closes with:* marking owed before the write and un-marking it on a failed write, measured against
+the liveness tests that read `owed`.
