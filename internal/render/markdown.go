@@ -583,13 +583,14 @@ func lockAndRender(r *glamour.TermRenderer, src string) (string, error) {
 // on a fresh line: right after an item's text, wrong when the list is the start
 // of it. The row beneath, an item marker two columns in, moves up beside the
 // bullet and keeps its column, so no row grows; its wrapped rest stays put.
-// A painted block (code, a quote) leads with an escape, so it never matches.
+// A painted block (code, a quote) leads with an escape, so it never matches; a
+// table is the one unstyled block, and underTableRule keeps a centred header out.
 func joinLoneBullets(s string) string {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
-	for _, line := range lines {
+	for i, line := range lines {
 		if n := len(out); n > 0 {
-			if col, ok := loneBulletAt(out[n-1]); ok && leadSpaces(line) == col+2 && opensItem(line) {
+			if col, ok := loneBulletAt(out[n-1]); ok && leadSpaces(line) == col+2 && opensItem(line) && !underTableRule(lines, i) {
 				out[n-1] = strings.TrimRight(out[n-1], " ") + line[col+1:]
 				continue
 			}
@@ -597,6 +598,12 @@ func joinLoneBullets(s string) string {
 		out = append(out, line)
 	}
 	return strings.Join(out, "\n")
+}
+
+// underTableRule reports whether row i has a table's rule beneath it - a table
+// header, the only table row that can follow a lone bullet, whatever its columns.
+func underTableRule(lines []string, i int) bool {
+	return i+1 < len(lines) && strings.ContainsAny(ansi.Strip(lines[i+1]), boxDrawing)
 }
 
 // loneBulletAt is the column of a row's last bullet when the row holds nothing

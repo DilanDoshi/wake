@@ -78,9 +78,10 @@ func TestOnlyTheFirstItemOfANestedListJoinsTheBullet(t *testing.T) {
 }
 
 // A bullet opening with a code block or a quote is left exactly as glamour drew
-// it: both are painted, and the join takes only an unstyled list marker.
+// it: both are painted, and the join takes only an unstyled list marker. The
+// code reads `28. …` once stripped, so only its leading escape keeps it out.
 func TestABulletOpeningWithCodeOrAQuoteIsLeftAlone(t *testing.T) {
-	for _, src := range []string{"- ```\n  - 1. code\n  ```", "- > quoted"} {
+	for _, src := range []string{"- ```\n  28. still code\n  ```", "- > quoted"} {
 		r, err := rendererFor(40)
 		if err != nil {
 			t.Fatal(err)
@@ -103,6 +104,7 @@ func TestJoiningABulletKeepsEveryRowWithinWidth(t *testing.T) {
 		"- 3. The unstructured lane's accuracy above the OCR ceiling, which is what the next release decides from the measurements",
 		"- - a nested bullet long enough to wrap several times over at the narrowest widths here now indeed",
 		"- 100. " + strings.Repeat("unbreakable", 12) + " and some trailing words to wrap",
+		"- 28. " + strings.Repeat("日本語", 20) + " and trailing words",
 	}
 	for _, src := range sources {
 		for width := minMarkdownWidth; width <= 80; width++ {
@@ -146,5 +148,30 @@ func TestOnlyAnItemMarkerJoinsALoneBullet(t *testing.T) {
 	const in = "  •\n    plain words"
 	if got := joinLoneBullets(in); got != in {
 		t.Errorf("joinLoneBullets(%q) = %q, want it untouched", in, got)
+	}
+}
+
+// A table is the one unstyled block glamour draws under a bullet, and a centred
+// header cell can land two columns in reading like a marker (`1. x`). It stays
+// where glamour drew it: a header, of one column or several, has the table's
+// rule beneath it.
+//
+// Mutation check: dropping underTableRule from joinLoneBullets fails this, on
+// both sources.
+func TestATableHeaderUnderALoneBulletIsNotJoined(t *testing.T) {
+	sources := []string{
+		"-\n  | 1. x | b |\n  | :---: | --- |\n  | 2. y | c |",
+		// A single-column header that nearly fills its column, so centring shifts
+		// it by one: two columns in at some width of the sweep, with no │ on it.
+		"-\n  | 1. x" + strings.Repeat("x", 20) + " |\n  | :---: |\n  | y |",
+	}
+	for _, src := range sources {
+		for width := minMarkdownWidth; width <= 60; width++ {
+			for _, l := range nonBlank(Markdown(src, width)) {
+				if p := strings.TrimSpace(ansi.Strip(l)); strings.HasPrefix(p, "• ") && strings.Contains(p, "1. x") {
+					t.Errorf("width %d, %q: the table's header joined the bullet: %q", width, src, p)
+				}
+			}
+		}
 	}
 }
