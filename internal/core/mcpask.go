@@ -14,6 +14,17 @@ package core
 // The caller mints the request id, unlike Interrupt and SetMode: the daemon
 // has to know it before the write, to send the answer to the client that asked.
 
+// Initialize is the handshake that makes this session load claude.ai
+// connectors. Its reply is an ordinary receipt carrying id, and the caller
+// that minted id owns it; nothing here remembers it.
+func (s *Session) Initialize(id string) error {
+	line, err := EncodeInitialize(id)
+	if err != nil {
+		return err
+	}
+	return s.writeLine(line)
+}
+
 // MCPServers asks for every MCP server's live status.
 func (s *Session) MCPServers(id string) error {
 	return s.askMCP(id, MCPResult{Ask: MCPAskServers}, EncodeMCPStatus)

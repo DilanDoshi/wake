@@ -82,6 +82,13 @@ DEAD_KEYS = [
     "skills",
 ]
 
+# The same dump in an initialize reply's payload: the machine's commands and
+# agents, the operator's own among them. Keep in step with replyEnvironmentKeys.
+REPLY_DEAD_KEYS = [
+    "agents",
+    "commands",
+]
+
 # A home directory with its owner attached. Two patterns rather than one, and
 # the difference is a single `-` in the name class, because the two spellings
 # terminate a name differently:
@@ -158,6 +165,12 @@ def scrub_text(text, names, slash_mapping):
             # separators=... keeps the compact spelling the corpus is written
             # in, so the diff is the removal rather than a reformat of 80 files.
             line = json.dumps(frame, separators=(",", ":"), ensure_ascii=False)
+        elif isinstance(frame, dict) and frame.get("type") == "control_response":
+            body = (frame.get("response") or {}).get("response")
+            if isinstance(body, dict) and any(k in body for k in REPLY_DEAD_KEYS):
+                for key in REPLY_DEAD_KEYS:
+                    body.pop(key, None)
+                line = json.dumps(frame, separators=(",", ":"), ensure_ascii=False)
         out.append(line)
 
     text = rewrite_paths("\n".join(out))

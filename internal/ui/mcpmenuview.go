@@ -18,12 +18,9 @@ const (
 	mcpChecking = "checking servers…"
 	mcpNone     = "no MCP servers configured for this agent"
 
-	// mcpNoConnectors says why the claude.ai section Claude Code shows is not
-	// here: a headless session does not load claude.ai connectors, before or
-	// after a turn and with ENABLE_CLAUDEAI_MCP_SERVERS set (probed 2026-09-23,
-	// 2.1.281). Said rather than left out, so the menu does not look broken
-	// beside Claude's.
-	mcpNoConnectors = "claude.ai connectors don't load in Wake's headless agents"
+	// mcpConnectorSignIn is where a claude.ai connector is signed in to: on
+	// claude.ai, not in a terminal - the connector's auth lives with the account.
+	mcpConnectorSignIn = "sign in on claude.ai (Settings → Connectors), then Reconnect"
 )
 
 // mcpScopes is the list's grouping, closest scope first - the precedence
@@ -171,7 +168,7 @@ func (m MCPMenu) listLines(width int) ([]string, int) {
 			row++
 		}
 	}
-	return append(lines, "", mutedLine(mcpNoConnectors, width)), focus
+	return lines, focus
 }
 
 // mcpRow is one server: a cursor, its glyph, its name and what it is doing - a
@@ -221,6 +218,12 @@ func (m MCPMenu) detailLines(width int) ([]string, int) {
 	if s.Error != "" {
 		lines = append(lines, field("Error", ErrorStyle.Render(collapseWhitespaceOneLine(s.Error)), width))
 	}
+	if s.Scope == core.MCPScopeClaudeAI && s.State == core.MCPNeedsAuth {
+		lines = append(lines, "")
+		for _, row := range strings.Split(ansi.Wrap(mcpConnectorSignIn, width, ""), "\n") {
+			lines = append(lines, mutedLine(row, width))
+		}
+	}
 	lines = append(lines, "")
 	focus := len(lines)
 	for i, act := range m.actions() {
@@ -240,6 +243,9 @@ func mcpScopeName(scope string) string {
 	for _, sc := range mcpScopes {
 		if sc.scope == scope && sc.where != "" {
 			return strings.TrimSuffix(sc.title, " MCPs") + "  " + sc.where
+		}
+		if sc.scope == scope {
+			return sc.title
 		}
 	}
 	return scope

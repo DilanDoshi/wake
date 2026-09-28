@@ -173,6 +173,9 @@ func (m MCPMenu) actions() []mcpAction {
 	case core.MCPConnected:
 		return []mcpAction{actViewTools, actReconnect, actDisable}
 	case core.MCPNeedsAuth:
+		if s.Scope == core.MCPScopeClaudeAI {
+			return []mcpAction{actReconnect, actDisable} // signed in on claude.ai; see mcpConnectorSignIn
+		}
 		return []mcpAction{actAuth, actDisable}
 	case core.MCPDisabled:
 		return []mcpAction{actEnable}

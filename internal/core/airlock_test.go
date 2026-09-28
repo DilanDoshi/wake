@@ -267,6 +267,10 @@ var claudeWireVocabulary = wordSet([]string{
 	// annotation, which the MCP spec itself calls readOnlyHint).
 	"mcp_status", "mcp_reconnect", "mcp_toggle", "serverName", "readOnly",
 
+	// The handshake that makes a headless session load claude.ai connectors,
+	// and the prefix Claude names every connector with.
+	"initialize", "claude.ai ",
+
 	// Two of the five permission modes, and the two that are *not* in
 	// deliberatelyGeneric with "auto" and "default". The argument there was that
 	// policing the plainest English in the corpus would fire across the tree;
@@ -658,7 +662,7 @@ var notNamedByTheAirlock = map[string]string{
 // wf_*.json record on disk, camelCase and distinct from the stream's
 // snake_case workflow_name/workflow_progress. See EncodeStopTask and
 // DecodeWorkflowRun.
-const policedWordCount = 203
+const policedWordCount = 205
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -676,8 +680,8 @@ var notWireVocabulary = wordSet([]string{
 	"decode transcript line: %w",
 	"encode user message",
 	"%w: encode user message: nothing to send",
-	"encode mcp status", "encode mcp reconnect", "encode mcp toggle",
-	"%w: encode mcp status: empty request id",
+	"encode ", "encode mcp reconnect", "encode mcp toggle",
+	"%w: encode %s: empty request id",
 	"%w: encode mcp reconnect: empty request id or server",
 	"%w: encode mcp toggle: empty request id or server",
 	// The separator a stdio server's command line is joined with.
@@ -869,6 +873,11 @@ var allowed = map[string]map[string]bool{
 	// impersonation an operator would misread, and blocking only a near-miss of
 	// it would be the guard doing nothing.
 	"internal/mcp/spawnname.go": {"system": true},
+
+	// The MCP protocol's own handshake method, which Wake's MCP server for the
+	// manager answers - JSON-RPC between Wake and a client of its own, not
+	// stream-json. Claude spells its session handshake the same word.
+	"internal/mcp/server.go": {"initialize": true},
 	// WorkflowAgent.Prompt's own json tag, the preview of the same concept
 	// "prompt" already names on the wire - a workflow agent's own
 	// instruction, shortened. workflow.go is Wake's vocabulary and decodes
@@ -892,7 +901,7 @@ var allowed = map[string]map[string]bool{
 // coincidence of subject rather than reuse of the wire.
 // 22 → 25: WorkflowRun's own "script", "status" and "summary" json tags
 // (task 2), reusing three more words the wire also carries.
-const allowlistPairCount = 25
+const allowlistPairCount = 26
 
 func TestTheAllowlistDoesNotGrowQuietly(t *testing.T) {
 	pairs := 0
@@ -1001,6 +1010,7 @@ var notInTheCorpus = map[string]string{
 	"last_seen_user_message_uuid": "outbound only; rewind request field Wake writes",
 	"interrupt_if_running":        "outbound only; rewind request field Wake writes",
 	"mcp_status":                  "outbound only; the corpus holds its receipts, not the requests",
+	"initialize":                  "outbound only; the corpus holds its receipt, not the request",
 	"mcp_reconnect":               "outbound only; the corpus holds its receipts, not the requests",
 	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
 	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
@@ -1036,6 +1046,8 @@ var embeddedMarkers = map[string]bool{
 	"Goal set: ":          true,
 	"Goal cleared: ":      true,
 	"Stop hook feedback:": true,
+	// Every connector's name begins with it ("claude.ai Gmail"); never whole.
+	"claude.ai ": true,
 }
 
 // The vocabulary has to be a real description of the corpus, or the test
