@@ -72,6 +72,20 @@ var nestedSessionEnv = []string{
 	"CLAUDE_PLUGIN_DATA",
 }
 
+// ListAgentsCommand is the one-shot that lists the machine's sessions, run in
+// dir: claude found on this process's PATH as an agent's is, with an agent's
+// scrubbed environment, and in a group of its own that cancelling ctx kills
+// whole. The caller feeds stdin and reads stdout.
+func ListAgentsCommand(ctx context.Context, dir string) *exec.Cmd {
+	cmd := execCommand(ctx, claudeBinary, listAgentsArgv()...)
+	cmd.Dir = dir
+	cmd.Env = scrubbedEnv(os.Environ())
+	cmd.WaitDelay = waitDelay
+	setProcessGroup(cmd)
+	cmd.Cancel = func() error { return killProcessGroup(cmd) }
+	return cmd
+}
+
 // scrubbedEnv returns a copy without nested-session or private launcher
 // variables, leaving the original untouched.
 func scrubbedEnv(env []string) []string {

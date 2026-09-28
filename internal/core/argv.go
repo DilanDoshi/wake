@@ -255,6 +255,19 @@ func (s *Session) buildArgs() ([]string, error) {
 	return args, nil
 }
 
+// listAgentsArgv is the one-shot that lists the machine's sessions: one bare
+// /list-agents on stdin, answered with no model turn, and --bare and
+// --no-session-persistence leave no hooks, MCP servers or transcript behind -
+// and no inbox, so it is not itself listed (2026-09-27-at-menu-findings.md §1a).
+// It names no session, so none of the identity flags above.
+func listAgentsArgv() []string {
+	return []string{
+		"--print", "--bare", "--no-session-persistence",
+		"--input-format", "stream-json", "--output-format", "stream-json",
+		"--verbose",
+	}
+}
+
 // SessionArgvMarkers are the argv fragments that say a live process is running
 // one session, for whoever has to answer "is anything holding this id".
 //

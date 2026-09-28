@@ -599,8 +599,7 @@ type Frame struct {
 	// FrameSaveWorkflow/FrameWorkflowSaved - declared in workflow.go for its
 	// own header's reason.
 	Workflow *WorkflowFrame `json:"workflow,omitempty"`
-
-	Peers *PeersFrame `json:"peers,omitempty"` // FramePeersReply's listing; see peers.go
+	Peers    *PeersFrame    `json:"peers,omitempty"` // FramePeersReply's listing; see peers.go
 }
 
 // writeMu serializes every write in this package. Sessions fan out to one

@@ -84,8 +84,7 @@ type server struct {
 	// (team.go); held here rather than derived by a client because only the daemon
 	// sees the whole fleet. Not persisted - see the teams spec.
 	teamOrder []string
-
-	peers peerBook // the /list-agents ask in flight and the last listing; its own lock
+	peers     peerBook // the /list-agents run in flight and its askers; its own lock
 
 	// taken is set by takeAgents when shutdown snapshots the fleet. An agent
 	// admitted after that snapshot enters a map nothing reads again - its
@@ -645,7 +644,7 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 	case rpc.FrameStatus:
 		c.enqueue(s.statusReply())
 	case rpc.FramePeers:
-		s.askPeers(c) // never blocks: a queued probe, or an answer at once
+		s.askPeers(ctx, c) // never blocks: joins or starts a run, or answers at once
 	case rpc.FrameHistory:
 		// On its own goroutine: dispatch is serial per connection and this
 		// reads a file off disk - measured at 740ms for a 50MB transcript -

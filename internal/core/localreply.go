@@ -86,19 +86,20 @@ func EffortFromModelReply(text string) (string, bool) {
 	return level, true
 }
 
-// A bare /list-agents reply names this session, then every other Claude
-// session on the machine (testdata/stream/list-agents.jsonl):
+// A /list-agents reply lists every other Claude session on the machine
+// (testdata/stream/list-agents.jsonl, list-agents-bare.jsonl):
 //
 //	This session: <name> [<short-id>] (the name other sessions use to message it)
 //
 //	Other Claude sessions (<n>):
 //	  [<state>]  ·  <name>  ·  <cwd>  ·  started <age>
 //
-// or, with nobody else, one line opening with listAgentsNone. Claude's docs name
-// subagent and teammate sections too; any `<Title> (<n>):` section of n
-// indented rows is counted and skipped, so a background subagent does not hide
-// the machine's sessions. It is human text rather than a schema, so any other
-// line refuses the reply whole: a wrong row is worse than none.
+// or, with nobody else, one line opening with listAgentsNone. A live session's
+// opens with the self line; a bare one-shot's registers no inbox and has none.
+// Claude's docs name subagent and teammate sections too; any `<Title> (<n>):`
+// section of n indented rows is counted and skipped, so a background subagent
+// does not hide the machine's sessions. It is human text rather than a schema,
+// so any other line refuses the reply whole: a wrong row is worse than none.
 const (
 	listAgentsSelf   = "This session: "
 	listAgentsOthers = "Other Claude sessions"
@@ -106,41 +107,34 @@ const (
 	listAgentsColumn = "  ·  "
 )
 
-// listAgentsSelfName is the name before the short id on the self line, and
+// listAgentsSelfName is the name and short id opening the self line, and
 // listAgentsHeader a section's unindented title and count.
 var (
 	listAgentsSelfName = regexp.MustCompile(`^(.+?) \[[0-9a-f]+\]`)
 	listAgentsHeader   = regexp.MustCompile(`^(\S.*) \(([0-9]+)\):$`)
 )
 
-// IsListAgentsReply reports whether text opens like a /list-agents reply, so a
-// body PeersFromListAgents refuses is still suppressed as the probe's own.
-func IsListAgentsReply(text string) bool {
-	_, ok := selfFromListAgents(firstLine(text))
-	return ok
-}
-
-// PeersFromListAgents reads this session's own name and the other sessions out
-// of a /list-agents reply, in the order it lists them. ok is false, with
-// nothing else, for any line it does not recognise.
-func PeersFromListAgents(text string) (self string, peers []Peer, ok bool) {
+// PeersFromListAgents reads the other sessions out of a /list-agents reply, in
+// the order it lists them, from either form. ok is false, with nothing else,
+// for any line it does not recognise.
+func PeersFromListAgents(text string) (peers []Peer, ok bool) {
 	var lines []string
 	for line := range strings.Lines(strings.TrimSpace(text)) {
 		lines = append(lines, strings.TrimRightFunc(line, unicode.IsSpace))
 	}
 	if len(lines) == 0 {
-		return "", nil, false
+		return nil, false
 	}
-	if self, ok = selfFromListAgents(lines[0]); !ok {
-		return "", nil, false
+	if rest, isSelf := strings.CutPrefix(lines[0], listAgentsSelf); isSelf {
+		if !listAgentsSelfName.MatchString(rest) {
+			return nil, false
+		}
+		lines = lines[1:]
 	}
-	if onlyNoPeers(lines[1:]) {
-		return self, nil, true
+	if onlyNoPeers(lines) {
+		return nil, true
 	}
-	if peers, ok = peersFromSections(lines[1:]); !ok {
-		return "", nil, false
-	}
-	return self, peers, true
+	return peersFromSections(lines)
 }
 
 // onlyNoPeers reports whether the body is the no-peers line and nothing else.
@@ -157,18 +151,9 @@ func onlyNoPeers(body []string) bool {
 	return said == 1
 }
 
-func selfFromListAgents(line string) (string, bool) {
-	rest, ok := strings.CutPrefix(line, listAgentsSelf)
-	m := listAgentsSelfName.FindStringSubmatch(rest)
-	if !ok || m == nil {
-		return "", false
-	}
-	return m[1], true
-}
-
-// peersFromSections walks the sections under the self line. Each header's
-// count must match the indented rows that follow it up to the next blank line
-// or header; rows are read only under listAgentsOthers, the rest only counted.
+// peersFromSections walks the sections of a listing. Each header's count must
+// match the indented rows that follow it up to the next blank line or header;
+// rows are read only under listAgentsOthers, the rest only counted.
 func peersFromSections(lines []string) ([]Peer, bool) {
 	var peers []Peer
 	sections := 0

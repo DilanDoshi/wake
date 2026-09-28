@@ -38,6 +38,7 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"syscall"
@@ -240,6 +241,9 @@ func waitForParentToExit() {
 // stdin, alive until stdin closes.
 func runFakeClaude() int {
 	_ = os.Unsetenv(fakeClaudeEnv)
+	if slices.Contains(os.Args, "--bare") {
+		return fakeOneShot() // the daemon's /list-agents one-shot - see peers_test.go
+	}
 	sid := argValue(os.Args, "--session-id")
 
 	switch os.Getenv(fakeScriptEnv) {
@@ -290,9 +294,9 @@ func runFakeClaude() int {
 		return fakeMCP(sid)
 	case "probe":
 		return fakeModelProbe(sid)
-	case "peers", "peersgone":
-		// Replays a recorded /list-agents reply, or exits on one - see peers_test.go.
-		return fakePeers(sid, os.Getenv(fakeScriptEnv) == "peersgone")
+	case "advertises":
+		// An agent whose init advertises list-agents - see peers_test.go.
+		return fakeAdvertises(sid)
 	case "tool":
 		return fakeTool(sid)
 	case "name":

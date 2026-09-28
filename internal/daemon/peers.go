@@ -1,16 +1,19 @@
 package daemon
 
-// The machine's other Claude sessions, asked of an idle agent.
+// The machine's other Claude sessions, asked of a bare one-shot claude.
 //
-// A bare /list-agents is a local command (num_turns 0, $0) that lists every
-// session sharing this machine (2026-09-27-at-menu-findings.md §1), so any one
-// agent's answer serves every client. It goes out as a probe (probe.go):
-// idle-gated, its reply suppressed at fanOut. One is in flight at a time and
-// every client that asks meanwhile gets that answer; with no agent able to
-// answer now, the last listing answers at once - asked per menu opening, so no
-// wait and no timer.
+// A /list-agents sent to a live agent stays in its transcript and reaches its
+// model on the next turn (2026-09-27-at-menu-findings.md §1a), so no agent is
+// asked. The daemon runs core.ListAgentsCommand instead - one bare /list-agents
+// on stdin, then EOF; ~0.7s, $0, no hooks, MCP servers or transcript - one run
+// at a time, answering every client that asked while it ran. Asked once per
+// menu opening, so nothing runs on a timer.
 
 import (
+	"bytes"
+	"context"
+	"errors"
+	"path/filepath"
 	"slices"
 	"sync"
 	"time"
@@ -19,31 +22,67 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// peerBook is the ask in flight and the last listing. Its lock is taken before
+// defaultPeersDeadline bounds one run: the recorded one answers in ~0.7s, so
+// one still going after this is hung, not slow.
+const defaultPeersDeadline = 10 * time.Second
+
+// peersDeadline is a var only so tests can compress it.
+var peersDeadline = defaultPeersDeadline
+
+// peersOutputBytes bounds what a run may print: its init and one listing are
+// tens of kilobytes.
+const peersOutputBytes = 1 << 20
+
+// peerBook is the run in flight and who waits on it. Its lock is taken before
 // s.mu or any a.mu and never while holding one.
 type peerBook struct {
 	mu      sync.Mutex
-	asked   *agent    // whose /list-agents is in flight, nil for none
-	waiting []*client // every client owed its answer
-
-	self  string
-	peers []core.Peer // replaced whole, never edited: frames share it
-	at    time.Time   // when self and peers were taken; zero for never
+	running bool
+	waiting []*client
 }
 
-// askPeers answers one client's FramePeers: it joins the ask in flight, starts
-// one on an agent that can answer now, or answers at once from the last
-// listing when none can.
-func (s *server) askPeers(c *client) {
+// askPeers answers one client's FramePeers: it joins the run in flight or
+// starts one off the dispatch goroutine - unless no agent's claude advertised
+// the command, when it answers empty at once.
+func (s *server) askPeers(ctx context.Context, c *client) {
 	b := &s.peers
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if !slices.Contains(b.waiting, c) {
 		b.waiting = append(b.waiting, c)
 	}
-	if b.asked != nil {
-		return
+	switch {
+	case b.running:
+	case !s.advertised(listAgentsVerb):
+		b.answerLocked(nil)
+	default:
+		b.running = true
+		s.start(func() { s.answerPeers(s.listPeers(ctx)) })
 	}
+}
+
+// answerPeers ends the run: every client that asked is answered once.
+func (s *server) answerPeers(peers []core.Peer) {
+	b := &s.peers
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	b.running = false
+	b.answerLocked(peers)
+}
+
+// answerLocked sends peers to every waiting client. The caller holds b.mu;
+// enqueue never blocks.
+func (b *peerBook) answerLocked(peers []core.Peer) {
+	f := rpc.Frame{Kind: rpc.FramePeersReply, Peers: &rpc.PeersFrame{Peers: peers}}
+	for _, c := range b.waiting {
+		c.enqueue(f)
+	}
+	b.waiting = nil
+}
+
+// advertised reports whether some agent's last init named cmd, so a claude
+// without it is never run for one.
+func (s *server) advertised(cmd string) bool {
 	s.mu.Lock()
 	agents := make([]*agent, 0, len(s.agents))
 	for _, a := range s.agents {
@@ -51,75 +90,86 @@ func (s *server) askPeers(c *client) {
 	}
 	s.mu.Unlock()
 	for _, a := range agents {
-		if a.askPeers() {
-			b.asked = a
-			return
+		a.mu.Lock()
+		named := slices.Contains(a.commands, cmd)
+		a.mu.Unlock()
+		if named {
+			return true
 		}
 	}
-	b.answerLocked(b.lastLocked())
+	return false
 }
 
-// askPeers queues a bare /list-agents if this agent can answer one now: idle,
-// not stopping, not the manager (launched apart, with no tools; whether it
-// answers a local command is unrecorded), and its last init advertised the
-// command, so a claude without it is never sent a line it would answer in the
-// conversation.
-func (a *agent) askPeers() bool {
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.stateLocked(time.Now()) != rpc.StateIdle || a.stopped || a.name == core.ManagerName ||
-		!slices.Contains(a.commands, listAgentsVerb) {
-		return false
+// listPeers runs the one-shot beside the socket, a directory Wake owns, and
+// reads its listing. Every failure - no claude, a failed exec, a non-zero exit,
+// the deadline, a text this build cannot read - is nil: no outside sessions,
+// never a wrong row.
+func (s *server) listPeers(ctx context.Context) []core.Peer {
+	ctx, cancel := context.WithTimeout(ctx, peersDeadline)
+	defer cancel()
+	// The daemon ending ends the run, rather than shutdown waiting it out.
+	s.start(func() {
+		select {
+		case <-s.done:
+			cancel()
+		case <-ctx.Done():
+		}
+	})
+	peers, err := runListAgents(ctx, filepath.Dir(s.socket))
+	if err != nil {
+		logf("wake: could not list the machine's Claude sessions: %v", err)
 	}
-	return a.queueProbeLocked(peersProbe, slashPrefix+listAgentsVerb)
+	return peers
 }
 
-// peersAnswered takes a's absorbed /list-agents reply. A listing it can read
-// becomes the last one and answers a's askers; one it cannot answers them
-// empty rather than with rows it might have wrong.
-func (s *server) peersAnswered(a *agent, reply string) {
-	b := &s.peers
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	self, peers, ok := core.PeersFromListAgents(reply)
-	if ok {
-		b.self, b.peers, b.at = self, peers, time.Now()
+// runListAgents runs one bare /list-agents in dir and parses the text of the
+// result it prints.
+func runListAgents(ctx context.Context, dir string) ([]core.Peer, error) {
+	line, err := core.EncodeUserMessage(slashPrefix+listAgentsVerb, nil, "")
+	if err != nil {
+		return nil, err
 	}
-	if b.asked != a {
-		return
+	var out capped
+	cmd := core.ListAgentsCommand(ctx, dir)
+	cmd.Stdin = bytes.NewReader(line)
+	cmd.Stdout = &out
+	if err := cmd.Run(); err != nil {
+		return nil, err
 	}
-	if !ok {
-		b.answerLocked(rpc.Frame{Kind: rpc.FramePeersReply, Peers: &rpc.PeersFrame{}})
-		return
+	if out.over {
+		return nil, errors.New("it printed more than a listing")
 	}
-	b.answerLocked(b.lastLocked())
+	for line := range bytes.Lines(out.buf.Bytes()) {
+		events, err := core.DecodeLine(line)
+		if err != nil {
+			continue // one unreadable line is not an unreadable run
+		}
+		for _, ev := range events {
+			if ev.Kind != core.KindTurnEnd {
+				continue
+			}
+			if peers, ok := core.PeersFromListAgents(ev.Text); ok {
+				return peers, nil
+			}
+			return nil, errors.New("its listing is a shape this build cannot read")
+		}
+	}
+	return nil, errors.New("it ended without a result")
 }
 
-// peersGone answers from the last listing an ask whose agent's session ended
-// before it replied, so the next ask starts afresh rather than joining it.
-func (s *server) peersGone(a *agent) {
-	b := &s.peers
-	b.mu.Lock()
-	defer b.mu.Unlock()
-	if b.asked == a {
-		b.answerLocked(b.lastLocked())
-	}
+// capped keeps a run's stdout up to peersOutputBytes and notes anything past
+// it, which fails the run. It never refuses a write: a refused copy would
+// leave the child blocked on a full pipe until the deadline. The buffer is a
+// field, not embedded, so io.Copy cannot reach its ReadFrom around Write.
+type capped struct {
+	buf  bytes.Buffer
+	over bool
 }
 
-// lastLocked is the last listing as a reply, aged now. The caller holds b.mu.
-func (b *peerBook) lastLocked() rpc.Frame {
-	p := &rpc.PeersFrame{Self: b.self, Peers: b.peers}
-	if !b.at.IsZero() {
-		p.AgeMS = time.Since(b.at).Milliseconds()
+func (c *capped) Write(p []byte) (int, error) {
+	if c.over || c.buf.Len()+len(p) > peersOutputBytes {
+		c.over = true
+		return len(p), nil
 	}
-	return rpc.Frame{Kind: rpc.FramePeersReply, Peers: p}
-}
-
-// answerLocked sends f to every waiting client and closes the ask. The caller
-// holds b.mu; enqueue never blocks.
-func (b *peerBook) answerLocked(f rpc.Frame) {
-	for _, c := range b.waiting {
-		c.enqueue(f)
-	}
-	b.waiting, b.asked = nil, nil
+	return c.buf.Write(p)
 }

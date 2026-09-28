@@ -76,46 +76,41 @@ func recordedResults(t *testing.T, path string) []string {
 	return out
 }
 
-// listing is one parsed /list-agents reply.
-type listing struct {
-	self  string
-	peers []Peer
-}
-
 // The two recorded peers, in the order the listing printed them.
 var recordedPeers = []Peer{
 	{Name: "wf-beta", Dir: "/private/tmp/wake-rec/beta", State: "idle"},
 	{Name: "wf-alpha", Dir: "/private/tmp/wake-rec/alpha", State: "idle"},
 }
 
-// Every result the recordings carry is read: the listings as listings, the
-// rename as a rename, and neither as the other.
+// renameReply marks the one recorded result that is a /rename, not a listing.
+var renameReply = []Peer{{Name: "(the rename reply)"}}
+
+// Every result the four recordings carry is read: a live session's listings
+// (which open with its own name) and a bare one-shot's (which do not), each
+// empty form, and the rename as a rename - and neither as the other.
 func TestEveryRecordedLocalReplyParses(t *testing.T) {
 	for _, tc := range []struct {
-		fixture  string
-		listings []listing // in order; nil marks the rename reply
-		renamed  string
+		fixture string
+		results [][]Peer // in order; renameReply marks the rename
 	}{
-		{"../../testdata/stream/list-agents.jsonl",
-			[]listing{{"wf-gamma", recordedPeers}, {}, {"wf-delta", recordedPeers}}, "wf-delta"},
-		{"../../testdata/stream/list-agents-empty.jsonl", []listing{{"proj-7d", nil}}, ""},
+		{"../../testdata/stream/list-agents.jsonl", [][]Peer{recordedPeers, renameReply, recordedPeers}},
+		{"../../testdata/stream/list-agents-empty.jsonl", [][]Peer{nil}},
+		{"../../testdata/stream/list-agents-bare.jsonl", [][]Peer{recordedPeers}},
+		{"../../testdata/stream/list-agents-bare-empty.jsonl", [][]Peer{nil}},
 	} {
 		results := recordedResults(t, tc.fixture)
-		if len(results) != len(tc.listings) {
-			t.Fatalf("%s carries %d results, want %d", tc.fixture, len(results), len(tc.listings))
+		if len(results) != len(tc.results) {
+			t.Fatalf("%s carries %d results, want %d", tc.fixture, len(results), len(tc.results))
 		}
 		for i, text := range results {
-			want := tc.listings[i]
-			if want.self == "" {
-				assertRename(t, text, tc.renamed)
+			want := tc.results[i]
+			if reflect.DeepEqual(want, renameReply) {
+				assertRename(t, text, "wf-delta")
 				continue
 			}
-			if !IsListAgentsReply(text) {
-				t.Errorf("%s result %d is not recognised as a /list-agents reply", tc.fixture, i)
-			}
-			self, peers, ok := PeersFromListAgents(text)
-			if !ok || self != want.self || !reflect.DeepEqual(peers, want.peers) {
-				t.Errorf("%s result %d = (%q, %+v, %v), want (%q, %+v, true)", tc.fixture, i, self, peers, ok, want.self, want.peers)
+			peers, ok := PeersFromListAgents(text)
+			if !ok || !reflect.DeepEqual(peers, want) {
+				t.Errorf("%s result %d = (%+v, %v), want (%+v, true)", tc.fixture, i, peers, ok, want)
 			}
 		}
 	}
@@ -126,10 +121,7 @@ func assertRename(t *testing.T, text, want string) {
 	if got, ok := RenamedFromReply(text); !ok || got != want {
 		t.Errorf("RenamedFromReply(%q) = (%q, %v), want (%q, true)", text, got, ok, want)
 	}
-	if IsListAgentsReply(text) {
-		t.Errorf("the rename reply %q reads as a /list-agents reply", text)
-	}
-	if _, _, ok := PeersFromListAgents(text); ok {
+	if _, ok := PeersFromListAgents(text); ok {
 		t.Errorf("the rename reply %q parses as a listing", text)
 	}
 }
@@ -143,80 +135,77 @@ const (
 // others is the recorded Other-sessions section, both rows under its header.
 const others = "Other Claude sessions (2):\n" + betaRow + "\n" + alphaRow
 
+// bothForms is text as a live session prints it (its own name first) and as a
+// bare one-shot does (no self line).
+func bothForms(body string) map[string]string {
+	return map[string]string{"live": selfLine + "\n\n" + body, "bare": body}
+}
+
 // Any other `<Title> (<n>):` section - the subagents and teammates the listing
 // also names - is counted and skipped, so an agent with a background subagent
 // still reports the machine's sessions. Its rows are never parsed.
 func TestOtherSectionsAreCountedAndSkipped(t *testing.T) {
 	const subagents = "Subagents (1):\n  explorer (running, 2s)"
 	for _, tc := range []struct {
-		name, text string
+		name, body string
 		peers      []Peer
 	}{
-		{"a section before the peers", selfLine + "\n\n" + subagents + "\n\n" + others, recordedPeers},
-		{"a section after the peers", selfLine + "\n\n" + others + "\n\n" + subagents, recordedPeers},
-		{"sections back to back, ended by the next header", selfLine + "\n\n" + subagents +
+		{"a section before the peers", subagents + "\n\n" + others, recordedPeers},
+		{"a section after the peers", others + "\n\n" + subagents, recordedPeers},
+		{"sections back to back, ended by the next header", subagents +
 			"\nTeammates (2):\n  a\n  b\n\n" + others, recordedPeers},
-		{"a skipped section alone", selfLine + "\n\n" + subagents, nil},
+		{"a skipped section alone", subagents, nil},
 	} {
-		t.Run(tc.name, func(t *testing.T) {
-			self, peers, ok := PeersFromListAgents(tc.text)
-			if !ok || self != "wf-gamma" || !reflect.DeepEqual(peers, tc.peers) {
-				t.Errorf("PeersFromListAgents = (%q, %+v, %v), want (\"wf-gamma\", %+v, true)", self, peers, ok, tc.peers)
-			}
-		})
+		for form, text := range bothForms(tc.body) {
+			t.Run(tc.name+"/"+form, func(t *testing.T) {
+				peers, ok := PeersFromListAgents(text)
+				if !ok || !reflect.DeepEqual(peers, tc.peers) {
+					t.Errorf("PeersFromListAgents = (%+v, %v), want (%+v, true)", peers, ok, tc.peers)
+				}
+			})
+		}
 	}
 }
 
-// A shape the parser was not shown is refused whole: no self, no rows - never
+// A shape the parser was not shown is refused whole, in either form - never
 // the rows it could read beside one it could not.
 func TestAnUnrecognisedListingIsRefusedWhole(t *testing.T) {
-	for _, tc := range []struct{ name, text string }{
-		{"empty", ""},
-		{"prose", "I can list the other sessions if you like."},
-		{"the model reply", "Current model: Opus 5 (effort: xhigh)"},
-		{"the self line alone", selfLine},
-		{"no short id", "This session: wf-gamma (the name other sessions use to message it)\n\nOther Claude sessions (1):\n" + betaRow},
-		{"the count disagrees", selfLine + "\n\nOther Claude sessions (3):\n" + betaRow + "\n" + alphaRow},
-		{"a count that is no number", selfLine + "\n\nOther Claude sessions (two):\n" + betaRow + "\n" + alphaRow},
-		{"a skipped section's count disagrees", selfLine + "\n\nSubagents (2):\n  explorer\n\n" + others},
-		{"an unknown line after the sections", selfLine + "\n\n" + others + "\n\nTip: message a session by its name."},
-		{"an unknown line inside a section", selfLine + "\n\nOther Claude sessions (2):\n" + betaRow + "\nand one more\n" + alphaRow},
-		{"a row under no header", selfLine + "\n\nOther Claude sessions (1):\n" + betaRow + "\n\n" + alphaRow},
-		{"rows parted from their header", selfLine + "\n\nOther Claude sessions (2):\n\n" + betaRow + "\n" + alphaRow},
-		{"a row with a column missing", selfLine + "\n\nOther Claude sessions (1):\n  [idle]  ·  wf-beta  ·  started 19s ago"},
-		{"a row with a column more", selfLine + "\n\nOther Claude sessions (1):\n" + betaRow + "  ·  remote"},
-		{"a state unbracketed", selfLine + "\n\nOther Claude sessions (1):\n  idle  ·  wf-beta  ·  /private/tmp/wake-rec/beta  ·  started 19s ago"},
-		{"a relative directory", selfLine + "\n\nOther Claude sessions (1):\n  [idle]  ·  wf-beta  ·  tmp/beta  ·  started 19s ago"},
-		{"a blank name", selfLine + "\n\nOther Claude sessions (1):\n  [idle]  ·    ·  /private/tmp/wake-rec/beta  ·  started 19s ago"},
-		{"the empty form with more before it", selfLine + "\n\n" + others + "\n\nNo subagents, teammates or other Claude sessions — nobody."},
-		{"the empty form with more after it", selfLine + "\n\nNo subagents, teammates or other Claude sessions — nobody.\n" + betaRow},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			self, peers, ok := PeersFromListAgents(tc.text)
-			if ok || self != "" || peers != nil {
-				t.Errorf("PeersFromListAgents = (%q, %+v, %v), want (\"\", nil, false)", self, peers, ok)
+	bodies := []struct{ name, body string }{
+		{"the count disagrees", "Other Claude sessions (3):\n" + betaRow + "\n" + alphaRow},
+		{"a count that is no number", "Other Claude sessions (two):\n" + betaRow + "\n" + alphaRow},
+		{"a skipped section's count disagrees", "Subagents (2):\n  explorer\n\n" + others},
+		{"an unknown line after the sections", others + "\n\nTip: message a session by its name."},
+		{"an unknown line inside a section", "Other Claude sessions (2):\n" + betaRow + "\nand one more\n" + alphaRow},
+		{"a row under no header", "Other Claude sessions (1):\n" + betaRow + "\n\n" + alphaRow},
+		{"rows parted from their header", "Other Claude sessions (2):\n\n" + betaRow + "\n" + alphaRow},
+		{"a row with a column missing", "Other Claude sessions (1):\n  [idle]  ·  wf-beta  ·  started 19s ago"},
+		{"a row with a column more", "Other Claude sessions (1):\n" + betaRow + "  ·  remote"},
+		{"a state unbracketed", "Other Claude sessions (1):\n  idle  ·  wf-beta  ·  /private/tmp/wake-rec/beta  ·  started 19s ago"},
+		{"a relative directory", "Other Claude sessions (1):\n  [idle]  ·  wf-beta  ·  tmp/beta  ·  started 19s ago"},
+		{"a blank name", "Other Claude sessions (1):\n  [idle]  ·    ·  /private/tmp/wake-rec/beta  ·  started 19s ago"},
+		{"the empty form with more before it", others + "\n\nNo subagents, teammates or other Claude sessions."},
+		{"the empty form with more after it", "No subagents, teammates or other Claude sessions.\n" + betaRow},
+		{"a self line after the rows", others + "\n\n" + selfLine},
+	}
+	cases := map[string]string{
+		"empty":               "",
+		"prose":               "I can list the other sessions if you like.",
+		"the model reply":     "Current model: Opus 5 (effort: xhigh)",
+		"the rename reply":    "Session renamed to: wf-delta",
+		"the self line alone": selfLine,
+		"no short id":         "This session: wf-gamma (the name other sessions use to message it)\n\n" + others,
+	}
+	for _, b := range bodies {
+		for form, text := range bothForms(b.body) {
+			cases[b.name+"/"+form] = text
+		}
+	}
+	for name, text := range cases {
+		t.Run(name, func(t *testing.T) {
+			if peers, ok := PeersFromListAgents(text); ok || peers != nil {
+				t.Errorf("PeersFromListAgents = (%+v, %v), want (nil, false)", peers, ok)
 			}
 		})
-	}
-}
-
-func TestIsListAgentsReply(t *testing.T) {
-	cases := map[string]bool{
-		selfLine + "\n\nOther Claude sessions (1):\n" + betaRow: true,
-		"  " + selfLine: true,
-		// Recognised on its first line alone, so a body the parser refuses is
-		// still known for the probe's reply it is.
-		selfLine + "\n\nSubagents (1):\n  [busy]  ·  explorer": true,
-		"Session renamed to: wf-delta":                         false,
-		"Current model: Opus 5 (effort: xhigh)":                false,
-		"In this session: I listed three files":                false,
-		"This session: is busy, so I will wait":                false,
-		"":                                                     false,
-	}
-	for in, want := range cases {
-		if got := IsListAgentsReply(in); got != want {
-			t.Errorf("IsListAgentsReply(%q) = %v, want %v", in, got, want)
-		}
 	}
 }
 

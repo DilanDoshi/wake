@@ -69,6 +69,4 @@ func (s *server) fanOut(a *agent) {
 			a.probeIfWanted()
 		}
 	}
-	// The session ended; a /list-agents it never answered must not hold its askers.
-	s.peersGone(a)
 }

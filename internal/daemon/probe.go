@@ -7,8 +7,7 @@ package daemon
 // inference), sent to read back something no frame carries unasked. Each kind
 // is its command, its reply's shape, and what the reply is for:
 //
-//	modelProbe  /model        the session's effort and model (effort.go)
-//	peersProbe  /list-agents  the machine's other sessions (peers.go)
+//	modelProbe  /model  the session's effort and model (effort.go)
 //
 // A kind is added by naming it below, giving probeReply its matcher and
 // absorbed its consequence. queueProbeLocked sends one only while the agent is
@@ -31,7 +30,6 @@ type probeKind int
 const (
 	notProbe probeKind = iota
 	modelProbe
-	peersProbe
 	probeKinds
 )
 
@@ -39,7 +37,6 @@ const (
 // claimed only while its own kind has one in flight.
 var probeReply = [probeKinds]func(string) bool{
 	modelProbe: core.IsModelReply,
-	peersProbe: core.IsListAgentsReply,
 }
 
 // wantProbe marks a startup or re-probe due and fires it at once if the agent
@@ -125,8 +122,6 @@ func (s *server) absorbed(a *agent, ev core.Event) bool {
 	switch answered {
 	case modelProbe:
 		s.broadcast(s.statusPush()) // the level and model it confirmed
-	case peersProbe:
-		s.peersAnswered(a, ev.Text)
 	}
 	return suppress
 }
