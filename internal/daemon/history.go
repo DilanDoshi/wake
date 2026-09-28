@@ -191,16 +191,22 @@ func liveHistory(r io.Reader, id string, active map[string]bool) ([]core.Event, 
 // is Claude's own rendered line and only a /model produces it. An operator's
 // /model is intercepted by internal/ui and never sent, so any such line on disk
 // is a probe's. See docs/live-testing.md for the fixture this still owes.
+//
+// A /rename and its reply are dropped the same way, and the operator's own
+// passthrough with them: on disk it cannot be told from Wake's probe. The live
+// view still shows the operator's reply.
 func probeLine(ev core.Event) bool {
 	text := strings.TrimSpace(ev.Text)
 	switch ev.Kind {
 	case core.KindUserText:
-		return text == slashPrefix+modelVerb
+		_, rename := slashCommand(text, renameVerb)
+		return text == slashPrefix+modelVerb || rename
 	case core.KindAssistantText:
 		// Prefix and effort clause both, so a coincidental "Current model:"
 		// line an agent wrote is not mistaken for the probe's reply.
 		_, effort := core.EffortFromModelReply(text)
-		return core.IsModelReply(text) && effort
+		_, renamed := core.RenamedFromReply(text)
+		return (core.IsModelReply(text) && effort) || renamed
 	}
 	return false
 }

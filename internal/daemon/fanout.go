@@ -21,6 +21,9 @@ import (
 func (s *server) fanOut(a *agent) {
 	defer s.retire(a)
 	for ev := range a.sess.Events() {
+		// Claude's own name, off every /rename reply - the operator's or a
+		// probe's - before a probe's is swallowed below.
+		a.noteRenamed(ev)
 		// A probe's reply is consumed here, before observe and before the
 		// broadcast, so it never touches this agent's state and never reaches a
 		// client. What it was asked for is carried out by absorbed.

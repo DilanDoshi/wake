@@ -77,19 +77,12 @@ func (a *agent) apply(p pending) {
 	switch p.frame.Kind {
 	case rpc.FrameSend:
 		if p.probe != notProbe {
-			// A probe is not an operator turn: no noteSent (so the agent is not
-			// marked owed and never looks busy), no noteEffort, and no client to
-			// report a failure to. incProbe before the write opens the window
-			// fanOut uses to swallow the reply; a failed write closes it again.
-			a.incProbe(p.probe)
-			if err := a.sess.Send(p.frame.Text, nil, ""); err != nil {
-				a.decProbe(p.probe)
-				logf("wake: session %s: probe %q not sent: %v", a.id, p.frame.Text, err)
-			}
+			a.sendProbe(p)
 			return
 		}
 		if err = a.sess.Send(p.frame.Text, p.frame.Images, p.frame.MessageID); err == nil {
 			a.noteSent()
+			a.noteRenameSent(p.frame.Text)
 			// An /effort or a /model just changed what the session runs as; the
 			// same bare-/model probe confirms both the level and the model back.
 			// noteSent just marked this turn owed, so wantProbe defers it to the

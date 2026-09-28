@@ -148,14 +148,18 @@ type agent struct {
 	swallowTurnEnd probeKind
 	probed         bool
 
-	// probeWanted records that a startup or re-probe is due once this agent is
+	// probeWanted records, per kind, that a probe is due once this agent is
 	// next idle. tryProbe refuses to send while a turn is owed - the probe is
 	// the daemon's only unprompted stdin write, and one landing mid-turn is
 	// what let its reply interleave with a real turn's own frames - so a
 	// trigger that arrives mid-turn sets this instead, and fanOut fires it once
 	// the turn in flight ends. Cleared only in the same locked step that queues
-	// the probe, so a concurrent wantProbe cannot be lost. See tryProbe.
-	probeWanted bool
+	// the probe, so a concurrent request cannot be lost. See tryProbeLocked.
+	probeWanted [probeKinds]bool
+
+	// claudeName is claude's own session name, "" while an operator's /rename
+	// is unanswered. See renamesync.go.
+	claudeName string
 
 	// model is what this session runs as, or "" for none. Display and the park
 	// book only, like effort. Read through currentModel: launch writes it and
@@ -305,6 +309,7 @@ func newAgent(id, name, label, dir, parent string, sess *core.Session, cancel co
 	return &agent{
 		id:           id,
 		name:         name,
+		claudeName:   name, // launch passes it as --name
 		label:        label,
 		dir:          dir,
 		parent:       parent,

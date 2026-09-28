@@ -79,19 +79,8 @@ const (
 // It returns whether it recorded a level, so apply can fire a confirming probe
 // on exactly the sends that changed the record and no others.
 func (a *agent) noteEffort(text string) bool {
-	rest, ok := strings.CutPrefix(strings.TrimSpace(text), slashPrefix+effortVerb)
-	if !ok {
-		return false
-	}
-	// The command has to end where the word does. Without this "/effortmax" is
-	// recorded as max - a line claude does not recognise as the command at all,
-	// so Wake would report a level the session was never set to, which is worse
-	// than reporting a stale one.
-	if rest != "" && !unicode.IsSpace(rune(rest[0])) {
-		return false
-	}
-	level := strings.TrimSpace(rest)
-	if !core.ValidEffortCommand(level) {
+	level, ok := slashCommand(text, effortVerb)
+	if !ok || !core.ValidEffortCommand(level) {
 		return false
 	}
 	a.mu.Lock()
@@ -112,16 +101,20 @@ func (a *agent) noteEffort(text string) bool {
 // It fires only with an argument. A bare /model is the probe's own form (and the
 // UI's picker), so reading it as a change would make the probe trigger a probe.
 func (a *agent) noteModel(text string) bool {
-	rest, ok := strings.CutPrefix(strings.TrimSpace(text), slashPrefix+modelVerb)
-	if !ok {
-		return false
+	arg, ok := slashCommand(text, modelVerb)
+	return ok && arg != ""
+}
+
+// slashCommand reports whether text is the slash command verb, and its argument.
+// The command has to end where the word does: without that "/effortmax" is
+// recorded as max, a line claude does not read as the command at all, so Wake
+// would report a level the session was never set to.
+func slashCommand(text, verb string) (arg string, ok bool) {
+	rest, ok := strings.CutPrefix(strings.TrimSpace(text), slashPrefix+verb)
+	if !ok || (rest != "" && !unicode.IsSpace(rune(rest[0]))) {
+		return "", false
 	}
-	// The command has to end where the word does, noteEffort's own rule:
-	// "/modelish" is not the command.
-	if rest != "" && !unicode.IsSpace(rune(rest[0])) {
-		return false
-	}
-	return strings.TrimSpace(rest) != ""
+	return strings.TrimSpace(rest), true
 }
 
 // argvEffort is what a level may become on a command line: itself, or nothing.

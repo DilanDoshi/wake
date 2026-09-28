@@ -7,17 +7,18 @@ package daemon
 // inference), sent to read back something no frame carries unasked. Each kind
 // is its command, its reply's shape, and what the reply is for:
 //
-//	modelProbe  /model  the session's effort and model (effort.go)
+//	modelProbe   /model   the session's effort and model (effort.go)
+//	renameProbe  /rename  claude's own session name, after a Wake rename (renamesync.go)
 //
-// A kind is added by naming it below, giving probeReply its matcher and
-// absorbed its consequence. queueProbeLocked sends one only while the agent is
-// idle, absorbProbe swallows its reply at fanOut before any client sees it,
-// and the command counts as no turn (apply.go skips noteSent). The fields it
-// touches (pendingProbes, swallowTurnEnd, confirmedEffort, probed, probeWanted)
-// live on the agent and are written only under a.mu. A probe is the daemon's
-// only unprompted stdin write, so one is never queued while a real turn is
-// owed - the model probe's wantProbe/probeIfWanted defer it to the next idle
-// instead of dropping it.
+// A kind is added by naming it below, giving probeReply its matcher,
+// probeTextLocked its line and absorbed its consequence. queueProbeLocked sends
+// one only while the agent is idle, absorbProbe swallows its reply at fanOut
+// before any client sees it, and the command counts as no turn (sendProbe
+// skips noteSent). The fields it touches (pendingProbes, swallowTurnEnd,
+// confirmedEffort, probed, probeWanted, claudeName) live on the agent and are
+// written only under a.mu. A probe is the daemon's only unprompted stdin
+// write, so one is never queued while a real turn is owed - a kind's want
+// waits in probeWanted and fires at the next idle instead of being dropped.
 
 import (
 	"github.com/DilanDoshi/wake/internal/core"
@@ -30,6 +31,7 @@ type probeKind int
 const (
 	notProbe probeKind = iota
 	modelProbe
+	renameProbe
 	probeKinds
 )
 
@@ -37,6 +39,10 @@ const (
 // claimed only while its own kind has one in flight.
 var probeReply = [probeKinds]func(string) bool{
 	modelProbe: core.IsModelReply,
+	renameProbe: func(text string) bool {
+		_, ok := core.RenamedFromReply(text)
+		return ok
+	},
 }
 
 // wantProbe marks a startup or re-probe due and fires it at once if the agent
@@ -49,29 +55,71 @@ var probeReply = [probeKinds]func(string) bool{
 // turn end to catch the request, so tryProbe fires it now instead.
 func (a *agent) wantProbe() {
 	a.mu.Lock()
-	a.probeWanted = true
+	a.probeWanted[modelProbe] = true
 	a.mu.Unlock()
 	a.tryProbe()
 }
 
-// probeIfWanted fires a due probe once this agent's turn end has been observed.
-// Called from fanOut after observe returns - never from inside it, which holds
-// a.mu. A no-op unless a probe is due and the agent is now idle.
+// probeIfWanted fires the due probes once this agent's turn end has been
+// observed. Called from fanOut after observe returns - never from inside it,
+// which holds a.mu. A no-op unless a probe is due and the agent is now idle.
 func (a *agent) probeIfWanted() {
 	a.tryProbe()
 }
 
-// tryProbe queues a bare /model to read the session's reasoning level back when
-// one is due (probeWanted) and the agent is idle. probeWanted is cleared only in
-// the same locked step that queues the probe, so a re-probe requested by a
-// concurrent wantProbe between two turn ends is never cleared without having
-// fired. A probe skipped because the queue is full does not refresh this cycle;
-// the next turn end retries. The reply is consumed by absorbProbe.
+// tryProbe queues every kind that is due (probeWanted) while the agent is idle.
+// The reply is consumed by absorbProbe.
 func (a *agent) tryProbe() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.probeWanted && a.queueProbeLocked(modelProbe, slashPrefix+modelVerb) {
-		a.probeWanted = false
+	for kind := modelProbe; kind < probeKinds; kind++ {
+		a.tryProbeLocked(kind)
+	}
+}
+
+// tryProbeLocked queues one kind if it is wanted and has a line to send. The
+// want is cleared only in the same locked step that queues it, so a request
+// made by another goroutine between two turn ends is never cleared without
+// having fired; one skipped on a full queue waits for the next turn end. The
+// caller holds a.mu.
+func (a *agent) tryProbeLocked(kind probeKind) {
+	if !a.probeWanted[kind] {
+		return
+	}
+	text, keep := a.probeTextLocked(kind)
+	switch {
+	case text == "":
+		a.probeWanted[kind] = keep
+	case a.queueProbeLocked(kind, text):
+		a.probeWanted[kind] = false
+	}
+}
+
+// probeTextLocked is the line a wanted probe sends now, or "" for none, with
+// keep saying whether the want outlives a "". The caller holds a.mu.
+func (a *agent) probeTextLocked(kind probeKind) (text string, keep bool) {
+	if kind == renameProbe {
+		return a.renameTextLocked()
+	}
+	return slashPrefix + modelVerb, false
+}
+
+// sendProbe writes one queued probe. A probe is not an operator turn: no
+// noteSent (so the agent is not marked owed and never looks busy), no
+// noteEffort, and no client to report a failure to. incProbe before the write
+// opens the window fanOut uses to swallow the reply; a failed write closes it
+// again. A rename is decided again here, at the write (renameWrite).
+func (a *agent) sendProbe(p pending) {
+	text := p.frame.Text
+	if p.probe == renameProbe {
+		if text = a.renameWrite(); text == "" {
+			return
+		}
+	}
+	a.incProbe(p.probe)
+	if err := a.sess.Send(text, nil, ""); err != nil {
+		a.decProbe(p.probe)
+		logf("wake: session %s: probe %q not sent: %v", a.id, text, err)
 	}
 }
 

@@ -53,7 +53,7 @@ func TestSnapshotCarriesTheConfirmedModel(t *testing.T) {
 // apply can send it without counting it as an operator turn.
 func TestProbeEnqueuesBareModel(t *testing.T) {
 	a := effortAgent(t)
-	a.probeWanted = true
+	a.probeWanted[modelProbe] = true
 	a.tryProbe()
 	select {
 	case p := <-a.in:
@@ -73,18 +73,18 @@ func TestProbeEnqueuesBareModel(t *testing.T) {
 // answer nobody made at worst.
 func TestProbeSkipsABlockedOrGoneAgent(t *testing.T) {
 	blocked := effortAgent(t)
-	blocked.probeWanted = true
+	blocked.probeWanted[modelProbe] = true
 	blocked.pending = []ask{{id: "r1"}}
 	blocked.tryProbe()
 	if len(blocked.in) != 0 {
 		t.Error("a blocked agent was probed")
 	}
-	if !blocked.probeWanted {
+	if !blocked.probeWanted[modelProbe] {
 		t.Error("a probe skipped for a block was not kept due for later")
 	}
 
 	gone := effortAgent(t)
-	gone.probeWanted = true
+	gone.probeWanted[modelProbe] = true
 	close(gone.gone)
 	gone.tryProbe()
 	if len(gone.in) != 0 {
@@ -181,13 +181,13 @@ func TestFirstInitFiresOnce(t *testing.T) {
 // the agent looks probeable, and keep the request due for the turn's end.
 func TestProbeDoesNotEnqueueWhileATurnIsOwed(t *testing.T) {
 	a := effortAgent(t)
-	a.probeWanted = true
+	a.probeWanted[modelProbe] = true
 	a.owed = true
 	a.tryProbe()
 	if len(a.in) != 0 {
 		t.Error("a probe was queued while a turn was owed")
 	}
-	if !a.probeWanted {
+	if !a.probeWanted[modelProbe] {
 		t.Error("a probe deferred by the idle gate was dropped instead of kept due")
 	}
 }

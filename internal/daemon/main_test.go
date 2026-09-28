@@ -294,6 +294,8 @@ func runFakeClaude() int {
 		return fakeMCP(sid)
 	case "probe":
 		return fakeModelProbe(sid)
+	case "renamesync":
+		return fakeRenameSync(sid) // see renamesync_test.go
 	case "advertises":
 		// An agent whose init advertises list-agents - see peers_test.go.
 		return fakeAdvertises(sid)

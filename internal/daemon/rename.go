@@ -116,7 +116,8 @@ const (
 // send or a park is. That queue exists to keep a write to a child's stdin off
 // the connection's goroutine; this writes nothing to a process, exactly like
 // unpark, and putting it behind an agent that has stopped reading its stdin
-// would make renaming a wedged session impossible.
+// would make renaming a wedged session impossible. Claude's own /rename only
+// follows as a probe, queued without waiting (renamesync.go).
 func (a *agent) rename(names *nameRegistry, requested string) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -131,6 +132,8 @@ func (a *agent) rename(names *nameRegistry, requested string) error {
 		return err
 	}
 	a.name = to
+	a.probeWanted[renameProbe] = true
+	a.tryProbeLocked(renameProbe)
 	return nil
 }
 

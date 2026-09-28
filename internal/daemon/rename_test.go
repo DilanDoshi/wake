@@ -439,12 +439,13 @@ func TestTheNameARenamedSessionGaveUpIsFreeForTheNextSpawn(t *testing.T) {
 // change that made it untrue, rather than left to cover whatever is written
 // there next.
 var unlockedReadsOfTheDisplayHalves = map[string]string{
-	"unpark":   "reads a parked agent, and a parked one cannot be renamed. isParked() took a.mu on this goroutine immediately above, which is what orders this read behind markParked's write",
-	"labelFor": "called from launch on a parked agent being woken, behind unpark's own isParked(); same ordering, same refusal",
-	"retire":   "finish() took a.mu on this goroutine two statements above, and a session that has ended cannot be renamed",
+	"unpark":           "reads a parked agent, and a parked one cannot be renamed. isParked() took a.mu on this goroutine immediately above, which is what orders this read behind markParked's write",
+	"labelFor":         "called from launch on a parked agent being woken, behind unpark's own isParked(); same ordering, same refusal",
+	"retire":           "finish() took a.mu on this goroutine two statements above, and a session that has ended cannot be renamed",
+	"renameTextLocked": "its callers hold a.mu, the Locked suffix's contract: tryProbeLocked under tryProbe's or rename's own lock, and renameWrite",
 }
 
-// Three, and newAgent is deliberately not among them: it writes the two fields
+// Four, and newAgent is deliberately not among them: it writes the two fields
 // as composite-literal keys rather than reading them off a receiver, so the
 // scan does not see it and the excuse would have been a dead entry covering
 // whatever was written next. The guard said so on its first run.
@@ -452,7 +453,10 @@ var unlockedReadsOfTheDisplayHalves = map[string]string{
 // It was five. completePark and bookParked both stopped reading either field
 // when the park book row moved into recordFor, which takes the lock - so their
 // excuses went with them, which is what the second half of this test is for.
-const unlockedDisplayReaderCount = 3
+//
+// renameTextLocked made it four: the rename probe compares Wake's name with
+// claude's under a lock its callers take.
+const unlockedDisplayReaderCount = 4
 
 // The display halves are read under the agent's lock, or by a function that has
 // said why it need not.
