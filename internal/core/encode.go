@@ -15,6 +15,7 @@
 package core
 
 import (
+	"cmp"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -790,3 +791,8 @@ func DecodeWorkflowRun(raw []byte) (WorkflowRun, error) {
 		Error: w.Error, Started: time.UnixMilli(w.StartTime), Duration: time.Duration(w.DurationMs) * time.Millisecond,
 		Script: w.Script, Progress: workflowSnapshotOf(w.WorkflowProgress)}), nil
 }
+
+// apiNotice tells a usage limit, which recovers when the quota resets, from every other failed turn.
+func (f wireFrame) apiNotice() Notice { return cmp.Or(apiNotices[f.APIErrorKind], NoticeAPIError) }
+
+var apiNotices = map[string]Notice{"rate_limit": NoticeUsageLimit}

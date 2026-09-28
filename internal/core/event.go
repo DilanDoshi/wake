@@ -442,6 +442,11 @@ const (
 	// NoticeRateLimited rather than a transcript line. Text is the API message.
 	NoticeAPIError Notice = "api_error"
 
+	// NoticeUsageLimit rides a KindAPIError that is a session or weekly usage
+	// limit. Unlike every other failed turn it recovers on its own when the quota
+	// resets, so it neither parks the agent nor asks for /reauth.
+	NoticeUsageLimit Notice = "usage_limit"
+
 	// NoticeTurnInterrupted is Claude's own account of a turn Wake aborted.
 	//
 	// It is the one notice resolved from a frame's *content* rather than from

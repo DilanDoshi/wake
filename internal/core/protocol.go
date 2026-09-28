@@ -634,7 +634,7 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 	// A failed turn is a synthetic assistant frame; pulled out before the text
 	// path renders the API's message under the agent's name. See KindAPIError.
 	if f.IsAPIErrorMessage {
-		base.Kind, base.Text, base.Notice = KindAPIError, apiErrorText(f.Message), NoticeAPIError
+		base.Kind, base.Text, base.Notice = KindAPIError, apiErrorText(f.Message), f.apiNotice()
 		return one(base)
 	}
 

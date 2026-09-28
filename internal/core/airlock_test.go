@@ -428,6 +428,10 @@ var deliberatelyGeneric = wordSet([]string{
 	// naming "workflow_progress", which is policed above.
 	"index", "title", "tokens",
 
+	// A failed turn's error kind for a usage limit (apiNotice). Wake's own
+	// KindRateLimit is spelled the same, so it cannot be policed.
+	"rate_limit",
+
 	// A workflow_agent's other state words, "start"'s siblings. Neither is
 	// policed: core.TaskProgress and core.TaskDone already spell "progress"
 	// and "done" literally in task.go, which is not an airlock file, so
