@@ -57,10 +57,19 @@ sessions it hit. To recover:
 
 1. Run **`/reauth`**. It parks the marked sessions in place: the stale process stops, the transcript
    is kept.
-2. Log in again, then `/resume all` brings them back on the fresh login. No full-fleet kill.
+2. They wake on their own once the login is shown to work: the next turn any other agent gets
+   through, or `/login` reporting you signed in. If you are signed out, run `claude auth login` in a
+   terminal, then `/login`. `/resume all` still brings them back by hand. No full-fleet kill.
 
 A session that keeps hitting a 401 long enough to be a dead login rather than a blip is auto-parked
-to end the retry hang.
+to end the retry hang, and wakes the same way. If one fails again after waking, only `/login` (or
+`/resume`) wakes it the next time.
+
+## A usage limit
+
+A session or weekly usage limit is not a broken login, so Wake neither parks the agent nor asks for
+`/reauth`. The notice row keeps `@x: You've hit your session limit · resets … — send again once it
+resets` until a turn goes through; after the reset, just send the next message.
 
 ## A key does nothing
 

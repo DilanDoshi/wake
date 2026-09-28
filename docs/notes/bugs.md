@@ -78,8 +78,9 @@ did not anticipate:
 whose login is still expired will 401 again and re-mark — self-correcting, but it means `/reauth`
 guides the login step (Wake cannot run `claude auth login`: no-PTY) rather than guaranteeing success.
 The wake is now automatic (2026-09-27, `fix/usage-limit-recovery`): a session parked for a failing API
-wakes once any agent's model turn, or a signed-in `/login`, proves the login works after the park
-(`internal/ui/apirecover.go`). A usage limit is no longer counted toward the auto-park at all — it
+wakes once a turn the API accepted from any agent (not Claude's own local-command reply, which works
+on a dead login), or a signed-in `/login`, proves the login works after the confirmed park; one that
+fails again after that wakes only on `/login` (`internal/ui/apirecover.go`). A usage limit is no longer counted toward the auto-park at all — it
 recovers in the same process when the quota resets.
 
 **Still open after the fix — the surfacing is easy to miss (watched 2026-09-09).** The rebuild that

@@ -686,9 +686,11 @@ type Event struct {
 	// the whole answer and an allow that has to carry one.
 	Ask AskKind `json:"ask,omitempty"`
 
-	// LocalCommand marks a KindTurnEnd whose result ran no model inference
-	// (num_turns == 0) - the shape of Claude's local commands, of which the
-	// daemon's bare-/model effort probe is one. See absorbProbe.
+	// LocalCommand marks an event that ran no model inference: a KindTurnEnd
+	// with num_turns == 0 - the shape of Claude's local commands, of which the
+	// daemon's bare-/model effort probe is one (see absorbProbe) - and the text
+	// of a "<synthetic>" reply such as /context's. So it is never proof the
+	// API answered (apirecover.go).
 	LocalCommand bool `json:"local_command,omitempty"`
 
 	// Subagent is set on every event a subagent produced, and on the receipt

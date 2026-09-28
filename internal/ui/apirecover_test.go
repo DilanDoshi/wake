@@ -1,6 +1,8 @@
 package ui
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
@@ -97,8 +99,11 @@ func apiParkedApp(t *testing.T) App {
 
 func TestAnAutoParkedSessionWakesOnAnotherAgentsHealthyTurn(t *testing.T) {
 	a := apiParkedApp(t)
-	if pin := a.pinnedNotice(); !strings.Contains(pin, "/login") {
-		t.Errorf("the parked failure's pin should say the login wakes it: %q", pin)
+	if pin := a.pinnedNotice(); !strings.Contains(pin, apiAwaitTail) {
+		t.Errorf("the parked failure's pin should say it wakes itself: %q", pin)
+	}
+	if n, _ := notice.Latest(); !strings.Contains(n.Text, apiAwaitTail) || strings.Contains(n.Text, resumeVerb) {
+		t.Errorf("the confirmed park should say it wakes itself, not send the operator to /resume: %q", n.Text)
 	}
 	a, cmd := a.apply(healthyTurn("s2")).autoWakeRecovered()
 	if got := kindsFor(sentFrames(t, a, cmd), rpc.FrameWake); len(got) != 1 || got[0] != "s1" {
@@ -135,9 +140,9 @@ func TestNoProofSinceTheParkWakesNothing(t *testing.T) {
 	}
 }
 
-// Proof that arrives while the park is still in flight is kept, not spent: the
-// session wakes once the park lands.
-func TestProofDuringTheParkWakesItOnceTheParkLands(t *testing.T) {
+// Proof has to follow the confirmed park, not only the ask: a turn that lands
+// while the park is in flight predates the report the wake answers.
+func TestOnlyProofAfterTheConfirmedParkWakesIt(t *testing.T) {
 	a := twoAgents(t)
 	for range authRetryParkAttempt {
 		a, _ = a.apply(apiErrorFrame("s1", "Failed to authenticate. API Error: 401")).settle()
@@ -147,8 +152,11 @@ func TestProofDuringTheParkWakesItOnceTheParkLands(t *testing.T) {
 		t.Fatal("a session whose park is not confirmed was woken")
 	}
 	a = reportStates(a, map[string]string{"s1": rpc.StateParked, "s2": rpc.StateIdle})
-	if _, cmd := a.autoWakeRecovered(); cmd == nil {
-		t.Error("the proof that came during the park was lost")
+	if _, cmd := a.autoWakeRecovered(); cmd != nil {
+		t.Error("a turn from before the confirmed park woke the session")
+	}
+	if _, cmd := a.apply(healthyTurn("s2")).autoWakeRecovered(); cmd == nil {
+		t.Error("a turn after the confirmed park did not wake it")
 	}
 }
 
@@ -160,10 +168,10 @@ func TestAHandParkedSessionIsNeverAutoWoken(t *testing.T) {
 	}
 }
 
-// A session brought back by hand (or by another window) is no longer owed a wake.
-func TestAResumedSessionIsForgotten(t *testing.T) {
+// A session brought back by hand (or by another window), then parked by hand, is
+// no longer owed a wake - read off the reports alone, with no settle between.
+func TestASessionResumedThenParkedByHandIsNotWoken(t *testing.T) {
 	a := reportStates(apiParkedApp(t), map[string]string{"s1": rpc.StateIdle, "s2": rpc.StateIdle})
-	a, _ = a.apply(healthyTurn("s2")).autoWakeRecovered()
 	a = reportStates(a, map[string]string{"s1": rpc.StateParked, "s2": rpc.StateIdle})
 	if _, cmd := a.apply(healthyTurn("s2")).autoWakeRecovered(); cmd != nil {
 		t.Error("a later park woke a session whose API park was already over")
@@ -205,5 +213,121 @@ func TestASessionAlreadyAskedToWakeIsNotWokenTwice(t *testing.T) {
 	a := apiParkedApp(t).awaitingWake("s1")
 	if _, cmd := a.apply(healthyTurn("s2")).autoWakeRecovered(); cmd != nil {
 		t.Error("the auto-wake repeated a wake this window had already asked for")
+	}
+}
+
+// Claude answers /context or /compact itself with a "<synthetic>" frame and no
+// inference, so it works on a dead login: never proof, neither for a parked
+// session nor for the one that answered.
+func TestAClaudeLocalReplyIsNotProof(t *testing.T) {
+	blob, err := os.ReadFile(filepath.Join("..", "..", "testdata", "stream", "slash-commands.jsonl"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := apiParkedApp(t).markAuthFailed("s2")
+	replies := 0
+	for _, line := range strings.Split(string(blob), "\n") {
+		evs, err := core.DecodeLine([]byte(line))
+		if err != nil {
+			continue
+		}
+		for _, ev := range evs {
+			if ev.Kind == core.KindAssistantText && ev.LocalCommand {
+				replies++
+				ev.SessionID = "s2"
+				a = a.apply(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &ev})
+			}
+		}
+	}
+	if replies == 0 {
+		t.Fatal("the fixture holds no local-command reply")
+	}
+	if _, cmd := a.autoWakeRecovered(); cmd != nil {
+		t.Error("a local-command reply woke a session parked for a dead login")
+	}
+	if _, marked := a.authFailed["s2"]; !marked {
+		t.Error("a local-command reply cleared its own session's auth-failed mark")
+	}
+}
+
+// A live process's token working does not prove a new one can read the login,
+// so a session that fails again after a wake on a turn's word waits for /login.
+func TestASessionThatFailsAgainAfterAWakeWaitsForLogin(t *testing.T) {
+	a := apiParkedApp(t)
+	a, _ = a.apply(healthyTurn("s2")).autoWakeRecovered()
+	a = reportStates(a, map[string]string{"s1": rpc.StateIdle, "s2": rpc.StateIdle})
+	for range authRetryParkAttempt {
+		a, _ = a.apply(apiErrorFrame("s1", "Failed to authenticate. API Error: 401")).settle()
+	}
+	a = reportStates(a, map[string]string{"s1": rpc.StateParked, "s2": rpc.StateIdle})
+	if _, cmd := a.apply(healthyTurn("s2")).autoWakeRecovered(); cmd != nil {
+		t.Fatal("a second turn's word woke a session its first wake did not heal")
+	}
+	if pin := a.pinnedNotice(); !strings.Contains(pin, apiLoginTail) {
+		t.Errorf("the pin should say only /login wakes it now: %q", pin)
+	}
+	m, cmd := a.Update(authResultMsg{ID: "s1", Text: `{"loggedIn": true}`})
+	if _, waking := m.(App).waking["s1"]; !waking || cmd == nil {
+		t.Error("a signed-in /login did not wake it")
+	}
+}
+
+// The daemon reports a park a moment before it takes the park's wake; a refusal
+// in that moment puts the session back to waiting, and the next proof retries.
+func TestARefusedAutoWakeTriesAgainOnTheNextProof(t *testing.T) {
+	a := apiParkedApp(t)
+	a, _ = a.apply(healthyTurn("s2")).autoWakeRecovered()
+	a = a.apply(rpc.Frame{Kind: rpc.FrameError, SessionID: "s1", Text: "session s1 is not parked, so there is nothing to bring back"})
+	if _, waking := a.waking["s1"]; waking {
+		t.Error("the refused wake is still awaited, so its arrival notice can never come")
+	}
+	if _, cmd := a.autoWakeRecovered(); cmd != nil {
+		t.Error("the refusal itself retried the wake")
+	}
+	if _, cmd := a.apply(healthyTurn("s2")).autoWakeRecovered(); cmd == nil {
+		t.Error("the next proof did not retry the refused wake")
+	}
+}
+
+// A park write that never landed leaves its wait behind; the operator's own
+// park after it replaces the API's, and is never undone.
+func TestAHandParkAfterAStaleAutoParkIsNotWoken(t *testing.T) {
+	a := twoAgents(t)
+	for range authRetryParkAttempt {
+		a, _ = a.apply(apiErrorFrame("s1", "Failed to authenticate. API Error: 401")).settle()
+	}
+	a = reportStates(a, map[string]string{"s1": rpc.StateIdle, "s2": rpc.StateIdle})
+	a, _, _ = a.parkTarget("s1", "alex")
+	a = reportStates(a, map[string]string{"s1": rpc.StateParked, "s2": rpc.StateIdle})
+	if _, cmd := a.apply(healthyTurn("s2")).autoWakeRecovered(); cmd != nil {
+		t.Error("the operator's park was undone by an auto-wake")
+	}
+}
+
+// The API only reports a usage limit to a login it knows: an earlier 401's mark
+// and count go, so a later 401 does not park one short of the threshold.
+func TestAUsageLimitClearsAnEarlierLoginMark(t *testing.T) {
+	a := twoAgents(t)
+	for range authRetryParkAttempt - 1 {
+		a, _ = a.apply(apiErrorFrame("s1", "Failed to authenticate. API Error: 401")).settle()
+	}
+	a, _ = a.apply(usageLimitFrame("s1")).settle()
+	if _, marked := a.authFailed["s1"]; marked {
+		t.Error("the usage limit left the 401 mark, so /reauth would park a session whose login works")
+	}
+	a, _ = a.apply(apiErrorFrame("s1", "Failed to authenticate. API Error: 401")).settle()
+	if _, parking := a.parking["s1"]; parking {
+		t.Error("a single 401 after the usage limit parked the session on the old count")
+	}
+}
+
+// A new process does not lift a quota, so a park and a resume leave the limit
+// pinned; only a turn that goes through unpins it.
+func TestAUsageLimitPinSurvivesAParkAndResume(t *testing.T) {
+	a := twoAgents(t).apply(usageLimitFrame("s1"))
+	a = reportStates(a, map[string]string{"s1": rpc.StateParked, "s2": rpc.StateIdle})
+	a = reportStates(a, map[string]string{"s1": rpc.StateIdle, "s2": rpc.StateIdle})
+	if pin := a.pinnedNotice(); !strings.Contains(pin, "resets 9:50pm") {
+		t.Errorf("a resume unpinned a usage limit it cannot lift: %q", pin)
 	}
 }

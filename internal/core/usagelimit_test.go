@@ -1,7 +1,9 @@
 package core
 
 import (
+	"encoding/json"
 	"fmt"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -32,5 +34,56 @@ func TestAUsageLimitIsToldApartFromAnExpiredLogin(t *testing.T) {
 		if !strings.Contains(evs[0].Text, "session limit") {
 			t.Errorf("%q: the API's message was not carried: %q", tc.kind, evs[0].Text)
 		}
+	}
+}
+
+// A "<synthetic>" assistant frame is Claude answering a local command itself -
+// /context, /compact, /mcp - with no inference, so it works on a dead login and
+// must never read as proof the API answered. Every assistant text in the
+// recorded slash-command corpus is held to that: synthetic ones are marked,
+// real model turns are not.
+func TestAClaudeLocalReplyIsMarkedAsNoInference(t *testing.T) {
+	var synthetic, real int
+	for _, line := range fixtureLines(t, filepath.Join("..", "..", "testdata", "stream", "slash-commands.jsonl")) {
+		var probe struct {
+			Type    string `json:"type"`
+			Message struct {
+				Model string `json:"model"`
+			} `json:"message"`
+		}
+		if json.Unmarshal([]byte(line), &probe) != nil || probe.Type != "assistant" {
+			continue
+		}
+		evs, err := DecodeLine([]byte(line))
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		for _, ev := range evs {
+			if ev.Kind != KindAssistantText {
+				continue
+			}
+			want := probe.Message.Model == "<synthetic>"
+			if want {
+				synthetic++
+			} else {
+				real++
+			}
+			if ev.LocalCommand != want {
+				t.Errorf("assistant text from model %q: LocalCommand = %v, want %v (%q)", probe.Message.Model, ev.LocalCommand, want, ev.Text)
+			}
+		}
+	}
+	if synthetic == 0 || real == 0 {
+		t.Fatalf("the corpus no longer holds both shapes: %d synthetic, %d real", synthetic, real)
+	}
+}
+
+// The error kind is read raw, so a frame whose "error" is not a string still
+// decodes - as an ordinary failed turn - rather than failing whole.
+func TestANonStringErrorKindStillDecodes(t *testing.T) {
+	line := `{"type":"assistant","is_api_error_message":true,"error":{"type":"overloaded"},"session_id":"s1","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Overloaded"}]}}`
+	evs, err := DecodeLine([]byte(line))
+	if err != nil || len(evs) != 1 || evs[0].Kind != KindAPIError || evs[0].Notice != NoticeAPIError {
+		t.Fatalf("an object error kind decoded as %+v, %v; want one KindAPIError/NoticeAPIError", evs, err)
 	}
 }

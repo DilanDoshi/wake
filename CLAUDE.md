@@ -129,10 +129,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - `/reauth` parks sessions marked by a 401 (upstream bug #48786, shared-OAuth refresh race) so
   a new process reads a fresh login. Wake never runs `claude auth login`.
   `internal/ui/apierror.go`, `reauth.go`.
-- **A session parked for a failing API wakes itself** (auto-park or `/reauth`) on proof the login
-  works *after* its park: any agent's model turn, or a signed-in `/login` — never a timer.
-  **A usage limit (`core.NoticeUsageLimit`) never marks or parks**; it stays pinned until the next
-  healthy turn. `internal/ui/apirecover.go`.
+- **A session parked for a failing API wakes itself** (auto-park or `/reauth`) on proof that follows
+  the *confirmed* park: a turn the API accepted from any agent (never a `LocalCommand` reply such as
+  `/context`'s), or a signed-in `/login` — never a timer. One that fails again after that wake waits
+  for `/login` alone; a hand park cancels it. **A usage limit (`core.NoticeUsageLimit`) never marks
+  or parks** and clears a 401 mark; it stays pinned until a turn goes through. `internal/ui/apirecover.go`.
 
 **Keys and the legend**
 - **The legend is drawn only while an arm is live, and then it is only the armed cue:**

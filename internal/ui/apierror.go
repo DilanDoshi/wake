@@ -31,6 +31,7 @@ import (
 //
 // A usage limit is only pinned: the quota resets on its own and the same process
 // answers again, so a mark for /reauth or a park would cost a restart for nothing.
+// The API only says it to a login it knows, so it is also proof the login works.
 func (a App) apiErrored(sessionID string, ev core.Event) App {
 	usage := ev.Notice == core.NoticeUsageLimit
 	if ev.Notice != core.NoticeAPIError && !usage {
@@ -46,7 +47,7 @@ func (a App) apiErrored(sessionID string, ev core.Event) App {
 	}
 	if usage {
 		notice.Report(usageLimitFormat, who, msg)
-		return a.pinAPIError(sessionID, stuckPin{msg: msg, usage: true})
+		return a.clearAuthFailed(sessionID).apiAnswered(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, usage: true})
 	}
 	notice.Report(apiErrorFormat, who, msg, reauthVerb)
 	return a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, stuckPin{msg: msg})
@@ -61,8 +62,9 @@ const (
 	// it - /reauth while the session runs, /resume once it is parked.
 	apiErrorFormat = "%s: %s — %s to bring it back"
 
-	// apiAwaitFormat is a session parked for a failing API, which wakes itself.
-	apiAwaitFormat = "%s: %s — parked; it wakes once the login works (/login checks)"
+	// apiAwaitFormat is a session parked for a failing API, which wakes itself;
+	// the tail says on what (apirecover.go).
+	apiAwaitFormat = "%s: %s — parked; %s"
 
 	// usageLimitFormat is a usage limit: nothing to run, only a reset to wait for.
 	usageLimitFormat = "%s: %s — send again once it resets"
@@ -99,7 +101,8 @@ func (a App) unpinAPIError(id string) App {
 // reconciledPins reads recovery off a fleet report: a pinned session seen parked
 // (a fleet row, or after a reattach only the park book) and then live again was
 // resumed, by this window or any other, onto a fresh process. /reauth's park
-// alone does not unpin - it is the step before a resume.
+// alone does not unpin - it is the step before a resume. A usage limit is not
+// lifted by a new process, so only a turn that goes through unpins it.
 func (a App) reconciledPins() App {
 	if len(a.notices.stuck) == 0 {
 		return a
@@ -114,7 +117,7 @@ func (a App) reconciledPins() App {
 		switch {
 		case inBook[id] || (ok && agent.State == rpc.StateParked):
 			p.parked = true
-		case ok && agent.State != rpc.StateEnded && p.parked:
+		case ok && agent.State != rpc.StateEnded && p.parked && !p.usage:
 			continue
 		}
 		next[id] = p
@@ -140,9 +143,10 @@ func (a App) pinnedNotice() string {
 	first, pin := stuck[0], a.notices.stuck[stuck[0].ID]
 	who := agentPrefix + first.Name
 	var text string
+	tail, wakes := a.apiParkTail(first.ID)
 	switch {
-	case a.isAPIParked(first):
-		text = fmt.Sprintf(apiAwaitFormat, who, pin.msg)
+	case wakes && first.State == rpc.StateParked:
+		text = fmt.Sprintf(apiAwaitFormat, who, pin.msg, tail)
 	case first.State == rpc.StateParked:
 		text = fmt.Sprintf(apiErrorFormat, who, pin.msg, resumeVerb)
 	case pin.usage:
@@ -222,12 +226,13 @@ func (a App) autoParkStalled() (App, tea.Cmd) {
 // clearedAuthFailedOn drops an auth-failed mark the moment the session proves the
 // login works again: a real model turn (KindAssistantText), which a failed turn
 // never produces - its synthetic frame is the KindAPIError observe routed away.
-// Without it a mark outlived the failure, and a later /reauth re-parked a session
-// that had already recovered (a resume elsewhere, or the API coming back). The
-// fleet shares one login, so the same turn is the auto-wake's proof.
+// Claude's own reply to a local command (LocalCommand, e.g. /context) ran no
+// inference and works on a dead login, so it proves nothing. Without it a mark
+// outlived the failure, and a later /reauth re-parked a session that had already
+// recovered. The fleet shares one login, so the same turn is the auto-wake's proof.
 func (a App) clearedAuthFailedOn(sessionID string, ev core.Event) App {
-	if ev.Kind == core.KindAssistantText {
-		return a.clearAuthFailed(sessionID).unpinAPIError(sessionID).apiAnswered()
+	if ev.Kind == core.KindAssistantText && !ev.LocalCommand {
+		return a.clearAuthFailed(sessionID).unpinAPIError(sessionID).apiAnswered(sessionID)
 	}
 	return a
 }

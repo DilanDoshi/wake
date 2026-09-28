@@ -421,8 +421,10 @@ component that logs corrupts the frame it is drawing.
       scrolls on every draw, which looks like the whole app shaking.
 - [ ] `/name` an agent: `renaming @x…` clears itself about ten seconds later on a quiet fleet. Say
       whether ten seconds reads as too short for a long error at your width.
-- [ ] After an API failure (a session limit, a 401), the row falls back to `@x: … — /reauth to bring
-      it back` once newer notices clear, reads `/resume` after `/reauth`, and goes on the resume.
+- [ ] After a 401, the row falls back to `@x: … — /reauth to bring it back` once newer notices clear,
+      reads `parked; it wakes when the API answers` after `/reauth`, and goes once it wakes.
+- [ ] After a real session limit, the row reads `— send again once it resets`, the agent is not
+      parked, and the first message after the reset is answered and clears the row.
 
 ---
 

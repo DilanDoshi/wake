@@ -167,8 +167,8 @@ type wireFrame struct {
 	// Without it the error text renders under the agent's name as if it spoke;
 	// see messageEvents and KindAPIError. Recorded 2026-09-07 in
 	// api-error-auth.jsonl (the not-logged-in variant of the fleet-wide 401).
-	IsAPIErrorMessage bool   `json:"is_api_error_message"`
-	APIErrorKind      string `json:"error"` // on that frame: "rate_limit" or "authentication_failed", …
+	IsAPIErrorMessage bool            `json:"is_api_error_message"`
+	APIErrorKind      json.RawMessage `json:"error"` // "rate_limit", "authentication_failed", …; raw so no shape loses the frame
 
 	// RetryStatus is the HTTP status on a system/api_retry frame: Claude Code
 	// emits one per retry on a failed API call, on the LIVE stream from attempt 1

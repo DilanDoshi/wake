@@ -656,11 +656,9 @@ func marshalLine(frame any, what string) ([]byte, error) {
 // command (the markers are in wire.go beside the wire shapes); the progress
 // refresh is a user frame carrying the feedback prefix.
 //
-// It reads, not writes - so wire.go would be its subject home - but that file is
-// at the 800-line hard max and the airlock is a fixed four files
-// (airlock_test.go's TestTheAirlockIsFourFilesInInternalCore), so a fifth is not
-// an option. encode.go held the room; the placement turns on it being an airlock
-// file, not on the direction of the frame.
+// It reads, not writes - wire.go is its subject home, but that file is at the size
+// cap and the airlock is a fixed four files (TestTheAirlockIsFourFilesInInternalCore),
+// so it sits here because this is an airlock file, not for the frame's direction.
 func goalOp(frameType string, m wireMessage) (GoalOp, bool) {
 	if m.Model == syntheticModel {
 		text := messageText(m.Content)
@@ -793,6 +791,8 @@ func DecodeWorkflowRun(raw []byte) (WorkflowRun, error) {
 }
 
 // apiNotice tells a usage limit, which recovers when the quota resets, from every other failed turn.
-func (f wireFrame) apiNotice() Notice { return cmp.Or(apiNotices[f.APIErrorKind], NoticeAPIError) }
+func (f wireFrame) apiNotice() Notice {
+	return cmp.Or(apiNotices[jsonString(f.APIErrorKind)], NoticeAPIError)
+}
 
 var apiNotices = map[string]Notice{"rate_limit": NoticeUsageLimit}
