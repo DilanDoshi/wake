@@ -63,8 +63,17 @@ func streamed(a *agent, ev core.Event) bool {
 
 func mustRename(t *testing.T, a *agent, r *nameRegistry, to string) {
 	t.Helper()
-	if err := a.rename(r, to); err != nil {
+	if err := a.rename(r, to, false); err != nil {
 		t.Fatalf("rename to %q: %v", to, err)
+	}
+}
+
+// mustMirror is the UI's /rename mirror: a rename whose keystroke also sends
+// claude its own /rename.
+func mustMirror(t *testing.T, a *agent, r *nameRegistry, to string) {
+	t.Helper()
+	if err := a.rename(r, to, true); err != nil {
+		t.Fatalf("mirrored rename to %q: %v", to, err)
 	}
 }
 
@@ -321,7 +330,7 @@ func TestARenameNeverWaitsOnAFullQueue(t *testing.T) {
 		a.in <- pending{frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: "queued"}}
 	}
 	done := make(chan error, 1)
-	go func() { done <- a.rename(r, "bob") }()
+	go func() { done <- a.rename(r, "bob", false) }()
 	select {
 	case err := <-done:
 		if err != nil {
@@ -395,7 +404,19 @@ func askRenames(c *testClient, id string) string {
 
 func renameTo(c *testClient, id, name string) {
 	c.t.Helper()
-	c.send(rpc.Frame{Kind: rpc.FrameRename, SessionID: id, Text: name})
+	sendRename(c, rpc.Frame{Kind: rpc.FrameRename, SessionID: id, Text: name})
+}
+
+// mirrorTo is the UI's /rename mirror over the wire.
+func mirrorTo(c *testClient, id, name string) {
+	c.t.Helper()
+	sendRename(c, rpc.Frame{Kind: rpc.FrameRename, SessionID: id, Text: name, ClaudeRenames: true})
+}
+
+func sendRename(c *testClient, f rpc.Frame) {
+	c.t.Helper()
+	id, name := f.SessionID, f.Text
+	c.send(f)
 	c.await("the rename to "+name+" published", func(f rpc.Frame) bool {
 		return f.Kind == rpc.FrameStatusPush && f.Status != nil && sessionRow(*f.Status, id).Name == name
 	})
@@ -559,5 +580,176 @@ func TestHistoryDropsTheRecordedOnDiskRename(t *testing.T) {
 	}
 	if want := []string{"before", "after"}; !slices.Equal(got, want) {
 		t.Fatalf("restored %q, want %q", got, want)
+	}
+}
+
+// A mirrored rename of an idle agent sends nothing: claude's own /rename is on
+// its way, and its reply naming Wake's name settles the want.
+func TestAMirroredRenameWaitsForClaudesOwnReply(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		busy bool
+	}{{name: "idle"}, {name: "busy", busy: true}} {
+		t.Run(tc.name, func(t *testing.T) {
+			a, r := renamingAgent(t)
+			if tc.busy {
+				a.noteSent()
+			}
+			mustMirror(t, a, r, "bob")
+			streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "a turn ends before the passthrough is written"})
+			a.probeIfWanted()
+			if got := queuedRenames(a); len(got) != 0 {
+				t.Fatalf("a mirrored rename queued %q before claude's own reply", got)
+			}
+
+			a.noteRenameSent("/rename bob")
+			if !streamed(a, renamedEvent("bob")) {
+				t.Fatal("the operator's own /rename reply was kept from clients")
+			}
+			streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: bob", LocalCommand: true})
+			a.probeIfWanted()
+			if got := queuedRenames(a); len(got) != 0 {
+				t.Fatalf("claude took bob itself, and Wake queued %q", got)
+			}
+		})
+	}
+}
+
+// Any rename reply releases a held want, and one naming Wake's name clears it
+// there and then - so no later reply, from a /rename Wake never mirrored, can
+// fire it.
+func TestAHeldWantIsSettledByTheReplyThatReleasesIt(t *testing.T) {
+	a, r := renamingAgent(t)
+	mustMirror(t, a, r, "bob")
+	a.noteRenamed(renamedEvent("bob"))
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.renameHeld || a.probeWanted[renameProbe] {
+		t.Fatalf("after claude named itself bob: held %v, wanted %v; want neither", a.renameHeld, a.probeWanted[renameProbe])
+	}
+}
+
+// Wake hyphenated the name, claude took the spaced form: the reply releases the
+// want and it fires once, bringing claude to Wake's name.
+func TestAMirroredRenameClaudeTookDifferentlyIsSentOnce(t *testing.T) {
+	a, r := renamingAgent(t)
+	mustMirror(t, a, r, "foo-bar")
+	a.noteSent()
+	a.noteRenameSent("/rename foo bar")
+	streamed(a, renamedEvent("foo bar"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: foo bar", LocalCommand: true})
+	a.probeIfWanted()
+	a.probeIfWanted()
+	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename foo-bar"}) {
+		t.Fatalf("claude took \"foo bar\" and Wake queued %q, want one [/rename foo-bar]", got)
+	}
+}
+
+// A /name after a mirrored rename replaces the held want with one that fires,
+// even if the mirrored passthrough never reaches claude.
+func TestANameAfterAMirroredRenameIsSent(t *testing.T) {
+	a, r := renamingAgent(t)
+	mustMirror(t, a, r, "bob")
+	mustRename(t, a, r, "cat")
+	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename cat"}) {
+		t.Fatalf("a /name after a mirrored rename queued %q, want [/rename cat]", got)
+	}
+}
+
+// A held want dies with a parked agent, reply or not - idle, so nothing but
+// the agent being gone stands in the way.
+func TestAHeldWantOfAParkedAgentNeverFires(t *testing.T) {
+	a, r := renamingAgent(t)
+	mustMirror(t, a, r, "bob")
+	a.beginPark()
+	a.finish(nil)
+	a.markParked()
+	a.noteRenamed(renamedEvent("sydney"))
+	a.probeIfWanted()
+	if got := queuedRenames(a); len(got) != 0 {
+		t.Fatalf("a parked agent's held rename fired: %q", got)
+	}
+}
+
+// Over a real process, the concern this fixes: the UI's mirror arrives while
+// the agent works, its passthrough held in type-ahead until the turn ends. The
+// turn's end sends nothing, the passthrough renames claude, and its reply is
+// the only one a client sees.
+func TestAMirrorAheadOfItsHeldBackPassthroughSendsNothing(t *testing.T) {
+	fakeClaudeOnPath(t, "renamesync")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
+	mirrorTo(c, idAlpha, "bob")
+	// Answered after the held turn ends, so anything the end queued is ahead of
+	// the passthrough below.
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "renames?"})
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "release"})
+	c.await("the count after the turn", func(f rpc.Frame) bool {
+		return f.Kind == rpc.FrameEvent && f.Event != nil && strings.HasPrefix(f.Event.Text, "renames: ")
+	})
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
+	c.awaitEvent(idAlpha, "Session renamed to: bob")
+	askRenames(c, idAlpha)
+	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [bob]") {
+		t.Fatalf("claude was sent %q, want only the operator's /rename bob", got)
+	}
+	if n := renameRepliesSeen(c); n != 1 {
+		t.Fatalf("%d /rename replies reached a client, want the operator's one\nsaw: %s", n, c.transcript())
+	}
+}
+
+// The same with the agent idle: the mirror lands first and sends nothing.
+func TestAMirrorOfAnIdleAgentSendsNothing(t *testing.T) {
+	fakeClaudeOnPath(t, "renamesync")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+
+	mirrorTo(c, idAlpha, "bob")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
+	c.awaitEvent(idAlpha, "Session renamed to: bob")
+	askRenames(c, idAlpha)
+	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [bob]") {
+		t.Fatalf("claude was sent %q, want only the operator's /rename bob", got)
+	}
+}
+
+// Over a real process: Wake holds foo-bar, claude took "foo bar", and one
+// /rename foo-bar brings claude to Wake's name.
+func TestAHyphenatedMirrorIsSentOnceInWakesForm(t *testing.T) {
+	fakeClaudeOnPath(t, "renamesync")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+
+	mirrorTo(c, idAlpha, "foo-bar")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename foo bar"})
+	c.awaitEvent(idAlpha, "Session renamed to: foo bar")
+	askRenames(c, idAlpha)
+	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 2 [foo bar foo-bar]") {
+		t.Fatalf("claude was sent %q, want the operator's /rename foo bar and one /rename foo-bar", got)
+	}
+}
+
+// Over a real process: a mirrored bob, then /name cat, both before claude's
+// reply to bob. Wake sends one /rename cat, after that reply.
+func TestANameBeforeTheMirroredReplyIsTheOneRenameSent(t *testing.T) {
+	fakeClaudeOnPath(t, "renamesync")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
+	mirrorTo(c, idAlpha, "bob")
+	renameTo(c, idAlpha, "cat")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "release"})
+	c.awaitEvent(idAlpha, "Session renamed to: bob")
+	askRenames(c, idAlpha)
+	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 2 [bob cat]") {
+		t.Fatalf("claude was sent %q, want the operator's /rename bob, then one /rename cat", got)
 	}
 }

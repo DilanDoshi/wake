@@ -504,3 +504,40 @@ func batchFrames(t *testing.T, a App, cmd tea.Cmd) []rpc.Frame {
 	}
 	return recorderOf(t, a).taken(t)
 }
+
+// The `/rename` mirror says its keystroke also sends claude its own /rename, so
+// the daemon waits for claude's reply instead of sending a second one; `/name`
+// sends claude nothing, so it never says so.
+func TestOnlyTheRenameMirrorSaysClaudeRenamesItself(t *testing.T) {
+	for _, tc := range []struct {
+		name, draft, session string
+		room, claudeRenames  bool
+	}{
+		{name: "mirror in a conversation", draft: "/rename bob", session: "s1", claudeRenames: true},
+		{name: "mirror from the room", draft: "@sydney /rename bob", session: "s2", room: true, claudeRenames: true},
+		{name: "name this conversation", draft: "/name bob", session: "s1"},
+		{name: "name another agent", draft: "/name @sydney bob", session: "s2"},
+		{name: "name from the room", draft: "/name @sydney bob", session: "s2", room: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fresh(t)
+			a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withAgents("alex", "sydney").withSize(200, 40)
+			if tc.room {
+				a = a.showRoom()
+			}
+			_, cmd := typeAndSubmit(a, tc.draft)
+			var renames []rpc.Frame
+			for _, f := range batchFrames(t, a, cmd) {
+				if f.Kind == rpc.FrameRename {
+					renames = append(renames, f)
+				}
+			}
+			if len(renames) != 1 || renames[0].SessionID != tc.session || renames[0].Text != "bob" {
+				t.Fatalf("%q wrote renames %+v, want one of %s to bob", tc.draft, renames, tc.session)
+			}
+			if renames[0].ClaudeRenames != tc.claudeRenames {
+				t.Errorf("%q wrote ClaudeRenames=%v, want %v", tc.draft, renames[0].ClaudeRenames, tc.claudeRenames)
+			}
+		})
+	}
+}

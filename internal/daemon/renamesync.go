@@ -4,7 +4,8 @@ package daemon
 //
 // Claude's name is how other sessions address this one (/list-agents and
 // SendMessage), and launch starts every agent - a wake and a /resume included -
-// as --name <Wake's name>. A Wake rename moves only Wake's handle, so the daemon
+// as --name <Wake's name>, which a resumed session takes over any earlier
+// /rename (at-menu findings §2). A Wake rename moves only Wake's handle, so the daemon
 // follows it with a bare /rename <new>: renameProbe, sent once the agent is
 // idle, its reply kept off every client (probe.go). The reply is a local
 // command (list-agents.jsonl:7-8), so the only cost is the one line claude's
@@ -14,11 +15,14 @@ package daemon
 // Wake writes, then whatever a rename reply on its stream says, the operator's
 // or Wake's. Only a Wake rename arms the want (rename.go), and it fires only
 // while the two names differ - checked when it is queued and again when it is
-// written - so a variant claude chose is never chased, and the operator's own
-// /rename, which internal/ui mirrors as a Wake rename beside it, is the only
-// /rename claude gets. That holds when the operator's line reaches the daemon
-// before the want fires: a mirror arriving first, its passthrough still held
-// in the UI's type-ahead, cannot be told from a /name here.
+// written - so a variant claude chose is never chased.
+//
+// The operator's own /rename reaches claude as a passthrough, and internal/ui
+// mirrors it as a Wake rename marked rpc.Frame.ClaudeRenames. That want is
+// held: it never fires until claude's next rename reply releases it, so a
+// mirror arriving first - its passthrough still in the UI's type-ahead - sends
+// nothing, and the reply settles it. A passthrough that never reaches claude
+// never releases it: the names stay apart until the next /name, fail-safe.
 
 import "github.com/DilanDoshi/wake/internal/core"
 
@@ -27,14 +31,14 @@ import "github.com/DilanDoshi/wake/internal/core"
 const renameVerb = "rename"
 
 // renameTextLocked is the /rename claude is owed now, or "" with keep saying
-// whether the want waits: it waits while an operator's /rename is unanswered
-// (claude's name is unknown until its reply), and is done when the names agree
-// or the agent is stopping. The caller holds a.mu.
+// whether the want waits: it waits while held, or while an operator's /rename
+// is unanswered (claude's name is unknown until its reply), and is done when
+// the names agree or the agent is stopping. The caller holds a.mu.
 func (a *agent) renameTextLocked() (text string, keep bool) {
 	switch {
 	case a.stopped:
 		return "", false
-	case a.claudeName == "":
+	case a.renameHeld || a.claudeName == "":
 		return "", true
 	case a.claudeName == a.name:
 		return "", false
@@ -75,8 +79,10 @@ func (a *agent) noteRenameSent(text string) {
 }
 
 // noteRenamed records the name a /rename reply on this agent's own stream says
-// claude took. Content-matched like every probe reply, so a turn whose prose
-// opens with the same words would be read as one.
+// claude took, and releases a held want - settled here when claude took Wake's
+// name, left to fire at the next idle when it did not. Content-matched like
+// every probe reply, so a turn whose prose opens with the same words would be
+// read as one.
 func (a *agent) noteRenamed(ev core.Event) {
 	if ev.Kind != core.KindAssistantText || ev.Subagent != nil {
 		return
@@ -88,4 +94,8 @@ func (a *agent) noteRenamed(ev core.Event) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.claudeName = name
+	if a.renameHeld {
+		a.renameHeld = false
+		a.probeWanted[renameProbe] = a.probeWanted[renameProbe] && name != a.name
+	}
 }

@@ -158,8 +158,10 @@ type agent struct {
 	probeWanted [probeKinds]bool
 
 	// claudeName is claude's own session name, "" while an operator's /rename
-	// is unanswered. See renamesync.go.
+	// is unanswered; renameHeld keeps a mirrored rename's want from firing until
+	// claude's next rename reply. See renamesync.go.
 	claudeName string
+	renameHeld bool
 
 	// model is what this session runs as, or "" for none. Display and the park
 	// book only, like effort. Read through currentModel: launch writes it and
@@ -309,7 +311,7 @@ func newAgent(id, name, label, dir, parent string, sess *core.Session, cancel co
 	return &agent{
 		id:           id,
 		name:         name,
-		claudeName:   name, // launch passes it as --name
+		claudeName:   name, // --name, which wins on --resume too (at-menu findings §2)
 		label:        label,
 		dir:          dir,
 		parent:       parent,

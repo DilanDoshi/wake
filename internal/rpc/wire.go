@@ -600,6 +600,10 @@ type Frame struct {
 	// own header's reason.
 	Workflow *WorkflowFrame `json:"workflow,omitempty"`
 	Peers    *PeersFrame    `json:"peers,omitempty"` // FramePeersReply's listing; see peers.go
+
+	// ClaudeRenames marks a FrameRename whose keystroke also sends claude its own
+	// /rename - the UI's mirror - so the daemon waits for that reply, sending none.
+	ClaudeRenames bool `json:"claude_renames,omitempty"`
 }
 
 // writeMu serializes every write in this package. Sessions fan out to one

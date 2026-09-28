@@ -177,7 +177,7 @@ func TestRenamingIsRefusedForAParkedOrEndedSessionAndSaysWhy(t *testing.T) {
 				t.Fatalf("the fixture is %q rather than %q, so this cell is about a state nobody built", got, tc.state)
 			}
 
-			err := a.rename(r, "bob")
+			err := a.rename(r, "bob", false)
 			switch {
 			case tc.refused && err == nil:
 				t.Fatalf("a %s session was renamed", tc.name)
@@ -217,7 +217,7 @@ func TestTheManagerCannotBeRenamed(t *testing.T) {
 	}
 	a := newAgent(idAlpha, core.ManagerName, "dev", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
 
-	if err := a.rename(r, "bob"); err == nil {
+	if err := a.rename(r, "bob", false); err == nil {
 		t.Fatal("the manager was renamed, so @manager now reaches nothing and the session holding Wake's " +
 			"own tools looks like an ordinary agent")
 	}
@@ -595,7 +595,7 @@ func TestTheManagerLookupDoesNotRaceARename(t *testing.T) {
 			if i%2 == 0 {
 				to = "bob"
 			}
-			if err := agents[0].rename(s.names, to); err != nil {
+			if err := agents[0].rename(s.names, to, false); err != nil {
 				t.Errorf("rename to %s: %v", to, err)
 				return
 			}

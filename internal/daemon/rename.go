@@ -117,8 +117,9 @@ const (
 // the connection's goroutine; this writes nothing to a process, exactly like
 // unpark, and putting it behind an agent that has stopped reading its stdin
 // would make renaming a wedged session impossible. Claude's own /rename only
-// follows as a probe, queued without waiting (renamesync.go).
-func (a *agent) rename(names *nameRegistry, requested string) error {
+// follows as a probe, queued without waiting, and held when the keystroke
+// sends claude one itself (renamesync.go).
+func (a *agent) rename(names *nameRegistry, requested string, held bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if why := renameableStates[a.stateLocked(time.Now())]; why != "" {
@@ -132,6 +133,7 @@ func (a *agent) rename(names *nameRegistry, requested string) error {
 		return err
 	}
 	a.name = to
+	a.renameHeld = held
 	a.probeWanted[renameProbe] = true
 	a.tryProbeLocked(renameProbe)
 	return nil
@@ -209,7 +211,7 @@ func (a *agent) rosterRecord(pgid int) record {
 // dies.
 func (s *server) renameSession(c *client, f rpc.Frame) {
 	s.withAgent(c, f, func(a *agent) error {
-		if err := a.rename(s.names, f.Text); err != nil {
+		if err := a.rename(s.names, f.Text, f.ClaudeRenames); err != nil {
 			return err
 		}
 		s.published(a)

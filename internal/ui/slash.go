@@ -741,7 +741,7 @@ func (a App) renameMirrorArg(agent Agent, text string) tea.Cmd {
 	if word != renameCommand || name == "" || strings.HasPrefix(name, agentPrefix) {
 		return nil
 	}
-	return a.renameTo(agent, hyphenateName(name))
+	return a.renameTo(agent, hyphenateName(name), true)
 }
 
 // loginCommand draws the auth panel: whether this machine is signed in, and the
