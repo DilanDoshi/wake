@@ -240,8 +240,8 @@ func mentionStem(draft string) (head, rest string, ok bool) {
 // docs/superpowers/notes/2026-09-27-at-menu-findings.md, from the docs), and
 // `@agent-<type>` resolves headless to an Agent call (§3). So once a character
 // that can begin a name is typed, a conversation offers what Claude Code's own
-// `@` does - the owner's 2026-09-27 reversal of the room-only rule, in
-// completionpeers.go. Paths are offered in both.
+// `@` does (the manager's, its fleet only) - the owner's 2026-09-27 reversal of
+// the room-only rule, in completionpeers.go. Paths are offered in both.
 func (a App) mentionMenu(draft, head, typed string) completion {
 	c := completion{pane: a.focus, draft: draft, head: head, paths: a.pathMenuFor(typed)}
 	switch {

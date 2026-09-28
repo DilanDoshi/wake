@@ -139,12 +139,21 @@ func (a App) conversationMenu(c completion, typed string) completion {
 
 // dirLabel is an outside session's row: the name keeps its width up to all but
 // the parentheses' own room, and the directory is cut from the left so its tail,
-// the part naming the project, survives - `@wf-alpha (…/deep/wf)`.
+// the part naming the project, survives - `@wf-alpha (…/deep/wf)`. With no room
+// it is `(…)`, never `()`: TruncateLeft drops the prefix when it drops everything.
 func dirLabel(offer, dir string, avail int) string {
 	name := ansi.Truncate(offer, max(avail-lipgloss.Width(fmt.Sprintf(peerDirFormat, ellipsis)), 0), ellipsis)
 	room := avail - lipgloss.Width(name) - lipgloss.Width(fmt.Sprintf(peerDirFormat, ""))
-	if over := lipgloss.Width(dir) - room; over > 0 {
-		dir = ansi.TruncateLeft(dir, over+lipgloss.Width(ellipsis), ellipsis)
+	switch over := lipgloss.Width(dir) - room; {
+	case over <= 0:
+	case room <= lipgloss.Width(ellipsis):
+		dir = ellipsis
+	default:
+		cut := ansi.TruncateLeft(dir, over+lipgloss.Width(ellipsis), ellipsis)
+		if lipgloss.Width(cut) > room { // a double-width rune straddled the cut
+			cut = ansi.TruncateLeft(dir, over+lipgloss.Width(ellipsis)+1, ellipsis)
+		}
+		dir = cut
 	}
 	return name + fmt.Sprintf(peerDirFormat, dir)
 }

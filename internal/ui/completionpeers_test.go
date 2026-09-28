@@ -6,6 +6,7 @@ package ui
 // typed, and claude resolves the mention.
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"slices"
@@ -13,6 +14,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -554,5 +556,33 @@ func TestANewDraftsMenuStartsAtTheTop(t *testing.T) {
 	}
 	if a, _ = typedAsking(t, a, runes("o")...); a.completion.cursor != 0 {
 		t.Errorf("`@jo` put the cursor at %d, want the top: offers %q", a.completion.cursor, a.completion.offers)
+	}
+}
+
+// A directory too narrow to show still shows that it was cut - `(…)`, never `()`
+// - and a double-width rune at the cut never pushes the label past the row.
+func TestADirectoryTagNeverEmptiesOrOverflows(t *testing.T) {
+	for _, width := range []int{24, 40} {
+		avail := width - lipgloss.Width(cardCursor)
+		for name, tc := range map[string]struct {
+			offer, dir, prefix string
+		}{
+			"name of avail-4": {"@" + strings.Repeat("n", avail-5), "/tmp/wf", "@" + strings.Repeat("n", avail-5) + " (…)"},
+			"longer name":     {"@" + strings.Repeat("n", avail), "/tmp/wf", ""},
+			"wide directory":  {"@wide", "/tmp/" + strings.Repeat("ト", 20), "@wide (…"},
+		} {
+			t.Run(fmt.Sprintf("%s at %d", name, width), func(t *testing.T) {
+				got := completion{tags: map[string]offerTag{tc.offer: {dir: tc.dir}}}.rowLabel(tc.offer, width)
+				if w := lipgloss.Width(got); w > avail {
+					t.Errorf("the label %q is %d cells in a row of %d", got, w, avail)
+				}
+				if !strings.HasPrefix(got, tc.prefix) || !strings.HasSuffix(got, ")") {
+					t.Errorf("the label is %q, want it to start %q and close its parenthesis", got, tc.prefix)
+				}
+				if tc.dir == "/tmp/wf" && !strings.HasSuffix(got, " (…)") {
+					t.Errorf("the label is %q, want the directory drawn as (…) when there is no room for it", got)
+				}
+			})
+		}
 	}
 }
