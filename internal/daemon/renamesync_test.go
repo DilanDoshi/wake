@@ -645,14 +645,26 @@ func TestAMirroredRenameClaudeTookDifferentlyIsSentOnce(t *testing.T) {
 	}
 }
 
-// A /name after a mirrored rename replaces the held want with one that fires,
-// even if the mirrored passthrough never reaches claude.
-func TestANameAfterAMirroredRenameIsSent(t *testing.T) {
+// A /name over a held want moves its target and keeps it held: the mirrored
+// passthrough is still on its way to claude, so the one /rename cat goes only
+// after claude's reply to it.
+func TestANameOverAHeldRenameWaitsForItsReply(t *testing.T) {
 	a, r := renamingAgent(t)
 	mustMirror(t, a, r, "bob")
 	mustRename(t, a, r, "cat")
+	a.probeIfWanted()
+	if got := queuedRenames(a); len(got) != 0 {
+		t.Fatalf("a /name over a held rename queued %q before claude's reply", got)
+	}
+
+	a.noteSent()
+	a.noteRenameSent("/rename bob")
+	streamed(a, renamedEvent("bob"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: bob", LocalCommand: true})
+	a.probeIfWanted()
+	a.probeIfWanted()
 	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename cat"}) {
-		t.Fatalf("a /name after a mirrored rename queued %q, want [/rename cat]", got)
+		t.Fatalf("after claude's reply named bob, Wake queued %q, want one [/rename cat]", got)
 	}
 }
 
@@ -751,5 +763,40 @@ func TestANameBeforeTheMirroredReplyIsTheOneRenameSent(t *testing.T) {
 	askRenames(c, idAlpha)
 	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 2 [bob cat]") {
 		t.Fatalf("claude was sent %q, want the operator's /rename bob, then one /rename cat", got)
+	}
+}
+
+// The gap fix round 1 left, over a real process: /rename bob while the agent
+// works (its passthrough held in type-ahead), then /name cat, then the turn
+// ends and the passthrough flushes. Nothing goes before claude's reply to bob;
+// after it, one /rename cat, and both end as cat.
+func TestANameWhileTheMirroredPassthroughWaitsEndsBothAsTheName(t *testing.T) {
+	fakeClaudeOnPath(t, "renamesync")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
+	mirrorTo(c, idAlpha, "bob")
+	renameTo(c, idAlpha, "cat")
+	// Answered after the held turn ends, so anything that end queued is ahead
+	// of the flushed passthrough.
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "renames?"})
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "release"})
+	after := c.await("the count after the turn", func(f rpc.Frame) bool {
+		return f.Kind == rpc.FrameEvent && f.Event != nil && strings.HasPrefix(f.Event.Text, "renames: ")
+	}).Event.Text
+	if !strings.HasPrefix(after, "renames: 0 ") {
+		t.Fatalf("the turn's end sent claude a /rename before the passthrough: %q", after)
+	}
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
+	c.awaitEvent(idAlpha, "Session renamed to: bob")
+	askRenames(c, idAlpha)
+	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 2 [bob cat]") {
+		t.Fatalf("claude was sent %q, want the operator's /rename bob and then one /rename cat", got)
+	}
+	if name := sessionRow(c.status(), idAlpha).Name; name != "cat" {
+		t.Fatalf("Wake calls the agent %q, want cat", name)
 	}
 }

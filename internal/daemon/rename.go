@@ -133,7 +133,9 @@ func (a *agent) rename(names *nameRegistry, requested string, held bool) error {
 		return err
 	}
 	a.name = to
-	a.renameHeld = held
+	// A /name over a held want keeps it held: the mirrored passthrough is still
+	// on its way to claude, and its reply decides what, if anything, to send.
+	a.renameHeld = a.renameHeld || held
 	a.probeWanted[renameProbe] = true
 	a.tryProbeLocked(renameProbe)
 	return nil

@@ -21,8 +21,10 @@ package daemon
 // mirrors it as a Wake rename marked rpc.Frame.ClaudeRenames. That want is
 // held: it never fires until claude's next rename reply releases it, so a
 // mirror arriving first - its passthrough still in the UI's type-ahead - sends
-// nothing, and the reply settles it. A passthrough that never reaches claude
-// never releases it: the names stay apart until the next /name, fail-safe.
+// nothing, and the reply settles it. A /name over a held want moves its target
+// and stays held. A passthrough that never reaches claude (a cancelled
+// type-ahead) never releases it, so no /name syncs until claude's next rename
+// reply - fail-safe.
 
 import "github.com/DilanDoshi/wake/internal/core"
 
