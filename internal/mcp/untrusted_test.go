@@ -123,6 +123,13 @@ var agentAuthored = map[string]bool{
 	// because every field needs one, not because a tool prints it.
 	"Commands": true,
 
+	// Agents is the agent's, on Commands' footing: the subagent types come from
+	// `.claude/agents/*.md` files an agent can write in a directory it can reach, so
+	// what a later init advertises is a value an agent decided. Never rendered on
+	// this surface (notInTheStatusReport); the verdict is here because every field
+	// needs one.
+	"Agents": true,
+
 	// ConfirmedModel is the agent's, and it is where it parts from Effort beside
 	// it: the /model probe reads it out of a `Current model: …` line, and unlike
 	// Effort the model half is not a closed set - ValidModel admits any non-empty

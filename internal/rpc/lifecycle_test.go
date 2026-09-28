@@ -309,6 +309,32 @@ func TestGoalRoundTripsAndOmitsWhenAbsent(t *testing.T) {
 	}
 }
 
+// Agents rides Commands' own route and reason: a session with none omits the
+// key so an ordinary report is not padded with an empty array per session, and
+// one that named some has them survive the wire in order.
+func TestAgentsRoundTripsAndOmitsWhenAbsent(t *testing.T) {
+	absent, err := json.Marshal(SessionStatus{ID: "s1", State: StateIdle})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(absent), "agents") {
+		t.Errorf("a session with no agents serialized an agents key: %s", absent)
+	}
+
+	st := SessionStatus{ID: "s1", State: StateWorking, Agents: []string{"general-purpose", "Explore"}}
+	b, err := json.Marshal(st)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var back SessionStatus
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !reflect.DeepEqual(back.Agents, st.Agents) {
+		t.Errorf("agents did not round-trip: got %v, want %v", back.Agents, st.Agents)
+	}
+}
+
 // readOne decodes exactly one frame and insists the stream held only that.
 func readOne(t *testing.T, r *bytes.Buffer) Frame {
 	t.Helper()

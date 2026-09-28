@@ -183,6 +183,9 @@ type agent struct {
 	// cwd, and updated on the receipt the same way. See rpc.SessionStatus.Commands.
 	commands []string
 
+	// agents is the subagent types the last init advertised, commands' way.
+	agents []string
+
 	// prs is the GitHub pull requests this session has opened, scraped from the
 	// tool result `gh pr create` prints and carried on the report so a client that
 	// attached after the PR was opened still learns it - Commands' own reason. It
@@ -378,6 +381,9 @@ func (a *agent) observe(ev core.Event) {
 	// same way withFacts guards against. See rpc.SessionStatus.Commands.
 	if ev.Session != nil && len(ev.Session.SlashCommands) > 0 {
 		a.commands = ev.Session.SlashCommands
+	}
+	if ev.Session != nil && len(ev.Session.Agents) > 0 {
+		a.agents = ev.Session.Agents
 	}
 
 	// The resolved model id off init, carried on the report for a client that

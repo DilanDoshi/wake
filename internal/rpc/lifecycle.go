@@ -473,6 +473,11 @@ type SessionStatus struct {
 	// `slash_commands`, which only the airlock may name.
 	Commands []string `json:"commands,omitempty"`
 
+	// Agents is the subagent types this session can run, off its last init - what
+	// the conversation's `@` menu offers as `@agent-<type>`. Commands' route and
+	// reason: the report is the only way a client that attached late learns them.
+	Agents []string `json:"agents,omitempty"`
+
 	// PRs is the GitHub pull-request numbers this session has opened, in
 	// first-seen order. Here for Commands' reason and by the same route: the
 	// daemon scrapes them from the tool result `gh pr create` prints (no frame on

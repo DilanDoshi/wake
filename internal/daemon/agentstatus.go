@@ -30,6 +30,7 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		ContextWindow:  a.contextWindow,
 		Budget:         a.budget,
 		Commands:       a.commands,
+		Agents:         a.agents,
 		PRs:            slices.Clone(a.prs),
 		Goal:           goalStatus(a.goalCondition),
 		Loop:           loopStatus(a.loop),

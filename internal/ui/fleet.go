@@ -157,8 +157,9 @@ type Agent struct {
 	// slice would make that a compile error - or a fleet-sized copy on every
 	// lifecycle frame. withFacts replaces the pointer only when the words
 	// differ, so re-advertising the same 133 commands each turn compares equal.
-	advertised *commandSet
-	prs        *prSet // GitHub PRs opened, off the report, pointer-held for advertised's reason. See prSet, statusbar.go.
+	advertised    *commandSet
+	subagentTypes *agentSet // init.agents, pointer-held for advertised's reason. See fleetagents.go.
+	prs           *prSet    // GitHub PRs opened, off the report, pointer-held for advertised's reason. See prSet, statusbar.go.
 
 	// goal is the native /goal this agent has active, folded from the live
 	// KindGoal event and from the report. A value struct so Agent stays
@@ -353,7 +354,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		}
 		// The report is the only route to these - and to PRs - for a client that
 		// attached after they were set. See rpc.SessionStatus.Commands.
-		a = a.withCommands(s.Commands).withPRs(s.PRs)
+		a = a.withCommands(s.Commands).withAgents(s.Agents).withPRs(s.PRs)
 		// The goal both sets and clears from the report (unlike Commands): the
 		// daemon holds it authoritatively, so its snapshot is never spuriously
 		// empty. The live KindGoal fold is the fresher source for a watching client.
@@ -533,7 +534,7 @@ func (a Agent) withFacts(f *core.SessionFacts) Agent {
 	if len(f.MCPServers) > 0 {
 		a.MCPNeedsAuth = needsAuth(f.MCPServers)
 	}
-	a = a.withCommands(f.SlashCommands)
+	a = a.withCommands(f.SlashCommands).withAgents(f.Agents)
 	// Summed, not replaced: every result reports its own turn's output.
 	a.Tokens += f.OutputTokens
 	// **Replaced within a message and summed across them**, which is the one
