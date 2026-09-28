@@ -53,7 +53,10 @@ their first turn.
 
 `/rename wf-delta` replies `Session renamed to: wf-delta` with `num_turns: 0` and `$0`, and the next
 `/list-agents` names the session `wf-delta`. So Wake can keep claude's peer name in step with its own `/name`
-for free. Two sessions launched with the same `--name` were not conclusive (the listing showed one); the docs
+for free. **`--name` wins on `--resume`**, even over an earlier `/rename`: a session named `wf-one`, resumed with
+`--name wf-two`, lists as `wf-two`; renamed to `wf-three` and resumed with `--name wf-four`, it lists as `wf-four`;
+resumed with no `--name`, it gets a generated name rather than the stored one (sterile `HOME`, 2.1.283, not
+committed as a fixture). So every Wake relaunch starts claude's name in step. Two sessions launched with the same `--name` were not conclusive (the listing showed one); the docs
 say a colliding name is renamed to a variant for interactive sessions.
 
 ## 3. `init.agents` names the subagent types, and `@agent-<name>` resolves headless
