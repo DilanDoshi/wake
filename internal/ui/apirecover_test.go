@@ -272,20 +272,44 @@ func TestASessionThatFailsAgainAfterAWakeWaitsForLogin(t *testing.T) {
 	}
 }
 
-// The daemon reports a park a moment before it takes the park's wake; a refusal
-// in that moment puts the session back to waiting, and the next proof retries.
-func TestARefusedAutoWakeTriesAgainOnTheNextProof(t *testing.T) {
-	a := apiParkedApp(t)
-	a, _ = a.apply(healthyTurn("s2")).autoWakeRecovered()
-	a = a.apply(rpc.Frame{Kind: rpc.FrameError, SessionID: "s1", Text: "session s1 is not parked, so there is nothing to bring back"})
+// The daemon reports a park a moment before it takes the park's wake. A refusal
+// in that moment keeps the proof and retries once the next report shows the park
+// again; a second refusal gives up, so a wake the daemon never takes cannot
+// retry on every report.
+func TestARefusedAutoWakeRetriesOnceOnTheNextReport(t *testing.T) {
+	refuse := func(a App) App {
+		return a.apply(rpc.Frame{Kind: rpc.FrameError, SessionID: "s1", Text: "session s1 is not parked, so there is nothing to bring back"})
+	}
+	parked := map[string]string{"s1": rpc.StateParked, "s2": rpc.StateIdle}
+	a, _ := apiParkedApp(t).apply(healthyTurn("s2")).autoWakeRecovered()
+	a = refuse(a)
 	if _, waking := a.waking["s1"]; waking {
 		t.Error("the refused wake is still awaited, so its arrival notice can never come")
 	}
 	if _, cmd := a.autoWakeRecovered(); cmd != nil {
-		t.Error("the refusal itself retried the wake")
+		t.Fatal("the refusal itself retried the wake, before any report")
 	}
-	if _, cmd := a.apply(healthyTurn("s2")).autoWakeRecovered(); cmd == nil {
-		t.Error("the next proof did not retry the refused wake")
+	a, cmd := reportStates(a, parked).autoWakeRecovered()
+	if got := kindsFor(sentFrames(t, a, cmd), rpc.FrameWake); len(got) != 1 {
+		t.Fatalf("the next parked report did not retry on the proof already seen: %v", got)
+	}
+	a = refuse(a)
+	a = reportStates(a, parked)
+	if _, cmd := a.apply(healthyTurn("s2")).autoWakeRecovered(); cmd != nil {
+		t.Error("a second refusal did not give up")
+	}
+	if pin := a.pinnedNotice(); !strings.Contains(pin, resumeVerb) {
+		t.Errorf("after giving up the pin should send the operator to /resume: %q", pin)
+	}
+}
+
+// A turn that goes straight to a tool call is the API answering too: it wakes a
+// login-parked session without waiting for prose.
+func TestAToolCallIsProof(t *testing.T) {
+	tool := core.Event{Kind: core.KindToolUse, SessionID: "s2", Tool: &core.ToolCall{Name: "Bash"}}
+	a := apiParkedApp(t).apply(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &tool})
+	if _, cmd := a.autoWakeRecovered(); cmd == nil {
+		t.Error("a tool call from another agent did not count as the API answering")
 	}
 }
 

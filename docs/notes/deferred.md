@@ -5045,9 +5045,8 @@ works (`internal/ui/apirecover.go`). Left out, each on purpose:
   Checked by key names against real on-disk lines only; none was committed, since a line lifted from
   an operator's own transcripts is not a sterile-HOME recording.
 - **The recovery state is per window.** Every attached window auto-wakes, as every window already
-  auto-parks; the loser's wake is refused as "not parked" and shown in that window (its own retry
-  logic reads that refusal as the daemon's finalizing-park window and tries once more on the next
-  proof). A window opened after the park, or a restarted Wake, knows nothing of it and leaves the
+  auto-parks; the loser's wake is refused as "not parked" and shown in that window (the retry meant for the
+  daemon's finalizing-park window tries once more on the next parked report, then gives up). A window opened after the park, or a restarted Wake, knows nothing of it and leaves the
   session for `/resume`. *Closes with:* the daemon owning the auto-park and wake, which needs the
   attempt count on its side of the socket.
 - **Any failed turn the auto-park counts is treated as a login failure** - an overload or an

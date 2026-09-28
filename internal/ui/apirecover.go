@@ -43,6 +43,7 @@ type apiPark struct {
 	stage         parkStage
 	turns, logins uint64
 	loginOnly     bool
+	retried       bool // a refused wake has had its one retry
 }
 
 type parkStage int
@@ -51,6 +52,7 @@ const (
 	parkAsked    parkStage = iota // FramePark written, not yet reported parked
 	parkHeld                      // reported parked, waiting for proof
 	wakeSent                      // FrameWake written, not yet reported live
+	wakeRetry                     // the wake was refused; retried on the next parked report
 	wakeUnproven                  // live again, with no accepted turn of its own yet
 )
 
@@ -117,6 +119,8 @@ func (a App) reconciledRecovery() App {
 		switch {
 		case parked && p.stage == parkAsked:
 			p.stage, p.turns, p.logins = parkHeld, a.recovery.turns, a.recovery.logins
+		case parked && p.stage == wakeRetry: // the proof already seen still stands
+			p.stage = parkHeld
 		case live && p.stage != parkAsked:
 			p.stage = wakeUnproven
 		case !parked && !live:
@@ -156,15 +160,16 @@ func (a App) autoWakeRecovered() (App, tea.Cmd) {
 	return a.wake(wake)
 }
 
-// wakeRefused puts an auto-wake the daemon refused back to waiting: the report
-// can show a park a moment before the daemon will take its wake, so the next
-// proof tries again. Keyed on the id, as startSettled is.
+// wakeRefused handles an auto-wake the daemon refused. A report can show a park
+// a moment before the daemon will take its wake, so the first refusal retries on
+// the next report that shows the park, on the proof already seen; a second gives
+// up and leaves the session to /resume, so a wake the daemon never takes cannot
+// retry on every report. Keyed on the id, as startSettled is.
 func (a App) wakeRefused(id string) App {
 	p, held := a.recovery.held[id]
 	if !held || p.stage != wakeSent {
 		return a
 	}
-	p.stage, p.turns, p.logins = parkHeld, a.recovery.turns, a.recovery.logins
 	next := make(map[string]struct{}, len(a.waking))
 	for w := range a.waking {
 		if w != id {
@@ -172,6 +177,10 @@ func (a App) wakeRefused(id string) App {
 		}
 	}
 	a.waking = next
+	if p.retried {
+		return a.forgetAPIPark(id)
+	}
+	p.stage, p.retried = wakeRetry, true
 	return a.withHeld(id, p, true)
 }
 

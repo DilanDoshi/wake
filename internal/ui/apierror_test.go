@@ -128,16 +128,21 @@ func TestAnAPIErrorNeverDrawsInTheTranscript(t *testing.T) {
 }
 
 // A mark that outlived its failure would make a later /reauth re-park a session
-// that has already recovered. A real model turn is what clears it; a tool call or
-// any other event does not (the failed turn produces neither).
+// that has already recovered. Model output is what clears it - prose, a tool call
+// or thinking, none of which a failed turn produces; a tool's result or any other
+// event does not, since the machine, not the API, produced it.
 func TestAHealthyTurnClearsTheAuthFailedMarkButOtherEventsDoNot(t *testing.T) {
 	a := sizedApp(t, nil, nil, "s1").markAuthFailed("s1")
 
-	if _, held := a.clearedAuthFailedOn("s1", core.Event{Kind: core.KindToolUse}).authFailed["s1"]; !held {
-		t.Error("a tool call cleared the mark; only a model turn proves the login works")
+	for _, kind := range []core.EventKind{core.KindToolResult, core.KindSystem, core.KindTurnEnd} {
+		if _, held := a.clearedAuthFailedOn("s1", core.Event{Kind: kind}).authFailed["s1"]; !held {
+			t.Errorf("a %q event cleared the mark; only model output proves the login works", kind)
+		}
 	}
-	if _, held := a.clearedAuthFailedOn("s1", core.Event{Kind: core.KindAssistantText, Text: "hi"}).authFailed["s1"]; held {
-		t.Error("a healthy assistant turn did not clear the mark; /reauth would re-park a recovered session")
+	for _, kind := range []core.EventKind{core.KindAssistantText, core.KindToolUse, core.KindThinking} {
+		if _, held := a.clearedAuthFailedOn("s1", core.Event{Kind: kind, Text: "hi"}).authFailed["s1"]; held {
+			t.Errorf("model output (%q) did not clear the mark; /reauth would re-park a recovered session", kind)
+		}
 	}
 }
 

@@ -224,14 +224,15 @@ func (a App) autoParkStalled() (App, tea.Cmd) {
 }
 
 // clearedAuthFailedOn drops an auth-failed mark the moment the session proves the
-// login works again: a real model turn (KindAssistantText), which a failed turn
-// never produces - its synthetic frame is the KindAPIError observe routed away.
+// login works again: model output - prose, a tool call, thinking - which a failed
+// turn never produces; its synthetic frame is the KindAPIError observe routed away.
 // Claude's own reply to a local command (LocalCommand, e.g. /context) ran no
 // inference and works on a dead login, so it proves nothing. Without it a mark
 // outlived the failure, and a later /reauth re-parked a session that had already
-// recovered. The fleet shares one login, so the same turn is the auto-wake's proof.
+// recovered. The fleet shares one login, so the same output is the auto-wake's proof.
 func (a App) clearedAuthFailedOn(sessionID string, ev core.Event) App {
-	if ev.Kind == core.KindAssistantText && !ev.LocalCommand {
+	modelOutput := ev.Kind == core.KindAssistantText || ev.Kind == core.KindToolUse || ev.Kind == core.KindThinking
+	if modelOutput && !ev.LocalCommand {
 		return a.clearAuthFailed(sessionID).unpinAPIError(sessionID).apiAnswered(sessionID)
 	}
 	return a
