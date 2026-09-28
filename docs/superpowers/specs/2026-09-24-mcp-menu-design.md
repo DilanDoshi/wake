@@ -27,7 +27,7 @@ the redirect on `localhost`, stores the token in the keychain and reconnects.
 | Enable / disable (persists in `~/.claude.json`) | `mcp_toggle {serverName, enabled}` | same |
 | Tool descriptions | **not returned** | — |
 | Sign-in | **no control request**; `claude mcp login` refuses a non-terminal stdin | probe |
-| claude.ai connectors | **not loaded** by a headless session at all | probe |
+| claude.ai connectors | **not loaded** by a headless session at all — *superseded 2026-09-27: they load after an `initialize` handshake, which Wake now sends (`docs/notes/decisions.md`)* | probe |
 
 ## Design
 
