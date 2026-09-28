@@ -5037,6 +5037,9 @@ every such resume drew a pooled one. Three things were left:
   `customTitle` (Wake mirrors it); `/name foo` changes Wake's registry alone, so an on-disk resume
   after it restores the pre-`/name` title. *Closes with:* `/name` also sending claude's `/rename`,
   which is also the only repair after the fallback above.
+- **Two windows resuming one session at once can land it pooled.** The name is claimed before
+  `launch` admits the id, so the loser of admission releases the recorded name after the winner
+  fell back. No second process results; closing it means admitting the id before naming it.
 - **Import and `/adopt` still mint pooled names.** They fork to a new id, so a hand-run session's
   own `/rename` title is dropped on adopt; the same restore could apply there.
 

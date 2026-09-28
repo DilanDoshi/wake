@@ -276,6 +276,12 @@ func TestDiscoveryKeepsTheNameClaudeRecorded(t *testing.T) {
 			`{"type":"ai-title","aiTitle":"Fix the parser"}`}},
 		{name: "not bounded for display", want: long, lines: []string{
 			`{"type":"custom-title","customTitle":"` + long + `"}`}},
+		// A line past transcriptScanBytes is skipped, not the end of the read: a
+		// big attachment must not hide the /rename that came after it.
+		{name: "past an oversized line", want: "renamed", lines: []string{
+			`{"type":"custom-title","customTitle":"stale"}`,
+			`{"type":"attachment","content":"` + strings.Repeat("a", transcriptScanBytes) + `"}`,
+			`{"type":"custom-title","customTitle":"renamed"}`}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			p := filepath.Join(t.TempDir(), "s.jsonl")
