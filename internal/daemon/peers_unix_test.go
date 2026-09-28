@@ -37,7 +37,7 @@ func TestAHungOneShotIsKilledAtTheDeadlineAndAnswersEmpty(t *testing.T) {
 	s := newServer(tempSocket(t))
 
 	start := time.Now()
-	peers := s.listPeers(t.Context())
+	peers, _ := s.listPeers(t.Context())
 	took := time.Since(start)
 
 	pid := waitForPid(t, pidPath)

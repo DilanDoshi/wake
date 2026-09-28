@@ -47,9 +47,6 @@ const (
 	// reason: slashguard_test.go refuses a literal naming a slash command in this
 	// package, and Wake claims /model's bare form (the picker) in internal/ui.
 	modelVerb = "model"
-	// listAgentsVerb composes the bare /list-agents the one-shot is sent, and
-	// names the command an agent's init must advertise (peers.go).
-	listAgentsVerb = "list-agents"
 )
 
 // noteEffort records the level if this message is claude's effort command.

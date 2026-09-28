@@ -752,10 +752,10 @@ var notWireVocabulary = wordSet([]string{
 	"[", "]", ":",
 
 	// localreply.go's delimiter and patterns: a /list-agents row's column
-	// separator, the self line's name before its short id, and a section
+	// separator, the self line's name and short id, and a section
 	// header's title and count. Punctuation and Wake's construction; the
 	// phrases are policed.
-	"  ·  ", `^(.+?) \[[0-9a-f]+\]`, `^(\S.*) \(([0-9]+)\):$`,
+	"  ·  ", `^.+? \[[0-9a-f]+\]`, `^(\S.*) \(([0-9]+)\):$`,
 })
 
 func wordSet(words []string) map[string]bool {

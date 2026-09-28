@@ -110,7 +110,7 @@ const (
 // listAgentsSelfName is the name and short id opening the self line, and
 // listAgentsHeader a section's unindented title and count.
 var (
-	listAgentsSelfName = regexp.MustCompile(`^(.+?) \[[0-9a-f]+\]`)
+	listAgentsSelfName = regexp.MustCompile(`^.+? \[[0-9a-f]+\]`)
 	listAgentsHeader   = regexp.MustCompile(`^(\S.*) \(([0-9]+)\):$`)
 )
 

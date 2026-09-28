@@ -31,6 +31,7 @@ const (
 	oneShotGarbage = "garbage" // a result whose text is no listing
 	oneShotFail    = "fail"    // the listing, then exit 1
 	oneShotFlood   = "flood"   // the listing, then more than a listing's worth
+	oneShotTurn    = "turn"    // the listing, from a result that ran a model turn
 	oneShotHang    = "hang"    // never answer
 	oneShotHeld    = "held"    // answer once the release file exists
 )
@@ -74,6 +75,11 @@ func fakeOneShot() int {
 	case oneShotFlood:
 		emitLines(readFixture(bareListingFixture))
 		fmt.Print(strings.Repeat("x", peersOutputBytes) + "\n")
+	case oneShotTurn:
+		lines := readFixture(bareListingFixture)
+		last := len(lines) - 1
+		lines[last] = strings.Replace(lines[last], `"num_turns":0`, `"num_turns":1`, 1)
+		emitLines(lines)
 	case oneShotHang:
 		_ = os.WriteFile(os.Getenv(fakeOneShotPIDEnv), []byte(fmt.Sprint(os.Getpid())), 0o600)
 		time.Sleep(lingerFor)
@@ -277,15 +283,37 @@ func TestAOneShotThatListsNobodyOrFailsAnswersEmpty(t *testing.T) {
 				t.Setenv("PATH", t.TempDir())
 			}
 			s := newServer(tempSocket(t))
-			if peers := s.listPeers(t.Context()); peers != nil {
-				t.Errorf("listPeers = %+v, want none", peers)
+			// The empty listing is a good read; every other mode says why it failed.
+			if peers, err := s.listPeers(t.Context()); peers != nil || (err == nil) != (mode == oneShotEmpty) {
+				t.Errorf("listPeers = (%+v, %v), want none", peers, err)
 			}
 		})
 	}
 	// And the same harness does list the recording, so the cases above fail
 	// for their own reason.
 	oneShotOnPath(t, "", "")
-	if peers := newServer(tempSocket(t)).listPeers(t.Context()); !reflect.DeepEqual(peers, recordedPeers) {
-		t.Fatalf("listPeers = %+v, want the recorded %+v", peers, recordedPeers)
+	if peers, err := newServer(tempSocket(t)).listPeers(t.Context()); err != nil || !reflect.DeepEqual(peers, recordedPeers) {
+		t.Fatalf("listPeers = (%+v, %v), want the recorded %+v", peers, err, recordedPeers)
+	}
+}
+
+// A result that ran a model turn is not the recorded local command, whatever
+// its text says - a claude that took /list-agents as a prompt - so it lists
+// nobody, and this daemon runs no more one-shots: every later ask is answered
+// empty at once, so any spend is bounded to that one turn.
+func TestAOneShotThatRanAModelTurnListsNobodyAndIsNotRunAgain(t *testing.T) {
+	oneShotOnPath(t, "advertises", oneShotTurn)
+	runs := runsCounted(t)
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	advertisingAgent(t, c)
+
+	for i := range 2 {
+		if got := askPeersOf(c); got.Peers != nil {
+			t.Errorf("ask %d answered %+v from a model turn", i, got.Peers)
+		}
+	}
+	if n := runs(); n != 1 {
+		t.Errorf("%d one-shot runs, want 1: a one-shot that ran a model turn must not be run again", n)
 	}
 }

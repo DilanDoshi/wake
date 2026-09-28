@@ -72,14 +72,22 @@ var nestedSessionEnv = []string{
 	"CLAUDE_PLUGIN_DATA",
 }
 
+// oneShotCredentialEnv is dropped from the one-shot alone: /list-agents needs no
+// credential (the bare recordings show apiKeySource none), and a bare claude
+// without one cannot spend first-party.
+var oneShotCredentialEnv = []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"}
+
 // ListAgentsCommand is the one-shot that lists the machine's sessions, run in
 // dir: claude found on this process's PATH as an agent's is, with an agent's
-// scrubbed environment, and in a group of its own that cancelling ctx kills
-// whole. The caller feeds stdin and reads stdout.
+// scrubbed environment less any credential, and in a group of its own that
+// cancelling ctx kills whole. The caller feeds stdin and reads stdout.
 func ListAgentsCommand(ctx context.Context, dir string) *exec.Cmd {
 	cmd := execCommand(ctx, claudeBinary, listAgentsArgv()...)
 	cmd.Dir = dir
-	cmd.Env = scrubbedEnv(os.Environ())
+	cmd.Env = slices.DeleteFunc(scrubbedEnv(os.Environ()), func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		return slices.Contains(oneShotCredentialEnv, name)
+	})
 	cmd.WaitDelay = waitDelay
 	setProcessGroup(cmd)
 	cmd.Cancel = func() error { return killProcessGroup(cmd) }

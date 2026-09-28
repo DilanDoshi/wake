@@ -37,3 +37,21 @@ func TestTheListAgentsOneShotRunsAsAnAgentDoes(t *testing.T) {
 			cmd.Cancel != nil, cmd.WaitDelay, waitDelay)
 	}
 }
+
+// It carries no first-party credential: /list-agents needs none (the bare
+// recordings show apiKeySource none), and a bare claude without one cannot
+// spend. Everything else an agent inherits it inherits too.
+func TestTheListAgentsOneShotCarriesNoCredential(t *testing.T) {
+	t.Setenv("ANTHROPIC_API_KEY", "sk-test")
+	t.Setenv("ANTHROPIC_AUTH_TOKEN", "token-test")
+	t.Setenv("WAKE_ONESHOT_KEPT", "1")
+	env := strings.Join(ListAgentsCommand(context.Background(), t.TempDir()).Env, "\x00")
+	for _, gone := range []string{"ANTHROPIC_API_KEY=", "ANTHROPIC_AUTH_TOKEN="} {
+		if strings.Contains(env, gone) {
+			t.Errorf("the one-shot carries %s, so a model turn it ran could be billed", gone)
+		}
+	}
+	if !strings.Contains(env, "WAKE_ONESHOT_KEPT=1") {
+		t.Error("the one-shot lost an ordinary variable an agent keeps")
+	}
+}
