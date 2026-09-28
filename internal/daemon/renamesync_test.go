@@ -132,10 +132,10 @@ func TestTheOperatorsRenameRepliedFirstLeavesNothingToSend(t *testing.T) {
 	}
 }
 
-// The mirrored Wake rename arriving first, mid-turn, with the operator's
-// passthrough written behind it: the earlier turn's end must not fire the want
-// while the operator's /rename is unanswered, its reply stays visible, and at
-// the next idle the names agree.
+// A /name arriving mid-turn with an unmirrored /rename passthrough written
+// behind it (the manager's, say): the earlier turn's end must not fire the want
+// while that /rename is unanswered, its reply stays visible, and at the next
+// idle the names agree.
 func TestTheOperatorsRenameInFlightHoldsTheWantUntilItsReply(t *testing.T) {
 	a, r := renamingAgent(t)
 	a.noteSent()
@@ -342,8 +342,9 @@ func TestHistoryDropsTheRecordedOnDiskRename(t *testing.T) {
 	}
 }
 
-// A mirrored rename of an idle agent sends nothing: claude's own /rename is on
-// its way, and its reply naming Wake's name settles the want.
+// A mirrored rename sends nothing: claude's own /rename is right behind it, and
+// its reply naming Wake's name settles the want. "busy" is a turn another
+// window started ending between the mirror and its passthrough.
 func TestAMirroredRenameWaitsForClaudesOwnReply(t *testing.T) {
 	for _, tc := range []struct {
 		name string
@@ -355,7 +356,7 @@ func TestAMirroredRenameWaitsForClaudesOwnReply(t *testing.T) {
 				a.noteSent()
 			}
 			mustMirror(t, a, r, "bob")
-			streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "a turn ends before the passthrough is written"})
+			streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "a turn ends before the passthrough is applied"})
 			a.probeIfWanted()
 			if got := queuedRenames(a); len(got) != 0 {
 				t.Fatalf("a mirrored rename queued %q before claude's own reply", got)
@@ -374,9 +375,9 @@ func TestAMirroredRenameWaitsForClaudesOwnReply(t *testing.T) {
 	}
 }
 
-// Any rename reply releases a held want, and one naming Wake's name clears it
-// there and then - so no later reply, from a /rename Wake never mirrored, can
-// fire it.
+// A reply no rename probe claims releases a held want there and then, and
+// settles it when claude took Wake's name - so no later reply, to a /rename
+// Wake never mirrored, can fire it. What it pins is the release itself.
 func TestAHeldWantIsSettledByTheReplyThatReleasesIt(t *testing.T) {
 	a, r := renamingAgent(t)
 	mustMirror(t, a, r, "bob")
@@ -404,9 +405,9 @@ func TestAMirroredRenameClaudeTookDifferentlyIsSentOnce(t *testing.T) {
 	}
 }
 
-// A /name over a held want moves its target and keeps it held: the mirrored
-// passthrough is still on its way to claude, so the one /rename cat goes only
-// after claude's reply to it.
+// Another window's /name over a held want - between the mirror and its
+// passthrough - moves its target and keeps it held, so the one /rename cat
+// goes only after claude's reply to the passthrough.
 func TestANameOverAHeldRenameWaitsForItsReply(t *testing.T) {
 	a, r := renamingAgent(t)
 	mustMirror(t, a, r, "bob")
@@ -458,11 +459,11 @@ func TestTheOperatorsRenameIsMarkedBeforeItsWrite(t *testing.T) {
 	}
 }
 
-// A rename probe's own reply never releases a held want (review O9): Wake's
-// /rename cat is in flight when the operator's /rename bob mirror lands, its
-// passthrough still in type-ahead, and a /name dan follows before that
-// passthrough. The probe's reply and the turn ending after it send nothing;
-// the passthrough's own reply releases the want, and one /rename dan follows.
+// A rename probe's own reply never releases a held want (review O9, in the
+// ordering the UI now produces): Wake's /rename cat is in flight when the
+// operator's /rename foo bar mirror and passthrough arrive together. The
+// probe's reply releases nothing; the passthrough's reply ("foo bar", the ask,
+// not Wake's foo-bar) does, and one /rename foo-bar follows.
 func TestAProbesOwnReplyDoesNotReleaseAHeldWant(t *testing.T) {
 	a, r := renamingAgent(t)
 	mustRename(t, a, r, "cat")
@@ -474,24 +475,49 @@ func TestAProbesOwnReplyDoesNotReleaseAHeldWant(t *testing.T) {
 	}
 	a.incProbe(renameProbe) // written, its reply not yet read
 
-	a.noteSent() // a message the operator sent behind it: the UI now thinks it busy
-	mustMirror(t, a, r, "bob")
+	mustMirror(t, a, r, "foo-bar")
+	a.noteSent()
+	a.noteRenameSent("/rename foo bar")
 	streamed(a, renamedEvent("cat"))
 	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: cat", LocalCommand: true})
-	mustRename(t, a, r, "dan")
-	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "the message's turn"})
+	streamed(a, renamedEvent("foo bar"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: foo bar", LocalCommand: true})
 	a.probeIfWanted()
-	if got := queuedRenames(a); len(got) != 0 {
-		t.Fatalf("the probe's own reply released the mirror's hold, and Wake queued %q ahead of the passthrough", got)
+	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename foo-bar"}) {
+		t.Fatalf("after the passthrough's reply Wake queued %q, want one [/rename foo-bar]", got)
 	}
+}
 
+// R1 in the ordering the UI now produces: /name cat on an idle agent fires its
+// /rename cat while the operator's /rename bob waits in type-ahead; then the
+// mirror and passthrough for bob arrive together, and claude answers bob-2.
+// Wake ends bob and claude bob-2, a variant claude chose, and nothing chases it.
+func TestANameThenAQueuedRenameAnsweredWithAVariantIsNotChased(t *testing.T) {
+	a, r := renamingAgent(t)
+	mustRename(t, a, r, "cat")
+	if got := queuedRenames(a); len(got) != 1 {
+		t.Fatalf("the idle /name queued %q, want one probe", got)
+	}
+	if text := a.renameWrite(); text != "/rename cat" {
+		t.Fatalf("the probe wrote %q", text)
+	}
+	a.incProbe(renameProbe)
+	streamed(a, renamedEvent("cat"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: cat", LocalCommand: true})
+
+	mustMirror(t, a, r, "bob")
 	a.noteSent()
 	a.noteRenameSent("/rename bob")
-	streamed(a, renamedEvent("bob"))
-	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: bob", LocalCommand: true})
+	streamed(a, renamedEvent("bob-2"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: bob-2", LocalCommand: true})
 	a.probeIfWanted()
-	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename dan"}) {
-		t.Fatalf("after the passthrough's reply Wake queued %q, want one [/rename dan]", got)
+	if got := queuedRenames(a); len(got) != 0 {
+		t.Fatalf("claude chose bob-2 for the operator's /rename bob, and Wake queued %q", got)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.name != "bob" || a.claudeName != "bob-2" {
+		t.Fatalf("Wake is %q and claude %q, want bob and the variant bob-2", a.name, a.claudeName)
 	}
 }
 

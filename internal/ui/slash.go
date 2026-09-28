@@ -674,8 +674,8 @@ func (a App) slash(text string) (App, tea.Cmd, bool) {
 }
 
 // renameMirror is Wake's half of a `/rename bob` typed in a conversation: the
-// write that moves this conversation's own handle for its agent, so the roster
-// and claude's title do not drift - or nil for any draft that is not one. The
+// name that moves this conversation's own handle for its agent, so the roster
+// and claude's title do not drift - or "" for any draft that is not one. The
 // room's `@who /rename bob` is renameMirrorFor, off the router's resolved
 // mention.
 //
@@ -683,8 +683,8 @@ func (a App) slash(text string) (App, tea.Cmd, bool) {
 // a leading slash means, which is this file's alone
 // (TestNothingButTheRouterKnowsWhatASlashMeans). It is deliberately not a
 // commands entry: `rename` is a word claude advertises, so slash leaves the
-// draft a message and it still reaches the agent - the caller writes this
-// *beside* the send, never instead of it, so claude's own rename keeps working.
+// draft a message and it still reaches the agent - the caller writes the mirror
+// just before the send, never instead of it, so claude's own rename keeps working.
 //
 // It mirrors claude's grammar rather than `/name`'s, and the difference is the
 // whole correctness of it. Claude's `/rename` renames the session it is typed
@@ -694,32 +694,31 @@ func (a App) slash(text string) (App, tea.Cmd, bool) {
 // with. The room is the opposite case: an `@who` there is the router's routing
 // target, so claude and Wake rename the same agent, and renameMirrorFor honours
 // it the way `/color` and `/name` take a room mention.
-func (a App) renameMirror(text string) tea.Cmd {
+func (a App) renameMirror(text string) string {
 	if a.focus == "" {
-		return nil
+		return ""
 	}
-	agent, ok := a.fleet.Agent(a.focus)
-	if !ok {
-		return nil
+	if _, ok := a.fleet.Agent(a.focus); !ok {
+		return ""
 	}
-	return a.renameMirrorArg(agent, text)
+	return renameMirrorArg(text)
 }
 
 // renameMirrorFor is the room's half of `@who /rename bob`: it mirrors claude's
-// rename onto the mentioned agent, beside the passthrough that carries /rename
+// rename onto the mentioned agent, just before the passthrough that carries /rename
 // to claude. who is the router's resolved mention - a live fleet name - so it
-// resolves the same way mentionCommand's reconstructed `@who` does, and nil when
-// the mention no longer names a live agent.
-func (a App) renameMirrorFor(who, text string) tea.Cmd {
+// resolves the same way mentionCommand's reconstructed `@who` does - its id and
+// the mirror's name, "" when the mention no longer names a live agent.
+func (a App) renameMirrorFor(who, text string) (id, name string) {
 	agent, ok := a.fleet.ByName(who)
 	if !ok {
-		return nil
+		return "", ""
 	}
-	return a.renameMirrorArg(agent, text)
+	return agent.ID, renameMirrorArg(text)
 }
 
 // renameMirrorArg is the shared recogniser behind both mirrors: a `/rename bob`
-// becomes a rename of agent, or nil for anything else - a folded case claude
+// becomes the name its mirror renames to, or "" for anything else - a folded case claude
 // will not read, an empty name, or a leading `@` (see below). A multi-word name
 // is no longer declined: hyphenateName folds its spaces, so `/rename foo bar`
 // mirrors as `foo-bar` rather than moving nothing while claude renames itself.
@@ -731,17 +730,17 @@ func (a App) renameMirrorFor(who, text string) tea.Cmd {
 // must not read it as "rename @sydney". Wake cannot hold a name starting with
 // `@` either (normalizeName wants a letter), so declining is both correct and
 // the only thing that could be stored.
-func (a App) renameMirrorArg(agent Agent, text string) tea.Cmd {
+func renameMirrorArg(text string) string {
 	body, ok := strings.CutPrefix(strings.TrimSpace(text), SlashPrefix)
 	if !ok {
-		return nil
+		return ""
 	}
 	word, name, _ := strings.Cut(body, " ")
 	name = strings.TrimSpace(name)
 	if word != renameCommand || name == "" || strings.HasPrefix(name, agentPrefix) {
-		return nil
+		return ""
 	}
-	return a.renameTo(agent, hyphenateName(name), true)
+	return hyphenateName(name)
 }
 
 // loginCommand draws the auth panel: whether this machine is signed in, and the

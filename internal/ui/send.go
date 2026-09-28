@@ -140,20 +140,10 @@ func (a App) submit() (tea.Model, tea.Cmd) {
 	if a, cmd, ok := a.slash(text); ok {
 		return a, cmd
 	}
-	// A `/rename bob` is claude's own word, so the router above leaves it a
-	// message - and Wake mirrors it onto its own handle in the same keystroke,
-	// so the roster and claude's title do not drift, which was the reported
-	// confusion. mirror is nil for every other draft, so an ordinary send is
-	// still one command. See renameMirror. Sequenced, never batched: the mirror
-	// must reach the daemon before its passthrough (renamesync.go), and park.go
-	// is the precedent.
-	mirror := a.renameMirror(text)
 	if a.focus != "" {
-		model, cmd := a.sendDM(text, images)
-		return model, tea.Sequence(mirror, cmd)
+		return a.sendDM(text, images)
 	}
-	model, cmd := a.sendRoom(text, images)
-	return model, tea.Sequence(mirror, cmd)
+	return a.sendRoom(text, images)
 }
 
 // sendDM writes one message to the one agent a DM is with. There is nothing to
@@ -189,13 +179,20 @@ func (a App) sendDM(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) 
 	// lifecycle can be tracked, and delivered when the agent is free (queue.go).
 	// The echo keeps the chips (image markers and all); the wire text has them
 	// stripped and their images ride beside it.
+	//
+	// A `/rename bob` is claude's own word, so the router leaves it a message -
+	// and Wake mirrors it onto its own handle, so the roster and claude's title
+	// do not drift (renameMirror). The mirror goes with its passthrough: queued
+	// with it, or sequenced just ahead of it, never batched - the daemon must
+	// read it first (renamesync.go), and park.go is the precedent.
 	msg := newQueued(a.composer().WireText(text), text, images, false)
+	msg.rename = a.renameMirror(text)
 	if a.shouldQueue(id) {
 		a = a.enqueue(id, msg)
 		return a.clearDraft(), nil
 	}
 	a = a.clearDraft().markSent(id, msg)
-	return a, a.write(sendFailed, sendFrame(id, msg))
+	return a, tea.Sequence(a.mirrorNow(id, msg.rename), a.write(sendFailed, sendFrame(id, msg)))
 }
 
 // sendRoom routes a draft the way §7 says: a leading @name that matches a live
@@ -272,18 +269,19 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		}
 	}
 	// `@who /rename bob` is claude's own word, so it passes through to the agent
-	// like any message - and Wake mirrors it onto its handle for who beside the
-	// send, the room half of renameMirror's focused case. nil for every other
-	// draft, so an ordinary broadcast is still one command. See renameMirrorFor.
+	// like any message - and Wake mirrors it onto its handle for who, the room
+	// half of renameMirror's focused case, the mirror going with who's passthrough
+	// as sendDM's does. "" for every other draft, so an ordinary broadcast is
+	// still one command. See renameMirrorFor.
 	//
 	// r.mode is MentionDirect for any slash command now - route never widens a
 	// knob - so `@who /rename bob` reaches who alone and the mirror moves who's
 	// handle beside it, whatever the mention mode. A plain `@who hello` in open
 	// mode is MentionOpen and takes no mirror, which is right: it is a broadcast
 	// keeping the @name in the text, and no agent gets a leading /rename.
-	var mirror tea.Cmd
+	var mirrorID, mirror string
 	if r.mentioned && r.mode == MentionDirect {
-		mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)
+		mirrorID, mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)
 	}
 	a = a.clearDraft()
 	// A busy target takes the broadcast when its turn ends (queue.go), fromRoom so
@@ -291,13 +289,20 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 	// regardless - you said it once, whoever is busy - so only the free targets are
 	// written and echoed to their DMs here; each frame carries its own stamped uuid.
 	var frames []rpc.Frame
+	var now tea.Cmd // the mirror, when its target takes the passthrough now
 	for _, id := range r.Targets {
 		msg := newQueued(r.Text, text, images, true)
+		if id == mirrorID {
+			msg.rename = mirror
+		}
 		if a.shouldQueue(id) {
 			a = a.enqueue(id, msg)
 			continue
 		}
 		a = a.markSent(id, msg)
+		if msg.rename != "" {
+			now = a.mirrorNow(id, msg.rename)
+		}
 		frames = append(frames, sendFrame(id, msg))
 	}
 	// Echoed as it was typed, mention and all: the room is the record of who you
@@ -314,7 +319,7 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		to = r.Targets[0]
 	}
 	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
-	return a, tea.Sequence(mirror, a.write(sendFailed, frames...)) // the mirror first, as in submit
+	return a, tea.Sequence(now, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
 }
 
 // clearDraft empties the focused composer and re-reads where ↵ would now send.

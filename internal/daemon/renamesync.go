@@ -18,13 +18,12 @@ package daemon
 // written - so a variant claude chose is never chased.
 //
 // The operator's own /rename reaches claude as a passthrough, and internal/ui
-// mirrors it as a Wake rename marked rpc.Frame.SelfRenames, sequenced ahead of
-// the passthrough so the hold is armed first. That want is held: it never fires
-// until claude's reply to the passthrough releases it, so a mirror whose
-// passthrough waits in type-ahead sends nothing until then. A /name over a held
-// want moves its target and stays held. A passthrough that never reaches claude
-// (a cancelled type-ahead) never releases it, so no /name syncs until claude's
-// next rename reply - fail-safe.
+// mirrors it as a Wake rename marked rpc.Frame.SelfRenames, written immediately
+// before the passthrough - at once, or at the type-ahead flush that carries
+// both - so the hold is armed first and spans only the passthrough's own turn.
+// That want is held: it never fires until claude's reply to the passthrough
+// releases it. A /name over a held want - another window's, during that round
+// trip - moves its target and stays held, and the release decides.
 
 import "github.com/DilanDoshi/wake/internal/core"
 

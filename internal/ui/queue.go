@@ -51,6 +51,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -67,13 +68,16 @@ const maxQueuedPinRows = 3
 // stamped with, so its command_lifecycle can be matched back; wire is what
 // reaches the agent (chip- and mention-stripped, as sendDM/sendRoom produce);
 // echo is what the transcript draws (as typed). fromRoom marks a broadcast, so
-// its held-DM echo heads `from the room` and its provenance is public.
+// its held-DM echo heads `from the room` and its provenance is public. rename is
+// a `/rename`'s mirror name, "" for none: written just before this message, so
+// Wake is renamed when the agent gets its own /rename, and not before.
 type queuedMsg struct {
 	id       string
 	wire     string
 	echo     string
 	images   []core.ImageBlock
 	fromRoom bool
+	rename   string
 }
 
 // newQueued builds a message with a freshly minted uuid, so an immediate send and
@@ -276,6 +280,10 @@ func (a App) flushQueued() (App, tea.Cmd) {
 		)
 		if a, msg, had = a.dequeue(id); had {
 			a = a.markSent(id, msg)
+			if msg.rename != "" {
+				notice.Report(renameAsked, agentPrefix, agent.Name)
+				frames = append(frames, renameFrame(id, msg.rename, true))
+			}
 			frames = append(frames, sendFrame(id, msg))
 		}
 	}

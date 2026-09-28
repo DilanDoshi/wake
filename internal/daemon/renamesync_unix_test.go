@@ -31,8 +31,9 @@ func TestARenamePendingAtParkIsNotSentToTheWokenProcess(t *testing.T) {
 	}
 }
 
-// The same for a held want: a mirror lands while the agent works and it parks
-// before claude's reply. The woken process is sent nothing.
+// The same for a held want: a mirror and its passthrough arrive while a turn
+// another window started runs, and the agent parks before claude's reply. The
+// woken process is sent nothing.
 func TestAHeldRenameAtParkIsNotSentToTheWokenProcess(t *testing.T) {
 	fakeClaudeOnPath(t, "renamesync")
 	d := startDaemon(t)
@@ -41,6 +42,7 @@ func TestAHeldRenameAtParkIsNotSentToTheWokenProcess(t *testing.T) {
 
 	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
 	mirrorTo(c, idAlpha, "bob")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
 	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha})
 	c.awaitState(idAlpha, rpc.StateParked)
 
