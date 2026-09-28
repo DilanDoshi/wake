@@ -10,10 +10,11 @@ package ui
 // menu may be wrong about a machine that has started nothing; a fence may not.
 //
 // **It is built per change, never per frame.** App.retarget's occasions, for
-// App.retarget's reason and one sharper: the `@` half needs a directory read,
-// which is why that half is a tea.Cmd - see completionpath.go. What is left per
-// frame is a comparison against the pane and the draft it was built for, which
-// is also what closes it.
+// App.retarget's reason and one sharper: the `@` half needs a directory read and
+// a git per opening, which is why that half is a tea.Cmd - see completionpath.go
+// and completionindex.go. A keystroke ranks what the git answered and never
+// walks. What is left per frame is a comparison against the pane and the draft
+// it was built for, which is also what closes it.
 //
 // **The menu never takes `↵`, but it takes `↑↓` to walk.** ⇥ completes, ↑↓ walk
 // the offers, and ⌃N/⌃P walk too as aliases - the ⌃ pair read above App.key's
@@ -481,13 +482,14 @@ func (a App) mentionedAlone(head string) (Agent, bool) {
 //
 // The names first and the paths under them, which is the overload stated as an
 // order rather than as a rule: a live session name wins. It runs again when a
-// directory read lands, so the cursor a walk left is clamped rather than reset -
-// paths arriving under the names cannot move them.
+// directory read or a git lands, so the cursor a walk left is clamped rather
+// than reset - paths arriving under the names cannot move them.
 func (c completion) bounded() completion {
-	matched := append(slices.Clone(c.names), c.paths.rows()...)
-	c.more = 0
+	paths, rest := c.paths.rows()
+	matched := append(slices.Clone(c.names), paths...)
+	c.more = rest
 	if len(matched) > completionRows {
-		c.more = len(matched) - completionRows
+		c.more += len(matched) - completionRows
 		matched = matched[:completionRows]
 	}
 	c.offers = matched

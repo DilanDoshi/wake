@@ -21,9 +21,14 @@ package ui
 // per character. The listing is dropped when the menu closes, so a menu opened
 // again is a directory read again.
 //
-// **One directory, never a walk.** Stepping into a subdirectory is ⇥ on the
-// directory itself, which is a keystroke somebody chose; a recursive scan of a
-// repository per character typed is what "cheap to leave open" prices at thirty.
+// **A listing steps; the index searches.** This file lists one directory, for
+// a draft that is walking them - a bare `@`, a path ending in a separator or
+// starting with `/`, `~` or `.` - and ⇥ on a directory steps into it. Other
+// typed text is ranked over the project's files (completionindex.go): one
+// bounded git per menu opening, off this goroutine, rather than a recursive scan
+// per character typed, which is what "cheap to leave open" prices at thirty.
+// That reverses the old "one directory, never a walk" (owner's 2026-09-27
+// ruling); a directory git does not answer for still gets the listing.
 //
 // **Bounded by entries.** os.ReadDir sorts the whole listing - unbounded work
 // in a directory nobody bounded, and node_modules is the ordinary case - while
@@ -86,13 +91,24 @@ type pathMenu struct {
 
 	// out is the directory a read is on a goroutine for, empty for none.
 	out string
+
+	// query is the typed text when it searches rather than steps, and root the
+	// directory the search is over: the session's own.
+	query, root string
+
+	// index is root's git answer - zero until it lands, and dropped by carrying
+	// when the menu closes - and indexing the directory a git is out for.
+	index    fileIndex
+	indexing string
 }
 
-// pathScanMsg is one finished read. It names the directory it was of, which is
-// what tells a menu's own answer from one it has stopped waiting for.
+// pathScanMsg is one finished read: a directory's listing, or with index set a
+// git's answer for it. It names the directory it was of, which is what tells a
+// menu's own answer from one it has stopped waiting for.
 type pathScanMsg struct {
 	dir     string
 	entries []pathEntry
+	index   *fileIndex
 }
 
 // pathMenuFor is which directory a mention offers from and what it matches
@@ -103,17 +119,21 @@ func (a App) pathMenuFor(typed string) pathMenu {
 		return pathMenu{}
 	}
 	dir, base := filepath.Split(typed)
-	return pathMenu{want: filepath.Join(root, dir), typed: dir, base: base}
+	return pathMenu{want: filepath.Join(root, dir), typed: dir, base: base, query: searchQuery(typed), root: root}
 }
 
-// rows is the path half of the menu as it is drawn now: the listing this menu
-// asked for, narrowed to what has been typed since it arrived.
+// rows is the path half of the menu as it is drawn now, and how many more it
+// has than it returns: a search's ranking, or the listing this menu asked for,
+// narrowed to what has been typed since it arrived.
 //
 // Nothing at all until the read has answered for this directory, which is what
 // a menu over a stalled mount offers - the names, and no paths.
-func (p pathMenu) rows() []string {
+func (p pathMenu) rows() ([]string, int) {
+	if p.searching() {
+		return p.ranked()
+	}
 	if p.want == "" || p.want != p.dir {
-		return nil
+		return nil, 0
 	}
 	lower := strings.ToLower(p.base)
 	out := make([]string, 0, len(p.entries))
@@ -133,40 +153,47 @@ func (p pathMenu) rows() []string {
 		out = append(out, agentPrefix+p.typed+name)
 	}
 	slices.Sort(out)
-	return out
+	return out, 0
 }
 
-// carrying is what a rebuilt menu keeps from the one it replaces: the read that
-// is out, and the listing when the new menu offers from the same directory.
+// carrying is what a rebuilt menu keeps from the one it replaces: the read and
+// the git that are out, the listing when the new menu offers from the same
+// directory, and the index while it searches the same one.
 //
-// The read is carried whatever the new menu is, because the goroutine exists
-// whether or not anything still wants its answer - dropping it here is what
-// would let a second one start beside it.
+// The read and the git are carried whatever the new menu is, because the
+// goroutine exists whether or not anything still wants its answer - dropping it
+// here is what would let a second one start beside it.
 func (p pathMenu) carrying(prev pathMenu) pathMenu {
-	p.out = prev.out
+	p.out, p.indexing = prev.out, prev.indexing
 	if p.want != "" && p.want == prev.dir {
 		p.dir, p.entries = prev.dir, prev.entries
+	}
+	if p.root != "" && p.root == prev.index.dir {
+		p.index = prev.index
 	}
 	return p
 }
 
-// scanning is what a keystroke owes the menu it rebuilt: the directory read it
-// needs, and an opening's one FramePeers (completionpeers.go). The keystroke
-// path is its only caller, which is what keeps both off a fleet report.
+// scanning is what a keystroke owes the menu it rebuilt: the git and the
+// directory read it needs, and an opening's one FramePeers (completionpeers.go).
+// The keystroke path is its only caller, which is what keeps them all off a
+// fleet report.
 func (a App) scanning() (App, tea.Cmd) {
 	a, scan := a.scanningPaths()
 	a, ask := a.askingPeers()
 	return a, tea.Batch(scan, ask)
 }
 
-// scanningPaths starts the read this menu needs, if it needs one and none is out.
+// scanningPaths starts the git an opening owes and the read this menu needs, if
+// it needs one - a search needs none - and none is out.
 func (a App) scanningPaths() (App, tea.Cmd) {
+	a, index := a.indexingPaths()
 	p := a.completion.paths
-	if p.want == "" || p.want == p.dir || p.out != "" {
-		return a, nil
+	if p.want == "" || p.want == p.dir || p.out != "" || p.searching() {
+		return a, index
 	}
 	a.completion.paths.out = p.want
-	return a, scanPaths(p.want)
+	return a, tea.Batch(index, scanPaths(p.want))
 }
 
 // scanPaths reads one directory off the draw goroutine. The read is separated
@@ -178,6 +205,9 @@ func scanPaths(dir string) tea.Cmd {
 // pathsScanned folds a finished read into the menu that asked for it, and asks
 // for another when the draft moved to a different directory while it read.
 func (a App) pathsScanned(m pathScanMsg) (App, tea.Cmd) {
+	if m.index != nil {
+		return a.pathsIndexed(*m.index)
+	}
 	if m.dir != a.completion.paths.out {
 		// A read nothing is waiting on: the keys moved to another pane, or the
 		// menu was rebuilt for another directory before this answered.

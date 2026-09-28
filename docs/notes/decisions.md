@@ -3310,3 +3310,36 @@ though only one of them is `WorkflowAgentHistory`'s own error to report rather t
 
 Full argument: `internal/daemon/workflowdisk.go`, `internal/daemon/workflowsave.go`,
 `internal/daemon/subagenttrack.go`, `internal/ui/workflowview.go`.
+
+## 2026-09-27 — `@` searches the project's files, reversing "one directory, never a walk"
+
+The owner asked for Claude Code's `@` here: typed text finds a file anywhere in the project, not
+only in the directory the draft names. That reverses `completionpath.go`'s old ruling, which said
+stepping into a directory is ⇥ on it and "a recursive scan of a repository per character typed is
+what cheap-to-leave-open prices at thirty". **The reversal answers the ruling rather than waiving
+it: the cost it priced was a walk per keystroke, and this is one bounded read per menu opening.**
+
+- **One index per opening.** When a menu that offers paths opens, one
+  `git -C <session cwd> ls-files -co --exclude-standard -z` runs as a `tea.Cmd` — one in flight at a
+  time, its answer tagged with its directory and dropped if nothing waits on it, held on the menu
+  (`pathMenu.index`) until the menu closes. A keystroke ranks what is held (`rankPaths`, one pass
+  keeping the best rows, about 1ms over 50,000 paths on the draw goroutine, `BenchmarkRankPaths`).
+  Git rather than a walk because it is the project's own answer to "which files": ignored build
+  output and `node_modules` stay out.
+- **Which mode.** A bare `@`, a text ending in a separator and one starting with `/`, `~` or `.`
+  step through directories, and keep the listing and ⇥'s step into a directory. Anything else
+  searches, and offers files only. The dotfile rule is the listing's over a whole path: a path with
+  a hidden segment is offered only to a query with one.
+- **The rank.** Case-insensitive: the file's name begins with the text, then contains it, then
+  spells it in order, then only the whole path spells it; within a tier the shorter path, then
+  lexical. A path that does not spell it is not offered.
+- **The bounds.** A 5s deadline that kills git's whole process group, then `bangWaitDelay` for a
+  pipe something it left holds (`bangRun`'s two bounds, through its own group helpers); 8 MiB kept
+  by a writer that claims every write, so a flood neither deadlocks nor grows memory (the lesson of
+  `internal/daemon/peers.go`'s `capped`); 50,000 names. What a cap leaves out is counted into the
+  menu's `more`. Every name goes through `core.Contained`; one holding a newline is not offered.
+- **The fallback.** No repository, a failed exec, a non-zero exit, the deadline or a held pipe all
+  give today's one-directory listing for that text, unchanged. The failure is held on the menu, so
+  git is not re-run per keystroke, and reported nowhere, for `readDirBounded`'s reason.
+
+Full argument: `internal/ui/completionindex.go`'s header, `internal/ui/completionpath.go`'s.
