@@ -8,6 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
+
+	"github.com/DilanDoshi/wake/internal/core"
 )
 
 // caretTestDraft is a composer's drawn draft as composerRegion captures it at a
@@ -345,5 +347,93 @@ func TestAClickInAScrolledDraftUnderACompletionMenu(t *testing.T) {
 	a = clickDraftRow(t, a, 0, 0)
 	if got, want := caretMarked(a), markedAt(draft, line, 0); got != want {
 		t.Errorf("clicking drawn row 0 (%q) put the marker at\n%q\nwant\n%q", drawn[0], got, want)
+	}
+}
+
+// A compacting conversation draws its bar a row taller, which in a short pane
+// takes rows from the box. The press must map against that box, not the one the
+// pane would draw without the bar: with the caret near the top both start at
+// the draft's first row, but on different screen rows.
+func TestAClickInACompactingConversationsTallDraft(t *testing.T) {
+	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex").withSize(80, 16)
+	draft := tallDraft(20)
+	a = a.withComposer(a.composer().InsertText(draft))
+	a = a.observe("s1", core.Event{Kind: core.KindSystem, Notice: core.NoticeCompacting})
+	var m tea.Model = a
+	for range 18 {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	}
+	a = m.(App)
+	frame := strings.Split(ansi.Strip(a.View()), "\n")
+	y := slices.IndexFunc(frame, func(l string) bool { return strings.Contains(l, "> line 00") })
+	if y < 0 || strings.Count(strings.Join(frame, "\n"), "> line ") >= 10 {
+		t.Fatalf("want a box cut short by the compacting bar, drawn from line 00:\n%s", strings.Join(frame, "\n"))
+	}
+	x := len([]rune(frame[y][:strings.Index(frame[y], "line 00")]))
+	a, _ = click(a, x, y)
+	if got, want := caretMarked(a), markedAt(draft, 0, 0); got != want {
+		t.Errorf("clicking the drawn 'line 00' put the marker at\n%q\nwant\n%q", got, want)
+	}
+}
+
+// wideRunes is n distinct double-width runes, so no two drawn rows of them read
+// alike and a row mapped one off cannot pass for the right one.
+func wideRunes(from, n int) string {
+	r := make([]rune, n)
+	for i := range r {
+		r[i] = rune(0x4e00 + from + i)
+	}
+	return string(r)
+}
+
+// Every start drawnRowStarts reports must begin with the text the box draws on
+// that row - checked against the renderer across tall, wrapped, full-width and
+// wide-rune drafts, with the caret walked up through each and then to its line's
+// end, since the window is found from the caret.
+func TestDrawnRowStartsMatchTheDrawnRows(t *testing.T) {
+	const width = 40
+	w := NewComposer().SetWidth(width).ta.Width()
+	full := strings.Repeat("x", w)
+	words := make([]string, 60)
+	for i := range words {
+		words[i] = fmt.Sprintf("t%02d", i)
+	}
+	drafts := map[string]string{
+		"tall":       tallDraft(20),
+		"wrapped":    strings.Join(words, " "),
+		"full-width": tallDraft(6) + "\n" + full + "\nmid\n" + full + "\n" + tallDraft(6),
+		"wide":       "a0\n" + wideRunes(0, 40) + "\nb1 " + wideRunes(100, 30) + "\n" + wideRunes(200, 17) + "\nc2",
+		// The caret at the end of a line one cell short of full carries its column
+		// into the wide line below, far enough to reach that line's second row.
+		"carry": strings.Repeat("e", w-1) + "\n" + wideRunes(300, 40) + "\n" + tallDraft(6),
+		// Three full rows fit the box, and the caret on the row wrapped after them
+		// is not drawn: the drawn rows still start at the top.
+		"fits-under": strings.Repeat("a", w) + strings.Repeat("b", w) + strings.Repeat("c", w),
+	}
+	for name, draft := range drafts {
+		lines := strings.Split(draft, "\n")
+		for step := 0; step <= 50; step++ {
+			c := NewComposer().SetWidth(width).WithMaxRows(5)
+			c.ta.InsertString(draft)
+			c = c.fit().reposition()
+			ups := step / 2
+			for range ups {
+				c, _ = c.Update(tea.KeyMsg{Type: tea.KeyUp})
+			}
+			if step%2 == 1 {
+				c, _ = c.Update(tea.KeyMsg{Type: tea.KeyEnd})
+			}
+			d := caretTestDraft(c, width)
+			if len(d.starts) != len(d.rows) {
+				t.Fatalf("%s, %d up: %d starts for %d drawn rows", name, ups, len(d.starts), len(d.rows))
+			}
+			for i, s := range d.starts {
+				drawn := strings.TrimRight(ansi.Strip(ansi.Cut(d.rows[i], composerTextLeft, width-composerRightInset)), " ")
+				if rest := string([]rune(lines[s.line])[s.col:]); !strings.HasPrefix(rest, drawn) {
+					t.Errorf("%s, %d up: drawn row %d reads %q, but its start (line %d, rune %d) reads %q",
+						name, ups, i, drawn, s.line, s.col, rest)
+				}
+			}
+		}
 	}
 }

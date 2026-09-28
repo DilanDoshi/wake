@@ -220,7 +220,7 @@ func (a App) imageDropped(m imageDropMsg) (App, tea.Cmd) {
 	// are re-derived, exactly as they are after a keystroke. No directory read:
 	// a chip is neither a command nor a mention, so the cursor lands past any
 	// completion word.
-	return a.withComposerFor(m.conv, comp).retarget().recompleted(), nil
+	return a.withComposerFor(m.conv, comp).droppedComposerSelection(m.conv).retarget().recompleted(), nil
 }
 
 // composerFor addresses one pane's composer by conversation id, "" for the

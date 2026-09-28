@@ -72,8 +72,21 @@ func (a App) drawnComposer(id string, width, height int) (c Composer, below, min
 		// A narrow bar wraps to dmBarRows, so this is not always one.
 		return room.composer, barRows(room.bar), room.minHeight()
 	}
-	d := a.dmFor(id).WithMenu(menu).SetSize(width, height)
+	// WithCompacting too, as dmPane draws it: the compacting bar is a row
+	// taller, and in a short pane that row comes out of the box.
+	d := a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).SetSize(width, height)
 	return d.composer, barRows(d.bar), d.minHeight()
+}
+
+// droppedComposerSelection drops a query-box selection in pane conv. A draft that
+// changes without a keystroke - an image read landing, a rewind's prefill -
+// leaves the rows the selection captured at its press describing a draft that
+// is gone, and a keystroke is what drops one everywhere else.
+func (a App) droppedComposerSelection(conv string) App {
+	if a.sel.inComposer && a.sel.pane == conv {
+		return a.cleared()
+	}
+	return a
 }
 
 // composerSelectionIn is the composer selection resolved for one pane: nothing
@@ -151,8 +164,9 @@ func (a App) composerPoint(x, y int) point {
 //
 // A snapshot rather than a live read - which is where the transcript reads off
 // the scrollback at release - because the draft cannot change under a live
-// composer drag: the only thing that edits it is a keystroke, and App.cleared
-// drops the selection on every KeyMsg before the key does its job. So the rows
+// composer drag: a keystroke edits it, and App.cleared drops the selection on
+// every KeyMsg before the key does its job; anything else that edits it drops
+// the selection too (droppedComposerSelection). So the rows
 // captured at press are the rows on screen at release, and the copy matches the
 // highlight. The transcript reads live for the opposite reason: events append to
 // it while the button is held.

@@ -1,11 +1,15 @@
 package ui
 
 import (
+	"errors"
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/DilanDoshi/wake/internal/core"
 )
 
 // roomDraftApp is a full-width room with the roster hidden and a draft typed in,
@@ -192,5 +196,76 @@ func TestDeletingAWideCharacterSelection(t *testing.T) {
 	got := dragThenKey(t, a, left+2, left+7, draftTop, tea.KeyMsg{Type: tea.KeyBackspace})
 	if want := "AB界CD"; got != want {
 		t.Errorf("deleting a CJK span gave %q, want %q", got, want)
+	}
+}
+
+// An image read lands in the draft without a keystroke. A highlight taken while
+// it was read maps rows captured before the insert, so the drop clears it the way
+// a keystroke would - and ⌫ is then an ordinary backspace, not a deletion of
+// whatever run now sits where the highlight was.
+func TestAnImageLandingInTheDraftDropsItsHighlight(t *testing.T) {
+	fresh(t)
+	a := roomDraftApp(t, "hello world")
+	r := a.regions()
+	draftTop, _, _, _, _ := a.composerRegion("", r.Room(), 0, a.paneHeight())
+	left := a.layout.PaneLeft(r, 0) + composerTextLeft
+	a, _ = click(a, left, draftTop) // the caret to the start, where the drop lands
+	a, _ = a.mouse(pressAt(left+6, draftTop))
+	for x := left + 7; x <= left+10; x++ {
+		a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft, X: x, Y: draftTop})
+	}
+	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: left + 10, Y: draftTop})
+	if !a.sel.inComposer || a.sel.empty() {
+		t.Fatalf("no highlight over 'world' to go stale: %+v", a.sel)
+	}
+	m, _ := a.Update(imageDropMsg{conv: "", results: []droppedImage{{path: "/tmp/shot.png", err: errors.New("unreadable")}}})
+	if !m.(App).sel.empty() {
+		t.Error("the highlight outlived an image read landing in its draft")
+	}
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	if got, want := m.(App).composer().Value(), "/tmp/shot.pnhello world"; got != want {
+		t.Errorf("⌫ after the drop gave %q, want an ordinary backspace: %q", got, want)
+	}
+}
+
+// A rewind's prefill replaces the draft without a keystroke, so a highlight in
+// that conversation's box is dropped with it.
+func TestARewindPrefillDropsTheHighlight(t *testing.T) {
+	fresh(t)
+	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
+	a = a.withComposer(a.composer().InsertText("typed while waiting"))
+	a.sel = selection{pane: "s1", inComposer: true, anchor: point{0, 0}, head: point{0, 5}}
+	after := a.observe("s1", core.Event{
+		Kind:   core.KindRewindReceipt,
+		Rewind: &core.RewindResult{Rewound: true, PrefillText: "redo me"},
+	})
+	if after.composer().Value() != "redo me" {
+		t.Fatalf("setup: the rewind did not prefill the draft: %q", after.composer().Value())
+	}
+	if !after.sel.empty() {
+		t.Error("the highlight outlived the rewind's prefill replacing its draft")
+	}
+}
+
+// A highlight on a wrapped row of a scrolled line deletes the word drawn under
+// it, not the one the same row index would hold from the draft's top.
+func TestBackspaceDeletesAWordOnAWrappedRowOfAScrolledLine(t *testing.T) {
+	words := make([]string, 500)
+	for i := range words {
+		words[i] = fmt.Sprintf("t%03d", i)
+	}
+	draft := strings.Join(words, " ")
+	a := pastedDraftApp(t, 120, 40, draft)
+	drawn := drawnDraftText(t, a)
+	if strings.HasPrefix(drawn[0], "t000") {
+		t.Fatalf("the line is not scrolled: drawn %q", drawn)
+	}
+	first := strings.Fields(drawn[3])[0]
+	r := a.regions()
+	draftTop, _, _, _, _ := a.composerRegion("", r.Room(), 0, a.paneHeight())
+	left := a.layout.PaneLeft(r, 0) + composerTextLeft
+	got := dragThenKey(t, a, left, left+3, draftTop+3, tea.KeyMsg{Type: tea.KeyBackspace})
+	if want := strings.Replace(draft, first, "", 1); got != want {
+		t.Errorf("deleting %q, the first word of drawn row 3, left %d runes, want %d", first, len(got), len(want))
 	}
 }

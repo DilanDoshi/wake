@@ -36,8 +36,8 @@ func (a App) deleteSelectedDraft(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	}
 	next, deleted := c.deleteSelected(a.sel.marked(), a.cdrag.drawnDraft, a.cdrag.boxWidth)
 	if !deleted {
-		// No typed rune sits under the highlight (both ends clamp to one): clear
-		// the highlight and take the key rather than let it fall through to a normal
+		// No typed rune lies between the highlight's ends: clear the highlight
+		// and take the key rather than let it fall through to a normal
 		// backspace, which would delete an unrelated character at the cursor while
 		// the highlight vanished. The draft is untouched; a second press deletes
 		// normally.
@@ -211,11 +211,11 @@ func (c Composer) placeCursor(value string, offset int) Composer {
 	// Hop whole logical lines, never wrapped rows: from a line's start CursorUp
 	// reaches the line above and from its end CursorDown the line below, so a
 	// long wrapped line costs one LineInfo, not one per row.
-	for c.ta.Line() > targetLine {
+	for range c.ta.Line() - targetLine {
 		c.ta.CursorStart()
 		c.ta.CursorUp()
 	}
-	for c.ta.Line() < min(targetLine, c.ta.LineCount()-1) {
+	for range targetLine - c.ta.Line() {
 		c.ta.CursorEnd()
 		c.ta.CursorDown()
 	}

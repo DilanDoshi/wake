@@ -659,6 +659,13 @@ rides in `composerDrag` beside the rows. `placeCursor` hops logical lines, linea
 click then scrolls the clicked row to the box's bottom, as ↑↓ do (owner's choice over keeping the
 view still, which would mean changing `reposition`'s scroll policy).
 
+**Two stale-mapping paths the adversarial review found, fixed with it.** `drawnComposer` sized a DM
+without `WithCompacting`, which `dmPane` draws: in a short pane the compacting bar takes a row from the
+box, so a press mapped against a box two rows taller than the one on screen. And an image read or a
+rewind's prefill edits the draft without a keystroke, so a highlight taken meanwhile kept rows that
+no longer mapped, and ⌫ deleted a neighbouring run; both now drop that pane's query-box selection
+(`droppedComposerSelection`), as a keystroke does.
+
 **Two residuals on the same bubbles wrap, not fixed here.** (1) **↓ cannot cross a full-width line
 mid-draft**: `CursorDown` stalls on it, so `CanCursorDown` reads false. (2) A draft that fits and ends
 in a full-width line leaves the caret on that trailing row, **below the fitted box** — `draftRows`
