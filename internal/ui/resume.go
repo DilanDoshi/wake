@@ -102,7 +102,11 @@ func (a App) resume(arg string) (App, tea.Cmd) {
 // against a single parked session would otherwise say "1 parked sessions", and
 // the name is the more useful half of that sentence anyway.
 func (a App) bringBack(agents []Agent) (App, tea.Cmd) {
-	a = a.clearDraft()
+	return a.clearDraft().wake(agents)
+}
+
+// wake is bringBack without the draft, for the auto-wake nobody typed.
+func (a App) wake(agents []Agent) (App, tea.Cmd) {
 	if len(agents) == 1 {
 		notice.Report(resumeAsked, agentPrefix, agents[0].Name)
 	} else {

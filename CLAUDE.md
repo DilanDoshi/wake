@@ -127,8 +127,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - `/manager-stop` refuses a parked manager and a missing one; it does not borrow park's
   blocked-agent refusal (a stop has no wake).
 - `/reauth` parks sessions marked by a 401 (upstream bug #48786, shared-OAuth refresh race) so
-  `/resume` brings them back on a fresh login. Wake never runs `claude auth login`.
+  a new process reads a fresh login. Wake never runs `claude auth login`.
   `internal/ui/apierror.go`, `reauth.go`.
+- **A session parked for a failing API wakes itself** (auto-park or `/reauth`) on proof the login
+  works *after* its park: any agent's model turn, or a signed-in `/login` — never a timer.
+  **A usage limit (`core.NoticeUsageLimit`) never marks or parks**; it stays pinned until the next
+  healthy turn. `internal/ui/apirecover.go`.
 
 **Keys and the legend**
 - **The legend is drawn only while an arm is live, and then it is only the armed cue:**
@@ -293,7 +297,7 @@ yet says so in bold.**
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (type-ahead) · `mention.go` · `imagedrop.go` |
-| Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `picker.go` |
+| Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomfocus.go` · `roomfilter.go` |

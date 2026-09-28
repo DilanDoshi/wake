@@ -77,9 +77,10 @@ did not anticipate:
 **Still a workaround, and the decision behind it.** The upstream race is unfixed, so a woken session
 whose login is still expired will 401 again and re-mark — self-correcting, but it means `/reauth`
 guides the login step (Wake cannot run `claude auth login`: no-PTY) rather than guaranteeing success.
-And it parks-then-`/resume` in two steps rather than one: an automatic wake would have to thread a
-`tea.Cmd` back through the fleet-report chain (`applyStatus` returns only `App`), a larger change than
-this fix carried. See `deferred.md`.
+The wake is now automatic (2026-09-27, `fix/usage-limit-recovery`): a session parked for a failing API
+wakes once any agent's model turn, or a signed-in `/login`, proves the login works after the park
+(`internal/ui/apirecover.go`). A usage limit is no longer counted toward the auto-park at all — it
+recovers in the same process when the quota resets.
 
 **Still open after the fix — the surfacing is easy to miss (watched 2026-09-09).** The rebuild that
 first put #66 in a running binary showed the recovery works and the *presentation* does not. `pablo`

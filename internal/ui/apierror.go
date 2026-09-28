@@ -28,21 +28,28 @@ import (
 // is the whole of what a KindAPIError does now: like rateLimited, the event
 // never reaches a transcript or the fleet, because it is infrastructure failing
 // rather than the model speaking.
+//
+// A usage limit is only pinned: the quota resets on its own and the same process
+// answers again, so a mark for /reauth or a park would cost a restart for nothing.
 func (a App) apiErrored(sessionID string, ev core.Event) App {
-	if ev.Notice != core.NoticeAPIError {
+	usage := ev.Notice == core.NoticeUsageLimit
+	if ev.Notice != core.NoticeAPIError && !usage {
 		return a
 	}
 	msg := apiErrorFallback
 	if ev.Text != "" {
 		msg = ev.Text
 	}
-	a = a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, msg)
 	who := sessionID
 	if agent, ok := a.fleet.Agent(sessionID); ok && agent.Name != "" {
 		who = agentPrefix + agent.Name
 	}
+	if usage {
+		notice.Report(usageLimitFormat, who, msg)
+		return a.pinAPIError(sessionID, stuckPin{msg: msg, usage: true})
+	}
 	notice.Report(apiErrorFormat, who, msg, reauthVerb)
-	return a
+	return a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, stuckPin{msg: msg})
 }
 
 const (
@@ -53,17 +60,23 @@ const (
 	// apiErrorFormat is who, what the API said, and the command that recovers
 	// it - /reauth while the session runs, /resume once it is parked.
 	apiErrorFormat = "%s: %s — %s to bring it back"
+
+	// apiAwaitFormat is a session parked for a failing API, which wakes itself.
+	apiAwaitFormat = "%s: %s — parked; it wakes once the login works (/login checks)"
+
+	// usageLimitFormat is a usage limit: nothing to run, only a reset to wait for.
+	usageLimitFormat = "%s: %s — send again once it resets"
 )
 
 // pinAPIError keeps a session's failure on the notice row until it recovers:
-// a session limit or a dead login stops the agent until it is resumed, and a
+// a usage limit or a dead login stops the agent until a reset or a wake, and a
 // linger would let that fact go while it is still true. See noticelinger.go.
-func (a App) pinAPIError(id, msg string) App {
+func (a App) pinAPIError(id string, pin stuckPin) App {
 	next := make(map[string]stuckPin, len(a.notices.stuck)+1)
 	for held, p := range a.notices.stuck {
 		next[held] = p
 	}
-	next[id] = stuckPin{msg: msg}
+	next[id] = pin
 	a.notices.stuck = next
 	return a
 }
@@ -124,12 +137,19 @@ func (a App) pinnedNotice() string {
 		return ""
 	}
 	slices.SortFunc(stuck, func(x, y Agent) int { return strings.Compare(x.Name, y.Name) })
-	first := stuck[0]
-	verb := reauthVerb
-	if first.State == rpc.StateParked {
-		verb = resumeVerb
+	first, pin := stuck[0], a.notices.stuck[stuck[0].ID]
+	who := agentPrefix + first.Name
+	var text string
+	switch {
+	case a.isAPIParked(first):
+		text = fmt.Sprintf(apiAwaitFormat, who, pin.msg)
+	case first.State == rpc.StateParked:
+		text = fmt.Sprintf(apiErrorFormat, who, pin.msg, resumeVerb)
+	case pin.usage:
+		text = fmt.Sprintf(usageLimitFormat, who, pin.msg)
+	default:
+		text = fmt.Sprintf(apiErrorFormat, who, pin.msg, reauthVerb)
 	}
-	text := fmt.Sprintf(apiErrorFormat, agentPrefix+first.Name, a.notices.stuck[first.ID].msg, verb)
 	if more := len(stuck) - 1; more > 0 {
 		text += fmt.Sprintf(" · +%d more", more)
 	}
@@ -190,7 +210,7 @@ func (a App) autoParkStalled() (App, tea.Cmd) {
 		if a.blockedAgent(id) {
 			continue
 		}
-		a = a.awaitingPark(id)
+		a = a.awaitingPark(id).parkedForAPI(id)
 		frames = append(frames, rpc.Frame{Kind: rpc.FramePark, SessionID: id})
 	}
 	if len(frames) == 0 {
@@ -203,10 +223,11 @@ func (a App) autoParkStalled() (App, tea.Cmd) {
 // login works again: a real model turn (KindAssistantText), which a failed turn
 // never produces - its synthetic frame is the KindAPIError observe routed away.
 // Without it a mark outlived the failure, and a later /reauth re-parked a session
-// that had already recovered (a resume elsewhere, or the API coming back).
+// that had already recovered (a resume elsewhere, or the API coming back). The
+// fleet shares one login, so the same turn is the auto-wake's proof.
 func (a App) clearedAuthFailedOn(sessionID string, ev core.Event) App {
 	if ev.Kind == core.KindAssistantText {
-		return a.clearAuthFailed(sessionID).unpinAPIError(sessionID)
+		return a.clearAuthFailed(sessionID).unpinAPIError(sessionID).apiAnswered()
 	}
 	return a
 }

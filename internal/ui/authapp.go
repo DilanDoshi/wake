@@ -62,6 +62,9 @@ func runAuthStatus(id, dir string) tea.Cmd {
 // on screen would answer under the wrong one.
 func (a App) authResult(m authResultMsg) App {
 	st, ok := parseAuthStatus(m.Text)
+	if ok && st.LoggedIn {
+		a = a.apiAnswered() // proof for the sessions parked on a dead login; apirecover.go
+	}
 	if m.ID == "" {
 		return a.withRoom(a.room.Append(authEvent(m.ID, st, ok, a.room.blockWidth()), Agent{}))
 	}

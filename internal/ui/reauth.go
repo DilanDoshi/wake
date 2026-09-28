@@ -10,14 +10,13 @@ package ui
 // re-logging in elsewhere cannot heal a live one, which is why the operator's
 // external /login did not fix a running fleet. So this parks each session
 // KindAPIError marked (apierror.go): a park stops the stale process and keeps
-// the transcript, and /resume brings it back on a fresh login. Wake never runs
+// the transcript, and a wake brings it back on a fresh login. Wake never runs
 // `claude auth login` itself (no-PTY, authapp.go), so the login step stays
 // theirs.
 //
-// It parks rather than parks-and-wakes in one step deliberately: an automatic
-// wake would have to thread a tea.Cmd back through the fleet-report chain
-// (applyStatus returns only App), a larger change than this fix carries. See
-// docs/notes/deferred.md.
+// The wake follows on its own once something proves the login works - a turn
+// from any agent, or a signed-in /login (apirecover.go) - and /resume still
+// forces it.
 
 import (
 	"slices"
@@ -31,10 +30,10 @@ import (
 const (
 	reauthNothing = "no session is in an auth-error state. /login shows your sign-in; if one is stuck, run `claude auth login` then /resume it"
 	reauthBlocked = "the auth-failed sessions are all blocked on a permission ask - answer or interrupt those first, then /reauth"
-	reauthParked  = "parked %d session(s) holding a stale login. Run `claude auth login` if /login shows you signed out, then /resume all to bring them back"
+	reauthParked  = "parked %d session(s) holding a stale login; each wakes once a turn succeeds or /login shows you signed in (`claude auth login` if not)"
 	// The mixed case: some parked, some skipped because a stop closes stdin on a
 	// blocked ask. Named so a skipped, still-broken session is not silent.
-	reauthSomeBlocked = "parked %d session(s); skipped %d blocked on a permission ask - answer those then /reauth. Then `claude auth login` if signed out, and /resume all"
+	reauthSomeBlocked = "parked %d session(s), which wake once the login works; skipped %d blocked on a permission ask - answer those then /reauth"
 )
 
 // reauth parks every session a KindAPIError marked, so a fresh login reaches
@@ -54,7 +53,7 @@ func (a App) reauth(_ string) (App, tea.Cmd) {
 			blocked++ // a park closes stdin; a blocked ask must be answered first
 			continue
 		}
-		a = a.awaitingPark(id).clearAuthFailed(id)
+		a = a.awaitingPark(id).clearAuthFailed(id).parkedForAPI(id)
 		frames = append(frames, rpc.Frame{Kind: rpc.FramePark, SessionID: id})
 	}
 	if len(frames) == 0 {

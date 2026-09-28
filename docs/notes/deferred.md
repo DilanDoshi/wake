@@ -4989,6 +4989,11 @@ a second room surface, which needs a §2c scope decision), then a plan.
 
 ## 2026-09-04 — `/reauth` parks then `/resume`s in two steps; one-command park→wake is deferred
 
+**CLOSED 2026-09-27 — `fix/usage-limit-recovery`.** The wake is derived in `settle()`, not threaded
+through the report chain: `autoWakeRecovered` (`internal/ui/apirecover.go`) wakes every session parked
+for a failing API once proof arrives after its park — any agent's model turn, or `/login` reporting
+signed in. The `/login`-inside-`/reauth` nicety below is still open.
+
 `/reauth` (BUG-35, `internal/ui/reauth.go`) recovers the sessions a fleet-wide OAuth expiry knocked
 out by **parking** them in place; the operator then types `/resume all` to bring them back on a fresh
 login. That is two commands where one would do.
@@ -5020,3 +5025,23 @@ case is a hint that goes away too soon, never a wrong action.
 *Closes with:* a daemon-issued process-incarnation id on `rpc.SessionStatus` (it trips the three
 reflective field guards), unpinning only on a report that proves a newer process than the one that
 failed.
+
+## 2026-09-27 — usage-limit recovery: what `fix/usage-limit-recovery` left out
+
+A usage limit (`error:"rate_limit"` on the failed turn's synthetic frame, `core.NoticeUsageLimit`)
+now stays live and pinned, and a session parked for a dead login wakes itself on proof the login
+works (`internal/ui/apirecover.go`). Left out, each on purpose:
+
+- **No message is sent for you at the reset.** Claude Code does not either; the pin names the reset
+  time and the next message works. An auto-send would need a timer per agent, against "no process on
+  a timer", and a guess at what to send.
+- **The live stream form of a usage-limit frame is unrecorded** — hitting one on purpose costs a
+  quota. The decoder keys on the top-level `error` field, which the recorded auth variant carries on
+  the stream (`testdata/stream/api-error-auth.jsonl`) and real on-disk usage-limit lines carry as
+  `"rate_limit"` beside `isApiErrorMessage`. Record one when it happens and replace the constructed
+  line in `internal/core/usagelimit_test.go`.
+- **Every attached window auto-wakes**, as every window already auto-parks. The loser's wake is
+  refused as "not parked" and shown in that window. *Closes with:* the daemon owning the auto-park and
+  wake, which needs the attempt count on its side of the socket.
+- **Nothing watches the login while every agent is parked.** With no agent live, only `/login`
+  (signed in) or `/resume` brings them back — Wake cannot poll `claude auth status` without a timer.
