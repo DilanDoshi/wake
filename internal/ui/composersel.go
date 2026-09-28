@@ -24,37 +24,37 @@ import (
 
 // composerRegion is where a pane's editable text sits on screen: the row its
 // first draft row is on, how many draft rows are drawn, the box width, and the
-// rendered draft rows. ok is false when the pane is too short to draw a box
-// whose interior is on screen.
+// rendered draft rows with where each begins in the draft. ok is false when the
+// pane is too short to draw a box whose interior is on screen.
 //
 // Computed from the bottom because that has the fewest moving parts: the
 // composer is the last thing a pane draws bar the DM's status bar, so its rows
 // are the pane's height less that bar and less the composer's own view height,
 // and its interior is the box top border down.
-func (a App) composerRegion(id string, width, top, height int) (draftTop, draftRows, boxWidth int, rows []string, ok bool) {
+func (a App) composerRegion(id string, width, top, height int) (draftTop, draftRows, boxWidth int, drawn drawnDraft, ok bool) {
 	w := max(width, minComposerWidth)
 	c, below, minH := a.drawnComposer(id, w, height)
 	// Too short to draw the composer inside its allocation: the pane overflows
 	// and App.View clips it from the bottom, so the bottom-up placement below
 	// would point at rows the frame never drew. Take no selection there.
 	if height < minH {
-		return 0, 0, 0, nil, false
+		return 0, 0, 0, drawnDraft{}, false
 	}
 	draftRows = c.ta.Height()
 	if draftRows <= 0 {
-		return 0, 0, 0, nil, false
+		return 0, 0, 0, drawnDraft{}, false
 	}
 	block := strings.Split(c.View(w), "\n")
 	// The box's draft rows: its top border down, for draftRows of them.
 	if len(block) < 1+draftRows {
-		return 0, 0, 0, nil, false
+		return 0, 0, 0, drawnDraft{}, false
 	}
 	viewHeight := draftRows + c.overhead()
 	draftTop = top + height - below - viewHeight + 1 // +1 past the box's top border
 	if draftTop < top {
-		return 0, 0, 0, nil, false
+		return 0, 0, 0, drawnDraft{}, false
 	}
-	return draftTop, draftRows, w, block[1 : 1+draftRows], true
+	return draftTop, draftRows, w, drawnDraft{block[1 : 1+draftRows], c.drawnRowStarts(draftRows)}, true
 }
 
 // drawnComposer is a pane's composer as it is drawn - sized the same way View
@@ -95,7 +95,7 @@ func (a App) composerSelectionIn(id string) marked {
 // still extends into the blank and copies only what it trims to, the way it does
 // in the transcript.
 func (a App) startComposerSelection(id string, col, top, height, x, y int, r Regions) App {
-	draftTop, draftRows, boxWidth, rows, ok := a.composerRegion(id, r.Cols[col], top, height)
+	draftTop, draftRows, boxWidth, drawn, ok := a.composerRegion(id, r.Cols[col], top, height)
 	if !ok || y < draftTop || y >= draftTop+draftRows {
 		return a.startScreenSelection(x, y)
 	}
@@ -105,14 +105,14 @@ func (a App) startComposerSelection(id string, col, top, height, x, y int, r Reg
 	// clamping first would let a drag begun on that chrome copy the row's text.
 	// The press must land on the row's own characters, [composerTextLeft, +len).
 	rawCol := x - paneLeft
-	textLen := composerRowTextLen(rows[min(max(y-draftTop, 0), draftRows-1)], boxWidth)
+	textLen := composerRowTextLen(drawn.rows[min(max(y-draftTop, 0), draftRows-1)], boxWidth)
 	if rawCol < composerTextLeft || rawCol >= composerTextLeft+textLen {
 		// The blank of a draft row is not text - not even a screen selection, or
 		// an empty query box would take a highlight it deliberately does not.
 		a.sel, a.selecting = selection{}, false
 		return a
 	}
-	a.cdrag = composerDrag{draftTop, draftRows, paneLeft, boxWidth, rows}
+	a.cdrag = composerDrag{draftTop, draftRows, paneLeft, boxWidth, drawn}
 	p := a.composerPoint(x, y)
 	// refocused is unset here: it exists only for clickedTool, which the composer
 	// branch of endSelection never reaches - a query box has no folded tool.
@@ -177,7 +177,7 @@ const (
 // the drag begins so extend and copy do not re-render the box per motion.
 type composerDrag struct {
 	draftTop, draftRows, paneLeft, boxWidth int
-	rows                                    []string
+	drawnDraft
 }
 
 // composerText is the typed characters a selection covers, ready for the

@@ -1,19 +1,21 @@
 package ui
 
 import (
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
-// caretTestRows renders a composer's drawn draft rows exactly as composerRegion
-// captures them at a press: the box's interior only, dropping both the top and
-// bottom borders, so len(rows) == draftRows. That count is what composerRowStarts
-// uses as its scroll-decline bound, so the helper must match what clickedComposer
-// really passes (a.cdrag.rows) rather than carry an extra border row.
-func caretTestRows(c Composer, width int) []string {
-	return strings.Split(c.box(width), "\n")[1 : 1+c.ta.Height()]
+// caretTestDraft is a composer's drawn draft as composerRegion captures it at a
+// press: the box's interior only, dropping both borders so there is one row per
+// drawn draft row, with where each begins in the draft.
+func caretTestDraft(c Composer, width int) drawnDraft {
+	rows := strings.Split(c.box(width), "\n")[1 : 1+c.ta.Height()]
+	return drawnDraft{rows, c.drawnRowStarts(len(rows))}
 }
 
 // A click lands the caret onto the clicked character - the block cursor sits on
@@ -25,10 +27,7 @@ func TestCaretAtPointOnASingleLineDraft(t *testing.T) {
 	c.ta.InsertString("hello world")
 	c = c.fit()
 
-	c, ok := c.caretAtPoint(point{0, 6}, caretTestRows(c, width), width) // the 'w'
-	if !ok {
-		t.Fatal("caretAtPoint declined a plain single-line click")
-	}
+	c = c.caretAtPoint(point{0, 6}, caretTestDraft(c, width), width) // the 'w'
 	c.ta.InsertRune('|')
 	if got := c.ta.Value(); got != "hello |world" {
 		t.Errorf("a click on the 'w' placed the caret so a marker landed %q, want %q", got, "hello |world")
@@ -43,10 +42,7 @@ func TestCaretAtPointOnASecondLine(t *testing.T) {
 	c.ta.InsertString("hello\nworld")
 	c = c.fit()
 
-	c, ok := c.caretAtPoint(point{1, 2}, caretTestRows(c, width), width) // "wo|rld"
-	if !ok {
-		t.Fatal("caretAtPoint declined a two-line click")
-	}
+	c = c.caretAtPoint(point{1, 2}, caretTestDraft(c, width), width) // "wo|rld"
 	c.ta.InsertRune('|')
 	if got := c.ta.Value(); got != "hello\nwo|rld" {
 		t.Errorf("a click on row 1 col 2 placed the caret so a marker landed %q, want %q", got, "hello\nwo|rld")
@@ -63,10 +59,7 @@ func TestCaretAtPointClampsToTheRowsText(t *testing.T) {
 		c := NewComposer().SetWidth(width)
 		c.ta.InsertString("hi")
 		c = c.fit()
-		c, ok := c.caretAtPoint(point{0, col}, caretTestRows(c, width), width)
-		if !ok {
-			t.Fatalf("caretAtPoint declined a click at column %d", col)
-		}
+		c = c.caretAtPoint(point{0, col}, caretTestDraft(c, width), width)
 		c.ta.InsertRune('|')
 		return c.ta.Value()
 	}
@@ -79,27 +72,19 @@ func TestCaretAtPointClampsToTheRowsText(t *testing.T) {
 	}
 }
 
-// A draft taller than the box has scrolled inside it, so a drawn-row index is no
-// longer a visual-row index and there is no public way to read the scroll
-// offset. caretAtPoint declines rather than placing the caret on the wrong row;
-// the arrow keys still position in that case.
-func TestCaretAtPointDeclinesAScrolledDraft(t *testing.T) {
+// A draft taller than the box has scrolled inside it, so drawn row 0 is not the
+// draft's first row. Three lines in a two-row box is the tightest case - one row
+// off screen - and a click on the top drawn row lands on the second line.
+func TestCaretAtPointInAScrolledDraft(t *testing.T) {
 	width := 30
-	// Three lines in a two-row box is the tightest scrolled case - one row off
-	// screen. It is the boundary where an inflated row count (a helper that kept a
-	// border row) would wrongly accept, so caretTestRows must feed exactly the
-	// draftRows production passes for this to prove the decline.
 	c := NewComposer().SetWidth(width).WithMaxRows(2)
 	c.ta.InsertString("l1\nl2\nl3")
-	c = c.fit()
-	rows := caretTestRows(c, width)
+	c = c.fit().reposition()
 
-	wasRow, wasCol := c.ta.Line(), c.ta.LineInfo().ColumnOffset
-	if got, ok := c.caretAtPoint(point{0, 0}, rows, width); ok {
-		t.Fatalf("caretAtPoint placed the caret in a scrolled draft (now line %d): it should decline", got.ta.Line())
-	}
-	if c.ta.Line() != wasRow || c.ta.LineInfo().ColumnOffset != wasCol {
-		t.Error("a declined placement still moved the caret")
+	c = c.caretAtPoint(point{0, 0}, caretTestDraft(c, width), width)
+	c.ta.InsertRune('|')
+	if got := c.ta.Value(); got != "l1\n|l2\nl3" {
+		t.Errorf("a click on the top drawn row of a scrolled draft landed the marker %q, want %q", got, "l1\n|l2\nl3")
 	}
 }
 
@@ -142,5 +127,223 @@ func TestAClickToPlaceTheCaretCopiesNothing(t *testing.T) {
 
 	if got.composerSelectionIn("") != (marked{}) {
 		t.Errorf("a caret click highlighted the row: %+v", got.composerSelectionIn(""))
+	}
+}
+
+// tallDraft is n numbered lines, each distinct, so a drawn row names its line.
+func tallDraft(n int) string {
+	lines := make([]string, n)
+	for i := range lines {
+		lines[i] = fmt.Sprintf("line %02d", i)
+	}
+	return strings.Join(lines, "\n")
+}
+
+// pastedDraftApp is roomDraftApp at a chosen size with the draft pasted in one
+// insert, for drafts too long to type a rune at a time.
+func pastedDraftApp(t *testing.T, w, h int, draft string) App {
+	t.Helper()
+	a := newRoomApp(t).withSize(w, h).withAgents("alex")
+	a.layout.ShowRoster = false
+	a.focus = ""
+	a = a.applyGeometry()
+	return a.withComposer(a.composer().InsertText(draft))
+}
+
+// drawnDraftText is the typed text of each draft row the room's box draws, read
+// off the rows a press captures.
+func drawnDraftText(t *testing.T, a App) []string {
+	t.Helper()
+	r := a.regions()
+	_, _, boxWidth, drawn, ok := a.composerRegion("", r.Room(), 0, a.paneHeight())
+	if !ok {
+		t.Fatal("the room drew no composer region")
+	}
+	out := make([]string, len(drawn.rows))
+	for i, row := range drawn.rows {
+		out[i] = strings.TrimRight(ansi.Strip(ansi.Cut(row, composerTextLeft, boxWidth-composerRightInset)), " ")
+	}
+	return out
+}
+
+// clickDraftRow clicks the room's drawn draft row at a column into its text.
+func clickDraftRow(t *testing.T, a App, row, col int) App {
+	t.Helper()
+	r := a.regions()
+	draftTop, _, _, _, ok := a.composerRegion("", r.Room(), 0, a.paneHeight())
+	if !ok {
+		t.Fatal("the room drew no composer region")
+	}
+	a, _ = click(a, a.layout.PaneLeft(r, 0)+composerTextLeft+col, draftTop+row)
+	return a
+}
+
+// caretMarked is the room's draft with a marker typed at the caret - the one
+// unambiguous read of where the caret is.
+func caretMarked(a App) string {
+	c := a.composer()
+	c.ta.InsertRune('|')
+	return c.ta.Value()
+}
+
+// markedAt is draft with the marker at rune col of logical line line.
+func markedAt(draft string, line, col int) string {
+	lines := strings.Split(draft, "\n")
+	r := []rune(lines[line])
+	lines[line] = string(r[:col]) + "|" + string(r[col:])
+	return strings.Join(lines, "\n")
+}
+
+// A draft taller than the box scrolls inside it, and a click on any drawn row
+// still lands on the character drawn there - the drawn rows are a window into
+// the draft, found from the caret, not its first rows.
+func TestAClickInAScrolledDraftPlacesTheCaret(t *testing.T) {
+	draft := tallDraft(20)
+	lines := strings.Split(draft, "\n")
+	for _, row := range []int{0, 4} {
+		a := roomDraftApp(t, draft)
+		drawn := drawnDraftText(t, a)
+		if len(drawn) >= len(lines) || drawn[0] == lines[0] {
+			t.Fatalf("the draft is not scrolled: drawn %q", drawn)
+		}
+		line := slices.Index(lines, drawn[row])
+		a = clickDraftRow(t, a, row, 5)
+		if got, want := caretMarked(a), markedAt(draft, line, 5); got != want {
+			t.Errorf("clicking drawn row %d (%q) put the marker at\n%q\nwant\n%q", row, drawn[row], got, want)
+		}
+	}
+}
+
+// With the caret moved near the top of a tall draft the box shows its first
+// rows, and a click below the caret lands on the row clicked.
+func TestAClickBelowTheCaretNearTheTopOfATallDraft(t *testing.T) {
+	draft := tallDraft(20)
+	var m tea.Model = roomDraftApp(t, draft)
+	for range 16 {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	}
+	a := m.(App)
+	if drawn := drawnDraftText(t, a); drawn[0] != "line 00" || a.composer().ta.Line() != 3 {
+		t.Fatalf("want the caret on line 3 under a box drawn from line 0: caret line %d, drawn %q", a.composer().ta.Line(), drawn)
+	}
+	a = clickDraftRow(t, a, 7, 2)
+	if got, want := caretMarked(a), markedAt(draft, 7, 2); got != want {
+		t.Errorf("clicking drawn row 7 put the marker at\n%q\nwant\n%q", got, want)
+	}
+}
+
+// One long line wrapped far past the box: a click on a wrapped row lands on the
+// first word drawn there, not on the row the same index would be from the top.
+func TestAClickOnAWrappedRowOfAScrolledLine(t *testing.T) {
+	words := make([]string, 500)
+	for i := range words {
+		words[i] = fmt.Sprintf("t%03d", i)
+	}
+	draft := strings.Join(words, " ")
+	a := pastedDraftApp(t, 120, 40, draft)
+	drawn := drawnDraftText(t, a)
+	if strings.HasPrefix(drawn[0], "t000") {
+		t.Fatalf("the line is not scrolled: drawn %q", drawn)
+	}
+	first := strings.Fields(drawn[3])[0]
+	a = clickDraftRow(t, a, 3, 0)
+	if got, want := caretMarked(a), strings.Replace(draft, first, "|"+first, 1); got != want {
+		t.Errorf("clicking the wrapped row that starts %q put the marker %d runes in, want %d",
+			first, strings.Index(got, "|"), strings.Index(want, "|"))
+	}
+}
+
+// A line that exactly fills the box's width wraps to a trailing blank row, and
+// the caret at its end sits on that row. As the last line of a draft exactly as
+// tall as the box, that row scrolls the first line off: a click on the top drawn
+// row must land on line 1, not on line 0 where counting from the top puts it.
+func TestAClickWhenTheLastLineExactlyFillsTheBox(t *testing.T) {
+	a := pastedDraftApp(t, 120, 40, "")
+	full := strings.Repeat("x", a.composer().ta.Width())
+	draft := tallDraft(9) + "\n" + full
+	a = a.withComposer(a.composer().InsertText(draft))
+	drawn := drawnDraftText(t, a)
+	if drawn[0] != "line 01" || drawn[len(drawn)-1] != "" {
+		t.Fatalf("want the box scrolled one row to a blank trailing row: drawn %q", drawn)
+	}
+	a = clickDraftRow(t, a, 0, 0)
+	if got, want := caretMarked(a), markedAt(draft, 1, 0); got != want {
+		t.Errorf("clicking drawn row 0 (%q) put the marker at\n%q\nwant\n%q", drawn[0], got, want)
+	}
+}
+
+// A full-width line in the middle of a draft draws a blank row after it; a click
+// on a row below that blank still lands on its own line.
+func TestAClickBelowAFullWidthLine(t *testing.T) {
+	a := pastedDraftApp(t, 120, 40, "")
+	full := strings.Repeat("x", a.composer().ta.Width())
+	draft := "alpha\n" + full + "\nbravo\ncharlie"
+	a = a.withComposer(a.composer().InsertText(draft))
+	drawn := drawnDraftText(t, a)
+	if len(drawn) < 4 || drawn[2] != "" || drawn[3] != "bravo" {
+		t.Fatalf("want a blank row drawn after the full line: drawn %q", drawn)
+	}
+	a = clickDraftRow(t, a, 3, 0)
+	if got, want := caretMarked(a), markedAt(draft, 2, 0); got != want {
+		t.Errorf("clicking drawn row 3 (bravo) put the marker at\n%q\nwant\n%q", got, want)
+	}
+}
+
+// The blank row after a full-width line counts as a drawn row when the box has
+// scrolled past it: a click on the top drawn row, with that blank row between it
+// and the caret, lands on the line drawn there and not the one above.
+func TestAClickAboveAFullWidthLineInAScrolledDraft(t *testing.T) {
+	a := pastedDraftApp(t, 120, 40, "")
+	full := strings.Repeat("x", a.composer().ta.Width())
+	draft := tallDraft(15) + "\n" + full + "\nline 16\nline 17\nline 18\nline 19"
+	a = a.withComposer(a.composer().InsertText(draft))
+	drawn := drawnDraftText(t, a)
+	if drawn[0] != "line 11" || !slices.Contains(drawn, "") {
+		t.Fatalf("want a scrolled box with the full line's blank row drawn: drawn %q", drawn)
+	}
+	a = clickDraftRow(t, a, 0, 0)
+	if got, want := caretMarked(a), markedAt(draft, 11, 0); got != want {
+		t.Errorf("clicking drawn row 0 (line 11) put the marker at\n%q\nwant\n%q", got, want)
+	}
+}
+
+// A draft that fits, ending in a line that exactly fills its last row, leaves
+// the caret on the blank row below it - which the box does not draw. The drawn
+// rows then start at the draft's top, however far the caret is below them.
+func TestAClickWhenTheCaretSitsBelowTheDrawnRows(t *testing.T) {
+	a := pastedDraftApp(t, 120, 40, "")
+	w := a.composer().ta.Width()
+	draft := strings.Repeat("a", w) + strings.Repeat("b", w) + strings.Repeat("c", w)
+	a = a.withComposer(a.composer().InsertText(draft))
+	if drawn := drawnDraftText(t, a); len(drawn) != 3 || a.composer().ta.LineInfo().RowOffset != 3 {
+		t.Fatalf("want three drawn rows over a caret on the fourth: drawn %q, caret row %d",
+			drawn, a.composer().ta.LineInfo().RowOffset)
+	}
+	a = clickDraftRow(t, a, 1, 0)
+	if got, want := caretMarked(a), markedAt(draft, 0, w); got != want {
+		t.Errorf("clicking the first 'b' put the marker %d runes in, want %d", strings.Index(got, "|"), w)
+	}
+}
+
+// An open completion menu changes how tall the box may draw, so the drawn rows
+// are mapped from the composer as drawn, not the one the pane stores.
+func TestAClickInAScrolledDraftUnderACompletionMenu(t *testing.T) {
+	draft := tallDraft(19) + "\n@"
+	a := newRoomApp(t).withSize(120, 16).withAgents("alex")
+	a.layout.ShowRoster = false
+	a.focus = ""
+	a = a.applyGeometry().withDraft(draft)
+	if menu, _ := a.menuBlock("", a.regions().Room(), a.paneHeight()); menu == "" {
+		t.Fatal("no completion menu is open over the draft")
+	}
+	drawn := drawnDraftText(t, a)
+	lines := strings.Split(draft, "\n")
+	line := slices.Index(lines, drawn[0])
+	if line <= 0 {
+		t.Fatalf("the draft is not scrolled: drawn %q", drawn)
+	}
+	a = clickDraftRow(t, a, 0, 0)
+	if got, want := caretMarked(a), markedAt(draft, line, 0); got != want {
+		t.Errorf("clicking drawn row 0 (%q) put the marker at\n%q\nwant\n%q", drawn[0], got, want)
 	}
 }

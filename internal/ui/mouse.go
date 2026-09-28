@@ -439,21 +439,13 @@ func (a App) clickedTool() App {
 // clickedComposer places the caret where a click landed in the query box, onto
 // that character, and clears the highlight - a click positions where a drag
 // copies. It resets the caret's blink so it shows at once at the new spot, and
-// rebuilds the completion menu the way a cursor-moving key does. A scrolled draft
-// declines the placement (caretAtPoint), and then the click leaves the caret
-// alone.
+// rebuilds the completion menu the way a cursor-moving key does.
 func (a App) clickedComposer() (App, tea.Cmd) {
 	c, ok := a.composerFor(a.sel.pane)
 	if !ok {
 		return a, nil
 	}
-	moved, placed := c.caretAtPoint(a.sel.anchor, a.cdrag.rows, a.cdrag.boxWidth)
-	if !placed {
-		// A scrolled draft declines the placement; drop the empty selection the
-		// press took, the way deleteSelectedDraft clears on its own decline.
-		return a.cleared(), nil
-	}
-	moved, blink := moved.Refocus()
+	moved, blink := c.caretAtPoint(a.sel.anchor, a.cdrag.drawnDraft, a.cdrag.boxWidth).Refocus()
 	return a.withComposerFor(a.sel.pane, moved).cleared().recompleted(), blink
 }
 

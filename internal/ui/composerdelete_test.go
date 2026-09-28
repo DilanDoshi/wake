@@ -1,7 +1,7 @@
 package ui
 
 import (
-	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -130,44 +130,53 @@ func TestTheCursorFollowsADeletionSoTypingLandsThere(t *testing.T) {
 	}
 }
 
-// A scrolled draft (taller than the box) cannot map a display selection back to
-// raw runes, so ⌫ leaves the draft untouched and clears the highlight rather
-// than deleting an unrelated character at the cursor.
-func TestBackspaceOnAScrolledDraftDeletesNothing(t *testing.T) {
-	var b strings.Builder
-	for i := 0; i < 20; i++ {
-		if i > 0 {
-			b.WriteByte('\n')
-		}
-		fmt.Fprintf(&b, "line %d", i)
-	}
-	draft := b.String()
+// A highlight in a scrolled draft deletes exactly the run under it: the drawn
+// rows are a window into the draft, mapped from the caret, not its first rows.
+func TestBackspaceDeletesTheHighlightInAScrolledDraft(t *testing.T) {
+	draft := tallDraft(20)
 	a := roomDraftApp(t, draft)
+	drawn := drawnDraftText(t, a)
+	lines := strings.Split(draft, "\n")
+	line := slices.Index(lines, drawn[0])
+	if line <= 0 {
+		t.Fatalf("the draft is not scrolled: drawn %q", drawn)
+	}
 	r := a.regions()
-	w, h := r.Room(), a.paneHeight()
-	draftTop, draftRows, _, _, ok := a.composerRegion("", w, 0, h)
-	if !ok {
-		t.Fatal("no composer region")
-	}
-	if draftRows >= 20 {
-		t.Fatalf("the draft was not scrolled: %d rows visible of 20", draftRows)
-	}
+	draftTop, _, _, _, _ := a.composerRegion("", r.Room(), 0, a.paneHeight())
 	left := a.layout.PaneLeft(r, 0) + composerTextLeft
-	a, _ = a.mouse(pressAt(left, draftTop))
+	got := dragThenKey(t, a, left, left+3, draftTop, tea.KeyMsg{Type: tea.KeyBackspace}) // "line"
+	lines[line] = strings.TrimPrefix(lines[line], "line")
+	if want := strings.Join(lines, "\n"); got != want {
+		t.Errorf("deleting 'line' on drawn row 0 (%q) gave\n%q\nwant\n%q", drawn[0], got, want)
+	}
+}
+
+// A deletion near the top of a tall draft leaves the caret where the run was,
+// however many lines below it the draft goes on - typing lands there.
+func TestTypingAfterADeletionNearTheTopOfATallDraft(t *testing.T) {
+	draft := tallDraft(30)
+	var m tea.Model = roomDraftApp(t, draft)
+	for range 26 {
+		m, _ = m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	}
+	a := m.(App)
+	if drawn := drawnDraftText(t, a); drawn[1] != "line 01" {
+		t.Fatalf("want the box drawn from line 0: drawn %q", drawn)
+	}
+	r := a.regions()
+	draftTop, _, _, _, _ := a.composerRegion("", r.Room(), 0, a.paneHeight())
+	left := a.layout.PaneLeft(r, 0) + composerTextLeft
+	a, _ = a.mouse(pressAt(left, draftTop+1))
 	for x := left + 1; x <= left+3; x++ {
-		a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft, X: x, Y: draftTop})
+		a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionMotion, Button: tea.MouseButtonLeft, X: x, Y: draftTop + 1})
 	}
-	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: left + 3, Y: draftTop})
-	if !a.sel.inComposer || a.sel.empty() {
-		t.Fatalf("no composer selection to test the bail with: %+v", a.sel)
-	}
-	m, _ := a.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-	got := m.(App)
-	if v := got.composer().Value(); v != draft {
-		t.Errorf("a scrolled-draft ⌫ changed the draft: %q\nwant it unchanged", v)
-	}
-	if !got.sel.empty() {
-		t.Error("the highlight was not cleared after the bail")
+	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: left + 3, Y: draftTop + 1})
+	m, _ = a.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("X")})
+	lines := strings.Split(draft, "\n")
+	lines[1] = "X 01"
+	if got, want := m.(App).composer().Value(), strings.Join(lines, "\n"); got != want {
+		t.Errorf("typing after deleting 'line' on line 1 gave\n%q\nwant\n%q", got, want)
 	}
 }
 

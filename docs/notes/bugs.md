@@ -635,6 +635,35 @@ extend to it. A fork in that brief window is the general "forking a parent mid-u
 `forkRefusal` has always had for `--brief`, not the subagent-write hazard this guard closes; covering
 it would mean solving the unowed-turn-reads-idle problem the owner scoped out in BUG-36.
 
+## BUG-38 — a click in a tall query does not move the caret, and highlight-then-⌫ deletes nothing
+
+**Reported 2026-09-27**: once the query outgrew the box, a click on a typed character left the caret
+where it was; the owner then found highlight-to-delete dead the same way, while highlight-to-copy
+still worked (copy reads the drawn rows; the other two map them back to the draft).
+
+**Root cause: the drawn-row → draft mapping counted rows from the draft's top.** `composerRowStarts`
+enumerated display rows from row 0 and declined any draft with more rows than the box draws (more
+than 10, fewer in a short pane), because bubbles keeps the view's scroll offset unexported. Both
+`caretAtPoint` and `deleteSelected` inherited the decline, and both tests pinning it called it
+intended. Worse, it *misplaced* rather than declined when a line exactly fills the width: bubbles
+wraps a one-space row after such a line that its `CursorDown` clamps short of, so the walk
+under-counted and returned `ok` over the wrong rows. And `placeCursor` climbed at most 10 rows, so a
+deep caret landed on the wrong line even where the mapping held.
+
+**Fix (`composerdelete.go`).** The window is found from the caret: `reposition` leaves the caret on the
+bottom drawn row of a tall draft and the view at the top of one that fits, so the first drawn row is
+the caret's less up to `bound-1` rows. `drawnRowStarts` walks there and down on a copy, stepping by
+column within a line (`rowUp`/`rowDown`, which reach that trailing row), bounded by the box. It runs
+at the press on the composer *as drawn* — a menu changes the box's height from the stored one — and
+rides in `composerDrag` beside the rows. `placeCursor` hops logical lines, linear in the draft. A
+click then scrolls the clicked row to the box's bottom, as ↑↓ do (owner's choice over keeping the
+view still, which would mean changing `reposition`'s scroll policy).
+
+**Two residuals on the same bubbles wrap, not fixed here.** (1) **↓ cannot cross a full-width line
+mid-draft**: `CursorDown` stalls on it, so `CanCursorDown` reads false. (2) A draft that fits and ends
+in a full-width line leaves the caret on that trailing row, **below the fitted box** — `draftRows`
+counts the row as padding, so the caret is not drawn until the next character.
+
 ---
 
 ## Residuals carried from bugs that are fixed and merged

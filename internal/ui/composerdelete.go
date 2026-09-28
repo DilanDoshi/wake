@@ -7,11 +7,9 @@ package ui
 // area's own wrap (LineInfo), never a second copy of it. ⌫ and the delete key
 // reach this before App.cleared drops the selection - see App.deleteSelectedDraft.
 //
-// It is scoped to a draft that fits the box (no scroll): a scrolled draft's
-// visible rows are a window into the value, not its first rows, so a
-// visible-relative row index no longer maps to an absolute display row. That is
-// rare for a chat composer, and the fall-through is safe - the key does its
-// ordinary job rather than deleting the wrong run.
+// A draft taller than the box scrolls inside it, so the drawn rows are a window
+// into the value rather than its first rows. bubbles keeps the window's offset to
+// itself; drawnRowStarts finds the window from the caret instead.
 
 import (
 	"strings"
@@ -23,8 +21,8 @@ import (
 
 // deleteSelectedDraft turns ⌫ or delete into a deletion of the highlighted query
 // text when a live query-box selection is up, reporting whether it took the key.
-// A transcript selection, an empty selection, a scrolled draft or any other key
-// is left to the ordinary path - App.cleared then the composer.
+// A transcript selection, an empty selection or any other key is left to the
+// ordinary path - App.cleared then the composer.
 func (a App) deleteSelectedDraft(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	if m.Type != tea.KeyBackspace && m.Type != tea.KeyDelete {
 		return a, nil, false
@@ -36,10 +34,10 @@ func (a App) deleteSelectedDraft(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	if !ok {
 		return a, nil, false
 	}
-	next, deleted := c.deleteSelected(a.sel.marked(), a.cdrag.rows, a.cdrag.boxWidth)
+	next, deleted := c.deleteSelected(a.sel.marked(), a.cdrag.drawnDraft, a.cdrag.boxWidth)
 	if !deleted {
-		// The selection could not be mapped (a scrolled draft): clear the
-		// highlight and take the key rather than let it fall through to a normal
+		// No typed rune sits under the highlight (both ends clamp to one): clear
+		// the highlight and take the key rather than let it fall through to a normal
 		// backspace, which would delete an unrelated character at the cursor while
 		// the highlight vanished. The draft is untouched; a second press deletes
 		// normally.
@@ -55,26 +53,23 @@ func (a App) deleteSelectedDraft(m tea.KeyMsg) (App, tea.Cmd, bool) {
 // sits.
 type rowStart struct{ line, col int }
 
+// drawnDraft is the box's draft rows as a press captured them, and where each
+// one begins in the draft. Both come off the composer as drawn: a menu or card
+// can draw the box at a different height than the pane stores.
+type drawnDraft struct {
+	rows   []string
+	starts []rowStart
+}
+
 // deleteSelected removes the runes a query-box selection covers and leaves the
-// cursor where they were, or returns the composer untouched (ok=false) when the
-// draft is scrolled and the mapping cannot be trusted. rows are the draft's
-// rendered display rows captured when the drag began; boxWidth is their width.
-func (c Composer) deleteSelected(m marked, rows []string, boxWidth int) (Composer, bool) {
+// cursor where they were, or returns the composer untouched (ok=false) when no
+// typed rune lies between the selection's ends.
+func (c Composer) deleteSelected(m marked, d drawnDraft, boxWidth int) (Composer, bool) {
 	value := c.ta.Value()
-	if value == "" || len(rows) == 0 {
-		return c, false
-	}
-	// A draft taller than the visible rows is scrolled: a visible-relative row is
-	// no longer an absolute display row, so the mapping would be wrong. The walk
-	// declines it rather than paying to enumerate a large paste's every row.
-	starts, ok := composerRowStarts(c.ta.Prompt, c.taWidth, len(rows), value)
-	if !ok {
-		return c, false
-	}
 	lines := strings.Split(value, "\n")
 
-	start := rawOffset(starts, lines, m.from.line, runesInto(rows, m.from.line, m.from.col, boxWidth))
-	end := rawOffset(starts, lines, m.to.line, runesInto(rows, m.to.line, m.to.col, boxWidth))
+	start := rawOffset(d.starts, lines, m.from.line, runesInto(d.rows, m.from.line, m.from.col, boxWidth))
+	end := rawOffset(d.starts, lines, m.to.line, runesInto(d.rows, m.to.line, m.to.col, boxWidth))
 
 	r := []rune(value)
 	start = min(max(start, 0), len(r))
@@ -88,53 +83,68 @@ func (c Composer) deleteSelected(m marked, rows []string, boxWidth int) (Compose
 	return c.fit().reposition(), true
 }
 
-// composerRowStarts walks the text area's own wrap - through a throwaway copy and
-// its LineInfo - and reports, for each display row in order, the logical line it
-// belongs to and the rune index within that line where it begins. Using the text
-// area itself is what keeps a second copy of bubbles' wrap rules out of this file.
+// drawnRowStarts is where each of the n draft rows the box draws begins, walked
+// through the text area's own wrap (LineInfo) on a copy, so bubbles' wrap rules
+// have no second copy here.
 //
-// ok is false when the draft is taller than maxRows (scrolled): the walk stops
-// there rather than enumerating every row of a large paste. **Both walks are
-// bounded to maxRows steps, not to the draft length** - bubbles rehashes the
-// whole logical line on every LineInfo/CursorUp call, so an unbounded walk is
-// quadratic in a big single-line paste (measured seconds at ~20k runes). maxRows
-// is the visible row count, so a fitting draft is fully enumerated and a scrolled
-// one is declined after a bounded probe, the way draftRows stays bounded too.
-func composerRowStarts(prompt string, taWidth, maxRows int, value string) ([]rowStart, bool) {
-	probe := textarea.New()
-	probe.Prompt = prompt
-	probe.ShowLineNumbers = false
-	probe.SetWidth(taWidth)
-	probe.SetHeight(maxComposerRows)
-	probe.SetValue(value)
-
-	// SetValue leaves the cursor on the last display row; climb to the first.
-	// Past maxRows rows above it, the draft is scrolled and we decline.
-	for up := 0; up <= maxRows; up++ {
-		if probe.Line() == 0 && probe.LineInfo().RowOffset == 0 {
-			break
-		}
-		probe.CursorUp()
-	}
-	if probe.Line() != 0 || probe.LineInfo().RowOffset != 0 {
-		return nil, false
-	}
-	probe.CursorStart()
-
-	var out []rowStart
-	for {
-		li := probe.LineInfo()
-		out = append(out, rowStart{line: probe.Line(), col: li.StartColumn})
-		if len(out) > maxRows {
-			return nil, false
-		}
-		beforeLine, beforeRow := probe.Line(), li.RowOffset
-		probe.CursorDown()
-		if probe.Line() == beforeLine && probe.LineInfo().RowOffset == beforeRow {
+// The walk starts at the caret because reposition fixes the drawn window there:
+// it leaves the caret on the bottom row of a draft taller than the box and the
+// view at the top of one that fits. So the first drawn row is the caret's, less
+// up to bound-1 rows. **Both walks are bounded by the box, not the draft** -
+// LineInfo rehashes the whole logical line, so a walk over every row of a big
+// single-line paste would be quadratic in it.
+func (c Composer) drawnRowStarts(n int) []rowStart {
+	probe := c.ta
+	for range c.bound() - 1 {
+		if !rowUp(&probe) {
 			break
 		}
 	}
-	return out, true
+	out := []rowStart{startOf(probe)}
+	for len(out) < n && rowDown(&probe) {
+		out = append(out, startOf(probe))
+	}
+	return out
+}
+
+// startOf is the row the text area's caret is on.
+func startOf(ta textarea.Model) rowStart {
+	return rowStart{line: ta.Line(), col: ta.LineInfo().StartColumn}
+}
+
+// rowUp moves the caret onto the display row above and reports whether there
+// was one. Within a logical line it steps by column, mirroring rowDown; across
+// lines CursorUp lands on the last row of the line above.
+func rowUp(ta *textarea.Model) bool {
+	li := ta.LineInfo()
+	switch {
+	case li.RowOffset > 0:
+		ta.SetCursor(li.StartColumn - 1)
+	case ta.Line() > 0:
+		ta.CursorUp()
+	default:
+		return false
+	}
+	return true
+}
+
+// rowDown moves the caret onto the display row below and reports whether there
+// was one. Within a logical line it steps to the next row's first rune rather
+// than calling CursorDown, which clamps short of the blank row bubbles wraps after
+// a line that exactly fills the width - a row the box draws. CursorStart after
+// crossing a line keeps a wide-rune column from carrying onto its second row.
+func rowDown(ta *textarea.Model) bool {
+	li := ta.LineInfo()
+	switch {
+	case li.RowOffset < li.Height-1:
+		ta.SetCursor(li.StartColumn + li.Width)
+	case ta.Line() < ta.LineCount()-1:
+		ta.CursorDown()
+		ta.CursorStart()
+	default:
+		return false
+	}
+	return true
 }
 
 // rawOffset is the rune offset into the value of a point runeCol runes into
@@ -188,7 +198,7 @@ func valueRuneLen(lines []string) int {
 }
 
 // placeCursor moves the draft cursor to a rune offset in value, so a deletion
-// leaves the cursor where the removed run began rather than at the end.
+// leaves the cursor where the removed run began and a click where it landed.
 func (c Composer) placeCursor(value string, offset int) Composer {
 	r := []rune(value)
 	offset = min(max(offset, 0), len(r))
@@ -198,18 +208,15 @@ func (c Composer) placeCursor(value string, offset int) Composer {
 	if nl := strings.LastIndex(before, "\n"); nl >= 0 {
 		col = len([]rune(before[nl+1:]))
 	}
-	// Climb to the first display row, then descend to the target logical line.
-	// Both are bounded to the box's rows: this runs only after a successful
-	// (non-scrolled) deletion, so the draft fits, and LineInfo is O(line) per
-	// call - an unbounded climb would be quadratic on a big draft.
-	for up := 0; up <= maxComposerRows; up++ {
-		if c.ta.Line() == 0 && c.ta.LineInfo().RowOffset == 0 {
-			break
-		}
+	// Hop whole logical lines, never wrapped rows: from a line's start CursorUp
+	// reaches the line above and from its end CursorDown the line below, so a
+	// long wrapped line costs one LineInfo, not one per row.
+	for c.ta.Line() > targetLine {
+		c.ta.CursorStart()
 		c.ta.CursorUp()
 	}
-	c.ta.CursorStart()
-	for guard := 0; c.ta.Line() < targetLine && guard <= maxComposerRows; guard++ {
+	for c.ta.Line() < min(targetLine, c.ta.LineCount()-1) {
+		c.ta.CursorEnd()
 		c.ta.CursorDown()
 	}
 	c.ta.SetCursor(col)
