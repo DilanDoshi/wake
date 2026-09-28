@@ -3,15 +3,18 @@ package ui
 // The project half of `@`: typed text searches the session's files, as Claude
 // Code's own `@` does (owner's 2026-09-27 ruling, docs/notes/decisions.md).
 //
-// **One index per opening, narrowed per keystroke.** A menu that offers paths
-// runs one `git ls-files` when it opens - a tea.Cmd, one at a time and tagged
-// with its directory, as a directory read is - and holds the answer until it
-// closes. A keystroke ranks what is held, so typing never costs a walk.
+// **One index per opening, ranked per change.** A menu that offers paths runs
+// one `git ls-files` when it opens - a tea.Cmd, one at a time and tagged with
+// its directory, as a directory read is - and holds the answer until it closes.
+// A keystroke ranks what is held, so typing never costs a walk, and a rebuild
+// that moved neither the query nor the index (a fleet report) reuses the rank.
 //
 // **A path steps; anything else searches.** A bare `@`, a text ending in a
 // separator and one starting with `/`, `~` or `.` are somebody walking
-// directories, so they keep the listing and ⇥'s step into a directory. Any
-// other text is ranked over the index, which holds files only.
+// directories, so they keep the listing. Any other text is ranked over the
+// index: git's files and every directory above them, as Claude Code's `@`
+// offers both. ⇥ on a directory leaves the draft ending in a separator, which
+// is a step into its listing.
 //
 // **Bounded three ways**, since a repository is a directory nobody bounded:
 // indexTimeout (the group killed, then bangWaitDelay - bangRun's two bounds and
@@ -82,21 +85,50 @@ type fileIndex struct {
 	failed bool
 }
 
-// indexedPath is one name and its lower case, folded once per index rather than
-// once per keystroke.
-type indexedPath struct{ path, fold string }
-
-// rankedPath is one match and its tier, as rankPaths orders them.
-type rankedPath struct {
-	tier int
-	path string
+// indexedPath is one file or directory and its lower case, folded once per
+// index rather than once per keystroke.
+type indexedPath struct {
+	path, fold string
+	dir        bool
 }
+
+// rankedPath is one match as rankPaths orders it: tier, width as drawn (a
+// directory draws its separator), kind, then path.
+type rankedPath struct {
+	tier, width, kind int
+	path              string
+}
+
+// The kinds, in the order a tie goes: a file finishes the mention, where a
+// directory is one more step.
+const (
+	fileKind = iota
+	dirKind
+)
+
+// rankCache is a search's ranked rows, keyed on the query and the index they
+// rank, so a rebuild that moved neither - a fleet report - reuses them and the
+// rank is paid per change, never per event.
+type rankCache struct {
+	query string
+	index *fileIndex
+	rows  []string
+	rest  int
+}
+
+// gitLocation is what would point `git -C dir` at another repository if Wake's
+// own environment carried it (a hook, a wrapper), so the lister runs without it.
+var gitLocation = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_NAMESPACE"}
 
 // lsFiles runs git over dir and returns what it printed, cut at indexMaxBytes,
 // with how many names the cut dropped. A variable so a test can fake a slow,
 // huge, failing or non-git one without running git.
 var lsFiles = func(dir string) ([]byte, int, error) {
-	return runCapped(indexTimeout, gitBinary, "-C", dir, "ls-files", "-co", "--exclude-standard", "-z")
+	env := slices.DeleteFunc(os.Environ(), func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		return slices.Contains(gitLocation, name)
+	})
+	return runCapped(indexTimeout, env, gitBinary, "-C", dir, "ls-files", "-co", "--exclude-standard", "-z")
 }
 
 // searchQuery is typed when it searches the project, and "" when it steps
@@ -111,27 +143,36 @@ func searchQuery(typed string) string {
 // searching reports whether this menu's paths come from the index: a search,
 // over a directory git has not failed for.
 func (p pathMenu) searching() bool {
-	return p.query != "" && !p.index.failed
+	return p.query != "" && (p.index == nil || !p.index.failed)
 }
 
-// ranked is a search's rows and how many more it has: the matches it does not
-// draw and the names never indexed. Nothing until git has answered - an index
-// is empty until then - which is what a menu over a slow repository offers: the
-// names, and no paths.
-func (p pathMenu) ranked() ([]string, int) {
-	top, total := rankPaths(p.index.files, p.query, completionRows)
-	rows := make([]string, len(top))
-	for i, path := range top {
-		rows[i] = agentPrefix + path
+// reranked is this menu with its search ranked: the rows, and how many more -
+// the matches it does not draw and the names never indexed. Nothing until git
+// has answered, which is what a menu over a slow repository offers: the names,
+// and no paths. The rank it carried is reused while its key still holds.
+func (p pathMenu) reranked() pathMenu {
+	if !p.searching() || (p.rank.query == p.query && p.rank.index == p.index) {
+		return p
 	}
-	return rows, total - len(top) + p.index.left
+	var files []indexedPath
+	left := 0
+	if p.index != nil {
+		files, left = p.index.files, p.index.left
+	}
+	top, total := rankPaths(files, p.query, completionRows)
+	rows := make([]string, len(top))
+	for i, row := range top {
+		rows[i] = agentPrefix + row
+	}
+	p.rank = rankCache{query: p.query, index: p.index, rows: rows, rest: total - len(top) + left}
+	return p
 }
 
 // indexingPaths starts an opening's git: for a menu offering paths from a
 // directory it holds no index of, when none is out.
 func (a App) indexingPaths() (App, tea.Cmd) {
 	p := a.completion.paths
-	if p.root == "" || p.index.dir == p.root || p.indexing != "" {
+	if p.root == "" || p.index != nil || p.indexing != "" {
 		return a, nil
 	}
 	a.completion.paths.indexing = p.root
@@ -153,7 +194,7 @@ func indexPaths(dir string) tea.Cmd {
 // pathsIndexed folds a finished git into the menu that asked for it - held only
 // while that menu is open over its directory - and starts what the menu wants
 // now: the listing a failure falls back to, or the index the draft moved to.
-func (a App) pathsIndexed(index fileIndex) (App, tea.Cmd) {
+func (a App) pathsIndexed(index *fileIndex) (App, tea.Cmd) {
 	p := a.completion.paths
 	if index.dir != p.indexing {
 		return a, nil
@@ -168,46 +209,75 @@ func (a App) pathsIndexed(index fileIndex) (App, tea.Cmd) {
 
 // parseIndex reads git's answer: each name contained (BUG-9, readDirBounded's
 // reason), one line, once - a merge prints a name per stage - and at most
-// indexMaxFiles of them. dropped is how many names the byte cap cut; the tail
-// after the last NUL is the one it cut through, counted there and never offered.
+// indexMaxFiles of them, then the directories above them. dropped is how many
+// names the byte cap cut; the tail after the last NUL is the one it cut
+// through, counted there and never offered.
 func parseIndex(dir string, out []byte, dropped int) fileIndex {
 	rest := string(out)
 	index := fileIndex{dir: dir, left: dropped}
-	index.files = make([]indexedPath, 0, min(strings.Count(rest, nameEnd), indexMaxFiles))
+	files := make([]indexedPath, 0, min(strings.Count(rest, nameEnd), indexMaxFiles))
 	for prev := ""; ; {
 		name, after, ok := strings.Cut(rest, nameEnd)
-		switch {
-		case !ok:
-			return index
-		case len(index.files) == indexMaxFiles:
+		if !ok {
+			break
+		}
+		if len(files) == indexMaxFiles {
 			index.left += 1 + strings.Count(after, nameEnd)
-			return index
-		case name != prev && !strings.Contains(name, "\n"):
+			break
+		}
+		if name != prev && !strings.Contains(name, "\n") {
 			shown := core.Contained(name)
-			index.files = append(index.files, indexedPath{path: shown, fold: strings.ToLower(shown)})
+			files = append(files, indexedPath{path: shown, fold: strings.ToLower(shown)})
 		}
 		prev, rest = name, after
 	}
+	index.files = append(files, directoriesOf(files)...)
+	return index
 }
 
-// rankPaths is index narrowed to query: the best k matches, and how many
-// matched in all. One pass keeping k, since it runs on the goroutine that draws,
-// per keystroke, over up to indexMaxFiles names (BenchmarkRankPaths).
+// directoriesOf is every directory above files, once each, derived when the
+// index lands rather than per keystroke. A directory already seen has had its
+// parents seen too, so the walk up stops there.
+func directoriesOf(files []indexedPath) []indexedPath {
+	seen := make(map[string]bool)
+	var dirs []indexedPath
+	for _, f := range files {
+		for p := f.path; ; {
+			cut := strings.LastIndex(p, pathSeparator)
+			if cut < 0 || seen[p[:cut]] {
+				break
+			}
+			p = p[:cut]
+			seen[p] = true
+			dirs = append(dirs, indexedPath{path: p, fold: strings.ToLower(p), dir: true})
+		}
+	}
+	return dirs
+}
+
+// rankPaths is index narrowed to query: the best k rows - a directory drawn
+// with its separator - and how many matched in all. One pass keeping k, since
+// it runs on the goroutine that draws, over up to indexMaxFiles names and their
+// directories (BenchmarkRankPaths).
 //
 // The dotfile rule is the listing's over a whole path: a path with a hidden
 // segment is offered only to a query with one.
 func rankPaths(index []indexedPath, query string, k int) ([]string, int) {
 	q := strings.ToLower(query)
+	tail := q[strings.LastIndex(q, pathSeparator)+1:]
 	reachesHidden := hiddenPath(q)
 	best := make([]rankedPath, 0, k+1)
 	total := 0
 	for _, f := range index {
-		tier, ok := pathTier(f.fold, q)
+		tier, ok := pathTier(f.fold, q, tail)
 		if !ok || (!reachesHidden && hiddenPath(f.fold)) {
 			continue
 		}
 		total++
-		r := rankedPath{tier: tier, path: f.path}
+		r := rankedPath{tier: tier, width: len(f.path), kind: fileKind, path: f.path}
+		if f.dir {
+			r.width, r.kind = r.width+len(pathSeparator), dirKind
+		}
 		if i, _ := slices.BinarySearchFunc(best, r, compareRanked); i < k {
 			best = slices.Insert(best, i, r)[:min(len(best)+1, k)]
 		}
@@ -215,23 +285,29 @@ func rankPaths(index []indexedPath, query string, k int) ([]string, int) {
 	rows := make([]string, len(best))
 	for i, r := range best {
 		rows[i] = r.path
+		if r.kind == dirKind {
+			rows[i] += pathSeparator
+		}
 	}
 	return rows, total
 }
 
-// pathTier is where a folded path ranks for q, and false for a path that does
-// not spell q at all - which is every tier's precondition, so it is asked first.
-func pathTier(path, q string) (int, bool) {
+// pathTier is where a folded path ranks for q, whose tail - what follows its
+// last separator, or all of it - tiers against the path's name. Spelling q
+// through the path is every tier's precondition, so it is asked first; it also
+// spells q's head through the directories, since the separator it matches sits
+// at or before the name's.
+func pathTier(path, q, tail string) (int, bool) {
 	if !spelt(path, q) {
 		return 0, false
 	}
 	name := path[strings.LastIndex(path, pathSeparator)+1:]
 	switch {
-	case strings.HasPrefix(name, q):
+	case strings.HasPrefix(name, tail):
 		return tierPrefix, true
-	case strings.Contains(name, q):
+	case strings.Contains(name, tail):
 		return tierWithin, true
-	case spelt(name, q):
+	case spelt(name, tail):
 		return tierSpelt, true
 	}
 	return tierPath, true
@@ -247,9 +323,11 @@ func spelt(s, q string) bool {
 	return q == ""
 }
 
-// compareRanked orders matches: tier, then the shorter path, then lexically.
+// compareRanked orders matches: tier, the shorter row as drawn, a file before a
+// directory, then lexically.
 func compareRanked(a, b rankedPath) int {
-	return cmp.Or(cmp.Compare(a.tier, b.tier), cmp.Compare(len(a.path), len(b.path)), strings.Compare(a.path, b.path))
+	return cmp.Or(cmp.Compare(a.tier, b.tier), cmp.Compare(a.width, b.width), cmp.Compare(a.kind, b.kind),
+		strings.Compare(a.path, b.path))
 }
 
 // hiddenPath reports whether any segment of p is a dotfile.
@@ -257,14 +335,15 @@ func hiddenPath(p string) bool {
 	return strings.HasPrefix(p, dotPrefix) || strings.Contains(p, pathSeparator+dotPrefix)
 }
 
-// runCapped runs one lister under bangRun's two bounds - its whole group killed
-// at the deadline, and WaitDelay for a pipe something it left still holds - and
-// keeps at most indexMaxBytes of what it prints.
-func runCapped(timeout time.Duration, name string, args ...string) ([]byte, int, error) {
+// runCapped runs one lister in env (nil is Wake's own) under bangRun's two
+// bounds - its whole group killed at the deadline, and WaitDelay for a pipe
+// something it left still holds - and keeps at most indexMaxBytes of its output.
+func runCapped(timeout time.Duration, env []string, name string, args ...string) ([]byte, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
 	out := &indexOutput{kept: bangOutput{limit: indexMaxBytes}}
 	cmd := exec.CommandContext(ctx, name, args...)
+	cmd.Env = env
 	cmd.Stdout = out
 	cmd.WaitDelay = bangWaitDelay
 	bangSetGroup(cmd)

@@ -3323,21 +3323,32 @@ it: the cost it priced was a walk per keystroke, and this is one bounded read pe
   `git -C <session cwd> ls-files -co --exclude-standard -z` runs as a `tea.Cmd` — one in flight at a
   time, its answer tagged with its directory and dropped if nothing waits on it, held on the menu
   (`pathMenu.index`) until the menu closes. A keystroke ranks what is held (`rankPaths`, one pass
-  keeping the best rows, about 1ms over 50,000 paths on the draw goroutine, `BenchmarkRankPaths`).
-  Git rather than a walk because it is the project's own answer to "which files": ignored build
+  keeping the best rows, about 1.3ms over 50,000 files on the draw goroutine, `BenchmarkRankPaths`).
+  **The rank is paid per change, never per event**: it is cached on the menu keyed on the query and
+  the index's identity (`rankCache`), so a fleet report - `recompleted` runs on every one - reuses
+  it. Git rather than a walk because it is the project's own answer to "which files": ignored build
   output and `node_modules` stay out.
 - **Which mode.** A bare `@`, a text ending in a separator and one starting with `/`, `~` or `.`
-  step through directories, and keep the listing and ⇥'s step into a directory. Anything else
-  searches, and offers files only. The dotfile rule is the listing's over a whole path: a path with
-  a hidden segment is offered only to a query with one.
-- **The rank.** Case-insensitive: the file's name begins with the text, then contains it, then
-  spells it in order, then only the whole path spells it; within a tier the shorter path, then
-  lexical. A path that does not spell it is not offered.
+  step through directories, and keep the listing. Anything else searches git's files **and every
+  directory above them** (derived once when the index lands), as Claude Code's `@` offers both; a
+  directory is inserted as `@dir/`, so ⇥ on it leaves a draft ending in a separator, which is a step
+  into its listing. The dotfile rule is the listing's over a whole path: a path with a hidden
+  segment is offered only to a query with one.
+- **The rank.** Case-insensitive. A query is split at its last separator: its tail tiers against
+  the path's name (a directory's is its last segment) - the name begins with it, then contains it,
+  then spells it in order, then only the whole path spells the query - and its head must be spelt
+  through the directories, which spelling the whole query through the path already guarantees.
+  Within a tier: the shorter row as drawn (a directory counts its separator), then a file before a
+  directory (a file finishes the mention; a directory is one more step), then lexical. A path that
+  does not spell the query is not offered.
 - **The bounds.** A 5s deadline that kills git's whole process group, then `bangWaitDelay` for a
   pipe something it left holds (`bangRun`'s two bounds, through its own group helpers); 8 MiB kept
   by a writer that claims every write, so a flood neither deadlocks nor grows memory (the lesson of
   `internal/daemon/peers.go`'s `capped`); 50,000 names. What a cap leaves out is counted into the
   menu's `more`. Every name goes through `core.Contained`; one holding a newline is not offered.
+- **Git's location variables** - `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`,
+  `GIT_NAMESPACE` - are dropped from the lister's environment, so `-C <dir>` means that directory
+  even when a hook or wrapper put them in Wake's.
 - **The fallback.** No repository, a failed exec, a non-zero exit, the deadline or a held pipe all
   give today's one-directory listing for that text, unchanged. The failure is held on the menu, so
   git is not re-run per keystroke, and reported nowhere, for `readDirBounded`'s reason.

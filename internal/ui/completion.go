@@ -485,6 +485,7 @@ func (a App) mentionedAlone(head string) (Agent, bool) {
 // directory read or a git lands, so the cursor a walk left is clamped rather
 // than reset - paths arriving under the names cannot move them.
 func (c completion) bounded() completion {
+	c.paths = c.paths.reranked()
 	paths, rest := c.paths.rows()
 	matched := append(slices.Clone(c.names), paths...)
 	c.more = rest

@@ -24,11 +24,12 @@ package ui
 // **A listing steps; the index searches.** This file lists one directory, for
 // a draft that is walking them - a bare `@`, a path ending in a separator or
 // starting with `/`, `~` or `.` - and ⇥ on a directory steps into it. Other
-// typed text is ranked over the project's files (completionindex.go): one
-// bounded git per menu opening, off this goroutine, rather than a recursive scan
-// per character typed, which is what "cheap to leave open" prices at thirty.
-// That reverses the old "one directory, never a walk" (owner's 2026-09-27
-// ruling); a directory git does not answer for still gets the listing.
+// typed text is ranked over the project's files and directories
+// (completionindex.go): one bounded git per menu opening, off this goroutine,
+// rather than a recursive scan per character typed, which is what "cheap to
+// leave open" prices at thirty. That reverses the old "one directory, never a
+// walk" (owner's 2026-09-27 ruling); a directory git does not answer for still
+// gets the listing.
 //
 // **Bounded by entries.** os.ReadDir sorts the whole listing - unbounded work
 // in a directory nobody bounded, and node_modules is the ordinary case - while
@@ -96,10 +97,13 @@ type pathMenu struct {
 	// directory the search is over: the session's own.
 	query, root string
 
-	// index is root's git answer - zero until it lands, and dropped by carrying
+	// index is root's git answer - nil until it lands, and dropped by carrying
 	// when the menu closes - and indexing the directory a git is out for.
-	index    fileIndex
+	index    *fileIndex
 	indexing string
+
+	// rank is a search's ranked rows and the key they were ranked for.
+	rank rankCache
 }
 
 // pathScanMsg is one finished read: a directory's listing, or with index set a
@@ -130,7 +134,7 @@ func (a App) pathMenuFor(typed string) pathMenu {
 // a menu over a stalled mount offers - the names, and no paths.
 func (p pathMenu) rows() ([]string, int) {
 	if p.searching() {
-		return p.ranked()
+		return p.rank.rows, p.rank.rest // ranked by bounded; see reranked
 	}
 	if p.want == "" || p.want != p.dir {
 		return nil, 0
@@ -158,7 +162,8 @@ func (p pathMenu) rows() ([]string, int) {
 
 // carrying is what a rebuilt menu keeps from the one it replaces: the read and
 // the git that are out, the listing when the new menu offers from the same
-// directory, and the index while it searches the same one.
+// directory, the index while it searches the same one, and the rank while it
+// ranks that index - reranked decides whether the query moved.
 //
 // The read and the git are carried whatever the new menu is, because the
 // goroutine exists whether or not anything still wants its answer - dropping it
@@ -168,8 +173,11 @@ func (p pathMenu) carrying(prev pathMenu) pathMenu {
 	if p.want != "" && p.want == prev.dir {
 		p.dir, p.entries = prev.dir, prev.entries
 	}
-	if p.root != "" && p.root == prev.index.dir {
+	if prev.index != nil && prev.index.dir == p.root {
 		p.index = prev.index
+	}
+	if prev.rank.index == p.index {
+		p.rank = prev.rank
 	}
 	return p
 }
@@ -206,7 +214,7 @@ func scanPaths(dir string) tea.Cmd {
 // for another when the draft moved to a different directory while it read.
 func (a App) pathsScanned(m pathScanMsg) (App, tea.Cmd) {
 	if m.index != nil {
-		return a.pathsIndexed(*m.index)
+		return a.pathsIndexed(m.index)
 	}
 	if m.dir != a.completion.paths.out {
 		// A read nothing is waiting on: the keys moved to another pane, or the

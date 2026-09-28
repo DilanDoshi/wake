@@ -85,15 +85,17 @@ func nested(t *testing.T, dir string, rels ...string) {
 	}
 }
 
-// The ranking, as a table: the file's name before its directories, then the
-// shorter path, then the lexical one - and nothing that does not spell the query.
+// The ranking, as a table: the name before the directories above it, then the
+// shorter row as drawn, a file before a directory, then the lexical one - and
+// nothing that does not spell the query. An index holds every directory above
+// its files, ranked by its last segment and drawn with its separator.
 func TestASearchRanksTheFileNameFirstThenTheShorterPath(t *testing.T) {
 	for _, tc := range []struct {
 		name, query string
 		files, want []string
 	}{
 		{"a file name beats a directory-only match, even a shorter one", "comp",
-			[]string{"comp/a.go", "src/deep/comp.go"}, []string{"src/deep/comp.go", "comp/a.go"}},
+			[]string{"comp/a.go", "src/deep/comp.go"}, []string{"comp/", "src/deep/comp.go", "comp/a.go"}},
 		{"a prefix beats a substring beats a subsequence, whatever their lengths", "comp",
 			[]string{"c_o_m_p.go", "xcompx.go", "compzzzzzzzz.go"}, []string{"compzzzzzzzz.go", "xcompx.go", "c_o_m_p.go"}},
 		{"within a tier the shorter path, then the lexical one", "comp",
@@ -106,6 +108,24 @@ func TestASearchRanksTheFileNameFirstThenTheShorterPath(t *testing.T) {
 			[]string{".github/ci.yml", "x/.ci.go", "ci.go"}, []string{"ci.go"}},
 		{"a query that reaches into a hidden path finds it", "x/.c",
 			[]string{"x/.ci.go", "x/ci.go"}, []string{"x/.ci.go"}},
+		// Every directory above a file, once: inner holds no file of its own.
+		{"a directory ranks by its last segment", "inn",
+			[]string{"inner/deep/buried.md", "inner/deep/other.md"},
+			[]string{"inner/", "inner/deep/", "inner/deep/other.md", "inner/deep/buried.md"}},
+		{"a hidden directory waits as a hidden file does", "work",
+			[]string{".github/workflows/ci.yml", "workspace/a.go"}, []string{"workspace/", "workspace/a.go"}},
+		// A file finishes the mention where a directory is one more step, so at the
+		// same tier and drawn length the file goes first, whatever the bytes say.
+		{"a file before a directory at the same tier and drawn length", "abc",
+			[]string{"abcd/x.go", "abcde"}, []string{"abcde", "abcd/", "abcd/x.go"}},
+		// Split at the last separator: the tail tiers against the name, and the
+		// head is spelt through the directories - a path that cannot spell it is
+		// not offered, whatever its name.
+		{"a query with a separator tiers its tail against the name", "ui/comp",
+			[]string{"internal/ui/completionpathmenu.go", "internal/ui/x/compare/zz.go",
+				"internal/ui/compat/readme.md", "src/lib/completion.go"},
+			[]string{"internal/ui/compat/", "internal/ui/x/compare/", "internal/ui/completionpathmenu.go",
+				"internal/ui/x/compare/zz.go", "internal/ui/compat/readme.md"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			got, total := rankPaths(indexed(tc.files...), tc.query, completionRows)
@@ -147,8 +167,6 @@ func TestTypedTextSearchesTheIndexAndAPathStepsThroughDirectories(t *testing.T) 
 		{"@/tmp", "@/tmpfile.md", "@tmpfile.md"},
 		{"@comp", "@zz/comp.go", "@compose.md"},
 		{"@ui/comp", "@ui/completion.go", "@ui/compact.md"},
-		// A search offers files; a directory is reached by stepping into it.
-		{"@inter", "@internal/inner.md", "@internal" + sep},
 	} {
 		got := roomOver(t, dir).withDraft(tc.draft).completion.offers
 		if !slices.Contains(got, tc.want) || slices.Contains(got, tc.never) {
@@ -167,6 +185,58 @@ func TestASearchReadsNoDirectory(t *testing.T) {
 	a, _ = a.withComposer(a.composer().WithDraft("@ui/comp")).recompleted().scanning()
 	if out := a.completion.paths.out; out != "" {
 		t.Errorf("a search over an answered index is reading %q", out)
+	}
+}
+
+// A search offers a directory too, ranked by its last segment, and ⇥ on one
+// steps into it: the draft then ends in a separator, which lists the directory.
+func TestASearchOffersADirectoryAndTabStepsIntoIt(t *testing.T) {
+	sep := string(os.PathSeparator)
+	dir := workdir(t, "top.md")
+	nested(t, dir, "inner/buried.md", "inner/notes.log")
+	withGit(t, answering("top.md", "inner/buried.md"))
+	a := roomOver(t, dir).withDraft("@inn")
+	if got := a.completion.offers; len(got) == 0 || got[0] != "@inner"+sep {
+		t.Fatalf("`@inn` offered %q, want the directory first", got)
+	}
+	next, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyTab})
+	next = next.scanned()
+	if got := next.composer().Value(); got != "@inner"+sep {
+		t.Fatalf("⇥ on the directory left the draft %q, want %q", got, "@inner"+sep)
+	}
+	// notes.log is on disk and not in git's answer, so only the listing offers it.
+	if got := next.completion.offers; !slices.Contains(got, "@inner/notes.log") {
+		t.Errorf("stepping into the directory offered %q, want its listing", got)
+	}
+}
+
+// A rebuild that moved neither the draft nor the index - a fleet report - reuses
+// the ranking rather than running it again over the whole index; a keystroke
+// ranks again.
+func TestAReportReusesTheRankingAndAKeystrokeRanksAgain(t *testing.T) {
+	withGit(t, answering("src/completion.go", "src/compare.go"))
+	dir := workdir(t)
+	a := roomOver(t, dir).withDraft("@comp")
+	ranked := a.completion.paths.rank.rows
+	if len(ranked) == 0 {
+		t.Fatalf("`@comp` ranked nothing over its index, so this asserts nothing: %q", a.completion.offers)
+	}
+	for range 2 {
+		a = a.withRoster(rpc.SessionStatus{ID: "s1", Name: "alex", Dir: dir, State: rpc.StateIdle})
+		if got := a.completion.paths.rank.rows; len(got) == 0 || &got[0] != &ranked[0] {
+			t.Fatalf("a fleet report ranked the index again: %q", got)
+		}
+	}
+	a = a.withDraft("l")
+	if got := a.completion.paths.rank.rows; len(got) == 0 || &got[0] == &ranked[0] {
+		t.Errorf("`@compl` reused the ranking for `@comp`: %q", got)
+	}
+	if got := a.completion.offers; slices.Contains(got, "@src/compare.go") {
+		t.Errorf("`@compl` offered %q, which it does not spell", got)
+	}
+	// A closed menu holds no rank, and so no index behind it.
+	if a = a.withDraft(" "); a.completion.paths.rank.index != nil {
+		t.Error("a closed menu still holds the rank of the index it searched")
 	}
 }
 
@@ -354,7 +424,7 @@ func TestAFloodingListerIsCutAtTheByteCapWithoutADeadlock(t *testing.T) {
 	done := make(chan result, 1)
 	go func() {
 		script := fmt.Sprintf("yes %s | tr '\\n' '\\000' | head -c %d", name, flood)
-		out, dropped, err := runCapped(time.Minute, "/bin/sh", "-c", script)
+		out, dropped, err := runCapped(time.Minute, nil, "/bin/sh", "-c", script)
 		done <- result{out, dropped, err}
 	}()
 	select {
@@ -380,7 +450,7 @@ func TestAListerPastItsDeadlineIsKilledWithWhatItStarted(t *testing.T) {
 	start := time.Now()
 	done := make(chan error, 1)
 	go func() {
-		_, _, err := runCapped(100*time.Millisecond, "/bin/sh", "-c", "sleep 30 & wait")
+		_, _, err := runCapped(100*time.Millisecond, nil, "/bin/sh", "-c", "sleep 30 & wait")
 		done <- err
 	}()
 	select {
@@ -402,7 +472,7 @@ func TestAListerThatLeavesItsOutputHeldIsLetGo(t *testing.T) {
 	start := time.Now()
 	done := make(chan error, 1)
 	go func() {
-		_, _, err := runCapped(time.Minute, "/bin/sh", "-c", "(sleep 5 &) ; exit 0")
+		_, _, err := runCapped(time.Minute, nil, "/bin/sh", "-c", "(sleep 5 &) ; exit 0")
 		done <- err
 	}()
 	select {
@@ -431,17 +501,16 @@ func TestTheShippedGitListsTrackedAndUntrackedFilesButNotIgnoredOnes(t *testing.
 	if err := os.WriteFile(filepath.Join(dir, ".gitignore"), []byte("ignored.log\n"), 0o600); err != nil {
 		t.Fatalf("write .gitignore: %v", err)
 	}
-	for _, args := range [][]string{{"init", "-q"}, {"add", "tracked.go"}} {
-		if out, err := exec.Command(gitBinary, append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
-			t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
-		}
-	}
+	gitIn(t, dir, "init", "-q")
+	gitIn(t, dir, "add", "tracked.go")
 	withGit(t, shippedLsFiles)
 
 	a := roomOver(t, dir).withDraft("@nest")
 	var got []string
 	for _, f := range a.completion.paths.index.files {
-		got = append(got, f.path)
+		if !f.dir {
+			got = append(got, f.path)
+		}
 	}
 	slices.Sort(got)
 	if want := []string{".gitignore", "has space.md", "sub/nested.go", "tracked.go", "untracked.md"}; !slices.Equal(got, want) {
@@ -449,6 +518,53 @@ func TestTheShippedGitListsTrackedAndUntrackedFilesButNotIgnoredOnes(t *testing.
 	}
 	if !slices.Contains(a.completion.offers, "@sub/nested.go") {
 		t.Errorf("`@nest` offered %q, want the nested file", a.completion.offers)
+	}
+}
+
+// Git's location variables in Wake's own environment - a hook, a wrapper - would
+// point `-C dir` at another repository, so the shipped git runs without them.
+// Each one set here reroutes ls-files on its own: the other repository's index,
+// its work tree, or its info/exclude.
+func TestTheShippedGitIndexesItsOwnDirectoryWhateverGitsVariablesSay(t *testing.T) {
+	if _, err := exec.LookPath(gitBinary); err != nil {
+		t.Skipf("no git on PATH: %v", err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	mine, other := workdir(t, "mine.go", "loose.md"), workdir(t, "decoy.go")
+	gitIn(t, mine, "init", "-q")
+	gitIn(t, mine, "add", "mine.go")
+	gitIn(t, other, "init", "-q")
+	gitIn(t, other, "add", "decoy.go")
+	otherGit := filepath.Join(other, ".git")
+	if err := os.WriteFile(filepath.Join(otherGit, "info", "exclude"), []byte("loose.md\n"), 0o600); err != nil {
+		t.Fatalf("write the other repository's exclude: %v", err)
+	}
+	t.Setenv("GIT_DIR", otherGit)
+	t.Setenv("GIT_WORK_TREE", other)
+	t.Setenv("GIT_INDEX_FILE", filepath.Join(otherGit, "index"))
+	t.Setenv("GIT_COMMON_DIR", otherGit)
+	t.Setenv("GIT_NAMESPACE", "elsewhere")
+
+	out, dropped, err := shippedLsFiles(mine)
+	if err != nil {
+		t.Fatalf("the shipped git over %s failed: %v", mine, err)
+	}
+	var got []string
+	for _, f := range parseIndex(mine, out, dropped).files {
+		got = append(got, f.path)
+	}
+	slices.Sort(got)
+	if want := []string{"loose.md", "mine.go"}; !slices.Equal(got, want) {
+		t.Errorf("with git's variables naming another repository, the index of %s is %q, want %q", mine, got, want)
+	}
+}
+
+// gitIn runs one git command in dir for a test's fixture.
+func gitIn(t *testing.T, dir string, args ...string) {
+	t.Helper()
+	if out, err := exec.Command(gitBinary, append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
+		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
 	}
 }
 
