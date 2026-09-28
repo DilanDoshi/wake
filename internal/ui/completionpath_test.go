@@ -98,15 +98,17 @@ func TestASessionWithNoDirectoryOffersNoPaths(t *testing.T) {
 	}
 }
 
-// A DM offers paths and no names. `@name` is Wake's routing and the room is
-// where it routes; a DM sends what was typed verbatim, so a name accepted there
-// is one claude's own CLI reads as a file reference.
-func TestAConversationOffersPathsAndNotNames(t *testing.T) {
+// A conversation offers names now (completionpeers.go), but never its own: alex
+// messaging alex is nothing, even when claude's listing names alex - its claude
+// name is its Wake name. The paths are still what `@` means to the agent.
+func TestAConversationNeverOffersItsOwnNameAndStillOffersPaths(t *testing.T) {
 	dir := workdir(t, "alexander.md")
 	fresh(t)
 	a := dmApp(nil, Stream{}, "s1", "alex").withSize(200, 40).withRoster(
 		rpc.SessionStatus{ID: "s1", Name: "alex", Dir: dir, State: rpc.StateIdle},
-	).withDraft("@alex")
+	).applyFrame(rpc.Frame{Kind: rpc.FramePeersReply, Peers: &rpc.PeersFrame{
+		Peers: []core.Peer{{Name: "alex", Dir: dir}},
+	}}).withDraft("@alex")
 
 	got := a.completion.offers
 	if slices.Contains(got, agentPrefix+"alex") {

@@ -745,6 +745,8 @@ func (a App) apply(f rpc.Frame) App {
 		return a.roomHistoryArrived(f)
 	case rpc.FrameRewindTargetsReply:
 		return a.rewindTargetsArrived(f)
+	case rpc.FramePeersReply:
+		return a.peersArrived(f)
 	case rpc.FrameWorkflowsReply, rpc.FrameWorkflowAgentReply, rpc.FrameWorkflowSaved:
 		return a.workflowReplied(f)
 

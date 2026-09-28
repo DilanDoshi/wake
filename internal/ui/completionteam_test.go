@@ -192,7 +192,7 @@ func TestTheTeamArgumentCompletesExistingTeams(t *testing.T) {
 }
 
 // A bare `/team ` in a DM offers every team: /team runs against the focused
-// agent there, and the argument completion is not the room-only @mention one.
+// agent there, and the argument completion is not the `@` menu.
 func TestTheTeamArgumentCompletesBareInADM(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
 	a = pick(a, "s2").openDMWith("s2", "bob").applyGeometry()
@@ -320,8 +320,8 @@ func TestTeamsSitAfterAgentsAndBeforeAll(t *testing.T) {
 	}
 }
 
-// A DM offers no teams: `@name` there is a file reference claude's own CLI
-// reads, not Wake routing, so a team completed there would resolve to nothing.
+// A DM offers no teams: `@name` there is claude's to resolve, not Wake routing,
+// and claude has no session called a team, so it would resolve to nothing.
 func TestADMDoesNotOfferTeams(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40).withTeamFleet()
 	a = pick(a, "s2").openDMWith("s2", "bob").applyGeometry()
@@ -331,6 +331,6 @@ func TestADMDoesNotOfferTeams(t *testing.T) {
 	a = a.withDraft("@back")
 
 	if slices.Contains(a.completion.offers, agentPrefix+"backend") {
-		t.Errorf("a DM offered the team @backend, but @name there is a file reference not a route: %v", a.completion.offers)
+		t.Errorf("a DM offered the team @backend, but @name there is claude's, not a route: %v", a.completion.offers)
 	}
 }

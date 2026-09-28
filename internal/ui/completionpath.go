@@ -150,8 +150,17 @@ func (p pathMenu) carrying(prev pathMenu) pathMenu {
 	return p
 }
 
-// scanning starts the read this menu needs, if it needs one and none is out.
+// scanning is what a keystroke owes the menu it rebuilt: the directory read it
+// needs, and an opening's one FramePeers (completionpeers.go). The keystroke
+// path is its only caller, which is what keeps both off a fleet report.
 func (a App) scanning() (App, tea.Cmd) {
+	a, scan := a.scanningPaths()
+	a, ask := a.askingPeers()
+	return a, tea.Batch(scan, ask)
+}
+
+// scanningPaths starts the read this menu needs, if it needs one and none is out.
+func (a App) scanningPaths() (App, tea.Cmd) {
 	p := a.completion.paths
 	if p.want == "" || p.want == p.dir || p.out != "" {
 		return a, nil
@@ -177,7 +186,7 @@ func (a App) pathsScanned(m pathScanMsg) (App, tea.Cmd) {
 	a.completion.paths.out = ""
 	a.completion.paths.dir, a.completion.paths.entries = m.dir, m.entries
 	a.completion = a.completion.bounded()
-	return a.scanning()
+	return a.scanningPaths() // an answer is not a keystroke, so it never asks
 }
 
 // readDirBounded reads at most pathScanMax entries of one directory.

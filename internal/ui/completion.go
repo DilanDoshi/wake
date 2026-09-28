@@ -134,15 +134,19 @@ type completion struct {
 	// commands and skills, Wake's own commands, and the fleet's live names.
 	names []string
 
-	// teams is which of names are teams rather than agents, keyed by the offer
-	// value, so View can tag them without changing what an accept inserts. Nil
-	// for a command menu and for a fleet with no teams, which is the flat menu
-	// this build has always drawn.
-	teams map[string]bool
+	// tags is what a tagged offer is drawn with after it, keyed by the offer
+	// value, so View can label it without changing what an accept inserts: a
+	// room's `(team)`, a conversation's outside session's directory and its
+	// subagents' `(agent)`. Nil for a flat menu.
+	tags map[string]string
 
 	// paths is the `@` half, which is a directory read and so is not this
 	// goroutine's. See completionpath.go.
 	paths pathMenu
+
+	// peers is a conversation's machine half: the listing and its ask. See
+	// completionpeers.go.
+	peers peerMenu
 
 	// offers are what could finish the token, already bounded, in the order
 	// they are drawn. more is how many matched beyond them.
@@ -168,13 +172,15 @@ func (c completion) open() bool { return len(c.offers) > 0 }
 // no longer has the keys - leaves it undrawn and its keys unread on the next
 // frame.
 //
-// It never starts a directory read - that is App.scanning, which the keystroke
-// path calls and a fleet report does not. A report arrives per fleet event and
-// cannot have moved the draft, so reading on one is a directory read per event
-// at fleet size for a menu nobody touched. The listing is carried instead.
+// It never starts a directory read or writes a frame - that is App.scanning,
+// which the keystroke path calls and a fleet report does not. A report arrives
+// per fleet event and cannot have moved the draft, so reading on one is a
+// directory read per event at fleet size for a menu nobody touched. The
+// listings are carried instead, and so is an opening's ask.
 func (a App) recompleted() App {
 	next := a.completing()
 	next.paths = next.paths.carrying(a.completion.paths)
+	next.peers = next.peers.carrying(a.completion.peers, next.pane == a.completion.pane)
 	a.completion = next.bounded()
 	return a
 }
@@ -221,22 +227,28 @@ func mentionStem(draft string) (head, rest string, ok bool) {
 // mentionMenu is `@`, which is overloaded exactly as it is in Claude Code: a
 // live session name wins, and anything else is a file path.
 //
-// **Names are offered in the room and nowhere else.** `@name` is Wake's
-// routing, and the room is the only place it routes - a DM sends what was typed
-// verbatim, so a name accepted there is one claude's own CLI reads as a file
-// reference. Paths are offered in both, because that is what `@` means to the
-// agent on the far side either way.
+// **The room offers Wake's names; a conversation offers claude's.** In the room
+// `@name` is Wake's routing, so its names are addressees. A DM still sends what
+// was typed verbatim, but claude reads `@<session>` as a SendMessage and
+// `@agent-<type>` as a subagent (docs/superpowers/notes/2026-09-27-at-menu-findings.md
+// §3-4), so once a letter is typed a conversation offers what Claude Code's own
+// `@` does - the owner's 2026-09-27 reversal of the room-only rule, in
+// completionpeers.go. Paths are offered in both.
 func (a App) mentionMenu(draft, head, typed string) completion {
 	c := completion{pane: a.focus, draft: draft, head: head, paths: a.pathMenuFor(typed)}
-	if a.focus == "" {
-		c.names, c.teams = a.addressees(typed)
+	switch {
+	case a.focus == "":
+		c.names, c.tags = a.addressees(typed)
+	case typed != "":
+		c.names, c.tags = a.conversationNames(typed)
+		c.peers.wants = true
 	}
 	return c
 }
 
 // addressees is every name a mention could resolve to, in the roster's own
-// order: the live agents, then the teams, then the broadcast last. The `teams`
-// set names which offers are teams, keyed by the offer value, so View tags them
+// order: the live agents, then the teams, then the broadcast last. A team is
+// tagged `(team)` in the returned tags, keyed by the offer value, so View tags it
 // without changing what an accept inserts - a team offer is the bare `@backend`
 // the router fans out (core.Resolve's team step), never the display tag.
 //
@@ -246,7 +258,7 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 // that is drawn and cannot be completed. Teams sit between the agents and the
 // broadcast - narrowest to broadest - and are the daemon's own order (teamOrder,
 // off the report), the roster sections' order one surface over.
-func (a App) addressees(typed string) (names []string, teams map[string]bool) {
+func (a App) addressees(typed string) (names []string, tags map[string]string) {
 	lower := strings.ToLower(typed)
 	// A team is mentionable only when it has a live member, mirroring
 	// core.Resolve's teamMembers(mention, a.live()): a team stays in teamOrder
@@ -289,16 +301,12 @@ func (a App) addressees(typed string) (names []string, teams map[string]bool) {
 		if !strings.HasPrefix(team, lower) || live[offer] || !liveTeam[offer] {
 			continue
 		}
-		names = append(names, offer)
-		if teams == nil {
-			teams = make(map[string]bool)
-		}
-		teams[offer] = true
+		names, tags = tagged(names, tags, offer, teamMenuSuffix)
 	}
 	if strings.HasPrefix(core.BroadcastName, lower) {
 		names = append(names, agentPrefix+core.BroadcastName)
 	}
-	return names, teams
+	return names, tags
 }
 
 // teamArgMenu offers the fleet's existing teams to finish a `/team` argument, so
@@ -447,7 +455,7 @@ func (a App) addressedAgent() (Agent, bool) {
 // a resolved leading `@name ` and nothing else before the command. It reuses
 // addressedAgent's direct route, so it answers the same "who does `@iris /command`
 // configure" the completion already asks. Absent in a DM, where a leading @name is
-// a file reference rather than a route; when prose sits between the mention and
+// sent as typed rather than routed; when prose sits between the mention and
 // the command, which is an ordinary message with a command-shaped word in it; and
 // when the mention names nobody live.
 func (a App) mentionedAlone(head string) (Agent, bool) {
@@ -553,19 +561,32 @@ func (a App) completionView(width int, id string) string {
 }
 
 // rowLabel is what an offer is drawn as at a given width. A plain offer is
-// handed to optionRow as-is (it truncates from the right); a team `@mention`
-// keeps its `(team)` tag by truncating the *name* first, with room reserved for
-// the row's lead and the tag. Without that reservation a long team name on a
-// narrow pane drops the tag and reads as an ordinary mention, while an accept
-// still inserts the bare mention and fans out to the team (the adversarial
-// review's finding). Display only - acceptCompletion writes the offer itself,
+// handed to optionRow as-is (it truncates from the right); a tagged one keeps
+// its tag by truncating the *name* first, with room reserved for the row's lead
+// and the tag. Without that reservation a long team name on a narrow pane drops
+// the tag and reads as an ordinary mention, while an accept still inserts the
+// bare mention and fans out to the team (the adversarial review's finding). The
+// reservation stops at half the row, so a long directory is what optionRow cuts
+// rather than the name. Display only - acceptCompletion writes the offer itself,
 // so neither the tag nor the truncation reaches the draft or the router.
 func (c completion) rowLabel(offer string, width int) string {
-	if !c.teams[offer] {
+	tag, ok := c.tags[offer]
+	if !ok {
 		return offer
 	}
-	room := width - lipgloss.Width(cardCursor) - lipgloss.Width(teamMenuSuffix)
-	return ansi.Truncate(offer, max(room, 0), ellipsis) + teamMenuSuffix
+	avail := width - lipgloss.Width(cardCursor)
+	room := max(avail-lipgloss.Width(tag), avail/2)
+	return ansi.Truncate(offer, max(room, 0), ellipsis) + tag
+}
+
+// tagged appends an offer drawn with a tag, making the map on the first so a
+// menu with none stays the flat menu.
+func tagged(names []string, tags map[string]string, offer, tag string) ([]string, map[string]string) {
+	if tags == nil {
+		tags = make(map[string]string)
+	}
+	tags[offer] = tag
+	return append(names, offer), tags
 }
 
 // View draws it, through the same rows a card and the picker draw.
