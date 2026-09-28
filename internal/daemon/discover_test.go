@@ -254,9 +254,41 @@ func TestDiscoveryReadsTheSessionsName(t *testing.T) {
 			if err := os.WriteFile(p, []byte(strings.Join(tc.lines, "\n")+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, got := readTranscript(p); got != tc.want {
+			if _, _, got, _ := readTranscript(p); got != tc.want {
 				t.Errorf("title = %q, want %q", got, tc.want)
 			}
 		})
+	}
+}
+
+// The name a resume restores is the newest custom title as written - never the
+// generated one, which names a session nobody named, and never cut to the
+// display bound, which would hand normalizeName a name nobody chose.
+func TestDiscoveryKeepsTheNameClaudeRecorded(t *testing.T) {
+	long := strings.Repeat("n", previewBytes+8)
+	for _, tc := range []struct {
+		name, want string
+		lines      []string
+	}{
+		{name: "the newest custom title", want: "gmail helper", lines: []string{
+			`{"type":"custom-title","customTitle":"alex"}`, `{"type":"custom-title","customTitle":"gmail helper"}`}},
+		{name: "a generated title is not a name", want: "", lines: []string{
+			`{"type":"ai-title","aiTitle":"Fix the parser"}`}},
+		{name: "not bounded for display", want: long, lines: []string{
+			`{"type":"custom-title","customTitle":"` + long + `"}`}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			p := filepath.Join(t.TempDir(), "s.jsonl")
+			if err := os.WriteFile(p, []byte(strings.Join(tc.lines, "\n")+"\n"), 0o644); err != nil {
+				t.Fatal(err)
+			}
+			if _, _, _, got := readTranscript(p); got != tc.want {
+				t.Errorf("name = %q, want %q", got, tc.want)
+			}
+		})
+	}
+	// And from a recorded transcript: interrupt-spike ran as `--name spike`.
+	if _, _, _, got := readTranscript(filepath.Join("..", "..", "testdata", "transcript", "interrupt-spike.jsonl")); got != "spike" {
+		t.Errorf("the recorded transcript's name = %q, want %q", got, "spike")
 	}
 }

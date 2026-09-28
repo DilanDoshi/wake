@@ -107,25 +107,9 @@ func (a App) renameAgent(arg string) (App, tea.Cmd) {
 		return a, nil
 	}
 	a = a.clearDraft()
-	return a, a.renameTo(agent, hyphenateName(to))
-}
-
-// hyphenateName folds internal whitespace in a requested name into single
-// hyphens, so a name a person types with spaces becomes the one-word address
-// Wake stores - `/name foo bar` and `/rename foo bar` both land `foo-bar`.
-//
-// Whitespace was always going to be refused: normalizeName's character set
-// admits none, so a spaced name used to be a dead end (the `/name` guard said so
-// with a usage line; the `/rename` mirror declined it in silence). Hyphenating
-// it is the owner's chosen fix - the daemon stays the authority on every other
-// rule, this only spares the operator the one character it was certain to reject.
-// strings.Fields collapses any run of whitespace, so "foo   bar" is one hyphen
-// too, and a single word is returned unchanged. A label is prose and is never
-// hyphenated, which is the whole of why these are two verbs.
-//
-// `/team` folds its tag through this too, since a team is an `@`-token as well.
-func hyphenateName(name string) string {
-	return strings.Join(strings.Fields(name), "-")
+	// A spaced name is hyphenated (rpc.HyphenateName): `/name foo bar` and
+	// `/rename foo bar` both land `foo-bar`. A label is prose and never is.
+	return a, a.renameTo(agent, rpc.HyphenateName(to))
 }
 
 // labelAgent says what one agent is working on.

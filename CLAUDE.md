@@ -121,6 +121,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   Import is a fork, the only guaranteed-safe primitive for a hand-started `claude`.
 - **`/resume` resumes in place and skips `resumeSafe`** — the one deliberate exception, matching
   Claude Code (owner's 2026-09-20 ruling). Parked rows keep `resumeSafe`. `internal/daemon/resume.go`.
+  It keeps the name the transcript recorded (newest `customTitle`, hyphenated), else a pooled one —
+  never the manager's (`resumedName`).
 - **Anything waiting on a spawn waits on the id it minted**, never the parent's.
 - `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
   confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
@@ -284,7 +286,7 @@ yet says so in bold.**
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
-| Transport | `internal/rpc/wire.go` · `lifecycle.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go` |
+| Transport | `internal/rpc/wire.go` · `lifecycle.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
 | Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `color.go`, `team.go` |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
