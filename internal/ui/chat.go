@@ -218,7 +218,10 @@ type roomLine struct {
 	// line that is not the operator's own. UI-only, set at creation (never on
 	// core.Event) - the view filter reads it to tell "you → @iris" from a
 	// broadcast and from "you → @john". See roomfocus.go.
-	to          string
+	to string
+	// recipient is the receiving session of a peer's cross-session line, drawn
+	// after the arrow in its own colour; zero on every other line.
+	recipient   Agent
 	id          uint64
 	broadcastID uint64
 	rows        int
@@ -310,15 +313,20 @@ func (r Room) WithFocus(focus, focusName, managerID string) Room {
 // that yanks them to the newest line every time anybody speaks is worse than
 // one with no scrollback at all. Sampling that before the content changes is
 // what makes it true.
-func (r Room) Append(ev core.Event, by Agent) Room { return r.appendLine(ev, by, "") }
+func (r Room) Append(ev core.Event, by Agent) Room { return r.appendLine(roomLine{ev: ev, by: by}) }
 
 // appendUser draws the operator's own room echo, stamped with the agent it was
-// addressed to (or "" for a broadcast). Only this path carries a recipient - an
+// addressed to (or "" for a broadcast). Only this path carries a "to" - an
 // agent's own lines are told apart by session id, not by "to".
-func (r Room) appendUser(ev core.Event, to string) Room { return r.appendLine(ev, Agent{}, to) }
+func (r Room) appendUser(ev core.Event, to string) Room { return r.appendLine(roomLine{ev: ev, to: to}) }
 
-func (r Room) appendLine(ev core.Event, by Agent, to string) Room {
-	line := roomLine{ev: ev, by: by, to: to}
+// appendPeer draws a peer's cross-session message, from sender to the receiving
+// session whose stream carried it.
+func (r Room) appendPeer(ev core.Event, sender, recipient Agent) Room {
+	return r.appendLine(roomLine{ev: ev, by: sender, recipient: recipient})
+}
+
+func (r Room) appendLine(line roomLine) Room {
 	// A room-worthy line the current focus hides is kept in said (canonical, so
 	// unfocus restores it) at rows == 0 with no rendered block - and its render
 	// is skipped, not done and dropped. A shown line renders as before; the
@@ -331,7 +339,7 @@ func (r Room) appendLine(ev core.Event, by Agent, to string) Room {
 		// A new event carries no per-line open of its own, but expandAll is a
 		// standing choice: while it is set, a long reply arriving lands expanded
 		// too, so ⌃E's "show everything" keeps meaning everything.
-		b = renderRoomBlock(ev, by, r.blockWidth(), r.expandAll)
+		b = renderRoomBlock(line.ev, line.by, line.recipient, r.blockWidth(), r.expandAll)
 		if b.text == "" {
 			return r
 		}
@@ -753,7 +761,7 @@ func (r Room) renderAll(lines []roomLine) []block {
 		if eff != "" && !focusAdmits(lines[i], eff, r.managerID) {
 			continue
 		}
-		b := renderRoomBlock(lines[i].ev, lines[i].by, r.blockWidth(), r.expandAll || r.expanded[lines[i].id])
+		b := renderRoomBlock(lines[i].ev, lines[i].by, lines[i].recipient, r.blockWidth(), r.expandAll || r.expanded[lines[i].id])
 		if b.text != "" {
 			b.laidOut = blockLines(b, false)
 			lines[i].rows = len(b.laidOut)

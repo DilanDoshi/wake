@@ -6,9 +6,10 @@
 > **`↪ sender → recipient`**, not the sender alone: on the owner's report, a peer message shown
 > once and attributed to the sender read as if the sender had just spoken in the room — the arrow
 > names who it was *for*. The recipient is the receiving session (this stream's own), resolved to
-> its fleet name and carried on the presentation-only `core.Event.ToName` (`observe` live,
-> `roomHistoryLines` on a restore); the arrow is dropped when the receiver is unknown, falling back
-> to the sender alone. The **DM is unchanged** — you are already in the recipient's conversation
+> its fleet agent and carried on the UI's `roomLine.recipient` (`observe` live, `roomHistoryLines`
+> on a restore), and its name is drawn in its own identity colour (2026-09-28; the lead and arrow
+> stay the sender's); the arrow is dropped when the receiver is unknown, falling back to the sender
+> alone. The **DM is unchanged** — you are already in the recipient's conversation
 > there. Everywhere this doc says "heads it with the sender", read "heads it `sender → recipient`".
 
 ## Problem
