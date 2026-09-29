@@ -74,8 +74,11 @@ var nestedSessionEnv = []string{
 
 // oneShotCredentialEnv is dropped from the one-shot alone: /list-agents needs no
 // credential (the bare recordings show apiKeySource none), and a bare claude
-// without one cannot spend first-party.
-var oneShotCredentialEnv = []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN"}
+// with no token and no provider switch has nothing to spend through.
+var oneShotCredentialEnv = []string{
+	"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
+	"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+}
 
 // ListAgentsCommand is the one-shot that lists the machine's sessions, run in
 // dir: claude found on this process's PATH as an agent's is, with an agent's

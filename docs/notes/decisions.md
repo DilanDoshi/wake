@@ -3391,7 +3391,8 @@ The owner's rulings for the `@` menu parity work (branch `feat/at-menu-peers`); 
   The daemon instead runs `claude --print --bare --no-session-persistence` with one `/list-agents`
   line (`daemon/peers.go`): ~0.7s, `$0`, no hooks, no MCP servers, no transcript, not itself listed.
   Coalesced, deadline-bounded, gated on an agent's init advertising `list-agents`; its environment
-  drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`, and a result that ran a model turn lists nobody
+  drops every token (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`) and
+  provider switch (`CLAUDE_CODE_USE_BEDROCK`/`_VERTEX`/`_FOUNDRY`), and a result that ran a model turn lists nobody
   and latches the one-shot off for the daemon's life, so binary drift can never spend. Asked once
   per menu opening, never per keystroke or per report.
 - **Wake's `/name` keeps claude's own name in step** with a bare `/rename` (a second probe kind,
