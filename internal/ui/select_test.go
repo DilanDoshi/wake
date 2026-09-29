@@ -184,7 +184,7 @@ func TestTheCopiedTextIsWhatWasUnderTheDrag(t *testing.T) {
 	a, _ = drag(a, 10, 30, textRow)
 	m := a.sel.marked()
 	tr := a.transcriptIn(a.sel.pane)
-	got := selectedText(tr.lines.slice(m.from.line, m.to.line+1), m.from.line, m)
+	got := selectedText(tr.lines.slice(m.from.line, m.to.line+1), m.from.line, m, nil)
 	// The exact cells, not merely "something without escapes": "" satisfies
 	// every negative assertion here, which is how this test passed while a drag
 	// on a blank row was copying nothing at all.

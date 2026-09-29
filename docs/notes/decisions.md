@@ -8,6 +8,36 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-09-28 — a copy rejoins what the pane wrapped
+
+The owner copied an email out of chat history and pasted it with a hard line break at every wrap
+and two spaces before every line. The select-copy spec had declined this ("soft wraps and real
+newlines are indistinguishable by then") on the grounds that `blockLines` splits after the wrap.
+That reasoning holds for arbitrary rows but not for the two row producers a copy cares about, so
+the ruling is reversed for them and kept for everything else.
+
+**Markdown rows are classified, not flagged.** `render.Rejoins` reads rendered rows with
+`reflowProse`'s own predicates (`reflowable`, `leadSpaces`, `opensItem`, `hyphenJoin`) plus
+`hangIndentLists`' hang. Rows that pass grouped into one paragraph or list item are wraps by
+construction — markdown renders a source newline as a space — so they rejoin with the space the
+wrap took, or nothing at a hyphen. Carrying a per-row flag out of the renderer was rejected: three
+wrap producers, a new return shape, and nothing the rows don't already say. The known miss is
+`reflowProse`'s own: a wrapped row that opens with a styled span (bold, inline code, a link) looks
+like code once rendered, so it stays a break.
+
+**The operator's own turn is matched back to what was typed.** lipgloss wraps it, and its rows
+don't say which breaks were typed, but the text is known: `typedRejoins` walks the rows against it
+and takes exactly the whitespace each wrap consumed. Any mismatch returns nil and the copy keeps the
+rows as drawn, which is never worse than before.
+
+**Only blocks that opt in rejoin.** `block.copied` marks them and `transcript.texts` remembers where
+they landed. Tool output, diffs, labels, subagent gutters, the composer and the screen selection
+copy exactly as drawn. Coupled decision: glamour's `WithPreservedNewLines` is off, which is why
+"Best regards,\nDilan" draws on one row; turning it on makes a kept newline indistinguishable from a
+wrap to both `reflowProse` and this rejoin, so the two must be decided together.
+
+---
+
 ## 2026-08-29 — the effort probe, and why an invisible turn is the honest one
 
 Effort is on no frame Claude sends unasked, so for a long time the status bar could only repeat the

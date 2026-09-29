@@ -15,7 +15,7 @@ func TestSelectedTextTakesWhatIsUnderTheSelectionAndNothingElse(t *testing.T) {
 		{"across three", selection{anchor: point{0, 6}, head: point{2, 4}}, "bravo\ncharlie\ndelta"},
 		{"a whole line", selection{anchor: point{1, 0}, head: point{1, 6}}, "charlie"},
 	} {
-		if got := selectedText(lines, 0, c.sel.marked()); got != c.want {
+		if got := selectedText(lines, 0, c.sel.marked(), nil); got != c.want {
 			t.Errorf("%s: selectedText = %q, want %q", c.name, got, c.want)
 		}
 	}
@@ -25,7 +25,7 @@ func TestSelectedTextDropsStylingAndTheTrailingPad(t *testing.T) {
 	// Every line in a pane is padded to the pane width by lipgloss, and the
 	// blocks are styled. Neither belongs on the clipboard.
 	lines := []string{"\x1b[31mred\x1b[0m        "}
-	if got := selectedText(lines, 0, selection{anchor: point{0, 0}, head: point{0, 10}}.marked()); got != "red" {
+	if got := selectedText(lines, 0, selection{anchor: point{0, 0}, head: point{0, 10}}.marked(), nil); got != "red" {
 		t.Errorf("selectedText = %q, want %q: ANSI stripped and the pad trimmed", got, "red")
 	}
 }
@@ -34,7 +34,7 @@ func TestSelectedTextIsOffsetByTheFirstLineOnScreen(t *testing.T) {
 	// A selection is anchored to absolute indices; the caller passes the slice
 	// it has and says where that slice starts.
 	lines := []string{"charlie", "delta echo"}
-	if got := selectedText(lines, 1, selection{anchor: point{1, 0}, head: point{1, 6}}.marked()); got != "charlie" {
+	if got := selectedText(lines, 1, selection{anchor: point{1, 0}, head: point{1, 6}}.marked(), nil); got != "charlie" {
 		t.Errorf("selectedText = %q, want %q", got, "charlie")
 	}
 }
