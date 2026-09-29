@@ -139,18 +139,18 @@ func apiFailedApp(t *testing.T) (App, *[]armedTick) {
 	ticks := recordNoticeTicks(t)
 	a := sizedApp(t, nil, nil, "s1")
 	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateWorking}}})
-	m, _ := a.Update(frameMsg{Frame: apiErrorFrame("s1", "Session limit reached ∙ resets 5pm")})
+	m, _ := a.Update(frameMsg{Frame: apiErrorFrame("s1", "Failed to authenticate. API Error: 401")})
 	m, _ = m.Update((*ticks)[len(*ticks)-1].msg)
 	return m.(App), ticks
 }
 
-// A session or usage limit is not a moment: the agent stays stopped until it
-// is brought back, so its notice outlives its linger, gives way to a newer
-// notice while that one stands, and comes back when it goes.
+// A dead login is not a moment: the agent stays stopped until it is brought
+// back, so its notice outlives its linger, gives way to a newer notice while
+// that one stands, and comes back when it goes.
 func TestAnAPIFailureStaysPinnedUntilItsSessionRecovers(t *testing.T) {
 	a, ticks := apiFailedApp(t)
 	row := stripANSI(a.noticeLine())
-	if !strings.Contains(row, "@alex: Session limit reached") || !strings.Contains(row, "/reauth") {
+	if !strings.Contains(row, "@alex: Failed to authenticate") || !strings.Contains(row, "/reauth") {
 		t.Fatalf("the failure did not stay pinned past its linger: %q", row)
 	}
 
@@ -160,7 +160,7 @@ func TestAnAPIFailureStaysPinnedUntilItsSessionRecovers(t *testing.T) {
 		t.Fatalf("a newer notice did not take the row: %q", row)
 	}
 	m, _ = m.Update((*ticks)[len(*ticks)-1].msg)
-	if row := stripANSI(m.(App).noticeLine()); !strings.Contains(row, "Session limit reached") {
+	if row := stripANSI(m.(App).noticeLine()); !strings.Contains(row, "Failed to authenticate") {
 		t.Errorf("the pinned failure did not return when the newer notice went: %q", row)
 	}
 }
@@ -176,13 +176,13 @@ func TestAHealthyTurnUnpinsTheFailure(t *testing.T) {
 }
 
 // /reauth parks the session but has not brought it back, so the pin stays and
-// names the step still owed; the resume that follows is what clears it.
-func TestTheFailureStaysPinnedThroughReauthUntilTheResume(t *testing.T) {
+// says what wakes it; the wake that follows is what clears it.
+func TestTheFailureStaysPinnedThroughReauthUntilTheWake(t *testing.T) {
 	a, _ := apiFailedApp(t)
 	a, _ = a.reauth("")
 	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateParked}}})
-	if pin := a.pinnedNotice(); !strings.Contains(pin, "/resume") || strings.Contains(pin, "/reauth") {
-		t.Fatalf("a reauth-parked failure should point at /resume: %q", pin)
+	if pin := a.pinnedNotice(); !strings.Contains(pin, "/login") || strings.Contains(pin, "/reauth") {
+		t.Fatalf("a reauth-parked failure should say the login wakes it: %q", pin)
 	}
 
 	a.waking = map[string]struct{}{"s1": {}}
@@ -231,7 +231,7 @@ func TestSeveralFailuresPinOneRowAndAnEndedOneNone(t *testing.T) {
 		{ID: "s1", Name: "alex", State: rpc.StateWorking},
 		{ID: "s2", Name: "bea", State: rpc.StateWorking},
 	}})
-	m, _ := a.Update(frameMsg{Frame: apiErrorFrame("s2", "Session limit reached ∙ resets 5pm")})
+	m, _ := a.Update(frameMsg{Frame: apiErrorFrame("s2", "Failed to authenticate. API Error: 401")})
 	if pin := m.(App).pinnedNotice(); !strings.Contains(pin, "@alex") || !strings.Contains(pin, "+1 more") {
 		t.Fatalf("two failures should pin @alex and a count: %q", pin)
 	}

@@ -438,6 +438,10 @@ var deliberatelyGeneric = wordSet([]string{
 	// naming "workflow_progress", which is policed above.
 	"index", "title", "tokens",
 
+	// A failed turn's error kind for a usage limit (apiNotice). Wake's own
+	// KindRateLimit is spelled the same, so it cannot be policed.
+	"rate_limit",
+
 	// origin.kind's own key, the plainest English there is: Wake's own code names
 	// kinds everywhere, and "origin" beside it is policed, so it is no route in.
 	"kind",

@@ -354,6 +354,7 @@ type App struct {
 	// single 401 that recovers on a later attempt never parks. Copy-on-write like
 	// authFailed; cleared with the mark on recovery, a wake, or /reauth.
 	authFailRetries map[string]int
+	recovery        recoveryState // parked for a failing API and owed a wake; see apirecover.go
 
 	// roomAsked is every (agentID, requestID) the room has already announced a
 	// permission ask for, so a re-delivered ask - the daemon replaying at attach
@@ -565,7 +566,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.imageDropped(m)
 
 	case authResultMsg:
-		return a.authResult(m), nil
+		return a.authResult(m).autoWakeRecovered()
 
 	case mcpSignedInMsg:
 		return a.mcpSignedIn(m)
@@ -777,7 +778,7 @@ func (a App) apply(f rpc.Frame) App {
 		//
 		// The text says when it could be forked instead; that is the daemon's
 		// sentence and it is reported below unchanged.
-		a = a.startSettled(f.SessionID).mcpRefused(f.SessionID, f.Text)
+		a = a.startSettled(f.SessionID).mcpRefused(f.SessionID, f.Text).wakeRefused(f.SessionID)
 		notice.Report("%s", a.errorText(f))
 		return a
 

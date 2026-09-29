@@ -261,7 +261,8 @@ func (a App) parkTarget(id, name string) (App, tea.Cmd, bool) {
 		notice.Report(parkWouldDeny, agentPrefix, name)
 		return a, nil, false
 	}
-	return a.awaitingPark(id), a.write(parkFailed, rpc.Frame{Kind: rpc.FramePark, SessionID: id}), true
+	// A hand park replaces any wake the API's park was owed (apirecover.go).
+	return a.awaitingPark(id).forgetAPIPark(id), a.write(parkFailed, rpc.Frame{Kind: rpc.FramePark, SessionID: id}), true
 }
 
 // armParkFleet takes ⌃Q: the first press arms, and a second confirms the park.
@@ -528,7 +529,9 @@ func (a App) parkArrived(st *rpc.Status) App {
 			}
 		}
 		a.parking = next
-		notice.Report(parkConfirmed, agentPrefix, s.Name, s.Name)
+		if !a.reportAPIPark(s.ID, s.Name) {
+			notice.Report(parkConfirmed, agentPrefix, s.Name, s.Name)
+		}
 	}
 	return a
 }

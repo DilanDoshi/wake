@@ -634,7 +634,7 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 	// A failed turn is a synthetic assistant frame; pulled out before the text
 	// path renders the API's message under the agent's name. See KindAPIError.
 	if f.IsAPIErrorMessage {
-		base.Kind, base.Text, base.Notice = KindAPIError, apiErrorText(f.Message), NoticeAPIError
+		base.Kind, base.Text, base.Notice = KindAPIError, apiErrorText(f.Message), f.apiNotice()
 		return one(base)
 	}
 
@@ -647,9 +647,8 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		base.Kind, base.Text = KindUnknown, f.Type
 		return one(base)
 	}
-	// The native /goal lifecycle, recognised from the decoded message before the
-	// text path renders the synthetic announcement or the Stop-hook feedback as
-	// prose. See wire.go's goalOp and core.KindGoal.
+	// The native /goal lifecycle, recognised before the text path renders its
+	// synthetic announcement or Stop-hook feedback as prose. See goalOp, KindGoal.
 	if op, ok := goalOp(f.Type, m); ok {
 		base.Kind, base.Goal = KindGoal, &op
 		return one(base)
@@ -677,10 +676,10 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		base.Kind, base.Text = KindUnknown, f.Type
 		return one(base)
 	}
-	return blockEvents(f, raws, raw, messageUsage(m.Usage))
+	return blockEvents(f, raws, raw, messageUsage(m.Usage), m.Model == syntheticModel)
 }
 
-func blockEvents(f wireFrame, raws []json.RawMessage, raw json.RawMessage, usage *wireUsage) []Event {
+func blockEvents(f wireFrame, raws []json.RawMessage, raw json.RawMessage, usage *wireUsage, synthetic bool) []Event {
 	evs := make([]Event, 0, len(raws))
 	// The message's output-token count belongs to the message, not to each of
 	// its blocks, so it is attached to the first text block and to that one
@@ -688,6 +687,7 @@ func blockEvents(f wireFrame, raws []json.RawMessage, raw json.RawMessage, usage
 	tokensLeft := usage != nil && usage.OutputTokens > 0
 	for _, rb := range raws {
 		ev := blockEvent(f, rb, raw)
+		ev.LocalCommand = synthetic // Claude's own reply to a local command, which ran no inference
 		if tokensLeft && ev.Kind == KindAssistantText {
 			ev.OutputTokens = usage.OutputTokens
 			tokensLeft = false

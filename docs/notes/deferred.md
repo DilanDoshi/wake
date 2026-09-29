@@ -4992,6 +4992,11 @@ a second room surface, which needs a §2c scope decision), then a plan.
 
 ## 2026-09-04 — `/reauth` parks then `/resume`s in two steps; one-command park→wake is deferred
 
+**CLOSED 2026-09-27 — `fix/usage-limit-recovery`.** The wake is derived in `settle()`, not threaded
+through the report chain: `autoWakeRecovered` (`internal/ui/apirecover.go`) wakes every session parked
+for a failing API once proof arrives after its park — any agent's model turn, or `/login` reporting
+signed in. The `/login`-inside-`/reauth` nicety below is still open.
+
 `/reauth` (BUG-35, `internal/ui/reauth.go`) recovers the sessions a fleet-wide OAuth expiry knocked
 out by **parking** them in place; the operator then types `/resume all` to bring them back on a fresh
 login. That is two commands where one would do.
@@ -5018,11 +5023,48 @@ and then live again. Codex's review of `fix/notice-expiry` noted that the daemon
 snapshot before taking the broadcast lock, so an older `idle` snapshot could in principle arrive
 after a newer `parked` one and clear the pin early. The same reorder would already mis-draw the
 roster, since `Fleet.WithStatus` trusts report order too, so the pin adds no new hazard. The worst
-case is a hint that goes away too soon, never a wrong action.
+case is a hint that goes away too soon, never a wrong action. *Since 2026-09-27 the same reorder can
+also cost an auto-wake:* a stale live report after the parked one reads as a wake by someone else
+(`reconciledRecovery`), so the session stays parked for `/resume` - still no wrong action, a missed one.
 
 *Closes with:* a daemon-issued process-incarnation id on `rpc.SessionStatus` (it trips the three
 reflective field guards), unpinning only on a report that proves a newer process than the one that
 failed.
+
+## 2026-09-27 — usage-limit recovery: what `fix/usage-limit-recovery` left out
+
+A usage limit (`error:"rate_limit"` on the failed turn's synthetic frame, `core.NoticeUsageLimit`)
+now stays live and pinned, and a session parked for a dead login wakes itself on proof the login
+works (`internal/ui/apirecover.go`). Left out, each on purpose:
+
+- **No message is sent for you at the reset.** Claude Code does not either; the pin names the reset
+  time and the next message works. An auto-send would need a timer per agent, against "no process on
+  a timer", and a guess at what to send.
+- **The live stream form of a usage-limit frame is unrecorded** — hitting one on purpose costs a
+  quota. The decoder keys on the top-level `error` field, which the recorded auth variant carries on
+  the stream (`testdata/stream/api-error-auth.jsonl`) and real on-disk usage-limit lines carry as
+  `"rate_limit"` beside `isApiErrorMessage`. Record one when it happens and replace the constructed
+  line in `internal/core/usagelimit_test.go`.
+  Checked by key names against real on-disk lines only; none was committed, since a line lifted from
+  an operator's own transcripts is not a sterile-HOME recording.
+- **The recovery state is per window.** Every attached window auto-wakes, as every window already
+  auto-parks; the loser's wake is refused as "not parked" and shown in that window (the retry meant for the
+  daemon's finalizing-park window tries once more on the next parked report, then gives up). A window opened after the park, or a restarted Wake, knows nothing of it and leaves the
+  session for `/resume`. *Closes with:* the daemon owning the auto-park and wake, which needs the
+  attempt count on its side of the socket.
+- **Any failed turn the auto-park counts is treated as a login failure** - an overload or an
+  `invalid_request` parks after three and wakes on proof like a 401. A deterministic failure wakes
+  once, fails again, and then waits for `/login`; the pin's wording is the login's. Narrowing this
+  needs the error kind (`authentication_failed`) carried past the airlock as a `Notice` of its own.
+- **Proof is counted per output block, not per API request.** One response streams several frames
+  (thinking, then a tool call), so a response that began before a park and lands a later block after
+  it reads as post-park proof: the wake can land on a login that expired mid-response. It costs one
+  wasted wake - the session fails again and then waits for `/login`. *Closes with:* the API response
+  id carried out of the airlock, so a response counts once and only if it began after the park.
+- **Nothing watches the login while every agent is parked.** With no agent live, only `/login`
+  (signed in) or `/resume` brings them back — Wake cannot poll `claude auth status` without a timer.
+- **A usage limit's timed notice outlives the turn that proves the reset** for its ~10s linger; the
+  pin under it goes at once. Clearing a timed notice early is not something `internal/notice` does.
 
 ## 2026-09-28 — a resumed on-disk session keeps its name, with three gaps
 
