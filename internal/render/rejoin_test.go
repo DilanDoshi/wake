@@ -119,3 +119,13 @@ func TestAFenceKeepsIndentEveryLineShares(t *testing.T) {
 		t.Errorf("copy is\n%q\nwant\n%q", got, want)
 	}
 }
+
+// An item that opens with a list draws its bullets on one row (joinLoneBullets),
+// and its wrap hangs under the text past the last of them.
+func TestABulletChainRejoinsItsHang(t *testing.T) {
+	src := "- - - three deep item that opens its parents and is long enough to wrap onto rows"
+	want := "• • • three deep item that opens its parents and is long enough to wrap onto rows"
+	if got := strings.TrimRight(unwrapped(Markdown(src, 40)), "\n"); got != want {
+		t.Errorf("copy is\n%q\nwant\n%q", got, want)
+	}
+}

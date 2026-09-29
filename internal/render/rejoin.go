@@ -36,15 +36,22 @@ func Rejoins(rows []string) []Rejoin {
 		case lead == cont && !opensItem(row):
 			out[i] = Rejoin{Sep: wrapSep(rows[i-1], row), Lead: lead}
 		default:
-			// hangIndentLists moved a bullet's continuations under its text.
-			cont = lead
-			if bulletMarker(row, lead) {
-				cont += ansi.StringWidth(bullet)
-			}
+			cont = hangOf(row, lead)
 			out[i] = Rejoin{Sep: "\n", Lead: min(lead, int(defaultMargin))}
 		}
 	}
 	return out
+}
+
+// hangOf is where a group's continuations sit: under an item's text, which
+// hangIndentLists hangs past its bullet and every bullet joinLoneBullets put
+// beside it; at the lead for anything else.
+func hangOf(row string, lead int) int {
+	rest, hang := row[lead:], lead
+	for strings.HasPrefix(rest, bullet) {
+		rest, hang = rest[len(bullet):], hang+ansi.StringWidth(bullet)
+	}
+	return hang
 }
 
 // runLead is the indent shared by the unreflowable rows around i - a code
