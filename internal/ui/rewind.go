@@ -281,7 +281,7 @@ func (a App) noteRewind(sessionID string, ev core.Event) App {
 		a = a.resetDM(sessionID).forgetHistoryAsk(sessionID).askHistory(sessionID)
 	}
 	if a.focus == sessionID {
-		a = a.withComposer(a.composer().WithDraft(ev.Rewind.PrefillText))
+		a = a.withComposer(a.composer().WithDraft(ev.Rewind.PrefillText)).droppedComposerSelection(sessionID)
 	}
 	return a
 }
