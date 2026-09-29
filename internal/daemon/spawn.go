@@ -352,6 +352,7 @@ func (s *server) launch(c *client, cfg core.Config, parent string, replaces *age
 		s.record(a, sess.Pgid())
 	}
 	settle(true)
+	a.handshake() // before serveInput, so it is the session's first line
 	s.start(a.serveInput)
 	s.start(func() { s.fanOut(a) })
 	c.enqueue(s.statusReply())

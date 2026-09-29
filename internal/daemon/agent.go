@@ -236,8 +236,10 @@ type agent struct {
 	runningTasks map[string]core.Event
 
 	// mcpAskers is the client behind each MCP ask not yet answered, by request
-	// id, so the answer goes to it alone. See askMCP.
+	// id, so the answer goes to it alone - nil for the daemon's own. initID is
+	// the handshake's, until its reply arrives. See askMCP and handshake.
 	mcpAskers map[string]*client
+	initID    string
 
 	tool    string
 	toolArg string

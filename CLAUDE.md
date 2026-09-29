@@ -68,7 +68,10 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
   (`mcp_status`/`mcp_reconnect`/`mcp_toggle`, replies sent only to the asking window). Authenticate
   hands the real terminal to `claude mcp login <server>`, then reconnects every live agent stuck on
-  that server. claude.ai connectors aren't listed — headless sessions don't load them.
+  that server. **Every agent opens with Claude's `initialize` handshake**, which is what makes a
+  headless session load the operator's claude.ai connectors; the daemon then reconnects each one
+  reading needs-auth, so the signed-in ones work from the start (`daemon/mcpask.go`'s `handshake`).
+  A connector not signed in points at claude.ai, and the banner's count leaves connectors out.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
@@ -304,7 +307,7 @@ yet says so in bold.**
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
-| `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl` |
+| `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (type-ahead) · `mention.go` · `imagedrop.go` |
 | Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
@@ -432,8 +435,13 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   mode change gets — only the request id says what it answers. `mcp_toggle` persists. The status
   carries no tool descriptions.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
-  hand-over. **A headless session does not load claude.ai connectors**, even with
-  `ENABLE_CLAUDEAI_MCP_SERVERS=true`.
+  hand-over.
+- **A headless session loads claude.ai connectors only after an `initialize` control request**
+  (never otherwise, even with `ENABLE_CLAUDEAI_MCP_SERVERS=true`), and a loaded connector reads
+  `needs-auth` — even one signed in on claude.ai — until an `mcp_reconnect` connects it; one never
+  signed in refuses the reconnect at once. `--strict-mcp-config` still excludes them.
+  `testdata/stream/initialize.jsonl`, `mcp-connectors.jsonl`,
+  `docs/superpowers/notes/2026-09-27-claudeai-connectors-findings.md`.
 
 ## Conventions
 

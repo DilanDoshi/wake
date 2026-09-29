@@ -3340,3 +3340,35 @@ though only one of them is `WorkflowAgentHistory`'s own error to report rather t
 
 Full argument: `internal/daemon/workflowdisk.go`, `internal/daemon/workflowsave.go`,
 `internal/daemon/subagenttrack.go`, `internal/ui/workflowview.go`.
+
+## 2026-09-27 — every agent opens with the `initialize` handshake, which is what brings claude.ai connectors
+
+**What changed.** The 2026-09-24 entry recorded that a headless session does not load claude.ai
+connectors. It does — after the `initialize` control request every Agent SDK host opens a session
+with, which Wake had never sent (`docs/superpowers/notes/2026-09-27-claudeai-connectors-findings.md`).
+So the daemon now writes it as every session's first stdin line (`daemon/mcpask.go`'s `handshake`).
+
+**Ruling 1 — the daemon connects the connectors, the operator does not.** A loaded connector reads
+`needs-auth` even when it is signed in on claude.ai, and stays so; one `mcp_reconnect` connects it,
+and one never signed in refuses at once. So when the handshake's reply lands the daemon asks for the
+servers and reconnects each claude.ai connector reading `needs-auth` — the interactive Claude Code
+behaviour of a signed-in connector just working. These are the daemon's own asks: recorded with no
+asking client, answered to nobody, their failures logged — a refused handshake asks nothing more. Ordinary servers are left alone: they
+are the operator's to sign in to from `/mcp`.
+
+**Ruling 2 — the handshake's reply reaches no window.** It is an environment dump (the machine's
+commands and agents, the account's token source, models). It is matched by the request id the daemon
+minted and swallowed in `fanOut`; the scrubber and `corpus_test.go` keep its `commands` and `agents`
+out of the corpus too.
+
+**Ruling 3 — the banner's needs-auth count leaves connectors out.** Every connector the account can
+use loads, and most are never signed in to — counting them warned on every agent, permanently, about
+nothing the operator had set up. `/mcp` still lists them, with the way to sign in on claude.ai.
+Connectors are told by Claude's own name for them, `claude.ai <service>` (`core.IsClaudeAIConnector`):
+the banner reads `init`'s server list, which carries a name and a status and no scope. `claude mcp
+add` refuses such a name (letters, digits, `-`, `_` only); a hand-written config accepts one, and a
+server so named loses only the banner's count — `/mcp` still shows it needing authentication.
+
+**Residual.** An agent's first turn can start before the reconnects land, so a connector can be
+missing from that one turn. The manager is unaffected: `--strict-mcp-config` excludes connectors even
+after the handshake.

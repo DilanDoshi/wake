@@ -30,6 +30,9 @@ func (s *server) fanOut(a *agent) {
 			}
 			continue
 		}
+		if a.handshakeAnswered(ev) {
+			continue
+		}
 		a.observe(ev)
 		// One Event, one pointer, shared by every client's copy of the
 		// frame. Nothing mutates an Event after the airlock decodes it, and
@@ -38,9 +41,12 @@ func (s *server) fanOut(a *agent) {
 		// start is the one copied, to keep its script here (forClients).
 		out := forClients(ev)
 		f := rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &out}
-		if c := a.mcpAsker(ev); c != nil {
+		switch c, asked := a.mcpAsker(ev); {
+		case asked && c == nil:
+			a.connectorsReported(ev) // the daemon's own ask; see handshake
+		case asked:
 			c.enqueue(f) // an MCP answer is its asker's alone; see askMCP
-		} else {
+		default:
 			s.broadcast(f)
 		}
 

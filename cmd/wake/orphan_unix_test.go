@@ -49,7 +49,12 @@ while [ $i -lt 5000 ]; do
   printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"flood line '"$i"' with enough prose on it to look like an ordinary turn"}]},"session_id":"fake"}'
   i=$((i+1))
 done
-read _ignored
+# The daemon opens every session with an initialize control request (and may
+# follow it with more); wait past those for the first line that is a message.
+while read -r line; do
+  case "$line" in *'"control_request"'*) continue ;; esac
+  break
+done
 `
 
 func withFloodingClaude(t *testing.T) {

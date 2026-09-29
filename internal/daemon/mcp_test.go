@@ -1,8 +1,13 @@
 package daemon
 
 import (
+	"bytes"
+	"log"
+	"os"
 	"strings"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -133,4 +138,106 @@ func TestAnMCPAnswerGoesOnlyToTheWindowThatAsked(t *testing.T) {
 			t.Fatalf("another window received the asker's MCP answer: %+v", f.Event.MCP)
 		}
 	}
+}
+
+// A session opens with the handshake, as its first line on stdin - which is
+// what makes it load claude.ai connectors at all.
+func TestASessionOpensWithTheHandshake(t *testing.T) {
+	fakeClaudeOnPath(t, "")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	line := c.awaitEvent(idAlpha, "echo: ").Event.Text
+	if !strings.Contains(line, `"subtype":"initialize"`) {
+		t.Fatalf("the session's first line was %s, not the handshake", line)
+	}
+}
+
+// After the handshake the daemon connects every claude.ai connector that is
+// signed in - a reconnect is what connects one - and touches nothing else: the
+// ordinary server is the operator's own to sign in to from /mcp. None of it
+// reaches a window: the handshake's reply and the sweep's are the daemon's.
+func TestTheHandshakeConnectsClaudeAIConnectorsQuietly(t *testing.T) {
+	fakeClaudeOnPath(t, "connectors")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	c.awaitEvent(idAlpha, "reconnect asked: claude.ai Gmail")
+	c.awaitEvent(idAlpha, "reconnect asked: claude.ai Slack")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "after"})
+	c.awaitEvent(idAlpha, "echo: ")
+	for _, f := range c.seen {
+		ev := f.Event
+		switch {
+		case ev == nil:
+		case strings.Contains(ev.Text, "reconnect asked: firecrawl"):
+			t.Error("the sweep reconnected an ordinary server, which is the operator's to sign in to")
+		case ev.Kind == core.KindMCPReply || ev.Kind == core.KindControlReceipt:
+			t.Errorf("a window received the daemon's own reply: %+v", ev)
+		}
+	}
+}
+
+// A refusal of the daemon's own ask reaches no window, so the log is the one
+// place anybody asking why a connector never connected can look.
+func TestTheDaemonLogsWhatRefusedItsOwnAsk(t *testing.T) {
+	logged := lockedLog(t)
+	fakeClaudeOnPath(t, "connectors")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	c.awaitEvent(idAlpha, "reconnect asked: claude.ai Slack")
+
+	want := "claude.ai Slack: Server status: needs-auth"
+	for deadline := time.Now().Add(testTimeout); !strings.Contains(logged.String(), want); {
+		if time.Now().After(deadline) {
+			t.Fatalf("the refused reconnect was not logged as %q:\n%s", want, logged)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+}
+
+// A refused handshake loaded nothing to connect: it is logged, and the daemon
+// asks nothing further.
+func TestARefusedHandshakeIsLoggedAndAsksNothing(t *testing.T) {
+	logged := lockedLog(t)
+	a := &agent{id: idAlpha, initID: "init-1", in: make(chan pending, 1)}
+	refusal := core.Event{Kind: core.KindControlReceipt, RequestID: "init-1", Control: &core.ControlResult{Error: "not now"}}
+	if !a.handshakeAnswered(refusal) {
+		t.Fatal("the handshake's refusal was not recognised as its reply")
+	}
+	if !strings.Contains(logged.String(), "not now") {
+		t.Errorf("the refusal was not logged:\n%s", logged)
+	}
+	if len(a.in) != 0 {
+		t.Error("a refused handshake still asked for the servers it loaded")
+	}
+}
+
+// lockedLog captures logf until the test ends; the daemon logs from its own
+// goroutines, so reads and writes share a lock.
+func lockedLog(t *testing.T) *lockedBuffer {
+	t.Helper()
+	b := &lockedBuffer{}
+	log.SetOutput(b)
+	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	return b
+}
+
+type lockedBuffer struct {
+	mu  sync.Mutex
+	buf bytes.Buffer
+}
+
+func (b *lockedBuffer) Write(p []byte) (int, error) {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.Write(p)
+}
+
+func (b *lockedBuffer) String() string {
+	b.mu.Lock()
+	defer b.mu.Unlock()
+	return b.buf.String()
 }

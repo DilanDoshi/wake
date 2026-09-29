@@ -861,6 +861,10 @@ login`. What only a real server and a real browser can settle:
 - [ ] **⌃C at the sign-in** cancels the sign-in only: Wake comes back with `✘ sign-in did not
       finish`, the fleet untouched.
 - [ ] **Two agents stuck on the same server**: signing in from one reconnects both.
+- [ ] **claude.ai connectors reach a new agent.** With a connector signed in on claude.ai (Gmail,
+      say), start an agent and open `/mcp` on it: the **claude.ai** section lists it `✔ connected`
+      within a few seconds, with no action from you, and asking the agent to use it works. A
+      connector never signed in stays `⚠ needs authentication` and says to sign in on claude.ai.
 
 ## Reporting back
 
