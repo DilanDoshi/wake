@@ -860,6 +860,20 @@ login`. What only a real server and a real browser can settle:
       finish`, the fleet untouched.
 - [ ] **Two agents stuck on the same server**: signing in from one reconnects both.
 
+## The conversation's `@` menu — what only a real machine shows
+
+The unit and screen tests fake the one-shot and the fleet. On your own machine, with other `claude`
+sessions open in other terminals:
+
+- [ ] In a conversation, type `@` and a letter. The fleet's peers appear at once; the machine's other
+      sessions appear within about a second, each with its directory. The conversation's own agent is
+      never offered.
+- [ ] `/name` an agent, then run `/list-agents` in another terminal's `claude` — it should list the new
+      name (Wake sends claude a `/rename` once the agent is idle).
+- [ ] Type `/rename bob` in a busy agent's conversation, then `/name cat` before its turn ends: both
+      names end `bob` — the queued `/rename` takes effect when it is delivered, not when typed.
+- [ ] In a large repository, `@` plus part of a filename ranks that file first, and typing stays smooth.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:

@@ -20,7 +20,8 @@ package daemon
 // The operator's own /rename reaches claude as a passthrough, and internal/ui
 // mirrors it as a Wake rename marked rpc.Frame.SelfRenames, written immediately
 // before the passthrough - at once, or at the type-ahead flush that carries
-// both - so the hold is armed first and spans only the passthrough's own turn.
+// both - so the hold is armed first and lasts until the passthrough's reply,
+// behind any turn already in flight.
 // That want is held: it never fires until claude's reply to the passthrough
 // releases it. A /name over a held want - another window's, during that round
 // trip - moves its target and stays held, and the release decides.

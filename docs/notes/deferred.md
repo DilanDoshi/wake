@@ -3892,8 +3892,9 @@ because session importing is the change that made somebody look.
 `discover.go` reads claude's **on-disk transcript**, which is a second Claude format and therefore a
 second leak. It is contained to one file and policed across the tree
 (`TestTheTranscriptKeysAreSpelledOnlyInDiscover`), which is `argv.go`'s pattern applied to the
-second offender — but `CLAUDE.md`'s non-negotiable still says the airlock is *four files in
-`internal/core`*, and this is a fifth place in the tree that knows Claude's JSON.
+second offender — but `CLAUDE.md`'s non-negotiable says the airlock is *five files in
+`internal/core`* (four when this was written; `localreply.go` joined 2026-09-27), and this is
+another place in the tree that knows Claude's JSON.
 
 *The question somebody has to rule on:* does the airlock's file set grow, does the rule get restated
 to name *formats* rather than files, or does discovery move behind `internal/core`? The third is the
@@ -5030,3 +5031,21 @@ Task 3 review, M1). `noteSent` keeps the shape it has always had.
 
 *Closes with:* marking owed before the write and un-marking it on a failed write, measured against
 the liveness tests that read `owed`.
+
+## 2026-09-28 — Left open by the `@` menu work (at-menu Tasks 3–6)
+
+- **`commandSet.words()` returns the shared slice** (`internal/ui/completion.go`): a caller that
+  mutated it would rewrite every Agent copy's advertised commands. Task 4's `SubagentTypes()` copies;
+  this older reader does not. *Closes with:* a `slices.Clone`, or a test that proves no caller writes.
+- **Prompt history recall (`walkPrompts`) replaces the draft without rebuilding the menu**, so a
+  recalled `@x` carries the previous menu's peers ask and skips one re-ask; the carried listing still
+  shows. Focus away and back has the same shape. *Closes with:* a rebuild there, once a pane whose
+  composer is not yet built can take one (the refocus one-liner panicked on exactly that).
+- **A path name with a space is offered as-is** by both the listing and the fuzzy index, and its
+  `@` insert cannot be read as one mention. Task 5 answered the same question for peers ("never
+  offer an insert that cannot resolve"); how Claude Code quotes such a path is unrecorded.
+  *Closes with:* a recording of claude's own `@"…"` handling, then quote or skip.
+- **`TestARunningDaemonReestablishesASweptLock` flakes** — 3 of 30 alone under `-race` on
+  `origin/main` (2026-09-27, `lock_test.go:322`, `<nil>`), so a clean 5/5 no longer proves it gone.
+- **`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**, so the
+  workflow kinds are unchecked for collisions. *Closes with:* adding it to the scanned files.

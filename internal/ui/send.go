@@ -637,8 +637,10 @@ func (a App) write(what string, frames ...rpc.Frame) tea.Cmd {
 			case len(frames) == 1:
 				return errMsg{Err: fmt.Errorf("%s: %w", what, err)}
 			default:
-				// How far it got, because the local echo has already drawn the
-				// message as sent and it is the single source of what you said.
+				// How far it got, in frames (a flushed /rename's mirror counts as
+				// one, and its failure reads as the send's), because the local echo
+				// has already drawn the message as sent and it is the single source
+				// of what you said.
 				// At thirty targets a deadline expiring on the fifth leaves
 				// twenty-five agents unmessaged, and "it failed" does not say
 				// which of those two happened. Aborting is right - the rest

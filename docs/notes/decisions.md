@@ -338,13 +338,15 @@ embedded in a `<script>` tag. Wake writes to a unix socket read by a Go decoder;
 does not exist here. Measured cost of leaving it on: 0.19% on the corpus but **1.87×** at ~19%
 bracket density — HTML, XML, JSX, SVG — which re-opens a connection-fatal size ceiling.
 
-**~~The airlock is a file, not a package — for now.~~ It is now four files**, and this entry
+**~~The airlock is a file, not a package — for now.~~ It became four files, and is now five**
+(`localreply.go` joined 2026-09-27 for the text replies of local commands — `/model`, `/list-agents`,
+`/rename` — owner's ruling; see "A conversation's `@` offers what Claude Code's does" below), and this entry
 predicted the trigger correctly: it said an `initialize` handshake *or `control_cancel_request`*
 would push `protocol.go` past the 800 hard max. Subagent attribution got there first, taking it to
 1031 — and the restatement arrived **during** the change rather than before it, which is exactly
 what this entry said not to do. The split is by direction and job: `protocol.go` decodes,
 `wire.go` holds shapes, `vocabulary.go` maps Claude's words to Wake's, `encode.go` writes. All in
-the 200–400 band, enforced by `airlock_test.go`, which fails on a fifth member or one outside
+the 200–400 band, enforced by `airlock_test.go`, which pins the file set and fails on an unlisted member or one outside
 `internal/core`. `control_cancel_request` is now recorded **and decoded** — `core.KindRequestWithdrawn`, merged 2026-08-09. So the entry's prediction was right about the trigger and wrong about which change would reach it first.
 
 **`make test` runs with and without `-race`.** Twice the no-race run caught what the detector hid:
@@ -3369,3 +3371,36 @@ it: the cost it priced was a walk per keystroke, and this is one bounded read pe
   where only `internal/ui` exists) keeps the search.
 
 Full argument: `internal/ui/completionindex.go`'s header, `internal/ui/completionpath.go`'s.
+
+## 2026-09-27 — A conversation's `@` offers what Claude Code's does: peers, the machine's sessions, subagents
+
+The owner's rulings for the `@` menu parity work (branch `feat/at-menu-peers`); wire facts in
+`docs/superpowers/notes/2026-09-27-at-menu-findings.md`.
+
+- **Names in a DM, reversing "names in the room only".** In a conversation, `@` plus a character
+  that can begin a name offers the fleet's live peers (the router's live set, not the conversation's
+  own agent), then the machine's other Claude sessions `(dir)`, then `@agent-<type> (agent)`, then
+  files. Nothing routes: the DM sends what was typed, and claude's *model* sends `@<session>` with
+  `SendMessage` (findings §4, from the docs); typed `@agent-<type>` resolves to an `Agent` call (§3).
+  **The manager's conversation offers its fleet and files only** — it runs with `--tools ""`, so it
+  has no `SendMessage` or `Agent`, and reaches fleet peers by Wake name through its `send` tool.
+  The room's menu is unchanged and still mirrors `core.Resolve`.
+- **The machine's sessions come from a bare one-shot, not from an agent.** A `/list-agents` sent to
+  a live session persists in its transcript and its model quotes it back next turn (findings §1a),
+  so asking an agent would put the whole listing into some agent's context on every menu opening.
+  The daemon instead runs `claude --print --bare --no-session-persistence` with one `/list-agents`
+  line (`daemon/peers.go`): ~0.7s, `$0`, no hooks, no MCP servers, no transcript, not itself listed.
+  Coalesced, deadline-bounded, gated on an agent's init advertising `list-agents`; its environment
+  drops `ANTHROPIC_API_KEY`/`ANTHROPIC_AUTH_TOKEN`, and a result that ran a model turn lists nobody
+  and latches the one-shot off for the daemon's life, so binary drift can never spend. Asked once
+  per menu opening, never per keystroke or per report.
+- **Wake's `/name` keeps claude's own name in step** with a bare `/rename` (a second probe kind,
+  `daemon/renamesync.go`), because claude's name is what peers and `SendMessage` address. The
+  operator's own typed `/rename` is mirrored by the UI immediately before its passthrough — at once,
+  or at the type-ahead flush that carries both — marked `SelfRenames`, and the daemon holds that want
+  until claude's reply, so claude never gets it twice; a name claude chose differently from the ask
+  (a variant) is never chased. `--name` wins on `--resume` (findings §2), so every relaunch starts in
+  step. Cost: a queued `/rename` renames Wake when it is delivered, not when typed.
+- **`⇥` stays the only accept**; `↵` still sends. Label is never insert: `(team)`, `(dir)` and
+  `(agent)` share one per-offer tag.
+- **The airlock is five files** (`localreply.go` for local-command reply text).
