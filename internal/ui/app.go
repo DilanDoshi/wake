@@ -86,8 +86,8 @@ type Stream struct {
 	Errs   <-chan error
 }
 
-// Dialer opens a fresh connection to the same daemon and session, and reports
-// that session and the whole fleet with it - the report reattached folds.
+// Dialer opens a fresh connection to the same daemon and to the session it is
+// handed - the attached one now, which a wake after /clear re-keys - and reports it.
 //
 // It is injected rather than written here, for the reason Stream is: this
 // package may not dial. Which socket, whether an unanswering daemon is shutting
@@ -97,7 +97,7 @@ type Stream struct {
 //
 // Nil means "no way back": the hang-up is reported and nothing else happens,
 // exactly as before - what the unit tests and any un-wired future caller get.
-type Dialer func() (net.Conn, Stream, rpc.SessionStatus, *rpc.Status, error)
+type Dialer func(sessionID string) (net.Conn, Stream, rpc.SessionStatus, *rpc.Status, error)
 
 // eventMsg carries one session event into the Bubble Tea loop, addressed to
 // the conversation that is open.
@@ -298,6 +298,7 @@ type App struct {
 	selRows   int
 	selecting bool
 	cdrag     composerDrag // query-box drag geometry, captured at its start; see composersel.go
+	edge      edgeScroll   // a transcript drag held at a pane's edge; see edgescroll.go
 	rosterHit rosterHit    // the roster row resolved at a press, opened on an empty release; see screensel.go
 	clicks    clickRun     // the presses landing on one cell in quick succession; see multiclick.go
 
@@ -581,6 +582,8 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case noticeExpiredMsg:
 		return a.noticeExpired(m), nil
+	case edgeScrollMsg:
+		return a.edgeTicked()
 
 	case parkAllMsg:
 		return a.parkAllSettled(m.err)

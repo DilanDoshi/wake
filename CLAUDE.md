@@ -127,6 +127,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **`/resume` resumes in place and skips `resumeSafe`** — the one deliberate exception, matching
   Claude Code (owner's 2026-09-20 ruling). Parked rows keep `resumeSafe`. `internal/daemon/resume.go`.
 - **Anything waiting on a spawn waits on the id it minted**, never the parent's.
+- **A `/clear` moves an agent onto a new claude conversation** (`a.claudeID`, via
+  `agent.conversation()`). Park records it, a wake resumes it and files the woken agent under it
+  (clients follow via `rpc.SessionStatus.Conversation`), and ⌃F forks it. `resumeSafe` cannot see
+  it — the process's argv still names the spawn id — so `conversationRow` is the only fence, and
+  `/resume` refuses a conversation a held agent is writing. `internal/daemon/park.go`.
 - `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
   confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
 - `/manager-stop` refuses a parked manager and a missing one; it does not borrow park's
@@ -182,6 +187,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
   (`screensel.go`). Every keystroke clears the highlight *and* does its job; width change clears,
   height doesn't; a click copies nothing. Roster click targets are resolved at press.
+- **A transcript drag at a pane's edge scrolls, and keeps scrolling while held** — the first
+  transcript row is the top edge (a pane can start on the window's first row) unless the drag has
+  not left the line it was pressed on; below the last row is the bottom. A one-shot tick
+  (`edgeScrollEvery`) re-arms only while the pane moved; the highlight ends on a line on screen.
+  `internal/ui/edgescroll.go`.
 - **Double-click selects a word, triple-click its row**, on any selectable surface; the first click
   still does its own job. A timer (`multiClickWindow`) counts clicks but never tells a click from a
   drag. `internal/ui/multiclick.go`.
@@ -303,7 +313,7 @@ yet says so in bold.**
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
-| Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
+| Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (type-ahead) · `mention.go` · `imagedrop.go` |
 | Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `picker.go` |
@@ -318,7 +328,7 @@ yet says so in bold.**
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
-| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix |
+| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix, `joinLoneBullets` the lone-bullet one (an item opening with a list) |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · daily notice `updatecheck.go` · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
@@ -488,9 +498,13 @@ first, and read it.
   send (mouse clicks, ⇧+arrows) is a still from the pty harness, and a `## Screenshots` section keeps
   the before/after pair (`main` build vs branch build doing the same thing). A change with nothing
   visible says so, with the reason.
-  - Record with VHS against the real `wake` and a scripted fake `claude` on a shim `PATH`
-    (`demo/agent/claude`). Never a live LLM or the owner's fleet: scratch `HOME`, and a **fresh
-    `WAKE_SOCKET` directory per take** (a reused one inherits orphans and hangs `wake new`).
+  - **Videos must be live, not mocked, wherever possible** (owner's rule, 2026-09-28): record with
+    VHS against the real `wake` driving a real `claude`. Fall back to the scripted fake `claude` on
+    a shim `PATH` (`demo/agent/claude`) only for a flow a live session cannot produce on demand (an
+    API failure, a specific ask), and say in the PR body which clips are scripted and why. Never the
+    owner's fleet: scratch `HOME` (log the real `claude` in there without copying the owner's
+    credentials into the repo or the frames), and a **fresh `WAKE_SOCKET` directory per take** (a
+    reused one inherits orphans and hangs `wake new`).
   - Use a neutral project path (e.g. `/tmp/<name>`) — a home path puts the operator's name in the image.
   - Record the videos against the PR's final head, not an earlier commit, and check their frames by eye.
   - Host videos and images on an orphan branch `pr-assets/<head-branch>` (head branch verbatim, one

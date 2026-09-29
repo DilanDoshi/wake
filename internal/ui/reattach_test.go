@@ -23,6 +23,8 @@ import (
 // that it was asked.
 type stubDialer struct {
 	calls   int
+	asked   string // the session id the last reattach was for
+	only    string // when set, every other session id is refused, as redial refuses one it cannot find
 	session rpc.SessionStatus
 	fleet   *rpc.Status
 	err     error
@@ -30,8 +32,11 @@ type stubDialer struct {
 	errs    chan error
 }
 
-func (d *stubDialer) dial() (net.Conn, Stream, rpc.SessionStatus, *rpc.Status, error) {
-	d.calls++
+func (d *stubDialer) dial(sessionID string) (net.Conn, Stream, rpc.SessionStatus, *rpc.Status, error) {
+	d.calls, d.asked = d.calls+1, sessionID
+	if d.only != "" && sessionID != d.only {
+		return nil, Stream{}, rpc.SessionStatus{}, nil, errors.New("no session " + sessionID)
+	}
 	if d.err != nil {
 		return nil, Stream{}, rpc.SessionStatus{}, nil, d.err
 	}

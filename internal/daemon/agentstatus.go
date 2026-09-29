@@ -39,6 +39,9 @@ func (a *agent) snapshot() rpc.SessionStatus {
 		PID:            a.sess.Pgid(),
 		QuietMS:        time.Since(a.lastEvent).Milliseconds(),
 	}
+	if conv := a.conversationLocked(); conv != a.id {
+		st.Conversation = conv
+	}
 	switch {
 	case a.err != nil:
 		st.Error = a.err.Error()

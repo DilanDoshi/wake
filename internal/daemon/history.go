@@ -315,10 +315,5 @@ func (s *server) transcriptID(id string) string {
 	if !ok {
 		return id
 	}
-	a.mu.Lock()
-	defer a.mu.Unlock()
-	if a.claudeID != "" {
-		return a.claudeID
-	}
-	return id
+	return a.conversation()
 }

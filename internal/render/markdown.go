@@ -96,10 +96,11 @@ func Markdown(src string, width int) string {
 	}
 	// reflowProse re-wraps the prose glamour laid out, restoring the greedy word
 	// wrap its paragraph pass loses without the muesli fork; hangIndentLists then
-	// hangs bullet continuations, and fitToWidth is the hard width net last of all
+	// hangs bullet continuations, joinLoneBullets puts an item that opens with a
+	// list back on its bullet's row, and fitToWidth is the hard width net last of all
 	// — it re-wraps anything the hang shifted past width (an unbreakable token in a
 	// bullet), the one case the shift cannot keep within width itself.
-	return strings.TrimRight(trimOpeningScaffold(fitToWidth(hangIndentLists(reflowProse(stylingOnly(out), width)), width)), "\n")
+	return strings.TrimRight(trimOpeningScaffold(fitToWidth(joinLoneBullets(hangIndentLists(reflowProse(stylingOnly(out), width))), width)), "\n")
 }
 
 // boxDrawing marks a rendered line as glamour's own table or block-quote layout,
@@ -574,4 +575,45 @@ func lockAndRender(r *glamour.TermRenderer, src string) (string, error) {
 	mu.Lock()
 	defer mu.Unlock()
 	return r.Render(src)
+}
+
+// joinLoneBullets puts a list item's text back on its bullet's row. An item
+// whose content opens with a list - `- 28. …` (how an agent keeps a document's
+// numbering), `- - …` - drew its bullet alone, because glamour enters every list
+// on a fresh line: right after an item's text, wrong when the list is the start
+// of it. The row beneath, an item marker two columns in, moves up beside the
+// bullet and keeps its column, so no row grows; its wrapped rest stays put.
+// A painted block (code, a quote) leads with an escape, so it never matches; a
+// table is the one unstyled block, and underTableRule keeps a centred header out.
+func joinLoneBullets(s string) string {
+	lines := strings.Split(s, "\n")
+	out := make([]string, 0, len(lines))
+	for i, line := range lines {
+		if n := len(out); n > 0 {
+			if col, ok := loneBulletAt(out[n-1]); ok && leadSpaces(line) == col+2 && opensItem(line) && !underTableRule(lines, i) {
+				out[n-1] = strings.TrimRight(out[n-1], " ") + line[col+1:]
+				continue
+			}
+		}
+		out = append(out, line)
+	}
+	return strings.Join(out, "\n")
+}
+
+// underTableRule reports whether row i has a table's rule beneath it - a table
+// header, the only table row that can follow a lone bullet, whatever its columns.
+func underTableRule(lines []string, i int) bool {
+	return i+1 < len(lines) && strings.ContainsAny(ansi.Strip(lines[i+1]), boxDrawing)
+}
+
+// loneBulletAt is the column of a row's last bullet when the row holds nothing
+// else - unstyled bullets and spaces, as glamour draws an item with no text of
+// its own (or a chain of them this pass has already joined).
+func loneBulletAt(line string) (int, bool) {
+	t := strings.TrimRight(line, " ")
+	mark := strings.TrimSpace(bullet)
+	if !strings.HasSuffix(t, mark) || strings.Trim(t, " "+mark) != "" {
+		return 0, false
+	}
+	return ansi.StringWidth(t) - 1, true
 }
