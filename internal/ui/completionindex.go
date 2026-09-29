@@ -1,41 +1,10 @@
 package ui
 
-// The project half of `@`: typed text searches the session's files, as Claude
-// Code's own `@` does (owner's 2026-09-27 ruling, docs/notes/decisions.md).
-//
-// **One index per opening, ranked per change.** A menu that offers paths runs
-// one `git ls-files` when it opens - a tea.Cmd, one at a time and tagged with
-// its directory, as a directory read is - and holds the answer until it closes.
-// A keystroke ranks what is held, so typing never costs a walk, and a rebuild
-// that moved neither the query nor the index (a fleet report) reuses the rank.
-//
-// **Only a conversation searches.** The room's `@` addresses the fleet; it
-// keeps the one-directory listing and runs no git.
-//
-// **A path steps; anything else searches.** A bare `@`, a text ending in a
-// separator and one starting with `/`, `~` or `.` are somebody walking
-// directories, so they keep the listing. Any other text is ranked over the
-// index: git's files and every directory above them, as Claude Code's `@`
-// offers both. ⇥ on a directory leaves the draft ending in a separator, which
-// is a step into its listing.
-//
-// **The repository runs nothing.** An agent can write its own .git/config, so
-// the git is told `core.fsmonitor=false` on its command line, which outranks
-// the repository's, and runs without git's location variables.
-//
-// **Bounded**, since a repository is a directory nobody bounded: indexTimeout
-// (the group killed, then bangWaitDelay, then the group again - bangRun's
-// bounds and its reasons); git's answer at indexMaxBytes (a writer that claims
-// every write, bangOutput's reason) and indexMaxFiles names, what those cut
-// counted into the menu's `more`; derived directories at indexMaxFiles of them
-// and indexMaxBytes of path, not counted.
-//
-// **Where git is silent, the listing answers**: a git that does not answer (no
-// repository, a failed exec, a non-zero exit, the deadline), a search with no
-// match, and a query whose directories git never indexed. A failure is held on
-// the menu, so git is not re-run per keystroke, and reported nowhere, for
-// readDirBounded's reason: most directories a menu opens in are not a problem
-// worth a row.
+// The project half of `@`: in a conversation, typed text searches the
+// session's files through one bounded `git ls-files` per menu opening, ranked
+// per change; a path still steps through the listing, and where git is silent
+// the listing answers. The rulings - the mode, the rank, the bounds, and why
+// the repository runs nothing - are decisions.md's 2026-09-27 entry.
 
 import (
 	"bytes"

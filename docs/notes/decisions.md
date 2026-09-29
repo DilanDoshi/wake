@@ -3370,7 +3370,7 @@ it: the cost it priced was a walk per keystroke, and this is one bounded read pe
   ignored tree, stepped into and then narrowed. A head that lists nothing at the root (`@ui/comp`
   where only `internal/ui` exists) keeps the search.
 
-Full argument: `internal/ui/completionindex.go`'s header, `internal/ui/completionpath.go`'s.
+This entry is the full argument; `internal/ui/completionpath.go`'s header holds the listing's.
 
 ## 2026-09-27 — A conversation's `@` offers what Claude Code's does: peers, the machine's sessions, subagents
 

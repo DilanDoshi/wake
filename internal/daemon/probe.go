@@ -15,8 +15,8 @@ package daemon
 // one only while the agent is idle, absorbProbe swallows its reply at fanOut
 // before any client sees it, and the command counts as no turn (sendProbe
 // skips noteSent). The fields it touches (pendingProbes, swallowTurnEnd,
-// confirmedEffort, probed, probeWanted, claudeName) live on the agent and are
-// written only under a.mu. A probe is the daemon's only unprompted stdin
+// confirmedEffort, probed, probeWanted, and renamesync.go's claudeName,
+// renameHeld and renameAsked) live on the agent and are written only under a.mu. A probe is the daemon's only unprompted stdin
 // write, so one is never queued while a real turn is owed - a kind's want
 // waits in probeWanted and fires at the next idle instead of being dropped.
 
@@ -176,17 +176,10 @@ func (s *server) absorbed(a *agent, ev core.Event) bool {
 
 // absorbProbe consumes a probe's reply and its turn end so neither reaches a
 // client, and names the kind whose reply the server must now act on - notProbe
-// for a turn end, and for a /model reply that confirmed nothing.
-//
-// It keys on the probe's own reply - an assistant frame of its kind's shape,
-// while that kind has one in flight - not on a bare in-flight flag. Keying on
-// the reply's shape is what makes it safe for a probe to be armed on another
-// goroutine: a previous turn's frames still draining here do not match, so they
-// pass through untouched. Each reply arms swallowTurnEnd, which carries the
-// window one frame further so the probe turn's own end is swallowed too and
-// decrements its kind's counter - so two probes in flight suppress two replies,
-// not one. The agent's state never moves for a question the operator did not
-// ask.
+// for a turn end, and for a /model reply that confirmed nothing. It keys on the
+// reply's shape while its kind is in flight, so a previous turn's frames pass
+// through; each reply arms swallowTurnEnd, so the probe's own end is swallowed
+// and drains its kind's counter.
 func (a *agent) absorbProbe(ev core.Event) (suppress bool, answered probeKind) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
