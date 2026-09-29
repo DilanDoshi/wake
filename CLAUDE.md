@@ -308,7 +308,7 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · `lifecycle.go` · `peers.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -460,7 +460,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/dm.go` at 799 and `internal/core/protocol.go` at 798 — derived by
+  `internal/ui/app.go` at 800 and `internal/ui/dm.go` at 799 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go
