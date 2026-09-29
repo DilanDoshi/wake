@@ -229,3 +229,23 @@ func TestResumeDoesNotAskResumeSafe(t *testing.T) {
 		t.Errorf("resume source is %q, want %q", src.ID, id)
 	}
 }
+
+// A cleared agent is filed under the id it was spawned with and writes another,
+// and ps cannot see that one - its argv still names the old id. So the fleet's
+// own record is the only fence: resuming the conversation it is writing would put
+// a second process on it.
+func TestResumeRefusesTheConversationAClearedAgentIsWriting(t *testing.T) {
+	s, projects := importServer(t)
+	real := t.TempDir()
+	conv := "ffff2222-4444-4444-8444-444444444444"
+	writeTranscript(t, projects, slugOf(real), conv, real)
+	a := liveAgent("dddddddd-4444-4444-8444-444444444444", "alex", real)
+	if !s.register(a) {
+		t.Fatal("could not put the agent in the fleet")
+	}
+	clearTo(a, a.id, conv)
+	_, err := s.resumeSource(conv)
+	if err == nil || !strings.Contains(err.Error(), "already in this fleet") {
+		t.Errorf("resumeSource of the conversation a live agent is writing gave %v, want a refusal", err)
+	}
+}

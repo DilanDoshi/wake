@@ -1235,7 +1235,10 @@ correlators survive and is **labelled a guard rather than evidence**, because `r
 *Residual, and it belongs to whoever owns re-keying:* an ask arriving **after** a `/clear` is
 still stamped with the spawn id, which is the only id `session.go` is told about. It routes to
 the right process and is the wrong id the moment something above re-keys the session to its
-successor. Written down in `attribute()`'s comment.
+successor. Written down in `attribute()`'s comment. **Closed by `fix/resume-after-clear`:** the
+only re-key is at wake, which starts a fresh process whose `session.go` is told the conversation
+id, so its asks are stamped with it from the start; a live cleared agent keeps its row id, which
+is still the ask's correct address.
 
 **~~I4. `make soak` is a green no-op.~~ FIXED** (`d396aab`). `internal/core/soak_test.go`, behind
 the `soak` tag, in two phases: churn at 20 concurrent for lifecycle leaks, then one long session
@@ -5045,3 +5048,32 @@ every such resume drew a pooled one. Three things were left:
 
 A recorded name that collides with a live **team** is not refused — no name-claim path checks teams
 yet (the teams entry above); the router's agent-name-wins rule covers it meanwhile.
+
+**Restored history shows no background task ending** (2026-09-26, `fix/resume-after-clear`). A
+task's ending reaches the live stream only as `task_*` frames, which never reach the transcript
+(BUG-33), and as a `result` marked `origin: task-notification`. On disk the one trace was the
+`<task-notification>` user line claude injects, and that is now dropped from restored history,
+because it restored as a turn the operator typed. So a reopened DM has no `● Subagent "…"
+finished` line for a dispatch that ended while it was closed. The better end state is decoding
+that line as the ending it is, in the airlock, rather than dropping it.
+
+**Residuals of the resume-after-clear re-key** (2026-09-26, `fix/resume-after-clear`). A wake after
+`/clear` files the agent under its new conversation id; what still keys on the old one is display
+only. Room lines said before the wake stay attributed to the old id, so a lone `@name` narrowing
+on the woken agent hides them. A fork whose `ParentID` is the old id loses its `forked from`
+line. And one behaviour is unrecorded: rewind's `last_seen_user_message_uuid` is the newest
+genuine typed prompt, so with task-notification lines dropped it is never the injected
+notification line - whether claude counts that line when it checks for a stale target is not
+known. Record a rewind after a background task ends to settle it.
+
+## 2026-09-28 — a copy keeps some wraps it cannot prove
+
+`render.Rejoins` rejoins only rows `reflowProse` would group, so these still paste with a break at
+the wrap: a wrapped row that opens with a styled span (bold, inline code, a link — indistinguishable
+from code once rendered), a long link or token `fitToWidth` hard-wrapped, and your own turn when
+lipgloss changed what was typed (a tab expands to spaces). Each falls back to the row as drawn,
+never to wrong text. A peer's cross-session message and a subagent's gutter copy as drawn too.
+
+*Closes with:* a wrap marker carried out of the renderer for styled rows, which means instrumenting
+glamour's wrap as well as `reflowProse`'s — see decisions.md 2026-09-28 for why that was not the
+first move.

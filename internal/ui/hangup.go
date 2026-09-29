@@ -63,8 +63,17 @@ func (a App) hungUp(err error) (tea.Model, tea.Cmd) {
 
 	dial := a.dial
 	id := a.sessionID
+	// A wake after /clear re-keys the agent onto its conversation; a window that
+	// missed that report still knows the conversation, and the old id is gone.
+	var then string
+	if ag, ok := a.fleet.Agent(id); ok {
+		then = ag.Conversation
+	}
 	return a, func() tea.Msg {
-		conn, stream, sess, fleet, err := dial()
+		conn, stream, sess, fleet, err := dial(id)
+		if err != nil && then != "" {
+			conn, stream, sess, fleet, err = dial(then)
+		}
 		if err != nil {
 			return errMsg{Err: fmt.Errorf("%w. %s", err, reattachAdvice(id))}
 		}

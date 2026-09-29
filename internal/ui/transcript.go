@@ -53,6 +53,10 @@ type transcript struct {
 	runs     map[int]string
 	runHeads map[string]int
 
+	// texts is where each block whose rows rejoin on the clipboard sits, keyed
+	// by its first row, under the tools map's write rule. See copytext.go.
+	texts map[int]textRows
+
 	// scroll is the index of the top line on screen. It is held rather than
 	// derived because it is the reader's position: an event arriving must not
 	// move it, which is the whole reason Append samples atBottom first.
@@ -96,7 +100,7 @@ func (t transcript) replace(blocks []block) transcript {
 // absolute index. A room history merge uses the base to keep retained live
 // lines at the indices a viewport and selection already hold.
 func (t transcript) replaceFrom(blocks []block, base int, prefix string) transcript {
-	t.tools, t.heads, t.runs, t.runHeads = nil, nil, nil, nil
+	t.tools, t.heads, t.runs, t.runHeads, t.texts = nil, nil, nil, nil, nil
 	lines := make([]string, 0, len(blocks)*2)
 	for _, b := range blocks {
 		added := b.laidOut
@@ -117,16 +121,17 @@ func (t transcript) trimBefore(at int) transcript {
 	t.lines = t.lines.trimBefore(at)
 	t.tools = keptLineMap(t.tools, at)
 	t.runs = keptLineMap(t.runs, at)
+	t.texts = keptLineMap(t.texts, at)
 	t.heads = keptHeadMap(t.heads, at)
 	t.runHeads = keptHeadMap(t.runHeads, at)
 	return t
 }
 
-func keptLineMap(held map[int]string, at int) map[int]string {
+func keptLineMap[V any](held map[int]V, at int) map[int]V {
 	if held == nil {
 		return nil
 	}
-	kept := make(map[int]string, len(held))
+	kept := make(map[int]V, len(held))
 	for line, id := range held {
 		if line >= at {
 			kept[line] = id
@@ -157,21 +162,28 @@ func keptHeadMap(held map[string]int, at int) map[string]int {
 // Six covers a fold whole and leaves the rest of an opened block to select.
 const clickableRows = 6
 
-// mark records where a tool block landed. A header contributes only its ⏺ row,
-// so a diff drawn under it still selects; a rollup contributes its one line.
+// mark records where a tool block landed, and where a block whose rows rejoin
+// on the clipboard did. A header contributes only its ⏺ row, so a diff drawn
+// under it still selects; a rollup contributes its one line.
 func (t *transcript) mark(b block, at int, added []string) {
+	// blockLines may open with the blank row that separates turns, which
+	// belongs to neither block.
+	first := at
+	if len(added) > 0 && added[0] == "" {
+		first++
+	}
+	if b.copied != rowsAsDrawn {
+		if t.texts == nil {
+			t.texts = map[int]textRows{}
+		}
+		t.texts[first] = textRows{end: at + len(added), how: b.copied, typed: b.typed}
+	}
 	if b.tool == "" && b.run == "" {
 		return
 	}
 	if t.tools == nil {
 		t.tools, t.heads = map[int]string{}, map[string]int{}
 		t.runs, t.runHeads = map[int]string{}, map[string]int{}
-	}
-	// blockLines may open with the blank row that separates turns, which
-	// belongs to neither block.
-	first := at
-	if len(added) > 0 && added[0] == "" {
-		first++
 	}
 	switch {
 	case b.run != "":

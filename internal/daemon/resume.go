@@ -104,7 +104,9 @@ func (s *server) resumeSource(sourceID string) (FoundSession, error) {
 	if !mintedByWake(sourceID) {
 		return FoundSession{}, fmt.Errorf("a session id must be a UUID, got %q: claude names every transcript for the session's own id, so anything else is not one", sourceID)
 	}
-	if s.holds(sourceID) {
+	// Also the conversation a cleared agent is writing, which resumeSafe cannot
+	// see: that process's argv still names the id it was spawned with.
+	if _, held := s.conversationRow(sourceID); held {
 		return FoundSession{}, fmt.Errorf("session %s is already in this fleet, so there is nothing to resume: attach it, or if it is parked bring it back with /resume", sourceID)
 	}
 	if _, parked := s.parked.record(sourceID); parked {

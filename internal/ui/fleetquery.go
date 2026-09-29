@@ -161,7 +161,9 @@ func (f Fleet) Focused() string { return f.focused }
 func needsAuth(servers []core.MCPServer) int {
 	n := 0
 	for _, s := range servers {
-		if s.State == core.MCPNeedsAuth {
+		// Every connector claude.ai offers loads; one never signed in to is not
+		// a fault to warn about on every agent. /mcp still lists it.
+		if s.State == core.MCPNeedsAuth && !core.IsClaudeAIConnector(s.Name) {
 			n++
 		}
 	}

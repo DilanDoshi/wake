@@ -39,8 +39,9 @@ func selectedNow(a App) string {
 		return a.composerSelectedText()
 	}
 	m := a.sel.marked()
-	lines, first := a.transcriptIn(a.sel.pane).selectionLines(m)
-	return selectedText(lines, first, m)
+	tr := a.transcriptIn(a.sel.pane)
+	lines, first := tr.selectionLines(m)
+	return selectedText(lines, first, m, tr.rejoins(lines, first))
 }
 
 // frameRow is one screen row of the drawn frame, without its styling.
