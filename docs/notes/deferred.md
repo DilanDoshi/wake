@@ -5024,6 +5024,31 @@ case is a hint that goes away too soon, never a wrong action.
 reflective field guards), unpinning only on a report that proves a newer process than the one that
 failed.
 
+## 2026-09-28 — a resumed on-disk session keeps its name, with three gaps
+
+`/resume` of an on-disk row now comes back under the newest `customTitle` its transcript recorded,
+hyphenated (`resumedName`, `internal/daemon/resume.go`); before, `FrameResume` carried no name and
+every such resume drew a pooled one. Three things were left:
+
+- **A pooled fallback is permanent.** When Wake cannot hold the recorded name (held by a live agent
+  in this fleet, over 24 characters, punctuation, `manager`), the session resumes pooled, and
+  `launch` passes that name as `--name` — so claude records it and every later resume restores it.
+  The fallback is only logged, as `unparkRecord`'s is; the room just says `@silas has been resumed.`
+  Decoupling `--name` from the registry name to dodge this was rejected: the `/rename` mirror rests
+  on the two moving together.
+- **Wake's own `/name` never reaches the transcript.** Only claude's `/rename` writes a
+  `customTitle` (Wake mirrors it); `/name foo` changes Wake's registry alone, so an on-disk resume
+  after it restores the pre-`/name` title. *Closes with:* `/name` also sending claude's `/rename`,
+  which is also the only repair after the fallback above.
+- **Two windows resuming one session at once can land it pooled.** The name is claimed before
+  `launch` admits the id, so the loser of admission releases the recorded name after the winner
+  fell back. No second process results; closing it means admitting the id before naming it.
+- **Import and `/adopt` still mint pooled names.** They fork to a new id, so a hand-run session's
+  own `/rename` title is dropped on adopt; the same restore could apply there.
+
+A recorded name that collides with a live **team** is not refused — no name-claim path checks teams
+yet (the teams entry above); the router's agent-name-wins rule covers it meanwhile.
+
 **Restored history shows no background task ending** (2026-09-26, `fix/resume-after-clear`). A
 task's ending reaches the live stream only as `task_*` frames, which never reach the transcript
 (BUG-33), and as a `result` marked `origin: task-notification`. On disk the one trace was the

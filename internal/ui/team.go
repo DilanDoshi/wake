@@ -38,5 +38,5 @@ func (a App) teamAgent(arg string) (App, tea.Cmd) {
 	}
 	a = a.clearDraft()
 	notice.Report(teamAsked, agentPrefix, agent.Name)
-	return a, a.write(teamFailed, rpc.Frame{Kind: rpc.FrameTeam, SessionID: agent.ID, Text: hyphenateName(team)})
+	return a, a.write(teamFailed, rpc.Frame{Kind: rpc.FrameTeam, SessionID: agent.ID, Text: rpc.HyphenateName(team)})
 }

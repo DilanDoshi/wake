@@ -41,13 +41,14 @@ func (s *server) resumeSession(ctx context.Context, c *client, f rpc.Frame) {
 		c.enqueue(errorFrame(f.SessionID, err.Error()))
 		return
 	}
-	name, err := s.names.claim(f.Text)
+	name, err := s.resumedName(src)
 	if err != nil {
 		c.enqueue(errorFrame(f.SessionID, err.Error()))
 		return
 	}
 	// ResumeFrom and the source's own id, where importSession sets ForkFrom and a
-	// minted id. Dir is the directory discovery proved, never one a client chose.
+	// minted id. Dir is the directory discovery proved, never one a client chose;
+	// the name is the one its transcript recorded, for the same reason.
 	//
 	// **No parent** (unparkRecord's rule, and for its reason): this is an
 	// identity resume, not a fork, so `parent` is "" rather than src.ID. Passing
@@ -62,6 +63,23 @@ func (s *server) resumeSession(ctx context.Context, c *client, f rpc.Frame) {
 		Dir:            src.Dir,
 		PermissionMode: spawnPermissionMode,
 	}, "", nil, nil)
+}
+
+// resumedName is the name an on-disk session comes back under: the one claude
+// last recorded for it, folded as a spaced `/rename` is, else a pooled one -
+// unparkRecord's fallback, since a display name never blocks a resume. claim,
+// never restoredName: a title is text anyone can write, and the manager's
+// tools are keyed on its name. A pooled fallback becomes the recorded name
+// from here on (launch passes it as --name); see docs/notes/deferred.md.
+func (s *server) resumedName(src FoundSession) (string, error) {
+	if recorded := rpc.HyphenateName(src.Name); recorded != "" {
+		name, err := s.names.claim(recorded)
+		if err == nil {
+			return name, nil
+		}
+		logf("wake: session %s cannot have the name %q back (%v), so it is resuming under another", src.ID, recorded, err)
+	}
+	return s.names.claim("")
 }
 
 // resumeSource is the transcript a `/resume` may take, or why it may not: it
