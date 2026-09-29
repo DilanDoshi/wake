@@ -33,6 +33,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -199,6 +200,9 @@ func runFakeAgent() int {
 	if len(os.Args) > 1 && os.Args[1] == "mcp" {
 		return fakeClaudeMCP(os.Args[2:])
 	}
+	if slices.Contains(os.Args, "--bare") {
+		return fakeBareListing()
+	}
 	sid := agentArg(os.Args, "--session-id")
 	// A session that runs leaves a transcript on disk, so a parked record for it
 	// is offered back (parkedStatuses drops one with none). Behind an explicit
@@ -234,6 +238,8 @@ func runFakeAgent() int {
 		return fakeAgentWorkflows(sid)
 	case scriptMCP:
 		return fakeAgentMCP(sid)
+	case scriptAtMenu:
+		return fakeAgentAtMenu(sid)
 	}
 	return fakeAgentEcho(sid)
 }
