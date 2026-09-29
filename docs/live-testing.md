@@ -864,17 +864,14 @@ login`. What only a real server and a real browser can settle:
 
 ## The conversation's `@` menu — what only a real machine shows
 
-The unit and screen tests fake the one-shot and the fleet. On your own machine, with other `claude`
-sessions open in other terminals:
+The unit and screen tests fake the one-shot and the fleet. On your own machine, after an agent has
+answered at least one prompt (the daemon asks for the machine's sessions only once some agent's init
+has advertised `/list-agents`), with other `claude` sessions open in other terminals:
 
-- [ ] In a conversation, type `@` and a letter. The fleet's peers appear at once; the machine's other
-      sessions appear within about a second, each with its directory. The conversation's own agent is
-      never offered.
-- [ ] `/name` an agent, then run `/list-agents` in another terminal's `claude` — it should list the new
-      name (Wake sends claude a `/rename` once the agent is idle).
-- [ ] Type `/rename bob` in a busy agent's conversation, then `/name cat` before its turn ends: both
-      names end `bob` — the queued `/rename` takes effect when it is delivered, not when typed.
-- [ ] In a large repository, `@` plus part of a filename ranks that file first, and typing stays smooth.
+- [ ] In a conversation, `@` and a letter offers the other terminals' sessions within about a
+      second, each with its directory.
+- [ ] `/name` an agent, then run `/list-agents` in another terminal's `claude`: it lists the new name.
+- [ ] In a large repository, typing after `@` stays smooth.
 
 ## Reporting back
 
