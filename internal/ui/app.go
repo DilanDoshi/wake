@@ -298,6 +298,7 @@ type App struct {
 	selRows   int
 	selecting bool
 	cdrag     composerDrag // query-box drag geometry, captured at its start; see composersel.go
+	edge      edgeScroll   // a transcript drag held at a pane's edge; see edgescroll.go
 	rosterHit rosterHit    // the roster row resolved at a press, opened on an empty release; see screensel.go
 	clicks    clickRun     // the presses landing on one cell in quick succession; see multiclick.go
 
@@ -581,6 +582,8 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case noticeExpiredMsg:
 		return a.noticeExpired(m), nil
+	case edgeScrollMsg:
+		return a.edgeTicked()
 
 	case parkAllMsg:
 		return a.parkAllSettled(m.err)
