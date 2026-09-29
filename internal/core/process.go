@@ -72,13 +72,14 @@ var nestedSessionEnv = []string{
 	"CLAUDE_PLUGIN_DATA",
 }
 
-// oneShotCredentialEnv is dropped from the one-shot alone: /list-agents needs no
-// credential (the bare recordings show apiKeySource none), and a bare claude
-// with no token and no provider switch has nothing to spend through.
-var oneShotCredentialEnv = []string{
-	"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
-	"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
-}
+// oneShotCredentialEnv and every provider switch (oneShotProviderPrefix) are
+// dropped from the one-shot alone: /list-agents needs no credential (the bare
+// recordings show apiKeySource none), and a bare claude with no token and no
+// provider selected has nothing to spend through. The prefix covers switches
+// added after this list was written.
+var oneShotCredentialEnv = []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"}
+
+const oneShotProviderPrefix = "CLAUDE_CODE_USE_"
 
 // ListAgentsCommand is the one-shot that lists the machine's sessions, run in
 // dir: claude found on this process's PATH as an agent's is, with an agent's
@@ -89,7 +90,7 @@ func ListAgentsCommand(ctx context.Context, dir string) *exec.Cmd {
 	cmd.Dir = dir
 	cmd.Env = slices.DeleteFunc(scrubbedEnv(os.Environ()), func(kv string) bool {
 		name, _, _ := strings.Cut(kv, "=")
-		return slices.Contains(oneShotCredentialEnv, name)
+		return slices.Contains(oneShotCredentialEnv, name) || strings.HasPrefix(name, oneShotProviderPrefix)
 	})
 	cmd.WaitDelay = waitDelay
 	setProcessGroup(cmd)

@@ -46,6 +46,8 @@ func TestTheListAgentsOneShotCarriesNoCredential(t *testing.T) {
 	gone := []string{
 		"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN",
 		"CLAUDE_CODE_USE_BEDROCK", "CLAUDE_CODE_USE_VERTEX", "CLAUDE_CODE_USE_FOUNDRY",
+		// Switches the list does not name: the whole family goes by its prefix.
+		"CLAUDE_CODE_USE_ANTHROPIC_AWS", "CLAUDE_CODE_USE_MANTLE",
 	}
 	for _, name := range gone {
 		t.Setenv(name, "1")
