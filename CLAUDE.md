@@ -480,7 +480,8 @@ first, and read it.
   send (mouse clicks, ⇧+arrows) is a still from the pty harness, and a `## Screenshots` section keeps
   the before/after pair (`main` build vs branch build doing the same thing). A change with nothing
   visible says so, with the reason.
-  - **Videos must be live, not mocked, wherever possible** (owner's rule, 2026-09-28): record with
+  - **Videos must be live, not mocked, wherever possible** (owner's rule, 2026-09-28, with standing permission to
+    run a live `claude` session for it — this covers videos only, not tests): record with
     VHS against the real `wake` driving a real `claude`. Fall back to the scripted fake `claude` on
     a shim `PATH` (`demo/agent/claude`) only for a flow a live session cannot produce on demand (an
     API failure, a specific ask), and say in the PR body which clips are scripted and why. Never the
