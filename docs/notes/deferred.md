@@ -5069,3 +5069,9 @@ the liveness tests that read `owed`.
   `origin/main` (2026-09-27, `lock_test.go:322`, `<nil>`), so a clean 5/5 no longer proves it gone.
 - **`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**, so the
   workflow kinds are unchecked for collisions. *Closes with:* adding it to the scanned files.
+- **A daemon on an older build answers each conversation's `@` opening with a notice**
+  (`unknown frame kind "peers"`, branch review L2), beside the stale-daemon notice the room opened
+  with. Not skipped: `internal/ui` keeps no daemon build, and a build mismatch is also every dev
+  rebuild against a daemon that does speak `FramePeers`. Not suppressed: the refusal carries no kind,
+  so only the daemon's sentence could name it. *Closes with:* a typed "unknown kind" on
+  `rpc.FrameError`, which the UI can drop for `FramePeers` alone.
