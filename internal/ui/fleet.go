@@ -93,6 +93,10 @@ type Agent struct {
 	// it from and no staleness to worry about: it never changes.
 	ParentID string
 
+	// Conversation is the claude conversation a /clear moved this agent onto,
+	// or empty; a wake comes back under it. See rpc.SessionStatus.Conversation.
+	Conversation string
+
 	// State is one of the rpc.State constants. Empty until a report arrives -
 	// an agent first seen through an event is real but not yet described.
 	State string
@@ -332,6 +336,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 			f.order = append(f.order, s.ID)
 		}
 		a.Name, a.Label, a.Color, a.Team, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, s.Team, runningIn(s), s.ParentID
+		a.Conversation = s.Conversation
 		a.Effort, a.Budget, a.ConfirmedModel = s.Effort, s.Budget, s.ConfirmedModel
 		// Only when the report names one, so a report assembled before the daemon
 		// saw an init does not blank a model the event stream already gave. Model

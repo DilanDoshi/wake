@@ -77,7 +77,7 @@ func (a *agent) markParked() {
 func (a *agent) markWakeable(rec parkedRecord, durable bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.wakeable = a.parked && rec.ID == a.id
+	a.wakeable = a.parked && rec.ID == a.conversationLocked()
 	a.parkDurable = a.wakeable && durable
 	if a.wakeable {
 		a.parkGeneration = rec
@@ -255,7 +255,7 @@ func recordFor(a *agent) parkedRecord {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return parkedRecord{
-		ID: a.id, Name: a.name, Label: a.label, Color: a.color, Team: a.team, Dir: a.dir,
+		ID: a.conversationLocked(), Name: a.name, Label: a.label, Color: a.color, Team: a.team, Dir: a.dir,
 		Effort: a.effort, Model: a.model,
 		MaxBudgetUSD: a.budget, FallbackModel: a.fallback,
 		Parked: time.Now(),
@@ -319,7 +319,7 @@ func (s *server) bookParked(agents []*agent) {
 		switch {
 		case !a.bookable():
 			refused++
-		case held[a.id]:
+		case held[a.conversation()]:
 			booked++
 		default:
 			if err := s.parked.add(recordFor(a)); err != nil {
@@ -354,6 +354,10 @@ func (s *server) bookParked(agents []*agent) {
 // any wire: two processes under one id each answer correctly from their own
 // history, the file branches in place, and whoever resumes it next silently
 // does not have half of it (2026-08-09 findings §5).
+//
+// It is blind to a /clear: the process writing the new conversation still has
+// the id it was spawned with in its argv. The fleet's own record is the only
+// fence for that one - conversationRow, which resumeSource asks first.
 func (s *server) resumeSafe(id string) error {
 	if !mintedByWake(id) {
 		return fmt.Errorf("%q is not an id Wake minted, so nothing recorded under it can be matched to a process", id)
@@ -392,7 +396,7 @@ func (s *server) unpark(ctx context.Context, c *client, f rpc.Frame) {
 		c.enqueue(errorFrame(f.SessionID, "the daemon is shutting down"))
 		return
 	}
-	a, ok := s.agent(f.SessionID)
+	a, ok := s.conversationRow(f.SessionID)
 	if !ok {
 		s.unparkRecord(c, f.SessionID)
 		return
@@ -417,17 +421,20 @@ func (s *server) unpark(ctx context.Context, c *client, f rpc.Frame) {
 			" ran, and a wake has to run there: claude locates a transcript by the directory it was started in"))
 		return
 	}
-	if err := s.resumeSafe(a.id); err != nil {
+	// The conversation claude was last writing, which a /clear moves off a.id:
+	// the woken agent is filed under it, since the id is what its argv proves.
+	id := a.conversation()
+	if err := s.resumeSafe(id); err != nil {
 		c.enqueue(errorFrame(f.SessionID, err.Error()))
 		return
 	}
-	rec, reserved, err := s.parked.reserve(a.id)
+	rec, reserved, err := s.parked.reserve(id)
 	if errors.Is(err, errParkReservationHeld) {
-		c.enqueue(errorFrame(a.id, "session "+a.id+" is already being brought back by something else"))
+		c.enqueue(errorFrame(f.SessionID, "session "+id+" is already being brought back by something else"))
 		return
 	}
 	if err != nil {
-		c.enqueue(errorFrame(a.id, "could not reserve the parked session for wake: "+err.Error()))
+		c.enqueue(errorFrame(f.SessionID, "could not reserve the parked session for wake: "+err.Error()))
 		return
 	}
 	// The parent edge travels with it. Nothing on claude's wire says a session
@@ -435,15 +442,15 @@ func (s *server) unpark(ctx context.Context, c *client, f rpc.Frame) {
 	// copy - a wake that dropped it would lose the fork's ancestry silently.
 	budget, fallback := a.currentSpend()
 	s.launch(c, core.Config{
-		SessionID:      a.id,
-		ResumeFrom:     a.id,
+		SessionID:      id,
+		ResumeFrom:     id,
 		Name:           a.name,
 		Dir:            a.dir,
 		PermissionMode: spawnPermissionMode,
 		// Sanitised rather than passed: a session set to a level only
 		// `/effort` takes is holding one `--effort` refuses, and launch is the
 		// one door and refuses rather than dropping. See argvEffort.
-		Effort: argvEffort(a.currentEffort(), a.id),
+		Effort: argvEffort(a.currentEffort(), id),
 		// Not sanitised, because there is nothing to sanitise against: any
 		// non-empty model may go on a command line. See rpc.Frame.Model.
 		Model: a.currentModel(),
@@ -566,7 +573,7 @@ func (s *server) parkLaunchOutcome(rec parkedRecord, reserved bool) func(bool) {
 		if launched || !s.parked.isDurable(rec) {
 			return
 		}
-		if a, held := s.agent(rec.ID); held {
+		if a, held := s.conversationRow(rec.ID); held {
 			a.markParkDurable(rec)
 		}
 	}
@@ -653,4 +660,52 @@ func (s *server) restoredName(recorded string) (string, error) {
 		return s.names.claimManager()
 	}
 	return s.names.claim(recorded)
+}
+
+// conversationRow is the held row id names: the one filed under it, or the one
+// whose current conversation it is - a park book record names the latter, and a
+// cleared agent stays filed under the id it was spawned with.
+func (s *server) conversationRow(id string) (*agent, bool) {
+	if a, ok := s.agent(id); ok {
+		return a, true
+	}
+	s.mu.Lock()
+	rows := make([]*agent, 0, len(s.agents))
+	for _, a := range s.agents {
+		rows = append(rows, a)
+	}
+	s.mu.Unlock()
+	for _, a := range rows {
+		if a.conversation() == id {
+			return a, true
+		}
+	}
+	return nil, false
+}
+
+// replaceParked swaps a woken agent in for the parked one it came from.
+//
+// Pointer identity rather than a state check, and that is what keeps it atomic:
+// asking the old agent whether it is still parked would mean taking its lock
+// under s.mu, which nothing in this package does, and the answer would be stale
+// the moment the lock was released. `was` is the exact agent unpark inspected,
+// so this either replaces that one or refuses.
+//
+// The woken agent is filed under the conversation it resumed, which a /clear
+// moved off was.id - so it may take a new key, never one another row holds.
+// forgetLocked for register's reason: a woken session must not be reported
+// alive and ended in one report.
+func (s *server) replaceParked(a, was *agent) bool {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.quitting || s.taken || s.agents[was.id] != was {
+		return false
+	}
+	if held, ok := s.agents[a.id]; ok && held != was {
+		return false
+	}
+	delete(s.agents, was.id)
+	s.agents[a.id] = a
+	s.forgetLocked(a.id)
+	return true
 }

@@ -95,6 +95,10 @@ func fakeMemory(sid string, resumed bool) int {
 
 	for line := range stdinLines() {
 		switch {
+		case strings.Contains(line, clearCommand):
+			sid = clearMemory(sid)
+			path, history = memoryPath(sid), nil
+			continue
 		case strings.Contains(line, recallWord):
 			// Answer from what is held, not from what was just asked. The
 			// question does not carry the passphrase, so an empty history

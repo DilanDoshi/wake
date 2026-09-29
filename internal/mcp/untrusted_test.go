@@ -87,17 +87,20 @@ var agentAuthored = map[string]bool{
 	"Error":   true,
 	"Label":   true,
 
-	"ID":         false,
-	"Name":       false,
-	"Dir":        false,
-	"State":      false,
-	"ParentID":   false,
-	"RequestIDs": false,
-	"PID":        false,
-	"QuietMS":    false,
-	"Effort":     false,
-	"Budget":     false,
-	"Color":      false,
+	"ID":       false,
+	"Name":     false,
+	"Dir":      false,
+	"State":    false,
+	"ParentID": false,
+	// Conversation is the id claude is writing under, off the child's stdout but
+	// kept only when it parses as a UUID (mintedByWake): no text can ride it.
+	"Conversation": false,
+	"RequestIDs":   false,
+	"PID":          false,
+	"QuietMS":      false,
+	"Effort":       false,
+	"Budget":       false,
+	"Color":        false,
 
 	// Team is the operator's and the manager's like Color, and false for the same
 	// reason the *described* agent has no path: /team is a human's TUI command and

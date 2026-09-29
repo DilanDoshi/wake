@@ -86,8 +86,8 @@ type Stream struct {
 	Errs   <-chan error
 }
 
-// Dialer opens a fresh connection to the same daemon and session, and reports
-// that session and the whole fleet with it - the report reattached folds.
+// Dialer opens a fresh connection to the same daemon and to the session it is
+// handed - the attached one now, which a wake after /clear re-keys - and reports it.
 //
 // It is injected rather than written here, for the reason Stream is: this
 // package may not dial. Which socket, whether an unanswering daemon is shutting
@@ -97,7 +97,7 @@ type Stream struct {
 //
 // Nil means "no way back": the hang-up is reported and nothing else happens,
 // exactly as before - what the unit tests and any un-wired future caller get.
-type Dialer func() (net.Conn, Stream, rpc.SessionStatus, *rpc.Status, error)
+type Dialer func(sessionID string) (net.Conn, Stream, rpc.SessionStatus, *rpc.Status, error)
 
 // eventMsg carries one session event into the Bubble Tea loop, addressed to
 // the conversation that is open.
