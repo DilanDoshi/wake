@@ -140,6 +140,7 @@ func (a *agent) rename(names *nameRegistry, requested string, held bool) error {
 	// A refused mirror holds too, since its passthrough renames claude anyway:
 	// the reply then owes claude Wake's unchanged name.
 	a.renameHeld = a.renameHeld || held
+	a.renameRefused = a.renameRefused || (held && err != nil)
 	a.probeWanted[renameProbe] = true
 	a.tryProbeLocked(renameProbe)
 	return err

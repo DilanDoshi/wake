@@ -107,8 +107,9 @@ func (a *agent) noteRenamed(ev core.Event) {
 	defer a.mu.Unlock()
 	a.claudeName = name
 	if a.renameHeld && a.pendingProbes[renameProbe] == 0 {
-		a.renameHeld = false
-		a.probeWanted[renameProbe] = a.probeWanted[renameProbe] && name == a.renameAsked && name != a.name
-		a.renameAsked = ""
+		// A refused mirror owes claude Wake's name whatever it took, a variant included.
+		keep := name != a.name && (a.renameRefused || name == a.renameAsked)
+		a.probeWanted[renameProbe] = a.probeWanted[renameProbe] && keep
+		a.renameHeld, a.renameAsked, a.renameRefused = false, "", false
 	}
 }

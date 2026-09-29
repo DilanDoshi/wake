@@ -578,6 +578,32 @@ func TestARefusedMirrorBringsClaudeBackToWakesName(t *testing.T) {
 	}
 }
 
+// A refused mirror whose reply is a variant (Codex #2): bob is a live peer, so
+// claude answers the operator's /rename bob with bob-2. Claude chose nothing
+// Wake asked for - the refusal still owes it Wake's name, so one /rename alice.
+func TestARefusedMirrorRestoresWakesNameOverAVariant(t *testing.T) {
+	r := newNameRegistry()
+	for _, name := range []string{"alice", "bob"} {
+		if _, err := r.claim(name); err != nil {
+			t.Fatalf("claim %s: %v", name, err)
+		}
+	}
+	a := newAgent(idAlpha, "alice", "dev-1", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
+	if err := a.rename(r, "bob", true); err == nil {
+		t.Fatal("a mirror onto bob, a name the fleet holds, was accepted")
+	}
+
+	a.noteSent()
+	a.noteRenameSent("/rename bob")
+	streamed(a, renamedEvent("bob-2"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: bob-2", LocalCommand: true})
+	a.probeIfWanted()
+	a.probeIfWanted()
+	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename alice"}) {
+		t.Fatalf("claude took bob-2 past a refused mirror and Wake queued %q, want one [/rename alice]", got)
+	}
+}
+
 // A refused mirror arms nothing where claude's name is not Wake's to keep: the
 // manager, and an agent that is not live.
 func TestARefusedMirrorOfTheManagerOrAParkedAgentArmsNothing(t *testing.T) {
