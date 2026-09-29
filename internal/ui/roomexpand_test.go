@@ -51,12 +51,12 @@ func expandableLine(t *testing.T, r Room) (int, uint64) {
 func TestExpandedDrawsTheWholeReplyAndDropsThePointer(t *testing.T) {
 	ev := core.Event{Kind: core.KindAssistantText, Text: longRoomReply("THE_TAIL")}
 
-	collapsed := roomBlock(ev, Agent{Name: "sydney"}, roomWidth, false)
+	collapsed := roomBlock(ev, Agent{Name: "sydney"}, Agent{}, roomWidth, false)
 	if !strings.Contains(collapsed.text, openDMHint) || strings.Contains(collapsed.text, "THE_TAIL") {
 		t.Fatalf("this reply is not collapsed at false, so the test proves nothing:\n%s", collapsed.text)
 	}
 
-	expanded := roomBlock(ev, Agent{Name: "sydney"}, roomWidth, true)
+	expanded := roomBlock(ev, Agent{Name: "sydney"}, Agent{}, roomWidth, true)
 	if strings.Contains(expanded.text, openDMHint) {
 		t.Errorf("an expanded reply still carries the pointer:\n%s", expanded.text)
 	}
@@ -70,7 +70,7 @@ func TestExpandedDrawsTheWholeReplyAndDropsThePointer(t *testing.T) {
 // never the thing expansion drops.
 func TestAnExpandedReplyStillNamesWhoSaidIt(t *testing.T) {
 	ev := core.Event{Kind: core.KindAssistantText, Text: longRoomReply("THE_TAIL")}
-	b := roomBlock(ev, Agent{Name: "sydney", Label: "auth-fix"}, roomWidth, true)
+	b := roomBlock(ev, Agent{Name: "sydney", Label: "auth-fix"}, Agent{}, roomWidth, true)
 	if !strings.Contains(b.text, "sydney") || !strings.Contains(b.text, "auth-fix") {
 		t.Errorf("an expanded reply in a room of many speakers does not name its own:\n%s", b.text)
 	}
@@ -93,7 +93,7 @@ func TestRoomCollapsibleMatchesWhatDrawsAsAPointer(t *testing.T) {
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
 			got := roomCollapsible(c.ev, roomWidth)
-			hasPointer := strings.Contains(roomBlock(c.ev, Agent{Name: "sydney"}, roomWidth, false).text, openDMHint)
+			hasPointer := strings.Contains(roomBlock(c.ev, Agent{Name: "sydney"}, Agent{}, roomWidth, false).text, openDMHint)
 			if got != c.want {
 				t.Errorf("roomCollapsible = %v, want %v", got, c.want)
 			}

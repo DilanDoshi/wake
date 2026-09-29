@@ -354,6 +354,7 @@ type App struct {
 	// single 401 that recovers on a later attempt never parks. Copy-on-write like
 	// authFailed; cleared with the mark on recovery, a wake, or /reauth.
 	authFailRetries map[string]int
+	recovery        recoveryState // parked for a failing API and owed a wake; see apirecover.go
 
 	// roomAsked is every (agentID, requestID) the room has already announced a
 	// permission ask for, so a re-delivered ask - the daemon replaying at attach
@@ -565,7 +566,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.imageDropped(m)
 
 	case authResultMsg:
-		return a.authResult(m), nil
+		return a.authResult(m).autoWakeRecovered()
 
 	case mcpSignedInMsg:
 		return a.mcpSignedIn(m)
@@ -696,29 +697,6 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 	return next, tea.Batch(cmd, next.reading())
 }
 
-// notedGap reports a frame gap and drops the per-turn beliefs a missing frame
-// could have staled: the permission mode, and the turn's tool and counts.
-//
-// One helper for the two gap producers, so their invalidation cannot drift: the
-// window's own ring counts a drop onto streamMsg.dropped, and the daemon's client
-// queue reports its overflow as a FrameError carrying rpc.Frame.Dropped. Both
-// mean the same thing - the record has a hole - and both demand the same two
-// forgettings. A permission-mode receipt may be in the hole, and a mode kept
-// across one is a mode this window cannot vouch for in the unsafe direction (see
-// forgotModes); a turn's result may be in it too, and its boundary is what would
-// have cleared the turn state the roster draws (see Fleet.ForgetTurns).
-//
-// Not inDM: a gap is not itself a turn-end, and clearing it blindly here would
-// leak an in-flight DM turn's remaining prose into the room. It is reconciled
-// instead at the report's own working→idle edge (Fleet.WithStatus), the
-// gap-robust second observable of the turn-end fold clears it on. See bugs.md.
-func (a App) notedGap(n int) App {
-	notice.Report("dropped %d frames: this window fell behind, so the conversation above has a gap", n)
-	a = a.forgotModes()
-	a.fleet = a.fleet.ForgetTurns()
-	return a
-}
-
 // apply folds one frame into the model.
 //
 // # The discard that was the room
@@ -779,7 +757,7 @@ func (a App) apply(f rpc.Frame) App {
 		//
 		// The text says when it could be forked instead; that is the daemon's
 		// sentence and it is reported below unchanged.
-		a = a.startSettled(f.SessionID).mcpRefused(f.SessionID, f.Text)
+		a = a.startSettled(f.SessionID).mcpRefused(f.SessionID, f.Text).wakeRefused(f.SessionID)
 		notice.Report("%s", a.errorText(f))
 		return a
 

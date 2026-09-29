@@ -8,6 +8,36 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-09-28 — a copy rejoins what the pane wrapped
+
+The owner copied an email out of chat history and pasted it with a hard line break at every wrap
+and two spaces before every line. The select-copy spec had declined this ("soft wraps and real
+newlines are indistinguishable by then") on the grounds that `blockLines` splits after the wrap.
+That reasoning holds for arbitrary rows but not for the two row producers a copy cares about, so
+the ruling is reversed for them and kept for everything else.
+
+**Markdown rows are classified, not flagged.** `render.Rejoins` reads rendered rows with
+`reflowProse`'s own predicates (`reflowable`, `leadSpaces`, `opensItem`, `hyphenJoin`) plus
+`hangIndentLists`' hang. Rows that pass grouped into one paragraph or list item are wraps by
+construction — markdown renders a source newline as a space — so they rejoin with the space the
+wrap took, or nothing at a hyphen. Carrying a per-row flag out of the renderer was rejected: three
+wrap producers, a new return shape, and nothing the rows don't already say. The known miss is
+`reflowProse`'s own: a wrapped row that opens with a styled span (bold, inline code, a link) looks
+like code once rendered, so it stays a break.
+
+**The operator's own turn is matched back to what was typed.** lipgloss wraps it, and its rows
+don't say which breaks were typed, but the text is known: `typedRejoins` walks the rows against it
+and takes exactly the whitespace each wrap consumed. Any mismatch returns nil and the copy keeps the
+rows as drawn, which is never worse than before.
+
+**Only blocks that opt in rejoin.** `block.copied` marks them and `transcript.texts` remembers where
+they landed. Tool output, diffs, labels, subagent gutters, the composer and the screen selection
+copy exactly as drawn. Coupled decision: glamour's `WithPreservedNewLines` is off, which is why
+"Best regards,\nDilan" draws on one row; turning it on makes a kept newline indistinguishable from a
+wrap to both `reflowProse` and this rejoin, so the two must be decided together.
+
+---
+
 ## 2026-08-29 — the effort probe, and why an invisible turn is the honest one
 
 Effort is on no frame Claude sends unasked, so for a long time the status bar could only repeat the
@@ -3392,7 +3422,7 @@ The owner's rulings for the `@` menu parity work (branch `feat/at-menu-peers`); 
   line (`daemon/peers.go`): ~0.7s, `$0`, no hooks, no MCP servers, no transcript, not itself listed.
   Coalesced, deadline-bounded, gated on an agent's init advertising `list-agents`; its environment
   drops every token (`ANTHROPIC_API_KEY`, `ANTHROPIC_AUTH_TOKEN`, `CLAUDE_CODE_OAUTH_TOKEN`) and
-  provider switch (`CLAUDE_CODE_USE_BEDROCK`/`_VERTEX`/`_FOUNDRY`), and a result that ran a model turn lists nobody
+  every `CLAUDE_CODE_USE_*` provider switch, and a result that ran a model turn lists nobody
   and latches the one-shot off for the daemon's life, so binary drift can never spend. Asked once
   per menu opening, never per keystroke or per report.
 - **Wake's `/name` keeps claude's own name in step** with a bare `/rename` (a second probe kind,
@@ -3405,3 +3435,35 @@ The owner's rulings for the `@` menu parity work (branch `feat/at-menu-peers`); 
 - **`⇥` stays the only accept**; `↵` still sends. Label is never insert: `(team)`, `(dir)` and
   `(agent)` share one per-offer tag.
 - **The airlock is five files** (`localreply.go` for local-command reply text).
+
+## 2026-09-27 — every agent opens with the `initialize` handshake, which is what brings claude.ai connectors
+
+**What changed.** The 2026-09-24 entry recorded that a headless session does not load claude.ai
+connectors. It does — after the `initialize` control request every Agent SDK host opens a session
+with, which Wake had never sent (`docs/superpowers/notes/2026-09-27-claudeai-connectors-findings.md`).
+So the daemon now writes it as every session's first stdin line (`daemon/mcpask.go`'s `handshake`).
+
+**Ruling 1 — the daemon connects the connectors, the operator does not.** A loaded connector reads
+`needs-auth` even when it is signed in on claude.ai, and stays so; one `mcp_reconnect` connects it,
+and one never signed in refuses at once. So when the handshake's reply lands the daemon asks for the
+servers and reconnects each claude.ai connector reading `needs-auth` — the interactive Claude Code
+behaviour of a signed-in connector just working. These are the daemon's own asks: recorded with no
+asking client, answered to nobody, their failures logged — a refused handshake asks nothing more. Ordinary servers are left alone: they
+are the operator's to sign in to from `/mcp`.
+
+**Ruling 2 — the handshake's reply reaches no window.** It is an environment dump (the machine's
+commands and agents, the account's token source, models). It is matched by the request id the daemon
+minted and swallowed in `fanOut`; the scrubber and `corpus_test.go` keep its `commands` and `agents`
+out of the corpus too.
+
+**Ruling 3 — the banner's needs-auth count leaves connectors out.** Every connector the account can
+use loads, and most are never signed in to — counting them warned on every agent, permanently, about
+nothing the operator had set up. `/mcp` still lists them, with the way to sign in on claude.ai.
+Connectors are told by Claude's own name for them, `claude.ai <service>` (`core.IsClaudeAIConnector`):
+the banner reads `init`'s server list, which carries a name and a status and no scope. `claude mcp
+add` refuses such a name (letters, digits, `-`, `_` only); a hand-written config accepts one, and a
+server so named loses only the banner's count — `/mcp` still shows it needing authentication.
+
+**Residual.** An agent's first turn can start before the reconnects land, so a connector can be
+missing from that one turn. The manager is unaffected: `--strict-mcp-config` excludes connectors even
+after the handshake.

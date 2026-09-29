@@ -442,6 +442,11 @@ const (
 	// NoticeRateLimited rather than a transcript line. Text is the API message.
 	NoticeAPIError Notice = "api_error"
 
+	// NoticeUsageLimit rides a KindAPIError that is a session or weekly usage
+	// limit. Unlike every other failed turn it recovers on its own when the quota
+	// resets, so it neither parks the agent nor asks for /reauth.
+	NoticeUsageLimit Notice = "usage_limit"
+
 	// NoticeTurnInterrupted is Claude's own account of a turn Wake aborted.
 	//
 	// It is the one notice resolved from a frame's *content* rather than from
@@ -656,16 +661,6 @@ type Event struct {
 	// envelope and empty on every other kind.
 	FromName string `json:"from_name,omitempty"`
 
-	// ToName is the receiving session's display name, so the room can head a
-	// KindCrossSession line "sender → recipient" rather than by the sender
-	// alone. Never set by the decoder - the envelope names only the sender - it
-	// is resolved from the receiving SessionID by the App that has the fleet
-	// (observe live, roomHistoryLines on a restore), and it is presentation
-	// only for FromRoom's reason: a wrong value mislabels a line and nothing
-	// keys on it. Empty when the receiver is unknown, which falls back to
-	// heading the line by the sender.
-	ToName string `json:"to_name,omitempty"`
-
 	Text string    `json:"text,omitempty"`
 	Tool *ToolCall `json:"tool,omitempty"`
 
@@ -681,9 +676,11 @@ type Event struct {
 	// the whole answer and an allow that has to carry one.
 	Ask AskKind `json:"ask,omitempty"`
 
-	// LocalCommand marks a KindTurnEnd whose result ran no model inference
-	// (num_turns == 0) - the shape of Claude's local commands, of which the
-	// daemon's bare-/model effort probe is one. See absorbProbe.
+	// LocalCommand marks an event that ran no model inference: a KindTurnEnd
+	// with num_turns == 0 - the shape of Claude's local commands, of which the
+	// daemon's bare-/model effort probe is one (see absorbProbe) - and the text
+	// of a "<synthetic>" reply such as /context's. So it is never proof the
+	// API answered (apirecover.go).
 	LocalCommand bool `json:"local_command,omitempty"`
 
 	// Subagent is set on every event a subagent produced, and on the receipt
@@ -760,4 +757,12 @@ type Event struct {
 	// Nil on the conversation frames, which is nearly all of them - only
 	// system/init and result carry any of it.
 	Session *SessionFacts `json:"session,omitempty"`
+}
+
+// apiNotice tells a usage limit, which recovers when the quota resets, from every other failed turn.
+func (f wireFrame) apiNotice() Notice {
+	if jsonString(f.APIErrorKind) == "rate_limit" {
+		return NoticeUsageLimit
+	}
+	return NoticeAPIError
 }

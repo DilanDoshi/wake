@@ -39,6 +39,7 @@ import (
 	"bufio"
 	"encoding/json"
 	"errors"
+	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -126,6 +127,10 @@ type FoundSession struct {
 	// Title is the session's name - its newest custom title, else claude's
 	// generated one - or empty. Contained by oneLine, for Preview's reason.
 	Title string
+
+	// Name is the newest custom title as written, or empty: what a resume
+	// restores. Unbounded and uncontained, because normalizeName fences it.
+	Name string
 }
 
 // slugOf is how a directory becomes the name of the directory its transcripts
@@ -239,7 +244,7 @@ func discover(projects string) ([]FoundSession, error) {
 			if !isReg {
 				return
 			}
-			cwds, preview, title := readTranscript(j.path)
+			cwds, preview, title, name := readTranscript(j.path)
 			found[i] = FoundSession{
 				ID:       j.id,
 				Dir:      verifiedDir(j.slug, cwds),
@@ -248,6 +253,7 @@ func discover(projects string) ([]FoundSession, error) {
 				Modified: info.ModTime(),
 				Preview:  preview,
 				Title:    title,
+				Name:     name,
 			}
 			ok[i] = true
 		}(i, j)
@@ -375,44 +381,51 @@ func verifiedDir(slug string, cwds []string) string {
 // appended to by a live process, so the last line of a file being read may be a
 // partial write - 2026-08-12 findings §7 records that no torn line was observed
 // in 428 files and that this is therefore not designed around, only survived.
-func readTranscript(path string) (cwds []string, preview, title string) {
+//
+// The whole file, on purpose: verifiedDir needs every top-level cwd to prove a
+// directory - a slug-matching cwd can appear deep in a transcript (measured
+// 260KB-9MB into 18 of a 358-file corpus), so a head-only read loses those
+// sessions. The cost is paid off the draw goroutine and in parallel (discover).
+// readTranscriptLine rather than a Scanner, which would stop at the first
+// oversized attachment and hide every cwd and /rename after it.
+func readTranscript(path string) (cwds []string, preview, title, name string) {
 	f, err := os.Open(path)
 	if err != nil {
 		logf("wake: transcript %s could not be opened: %v", path, err)
-		return nil, "", ""
+		return nil, "", "", ""
 	}
 	defer func() { _ = f.Close() }()
-
 	seen := map[string]bool{}
 	var generated string
-	// The whole file, on purpose: verifiedDir needs every top-level cwd to prove
-	// a directory - a slug-matching cwd can appear deep in a transcript (measured
-	// 260KB-9MB into 18 of a 358-file corpus), so a head-only read loses those
-	// sessions. The cost of reading every file is paid off the draw goroutine and
-	// in parallel - see discover, which fans these reads across discoverWorkers.
-	sc := bufio.NewScanner(f)
-	sc.Buffer(make([]byte, 0, 64*1024), transcriptScanBytes)
-	for sc.Scan() {
+	br := bufio.NewReaderSize(f, 64*1024)
+	for {
+		raw, err := readTranscriptLine(br)
 		var line map[string]json.RawMessage
-		if err := json.Unmarshal(sc.Bytes(), &line); err != nil {
-			continue
+		if len(raw) > 0 && json.Unmarshal(raw, &line) == nil {
+			if c, ok := decodeString(line, keyCwd); ok && !seen[c] {
+				seen[c] = true
+				cwds = append(cwds, c)
+			}
+			// Last one wins for both: a transcript carries one `last-prompt` frame
+			// per turn, and the newest is what says what this session is doing.
+			if p, ok := decodeString(line, keyLastPrompt); ok {
+				preview = p
+			}
+			if t, ok := decodeString(line, keyCustomTitle); ok {
+				title = t
+			}
+			if t, ok := decodeString(line, keyAITitle); ok {
+				generated = t
+			}
 		}
-		if c, ok := decodeString(line, keyCwd); ok && !seen[c] {
-			seen[c] = true
-			cwds = append(cwds, c)
-		}
-		// Last one wins for both: a transcript carries one `last-prompt` frame
-		// per turn, and the newest is what says what this session is doing.
-		if p, ok := decodeString(line, keyLastPrompt); ok {
-			preview = p
-		}
-		if t, ok := decodeString(line, keyCustomTitle); ok {
-			title = t
-		}
-		if t, ok := decodeString(line, keyAITitle); ok {
-			generated = t
+		if err != nil {
+			if !errors.Is(err, io.EOF) {
+				logf("wake: transcript %s could not be read to the end: %v", path, err)
+			}
+			break
 		}
 	}
+	name = title
 	if title == "" {
 		title = generated
 	}
@@ -422,7 +435,7 @@ func readTranscript(path string) (cwds []string, preview, title string) {
 		// better nothing.
 		preview = title
 	}
-	return cwds, oneLine(preview, previewBytes), oneLine(title, previewBytes)
+	return cwds, oneLine(preview, previewBytes), oneLine(title, previewBytes), name
 }
 
 // decodeString reads one top-level string key, treating any other shape as

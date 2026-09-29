@@ -97,7 +97,7 @@ func TestTheListIsGroupedByWhereEachServerIsConfigured(t *testing.T) {
 	for _, want := range []string{
 		"4 servers", "Project MCPs", ".mcp.json", "User MCPs", "~/.claude.json",
 		"firecrawl", "2 tools", "higgsfield", "needs authentication",
-		"github", "failed", "echo", "disabled", "claude.ai connectors",
+		"github", "failed", "echo", "disabled",
 	} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the list does not show %q:\n%s", want, view)
@@ -446,5 +446,76 @@ func TestAGapSettlesEveryWaitingMCPAsk(t *testing.T) {
 	}
 	if n := latestNotice(t); !strings.Contains(n, "higgsfield signed in") || strings.Contains(n, "failing") {
 		t.Errorf("the sweep's line = %q; after a gap it may not claim a failure it never saw", n)
+	}
+}
+
+// A claude.ai connector: signed in on claude.ai it is connected (the daemon
+// reconnects it as the session starts), and one that is not is signed in to on
+// claude.ai itself, so the menu offers a reconnect and says where - never the
+// terminal hand-off, which is claude mcp login's, for the operator's own servers.
+var (
+	mcpDocs  = core.MCPServerStatus{Name: "claude.ai Claude Docs", State: core.MCPConnected, Scope: core.MCPScopeClaudeAI, Transport: "claudeai-proxy", Target: "https://api.anthropic.com/v1/x", Tools: []core.MCPTool{{Name: "search"}}}
+	mcpSlack = core.MCPServerStatus{Name: "claude.ai Slack", State: core.MCPNeedsAuth, Scope: core.MCPScopeClaudeAI, Transport: "claudeai-proxy", Target: "https://api.anthropic.com/v1/x"}
+)
+
+func TestClaudeAIConnectorsHaveTheirOwnSection(t *testing.T) {
+	a, _ := mcpDM(t)
+	a = deliver(a, serversReply("s1", mcpFirecrawl, mcpDocs, mcpSlack))
+	view := shown(a)
+	for _, want := range []string{"User MCPs", "claude.ai", "claude.ai Claude Docs", "claude.ai Slack"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the list does not show %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "don't load") {
+		t.Errorf("the list still says connectors do not load:\n%s", view)
+	}
+	if strings.Index(view, "User MCPs") > strings.Index(view, "claude.ai Claude Docs") {
+		t.Error("connectors are listed before the operator's own servers; Claude's order puts them after")
+	}
+}
+
+func TestAConnectorNotSignedInPointsAtClaudeAI(t *testing.T) {
+	a, _ := mcpDM(t)
+	var ran []*exec.Cmd
+	a = deliver(a, serversReply("s1", mcpSlack)).WithHandOver(fakeHandOver{&ran}.handOver)
+	view := shown(pressMenu(a, keyEnter))
+	for _, want := range []string{"needs authentication", "Reconnect", "Disable", "sign in on claude.ai"} {
+		if !strings.Contains(view, want) {
+			t.Errorf("the connector's detail does not show %q:\n%s", want, view)
+		}
+	}
+	if strings.Contains(view, "Authenticate") {
+		t.Errorf("a connector offers the terminal sign-in, which is for the operator's own servers:\n%s", view)
+	}
+}
+
+// A pane too narrow for the sign-in hint wraps it rather than cutting it off.
+func TestTheSignInHintWrapsInANarrowPane(t *testing.T) {
+	a, _ := mcpDM(t)
+	a = deliver(a, serversReply("s1", mcpSlack)).withSize(104, 40)
+	view := shown(pressMenu(a, keyEnter))
+	var words []string
+	for _, w := range strings.Fields(view) {
+		if strings.Trim(w, "│") != "" { // the pane's and the menu's borders
+			words = append(words, w)
+		}
+	}
+	if !strings.Contains(strings.Join(words, " "), mcpConnectorSignIn) {
+		t.Errorf("the sign-in hint is not whole:\n%s", view)
+	}
+}
+
+// The banner's "needs authentication" count is the operator's own servers: every
+// connector claude.ai offers loads, and the ones never signed in to are not a
+// fault to warn about on every agent.
+func TestTheBannerDoesNotCountClaudeAIConnectors(t *testing.T) {
+	got := needsAuth([]core.MCPServer{
+		{Name: "higgsfield", State: core.MCPNeedsAuth},
+		{Name: "claude.ai Slack", State: core.MCPNeedsAuth},
+		{Name: "claude.ai Notion", State: core.MCPNeedsAuth},
+	})
+	if got != 1 {
+		t.Errorf("needsAuth = %d, want 1: only higgsfield is the operator's to sign in to", got)
 	}
 }

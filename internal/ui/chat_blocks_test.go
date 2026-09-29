@@ -29,6 +29,7 @@ func TestAShortReplyIsShownWholeAndNamesWhoSaidIt(t *testing.T) {
 	b := roomBlock(
 		core.Event{Kind: core.KindAssistantText, Text: "Fixed the retry header, tests pass"},
 		Agent{ID: "s1", Name: "sydney", Label: "auth-fix"},
+		Agent{},
 		roomWidth,
 		false,
 	)
@@ -50,6 +51,7 @@ func TestAReplyTallerThanTheCapBecomesAPointerIntoTheDM(t *testing.T) {
 	b := roomBlock(
 		core.Event{Kind: core.KindAssistantText, Text: long},
 		Agent{ID: "s1", Name: "sydney", Label: "auth-fix"},
+		Agent{},
 		roomWidth,
 		false,
 	)
@@ -71,6 +73,7 @@ func TestAFoldedReplyShowsItsTokenCount(t *testing.T) {
 	b := roomBlock(
 		core.Event{Kind: core.KindAssistantText, Text: long, OutputTokens: 210},
 		Agent{ID: "s1", Name: "sydney", Label: "auth-fix"},
+		Agent{},
 		roomWidth,
 		false,
 	)
@@ -89,6 +92,7 @@ func TestAFoldedReplyWithNoTokenCountShowsNoFigure(t *testing.T) {
 	b := roomBlock(
 		core.Event{Kind: core.KindAssistantText, Text: long, OutputTokens: 0},
 		Agent{ID: "s1", Name: "sydney"},
+		Agent{},
 		roomWidth,
 		false,
 	)
@@ -118,7 +122,7 @@ func TestAReplyCollapsesExactlyWhenItRendersTallerThanTheCap(t *testing.T) {
 	for _, body := range bodies {
 		for _, w := range []int{roomWidth, 100} {
 			want := renderedRows(render.Markdown(strings.TrimSpace(body), w)) > roomInlineRows
-			b := roomBlock(core.Event{Kind: core.KindAssistantText, Text: body}, Agent{Name: "sydney"}, w, false)
+			b := roomBlock(core.Event{Kind: core.KindAssistantText, Text: body}, Agent{Name: "sydney"}, Agent{}, w, false)
 			if got := strings.Contains(b.text, openDMHint); got != want {
 				t.Errorf("width %d: body rendering %d rows (cap %d) collapsed=%v, want %v:\n%s",
 					w, renderedRows(render.Markdown(strings.TrimSpace(body), w)), roomInlineRows, got, want, b.text)
@@ -137,11 +141,11 @@ func TestTheDecisionFlipsAtExactlyTheRowCap(t *testing.T) {
 	atCap := codeBlockRenderingTo(t, roomInlineRows, w)
 	pastCap := codeBlockRenderingTo(t, roomInlineRows+1, w)
 
-	at := roomBlock(core.Event{Kind: core.KindAssistantText, Text: atCap}, Agent{Name: "sydney"}, w, false)
+	at := roomBlock(core.Event{Kind: core.KindAssistantText, Text: atCap}, Agent{Name: "sydney"}, Agent{}, w, false)
 	if strings.Contains(at.text, openDMHint) {
 		t.Errorf("a reply rendering exactly %d rows (the cap) became a pointer: a reply the height of the cap is still content:\n%s", roomInlineRows, at.text)
 	}
-	past := roomBlock(core.Event{Kind: core.KindAssistantText, Text: pastCap}, Agent{Name: "sydney"}, w, false)
+	past := roomBlock(core.Event{Kind: core.KindAssistantText, Text: pastCap}, Agent{Name: "sydney"}, Agent{}, w, false)
 	if !strings.Contains(past.text, openDMHint) {
 		t.Errorf("a reply rendering %d rows (one past the cap) was drawn whole: one row past the cap is past it:\n%s", roomInlineRows+1, past.text)
 	}
@@ -182,11 +186,11 @@ func TestTheSameReplyShowsAtWideWidthAndCollapsesInANarrowColumn(t *testing.T) {
 			roomInlineRows, wideRows, wide, narrowRows, narrow)
 	}
 
-	w := roomBlock(core.Event{Kind: core.KindAssistantText, Text: plan}, Agent{Name: "sydney"}, wide, false)
+	w := roomBlock(core.Event{Kind: core.KindAssistantText, Text: plan}, Agent{Name: "sydney"}, Agent{}, wide, false)
 	if strings.Contains(w.text, openDMHint) {
 		t.Errorf("a plan that renders %d rows at %d cols (cap %d) was collapsed, so the room hid what it had room to show:\n%s", wideRows, wide, roomInlineRows, w.text)
 	}
-	n := roomBlock(core.Event{Kind: core.KindAssistantText, Text: plan}, Agent{Name: "sydney"}, narrow, false)
+	n := roomBlock(core.Event{Kind: core.KindAssistantText, Text: plan}, Agent{Name: "sydney"}, Agent{}, narrow, false)
 	if !strings.Contains(n.text, openDMHint) {
 		t.Errorf("the same plan renders %d rows at %d cols (cap %d) and was still drawn whole, so a narrow column got a wall of text:\n%s", narrowRows, narrow, roomInlineRows, n.text)
 	}
@@ -199,7 +203,7 @@ func TestTheSameReplyShowsAtWideWidthAndCollapsesInANarrowColumn(t *testing.T) {
 func TestAShortReplyInADoubleWidthScriptIsShownWhole(t *testing.T) {
 	b := roomBlock(
 		core.Event{Kind: core.KindAssistantText, Text: strings.Repeat("あ", 200)},
-		Agent{Name: "kenji"}, roomWidth, false,
+		Agent{Name: "kenji"}, Agent{}, roomWidth, false,
 	)
 	if strings.Contains(b.text, openDMHint) {
 		t.Errorf("a short CJK reply collapsed:\n%s", b.text)
@@ -217,7 +221,7 @@ func TestThePointerPreviewsTheOpeningOfTheReplyAndNotItsEnd(t *testing.T) {
 		strings.Repeat("and then some middle reasoning.\n\n", roomInlineRows+5) + "CLOSING recommendation."
 	b := roomBlock(
 		core.Event{Kind: core.KindAssistantText, Text: long},
-		Agent{Name: "sydney", Label: "auth-fix"}, roomWidth, false,
+		Agent{Name: "sydney", Label: "auth-fix"}, Agent{}, roomWidth, false,
 	)
 	if !strings.Contains(b.text, "OPENING") {
 		t.Errorf("the pointer does not show the opening of the reply:\n%s", b.text)
@@ -228,7 +232,7 @@ func TestThePointerPreviewsTheOpeningOfTheReplyAndNotItsEnd(t *testing.T) {
 }
 
 func TestATurnThatSaidNothingDrawsAQuietMarkerAndNotAClaimOfCompletion(t *testing.T) {
-	b := roomBlock(core.Event{Kind: core.KindTurnEnd}, Agent{Name: "john"}, roomWidth, false)
+	b := roomBlock(core.Event{Kind: core.KindTurnEnd}, Agent{Name: "john"}, Agent{}, roomWidth, false)
 	if !strings.Contains(b.text, finishedMarker) {
 		t.Errorf("a silent turn drew nothing at all:\n%s", b.text)
 	}
@@ -246,7 +250,7 @@ func TestATurnThatSaidNothingDrawsAQuietMarkerAndNotAClaimOfCompletion(t *testin
 // number here.
 func TestTheQuietMarkerIsNotDrawnAsAThirdHalfOfTheAgentsName(t *testing.T) {
 	a := Agent{Name: "sydney", Label: "auth-fix"}
-	b := roomBlock(core.Event{Kind: core.KindTurnEnd}, a, roomWidth, false)
+	b := roomBlock(core.Event{Kind: core.KindTurnEnd}, a, Agent{}, roomWidth, false)
 
 	want := strings.Count(speaker(a), roomSep)
 	if got := strings.Count(b.text, roomSep); got != want {
@@ -376,7 +380,7 @@ func mentionParam(t *testing.T) string {
 }
 
 func TestYourOwnMessageIsDrawnAsYours(t *testing.T) {
-	b := roomBlock(core.Event{Kind: core.KindUserText, Text: "who is stuck?"}, Agent{}, roomWidth, false)
+	b := roomBlock(core.Event{Kind: core.KindUserText, Text: "who is stuck?"}, Agent{}, Agent{}, roomWidth, false)
 	if !strings.Contains(b.text, "who is stuck?") {
 		t.Errorf("your own message is not in your own conversation:\n%s", b.text)
 	}
@@ -404,7 +408,7 @@ func TestYourOwnMessageWrapsRatherThanBeingCut(t *testing.T) {
 		"one long sentence":                "can you make a hil thing asking my favorite colour and then wire it up",
 	} {
 		t.Run(name, func(t *testing.T) {
-			b := roomBlock(core.Event{Kind: core.KindUserText, Text: text}, Agent{}, roomWidth, false)
+			b := roomBlock(core.Event{Kind: core.KindUserText, Text: text}, Agent{}, Agent{}, roomWidth, false)
 			if strings.Contains(b.text, ellipsis) {
 				t.Errorf("the room cut your own message with %q:\n%s", ellipsis, b.text)
 			}
@@ -430,7 +434,7 @@ func TestYourOwnMessageWrapsRatherThanBeingCut(t *testing.T) {
 func TestBothSurfacesShowTheWholeMessageYouTyped(t *testing.T) {
 	const text = "can you make a hil thing asking my favorite colour and then wire it up to the form"
 
-	room := roomBlock(core.Event{Kind: core.KindUserText, Text: text}, Agent{}, roomWidth, false)
+	room := roomBlock(core.Event{Kind: core.KindUserText, Text: text}, Agent{}, Agent{}, roomWidth, false)
 	dm := userBlock(core.Event{Kind: core.KindUserText, Text: text}, roomWidth)
 
 	for _, word := range strings.Fields(text) {
@@ -452,7 +456,7 @@ func TestNoRoomBlockIsEverWiderThanThePaneItWasAskedFor(t *testing.T) {
 	}
 	for _, w := range []int{minBlockWidth, 40, 80, 120} {
 		for _, ev := range events {
-			b := roomBlock(ev, Agent{Name: "sydney", Label: "a-very-long-branch-name-indeed"}, w, false)
+			b := roomBlock(ev, Agent{Name: "sydney", Label: "a-very-long-branch-name-indeed"}, Agent{}, w, false)
 			assertFitsWidth(t, b.text, w)
 		}
 	}
@@ -498,7 +502,7 @@ func TestEveryKindTheRoomAdmitsIsDrawnHereOrExcusedWithAReason(t *testing.T) {
 		if !c.want {
 			continue
 		}
-		if roomBlock(c.ev, Agent{Name: "sydney", Label: "auth-fix"}, roomWidth, false).text != "" {
+		if roomBlock(c.ev, Agent{Name: "sydney", Label: "auth-fix"}, Agent{}, roomWidth, false).text != "" {
 			drawn[c.ev.Kind] = true
 			continue
 		}

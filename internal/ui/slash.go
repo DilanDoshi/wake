@@ -720,7 +720,7 @@ func (a App) renameMirrorFor(who, text string) (id, name string) {
 // renameMirrorArg is the shared recogniser behind both mirrors: a `/rename bob`
 // becomes the name its mirror renames to, or "" for anything else - a folded case claude
 // will not read, an empty name, or a leading `@` (see below). A multi-word name
-// is no longer declined: hyphenateName folds its spaces, so `/rename foo bar`
+// is no longer declined: rpc.HyphenateName folds its spaces, so `/rename foo bar`
 // mirrors as `foo-bar` rather than moving nothing while claude renames itself.
 // One copy, so the focused and room mirrors cannot drift on what a `/rename` is.
 //
@@ -740,7 +740,7 @@ func renameMirrorArg(text string) string {
 	if word != renameCommand || name == "" || strings.HasPrefix(name, agentPrefix) {
 		return ""
 	}
-	return hyphenateName(name)
+	return rpc.HyphenateName(name)
 }
 
 // loginCommand draws the auth panel: whether this machine is signed in, and the

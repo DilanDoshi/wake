@@ -171,6 +171,12 @@ func (a *agent) apply(p pending) {
 		_, err = a.sess.StopTask(id)
 	case rpc.FrameMCPList, rpc.FrameMCPReconnect, rpc.FrameMCPEnable, rpc.FrameMCPDisable:
 		err = a.askMCP(p)
+		if p.from == nil { // the daemon's own ask has nobody to tell; see handshake
+			if err != nil {
+				logf("wake: session %s: %v", a.id, err)
+			}
+			return
+		}
 		if errors.Is(err, core.ErrNotWritten) {
 			a.refuse(p, err)
 			return

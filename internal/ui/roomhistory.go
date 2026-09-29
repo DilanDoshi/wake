@@ -311,7 +311,7 @@ func roomHistoryLines(events []core.Event, cutoff time.Time, agentOf func(string
 		next, out := fold(a, ev, ev.SessionID)
 		scratch[ev.SessionID] = next
 		for _, e := range out {
-			by := agentOf(ev.SessionID)
+			by, to := agentOf(ev.SessionID), Agent{}
 			if e.Kind == core.KindCrossSession {
 				// Head "sender → recipient". The receiving session is the
 				// transcript this frame came off (by, before the override); the
@@ -320,10 +320,9 @@ func roomHistoryLines(events []core.Event, cutoff time.Time, agentOf func(string
 				// alone - the identity colour the live path resolves through the
 				// fleet is the room's when it is drawn live, dropped on a restore
 				// where the sender may not be running.
-				e.ToName = by.Name
-				by = Agent{Name: e.FromName}
+				to, by = by, Agent{Name: e.FromName}
 			}
-			lines = append(lines, roomLine{ev: e, by: by})
+			lines = append(lines, roomLine{ev: e, by: by, recipient: to})
 		}
 	}
 

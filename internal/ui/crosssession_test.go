@@ -9,6 +9,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // The room comes back with the peer message after a restore. A cross-session
@@ -43,6 +44,46 @@ func TestTheRoomNamesSenderAndRecipientOfACrossSessionMessage(t *testing.T) {
 	}
 	if !strings.Contains(out, "rerun the build") {
 		t.Errorf("body missing from the room:\n%s", out)
+	}
+}
+
+// Each end of "↪ sender → recipient" wears its own identity colour: the
+// recipient is its own agent, not part of the sender's name-tag (owner's bug,
+// 2026-09-28 - a blue job-finder was drawn in recruiter-finder's violet).
+func TestACrossSessionHeadDrawsTheRecipientInItsOwnColour(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0) // termenv.TrueColor, so the two hues render apart
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	st := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "planner", Color: "violet", State: rpc.StateIdle},
+		{ID: "s2", Name: "sydney", Color: "blue", State: rpc.StateIdle},
+	}}
+	a := newRoomApp(t).withSize(120, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+	a = a.observe("s2", core.Event{Kind: core.KindCrossSession, SessionID: "s2", FromName: "planner", Text: "rerun the build"})
+
+	out := a.View()
+	if !strings.Contains(out, fgEscape(t, identityColors["violet"])+crossSessionLead+"planner") {
+		t.Errorf("the sender is not drawn in its own violet:\n%q", out)
+	}
+	if !strings.Contains(out, fgEscape(t, identityColors["blue"])+"sydney") {
+		t.Errorf("the recipient is not drawn in its own blue:\n%q", out)
+	}
+}
+
+// A restore draws the recipient in its colour too: the receiver is the live
+// agent whose transcript carried the envelope, so its hue is known.
+func TestARestoredCrossSessionHeadDrawsTheRecipientInItsOwnColour(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	blue := func(id string) Agent { return Agent{ID: id, Name: "sydney", Color: "blue"} }
+	ev := core.Event{Kind: core.KindCrossSession, SessionID: "s1", FromName: "planner", Text: "rerun the build", At: base.Add(time.Second)}
+	r := NewRoom().SetSize(80, 24).Before(roomHistoryLines([]core.Event{ev}, base.Add(100*time.Hour), blue))
+
+	if out := r.View(80, 24); !strings.Contains(out, fgEscape(t, identityColors["blue"])+"sydney") {
+		t.Errorf("the restored recipient is not drawn in its own blue:\n%q", out)
 	}
 }
 
@@ -96,11 +137,11 @@ func TestFoldAdmitsACrossSessionMessageToTheRoom(t *testing.T) {
 }
 
 // The room heads the line "sender → recipient" and carries what the peer wrote.
-// With no ToName - an outside receiver the fleet can't name - it falls back to
+// With no recipient name - a receiver the fleet can't name - it falls back to
 // heading by the sender alone rather than drawing a dangling arrow.
 func TestTheRoomHeadsACrossSessionMessageSenderThenRecipient(t *testing.T) {
-	ev := core.Event{Kind: core.KindCrossSession, FromName: "planner", ToName: "sydney", Text: "rerun the build"}
-	b := roomBlock(ev, Agent{Name: "planner"}, 60, false)
+	ev := core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}
+	b := roomBlock(ev, Agent{Name: "planner"}, Agent{Name: "sydney"}, 60, false)
 	if !strings.Contains(b.text, "planner → sydney") {
 		t.Errorf("room block does not head sender → recipient: %q", b.text)
 	}
@@ -108,7 +149,7 @@ func TestTheRoomHeadsACrossSessionMessageSenderThenRecipient(t *testing.T) {
 		t.Errorf("room block does not carry the body: %q", b.text)
 	}
 
-	noRecv := roomBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}, Agent{Name: "planner"}, 60, false)
+	noRecv := roomBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}, Agent{Name: "planner"}, Agent{}, 60, false)
 	if !strings.Contains(noRecv.text, "planner") {
 		t.Errorf("room block does not name the sender when the receiver is unknown: %q", noRecv.text)
 	}
@@ -184,14 +225,14 @@ func TestACrossSessionMessageBodyIsDimmed(t *testing.T) {
 	}
 
 	// The group chat.
-	room := roomBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", ToName: "sydney", Text: "rerun the build"}, Agent{Name: "planner"}, 60, false).text
+	room := roomBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}, Agent{Name: "planner"}, Agent{Name: "sydney"}, 60, false).text
 	if !strings.Contains(room, muted) {
 		t.Errorf("the room cross-session body is not dimmed to Muted:\n%q", room)
 	}
 
 	// The distinction is real: an agent's own reply is never dimmed to Muted,
 	// so it is told apart from an incoming peer message by more than the head.
-	reply := roomBlock(core.Event{Kind: core.KindAssistantText, Text: "rerun the build"}, Agent{Name: "planner"}, 60, false).text
+	reply := roomBlock(core.Event{Kind: core.KindAssistantText, Text: "rerun the build"}, Agent{Name: "planner"}, Agent{}, 60, false).text
 	if strings.Contains(reply, muted) {
 		t.Errorf("an agent's own reply was dimmed to Muted, erasing the distinction:\n%q", reply)
 	}

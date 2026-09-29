@@ -509,7 +509,7 @@ func EncodeStopTask(requestID, taskID string) ([]byte, error) {
 // None needs a model turn. A refusal comes back as a subtype "error" receipt
 // with the reason top-level - "Server not found: x", "Server status:
 // needs-auth" - never as an error here.
-type outMCPStatusRequest struct {
+type outBareRequest struct {
 	Subtype string `json:"subtype"`
 }
 
@@ -518,23 +518,26 @@ type outMCPReconnectRequest struct {
 	ServerName string `json:"serverName"`
 }
 
-// outMCPToggleRequest persists: a disabled server is written into the
-// project's disabledMcpServers in ~/.claude.json, so it stays off across a
-// restart, exactly as the interactive /mcp's Disable does.
+// outMCPToggleRequest persists, into the project's disabledMcpServers.
 type outMCPToggleRequest struct {
 	Subtype    string `json:"subtype"`
 	ServerName string `json:"serverName"`
 	Enabled    bool   `json:"enabled"`
 }
 
-// EncodeMCPStatus asks for every server's live status. The empty check is
-// EncodeSetMode's: an id-less receipt could not be matched to its ask.
-func EncodeMCPStatus(requestID string) ([]byte, error) {
+// EncodeMCPStatus asks for every server's live status. EncodeInitialize is the
+// handshake every SDK host opens a session with, and the step that makes a
+// headless session load claude.ai connectors (probed 2026-09-27, 2.1.281). The
+// empty check is EncodeSetMode's: an id-less receipt could not be matched.
+func EncodeMCPStatus(requestID string) ([]byte, error)  { return encodeBare(requestID, "mcp_status") }
+func EncodeInitialize(requestID string) ([]byte, error) { return encodeBare(requestID, "initialize") }
+
+func encodeBare(requestID, subtype string) ([]byte, error) {
 	if requestID == "" {
-		return nil, fmt.Errorf("%w: encode mcp status: empty request id", ErrNotWritten)
+		return nil, fmt.Errorf("%w: encode %s: empty request id", ErrNotWritten, subtype)
 	}
 	return marshalLine(outControlRequest{Type: "control_request", RequestID: requestID,
-		Request: outMCPStatusRequest{Subtype: "mcp_status"}}, "encode mcp status")
+		Request: outBareRequest{Subtype: subtype}}, "encode "+subtype)
 }
 
 // EncodeMCPReconnect reconnects one server by the name the status reply gave.
@@ -555,8 +558,7 @@ func EncodeMCPToggle(requestID, server string, enabled bool) ([]byte, error) {
 		Request: outMCPToggleRequest{Subtype: "mcp_toggle", ServerName: server, Enabled: enabled}}, "encode mcp toggle")
 }
 
-// The two states the init frame's roster never showed, beside the three
-// vocabulary.go names.
+// The two states the init roster never showed, beside vocabulary.go's three.
 const (
 	MCPFailed   = "failed"
 	MCPDisabled = "disabled"
@@ -574,6 +576,10 @@ const (
 	MCPScopeEnterprise = "enterprise"
 	MCPScopeDynamic    = "dynamic"
 )
+
+// IsClaudeAIConnector reports whether a server is a claude.ai connector, which
+// Claude names "claude.ai <service>" - the name its own deniedMcpServers takes.
+func IsClaudeAIConnector(name string) bool { return strings.HasPrefix(name, "claude.ai ") }
 
 // wireMCPStatus is one row of an mcp_status receipt's mcpServers. Here rather
 // than in wire.go for room; the reply's other fields (source, the tools'
