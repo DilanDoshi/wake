@@ -164,6 +164,12 @@ var claudeWireVocabulary = wordSet([]string{
 	// which are Wake's words for them.
 	"uuid", "parentUuid", "leafUuid", "last-prompt",
 
+	// A user line's provenance on disk, which DecodeTranscriptLine reads to drop
+	// the note claude injects when a background task ends ("task-notification",
+	// policed below). Policed for "timestamp"'s reason: no file outside this
+	// package names the literal.
+	"origin",
+
 	// system subtypes.
 	"compact_boundary", "permission_denied", "hook_started",
 	"hook_response", "thinking_tokens", "task_started",
@@ -266,6 +272,10 @@ var claudeWireVocabulary = wordSet([]string{
 	// Claude-spelled key of the status receipt Wake reads (a tool's readOnly
 	// annotation, which the MCP spec itself calls readOnlyHint).
 	"mcp_status", "mcp_reconnect", "mcp_toggle", "serverName", "readOnly",
+
+	// The handshake that makes a headless session load claude.ai connectors,
+	// and the prefix Claude names every connector with.
+	"initialize", "claude.ai ",
 
 	// Two of the five permission modes, and the two that are *not* in
 	// deliberatelyGeneric with "auto" and "default". The argument there was that
@@ -431,6 +441,10 @@ var deliberatelyGeneric = wordSet([]string{
 	// A failed turn's error kind for a usage limit (apiNotice). Wake's own
 	// KindRateLimit is spelled the same, so it cannot be policed.
 	"rate_limit",
+
+	// origin.kind's own key, the plainest English there is: Wake's own code names
+	// kinds everywhere, and "origin" beside it is policed, so it is no route in.
+	"kind",
 
 	// A workflow_agent's other state words, "start"'s siblings. Neither is
 	// policed: core.TaskProgress and core.TaskDone already spell "progress"
@@ -609,14 +623,12 @@ var notNamedByTheAirlock = map[string]string{
 	"AskUserQuestion": "askKind reads the wire, never the tool's name",
 	"ExitPlanMode":    "askKind reads the wire, never the tool's name",
 
-	// Field *values*, not keys. The first three are the deny-vs-interrupt
-	// discriminators CLAUDE.md's traps section is built on; the last marks the
-	// unprompted turn an async subagent causes. Nothing reads them yet, and
-	// whatever does must be behind the airlock.
+	// Field *values*, not keys: the deny-vs-interrupt discriminators CLAUDE.md's
+	// traps section is built on. Nothing reads them yet, and whatever does must
+	// be behind the airlock.
 	"user-rejected":          "deny/interrupt discriminator, not decoded yet",
 	"permission-rule":        "deny/interrupt discriminator, not decoded yet",
 	"error_during_execution": "deny/interrupt discriminator, not decoded yet",
-	"task-notification":      "unprompted-turn marker, not decoded yet",
 }
 
 // policedWordCount is a tripwire, not a fact worth knowing. Any change to the
@@ -662,7 +674,9 @@ var notNamedByTheAirlock = map[string]string{
 // wf_*.json record on disk, camelCase and distinct from the stream's
 // snake_case workflow_name/workflow_progress. See EncodeStopTask and
 // DecodeWorkflowRun.
-const policedWordCount = 203
+// 203 → 204: "origin", the on-disk provenance key DecodeTranscriptLine reads to
+// drop a task-notification line from restored history.
+const policedWordCount = 206
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -680,8 +694,8 @@ var notWireVocabulary = wordSet([]string{
 	"decode transcript line: %w",
 	"encode user message",
 	"%w: encode user message: nothing to send",
-	"encode mcp status", "encode mcp reconnect", "encode mcp toggle",
-	"%w: encode mcp status: empty request id",
+	"encode ", "encode mcp reconnect", "encode mcp toggle",
+	"%w: encode %s: empty request id",
 	"%w: encode mcp reconnect: empty request id or server",
 	"%w: encode mcp toggle: empty request id or server",
 	// The separator a stdio server's command line is joined with.
@@ -873,6 +887,11 @@ var allowed = map[string]map[string]bool{
 	// impersonation an operator would misread, and blocking only a near-miss of
 	// it would be the guard doing nothing.
 	"internal/mcp/spawnname.go": {"system": true},
+
+	// The MCP protocol's own handshake method, which Wake's MCP server for the
+	// manager answers - JSON-RPC between Wake and a client of its own, not
+	// stream-json. Claude spells its session handshake the same word.
+	"internal/mcp/server.go": {"initialize": true},
 	// WorkflowAgent.Prompt's own json tag, the preview of the same concept
 	// "prompt" already names on the wire - a workflow agent's own
 	// instruction, shortened. workflow.go is Wake's vocabulary and decodes
@@ -896,7 +915,7 @@ var allowed = map[string]map[string]bool{
 // coincidence of subject rather than reuse of the wire.
 // 22 → 25: WorkflowRun's own "script", "status" and "summary" json tags
 // (task 2), reusing three more words the wire also carries.
-const allowlistPairCount = 25
+const allowlistPairCount = 26
 
 func TestTheAllowlistDoesNotGrowQuietly(t *testing.T) {
 	pairs := 0
@@ -1005,6 +1024,7 @@ var notInTheCorpus = map[string]string{
 	"last_seen_user_message_uuid": "outbound only; rewind request field Wake writes",
 	"interrupt_if_running":        "outbound only; rewind request field Wake writes",
 	"mcp_status":                  "outbound only; the corpus holds its receipts, not the requests",
+	"initialize":                  "outbound only; the corpus holds its receipt, not the request",
 	"mcp_reconnect":               "outbound only; the corpus holds its receipts, not the requests",
 	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
 	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
@@ -1040,6 +1060,8 @@ var embeddedMarkers = map[string]bool{
 	"Goal set: ":          true,
 	"Goal cleared: ":      true,
 	"Stop hook feedback:": true,
+	// Every connector's name begins with it ("claude.ai Gmail"); never whole.
+	"claude.ai ": true,
 }
 
 // The vocabulary has to be a real description of the corpus, or the test

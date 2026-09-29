@@ -6,6 +6,8 @@ package ui
 import (
 	"strings"
 
+	"github.com/DilanDoshi/wake/internal/render"
+
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -110,8 +112,12 @@ func (m marked) covers(line int) (c0, c1 int, ok bool) {
 //
 // The trim is not cosmetic. Every line in a pane is rendered to the pane's
 // width, so without it a two-word copy arrives as two words and forty spaces.
-func selectedText(lines []string, first int, m marked) string {
-	var out []string
+//
+// joins, when not nil, says how each line follows the one above it and how
+// much of its lead is layout (see copytext.go); nil keeps every row break.
+func selectedText(lines []string, first int, m marked, joins []render.Rejoin) string {
+	var b strings.Builder
+	started := false
 	for i, l := range lines {
 		c0, c1, ok := m.covers(first + i)
 		if !ok {
@@ -120,9 +126,27 @@ func selectedText(lines []string, first int, m marked) string {
 		if c1 == lineEnd {
 			c1 = ansi.StringWidth(l)
 		}
-		out = append(out, strings.TrimRight(ansi.Strip(ansi.Cut(l, c0, c1)), " "))
+		j := hardBreak
+		if joins != nil {
+			j = joins[i]
+		}
+		if started {
+			b.WriteString(j.Sep)
+		}
+		text := strings.TrimRight(ansi.Strip(ansi.Cut(l, c0, c1)), " ")
+		b.WriteString(dropSpaces(text, j.Lead-c0))
+		started = true
 	}
-	return strings.Join(out, "\n")
+	return b.String()
+}
+
+// dropSpaces removes up to n leading spaces - the layout lead a selection
+// starting inside it took.
+func dropSpaces(s string, n int) string {
+	for ; n > 0 && strings.HasPrefix(s, " "); n-- {
+		s = s[1:]
+	}
+	return s
 }
 
 // clampedTo holds both ends inside a pane. A drag into the next column

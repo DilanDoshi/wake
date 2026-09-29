@@ -11,7 +11,9 @@ package ui
 // from; everything that does not spell a slash is here.
 
 import (
+	"cmp"
 	"fmt"
+	"maps"
 	"sort"
 	"strings"
 	"time"
@@ -141,12 +143,71 @@ func wakeFrames(agents []Agent) []rpc.Frame {
 // a record out of the book as it launches, and a live row is one it is holding.
 func (a App) parkedAgents() []Agent {
 	var out []Agent
+	held := map[string]bool{}
 	for _, agent := range a.fleet.Agents() {
 		if agent.State == rpc.StateParked {
 			out = append(out, agent)
+			held[agent.ID], held[cmp.Or(agent.Conversation, agent.ID)] = true, true
 		}
 	}
-	return append(out, a.fleet.Parked()...)
+	// A report may still list a ⌃C row's own book record beside it, under the
+	// conversation it parked with; one agent, so one entry and one wake.
+	for _, rec := range a.fleet.Parked() {
+		if !held[rec.ID] {
+			out = append(out, rec)
+		}
+	}
+	return out
+}
+
+// rekeyed follows an agent a wake brought back under the conversation it
+// resumed - a /clear had moved it off the id it was filed under. The report
+// stops naming the old id and names the conversation instead, so the row, the
+// pane and this window's wake ask move to it; the fleet never drops a row a
+// report stops listing, so the old one would otherwise stay parked forever.
+func (a App) rekeyed(st *rpc.Status) App {
+	reported, running := map[string]bool{}, map[string]bool{}
+	for _, s := range st.Sessions {
+		reported[s.ID], running[s.ID] = true, s.PID > 0
+	}
+	gone := map[string]struct{}{}
+	for _, ag := range a.fleet.Agents() {
+		conv := ag.Conversation
+		// Only once the woken process exists: a wake reports its row before it
+		// starts, and one that fails to start puts the old row back.
+		if conv == "" || reported[ag.ID] || !running[conv] {
+			continue
+		}
+		gone[ag.ID] = struct{}{}
+		if a.sessionID == ag.ID {
+			a.sessionID = conv // what a hang-up reattaches to, and whose ending closes this window
+		}
+		if _, asked := a.waking[ag.ID]; asked {
+			a = a.awaitingWake(conv)
+		}
+		old, held := a.dms[ag.ID]
+		if a.grid.Has(ag.ID) {
+			a = a.rekeyPane(ag.ID, conv, ag.Name)
+		}
+		a = a.roomAskedAs(ag.ID, conv)
+		if held {
+			// The draft survives a park, so it survives the re-key: the fresh
+			// pane loads the resumed conversation and keeps what was typed.
+			if _, ok := a.dms[conv]; !ok {
+				a = a.withDM(conv, NewDM(conv, ag.Name))
+			}
+			a = a.withComposerFor(conv, old.Composer())
+		}
+		a = a.forgetConversation(ag.ID)
+	}
+	if len(gone) > 0 {
+		a.waking = maps.Clone(a.waking)
+		for id := range gone {
+			delete(a.waking, id)
+		}
+		a.fleet = a.fleet.drop(gone)
+	}
+	return a
 }
 
 // parkedNamed resolves a name to a parked agent. Exact and folded, the way
@@ -309,13 +370,22 @@ func (a App) showResume(disk []DiskSession) (App, tea.Cmd) {
 func (a App) resumeRowsFrom(disk []DiskSession) (rows []resumeRow, more int) {
 	live := map[string]bool{}
 	for _, ag := range a.fleet.Agents() {
-		if ag.State != rpc.StateParked {
+		switch {
+		case ag.State != rpc.StateParked:
+			// And the conversation a cleared agent is writing: resuming it in
+			// place would put a second process on it.
+			live[ag.ID], live[ag.Conversation] = true, true
+		case ag.Conversation != "":
+			// A parked cleared agent is offered by its conversation below; its
+			// own id is the pre-clear transcript, refused while the row is held.
 			live[ag.ID] = true
 		}
 	}
+	delete(live, "")
 	parked := map[string]Agent{}
 	for _, ag := range a.parkedAgents() {
-		parked[ag.ID] = ag
+		// Keyed by the conversation its wake resumes, which is the disk row.
+		parked[cmp.Or(ag.Conversation, ag.ID)] = ag
 	}
 
 	all := make([]resumeRow, 0, len(disk)+len(parked))
@@ -400,4 +470,21 @@ func (a App) awaitingWake(ids ...string) App {
 	}
 	a.waking = next
 	return a
+}
+
+// rekeyPane puts conversation conv in the pane showing from, moving nothing the
+// operator pointed at: the keys, the roster cursor and the fleet's focus stay
+// where they were unless they were on from, so ⌃C still parks whoever was picked.
+func (a App) rekeyPane(from, conv, name string) App {
+	follow := func(id string) string {
+		if id == from {
+			return conv
+		}
+		return id
+	}
+	focus, sel, task, focused := follow(a.focus), follow(a.roster.Selected), a.roster.SelectedTask, follow(a.fleet.Focused())
+	a = a.show(conv, name, func(g Grid) Grid { return g.Replace(from, conv) })
+	a.roster.Selected, a.roster.SelectedTask = sel, task
+	a.fleet = a.fleet.Focus(focused)
+	return a.refocus(focus)
 }

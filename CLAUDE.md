@@ -68,7 +68,10 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
   (`mcp_status`/`mcp_reconnect`/`mcp_toggle`, replies sent only to the asking window). Authenticate
   hands the real terminal to `claude mcp login <server>`, then reconnects every live agent stuck on
-  that server. claude.ai connectors aren't listed — headless sessions don't load them.
+  that server. **Every agent opens with Claude's `initialize` handshake**, which is what makes a
+  headless session load the operator's claude.ai connectors; the daemon then reconnects each one
+  reading needs-auth, so the signed-in ones work from the start (`daemon/mcpask.go`'s `handshake`).
+  A connector not signed in points at claude.ai, and the banner's count leaves connectors out.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
@@ -121,7 +124,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   Import is a fork, the only guaranteed-safe primitive for a hand-started `claude`.
 - **`/resume` resumes in place and skips `resumeSafe`** — the one deliberate exception, matching
   Claude Code (owner's 2026-09-20 ruling). Parked rows keep `resumeSafe`. `internal/daemon/resume.go`.
+  It keeps the name the transcript recorded (newest `customTitle`, hyphenated), else a pooled one —
+  never the manager's (`resumedName`).
 - **Anything waiting on a spawn waits on the id it minted**, never the parent's.
+- **A `/clear` moves an agent onto a new claude conversation** (`a.claudeID`, via
+  `agent.conversation()`). Park records it, a wake resumes it and files the woken agent under it
+  (clients follow via `rpc.SessionStatus.Conversation`), and ⌃F forks it. `resumeSafe` cannot see
+  it — the process's argv still names the spawn id — so `conversationRow` is the only fence, and
+  `/resume` refuses a conversation a held agent is writing. `internal/daemon/park.go`.
 - `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
   confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
 - `/manager-stop` refuses a parked manager and a missing one; it does not borrow park's
@@ -182,6 +192,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
   (`screensel.go`). Every keystroke clears the highlight *and* does its job; width change clears,
   height doesn't; a click copies nothing. Roster click targets are resolved at press.
+- **A transcript drag at a pane's edge scrolls, and keeps scrolling while held** — the first
+  transcript row is the top edge (a pane can start on the window's first row) unless the drag has
+  not left the line it was pressed on; below the last row is the bottom. A one-shot tick
+  (`edgeScrollEvery`) re-arms only while the pane moved; the highlight ends on a line on screen.
+  `internal/ui/edgescroll.go`.
+- **A transcript copy rejoins what the pane wrapped** — markdown by `render.Rejoins` (reflowProse's
+  own predicates), your own turn matched back to what you typed; every other row copies as drawn.
+  `internal/ui/copytext.go`.
 - **Double-click selects a word, triple-click its row**, on any selectable surface; the first click
   still does its own job. A timer (`multiClickWindow`) counts clicks but never tells a click from a
   drag. `internal/ui/multiclick.go`.
@@ -289,14 +307,14 @@ yet says so in bold.**
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
-| Transport | `internal/rpc/wire.go` · `lifecycle.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go` |
+| Transport | `internal/rpc/wire.go` · `lifecycle.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
 | Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `color.go`, `team.go` |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
-| Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
-| `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl` |
+| Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
+| `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (type-ahead) · `mention.go` · `imagedrop.go` |
 | Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
@@ -310,7 +328,7 @@ yet says so in bold.**
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
-| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix |
+| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · daily notice `updatecheck.go` · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
@@ -424,8 +442,13 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   mode change gets — only the request id says what it answers. `mcp_toggle` persists. The status
   carries no tool descriptions.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
-  hand-over. **A headless session does not load claude.ai connectors**, even with
-  `ENABLE_CLAUDEAI_MCP_SERVERS=true`.
+  hand-over.
+- **A headless session loads claude.ai connectors only after an `initialize` control request**
+  (never otherwise, even with `ENABLE_CLAUDEAI_MCP_SERVERS=true`), and a loaded connector reads
+  `needs-auth` — even one signed in on claude.ai — until an `mcp_reconnect` connects it; one never
+  signed in refuses the reconnect at once. `--strict-mcp-config` still excludes them.
+  `testdata/stream/initialize.jsonl`, `mcp-connectors.jsonl`,
+  `docs/superpowers/notes/2026-09-27-claudeai-connectors-findings.md`.
 
 ## Conventions
 
@@ -437,7 +460,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/vocabulary.go` at 800 and `internal/ui/dm.go` at 799 — derived by
+  `internal/core/vocabulary.go` at 800 and `internal/ui/app.go` at 799 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go
@@ -475,9 +498,14 @@ first, and read it.
   send (mouse clicks, ⇧+arrows) is a still from the pty harness, and a `## Screenshots` section keeps
   the before/after pair (`main` build vs branch build doing the same thing). A change with nothing
   visible says so, with the reason.
-  - Record with VHS against the real `wake` and a scripted fake `claude` on a shim `PATH`
-    (`demo/agent/claude`). Never a live LLM or the owner's fleet: scratch `HOME`, and a **fresh
-    `WAKE_SOCKET` directory per take** (a reused one inherits orphans and hangs `wake new`).
+  - **Videos must be live, not mocked, wherever possible** (owner's rule, 2026-09-28, with standing permission to
+    run a live `claude` session for it — this covers videos only, not tests): record with
+    VHS against the real `wake` driving a real `claude`. Fall back to the scripted fake `claude` on
+    a shim `PATH` (`demo/agent/claude`) only for a flow a live session cannot produce on demand (an
+    API failure, a specific ask), and say in the PR body which clips are scripted and why. Never the
+    owner's fleet: scratch `HOME` (log the real `claude` in there without copying the owner's
+    credentials into the repo or the frames), and a **fresh `WAKE_SOCKET` directory per take** (a
+    reused one inherits orphans and hangs `wake new`).
   - Use a neutral project path (e.g. `/tmp/<name>`) — a home path puts the operator's name in the image.
   - Record the videos against the PR's final head, not an earlier commit, and check their frames by eye.
   - Host videos and images on an orphan branch `pr-assets/<head-branch>` (head branch verbatim, one

@@ -246,7 +246,9 @@ cell crossed, at whatever rate your hardware produces, which is the thing that c
       stray character on the clipboard.
 - [ ] **Drag off the right-hand edge into the next column.** The selection stays in the pane it
       started in; it must never take the neighbouring column's text with it.
-- [ ] **Drag past the top of a pane** and it scrolls back through the conversation, still selecting.
+- [ ] **Drag to the top row of the window and hold still** and it keeps scrolling back through the
+      conversation, still selecting; the same below the transcript scrolls forward. Letting go or
+      moving back inside stops it at once. A drag along the top row it started on does not scroll.
 - [ ] **Press a key with a highlight up.** It clears, *and* the key still does its own job — `esc`
       must still interrupt.
 - [ ] **Resize the terminal's width with a highlight up.** It clears. Changing only the height
@@ -861,6 +863,10 @@ login`. What only a real server and a real browser can settle:
 - [ ] **⌃C at the sign-in** cancels the sign-in only: Wake comes back with `✘ sign-in did not
       finish`, the fleet untouched.
 - [ ] **Two agents stuck on the same server**: signing in from one reconnects both.
+- [ ] **claude.ai connectors reach a new agent.** With a connector signed in on claude.ai (Gmail,
+      say), start an agent and open `/mcp` on it: the **claude.ai** section lists it `✔ connected`
+      within a few seconds, with no action from you, and asking the agent to use it works. A
+      connector never signed in stays `⚠ needs authentication` and says to sign in on claude.ai.
 
 ## Reporting back
 

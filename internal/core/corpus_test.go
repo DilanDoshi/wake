@@ -115,6 +115,11 @@ var environmentKeys = []string{
 	"plugins", "skills",
 }
 
+// replyEnvironmentKeys are the same dump one frame over: an initialize reply
+// lists the machine's commands and agents - the operator's own among them -
+// and nothing decodes either.
+var replyEnvironmentKeys = []string{"agents", "commands"}
+
 // corpusFiles is every file the repository tracks *or* would track, as a path
 // this test can open.
 func corpusFiles(t *testing.T) []string {
@@ -189,6 +194,7 @@ func TestTheScrubberAndThisGuardAgree(t *testing.T) {
 		want, got      []string
 	}{
 		{"DEAD_KEYS", "environmentKeys", found["DEAD_KEYS"], environmentKeys},
+		{"REPLY_DEAD_KEYS", "replyEnvironmentKeys", found["REPLY_DEAD_KEYS"], replyEnvironmentKeys},
 		{"KEEP", "scrubbedUsers", found["KEEP"], sortedKeys(scrubbedUsers)},
 	} {
 		if len(pair.want) == 0 {
@@ -253,6 +259,11 @@ func TestNoInitFrameCarriesTheMachineItWasRecordedOn(t *testing.T) {
 			if json.Unmarshal([]byte(line), &frame) != nil {
 				continue // not every line is JSON, and that is not this test's business
 			}
+			if leaked := replyEnvironment(frame); leaked != "" {
+				rel, _ := filepath.Rel(repoRoot, path)
+				t.Errorf("%s:%d is a control reply still carrying %q, which describes the "+
+					"machine rather than the session. Run scripts/scrub-fixtures.py", rel, i+1, leaked)
+			}
 			if string(frame["subtype"]) != `"init"` {
 				continue
 			}
@@ -272,6 +283,25 @@ func TestNoInitFrameCarriesTheMachineItWasRecordedOn(t *testing.T) {
 	if checked == 0 {
 		t.Fatal("no init frame was checked: either the corpus lost them or the walk missed them")
 	}
+}
+
+// replyEnvironment is the first replyEnvironmentKeys key a control reply's
+// payload still carries, or "".
+func replyEnvironment(frame map[string]json.RawMessage) string {
+	var r struct {
+		Response struct {
+			Response map[string]json.RawMessage `json:"response"`
+		} `json:"response"`
+	}
+	if string(frame["type"]) != `"control_response"` || json.Unmarshal(frame["response"], &r.Response) != nil {
+		return ""
+	}
+	for _, key := range replyEnvironmentKeys {
+		if _, ok := r.Response.Response[key]; ok {
+			return key
+		}
+	}
+	return ""
 }
 
 // slashAllowlist is every slash-command name a recorded init frame may

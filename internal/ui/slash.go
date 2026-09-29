@@ -721,7 +721,7 @@ func (a App) renameMirrorFor(who, text string) tea.Cmd {
 // renameMirrorArg is the shared recogniser behind both mirrors: a `/rename bob`
 // becomes a rename of agent, or nil for anything else - a folded case claude
 // will not read, an empty name, or a leading `@` (see below). A multi-word name
-// is no longer declined: hyphenateName folds its spaces, so `/rename foo bar`
+// is no longer declined: rpc.HyphenateName folds its spaces, so `/rename foo bar`
 // mirrors as `foo-bar` rather than moving nothing while claude renames itself.
 // One copy, so the focused and room mirrors cannot drift on what a `/rename` is.
 //
@@ -741,7 +741,7 @@ func (a App) renameMirrorArg(agent Agent, text string) tea.Cmd {
 	if word != renameCommand || name == "" || strings.HasPrefix(name, agentPrefix) {
 		return nil
 	}
-	return a.renameTo(agent, hyphenateName(name))
+	return a.renameTo(agent, rpc.HyphenateName(name))
 }
 
 // loginCommand draws the auth panel: whether this machine is signed in, and the

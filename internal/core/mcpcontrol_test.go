@@ -269,3 +269,95 @@ func TestAnUnwrittenAskIsNotRemembered(t *testing.T) {
 		t.Errorf("%d asks remembered after a failed write", n)
 	}
 }
+
+// The handshake Wake opens a session with is byte-identical to the one recorded
+// going in, and it is what makes a headless session load claude.ai connectors.
+func TestEncodeInitializeMatchesTheRecordedRequest(t *testing.T) {
+	raw, err := os.ReadFile("../../testdata/input/initialize.stdin.jsonl")
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	want := strings.TrimSpace(string(raw))
+	var m struct {
+		RequestID string `json:"request_id"`
+	}
+	if err := json.Unmarshal([]byte(want), &m); err != nil || m.RequestID == "" {
+		t.Fatalf("fixture has no request id: %v", err)
+	}
+	got, err := EncodeInitialize(m.RequestID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if string(bytes.TrimSuffix(got, []byte("\n"))) != want {
+		t.Errorf("does not match the recording\n got: %s\nwant: %s", got, want)
+	}
+	if _, err := EncodeInitialize(""); !errors.Is(err, ErrNotWritten) {
+		t.Errorf("an id-less handshake was encoded: %v", err)
+	}
+}
+
+// Its reply is an environment dump with no mcpServers, so it is an ordinary
+// receipt - never mistaken for a status reply.
+func TestTheHandshakesReplyIsAnOrdinaryReceipt(t *testing.T) {
+	ev := onlyEvent0(t, fixtureLineContaining(t, "initialize.jsonl", `"type":"control_response"`))
+	if ev.Kind != KindControlReceipt || ev.MCP != nil || ev.RequestID == "" {
+		t.Errorf("kind %q MCP %+v id %q", ev.Kind, ev.MCP, ev.RequestID)
+	}
+}
+
+// A connector row decodes like any server, scoped claudeai and reached through
+// claude.ai's proxy; signed in on claude.ai, a reconnect is what connects it.
+func TestAClaudeAIConnectorDecodesAndConnectsOnReconnect(t *testing.T) {
+	servers := func(id string) map[string]MCPServerStatus {
+		t.Helper()
+		ev := onlyEvent0(t, fixtureLineContaining(t, "mcp-connectors.jsonl", `"request_id":"`+id+`"`))
+		if ev.Kind != KindMCPReply || ev.MCP == nil {
+			t.Fatalf("%s: kind %q", id, ev.Kind)
+		}
+		out := map[string]MCPServerStatus{}
+		for _, s := range ev.MCP.Servers {
+			out[s.Name] = s
+		}
+		return out
+	}
+	before, after := servers("conn-02"), servers("conn-05")
+	drive := before["claude.ai Google Drive"]
+	if drive.Scope != MCPScopeClaudeAI || drive.Transport != "claudeai-proxy" || drive.State != MCPNeedsAuth {
+		t.Errorf("before the reconnect drive = %+v", drive)
+	}
+	if after["claude.ai Google Drive"].State != MCPConnected || len(after["claude.ai Google Drive"].Tools) == 0 {
+		t.Errorf("after the reconnect drive = %+v", after["claude.ai Google Drive"])
+	}
+	refused := onlyEvent0(t, fixtureLineContaining(t, "mcp-connectors.jsonl", `"request_id":"conn-04"`))
+	if refused.Control == nil || refused.Control.Error != "Server status: needs-auth" {
+		t.Errorf("a connector never signed in on claude.ai refused with %+v", refused.Control)
+	}
+}
+
+func TestIsClaudeAIConnectorReadsClaudesName(t *testing.T) {
+	for name, want := range map[string]bool{
+		"claude.ai Gmail": true, "claude.ai Slack": true,
+		"slack": false, "claude.ai": false, "my claude.ai thing": false,
+	} {
+		if got := IsClaudeAIConnector(name); got != want {
+			t.Errorf("IsClaudeAIConnector(%q) = %v, want %v", name, got, want)
+		}
+	}
+}
+
+func TestTheSessionOpensWithTheHandshake(t *testing.T) {
+	s, buf := mcpSession(t)
+	if err := s.Initialize("h1"); err != nil {
+		t.Fatal(err)
+	}
+	if id, req := sentRequest(t, buf); id != "h1" || req["subtype"] != "initialize" {
+		t.Errorf("wrote %s %v", id, req)
+	}
+}
+
+// fixtureLineContaining is the one line of a stream fixture carrying marker.
+func fixtureLineContaining(t *testing.T, name, marker string) string {
+	t.Helper()
+	line, _ := findFixtureLine(t, name, marker)
+	return line
+}

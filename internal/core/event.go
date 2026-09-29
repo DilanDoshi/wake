@@ -768,3 +768,11 @@ type Event struct {
 	// system/init and result carry any of it.
 	Session *SessionFacts `json:"session,omitempty"`
 }
+
+// apiNotice tells a usage limit, which recovers when the quota resets, from every other failed turn.
+func (f wireFrame) apiNotice() Notice {
+	if jsonString(f.APIErrorKind) == "rate_limit" {
+		return NoticeUsageLimit
+	}
+	return NoticeAPIError
+}

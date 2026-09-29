@@ -66,8 +66,8 @@ const (
 	// FrameResume resumes an on-disk conversation in place under its own id
 	// (`--resume <id>`, no fork), so the transcript continues. Unlike FrameImport
 	// it mints no new id, and its handler deliberately skips resumeSafe - the
-	// owner's "same as Claude Code, no guard" ruling. See internal/daemon/resume.go
-	// and docs/notes/decisions.md.
+	// owner's "same as Claude Code, no guard" ruling. It carries no Text: the
+	// daemon names it from its transcript, like Dir. See internal/daemon/resume.go.
 	FrameResume = "resume" // client → daemon: resume an on-disk conversation in place, under its own id
 
 	FrameHello = "hello" // daemon → client: handshake, sent on connect

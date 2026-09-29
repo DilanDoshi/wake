@@ -50,8 +50,8 @@ func conversation(socket string, sess rpc.SessionStatus, seed *rpc.Status, conn 
 	return ui.NewRoomApp(conn, stream, seed).
 		WithOpenDM(sess.ID, displayName(sess)).
 		WithSessions(machineSessions{}).
-		WithDialer(func() (net.Conn, ui.Stream, rpc.SessionStatus, *rpc.Status, error) {
-			return redial(socket, sess.ID, held)
+		WithDialer(func(id string) (net.Conn, ui.Stream, rpc.SessionStatus, *rpc.Status, error) {
+			return redial(socket, id, held)
 		})
 }
 
@@ -67,7 +67,7 @@ func conversationRoom(socket string, seed *rpc.Status, conn net.Conn, stream ui.
 	warnIfStaleDaemon(seed)
 	return ui.NewRoomApp(conn, stream, seed).
 		WithSessions(machineSessions{}).
-		WithDialer(func() (net.Conn, ui.Stream, rpc.SessionStatus, *rpc.Status, error) {
+		WithDialer(func(string) (net.Conn, ui.Stream, rpc.SessionStatus, *rpc.Status, error) {
 			return redialRoom(socket, held)
 		})
 }

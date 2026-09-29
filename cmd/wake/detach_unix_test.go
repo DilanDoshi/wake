@@ -47,7 +47,12 @@ import (
 // rather than a kill.
 const fakeClaude = `#!/bin/sh
 printf '%s\n' '{"type":"assistant","message":{"content":[{"type":"text","text":"fake agent ready"}]},"session_id":"fake"}'
-read _ignored
+# The daemon opens every session with an initialize control request (and may
+# follow it with more); wait past those for the first line that is a message.
+while read -r line; do
+  case "$line" in *'"control_request"'*) continue ;; esac
+  break
+done
 `
 
 // withFakeClaude puts a fake agent first on PATH, for this process and for

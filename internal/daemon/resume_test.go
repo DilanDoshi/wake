@@ -3,10 +3,12 @@ package daemon
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -69,14 +71,26 @@ func TestAResumeIsRefusedWhenThereIsNoTranscript(t *testing.T) {
 // (the same id it resumed, not a fork to a new one) and has **no parent** - a
 // self-referential ParentID would read as a fork, so the room's history would
 // never backfill and the DM header would say "forked from" its own name.
-// unparkRecord passes "" for exactly this reason; resumeSession must too.
-func TestAResumedSessionIsInPlaceAndHasNoParent(t *testing.T) {
+// unparkRecord passes "" for exactly this reason; resumeSession must too. And it
+// comes back under the name claude last recorded for it, not a pooled one.
+func TestAResumedSessionIsInPlaceUnderItsOwnNameAndHasNoParent(t *testing.T) {
 	projects := t.TempDir()
 	t.Setenv("WAKE_PROJECTS", projects)
 	fakeClaudeOnPath(t, "")
 	real := t.TempDir()
 	id := "abcd0000-1111-4111-8111-111111111111"
-	writeTranscript(t, projects, slugOf(real), id, real)
+	p := writeTranscript(t, projects, slugOf(real), id, real)
+	named, err := os.OpenFile(p, os.O_APPEND|os.O_WRONLY, 0)
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = named.WriteString(`{"type":"custom-title","customTitle":"cursor-bug"}` + "\n")
+	if cerr := named.Close(); err == nil {
+		err = cerr
+	}
+	if err != nil {
+		t.Fatal(err)
+	}
 
 	d := startDaemon(t)
 	c := attach(t, d.socket)
@@ -108,6 +122,44 @@ func TestAResumedSessionIsInPlaceAndHasNoParent(t *testing.T) {
 		t.Errorf("a resumed session reports ParentID %q, want empty: it is not a fork, and a self-referential "+
 			"parent would make isFork true - the room's history would never backfill and the DM header would "+
 			"read 'forked from' its own name", got.ParentID)
+	}
+	if got.Name != "cursor-bug" {
+		t.Errorf("the resumed session is called %q, want %q - the name its transcript recorded", got.Name, "cursor-bug")
+	}
+}
+
+// A resume keeps the name claude recorded, folded the way a spaced /rename is -
+// and draws a pooled one when Wake cannot hold it, since a display name never
+// blocks a resume. A title is text anyone can write, so it never makes a manager.
+func TestAResumeKeepsTheNameTheSessionHad(t *testing.T) {
+	for _, tc := range []struct {
+		name, recorded, held, want string // want "" means any pooled name
+	}{
+		{name: "the recorded name", recorded: "cursor-bug", want: "cursor-bug"},
+		{name: "a spaced rename folds", recorded: "Render  Bug", want: "render-bug"},
+		{name: "held by a live agent", recorded: "cursor-bug", held: "cursor-bug"},
+		{name: "not a name Wake can hold", recorded: "potential bug."},
+		{name: "the manager's word", recorded: core.ManagerName},
+		{name: "nobody named it", recorded: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			s, _ := importServer(t)
+			if tc.held != "" {
+				if _, err := s.names.claim(tc.held); err != nil {
+					t.Fatal(err)
+				}
+			}
+			got, err := s.resumedName(FoundSession{ID: "abcd0000-1111-4111-8111-111111111111", Name: tc.recorded})
+			if err != nil {
+				t.Fatalf("resumedName: %v", err)
+			}
+			if tc.want != "" && got != tc.want {
+				t.Errorf("resumed as %q, want %q", got, tc.want)
+			}
+			if tc.want == "" && !slices.Contains(namePool, got) {
+				t.Errorf("resumed as %q, want a pooled name", got)
+			}
+		})
 	}
 }
 
@@ -175,5 +227,25 @@ func TestResumeDoesNotAskResumeSafe(t *testing.T) {
 	}
 	if src.ID != id {
 		t.Errorf("resume source is %q, want %q", src.ID, id)
+	}
+}
+
+// A cleared agent is filed under the id it was spawned with and writes another,
+// and ps cannot see that one - its argv still names the old id. So the fleet's
+// own record is the only fence: resuming the conversation it is writing would put
+// a second process on it.
+func TestResumeRefusesTheConversationAClearedAgentIsWriting(t *testing.T) {
+	s, projects := importServer(t)
+	real := t.TempDir()
+	conv := "ffff2222-4444-4444-8444-444444444444"
+	writeTranscript(t, projects, slugOf(real), conv, real)
+	a := liveAgent("dddddddd-4444-4444-8444-444444444444", "alex", real)
+	if !s.register(a) {
+		t.Fatal("could not put the agent in the fleet")
+	}
+	clearTo(a, a.id, conv)
+	_, err := s.resumeSource(conv)
+	if err == nil || !strings.Contains(err.Error(), "already in this fleet") {
+		t.Errorf("resumeSource of the conversation a live agent is writing gave %v, want a refusal", err)
 	}
 }

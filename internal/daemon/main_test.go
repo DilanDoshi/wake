@@ -44,6 +44,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/DilanDoshi/wake/internal/core"
 )
 
@@ -288,6 +290,8 @@ func runFakeClaude() int {
 		return fakeMode(sid)
 	case "mcp":
 		return fakeMCP(sid)
+	case "connectors":
+		return fakeConnectors(sid)
 	case "probe":
 		return fakeModelProbe(sid)
 	case "tool":
@@ -601,6 +605,45 @@ func fakeMCP(sid string) int {
 	return 0
 }
 
+// fakeConnectors answers the handshake, then reports two claude.ai connectors
+// and one ordinary server all needing auth, the way mcp-connectors.jsonl
+// recorded a fresh session: Gmail is signed in on claude.ai and connects on a
+// reconnect, Slack is not and refuses. Each reconnect it is sent is said aloud,
+// so a test can see exactly which ones the daemon asked for.
+func fakeConnectors(sid string) int {
+	emitText(sid, "ready")
+	emitResult(sid)
+	for line := range stdinLines() {
+		id := controlRequestID(line)
+		switch {
+		case strings.Contains(line, `"subtype":"initialize"`):
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"pid":1}}}`+"\n", id)
+		case strings.Contains(line, `"subtype":"mcp_status"`):
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"mcpServers":[`+
+				`{"name":"claude.ai Gmail","status":"needs-auth","scope":"claudeai","config":{"type":"claudeai-proxy","url":"https://api.anthropic.com/v1/x","id":"mcpsrv_1"}},`+
+				`{"name":"claude.ai Slack","status":"needs-auth","scope":"claudeai","config":{"type":"claudeai-proxy","url":"https://api.anthropic.com/v1/x","id":"mcpsrv_2"}},`+
+				`{"name":"firecrawl","status":"needs-auth","scope":"user","config":{"type":"http","url":"https://example.com/mcp"}}]}}}`+"\n", id)
+		case strings.Contains(line, `"subtype":"mcp_reconnect"`):
+			var f struct {
+				Request struct {
+					ServerName string `json:"serverName"`
+				} `json:"request"`
+			}
+			_ = json.Unmarshal([]byte(line), &f)
+			emitText(sid, "reconnect asked: "+f.Request.ServerName)
+			if f.Request.ServerName == "claude.ai Gmail" {
+				fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q}}`+"\n", id)
+			} else {
+				fmt.Printf(`{"type":"control_response","response":{"subtype":"error","request_id":%q,"error":"Server status: needs-auth"}}`+"\n", id)
+			}
+		default:
+			emitText(sid, "echo: "+line)
+			emitResult(sid)
+		}
+	}
+	return 0
+}
+
 // modeAsked reads the mode out of a set_permission_mode request, one level down
 // beside its subtype.
 func modeAsked(line string) string {
@@ -679,9 +722,27 @@ func fakeName(sid string) int {
 func fakeArgv(sid string) int {
 	emitText(sid, "argv: "+strings.Join(os.Args, " "))
 	emitResult(sid)
-	for range stdinLines() {
+	for line := range stdinLines() {
+		if strings.Contains(line, clearCommand) {
+			sid = clearMemory(sid)
+		}
 	}
 	return 0
+}
+
+// clearCommand starts a new conversation, the way claude's own /clear does.
+const clearCommand = "/clear"
+
+// clearMemory is /clear in claude's recorded shape (slash-commands.jsonl): a
+// reset under the id that dies, whose new_conversation_id is NOT the successor,
+// then an init and a zero-turn result under the successor. It returns the
+// successor, which starts with no memory.
+func clearMemory(dying string) string {
+	successor := uuid.NewString()
+	fmt.Printf(`{"type":"conversation_reset","session_id":%q,"new_conversation_id":%q}`+"\n", dying, uuid.NewString())
+	emitInit(successor)
+	emitResult(successor)
+	return successor
 }
 
 // fakeDeaf never reads its stdin, so it outlives the daemon that spawned it.
