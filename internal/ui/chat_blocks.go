@@ -99,7 +99,7 @@ const (
 
 	// crossSessionArrow joins the sender to the receiving session so a peer
 	// message reads "planner → sydney" - a directed message, not the sender's
-	// own room turn. Dropped when the receiver is unknown (ToName is "").
+	// own room turn. Dropped when the receiver is unknown (no name).
 	crossSessionArrow = " → "
 
 	// collapsedFormat is the pointer's last line: how much there is, and the
@@ -131,14 +131,15 @@ const (
 var renderRoomBlock = roomBlock
 
 // roomBlock renders one event for the room, or an empty block for one with no
-// room representation. expanded draws an over-cap response in full rather than
+// room representation. to is a peer message's receiving session, zero for every
+// other kind. expanded draws an over-cap response in full rather than
 // as a pointer - ⌃E and a click reach it through the Room's expand state; every
 // other kind ignores it, since only an agent's reply collapses.
 //
 // It never returns a line wider than width. The room is one column of a
 // three-region layout and lipgloss joins columns on their widest line, so an
 // over-wide line here shoves both sidebars out of place.
-func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
+func roomBlock(ev core.Event, a, to Agent, width int, expanded bool) block {
 	w := max(width, minBlockWidth)
 	// The operator's own resolution of a question, authored above the airlock
 	// (cardroom.go) and keyed on the notice rather than the kind, so the record
@@ -151,7 +152,7 @@ func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 	case core.KindAssistantText:
 		return block{text: agentSaid(ev.Text, ev.OutputTokens, a, w, expanded)}
 	case core.KindCrossSession:
-		return block{text: crossSaid(ev.Text, ev.ToName, a, w, expanded)}
+		return block{text: crossSaid(ev.Text, a, to, w, expanded)}
 	case core.KindUserText:
 		return block{text: youSaid(ev.Text, w)}
 	case core.KindTurnEnd:
@@ -203,17 +204,18 @@ func agentSaid(text string, count int, a Agent, width int, expanded bool) string
 
 // crossSaid draws a peer's cross-session message: the sender's name-tag with a
 // lead marking it as a message from another session - so it is not mistaken for
-// the sender's own turn in the room - the receiving session after an arrow when
-// it is known (toName), then the body in Muted, folded past roomInlineRows the
+// the sender's own turn in the room - the receiving session after an arrow in its
+// own colour when it is known (to.Name), then the body in Muted, folded past roomInlineRows the
 // way a reply is. Dimmer than a reply so an incoming message reads apart from
 // the agent's own words (crossSessionBody); no token count, since a peer message
 // is not this fleet's spend.
-func crossSaid(text, toName string, a Agent, width int, expanded bool) string {
-	name := crossSessionLead + speaker(a)
-	if toName != "" {
-		name += crossSessionArrow + toName
+func crossSaid(text string, a, to Agent, width int, expanded bool) string {
+	name, recipient := crossSessionLead+speaker(a), ""
+	if to.Name != "" {
+		name += crossSessionArrow
+		recipient = speakerStyle(to).Render(to.Name)
 	}
-	head := speakerStyle(a).MaxWidth(width).Render(name)
+	head := clip(speakerStyle(a).Render(name)+recipient, width)
 	return saidBlock(head, crossSessionBody(text, width), "", width, expanded)
 }
 

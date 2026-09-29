@@ -81,15 +81,15 @@ func TestRefusingAQuestionIsRecordedCancelledInTheRoom(t *testing.T) {
 // the fold might one day admit does not start drawing a stray line.
 func TestTheRoomDrawsAQuestionResolutionLine(t *testing.T) {
 	by := Agent{Name: "iris"}
-	answered := ansi.Strip(roomBlock(core.Event{Kind: core.KindSystem, Notice: core.NoticeQuestionAnswered}, by, roomWidth, false).text)
+	answered := ansi.Strip(roomBlock(core.Event{Kind: core.KindSystem, Notice: core.NoticeQuestionAnswered}, by, Agent{}, roomWidth, false).text)
 	if !strings.Contains(answered, "iris") || !strings.Contains(answered, resolvedAnswered) {
 		t.Errorf("the answered line does not name the agent and what happened: %q", answered)
 	}
-	cancelled := ansi.Strip(roomBlock(core.Event{Kind: core.KindSystem, Notice: core.NoticeQuestionCancelled}, by, roomWidth, false).text)
+	cancelled := ansi.Strip(roomBlock(core.Event{Kind: core.KindSystem, Notice: core.NoticeQuestionCancelled}, by, Agent{}, roomWidth, false).text)
 	if !strings.Contains(cancelled, resolvedCancelled) {
 		t.Errorf("the cancelled line does not say so: %q", cancelled)
 	}
-	if plain := roomBlock(core.Event{Kind: core.KindSystem, Text: "lifecycle"}, by, roomWidth, false).text; plain != "" {
+	if plain := roomBlock(core.Event{Kind: core.KindSystem, Text: "lifecycle"}, by, Agent{}, roomWidth, false).text; plain != "" {
 		t.Errorf("ordinary system chatter drew a line in the room: %q", plain)
 	}
 }
@@ -190,7 +190,7 @@ func TestTheRoomNamesWhatAPermissionAskWants(t *testing.T) {
 		Kind: core.KindPermissionRequest, RequestID: "r1",
 		Tool: &core.ToolCall{Name: "Bash", Display: "rm -rf build/"},
 	}
-	got := ansi.Strip(roomBlock(ev, Agent{Name: "sydney"}, roomWidth, false).text)
+	got := ansi.Strip(roomBlock(ev, Agent{Name: "sydney"}, Agent{}, roomWidth, false).text)
 	if !strings.Contains(got, "Bash") {
 		t.Errorf("a permission ask in the room does not name the tool: %q", got)
 	}

@@ -117,7 +117,7 @@ func TestAWorkflowEndingFoldsIntoARoomLineHeadedByTheAgent(t *testing.T) {
 	if len(lastRoom) != 1 {
 		t.Fatalf("the room admitted %d events across the run, want exactly 1 (the task_notification alone)", len(lastRoom))
 	}
-	rendered := roomBlock(lastRoom[0], Agent{ID: "s1", Name: "sydney"}, roomWidth, false)
+	rendered := roomBlock(lastRoom[0], Agent{ID: "s1", Name: "sydney"}, Agent{}, roomWidth, false)
 	for _, want := range []string{"sydney", "Workflow", `"count-lines"`, "finished"} {
 		if !strings.Contains(rendered.text, want) {
 			t.Errorf("the room line is missing %q:\n%s", want, rendered.text)
@@ -212,7 +212,7 @@ func TestAWorkflowRoomLineNeverOutgrowsTheColumn(t *testing.T) {
 		Workflow: &core.WorkflowUpdate{Error: "a long error line that goes on for quite a while explaining exactly what went wrong in great detail"},
 	}}
 	for _, w := range []int{minBlockWidth, 20, roomWidth, 120} {
-		b := roomBlock(ev, Agent{ID: "s1", Name: "sydney", Label: "a-very-long-branch-name-indeed"}, w, false)
+		b := roomBlock(ev, Agent{ID: "s1", Name: "sydney", Label: "a-very-long-branch-name-indeed"}, Agent{}, w, false)
 		for _, line := range strings.Split(b.text, "\n") {
 			if got := lipgloss.Width(line); got > w {
 				t.Errorf("width %d: a line measured %d: %q", w, got, line)

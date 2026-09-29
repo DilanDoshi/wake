@@ -132,9 +132,8 @@ func (a App) observe(sessionID string, ev core.Event) App {
 			// inDM: it is not the operator's own DM turn, so it belongs in the
 			// room whatever the receiver was last sent from. The receiver is this
 			// stream's own session (agent, resolved above), so the room heads the
-			// line "sender → recipient"; "" when unknown drops the arrow.
-			e.ToName = agent.Name
-			a = a.withRoom(a.room.Append(e, a.fleet.crossSpeaker(e.FromName)))
+			// line "sender → recipient"; an unnamed receiver drops the arrow.
+			a = a.withRoom(a.room.appendPeer(e, a.fleet.crossSpeaker(e.FromName), agent))
 		default:
 			// A DM-sent turn stays private only while its DM is drawn; once the
 			// reader has left it, its prose promotes to the room. Fleet.sending
