@@ -268,43 +268,8 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 			return next, cmd
 		}
 	}
-	// `@who /rename bob` is claude's own word, so it passes through to the agent
-	// like any message - and Wake mirrors it onto its handle for who, the room
-	// half of renameMirror's focused case, the mirror going with who's passthrough
-	// as sendDM's does. "" for every other draft, so an ordinary broadcast is
-	// still one command. See renameMirrorFor.
-	//
-	// r.mode is MentionDirect for any slash command now - route never widens a
-	// knob - so `@who /rename bob` reaches who alone and the mirror moves who's
-	// handle beside it, whatever the mention mode. A plain `@who hello` in open
-	// mode is MentionOpen and takes no mirror, which is right: it is a broadcast
-	// keeping the @name in the text, and no agent gets a leading /rename.
-	var mirrorID, mirror string
-	if r.mentioned && r.mode == MentionDirect {
-		mirrorID, mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)
-	}
 	a = a.clearDraft()
-	// A busy target takes the broadcast when its turn ends (queue.go), fromRoom so
-	// its held-DM echo reads `from the room`. The room's own line is drawn now
-	// regardless - you said it once, whoever is busy - so only the free targets are
-	// written and echoed to their DMs here; each frame carries its own stamped uuid.
-	var frames []rpc.Frame
-	var now tea.Cmd // the mirror, when its target takes the passthrough now
-	for _, id := range r.Targets {
-		msg := newQueued(r.Text, text, images, true)
-		if id == mirrorID {
-			msg.rename = mirror
-		}
-		if a.shouldQueue(id) {
-			a = a.enqueue(id, msg)
-			continue
-		}
-		a = a.markSent(id, msg)
-		if msg.rename != "" {
-			now = a.mirrorNow(id, msg.rename)
-		}
-		frames = append(frames, sendFrame(id, msg))
-	}
+	a, frames, now := a.roomSends(r, text, images)
 	// Echoed as it was typed, mention and all: the room is the record of who you
 	// said it to, chips included, while the agents get r.Text - already routed
 	// off the chip-stripped draft above, so it carries the images' words and not
@@ -320,6 +285,51 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 	}
 	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
 	return a, tea.Sequence(now, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
+}
+
+// roomSends takes a routed room message to each target, returning the frames
+// for the free ones and the `/rename` mirror when its target takes it now.
+//
+// `@who /rename bob` is claude's own word, so it passes through to the agent
+// like any message - and Wake mirrors it onto its handle for who, the room
+// half of renameMirror's focused case, the mirror going with who's passthrough
+// as sendDM's does. "" for every other draft, so an ordinary broadcast is
+// still one command. See renameMirrorFor.
+//
+// r.mode is MentionDirect for any slash command now - route never widens a
+// knob - so `@who /rename bob` reaches who alone and the mirror moves who's
+// handle beside it, whatever the mention mode. A plain `@who hello` in open
+// mode is MentionOpen and takes no mirror, which is right: it is a broadcast
+// keeping the @name in the text, and no agent gets a leading /rename.
+//
+// A busy target takes the broadcast when its turn ends (queue.go), fromRoom so
+// its held-DM echo reads `from the room`. The room's own line is drawn by the
+// caller regardless - you said it once, whoever is busy - so only the free
+// targets are written and echoed to their DMs here; each frame carries its own
+// stamped uuid.
+func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock) (App, []rpc.Frame, tea.Cmd) {
+	var mirrorID, mirror string
+	if r.mentioned && r.mode == MentionDirect {
+		mirrorID, mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)
+	}
+	var frames []rpc.Frame
+	var now tea.Cmd
+	for _, id := range r.Targets {
+		msg := newQueued(r.Text, text, images, true)
+		if id == mirrorID {
+			msg.rename = mirror
+		}
+		if a.shouldQueue(id) {
+			a = a.enqueue(id, msg)
+			continue
+		}
+		a = a.markSent(id, msg)
+		if msg.rename != "" {
+			now = a.mirrorNow(id, msg.rename)
+		}
+		frames = append(frames, sendFrame(id, msg))
+	}
+	return a, frames, now
 }
 
 // clearDraft empties the focused composer, re-reads where ↵ would now send, and
