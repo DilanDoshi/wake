@@ -129,16 +129,20 @@ func (a *agent) rename(names *nameRegistry, requested string, held bool) error {
 		return errors.New(renameManager)
 	}
 	to, err := names.rename(a.name, requested)
-	if err != nil {
+	if err != nil && !held {
 		return err
 	}
-	a.name = to
+	if err == nil {
+		a.name = to
+	}
 	// A /name over a held want - another window's, during the passthrough's
 	// round trip - keeps it held: that reply decides what, if anything, to send.
+	// A refused mirror holds too, since its passthrough renames claude anyway:
+	// the reply then owes claude Wake's unchanged name.
 	a.renameHeld = a.renameHeld || held
 	a.probeWanted[renameProbe] = true
 	a.tryProbeLocked(renameProbe)
-	return nil
+	return err
 }
 
 // relabel says what a session is working on.

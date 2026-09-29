@@ -325,3 +325,28 @@ func TestAVariantForTheOperatorsRenameIsNotChasedOverAProcess(t *testing.T) {
 		t.Fatalf("claude was sent %q, want only the operator's /rename clash", got)
 	}
 }
+
+// Over a real process, branch review L3: alice and bob are both live and
+// `/rename bob` is typed in alice's DM. The mirror is refused as before, the
+// passthrough renames claude, and one /rename alice brings it back.
+func TestARefusedMirrorEndsWithClaudeAtWakesName(t *testing.T) {
+	fakeClaudeOnPath(t, "renamesync")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alice")
+	c.spawn(idBeta, "bob")
+
+	c.send(rpc.Frame{Kind: rpc.FrameRename, SessionID: idAlpha, Text: "bob", SelfRenames: true})
+	if why := c.awaitErrorFor(idAlpha); !strings.Contains(why, "already called") {
+		t.Fatalf("the mirror onto bob was refused with %q, want the held-name refusal", why)
+	}
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/rename bob"})
+	c.awaitEvent(idAlpha, "Session renamed to: bob")
+	askRenames(c, idAlpha)
+	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 2 [bob alice]") {
+		t.Fatalf("claude was sent %q, want the operator's /rename bob and then one /rename alice", got)
+	}
+	if name := sessionRow(c.status(), idAlpha).Name; name != "alice" {
+		t.Fatalf("Wake calls the agent %q, want alice", name)
+	}
+}

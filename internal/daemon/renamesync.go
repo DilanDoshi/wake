@@ -24,7 +24,11 @@ package daemon
 // behind any turn already in flight.
 // That want is held: it never fires until claude's reply to the passthrough
 // releases it. A /name over a held want - another window's, during that round
-// trip - moves its target and stays held, and the release decides.
+// trip - moves its target and stays held, and the release decides. A refused
+// mirror is held too, since the passthrough renames claude regardless, and the
+// release then owes claude Wake's unchanged name.
+// A passthrough unwritten after its mirror leaves the hold unreleased, but only
+// a window whose connection is already dead fails that write.
 
 import "github.com/DilanDoshi/wake/internal/core"
 

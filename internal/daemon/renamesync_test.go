@@ -535,3 +535,77 @@ func TestAVariantForTheOperatorsRenameIsNeverChased(t *testing.T) {
 		t.Fatalf("claude chose bob-2 for the operator's /rename bob, and Wake queued %q", got)
 	}
 }
+
+// A refused mirror (branch review L3): alice and bob are both in the fleet and
+// `/rename bob` is typed in alice's DM. Wake keeps alice and refuses, but the
+// passthrough renames claude, so the refusal still holds the want and claude's
+// reply brings it back with exactly one /rename alice.
+func TestARefusedMirrorBringsClaudeBackToWakesName(t *testing.T) {
+	r := newNameRegistry()
+	for _, name := range []string{"alice", "bob"} {
+		if _, err := r.claim(name); err != nil {
+			t.Fatalf("claim %s: %v", name, err)
+		}
+	}
+	a := newAgent(idAlpha, "alice", "dev-1", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
+	if err := a.rename(r, "bob", true); err == nil {
+		t.Fatal("a mirror onto bob, a name the fleet holds, was accepted")
+	}
+
+	a.noteSent()
+	a.noteRenameSent("/rename bob")
+	streamed(a, renamedEvent("bob"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: bob", LocalCommand: true})
+	a.probeIfWanted()
+	a.probeIfWanted()
+	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename alice"}) {
+		t.Fatalf("claude took bob past a refused mirror and Wake queued %q, want one [/rename alice]", got)
+	}
+	if text := a.renameWrite(); text != "/rename alice" {
+		t.Fatalf("the probe wrote %q, want /rename alice", text)
+	}
+	a.incProbe(renameProbe)
+	streamed(a, renamedEvent("alice"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: alice", LocalCommand: true})
+	a.probeIfWanted()
+	if got := queuedRenames(a); len(got) != 0 {
+		t.Fatalf("with both names alice Wake queued %q", got)
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.name != "alice" || a.claudeName != "alice" {
+		t.Fatalf("Wake is %q and claude %q, want both alice", a.name, a.claudeName)
+	}
+}
+
+// A refused mirror arms nothing where claude's name is not Wake's to keep: the
+// manager, and an agent that is not live.
+func TestARefusedMirrorOfTheManagerOrAParkedAgentArmsNothing(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		agent func() *agent
+	}{
+		{name: "manager", agent: func() *agent {
+			return newAgent(idAlpha, core.ManagerName, "", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
+		}},
+		{name: "parked", agent: func() *agent {
+			a := effortAgent(t)
+			a.beginPark()
+			a.finish(nil)
+			a.markParked()
+			return a
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			a := tc.agent()
+			if err := a.rename(newNameRegistry(), "bob", true); err == nil {
+				t.Fatal("the mirror was accepted")
+			}
+			a.mu.Lock()
+			defer a.mu.Unlock()
+			if a.renameHeld || a.probeWanted[renameProbe] {
+				t.Fatalf("a refused %s mirror armed the want: held %v, wanted %v", tc.name, a.renameHeld, a.probeWanted[renameProbe])
+			}
+		})
+	}
+}
