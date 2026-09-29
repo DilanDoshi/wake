@@ -97,3 +97,14 @@ func TestARowOpeningWithAStyledSpanStaysABreak(t *testing.T) {
 		t.Errorf("a row opening with bold was joined, which the rule cannot prove safe:\n%q", got)
 	}
 }
+
+// A blank line inside a fence is still the fence: glamour paints it, which is
+// what tells it from the plain blank row between two blocks. Splitting the run
+// there stripped the code after it to column 0.
+func TestABlankLineInsideAFenceKeepsTheCodesIndent(t *testing.T) {
+	src := "## Head\n\n```python\ndef f():\n    return 1\n\n    x = 2\n\n        y\n```"
+	want := "Head\n\ndef f():\n    return 1\n\n    x = 2\n\n        y"
+	if got := unwrapped(Markdown(src, 40)); got != want {
+		t.Errorf("copy is\n%q\nwant\n%q", got, want)
+	}
+}

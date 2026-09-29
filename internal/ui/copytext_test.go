@@ -84,8 +84,11 @@ func TestCopyingAnAgentsEmailGivesBackItsParagraphs(t *testing.T) {
 	m, _ := room.Update(eventMsg{Event: ev})
 	room = m.(App)
 	tr = room.transcriptIn("")
-	got = copyOf(t, room, "", lineHolding(t, tr, "Hi Sam"), 0, tr.lines.len()-1, tr.width-1)
-	if want := emailCopied; got != want {
+	// From the speaker's name down: the head is a row of its own, never prose.
+	head := lineHolding(t, tr, "Hi Sam") - 1
+	name := strings.TrimSpace(ansi.Strip(tr.lines.at(head)))
+	got = copyOf(t, room, "", head, 0, tr.lines.len()-1, tr.width-1)
+	if want := name + "\n" + emailCopied; got != want {
 		t.Errorf("the room copied\n%q\nwant\n%q", got, want)
 	}
 }

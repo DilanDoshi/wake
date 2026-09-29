@@ -55,7 +55,6 @@ func (t transcript) rejoins(lines []string, first int) []render.Rejoin {
 		out[i] = hardBreak
 	}
 	for from, span := range t.texts {
-		from = max(from, t.lines.first())
 		if span.end <= first || from >= first+len(lines) {
 			continue
 		}

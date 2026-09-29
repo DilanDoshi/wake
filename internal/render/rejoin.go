@@ -48,9 +48,10 @@ func Rejoins(rows []string) []Rejoin {
 }
 
 // runLead is the indent shared by the unreflowable rows around i - a code
-// block's, say - so the code's own indentation survives the copy.
+// block's, say - so the code's own indentation survives the copy. A blank row
+// glamour painted is inside a fence and joins the run; a plain one ends it.
 func runLead(rows []string, i int) int {
-	kept := func(r string) bool { return !blankRow(r) && !reflowable(r) }
+	kept := func(r string) bool { return strings.TrimSpace(r) != "" && !reflowable(r) }
 	if !kept(rows[i]) {
 		return 0
 	}
@@ -63,12 +64,15 @@ func runLead(rows []string, i int) int {
 	}
 	lead := -1
 	for _, r := range rows[from : to+1] {
+		if blankRow(r) {
+			continue
+		}
 		plain := ansi.Strip(r)
 		if n := len(plain) - len(strings.TrimLeft(plain, " ")); lead < 0 || n < lead {
 			lead = n
 		}
 	}
-	return lead
+	return max(lead, 0)
 }
 
 // wrapSep is what a wrap between prev and next consumed, judged the way
