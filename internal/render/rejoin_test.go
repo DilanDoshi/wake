@@ -108,3 +108,14 @@ func TestABlankLineInsideAFenceKeepsTheCodesIndent(t *testing.T) {
 		t.Errorf("copy is\n%q\nwant\n%q", got, want)
 	}
 }
+
+// Only the renderer's own lead is layout. A snippet whose every line is
+// indented in the source keeps that indent; the fence strips the document
+// margin and its own, nothing more.
+func TestAFenceKeepsIndentEveryLineShares(t *testing.T) {
+	src := "```python\n    if ready:\n        ship()\n```"
+	want := "    if ready:\n        ship()"
+	if got := unwrapped(Markdown(src, 40)); got != want {
+		t.Errorf("copy is\n%q\nwant\n%q", got, want)
+	}
+}

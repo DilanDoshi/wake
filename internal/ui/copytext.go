@@ -59,6 +59,9 @@ func (t transcript) rejoins(lines []string, first int) []render.Rejoin {
 			continue
 		}
 		rows := t.lines.slice(from, span.end)
+		if clipped(rows, t.width) {
+			continue // the rows hold text the pane never drew
+		}
 		var js []render.Rejoin
 		switch span.how {
 		case markdownRows:
@@ -73,6 +76,17 @@ func (t transcript) rejoins(lines []string, first int) []render.Rejoin {
 		}
 	}
 	return out
+}
+
+// clipped reports a row wider than the pane, which draws it cut: a block
+// rendered at minBlockWidth in a narrower pane.
+func clipped(rows []string, width int) bool {
+	for _, r := range rows {
+		if ansi.StringWidth(r) > width {
+			return true
+		}
+	}
+	return false
 }
 
 // typedRejoins matches the rows shadedOwn drew back to the text they came from:

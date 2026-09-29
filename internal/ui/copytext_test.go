@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/render"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
@@ -137,5 +138,20 @@ func TestCopyingYourOwnTurnGivesBackWhatYouTyped(t *testing.T) {
 	got = copyOf(t, dm, "s1", head, 0, tr.lines.len()-1, tr.width-1)
 	if want := label + "\n" + typedEmail; got != want {
 		t.Errorf("the DM copied\n%q\nwant\n%q", got, want)
+	}
+}
+
+// Below minBlockWidth a block is drawn wider than its pane and clipped, so the
+// rows hold text nobody saw. Rejoining their visible halves would present the
+// gap as continuous text; the span copies as drawn instead.
+func TestAClippedBlockCopiesAsDrawn(t *testing.T) {
+	para := render.Markdown(strings.Repeat("words that wrap ", 8), minBlockWidth)
+	tr := transcript{}.sized(minBlockWidth/2, 20).add(block{text: para, copied: markdownRows})
+	m := marked{from: point{line: 0}, to: point{line: tr.lines.len() - 1, col: lineEnd}}
+	lines, first := tr.selectionLines(m)
+	for i, j := range tr.rejoins(lines, first) {
+		if j != hardBreak {
+			t.Errorf("row %d of a clipped block rejoins as %+v, want it kept as drawn", i, j)
+		}
 	}
 }
