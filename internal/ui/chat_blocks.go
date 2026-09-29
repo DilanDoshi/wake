@@ -149,11 +149,11 @@ func roomBlock(ev core.Event, a Agent, width int, expanded bool) block {
 	}
 	switch ev.Kind {
 	case core.KindAssistantText:
-		return block{text: agentSaid(ev.Text, ev.OutputTokens, a, w, expanded)}
+		return block{text: agentSaid(ev.Text, ev.OutputTokens, a, w, expanded), copied: markdownRows}
 	case core.KindCrossSession:
 		return block{text: crossSaid(ev.Text, ev.ToName, a, w, expanded)}
 	case core.KindUserText:
-		return block{text: youSaid(ev.Text, w)}
+		return block{text: youSaid(ev.Text, w), copied: typedRows, typed: ev.Text}
 	case core.KindTurnEnd:
 		return block{text: mutedLine(speaker(a)+markerSep+finishedMarker, w)}
 	case core.KindPermissionRequest:
