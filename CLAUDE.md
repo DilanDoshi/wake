@@ -475,9 +475,13 @@ first, and read it.
   send (mouse clicks, ⇧+arrows) is a still from the pty harness, and a `## Screenshots` section keeps
   the before/after pair (`main` build vs branch build doing the same thing). A change with nothing
   visible says so, with the reason.
-  - Record with VHS against the real `wake` and a scripted fake `claude` on a shim `PATH`
-    (`demo/agent/claude`). Never a live LLM or the owner's fleet: scratch `HOME`, and a **fresh
-    `WAKE_SOCKET` directory per take** (a reused one inherits orphans and hangs `wake new`).
+  - **Videos must be live, not mocked, wherever possible** (owner's rule, 2026-09-28): record with
+    VHS against the real `wake` driving a real `claude`. Fall back to the scripted fake `claude` on
+    a shim `PATH` (`demo/agent/claude`) only for a flow a live session cannot produce on demand (an
+    API failure, a specific ask), and say in the PR body which clips are scripted and why. Never the
+    owner's fleet: scratch `HOME` (log the real `claude` in there without copying the owner's
+    credentials into the repo or the frames), and a **fresh `WAKE_SOCKET` directory per take** (a
+    reused one inherits orphans and hangs `wake new`).
   - Use a neutral project path (e.g. `/tmp/<name>`) — a home path puts the operator's name in the image.
   - Record the videos against the PR's final head, not an earlier commit, and check their frames by eye.
   - Host videos and images on an orphan branch `pr-assets/<head-branch>` (head branch verbatim, one
