@@ -155,3 +155,23 @@ func TestAClippedBlockCopiesAsDrawn(t *testing.T) {
 		}
 	}
 }
+
+// A reply that opens with a fence sits directly under the speaker's name, with
+// no blank row between. The name is not the document, so it must not pull the
+// fence's shared lead to zero and leave glamour's margin on the code.
+func TestARoomReplyOpeningWithAFenceCopiesItsCode(t *testing.T) {
+	fresh(t)
+	room := NewRoomApp(nil, Stream{}, nil)
+	room.layout.ShowGroups, room.layout.ShowRoster = false, false
+	room = resized(t, room, 70, 40)
+	m, _ := room.Update(eventMsg{Event: core.Event{Kind: core.KindAssistantText, SessionID: "s1",
+		Text: "```python\ndef f():\n    return 1\n```"}})
+	room = m.(App)
+	tr := room.transcriptIn("")
+	head := lineHolding(t, tr, "def f") - 1
+	name := strings.TrimSpace(ansi.Strip(tr.lines.at(head)))
+	got := copyOf(t, room, "", head, 0, tr.lines.len()-1, tr.width-1)
+	if want := name + "\ndef f():\n    return 1"; got != want {
+		t.Errorf("the room copied\n%q\nwant\n%q", got, want)
+	}
+}

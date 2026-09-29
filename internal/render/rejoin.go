@@ -27,12 +27,13 @@ type Rejoin struct {
 func Rejoins(rows []string) []Rejoin {
 	out := make([]Rejoin, len(rows))
 	cont := -1 // the lead the group above continues at; -1 outside prose
+	leads := runLeads(rows)
 	for i, row := range rows {
 		lead := leadSpaces(row)
 		switch {
 		case !reflowable(row):
 			cont = -1
-			out[i] = Rejoin{Sep: "\n", Lead: runLead(rows, i)}
+			out[i] = Rejoin{Sep: "\n", Lead: leads[i]}
 		case lead == cont && !opensItem(row):
 			out[i] = Rejoin{Sep: wrapSep(rows[i-1], row), Lead: lead}
 		default:
@@ -54,33 +55,45 @@ func hangOf(row string, lead int) int {
 	return hang
 }
 
-// runLead is the indent shared by the unreflowable rows around i - a code
-// block's, say - capped at a fence's own layout (the document margin and the
-// block's), so indentation the code itself shares survives the copy. A blank
-// row glamour painted is inside a fence and joins the run; a plain one ends it.
-func runLead(rows []string, i int) int {
-	kept := func(r string) bool { return strings.TrimSpace(r) != "" && !reflowable(r) }
-	if !kept(rows[i]) {
-		return 0
-	}
-	from, to := i, i
-	for from > 0 && kept(rows[from-1]) {
-		from--
-	}
-	for to+1 < len(rows) && kept(rows[to+1]) {
-		to++
-	}
-	lead := -1
-	for _, r := range rows[from : to+1] {
-		if blankRow(r) {
+// runLeads is, for each row, the indent shared by the unreflowable run it sits
+// in - a code block's, say - capped at a fence's own layout (the document margin
+// and the block's), so indentation the code itself shares survives the copy.
+// One pass, so a long fence costs a copy linear time.
+func runLeads(rows []string) []int {
+	leads := make([]int, len(rows))
+	for i := 0; i < len(rows); {
+		if !inRun(rows[i]) {
+			i++
 			continue
 		}
-		plain := ansi.Strip(r)
-		if n := len(plain) - len(strings.TrimLeft(plain, " ")); lead < 0 || n < lead {
-			lead = n
+		j, lead := i, 2*int(defaultMargin)
+		for ; j < len(rows) && inRun(rows[j]); j++ {
+			if !blankRow(rows[j]) {
+				lead = min(lead, plainLead(rows[j]))
+			}
 		}
+		for k := i; k < j; k++ {
+			leads[k] = lead
+		}
+		i = j
 	}
-	return min(max(lead, 0), 2*int(defaultMargin))
+	return leads
+}
+
+// inRun reports a row that shares a run's lead. A blank row glamour painted is
+// inside a fence; a plain blank ends the run, and so does a row outside the
+// document margin - the speaker's name a room reply sits under.
+func inRun(r string) bool {
+	if strings.TrimSpace(r) == "" || reflowable(r) {
+		return false
+	}
+	return blankRow(r) || plainLead(r) >= int(defaultMargin)
+}
+
+// plainLead is a styled row's leading spaces once its escapes are gone.
+func plainLead(r string) int {
+	plain := ansi.Strip(r)
+	return len(plain) - len(strings.TrimLeft(plain, " "))
 }
 
 // wrapSep is what a wrap between prev and next consumed, judged the way
