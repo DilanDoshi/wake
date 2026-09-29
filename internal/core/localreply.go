@@ -86,37 +86,29 @@ func EffortFromModelReply(text string) (string, bool) {
 	return level, true
 }
 
-// A /list-agents reply lists every other Claude session on the machine
-// (testdata/stream/list-agents.jsonl, list-agents-bare.jsonl):
-//
-//	This session: <name> [<short-id>] (the name other sessions use to message it)
+// A bare /list-agents reply lists every other Claude session on the machine
+// (testdata/stream/list-agents-bare.jsonl):
 //
 //	Other Claude sessions (<n>):
 //	  [<state>]  ·  <name>  ·  <cwd>  ·  started <age>
 //
-// or, with nobody else, one line opening with listAgentsNone. A live session's
-// opens with the self line; a bare one-shot's registers no inbox and has none.
-// Claude's docs name subagent and teammate sections too; any `<Title> (<n>):`
-// section of n indented rows is counted and skipped, so a background subagent
-// does not hide the machine's sessions. It is human text rather than a schema,
-// so any other line refuses the reply whole: a wrong row is worse than none.
+// or, with nobody else, one line opening with listAgentsNone. Claude's docs
+// name subagent and teammate sections too; a bare one-shot has neither, but
+// any `<Title> (<n>):` section is counted and skipped as tolerance of CLI drift.
+// It is human text rather than a schema, so any other line - a live session's
+// self line included - refuses the reply whole: a wrong row is worse than none.
 const (
-	listAgentsSelf   = "This session: "
 	listAgentsOthers = "Other Claude sessions"
 	listAgentsNone   = "No subagents, teammates or other Claude sessions"
 	listAgentsColumn = "  ·  "
 )
 
-// listAgentsSelfName is the name and short id opening the self line, and
-// listAgentsHeader a section's unindented title and count.
-var (
-	listAgentsSelfName = regexp.MustCompile(`^.+? \[[0-9a-f]+\]`)
-	listAgentsHeader   = regexp.MustCompile(`^(\S.*) \(([0-9]+)\):$`)
-)
+// listAgentsHeader is a section's unindented title and count.
+var listAgentsHeader = regexp.MustCompile(`^(\S.*) \(([0-9]+)\):$`)
 
-// PeersFromListAgents reads the other sessions out of a /list-agents reply, in
-// the order it lists them, from either form. ok is false, with nothing else,
-// for any line it does not recognise.
+// PeersFromListAgents reads the other sessions out of a bare /list-agents
+// reply, in the order it lists them. ok is false, with nothing else, for any
+// line it does not recognise.
 func PeersFromListAgents(text string) (peers []Peer, ok bool) {
 	var lines []string
 	for line := range strings.Lines(strings.TrimSpace(text)) {
@@ -124,12 +116,6 @@ func PeersFromListAgents(text string) (peers []Peer, ok bool) {
 	}
 	if len(lines) == 0 {
 		return nil, false
-	}
-	if rest, isSelf := strings.CutPrefix(lines[0], listAgentsSelf); isSelf {
-		if !listAgentsSelfName.MatchString(rest) {
-			return nil, false
-		}
-		lines = lines[1:]
 	}
 	if onlyNoPeers(lines) {
 		return nil, true

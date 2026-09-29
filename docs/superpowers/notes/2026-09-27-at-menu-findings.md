@@ -6,7 +6,6 @@ The behaviour of Claude Code's own `@` typeahead is from its public docs (cross-
 | Fixture | What it is |
 |---|---|
 | `testdata/stream/list-agents.jsonl` | `wf-gamma` sends `/list-agents`, `/rename wf-delta`, `/list-agents` with two idle peers (`wf-alpha`, `wf-beta`) |
-| `testdata/stream/list-agents-empty.jsonl` | `/list-agents` with no peers |
 | `testdata/stream/list-agents-bare.jsonl` | a `--bare --no-session-persistence` one-shot `/list-agents` with two idle peers |
 | `testdata/stream/list-agents-bare-empty.jsonl` | the same one-shot with no peers |
 

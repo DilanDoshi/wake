@@ -409,8 +409,8 @@ var claudeWireVocabulary = wordSet([]string{
 	// The bare /list-agents and /rename replies' rendered English, which
 	// localreply.go reads the machine's sessions and a new name out of. Policed
 	// for "Current model:"'s reason, and each is a longer value's leading or
-	// inner phrase, so all four are in embeddedMarkers below.
-	"This session: ", "Other Claude sessions",
+	// inner phrase, so all three are in embeddedMarkers below.
+	"Other Claude sessions",
 	"No subagents, teammates or other Claude sessions", "Session renamed to: ",
 
 	// Claude Code's /goal lifecycle, the rendered English wire.go's goalOp reads.
@@ -686,7 +686,9 @@ var notNamedByTheAirlock = map[string]string{
 // localreply.go reads - "This session: ", "Other Claude sessions", "No
 // subagents, teammates or other Claude sessions" and "Session renamed to: ".
 // Recorded in list-agents.jsonl and list-agents-empty.jsonl.
-const policedWordCount = 208
+// 208 → 207: "This session: " goes with the live-session self line, which the
+// bare one-shot never prints; the empty form is list-agents-bare-empty.jsonl's.
+const policedWordCount = 207
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -761,11 +763,10 @@ var notWireVocabulary = wordSet([]string{
 	// Wake matches on, not wire words.
 	"[", "]", ":",
 
-	// localreply.go's delimiter and patterns: a /list-agents row's column
-	// separator, the self line's name and short id, and a section
-	// header's title and count. Punctuation and Wake's construction; the
-	// phrases are policed.
-	"  ·  ", `^.+? \[[0-9a-f]+\]`, `^(\S.*) \(([0-9]+)\):$`,
+	// localreply.go's delimiter and pattern: a /list-agents row's column
+	// separator and a section header's title and count. Punctuation and
+	// Wake's construction; the phrases are policed.
+	"  ·  ", `^(\S.*) \(([0-9]+)\):$`,
 })
 
 func wordSet(words []string) map[string]bool {
@@ -1071,8 +1072,7 @@ var embeddedMarkers = map[string]bool{
 	"Goal cleared: ":      true,
 	"Stop hook feedback:": true,
 	// The /list-agents and /rename replies' phrases, inside a result value.
-	"This session: ":        true,
-	"Other Claude sessions": true,
+	"Other Claude sessions":                            true,
 	"No subagents, teammates or other Claude sessions": true,
 	"Session renamed to: ":                             true,
 }
