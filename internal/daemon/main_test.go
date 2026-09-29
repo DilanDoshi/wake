@@ -44,6 +44,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/DilanDoshi/wake/internal/core"
 )
 
@@ -679,9 +681,27 @@ func fakeName(sid string) int {
 func fakeArgv(sid string) int {
 	emitText(sid, "argv: "+strings.Join(os.Args, " "))
 	emitResult(sid)
-	for range stdinLines() {
+	for line := range stdinLines() {
+		if strings.Contains(line, clearCommand) {
+			sid = clearMemory(sid)
+		}
 	}
 	return 0
+}
+
+// clearCommand starts a new conversation, the way claude's own /clear does.
+const clearCommand = "/clear"
+
+// clearMemory is /clear in claude's recorded shape (slash-commands.jsonl): a
+// reset under the id that dies, whose new_conversation_id is NOT the successor,
+// then an init and a zero-turn result under the successor. It returns the
+// successor, which starts with no memory.
+func clearMemory(dying string) string {
+	successor := uuid.NewString()
+	fmt.Printf(`{"type":"conversation_reset","session_id":%q,"new_conversation_id":%q}`+"\n", dying, uuid.NewString())
+	emitInit(successor)
+	emitResult(successor)
+	return successor
 }
 
 // fakeDeaf never reads its stdin, so it outlives the daemon that spawned it.

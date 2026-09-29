@@ -5,8 +5,8 @@ package ui
 //
 // A run is counted at press, on one cell and one surface - the same pane, the
 // same query box, the same chrome - within multiClickWindow of the press before
-// it, and any drag ends it. It is the only timer in selection, and it counts clicks rather
-// than telling a click from a drag, which head != anchor still does alone. The
+// it, and any drag ends it. Its timer counts clicks rather than telling a
+// click from a drag, which head != anchor still does alone. The
 // first click of a run does whatever a click does where it lands - opens a
 // fold, places the caret, opens a roster row - and only the presses after it
 // select. A run's selection is a span, so a one-character word is a selection

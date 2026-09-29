@@ -413,10 +413,11 @@ var notInTheStatusReport = map[string]string{
 	"Model":          "the model id observed on the session's init frame, the operator's status-bar chrome and not a fact this surface can act on: there is no model verb here, and it rides the report only so a client that attached without witnessing an init can still name the model. ConfirmedModel beside it is kept out for the same reason",
 	"PRs":            "the pull requests this session opened, which is the operator's status bar and nothing this surface can act on: there is no PR verb here, and the numbers are scraped from an agent's own tool output (agentAuthored), so they are somebody else's words with nothing for a manager to do with them. It rides the report only so a reattached client can draw the segment",
 	"ContextTokens":  "how full the context is, the operator's status bar and not a fact this surface acts on: there is no /compact or /clear verb here, and it rides the report only so a client that never saw the result frame it comes on can still draw the ctx segment. Unlike Budget it is a live measurement rather than a cap with no progress, but it is still nothing a manager holds a verb for",
+	"Conversation":   "the claude conversation a /clear moved this session onto, which a wake resumes and a client follows. It is a second UUID for one agent, and the manager addresses agents by ID alone - handing it another id for the same agent invites sending to the wrong one, with no verb here that needs it",
 	"ContextWindow":  "the window the context figure is a percentage of, ContextTokens' other half and out for its reason: it rides the report only so a client can compute ctx, and no verb here acts on it",
 }
 
-const notInTheStatusReportCount = 11
+const notInTheStatusReportCount = 12
 
 // agent_status is the daemon's facts, and which facts is a decision that
 // should fail loudly when rpc.SessionStatus grows a field.

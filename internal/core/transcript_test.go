@@ -146,3 +146,23 @@ func TestAMalformedTranscriptLineIsReported(t *testing.T) {
 		t.Error("a malformed line decoded without error: a transcript half-read is a conversation missing turns nobody can see are missing")
 	}
 }
+
+// A background task's completion note is injected into the conversation as a
+// user line, and on disk it carries origin.kind "task-notification". Live, Wake
+// never draws it; restored, it came back as a turn the operator typed. Dropped
+// here, and only on the marker: the same text with no origin is a typed turn.
+func TestATaskNotificationTranscriptLineIsDropped(t *testing.T) {
+	const line = `{"type":"user","origin":{"kind":"task-notification"},"message":{"role":"user","content":"<task-notification>\n<task-id>b1</task-id>\n<status>completed</status>\n</task-notification>"}}`
+	events, err := DecodeTranscriptLine([]byte(line))
+	if err != nil {
+		t.Fatalf("decode: %v", err)
+	}
+	if len(events) != 0 {
+		t.Errorf("a task-notification line produced %d events: it is claude's note that a task ended, not a turn the operator typed", len(events))
+	}
+
+	events, err = DecodeTranscriptLine([]byte(strings.Replace(line, `"origin":{"kind":"task-notification"},`, "", 1)))
+	if err != nil || len(events) == 0 {
+		t.Errorf("the same line without the origin marker produced %d events (err=%v)", len(events), err)
+	}
+}

@@ -215,6 +215,9 @@ type agent struct {
 	// under, which is the one its transcript is named after. Equal to the
 	// agent's own id until a /clear mints a new one. See observe.
 	claudeID string
+	// endedIDs is every id a /clear ended in this process, none of which a late
+	// frame still carrying it may make current again.
+	endedIDs map[string]bool
 
 	// pending is every ask this agent is blocked on, oldest first. A slice
 	// because concurrent asks are real - parallel tool calls, or two subagents
@@ -326,6 +329,31 @@ func (a *agent) runningIn() string {
 	return a.dir
 }
 
+// conversation is the conversation claude is writing now - what a park records,
+// a wake resumes and a fork copies. The agent's own id until a /clear mints
+// another, and only an id Wake could have minted: it comes off the child's
+// stdout and reaches an argv and the park book.
+func (a *agent) conversation() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.conversationLocked()
+}
+
+// midClear reports the gap between a /clear's reset and the first frame under
+// its successor, when the conversation this agent is writing is not yet known.
+func (a *agent) midClear() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.claudeID == "" && len(a.endedIDs) > 0
+}
+
+func (a *agent) conversationLocked() string {
+	if mintedByWake(a.claudeID) {
+		return a.claudeID
+	}
+	return a.id
+}
+
 // observe records what one event says about this session's liveness.
 func (a *agent) observe(ev core.Event) {
 	a.mu.Lock()
@@ -339,7 +367,7 @@ func (a *agent) observe(ev core.Event) {
 	// a fresh silence is worth asking about promptly.
 	a.probeEvery, a.probeAfter = 0, time.Time{}
 
-	if ev.SessionID != "" && ev.SessionID != a.claudeID {
+	if ev.SessionID != "" && ev.SessionID != a.claudeID && !a.endedIDs[ev.SessionID] {
 		// Claude's own id for this conversation, which is what its transcript
 		// is named after - the agent's own until a /clear mints a new one.
 		// Re-keyed on session_id changing between events, which is the rule
@@ -450,6 +478,10 @@ func (a *agent) observe(ev core.Event) {
 		// memory was cleared. The successor is not on this frame - it arrives on
 		// the next one - so this only forgets, and the arm below relearns.
 		a.claudeID = ""
+		if a.endedIDs == nil {
+			a.endedIDs = map[string]bool{}
+		}
+		a.endedIDs[ev.SessionID] = true
 		// The context figure describes the conversation /clear just emptied, so
 		// the used half goes with it - the UI's fleet.go reset. The window stays:
 		// the model, and so its window, is unchanged.

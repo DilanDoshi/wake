@@ -31,8 +31,10 @@ func (s *server) fleet() rpc.Status {
 	st.Sessions = append(st.Sessions, s.recent...)
 	s.mu.Unlock()
 
+	held := make(map[string]bool, len(agents))
 	for _, a := range agents {
 		st.Sessions = append(st.Sessions, a.snapshot())
+		held[a.conversation()] = true
 	}
 	sortSessions(st.Sessions)
 	st.Teams = s.orderTeams(st.Sessions)
@@ -41,7 +43,13 @@ func (s *server) fleet() rpc.Status {
 	// lock and holds no agent - and reported by a *running* daemon rather than
 	// only by FleetOnDisk, because that is what makes /resume work in a room
 	// that has been open since before anything was parked.
-	st.Parked = parkedStatuses(s.parked.records())
+	// A ⌃C row is already in Sessions, so its own record is not listed again:
+	// /resume all would send two wakes for one conversation.
+	for _, p := range parkedStatuses(s.parked.records()) {
+		if !held[p.ID] {
+			st.Parked = append(st.Parked, p)
+		}
+	}
 	sortSessions(st.Parked)
 	return st
 }

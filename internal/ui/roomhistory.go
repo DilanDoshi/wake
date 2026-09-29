@@ -23,6 +23,8 @@ package ui
 // Agent per session, which is the same pure function App.observe uses.
 
 import (
+	"maps"
+	"slices"
 	"sort"
 	"time"
 
@@ -565,4 +567,19 @@ func broadcastRuns(lines []roomLine) [][]int {
 		}
 	}
 	return runs
+}
+
+// roomAskedAs carries what the room holds for an agent's old id onto the id a
+// wake re-keyed it under. The seed restored its current conversation under the
+// old id already, so asking again would draw it twice and read every private
+// turn as a public one (the broadcast rule counts it in two transcripts).
+func (a App) roomAskedAs(from, to string) App {
+	at, asked := a.roomAsk.at[from]
+	if !asked && a.room.linesFor(from) == 0 {
+		return a
+	}
+	next := roomAsk{at: maps.Clone(a.roomAsk.at), pending: slices.Clone(a.roomAsk.pending)}
+	next.at[to] = at
+	a.roomAsk = next
+	return a
 }
