@@ -245,3 +245,35 @@ func TestADragOnTheQueryBarLeavesNoHighlight(t *testing.T) {
 			"the rows under a transcript are not lines of it.\n%s", before, after, s.dump())
 	}
 }
+
+// A drag brought to the window's top row and held there keeps scrolling the
+// conversation back, though the pointer sends nothing more: the pane starts on
+// the first row, so there is no row above it to drag to, and a resting pointer
+// makes no motion. Before edgescroll.go it scrolled nothing at all.
+func TestADragHeldAtTheTopOfTheWindowKeepsScrollingBack(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWakeInAConversation(t, 100, 30)
+	s.await("ready")
+	for i := range 15 {
+		s.send(fmt.Sprintf("line-%02d\r", i))
+		s.await(fmt.Sprintf("%sline-%02d", heardPrefix, i))
+	}
+	s.settle()
+	first := heardPrefix + "line-00"
+	if s.rowOf(first) >= 0 {
+		t.Fatalf("the first reply is still on screen, so there is nothing to scroll back to.\n%s", s.dump())
+	}
+	last := heardPrefix + "line-14"
+	row := s.rowOf(last)
+	x := s.colOf(row, last)
+	if row <= 0 || x < 0 {
+		t.Fatalf("no reply on screen below the top row to start a drag from.\n%s", s.dump())
+	}
+
+	s.send(fmt.Sprintf("\x1b[<0;%d;%dM", x+1, row+1)) // press
+	s.send(fmt.Sprintf("\x1b[<32;%d;1M", x+1))        // one motion onto the top row, then rest
+	// No release: it would copy the whole run onto this machine's clipboard.
+	s.await(first)
+}
