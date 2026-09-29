@@ -3319,11 +3319,15 @@ stepping into a directory is ⇥ on it and "a recursive scan of a repository per
 what cheap-to-leave-open prices at thirty". **The reversal answers the ruling rather than waiving
 it: the cost it priced was a walk per keystroke, and this is one bounded read per menu opening.**
 
-- **One index per opening.** When a menu that offers paths opens, one
-  `git -C <session cwd> ls-files -co --exclude-standard -z` runs as a `tea.Cmd` — one in flight at a
-  time, its answer tagged with its directory and dropped if nothing waits on it, held on the menu
-  (`pathMenu.index`) until the menu closes. A keystroke ranks what is held (`rankPaths`, one pass
-  keeping the best rows, about 1.3ms over 50,000 files on the draw goroutine, `BenchmarkRankPaths`).
+- **A conversation's only.** The room's `@` addresses the fleet; it keeps the one-directory listing
+  and runs no git.
+- **One index per opening.** When a conversation's menu that offers paths opens, one
+  `git -c core.fsmonitor=false -C <session cwd> ls-files -co --exclude-standard -z` runs as a
+  `tea.Cmd` — one in flight at a time, its answer tagged with its directory and dropped if nothing
+  waits on it, held on the menu (`pathMenu.index`) until the menu closes. A keystroke ranks what is
+  held (`rankPaths`, one pass keeping the best rows). At the bounds' worst case - 50,000 names at
+  the byte cap's 160 bytes a name, and 50,000 derived directories - that is about 3.8ms on the draw
+  goroutine (`BenchmarkRankPathsAtTheBounds`).
   **The rank is paid per change, never per event**: it is cached on the menu keyed on the query and
   the index's identity (`rankCache`), so a fleet report - `recompleted` runs on every one - reuses
   it. Git rather than a walk because it is the project's own answer to "which files": ignored build
@@ -3342,15 +3346,26 @@ it: the cost it priced was a walk per keystroke, and this is one bounded read pe
   directory (a file finishes the mention; a directory is one more step), then lexical. A path that
   does not spell the query is not offered.
 - **The bounds.** A 5s deadline that kills git's whole process group, then `bangWaitDelay` for a
-  pipe something it left holds (`bangRun`'s two bounds, through its own group helpers); 8 MiB kept
-  by a writer that claims every write, so a flood neither deadlocks nor grows memory (the lesson of
-  `internal/daemon/peers.go`'s `capped`); 50,000 names. What a cap leaves out is counted into the
-  menu's `more`. Every name goes through `core.Contained`; one holding a newline is not offered.
-- **Git's location variables** - `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR`,
-  `GIT_NAMESPACE` - are dropped from the lister's environment, so `-C <dir>` means that directory
-  even when a hook or wrapper put them in Wake's.
-- **The fallback.** No repository, a failed exec, a non-zero exit, the deadline or a held pipe all
-  give today's one-directory listing for that text, unchanged. The failure is held on the menu, so
-  git is not re-run per keystroke, and reported nowhere, for `readDirBounded`'s reason.
+  pipe something it left holds, then the group again once it returns (`bangRun`'s bounds, through
+  its own group helpers); 8 MiB of git's answer kept by a writer that claims every write, so a flood
+  neither deadlocks nor grows memory (the lesson of `internal/daemon/peers.go`'s `capped`); 50,000
+  names; and derived directories at 50,000 of them and 8 MiB of their paths - a deep, narrow tree
+  or one very long name would otherwise multiply what each keystroke ranks. What the byte and name
+  caps leave out is counted into the menu's `more`; directories the directory cap leaves out are
+  not. Every name goes through `core.Contained`; one holding a word break other than the space (a
+  newline, a tab) is no mention and is not offered.
+- **An agent-writable `.git/config` must never run code as the operator.** An agent can write its
+  own repository's config, and `core.fsmonitor` names a program git runs on a read; the lister sets
+  `core.fsmonitor=false` on its command line, which outranks the repository's.
+- **Git's location variables** - `GIT_DIR`, `GIT_WORK_TREE`, `GIT_INDEX_FILE`, `GIT_COMMON_DIR` - are
+  dropped from the lister's environment, so `-C <dir>` means that directory even when a hook or
+  wrapper put them in Wake's.
+- **Where git is silent, the listing answers.** No repository, a failed exec, a non-zero exit, the
+  deadline or a held pipe all give today's one-directory listing for that text, unchanged; the
+  failure is held on the menu, so git is not re-run per keystroke, and reported nowhere, for
+  `readDirBounded`'s reason. So do a search with no match (an index git answered empty) and a query
+  whose directories - what precedes its last separator - the index does not hold: build output, an
+  ignored tree, stepped into and then narrowed. A head that lists nothing at the root (`@ui/comp`
+  where only `internal/ui` exists) keeps the search.
 
 Full argument: `internal/ui/completionindex.go`'s header, `internal/ui/completionpath.go`'s.

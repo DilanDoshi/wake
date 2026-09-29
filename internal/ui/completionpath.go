@@ -123,21 +123,35 @@ func (a App) pathMenuFor(typed string) pathMenu {
 		return pathMenu{}
 	}
 	dir, base := filepath.Split(typed)
-	return pathMenu{want: filepath.Join(root, dir), typed: dir, base: base, query: searchQuery(typed), root: root}
+	p := pathMenu{want: filepath.Join(root, dir), typed: dir, base: base, root: root}
+	if a.focus != "" { // only a conversation searches; the room lists
+		p.query = searchQuery(typed)
+	}
+	return p
 }
 
 // rows is the path half of the menu as it is drawn now, and how many more it
-// has than it returns: a search's ranking, or the listing this menu asked for,
-// narrowed to what has been typed since it arrived.
-//
-// Nothing at all until the read has answered for this directory, which is what
-// a menu over a stalled mount offers - the names, and no paths.
+// has than it returns: a search's ranking, or the listing - where it steps, or
+// where git is silent (pathMenu.lists). A listing that has nothing to offer a
+// search leaves the ranking standing: a head naming no directory at the root
+// is still a search through deeper ones.
 func (p pathMenu) rows() ([]string, int) {
-	if p.searching() {
+	if !p.lists() {
 		return p.rank.rows, p.rank.rest // ranked by bounded; see reranked
 	}
+	if listed := p.listed(); len(listed) > 0 || !p.searching() {
+		return listed, 0
+	}
+	return p.rank.rows, p.rank.rest
+}
+
+// listed is the listing this menu asked for, narrowed to what has been typed
+// since it arrived. Nothing at all until the read has answered for this
+// directory, which is what a menu over a stalled mount offers - the names, and
+// no paths.
+func (p pathMenu) listed() []string {
 	if p.want == "" || p.want != p.dir {
-		return nil, 0
+		return nil
 	}
 	lower := strings.ToLower(p.base)
 	out := make([]string, 0, len(p.entries))
@@ -157,7 +171,7 @@ func (p pathMenu) rows() ([]string, int) {
 		out = append(out, agentPrefix+p.typed+name)
 	}
 	slices.Sort(out)
-	return out, 0
+	return out
 }
 
 // carrying is what a rebuilt menu keeps from the one it replaces: the read and
@@ -193,11 +207,11 @@ func (a App) scanning() (App, tea.Cmd) {
 }
 
 // scanningPaths starts the git an opening owes and the read this menu needs, if
-// it needs one - a search needs none - and none is out.
+// it needs one - a search needs none until git is silent - and none is out.
 func (a App) scanningPaths() (App, tea.Cmd) {
 	a, index := a.indexingPaths()
 	p := a.completion.paths
-	if p.want == "" || p.want == p.dir || p.out != "" || p.searching() {
+	if p.want == "" || p.want == p.dir || p.out != "" || !p.lists() {
 		return a, index
 	}
 	a.completion.paths.out = p.want

@@ -136,7 +136,7 @@ func TestThePathScanReadsOneDirectoryAndNeverDescends(t *testing.T) {
 	}
 	withGit(t, answering("top.md", "inner/buried.md"))
 	fresh(t)
-	a := newRoomApp(t).withSize(200, 40).withRoster(
+	a := dmApp(nil, Stream{}, "s1", "alex").withSize(200, 40).withRoster(
 		rpc.SessionStatus{ID: "s1", Name: "alex", Dir: dir, State: rpc.StateIdle},
 	).withDraft("@")
 

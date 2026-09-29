@@ -62,6 +62,16 @@ func withGit(t *testing.T, fake func(string) ([]byte, int, error)) *atomic.Int32
 // indexed is names read the way git's answer is.
 func indexed(names ...string) []indexedPath { return parseIndex("", lsOutput(names...), 0).files }
 
+// convOver is a conversation with an agent that works in dir: only a
+// conversation searches.
+func convOver(t *testing.T, dir string) App {
+	t.Helper()
+	fresh(t)
+	return dmApp(nil, Stream{}, "s1", "alex").withSize(200, 40).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "alex", Dir: dir, State: rpc.StateIdle},
+	)
+}
+
 // roomOver is a room whose one agent works in dir.
 func roomOver(t *testing.T, dir string) App {
 	t.Helper()
@@ -109,6 +119,12 @@ func TestASearchRanksTheFileNameFirstThenTheShorterPath(t *testing.T) {
 		{"a query that reaches into a hidden path finds it", "x/.c",
 			[]string{"x/.ci.go", "x/ci.go"}, []string{"x/.ci.go"}},
 		// Every directory above a file, once: inner holds no file of its own.
+		// é is C3 A9, and Ã© is C3 83 C2 A9: its bytes spell é, its runes do not.
+		{"a subsequence is of runes, not bytes", "é",
+			[]string{"Ã©.go", "café.go"}, []string{"café.go"}},
+		// ls-files -o prints an untracked nested repository with a separator.
+		{"a name ending in a separator is a directory, once", "lib",
+			[]string{"a.go", "vendor/lib/"}, []string{"vendor/lib/"}},
 		{"a directory ranks by its last segment", "inn",
 			[]string{"inner/deep/buried.md", "inner/deep/other.md"},
 			[]string{"inner/", "inner/deep/", "inner/deep/other.md", "inner/deep/buried.md"}},
@@ -156,9 +172,12 @@ func TestASearchKeepsTheBestAndCountsEveryMatch(t *testing.T) {
 // Typed text searches the index; a path steps through directories. Each draft
 // names an offer only its own mode makes, and one only the other mode would.
 func TestTypedTextSearchesTheIndexAndAPathStepsThroughDirectories(t *testing.T) {
-	dir := workdir(t, "top.md", "tmpfile.md", "compose.md")
+	dir := workdir(t, "top.md", "tmpfile.md", "compose.md", ".env", "~notes.md")
 	nested(t, dir, "internal/inner.md", "internal/ignored.log", "ui/compact.md")
-	withGit(t, answering("top.md", "tmpfile.md", "internal/inner.md", "ui/completion.go", "zz/comp.go"))
+	// v1.2/tmx.go, x.envy/a.go, ~nox.go and p..q/00z.go spell the lead drafts
+	// below, so a search would offer them where the listing does not.
+	withGit(t, answering("top.md", "tmpfile.md", "internal/inner.md", "ui/completion.go", "zz/comp.go",
+		"v1.2/tmx.go", "x.envy/a.go", "~nox.go", "p..q/00z.go"))
 	sep := string(os.PathSeparator)
 	for _, tc := range []struct{ draft, want, never string }{
 		{"@", "@internal" + sep, "@ui/completion.go"},
@@ -167,8 +186,13 @@ func TestTypedTextSearchesTheIndexAndAPathStepsThroughDirectories(t *testing.T) 
 		{"@/tmp", "@/tmpfile.md", "@tmpfile.md"},
 		{"@comp", "@zz/comp.go", "@compose.md"},
 		{"@ui/comp", "@ui/completion.go", "@ui/compact.md"},
+		// A lead with no trailing separator still steps.
+		{"@./tm", "@./tmpfile.md", "@v1.2/tmx.go"},
+		{"@.en", "@.env", "@x.envy/"},
+		{"@~no", "@~notes.md", "@~nox.go"},
+		{"@.." + sep + filepath.Base(dir)[:2], "@.." + sep + filepath.Base(dir) + sep, "@p..q/00z.go"},
 	} {
-		got := roomOver(t, dir).withDraft(tc.draft).completion.offers
+		got := convOver(t, dir).withDraft(tc.draft).completion.offers
 		if !slices.Contains(got, tc.want) || slices.Contains(got, tc.never) {
 			t.Errorf("%q offered %q, want %q and never %q", tc.draft, got, tc.want, tc.never)
 		}
@@ -181,7 +205,7 @@ func TestASearchReadsNoDirectory(t *testing.T) {
 	dir := workdir(t)
 	nested(t, dir, "ui/compact.md")
 	withGit(t, answering("ui/completion.go"))
-	a := roomOver(t, dir).withDraft("@")
+	a := convOver(t, dir).withDraft("@")
 	a, _ = a.withComposer(a.composer().WithDraft("@ui/comp")).recompleted().scanning()
 	if out := a.completion.paths.out; out != "" {
 		t.Errorf("a search over an answered index is reading %q", out)
@@ -195,7 +219,7 @@ func TestASearchOffersADirectoryAndTabStepsIntoIt(t *testing.T) {
 	dir := workdir(t, "top.md")
 	nested(t, dir, "inner/buried.md", "inner/notes.log")
 	withGit(t, answering("top.md", "inner/buried.md"))
-	a := roomOver(t, dir).withDraft("@inn")
+	a := convOver(t, dir).withDraft("@inn")
 	if got := a.completion.offers; len(got) == 0 || got[0] != "@inner"+sep {
 		t.Fatalf("`@inn` offered %q, want the directory first", got)
 	}
@@ -216,7 +240,7 @@ func TestASearchOffersADirectoryAndTabStepsIntoIt(t *testing.T) {
 func TestAReportReusesTheRankingAndAKeystrokeRanksAgain(t *testing.T) {
 	withGit(t, answering("src/completion.go", "src/compare.go"))
 	dir := workdir(t)
-	a := roomOver(t, dir).withDraft("@comp")
+	a := convOver(t, dir).withDraft("@comp")
 	ranked := a.completion.paths.rank.rows
 	if len(ranked) == 0 {
 		t.Fatalf("`@comp` ranked nothing over its index, so this asserts nothing: %q", a.completion.offers)
@@ -240,6 +264,84 @@ func TestAReportReusesTheRankingAndAKeystrokeRanksAgain(t *testing.T) {
 	}
 }
 
+// A search git has nothing for falls back to the listing for that text: an
+// index git answered empty, and a query whose directories git never indexed -
+// build output, an ignored tree - stepped into and then narrowed.
+func TestASearchGitHasNothingForListsInstead(t *testing.T) {
+	t.Run("an empty index", func(t *testing.T) {
+		withGit(t, answering())
+		a := convOver(t, workdir(t, "readme.md", "rebase.md")).withDraft("@re")
+		if got, want := a.completion.offers, []string{"@readme.md", "@rebase.md"}; !slices.Equal(got, want) {
+			t.Errorf("`@re` over an empty index offered %q, want the listing's %q", got, want)
+		}
+	})
+	t.Run("an unindexed directory", func(t *testing.T) {
+		dir := workdir(t, "top.md")
+		nested(t, dir, "src/a.go", "build/out.txt", "build/other.bin")
+		// rebuild/foo.go spells `build/o`, so only the head rule lists here.
+		withGit(t, answering("top.md", "src/a.go", "rebuild/foo.go"))
+		a := convOver(t, dir).withDraft("@build/o")
+		if got, want := a.completion.offers, []string{"@build/other.bin", "@build/out.txt"}; !slices.Equal(got, want) {
+			t.Errorf("`@build/o` offered %q, want the listing's %q", got, want)
+		}
+	})
+	// A head naming no directory at the root lists nothing, so the search stands.
+	t.Run("a head that lists nothing", func(t *testing.T) {
+		withGit(t, answering("internal/ui/completion.go"))
+		a := convOver(t, workdir(t)).withDraft("@ui/comp")
+		if got := a.completion.offers; !slices.Contains(got, "@internal/ui/completion.go") {
+			t.Errorf("`@ui/comp` offered %q, want the search's nested file", got)
+		}
+	})
+}
+
+// Only a conversation searches. The room's `@` addresses the fleet, so it keeps
+// the one-directory listing and runs no git at all.
+func TestTheRoomListsAndRunsNoGit(t *testing.T) {
+	runs := withGit(t, answering("zz/comp.go"))
+	a := roomOver(t, workdir(t, "compose.md")).withDraft("@comp")
+	if n := runs.Load(); n != 0 {
+		t.Errorf("a room mention ran git %d times, want none", n)
+	}
+	if got := a.completion.offers; !slices.Contains(got, "@compose.md") || slices.Contains(got, "@zz/comp.go") {
+		t.Errorf("the room's `@comp` offered %q, want the listing's @compose.md and no search", got)
+	}
+}
+
+// Directories are bounded as entries and as bytes: derived ones at most
+// indexMaxFiles of them and indexMaxBytes of path - a deep, narrow tree or one
+// very long name must not multiply the index the draw goroutine ranks. They are
+// not counted into `more`.
+func TestDerivedDirectoriesAreBoundedInCountAndBytes(t *testing.T) {
+	dirStats := func(idx fileIndex) (n, size int) {
+		for _, f := range idx.files {
+			if f.dir {
+				n, size = n+1, size+len(f.path)
+			}
+		}
+		return n, size
+	}
+	var wide []string
+	for i := range 20_000 {
+		wide = append(wide, fmt.Sprintf("p%05d/q/r/f", i)) // three directories each
+	}
+	idx := parseIndex("", lsOutput(wide...), 0)
+	if n, _ := dirStats(idx); n != indexMaxFiles || idx.left != 0 {
+		t.Errorf("60,000 directories derived %d with %d left, want the cap's %d and none counted", n, idx.left, indexMaxFiles)
+	}
+	deep := strings.Repeat("aaaaaaaaaa/", 3000) + "f" // 3000 directories, ~50MB of their paths
+	done := make(chan fileIndex, 1)
+	go func() { done <- parseIndex("", lsOutput(deep), 0) }()
+	select {
+	case idx := <-done:
+		if n, size := dirStats(idx); size > indexMaxBytes || n == 3000 {
+			t.Errorf("one deep name derived %d directories of %d bytes, want at most %d bytes", n, size, indexMaxBytes)
+		}
+	case <-time.After(bangTestLimit):
+		t.Fatal("deriving one deep name's directories did not end")
+	}
+}
+
 // Past the cap the index keeps the first names and counts the rest, and the
 // menu's `more` says so beside what the rows left out.
 func TestAnIndexPastTheCapKeepsTheFirstAndCountsTheRest(t *testing.T) {
@@ -249,7 +351,7 @@ func TestAnIndexPastTheCapKeepsTheFirstAndCountsTheRest(t *testing.T) {
 		names[i] = fmt.Sprintf("f%06d.go", i)
 	}
 	withGit(t, answering(names...))
-	c := roomOver(t, workdir(t)).withDraft("@f0").completion
+	c := convOver(t, workdir(t)).withDraft("@f0").completion
 
 	if idx := c.paths.index; len(idx.files) != indexMaxFiles || idx.left != over {
 		t.Fatalf("an index of %d names kept %d and counted %d, want %d and %d",
@@ -266,11 +368,12 @@ func TestAnIndexPastTheCapKeepsTheFirstAndCountsTheRest(t *testing.T) {
 func TestAGitThatDoesNotAnswerFallsBackToTheListingOnce(t *testing.T) {
 	for name, fake := range map[string]func(string) ([]byte, int, error){
 		"no repository": notARepository,
-		"a failing git": func(string) ([]byte, int, error) { return lsOutput("ghost.md"), 0, errors.New("exit status 1") },
+		// What a failing git printed is no answer, even where it would match.
+		"a failing git": func(string) ([]byte, int, error) { return lsOutput("reghost.md"), 0, errors.New("exit status 1") },
 	} {
 		t.Run(name, func(t *testing.T) {
 			runs := withGit(t, fake)
-			a := roomOver(t, workdir(t, "readme.md", "rebase.md")).withDraft("@re")
+			a := convOver(t, workdir(t, "readme.md", "rebase.md")).withDraft("@re")
 			if got, want := a.completion.offers, []string{"@readme.md", "@rebase.md"}; !slices.Equal(got, want) {
 				t.Errorf("`@re` offered %q, want the listing's %q", got, want)
 			}
@@ -351,7 +454,7 @@ func TestASlowGitNeverHoldsTheKeysAndRunsOncePerOpening(t *testing.T) {
 // closed is not held for the next one.
 func TestAnOpeningRunsGitOnceAndAClosedMenuForgetsIt(t *testing.T) {
 	runs := withGit(t, answering("readme.md", "src/reader.go"))
-	a := roomOver(t, workdir(t)).withDraft("@r").withDraft("ea")
+	a := convOver(t, workdir(t)).withDraft("@r").withDraft("ea")
 	if got := a.completion.offers; !slices.Contains(got, "@readme.md") || !slices.Contains(got, "@src/reader.go") {
 		t.Errorf("`@rea` offered %q, want both indexed files", got)
 	}
@@ -364,7 +467,7 @@ func TestAnOpeningRunsGitOnceAndAClosedMenuForgetsIt(t *testing.T) {
 	}
 
 	// Typed without answering, so the menu closes before its git lands.
-	var m tea.Model = roomOver(t, workdir(t))
+	var m tea.Model = convOver(t, workdir(t))
 	for _, k := range runes("@r ") {
 		m, _ = m.Update(k)
 	}
@@ -381,7 +484,7 @@ func TestAnOpeningRunsGitOnceAndAClosedMenuForgetsIt(t *testing.T) {
 func TestAnIndexNothingWaitsOnIsDropped(t *testing.T) {
 	withGit(t, answering("readme.md"))
 	dir := workdir(t)
-	a := roomOver(t, dir).withDraft("@re")
+	a := convOver(t, dir).withDraft("@re")
 	late := fileIndex{dir: dir, files: indexed("late-report.md")}
 	next, _ := a.Update(pathScanMsg{dir: dir, index: &late})
 	if got := next.(App).completion.offers; slices.Contains(got, "@late-report.md") {
@@ -389,10 +492,11 @@ func TestAnIndexNothingWaitsOnIsDropped(t *testing.T) {
 	}
 }
 
-// A name is external bytes (BUG-9), a row is one line, and a merge's stages
-// print a name once each - so git's answer is contained, one-line and deduped.
+// A name is external bytes (BUG-9), a row is one line and one mention, and a
+// merge's stages print a name once each - so git's answer is contained, holds
+// no word break but the space, and is deduped.
 func TestAnIndexedNameIsContainedOneLineAndOnce(t *testing.T) {
-	idx := parseIndex("", lsOutput("a\x1b[2Jb.go", "two\nlines.go", "dup.go", "dup.go", "has space.md"), 0)
+	idx := parseIndex("", lsOutput("a\x1b[2Jb.go", "two\nlines.go", "tab\tbed.go", "dup.go", "dup.go", "has space.md"), 0)
 	got := make([]string, 0, len(idx.files))
 	for _, f := range idx.files {
 		got = append(got, f.path)
@@ -505,7 +609,7 @@ func TestTheShippedGitListsTrackedAndUntrackedFilesButNotIgnoredOnes(t *testing.
 	gitIn(t, dir, "add", "tracked.go")
 	withGit(t, shippedLsFiles)
 
-	a := roomOver(t, dir).withDraft("@nest")
+	a := convOver(t, dir).withDraft("@nest")
 	var got []string
 	for _, f := range a.completion.paths.index.files {
 		if !f.dir {
@@ -544,7 +648,6 @@ func TestTheShippedGitIndexesItsOwnDirectoryWhateverGitsVariablesSay(t *testing.
 	t.Setenv("GIT_WORK_TREE", other)
 	t.Setenv("GIT_INDEX_FILE", filepath.Join(otherGit, "index"))
 	t.Setenv("GIT_COMMON_DIR", otherGit)
-	t.Setenv("GIT_NAMESPACE", "elsewhere")
 
 	out, dropped, err := shippedLsFiles(mine)
 	if err != nil {
@@ -560,11 +663,63 @@ func TestTheShippedGitIndexesItsOwnDirectoryWhateverGitsVariablesSay(t *testing.
 	}
 }
 
+// A repository's own config must not run code as the operator: an agent can
+// write its .git/config, and core.fsmonitor names a program git runs on a
+// read. The shipped git overrides it on its command line.
+func TestTheShippedGitRunsNoProgramTheRepositoryNames(t *testing.T) {
+	if _, err := exec.LookPath(gitBinary); err != nil {
+		t.Skipf("no git on PATH: %v", err)
+	}
+	t.Setenv("GIT_CONFIG_GLOBAL", os.DevNull)
+	t.Setenv("GIT_CONFIG_NOSYSTEM", "1")
+	dir := workdir(t, "tracked.go")
+	marker := filepath.Join(t.TempDir(), "ran")
+	hook := filepath.Join(t.TempDir(), "hook.sh")
+	if err := os.WriteFile(hook, []byte("#!/bin/sh\ntouch '"+marker+"'\n"), 0o700); err != nil {
+		t.Fatalf("write the hook: %v", err)
+	}
+	gitIn(t, dir, "init", "-q")
+	gitIn(t, dir, "add", "tracked.go")
+	gitIn(t, dir, "config", "core.fsmonitor", hook)
+
+	out, dropped, err := shippedLsFiles(dir)
+	if err != nil {
+		t.Fatalf("the shipped git failed: %v", err)
+	}
+	if got := parseIndex(dir, out, dropped).files; len(got) != 1 || got[0].path != "tracked.go" {
+		t.Errorf("the index is %+v, want tracked.go", got)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Error("indexing ran the program the repository's core.fsmonitor names")
+	}
+}
+
 // gitIn runs one git command in dir for a test's fixture.
 func gitIn(t *testing.T, dir string, args ...string) {
 	t.Helper()
 	if out, err := exec.Command(gitBinary, append([]string{"-C", dir}, args...)...).CombinedOutput(); err != nil {
 		t.Fatalf("git %s: %v\n%s", strings.Join(args, " "), err, out)
+	}
+}
+
+// BenchmarkRankPathsAtTheBounds is a search over the worst index the bounds
+// admit: full-length names at the byte cap's ratio (160 bytes a name, 50,000 of
+// them), each with directories of its own, so derived directories hit their cap.
+func BenchmarkRankPathsAtTheBounds(b *testing.B) {
+	pad := strings.Repeat("b", 70)
+	names := make([]string, indexMaxFiles)
+	for i := range names {
+		names[i] = fmt.Sprintf("d%05d/%s/%s/Completion%05d.go", i, strings.Repeat("a", 60), pad, i)
+	}
+	idx := parseIndex("", lsOutput(names...), 0)
+	b.Logf("%d entries", len(idx.files))
+	for _, q := range []string{"c", "comp", "ui/comp", "zzz"} {
+		b.Run(q, func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				rankPaths(idx.files, q, completionRows)
+			}
+		})
 	}
 }
 

@@ -9,6 +9,9 @@ package ui
 // A keystroke ranks what is held, so typing never costs a walk, and a rebuild
 // that moved neither the query nor the index (a fleet report) reuses the rank.
 //
+// **Only a conversation searches.** The room's `@` addresses the fleet; it
+// keeps the one-directory listing and runs no git.
+//
 // **A path steps; anything else searches.** A bare `@`, a text ending in a
 // separator and one starting with `/`, `~` or `.` are somebody walking
 // directories, so they keep the listing. Any other text is ranked over the
@@ -16,15 +19,21 @@ package ui
 // offers both. ⇥ on a directory leaves the draft ending in a separator, which
 // is a step into its listing.
 //
-// **Bounded three ways**, since a repository is a directory nobody bounded:
-// indexTimeout (the group killed, then bangWaitDelay - bangRun's two bounds and
-// its reasons), indexMaxBytes (a writer that claims every write, bangOutput's
-// reason) and indexMaxFiles. What a cap leaves out is counted into the menu's
-// `more`.
+// **The repository runs nothing.** An agent can write its own .git/config, so
+// the git is told `core.fsmonitor=false` on its command line, which outranks
+// the repository's, and runs without git's location variables.
 //
-// **A git that does not answer falls back to the listing** - no repository, a
-// failed exec, a non-zero exit, the deadline. The failure is held on the menu,
-// so git is not re-run per keystroke, and reported nowhere, for
+// **Bounded**, since a repository is a directory nobody bounded: indexTimeout
+// (the group killed, then bangWaitDelay, then the group again - bangRun's
+// bounds and its reasons); git's answer at indexMaxBytes (a writer that claims
+// every write, bangOutput's reason) and indexMaxFiles names, what those cut
+// counted into the menu's `more`; derived directories at indexMaxFiles of them
+// and indexMaxBytes of path, not counted.
+//
+// **Where git is silent, the listing answers**: a git that does not answer (no
+// repository, a failed exec, a non-zero exit, the deadline), a search with no
+// match, and a query whose directories git never indexed. A failure is held on
+// the menu, so git is not re-run per keystroke, and reported nowhere, for
 // readDirBounded's reason: most directories a menu opens in are not a problem
 // worth a row.
 
@@ -37,6 +46,7 @@ import (
 	"slices"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -51,8 +61,8 @@ const (
 	// entries cap, so that cap binds first in any ordinary repository.
 	indexMaxBytes = 8 << 20
 
-	// indexTimeout bounds one git: this repository's answers in about 12ms, so
-	// one still going after this is hung on a lock or a mount, not slow.
+	// indexTimeout bounds one git: one still going after this is hung on a lock
+	// or a mount, not slow.
 	indexTimeout = 5 * time.Second
 
 	gitBinary = "git"
@@ -76,20 +86,21 @@ const (
 )
 
 // fileIndex is git's answer for one directory: names relative to it, contained
-// and bounded, and how many the bounds left out. failed is a git that did not
-// answer, which sends the menu back to the listing.
+// and bounded, with the directories above them; how many names the bounds left
+// out; and dirs, the directories it holds. A git that did not answer is an
+// index with nothing in it, so every search over it falls to the listing.
 type fileIndex struct {
-	dir    string
-	files  []indexedPath
-	left   int
-	failed bool
+	dir   string
+	files []indexedPath
+	dirs  map[string]bool
+	left  int
 }
 
-// indexedPath is one file or directory and its lower case, folded once per
-// index rather than once per keystroke.
+// indexedPath is one file or directory, its lower case and whether a segment of
+// it is hidden - worked out once per index rather than once per keystroke.
 type indexedPath struct {
-	path, fold string
-	dir        bool
+	path, fold  string
+	dir, hidden bool
 }
 
 // rankedPath is one match as rankPaths orders it: tier, width as drawn (a
@@ -118,7 +129,7 @@ type rankCache struct {
 
 // gitLocation is what would point `git -C dir` at another repository if Wake's
 // own environment carried it (a hook, a wrapper), so the lister runs without it.
-var gitLocation = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_NAMESPACE"}
+var gitLocation = []string{"GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR"}
 
 // lsFiles runs git over dir and returns what it printed, cut at indexMaxBytes,
 // with how many names the cut dropped. A variable so a test can fake a slow,
@@ -128,7 +139,8 @@ var lsFiles = func(dir string) ([]byte, int, error) {
 		name, _, _ := strings.Cut(kv, "=")
 		return slices.Contains(gitLocation, name)
 	})
-	return runCapped(indexTimeout, env, gitBinary, "-C", dir, "ls-files", "-co", "--exclude-standard", "-z")
+	return runCapped(indexTimeout, env, gitBinary, "-c", "core.fsmonitor=false", "-C", dir,
+		"ls-files", "-co", "--exclude-standard", "-z")
 }
 
 // searchQuery is typed when it searches the project, and "" when it steps
@@ -140,10 +152,23 @@ func searchQuery(typed string) string {
 	return typed
 }
 
-// searching reports whether this menu's paths come from the index: a search,
-// over a directory git has not failed for.
-func (p pathMenu) searching() bool {
-	return p.query != "" && (p.index == nil || !p.index.failed)
+// searching reports whether this menu's text searches the index rather than
+// steps through directories.
+func (p pathMenu) searching() bool { return p.query != "" }
+
+// lists reports whether this menu wants the listing: it steps rather than
+// searches, or git answered (a failure is an empty answer) and is silent for
+// this text - no match, or directories it never indexed, which the listing
+// knows and the index cannot.
+func (p pathMenu) lists() bool {
+	if !p.searching() {
+		return true
+	}
+	if p.index == nil {
+		return false
+	}
+	cut := strings.LastIndex(p.query, pathSeparator)
+	return len(p.rank.rows) == 0 || (cut >= 0 && !p.index.dirs[p.query[:cut]])
 }
 
 // reranked is this menu with its search ranked: the rows, and how many more -
@@ -168,11 +193,11 @@ func (p pathMenu) reranked() pathMenu {
 	return p
 }
 
-// indexingPaths starts an opening's git: for a menu offering paths from a
-// directory it holds no index of, when none is out.
+// indexingPaths starts an opening's git: for a conversation's menu offering
+// paths from a directory it holds no index of, when none is out.
 func (a App) indexingPaths() (App, tea.Cmd) {
 	p := a.completion.paths
-	if p.root == "" || p.index != nil || p.indexing != "" {
+	if a.completion.pane == "" || p.root == "" || p.index != nil || p.indexing != "" {
 		return a, nil
 	}
 	a.completion.paths.indexing = p.root
@@ -183,7 +208,7 @@ func (a App) indexingPaths() (App, tea.Cmd) {
 func indexPaths(dir string) tea.Cmd {
 	return func() tea.Msg {
 		out, dropped, err := lsFiles(dir)
-		index := fileIndex{dir: dir, failed: true}
+		index := fileIndex{dir: dir}
 		if err == nil {
 			index = parseIndex(dir, out, dropped)
 		}
@@ -208,9 +233,10 @@ func (a App) pathsIndexed(index *fileIndex) (App, tea.Cmd) {
 }
 
 // parseIndex reads git's answer: each name contained (BUG-9, readDirBounded's
-// reason), one line, once - a merge prints a name per stage - and at most
-// indexMaxFiles of them, then the directories above them. dropped is how many
-// names the byte cap cut; the tail after the last NUL is the one it cut
+// reason), one mention, once - a merge prints a name per stage - and at most
+// indexMaxFiles of them, then the directories above them. A name ending in the
+// separator is an untracked nested repository, a directory. dropped is how
+// many names the byte cap cut; the tail after the last NUL is the one it cut
 // through, counted there and never offered.
 func parseIndex(dir string, out []byte, dropped int) fileIndex {
 	rest := string(out)
@@ -225,40 +251,54 @@ func parseIndex(dir string, out []byte, dropped int) fileIndex {
 			index.left += 1 + strings.Count(after, nameEnd)
 			break
 		}
-		if name != prev && !strings.Contains(name, "\n") {
-			shown := core.Contained(name)
-			files = append(files, indexedPath{path: shown, fold: strings.ToLower(shown)})
+		if name != prev && !strings.ContainsFunc(name, breaksMention) {
+			shown, dir := strings.CutSuffix(core.Contained(name), pathSeparator)
+			files = append(files, indexedPath{path: shown, fold: strings.ToLower(shown), dir: dir, hidden: hiddenPath(shown)})
 		}
 		prev, rest = name, after
 	}
-	index.files = append(files, directoriesOf(files)...)
+	dirs, held := directoriesOf(files)
+	index.files, index.dirs = append(files, dirs...), held
 	return index
 }
 
+// breaksMention is a rune that ends a word in a draft, other than the space -
+// which a name may hold, as the listing's may. A name with one is no mention.
+func breaksMention(r rune) bool {
+	return r != ' ' && strings.ContainsRune(wordBreak, r)
+}
+
 // directoriesOf is every directory above files, once each, derived when the
-// index lands rather than per keystroke. A directory already seen has had its
-// parents seen too, so the walk up stops there.
-func directoriesOf(files []indexedPath) []indexedPath {
+// index lands rather than per keystroke, and the set of them. A directory
+// already seen has had its parents seen too, so the walk up stops there.
+// Bounded at indexMaxFiles directories and indexMaxBytes of their paths: a
+// deep, narrow tree or one very long name would otherwise multiply what every
+// keystroke ranks.
+func directoriesOf(files []indexedPath) ([]indexedPath, map[string]bool) {
 	seen := make(map[string]bool)
 	var dirs []indexedPath
+	size := 0
 	for _, f := range files {
 		for p := f.path; ; {
 			cut := strings.LastIndex(p, pathSeparator)
 			if cut < 0 || seen[p[:cut]] {
 				break
 			}
-			p = p[:cut]
+			if p = p[:cut]; len(dirs) == indexMaxFiles || size+len(p) > indexMaxBytes {
+				return dirs, seen
+			}
+			size += len(p)
 			seen[p] = true
-			dirs = append(dirs, indexedPath{path: p, fold: strings.ToLower(p), dir: true})
+			dirs = append(dirs, indexedPath{path: p, fold: strings.ToLower(p), dir: true, hidden: hiddenPath(p)})
 		}
 	}
-	return dirs
+	return dirs, seen
 }
 
 // rankPaths is index narrowed to query: the best k rows - a directory drawn
 // with its separator - and how many matched in all. One pass keeping k, since
-// it runs on the goroutine that draws, over up to indexMaxFiles names and their
-// directories (BenchmarkRankPaths).
+// it runs on the goroutine that draws, over up to indexMaxFiles names and as
+// many directories (BenchmarkRankPathsAtTheBounds).
 //
 // The dotfile rule is the listing's over a whole path: a path with a hidden
 // segment is offered only to a query with one.
@@ -269,8 +309,11 @@ func rankPaths(index []indexedPath, query string, k int) ([]string, int) {
 	best := make([]rankedPath, 0, k+1)
 	total := 0
 	for _, f := range index {
+		if f.hidden && !reachesHidden {
+			continue
+		}
 		tier, ok := pathTier(f.fold, q, tail)
-		if !ok || (!reachesHidden && hiddenPath(f.fold)) {
+		if !ok {
 			continue
 		}
 		total++
@@ -313,14 +356,18 @@ func pathTier(path, q, tail string) (int, bool) {
 	return tierPath, true
 }
 
-// spelt reports whether q's bytes appear in s in order.
+// spelt reports whether q's runes appear in s in order. Each is found whole -
+// UTF-8 matches an encoded rune only at a rune's start - so one rune's bytes
+// spread across others do not spell it.
 func spelt(s, q string) bool {
-	for i := 0; i < len(s) && q != ""; i++ {
-		if s[i] == q[0] {
-			q = q[1:]
+	for _, r := range q {
+		i := strings.IndexRune(s, r)
+		if i < 0 {
+			return false
 		}
+		s = s[i+utf8.RuneLen(r):]
 	}
-	return q == ""
+	return true
 }
 
 // compareRanked orders matches: tier, the shorter row as drawn, a file before a
@@ -335,9 +382,10 @@ func hiddenPath(p string) bool {
 	return strings.HasPrefix(p, dotPrefix) || strings.Contains(p, pathSeparator+dotPrefix)
 }
 
-// runCapped runs one lister in env (nil is Wake's own) under bangRun's two
-// bounds - its whole group killed at the deadline, and WaitDelay for a pipe
-// something it left still holds - and keeps at most indexMaxBytes of its output.
+// runCapped runs one lister in env (nil is Wake's own) under bangRun's bounds -
+// its whole group killed at the deadline, WaitDelay for a pipe something it
+// left still holds, and the group killed again once it returns - and keeps at
+// most indexMaxBytes of its output.
 func runCapped(timeout time.Duration, env []string, name string, args ...string) ([]byte, int, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
@@ -349,12 +397,15 @@ func runCapped(timeout time.Duration, env []string, name string, args ...string)
 	bangSetGroup(cmd)
 	cmd.Cancel = func() error { return bangKillGroup(cmd) }
 	err := cmd.Run()
+	// Reclaims what it left running. Nothing reads the result: an empty group is
+	// the ordinary answer, and a failed reclaim changes nothing the menu shows.
+	_ = bangKillGroup(cmd)
 	return out.kept.buf, out.dropped, err
 }
 
 // indexOutput is bangOutput counting the names it drops. bangOutput is a field,
-// not embedded, so io.Copy can reach nothing around Write - the bug
-// internal/daemon/peers.go's capped fixed.
+// not embedded, so a ReadFrom it ever gains cannot let io.Copy around Write -
+// the bug internal/daemon/peers.go's capped fixed.
 type indexOutput struct {
 	kept    bangOutput
 	dropped int
