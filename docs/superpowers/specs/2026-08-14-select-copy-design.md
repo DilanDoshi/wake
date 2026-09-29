@@ -370,9 +370,10 @@ Recorded here so they are choices rather than omissions:
   on legend budget more than on effort.
 - **Double-click a word, triple-click a line.** Wants a timer, and a timer is the thing this
   project spends the most care avoiding.
-- **Copying the source text rather than the screen text.** Would give back unwrapped lines and
-  raw markdown. Needs a wrapped-line → source-block index that does not exist, and `blockLines`
-  splits on `\n` *after* lipgloss and glamour have already wrapped, so soft wraps and real
-  newlines are indistinguishable by then. Screen text is what you see and what you get.
+- **Copying the source text rather than the screen text.** Would give back raw markdown. Still
+  declined — but the half of it about wraps was reversed on 2026-09-28: a copy now rejoins the rows
+  a pane wrapped and drops their layout margin (`internal/ui/copytext.go`, `render.Rejoins`),
+  after an email copied out of the room pasted with a line break every sixty columns. See
+  `docs/notes/decisions.md`.
 - **A `copyOnSelect` setting.** Claude Code has one. Wake has no settings surface at all yet, and
   adding one for a single boolean is the wrong order to build it in.

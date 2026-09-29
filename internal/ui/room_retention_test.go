@@ -163,11 +163,11 @@ func TestLateHistoryInsertionKeepsTheRestoredSelectionContent(t *testing.T) {
 	cLine := roomTextLine(a.room, "history C")
 	line := ansi.Strip(a.room.tr.lines.at(cLine))
 	a.sel = selection{pane: "", anchor: point{line: cLine, col: 0}, head: point{line: cLine, col: ansi.StringWidth(line) - 1}}
-	want := selectedText(a.room.tr.lines.slice(cLine, cLine+1), cLine, a.sel.marked())
+	want := selectedText(a.room.tr.lines.slice(cLine, cLine+1), cLine, a.sel.marked(), nil)
 
 	a = a.withRoom(a.room.Before(restoredBroadcast("history B", base.Add(10*time.Second))))
 	m := a.sel.marked()
-	got := selectedText(a.room.tr.lines.slice(m.from.line, m.to.line+1), m.from.line, m)
+	got := selectedText(a.room.tr.lines.slice(m.from.line, m.to.line+1), m.from.line, m, nil)
 	if got != want {
 		t.Errorf("late insertion changed selected history from %q to %q", want, got)
 	}

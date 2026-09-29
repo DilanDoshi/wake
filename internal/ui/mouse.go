@@ -385,7 +385,7 @@ func (a App) endSelection() (App, tea.Cmd) {
 	// what lets a selection that ran past the pane's edge copy the lines it
 	// scrolled to reach.
 	lines, first := tr.selectionLines(m)
-	return a, copyToClipboard(selectedText(lines, first, m))
+	return a, copyToClipboard(selectedText(lines, first, m, tr.rejoins(lines, first)))
 }
 
 // clickedTool opens or folds what a click landed on: in a conversation, a

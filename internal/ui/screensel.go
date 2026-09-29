@@ -62,7 +62,7 @@ func (a App) screenPoint(x, y int) point {
 // under a drag the way a transcript appends, but reading it off the frame is
 // what keeps this in step with what the highlight drew.
 func (a App) screenSelectedText() string {
-	return selectedText(strings.Split(a.assembleFrame(), "\n"), 0, a.sel.marked())
+	return selectedText(strings.Split(a.assembleFrame(), "\n"), 0, a.sel.marked(), nil)
 }
 
 // rosterHit is the roster row a press landed on, resolved at press time (see
