@@ -7,13 +7,14 @@
 // decoder: Go fails the *entire frame* on a type mismatch, and a frame lost
 // that way is invisible rather than loud.
 //
-// The airlock is these four files and nothing else in Wake knows Claude
+// The airlock is these five files and nothing else in Wake knows Claude
 // Code's stream-json format:
 //
 //	protocol.go    decoding - one wire line in, core.Events out
 //	wire.go        the shapes it decodes into
 //	vocabulary.go  Claude's words resolved into Wake's
 //	encode.go      the frames Wake writes back
+//	localreply.go  the text replies of local commands Wake parses
 //
 // internal/core/airlock_test.go enforces that over the whole tree and reads
 // the same list. protocol.go's header carries the full rule.
@@ -124,11 +125,10 @@ type wireFrame struct {
 	// accounting about.
 	Model string `json:"model"`
 
-	// Cwd is the directory an init frame says the session is running in. On
-	// init and on no other frame, which is what makes it safe to merge.
-	//
-	// Read because it *moves*: EnterWorktree is advertised to every session
-	// Wake spawns, so the spawn directory stops being the running directory the
+	// Cwd is the directory an init frame says the session is running in - on
+	// init and on no other frame, which is what makes it safe to merge. Read
+	// because it *moves*: EnterWorktree is advertised to every session Wake
+	// spawns, so the spawn directory stops being the running directory the
 	// moment an agent uses it. See SessionFacts.Dir.
 	Cwd string `json:"cwd"`
 
@@ -137,13 +137,13 @@ type wireFrame struct {
 	// started with none - which is most of them, and is not a warning.
 	MCPServers []wireMCPServer `json:"mcp_servers"`
 
-	// SlashCommands is every command this session's claude answers to,
-	// announced on init - built-ins and the operator's own ~/.claude/commands
-	// files alike, 133 of them across the recorded corpus. It is what a
-	// completion menu offers; it decides no routing, because the list is per
-	// session and arrives after the first frame while a draft is judged per
-	// keystroke (internal/ui/slash.go's header).
+	// SlashCommands and Agents are what init advertises: the commands this
+	// session answers to (133 across the corpus, the operator's own among them)
+	// and the subagent types it can run. Menus offer both and route on neither,
+	// since a draft is judged per keystroke (internal/ui/slash.go's header).
+	// The scrubber drops `agents` from recordings: it names the operator's own.
 	SlashCommands []string `json:"slash_commands"`
+	Agents        []string `json:"agents"`
 
 	Usage      *wireUsage           `json:"usage"`
 	ModelUsage map[string]wireModel `json:"modelUsage"`

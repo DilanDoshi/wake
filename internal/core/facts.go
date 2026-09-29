@@ -9,8 +9,8 @@ package core
 // keeps the vocabulary and the shape of an event; this keeps what a lifecycle
 // frame says about the session behind it.
 //
-// Not an airlock file: the airlock is protocol.go, wire.go, vocabulary.go and
-// encode.go, and these are Wake's shapes rather than Claude's.
+// Not an airlock file: the airlock is protocol.go, wire.go, vocabulary.go,
+// encode.go and localreply.go, and these are Wake's shapes rather than Claude's.
 
 // SessionFacts are the facts about a session that are not the conversation:
 // what model it is running and how full its context is. They arrive on
@@ -59,6 +59,11 @@ type SessionFacts struct {
 	// Tagged in Wake's spelling rather than Claude's, like OutputTokens below:
 	// `slash_commands` is a policed wire word that only the airlock may name.
 	SlashCommands []string `json:"commands,omitempty"`
+
+	// Agents is init.agents: the subagent types this session can run, built-ins
+	// and the operator's own, in claude's order. Carried whole for SlashCommands'
+	// reason; the `@` menu offers them as `@agent-<type>`.
+	Agents []string `json:"agents,omitempty"`
 
 	// Model is Claude's own id for it, e.g. "claude-sonnet-5", not a display
 	// name. Resolving it to something a human reads belongs above the airlock:

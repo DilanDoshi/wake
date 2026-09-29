@@ -177,7 +177,7 @@ func TestRenamingIsRefusedForAParkedOrEndedSessionAndSaysWhy(t *testing.T) {
 				t.Fatalf("the fixture is %q rather than %q, so this cell is about a state nobody built", got, tc.state)
 			}
 
-			err := a.rename(r, "bob")
+			err := a.rename(r, "bob", false)
 			switch {
 			case tc.refused && err == nil:
 				t.Fatalf("a %s session was renamed", tc.name)
@@ -217,7 +217,7 @@ func TestTheManagerCannotBeRenamed(t *testing.T) {
 	}
 	a := newAgent(idAlpha, core.ManagerName, "dev", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
 
-	if err := a.rename(r, "bob"); err == nil {
+	if err := a.rename(r, "bob", false); err == nil {
 		t.Fatal("the manager was renamed, so @manager now reaches nothing and the session holding Wake's " +
 			"own tools looks like an ordinary agent")
 	}
@@ -439,12 +439,13 @@ func TestTheNameARenamedSessionGaveUpIsFreeForTheNextSpawn(t *testing.T) {
 // change that made it untrue, rather than left to cover whatever is written
 // there next.
 var unlockedReadsOfTheDisplayHalves = map[string]string{
-	"unpark":   "reads a parked agent, and a parked one cannot be renamed. isParked() took a.mu on this goroutine immediately above, which is what orders this read behind markParked's write",
-	"labelFor": "called from launch on a parked agent being woken, behind unpark's own isParked(); same ordering, same refusal",
-	"retire":   "finish() took a.mu on this goroutine two statements above, and a session that has ended cannot be renamed",
+	"unpark":           "reads a parked agent, and a parked one cannot be renamed. isParked() took a.mu on this goroutine immediately above, which is what orders this read behind markParked's write",
+	"labelFor":         "called from launch on a parked agent being woken, behind unpark's own isParked(); same ordering, same refusal",
+	"retire":           "finish() took a.mu on this goroutine two statements above, and a session that has ended cannot be renamed",
+	"renameTextLocked": "its callers hold a.mu, the Locked suffix's contract: tryProbeLocked under tryProbe's or rename's own lock, and renameWrite",
 }
 
-// Three, and newAgent is deliberately not among them: it writes the two fields
+// Four, and newAgent is deliberately not among them: it writes the two fields
 // as composite-literal keys rather than reading them off a receiver, so the
 // scan does not see it and the excuse would have been a dead entry covering
 // whatever was written next. The guard said so on its first run.
@@ -452,7 +453,10 @@ var unlockedReadsOfTheDisplayHalves = map[string]string{
 // It was five. completePark and bookParked both stopped reading either field
 // when the park book row moved into recordFor, which takes the lock - so their
 // excuses went with them, which is what the second half of this test is for.
-const unlockedDisplayReaderCount = 3
+//
+// renameTextLocked made it four: the rename probe compares Wake's name with
+// claude's under a lock its callers take.
+const unlockedDisplayReaderCount = 4
 
 // The display halves are read under the agent's lock, or by a function that has
 // said why it need not.
@@ -591,7 +595,7 @@ func TestTheManagerLookupDoesNotRaceARename(t *testing.T) {
 			if i%2 == 0 {
 				to = "bob"
 			}
-			if err := agents[0].rename(s.names, to); err != nil {
+			if err := agents[0].rename(s.names, to, false); err != nil {
 				t.Errorf("rename to %s: %v", to, err)
 				return
 			}

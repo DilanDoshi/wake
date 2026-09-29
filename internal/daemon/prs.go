@@ -8,7 +8,7 @@ package daemon
 // times over.
 //
 // It reads core.Event.Text - Wake's own decoded text, off a KindToolResult -
-// never the raw JSON, so the airlock's four files stay the only place that
+// never the raw JSON, so the airlock's files stay the only place that
 // knows Claude's wire. **A tool result, never prose**: a PR URL an agent writes
 // in a reply is a link, not the output of a command it ran.
 //

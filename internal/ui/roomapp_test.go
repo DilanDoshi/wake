@@ -13,6 +13,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"reflect"
 	"strings"
 	"sync"
 	"testing"
@@ -458,20 +459,26 @@ func (a App) withDraft(text string) App {
 	return m.(App).scanned()
 }
 
-// scanned answers the directory read the menu is waiting for, the way Bubble
-// Tea runs the command Update handed back. The `@` half of a menu is off the
-// draw goroutine - see completionpath.go - so a test that reads its offers has
-// to let the read land.
+// scanned answers what the path half is waiting for - its git, then its
+// directory read - the way Bubble Tea runs the commands Update handed back. The
+// `@` half of a menu is off the draw goroutine - see completionpath.go - so a
+// test that reads its offers has to let both land.
 //
-// Twice at most: a fold either fills the directory the menu wants or asks for
-// the one the draft moved to while the first read was out.
+// A few rounds at most: a git's answer can start the listing a failure falls
+// back to, and a read's fold can ask for the directory the draft moved to while
+// it was out.
 func (a App) scanned() App {
-	for range 2 {
-		out := a.completion.paths.out
-		if out == "" {
-			break
+	for range 4 {
+		var msg tea.Msg
+		switch p := a.completion.paths; {
+		case p.indexing != "":
+			msg = indexPaths(p.indexing)()
+		case p.out != "":
+			msg = scanPaths(p.out)()
+		default:
+			return a
 		}
-		m, _ := a.Update(scanPaths(out)())
+		m, _ := a.Update(msg)
 		a = m.(App)
 	}
 	return a
@@ -550,8 +557,11 @@ func sentFrames(t *testing.T, a App, cmd tea.Cmd) []rpc.Frame {
 	return recorderOf(t, a).taken(t)
 }
 
-// commandCount is how many goroutines Bubble Tea would spend on one command:
-// one, unless it is a batch, in which case one per member.
+// commandCount is how many commands one keystroke's command carries: one,
+// unless it is a batch or a sequence, in which case one per member - a batch
+// spends a goroutine on each, and a sequence's members are still one write
+// each. tea.sequenceMsg is unexported, so it is recognised by reflection, as
+// runLikeTheLoop does.
 //
 // It runs the command a second time, which is why the connection under it has
 // to be one that never blocks and never fills - the frames of that second run
@@ -560,8 +570,8 @@ func commandCount(cmd tea.Cmd) int {
 	if cmd == nil {
 		return 0
 	}
-	if batch, ok := cmd().(tea.BatchMsg); ok {
-		return len(batch)
+	if v := reflect.ValueOf(cmd()); v.IsValid() && v.Kind() == reflect.Slice {
+		return v.Len()
 	}
 	return 1
 }

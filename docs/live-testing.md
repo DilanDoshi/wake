@@ -868,6 +868,17 @@ login`. What only a real server and a real browser can settle:
       within a few seconds, with no action from you, and asking the agent to use it works. A
       connector never signed in stays `⚠ needs authentication` and says to sign in on claude.ai.
 
+## The conversation's `@` menu — what only a real machine shows
+
+The unit and screen tests fake the one-shot and the fleet. On your own machine, after an agent has
+answered at least one prompt (the daemon asks for the machine's sessions only once some agent's init
+has advertised `/list-agents`), with other `claude` sessions open in other terminals:
+
+- [ ] In a conversation, `@` and a letter offers the other terminals' sessions within about a
+      second, each with its directory.
+- [ ] `/name` an agent, then run `/list-agents` in another terminal's `claude`: it lists the new name.
+- [ ] In a large repository, typing after `@` stays smooth.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:

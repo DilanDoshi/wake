@@ -1,6 +1,9 @@
 package core
 
-import "testing"
+import (
+	"slices"
+	"testing"
+)
 
 // An init frame's advertised slash commands cross the airlock, read off a real
 // recording.
@@ -55,5 +58,36 @@ func TestOnlyAnInitFrameCarriesTheAdvertisedCommands(t *testing.T) {
 	if ev.Session.SlashCommands != nil {
 		t.Errorf("a result frame carries %q as an advertised command set: only init advertises one, "+
 			"and a consumer folding this would empty the menu once per turn", ev.Session.SlashCommands)
+	}
+}
+
+// An init frame's subagent types cross the airlock.
+//
+// A literal rather than the fixture: the scrubber strips `agents` from every
+// recording, since under a real HOME it names the operator's own. The shape
+// is copied from the sterile recording behind list-agents.jsonl, whose list
+// was the built-ins and nothing else.
+func TestAnInitFramesAgentsCrossTheAirlock(t *testing.T) {
+	ev := onlyEvent0(t, `{"type":"system","subtype":"init","cwd":"/private/tmp/wake-rec/gamma",`+
+		`"session_id":"159eb867-8e29-43fb-88cf-11b5ded2f5f3","mcp_servers":[],"model":"claude-haiku-4-5-20251001",`+
+		`"permissionMode":"default","apiKeySource":"none","claude_code_version":"2.1.283","output_style":"default",`+
+		`"agents":["claude","Explore","general-purpose","Plan","statusline-setup"]}`)
+	want := []string{"claude", "Explore", "general-purpose", "Plan", "statusline-setup"}
+	if ev.Session == nil || !slices.Equal(ev.Session.Agents, want) {
+		t.Fatalf("init.agents crossed as %+v, want %q", ev.Session, want)
+	}
+}
+
+// No agents on the frame is nil, and a result frame never carries any - the
+// commands' own two traps, one field over.
+func TestOnlyAnInitFrameNamingAgentsCarriesThem(t *testing.T) {
+	for _, line := range []string{
+		`{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-4-6"}`,
+		`{"type":"system","subtype":"init","session_id":"s1","model":"claude-opus-4-6","agents":[]}`,
+		`{"type":"result","subtype":"success","session_id":"s1","result":"done","usage":{"input_tokens":10}}`,
+	} {
+		if ev := onlyEvent0(t, line); ev.Session == nil || ev.Session.Agents != nil {
+			t.Errorf("%s carries agents %+v, want facts with none", line, ev.Session)
+		}
 	}
 }

@@ -3,9 +3,9 @@
 //
 // # This file is a second airlock leak, and it is confined here on purpose
 //
-// CLAUDE.md's non-negotiable is that internal/core's four files are the only
+// CLAUDE.md's non-negotiable is that internal/core's five files are the only
 // non-test files that know Claude's JSON. That rule is about Claude's *stream*
-// - the thing that makes a Codex port four files - and this reads a different
+// - the thing that makes a Codex port five files - and this reads a different
 // Claude artefact: the transcript on disk. A Codex port rewrites discovery
 // outright, because "where does the tool persist a conversation" has no
 // model-agnostic answer at all.
@@ -14,7 +14,7 @@
 // CLI flags: the transcript's keys are spelled **in this file and nowhere else
 // in the tree**, held by TestTheTranscriptKeysAreSpelledOnlyInDiscover, and
 // anything outside asks FoundSession. docs/notes/deferred.md carries the ruling
-// this wants next - whether the airlock's file set should grow a fifth member.
+// this wants next - whether the airlock's file set should grow a further member.
 //
 // # Why a directory is verified rather than decoded
 //

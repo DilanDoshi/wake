@@ -88,16 +88,30 @@ const (
 	noSuchAgent = "no live agent answers to that handle"
 )
 
-// renameTo reports the ask on the keypress and writes the rename for one agent
-// to a one-word name its caller has already resolved and validated.
-//
-// The shared tail of `/name` and the `/rename` mirror in slash.go: the two
-// resolve differently - an `@who` handle or the conversation you are in - and
-// write the same frame, so a second copy would be one that goes stale the day
-// rpc.FrameRename changes.
+// renameFrame is the rename for one agent to a one-word name its caller has
+// already resolved and validated - the one frame `/name` and the `/rename`
+// mirror both write, so a second copy cannot go stale the day rpc.FrameRename
+// changes. selfRenames is the mirror's: its keystroke also sends the agent its
+// own /rename, so the daemon decides whether to send one only after that reply.
+func renameFrame(id, name string, selfRenames bool) rpc.Frame {
+	return rpc.Frame{Kind: rpc.FrameRename, SessionID: id, Text: name, SelfRenames: selfRenames}
+}
+
+// renameTo reports the ask on the keypress and writes `/name`'s rename.
 func (a App) renameTo(agent Agent, name string) tea.Cmd {
 	notice.Report(renameAsked, agentPrefix, agent.Name)
-	return a.write(renameFailed, rpc.Frame{Kind: rpc.FrameRename, SessionID: agent.ID, Text: name})
+	return a.write(renameFailed, renameFrame(agent.ID, name, false))
+}
+
+// mirrorNow writes a `/rename` mirror for an agent taking its passthrough now,
+// reporting the ask as renameTo does; nil for no mirror. A queued passthrough
+// carries its mirror instead, and flushQueued writes the two together.
+func (a App) mirrorNow(id, name string) tea.Cmd {
+	if name == "" {
+		return nil
+	}
+	notice.Report(renameAsked, agentPrefix, a.agentName(id))
+	return a.write(renameFailed, renameFrame(id, name, true))
 }
 
 // renameAgent changes what one agent is called.

@@ -98,27 +98,34 @@ func TestASessionWithNoDirectoryOffersNoPaths(t *testing.T) {
 	}
 }
 
-// A DM offers paths and no names. `@name` is Wake's routing and the room is
-// where it routes; a DM sends what was typed verbatim, so a name accepted there
-// is one claude's own CLI reads as a file reference.
-func TestAConversationOffersPathsAndNotNames(t *testing.T) {
+// A conversation offers names now (completionpeers.go), but never its own: alex
+// messaging alex is nothing, even when claude's listing names alex - its claude
+// name is its Wake name. The paths are still what `@` means to the agent.
+func TestAConversationNeverOffersItsOwnNameAndStillOffersPaths(t *testing.T) {
 	dir := workdir(t, "alexander.md")
 	fresh(t)
 	a := dmApp(nil, Stream{}, "s1", "alex").withSize(200, 40).withRoster(
 		rpc.SessionStatus{ID: "s1", Name: "alex", Dir: dir, State: rpc.StateIdle},
-	).withDraft("@alex")
+		rpc.SessionStatus{ID: "s2", Name: "alexa", State: rpc.StateIdle},
+	).applyFrame(rpc.Frame{Kind: rpc.FramePeersReply, Peers: &rpc.PeersFrame{
+		Peers: []core.Peer{{Name: "alex", Dir: dir}},
+	}}).withDraft("@alex")
 
 	got := a.completion.offers
 	if slices.Contains(got, agentPrefix+"alex") {
 		t.Errorf("a conversation offered the agent's own name: %q", got)
+	}
+	if !slices.Contains(got, agentPrefix+"alexa") {
+		t.Errorf("a conversation offered %q and not its live peer alexa: a DM offers names now", got)
 	}
 	if !slices.Contains(got, agentPrefix+"alexander.md") {
 		t.Errorf("a conversation offered %q, want the path that is what `@` means to the agent", got)
 	}
 }
 
-// One directory, never a walk. `@` at a repository root must not cost a
-// recursive read on a keystroke.
+// A bare `@` steps through directories: it lists one and never descends, even
+// in a repository whose index holds what is below it. The search is for typed
+// text (completionindex.go); stepping in is ⇥ on the directory.
 func TestThePathScanReadsOneDirectoryAndNeverDescends(t *testing.T) {
 	dir := workdir(t, "top.md")
 	if err := os.MkdirAll(filepath.Join(dir, "inner"), 0o755); err != nil {
@@ -127,15 +134,16 @@ func TestThePathScanReadsOneDirectoryAndNeverDescends(t *testing.T) {
 	if err := os.WriteFile(filepath.Join(dir, "inner", "buried.md"), nil, 0o600); err != nil {
 		t.Fatalf("write: %v", err)
 	}
+	withGit(t, answering("top.md", "inner/buried.md"))
 	fresh(t)
-	a := newRoomApp(t).withSize(200, 40).withRoster(
+	a := dmApp(nil, Stream{}, "s1", "alex").withSize(200, 40).withRoster(
 		rpc.SessionStatus{ID: "s1", Name: "alex", Dir: dir, State: rpc.StateIdle},
 	).withDraft("@")
 
 	for _, offer := range a.completion.offers {
 		if strings.Contains(offer, "buried") {
-			t.Errorf("a bare `@` offered %q: the scan descended, which is a recursive read per "+
-				"keystroke in a repository", offer)
+			t.Errorf("a bare `@` offered %q: it searched or descended, where it steps through one "+
+				"directory at a time", offer)
 		}
 	}
 	if !slices.Contains(a.completion.offers, agentPrefix+"inner"+string(os.PathSeparator)) {

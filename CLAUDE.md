@@ -81,6 +81,11 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   script as `/<name>` (project or personal scope; the daemon owns the path, no overwrite). Endings land
   in the conversation and the room. No pause, restart or per-agent stop — headless refuses or ignores
   them. `internal/ui/workflowview.go`, `workflowdraw.go`, `workflowdata.go`, `workflowsave.go`.
+- **A conversation's `@` menu** offers what Claude Code's does: the fleet's live peers, then the
+  machine's other Claude sessions `(dir)` (a bare one-shot `claude` running `/list-agents`, asked
+  once per opening), then `@agent-<type> (agent)`, then files by fuzzy search. The manager's
+  conversation offers its fleet and files only. `⇥` is the only accept. `internal/ui/completionpeers.go`,
+  `completionindex.go`; rulings in `decisions.md` (2026-09-27).
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
   (absent→spawn, parked→wake, running→park); `/manager-stop` ends it.
 - **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
@@ -96,7 +101,7 @@ Violating one is a design regression, not a style nit.
 |---|---|
 | **Not a terminal emulator or multiplexer.** No PTY, no VT100, no browser panes, no arbitrary shells. | Chasing it is how this project dies at 40%. |
 | **Cheap to leave open.** No per-frame work that could be per-change, no poll where a wait will do, no process on a timer. | A per-agent cost multiplies by 30. |
-| **Only `internal/core`'s four airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`. | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
+| **Only `internal/core`'s five airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`, and `localreply.go` for the text replies of local commands (owner's 2026-09-27 ruling). | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
 | **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Use `core.SessionArgvMarkers`. | Enforced by `argv_test.go` tree-wide. |
 | **`attention.go` stays a pure function.** | Hardest logic; testable without spawning. |
 | **The UI never touches an agent's process.** | Keeps the daemon boundary real. |
@@ -251,8 +256,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **Open mention mode widens a message, never a command**: `@john /anything` always goes to john
   alone (`mention.go`, `leadingCommand`).
 - **Completion offers, never routes, never takes `↵`.** Session commands/skills first, then Wake's,
-  agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads run off
-  the draw goroutine (`completion.go`, `completionpath.go`). It must mirror `core.Resolve`.
+  agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads and the
+  conversation's one bounded `git -c core.fsmonitor=false ls-files` per opening run off the draw
+  goroutine, and the room keeps the one-directory listing (`completion.go`, `completionpath.go`,
+  `completionindex.go`). The room's menu must mirror `core.Resolve`; a DM routes nothing.
 
 **Cards and asks**
 - **An ask belongs to its agent's conversation; the room draws none** (`Cards.For`, `App.cardOf`).
@@ -293,6 +300,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   names the effort and model (`core.EffortFromModelReply`, `ModelFromModelReply`). The reply is
   suppressed at `fanOut` (`absorbProbe`) and filtered from restored history. The status bar prefers
   confirmed values. `internal/daemon/probe.go`, `effort.go`.
+- The same machinery's second kind keeps claude's own name in step: Wake's `/name` sends a bare
+  `/rename` at idle; the operator's own `/rename` is mirrored marked `SelfRenames` and held until
+  claude's reply, so it is never sent twice. `internal/daemon/renamesync.go`.
+- **The machine's sessions are not a probe:** a `/list-agents` sent to an agent stays in its context,
+  so the daemon runs a bare one-shot instead — no credential, a model turn latches it off.
+  `internal/daemon/peers.go`.
 
 ## Key locations
 
@@ -303,15 +316,15 @@ yet says so in bold.**
 |---|---|
 | Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` · `handover.go` |
-| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` |
-| One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` |
+| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) |
+| One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
-| Transport | `internal/rpc/wire.go` · `lifecycle.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `color.go`, `team.go` |
+| Transport | `internal/rpc/wire.go` · `lifecycle.go` · `peers.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
-| Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `sections.go` |
+| Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
@@ -323,7 +336,7 @@ yet says so in bold.**
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
-| Completion | `internal/ui/completion.go` · `completionpath.go` |
+| Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
@@ -405,6 +418,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 | Debug | `--debug-file <path>`; `--debug` alone logs nothing observable headless |
 | Isolation | `--worktree` — **not used**; Wake runs `git worktree add` itself |
 | Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools ""`; `--append-system-prompt` |
+| Session listing | `--print --bare --no-session-persistence` + stream-json, one `/list-agents` line (verified 2.1.283) |
 
 ### Traps
 
@@ -441,6 +455,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   (2.1.281, `testdata/stream/mcp-control.jsonl`). Reconnect/toggle reply with the bare `success` a
   mode change gets — only the request id says what it answers. `mcp_toggle` persists. The status
   carries no tool descriptions.
+- A local command sent to a live session (`/list-agents`, `/rename`) persists in its transcript and
+  reaches its model next turn. `--name` wins on `--resume`, even over a `/rename`. A `--bare` session
+  registers no inbox, so its `/list-agents` has no `This session:` line.
+  `docs/superpowers/notes/2026-09-27-at-menu-findings.md`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A headless session loads claude.ai connectors only after an `initialize` control request**
@@ -460,7 +478,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/vocabulary.go` at 800 and `internal/ui/app.go` at 799 — derived by
+  `internal/ui/dm.go` at 799 and `internal/core/encode.go` at 798 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

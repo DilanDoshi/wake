@@ -10,10 +10,11 @@ package ui
 // menu may be wrong about a machine that has started nothing; a fence may not.
 //
 // **It is built per change, never per frame.** App.retarget's occasions, for
-// App.retarget's reason and one sharper: the `@` half needs a directory read,
-// which is why that half is a tea.Cmd - see completionpath.go. What is left per
-// frame is a comparison against the pane and the draft it was built for, which
-// is also what closes it.
+// App.retarget's reason and one sharper: the `@` half needs a directory read and
+// a git per opening, which is why that half is a tea.Cmd - see completionpath.go
+// and completionindex.go. A keystroke ranks what the git answered and never
+// walks. What is left per frame is a comparison against the pane and the draft
+// it was built for, which is also what closes it.
 //
 // **The menu never takes `↵`, but it takes `↑↓` to walk.** ⇥ completes, ↑↓ walk
 // the offers, and ⌃N/⌃P walk too as aliases - the ⌃ pair read above App.key's
@@ -134,15 +135,19 @@ type completion struct {
 	// commands and skills, Wake's own commands, and the fleet's live names.
 	names []string
 
-	// teams is which of names are teams rather than agents, keyed by the offer
-	// value, so View can tag them without changing what an accept inserts. Nil
-	// for a command menu and for a fleet with no teams, which is the flat menu
-	// this build has always drawn.
-	teams map[string]bool
+	// tags is what a tagged offer is drawn with after it, keyed by the offer
+	// value, so View can label it without changing what an accept inserts: a
+	// room's `(team)`, a conversation's outside session's directory and its
+	// subagents' `(agent)`. Nil for a flat menu.
+	tags map[string]offerTag
 
 	// paths is the `@` half, which is a directory read and so is not this
 	// goroutine's. See completionpath.go.
 	paths pathMenu
+
+	// peers is a conversation's machine half: the listing and its ask. See
+	// completionpeers.go.
+	peers peerMenu
 
 	// offers are what could finish the token, already bounded, in the order
 	// they are drawn. more is how many matched beyond them.
@@ -168,15 +173,24 @@ func (c completion) open() bool { return len(c.offers) > 0 }
 // no longer has the keys - leaves it undrawn and its keys unread on the next
 // frame.
 //
-// It never starts a directory read - that is App.scanning, which the keystroke
-// path calls and a fleet report does not. A report arrives per fleet event and
-// cannot have moved the draft, so reading on one is a directory read per event
-// at fleet size for a menu nobody touched. The listing is carried instead.
+// It never starts a directory read or writes a frame - that is App.scanning,
+// which the keystroke path calls and a fleet report does not. A report arrives
+// per fleet event and cannot have moved the draft, so reading on one is a
+// directory read per event at fleet size for a menu nobody touched. The
+// listings are carried instead, and so is an opening's ask.
 func (a App) recompleted() App {
-	next := a.completing()
-	next.paths = next.paths.carrying(a.completion.paths)
-	a.completion = next.bounded()
+	a.completion = a.completing().carried(a.completion).bounded().keepingCursor(a.completion)
 	return a
+}
+
+// carried is a new menu with what the one it replaces holds: the read in
+// flight, the listings, and an opening's ask while it goes on. It reads nothing
+// the command table does, so clearDraft - which that table reaches - may call it
+// where recompleted would be an initialization cycle.
+func (c completion) carried(prev completion) completion {
+	c.paths = c.paths.carrying(prev.paths)
+	c.peers = c.peers.carrying(prev.peers, c.pane == prev.pane)
+	return c
 }
 
 // completing builds the menu for the focused draft. See this file's header for
@@ -221,22 +235,28 @@ func mentionStem(draft string) (head, rest string, ok bool) {
 // mentionMenu is `@`, which is overloaded exactly as it is in Claude Code: a
 // live session name wins, and anything else is a file path.
 //
-// **Names are offered in the room and nowhere else.** `@name` is Wake's
-// routing, and the room is the only place it routes - a DM sends what was typed
-// verbatim, so a name accepted there is one claude's own CLI reads as a file
-// reference. Paths are offered in both, because that is what `@` means to the
-// agent on the far side either way.
+// **The room offers Wake's names; a conversation offers claude's.** In the room
+// `@name` is Wake's routing, so its names are addressees. A DM still sends what
+// was typed verbatim: claude's model sends `@<session>` with SendMessage (§4 of
+// docs/superpowers/notes/2026-09-27-at-menu-findings.md, from the docs), and
+// `@agent-<type>` resolves headless to an Agent call (§3). So once a character
+// that can begin a name is typed, a conversation offers what Claude Code's own
+// `@` does (the manager's, its fleet only) - the owner's 2026-09-27 reversal of
+// the room-only rule, in completionpeers.go. Paths are offered in both.
 func (a App) mentionMenu(draft, head, typed string) completion {
 	c := completion{pane: a.focus, draft: draft, head: head, paths: a.pathMenuFor(typed)}
-	if a.focus == "" {
-		c.names, c.teams = a.addressees(typed)
+	switch {
+	case a.focus == "":
+		c.names, c.tags = a.addressees(typed)
+	case canBeginName(typed):
+		c = a.conversationMenu(c, typed)
 	}
 	return c
 }
 
 // addressees is every name a mention could resolve to, in the roster's own
-// order: the live agents, then the teams, then the broadcast last. The `teams`
-// set names which offers are teams, keyed by the offer value, so View tags them
+// order: the live agents, then the teams, then the broadcast last. A team is
+// tagged `(team)` in the returned tags, keyed by the offer value, so View tags it
 // without changing what an accept inserts - a team offer is the bare `@backend`
 // the router fans out (core.Resolve's team step), never the display tag.
 //
@@ -246,7 +266,7 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 // that is drawn and cannot be completed. Teams sit between the agents and the
 // broadcast - narrowest to broadest - and are the daemon's own order (teamOrder,
 // off the report), the roster sections' order one surface over.
-func (a App) addressees(typed string) (names []string, teams map[string]bool) {
+func (a App) addressees(typed string) (names []string, tags map[string]offerTag) {
 	lower := strings.ToLower(typed)
 	// A team is mentionable only when it has a live member, mirroring
 	// core.Resolve's teamMembers(mention, a.live()): a team stays in teamOrder
@@ -289,16 +309,12 @@ func (a App) addressees(typed string) (names []string, teams map[string]bool) {
 		if !strings.HasPrefix(team, lower) || live[offer] || !liveTeam[offer] {
 			continue
 		}
-		names = append(names, offer)
-		if teams == nil {
-			teams = make(map[string]bool)
-		}
-		teams[offer] = true
+		names, tags = tagged(names, tags, offer, offerTag{suffix: teamMenuSuffix})
 	}
 	if strings.HasPrefix(core.BroadcastName, lower) {
 		names = append(names, agentPrefix+core.BroadcastName)
 	}
-	return names, teams
+	return names, tags
 }
 
 // teamArgMenu offers the fleet's existing teams to finish a `/team` argument, so
@@ -447,7 +463,7 @@ func (a App) addressedAgent() (Agent, bool) {
 // a resolved leading `@name ` and nothing else before the command. It reuses
 // addressedAgent's direct route, so it answers the same "who does `@iris /command`
 // configure" the completion already asks. Absent in a DM, where a leading @name is
-// a file reference rather than a route; when prose sits between the mention and
+// sent as typed rather than routed; when prose sits between the mention and
 // the command, which is an ordinary message with a command-shaped word in it; and
 // when the mention names nobody live.
 func (a App) mentionedAlone(head string) (Agent, bool) {
@@ -466,17 +482,34 @@ func (a App) mentionedAlone(head string) (Agent, bool) {
 //
 // The names first and the paths under them, which is the overload stated as an
 // order rather than as a rule: a live session name wins. It runs again when a
-// directory read lands, so the cursor a walk left is clamped rather than reset -
-// paths arriving under the names cannot move them.
+// directory read or a git lands, so the cursor a walk left is clamped rather
+// than reset - paths arriving under the names cannot move them.
 func (c completion) bounded() completion {
-	matched := append(slices.Clone(c.names), c.paths.rows()...)
-	c.more = 0
+	c.paths = c.paths.reranked()
+	paths, rest := c.paths.rows()
+	matched := append(slices.Clone(c.names), paths...)
+	c.more = rest
 	if len(matched) > completionRows {
-		c.more = len(matched) - completionRows
+		c.more += len(matched) - completionRows
 		matched = matched[:completionRows]
 	}
 	c.offers = matched
 	c.cursor = min(c.cursor, max(len(matched)-1, 0))
+	return c
+}
+
+// keepingCursor holds a walk across a rebuild that left the draft alone - a
+// report, the peers reply - on the offer it was on, or clamped where that offer
+// went. A menu for a new draft starts at the top, as it always has.
+func (c completion) keepingCursor(prev completion) completion {
+	if c.pane != prev.pane || c.draft != prev.draft || !prev.open() {
+		return c
+	}
+	if i := slices.Index(c.offers, prev.offers[prev.cursor]); i >= 0 {
+		c.cursor = i
+		return c
+	}
+	c.cursor = clamp(prev.cursor, 0, max(len(c.offers)-1, 0))
 	return c
 }
 
@@ -552,20 +585,39 @@ func (a App) completionView(width int, id string) string {
 	return a.completion.View(width)
 }
 
+// offerTag is what a tagged offer is drawn with after it: a fixed word such as
+// `(team)`, or a directory, which dirLabel cuts from the left.
+type offerTag struct{ suffix, dir string }
+
 // rowLabel is what an offer is drawn as at a given width. A plain offer is
-// handed to optionRow as-is (it truncates from the right); a team `@mention`
-// keeps its `(team)` tag by truncating the *name* first, with room reserved for
-// the row's lead and the tag. Without that reservation a long team name on a
-// narrow pane drops the tag and reads as an ordinary mention, while an accept
-// still inserts the bare mention and fans out to the team (the adversarial
-// review's finding). Display only - acceptCompletion writes the offer itself,
-// so neither the tag nor the truncation reaches the draft or the router.
+// handed to optionRow as-is (it truncates from the right); a fixed tag is kept
+// by truncating the *name* first, with room reserved for the row's lead and the
+// tag. Without that reservation a long team name on a narrow pane drops the tag
+// and reads as an ordinary mention, while an accept still inserts the bare
+// mention and fans out to the team (the adversarial review's finding). Display
+// only - acceptCompletion writes the offer itself, so neither the tag nor the
+// truncation reaches the draft or the router.
 func (c completion) rowLabel(offer string, width int) string {
-	if !c.teams[offer] {
+	tag, ok := c.tags[offer]
+	if !ok {
 		return offer
 	}
-	room := width - lipgloss.Width(cardCursor) - lipgloss.Width(teamMenuSuffix)
-	return ansi.Truncate(offer, max(room, 0), ellipsis) + teamMenuSuffix
+	avail := width - lipgloss.Width(cardCursor)
+	if tag.dir != "" {
+		return dirLabel(offer, tag.dir, avail)
+	}
+	room := avail - lipgloss.Width(tag.suffix)
+	return ansi.Truncate(offer, max(room, 0), ellipsis) + tag.suffix
+}
+
+// tagged appends an offer drawn with a tag, making the map on the first so a
+// menu with none stays the flat menu.
+func tagged(names []string, tags map[string]offerTag, offer string, tag offerTag) ([]string, map[string]offerTag) {
+	if tags == nil {
+		tags = make(map[string]offerTag)
+	}
+	tags[offer] = tag
+	return append(names, offer), tags
 }
 
 // View draws it, through the same rows a card and the picker draw.

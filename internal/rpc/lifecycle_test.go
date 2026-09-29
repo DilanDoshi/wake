@@ -64,6 +64,8 @@ var frameKinds = map[string]string{
 	"FrameMCPReconnect":       FrameMCPReconnect,
 	"FrameMCPEnable":          FrameMCPEnable,
 	"FrameMCPDisable":         FrameMCPDisable,
+	"FramePeers":              FramePeers,
+	"FramePeersReply":         FramePeersReply,
 }
 
 // The verbs must not collide with each other or with the existing kinds. A
@@ -92,7 +94,7 @@ func TestEveryFrameKindIsDistinct(t *testing.T) {
 // It is the guard that stops that test from being one more of the shape this
 // project keeps finding: a check whose subject can walk out from under it.
 func TestNoFrameKindIsMissingFromTheDistinctnessMap(t *testing.T) {
-	declared := frameKindConstants(t, "wire.go", "lifecycle.go", "history.go", "team.go", "mcp.go")
+	declared := frameKindConstants(t, "wire.go", "lifecycle.go", "history.go", "team.go", "mcp.go", "peers.go")
 	if len(declared) < len(frameKinds) {
 		t.Fatalf("found %d Frame* constants across the package, but the map holds %d: the scan is broken and this test is asserting nothing", len(declared), len(frameKinds))
 	}
@@ -304,6 +306,32 @@ func TestGoalRoundTripsAndOmitsWhenAbsent(t *testing.T) {
 	}
 	if back.Goal == nil || back.Goal.Condition != "ship the PR" || !back.Goal.Active {
 		t.Errorf("goal did not round-trip: %+v", back.Goal)
+	}
+}
+
+// Agents rides Commands' own route and reason: a session with none omits the
+// key so an ordinary report is not padded with an empty array per session, and
+// one that named some has them survive the wire in order.
+func TestAgentsRoundTripsAndOmitsWhenAbsent(t *testing.T) {
+	absent, err := json.Marshal(SessionStatus{ID: "s1", State: StateIdle})
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if strings.Contains(string(absent), "agents") {
+		t.Errorf("a session with no agents serialized an agents key: %s", absent)
+	}
+
+	st := SessionStatus{ID: "s1", State: StateWorking, Agents: []string{"general-purpose", "Explore"}}
+	b, err := json.Marshal(st)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	var back SessionStatus
+	if err := json.Unmarshal(b, &back); err != nil {
+		t.Fatalf("unmarshal: %v", err)
+	}
+	if !reflect.DeepEqual(back.Agents, st.Agents) {
+		t.Errorf("agents did not round-trip: got %v, want %v", back.Agents, st.Agents)
 	}
 }
 

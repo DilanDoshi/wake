@@ -1,13 +1,14 @@
 // The frames Wake writes back to a session - part of the airlock; see
 // protocol.go.
 //
-// The airlock is these four files and nothing else in Wake knows Claude
+// The airlock is these five files and nothing else in Wake knows Claude
 // Code's stream-json format:
 //
 //	protocol.go    decoding - one wire line in, core.Events out
 //	wire.go        the shapes it decodes into
 //	vocabulary.go  Claude's words resolved into Wake's
 //	encode.go      the frames Wake writes back
+//	localreply.go  the text replies of local commands Wake parses
 //
 // internal/core/airlock_test.go enforces that over the whole tree and reads
 // the same list. protocol.go's header carries the full rule.
@@ -24,8 +25,8 @@ import (
 
 // --- encoding ---------------------------------------------------------------
 //
-// PROBE-DERIVED, NOT FIXTURE-DERIVED - unlike everything the other three
-// airlock files decode. Wake writes these frames on stdin and never reads
+// PROBE-DERIVED, NOT FIXTURE-DERIVED - unlike everything the rest of the
+// airlock decodes. Wake writes these frames on stdin and never reads
 // them, so a recording of stdout cannot contain them whatever its size. The
 // corpus does hold 12 control_response lines, and they are not these: those
 // are Claude's receipts coming back, the same wire word travelling the other
@@ -661,9 +662,10 @@ func marshalLine(frame any, what string) ([]byte, error) {
 // command (the markers are in wire.go beside the wire shapes); the progress
 // refresh is a user frame carrying the feedback prefix.
 //
-// It reads, not writes - wire.go is its subject home, but that file is at the size
-// cap and the airlock is a fixed four files (TestTheAirlockIsFourFilesInInternalCore),
-// so it sits here because this is an airlock file, not for the frame's direction.
+// It reads, not writes - so wire.go would be its subject home - but that file is
+// at the 800-line hard max and the airlock's set grows only by a ruling
+// (airlock_test.go's TestTheAirlockIsFiveFilesInInternalCore). encode.go held
+// the room; the placement turns on it being an airlock file, not the direction.
 func goalOp(frameType string, m wireMessage) (GoalOp, bool) {
 	if m.Model == syntheticModel {
 		text := messageText(m.Content)

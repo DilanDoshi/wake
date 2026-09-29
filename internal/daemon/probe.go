@@ -1,24 +1,49 @@
 package daemon
 
-// The effort probe: how the daemon reads a session's reasoning level back, and
-// keeps the reply invisible.
+// Probes: the local commands the daemon sends on its own, and how their replies
+// are kept invisible.
 //
-// Effort is on no frame Claude sends unasked, so the only way to confirm a level
-// is to ask - a bare /model, whose reply names it (`Current model: … (effort:
-// xhigh)`) and which the CLI answers locally (num_turns:0, $0, no inference).
-// tryProbe sends it, absorbProbe swallows the reply at fanOut before it
-// reaches a client, and the level lands on agent.confirmedEffort. The command
-// counts as no turn (apply.go skips noteSent) and the fields it touches
-// (pendingProbes, swallowTurnEnd, confirmedEffort, probed, probeWanted) live on
-// the agent and are written only under a.mu. It is also the daemon's only
-// unprompted stdin write, so tryProbe refuses to send one while a real turn is
-// owed - wantProbe/probeIfWanted defer it to the next idle instead of dropping
-// it. Split from agent.go/effort.go as its own subject.
+// A probe is a bare slash command the CLI answers locally (num_turns:0, $0, no
+// inference), sent to read back something no frame carries unasked. Each kind
+// is its command, its reply's shape, and what the reply is for:
+//
+//	modelProbe   /model   the session's effort and model (effort.go)
+//	renameProbe  /rename  claude's own session name, after a Wake rename (renamesync.go)
+//
+// A kind is added by naming it below, giving probeReply its matcher,
+// probeTextLocked its line and absorbed its consequence. queueProbeLocked sends
+// one only while the agent is idle, absorbProbe swallows its reply at fanOut
+// before any client sees it, and the command counts as no turn (sendProbe
+// skips noteSent). The fields it touches (pendingProbes, swallowTurnEnd,
+// confirmedEffort, probed, probeWanted, and renamesync.go's claudeName,
+// renameHeld and renameAsked) live on the agent and are written only under a.mu. A probe is the daemon's only unprompted stdin
+// write, so one is never queued while a real turn is owed - a kind's want
+// waits in probeWanted and fires at the next idle instead of being dropped.
 
 import (
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
+
+// probeKind is which local command a probe is; notProbe is an operator's line.
+type probeKind int
+
+const (
+	notProbe probeKind = iota
+	modelProbe
+	renameProbe
+	probeKinds
+)
+
+// probeReply recognises each kind's reply. Content-matched, so a reply is
+// claimed only while its own kind has one in flight.
+var probeReply = [probeKinds]func(string) bool{
+	modelProbe: core.IsModelReply,
+	renameProbe: func(text string) bool {
+		_, ok := core.RenamedFromReply(text)
+		return ok
+	},
+}
 
 // wantProbe marks a startup or re-probe due and fires it at once if the agent
 // is already idle. Called while the turn it belongs to is normally still in
@@ -30,137 +55,204 @@ import (
 // turn end to catch the request, so tryProbe fires it now instead.
 func (a *agent) wantProbe() {
 	a.mu.Lock()
-	a.probeWanted = true
+	a.probeWanted[modelProbe] = true
 	a.mu.Unlock()
 	a.tryProbe()
 }
 
-// probeIfWanted fires a due probe once this agent's turn end has been observed.
-// Called from fanOut after observe returns - never from inside it, which holds
-// a.mu. A no-op unless a probe is due and the agent is now idle.
+// probeIfWanted fires the due probes once this agent's turn end has been
+// observed. Called from fanOut after observe returns - never from inside it,
+// which holds a.mu. A no-op unless a probe is due and the agent is now idle.
 func (a *agent) probeIfWanted() {
 	a.tryProbe()
 }
 
-// tryProbe queues a bare /model to read the session's reasoning level back - a
-// local CLI reply (num_turns:0, $0) absorbProbe suppresses - when one is due
-// (probeWanted) and the agent is idle. It is the daemon's only unprompted stdin
-// write, and one sent while a real turn is owed is what let its reply interleave
-// with that turn's own frames, so it defers while owed or blocked on an ask
-// (whose stdin is a closed decision). probeWanted is cleared only in the same
-// locked step that queues the probe, so a re-probe requested by a concurrent
-// wantProbe between two turn ends is never cleared without having fired.
-// Best-effort past the idle gate: skipped for an agent that is gone, and dropped
-// if the queue is full - the level does not refresh this cycle and the next turn
-// end retries. The reply is consumed by absorbProbe.
+// tryProbe queues every kind that is due (probeWanted) while the agent is idle.
+// The reply is consumed by absorbProbe.
 func (a *agent) tryProbe() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if !a.probeWanted || a.owed || len(a.pending) > 0 {
+	for kind := modelProbe; kind < probeKinds; kind++ {
+		a.tryProbeLocked(kind)
+	}
+}
+
+// tryProbeLocked queues one kind if it is wanted and has a line to send. The
+// want is cleared only in the same locked step that queues it, so a request
+// made by another goroutine between two turn ends is never cleared without
+// having fired; one skipped on a full queue waits for the next turn end. The
+// caller holds a.mu.
+func (a *agent) tryProbeLocked(kind probeKind) {
+	if !a.probeWanted[kind] {
 		return
+	}
+	text, keep := a.probeTextLocked(kind)
+	switch {
+	case text == "":
+		a.probeWanted[kind] = keep
+	case a.queueProbeLocked(kind, text):
+		a.probeWanted[kind] = false
+	}
+}
+
+// probeTextLocked is the line a wanted probe sends now, or "" for none, with
+// keep saying whether the want outlives a "". The caller holds a.mu.
+func (a *agent) probeTextLocked(kind probeKind) (text string, keep bool) {
+	if kind == renameProbe {
+		return a.renameTextLocked()
+	}
+	return slashPrefix + modelVerb, false
+}
+
+// sendProbe writes one queued probe. A probe is not an operator turn: no
+// noteSent (so the agent is not marked owed and never looks busy), no
+// noteEffort, and no client to report a failure to. incProbe before the write
+// opens the window fanOut uses to swallow the reply; a failed write closes it
+// again. A rename is decided again here, at the write (renameWrite).
+func (a *agent) sendProbe(p pending) {
+	text := p.frame.Text
+	if p.probe == renameProbe {
+		if text = a.renameWrite(); text == "" {
+			return
+		}
+	}
+	a.incProbe(p.probe)
+	if err := a.sess.Send(text, nil, ""); err != nil {
+		a.decProbe(p.probe)
+		logf("wake: session %s: probe %q not sent: %v", a.id, text, err)
+	}
+}
+
+// queueProbeLocked queues one probe and reports whether it did. One sent while
+// a real turn is owed is what let a reply interleave with that turn's own
+// frames, so it refuses while owed or blocked on an ask (whose stdin is a
+// closed decision), for an agent that is gone, and on a full queue. The caller
+// holds a.mu.
+func (a *agent) queueProbeLocked(kind probeKind, text string) bool {
+	if a.owed || len(a.pending) > 0 {
+		return false
 	}
 	select {
 	case <-a.gone:
-		return
+		return false
 	default:
 	}
 	select {
-	case a.in <- pending{probe: true, frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: slashPrefix + modelVerb}}:
-		a.probeWanted = false
+	case a.in <- pending{probe: kind, frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: text}}:
+		return true
 	default:
+		return false
 	}
 }
 
 // incProbe and decProbe open and close one probe's suppression window. The
-// window is opened before /model reaches stdin and closed if the write fails,
-// so a probe that never went out expects no reply.
-func (a *agent) incProbe() {
+// window is opened before the command reaches stdin and closed if the write
+// fails, so a probe that never went out expects no reply.
+func (a *agent) incProbe(kind probeKind) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.pendingProbes++
+	a.pendingProbes[kind]++
 }
 
-func (a *agent) decProbe() {
+func (a *agent) decProbe(kind probeKind) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.pendingProbes > 0 {
-		a.pendingProbes--
+	if a.pendingProbes[kind] > 0 {
+		a.pendingProbes[kind]--
 	}
 }
 
-// absorbProbe consumes a /model probe's reply so it never reaches a client, and
-// reports whether the caller should publish the newly confirmed effort.
-//
-// It keys on the probe's own reply - an assistant frame carrying the /model
-// text - not on a bare in-flight flag. Keying on the reply's shape is what makes
-// it safe for a probe to be armed on another goroutine: a previous turn's frames
-// still draining here do not match, so they pass through untouched. Each reply
-// arms swallowTurnEnd, which carries the window one frame further so the probe
-// turn's own end is swallowed too and decrements the counter - so two probes in
-// flight suppress two replies, not one. The end is swallowed only when it is a
-// local command (num_turns==0, Event.LocalCommand): the arm is content-matched
-// and a real turn's prose can begin "Current model:", but only the probe's own
-// turn ran no inference, so a look-alike real turn's end passes through. The
-// agent's state never moves for a question the operator did not ask.
-func (a *agent) absorbProbe(ev core.Event) (suppress, publish bool) {
+// absorbed takes a probe's own frame off the stream and carries out what its
+// reply is for, reporting whether ev is kept from every client. Called by
+// fanOut before observe, so a probe never moves this agent's state.
+func (s *server) absorbed(a *agent, ev core.Event) bool {
+	suppress, answered := a.absorbProbe(ev)
+	switch answered {
+	case modelProbe:
+		s.broadcast(s.statusPush()) // the level and model it confirmed
+	}
+	return suppress
+}
+
+// absorbProbe consumes a probe's reply and its turn end so neither reaches a
+// client, and names the kind whose reply the server must now act on - notProbe
+// for a turn end, and for a /model reply that confirmed nothing. It keys on the
+// reply's shape while its kind is in flight, so a previous turn's frames pass
+// through; each reply arms swallowTurnEnd, so the probe's own end is swallowed
+// and drains its kind's counter.
+func (a *agent) absorbProbe(ev core.Event) (suppress bool, answered probeKind) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.pendingProbes > 0 && ev.Kind == core.KindAssistantText && core.IsModelReply(ev.Text) {
-		// Content-matched, so a real turn whose prose merely begins "Current
-		// model:" also arms and has this block suppressed (and, if it carries an
-		// (effort: …) clause, records a level that the real probe's reply then
-		// corrects). That mis-suppression of the block is pre-existing and not
-		// what the LocalCommand gate below addresses - that gate protects only
-		// the turn *end*, so a look-alike real turn keeps its end even though it
-		// loses this one block.
-		//
-		// Armed whether or not the level parses. Arming only inside the ok
-		// branch below used to leave a reply this build cannot read as neither
-		// - not published, and its window never closed - so pendingProbes
-		// never came back down and stuck every later turn's own end under a
-		// window that could never legitimately claim it again.
-		a.swallowTurnEnd = true
-		// A /model reply always names the level, so requiring the (effort: …)
-		// clause as well as the "Current model:" prefix is what keeps a
-		// coincidental line - a with-argument /effort's own confirmation, say -
-		// from being mistaken for the probe's reply and closing the window early.
-		if lvl, ok := core.EffortFromModelReply(ev.Text); ok {
-			a.confirmedEffort = lvl
-			// The same reply names the model; read it back for the status bar so a
-			// runtime /model shows at once rather than at the next turn's init.
-			if model, ok := core.ModelFromModelReply(ev.Text); ok {
-				a.confirmedModel = model
-			}
-			return true, true
+	if kind := a.replyKindLocked(ev); kind != notProbe {
+		// Armed whether or not the reply parses. Arming only once it parsed used
+		// to leave a /model reply this build cannot read neither published nor
+		// closed, so its counter never came back down and stuck every later
+		// turn's own end under a window nothing could legitimately claim again.
+		a.swallowTurnEnd = kind
+		if kind == modelProbe && !a.confirmModelLocked(ev.Text) {
+			return true, notProbe
 		}
-		return true, false
+		return true, kind
 	}
-	// Swallow the probe's own turn end. The arm above fires on any
-	// "Current model:" assistant frame, which a real turn's prose can match,
-	// so the end is swallowed only when it is a local command (num_turns==0)
-	// - the shape of the bare /model the daemon sends (bare-model.jsonl) and of
-	// no real inference turn. A real turn whose text merely began "Current
-	// model:" disarms here and passes through, and the actual probe's reply and
-	// end follow and re-arm. Keying this on !a.owed instead ate a real turn's
-	// end whenever a racing send had set owed, and keying it on the arm alone
-	// ate the end of any real turn that started "Current model:".
+	// Swallow the probe's own turn end - only when it is a local command
+	// (num_turns==0), the shape of every probe's recorded end and of no real
+	// inference turn. The arm is content-matched and a real turn's prose can
+	// begin like a reply, so a look-alike real turn disarms here and passes
+	// through, and the actual probe's reply and end follow and re-arm. Keying
+	// this on !a.owed instead ate a real turn's end whenever a racing send had
+	// set owed, and keying it on the arm alone ate the end of any real turn that
+	// merely began "Current model:".
 	//
-	// pendingProbes decrements only here, so it relies on the probe's own end
-	// being a local command; that is the recorded shape of a bare /model, and
-	// were it ever to run a turn the window would disarm without draining. An
-	// operator's own num_turns==0 passthrough (/model <arg>, /clear) that armed
-	// on a "Current model:" prefix would also be swallowed here, the same as it
-	// was before this gate - a pre-existing limit of content-matched arming.
-	if a.swallowTurnEnd && ev.Kind == core.KindTurnEnd {
-		a.swallowTurnEnd = false
+	// The counter decrements only here, so it relies on the probe's own end
+	// being a local command; were one ever to run a turn the window would disarm
+	// without draining. An operator's own num_turns==0 passthrough that armed on
+	// a look-alike reply would also be swallowed - a limit of content matching.
+	if a.swallowTurnEnd != notProbe && ev.Kind == core.KindTurnEnd {
+		kind := a.swallowTurnEnd
+		a.swallowTurnEnd = notProbe
 		if ev.LocalCommand {
-			if a.pendingProbes > 0 {
-				a.pendingProbes--
+			if a.pendingProbes[kind] > 0 {
+				a.pendingProbes[kind]--
 			}
-			return true, false
+			return true, notProbe
 		}
 	}
-	return false, false
+	return false, notProbe
+}
+
+// replyKindLocked is the kind in flight whose reply ev is, or notProbe. The
+// caller holds a.mu.
+func (a *agent) replyKindLocked(ev core.Event) probeKind {
+	if ev.Kind != core.KindAssistantText {
+		return notProbe
+	}
+	for kind := modelProbe; kind < probeKinds; kind++ {
+		if a.pendingProbes[kind] > 0 && probeReply[kind](ev.Text) {
+			return kind
+		}
+	}
+	return notProbe
+}
+
+// confirmModelLocked records the level a /model reply names, and the model
+// beside it, reporting whether the level parsed. Requiring the (effort: …)
+// clause as well as the "Current model:" prefix keeps a coincidental line - a
+// with-argument /effort's own confirmation, say - from being recorded as one.
+// A real turn whose prose merely begins "Current model:" still has that block
+// suppressed by absorbProbe's content match - a pre-existing limit the
+// LocalCommand gate on the end does not address. The caller holds a.mu.
+func (a *agent) confirmModelLocked(text string) bool {
+	lvl, ok := core.EffortFromModelReply(text)
+	if !ok {
+		return false
+	}
+	a.confirmedEffort = lvl
+	// The same reply names the model; read it back for the status bar so a
+	// runtime /model shows at once rather than at the next turn's init.
+	if model, ok := core.ModelFromModelReply(text); ok {
+		a.confirmedModel = model
+	}
+	return true
 }
 
 // firstInit reports whether ev is this session's init and no probe has fired

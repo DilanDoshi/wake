@@ -599,6 +599,12 @@ type Frame struct {
 	// FrameSaveWorkflow/FrameWorkflowSaved - declared in workflow.go for its
 	// own header's reason.
 	Workflow *WorkflowFrame `json:"workflow,omitempty"`
+	Peers    *PeersFrame    `json:"peers,omitempty"` // FramePeersReply's listing; see peers.go
+
+	// SelfRenames marks a FrameRename whose keystroke also sends the agent its own
+	// /rename - the UI's mirror - so the daemon waits for the agent's own reply
+	// before deciding whether to send one.
+	SelfRenames bool `json:"self_renames,omitempty"`
 }
 
 // writeMu serializes every write in this package. Sessions fan out to one

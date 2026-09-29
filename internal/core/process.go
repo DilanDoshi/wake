@@ -72,6 +72,32 @@ var nestedSessionEnv = []string{
 	"CLAUDE_PLUGIN_DATA",
 }
 
+// oneShotCredentialEnv and every provider switch (oneShotProviderPrefix) are
+// dropped from the one-shot alone: /list-agents needs no credential (the bare
+// recordings show apiKeySource none), and a bare claude with no token and no
+// provider selected has nothing to spend through. The prefix covers switches
+// added after this list was written.
+var oneShotCredentialEnv = []string{"ANTHROPIC_API_KEY", "ANTHROPIC_AUTH_TOKEN", "CLAUDE_CODE_OAUTH_TOKEN"}
+
+const oneShotProviderPrefix = "CLAUDE_CODE_USE_"
+
+// ListAgentsCommand is the one-shot that lists the machine's sessions, run in
+// dir: claude found on this process's PATH as an agent's is, with an agent's
+// scrubbed environment less any credential, and in a group of its own that
+// cancelling ctx kills whole. The caller feeds stdin and reads stdout.
+func ListAgentsCommand(ctx context.Context, dir string) *exec.Cmd {
+	cmd := execCommand(ctx, claudeBinary, listAgentsArgv()...)
+	cmd.Dir = dir
+	cmd.Env = slices.DeleteFunc(scrubbedEnv(os.Environ()), func(kv string) bool {
+		name, _, _ := strings.Cut(kv, "=")
+		return slices.Contains(oneShotCredentialEnv, name) || strings.HasPrefix(name, oneShotProviderPrefix)
+	})
+	cmd.WaitDelay = waitDelay
+	setProcessGroup(cmd)
+	cmd.Cancel = func() error { return killProcessGroup(cmd) }
+	return cmd
+}
+
 // scrubbedEnv returns a copy without nested-session or private launcher
 // variables, leaving the original untouched.
 func scrubbedEnv(env []string) []string {

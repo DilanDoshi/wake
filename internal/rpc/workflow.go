@@ -11,7 +11,7 @@ package rpc
 // FrameWorkflowAgent/FrameWorkflowAgentReply ask for and answer one workflow
 // agent's own transcript, named "workflow_transcript" on the wire rather
 // than Claude's own "workflow_agent" - internal/core/airlock_test.go polices
-// that word, and this package is not one of the four airlock files, so it
+// that word, and this package is not one of the airlock files, so it
 // may not spell it. FrameSaveWorkflow/FrameWorkflowSaved write a run's
 // script to disk and confirm the path it landed at.
 
