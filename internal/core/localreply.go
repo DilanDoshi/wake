@@ -187,8 +187,8 @@ func peersFromRows(rows []string) ([]Peer, bool) {
 	return peers, true
 }
 
-// peerFromRow reads one `[state]  ·  name  ·  cwd  ·  started age` row. The age
-// is required and unread.
+// peerFromRow reads one `[state]  ·  name  ·  cwd  ·  started age` row. The
+// state and age are required for the shape and unread.
 func peerFromRow(row string) (Peer, bool) {
 	cols := strings.Split(row, listAgentsColumn)
 	if len(cols) != 4 {
@@ -204,7 +204,7 @@ func peerFromRow(row string) (Peer, bool) {
 	if !opened || !closed || state == "" || !filepath.IsAbs(cols[2]) {
 		return Peer{}, false
 	}
-	return Peer{Name: cols[1], Dir: cols[2], State: state}, true
+	return Peer{Name: cols[1], Dir: cols[2]}, true
 }
 
 // A bare /rename replies with the name it took (list-agents.jsonl), which the

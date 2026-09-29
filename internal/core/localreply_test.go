@@ -78,8 +78,8 @@ func recordedResults(t *testing.T, path string) []string {
 
 // The two recorded peers, in the order the listing printed them.
 var recordedPeers = []Peer{
-	{Name: "wf-beta", Dir: "/private/tmp/wake-rec/beta", State: "idle"},
-	{Name: "wf-alpha", Dir: "/private/tmp/wake-rec/alpha", State: "idle"},
+	{Name: "wf-beta", Dir: "/private/tmp/wake-rec/beta"},
+	{Name: "wf-alpha", Dir: "/private/tmp/wake-rec/alpha"},
 }
 
 // Every result the bare one-shot's recordings carry is read, the empty form
@@ -173,6 +173,7 @@ func TestAnUnrecognisedListingIsRefusedWhole(t *testing.T) {
 		"a row with a column missing":         "Other Claude sessions (1):\n  [idle]  ·  wf-beta  ·  started 19s ago",
 		"a row with a column more":            "Other Claude sessions (1):\n" + betaRow + "  ·  remote",
 		"a state unbracketed":                 "Other Claude sessions (1):\n  idle  ·  wf-beta  ·  /private/tmp/wake-rec/beta  ·  started 19s ago",
+		"an empty state":                      "Other Claude sessions (1):\n  []  ·  wf-beta  ·  /private/tmp/wake-rec/beta  ·  started 19s ago",
 		"a relative directory":                "Other Claude sessions (1):\n  [idle]  ·  wf-beta  ·  tmp/beta  ·  started 19s ago",
 		"a blank name":                        "Other Claude sessions (1):\n  [idle]  ·    ·  /private/tmp/wake-rec/beta  ·  started 19s ago",
 		"the empty form with more before it":  others + "\n\nNo subagents, teammates or other Claude sessions.",

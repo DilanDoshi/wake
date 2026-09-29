@@ -153,8 +153,8 @@ func TestOutsideSessionsFromAReplyAreOfferedWithTheirDirectory(t *testing.T) {
 		t.Fatalf("`@wf` offered %q before any reply, so this asserts nothing about the reply", a.completion.offers)
 	}
 	a = a.applyFrame(peersReply(
-		core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a", State: "idle"},
-		core.Peer{Name: "wf-beta", Dir: "/tmp/wf-b", State: "busy"},
+		core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a"},
+		core.Peer{Name: "wf-beta", Dir: "/tmp/wf-b"},
 	))
 
 	if got, want := a.completion.offers, []string{"@wf-alpha", "@wf-beta"}; !slices.Equal(got, want) {

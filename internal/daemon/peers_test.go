@@ -46,8 +46,8 @@ const (
 
 // recordedPeers is what the bare recording lists.
 var recordedPeers = []core.Peer{
-	{Name: "wf-beta", Dir: "/private/tmp/wake-rec/beta", State: "idle"},
-	{Name: "wf-alpha", Dir: "/private/tmp/wake-rec/alpha", State: "idle"},
+	{Name: "wf-beta", Dir: "/private/tmp/wake-rec/beta"},
+	{Name: "wf-alpha", Dir: "/private/tmp/wake-rec/alpha"},
 }
 
 // fakeOneShot is the bare one-shot: it checks it was sent exactly the recorded

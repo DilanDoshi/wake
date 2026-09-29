@@ -6,7 +6,6 @@ package core
 //
 // Parsed from Event text, which DecodeLine has already contained.
 type Peer struct {
-	Name  string `json:"name"`
-	Dir   string `json:"dir,omitempty"`
-	State string `json:"state,omitempty"` // the listing's own word ("idle", "busy"), display only
+	Name string `json:"name"`
+	Dir  string `json:"dir,omitempty"`
 }

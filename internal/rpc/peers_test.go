@@ -18,7 +18,7 @@ func TestPeersFrameRoundTrips(t *testing.T) {
 	want := Frame{
 		Kind: FramePeersReply,
 		Peers: &PeersFrame{
-			Peers: []core.Peer{{Name: "wf-beta", Dir: "/private/tmp/wake-rec/beta", State: "idle"}},
+			Peers: []core.Peer{{Name: "wf-beta", Dir: "/private/tmp/wake-rec/beta"}},
 		},
 	}
 
