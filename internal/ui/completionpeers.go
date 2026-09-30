@@ -147,10 +147,13 @@ func (a App) conversationMenu(c completion, typed string) completion {
 
 // peerMention is how a listed session is mentioned: bare when every rune is an
 // ASCII letter, digit, `-` or `_`, quoted otherwise - a quote claude did not need
-// costs nothing, a missing one ends the mention at a space. false for a name no
-// mention carries: a quote has no escape, and a control character is no name.
+// costs nothing, a missing one ends the mention at a space. false for a name
+// whose row would not draw what ⇥ inserts: a quote has no escape, optionRow
+// collapses any other whitespace to one space, and a rune that is not graphic
+// (a control, a bidi override) draws as something else or nothing.
 func peerMention(name string) (string, bool) {
-	if strings.Contains(name, mentionQuote) || strings.ContainsFunc(name, unicode.IsControl) {
+	notGraphic := func(r rune) bool { return !unicode.IsGraphic(r) }
+	if strings.Contains(name, mentionQuote) || collapseWhitespaceOneLine(name) != name || strings.ContainsFunc(name, notGraphic) {
 		return "", false
 	}
 	if strings.IndexFunc(name, func(r rune) bool { return !bareMentionRune(r) }) < 0 {

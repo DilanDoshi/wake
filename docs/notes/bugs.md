@@ -686,12 +686,15 @@ session (`/rename` takes spaces; Wake's own names never hold one).
 messaging docs say otherwise: a name with a space or any character outside letters, digits, `-` and
 `_` is typed in double quotes, `@"release notes"`, and its typeahead inserts the quotes.
 
-**Fix (`completionpeers.go`'s `peerMention`).** A listed session is offered bare when every rune is
-an ASCII letter, digit, `-` or `_`, and quoted otherwise, so a non-ASCII letter is quoted too (a quote
-claude did not need costs nothing). A typed opening quote matches (`@"fab`). Only a name no mention
-carries is dropped: one holding `"`, which has no escape, or a control character — which `main`
-offered, drawing a listed name's raw escape bytes to the terminal. Subagent types keep the
-whitespace drop: `@agent-<type>` is the one form claude resolves headless (findings §3).
+**Fix (`completionpeers.go`'s `peerMention`, `completion.go`'s `mentionStem`).** A listed session is
+offered bare when every rune is an ASCII letter, digit, `-` or `_`, and quoted otherwise, so a
+non-ASCII letter is quoted too (a quote claude did not need costs nothing). A name is offered only
+when its row draws exactly what ⇥ inserts: no `"` (it has no escape), no whitespace but single
+spaces (`optionRow` collapses the rest, so `foo bar` and `foo  bar` would be one row), and every rune
+graphic — which drops the raw escape bytes and bidi overrides `main` offered and drew. An open quote is one token through its spaces (`@"release n` narrows), ending at the closing
+quote or anything no offered name holds, so a stray `@"` never turns the prose after it into a
+mention. Subagent types keep the whitespace drop: `@agent-<type>` is the one form claude resolves
+headless (findings §3).
 
 **Residual, not changed:** an outside session sharing a fleet agent's name (another fleet's
 `manager`) is still dropped by `heldNames` — `@manager` would name both, and claude would have to ask.

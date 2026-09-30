@@ -442,17 +442,21 @@ func TestAPathShapedMentionAsksNothing(t *testing.T) {
 }
 
 // spacedListing is a machine listing holding every shape of name an operator's
-// own `/rename` gives a session, and two no mention can carry.
+// own `/rename` gives a session, and the shapes whose row could not draw what ⇥
+// inserts.
 func spacedListing(t *testing.T) App {
 	t.Helper()
 	return peerFleet(t, "", "my helper", "my-helper").applyFrame(peersReply(
 		core.Peer{Name: "foo bar", Dir: "/tmp/a"},
-		core.Peer{Name: "foo baz", Dir: "/tmp/b"},
+		core.Peer{Name: "foo\u00a0bar", Dir: "/tmp/a"},
+		core.Peer{Name: "foo  bar", Dir: "/tmp/a"},
 		core.Peer{Name: "foobar", Dir: "/tmp/c"},
 		core.Peer{Name: "foo.v2", Dir: "/tmp/d"},
-		core.Peer{Name: "foosé", Dir: "/tmp/e"},
+		core.Peer{Name: "foos\u00e9", Dir: "/tmp/e"},
 		core.Peer{Name: `foo"q`, Dir: "/tmp/f"},
 		core.Peer{Name: "foo\x1b[31m", Dir: "/tmp/g"},
+		core.Peer{Name: "foo\u202ex", Dir: "/tmp/h"},
+		core.Peer{Name: "foo\u2028x", Dir: "/tmp/i"},
 	))
 }
 
@@ -460,10 +464,12 @@ func spacedListing(t *testing.T) App {
 // double quotes, as Claude Code's typeahead inserts it (its cross-session
 // messaging docs): unquoted, the mention would end at the space. A non-ASCII
 // letter is quoted too - a quote claude did not need costs nothing, a missing
-// one splits the name. A quote has no escape and a control character is no
-// name, so those two are not offered.
+// one splits the name. A name whose row cannot draw what ⇥ inserts is not
+// offered: another space than one U+0020 (the row collapses them, so `foo bar`
+// and `foo  bar` would be one row), a quote (no escape), a control, a format
+// character or a line separator.
 func TestAnOutsideSessionNamedPastTheBareSetIsOfferedQuoted(t *testing.T) {
-	want := []string{`@"foo bar"`, "@\"foo baz\"", "@foobar", `@"foo.v2"`, "@\"foosé\""}
+	want := []string{`@"foo bar"`, "@foobar", `@"foo.v2"`, "@\"foos\u00e9\""}
 	if got := spacedListing(t).withDraft("@f").completion.offers; !slices.Equal(got, want) {
 		t.Errorf("`@f` offered %q, want %q", got, want)
 	}
@@ -472,20 +478,52 @@ func TestAnOutsideSessionNamedPastTheBareSetIsOfferedQuoted(t *testing.T) {
 	}
 	a := spacedListing(t).withDraft("@foo b")
 	if a.completion.open() {
-		t.Errorf("`@foo b` offered %q: a typed space still ends the mention being typed", a.completion.offers)
+		t.Errorf("`@foo b` offered %q: a space still ends an unquoted mention", a.completion.offers)
 	}
 }
 
-// ⇥ inserts the quoted mention, and the row draws what it inserts beside the
-// session's directory.
-func TestAcceptingAQuotedSessionInsertsItsQuotes(t *testing.T) {
-	a := spacedListing(t).withDraft("@foo")
-	if got, want := a.completion.rowLabel(`@"foo bar"`, 200), `@"foo bar" (/tmp/a)`; got != want {
-		t.Errorf("the quoted session is labelled %q, want %q", got, want)
+// An open quote keeps the mention being typed past its spaces, so a spaced name
+// narrows as it is typed, and ⇥ inserts it quoted after what came before; the
+// closing quote finishes it.
+func TestAnOpenQuoteNarrowsPastASpace(t *testing.T) {
+	a := spacedListing(t).withDraft(`ask @"foo b`)
+	if got, want := a.completion.offers, []string{`@"foo bar"`}; !slices.Equal(got, want) {
+		t.Fatalf("`ask @\"foo b` offered %q, want %q", got, want)
+	}
+	if drawn := a.completionView(200, a.focus); !strings.Contains(drawn, `@"foo bar" (/tmp/a)`) {
+		t.Errorf("the drawn menu does not draw the quoted mention beside its directory:\n%s", drawn)
 	}
 	took, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyTab})
-	if got, want := took.composer().Value(), `@"foo bar" `; got != want {
+	if got, want := took.composer().Value(), `ask @"foo bar" `; got != want {
 		t.Errorf("⇥ inserted %q, want %q", got, want)
+	}
+	for _, draft := range []string{`@"foo bar"`, `x@"foo b`} {
+		if a := spacedListing(t).withDraft(draft); a.completion.open() {
+			t.Errorf("%q offered %q: a closed quote, or one inside a word, is no mention being typed", draft, a.completion.offers)
+		}
+	}
+}
+
+// An open quote stays open only through what a name peerMention offers can hold,
+// so a stray `@"` does not turn the prose after it into one long mention.
+func TestAnOpenQuoteEndsWhereNoOfferedNameCouldGo(t *testing.T) {
+	for draft, want := range map[string]string{
+		`ask @"foo b`:   `"foo b`,
+		`ask @"foo "`:   "",
+		"ask @\"foo  b": "",
+		"ask @\"foo\tb": "",
+		"ask @\"foo\nb": "",
+	} {
+		if _, rest, ok := mentionStem(draft); rest != want || ok != (want != "") {
+			t.Errorf("mentionStem(%q) = %q, %v; want %q", draft, rest, ok, want)
+		}
+	}
+}
+
+// The space inside an open quote is the same opening, so it asks nothing more.
+func TestAnOpenQuoteIsOneOpening(t *testing.T) {
+	if _, asked := typedAsking(t, peerFleet(t, ""), runes(`@"foo b`)...); asked != 1 {
+		t.Errorf("`@\"foo b` asked for the machine's sessions %d times, want once", asked)
 	}
 }
 
