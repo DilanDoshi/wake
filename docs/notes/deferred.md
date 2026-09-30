@@ -4589,7 +4589,13 @@ handed the pending width, so no motion re-wraps. Letting go commits the drag at 
 settle coalesces motions, and none follow a release. The one mouse event a held button still sends,
 the wheel, hits the columns as drawn. A window drag keeps its clip: its column count can change
 mid-drag. Taking hold of the divider clears the selection, which also closes a hole the entry did not
-name — the divider's settle re-wrapped both panes under a highlight left standing. The original
+name — the divider's settle re-wrapped both panes under a highlight left standing. A release while
+a window drag is also in flight leaves both to the shared settle, since the width is still moving.
+**Left as they were on `main`, and why:** a hand that rests on the divider past `resizeQuiet` gets
+its settle and re-wraps mid-drag — the settle's own rule, which the window drag shares, and what
+gives a resting hand reflowed text rather than a cut; and a grid key (`⌃W`, `⌃Y`) pressed while the
+mouse holds a divider leaves the drag's weights indexed for the old grid, so the split lands on
+whatever column now sits there — `main`'s settle applied the same stale weights. The original
 entry is kept below.
 
 

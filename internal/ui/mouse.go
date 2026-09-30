@@ -91,9 +91,11 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 
 // letGo ends a hand on a divider or a rule. A divider drag that moved commits
 // now rather than when its settle lands: the settle coalesces motions, and none
-// follow a release. The generation moves, so that timer finds nothing to do.
+// follow a release. The generation moves, so that timer finds nothing to do. A
+// window drag in flight keeps the settle, for its width and the split with it.
 func (a App) letGo() App {
-	moved := a.dragAt != noDrag && !a.dragRows && !slices.Equal(a.pending.weights, a.layout.Weights)
+	moved := a.dragAt != noDrag && !a.dragRows && a.pending.width == a.layout.Width &&
+		!slices.Equal(a.pending.weights, a.layout.Weights)
 	a.dragAt, a.dragRows = noDrag, false
 	if !moved {
 		return a

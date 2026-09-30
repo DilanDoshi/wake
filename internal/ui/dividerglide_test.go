@@ -118,6 +118,29 @@ func TestReleasingTheDividerReWrapsOnceAndTheSettleNothing(t *testing.T) {
 	}
 }
 
+// A window drag in flight when the hand lets go keeps its settle: the terminal
+// width is still moving, so committing it on the release would re-wrap for a
+// size the window is passing through, and again when it stops.
+func TestLettingGoMidWindowDragLeavesItToTheSettle(t *testing.T) {
+	a := splitApp(t, 200, 40, 20)
+	from := dividerColumnOf(a)
+	a = grab(t, a, from)
+	a = dragTo(a, from-30)
+	dragged := a.pending.weights
+	a, _ = a.resized(190, 40) // the window moves while the hand is still down
+	room, dm := countPaneRenders(t, func() { a = release(a, from-30) })
+	if room+dm != 0 {
+		t.Errorf("letting go mid-window-drag re-wrapped (room %d, DM %d), want nothing until the window settles", room, dm)
+	}
+	room, dm = countPaneRenders(t, func() { a = settle(a) })
+	if room != 1 || dm != 1 {
+		t.Errorf("the shared settle re-wrapped the room %d and the DM %d times, want once each", room, dm)
+	}
+	if a.layout.Width != 190 || !slices.Equal(a.layout.Weights, dragged) {
+		t.Errorf("the settle applied width %d and weights %v, want 190 and the drag's %v", a.layout.Width, a.layout.Weights, dragged)
+	}
+}
+
 // The wheel is the one other thing the mouse can do while the button is held,
 // and it scrolls the pane drawn under the pointer, not the one the layout the
 // panes are still wrapped for would put there.
