@@ -501,7 +501,9 @@ core's `Wait` has returned, so the daemon that wrote it had watched *its own* pr
 is all that travels. Anything can start on the id between two daemons, so a restored row asserts
 identity and location and nothing about liveness, and `unpark` re-proves the rest through
 `resumeSafe`. The corollary is that **`restoreParked` starts nothing**: a restore that resumed N
-sessions would resume N ids it had never checked.
+sessions would resume N ids it had never checked. *(2026-09-29: `restoreParked` is gone —
+`6ca7e6b`, a daemon restores nothing — and the book is read only into `rpc.Status.Parked`, so the
+corollary holds with nothing to restore.)*
 
 **A file format is where rung 6 bites.** A test that writes with the writer and reads with the
 reader proves round-tripping and nothing about the bytes: a reader and a writer that agree on the
@@ -1063,8 +1065,8 @@ are kept, because the wrong half is the lesson.
 `EnsureRunning`, which forks a daemon when nothing is listening, so asking afterwards asks a daemon
 this command just created. The plan asked for the reversing mutation to be killed. It was
 constructed, it compiled, and it survived the whole suite. The task reasoned out *why* — `restoreParked`
-runs before the accept loop, so the daemon a dial forks reports exactly the parked rows that make
-`hasFleet` true — recorded it as surviving in three artefacts rather than dropping it quietly, and
+ran before the accept loop (removed in `6ca7e6b`), so the daemon a dial forks reported exactly the
+parked rows that made `hasFleet` true — recorded it as surviving in three artefacts rather than dropping it quietly, and
 called the ordering *"a statement about the code rather than about an output"*.
 
 **Every sentence of that was true of the configuration it had, and the configuration was the wrong
@@ -1681,8 +1683,8 @@ its real cost; nothing in this tree can measure it without spending money, and i
 `parkBook.add` rewrites the whole file through a temp and a rename on **every** park, so ⌃Q at 30
 agents is 30 rewrites — but the per-park cost only goes 103 µs → 130 µs average, because the
 atomic rename dominates and the JSON does not. Four milliseconds, on a path that already waits for
-processes to die. `restoreParked` is 212 µs before the accept loop, which is what a `wake` waits
-behind while `EnsureRunning` decides whether a daemon exists. Neither is worth changing.
+processes to die. `restoreParked` was 212 µs before the accept loop (removed in `6ca7e6b`), which is what a `wake`
+waited behind while `EnsureRunning` decided whether a daemon exists. Neither is worth changing.
 
 **The fixture had to stop using hex names to measure the real path.** `w00`, not `a00`:
 `normalizeName` refuses a name made only of hex digits, so a hex fixture sends `restoreParked` down

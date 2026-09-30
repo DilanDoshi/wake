@@ -1731,8 +1731,8 @@ work; the rest is bookkeeping. **Whoever adds the field owns the record.**
 
 **Left open by the same task, and smaller: the manager is an ordinary row on every surface that
 draws one.** It is in the roster, it has an attention rank, `⌃D` opens a DM on it and `⌃C` will park
-it. Parking it is *recoverable* — `restoreParked` (deleted in `6ca7e6b`; `/manager` wakes it now) gives it its name back and `managerConfig` gives
-it its tools back — so nothing is lost, but a manager sitting in the attention ranking between two
+it. Parking it is *recoverable* — `restoreParked` (deleted in `6ca7e6b`; `/manager` wakes it now)
+gives it its name back and `managerConfig` gives it its tools back — so nothing is lost, but a manager sitting in the attention ranking between two
 agents is a design question nobody has answered. It was deliberately not answered here: the settled
 scope was routing (default addressee, broadcast exclusion), and the roster is a different surface
 with a different argument.
