@@ -8,6 +8,40 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-09-29 — the manager's tools self-test at launch; ordinary agents keep the operator's MCP servers
+
+**Ruling 1 — a manager whose `wake mcp` cannot answer is refused before claude starts.** Until
+now a server that could not start (a binary that moved, one that is not wake, one replaced by
+another build) produced a manager with no tools that said so only in prose. `managerConfig` now runs
+the exact command `mcp.json` names, writes `initialize` and `tools/list`, and refuses the launch
+unless it calls itself wake, offers tools, and lists exactly `mcp.Tools()`
+(`internal/daemon/mcpselftest.go`, client half `internal/mcp/selftest.go`).
+
+- **In the daemon, not in `wake manager`**, as deferred.md had costed it: `mcp.json` names the
+  *daemon's* executable, which a stale daemon makes different from the client's, and `launch` is the
+  one door every spawn, `/manager`, the room's default seat and a wake from park go through. The
+  case it catches best is `wake upgrade` under a running daemon followed by `/manager` waking a
+  parked manager.
+- **Inline and bounded.** It runs on the asking client's dispatch goroutine so a refusal stays
+  enqueued ahead of any `FrameStatus` written behind the spawn — `cmd/wake`'s `act` reads that
+  order as "taken". So its bound (`mcpSelfTestTimeout`) is load-bearing, with git's process group
+  and `WaitDelay`.
+- **Safe to run there** because internal/mcp answers these two requests without its Fleet: the
+  server never dials the socket, opens no client, and cannot move the daemon's client count.
+- **Tool names, not `serverInfo.version`**, which is a hand-kept `"0.2.0"` two builds share.
+- **What it does not prove:** that claude accepted the handshake. `live-testing.md` §13.1 stays the
+  gate for that half. Cost: one short process per manager launch, never on a timer.
+
+**Ruling 2 — ordinary agents get neither `--strict-mcp-config` nor `--tools`.** This was open in
+deferred.md as "unruled". The owner ruled it by building PR #127 (2026-09-27) on it: every agent's
+`initialize` handshake exists so a headless session loads the operator's claude.ai connectors, and
+`--strict-mcp-config` would exclude them. So an agent Wake spawns has the MCP servers and built-ins
+the same `claude` would have in the same directory; only the manager is bounded.
+`TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt` holds it. *Recorded as the owner's
+decision, not a new one — veto it in review if that reading is wrong.*
+
+---
+
 ## 2026-09-28 — a copy rejoins what the pane wrapped
 
 The owner copied an email out of chat history and pasted it with a hard line break at every wrap

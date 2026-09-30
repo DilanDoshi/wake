@@ -1742,8 +1742,12 @@ with a different argument.
 > costs the one route to its transcript unless something replaces it. **Whoever answers this owns the
 > strip's count too** — the two are the same claim about whether the manager is part of "the fleet".
 
-**Phase 3 or later — `--strict-mcp-config` for *ordinary* agents is unruled.** Added 2026-08-11 by
-Phase 2 Task 15.
+**~~Phase 3 or later — `--strict-mcp-config` for *ordinary* agents is unruled.~~ RULED 2026-09-29:
+ordinary agents inherit** — the owner decided it by building PR #127 on it (every agent's
+`initialize` handshake loads the operator's claude.ai connectors, which `--strict-mcp-config` would
+exclude). Recorded in `decisions.md` (2026-09-29, ruling 2) and held by
+`TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt`. Original entry follows. Added
+2026-08-11 by Phase 2 Task 15.
 
 The manager gets `--mcp-config` and `--strict-mcp-config` as a pair, and the second is what stops it
 inheriting every MCP server in the user's own configuration. **Every other agent Wake spawns still
@@ -1754,8 +1758,12 @@ a ruling the day somebody wants a fleet whose tool surface Wake controls — the
 away, and the argument against is that a Wake agent that can do *less* than the same `claude` in the
 same directory is a surprise nothing on screen explains.
 
-**Phase 3 or later — a manager whose MCP server cannot start is indistinguishable from one whose
-tools are empty.** Added 2026-08-11 by Phase 2 Task 15.
+**~~Phase 3 or later — a manager whose MCP server cannot start is indistinguishable from one whose
+tools are empty.~~ DONE 2026-09-29:** the self-test below shipped, in the daemon's `managerConfig`
+rather than at `wake manager` time (`mcp.json` names the daemon's binary, and `launch` is the one
+door every manager start goes through) — `internal/daemon/mcpselftest.go`, `decisions.md`
+(2026-09-29, ruling 1). Claude's acceptance of the handshake stays `live-testing.md` §13.1. Original
+entry follows. Added 2026-08-11 by Phase 2 Task 15.
 
 `managerConfig` refuses the launch if the config file cannot be **written**. It cannot check that
 the file is *usable*: `wake mcp` is executed by claude, not by Wake, and its failure — a binary that
@@ -5058,6 +5066,12 @@ no new guard beyond `managerScope`, or whether reading every agent's words is it
 recorded bound. It owes the same discipline the rest of the manager was held to — a bounded verb, a
 guard (`cmd/wake/mcpguard_test.go`), a recorded reason — not just a longer prompt. *Blocks:* the
 orchestrator above; it cannot judge what it cannot read.
+
+**2026-09-29 — still unruled, and the first question is not the budget.** No ruling exists beyond
+the ask. `managerVerbs` refuses `FrameHistory` in writing because a transcript is "the operator's own
+words", so a manager reading one reads the operator's DM turns to that agent. Whether user turns are
+in it at all is the owner's call, before budget or compression; the tool then owes a written
+counter-verdict on that cell.
 
 ---
 

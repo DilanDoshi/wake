@@ -277,7 +277,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each argued in
   `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
 - Its config is a function of its name, applied in `launch`: `--mcp-config` only ever beside
-  `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing).
+  `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing). Ordinary
+  agents get none of the three — they keep the operator's MCP servers (owner's ruling via PR #127).
+- **Every manager launch self-tests its tools** before claude starts: `managerConfig` runs
+  `mcp.json`'s command through `initialize`/`tools/list`, inline and bounded, and refuses unless
+  `mcp.Tools()` comes back. Claude accepting the handshake stays `live-testing.md` §13.1.
+  `internal/daemon/mcpselftest.go`.
 - The daemon socket has no caller auth; `managerVerbs` bounds the manager's tool surface, not what
   the daemon accepts.
 
@@ -321,8 +326,8 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · `lifecycle.go` · `peers.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
-| MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go` · verdicts in `cmd/wake/mcpguard_test.go` |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
+| MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
