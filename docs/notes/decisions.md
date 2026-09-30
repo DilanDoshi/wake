@@ -25,7 +25,9 @@ unless it calls itself wake, offers tools, and lists exactly `mcp.Tools()`
 - **Inline and bounded.** It runs on the asking client's dispatch goroutine so a refusal stays
   enqueued ahead of any `FrameStatus` written behind the spawn — `cmd/wake`'s `act` reads that
   order as "taken". So its bound (`mcpSelfTestTimeout`) is load-bearing, with git's process group
-  and `WaitDelay`.
+  and `WaitDelay`. It holds once the process exists; the exec itself is as unbounded as the
+  `StartObserved` every launch makes of the same binary right after (a stalled filesystem blocks
+  both — Codex, 2026-09-29, ruled pre-existing).
 - **Safe to run there** because internal/mcp answers these two requests without its Fleet: the
   server never dials the socket, opens no client, and cannot move the daemon's client count.
 - **Tool names, not `serverInfo.version`**, which is a hand-kept `"0.2.0"` two builds share.

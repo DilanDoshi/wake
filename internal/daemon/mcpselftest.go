@@ -10,9 +10,11 @@ package daemon
 // It runs inside launch, on the dispatch goroutine of the client that asked,
 // and stays inline so a refusal is enqueued ahead of any FrameStatus written
 // behind the spawn (cmd/wake's act reads that order as "taken") - which is why
-// the bound is load-bearing. It is safe there because internal/mcp answers
-// these two requests without its Fleet: the server never dials this socket, so
-// it opens no client and cannot move the daemon's client count.
+// the bound is load-bearing. It holds from the moment the process exists: the
+// exec itself is the kernel's, as it is for the StartObserved every launch makes
+// of this same binary a few lines later. It is safe there because internal/mcp
+// answers these two requests without its Fleet: the server never dials this
+// socket, so it opens no client and cannot move the daemon's client count.
 
 import (
 	"bytes"
