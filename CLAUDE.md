@@ -242,7 +242,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The room re-derives its history from claude's transcripts** (`FrameRoomHistory`,
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
   if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
-  broadcast; agent prose is restored only inside a public turn.
+  broadcast; agent prose is restored only inside a public turn. A record in two transcripts (same
+  uuid, `Event.MessageID`) is a fork's copy, drawn once (`forkCopies`) — forks are asked like any session.
 - A routed message is echoed into the room and into every *held* DM it reached, mention included,
   marked `FromRoom`.
 - **A lone `@name` narrows the room** to that thread (`roomfocus.go`); `⌃A` overrides per target;

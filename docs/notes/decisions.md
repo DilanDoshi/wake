@@ -2608,7 +2608,9 @@ reading.
 
 **And it asks at two moments, not on every report.** The seed and `wakeArrived`. Asking whenever an
 unasked-for session appears would have caught **forks**, whose transcript is their parent's — an hour
-of the same prose drawn twice under two names.
+of the same prose drawn twice under two names. *(Fork half superseded 2026-09-29: a fork is asked
+about at both moments now, and its copy of its parent is drawn once by record uuid — see "a fork is
+asked about, and one record in two transcripts is one record" below.)*
 
 ---
 
@@ -2643,7 +2645,8 @@ had no `ParentID` check. The ruling was enforced only for a *later* status push 
 accident, because `askRoomHistory` is never reached from an ordinary report — so a fork already in the
 seed, or one resumed from parked, went straight through and drew its parent's whole conversation a
 second time under a new name. **A rule written in three documents and enforced by nothing is worth
-what a comment is worth.** `isFork` is now checked at both call sites and both are tested.
+what a comment is worth.** `isFork` is now checked at both call sites and both are tested. *(Superseded
+2026-09-29: `isFork` is gone; `forkCopies` replaced the refusal — below.)*
 
 The general lesson is the one about *shape*: all three bugs live in the gap between the data the tests
 construct and the data the wire delivers. A unit test that builds its own input is testing the
@@ -2709,6 +2712,28 @@ whole session lifetime* rather than for algebra found it. That is the second tim
 gap was in what the fixtures were shaped like rather than in the logic, and it is worth stating as a
 habit: **a guard that compares a value at two moments is only as good as the range of starting values
 the tests give it.**
+
+---
+
+## Ruling (2026-09-29): a fork is asked about, and one record in two transcripts is one record
+
+**The refusal cost a fork's own turns, and did not keep out what it was for.** `isFork` read
+`ParentID`, which only the running daemon knows: the park book holds no lineage, so a fork parked and
+woken arrives with none, was asked about like any session, and its copy of its parent — the same
+text at the same *time*, since a fork copies records verbatim — met the parent's copy in
+`broadcastIndex`. Two transcripts, one text, inside the window: **multiplicity proved a broadcast,
+and a private DM turn and the reply to it were restored into the room.** Reproduced by
+`TestAWokenForksCopyOfAPrivateTurnIsNotABroadcast` on the tree before the fix; not seen in real use.
+
+**The record's uuid is the second sound discriminator.** A fork copies its parent's records under the
+same uuids (`testdata/transcript/fork-child.jsonl`), and a send mints a uuid per target, so the same
+uuid in two transcripts is one record a fork copied, never two things said. The airlock carries each
+record's uuid as `Event.MessageID`; `forkCopies` (`roomhistory.go`) drops every copy but one before
+multiplicity or the turn rule sees them, keeping the copy whose session's parent holds none — the
+original, or the oldest ancestor still in the room — and the first in time order when nobody names a
+parent. So forks are asked at the seed and on a wake, their own turns come back, and the parent's
+prose is drawn once under the parent. A live fork still is not asked on the report that announces it:
+its turns arrive on the socket.
 
 ---
 

@@ -4660,7 +4660,11 @@ blocks:* nothing; the roster draws a spinner per row and `⌃X` reaches a blocke
 is a decision about what the room may spend on chrome, which is the same question a room last-read
 marker asks, so the two are worth taking together.
 
-**2026-08-15 — a fork's own conversation is not restored to the room either.** `isFork` refuses a room
+**2026-08-15 — a fork's own conversation is not restored to the room either.** *FIXED 2026-09-29
+(`fix/room-gaps`): the corpus was checked — there is no fork marker, but a fork copies its parent's
+records under the same **uuids** (`testdata/transcript/fork-child.jsonl`), so `forkCopies` draws a
+copied record once and `isFork` is gone; forks are asked about, and a woken fork's copy no longer
+passes for a broadcast (decisions.md, 2026-09-29).* `isFork` refuses a room
 history ask for any session carrying a `ParentID`, because a fork's transcript opens with every line
 its parent had at the moment it was taken — and the parent is usually in the same report, so asking
 draws that prose twice under two names. What it costs is the fork's *own* turns after the fork point,
