@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.6 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.7 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -108,7 +108,7 @@ Flags on the verbs that start a session (`new`, `manager`):
 
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
 slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
-`/reauth`, `/manager`, `/manager-stop`, `/board` and `/groupchat-filter`; `/effort` and `/model`
+`/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows` and `/groupchat-filter`; `/effort` and `/model`
 configure the session they are addressed to. Everything else you type is passed to the agent byte for
 byte. A lone `@name` narrows the room to that agent's thread; `⌃A` widens it back to everyone while
 still addressing them, and `/groupchat-filter off` flips that default. `/team <name>` groups an agent

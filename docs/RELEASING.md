@@ -19,6 +19,10 @@ release should go out. There is no CI release trigger; the timing is entirely yo
    `-ldflags -X`, but the checked-in default is what every non-release build
    shows, so keep it in step with the tag you are about to cut.
 
+   In the same commit, update `README.md`: the **Current version:** line near the top names the
+   release number, and the Commands section (verbs, spawn flags, slash commands) names every
+   user-facing surface the release adds. Nothing tests the README, so this step is the only check.
+
 3. Tag the commit (semver):
 
    ```sh
@@ -85,6 +89,8 @@ section that has nothing in it rather than writing "None" under a heading.
 - Follow semver for the tag.
 - The checked-in banner default (`internal/version.Version`, and its `bannerVersion` test twin) matches the
   tag — that is step 2 above. A tag ahead of the default means every non-release build under-reports.
+- `README.md`'s **Current version:** line matches the tag — also step 2. The README is the first thing
+  a visitor reads, and a stale number there says the project stopped at the last release.
 
 ## After you cut
 
