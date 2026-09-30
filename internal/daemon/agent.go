@@ -205,6 +205,11 @@ type agent struct {
 	// agent by it and nothing here reads it.
 	parent string
 
+	// forkFrom is the conversation this fork (or import) was copied from, or
+	// empty; set at launch, carried across a wake, never persisted (the park
+	// book holds no lineage). The room's history reads it: see inheritedBy.
+	forkFrom string
+
 	sess   *core.Session
 	cancel context.CancelFunc
 

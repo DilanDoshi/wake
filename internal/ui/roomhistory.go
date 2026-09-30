@@ -202,39 +202,23 @@ func (a App) agentFor(id string) Agent {
 	return Agent{ID: id}
 }
 
-// liveSessions is every session in a report the room should ask about (askable).
-// Parked rows are disjoint from these by construction - see rpc.Status.Parked -
-// and an ended one has nothing to come back to.
+// liveSessions is every session in a report the room should ask about: the ones
+// that are running, forks included - the daemon leaves out of a fork's room
+// history what it copied from its source (inheritedBy), and forkCopies catches
+// the copy of a fork woken with no lineage. Parked rows are disjoint from these
+// by construction - see rpc.Status.Parked - and an ended one has nothing to come
+// back to.
 func liveSessions(st *rpc.Status) []string {
 	if st == nil {
 		return nil
 	}
 	out := make([]string, 0, len(st.Sessions))
 	for _, s := range st.Sessions {
-		if askable(s, st) {
+		if s.State != rpc.StateEnded {
 			out = append(out, s.ID)
 		}
 	}
 	return out
-}
-
-// askable is whether the room asks about s: a running session, and a fork only
-// while its parent runs too. forkCopies drops a copy it can see the original of;
-// with the parent gone the fork alone holds what it inherited, which would be
-// drawn under the fork's name - a direct `@parent ...` readdressed to the fork.
-func askable(s rpc.SessionStatus, st *rpc.Status) bool {
-	if s.State == rpc.StateEnded {
-		return false
-	}
-	if s.ParentID == "" {
-		return true
-	}
-	for _, p := range st.Sessions {
-		if p.ID == s.ParentID {
-			return p.State != rpc.StateEnded
-		}
-	}
-	return false
 }
 
 const (
@@ -569,12 +553,20 @@ func broadcastIndex(lines []roomLine, copied map[int]int) (firsts, public map[in
 
 // roomSendGroups is every user line a room send stamped, grouped by that send,
 // in order of each group's first line. A fork's copy is in none, and nor is an
-// image: its record's text block, which carries the same uuid, is the turn.
+// image beside a caption: the record's text block, under the same uuid, is the
+// turn. A captionless image is the turn itself.
 func roomSendGroups(lines []roomLine, copied map[int]int) [][]int {
+	captioned := map[string]bool{}
+	for _, l := range lines {
+		if l.ev.Kind == core.KindUserText && l.ev.Text != core.ImagePlaceholder {
+			captioned[l.ev.MessageID] = true
+		}
+	}
 	var order [][6]byte
 	groups := map[[6]byte][]int{}
 	for i, l := range lines {
-		if _, isCopy := copied[i]; isCopy || l.ev.Kind != core.KindUserText || l.ev.Text == core.ImagePlaceholder {
+		_, isCopy := copied[i]
+		if isCopy || l.ev.Kind != core.KindUserText || l.ev.Text == core.ImagePlaceholder && captioned[l.ev.MessageID] {
 			continue
 		}
 		send, _, ok := roomSendOf(l.ev.MessageID)

@@ -2733,11 +2733,18 @@ uuid in two transcripts is one record a fork copied, never two things said. The 
 record's uuid as `Event.MessageID`; `forkCopies` (`roomhistory.go`) drops every copy but one before
 multiplicity or the turn rule sees them, keeping the copy whose session's parent holds none — the
 original, or the oldest ancestor still in the room — and the first in time order when nobody names a
-parent; a dropped user copy still opens or closes its own session's turn as the kept one does. So
-forks are asked at the seed and on a wake **while their parent runs** (`askable`), their own turns
-come back, and the parent's prose is drawn once under the parent. A fork whose parent is parked or
-ended is not asked: it alone would hold what it inherited, drawn under its name. A live fork still is
-not asked on the report that announces it: its turns arrive on the socket.
+parent; a dropped user copy still opens or closes its own session's turn as the kept one does.
+
+**And the daemon, which knows the lineage, does it exactly.** A room history is tail-bounded (400
+events), so a parent that talks on past the records a quiet fork copied no longer shows them, and the
+client-side dedupe cannot see the copy — the fork's inherited turns would restore under the fork
+(Codex, second pass). The running daemon keeps each fork's source conversation (`agent.forkFrom`, set
+at launch, carried across a wake, never persisted) and answers a fork's *room* history without every
+record whose uuid is anywhere in the source transcript (`inheritedBy`, read whole, identity only).
+The conversation pane still gets the whole conversation. So forks are asked at the seed and on a wake
+like any running session, parked or ended parent included; `forkCopies` remains for a fork woken from
+the park book, which has no lineage. A live fork still is not asked on the report that announces it:
+its turns arrive on the socket.
 
 ---
 

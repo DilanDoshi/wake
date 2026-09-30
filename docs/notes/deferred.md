@@ -4668,9 +4668,10 @@ marker asks, so the two are worth taking together.
 (`fix/room-gaps`): the corpus was checked — there is no fork marker, but a fork copies its parent's
 records under the same **uuids** (`testdata/transcript/fork-child.jsonl`), so `forkCopies` draws a
 copied record once and `isFork` is gone; forks are asked about while their parent runs, and a woken
-fork's copy no longer passes for a broadcast (decisions.md, 2026-09-29). **Still open:** a fork whose
-parent is parked or ended is not asked (it alone would hold its inherited records, drawn under its
-name); closing it means reading the parent's transcript for the dedupe.* `isFork` refuses a room
+fork's copy no longer passes for a broadcast (decisions.md, 2026-09-29); the daemon leaves a fork's
+inherited records out of its room history against the source transcript read whole (`inheritedBy`).
+**Still open:** a fork woken from the park book has no lineage, so its inherited records are told
+apart only by what the parent's own tail still shows, and kept by arrival order.* `isFork` refuses a room
 history ask for any session carrying a `ParentID`, because a fork's transcript opens with every line
 its parent had at the moment it was taken — and the parent is usually in the same report, so asking
 draws that prose twice under two names. What it costs is the fork's *own* turns after the fork point,

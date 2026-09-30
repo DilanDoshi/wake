@@ -191,3 +191,16 @@ func TestAMarkedRoomSendWithAnImageComesBackWithItsText(t *testing.T) {
 		t.Errorf("a marked send with an image restored %q, want its text and its reply", got)
 	}
 }
+
+// An image sent to @john with no caption is a record of one block, the image:
+// it is the turn, and it opens the reply.
+func TestAMarkedImageOnlyRoomSendComesBack(t *testing.T) {
+	r := restored([]core.Event{
+		record(typed("s1", core.ImagePlaceholder, base), newRoomSend(true).messageID()),
+		heard("s1", "that is the staging dashboard", base.Add(time.Second)),
+	})
+	got := strings.Join(texts(r), "|")
+	if got != "@agent-s1 "+core.ImagePlaceholder+"|that is the staging dashboard" {
+		t.Errorf("a captionless image sent to one agent restored %q, want the image and its reply", got)
+	}
+}

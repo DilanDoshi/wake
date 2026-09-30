@@ -138,17 +138,19 @@ func TestADroppedCopyStillOpensItsOwnSessionsTurn(t *testing.T) {
 	}
 }
 
-// A fork whose parent is not running is not asked about: only the fork would
-// hold the records it inherited, so they would be drawn under the fork's name -
-// a direct `@parent ...` readdressed to the fork. Asked again once the parent is
-// live, with its copy drawn once under the parent.
-func TestTheRoomAsksAboutAForkOnlyWhileItsParentIsLive(t *testing.T) {
+// Every running fork is asked about, its parent running or not: the daemon's
+// room history for a fork leaves out what it copied (inheritedBy, held in
+// internal/daemon/roomhistoryfork_test.go), so the fork alone holding its
+// inherited records - a parked parent, or one whose tail moved past them - does
+// not draw them under the fork's name.
+func TestTheRoomAsksAboutEveryRunningFork(t *testing.T) {
 	st := &rpc.Status{Sessions: []rpc.SessionStatus{
 		{ID: "s1", Name: "alex", State: rpc.StateIdle},
 		{ID: "f1", Name: "juno", State: rpc.StateIdle, ParentID: "s1"},
-		{ID: "f2", Name: "nora", State: rpc.StateIdle, ParentID: "gone"},
+		{ID: "f2", Name: "nora", State: rpc.StateIdle, ParentID: "parked-parent"},
+		{ID: "f3", Name: "otto", State: rpc.StateEnded, ParentID: "s1"},
 	}}
-	if got := strings.Join(liveSessions(st), ","); got != "s1,f1" {
-		t.Errorf("the room would ask about %q, want the parent and the fork whose parent is live", got)
+	if got := strings.Join(liveSessions(st), ","); got != "s1,f1,f2" {
+		t.Errorf("the room would ask about %q, want every running session, forks included", got)
 	}
 }
