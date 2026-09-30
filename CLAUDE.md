@@ -203,8 +203,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`edgeScrollEvery`) re-arms only while the pane moved; the highlight ends on a line on screen.
   `internal/ui/edgescroll.go`.
 - **A transcript copy rejoins what the pane wrapped** — markdown by `render.Rejoins` (reflowProse's
-  own predicates), your own turn matched back to what you typed; every other row copies as drawn.
-  `internal/ui/copytext.go`.
+  own predicates), your own turn and a local command's reply matched back to their text; every other
+  row copies as drawn. `internal/ui/copytext.go`.
 - **Double-click selects a word, triple-click its row**, on any selectable surface; the first click
   still does its own job. A timer (`multiClickWindow`) counts clicks but never tells a click from a
   drag. `internal/ui/multiclick.go`.
@@ -222,6 +222,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A preview is never a record**: plain-text tail, bounded by the pane, never through glamour,
   accumulated only for panes on screen (`App.wants`), dropped on leave. No preview in the room or for
   subagents. `internal/ui/partial.go`.
+- **A local command's reply is drawn as its lines** (`/list-agents`, `/cost`, `/config`), as Claude
+  Code draws it; one opening with a markdown heading (`/context`'s) stays markdown.
+  `internal/ui/dm_blocks.go`'s `drawnAsLines`.
 - The composer grows with the draft; the pane bounds it (`composerRowsIn`), never itself. A pane's
   chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
   screen.
