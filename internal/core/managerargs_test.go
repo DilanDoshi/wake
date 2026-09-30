@@ -93,6 +93,13 @@ func TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt(t *testing.T) {
 							"manager's tools would let any of them message and interrupt any other, which is "+
 							"a fleet that can deadlock itself with nobody having asked for it\ngot: %v", d.name, args)
 					}
+					// Ordinary agents inherit the operator's MCP servers and built-ins, as a hand-started
+					// claude does (owner's ruling by PR #127, docs/notes/decisions.md 2026-09-29).
+					if hasStrict || hasTools {
+						t.Errorf("%s: an ordinary agent was bounded (--strict-mcp-config=%v, --tools=%v). It would "+
+							"lose the operator's MCP servers and claude.ai connectors, which the owner ruled "+
+							"agents keep\ngot: %v", d.name, hasStrict, hasTools, args)
+					}
 					continue
 				}
 				carried++
