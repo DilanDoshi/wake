@@ -5384,16 +5384,18 @@ the liveness tests that read `owed`.
   `@` insert cannot be read as one mention. Task 5 answered the same question for peers ("never
   offer an insert that cannot resolve"); how Claude Code quotes such a path is unrecorded.
   *Closes with:* a recording of claude's own `@"…"` handling, then quote or skip.
-- **`TestARunningDaemonReestablishesASweptLock` flakes** — 3 of 30 alone under `-race` on
-  `origin/main` (2026-09-27, `lock_test.go:322`, `<nil>`), so a clean 5/5 no longer proves it gone.
+- ~~**`TestARunningDaemonReestablishesASweptLock` flakes**~~ **FIXED (`fix/recent-follow-ups`,
+  2026-09-29):** the test's own race. `reopenLock` creates the file before `explainLock` writes it,
+  and the test read it the moment the inode changed. It now waits for both (1/30 before, 0/160 after).
 - **`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**, so the
   workflow kinds are unchecked for collisions. *Closes with:* adding it to the scanned files.
-- **A daemon on an older build answers each conversation's `@` opening with a notice**
+- **WON'T DO (2026-09-29, fable wake's ruling): a daemon on an older build answers each conversation's `@` opening with a notice**
   (`unknown frame kind "peers"`, branch review L2), beside the stale-daemon notice the room opened
   with. Not skipped: `internal/ui` keeps no daemon build, and a build mismatch is also every dev
   rebuild against a daemon that does speak `FramePeers`. Not suppressed: the refusal carries no kind,
-  so only the daemon's sentence could name it. *Closes with:* a typed "unknown kind" on
-  `rpc.FrameError`, which the UI can drop for `FramePeers` alone.
+  so only the daemon's sentence could name it. A typed "unknown kind" on `rpc.FrameError` cannot
+  reach the pre-#131 daemons this is about, and every daemon since knows `FramePeers`; the
+  stale-daemon notice already says to restart.
 
 ## 2026-09-28 — a copy keeps some wraps it cannot prove
 
