@@ -38,6 +38,24 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## KNOWN GAP, 2026-09-30 — `$CLAUDE_CONFIG_DIR` moves claude's transcripts and Wake does not follow
+
+**Found by reading, not watched go wrong** (hence here rather than `bugs.md`), while
+`fix/workflow-view-gaps` taught the workflow save to honour the variable. `daemon.ProjectsDir()` is
+`WAKE_PROJECTS` else `~/.claude/projects`, full stop; claude keeps its projects under
+`$CLAUDE_CONFIG_DIR` when that is set, so a daemon started with it reads a tree claude never writes.
+Everything keyed on `ProjectsDir` misses: `History` (a woken DM opens empty), `discover` (the
+`/resume` picker's disk half and `verifiedDir`), `WorkflowRuns` (the `/workflows` view's records),
+and — **the sharp one** — `parkedStatuses`, which drops any park-book record whose transcript
+`transcriptPath` cannot find as "nothing to bring back", so **a ⌃Q'd fleet under
+`$CLAUDE_CONFIG_DIR` is unresumable on the next `wake`**.
+
+*Closes with:* its own small PR — `ProjectsDir` as `claudeConfigDir()`'s `projects` (the helper
+`fix/workflow-view-gaps` adds in `internal/daemon/workflowsave.go`), keeping the `WAKE_PROJECTS` test
+override — with tests for history, discovery and the park book under the variable. Not bundled into
+the workflow PR because it changes discovery and history, which carry guards of their own
+(`fable wake`'s ruling, 2026-09-30).
+
 ## KNOWN GAPS, 2026-09-24 — dynamic workflows: what `feat/workflow-sidebar` shipped without
 
 The workflow sidebar row, the `/workflows` view, stop and save shipped after a final review wave
