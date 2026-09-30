@@ -27,8 +27,7 @@ import (
 const minMarkdownWidth = 20
 
 var (
-	mu        sync.Mutex
-	renderers = map[int]*glamour.TermRenderer{}
+	mu sync.Mutex
 
 	styleOnce sync.Once
 	mdStyle   gansi.StyleConfig
@@ -61,9 +60,8 @@ var (
 // diff palette resolve through the same cached lipgloss background detection.
 func Prime() { _ = resolvedStyle() }
 
-// Markdown renders source markdown at the given width. Renderers are cached
-// per width: constructing one parses a full style definition, and the render
-// loop calls this on every frame.
+// Markdown renders source markdown at the given width, through a renderer
+// cached for that width (renderercache.go).
 //
 // No line of the result is wider than width display cells, on every path
 // including the degraded ones — see fitToWidth for why glamour's own word wrap
@@ -415,29 +413,6 @@ func boundedWidth(width int) int {
 		return minMarkdownWidth
 	}
 	return width
-}
-
-// rendererFor returns the renderer cached for width, building one on first
-// use. Only the map lookup and the style parse happen under mu; the terminal
-// probe is resolved before the lock is taken.
-func rendererFor(width int) (*glamour.TermRenderer, error) {
-	width = boundedWidth(width)
-	style := resolvedStyle() // must precede mu.Lock: this can block on the TTY
-
-	mu.Lock()
-	defer mu.Unlock()
-	if r, ok := renderers[width]; ok {
-		return r, nil
-	}
-	r, err := newRenderer(
-		glamour.WithStyles(style),
-		glamour.WithWordWrap(width),
-	)
-	if err != nil {
-		return nil, err
-	}
-	renderers[width] = r
-	return r, nil
 }
 
 // resolvedStyle returns the glamour style for this terminal, resolving it at

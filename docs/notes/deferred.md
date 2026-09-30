@@ -1566,8 +1566,14 @@ None of these are wrong. All are unmeasured at the scale the product claims.
 
 - **One process-global mutex serializes rendering across every session** (`internal/render`).
   Correct; a cache miss blocks every other session. Never profiled under load.
-- **Unbounded renderer cache.** Dragging a terminal resize caches a `TermRenderer` plus its
-  parsed style config at every intermediate width, permanently.
+- ~~**Unbounded renderer cache.** Dragging a terminal resize caches a `TermRenderer` plus its
+  parsed style config at every intermediate width, permanently.~~ **CLOSED 2026-09-30
+  (`fix/render-list-hang-cache`):** `internal/render/renderercache.go` keeps the `CachedWidths` most
+  recently used widths (a renderer is ~36KB retained and ~10µs to build). The cap is derived, not
+  chosen: `internal/ui/renderwidths_test.go` measures the widths a 200-column frame renders at — six
+  columns at distinct widths and a plan card, the tiled board's tile width, one reserved for the copy
+  path — and fails if the constant disagrees. A wider terminal can draw more widths; a miss costs one
+  build per block rendered, and a block renders on an event or a re-wrap, never on a frame.
 - **A session that ends *cleanly* still leaks what it spawned.** **CLOSED 2026-08-24 — PR #103 (`fix/clean-exit-group-sweep`):** `retire`'s ordinary non-park branch now sweeps the group via `core.KillGroup(a.sess.Pgid())`; `completePark` is untouched so a parked session's children survive its wake. Follow-up (c) zombie-reap concurrent-`Wait` ordering **CLOSED 2026-08-25 — PR #112** (`fix/wedged-exit-selfdetect`): Wake owns the stdout pipe and `awaitExit` self-detects a leader that exited while a grandchild holds stdout, so a wedged session ends cleanly and `retire`'s sweep now reaches it too; (b) wedged-logger goroutine leak remains (the log-sink owner's, not a core group-kill). Both kill paths are failure
   paths. An agent that finishes normally after `npm run dev &` leaves the dev server behind.
   Policy belongs to the pool; the *mechanism* cannot — `cmd.Process.Pid` dies with `finish`, so

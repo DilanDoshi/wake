@@ -5,7 +5,10 @@ package ui
 // takes. dm.go owns the model and how the pane is sized; dm_blocks.go owns what
 // one event looks like; this owns how those blocks become the scrollback.
 
-import "github.com/DilanDoshi/wake/internal/core"
+import (
+	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/render"
+)
 
 // block is one rendered unit of transcript.
 type block struct {
@@ -40,6 +43,11 @@ type block struct {
 	copied rejoin
 	typed  string
 }
+
+// renderMarkdown is the seam every markdown block a pane or a card draws goes
+// through, so a test can see the widths a frame asks internal/render for - what
+// render.CachedWidths is sized by (renderwidths_test.go).
+var renderMarkdown = render.Markdown
 
 // renderTranscript is the seam renderAll is reached through, so a test can
 // count how often the whole transcript goes back through glamour. Rendering is
