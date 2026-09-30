@@ -89,13 +89,18 @@ func clipped(rows []string, width int) bool {
 	return false
 }
 
+// ownTabWidth is how many spaces shadedOwn draws a typed tab as - lipgloss's own
+// default, set by name so typedRejoins can read the text the same way.
+const ownTabWidth = 4
+
 // typedRejoins matches the rows shadedOwn drew back to the text they came from:
 // each row follows exactly the whitespace its wrap consumed, a typed newline
-// included. Rows before the first that opens the text (the DM's "you" label)
-// are kept as drawn. nil when the rows do not match - the copy then keeps every
-// row break, which is never worse than what was drawn.
+// included, and a typed tab reads as the spaces drawn for it. Rows before the
+// first that opens the text (the DM's "you" label) are kept as drawn. nil when
+// the rows do not match - the copy then keeps every row break, which is never
+// worse than what was drawn.
 func typedRejoins(rows []string, typed string) []render.Rejoin {
-	src := strings.TrimSpace(typed)
+	src := strings.TrimSpace(strings.ReplaceAll(typed, "\t", strings.Repeat(" ", ownTabWidth)))
 	out := make([]render.Rejoin, len(rows))
 	pos := -1 // where in src the rows have reached; -1 before the body
 	for i, row := range rows {

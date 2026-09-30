@@ -141,6 +141,24 @@ func TestCopyingYourOwnTurnGivesBackWhatYouTyped(t *testing.T) {
 	}
 }
 
+// A tab the operator typed is drawn as spaces, so their turn still matches what
+// they typed and rejoins across its wraps, the tab coming back as the spaces
+// drawn for it rather than the block falling back to its row breaks.
+func TestYourOwnTurnWithATabStillRejoins(t *testing.T) {
+	fresh(t)
+	typed := "Run\tthis first: the quick brown fox jumps over the lazy dog again and again until it wraps"
+	room := NewRoomApp(nil, Stream{}, nil)
+	room.layout.ShowGroups, room.layout.ShowRoster = false, false
+	room = resized(t, room, 50, 40)
+	m, _ := room.Update(eventMsg{Event: core.Event{Kind: core.KindUserText, SessionID: "s1", Text: typed}})
+	room = m.(App)
+	tr := room.transcriptIn("")
+	got := copyOf(t, room, "", lineHolding(t, tr, "Run"), 0, tr.lines.len()-1, tr.width-1)
+	if want := strings.ReplaceAll(typed, "\t", strings.Repeat(" ", ownTabWidth)); got != want {
+		t.Errorf("the room copied\n%q\nwant\n%q", got, want)
+	}
+}
+
 // Below minBlockWidth a block is drawn wider than its pane and clipped, so the
 // rows hold text nobody saw. Rejoining their visible halves would present the
 // gap as continuous text; the span copies as drawn instead.

@@ -5404,8 +5404,9 @@ the liveness tests that read `owed`.
 
 `render.Rejoins` rejoins only rows `reflowProse` would group, so these still paste with a break at
 the wrap: a wrapped row that opens with a styled span (bold, inline code, a link — indistinguishable
-from code once rendered), a long link or token `fitToWidth` hard-wrapped, and your own turn when
-lipgloss changed what was typed (a tab expands to spaces). Each falls back to the row as drawn,
+from code once rendered), and a long link or token `fitToWidth` hard-wrapped. (Your own turn with a
+tab in it now rejoins: `shadedOwn` draws a tab as `ownTabWidth` spaces and `typedRejoins` reads the
+typed text the same way — `fix/recent-follow-ups`, 2026-09-29.) Each falls back to the row as drawn,
 never to wrong text. A peer's cross-session message and a subagent's gutter copy as drawn too.
 
 *Closes with:* a wrap marker carried out of the renderer for styled rows, which means instrumenting

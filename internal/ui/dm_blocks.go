@@ -512,7 +512,7 @@ func shadedOwn(text string, width int) string {
 	if width < 1 {
 		return TextStyle.Render(text)
 	}
-	style := OwnStyle.Width(width)
+	style := OwnStyle.Width(width).TabWidth(ownTabWidth)
 	if width > bodyIndent {
 		style = style.PaddingLeft(bodyIndent)
 	}
