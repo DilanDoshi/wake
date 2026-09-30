@@ -22,8 +22,9 @@ type Rejoin struct {
 // so the package that made the wraps is the one that undoes them. Rows it
 // grouped as one paragraph or list item are wraps by construction - markdown
 // renders a source newline as a space - and every other break is kept. A row
-// reflowable refuses (code, a quote, a row opening with a styled span) is kept
-// whole, which is reflowProse's own conservative limit.
+// reflowable refuses (code, a quote, a paragraph row opening with a styled span)
+// is kept whole, which is reflowProse's own conservative limit; a list item's
+// styled wrap it merged back is reflowable prose by the time it gets here.
 func Rejoins(rows []string) []Rejoin {
 	out := make([]Rejoin, len(rows))
 	cont, first := -1, "" // where the group above continues (-1 outside prose), and its first row

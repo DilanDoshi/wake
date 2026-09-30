@@ -258,16 +258,80 @@ func TestNoRowLeavesAStyleOpen(t *testing.T) {
 	}
 }
 
+// TestASpanCutAcrossRowsIsStyledOnEach: closing the style at a row's end is half
+// of it - the span's rest, on the next row, is drawn in it too. The span is
+// digits, which nothing else in the source is.
+func TestASpanCutAcrossRowsIsStyledOnEach(t *testing.T) {
+	for _, src := range []string{
+		"a paragraph `0123456789012345678901234567890123456789` long code with no break",
+		"- x `012345678901234567890123`",
+	} {
+		for width := minMarkdownWidth; width <= 80; width++ {
+			for i, row := range strings.Split(Markdown(src, width), "\n") {
+				if d := unstyledDigit(row); d >= 0 {
+					t.Errorf("width %d: row %d of %q draws the span's digit at byte %d unstyled: %q", width, i, src, d, row)
+				}
+			}
+		}
+	}
+}
+
+// unstyledDigit is the byte offset of the first digit a row draws with no style
+// on, or -1.
+func unstyledDigit(row string) int {
+	on := false
+	for i := 0; i < len(row); i++ {
+		if row[i] == 0x1b {
+			j := strings.IndexByte(row[i:], 'm')
+			if j < 0 {
+				return -1
+			}
+			code := row[i+2 : i+j]
+			on = code != "0" && code != ""
+			i += j
+			continue
+		}
+		if row[i] >= '0' && row[i] <= '9' && !on {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestNoTagSurvivesTheRender holds the tag scheme to its promise: itemTag and
+// headingTag are read by reflowProse and gone from everything Markdown returns.
+func TestNoTagSurvivesTheRender(t *testing.T) {
+	for _, src := range []string{
+		"1. one\n2. two that wraps onto a second visual line at narrow widths here",
+		"- [ ] a task\n- [x] a done task that wraps onto a second visual line here",
+		"# A heading\n\n## Another that wraps onto a second visual line at narrow widths",
+		"- intro\n  # A nested heading",
+		"> - [ ] a quoted task\n> 1. and a quoted enumerator",
+		"| a | b |\n|---|---|\n| 1. x | [ ] y |",
+		"```\n1. code\n- [ ] code\n```",
+	} {
+		for width := minMarkdownWidth; width <= 80; width++ {
+			if out := Markdown(src, width); strings.Contains(out, "\x1b[59") {
+				t.Errorf("width %d: a tag survived rendering %q: %q", width, src, out)
+			}
+		}
+	}
+}
+
 // TestAHeadingInsideAnItemStaysAHeading is the limit on taking a styled row
 // back into an item: glamour draws a heading nested in an item straight under
 // it, led with the same empty styling a styled wrap is, but it is a block of its
 // own - which the style marks (headingTag) - and never the item's prose.
 func TestAHeadingInsideAnItemStaysAHeading(t *testing.T) {
-	const src = "- intro\n  # Important"
-	for width := minMarkdownWidth; width <= 80; width++ {
-		for _, line := range nonBlank(Markdown(src, width)) {
-			if plain := ansi.Strip(line); strings.Contains(plain, "Important") && strings.Contains(plain, "intro") {
-				t.Errorf("width %d: the nested heading was folded into the item's text: %q", width, plain)
+	for _, src := range []string{
+		"- intro\n  # Important",
+		"- intro\n  # Important and long enough to wrap onto a second row at narrow widths",
+	} {
+		for width := minMarkdownWidth; width <= 80; width++ {
+			for _, line := range nonBlank(Markdown(src, width)) {
+				if plain := ansi.Strip(line); strings.Contains(plain, "Important") && strings.Contains(plain, "intro") {
+					t.Errorf("width %d: the nested heading was folded into the item's text: %q", width, plain)
+				}
 			}
 		}
 	}

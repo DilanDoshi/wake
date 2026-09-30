@@ -72,8 +72,8 @@ const (
 
 // itemTag marks the enumerators and task boxes glamour draws for a real list
 // item, which on the page are the same bytes as prose that only reads like one
-// (`1\.`, a literal `[ ] `). SGR 59 closed at once styles nothing and is never
-// glamour's own; reflowProse reads it and strips it.
+// (`1\.`, a literal `[ ] `). SGR 59 closed at once styles nothing and glamour
+// never emits it; reflowProse reads it and strips it.
 const itemTag = "\x1b[59m\x1b[0m"
 
 // headingTag leads the first row of a heading the same way, so a heading nested
@@ -137,8 +137,9 @@ func claudeStyle(dark bool) gansi.StyleConfig {
 		Paragraph: gansi.StyleBlock{},
 
 		// One heading style, all six levels the same: bold text with the `#`
-		// markers stripped (owner observation, 2026-08-29). The blank line before
-		// a heading is BlockPrefix on Heading itself so it applies to all of them.
+		// markers stripped (owner observation, 2026-08-29). The blank line after a
+		// heading is BlockSuffix on Heading itself so it applies to all of them;
+		// BlockPrefix carries headingTag.
 		Heading: gansi.StyleBlock{StylePrimitive: gansi.StylePrimitive{
 			BlockPrefix: headingTag,
 			BlockSuffix: "\n",

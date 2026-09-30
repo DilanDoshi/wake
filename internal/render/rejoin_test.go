@@ -75,6 +75,31 @@ func TestAParagraphWhoseWrapOpensAnEnumeratorCopiesWhole(t *testing.T) {
 	}
 }
 
+// A styled span glamour breaks at its own hyphens comes back whole, drawn and
+// copied: the join reads the rows' text, not the escapes after a trailing `-`.
+// The copy is held where the span fits a row; narrower, the reflow cuts it
+// mid-token, and no copy can tell that cut from a space.
+func TestAHyphenatedSpanRejoinsWithoutASpace(t *testing.T) {
+	const token = "--resume-session-token-value,"
+	const src = "- an item that names a flag long enough to wrap, `--resume-session-token-value`, and more words"
+	const want = "• an item that names a flag long enough to wrap, " + token + " and more words"
+	for width := minMarkdownWidth; width <= 80; width++ {
+		out := Markdown(src, width)
+		for _, row := range strings.Split(ansi.Strip(out), "\n") {
+			// A hyphen then a space mid-row, after a letter or a hyphen, is a join.
+			row = strings.TrimRight(row, " ")
+			if at := strings.Index(row, "- "); at > 0 && row[at-1] != ' ' && row[at-1] != ',' {
+				t.Errorf("width %d: a space was joined into the span: %q", width, row)
+			}
+		}
+		if hang := 4; width-int(defaultMargin)-hang >= len(token) {
+			if got := unwrapped(out); got != want {
+				t.Errorf("width %d: copy is\n%q\nwant\n%q", width, got, want)
+			}
+		}
+	}
+}
+
 // An item's wrap that glamour opens with a styled span copies back into the
 // item, and prose that only reads like a marker copies back as the one line it is.
 func TestAStyledWrapAndALookalikeMarkerCopyWhole(t *testing.T) {

@@ -161,7 +161,8 @@ func reflowProse(s string, width int) string {
 // startsItem reports whether row, at the lead of the group first opened, starts
 // an item rather than continuing the group. glamour opens a new list only after
 // a blank row, so mid-group a row is an item only of first's own list - an
-// enumerator after an enumerator, a bullet or a task box after either. A wrapped
+// enumerator after an enumerator, a bullet or a task box after a bullet or a task
+// box. A wrapped
 // row that happens to open `2. Then` continues a paragraph, or a bullet.
 func startsItem(first, row, tag string) bool {
 	a, b := markerOf(first, tag), markerOf(row, tag)
@@ -275,12 +276,15 @@ func rewrapProse(group []string, lead, width int, mark string) []string {
 		return group
 	}
 	var joined strings.Builder
+	prev := "" // the row above's text, which a hyphen break is read from
 	for k, line := range group {
 		content := trimRightCells(line[lead:])
-		if k > 0 && !hyphenJoin(joined.String(), content) {
+		text := ansi.Strip(content)
+		if k > 0 && !hyphenJoin(prev, text) {
 			joined.WriteByte(' ')
 		}
 		joined.WriteString(content)
+		prev = text
 	}
 	first, rest := strings.Repeat(" ", lead)+mark, strings.Repeat(" ", lead+hang)
 	var out []string
