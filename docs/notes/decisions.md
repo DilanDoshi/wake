@@ -2733,9 +2733,11 @@ uuid in two transcripts is one record a fork copied, never two things said. The 
 record's uuid as `Event.MessageID`; `forkCopies` (`roomhistory.go`) drops every copy but one before
 multiplicity or the turn rule sees them, keeping the copy whose session's parent holds none — the
 original, or the oldest ancestor still in the room — and the first in time order when nobody names a
-parent. So forks are asked at the seed and on a wake, their own turns come back, and the parent's
-prose is drawn once under the parent. A live fork still is not asked on the report that announces it:
-its turns arrive on the socket.
+parent; a dropped user copy still opens or closes its own session's turn as the kept one does. So
+forks are asked at the seed and on a wake **while their parent runs** (`askable`), their own turns
+come back, and the parent's prose is drawn once under the parent. A fork whose parent is parked or
+ended is not asked: it alone would hold what it inherited, drawn under its name. A live fork still is
+not asked on the report that announces it: its turns arrive on the socket.
 
 ---
 

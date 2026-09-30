@@ -112,6 +112,7 @@ func TestTheRoomAsksAboutAForkThatComesBackFromParked(t *testing.T) {
 	}).withSize(200, 40).awaitingWake("s9")
 
 	m, cmd := a.Update(frameMsg{Frame: rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
+		rpc.SessionStatus{ID: "s1", Name: "sydney", State: rpc.StateIdle},
 		rpc.SessionStatus{ID: "s9", Name: "marco", State: rpc.StateIdle, ParentID: "s1"},
 	)}})
 

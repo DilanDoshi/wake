@@ -175,3 +175,19 @@ func TestTwoRoomSendsOfTheSameWordsAreTwoLines(t *testing.T) {
 		t.Errorf("two room sends came back as %d lines: %v", n, texts(r))
 	}
 }
+
+// A room send with an image is one record of two blocks - the image first, the
+// text last (EncodeUserMessage) - so both events carry its uuid. The text is
+// the turn; the image is dropped from a restore the way multiplicity drops it.
+func TestAMarkedRoomSendWithAnImageComesBackWithItsText(t *testing.T) {
+	id := newRoomSend(true).messageID()
+	r := restored([]core.Event{
+		record(typed("s1", core.ImagePlaceholder, base), id),
+		record(typed("s1", "what is wrong with this chart?", base), id),
+		heard("s1", "the y axis is logarithmic", base.Add(time.Second)),
+	})
+	got := strings.Join(texts(r), "|")
+	if got != "@agent-s1 what is wrong with this chart?|the y axis is logarithmic" {
+		t.Errorf("a marked send with an image restored %q, want its text and its reply", got)
+	}
+}

@@ -245,7 +245,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   broadcast, or was stamped by a room send (`roomprovenance.go`: the uuid Wake stamps is the one on
   disk; a direct `@name` comes back in that thread); agent prose is restored only inside a public
   turn. A record in two transcripts (same uuid, `Event.MessageID`) is a fork's copy, drawn once
-  (`forkCopies`) — forks are asked like any session.
+  (`forkCopies`) — a fork is asked while its parent runs (`askable`).
 - A routed message is echoed into the room and into every *held* DM it reached, mention included,
   marked `FromRoom`.
 - **A lone `@name` narrows the room** to that thread (`roomfocus.go`); `⌃A` overrides per target;

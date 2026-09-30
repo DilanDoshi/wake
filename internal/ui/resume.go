@@ -291,8 +291,10 @@ func (a App) wakeArrived(st *rpc.Status) App {
 		a = a.modeReverted(s.ID, s.Name)
 		// The room is missing everything this session said before it was
 		// parked, and this is the only report that says it has been resumed. A
-		// fork is asked too; its copy of its parent is drawn once (forkCopies).
-		a = a.askRoomHistory(s.ID)
+		// fork is asked on askable's terms, the seed's.
+		if askable(s, st) {
+			a = a.askRoomHistory(s.ID)
+		}
 	}
 	return a
 }

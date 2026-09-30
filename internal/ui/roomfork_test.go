@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // record is an event restored from a transcript record with this uuid.
@@ -113,5 +114,41 @@ func TestABroadcastWithAUUIDPerTargetIsStillOneRoomLine(t *testing.T) {
 	)
 	if got := texts(r); len(got) != 1 || got[0] != "@all stop" {
 		t.Errorf("a broadcast with a uuid per target came back as %v, want it once", got)
+	}
+}
+
+// A copy dropped for its keeper still carries that turn's standing into its own
+// session: a woken fork kept as the broadcast's copy (it arrived first) must not
+// leave the parent's own later prose, in the same public turn, unopened.
+func TestADroppedCopyStillOpensItsOwnSessionsTurn(t *testing.T) {
+	fork := []core.Event{
+		record(opener("f1", base), "u-open-s1"),
+		record(heard("f1", "the parent's answer", base.Add(time.Second)), "u-answer"),
+	}
+	parent := []core.Event{
+		record(opener("s1", base), "u-open-s1"),
+		record(heard("s1", "the parent's answer", base.Add(time.Second)), "u-answer"),
+		// Said by the parent after the fork, still inside that public turn.
+		record(heard("s1", "and one more thing, after the fork", base.Add(time.Minute)), "u-after"),
+	}
+	second := []core.Event{record(opener("s2", base.Add(40*time.Millisecond)), "u-open-s2")}
+	r := restored(fork, second, parent) // named: no ParentID, so the first to arrive is kept
+	if got := strings.Join(texts(r), "|"); !strings.Contains(got, "after the fork") {
+		t.Errorf("the parent's own prose in a public turn was dropped because its copy of the opener was: %v", texts(r))
+	}
+}
+
+// A fork whose parent is not running is not asked about: only the fork would
+// hold the records it inherited, so they would be drawn under the fork's name -
+// a direct `@parent ...` readdressed to the fork. Asked again once the parent is
+// live, with its copy drawn once under the parent.
+func TestTheRoomAsksAboutAForkOnlyWhileItsParentIsLive(t *testing.T) {
+	st := &rpc.Status{Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateIdle},
+		{ID: "f1", Name: "juno", State: rpc.StateIdle, ParentID: "s1"},
+		{ID: "f2", Name: "nora", State: rpc.StateIdle, ParentID: "gone"},
+	}}
+	if got := strings.Join(liveSessions(st), ","); got != "s1,f1" {
+		t.Errorf("the room would ask about %q, want the parent and the fork whose parent is live", got)
 	}
 }
