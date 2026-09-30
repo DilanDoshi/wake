@@ -74,12 +74,13 @@ func (srv mcpServer) selfTest() error {
 	return nil
 }
 
-// ranWith is a failed run with the server's own stderr, when it said anything:
-// "exit status 1" alone is nothing an operator can act on.
+// ranWith is a failed run with the first line of the server's stderr, when it
+// said anything: "exit status 1" alone is nothing an operator can act on, and a
+// panic's trace is more than a notice row can hold.
 func ranWith(err error) error {
 	var exit *exec.ExitError
 	if errors.As(err, &exit) {
-		if said := strings.TrimSpace(string(exit.Stderr)); said != "" {
+		if said, _, _ := strings.Cut(strings.TrimSpace(string(exit.Stderr)), "\n"); said != "" {
 			return fmt.Errorf("%w: %s", err, said)
 		}
 	}

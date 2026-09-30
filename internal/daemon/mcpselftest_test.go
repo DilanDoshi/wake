@@ -30,14 +30,17 @@ const (
 )
 
 // fakeMCPExitSays is what the exiting server leaves on stderr, so a test can
-// see the refusal carry it.
-const fakeMCPExitSays = "wake: not the server you were looking for"
+// see the refusal carry it - and fakeMCPExitTrace below it, which it must not.
+const (
+	fakeMCPExitSays  = "wake: not the server you were looking for"
+	fakeMCPExitTrace = "goroutine 1 [running]:"
+)
 
 // runFakeMCP is this binary as `wake mcp`.
 func runFakeMCP() int {
 	switch os.Getenv(fakeMCPEnv) {
 	case mcpExits:
-		fmt.Fprintln(os.Stderr, fakeMCPExitSays)
+		fmt.Fprintln(os.Stderr, fakeMCPExitSays+"\n\n"+fakeMCPExitTrace)
 		return 1
 	case mcpHangs:
 		// A grandchild holding stdout too, so the bound has to reach the group
@@ -132,6 +135,9 @@ func TestABrokenManagerServerFailsItsSelfTestAndSaysHow(t *testing.T) {
 		if !strings.Contains(err.Error(), c.says) {
 			t.Errorf("%s: refused with %q, which does not say %q", c.name, err, c.says)
 		}
+	}
+	if err := mcpServerFor(t, mcpExits).selfTest(); err != nil && strings.Contains(err.Error(), fakeMCPExitTrace) {
+		t.Errorf("a binary that exits was refused with its whole stderr, which a notice row cannot hold: %q", err)
 	}
 	if err := mcpServerFor(t, mcpOtherTools).selfTest(); !errors.Is(err, mcp.ErrOtherTools) {
 		t.Errorf("a binary from another build: err = %v, want it to wrap mcp.ErrOtherTools", err)
