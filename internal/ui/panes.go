@@ -6,6 +6,7 @@ package ui
 
 import (
 	"maps"
+	"math"
 	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -27,8 +28,13 @@ func (a App) withDM(id string, dm DM) App {
 	next[id] = &dm
 	a.dms = next
 	// A reclaim takes the scrollback's oldest lines, and a highlight on them -
-	// the last of them now the reclaimed line's own.
-	if first := dm.tr.lines.first(); held && first > was.tr.lines.first() {
+	// the last of them now the reclaimed line's own - or, laying the rest out
+	// again, moves every line under one.
+	if held && dm.events.first() > was.events.first() {
+		first := dm.tr.lines.first()
+		if first == was.tr.lines.first() {
+			first = math.MaxInt
+		}
 		if onLinesBefore(a.sel, id, first) {
 			a.sel, a.selecting = selection{}, false
 		}

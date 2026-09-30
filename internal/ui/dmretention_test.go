@@ -22,6 +22,20 @@ import (
 func pastTheCap(t testing.TB) DM {
 	t.Helper()
 	d := NewDM("s1", "alex").SetSize(80, 30)
+	// Every reclaim here cuts exactly: they render what they reclaim, a chunk
+	// each, where one that fell back would lay out all it kept.
+	n := renderedDuring(t, func() { d = buildPastTheCap(d) })
+	if n >= dmRetentionEvents {
+		t.Fatalf("building the conversation rendered %d events: its reclaims fell back to laying out all they kept", n)
+	}
+	if !d.reclaimed() {
+		t.Fatalf("%d events and nothing reclaimed: every test on this conversation asserts nothing", d.events.len())
+	}
+	return d
+}
+
+// buildPastTheCap appends pastTheCap's turns to d.
+func buildPastTheCap(d DM) DM {
 	for i := 0; d.events.len() < dmRetentionEvents+5*chunkSize; i++ {
 		if i%17 == 0 && i > 0 && i < 120 {
 			d = d.Leave() // an absence: the next event draws a last-read rule
@@ -30,9 +44,6 @@ func pastTheCap(t testing.TB) DM {
 		d = d.Append(prose(fmt.Sprintf("Turn %d. The handler reads the config before the context is checked.", i)))
 		d = d.Append(bashCall(id)).Append(result(id, "ok", false))
 		d = d.Append(readCall(id+"r", "main.go")).Append(result(id+"r", "12 lines", false))
-	}
-	if !d.reclaimed() {
-		t.Fatalf("%d events and nothing reclaimed: every test on this conversation asserts nothing", d.events.len())
 	}
 	return d
 }
@@ -261,6 +272,32 @@ func TestAToolOnlyStreamIsBoundedToo(t *testing.T) {
 	}
 }
 
+// When a reclaim has to lay out again - a cut into a run - a reader scrolled back
+// keeps their place, as far from the newest line as they were, and a highlight
+// on lines that all moved goes.
+func TestLayingOutAgainKeepsTheReadersPlace(t *testing.T) {
+	d := NewDM("s1", "alex").SetSize(80, 30).toggleExpanded().Append(prose("Starting the sweep."))
+	for i := 0; d.events.count() < dmRetentionEvents+chunkSize-2; i++ {
+		id := fmt.Sprintf("b%d", i)
+		d = d.Append(bashCall(id)).Append(result(id, "ok", false))
+	}
+	d = d.ScrollUp(40)
+	top := d.tr.lines.at(d.tr.scroll)
+	a := App{dms: map[string]*DM{}}.withDM("s1", d)
+	a.sel = selection{pane: "s1", anchor: point{line: d.tr.scroll}, head: point{line: d.tr.scroll + 1, col: 3}}
+	for i, first := 0, d.events.first(); d.events.first() == first; i++ {
+		id := fmt.Sprintf("n%d", i)
+		d = d.Append(bashCall(id)).Append(result(id, "ok", false))
+	}
+	if d.tr.atBottom() || d.tr.lines.at(d.tr.scroll) != top {
+		t.Errorf("laying out again moved the reader: top line %q, was %q (at bottom: %v)",
+			stripANSI(d.tr.lines.at(d.tr.scroll)), stripANSI(top), d.tr.atBottom())
+	}
+	if a = a.withDM("s1", d); !a.sel.empty() {
+		t.Errorf("a highlight survived a lay-out that moved every line under it")
+	}
+}
+
 // A reclaim cuts only where a block starts: never inside a folded run, never
 // between a call and the result under it.
 func TestAReclaimNeverCutsIntoAToolRun(t *testing.T) {
@@ -307,15 +344,13 @@ func TestTheReclaimedLineIsTheConversationsOwn(t *testing.T) {
 // A highlight on lines a reclaim took has nothing left to point at.
 func TestASelectionOnReclaimedLinesIsCleared(t *testing.T) {
 	d := NewDM("s1", "alex").SetSize(80, 30)
-	for i := range 40 {
+	for i := 0; i < dmRetentionEvents+chunkSize-1; i++ {
 		d = d.Append(prose(fmt.Sprintf("Turn %d.", i)))
 	}
 	a := App{dms: map[string]*DM{}}.withDM("s1", d)
 	first := d.tr.lines.first()
-	a.sel = selection{pane: "s1", anchor: point{line: first}, head: point{line: first + 1, col: 3}}
-	reclaimed := d
-	reclaimed.tr = reclaimed.tr.trimBefore(first + 2)
-	if a = a.withDM("s1", reclaimed); !a.sel.empty() {
+	a.sel = selection{pane: "s1", anchor: point{line: first + 2}, head: point{line: first + 3, col: 3}}
+	if a = a.withDM("s1", d.Append(prose("the event that reclaims"))); !a.sel.empty() {
 		t.Errorf("a selection on reclaimed lines survived")
 	}
 }

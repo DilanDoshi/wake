@@ -50,9 +50,13 @@ func (d DM) retained() DM {
 		d.tr = d.tr.trimBefore(d.tr.lines.first() + rows)
 		d.tr.scroll = max(d.tr.scroll, d.tr.first())
 	default:
-		// A cut into a run, or lines that no longer match a render: laid out again.
+		// A cut into a run, or lines that no longer match a render: laid out again,
+		// a reader scrolled back kept as far from the newest line as they were.
+		fromBottom := d.tr.bottom() - d.tr.scroll
 		if d.tr = d.rewrapped(); following {
 			d.tr = d.tr.toBottom()
+		} else {
+			d.tr.scroll = max(d.tr.bottom()-fromBottom, d.tr.first())
 		}
 	}
 	if !clean {
@@ -114,6 +118,8 @@ func (d DM) rowsBefore(cut int) (int, bool) {
 	i := start
 	for j := 0; j < len(want); {
 		switch {
+		case i >= d.tr.lines.len():
+			return 0, false
 		case ruleAt(live, i) && !ruleAt(wanted, j):
 			i += len(rule)
 		case live(i) == want[j]:
