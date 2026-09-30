@@ -5260,6 +5260,12 @@ park is confirmed.
 
 ## 2026-09-24 — the API-failure pin infers a resume from report order
 
+**CLOSED 2026-09-29 — `fix/recent-follow-ups`.** The reorder was real at every push site: each built
+its snapshot before `broadcast` took `s.mu`. `pushStatus`/`replyStatus` now hold `reportMu` across
+the build and the enqueue, so every client's queue carries reports in build order and "parked, then
+live" proves a resume (`TestAStatusReportIsNeverQueuedBehindANewerOne`). The incarnation id below
+was dropped: three reflective guards, a fence in both reconcilers, and the roster still misdrawn.
+
 `reconciledPins` (`internal/ui/apierror.go`) unpins a failure when its session is reported parked
 and then live again. Codex's review of `fix/notice-expiry` noted that the daemon assembles a status
 snapshot before taking the broadcast lock, so an older `idle` snapshot could in principle arrive
