@@ -69,9 +69,9 @@ func TestAStackedTopPaneOverflowDoesNotBleedIntoTheBottom(t *testing.T) {
 		t.Fatalf("the top pane drew %d rows into %d - it did not overflow, so the bleed is not exercised", natural, top)
 	}
 	// And the column still measures exactly its height.
-	if got := lipgloss.Height(a.column(col, w, h)); got != h {
+	if got := lipgloss.Height(a.column(col, w, w, h)); got != h {
 		t.Fatalf("the stacked column drew %d rows into %d: the top pane's overflow bled into the bottom:\n%s",
-			got, h, stripANSI(a.column(col, w, h)))
+			got, h, stripANSI(a.column(col, w, w, h)))
 	}
 }
 

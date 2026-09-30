@@ -38,6 +38,24 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## KNOWN GAP, 2026-09-30 — `$CLAUDE_CONFIG_DIR` moves claude's transcripts and Wake does not follow
+
+**Found by reading, not watched go wrong** (hence here rather than `bugs.md`), while
+`fix/workflow-view-gaps` taught the workflow save to honour the variable. `daemon.ProjectsDir()` is
+`WAKE_PROJECTS` else `~/.claude/projects`, full stop; claude keeps its projects under
+`$CLAUDE_CONFIG_DIR` when that is set, so a daemon started with it reads a tree claude never writes.
+Everything keyed on `ProjectsDir` misses: `History` (a woken DM opens empty), `discover` (the
+`/resume` picker's disk half and `verifiedDir`), `WorkflowRuns` (the `/workflows` view's records),
+and — **the sharp one** — `parkedStatuses`, which drops any park-book record whose transcript
+`transcriptPath` cannot find as "nothing to bring back", so **a ⌃Q'd fleet under
+`$CLAUDE_CONFIG_DIR` is unresumable on the next `wake`**.
+
+*Closes with:* its own small PR — `ProjectsDir` as `claudeConfigDir()`'s `projects` (the helper
+`fix/workflow-view-gaps` adds in `internal/daemon/workflowsave.go`), keeping the `WAKE_PROJECTS` test
+override — with tests for history, discovery and the park book under the variable. Not bundled into
+the workflow PR because it changes discovery and history, which carry guards of their own
+(`fable wake`'s ruling, 2026-09-30).
+
 ## KNOWN GAPS, 2026-09-24 — dynamic workflows: what `feat/workflow-sidebar` shipped without
 
 The workflow sidebar row, the `/workflows` view, stop and save shipped after a final review wave
@@ -1587,7 +1605,17 @@ None of these are wrong. All are unmeasured at the scale the product claims.
 - **A wedged logger leaks one parked goroutine per affected session.** The session itself ends
   and frees its slot; the goroutine does not. Unbounded from inside for the same reason the
   original bug existed — a component cannot bound a sink it does not own. Task 6 owns the sink.
-- **A DM's scrollback is unbounded for the life of the session.** Deliberately left there by
+- ~~**A DM's scrollback is unbounded for the life of the session.**~~ **CLOSED 2026-09-30
+  (`fix/dm-scrollback-bound`):** a conversation keeps its newest `dmRetentionEvents` (3,000 — the
+  re-wrap cost accepted when the settle was designed, 248ms then and 73ms now by
+  `BenchmarkReWrapAtTheRetentionCap`) and reclaims the oldest a chunk at a time under `… older
+  conversation reclaimed` (`internal/ui/dmretention.go`). It cuts only before a non-tool event, so
+  never inside a folded run or between a call and its result, and the lines it keeps are the lines a
+  re-wrap of what it kept draws (`TestAReclaimKeepsTheLinesAReWrapDraws`), stale last-read rules
+  included. History arriving after a reclaim is left out rather than drawn above a gap. **Still
+  unbounded, out of scope here:** `Fleet.subs` and `DM.subs` (subagent transcripts), and a DM's
+  `calls`/`outcomes`/`opened`/`runOpen` maps (one entry per tool call). The original entry:
+  Deliberately left there by
   C2's fix: dropping old events means dropping the lines they rendered to, or a width change
   re-renders a transcript missing its beginning — so a bound on `d.events` is a bound on
   *scrollback depth*, which is a product decision about a view §8 calls "literally Claude
@@ -1748,8 +1776,8 @@ work; the rest is bookkeeping. **Whoever adds the field owns the record.**
 
 **Left open by the same task, and smaller: the manager is an ordinary row on every surface that
 draws one.** It is in the roster, it has an attention rank, `⌃D` opens a DM on it and `⌃C` will park
-it. Parking it is *recoverable* — `restoreParked` (deleted in `6ca7e6b`; `/manager` wakes it now) gives it its name back and `managerConfig` gives
-it its tools back — so nothing is lost, but a manager sitting in the attention ranking between two
+it. Parking it is *recoverable* — `restoreParked` (deleted in `6ca7e6b`; `/manager` wakes it now)
+gives it its name back and `managerConfig` gives it its tools back — so nothing is lost, but a manager sitting in the attention ranking between two
 agents is a design question nobody has answered. It was deliberately not answered here: the settled
 scope was routing (default addressee, broadcast exclusion), and the roster is a different surface
 with a different argument.
@@ -1777,8 +1805,12 @@ with a different argument.
 > costs the one route to its transcript unless something replaces it. **Whoever answers this owns the
 > strip's count too** — the two are the same claim about whether the manager is part of "the fleet".
 
-**Phase 3 or later — `--strict-mcp-config` for *ordinary* agents is unruled.** Added 2026-08-11 by
-Phase 2 Task 15.
+**~~Phase 3 or later — `--strict-mcp-config` for *ordinary* agents is unruled.~~ RULED 2026-09-29:
+ordinary agents inherit** — the owner decided it by building PR #127 on it (every agent's
+`initialize` handshake loads the operator's claude.ai connectors, which `--strict-mcp-config` would
+exclude). Recorded in `decisions.md` (2026-09-29, ruling 2) and held by
+`TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt`. Original entry follows. Added
+2026-08-11 by Phase 2 Task 15.
 
 The manager gets `--mcp-config` and `--strict-mcp-config` as a pair, and the second is what stops it
 inheriting every MCP server in the user's own configuration. **Every other agent Wake spawns still
@@ -1789,8 +1821,12 @@ a ruling the day somebody wants a fleet whose tool surface Wake controls — the
 away, and the argument against is that a Wake agent that can do *less* than the same `claude` in the
 same directory is a surprise nothing on screen explains.
 
-**Phase 3 or later — a manager whose MCP server cannot start is indistinguishable from one whose
-tools are empty.** Added 2026-08-11 by Phase 2 Task 15.
+**~~Phase 3 or later — a manager whose MCP server cannot start is indistinguishable from one whose
+tools are empty.~~ DONE 2026-09-29:** the self-test below shipped, in the daemon's `managerConfig`
+rather than at `wake manager` time (`mcp.json` names the daemon's binary, and `launch` is the one
+door every manager start goes through) — `internal/daemon/mcpselftest.go`, `decisions.md`
+(2026-09-29, ruling 1). Claude's acceptance of the handshake stays `live-testing.md` §13.1. Original
+entry follows. Added 2026-08-11 by Phase 2 Task 15.
 
 `managerConfig` refuses the launch if the config file cannot be **written**. It cannot check that
 the file is *usable*: `wake mcp` is executed by claude, not by Wake, and its failure — a binary that
@@ -4597,7 +4633,27 @@ multi-select entry above is untouched and is still the only field left out.
 
 ---
 
-## 2026-08-14 — a column drag jumps where a row drag glides
+## ~~2026-08-14 — a column drag jumps where a row drag glides~~ CLOSED 2026-09-30 (`fix/divider-drag-glides`)
+
+**Closed the way the entry below says.** Mid-drag each pane is drawn at the width it is wrapped for
+and cut or padded, row by row, to the width the drag gives it (`fitCells`), at `frameRegions` — the
+layout at the pending split (`drawnRegions`, shared with the room's settle fix). A pane is never
+handed the pending width, so no motion re-wraps. Letting go commits the drag at once (`letGo`): the
+settle coalesces motions, and none follow a release. The one mouse event a held button still sends,
+the wheel, hits the columns as drawn. A window drag keeps its clip: its column count can change
+mid-drag. Taking hold of the divider clears the selection, which also closes a hole the entry did not
+name — the divider's settle re-wrapped both panes under a highlight left standing. A release while
+a window drag is also in flight leaves both to the shared settle, since the width is still moving.
+`Layout.DragDivider` now solves the split against the running total `share` rounds on, so among
+three or more columns the divider lands on the pointer's column rather than a cell off it (on
+`main` too, once settled).
+**Left as they were on `main`, and why:** a hand that rests on the divider past `resizeQuiet` gets
+its settle and re-wraps mid-drag — the settle's own rule, which the window drag shares, and what
+gives a resting hand reflowed text rather than a cut; and a grid key (`⌃W`, `⌃Y`) pressed while the
+mouse holds a divider leaves the drag's weights indexed for the old grid, so the split lands on
+whatever column now sits there — `main`'s settle applied the same stale weights. The original
+entry is kept below.
+
 
 **Wake — dragging a vertical divider moves nothing until the drag ends, while dragging a stacked
 column's rule tracks the pointer.** Asked for by the owner after a real screen, and it is the cost
@@ -5093,6 +5149,12 @@ no new guard beyond `managerScope`, or whether reading every agent's words is it
 recorded bound. It owes the same discipline the rest of the manager was held to — a bounded verb, a
 guard (`cmd/wake/mcpguard_test.go`), a recorded reason — not just a longer prompt. *Blocks:* the
 orchestrator above; it cannot judge what it cannot read.
+
+**2026-09-29 — still unruled, and the first question is not the budget.** No ruling exists beyond
+the ask. `managerVerbs` refuses `FrameHistory` in writing because a transcript is "the operator's own
+words", so a manager reading one reads the operator's DM turns to that agent. Whether user turns are
+in it at all is the owner's call, before budget or compression; the tool then owes a written
+counter-verdict on that cell.
 
 ---
 

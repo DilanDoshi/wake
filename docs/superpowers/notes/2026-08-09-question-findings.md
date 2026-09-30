@@ -453,8 +453,8 @@ cannot prove a negative about a mechanism it never exercised).
 - **Whether a question can arrive as `request_user_dialog`.** `[binary]` a sibling control subtype
   exists — *"Requests the SDK consumer to render a tool-driven blocking dialog"* — carrying
   `dialog_kind` and an opaque `data` payload, answered `completed`/`cancelled`. It is gated on the
-  client declaring `supportedDialogKinds` in an `initialize` control request, which Wake never
-  sends: *"The CLI treats ABSENCE as 'cannot display' and fails closed."* No such frame appeared in
+  client declaring `supportedDialogKinds` in an `initialize` control request. Wake has sent a bare
+  `initialize` since PR #127 (2026-09-29 note), but never declares `supportedDialogKinds`: *"The CLI treats ABSENCE as 'cannot display' and fails closed."* No such frame appeared in
   these recordings. Nothing here proves it can never appear, only that it did not.
 - **Two questions outstanding at once**, from one agent or from a queued message.
 - **A question during `/compact`, or across a `/clear` session-id change.**

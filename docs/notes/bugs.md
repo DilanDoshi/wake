@@ -675,6 +675,28 @@ counts the row as padding, so the caret is not drawn until the next character.
 
 ---
 
+## BUG-40 — a local command's reply was one paragraph in a conversation
+
+**Reported 2026-09-30** (seen on PR #134's video): `/list-agents` in a conversation drew its
+session rows run together as one reflowed paragraph. `/cost`, `/config`, `/mcp` and `/agents` did the
+same — their rows, and `/cost`'s aligned columns, folded into prose.
+
+**Root cause: the reply was drawn as markdown.** A local command's text reaches the DM as assistant
+text marked `LocalCommand` (a `<synthetic>` frame), and `kindBlock` sent all assistant text through
+glamour, which reads a single newline as a space. Claude Code draws local-command output as its
+lines. Probed 2026-09-30 (2.1.285, sterile `HOME`, local commands only): of `/context`, `/cost`,
+`/usage`, `/stats`, `/config`, `/mcp` and `/agents`, only `/context` replies in markdown, opening with
+`## Context Usage`.
+
+**Fix (`dm_blocks.go`'s `drawnAsLines`, `localReplyBlock`).** A local command's reply is drawn as
+its lines — indentation and column alignment kept, wrapped to the pane one margin in — unless it
+opens with a markdown heading, as `/context`'s does. The same predicate sends its copy through
+`typedRejoins` (`copytext.go`), so a copy gives back the rows the command printed.
+
+**Not changed:** the room still draws a public local reply (`@name /list-agents`) as markdown.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

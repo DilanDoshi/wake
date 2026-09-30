@@ -191,7 +191,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The grid is bounded:** columns, each split once (spec §8). The room is `Cols[0]` and cannot be
   closed. Arbitrary tiling is out of scope.
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
-  through the 80ms settle; row drags don't. The wheel scrolls the pane under the pointer.
+  through the 80ms settle, drawn at the pointer meanwhile (each pane at its wrap width, cut or padded —
+  `fitCells`) and committed on release; row drags don't settle. The wheel scrolls the pane under the pointer.
 - **Drag selects, release copies**, on every surface but the `/workflows` view (a press there moves
   its cursor; `deferred.md`): transcript (anchored to `transcript.lines`
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
@@ -203,8 +204,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`edgeScrollEvery`) re-arms only while the pane moved; the highlight ends on a line on screen.
   `internal/ui/edgescroll.go`.
 - **A transcript copy rejoins what the pane wrapped** — markdown by `render.Rejoins` (reflowProse's
-  own predicates), your own turn matched back to what you typed; every other row copies as drawn.
-  `internal/ui/copytext.go`.
+  own predicates), your own turn and a local command's reply matched back to their text; every other
+  row copies as drawn. `internal/ui/copytext.go`.
 - **Double-click selects a word, triple-click its row**, on any selectable surface; the first click
   still does its own job. A timer (`multiClickWindow`) counts clicks but never tells a click from a
   drag. `internal/ui/multiclick.go`.
@@ -219,9 +220,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   through one 80ms settle (`geometry.go`).
 - **A streamed preview never costs the record a slot**: partials fold into one slot and never evict,
   and a dropped partial is not a gap (`inbox.go`, daemon `client.go`'s `partialCeiling`).
+- **A conversation keeps its newest `dmRetentionEvents` (3,000)** — the re-wrap budget — and reclaims
+  the oldest a chunk at a time, only before a non-tool event, under one fixed line (`dmretention.go`).
 - **A preview is never a record**: plain-text tail, bounded by the pane, never through glamour,
   accumulated only for panes on screen (`App.wants`), dropped on leave. No preview in the room or for
   subagents. `internal/ui/partial.go`.
+- **A local command's reply is drawn as its lines** (`/list-agents`, `/cost`, `/config`), as Claude
+  Code draws it; one opening with a markdown heading (`/context`'s) stays markdown.
+  `internal/ui/dm_blocks.go`'s `drawnAsLines`.
 - The composer grows with the draft; the pane bounds it (`composerRowsIn`), never itself. A pane's
   chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
   screen.
@@ -277,7 +283,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each argued in
   `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
 - Its config is a function of its name, applied in `launch`: `--mcp-config` only ever beside
-  `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing).
+  `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing). Ordinary
+  agents get none of the three — they keep the operator's MCP servers (owner's ruling via PR #127).
+- **Every manager launch self-tests its tools** before claude starts: `managerConfig` runs
+  `mcp.json`'s command through `initialize`/`tools/list` under a bound, and refuses unless
+  `mcp.Tools()` comes back. Claude accepting the handshake stays `live-testing.md` §13.1.
+  `internal/daemon/mcpselftest.go`.
 - The daemon socket has no caller auth; `managerVerbs` bounds the manager's tool surface, not what
   the daemon accepts.
 
@@ -321,8 +332,8 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · `lifecycle.go` · `peers.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
-| MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go` · verdicts in `cmd/wake/mcpguard_test.go` |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
+| MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
@@ -333,7 +344,7 @@ yet says so in bold.**
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomfocus.go` · `roomfilter.go` |
-| DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
+| DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
@@ -478,7 +489,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/dm.go` at 799 and `internal/core/encode.go` at 798 — derived by
+  `internal/core/encode.go` at 798 and `internal/core/protocol.go` at 798 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

@@ -339,3 +339,22 @@ func TestTheTakeoverThresholdIsWhatKeepsBothPanesReadable(t *testing.T) {
 		t.Errorf("at %d both sidebars leave %d columns, floor %d", groupsCollapseColumns, left, minPaneWidth)
 	}
 }
+
+// A dragged divider lands on the column the hand is on, among any number of
+// columns: the split is solved against the running total share rounds on, not
+// the pair's own width, which put a middle divider of four a cell off it.
+func TestADraggedDividerLandsOnThePointer(t *testing.T) {
+	l := Layout{Width: 161, ShowRoster: true}
+	for cols := 2; cols <= 4; cols++ {
+		r := l.Regions(cols, 0)
+		for at := 0; at+1 < cols; at++ {
+			lo, hi := edgeOf(r, at)+minPaneWidth, edgeOf(r, at)+r.Cols[at]+r.Cols[at+1]-minPaneWidth
+			for x := lo; x <= hi; x++ {
+				got := l.DragDivider(r, at, x).Regions(cols, 0)
+				if edge := edgeOf(got, at) + got.Cols[at]; edge != x {
+					t.Fatalf("%d columns: divider %d dragged to %d lands at %d (%v)", cols, at, x, edge, got.Cols)
+				}
+			}
+		}
+	}
+}

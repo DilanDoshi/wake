@@ -271,7 +271,7 @@ func (d DM) SetSize(w, h int) DM {
 	following := d.tr.atBottom()
 	if w != d.width {
 		d.width = w
-		d.tr = d.tr.replace(renderTranscript(d))
+		d.tr = d.rewrapped()
 		// A re-wrap invalidates the offset outright: it no longer points at
 		// what the reader was reading, and restoring a stale one would be a
 		// worse lie than returning to the newest message.
@@ -424,7 +424,7 @@ func (d DM) Append(ev core.Event) DM {
 		d = d.advanceRun(ev)
 	}
 	if !drawn {
-		return d
+		return d.retained()
 	}
 	if fold {
 		d = d.drawFold(ev)
@@ -440,7 +440,7 @@ func (d DM) Append(ev core.Event) DM {
 	// against it - the token path returns above and keeps the cap this settled,
 	// so a stream re-measures only when a block lands rather than per token.
 	d.partial = d.partial.capped(d.previewCap())
-	return d
+	return d.retained()
 }
 
 // forwardedTo is the dispatch an event belongs to, and "" for one that belongs
@@ -506,7 +506,7 @@ func (d DM) Viewing(dispatch string) DM {
 		return d
 	}
 	d.viewing = dispatch
-	d.tr = d.tr.replace(renderTranscript(d)).toBottom()
+	d.tr = d.rewrapped().toBottom()
 	return d
 }
 
@@ -645,7 +645,7 @@ func (d DM) Before(earlier []core.Event) DM {
 	// disk would otherwise split a run here that the live path kept whole - the
 	// resize-versus-restore disagreement this fold has to avoid. See renderAll.
 	earlier = d.storable(earlier)
-	if len(earlier) == 0 {
+	if len(earlier) == 0 || d.reclaimed() {
 		return d
 	}
 	events := append(append([]core.Event(nil), earlier...), d.events.slice(0, d.events.len())...)
@@ -676,12 +676,8 @@ func (d DM) Before(earlier []core.Event) DM {
 	// the one re-render that changes the events - a resize and a toggle leave the
 	// tail alone, so runKey and runTally survive them untouched. Rebuilt from the
 	// tail once here, where the live path keeps them in step incrementally.
-	if run := d.trailingRun(); len(run) > 0 {
-		d.runKey, d.runTally = run[0].Tool.ID, tallyOf(run)
-	} else {
-		d.runKey, d.runTally = "", nil
-	}
-	d.tr = d.tr.replace(renderTranscript(d)).toBottom()
+	d = d.withTrailingRun()
+	d.tr = d.rewrapped().toBottom()
 	// The restored ops may have grown the board, which is chrome the transcript's
 	// height is taken out of. Re-settle so the viewport is sized for it - the same
 	// thing Append does after a live checklist op, and the reason the old code did
