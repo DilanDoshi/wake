@@ -2586,7 +2586,9 @@ files claude already writes. The cost of that choice is the whole of `roomhistor
 
 **What it costs, stated so nobody re-derives it as a bug:**
 
-1. **`@noah do this` does not come back.** A user turn on disk is indistinguishable from a private
+1. **`@noah do this` does not come back.** *(Amended 2026-09-29 — it does now, for a turn sent after
+   the change: see "a room turn carries its provenance in its uuid" below. Everything here still
+   governs transcripts written before it.)* A user turn on disk is indistinguishable from a private
    one — `sendRoom` strips the leading `@name` before writing, and `FromRoom` is presentation-only and
    on no wire — so the same bytes are a room message aimed at one agent and a turn typed into that
    agent's pane. The only sound discriminator is multiplicity: **the same text in two or more
@@ -2734,6 +2736,33 @@ original, or the oldest ancestor still in the room — and the first in time ord
 parent. So forks are asked at the seed and on a wake, their own turns come back, and the parent's
 prose is drawn once under the parent. A live fork still is not asked on the report that announces it:
 its turns arrive on the socket.
+
+---
+
+## Ruling (2026-09-29, flagged for the owner): a room turn carries its provenance in its uuid
+
+**The reason multiplicity was the only discriminator no longer holds.** The ruling above rests on
+"on disk a broadcast and a DM turn are the same bytes". They still are — but the **uuid** is not
+part of the bytes the model reads, and claude records the uuid Wake stamps on a send as that turn's
+own (`testdata/input/room-stamped-uuid.stdin.jsonl` → `testdata/transcript/room-stamped-uuid.jsonl`,
+2.1.285). So a room send stamps its targets with a recognisable uuid (`roomprovenance.go`: a
+`wake` prefix, a version-8 shape, a direct-`@name` flag, one *send* id shared by every target, and
+per-target random bits) and a DM send keeps a random version-4 one. The spirit of the privacy
+ruling — **a private DM turn is never shown** — holds unchanged: an unmarked turn is decided exactly
+as before.
+
+**Precedence, in `broadcastIndex`:** a marked turn is public on its own record; one send is one line
+however many transcripts hold it (grouped by the send, not by text, so two sends of the same words are
+two lines and a DM `status` beside a room `status` is no longer a repeat-sender refusal); a *direct*
+send held by one transcript comes back `@name …` in that agent's thread (`addressedAsSent`), and an
+undirected one unaddressed, as the live echo drew them. Unmarked turns keep the multiplicity rule; a
+fork's copy is in neither (`forkCopies`).
+
+**The dependency, recorded because it is the cost:** the marker rides a field claude validates. A CLI
+that one day insists on version 4 rejects the stdin line — echoed to stderr, exit 1 — so every room
+send would end its agent. `roomMessageVersion` is the one constant to change, and
+`TestTheRoomMessageVersionIsTheOneRecordedAccepted` fails if it drifts from the recording. Re-record on
+a CLI upgrade. It is its own commit so the owner can veto it alone.
 
 ---
 

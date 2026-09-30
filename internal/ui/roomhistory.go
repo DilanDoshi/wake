@@ -467,6 +467,7 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 			// transcript reply arrives late or the raw backstop evicts one member.
 			// The proved cluster carries a separate logical rendered-block identity.
 			l.id = identities[i]
+			l = addressedAsSent(l, lines, clusters[i])
 			// The operator's own turn has no speaker, the same way a live echo
 			// into the room does not. Under one agent's name it would read as
 			// that agent quoting you.
@@ -522,7 +523,41 @@ func broadcastIndex(lines []roomLine, copied map[int]bool) (firsts, public map[i
 			}
 		}
 	}
+	// A turn a room send stamped is public on its own record: provenance, not
+	// multiplicity. One send is one line however many transcripts hold it.
+	for _, at := range roomSendGroups(lines, copied) {
+		firsts[at[0]] = true
+		clusters[at[0]] = at
+		for _, k := range at {
+			public[k] = true
+		}
+	}
 	return firsts, public, clusters
+}
+
+// roomSendGroups is every user line a room send stamped, grouped by that send,
+// in order of each group's first line. A fork's copy is in none.
+func roomSendGroups(lines []roomLine, copied map[int]bool) [][]int {
+	var order [][6]byte
+	groups := map[[6]byte][]int{}
+	for i, l := range lines {
+		if copied[i] || l.ev.Kind != core.KindUserText {
+			continue
+		}
+		send, _, ok := roomSendOf(l.ev.MessageID)
+		if !ok {
+			continue
+		}
+		if _, seen := groups[send]; !seen {
+			order = append(order, send)
+		}
+		groups[send] = append(groups[send], i)
+	}
+	out := make([][]int, 0, len(order))
+	for _, send := range order {
+		out = append(out, groups[send])
+	}
+	return out
 }
 
 // broadcastRuns partitions every eligible same-text user line from its own
@@ -532,7 +567,9 @@ func broadcastIndex(lines []roomLine, copied map[int]bool) (firsts, public map[i
 func broadcastRuns(lines []roomLine, copied map[int]bool) [][]int {
 	byText := map[string][]int{}
 	for i, l := range lines {
-		if copied[i] {
+		// A room send's turn is decided by its provenance (roomSendGroups), and a
+		// fork's copy is not a line anybody sent: multiplicity reads neither.
+		if _, _, room := roomSendOf(l.ev.MessageID); copied[i] || room {
 			continue
 		}
 		// Every decoded image carries the one placeholder text, so two private
@@ -558,6 +595,27 @@ func broadcastRuns(lines []roomLine, copied map[int]bool) [][]int {
 		}
 	}
 	return runs
+}
+
+// addressedAsSent gives a restored room turn the address the live echo had: a
+// lone direct @name that reached one transcript is drawn `@name ...` in that
+// agent's thread (claude received it with the mention stripped). A broadcast, an
+// undirected send and a turn proved by multiplicity stay unaddressed.
+func addressedAsSent(l roomLine, lines []roomLine, members []int) roomLine {
+	_, direct, room := roomSendOf(l.ev.MessageID)
+	if !room || !direct {
+		return l
+	}
+	for _, k := range members {
+		if lines[k].ev.SessionID != l.ev.SessionID {
+			return l
+		}
+	}
+	l.to = l.ev.SessionID
+	if name := l.by.Name; name != "" {
+		l.ev.Text = agentPrefix + name + " " + l.ev.Text
+	}
+	return l
 }
 
 // forkCopies is every restored line that is a fork's copy of a record another

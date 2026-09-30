@@ -25,7 +25,12 @@ version-8 uuid, which no random-v4 generator produces, was accepted and persiste
 `TestTheUUIDWakeStampsOnASendIsTheOneOnDisk`.
 
 So a uuid is a provenance channel that survives to disk **without changing what the model reads** -
-the model never sees it.
+the model never sees it. `internal/ui` uses it to mark a turn typed in the room (`roomprovenance.go`).
+
+**The dependency this creates:** the marker rides a field claude validates. A future CLI that insisted
+on v4 would reject the stdin line, and a rejected line is echoed to stderr and exits 1 - every room
+send would end its agent. The version nibble is one named constant (`roomMessageVersion`) so falling
+back to v4 is one line; re-check on a CLI upgrade.
 
 ## 2. A fork copies its parent's records under the same uuids
 

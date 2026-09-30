@@ -4636,7 +4636,11 @@ The two alternatives are worse and are written down so nobody re-derives them: l
 248ms the settle exists to avoid, and a rubber-band divider drawn at the pending column while the
 panes stay put draws a `│` through the middle of a pane's text.
 
-**2026-08-15 — a room message aimed at one agent does not come back.** `roomHistoryLines` restores a
+**2026-08-15 — a room message aimed at one agent does not come back.** *FIXED 2026-09-29
+(`fix/room-gaps`) for turns sent after the change: the uuid Wake stamps is recorded as the turn's own,
+so a room send marks its uuid (`roomprovenance.go`) and a direct `@noah` comes back in noah's thread —
+provenance on disk without changing what the model reads (decisions.md, 2026-09-29). Older transcripts
+restore exactly as below.* `roomHistoryLines` restores a
 turn you typed only when two or more transcripts hold the same text within `broadcastWindow`, because
 one transcript cannot distinguish `@noah do this` sent from the room from `do this` typed into noah's
 own pane, and a DM is private. So `@all` and `@noah,@robin` come back and a single-target room
@@ -4684,7 +4688,10 @@ and matching on `(session, kind, text)` is the obvious way and is wrong for an a
 twice. **Do not take this without deciding what identity a room line has.**
 
 **2026-08-15 — a restored room holds the broadcasts and nothing else, which on some fleets is almost
-nothing.** An agent's prose comes back only inside a turn two transcripts prove was a broadcast, and
+nothing.** *Narrowed 2026-09-29 (`fix/room-gaps`): every turn typed in the room after the change
+comes back with its replies, by the uuid marker above — not a zero-width prefix or sentinel, so the
+model reads nothing new. Still true: a fleet driven from conversation panes restores the room's
+share only, which is the privacy rule working.* An agent's prose comes back only inside a turn two transcripts prove was a broadcast, and
 prose with no initiator inside the 400-event window is dropped — which is most of a tail, since a tail
 usually opens mid-conversation. A fleet driven mostly from conversation panes therefore restores a
 nearly empty room. **This is the deliberate cost of the privacy rule** (`decisions.md`), taken by the

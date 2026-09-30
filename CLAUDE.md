@@ -242,8 +242,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The room re-derives its history from claude's transcripts** (`FrameRoomHistory`,
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
   if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
-  broadcast; agent prose is restored only inside a public turn. A record in two transcripts (same
-  uuid, `Event.MessageID`) is a fork's copy, drawn once (`forkCopies`) — forks are asked like any session.
+  broadcast, or was stamped by a room send (`roomprovenance.go`: the uuid Wake stamps is the one on
+  disk; a direct `@name` comes back in that thread); agent prose is restored only inside a public
+  turn. A record in two transcripts (same uuid, `Event.MessageID`) is a fork's copy, drawn once
+  (`forkCopies`) — forks are asked like any session.
 - A routed message is echoed into the room and into every *held* DM it reached, mention included,
   marked `FromRoom`.
 - **A lone `@name` narrows the room** to that thread (`roomfocus.go`); `⌃A` overrides per target;
@@ -334,7 +336,7 @@ yet says so in bold.**
 | Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
-| Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomfocus.go` · `roomfilter.go` |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
@@ -443,6 +445,9 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - A question killed by closing stdin is indistinguishable from an operator deny.
 - Images: first in the content array, text last. An undecodable image silently degrades to text.
 - A malformed stdin line is echoed to stderr in full, then exit 1.
+- A user line's top-level `uuid` is recorded as that turn's own on disk; a version-8 one is accepted
+  (2.1.285). Wake's room marker depends on it — `roomMessageVersion`, re-check on upgrade. A fork
+  copies records under the same uuids. `docs/superpowers/notes/2026-09-29-transcript-uuid-findings.md`.
 - `/model`, `/clear`, `/compact`, `/context` survive stream-json; `/resume` does not. Bare
   `/effort`/`/model` do nothing (`num_turns: 0`, `$0`).
 - `stream_event` text deltas are byte-identical to the completed `assistant` block
