@@ -25,7 +25,21 @@ func (a App) withDM(id string, dm DM) App {
 	maps.Copy(next, a.dms)
 	next[id] = &dm
 	a.dms = next
+	// A reclaim takes the scrollback's oldest lines, and a highlight on them.
+	if onLinesBefore(a.sel, id, dm.tr.first()) {
+		a.sel, a.selecting = selection{}, false
+	}
+	if onLinesBefore(a.clicks.kept, id, dm.tr.first()) {
+		a.clicks.kept = selection{}
+	}
 	return a
+}
+
+// onLinesBefore reports whether s is a highlight in pane's transcript that
+// reaches a line before first.
+func onLinesBefore(s selection, pane string, first int) bool {
+	return s.pane == pane && !s.inComposer && !s.onScreen && !s.empty() &&
+		min(s.anchor.line, s.head.line) < first
 }
 
 const (

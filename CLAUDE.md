@@ -219,6 +219,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   through one 80ms settle (`geometry.go`).
 - **A streamed preview never costs the record a slot**: partials fold into one slot and never evict,
   and a dropped partial is not a gap (`inbox.go`, daemon `client.go`'s `partialCeiling`).
+- **A conversation keeps its newest `dmRetentionEvents` (3,000)** — the re-wrap budget — and reclaims
+  the oldest a chunk at a time, only before a non-tool event, under one fixed line (`dmretention.go`).
 - **A preview is never a record**: plain-text tail, bounded by the pane, never through glamour,
   accumulated only for panes on screen (`App.wants`), dropped on leave. No preview in the room or for
   subagents. `internal/ui/partial.go`.
@@ -333,7 +335,7 @@ yet says so in bold.**
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomfocus.go` · `roomfilter.go` |
-| DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
+| DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |

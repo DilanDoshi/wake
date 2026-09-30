@@ -291,7 +291,7 @@ func (d DM) openRun(line int) (DM, bool) {
 	// the click keeps their place - the rule openTool states at length. runKey is
 	// left untouched: this changes no events, so the trailing run is unchanged.
 	following := d.tr.atBottom()
-	d.tr = d.tr.replace(renderTranscript(d))
+	d.tr = d.rewrapped()
 	if following {
 		d.tr = d.tr.toBottom()
 	}
