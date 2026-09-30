@@ -230,7 +230,7 @@ func (a App) paneAt(col, y int) (id string, top, height int, ok bool) {
 func (a App) scroll(lines, x, y int) App {
 	id, under := a.focus, false
 	// Where the columns are drawn: mid-drag the divider is ahead of the layout.
-	if region, at := a.layout.Hit(a.frameRegions(), x); region == RegionPane {
+	if region, at := a.layout.Hit(a.frameRegions(a.regions()), x); region == RegionPane {
 		id, _, _, under = a.paneAt(at, y)
 		if !under {
 			id = a.focus

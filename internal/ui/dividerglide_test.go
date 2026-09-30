@@ -91,6 +91,36 @@ func TestADividerDragIsDrawnAtThePointer(t *testing.T) {
 	}
 }
 
+// A stacked column is fitted pane by pane, and its rule is drawn at the width
+// the drag gives the column rather than the one it is wrapped for.
+func TestAStackedColumnFollowsTheDividerToo(t *testing.T) {
+	a := splitApp(t, 200, 40, 20)
+	a = a.withAgents("alex", "sydney")
+	a.focus = "s1"
+	a = a.openBelow("s2", "sydney").applyGeometry()
+	if a.grid.Cols[1].Bottom != "s2" {
+		t.Fatalf("precondition: s2 is not stacked under s1: %+v", a.grid.Cols)
+	}
+	from := dividerColumnOf(a)
+	a = grab(t, a, from)
+	to := from + 30
+	for x := from + 1; x <= to; x++ {
+		a = dragTo(a, x)
+	}
+	frame := a.View()
+	if got := dividerColumnsIn(frame, a.paneHeight()); !slices.Equal(got, []int{to}) {
+		t.Errorf("mid-drag the divider beside a stacked column is at %v, want %d", got, to)
+	}
+	if w, h := widest(frame), lipgloss.Height(frame); w != 200 || h != 40 {
+		t.Errorf("mid-drag the frame is %dx%d, want 200x40", w, h)
+	}
+	drawn := a.frameRegions(a.regions()).Cols[1]
+	rule := strings.Repeat(dividerRow, drawn)
+	if !strings.Contains(stripANSI(frame), dividerGlyph+rule) {
+		t.Errorf("the stacked column's rule is not drawn %d wide beside the divider", drawn)
+	}
+}
+
 // Letting go commits the drag at once: the settle exists to coalesce motions,
 // and none follow a release. The timer it scheduled then finds nothing to do.
 func TestReleasingTheDividerReWrapsOnceAndTheSettleNothing(t *testing.T) {
@@ -105,6 +135,9 @@ func TestReleasingTheDividerReWrapsOnceAndTheSettleNothing(t *testing.T) {
 	room, dm := countPaneRenders(t, func() { a = release(a, to) })
 	if room != 1 || dm != 1 {
 		t.Errorf("letting go re-wrapped the room %d and the DM %d times, want once each", room, dm)
+	}
+	if a.geoGen == pending {
+		t.Errorf("letting go left the drag's settle current: it would land and lay the panes out again")
 	}
 	if a.room.width != to {
 		t.Errorf("after letting go the room is %d wide, want the %d the hand left it at", a.room.width, to)

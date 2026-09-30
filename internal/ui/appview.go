@@ -42,7 +42,8 @@ func (a App) View() string {
 // frame and is exactly the sort of per-frame cost that multiplies by thirty if
 // it is paid three times.
 func (a App) assembleFrame() string {
-	r, drawn := a.regions(), a.frameRegions()
+	r := a.regions()
+	drawn := a.frameRegions(r)
 	h := a.paneHeight()
 	agents := a.fleet.OnRoster()
 

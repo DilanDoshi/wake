@@ -223,13 +223,14 @@ func (a App) drawnRegions() Regions {
 	return a.settlingLayout().Regions(len(a.grid.Cols), a.focusedCol())
 }
 
-// frameRegions is where the frame draws each column: at the divider a hand is
-// holding, ahead of the settle that re-wraps for it. A window drag is drawn at
-// the old layout and clipped instead (clipMidDrag): its column count can change
-// mid-drag, so there is no one width to fit a pane to.
-func (a App) frameRegions() Regions {
-	if a.pending.width != a.layout.Width {
-		return a.regions()
+// frameRegions is where the frame draws each column, given r, the layout's own:
+// at the divider a hand is holding, ahead of the settle that re-wraps for it. A
+// window drag is drawn at the old layout and clipped instead (clipMidDrag): its
+// column count can change mid-drag, so there is no one width to fit a pane to.
+// r itself when no split is pending, so an idle frame lays nothing out twice.
+func (a App) frameRegions(r Regions) Regions {
+	if a.pending.width != a.layout.Width || slices.Equal(a.pending.weights, a.layout.Weights) {
+		return r
 	}
 	return a.drawnRegions()
 }
