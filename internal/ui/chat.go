@@ -143,7 +143,8 @@ type Room struct {
 	narrowDefault bool
 
 	// menu is everything pinned between the transcript and the composer - the
-	// card, the picker and the completion menu (App.menuBlock) - handed over
+	// picker and the completion menu (App.menuBlock; a DM's carries its card too,
+	// the room's never does) - handed over
 	// whole by App.roomPane and clipped here (see menuRows).
 	//
 	// Held rather than pinned above the pane because all three belong *next to
@@ -242,11 +243,11 @@ func NewRoom() Room { return Room{composer: NewComposer(), narrowDefault: true} 
 // A **height** change does not, unless the reader was already following. It
 // moves a window over lines that already exist and cannot invalidate an offset -
 // and the pane's height moves for reasons that have nothing to do with reading:
-// a card is pinned above the room whenever an agent is blocked, and App.roomPane
-// then draws the room shorter by exactly that many rows. An unconditional
-// return threw the offset away on every drawn frame for as long as a card was
-// up, which is precisely when somebody is reading back to work out what the
-// agent is asking about. The key moved the model and not the screen.
+// a picker or the completion menu is pinned above the composer while it is up
+// (App.menuBlock), and the room is drawn shorter by exactly that many rows. An
+// unconditional return threw the offset away on every drawn frame for as long
+// as one was up, which is precisely when somebody is reading back to decide
+// what to pick. The key moved the model and not the screen.
 //
 // Sampling atBottom *before* anything is re-laid is what makes it true, the
 // same way Append does it.

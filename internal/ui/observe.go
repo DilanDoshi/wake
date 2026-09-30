@@ -121,7 +121,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 				continue
 			}
 			// And the room says so, as well as the card - the card is the one
-			// surface that *answers* (Cards.Undrawn), and this is the record
+			// surface that *answers* (App.cardOf), and this is the record
 			// that it happened. Not gated on inDM: that rule keeps a private
 			// conversation private, and an agent that has stopped and is
 			// waiting is the room's own filter rather than an exception to it.

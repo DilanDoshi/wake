@@ -29,8 +29,9 @@ import (
 // Neither turns a record into an agent, and a parked session put in there would
 // name a process group that is gone and may since have been recycled.
 //
-// The second daemon is asked rather than waited on. restoreParked runs before
-// the accept loop, so the row is there the instant a client can connect - and a
+// The second daemon is asked rather than waited on. Every report reads the book
+// into Status.Parked (server.fleet), so the row is there the instant a client can
+// connect - and a
 // wait would turn the defect into a fifteen-second timeout naming a push that
 // never came instead of the report that was handed over. Nothing pushes here
 // anyway: the liveness tick clamps to 30s, twice testTimeout.

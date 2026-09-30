@@ -159,13 +159,13 @@ func roomBlock(ev core.Event, a, to Agent, width int, expanded bool) block {
 		return block{text: mutedLine(speaker(a)+markerSep+finishedMarker, w)}
 	case core.KindPermissionRequest:
 		// The room announces; it does not offer. The card is still the one
-		// surface that answers - Cards.Undrawn keeps it to a single pane - and
-		// this line carries no keys, so "one ask, one surface" is intact.
+		// surface that answers - App.cardOf keeps it to its agent's
+		// conversation - and this line carries no keys, so "one ask, one surface" is intact.
 		//
 		// It exists because the room had *neither*: the fold routed every ask
-		// into Cards, and Cards.Undrawn excludes an agent whose conversation is
-		// on screen, so opening the DM of a blocked agent left the group chat
-		// with nothing at all. On the surface somebody supervising a fleet sits
+		// into Cards, and the card used to be drawn only where the conversation
+		// was not, so opening the DM of a blocked agent left the group chat with
+		// nothing at all. On the surface somebody supervising a fleet sits
 		// on, an agent stopping is exactly what has to be visible.
 		return block{text: warnLine(cardLead+speaker(a)+markerSep+askHeadline(ev), w)}
 	case core.KindSystem:
