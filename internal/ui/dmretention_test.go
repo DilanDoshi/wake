@@ -76,6 +76,116 @@ func TestAReclaimKeepsTheLinesAReWrapDraws(t *testing.T) {
 	}
 }
 
+// The edge of a reclaim is where rules pile up: absences at the seven events
+// before the cut leave four rules the cap no longer anchors, two it does in what
+// is reclaimed, and one on the cut itself, which the kept scrollback keeps. A
+// count of rules cannot tell those apart there; the cut has to walk them.
+func TestAReclaimCutsExactlyAmongRulesAtItsEdge(t *testing.T) {
+	d := NewDM("s1", "alex").SetSize(80, 30)
+	for i := 0; i < dmRetentionEvents+chunkSize; i++ {
+		if i >= chunkSize-6 && i <= chunkSize {
+			d = d.Leave()
+		}
+		d = d.Append(prose(fmt.Sprintf("Turn %d.", i)))
+	}
+	if d.events.first() != chunkSize {
+		t.Fatalf("the reclaim cut at event %d, want %d: the rules are not at its edge", d.events.first(), chunkSize)
+	}
+	got, want := linesOf(d.tr), linesOf(d.rewrapped())
+	if !slices.Equal(got, want) {
+		t.Fatalf("the kept scrollback (%d lines) is not a re-wrap of it (%d lines):\n got %q\nwant %q",
+			len(got), len(want), got[:min(4, len(got))], want[:min(4, len(want))])
+	}
+}
+
+// A reader scrolled back through a reclaimed conversation who opens a folded run
+// stays where they were: the re-wrap keeps the scrollback's numbering, which the
+// reader's place is held in.
+func TestOpeningARunScrolledBackAfterAReclaimKeepsThePlace(t *testing.T) {
+	d := pastTheCap(t).ScrollUp(200)
+	line := -1
+	for at := range d.tr.runs {
+		if at >= d.tr.scroll && at < d.tr.scroll+d.tr.height {
+			line = at
+			break
+		}
+	}
+	if line < 0 {
+		t.Fatal("no folded run on screen to open")
+	}
+	opened, hit := d.openRun(line)
+	if !hit {
+		t.Fatalf("line %d did not open a run", line)
+	}
+	if opened.tr.scroll != d.tr.scroll || opened.tr.atBottom() {
+		t.Errorf("opening a run moved the reader from line %d to %d (at bottom: %v)", d.tr.scroll, opened.tr.scroll, opened.tr.atBottom())
+	}
+}
+
+// A result the fold leaves standing - a failed edit's, drawn joined under its
+// call - is part of that call. The cut would land on it here, and has to step
+// past it rather than keep a result whose call it reclaimed.
+func TestAReclaimNeverOrphansAResult(t *testing.T) {
+	d := NewDM("s1", "alex").SetSize(80, 30)
+	for i := 0; i < dmRetentionEvents+chunkSize+2; i++ {
+		switch i {
+		case chunkSize - 1:
+			d = d.Append(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{
+				ID: "e1", Name: "Edit", Display: "auth.go", Diff: &core.ToolDiff{Old: "alpha", New: "ALPHA"},
+			}})
+		case chunkSize:
+			d = d.Append(result("e1", "String to replace not found in file.", true))
+		default:
+			d = d.Append(prose(fmt.Sprintf("Turn %d.", i)))
+		}
+	}
+	if !d.reclaimed() {
+		t.Fatal("nothing was reclaimed: the cut is not being tested")
+	}
+	if first := d.events.at(d.events.first()); first.Tool != nil {
+		t.Errorf("the oldest kept event belongs to a tool call (%v) whose other half was reclaimed", first.Kind)
+	}
+	if got, want := linesOf(d.tr), linesOf(d.rewrapped()); !slices.Equal(got, want) {
+		t.Errorf("the kept scrollback is not a re-wrap of it: %d lines against %d", len(got), len(want))
+	}
+}
+
+// A conversation keeps its bound while a subagent is open in its pane: its
+// events are reclaimed behind the subagent's transcript, which is left alone, and
+// coming back draws only what was kept.
+func TestAConversationBehindASubagentIsBoundedToo(t *testing.T) {
+	d := NewDM("s1", "alex").SetSize(80, 30).Viewing("d1")
+	behind := linesOf(d.tr)
+	for i := 0; i < dmRetentionEvents+2*chunkSize; i++ {
+		d = d.Append(prose(fmt.Sprintf("Turn %d.", i)))
+	}
+	if n := d.events.count(); n >= dmRetentionEvents+chunkSize {
+		t.Errorf("behind a subagent the conversation grew to %d events", n)
+	}
+	if !slices.Equal(linesOf(d.tr), behind) {
+		t.Errorf("reclaiming behind the subagent changed the subagent's transcript")
+	}
+	if d = d.Viewing(""); !strings.Contains(stripANSI(d.tr.prefix), dmReclaimedHistory) {
+		t.Errorf("back in the conversation, no reclaimed line")
+	}
+}
+
+// A highlight on the last reclaimed line is on the line the reclaimed marker
+// now holds, and goes with the rest.
+func TestASelectionOnTheLineTheMarkerTakesIsCleared(t *testing.T) {
+	d := NewDM("s1", "alex").SetSize(80, 30)
+	for i := 0; i < dmRetentionEvents+chunkSize-1; i++ {
+		d = d.Append(prose(fmt.Sprintf("Turn %d.", i)))
+	}
+	next := d.Append(prose("the event that reclaims"))
+	marker := next.tr.lines.first() - 1
+	a := App{dms: map[string]*DM{}}.withDM("s1", d)
+	a.sel = selection{pane: "s1", anchor: point{line: marker}, head: point{line: marker, col: 4}}
+	if a = a.withDM("s1", next); !a.sel.empty() {
+		t.Errorf("a selection on line %d, now the reclaimed marker's, survived the reclaim", marker)
+	}
+}
+
 // A reclaim cuts only where a block starts: never inside a folded run, never
 // between a call and the result under it.
 func TestAReclaimNeverCutsIntoAToolRun(t *testing.T) {

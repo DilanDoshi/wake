@@ -424,7 +424,7 @@ func (d DM) Append(ev core.Event) DM {
 		d = d.advanceRun(ev)
 	}
 	if !drawn {
-		return d
+		return d.retained()
 	}
 	if fold {
 		d = d.drawFold(ev)

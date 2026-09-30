@@ -23,26 +23,30 @@ const (
 
 // retained reclaims the oldest events once the conversation holds a chunk more
 // than it keeps, so a reclaim renders a chunk once per chunk appended. It cuts
-// only before an event that is no tool block - which no run folds and no
-// result joins under - and never while a subagent is on screen, where the
-// transcript is not the conversation's.
+// only before an event of no tool call - so no run is split and no result is
+// kept without its call, fold-exempt ones included - looking a chunk past the
+// mark at most. While a subagent is on screen only the events go: the
+// transcript is the subagent's, and coming back draws what was kept.
 func (d DM) retained() DM {
-	if d.viewing != "" || d.events.count() < dmRetentionEvents+chunkSize {
+	if d.events.count() < dmRetentionEvents+chunkSize {
 		return d
 	}
-	cut := d.events.len() - dmRetentionEvents
-	for cut < d.events.len() && d.isToolBlock(d.events.at(cut)) {
+	cut, end := d.events.len()-dmRetentionEvents, d.events.len()-dmRetentionEvents+chunkSize
+	for cut < end && d.events.at(cut).Tool != nil {
 		cut++
 	}
-	if cut == d.events.len() {
-		return d // one run longer than all that is kept: it is cut after, later
+	if d.events.at(cut).Tool != nil {
+		return d // a chunk of tool calls at the mark: tried again as more arrive
 	}
-	rows := d.rowsBefore(cut)
-	if !d.reclaimed() {
-		d.tr.prefix, d.seed = HintStyle.Render(dmReclaimedHistory), nil
+	if d.viewing == "" {
+		rows := d.rowsBefore(cut)
+		if !d.reclaimed() {
+			d.tr.prefix = HintStyle.Render(dmReclaimedHistory)
+		}
+		d.tr = d.tr.trimBefore(d.tr.lines.first() + rows)
+		d.tr.scroll = max(d.tr.scroll, d.tr.first())
 	}
-	d.tr = d.tr.trimBefore(d.tr.lines.first() + rows)
-	d.tr.scroll = max(d.tr.scroll, d.tr.first())
+	d.seed = nil
 	d.events = d.events.trimBefore(cut)
 	d.marks = slices.DeleteFunc(slices.Clone(d.marks), func(m int) bool { return m < cut })
 	return d
@@ -72,24 +76,31 @@ func (d DM) rowsBefore(cut int) int {
 		}
 		return n
 	}
+	// The stale rules push the chunk's edge past rows by perRule each: the edge
+	// is the first span whose rules outnumber the anchored ones by exactly the
+	// span's excess. No two rules are adjacent - an event is drawn between any
+	// two - so the first such span is the true one.
 	start := d.tr.lines.first()
-	stale := drawn(start, start+rows) - len(slices.DeleteFunc(slices.Clone(d.marks), func(m int) bool { return m >= cut }))
-	for stale > 0 {
-		rows += stale * perRule
-		stale = drawn(start+rows-stale*perRule, start+rows)
+	anchored := len(slices.DeleteFunc(slices.Clone(d.marks), func(m int) bool { return m >= cut }))
+	for extra := 0; ; {
+		stale := drawn(start, start+rows+extra) - anchored
+		if stale*perRule <= extra {
+			return rows + extra
+		}
+		extra = stale * perRule
 	}
-	return rows
 }
 
 // reclaimed reports whether the conversation's oldest events have gone.
 func (d DM) reclaimed() bool { return d.events.first() > 0 }
 
 // rewrapped is the scrollback laid out again from the events, under the
-// reclaimed line when the conversation is what the pane draws.
+// reclaimed line when the conversation is what the pane draws. The numbering is
+// kept: a reader's place is held in it, and a click that re-wraps keeps that.
 func (d DM) rewrapped() transcript {
 	prefix := ""
 	if d.viewing == "" && d.reclaimed() {
 		prefix = HintStyle.Render(dmReclaimedHistory)
 	}
-	return d.tr.replaceFrom(renderTranscript(d), 0, prefix)
+	return d.tr.replaceFrom(renderTranscript(d), d.tr.lines.first(), prefix)
 }

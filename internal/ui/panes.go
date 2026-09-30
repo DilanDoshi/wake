@@ -21,16 +21,20 @@ import (
 // reason Fleet copies. It is the one write path into dms, so there is one place
 // for that to be true.
 func (a App) withDM(id string, dm DM) App {
+	was, held := a.dms[id]
 	next := make(map[string]*DM, len(a.dms)+1)
 	maps.Copy(next, a.dms)
 	next[id] = &dm
 	a.dms = next
-	// A reclaim takes the scrollback's oldest lines, and a highlight on them.
-	if onLinesBefore(a.sel, id, dm.tr.first()) {
-		a.sel, a.selecting = selection{}, false
-	}
-	if onLinesBefore(a.clicks.kept, id, dm.tr.first()) {
-		a.clicks.kept = selection{}
+	// A reclaim takes the scrollback's oldest lines, and a highlight on them -
+	// the last of them now the reclaimed line's own.
+	if first := dm.tr.lines.first(); held && first > was.tr.lines.first() {
+		if onLinesBefore(a.sel, id, first) {
+			a.sel, a.selecting = selection{}, false
+		}
+		if onLinesBefore(a.clicks.kept, id, first) {
+			a.clicks.kept = selection{}
+		}
 	}
 	return a
 }
