@@ -4591,6 +4591,9 @@ the wheel, hits the columns as drawn. A window drag keeps its clip: its column c
 mid-drag. Taking hold of the divider clears the selection, which also closes a hole the entry did not
 name — the divider's settle re-wrapped both panes under a highlight left standing. A release while
 a window drag is also in flight leaves both to the shared settle, since the width is still moving.
+`Layout.DragDivider` now solves the split against the running total `share` rounds on, so among
+three or more columns the divider lands on the pointer's column rather than a cell off it (on
+`main` too, once settled).
 **Left as they were on `main`, and why:** a hand that rests on the divider past `resizeQuiet` gets
 its settle and re-wraps mid-drag — the settle's own rule, which the window drag shares, and what
 gives a resting hand reflowed text rather than a cut; and a grid key (`⌃W`, `⌃Y`) pressed while the
