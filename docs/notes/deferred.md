@@ -5360,6 +5360,10 @@ known. Record a rewind after a background task ends to settle it.
 
 ## 2026-09-28 — `noteSent` marks a turn owed only after its write
 
+**CLOSED 2026-09-29 — `fix/recent-follow-ups`.** `apply` marks owed before the write, as
+`noteRenameSent` does; a failed write clears it only if nothing was owed before, so a type-ahead's
+earlier turn stays owed (`TestATurnIsOwedWhileItsWriteIsInFlight`, `TestARefusedSendLeavesNothingOwed`).
+
 `apply` (`internal/daemon/apply.go`) calls `noteSent` once `Send` has returned, so a turn's end can in
 principle reach fanOut before the turn is marked owed, and `owed` is then left set for a turn that
 has already ended. `noteRenameSent` was moved ahead of the write for exactly this window (at-menu

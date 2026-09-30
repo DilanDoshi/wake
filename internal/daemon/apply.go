@@ -80,18 +80,19 @@ func (a *agent) apply(p pending) {
 			a.sendProbe(p)
 			return
 		}
-		// Marked before the write: its reply can reach fanOut before this
-		// returns, and a failed write leaves claude's name unknown, fail-safe.
+		// Both marked before the write: its reply can reach fanOut before this
+		// returns. A failed write leaves claude's name unknown, fail-safe, and
+		// takes back only the turn it marked.
 		a.noteRenameSent(p.frame.Text)
-		if err = a.sess.Send(p.frame.Text, p.frame.Images, p.frame.MessageID); err == nil {
-			a.noteSent()
+		owed := a.noteSent()
+		if err = a.sess.Send(p.frame.Text, p.frame.Images, p.frame.MessageID); err != nil {
+			a.unsent(owed)
+		} else if a.noteEffort(p.frame.Text) || a.noteModel(p.frame.Text) {
 			// An /effort or a /model just changed what the session runs as; the
 			// same bare-/model probe confirms both the level and the model back.
-			// noteSent just marked this turn owed, so wantProbe defers it to the
+			// noteSent marked this turn owed, so wantProbe defers it to the
 			// turn's own end rather than sending it into the turn that changed it.
-			if a.noteEffort(p.frame.Text) || a.noteModel(p.frame.Text) {
-				a.wantProbe()
-			}
+			a.wantProbe()
 		}
 	case rpc.FrameAllow:
 		err = a.allow(p)
