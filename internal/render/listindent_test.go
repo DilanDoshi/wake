@@ -217,6 +217,62 @@ func TestCodeInsideAnItemKeepsItsLead(t *testing.T) {
 	}
 }
 
+// endsStyled reports whether a row leaves an SGR style on at its end, read
+// independently of the renderer's own bookkeeping.
+func endsStyled(row string) bool {
+	on := false
+	for i := 0; i < len(row); i++ {
+		if row[i] != 0x1b || i+1 >= len(row) || row[i+1] != '[' {
+			continue
+		}
+		j := strings.IndexByte(row[i:], 'm')
+		if j < 0 {
+			break
+		}
+		code := row[i+2 : i+j]
+		on = code != "0" && code != ""
+		i += j
+	}
+	return on
+}
+
+// TestNoRowLeavesAStyleOpen: a wrap inside a styled span - the reflow's, or
+// fitToWidth's hard wrap of a row glamour could not break - used to end the row
+// with the span's style still on, and Wake draws a divider and another pane on
+// the rest of that terminal row, which inherited it.
+func TestNoRowLeavesAStyleOpen(t *testing.T) {
+	for _, src := range []string{
+		"- x `abcdefghijklmnopq`",
+		"- x `abcdefghijklmnopq` and some words after it that wrap too",
+		"a paragraph `abcdefghijklmnopqrstuvwxyzabcdefghij` long code with no break",
+		"- **abcdefghijklmnopqrstuvwxyz** bold run with no break",
+		styledWrap("1.", "[a link](https://x.io)"),
+	} {
+		for width := minMarkdownWidth; width <= 80; width++ {
+			for i, row := range strings.Split(Markdown(src, width), "\n") {
+				if endsStyled(row) {
+					t.Errorf("width %d: row %d of %q ends with a style on: %q", width, i, src, row)
+				}
+			}
+		}
+	}
+}
+
+// TestAHeadingInsideAnItemStaysAHeading is the limit on taking a styled row
+// back into an item: glamour draws a heading nested in an item straight under
+// it, led with the same empty styling a styled wrap is, but it is a block of its
+// own - which the style marks (headingTag) - and never the item's prose.
+func TestAHeadingInsideAnItemStaysAHeading(t *testing.T) {
+	const src = "- intro\n  # Important"
+	for width := minMarkdownWidth; width <= 80; width++ {
+		for _, line := range nonBlank(Markdown(src, width)) {
+			if plain := ansi.Strip(line); strings.Contains(plain, "Important") && strings.Contains(plain, "intro") {
+				t.Errorf("width %d: the nested heading was folded into the item's text: %q", width, plain)
+			}
+		}
+	}
+}
+
 // assertHangsUnder finds the item opening with marker at lead and checks every
 // continuation of it sits under its text, the column the marker ends.
 func assertHangsUnder(t *testing.T, lines []string, marker string, lead int) {

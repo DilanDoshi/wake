@@ -76,6 +76,11 @@ const (
 // glamour's own; reflowProse reads it and strips it.
 const itemTag = "\x1b[59m\x1b[0m"
 
+// headingTag leads the first row of a heading the same way, so a heading nested
+// in a list item - drawn straight under it, led with the empty styling a styled
+// wrap is - is never taken back into the item's text.
+const headingTag = "\x1b[59;59m\x1b[0m"
+
 func stringPtr(s string) *string { return &s }
 func boolPtr(b bool) *bool       { return &b }
 func uintPtr(u uint) *uint       { return &u }
@@ -135,6 +140,7 @@ func claudeStyle(dark bool) gansi.StyleConfig {
 		// markers stripped (owner observation, 2026-08-29). The blank line before
 		// a heading is BlockPrefix on Heading itself so it applies to all of them.
 		Heading: gansi.StyleBlock{StylePrimitive: gansi.StylePrimitive{
+			BlockPrefix: headingTag,
 			BlockSuffix: "\n",
 			Bold:        boolPtr(true),
 		}},

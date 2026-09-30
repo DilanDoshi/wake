@@ -96,8 +96,9 @@ func Markdown(src string, width int) string {
 	// wrap its paragraph pass loses without the muesli fork and hanging each list
 	// item's continuation under its text; joinLoneBullets puts an item that opens
 	// with a list back on its bullet's row, and fitToWidth is the hard width net
-	// last of all, for the rows glamour could not wrap and reflowProse leaves alone.
-	return strings.TrimRight(trimOpeningScaffold(fitToWidth(joinLoneBullets(reflowProse(stylingOnly(out), width)), width)), "\n")
+	// last of all, for the rows glamour could not wrap and reflowProse leaves alone;
+	// sealRows closes a style either wrap broke a row inside.
+	return strings.TrimRight(trimOpeningScaffold(sealRows(fitToWidth(joinLoneBullets(reflowProse(stylingOnly(out), width)), width))), "\n")
 }
 
 // boxDrawing marks a rendered line as glamour's own table or block-quote layout,
@@ -154,7 +155,7 @@ func reflowProse(s string, width int) string {
 		}
 		out = append(out, rewrapProse(group, lead, width, mark)...)
 	}
-	return strings.ReplaceAll(strings.Join(out, "\n"), itemTag, "")
+	return strings.NewReplacer(itemTag, "", headingTag, "").Replace(strings.Join(out, "\n"))
 }
 
 // startsItem reports whether row, at the lead of the group first opened, starts
@@ -171,13 +172,17 @@ func startsItem(first, row, tag string) bool {
 func enumerator(mark string) bool { return mark != "" && mark[0] >= '0' && mark[0] <= '9' }
 
 // unstyledLead drops the escapes glamour leads a wrapped row with when a styled
-// span opens it. They end in a reset, so they style nothing.
+// span opens it. They end in a reset, so they style nothing. A heading's row is
+// left as it is: it is a block of its own (headingTag).
 func unstyledLead(row string) string {
+	if strings.HasPrefix(row, headingTag) {
+		return row
+	}
 	cut := 0
 	for n := sgrRun(row); n > 0; n = sgrRun(row[cut:]) {
 		cut += n
 	}
-	if cut == 0 || !strings.HasSuffix(row[:cut], "\x1b[0m") {
+	if cut == 0 || !strings.HasSuffix(row[:cut], sgrReset) {
 		return row
 	}
 	return row[cut:]
@@ -554,6 +559,50 @@ func fitToWidth(s string, width int) string {
 // precedes it and this returns false — which is what keeps the pass off code.
 func bulletMarker(raw string, lead int) bool {
 	return strings.HasPrefix(raw, strings.Repeat(" ", lead)+bullet)
+}
+
+// sealRows closes a style still on at the end of a row, after its text, and
+// reopens it after the next row's indent. A wrap inside a styled span - the
+// reflow's, or fitToWidth's hard wrap - leaves the row ending with it on, and Wake
+// draws a divider and another pane on the rest of that terminal row.
+func sealRows(s string) string {
+	rows := strings.Split(s, "\n")
+	open := ""
+	for i, row := range rows {
+		if open != "" {
+			lead := leadSpaces(row)
+			row = row[:lead] + open + row[lead:]
+		}
+		if open = styleOn(row); open != "" {
+			end := len(strings.TrimRight(row, " "))
+			row = row[:end] + sgrReset + row[end:]
+		}
+		rows[i] = row
+	}
+	return strings.Join(rows, "\n")
+}
+
+// sgrReset turns every style off.
+const sgrReset = "\x1b[0m"
+
+// styleOn is the styling a row leaves on at its end - its SGR runs since the
+// last reset - or "" when it ends with none.
+func styleOn(row string) string {
+	var on strings.Builder
+	for i := 0; i < len(row); {
+		n := sgrRun(row[i:])
+		if n == 0 {
+			i++
+			continue
+		}
+		if run := row[i : i+n]; run == sgrReset || run == "\x1b[m" {
+			on.Reset()
+		} else {
+			on.WriteString(run)
+		}
+		i += n
+	}
+	return on.String()
 }
 
 // lockAndRender acquires mu and renders through the shared renderer. Callers

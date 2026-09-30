@@ -212,7 +212,9 @@ mid-group splits it only for an item of the group's own list (`startsItem`), bec
 opens `2. Then` is prose, or a bullet's text. Inside an item, the row glamour leads with a styled
 span's empty escapes is merged back into the item — a code block in an item sits deeper, and any
 other block is a blank row away — so bold, code and links at a wrap no longer drop the hang the old
-shift gave them. `rejoin.go` steps past the same markers so a copy rejoins the hang. The original entry is kept below.
+shift gave them — a heading nested in an item, drawn under it the same way, is refused by `headingTag`.
+`sealRows` closes a style a wrap broke a row inside (the reflow's, or `fitToWidth`'s hard wrap of a
+row glamour could not break, which `main` already did), so no row ends styled beside a divider. `rejoin.go` steps past the same markers so a copy rejoins the hang. The original entry is kept below.
 
 
 **Shipped:** `fix/markdown-list-hanging-indent` hang-indents a wrapped **bullet** item's
