@@ -184,7 +184,10 @@ against and which is fragile (later edits shift the lines). Owner chose to leave
 vocabulary, "Edit" is not wrong, and doing it right means verifying Claude Code's whole display
 mapping (Edit/Write/MultiEdit) against a recording rather than guessing.
 
-**`MultiEdit` gets none of this today, and that is a recorded gap rather than a decision.**
+**`MultiEdit` gets none of this, and since 2026-09-30 that is a decision rather than a gap:** no
+session in the verified range offers the tool (no `init` in `testdata/stream/`, 2.1.226-2.1.283,
+lists it, and no transcript on the owner's machine holds a call), so only a pre-2.x transcript read
+back through history can carry one, and it folds as below. See `deferred.md`. The original reasoning:
 `core.toolDiff` reads a *top-level* `old_string`/`new_string`, which `Edit` and `Update` carry;
 `MultiEdit` nests its hunks in an `edits` array and carries neither at the top level, so its `Diff`
 is nil, `foldExempt` is false, and a `MultiEdit` still folds into `1 tool use · 1 multiedit` — and

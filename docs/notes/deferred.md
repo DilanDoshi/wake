@@ -332,7 +332,18 @@ someone picks this up.
 entry names). *Blocks:* nothing in the product — but it makes the project's **only gate** (`make ci`
 exit 0) unreliable on a loaded machine, which is why it is written down rather than left as folklore.
 
-## KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment
+## ~~KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment~~ CLOSED 2026-09-30 — nothing can deliver one
+
+**Closed without building, on evidence that no `MultiEdit` can arrive.** A guard's domain is what
+can arrive, and in the verified range nothing offers the tool: no `init` in `testdata/stream/`
+(133 of them, across ten versions from 2.1.226 to 2.1.283) lists `MultiEdit` among its tools, the
+installed claude is 2.1.285, and not one transcript under the owner's `~/.claude/projects` holds a
+`MultiEdit` call. A decode and a per-hunk draw for it would be code for a tool no session offers.
+**The one residual:** a pre-2.x transcript read back through history, `/resume` or import still
+decodes its `MultiEdit` calls, and they draw as any tool without a diff does — folded into
+`1 tool use · 1 multiedit`, with nothing behind the fold. If a later Claude Code offers the tool
+again, a recording earns the decode this entry describes. The original entry is kept below.
+
 
 `feat/dm-diff-rendering` made an `Edit`/`Update` draw its diff whole in the DM pane rather than fold
 into a `1 tool use · 1 edit` rollup (see `decisions.md`, 2026-08-28). It keys on `core.ToolDiff`,
