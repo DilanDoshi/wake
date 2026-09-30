@@ -345,8 +345,11 @@ func (a App) cardOf(id string) (Card, bool) {
 // whole cost that gate exists to refuse. It decides no card - an ask belongs to
 // its agent's conversation whether that column is on screen or slid past. See
 // App.cardOf.
+//
+// Settling, not committed: mid-drag View draws the old layout clipped, so the
+// columns that stay on screen are the ones the settle will commit (drawnRegions).
 func (a App) drawnConversations() func(string) bool {
-	r := a.regions()
+	r := a.drawnRegions()
 	return func(agentID string) bool {
 		if agentID == "" {
 			return false

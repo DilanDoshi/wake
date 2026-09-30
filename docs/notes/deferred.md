@@ -111,7 +111,13 @@ tree when this entry was written; check again before acting on one.
 
 *Blocks:* nothing shipped. *Closes with:* each item on its own; none is a prerequisite of another.
 
-## KNOWN GAP, 2026-09-15 — a DM reply can miss room-promotion during the 80ms resize settle
+## KNOWN GAP, 2026-09-15 — a DM reply can miss room-promotion during the 80ms resize settle — FIXED (`fix/room-gaps`, 2026-09-29)
+
+**FIXED:** `drawnConversations` now reads `drawnRegions()` (`geometry.go`) — the layout the pending
+geometry commits on the next settle — rather than the committed one. The intersection sketched below is
+wrong in one case: with the DM focused, a wide→narrow resize past the takeover keeps the *DM* (the
+window follows the focused column), so the intersection would promote into a room nobody can see.
+Pending is right in both directions, and `App.wants` inherits it. Pinned by `roomsettle_test.go`.
 
 **Shipped:** `feat/promote-dm-reply-on-leave` promotes a DM-sent turn's prose into the room once its
 DM stops being drawn (the operator has left it), so someone watching the group chat does not miss a

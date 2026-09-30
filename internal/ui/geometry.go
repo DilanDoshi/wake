@@ -209,6 +209,24 @@ func (g geometry) withSplitAt(l Layout, r Regions, at, x int) geometry {
 	return g
 }
 
+// settlingLayout is the layout the pending geometry commits on the next settle.
+// Equal to a.layout except mid-drag, when a.layout still holds the old wrap.
+func (a App) settlingLayout() Layout {
+	l := a.layout
+	if a.pending.width > 0 {
+		l.Width, l.Weights = a.pending.width, a.pending.weights
+	}
+	return l
+}
+
+// drawnRegions is which columns are on screen once the drag settles - which,
+// mid-drag, is not what View draws: that is the old layout clipped to the new
+// terminal, and a column the clip cuts may still be the one below the takeover
+// keeps (the focused one).
+func (a App) drawnRegions() Regions {
+	return a.settlingLayout().Regions(len(a.grid.Cols), a.focusedCol())
+}
+
 // paneHeight is what is left for a pane once the notice row is taken. Every
 // column of the frame is exactly this tall, which is what keeps the frame the
 // height the terminal reported.
