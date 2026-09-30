@@ -107,6 +107,6 @@ func (a App) reviewChoose(c Card) (tea.Model, tea.Cmd, bool) {
 	a.cards = a.cards.Settle(c.AgentID, c.RequestID)
 	// And the room records the close, so the ask's warn line there does not go
 	// stale. Only reached for a question - OnReview above implies ShapeQuestion.
-	a = a.recordQuestionResolved(c.AgentID, true)
+	a = a.recordQuestionResolved(c.AgentID, c.RequestID, true, c.resolvedAnswers())
 	return a, a.write(answerFailed, c.Allow()), true
 }

@@ -172,6 +172,12 @@ var (
 	// draft, the other a marker in the transcript.
 	CompletionStyle = lipgloss.NewStyle().Foreground(LastRead)
 
+	// AnsweredStyle heads the room's record of an answered question - the
+	// owner's "yellow → purple" (deferred.md, 2026-08-28). LastRead's colour
+	// again, and never its surface: the last-read rule is a DM's, and this is
+	// a room line.
+	AnsweredStyle = lipgloss.NewStyle().Foreground(LastRead)
+
 	// SelectionStyle marks the cells a drag has taken.
 	//
 	// Claude Code's selectionBg rather than Own: a selection on Own's own ground

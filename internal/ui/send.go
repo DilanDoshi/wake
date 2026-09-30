@@ -561,7 +561,7 @@ func (a App) interrupt() (tea.Model, tea.Cmd, bool) {
 	if a.focus != "" {
 		if card, ok := a.cardOf(a.focus); ok && card.Shape() == ShapeQuestion {
 			a.cards = a.cards.Settle(card.AgentID, card.RequestID)
-			a = a.recordQuestionResolved(card.AgentID, false)
+			a = a.recordQuestionResolved(card.AgentID, card.RequestID, false, nil)
 			return a, a.write(answerFailed, card.Deny(escDismissReason)), true
 		}
 	}

@@ -151,7 +151,7 @@ func (a App) commitAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 		// answered one - questions only, since a permission or a plan deny is a
 		// verb the room does not announce specially (see cardroom.go).
 		if c.Shape() == ShapeQuestion {
-			a = a.recordQuestionResolved(c.AgentID, false)
+			a = a.recordQuestionResolved(c.AgentID, c.RequestID, false, nil)
 		}
 		return a.clearDraft(), a.write(answerFailed, c.Deny(reason)), true
 	}

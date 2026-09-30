@@ -355,7 +355,18 @@ needed — the input shape is the documented `MultiEdit` schema — but a fixtur
 
 ---
 
-## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿` — record shipped 2026-08-31; purple-under-`⎿` presentation still deferred
+## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿` — DONE (`fix/room-gaps`, 2026-09-29)
+
+**DONE:** a settle now resolves the ask's own `⚠ ‹agent› has a question` line in place
+(`cardroom.go`'s `resolveAsk`, re-rendered through `roomexpand.go`'s `relaid`, which `toggleLine`
+shares, so a scrolled reader keeps their place): answered is `● ‹agent› · question answered` in
+`AnsweredStyle` (LastRead's effortUltra purple — never its surface, the last-read rule is a DM's) with
+one `question → answer` row per question under a `⎿`, drawn by `render.ToolResult` collapsed; a refusal
+is the same line muted with no body. An ask line evicted past retention gets the record appended
+instead. Open questions below: **multiple questions** is one row each; **permissions/plans** still post
+nothing; **persistence** stays live-only. Not closed: a question answered in *another* window leaves
+this window's line yellow (only the operator's own settle points author the record; the
+`AskUserQuestion` tool_result would be the wire-side source).
 
 **Partially shipped (`fix/room-question-answered-notice`, PR #40, 2026-08-31).** The "yellow → gone"
 failure below is fixed: a settled question now leaves one line in the group chat — `● ‹agent› ·
