@@ -74,6 +74,6 @@ func (d DM) toggleExpanded() DM {
 	if !d.expanded {
 		d.runOpen, d.opened = nil, nil
 	}
-	d.tr = d.tr.replace(renderTranscript(d)).toBottom()
+	d.tr = d.rewrapped().toBottom()
 	return d
 }

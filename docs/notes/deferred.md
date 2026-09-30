@@ -1570,7 +1570,17 @@ None of these are wrong. All are unmeasured at the scale the product claims.
 - **A wedged logger leaks one parked goroutine per affected session.** The session itself ends
   and frees its slot; the goroutine does not. Unbounded from inside for the same reason the
   original bug existed — a component cannot bound a sink it does not own. Task 6 owns the sink.
-- **A DM's scrollback is unbounded for the life of the session.** Deliberately left there by
+- ~~**A DM's scrollback is unbounded for the life of the session.**~~ **CLOSED 2026-09-30
+  (`fix/dm-scrollback-bound`):** a conversation keeps its newest `dmRetentionEvents` (3,000 — the
+  re-wrap cost accepted when the settle was designed, 248ms then and 73ms now by
+  `BenchmarkReWrapAtTheRetentionCap`) and reclaims the oldest a chunk at a time under `… older
+  conversation reclaimed` (`internal/ui/dmretention.go`). It cuts only before a non-tool event, so
+  never inside a folded run or between a call and its result, and the lines it keeps are the lines a
+  re-wrap of what it kept draws (`TestAReclaimKeepsTheLinesAReWrapDraws`), stale last-read rules
+  included. History arriving after a reclaim is left out rather than drawn above a gap. **Still
+  unbounded, out of scope here:** `Fleet.subs` and `DM.subs` (subagent transcripts), and a DM's
+  `calls`/`outcomes`/`opened`/`runOpen` maps (one entry per tool call). The original entry:
+  Deliberately left there by
   C2's fix: dropping old events means dropping the lines they rendered to, or a width change
   re-renders a transcript missing its beginning — so a bound on `d.events` is a bound on
   *scrollback depth*, which is a product decision about a view §8 calls "literally Claude

@@ -59,7 +59,7 @@ func (d DM) withRoomSeed(events []core.Event) DM {
 		return d
 	}
 	d.seed = events
-	d.tr = d.tr.replace(renderTranscript(d)).toBottom()
+	d.tr = d.rewrapped().toBottom()
 	return d
 }
 

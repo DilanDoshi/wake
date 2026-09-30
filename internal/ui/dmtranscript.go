@@ -66,10 +66,13 @@ func (d DM) renderAll() []block {
 	if d.viewing != "" {
 		return d.renderForwarded()
 	}
-	events := d.events.slice(0, d.events.len())
+	events, base := d.events.slice(0, d.events.len()), d.events.first()
 	blocks := make([]block, 0, len(events)+len(d.seed)+2)
-	// First, so it scrolls away as the conversation fills - see banner.go.
-	blocks = append(blocks, dmBanner(d.Agent, d.blockWidth()))
+	// First, so it scrolls away as the conversation fills - see banner.go - and
+	// gone with the oldest events once they are reclaimed (dmretention.go).
+	if base == 0 {
+		blocks = append(blocks, dmBanner(d.Agent, d.blockWidth()))
+	}
 
 	// The provisional room seed, above the transcript and outside the run fold:
 	// text turns the room already holds, drawn until the on-disk read supersedes
@@ -97,7 +100,7 @@ func (d DM) renderAll() []block {
 	for i := range events {
 		// Before the event, so the boundary lands in the same place whether the
 		// events around it rendered to anything or not. A boundary breaks a run.
-		if m, ok := d.markerBefore(i); ok {
+		if m, ok := d.markerBefore(base + i); ok {
 			flush(i)
 			blocks = append(blocks, m)
 		}

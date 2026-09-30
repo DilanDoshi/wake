@@ -179,7 +179,7 @@ func (d DM) openTool(line int) (DM, bool) {
 	// at what was being read. Following the conversation is preserved the way
 	// Append preserves it - sampled before the content changes.
 	following := d.tr.atBottom()
-	d.tr = d.tr.replace(renderTranscript(d))
+	d.tr = d.rewrapped()
 	if following {
 		d.tr = d.tr.toBottom()
 	}
