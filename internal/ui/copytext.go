@@ -49,13 +49,19 @@ func copiedAs(ev core.Event) (rejoin, string) {
 // hardBreak is how a row follows the one above it when nothing proves a wrap.
 var hardBreak = render.Rejoin{Sep: "\n"}
 
-// rejoins is how each of lines - what selectionLines returned, lines[0] at
-// absolute index first - follows the row above it.
-func (t transcript) rejoins(lines []string, first int) []render.Rejoin {
-	out := make([]render.Rejoin, len(lines))
-	for i := range out {
-		out[i] = hardBreak
-	}
+// copySpan is one block a copy crosses and the rows it drew. Taken on the
+// Update loop, since texts is written in place as blocks land, so the rejoin -
+// a render per markdown block - can run in the copy's own command.
+type copySpan struct {
+	from int
+	rows []string
+	textRows
+}
+
+// copySpans is every block among lines - what selectionLines returned, lines[0]
+// at absolute index first - whose rows rejoin.
+func (t transcript) copySpans(lines []string, first int) []copySpan {
+	var out []copySpan
 	for from, span := range t.texts {
 		if span.end <= first || from >= first+len(lines) {
 			continue
@@ -64,15 +70,28 @@ func (t transcript) rejoins(lines []string, first int) []render.Rejoin {
 		if clipped(rows, t.width) {
 			continue // the rows hold text the pane never drew
 		}
+		out = append(out, copySpan{from: from, rows: rows, textRows: span})
+	}
+	return out
+}
+
+// rejoinsOf is how each of n lines from absolute index first follows the row
+// above it.
+func rejoinsOf(spans []copySpan, first, n int) []render.Rejoin {
+	out := make([]render.Rejoin, n)
+	for i := range out {
+		out[i] = hardBreak
+	}
+	for _, span := range spans {
 		var js []render.Rejoin
 		switch span.how {
 		case markdownRows:
-			js = render.Rejoins(rows, span.src)
+			js = render.Rejoins(span.rows, span.src)
 		case typedRows:
-			js = typedRejoins(rows, span.src)
+			js = typedRejoins(span.rows, span.src)
 		}
 		for k, j := range js {
-			if i := from + k - first; i >= 0 && i < len(out) {
+			if i := span.from + k - first; i >= 0 && i < n {
 				out[i] = j
 			}
 		}

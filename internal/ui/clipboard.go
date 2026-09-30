@@ -103,16 +103,27 @@ func screenSequence(text string) string {
 
 // copyToClipboard writes text everywhere it can reach, and is nil when there is
 // nothing to write.
-//
-// The machine's own clipboard is a subprocess and happens here. The OSC 52
-// sequence has to reach the terminal, which Bubble Tea owns, so it rides back
-// on the message for App.update to hand to the writer.
 func copyToClipboard(text string) tea.Cmd {
 	if text == "" {
 		return nil
 	}
+	return copyWhenBuilt(func() string { return text })
+}
+
+// copyWhenBuilt is copyToClipboard for text built when the command runs rather
+// than on the Update loop: a transcript copy re-renders the markdown it spans.
+// Its turn is taken when asked, so copies still land in the order they were.
+//
+// The machine's own clipboard is a subprocess and happens here. The OSC 52
+// sequence has to reach the terminal, which Bubble Tea owns, so it rides back
+// on the message for App.update to hand to the writer.
+func copyWhenBuilt(build func() string) tea.Cmd {
 	turn := clipboardAsked.Add(1)
 	return func() tea.Msg {
+		text := build()
+		if text == "" {
+			return nil
+		}
 		var msg tea.Msg // nil when a newer copy wrote first, which Bubble Tea drops
 		nativeOrder.write(turn, func() {
 			msg = copiedMsg{

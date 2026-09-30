@@ -24,7 +24,9 @@ document margin can open one, so the room's speaker is never read as the reply. 
 constant, not one per block, because `rendererFor` caches a renderer per width. It doubles only
 while a row other than a table's reaches half of it, since a wrap always leaves one that wide, and
 stops at `maxUnwrappedWidth` (8,192), where a long unbreakable token starts to cost glamour tens of
-milliseconds. Cost: one more glamour render per copied block, at the gesture (about 12 ms for 2 KB).
+milliseconds. Cost: one more glamour render per copied block (about 12 ms for 2 KB), in the copy's
+own command rather than on the Update loop, so a long selection never stalls the inbox's drain: the
+spans are taken at release, since `texts` is written in place as blocks land.
 
 ---
 

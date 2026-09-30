@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -123,6 +124,34 @@ func TestCopyingAReplyWithInlineCodeRejoinsItsWraps(t *testing.T) {
 	}
 }
 
+// A copy's command runs beside the Update loop, which goes on adding blocks to
+// the same transcript and writes texts in place as they land, so the command
+// may read only what endSelection took. Under -race a command reading texts
+// fails here.
+func TestACopysCommandReadsNothingTheNextBlockWrites(t *testing.T) {
+	fresh(t)
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("TMUX", "")
+	t.Setenv("TERM", "")
+	dm := resized(t, dmApp(nil, Stream{}, "s1", "alex"), 90, 40)
+	dm = dm.applyFrame(eventFrame("s1", email))
+	tr := dm.transcriptIn("s1")
+	dm.sel = selection{pane: "s1", anchor: point{line: lineHolding(t, tr, "Hi Sam")}, head: point{line: tr.lines.len() - 1, col: tr.width - 1}}
+	dm.selecting = true
+	_, cmd := dm.endSelection()
+	done := make(chan tea.Msg)
+	go func() { done <- cmd() }()
+	// Your own turns: they mark texts too, and are drawn by lipgloss rather than
+	// through glamour's mutex, which would otherwise order the two goroutines.
+	for i := range 50 {
+		m, _ := dm.Update(eventMsg{Event: core.Event{Kind: core.KindUserText, SessionID: "s1", Text: fmt.Sprintf("turn %d, typed while the copy is built", i)}})
+		dm = m.(App)
+	}
+	if msg, ok := (<-done).(copiedMsg); !ok || msg.chars != len([]rune(emailCopied)) {
+		t.Fatalf("the copy produced %+v, want the email's %d characters", msg, len([]rune(emailCopied)))
+	}
+}
+
 // A drag that starts and ends mid-paragraph takes the words between, joined
 // across the wrap by the space the wrap consumed.
 func TestAPartialDragAcrossAWrapTakesTheWordsBetween(t *testing.T) {
@@ -196,7 +225,7 @@ func TestAClippedBlockCopiesAsDrawn(t *testing.T) {
 	tr := transcript{}.sized(minBlockWidth/2, 20).add(block{text: para, copied: markdownRows})
 	m := marked{from: point{line: 0}, to: point{line: tr.lines.len() - 1, col: lineEnd}}
 	lines, first := tr.selectionLines(m)
-	for i, j := range tr.rejoins(lines, first) {
+	for i, j := range rejoinsOf(tr.copySpans(lines, first), first, len(lines)) {
 		if j != hardBreak {
 			t.Errorf("row %d of a clipped block rejoins as %+v, want it kept as drawn", i, j)
 		}
