@@ -5300,15 +5300,17 @@ works (`internal/ui/apirecover.go`). Left out, each on purpose:
   daemon's finalizing-park window tries once more on the next parked report, then gives up). A window opened after the park, or a restarted Wake, knows nothing of it and leaves the
   session for `/resume`. *Closes with:* the daemon owning the auto-park and wake, which needs the
   attempt count on its side of the socket.
-- **Any failed turn the auto-park counts is treated as a login failure** - an overload or an
-  `invalid_request` parks after three and wakes on proof like a 401. A deterministic failure wakes
-  once, fails again, and then waits for `/login`; the pin's wording is the login's. Narrowing this
-  needs the error kind (`authentication_failed`) carried past the airlock as a `Notice` of its own.
+- ~~**Any failed turn the auto-park counts is treated as a login failure**~~ **FIXED
+  (`fix/recent-follow-ups`, 2026-09-29):** `apiNotice` reads the failed turn's error kind. Only
+  `authentication_failed` (or a frame naming no kind, the old reading) marks, counts and pins; any
+  other named kind is `core.NoticeTurnFailed`, a timed notice with no mark, park or pin.
 - **Proof is counted per output block, not per API request.** One response streams several frames
   (thinking, then a tool call), so a response that began before a park and lands a later block after
   it reads as post-park proof: the wake can land on a login that expired mid-response. It costs one
   wasted wake - the session fails again and then waits for `/login`. *Closes with:* the API response
   id carried out of the airlock, so a response counts once and only if it began after the park.
+  *Kept deferred 2026-09-29 (fable wake's ruling):* `wire.go` is at 798 of 800, the gain is one
+  wasted wake in a race window, and no recording pins `message.id`'s continuity across a park.
 - **Nothing watches the login while every agent is parked.** With no agent live, only `/login`
   (signed in) or `/resume` brings them back — Wake cannot poll `claude auth status` without a timer.
 - **A usage limit's timed notice outlives the turn that proves the reset** for its ~10s linger; the

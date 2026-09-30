@@ -32,11 +32,9 @@ import (
 // A usage limit is only pinned: the quota resets on its own and the same process
 // answers again, so a mark for /reauth or a park would cost a restart for nothing.
 // The API only says it to a login it knows, so it is also proof the login works.
+// Any other failed turn - an overload, a rejected request - is only told: the
+// next send retries it, and a pin is for a condition that stands.
 func (a App) apiErrored(sessionID string, ev core.Event) App {
-	usage := ev.Notice == core.NoticeUsageLimit
-	if ev.Notice != core.NoticeAPIError && !usage {
-		return a
-	}
 	msg := apiErrorFallback
 	if ev.Text != "" {
 		msg = ev.Text
@@ -45,12 +43,17 @@ func (a App) apiErrored(sessionID string, ev core.Event) App {
 	if agent, ok := a.fleet.Agent(sessionID); ok && agent.Name != "" {
 		who = agentPrefix + agent.Name
 	}
-	if usage {
+	switch ev.Notice {
+	case core.NoticeTurnFailed:
+		notice.Report(turnFailedFormat, who, msg)
+	case core.NoticeUsageLimit:
 		notice.Report(usageLimitFormat, who, msg)
 		return a.clearAuthFailed(sessionID).apiAnswered(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, usage: true})
+	case core.NoticeAPIError:
+		notice.Report(apiErrorFormat, who, msg, reauthVerb)
+		return a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, stuckPin{msg: msg})
 	}
-	notice.Report(apiErrorFormat, who, msg, reauthVerb)
-	return a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, stuckPin{msg: msg})
+	return a
 }
 
 const (
@@ -68,6 +71,9 @@ const (
 
 	// usageLimitFormat is a usage limit: nothing to run, only a reset to wait for.
 	usageLimitFormat = "%s: %s — send again once it resets"
+
+	// turnFailedFormat is any other failed turn: who, and what the API said.
+	turnFailedFormat = "%s: %s"
 )
 
 // pinAPIError keeps a session's failure on the notice row until it recovers:
