@@ -203,9 +203,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   not left the line it was pressed on; below the last row is the bottom. A one-shot tick
   (`edgeScrollEvery`) re-arms only while the pane moved; the highlight ends on a line on screen.
   `internal/ui/edgescroll.go`.
-- **A transcript copy rejoins what the pane wrapped** — markdown by `render.Rejoins` (reflowProse's
-  own predicates), your own turn matched back to what you typed; every other row copies as drawn.
-  `internal/ui/copytext.go`.
+- **A transcript copy rejoins what the pane wrapped** — markdown by `render.Rejoins`, matched back to
+  its source rendered at `unwrappedWidth`, your own turn matched back to what you typed; every other
+  row copies as drawn. `internal/ui/copytext.go`.
 - **Double-click selects a word, triple-click its row**, on any selectable surface; the first click
   still does its own job. A timer (`multiClickWindow`) counts clicks but never tells a click from a
   drag. `internal/ui/multiclick.go`.

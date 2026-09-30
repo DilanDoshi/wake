@@ -23,21 +23,23 @@ const (
 	typedRows                  // shadedOwn drew the operator's text
 )
 
-// textRows is one block in transcript.texts: where it ends, and how it rejoins.
+// textRows is one block in transcript.texts: where it ends, how it rejoins, and
+// the text its rows were drawn from.
 type textRows struct {
-	end   int
-	how   rejoin
-	typed string
+	end int
+	how rejoin
+	src string
 }
 
-// copiedAs is how the DM draws an event, as far as a copy cares. A subagent's
-// block sits inside a gutter no rule here reads past, so it copies as drawn.
+// copiedAs is how the DM draws an event, as far as a copy cares, and from what.
+// A subagent's block sits inside a gutter no rule here reads past, so it copies
+// as drawn.
 func copiedAs(ev core.Event) (rejoin, string) {
 	switch {
 	case ev.Subagent != nil:
 		return rowsAsDrawn, ""
 	case ev.Kind == core.KindAssistantText, ev.Kind == core.KindUserText && ev.Echoed:
-		return markdownRows, ""
+		return markdownRows, ev.Text
 	case ev.Kind == core.KindUserText:
 		return typedRows, ev.Text
 	}
@@ -65,9 +67,9 @@ func (t transcript) rejoins(lines []string, first int) []render.Rejoin {
 		var js []render.Rejoin
 		switch span.how {
 		case markdownRows:
-			js = render.Rejoins(rows)
+			js = render.Rejoins(rows, span.src)
 		case typedRows:
-			js = typedRejoins(rows, span.typed)
+			js = typedRejoins(rows, span.src)
 		}
 		for k, j := range js {
 			if i := from + k - first; i >= 0 && i < len(out) {

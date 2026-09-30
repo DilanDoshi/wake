@@ -94,6 +94,35 @@ func TestCopyingAnAgentsEmailGivesBackItsParagraphs(t *testing.T) {
 	}
 }
 
+// Inline code at the start of a wrapped row is everywhere in agent prose, and
+// such a row looks like code once rendered. Both surfaces hand the copy their
+// source, so it rejoins with the rest.
+//
+// Mutation check: a block that keeps no source (src "") copies every such row as
+// a break of its own.
+func TestCopyingAReplyWithInlineCodeRejoinsItsWraps(t *testing.T) {
+	fresh(t)
+	const reply = "Run the `go test ./...` command, then check `make ci` and `make lint` and `make cover` before you push the branch for review."
+	const want = "Run the go test ./... command, then check make ci and make lint and make cover before you push the branch for review."
+
+	dm := resized(t, dmApp(nil, Stream{}, "s1", "alex"), 44, 40)
+	dm = dm.applyFrame(eventFrame("s1", reply))
+	tr := dm.transcriptIn("s1")
+	if got := copyOf(t, dm, "s1", lineHolding(t, tr, "Run the"), 0, tr.lines.len()-1, tr.width-1); got != want {
+		t.Errorf("the DM copied\n%q\nwant\n%q", got, want)
+	}
+
+	room := NewRoomApp(nil, Stream{}, nil)
+	room.layout.ShowGroups, room.layout.ShowRoster = false, false
+	room = resized(t, room, 44, 40)
+	m, _ := room.Update(eventMsg{Event: core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "\n" + reply + "\n"}})
+	room = m.(App)
+	tr = room.transcriptIn("")
+	if got := copyOf(t, room, "", lineHolding(t, tr, "Run the"), 0, tr.lines.len()-1, tr.width-1); got != want {
+		t.Errorf("the room copied\n%q\nwant\n%q", got, want)
+	}
+}
+
 // A drag that starts and ends mid-paragraph takes the words between, joined
 // across the wrap by the space the wrap consumed.
 func TestAPartialDragAcrossAWrapTakesTheWordsBetween(t *testing.T) {

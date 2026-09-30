@@ -8,6 +8,26 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-09-29 — a copy matches markdown back to its source
+
+Supersedes "markdown rows are classified, not flagged" below. Classifying rows by `reflowProse`'s
+predicates could not rejoin a wrapped row that opens with a styled span - inline code at a wrap is
+everywhere in agent prose - and escapes cannot tell such a row from code: a fence inside a list item
+draws straight under the item, at the item's hang, with a styled row's shape.
+
+`render.Rejoins(rows, src)` renders the block's own source once more at `unwrappedWidth`, where each
+paragraph, item and line of code is one row, and matches the drawn rows back to it, as `typedRejoins`
+does for a typed turn. A row that continues its unwrapped row takes exactly the whitespace the wrap
+consumed, so hyphen breaks and `fitToWidth`'s hard wraps are exact, not guessed. A row the render
+does not hold is kept, and matching resumes at the next row that opens one. Only a row inside the
+document margin can open one, so the room's speaker is never read as the reply. The width is one
+constant, not one per block, because `rendererFor` caches a renderer per width. It doubles only
+while a row other than a table's reaches half of it, since a wrap always leaves one that wide, and
+stops at `maxUnwrappedWidth` (8,192), where a long unbreakable token starts to cost glamour tens of
+milliseconds. Cost: one more glamour render per copied block, at the gesture (about 12 ms for 2 KB).
+
+---
+
 ## 2026-09-28 — a copy rejoins what the pane wrapped
 
 The owner copied an email out of chat history and pasted it with a hard line break at every wrap
@@ -16,7 +36,7 @@ newlines are indistinguishable by then") on the grounds that `blockLines` splits
 That reasoning holds for arbitrary rows but not for the two row producers a copy cares about, so
 the ruling is reversed for them and kept for everything else.
 
-**Markdown rows are classified, not flagged.** `render.Rejoins` reads rendered rows with
+**Markdown rows are classified, not flagged.** *(Superseded 2026-09-29, above.)* `render.Rejoins` reads rendered rows with
 `reflowProse`'s own predicates (`reflowable`, `leadSpaces`, `opensItem`, `hyphenJoin`) plus
 `hangIndentLists`' hang. Rows that pass grouped into one paragraph or list item are wraps by
 construction — markdown renders a source newline as a space — so they rejoin with the space the

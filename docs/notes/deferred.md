@@ -5402,13 +5402,9 @@ the liveness tests that read `owed`.
 
 ## 2026-09-28 — a copy keeps some wraps it cannot prove
 
-`render.Rejoins` rejoins only rows `reflowProse` would group, so these still paste with a break at
-the wrap: a wrapped row that opens with a styled span (bold, inline code, a link — indistinguishable
-from code once rendered), and a long link or token `fitToWidth` hard-wrapped. (Your own turn with a
-tab in it now rejoins: `shadedOwn` draws a tab as `ownTabWidth` spaces and `typedRejoins` reads the
-typed text the same way — `fix/recent-follow-ups`, 2026-09-29.) Each falls back to the row as drawn,
-never to wrong text. A peer's cross-session message and a subagent's gutter copy as drawn too.
-
-*Closes with:* a wrap marker carried out of the renderer for styled rows, which means instrumenting
-glamour's wrap as well as `reflowProse`'s — see decisions.md 2026-09-28 for why that was not the
-first move.
+**CLOSED 2026-09-29 — `fix/recent-follow-ups`** for markdown and the typed turn. `render.Rejoins`
+matches the drawn rows back to the block's source rendered at `unwrappedWidth` (decisions.md
+2026-09-29), so a row opening with a styled span and a token `fitToWidth` hard-wrapped rejoin, and
+your own turn with a tab rejoins (`ownTabWidth`). Still copying as drawn: a peer's cross-session
+message and a subagent's gutter (neither opts in), and a paragraph or token wider than
+`maxUnwrappedWidth` (8,192 cells) past that point.
