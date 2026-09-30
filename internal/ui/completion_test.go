@@ -42,12 +42,12 @@ func TestATurnEndingDoesNotEmptyTheAdvertisedSet(t *testing.T) {
 		Model:         "claude-opus-4-6",
 		SlashCommands: []string{"clear", "compact"},
 	})
-	if len(a.advertised.words()) != 2 {
-		t.Fatalf("the init did not establish the set: %q", a.advertised.words())
+	if len(slices.Collect(a.advertised.words())) != 2 {
+		t.Fatalf("the init did not establish the set: %q", slices.Collect(a.advertised.words()))
 	}
 
 	after := a.withFacts(&core.SessionFacts{ContextTokens: 900, ContextWindow: 200_000, OutputTokens: 12})
-	if got := after.advertised.words(); len(got) != 2 {
+	if got := slices.Collect(after.advertised.words()); len(got) != 2 {
 		t.Errorf("a turn ending left the advertised set as %q, want the two the init named: the list "+
 			"rides on init and a frame carrying none says nothing about it", got)
 	}

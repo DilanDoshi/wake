@@ -5374,9 +5374,8 @@ the liveness tests that read `owed`.
 
 ## 2026-09-28 — Left open by the `@` menu work (at-menu Tasks 3–6)
 
-- **`commandSet.words()` returns the shared slice** (`internal/ui/completion.go`): a caller that
-  mutated it would rewrite every Agent copy's advertised commands. Task 4's `SubagentTypes()` copies;
-  this older reader does not. *Closes with:* a `slices.Clone`, or a test that proves no caller writes.
+- ~~**`commandSet.words()` returns the shared slice**~~ **FIXED (`fix/recent-follow-ups`,
+  2026-09-29):** it returns an `iter.Seq`, so no caller can write the slice every Agent copy shares.
 - **Prompt history recall (`walkPrompts`) replaces the draft without rebuilding the menu**, so a
   recalled `@x` carries the previous menu's peers ask and skips one re-ask; the carried listing still
   shows. Focus away and back has the same shape. *Closes with:* a rebuild there, once a pane whose
