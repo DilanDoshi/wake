@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/notice"
 )
@@ -41,7 +42,7 @@ func (a App) View() string {
 // frame and is exactly the sort of per-frame cost that multiplies by thirty if
 // it is paid three times.
 func (a App) assembleFrame() string {
-	r := a.regions()
+	r, drawn := a.regions(), a.frameRegions()
 	h := a.paneHeight()
 	agents := a.fleet.OnRoster()
 
@@ -74,7 +75,7 @@ func (a App) assembleFrame() string {
 	}
 	for i, w := range r.Cols {
 		if w > 0 {
-			panels = append(panels, a.column(i, w, h))
+			panels = append(panels, a.column(i, w, max(drawn.Cols[i], 0), h))
 		}
 	}
 	if r.Roster > 0 {
@@ -130,14 +131,22 @@ func (a App) focusedCol() int { return a.columnOf(a.focus) }
 // SplitRows says so - and the lower conversation keeps its transcript for when
 // the window is tall enough again, exactly as a column that does not fit keeps
 // its width for when it does.
-func (a App) column(col, width, height int) string {
+//
+// Each pane is drawn at width, the one it is wrapped for, and fitted to drawn,
+// where a divider mid-drag puts its edge. Never drawn at drawn: DM.View re-wraps
+// for any width it is handed, and that on every motion is the cost the settle
+// exists to spare.
+func (a App) column(col, width, drawn, height int) string {
 	c := a.grid.Cols[col]
+	if drawn == 0 {
+		drawn = width
+	}
 	if c.Bottom == "" {
-		return a.pane(c.Top, width, height)
+		return fitCells(a.pane(c.Top, width, height), width, drawn)
 	}
 	top, bottom := a.layout.SplitRowsIn(col, height)
 	if bottom == 0 {
-		return a.pane(c.Top, width, top)
+		return fitCells(a.pane(c.Top, width, top), width, drawn)
 	}
 	// Each pane is clipped to its own allocation before joining. A pane can draw
 	// taller than it was given - a task board is unbounded and is not in the
@@ -148,10 +157,25 @@ func (a App) column(col, width, height int) string {
 	// answerable permission decision nobody can see. Clipping here keeps one
 	// pane's overflow out of the other.
 	return lipgloss.JoinVertical(lipgloss.Left,
-		firstRows(a.pane(c.Top, width, top), top),
-		HintStyle.Render(strings.Repeat(dividerRow, width)),
-		firstRows(a.pane(c.Bottom, width, bottom), bottom),
+		fitCells(firstRows(a.pane(c.Top, width, top), top), width, drawn),
+		HintStyle.Render(strings.Repeat(dividerRow, drawn)),
+		fitCells(firstRows(a.pane(c.Bottom, width, bottom), bottom), width, drawn),
 	)
+}
+
+// fitCells cuts or pads every row of a pane drawn at width to drawn. A no-op
+// unless a divider is mid-drag: the shrinking pane is cut at its new edge and
+// the growing one gets a blank gutter, and both reflow when the hand lets go.
+func fitCells(block string, width, drawn int) string {
+	if drawn == width {
+		return block
+	}
+	rows := strings.Split(block, "\n")
+	for i, row := range rows {
+		row = ansi.Truncate(row, drawn, "")
+		rows[i] = row + strings.Repeat(" ", max(drawn-ansi.StringWidth(row), 0))
+	}
+	return strings.Join(rows, "\n")
 }
 
 // pane draws one conversation, the room included. "" is the room, which is the

@@ -4580,7 +4580,18 @@ multi-select entry above is untouched and is still the only field left out.
 
 ---
 
-## 2026-08-14 — a column drag jumps where a row drag glides
+## ~~2026-08-14 — a column drag jumps where a row drag glides~~ CLOSED 2026-09-30 (`fix/divider-drag-glides`)
+
+**Closed the way the entry below says.** Mid-drag each pane is drawn at the width it is wrapped for
+and cut or padded, row by row, to the width the drag gives it (`fitCells`), at `frameRegions` — the
+layout at the pending split (`drawnRegions`, shared with the room's settle fix). A pane is never
+handed the pending width, so no motion re-wraps. Letting go commits the drag at once (`letGo`): the
+settle coalesces motions, and none follow a release. The one mouse event a held button still sends,
+the wheel, hits the columns as drawn. A window drag keeps its clip: its column count can change
+mid-drag. Taking hold of the divider clears the selection, which also closes a hole the entry did not
+name — the divider's settle re-wrapped both panes under a highlight left standing. The original
+entry is kept below.
+
 
 **Wake — dragging a vertical divider moves nothing until the drag ends, while dragging a stacked
 column's rule tracks the pointer.** Asked for by the owner after a real screen, and it is the cost
