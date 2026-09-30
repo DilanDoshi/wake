@@ -175,6 +175,21 @@ func (a App) displayTarget(arg, usage, noTarget string) (Agent, string, bool) {
 	return agent, value, true
 }
 
+// namedTarget reads an argument that is one @who and nothing else - the grammar
+// of the commands whose target is their whole argument (/quit, /mcp,
+// /workflows) - reporting usage for any other shape.
+func (a App) namedTarget(fields []string, usage string) (Agent, bool) {
+	if len(fields) != 1 || !strings.HasPrefix(fields[0], agentPrefix) {
+		notice.Report("%s", usage)
+		return Agent{}, false
+	}
+	agent, ok := a.fleet.ByName(strings.TrimPrefix(fields[0], agentPrefix))
+	if !ok {
+		notice.Report("%s\n%s", noSuchAgent, a.handleList())
+	}
+	return agent, ok
+}
+
 // conversationAgent is the agent this conversation is with, when the focused
 // pane is a conversation at all. parkedHere's shape, and its reason.
 func (a App) conversationAgent() (Agent, bool) {

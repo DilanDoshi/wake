@@ -249,3 +249,22 @@ func TestAPressLandsOnTheRowTheDrawPutThere(t *testing.T) {
 		t.Errorf("a press on a heading moved the cursor to %d", got.Cursor)
 	}
 }
+
+// An agent row calls its model by family, off core.ModelAliases: a dated id by
+// the family it names, an alias that extends one (opusplan) by that family, and
+// anything the recorded sample does not know as it arrived.
+func TestAWorkflowAgentsModelIsNamedByItsFamily(t *testing.T) {
+	for id, want := range map[string]string{
+		"claude-opus-4-8-20260101":  "opus",
+		"claude-sonnet-5-20260301":  "sonnet",
+		"claude-haiku-4-5-20251001": "haiku",
+		"claude-fable-5-1":          "fable",
+		"opusplan":                  "opus",
+		"sonnet[1m]":                "sonnet",
+		"some-new-model":            "some-new-model",
+	} {
+		if got := workflowModel(id); got != want {
+			t.Errorf("workflowModel(%q) = %q, want %q", id, got, want)
+		}
+	}
+}

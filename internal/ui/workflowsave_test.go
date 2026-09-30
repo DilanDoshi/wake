@@ -4,6 +4,7 @@ package ui
 // keys, the one frame ↵ writes, and the notice the daemon's answer becomes.
 
 import (
+	"path/filepath"
 	"reflect"
 	"strings"
 	"testing"
@@ -97,6 +98,38 @@ func TestTabTogglesTheScopeAndItsPath(t *testing.T) {
 	}
 	if l, ok := wfLine(drawnView(t, a), ".claude/workflows/count-lines.js"); !ok || strings.Contains(l, "~") {
 		t.Errorf("back in the project the path is %q", l)
+	}
+}
+
+// The personal scope's path is the one the daemon's runs reply named - the
+// daemon places the file, from its own $CLAUDE_CONFIG_DIR - with this home as ~.
+func TestThePersonalScopeDrawsTheDaemonsDirectory(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	for dir, want := range map[string]string{
+		"/cfg/claude/workflows":                          "personal · /cfg/claude/workflows/count-lines.js",
+		filepath.Join(home, ".claude-work", "workflows"): "personal · ~/.claude-work/workflows/count-lines.js",
+	} {
+		a := runOpen(t).applyFrame(rpc.Frame{Kind: rpc.FrameWorkflowsReply, SessionID: "s1",
+			Workflow: &rpc.WorkflowFrame{PersonalDir: dir}})
+		a = dialogKeys(a, wfRune('s'), wfKey(tea.KeyTab))
+		if _, ok := wfLine(drawnView(t, a), want); !ok {
+			t.Errorf("a reply naming %s drew:\n%s\nwant %q", dir, strings.Join(drawnView(t, a), "\n"), want)
+		}
+	}
+}
+
+// The daemon's directory outlives a walk back to the list and into a run again.
+func TestThePersonalDirectorySurvivesBackingOutToTheList(t *testing.T) {
+	a, _ := openedWorkflows(t, secondRun(workflowFleet(t)).openDMWith("s1", "alex"))
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameWorkflowsReply, SessionID: "s1",
+		Workflow: &rpc.WorkflowFrame{PersonalDir: "/cfg/workflows"}})
+	a = dialogKeys(a, wfKey(tea.KeyEnter), wfKey(tea.KeyEsc), wfKey(tea.KeyEnter), wfRune('s'), wfKey(tea.KeyTab))
+	if d := a.workflow.view.Save; d == nil || a.workflow.view.Level != levelRun {
+		t.Fatalf("the walk did not end in the save dialog: %+v", a.workflow.view)
+	}
+	if _, ok := wfLine(drawnView(t, a), "personal · /cfg/workflows/"); !ok {
+		t.Errorf("the walk back lost the daemon's directory:\n%s", strings.Join(drawnView(t, a), "\n"))
 	}
 }
 

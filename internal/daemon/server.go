@@ -689,8 +689,8 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 	}
 }
 
-// withAgent runs an ending verb against a named session, reporting an unknown
-// name rather than silently doing nothing.
+// withAgent runs a verb against a named session, reporting an unknown name
+// rather than silently doing nothing, and do's error as the verb's refusal.
 func (s *server) withAgent(c *client, f rpc.Frame, do func(*agent) error) {
 	a, ok := s.agent(f.SessionID)
 	if !ok {

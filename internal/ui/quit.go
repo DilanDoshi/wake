@@ -117,26 +117,14 @@ func (a App) quitAgent(arg string) (App, tea.Cmd) {
 // so a bare form is not "the value with no @who" but "no target named".
 func (a App) quitTarget(arg string) (Agent, bool) {
 	fields := strings.Fields(arg)
-	switch {
-	case len(fields) == 0:
-		agent, ok := a.conversationAgent()
-		if !ok {
-			notice.Report("%s", noQuitTarget)
-			return Agent{}, false
-		}
-		return agent, true
-	case len(fields) == 1 && strings.HasPrefix(fields[0], agentPrefix):
-		who := strings.TrimPrefix(fields[0], agentPrefix)
-		agent, ok := a.fleet.ByName(who)
-		if !ok {
-			notice.Report("%s\n%s", noSuchAgent, a.handleList())
-			return Agent{}, false
-		}
-		return agent, true
-	default:
-		notice.Report("%s", quitUsage)
-		return Agent{}, false
+	if len(fields) > 0 {
+		return a.namedTarget(fields, quitUsage)
 	}
+	agent, ok := a.conversationAgent()
+	if !ok {
+		notice.Report("%s", noQuitTarget)
+	}
+	return agent, ok
 }
 
 // awaitingQuit remembers a quit this client asked for, so the report that

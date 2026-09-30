@@ -383,20 +383,21 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
 // aimed by a room mention: `@thea /color green` means `/color @thea green`.
-// name, task and colour read displayTarget for the value beside the target;
-// quit takes the target alone - `@thea /quit` ends thea. `/effort` and `/model`
-// are the room's other addressed path (configure, a picker over the bare form);
-// every other Wake verb takes no `@who`, and claude's own commands must pass
-// through to the agent untouched. So the set is closed and a subset of commands,
-// held to both by slashguard_test.go for the reason the passthrough itself is
-// guarded.
+// name, task and colour read displayTarget for the value beside the target; quit,
+// mcp and workflows take the target alone - `@thea /quit` ends thea. `/effort`
+// and `/model` are the room's other addressed path (configure, a picker over the
+// bare form); every other Wake verb takes no `@who`, and claude's own commands
+// must pass through to the agent untouched. So the set is closed and a subset of
+// commands, held to both by slashguard_test.go for the reason the passthrough
+// itself is guarded.
 var roomTargetCommands = map[string]struct{}{
-	nameCommand:  {},
-	taskCommand:  {},
-	colorCommand: {},
-	teamCommand:  {},
-	quitCommand:  {},
-	mcpCommand:   {},
+	nameCommand:      {},
+	taskCommand:      {},
+	colorCommand:     {},
+	teamCommand:      {},
+	quitCommand:      {},
+	mcpCommand:       {},
+	workflowsCommand: {},
 }
 
 // leadingRoomTargetCommand is the roomTargetCommand a draft leads with, if any:

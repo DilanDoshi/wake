@@ -64,12 +64,13 @@ triaged as deferred is recorded here rather than lost with it). Each item was ch
 tree when this entry was written; check again before acting on one.
 
 **Deferred features, owner's triage.**
-- **`@who /workflows` from the room** (M6). `/workflows` in the room lists every agent's runs; there is
-  no way to aim it at one agent the way `@who /mcp` aims the MCP menu. *Closes with:* a
-  `roomTargetCommands` entry and `openWorkflows` taking the resolved id.
-- **The view's text cannot be selected or copied** (M7). A press on the view moves its cursor
-  (`workflowPress`) and never starts a selection, and it leaves an earlier highlight standing. It is the
-  one rendered surface CLAUDE.md's "every other surface is selectable" does not cover, and says so.
+- ~~**`@who /workflows` from the room** (M6).~~ **CLOSED on `fix/workflow-view-gaps`:** a
+  `roomTargetCommands` entry, and `openWorkflows` takes one `@who` (`namedTarget`, now /quit's and
+  /mcp's too); the view's title names whose runs it draws. `@thea /work⇥` still does not complete —
+  behind a lone `@thea ` the menu offers only thea's own commands, as for `/col` today.
+- ~~**The view's text cannot be selected or copied** (M7).~~ **CLOSED on `fix/workflow-view-gaps`:** a
+  press anchors the frame-wide screen selection before `workflowPress` moves the cursor, so a drag
+  copies, a click still only moves the cursor, and multi-click selects a word or row.
 - **The room's list has no way to jump between agents' groups** (M12) — a long fleet list is walked a
   row at a time.
 
@@ -96,8 +97,9 @@ tree when this entry was written; check again before acting on one.
   under it is unattributed in the room.
 - **The save dialog:** `↵` closes it silently if the run left the list underneath; an invalid name is
   refused in the notice slot rather than in the dialog; a `FrameWorkflowSaved` with no payload is
-  dropped silently; the personal-scope path hint ignores `$CLAUDE_CONFIG_DIR`; a one-row body hides the
-  dialog's cue.
+  dropped silently; ~~the personal-scope path hint ignores `$CLAUDE_CONFIG_DIR`~~ (closed on
+  `fix/workflow-view-gaps`: the daemon names its own directory on the runs reply); a one-row body hides
+  the dialog's cue.
 - **`⌃C` in the save dialog closes the dialog alone** (the ruling: parking would end the run being
   saved). A second `⌃C` straight after is the kill switch's `⌃C⌃C` emergency exit, not a park — to park
   from there, press anything else first. The kill switch is deliberately untouched.
@@ -108,22 +110,22 @@ tree when this entry was written; check again before acting on one.
   atomic, and a filesystem without them refuses the save rather than falling back.
 
 **Small code debts.**
-- `stopWorkflow`'s `!ok` branch is unreachable (`workflowKeyed` runs `settledArm` first, so `armedKey`
-  only ever sees a stoppable run); `FrameStopRun` with an empty task id refuses with a trailing space
-  (`"no running workflow "`); `saveWorkflowFrame`'s own unknown-session refusal wants a comment on why it
-  does not go through `withAgent`.
-- `workflowdraw.go`'s `modelFamilies` restates what `core.ModelAliases` knows; `workflowdraw.go` is
-  ~620 lines and its agent level could be its own file.
+- ~~`stopWorkflow`'s `!ok` branch is unreachable; `FrameStopRun` with an empty task id refuses with a
+  trailing space; `saveWorkflowFrame`'s own unknown-session refusal.~~ **CLOSED on
+  `fix/workflow-view-gaps`:** folded into `armedKey`; "a workflow stop needs a task id"; the save goes
+  through `withAgent` (nothing made the split deliberate).
+- ~~`modelFamilies` restates `core.ModelAliases`; the agent level could be its own file.~~ **CLOSED on
+  `fix/workflow-view-gaps`:** `workflowModel` reads `core.ModelAliases`; the agent level is
+  `workflowagent.go`.
 - The airlock is full: `vocabulary.go` 800, `protocol.go` 798, `wire.go` 797, `encode.go` 792 (now
   742/798/798/798, 2026-09-29; *"never by a fifth airlock file"* below is SUPERSEDED — the owner's
   2026-09-27 ruling added `localreply.go` as the fifth, `bf77dce`, PR #131). The next
   decoded field pays for its line by moving Claude-free code out (`rawjson.go`'s precedent), never by a
   fifth airlock file.
-- Tests: `workflowstop_test.go`'s `emitTaskEnded` puts `status` at the top level where recordings nest
-  it under `patch`; the e2e fake's frames omit `last_tool_name`/`uuid`; the sidechain transcript fixture
-  is hand-built rather than recording-derived; the open-key tests that check an ask was written cover
-  `⌃D` and `/workflows`, not `↵`/`⌃Y`/`⌃B`/click/board; the wheel over the view itself under an armed
-  stop is untested.
+- Tests: the e2e fake's frames omit `last_tool_name`/`uuid`; the sidechain transcript fixture is
+  hand-built rather than recording-derived. (~~`emitTaskEnded`'s top-level `status`; the open-key ask
+  tests covering only `⌃D`/`/workflows`; the wheel over the armed view untested~~ — closed on
+  `fix/workflow-view-gaps`.)
 - Demo (`demo/`): `pick_turn` falls through to prose matching for an unadvertised `/<name>`, and
   `workflow_spec` rescans the scenarios on every call.
 
@@ -5377,8 +5379,9 @@ the liveness tests that read `owed`.
   *Closes with:* a recording of claude's own `@"…"` handling, then quote or skip.
 - **`TestARunningDaemonReestablishesASweptLock` flakes** — 3 of 30 alone under `-race` on
   `origin/main` (2026-09-27, `lock_test.go:322`, `<nil>`), so a clean 5/5 no longer proves it gone.
-- **`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**, so the
-  workflow kinds are unchecked for collisions. *Closes with:* adding it to the scanned files.
+- ~~**`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**~~ **CLOSED
+  on `fix/workflow-view-gaps`:** the scan globs every non-test file, and the seven workflow kinds are
+  in `frameKinds`.
 - **A daemon on an older build answers each conversation's `@` opening with a notice**
   (`unknown frame kind "peers"`, branch review L2), beside the stale-daemon notice the room opened
   with. Not skipped: `internal/ui` keeps no daemon build, and a build mismatch is also every dev
