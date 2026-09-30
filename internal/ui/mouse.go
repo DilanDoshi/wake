@@ -61,16 +61,14 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 	case m.Action == tea.MouseActionRelease:
 		// The button may be reported as None here: X10 encoding loses which one
 		// was let go of, and there is only one drag to end.
-		a.dragAt, a.dragRows = noDrag, false
-		return a.released()
+		return a.letGo().released()
 	case m.Action == tea.MouseActionMotion && a.dragAt != noDrag:
 		if m.Button == tea.MouseButtonNone {
 			// 1002 reports motion only while a button is held, so this is a
 			// release that never arrived - under 1003, or from a terminal that
 			// swallowed it. Ending the drag here is what stops every later
 			// motion from moving a divider nobody is holding.
-			a.dragAt, a.dragRows = noDrag, false
-			return a, nil
+			return a.letGo(), nil
 		}
 		if a.dragRows {
 			// A rule moves rows, and rows are the half of a geometry change that
@@ -89,6 +87,21 @@ func (a App) mouse(m tea.MouseMsg) (App, tea.Cmd) {
 		return a.extendSelection(m.X, m.Y)
 	}
 	return a, nil
+}
+
+// letGo ends a hand on a divider or a rule. A divider drag that moved commits
+// now rather than when its settle lands: the settle coalesces motions, and none
+// follow a release. The generation moves, so that timer finds nothing to do. A
+// window drag in flight keeps the settle, for its width and the split with it.
+func (a App) letGo() App {
+	moved := a.dragAt != noDrag && !a.dragRows && a.pending.width == a.layout.Width &&
+		!slices.Equal(a.pending.weights, a.layout.Weights)
+	a.dragAt, a.dragRows = noDrag, false
+	if !moved {
+		return a
+	}
+	a.geoGen++
+	return a.applyGeometry()
 }
 
 // draggingRows reports whether the hand on the mouse is on a stacked column's
@@ -127,7 +140,9 @@ func (a App) press(x, y int) App {
 		if y >= a.paneHeight() {
 			a = a.startScreenSelection(x, y)
 		} else {
-			a.dragAt, a.dragRows = at, false
+			// A width change for both panes, and a width change clears the
+			// highlight: the drag's re-wrap renumbers the lines it is anchored to.
+			a.dragAt, a.dragRows, a.sel = at, false, selection{}
 		}
 	case RegionPane:
 		id, top, height, ok := a.paneAt(at, y)
@@ -214,7 +229,8 @@ func (a App) paneAt(col, y int) (id string, top, height int, ok bool) {
 // is the honest fallback: there is no transcript under it to move.
 func (a App) scroll(lines, x, y int) App {
 	id, under := a.focus, false
-	if region, at := a.layout.Hit(a.regions(), x); region == RegionPane {
+	// Where the columns are drawn: mid-drag the divider is ahead of the layout.
+	if region, at := a.layout.Hit(a.frameRegions(a.regions()), x); region == RegionPane {
 		id, _, _, under = a.paneAt(at, y)
 		if !under {
 			id = a.focus

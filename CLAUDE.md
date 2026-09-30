@@ -191,7 +191,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The grid is bounded:** columns, each split once (spec §8). The room is `Cols[0]` and cannot be
   closed. Arbitrary tiling is out of scope.
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
-  through the 80ms settle; row drags don't. The wheel scrolls the pane under the pointer.
+  through the 80ms settle, drawn at the pointer meanwhile (each pane at its wrap width, cut or padded —
+  `fitCells`) and committed on release; row drags don't settle. The wheel scrolls the pane under the pointer.
 - **Drag selects, release copies**, on every surface but the `/workflows` view (a press there moves
   its cursor; `deferred.md`): transcript (anchored to `transcript.lines`
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
