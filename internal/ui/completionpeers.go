@@ -24,6 +24,7 @@ import (
 	"slices"
 	"strings"
 	"unicode"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -46,6 +47,11 @@ const (
 
 	// pathLeads are what a typed `@` path starts with and no name does.
 	pathLeads = "./~"
+
+	// mentionQuote wraps a session's name holding anything but ASCII letters,
+	// digits, `-` and `_`: Claude Code's typeahead inserts `@"release notes"`
+	// (its cross-session messaging docs), and the docs say to type it so.
+	mentionQuote = `"`
 
 	peersFailed = "asking for the machine's other Claude sessions"
 )
@@ -106,9 +112,10 @@ func canBeginName(typed string) bool {
 // fleet's live peers, then the listing's sessions and this agent's subagent
 // types - for any agent but the manager, whose `--tools ""` reaches neither.
 // Nothing here routes, so unlike addressees it need not mirror core.Resolve. A
-// name holding whitespace is not one mention, so it is not offered.
+// listed name is offered as peerMention writes it; a subagent type holding
+// whitespace is not one `@agent-` mention, so it is not offered.
 func (a App) conversationMenu(c completion, typed string) completion {
-	lower := strings.ToLower(typed)
+	lower := strings.ToLower(strings.TrimPrefix(typed, mentionQuote))
 	matches := func(word string) bool { return strings.HasPrefix(strings.ToLower(word), lower) }
 	for _, addr := range a.live() {
 		if addr.ID != a.focus && matches(addr.Name) {
@@ -123,11 +130,12 @@ func (a App) conversationMenu(c completion, typed string) completion {
 	held := a.heldNames()
 	for _, p := range a.completion.peers.listing {
 		key := strings.ToLower(p.Name)
-		if held[key] || !matches(p.Name) || strings.ContainsFunc(p.Name, unicode.IsSpace) {
+		mention, ok := peerMention(p.Name)
+		if held[key] || !matches(p.Name) || !ok {
 			continue
 		}
 		held[key] = true // a listing naming one twice, in any case, offers it once
-		c.names, c.tags = tagged(c.names, c.tags, agentPrefix+p.Name, offerTag{dir: shortPath(p.Dir)})
+		c.names, c.tags = tagged(c.names, c.tags, mention, offerTag{dir: shortPath(p.Dir)})
 	}
 	for _, kind := range agent.SubagentTypes() {
 		if !strings.ContainsFunc(kind, unicode.IsSpace) && (matches(kind) || matches(subagentMention+kind)) {
@@ -135,6 +143,25 @@ func (a App) conversationMenu(c completion, typed string) completion {
 		}
 	}
 	return c
+}
+
+// peerMention is how a listed session is mentioned: bare when every rune is an
+// ASCII letter, digit, `-` or `_`, quoted otherwise - a quote claude did not need
+// costs nothing, a missing one ends the mention at a space. false for a name no
+// mention carries: a quote has no escape, and a control character is no name.
+func peerMention(name string) (string, bool) {
+	if strings.Contains(name, mentionQuote) || strings.ContainsFunc(name, unicode.IsControl) {
+		return "", false
+	}
+	if strings.IndexFunc(name, func(r rune) bool { return !bareMentionRune(r) }) < 0 {
+		return agentPrefix + name, true
+	}
+	return agentPrefix + mentionQuote + name + mentionQuote, true
+}
+
+// bareMentionRune is a rune a mention may hold unquoted.
+func bareMentionRune(r rune) bool {
+	return r == '-' || r == '_' || r < utf8.RuneSelf && (unicode.IsLetter(r) || unicode.IsDigit(r))
 }
 
 // dirLabel is an outside session's row: the name keeps its width up to all but

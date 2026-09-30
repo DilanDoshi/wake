@@ -675,6 +675,29 @@ counts the row as padding, so the caret is not drawn until the next character.
 
 ---
 
+## BUG-39 — a conversation's `@` hid every session named with a space
+
+**Reported 2026-09-29**: the owner's `@` menu left out most of the Claude sessions open on the
+machine. The one-shot `/list-agents` listed 29 and `core.PeersFromListAgents` read all 29, but
+`conversationMenu` dropped each name holding whitespace — 10 of them, every hand-named interactive
+session (`/rename` takes spaces; Wake's own names never hold one).
+
+**Root cause: the drop assumed a spaced name cannot be one mention.** Claude Code's cross-session
+messaging docs say otherwise: a name with a space or any character outside letters, digits, `-` and
+`_` is typed in double quotes, `@"release notes"`, and its typeahead inserts the quotes.
+
+**Fix (`completionpeers.go`'s `peerMention`).** A listed session is offered bare when every rune is
+an ASCII letter, digit, `-` or `_`, and quoted otherwise, so a non-ASCII letter is quoted too (a quote
+claude did not need costs nothing). A typed opening quote matches (`@"fab`). Only a name no mention
+carries is dropped: one holding `"`, which has no escape, or a control character — which `main`
+offered, drawing a listed name's raw escape bytes to the terminal. Subagent types keep the
+whitespace drop: `@agent-<type>` is the one form claude resolves headless (findings §3).
+
+**Residual, not changed:** an outside session sharing a fleet agent's name (another fleet's
+`manager`) is still dropped by `heldNames` — `@manager` would name both, and claude would have to ask.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

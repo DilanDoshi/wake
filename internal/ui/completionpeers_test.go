@@ -441,23 +441,58 @@ func TestAPathShapedMentionAsksNothing(t *testing.T) {
 	}
 }
 
-// A name holding whitespace is not offered - an outside session's or a
-// subagent type's. The mention ends at the first space claude reads, so ⇥ would
-// insert one mention and some prose; and the row collapses whitespace, so it
-// would not even be drawn as what it inserts.
-func TestANameHoldingWhitespaceIsNotOffered(t *testing.T) {
-	spaced := func(t *testing.T) App {
-		t.Helper()
-		return peerFleet(t, "", "my helper", "my-helper").applyFrame(peersReply(
-			core.Peer{Name: "foo bar", Dir: "/tmp/a"},
-			core.Peer{Name: "foo\u00a0baz", Dir: "/tmp/b"},
-			core.Peer{Name: "foobar", Dir: "/tmp/c"},
-		))
+// spacedListing is a machine listing holding every shape of name an operator's
+// own `/rename` gives a session, and two no mention can carry.
+func spacedListing(t *testing.T) App {
+	t.Helper()
+	return peerFleet(t, "", "my helper", "my-helper").applyFrame(peersReply(
+		core.Peer{Name: "foo bar", Dir: "/tmp/a"},
+		core.Peer{Name: "foo baz", Dir: "/tmp/b"},
+		core.Peer{Name: "foobar", Dir: "/tmp/c"},
+		core.Peer{Name: "foo.v2", Dir: "/tmp/d"},
+		core.Peer{Name: "foosé", Dir: "/tmp/e"},
+		core.Peer{Name: `foo"q`, Dir: "/tmp/f"},
+		core.Peer{Name: "foo\x1b[31m", Dir: "/tmp/g"},
+	))
+}
+
+// A session named with anything but letters, digits, `-` and `_` is offered in
+// double quotes, as Claude Code's typeahead inserts it (its cross-session
+// messaging docs): unquoted, the mention would end at the space. A non-ASCII
+// letter is quoted too - a quote claude did not need costs nothing, a missing
+// one splits the name. A quote has no escape and a control character is no
+// name, so those two are not offered.
+func TestAnOutsideSessionNamedPastTheBareSetIsOfferedQuoted(t *testing.T) {
+	want := []string{`@"foo bar"`, "@\"foo baz\"", "@foobar", `@"foo.v2"`, "@\"foosé\""}
+	if got := spacedListing(t).withDraft("@f").completion.offers; !slices.Equal(got, want) {
+		t.Errorf("`@f` offered %q, want %q", got, want)
 	}
-	if got, want := spaced(t).withDraft("@f").completion.offers, []string{"@foobar"}; !slices.Equal(got, want) {
-		t.Errorf("`@f` offered %q, want %q: a spaced name is not one mention", got, want)
+	if got := spacedListing(t).withDraft(`@"f`).completion.offers; !slices.Equal(got, want) {
+		t.Errorf("`@\"f` offered %q, want %q: the docs say to type the opening quote", got, want)
 	}
-	if got, want := spaced(t).withDraft("@agent-my").completion.offers, []string{"@agent-my-helper"}; !slices.Equal(got, want) {
+	a := spacedListing(t).withDraft("@foo b")
+	if a.completion.open() {
+		t.Errorf("`@foo b` offered %q: a typed space still ends the mention being typed", a.completion.offers)
+	}
+}
+
+// ⇥ inserts the quoted mention, and the row draws what it inserts beside the
+// session's directory.
+func TestAcceptingAQuotedSessionInsertsItsQuotes(t *testing.T) {
+	a := spacedListing(t).withDraft("@foo")
+	if got, want := a.completion.rowLabel(`@"foo bar"`, 200), `@"foo bar" (/tmp/a)`; got != want {
+		t.Errorf("the quoted session is labelled %q, want %q", got, want)
+	}
+	took, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyTab})
+	if got, want := took.composer().Value(), `@"foo bar" `; got != want {
+		t.Errorf("⇥ inserted %q, want %q", got, want)
+	}
+}
+
+// A subagent type holding whitespace is still not offered: `@agent-<type>` is
+// the one typed form claude resolves headless (findings §3).
+func TestASubagentTypeHoldingWhitespaceIsNotOffered(t *testing.T) {
+	if got, want := spacedListing(t).withDraft("@agent-my").completion.offers, []string{"@agent-my-helper"}; !slices.Equal(got, want) {
 		t.Errorf("`@agent-my` offered %q, want %q: a spaced type is not one mention", got, want)
 	}
 }
