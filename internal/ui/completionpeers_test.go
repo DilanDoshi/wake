@@ -520,6 +520,15 @@ func TestAnOpenQuoteEndsWhereNoOfferedNameCouldGo(t *testing.T) {
 	}
 }
 
+// A typed opening quote begins a name even past a separator, so a session named
+// like a path still narrows: `@"team/` is no path, since no path holds a quote.
+func TestAQuotedNameNarrowsPastASeparator(t *testing.T) {
+	a := peerFleet(t, "").applyFrame(peersReply(core.Peer{Name: "team/release", Dir: "/tmp/a"}))
+	if got, want := a.withDraft(`@"team/`).completion.offers, []string{`@"team/release"`}; !slices.Equal(got, want) {
+		t.Errorf("`@\"team/` offered %q, want %q", got, want)
+	}
+}
+
 // The space inside an open quote is the same opening, so it asks nothing more.
 func TestAnOpenQuoteIsOneOpening(t *testing.T) {
 	if _, asked := typedAsking(t, peerFleet(t, ""), runes(`@"foo b`)...); asked != 1 {

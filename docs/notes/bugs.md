@@ -693,7 +693,8 @@ when its row draws exactly what ⇥ inserts: no `"` (it has no escape), no white
 spaces (`optionRow` collapses the rest, so `foo bar` and `foo  bar` would be one row), and every rune
 graphic — which drops the raw escape bytes and bidi overrides `main` offered and drew. An open quote is one token through its spaces (`@"release n` narrows), ending at the closing
 quote or anything no offered name holds, so a stray `@"` never turns the prose after it into a
-mention. Subagent types keep the whitespace drop: `@agent-<type>` is the one form claude resolves
+mention; and an opening quote begins a name even past a `/` (`canBeginName`), since no path holds a
+quote. Subagent types keep the whitespace drop: `@agent-<type>` is the one form claude resolves
 headless (findings §3).
 
 **Residual, not changed:** an outside session sharing a fleet agent's name (another fleet's

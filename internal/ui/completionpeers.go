@@ -103,8 +103,9 @@ func (a App) peersArrived(f rpc.Frame) App {
 // canBeginName reports whether typed could begin a session's name, which is
 // what opens a conversation's names and their ask: a Wake name starts with a
 // letter (daemon/names.go), and `@src/` is a path, typed or stepped into with ⇥.
+// An opening quote begins only a name, which may hold a separator (peerMention).
 func canBeginName(typed string) bool {
-	return typed != "" && strings.IndexAny(typed, pathLeads) != 0 &&
+	return strings.HasPrefix(typed, mentionQuote) || typed != "" && strings.IndexAny(typed, pathLeads) != 0 &&
 		!strings.ContainsRune(typed, os.PathSeparator)
 }
 
