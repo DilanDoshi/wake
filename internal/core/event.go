@@ -586,8 +586,12 @@ type Event struct {
 	// on a KindMessageState as command_uuid. It is a different id space from
 	// RequestID - a message Wake sent, not a control request Wake sent - so
 	// it gets its own field rather than sharing one and making a consumer
-	// guess which it is holding. Every frame's own top-level uuid is dropped
-	// here as it is everywhere else in this decoder.
+	// guess which it is holding. A live frame's own top-level uuid is dropped.
+	//
+	// On a restored transcript event it is that record's own uuid, which on a
+	// turn Wake sent is the one Wake stamped, and which a fork copies unchanged
+	// (testdata/transcript/room-stamped-uuid.jsonl, fork-child.jsonl). An
+	// identity, matched and never drawn.
 	MessageID string `json:"message_id,omitempty"`
 
 	// PermissionMode is the mode a session is running in, and it has two

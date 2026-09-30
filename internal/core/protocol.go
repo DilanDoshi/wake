@@ -177,16 +177,17 @@ func turnTokensEvent(f wireFrame) []Event {
 // it there is one fact in one place rather than two spellings in the airlock.
 //
 // A sidechain line is a subagent's; dropped here, kept by DecodeSidechainLine.
-// It reads one on-disk-only key: `timestamp` - the exception above, since the
-// caller cannot supply what only the line knows, and the room needs it to
-// interleave several transcripts. A record with no readable time keeps its
-// turn and loses only the stamp; see Event.At.
+// It reads two keys only the line knows - the exception above: `timestamp`, so
+// the room can interleave several transcripts (a record with no readable time
+// keeps its turn and loses only the stamp; see Event.At), and the record's
+// `uuid`, so it can tell a fork's copied record from a new one (MessageID).
 func DecodeTranscriptLine(line []byte) ([]Event, error) { return decodeTranscript(line, false) }
 
 // decodeTranscript is the shared body; keepSidechain true is DecodeSidechainLine's (workflow.go).
 func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 	var f struct {
 		Type      string `json:"type"`
+		UUID      string `json:"uuid"`
 		Sidechain bool   `json:"isSidechain"`
 		Timestamp string `json:"timestamp"`
 		// On-disk markers of lines that are not conversation, dropped: a failed
@@ -208,12 +209,14 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 	if err != nil {
 		return events, err
 	}
+	// The record's own uuid rides every event it decodes to: a fork copies it,
+	// and on a turn Wake sent it is the one Wake stamped. See Event.MessageID.
 	at, tErr := time.Parse(time.RFC3339, f.Timestamp)
-	if tErr != nil {
-		return events, nil
-	}
 	for i := range events {
-		events[i].At = at
+		events[i].MessageID = f.UUID
+		if tErr == nil {
+			events[i].At = at
+		}
 	}
 	return events, nil
 }
@@ -353,16 +356,6 @@ func taskStatus(phase TaskPhase, f wireFrame) TaskStatus {
 		return s
 	}
 	return TaskStatusUnknown
-}
-
-// taskKind resolves a task_type, and refuses to guess. A bare map lookup
-// would give an unmapped type the zero value, which is "" and not a kind at
-// all - see TaskKindUnknown for what each wrong guess costs.
-func taskKind(s string) TaskKind {
-	if k, ok := taskKinds[s]; ok {
-		return k
-	}
-	return TaskKindUnknown
 }
 
 // taskTokens and taskElapsed read the *task* half of a usage object. See
