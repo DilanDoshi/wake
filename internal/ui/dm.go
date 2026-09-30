@@ -676,11 +676,7 @@ func (d DM) Before(earlier []core.Event) DM {
 	// the one re-render that changes the events - a resize and a toggle leave the
 	// tail alone, so runKey and runTally survive them untouched. Rebuilt from the
 	// tail once here, where the live path keeps them in step incrementally.
-	if run := d.trailingRun(); len(run) > 0 {
-		d.runKey, d.runTally = run[0].Tool.ID, tallyOf(run)
-	} else {
-		d.runKey, d.runTally = "", nil
-	}
+	d = d.withTrailingRun()
 	d.tr = d.rewrapped().toBottom()
 	// The restored ops may have grown the board, which is chrome the transcript's
 	// height is taken out of. Re-settle so the viewport is sized for it - the same

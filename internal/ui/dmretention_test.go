@@ -37,6 +37,18 @@ func pastTheCap(t testing.TB) DM {
 	return d
 }
 
+// renderedDuring counts the events f sends back through glamour by way of the
+// renderTranscript seam: a reclaim that cut exactly renders only what it
+// reclaims, and one that fell back lays out everything it kept.
+func renderedDuring(t testing.TB, f func()) int {
+	t.Helper()
+	was, n := renderTranscript, 0
+	renderTranscript = func(d DM) []block { n += d.events.count(); return was(d) }
+	defer func() { renderTranscript = was }()
+	f()
+	return n
+}
+
 // linesOf is a transcript's retained lines as text.
 func linesOf(tr transcript) []string {
 	return tr.lines.slice(tr.lines.first(), tr.lines.len())
@@ -183,6 +195,69 @@ func TestASelectionOnTheLineTheMarkerTakesIsCleared(t *testing.T) {
 	a.sel = selection{pane: "s1", anchor: point{line: marker}, head: point{line: marker, col: 4}}
 	if a = a.withDM("s1", next); !a.sel.empty() {
 		t.Errorf("a selection on line %d, now the reclaimed marker's, survived the reclaim", marker)
+	}
+}
+
+// A checklist op is stored and draws nothing, so an absence before one and
+// another after it put two rules side by side - which no count of rules can
+// place. The cut walks the scrollback against a render of what it reclaims.
+func TestAReclaimWalksRulesBesideAnEventThatDrawsNothing(t *testing.T) {
+	for _, tc := range []struct {
+		name string
+		op   func(n int) bool // whether an absence-op-absence group goes in at event n
+		away func(n int) bool // whether a plain absence goes in before event n
+	}{
+		{"rules side by side", func(n int) bool { return n >= chunkSize-16 && n < chunkSize-4 && n%4 == 0 }, func(int) bool { return false }},
+		{"the newest rule on an op at the edge",
+			func(n int) bool { return n == chunkSize-1 },
+			func(n int) bool { return n >= chunkSize-40 && n < chunkSize-30 && n%2 == 0 }},
+		// The rule on the cut itself, its anchor pushed out of the cap by three
+		// absences after it: a re-wrap of the kept events does not draw it.
+		{"an unanchored rule on the cut", func(int) bool { return false },
+			func(n int) bool { return n >= chunkSize && n <= chunkSize+6 && n%2 == 0 }},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := NewDM("s1", "alex").SetSize(80, 30)
+			for d.events.len() < dmRetentionEvents+chunkSize-1 {
+				n := d.events.len()
+				if tc.away(n) {
+					d = d.Leave()
+				}
+				if tc.op(n) {
+					d = d.Leave().Append(taskCreateID(fmt.Sprintf("c%d", n), "a step", "doing it")).Leave()
+					continue
+				}
+				d = d.Append(prose(fmt.Sprintf("Turn %d.", n)))
+			}
+			if n := renderedDuring(t, func() { d = d.Append(prose("the turn that reclaims")) }); n >= dmRetentionEvents {
+				t.Errorf("the reclaim rendered %d events: it fell back to laying out all it kept rather than cutting exactly", n)
+			}
+			if d.events.first() != chunkSize {
+				t.Fatalf("the reclaim cut at event %d, want %d: the rules are not at its edge", d.events.first(), chunkSize)
+			}
+			if got, want := linesOf(d.tr), linesOf(d.rewrapped()); !slices.Equal(got, want) {
+				t.Fatalf("the kept scrollback (%d lines) is not a re-wrap of it (%d lines)", len(got), len(want))
+			}
+		})
+	}
+}
+
+// A stream of nothing but tool calls has no prose to cut before, and is
+// bounded all the same: the cut falls before a call, and what is kept is laid
+// out again once, so it is a re-wrap by construction - and the run it cut into
+// goes on folding into one line.
+func TestAToolOnlyStreamIsBoundedToo(t *testing.T) {
+	d := NewDM("s1", "alex").SetSize(80, 30).Append(prose("Starting the sweep."))
+	for i := 0; d.events.len() < dmRetentionEvents+3*chunkSize; i++ {
+		id := fmt.Sprintf("b%d", i)
+		d = d.Append(bashCall(id)).Append(result(id, "ok", false))
+	}
+	if n := d.events.count(); n >= dmRetentionEvents+chunkSize {
+		t.Fatalf("a tool-only stream grew to %d events", n)
+	}
+	d = d.Append(bashCall("last")).Append(result("last", "ok", false))
+	if got, want := linesOf(d.tr), linesOf(d.rewrapped()); !slices.Equal(got, want) {
+		t.Errorf("after the cut into the run, the scrollback (%d lines) is not a re-wrap of it (%d lines)", len(got), len(want))
 	}
 }
 
