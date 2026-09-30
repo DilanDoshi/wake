@@ -60,14 +60,24 @@ var stateLabel = map[string]string{
 // thing worth stopping for is leftmost. States with nobody in them are left out
 // rather than drawn as zeros: a row of "0 need you · 0 silent · 0 ended" is
 // four words of chrome around the one number that matters.
-func awarenessStrip(agents []Agent, workspace string, width int) string {
+func awarenessStrip(agents []Agent, subs subsOf, workspace string, width int) string {
 	counts := map[string]int{}
+	done := 0
 	for _, a := range agents {
+		// A finished agent is counted as done and not as idle too, so the figures
+		// still sum to the fleet. An annotation, not a state: see turnDone.
+		if turnDone(a, len(subsFor(subs, a.ID)) > 0) {
+			done++
+			continue
+		}
 		counts[a.State]++
 	}
-	segs := make([]string, 0, len(counts)+1)
+	segs := make([]string, 0, len(counts)+2)
 	for _, state := range statesByAttention(counts) {
 		segs = append(segs, glyphOf(state)+" "+strconv.Itoa(counts[state])+" "+labelOf(state))
+	}
+	if done > 0 {
+		segs = append(segs, turnDoneGlyph+" "+strconv.Itoa(done)+" done")
 	}
 	// The looping count is cross-cutting rather than a state - a loop rides over
 	// working or idle - so it trails the state segments as one figure. A

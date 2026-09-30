@@ -233,7 +233,17 @@ at glamour's margin, unchanged — pinned by `TestOrderedListContinuationIsLeftA
 per-item hang-indent reflow that is width-safe for enumerators, or a glamour release that
 hang-indents lists itself.
 
-## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance
+## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance — DONE (`fix/room-gaps`, 2026-09-29)
+
+**DONE as a client-side annotation, never a state** (the lean below). `turnDone` (`dmbeat.go`) is the
+one predicate — idle, a *witnessed* turn's `doneAt`, no running subagent, no live loop — and the DM's
+done line (`showsDone`, plus its preview gate), the roster/board glyph `✔` (`rowGlyph`) and the strip's
+`✔ N done` (taken out of the idle count) all read it; `Fleet.done(id)` wraps it for the board.
+`stateGlyph`, `stateLabel` and `attentionRank` do not know it, so no totality guard moved. Not `✻`:
+that is a heartbeat frame. **Two limits, left for the owner:** a client that attaches after a turn ended
+shows `○`, not `✔` (`doneAt` is witnessed-only, the done line's own rule); and an agent whose own
+`TaskCreate` checklist still has open items is still marked done — a checklist is the agent's
+bookkeeping and is routinely left open after a turn, so gating on it would break roster == done line.
 
 **Asked for in this version.** A "done" indicator in the right sidebar (the roster) so the operator
 scanning a fleet can see which agents have **finished the requested task**, distinct from ones still

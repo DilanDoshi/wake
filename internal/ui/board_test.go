@@ -377,18 +377,18 @@ func TestTheBoardListRowWearsTheIdentityHue(t *testing.T) {
 	coloured := Agent{ID: "s1", Name: "iris", Color: "violet", State: rpc.StateIdle}
 	plain := Agent{ID: "s1", Name: "iris", State: rpc.StateIdle}
 
-	got := boardRow(coloured, nameW, stateW, width, false)
+	got := boardRow(coloured, false, nameW, stateW, width, false)
 	if !strings.Contains(got, violetEsc) {
 		t.Errorf("an idle /color'd board row does not carry its identity hue\n want escape: %q\n row:        %q", violetEsc, got)
 	}
-	if bare := boardRow(plain, nameW, stateW, width, false); bare == got {
+	if bare := boardRow(plain, false, nameW, stateW, width, false); bare == got {
 		t.Errorf("a /color'd row and an uncoloured row render identically; the hue is not consulted\n row: %q", got)
 	}
 
 	// Precedence unchanged: a blocked coloured row still warns rather than
 	// drawing its hue - identityRowStyle checks blocked first, the roster's rule.
 	blocked := Agent{ID: "s1", Name: "iris", Color: "violet", State: rpc.StateBlocked}
-	row := boardRow(blocked, nameW, stateW, width, false)
+	row := boardRow(blocked, false, nameW, stateW, width, false)
 	if strings.Contains(row, violetEsc) {
 		t.Errorf("a blocked coloured board row drew its identity hue; warn must win\n row: %q", row)
 	}
@@ -513,7 +513,7 @@ func TestAgentAuthoredControlBytesCannotForgeABoardRow(t *testing.T) {
 	if strings.ContainsAny(agent.LastLine, "\r\x1b") {
 		t.Errorf("LastLine stored control bytes verbatim: %q", agent.LastLine)
 	}
-	row := boardRow(Agent{Name: "alex", State: rpc.StateWorking, Doing: "innocent\n■ need you"}, 6, 8, 80, false)
+	row := boardRow(Agent{Name: "alex", State: rpc.StateWorking, Doing: "innocent\n■ need you"}, false, 6, 8, 80, false)
 	if strings.Contains(row, "\n") {
 		t.Errorf("a newline in an agent's Doing drew a second row:\n%q", row)
 	}

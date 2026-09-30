@@ -31,7 +31,7 @@ func TestEveryStateTheRosterDrawsIsCountedInTheStrip(t *testing.T) {
 		if _, ok := stateLabel[state]; !ok {
 			t.Errorf("the roster draws %q and the strip has no word for it: a count with no word reads as a fleet with a hole in it", state)
 		}
-		out := stripANSI(awarenessStrip(inState(state, 2), "", 200))
+		out := stripANSI(awarenessStrip(inState(state, 2), nil, "", 200))
 		if !strings.Contains(out, "2 "+stateLabel[state]) {
 			t.Errorf("two agents in %q are not counted: %q", state, out)
 		}
@@ -54,12 +54,12 @@ func TestTheStripCountsTheLoopingAgents(t *testing.T) {
 	blockedLooper := Agent{ID: "b", Name: "b", State: rpc.StateBlocked, loop: LoopState{Active: true, SelfPaced: true}}
 	agents = append(agents, blockedLooper)
 
-	out := stripANSI(awarenessStrip(agents, "", 200))
+	out := stripANSI(awarenessStrip(agents, nil, "", 200))
 	if !strings.Contains(out, "2 looping") {
 		t.Errorf("the strip does not count the two unblocked loopers: %q", out)
 	}
 
-	none := stripANSI(awarenessStrip(inState(rpc.StateIdle, 3), "", 200))
+	none := stripANSI(awarenessStrip(inState(rpc.StateIdle, 3), nil, "", 200))
 	if strings.Contains(none, "looping") {
 		t.Errorf("a fleet with no loops named looping: %q", none)
 	}
@@ -73,7 +73,7 @@ func TestTheStripPutsWhatNeedsYouFirst(t *testing.T) {
 	agents := append(inState(rpc.StateIdle, 3), inState(rpc.StateWorking, 17)...)
 	agents = append(agents, inState(rpc.StateBlocked, 2)...)
 
-	out := stripANSI(awarenessStrip(agents, "pufferfish", 200))
+	out := stripANSI(awarenessStrip(agents, nil, "pufferfish", 200))
 	need := strings.Index(out, "need you")
 	working := strings.Index(out, "working")
 	idle := strings.Index(out, "idle")
@@ -95,7 +95,7 @@ func TestTheStripPutsWhatNeedsYouFirst(t *testing.T) {
 // why this is defence in depth rather than a live path.
 func TestAnUnknownStateCannotAddARowToTheStrip(t *testing.T) {
 	agents := []Agent{{ID: "s1", Name: "a0", State: "working\nsurprise"}}
-	if got := lipgloss.Height(awarenessStrip(agents, "", 100)); got != 1 {
+	if got := lipgloss.Height(awarenessStrip(agents, nil, "", 100)); got != 1 {
 		t.Errorf("an unknown state carrying a newline made the strip %d rows", got)
 	}
 }
@@ -111,7 +111,7 @@ func TestTheCountsSurviveAWidthTheNameDoesNot(t *testing.T) {
 	agents = append(agents, inState(rpc.StateIdle, 3)...)
 
 	for _, width := range []int{40, 50, 60, 80} {
-		out := stripANSI(awarenessStrip(agents, "some-very-long-repository-name-indeed", width))
+		out := stripANSI(awarenessStrip(agents, nil, "some-very-long-repository-name-indeed", width))
 		for _, want := range []string{"2 need you", "17 working", "3 idle"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("width %d: %q is missing from %q - the name was budgeted before the counts", width, want, out)
@@ -127,9 +127,9 @@ func TestTheCountsSurviveAWidthTheNameDoesNot(t *testing.T) {
 // next without the tie-break.
 func TestTheOrderIsStableAcrossFrames(t *testing.T) {
 	agents := append(inState("mystery-a", 1), inState("mystery-b", 1)...)
-	first := stripANSI(awarenessStrip(agents, "", 200))
+	first := stripANSI(awarenessStrip(agents, nil, "", 200))
 	for range 20 {
-		if got := stripANSI(awarenessStrip(agents, "", 200)); got != first {
+		if got := stripANSI(awarenessStrip(agents, nil, "", 200)); got != first {
 			t.Fatalf("the strip drew %q then %q: two states that rank equal have to have an order", first, got)
 		}
 	}
@@ -140,7 +140,7 @@ func TestTheOrderIsStableAcrossFrames(t *testing.T) {
 // "0 need you · 0 silent · 0 ended" is four words of chrome around the one
 // number that matters.
 func TestTheStripLeavesOutStatesNobodyIsIn(t *testing.T) {
-	out := stripANSI(awarenessStrip(inState(rpc.StateWorking, 4), "", 200))
+	out := stripANSI(awarenessStrip(inState(rpc.StateWorking, 4), nil, "", 200))
 	if !strings.Contains(out, "4 working") {
 		t.Fatalf("the strip does not count the fleet: %q", out)
 	}
@@ -156,7 +156,7 @@ func TestTheStripLeavesOutStatesNobodyIsIn(t *testing.T) {
 // It is a real state: bare `wake` on a machine with nothing running draws one
 // before its first agent answers.
 func TestAnEmptyFleetSaysSo(t *testing.T) {
-	if out := stripANSI(awarenessStrip(nil, "", 200)); !strings.Contains(out, noFleet) {
+	if out := stripANSI(awarenessStrip(nil, nil, "", 200)); !strings.Contains(out, noFleet) {
 		t.Errorf("an empty fleet drew %q, want %q", out, noFleet)
 	}
 }
@@ -172,7 +172,7 @@ func TestTheStripIsOneRowAndFitsTheFrame(t *testing.T) {
 	agents = append(agents, inState(rpc.StateParked, 8)...)
 
 	for _, width := range []int{20, 40, 80, 120, 200} {
-		out := awarenessStrip(agents, "a-very-long-workspace-name-indeed", width)
+		out := awarenessStrip(agents, nil, "a-very-long-workspace-name-indeed", width)
 		if got := strings.Count(out, "\n"); got != 0 {
 			t.Errorf("width %d: the strip is %d rows", width, got+1)
 		}
@@ -273,7 +273,7 @@ func TestAWorkspaceNameCannotAddARowToTheFrame(t *testing.T) {
 	// On the row rather than on the accessor: the one-line promise belongs to
 	// the function that makes it, which is why the containment moved there and
 	// now covers labelOf's unknown-state fallback too.
-	strip := awarenessStrip(a.fleet.OnRoster(), a.stripWorkspace(), 100)
+	strip := awarenessStrip(a.fleet.OnRoster(), a.fleet.RunningTasks, a.stripWorkspace(), 100)
 	if got := lipgloss.Height(strip); got != 1 {
 		t.Errorf("the strip is %d rows with a newline in the workspace name: %q", got, stripANSI(strip))
 	}

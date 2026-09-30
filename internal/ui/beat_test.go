@@ -243,7 +243,7 @@ func TestAWorkingRowAnimatesInStepWithItsConversation(t *testing.T) {
 	var seen []string
 	for _, at := range []time.Duration{0, glyphStep, 2 * glyphStep, 3 * glyphStep} {
 		clock = func() time.Time { return start.Add(at) }
-		row := stripANSI(headLine(a, 20))
+		row := stripANSI(headLine(a, false, 20))
 		glyph, _, _ := strings.Cut(row, " ")
 		seen = append(seen, glyph)
 
@@ -261,7 +261,7 @@ func TestAWorkingRowAnimatesInStepWithItsConversation(t *testing.T) {
 func TestOnlyAWorkingRowAnimates(t *testing.T) {
 	for _, state := range []string{rpc.StateIdle, rpc.StateBlocked, rpc.StateParked, rpc.StateEnded} {
 		a := Agent{ID: "a", Name: "sydney", State: state, startedAt: clock()}
-		row := stripANSI(headLine(a, 20))
+		row := stripANSI(headLine(a, false, 20))
 		if glyph, _, _ := strings.Cut(row, " "); glyph != stateGlyph[state] {
 			t.Errorf("state %q drew %q, want its own %q", state, glyph, stateGlyph[state])
 		}
@@ -274,7 +274,7 @@ func TestOnlyAWorkingRowAnimates(t *testing.T) {
 // frame forever.
 func TestAWorkingRowWithNoStartKeepsTheStaticGlyph(t *testing.T) {
 	a := Agent{ID: "a", Name: "sydney", State: rpc.StateWorking}
-	row := stripANSI(headLine(a, 20))
+	row := stripANSI(headLine(a, false, 20))
 	if glyph, _, _ := strings.Cut(row, " "); glyph != stateGlyph[rpc.StateWorking] {
 		t.Errorf("a turn with no start drew %q, want the static %q", glyph, stateGlyph[rpc.StateWorking])
 	}

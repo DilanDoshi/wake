@@ -51,7 +51,7 @@ func (a App) assembleFrame() string {
 	// reserved row is where failures go under a TUI.
 	if a.board.Up {
 		frame := a.boardView(a.fleet.sectioned(agents), a.layout.Width) + "\n" +
-			awarenessStrip(agents, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
+			awarenessStrip(agents, a.fleet.RunningTasks, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
 		// clipMidDrag for the grid path's reason: mid-resize the rows were
 		// built for the old width, and a row wider than the window wraps -
 		// which is the frame taller than the terminal on every draw.
@@ -90,7 +90,7 @@ func (a App) assembleFrame() string {
 	}
 
 	frame := lipgloss.JoinHorizontal(lipgloss.Top, cols...) + "\n" +
-		awarenessStrip(agents, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
+		awarenessStrip(agents, a.fleet.RunningTasks, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
 	// Cut to the terminal, because below their own floors the panes stop
 	// shrinking rather than drawing a broken box - so at a height under that
 	// floor plus these two rows, something has to give. It is the bottom of the

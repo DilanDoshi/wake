@@ -229,7 +229,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`roomWorkingLine`, `roomwords.go`).
 - **The DM's done line** is captured at the working→idle edge (`Fleet.WithStatus`), only for turns
   this client watched start; forgotten on park/end/gap, on new agent content (`notDone`), and hidden
-  while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate.
+  while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate. The roster's `✔`
+  and the strip's `N done` read the same `turnDone` — an annotation over idle, never an `rpc` state.
 - **Every notice times out**: `max(10s, drawn cells × 100ms)`, one tick per `notice.Seq`, armed in
   `App.Update`. An API failure stays pinned under them until a healthy turn or a resume
   (`noticelinger.go`, `apierror.go`'s `pinnedNotice`).

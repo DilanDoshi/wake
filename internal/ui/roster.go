@@ -75,6 +75,12 @@ var stateGlyph = map[string]string{
 // one, and fan-out starts before the spawn confirmation is enqueued.
 const unknownGlyph = "?"
 
+// turnDoneGlyph stands in for idle's ○ on an agent that finished a turn this
+// client watched (turnDone) - an annotation, not a state, so no state map knows
+// it. Not the done line's ✻: that is a heartbeat frame, so a working row would
+// draw it too.
+const turnDoneGlyph = "✔"
+
 // Roster is the sidebar and where the cursor is in it.
 type Roster struct {
 	// Selected is the agent the cursor is on, by id. Empty means none - which
@@ -310,7 +316,7 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (Agent, st
 // in this package still green - a bound whose failure nothing reaches, sitting
 // beside the one thing this file must not get wrong.
 func (r Roster) rows(a Agent, subs []Task, width int) []string {
-	out := []string{r.headStyle(a).Render(headLine(a, width))}
+	out := []string{r.headStyle(a).Render(headLine(a, turnDone(a, len(subs) > 0), width))}
 	if a.Tool != "" {
 		// Indented to sit under the name rather than under the glyph: the glyph
 		// is the row's own column and what follows it is about the agent.
@@ -428,8 +434,8 @@ func (r Roster) headStyle(a Agent) lipgloss.Style {
 // Dropped rather than abbreviated further for the same reason `⌃Q` reads
 // `quit & park all`: a partial `↓ 12` is a *different number*, and a wrong
 // figure on screen is worse than no figure.
-func headLine(a Agent, width int) string {
-	head := rowGlyph(a) + " " + a.Name
+func headLine(a Agent, done bool, width int) string {
+	head := rowGlyph(a, done) + " " + a.Name
 	if a.Unread > 0 {
 		badge := " " + unreadBadge(a.Unread)
 		head = clip(head, width-lipgloss.Width(badge)) + badge
@@ -510,10 +516,13 @@ const toolIndent = 2
 //
 // A working agent with no start time keeps the static glyph: that is a session
 // already running when this client attached, and animating it from the zero
-// time would freeze every such row on one frame.
-func rowGlyph(a Agent) string {
+// time would freeze every such row on one frame. done is Fleet.done's answer.
+func rowGlyph(a Agent, done bool) string {
 	if a.State == rpc.StateWorking && !a.startedAt.IsZero() {
 		return heartbeatGlyph(turnAge(a.State, a.startedAt))
+	}
+	if done {
+		return turnDoneGlyph
 	}
 	return glyphOf(a.State)
 }

@@ -533,7 +533,7 @@ func (a App) boardView(agents []Agent, width int) string {
 		if hdr != "" {
 			blocks = append(blocks, teamHeaderBand(hdr, width)...)
 		}
-		blocks = append(blocks, boardRow(ag, nameW, stateW, width, i == cursor && a.board.SelectedTask == ""))
+		blocks = append(blocks, boardRow(ag, a.fleet.done(ag.ID), nameW, stateW, width, i == cursor && a.board.SelectedTask == ""))
 		for _, t := range a.fleet.RunningTasks(ag.ID) {
 			if len(blocks) >= visible {
 				break
@@ -567,12 +567,13 @@ func boardColumns(agents []Agent) (name, state int) {
 
 // boardRow is one agent: cursor, liveness, name, state, and what it is doing
 // in its own words - the tool it wants or runs, then its last line of prose.
-func boardRow(ag Agent, nameW, stateW, width int, cursored bool) string {
+// done marks the glyph only; the word stays the state, since done is not one.
+func boardRow(ag Agent, done bool, nameW, stateW, width int, cursored bool) string {
 	lead := cardUnchosen
 	if cursored {
 		lead = cardCursor
 	}
-	head := fmt.Sprintf("%s%s %-*s  %-*s  ", lead, rowGlyph(ag), nameW, ag.Name, stateW, labelOf(ag.State))
+	head := fmt.Sprintf("%s%s %-*s  %-*s  ", lead, rowGlyph(ag, done), nameW, ag.Name, stateW, labelOf(ag.State))
 	// The roster's own precedence (identityRowStyle): blocked warns, the cursor
 	// bolds an identity hue or accents an uncoloured row, else the /color hue.
 	// The row is one rendered line, so the whole of it takes the style.
