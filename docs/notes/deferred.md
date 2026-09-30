@@ -10,15 +10,16 @@ That file is for recovery; this one is for deciding what to do next.
 **Rule for this file:** an item leaves only when it is fixed or when someone decides it never
 will be, and the decision is written down. Nothing gets quietly dropped.
 
-Last updated: **Phase 2 Task 15 — the manager**, 2026-08-11. `wake manager` starts a real `claude`
-session with Wake's five tools, `--strict-mcp-config` beside them and a scoping system prompt; the
-room's default addressee is it, and `@all` is not. Before that: **park/wake's eight tasks merged and
-the branch reviewed as a whole**, 2026-08-11.
-Park, wake, the park book, `⌃C`/`⌃Q`/`⌃O`, `/resume` and bare `wake` all run, and the lifecycle
-composes end to end from a keyboard across a daemon restart. **The ranked outstanding-bug list is
-the first section below** — read it before trusting any of this in front of real work. Before that:
-all eleven tasks of Phase 1 merged — Task 6 (the daemon) after three fix rounds, Task 10 (the
-wire-up) after four, Task 11 (CI) in its final tidy.
+Last updated: **2026-09-29 — a whole-file audit against `main` at v0.1.7.** Every entry was
+checked against the tree, and 113 edits marked entries done, superseded or corrected in place (stale line counts,
+renamed symbols, the five-tool manager that now has nine, the restore path "a daemon restores
+nothing" removed). Nothing was deleted. Entries it could not verify read-only stay open and say so.
+The ranked outstanding-bug list of 2026-08-11 is no longer the first section; its table now marks
+which rows closed.
+
+**PR numbers dated before 2026-08-27 name the pre-release history**, which was squashed into
+`017dd6c` (Wake 0.1.0). They do not resolve in this repository — `#99` and `#100` here are other
+PRs — so follow the branch name or symbol beside them instead.
 
 **Items in this file have now been wrong more often than they have been forgotten**, which is
 worth stating because it changes how to read it:
@@ -32,7 +33,8 @@ worth stating because it changes how to read it:
 - **I1 was carried three rounds without a ruling**, which is the failure this file exists to
   prevent.
 
-So: before acting on an entry, check it still describes the tree. Four of the last dozen did not.
+So: before acting on an entry, check it still describes the tree. Four of the last dozen did not —
+and the 2026-09-29 audit found over forty entries still reading as open that were already done.
 
 ---
 
@@ -94,7 +96,9 @@ tree when this entry was written; check again before acting on one.
   does not go through `withAgent`.
 - `workflowdraw.go`'s `modelFamilies` restates what `core.ModelAliases` knows; `workflowdraw.go` is
   ~620 lines and its agent level could be its own file.
-- The airlock is full: `vocabulary.go` 800, `protocol.go` 798, `wire.go` 797, `encode.go` 792. The next
+- The airlock is full: `vocabulary.go` 800, `protocol.go` 798, `wire.go` 797, `encode.go` 792 (now
+  742/798/798/798, 2026-09-29; *"never by a fifth airlock file"* below is SUPERSEDED — the owner's
+  2026-09-27 ruling added `localreply.go` as the fifth, `bf77dce`, PR #131). The next
   decoded field pays for its line by moving Claude-free code out (`rawjson.go`'s precedent), never by a
   fifth airlock file.
 - Tests: `workflowstop_test.go`'s `emitTaskEnded` puts `status` at the top level where recordings nest
@@ -352,7 +356,10 @@ question` line the room pins should not simply vanish — it should **turn purpl
 answer beneath it**, drawn with the small `⎿` ("L") continuation line, the answer indented and
 slightly darker grey, exactly the way a tool-use result renders in a DM pane.
 
-**What exists today, and why the current transition is "yellow → gone."** While an agent is blocked
+**What exists today, and why the current transition is "yellow → gone."** *(Stale, 2026-09-29: the
+room pins no card any more — `App.cardOf` refuses `id == ""`, so an ask draws only in its own
+conversation; the room instead gets a yellow `⚠ ‹agent› has a question` record line, `chat_blocks.go`'s
+`KindPermissionRequest` case. The paragraph below describes the older pin.)* While an agent is blocked
 the room pins a compact card above the composer: `internal/ui/cards_blocks.go`'s `View` draws
 `cardLead + speaker(by) + markerSep + card.headline()` — headline `cardHasQuestion` = "has a
 question" — through `titledBox(..., warnStyle, HintStyle)`, so the yellow is `theme.go`'s `Warn`
@@ -643,7 +650,9 @@ broken surface.
 **Asked for in this version.** Be able to drop into a subagent's own conversation the way one drops
 into any other agent's — modelled on watching an `Explore`-type dispatch agent work.
 
-**Most of this already exists, narrower than the ask.** Phase 3 landed dispatch viewing:
+**Most of this already exists, narrower than the ask.** *(Paths stale, 2026-09-29: `taskrows.go`,
+`taskkeys.go` and `⌃N`/`⌃P` were removed with the dispatch list, `d7835a4`, PR #3; the first cut
+below says what reaches `DM.Viewing` now.)* Phase 3 landed dispatch viewing:
 `internal/ui/taskrows.go` lists what a conversation has dispatched, `taskkeys.go` binds `⌃N`/`⌃P` to
 walk the list, and `DM.Viewing` (`internal/ui/dm.go`) swaps the pane's transcript onto one dispatch's
 forwarded frames — `↵` on the conversation's own row is the way back. So "open a subagent's
@@ -651,7 +660,8 @@ transcript" is built and reachable **only from inside an already-open DM whose p
 
 **What is not built, and why the harder version may not be buildable at all.** Two gaps, of different
 kinds:
-1. **Reachability.** There is no way to jump to a subagent's transcript from the room, and no grid
+1. **Reachability.** *(Room reach FIXED — see the first cut below, 2026-09-29; a pane of its own is
+   still unbuilt.)* There is no way to jump to a subagent's transcript from the room, and no grid
    pane of its own — it borrows the parent DM's pane rather than opening the way `⌃Y`/`⌃B` would for
    a real agent. Nothing here is architecturally blocked; it is unbuilt surface.
 2. **Interaction.** `renderForwarded` draws a subagent's own frames and nothing else, and there is no
@@ -662,7 +672,11 @@ kinds:
    into and talk to a subagent" may be a Claude Code limitation Wake cannot design around; only the
    read-only view can be improved.
 
-**Cheap first cut, if the read-only half is what's wanted:** make dispatch viewing reachable from the
+~~**Cheap first cut, if the read-only half is what's wanted:**~~ **FIXED** (found 2026-09-29; shipped
+before the 0.1.0 squash, `017dd6c`): the right sidebar lists each agent's running subagents, and
+`⌃D`/`⌃Y`/`⌃B` or a click on one opens the parent's conversation already viewing it (`rostersubs.go`'s
+`viewingPicked`; PR #44 fixed its blank transcripts). `Cards.Undrawn` no longer exists. Gap 2 stays
+open. Original: make dispatch viewing reachable from the
 room (drawing on `Cards.Undrawn`'s pattern of finding an ask with nowhere else to be drawn), rather
 than requiring the parent DM to already be open.
 
@@ -773,7 +787,8 @@ surfaced, and it is two `/new` flags rather than a profile). Teams stand alone. 
 `feat/profiles` branch (259 commits behind when last measured) is reference material for nobody and
 should be deleted rather than rebased.
 
-**Status, 2026-09-20: BUILDING on `feat/team-tags`.** The owner greenlit it with four scope
+**Status, 2026-09-20: ~~BUILDING on `feat/team-tags`~~ MERGED 2026-09-21 (PR #106).** The owner
+greenlit it with four scope
 decisions (one team per agent; manager + un-tagged pinned in a header-less top block; `@team`
 fan-out routing IS in; both board modes sectioned) and pointed design questions at the `@fable wake`
 session. It did NOT become `groups.go`'s directory grouping — teams are a per-agent tag on
@@ -801,7 +816,8 @@ awareness strip's `N need you` and `⌃X` are what carry urgency across sections
 count un-truncatable.
 
 **Remaining, deferred within the feature:**
-- The tiled board's **per-team shelves** — the wall groups tiles by team but draws no per-team header
+- **DONE (PR #107 `feat/board-tile-sections`, 2026-09-21).** The tiled board's **per-team shelves** —
+  the wall groups tiles by team but draws no per-team header
   (the grid rework: `tileGridFor`/`tileNav`/`tileWindowStart`/`boardHit` assume one flat index space).
 - Refusing a `/team` that collides with a **live agent name** (and a `/name` into a team name) — the
   reserved words `all`/`manager` are refused; the fleet-registry collision check lands with a lock
@@ -810,7 +826,8 @@ count un-truncatable.
   persisted, by the "restore nothing" rule).
 - A team-of-one send is byte-identical to a private DM turn on disk, so it does not restore into the
   room; a send to ≥2 members does (multiplicity).
-- `@` completion offering team names; a member count in section headers; refusing the manager a team;
+- ~~`@` completion offering team names~~ (DONE, PR #111, 2026-09-22); a member count in section
+  headers; refusing the manager a team;
   the team-echo `to` stamp showing in an unrelated narrowed `@john` thread; direct team tools on
   ordinary (non-manager) agents. Owner's calls.
 ---
@@ -841,6 +858,11 @@ report and the park book both read it and are correct by construction. Two thing
 - **Nothing re-derives the label on a move.** `daemon/label.go` reads `.git/HEAD` at spawn, so a
   session that enters a worktree keeps the branch name of the tree it left. The status bar re-reads
   through `gitref` and is right; the roster's label is stale until a rename.
+
+*Partly stale, 2026-09-29:* the moving field is now `a.cwd` (`rpc.SessionStatus.Cwd`); `a.dir` is
+where a session started and never moves (CLAUDE.md). `groups.go`'s `Workspaces` keys on `Cwd`, and
+its sidebar is hidden (`panes.go`'s `toggleGroups` is `nolint:unused`). `labelFor` in `spawn.go`
+still derives the label once, at spawn, so the second bullet holds.
 
 ---
 
@@ -901,7 +923,9 @@ Three things the owner asked for after running the build. Two are fixed; the res
 
 **Open, and both are features rather than defects:**
 
-1. **A woken agent comes back with no account of itself.** *"If you bring an agent back it should
+1. **~~A woken agent comes back with no account of itself.~~ DONE** by 2026-08-26 (`017dd6c`):
+   `internal/daemon/history.go` reads the transcript back and `internal/ui/history.go`'s `askHistory`
+   folds it into the DM. *"If you bring an agent back it should
    have its history, just like when you /resume a claude agent."* The model keeps its context —
    claude has the transcript — so this is the **pane**, not the conversation, and Wake already says
    so on the wake: *"What it said before now is not here - claude keeps the transcript, Wake does
@@ -921,7 +945,10 @@ Three things the owner asked for after running the build. Two are fixed; the res
    `heartbeatGlyph`, so the character beside a name and the one on its working line are one
    character at any moment. A static `◐` could not tell a session that is thinking from one that
    is wedged, which is the question a column of fifteen to thirty exists to answer.
-   **Still open:** the line carries the turn's age alone where Claude also shows `↓ 59.5k tokens`
+   **Still open** *(partly stale, 2026-09-29: the working line now shows `↓ N tokens` via
+   `heartbeat.go`'s `tokenText`, and Wake passes `--effort` (`argv.go`), confirmed onto the status bar
+   by the `/model` probe; only effort on the working line is missing)*: the line carries the turn's
+   age alone where Claude also shows `↓ 59.5k tokens`
    and the effort. Tokens now decode (`core.SessionFacts`) but are spent on the status bar's
    context percentage rather than here, and **effort is on no frame Wake receives at all** — Wake
    does not pass `--effort`, so there is nothing to read.
@@ -954,24 +981,28 @@ and they are one piece of work.
 
 | # | What | Severity | Blocks |
 |---|---|---|---|
-| 1 | Nothing shows a woken session answering **from the conversation it parked with** | Important | the central product claim |
-| 2 | Neither soak lane parks or wakes | Important | confidence at 15–30 sessions |
+| 1 | ~~Nothing shows a woken session answering **from the conversation it parked with**~~ **CLOSED by 2026-08-26** | Important | the central product claim |
+| 2 | ~~Neither soak lane parks or wakes~~ **CLOSED by 2026-08-26** | Important | confidence at 15–30 sessions |
 | 3 | ~~`⌃C`/`⌃Q` report success on the keypress, before any write is confirmed~~ **CLOSED 2026-08-12** | Important | honest reporting of a failed park |
-| 4 | A fresh spawn admitted after `takeAgents` starts a process `shutdown` never sees | Important | a clean `wake stop`/`⌃Q` under concurrent load |
+| 4 | ~~A fresh spawn admitted after `takeAgents` starts a process `shutdown` never sees~~ **CLOSED 2026-08-20** | Important | a clean `wake stop`/`⌃Q` under concurrent load |
 | 5 | `⌃Q` may never reach the program on a real terminal (`IXON`/XON) | **Unknown — gates the feature** | items 3 and everything else on that key |
-| 6 | `FleetOnDisk` is unbounded by its own timeout, and bare `wake` made it the front door | Important | the first thing an operator runs, on the machine already in trouble |
+| 6 | ~~`FleetOnDisk` is unbounded by its own timeout, and bare `wake` made it the front door~~ **CLOSED 2026-08-24 (`fix/fleetondisk-deadline`)** | Important | the first thing an operator runs, on the machine already in trouble |
 | 7 | Rung 7 is recorded; the guard it was found on is narrowed but still **underived** | Minor | it will expire again, the same way |
-| 8 | The legend truncates mid-entry at every ordinary width | Minor | cosmetic; the dangerous version is closed |
-| 9 | A woken conversation opens with no account of itself | Minor | the sentence exists one file away |
-| 10 | No test reads a park book written by an **older build** | Minor | schema evolution |
+| 8 | ~~The legend truncates mid-entry at every ordinary width~~ **SUPERSEDED, PR #31** | Minor | cosmetic; the dangerous version is closed |
+| 9 | ~~A woken conversation opens with no account of itself~~ **CLOSED by 2026-08-26** | Minor | the sentence exists one file away |
+| 10 | ~~No test reads a park book written by an **older build**~~ **CLOSED by 2026-08-26** | Minor | schema evolution |
 | 11 | `s.agents` grows without bound for parked entries | Minor | narrowed three times, closed never |
 | 12 | `gofmt` is checked by neither `make lint` nor CI | Minor | it is checked only by whoever remembers |
 | 13 | `golangci-lint` walks `.worktrees/`, which is gitignored | Minor | a future worktree's files linted as this branch's |
-| 14 | `/add-<agent-name>` cannot route as spelled | Minor | the next slash command `goals.md` names |
+| 14 | ~~`/add-<agent-name>` cannot route as spelled~~ **DECIDED 2026-08-12: refused as spelled** | Minor | the next slash command `goals.md` names |
 | 15 | Two spellings of one UUID are two sessions, and the park book made that durable | Minor | pre-existing; the restart is what is new |
 | 16 | `"parking 1 agents"` — the notice row does not pluralise | Trivial | one sentence, read once per quit |
 
-### 1. Nothing shows a woken session answering *from the conversation it parked with*
+### 1. Nothing shows a woken session answering *from the conversation it parked with* — DONE (by `017dd6c`, 2026-08-26)
+
+**CLOSED:** `internal/daemon/continuity_unix_test.go`'s
+`TestAWokenSessionAnswersFromTheConversationItParkedWith` (and its across-a-daemon twin) runs the
+remembering fake `claude` this entry prescribes: told a passphrase before the park, asked after the wake.
 
 **Important. This is the single highest-value test still missing, and item 2 is the same work.**
 
@@ -990,7 +1021,11 @@ replays them — then park mid-conversation, wake, and ask it something only the
 answer. Recorded since park/wake Task 3, which asked for it in `docs/live-testing.md` *"before
 anyone trusts a wake in front of a user"*; that line is still the only coverage.
 
-### 2. Neither soak lane parks or wakes
+### 2. Neither soak lane parks or wakes — DONE (by `017dd6c`, 2026-08-26)
+
+**CLOSED:** `internal/daemon/soak_test.go`'s `TestSoakDaemon` now has a bounded park phase
+(`parkSome`), wakes half (`wakeSome`), races wakes on the rest (`raceWake`) and shuts down with the
+woken half live, which is the live-fleet-at-shutdown phase asked for below.
 
 **Important, and it needs item 1's fake, which is why they should be done together.**
 
@@ -1022,7 +1057,9 @@ bubbletea names `\x11` as `ctrl+q`. **What is unverified is everything between t
 Wake that is not the driver**: tmux, ssh, a terminal that ignores raw mode. `go test` has no tty.
 
 If something eats it, the key moves to `⌃X`/`⌃Y` — which is an owner decision, and spends one of the
-**two** unshadowed keys left, one of which deferred I7 is already owed.
+**two** unshadowed keys left, one of which deferred I7 is already owed. *(Stale, 2026-09-29: both are now
+bound, `⌃X` to next blocked and `⌃Y` to the new column, so none is left; `docs/live-testing.md` says
+the same.)*
 
 ### 6. `FleetOnDisk` is unbounded by its own timeout, and bare `wake` made it the front door
 
@@ -1058,7 +1095,11 @@ capability, grep the test tree for assertions that it does not exist. **Run at t
 (*"the manager is not built"*), which that task falsified and rewrote. Everything else the grep
 matched was about an input rather than about the build.
 
-### 8. The legend truncates mid-entry at every ordinary width
+### 8. The legend truncates mid-entry at every ordinary width — SUPERSEDED (PR #31)
+
+**SUPERSEDED:** the legend is drawn only while an arm is live, and then only the armed cue
+(`feat/status-bar-legend`; CLAUDE.md; `TestUnarmedComposerDrawsNoLegendRow`), so there is no static
+hint line left to truncate.
 
 **Minor, deferred, and the controller's finding said leaving *both* halves was not acceptable.**
 
@@ -1072,13 +1113,21 @@ Worth pairing with the structural observation Task 7's review left standing and 
 with a DM open, the last six entries (`⌃W ⌃G ⌃R ⇞⇟ ⌃F ⌃Q`) are invisible on every terminal up to
 ~300 columns.
 
-### 9. A woken conversation opens with no account of itself
+### 9. A woken conversation opens with no account of itself — DONE (by `017dd6c`, 2026-08-26)
+
+**CLOSED:** opening a conversation asks the daemon for its transcript (`internal/ui/history.go`'s
+`askHistory`, answered by `internal/daemon/history.go`'s `History`), so the pane shows what was said,
+and the *"What it said before now is not here"* sentence no longer exists in the tree.
 
 **Minor.** `wake attach` says *"What it said before now is not here — claude keeps the transcript,
 Wake does not"*. `/resume` says *"bringing @alex back…"* and then the DM is empty. Same surprise,
 same sentence needed, and the sentence already exists one file away.
 
-### 10. No test reads a park book written by an *older build*
+### 10. No test reads a park book written by an *older build* — DONE (by `017dd6c`, 2026-08-26)
+
+**CLOSED:** `internal/daemon/parkbook_test.go`'s `TestAParkBookFromAnotherBuildLosesOnlyWhatItDoesNotCarry`
+is the table test over hand-written historical shapes this entry prescribes (no `parked`, no
+`label`, no `dir`, an unknown field, an empty book).
 
 **Minor — smaller than it was.** Pinned from both directions now: `openroom_test.go`'s
 `writeParkBook` hand-writes the JSON and has a real daemon **in another process** read it back, and
@@ -1096,6 +1145,10 @@ stays in the map, because `holds` reads the map rather than the file and that re
 a respawn under a parked id. Restore made it visible for the first time: a hundred book entries is a
 hundred rows in every status reply. Spec §6's automatic parker under a live cap is what turns it
 from bookkeeping into a question. Whoever decides the park book's lifetime decides this too.
+*Partly stale, 2026-09-29:* a daemon restores nothing (`daemon.go`'s *"Nothing is restored here"*;
+the book is read on demand into `rpc.Status.Parked`), so book entries no longer become rows. What
+stays open is a session parked under the running daemon, which sits in `s.agents` until a wake
+replaces it (`replaceParked`).
 
 ### 12–13. Two lint gaps, both cheap
 
@@ -1108,7 +1161,10 @@ emitted a warning about a file under `.worktrees/p8/` that no longer exists; har
 cache entry, but lint reaching outside the tracked tree means a future worktree's files would be
 linted as though they were this branch's. One `exclude-dirs` entry.
 
-### 14. `/add-<agent-name>` cannot route as spelled
+### 14. `/add-<agent-name>` cannot route as spelled — CLOSED (decided 2026-08-12)
+
+**DECIDED:** refused as spelled. `docs/goals.md`'s table and `internal/ui/slash.go`'s header carry the
+argument, and `/add <name>` was not shipped in its place either (a command that does nothing).
 
 **Minor, and it is a design question rather than a bug.** `goals.md` §3 names `/new agent in <dir>`
 and `/add-<agent-name>` as the reason to build a slash **layer** rather than one command. The router
@@ -1196,7 +1252,10 @@ Numbers, test design and the two judgement calls:
 
 ### Important
 
-**I1. Thirteen Claude wire literals live above the airlock**, in `internal/ui/dm_blocks.go`
+**~~I1. Thirteen Claude wire literals live above the airlock~~ DONE** by 2026-08-26 (`017dd6c`):
+`core.ToolCall.Display`/`Diff` carry them, the tool map is `internal/core/vocabulary.go`'s
+`primaryArg`, none of the literals is left in `internal/ui` or `internal/render`, and
+`airlock_test.go`'s `TestNoClaudeWireVocabularyOutsideTheAirlock` enforces it. Was: in `internal/ui/dm_blocks.go`
 (`old_string`, `new_string`, `compact_boundary`, `permission_denied`, `<local-command-stdout>`,
 `allowed`) and `internal/render/tool.go` (eight tool→argument mappings). They are load-bearing
 dispatch, not incidental. The airlock leaks by design at three points: `Event.Text` carries the
@@ -1215,7 +1274,8 @@ subtype is the worse trade.
 attribution fields (I6), because those land in the same three files and doing I1 first would make
 the second pass rewrite it. `dm_blocks.go` is in Task 10's blast radius until then.
 
-**I2. `render.Markdown` has no width bound at all.** `WithWordWrap` wraps at break
+**~~I2. `render.Markdown` has no width bound at all.~~ FIXED** (see "New, from fixing I2" below;
+`markdown.go` hard-wraps each line with `ansi.Hardwrap`). `WithWordWrap` wraps at break
 opportunities and does nothing without them. 600 display-cells of space-free Japanese at width
 80 returns **602 cells**; the same string through `ToolResult` returns 80. Same package, one
 bounds and one doesn't, and only the bounded ones say so. `TestMarkdownWrapsWithinRequestedWidth`
@@ -1278,7 +1338,10 @@ a lagging client, not a bound* — is what got built, in both halves:
 skips `FrameError` — which is how two daemon tests passed with the harm printed above the PASS.
 Tracked as a round-3 minor.
 
-**I6. `--forward-subagent-text` is passed and subagent frames arrive unattributed. RECORDED
+**~~I6. `--forward-subagent-text` is passed and subagent frames arrive unattributed.~~ FIXED** by
+2026-08-26 (`017dd6c`): `core.Event.Subagent` carries the attribution, a permission ask's `agent_id`
+sets it (`protocol.go`), the `task_*` subtypes decode to `Event.Task`, and `primaryArg` names `Agent`.
+**Was: RECORDED
 (`47d3815`), still unfixed — and the recording made it bigger, not smaller.**
 
 The original remedy — "either drop the flag or add the field, one struct field each side" — was
@@ -1323,7 +1386,8 @@ could be changed at all**, and this project does not design around unrecorded be
 What landed: `core.EncodeSetMode` / `Session.SetMode` write a `set_permission_mode` control
 request; `rpc.FrameMode` carries it (a kind, not a field — an empty mode has two readings and
 both are wrong); the daemon routes it through the agent's input queue; and `⇧⇥` cycles
-`plan` / `auto` / `default`. Next-blocked moved to `⌃X` (`docs/goals.md` §5).
+`plan` / `auto` / `default` *(now four, 2026-09-29: `default → acceptEdits → plan → auto`, CLAUDE.md)*.
+Next-blocked moved to `⌃X` (`docs/goals.md` §5).
 
 **The label moves on the receipt, never on the keystroke** — the defect that got the old
 indicator deleted, rebuilt on a mechanism that works. `manual` is accepted by the CLI and
@@ -1346,10 +1410,15 @@ frame arriving with an empty behavior would need a default and every default is 
 grants a call nobody approved, deny refuses one somebody did; an unrecognized *kind* just leaves
 the agent blocked, which is the safe end. `omitempty` on `UpdatedInput` collapses `nil` and `{}`
 to an absent key, so the transport cannot express the `{}` shape §6 records as never tested.
-**Daemon side is still Task 6** — this is vocabulary, not wiring, and Task 6's interface list
+**Daemon side is still Task 6** *(done since: `internal/daemon/apply.go` handles `rpc.FrameAllow`)*
+— this is vocabulary, not wiring, and Task 6's interface list
 should gain `FrameAllow`/`FrameDeny` alongside `FrameStop`/`FrameKill`/`FrameQuit`.
 
-### New, from fixing I2 — bounding converts width overflow into height
+### New, from fixing I2 — bounding converts width overflow into height — group-chat half CLOSED (by `017dd6c`, 2026-08-26)
+
+**CLOSED for the room:** `internal/ui/chat_blocks.go`'s `roomInlineRows` (24) collapses a reply that
+renders taller than that into a pointer, so one long message cannot push the room off screen. The
+two layout residuals at the end of this entry are unverified and stay open.
 
 `render.Markdown` now hard-wraps rather than overflowing (I2 **done**, and it retires the
 `render_test.go` `len([]rune(...))` test-quality item too). But the content has to go somewhere:
@@ -1499,8 +1568,11 @@ None of these are wrong. All are unmeasured at the scale the product claims.
 
 ## Assigned to a specific task
 
-**PHASE 4, TOP ITEM — `--allowed-tools` for the manager. The blast radius is bounded on the fleet
-and not on the machine.** Added 2026-08-12 by Phase 2 Task 15's review (C1), at the coordinator's
+**~~PHASE 4, TOP ITEM — `--allowed-tools` for the manager. The blast radius is bounded on the fleet
+and not on the machine.~~ CLOSED 2026-08-12, by `--tools ""` rather than `--allowed-tools`:** the
+spike (`docs/superpowers/notes/2026-08-12-tool-bounding-findings.md`) found `--allowed-tools` a no-op
+in `auto`, and `internal/core/argv.go` emits `--tools ""` in the same `MCPConfig` append, so the
+manager holds no built-ins (`managerScope` now says so). Added 2026-08-12 by Phase 2 Task 15's review (C1), at the coordinator's
 direction.
 
 **The gap.** The manager is an ordinary `claude` session. Nothing in this tree passes
@@ -1558,7 +1630,8 @@ Cross-referenced from `docs/superpowers/specs/2026-08-12-phase-4-scope.md` §2a'
 §4's order.
 
 **Phase 2 Task 15 (the manager) — INHERITED AS A PRECONDITION: agent output is data, never
-instruction.** Added 2026-08-11 by Phase 2 Task 14's fix round, at the coordinator's direction.
+instruction.** **Point 1 MET (2026-09-29 audit):** `managerScope` in `internal/daemon/manager.go`
+states the rule and says to report an apparent instruction, not act on it; points 2 and 3 stand. Added 2026-08-11 by Phase 2 Task 14's fix round, at the coordinator's direction.
 
 Everything `internal/mcp`'s reading tools return is **text an agent wrote**: `SessionStatus.Tool` and
 `ToolArg` are `core.ToolCall.Name`/`Display`, `Error` is the process's own stderr. It lands verbatim
@@ -1584,6 +1657,9 @@ derived from the struct.
    §13's injection item is the only check of whether a real model treats the framing as framing.
 
 **Phase 2 Task 15 / whoever ships the live cap — run rung 7's audit against `managerVerbs`.**
+**Re-read DONE 2026-08-12** when `daemon.liveCap` shipped: `liveCapDecl` in `cmd/wake/mcpguard_test.go`
+records the spawn/fork verdicts as re-argued, not inherited. The `decisions.md` note below is still
+unwritten (2026-09-29).
 Added 2026-08-11 by Task 14's fix round; it is F5 of that task's review.
 
 `cmd/wake/mcpguard_test.go`'s verdict **domain** is derived from `daemon.dispatch`, so a verb the
@@ -1637,7 +1713,7 @@ work; the rest is bookkeeping. **Whoever adds the field owns the record.**
 
 **Left open by the same task, and smaller: the manager is an ordinary row on every surface that
 draws one.** It is in the roster, it has an attention rank, `⌃D` opens a DM on it and `⌃C` will park
-it. Parking it is *recoverable* — `restoreParked` gives it its name back and `managerConfig` gives
+it. Parking it is *recoverable* — `restoreParked` (deleted in `6ca7e6b`; `/manager` wakes it now) gives it its name back and `managerConfig` gives
 it its tools back — so nothing is lost, but a manager sitting in the attention ranking between two
 agents is a design question nobody has answered. It was deliberately not answered here: the settled
 scope was routing (default addressee, broadcast exclusion), and the roster is a different surface
@@ -1688,7 +1764,8 @@ moved, a socket that went away, a protocol the client rejects — arrives as a m
 `docs/live-testing.md` §13.1's gate stated from the other side, and it is the reason that item is a
 gate rather than a checklist entry. **The cheap close, if it is ever worth it**, is a self-test at
 `wake manager` time: run `wake mcp` against the same socket, write an `initialize` and a
-`tools/list`, and refuse the spawn if five tools do not come back. It costs a process per manager
+`tools/list`, and refuse the spawn if five tools do not come back (nine now, `internal/mcp`,
+2026-09-29). It costs a process per manager
 start and it would have caught every failure this paragraph lists.
 
 **~~Phase 2 Task 15 (or later) — `spawn_agent` is in the spec's manager tool list and is not
@@ -1697,7 +1774,10 @@ after Task 15's review flagged it as a plan-mandated conflict (`CLAUDE.md` opens
 and this file gets fixed", and nobody had fixed either). §12 now names the five the build has and
 records why `spawn_agent` is not among them; §17 carries the machine-bound gap.
 
-**The work is unchanged and still owed**, and it is the live cap rather than the tool. Original
+~~**The work is unchanged and still owed**, and it is the live cap rather than the tool.~~ **DONE
+2026-08-12:** `spawn_agent` (`internal/mcp/tools.go`) shipped behind `daemon.liveCap`
+(`internal/daemon/mayspawn.go`) and `mcpguard_test.go` allows `FrameSpawn`; the `pool.go` scheduler is
+still unbuilt and `FrameFork` stays refused. Original
 entry follows. Added 2026-08-11 by Phase 2 Task 14.
 
 Spec §12 names four manager tools — `list_agents`, `agent_status`, `spawn_agent`, `send_to_agent` —
@@ -1735,7 +1815,8 @@ The guard walks from `serveMCP` and `socketFleet`'s methods through calls `cmd/w
 collects every `rpc.Frame` composite literal it can reach. `socketFleet.List` calls `daemon.Status`,
 which writes a frame *inside* `internal/daemon`, and the walk does not follow it there. Today that is
 sound by inspection — `internal/daemon` exports `Status`, `Dial`, `FleetOnDisk`, `EnsureRunning`,
-`Serve`, `SocketPath` and `OpenLog`, and none of them writes a session verb — but a future export
+`Serve`, `SocketPath` and `OpenLog` (2026-09-29: also `Discoverable`, `Fleets`, `History`,
+`RewindTargets`, `RunningBuilds`, `WorkflowRuns` and more), and none of them writes a session verb — but a future export
 that did would be invisible. **The close, if it is ever worth it**, is to extend the walk across
 package boundaries for `internal/daemon` specifically, the way `internal/core/argvguard_test.go`
 walks its own package's call graph. Not done because the boundary is one package deep and stated in
@@ -1749,12 +1830,13 @@ Claude's wire ever will. Two guards downstream insist that a field added to that
 carried or excused with a reason, and Task 2 excused both rather than widen past the wire and the
 daemon:
 
-- `internal/ui/fleet_test.go` — `notCarriedOntoAnAgent["ParentID"]`. `ui.Agent` has no field for
+- ~~`internal/ui/fleet_test.go` — `notCarriedOntoAnAgent["ParentID"]`.~~ **DONE by Task 4
+  (2026-08-10):** `WithStatus` folds it onto `ui.Agent.ParentID` (`internal/ui/fleet.go`). `ui.Agent` has no field for
   it and `WithStatus` does not fold it. **The task that gives the TUI a fork action carries it in
   the same change**, because that is the task that decides where `a fork of sydney` is drawn; a
   field folded now would be state with no reader on a type Bubble Tea copies per keystroke.
 - `internal/mcp/tools_test.go` — `notInTheStatusReport["ParentID"]`, with
-  `notInTheStatusReportCount` at 3. **There is no fork verb on that surface**, so lineage is
+  `notInTheStatusReportCount` at 3 (now 13, 2026-09-29). **There is no fork verb on that surface**, so lineage is
   context a manager cannot act on, and the manager-legible form of it is the parent's *name*
   rather than a UUID. Note what is **not** a reason, because the first draft of this excuse
   claimed it: resolving the name is not hard. `statusReport` is handed one row, but
@@ -1812,22 +1894,23 @@ column-width check, because `roster.go`'s rule is that a row wider than its colu
 and the DM sideways rather than overflowing itself.
 
 **Fork — `⌃F` shadows the text area's CharacterForward.** Third of three, after `⌃D` and `⌃W`, and
-the cheapest: the composer is one line high, so `ctrl+f` is `→` by another name. Recorded beside the
+the cheapest: the composer is one line high (no longer: it grows with the draft, 2026-09-29), so
+`ctrl+f` is `→` by another name. Recorded beside the
 existing `⌃D`/`⌃W` entry because somebody with readline muscle memory will find it.
 
 **Fork — a fork whose first report already says `ended` opens nothing and says nothing.**
-Added 2026-08-10 by Phase 3 Task 4, and it is narrow rather than theoretical. `isTheAwaitedFork`
-opens the fork's conversation in every state a running daemon can report *except* `ended`, because a
+Added 2026-08-10 by Phase 3 Task 4, and it is narrow rather than theoretical. `isTheAwaitedFork` (now
+`isTheAwaitedStart`, `internal/ui/starts.go`, 2026-09-29) opens the fork's conversation in every state a running daemon can report *except* `ended`, because a
 pane with no process behind it is the empty conversation with a working-looking header
 `cmd/wake.reattach` exists to prevent. A fork that **failed** to start is covered — the daemon sends
 a `FrameError` addressed to the fork's own id, which clears the wait and prints why. What is left is
-a fork that started, exited cleanly, and was first reported after that: `App.pendingFork` stays set,
+a fork that started, exited cleanly, and was first reported after that: `App.pendingFork` (now `App.pendingStarts`) stays set,
 so ⌃F looks like it did nothing beyond its own "forking @alex…". The fix is a third arm saying the
 fork ended before it could be opened; it was not built because the sentence is a decision and this
 task's brief did not ask for one.
 
 *Widened 2026-08-10 by park/wake Task 2: `parked` joins `ended` in that arm, for the same reason and
-with the same residual.* A fork first reported parked opens no pane and stays in `pendingForks`,
+with the same residual.* A fork first reported parked opens no pane and stays in `pendingForks` (now `pendingStarts`; `/resume` shipped and this cell is still unanswered),
 which is the entry above with one more way in. Two things separate it from the ended case and both
 argue for taking them together rather than separately. It is **rarer** — it needs somebody to park a
 session the daemon has only just started, in the window before the first report reaches this
@@ -1846,7 +1929,9 @@ attention rank, the roster glyph, the fork-arrival cell) plus routing — `ui.li
 
 *What is deliberately still ended-shaped, with what it costs:*
 
-- **`App.endedAgent` does not cover parked**, so a DM open on a parked agent accepts a message,
+- **~~`App.endedAgent` does not cover parked~~ FIXED (2026-09-29 audit):** `sendDM` refuses a parked
+  agent with `parkedAdvice` before the ended arm (`internal/ui/send.go`'s `parkedAgent` check).
+  Original: so a DM open on a parked agent accepts a message,
   writes the frame, and the operator gets the daemon's own `session … has ended` back on the notice
   row. Wrong twice over: it is not an ending, and the local refusal exists precisely so the round
   trip does not have to say it. One line to fix; the sentence beside it (`endedAdvice`) is the part
@@ -2018,7 +2103,9 @@ refusal now happens before there is a process to stop). Not attempted here: it i
 change with its own blast radius and it is not the hazard the key made reachable. See the entry
 below.
 
-**UI — `⌃C` and `⌃Q` both report on the keypress, before anything has confirmed the write.** Added
+**~~UI — `⌃C` and `⌃Q` both report on the keypress, before anything has confirmed the write.~~
+FIXED (2026-09-29 audit):** ⌃C's promise moved to the report (`parkConfirmed` via `parkArrived`), and
+⌃Q writes a `FrameStatus` behind `FrameParkAll` and waits for it (`internal/ui/park.go`). Added
 2026-08-11 by Task 7's review.
 
 `park` writes *"parking @alex — /resume alex brings it back"* and `parkFleet` writes *"parking N
@@ -2036,8 +2123,9 @@ recoverable, which is what keeps it a note.
 already closing, so the error frame has nowhere to land at all. The hedge in `parkingFleet` covers
 the grace, not a refused write. Whoever gives the notice row a pending state should take both.
 
-**Daemon — the soak lane sends no `FrameWake`, so it does not exercise the wake path it is credited
-with.** Added 2026-08-11 by Task 7's review.
+**~~Daemon — the soak lane sends no `FrameWake`, so it does not exercise the wake path it is credited
+with.~~ FIXED (2026-09-29 audit):** `wakeSome` and `raceWake` in `internal/daemon/soak_test.go` send
+`FrameWake` in the lane, under the `soak` tag. Added 2026-08-11 by Task 7's review.
 
 `internal/daemon/soak_test.go` churns whole lifecycles through a real socket and checks goroutines,
 child processes and the roster afterwards — which is what makes it the detector for a leaked
@@ -2144,7 +2232,9 @@ that binds it.
 is why the daemon is ending, and `shutdown` writes the book before it closes its clients. What is
 still open is the key — see the entry directly below.
 
-**`⌃Q` has no key, and neither has anything else that reaches park, wake or park-all.** Added
+**~~`⌃Q` has no key, and neither has anything else that reaches park, wake or park-all.~~ CLOSED
+(2026-09-29 audit):** ⌃C sends `FramePark`, ⌃Q⌃Q `FrameParkAll` and `/resume` `FrameWake`
+(`internal/ui/park.go`, `resume.go`); the struck entry above records the same close. Added
 2026-08-11 by park/wake Task 5, and it is the same sentence Task 2 wrote about `FramePark`, now
 covering three frames instead of one.
 
@@ -2183,8 +2273,9 @@ task that binds `⌃Q`**, in the same change as the key: decide whether a park t
 written down is announced to the attached clients before they are closed, and if so what the room
 does with it while it is closing.
 
-**The daemon soak lane does not exercise `quitPark`, and the reason is not the one first written
-down.** Added 2026-08-11 by park/wake Task 5's fix round, correcting its own report (review m3).
+**~~The daemon soak lane does not exercise `quitPark`, and the reason is not the one first written
+down.~~ FIXED (2026-09-29 audit):** `TestSoakParkAllLeavesAFleetToComeBackTo`
+(`internal/daemon/soak_test.go`) parks a live fleet with `FrameParkAll` in its own test, as prescribed. Added 2026-08-11 by park/wake Task 5's fix round, correcting its own report (review m3).
 
 What the review proposed is one frame — swap `reader.send(rpc.Frame{Kind: rpc.FrameQuit})` for
 `FrameParkAll` at the end of `TestSoakDaemon` — and **it would exercise nothing**. The lane asserts
@@ -2226,7 +2317,9 @@ what makes it a decision rather than a bug is that the bound is a guess about ho
 quit may take. Recorded here so the task that binds the key can decide it with the composer in
 front of it.
 
-**Park — a parked agent's `submit` refuses with "session … has ended".** Added 2026-08-10 by
+**Park — a parked agent's `submit` refuses with "session … has ended".** *(2026-09-29: the client gate
+exists now - `sendDM`'s `parkedAgent` arm and `App.live` - but `agent.submit`, now in
+`internal/daemon/apply.go`, still says "has ended"; still open.)* Added 2026-08-10 by
 park/wake Task 2, and it is one string rather than a mechanism: `agent.submit` selects on `a.gone`,
 which a park closes exactly as an ending does, so the sentence is the ending's. Correct about what
 happened to the process and wrong about what happened to the session, on the one surface an operator
@@ -2264,7 +2357,9 @@ respawn under a parked id is what stops two processes reaching one transcript, a
 the map rather than the file. Nothing has changed about the growth; what has changed is that the
 fix is now cheap. Note the restore makes the shape visible for the first time too: a daemon that
 starts with a hundred entries in the book puts a hundred rows in every status reply, which is the
-same quadratic the soak lane's park phase was moved out of the churn to avoid.
+same quadratic the soak lane's park phase was moved out of the churn to avoid. *(2026-09-29: a
+daemon no longer restores the book into `s.agents` (`6ca7e6b`), but `fleet()` lists it as
+`rpc.Status.Parked` in every report, so the growth is unchanged.)*
 
 **~~Park — the daemon soak lane cannot run more than one client.~~ FIXED** in park/wake Task 2's
 fix round, and recorded because of how it hid. `soakClient.oneLifecycle` asked for the literal name
@@ -2295,7 +2390,8 @@ and letting `noteUnreachable`'s own guard be the single answer to "was this sess
 **`make lint` does not check formatting, and nothing else does either.** Added 2026-08-10 by the
 review of park/wake Task 2, which found `internal/ui/roster.go` failing `gofmt -l` on a merged
 commit: a map entry lost its alignment when a new key and its comment landed between two others.
-`.golangci.yml` is `default: none` with seven linters named and **no gofmt-family member**, and CI
+`.golangci.yml` is `default: none` with seven linters named (eight now, 2026-09-29) and **no
+gofmt-family member**, and CI
 runs `make` targets rather than a second list — so nothing in the repository reads formatting.
 Anyone with format-on-save then produces a spurious diff in a file they did not mean to touch.
 
@@ -2332,8 +2428,9 @@ the socket already and seeding from it would open the room on a report assembled
 was asked. That is `daemon.Status`'s own rule arriving on a connection it does not own, and
 `TestAwaitFleetTakesTheReplyAndNotAPushThatCameFirst` is what holds it.
 
-**Restore — `restoreParked`'s `!s.register(a)` arm cannot fire, and is kept as a stop rather than a
-guard.** Added 2026-08-10 by Phase 3 Task 4. `s.agents` is empty until the accept loop runs and the
+**~~Restore — `restoreParked`'s `!s.register(a)` arm cannot fire, and is kept as a stop rather than a
+guard.~~ SUPERSEDED 2026-09-29**: there is no `restoreParked` left in the tree (only comments name
+it) — a daemon restores nothing (`CLAUDE.md`), so the arm went with the restore. Added 2026-08-10 by Phase 3 Task 4. `s.agents` is empty until the accept loop runs and the
 book is keyed by id, so `records()` hands out one row per id and the registration always succeeds.
 `register`'s answer is taken anyway because discarding it would leak the name just claimed, and
 because moving the call anywhere but before the accept loop makes the arm live — which is the same
@@ -2401,7 +2498,8 @@ whose only consumer is a test. **If one is ever fixed, fix both** — they are a
 question about the same two producers.
 
 **Fork — `TestTheKeysTheLegendNamesAreTheKeysBubbleteaReports` is a hand-written list of 8 of the 11
-legend entries.** Added 2026-08-10 by Phase 3 Task 4, which added `⌃F` to it and left the shape
+legend entries.** *(Now 21 hand-written cases, 2026-09-29; ⎋⎋ is probed in `escprobe_test.go` and ⌃C
+is the probe's own sentinel, so only ⇞⇟ is unprobed. Still not derived from `legendKeyNames`.)* Added 2026-08-10 by Phase 3 Task 4, which added `⌃F` to it and left the shape
 alone. `⌃C`, `⎋` and `⇞⇟` have never been probed against bubbletea's decoder. The list is exactly the
 "hand-written list standing in for something the code already declares" this project keeps naming:
 it could be derived from `legendKeyNames`, which already maps every glyph to its `tea.Key…`, if the
@@ -2414,7 +2512,8 @@ tests in this package call `run(...)` without setting `WAKE_SOCKET`. `cmd/wake/r
 `TestAttachWithNoIdAsksRatherThanGuessing`, `TestAttachWithTwoIdsIsRefused`,
 `TestTheOtherVerbsStillTakeNoArguments`, `TestAMistypedVerbIsRefusedRatherThanSpawning`; and
 `cmd/wake/identity_test.go` — `TestNewTakesAtMostOneName`, `TestTheUsageNamesTheVerbThatCreatesAnAgent`.
-`daemon.SocketPath()` calls `os.MkdirAll` on `~/.wake` before the verb switch, so **every** `run()`
+`daemon.SocketPath()` (now `daemon.FleetSocketPath(fleet)` in `run`, 2026-09-29) calls
+`os.MkdirAll` on `~/.wake` before the verb switch, so **every** `run()`
 without `t.Setenv` does it regardless of verb, and `go test ./cmd/wake` creates that directory on
 whoever runs it. `TestUnknownCommandsAreRefused` sets `t.Setenv(daemon.SocketEnv, tempSocket(t))`
 with a comment saying exactly this, and Task 3's new tests copied it. The six were left alone
@@ -2451,7 +2550,10 @@ reachable domain from `agent.stateLocked` and fails the day that changes — cov
 Whoever takes it should check `internal/mcp/tools.go`'s `s.State == rpc.StateOrphaned` at the same
 time: it consumes the same two-path `daemon.Status`, so it is reachable there and **is** live code.
 
-**Phase 3 — `internal/daemon/spawn.go` is at 523 lines and the seam is in its own header.** Added
+**Phase 3 — `internal/daemon/spawn.go` is at 523 lines and the seam is in its own header.**
+*(Re-counted 2026-09-29: the fan-out half left in `fdef9c5` — `fanout.go`, with the watchdog in
+`watchdog.go` — yet `spawn.go` is back at **785** of the 800 max, so the next starting verb splits it
+first.)* Added
 2026-08-10 by Phase 3 Task 2 (the fork verb), and it is the sibling of the `session.go` item below.
 
 Fork took the file from **395 to 523** against the 800 hard max, and well past the project's
@@ -2515,7 +2617,10 @@ now surface:
   verbatim as the tool result and is the one channel for saying what to do instead of retrying
   the identical call, so a typed one is worth having — see the new item below.
 
-**A session with a card outstanding must still not be stopped silently** - the second bullet of
+**A session with a card outstanding must still not be stopped silently** — **DECIDED 2026-09-29**:
+`⌃C` park refuses a blocked agent (`CLAUDE.md`), and `/quit` deliberately does not — `quitAgent`'s
+header in `internal/ui/quit.go`: a stop has no wake, so refusing would strand the operator. Original:
+the second bullet of
 the item above, which nothing in Task 10 closed because nothing in Task 10 stops a session.
 `Cards.Len()` is the check and there is no detector to add later: closing stdin on an unanswered
 ask ends the turn as a permission-rule denial on a *success* turn, byte-for-byte what a deliberate
@@ -2585,7 +2690,10 @@ have — render on change, store lines, draw a window — which is a design chan
 round. **Whoever takes it should add the benchmark first**: `BenchmarkView` uses `dmApp` and has
 never had a card on screen.
 
-**Phase 2 Task 11 — a DM opened for the first time is empty, while its badge says otherwise.**
+**~~Phase 2 Task 11 — a DM opened for the first time is empty, while its badge says otherwise.~~
+FIXED** (verified 2026-09-29): opening a conversation asks the daemon for its transcript off disk
+(`internal/ui/history.go`'s `askHistory`, Lane B #9), `roomseed.go` seeds it provisionally from the
+room with the disk read authoritative, and `DM.Leave` now marks a seed-only DM.
 `App.observe` appends to a DM only if one is already in the map, so an agent that has been talking
 since before anybody opened its conversation has every line of it in the *room* and none of it in
 the DM. Measured: one assistant line, `Agent.Unread == 1`, and the DM opens blank. Pre-existing -
@@ -2646,14 +2754,20 @@ makes the cap exact at every instant. The cost is that `bottom`, `atBottom`, `sc
 all have to count the injected rows, which is the scroll arithmetic two shipped guards protect — so
 it is a change worth designing rather than a follow-up patch.
 
-**Phase 2 Task 10 review, Minor 1 — still open, and its own prerequisite is still missing.**
+**~~Phase 2 Task 10 review, Minor 1 — still open, and its own prerequisite is still missing.~~ CLOSED
+2026-08-24** with the entry above (`perf/pinned-card-render-cache`): the benchmark exists
+(`BenchmarkViewWithPlanCard`, `internal/ui/idle_bench_test.go`) and the plan body is memoized
+(`cards.go`'s `planKey`/`cachedPlan`).
 `BenchmarkViewOnePane` and `BenchmarkViewTwoPanes` landed in Task 11 and neither has a card on
 screen either, so "whoever takes it should add the benchmark first" is still the next step. What
 Task 11 adds is a number to set it against: a two-pane frame is 299-317µs, so the reviewer's
 measured +45µs for a pinned plan is ~15% of a split frame rather than ~25% of a single one.
 
-**Phase 2 Task 10 review, Minor 4 — `App.regions()` reconciles a divergence no production path can
-produce. RULED at Task 11: it stays, and the alternative is now worse rather than better.**
+**~~Phase 2 Task 10 review, Minor 4 — `App.regions()` reconciles a divergence no production path can
+produce. RULED at Task 11: it stays, and the alternative is now worse rather than better.~~
+SUPERSEDED 2026-09-29**: `Layout.ShowDM` is gone — the grid holds session ids, so the two facts are
+one, and `TestEveryConversationInTheGridHasATranscript` (`roomapp_test.go`) holds `App.show` as the
+only way in.
 `Layout.ShowDM` is written only by `Layout.WithDM`, called only from `openDMWith` and
 `closeDM`, both of which set `a.open` in the same block — so `r.DM > 0 && a.open == ""` is
 unreachable today, and `TestAPaneIsNeverDrawnForADMThatDoesNotExist` builds that state by hand.
@@ -2674,7 +2788,9 @@ is beside the room, and the whole reason every responsive rule here is a table t
 `Layout` knows nothing about content. The duplication stays and `App.regions()` stays the one
 place the two facts are reconciled.
 
-**Phase 2 Task 10 — the room has no default addressee, so a draft with no `@` is refused.**
+**~~Phase 2 Task 10 — the room has no default addressee, so a draft with no `@` is refused.~~ DONE**
+(verified 2026-09-29): the manager landed (Phase 2 Task 15) and is the default addressee —
+`internal/ui/send.go`'s `App.service()` feeds `core.Resolve`.
 `core.Resolve` takes one and this build passes `""`. The manager session is what it is meant to
 be (§7) and there is no manager yet, so the alternatives were the attached session - which would
 make a room message silently go to one agent, drawn unattributed, which is the misroute
@@ -2682,7 +2798,9 @@ make a room message silently go to one agent, drawn unattributed, which is the m
 leaves when the manager lands.** The composer says `→ @name or @all` meanwhile, so the refusal is
 visible before ↵ rather than after it.
 
-**Phase 2 Task 10 — `[d]eny` cannot carry a typed reason.** The reason reaches the model verbatim
+**~~Phase 2 Task 10 — `[d]eny` cannot carry a typed reason.~~ FIXED** (verified 2026-09-29): `d`
+opens a deny-reason box (`internal/ui/cardanswer.go`'s `beginDeny`/`denyReasonStep`), `↵` sends the
+typed text, and an empty box keeps `cardDenyReason`. The reason reaches the model verbatim
 as the tool result and is the one channel for saying what to do instead of retrying the identical
 call; a constant is a weaker answer than the operator's own words. The obstacle is the gate: card
 keys are read only when the composer is empty, so the draft cannot be the reason. **What closes
@@ -2690,7 +2808,10 @@ it is a shape for "deny with this text" that does not re-open the letter-key haz
 likely `d` on a *non-empty* draft, which is exactly the branch the gate exists to forbid, so it
 needs designing rather than adding.
 
-**Phase 2 Task 10 — a terminal shorter than a pane's floor still over-draws.** `Room.minHeight`
+**~~Phase 2 Task 10 — a terminal shorter than a pane's floor still over-draws.~~ FIXED** (verified
+2026-09-29): `App.View` cuts the frame to the terminal with `firstRows(frame, a.layout.Height)`
+(`internal/ui/appview.go`) — the bottom gives, and not via a lipgloss `MaxHeight`, which measured
++44% a frame. `Room.minHeight`
 and `minDMHeight` are floors below which the pane stops shrinking rather than drawing a broken
 box, which is deliberate and predates the room - but the frame is then taller than the terminal
 and the alt screen scrolls on every draw, which is the failure the notice row's one-row rule
@@ -2699,7 +2820,9 @@ than one. **The cheap fix is a `MaxHeight` on the whole frame beside the `MaxWid
 already there**, at the cost of cutting the composer off instead. Not taken, because "the pane
 floors" is a documented decision and reversing it is not this task's to reverse.
 
-**Phase 2 Task 10 — the sidebars answer no clicks.** `App.press` takes an x coordinate and
+**~~Phase 2 Task 10 — the sidebars answer no clicks.~~ FIXED** (verified 2026-09-29): a roster press
+resolves its row at press time (`rosterHit`, `internal/ui/mouse.go`/`screensel.go`) and opens it on
+an empty release. `App.press` takes an x coordinate and
 `Layout.Hit` resolves it to a region, but selecting a *row* needs the y coordinate and the row
 arithmetic each sidebar does privately. A click that selected the wrong agent is worse than one
 that selected none, so the rows are inert. It matters more than it looks: `⌃D` opens the DM of
@@ -2730,7 +2853,9 @@ still has **no** write deadline (the daemon applied `wire.go`'s prescription, th
 did), and never-snapshot-a-`Composer` is now *unassertable* through the exported surface rather
 than merely untested.
 
-**Task 10, added after Task 6's C1 fix** — the client must wait for `FrameHello` on the one
+**Task 10, added after Task 6's C1 fix** — **DONE** (verified 2026-09-29: `cmd/wake/attach.go`'s
+`waitForHello` waits hello-or-EOF on the held connection and never re-dials) — the client must wait
+for `FrameHello` on the one
 connection it already holds, and must **not** poll by re-dialling. Measured here on darwin:
 128 connects succeed against a bound-but-never-accepting listener (the shutting-down daemon)
 and **closing a pending connection does not give its backlog slot back** — dial #129 is
@@ -2813,7 +2938,9 @@ cause less findable. Instrument what actually takes the time when it fires.
 `TestARestartDuringShutdownDoesNotReapTheFleetItIsWaitingFor` legitimately costs both.
 `shutdownWait` is a `const` with no test seam, so a future bump silently eats the 7s of slack
 round 3 just bought back. Derive `testTimeout` from the two, or assert the relation once — CI on
-slower hardware is what finds this otherwise.
+slower hardware is what finds this otherwise. **The coupling half is DONE** (verified 2026-09-29):
+`TestTheShutdownBudgetKeepsItsMargin` (`internal/daemon/harness_test.go`) asserts it through
+`shutdownSlack`. The orphan half is still open (`orphanLifetime` is 30s).
 
 **Left open at the daemon's merge**, all Minor, all with the reviewer's agreement that they are
 Minor. Recorded here because they were living in a task report, which is not where deferred work
@@ -2855,7 +2982,10 @@ belongs:
   cannot silently find nothing. Mutation-checked by removing an entry from the map.
 - **`watchStates`' gap-failure branch is itself unexercised** — deleting it leaves the package
   green, because no test drives a real drop while `watchStates` reads.
-- **`daemon.FleetOnDisk` is unbounded by its own timeout**: `r.alive()` per record at up to
+- **~~`daemon.FleetOnDisk` is unbounded by its own timeout~~ CLOSED 2026-08-24**
+  (`fix/fleetondisk-deadline`, recorded in the ranked list above): one `fleetProbeBudget` deadline
+  over the whole loop, held by `TestFleetOnDiskIsBoundedAcrossTheWholeLoop`. Original: `r.alive()`
+  per record at up to
   `probeTimeout` each, serially, so 30 dead pids and a wedged `ps` is ~60s inside a function
   whose sibling path is bounded at 3s. `wake status` is the command someone runs *because*
   something is wrong, and `⌃O`'s detach line calls it. **Bare `wake` is the third caller and
@@ -2939,7 +3069,8 @@ count, because `goFiles`' skip list matches a base name at any depth and one ent
 package from three guards at once.
 
 **Still open, and inherited rather than introduced:** `airlock_test.go`'s own leak check calls
-`goFiles` directly and carries no coverage floor of its own. The practical hole is closed — all
+`goFiles` directly and carries no coverage floor of its own *(it has a 20-file floor now, in
+`TestNoClaudeWireVocabularyOutsideTheAirlock`, but still walks `goFiles`, 2026-09-29)*. The practical hole is closed — all
 three guards live in `internal/core`, so any `skipDir` edit now fails that package's suite through
 `argv_test.go` — but the airlock's check would still be individually satisfiable if it were ever
 moved to another package. Cheap follow-up: have it call `nonTestGoFiles` too.
@@ -2987,7 +3118,10 @@ Counted from the source on 2026-08-10; count again rather than believing this se
 the rule the same task had to apply to a flag count that had been wrong in a comment since
 `ec2748e`.
 
-**Phase 3 park/wake — the slash layer exists and `/new` and `/add-<name>` still do not.** Added
+**~~Phase 3 park/wake — the slash layer exists and `/new` and `/add-<name>` still do not.~~ DONE /
+DECIDED** (verified 2026-09-29): `/new` ships (`internal/ui/new.go` writes `rpc.FrameSpawn`),
+`/add-<agent-name>` was refused as spelled on 2026-08-12 (`docs/goals.md`, `slash.go`'s header), and
+grouping arrived as `/team`. Added
 2026-08-11 by park/wake Task 6. `internal/ui/slash.go` is the layer `docs/goals.md` §3 says the two
 missing verbs need — a closed set, a name, an argument, a target out of the fleet, and a frame — and
 adding one is an entry in `commands`, plus the two things that entry drags with it:
@@ -3000,7 +3134,8 @@ belongs to a phase today**, which is the sentence `goals.md` §3 already carries
 so the next person finds the layer rather than building a second one beside it.
 
 **And the layer cannot route `/add-<agent-name>` as `goals.md` spells it — the guard that closes the
-value space forecloses it.** Found 2026-08-11 by Task 6's review, and it is worth stating plainly
+value space forecloses it.** **DECIDED 2026-08-12**: refused as spelled, and `/add <name>` was not
+shipped either (`docs/goals.md`'s `/add-<agent-name>` row; `internal/ui/slash.go`'s header). Found 2026-08-11 by Task 6's review, and it is worth stating plainly
 because both this entry and `goals.md` described `/add-`'s missing work as the group model, which is
 true and is **not** the routing problem. `slash` cuts the first word at a space, so `/add-sydney`
 gives `word = "add-sydney"`, `commands` is keyed on the exact bare word, and it falls through as a
@@ -3020,7 +3155,10 @@ whoever builds it picks one of two, deliberately:
 
 `/new agent in <dir>` has no such problem — `word = "new"`, `arg = "agent in ~/p"`.
 
-**The passthrough list is five hand-written claude commands.** `/model`, `/clear`, `/compact`,
+**~~The passthrough list is five hand-written claude commands.~~ CLOSED** (verified 2026-09-29): the
+guard this asked for exists — `TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising`
+(`internal/ui/slashguard_test.go`) reads `slash_commands` off every recorded `init` (133 words); the
+hand-written five stay beside it because `help` is not in the corpus. `/model`, `/clear`, `/compact`,
 `/context`, `/help`. Four are recorded as surviving stream-json mode; `/help` is not, and it is in
 the list because it is the command somebody types first. The set claude actually ships is on the
 `init` frame as `slash_commands`, **which the airlock decodes as of 2026-08-15** — so the remaining
@@ -3057,15 +3195,19 @@ it does.
 These are tests that pass without proving what their name claims. Each was caught by review,
 none is load-bearing today, all will mislead someone eventually.
 
-- `TestToolCallCoversEveryMappedTool` iterates the map it validates, so `Glob`, `WebFetch` and
+- `TestToolCallCoversEveryMappedTool` *(gone; its successor `TestToolCallResolvesItsDisplayArgument`
+  is a hand-written table that still omits these three, 2026-09-29)* iterates the map it validates, so
+  `Glob`, `WebFetch` and
   `WebSearch` mappings are asserted by **nothing**.
 - `TestEncodeAllowCarriesUpdatedInput` compares `any` values with `!=` — a nested map or slice
   **panics at runtime**; a numeric key silently mis-compares `float64(1)` against `int(1)`.
-- `render_test.go:50` measures with `len([]rune(...))` — fine while the fixture is ASCII, wrong
-  the moment it isn't.
+- ~~`render_test.go:50` measures with `len([]rune(...))` — fine while the fixture is ASCII, wrong
+  the moment it isn't.~~ **FIXED** (verified 2026-09-29): `widestLine` measures with
+  `ansi.StringWidth`, and no `len([]rune` is left in `internal/render`'s tests.
 - `waitForGoroutines` compares against a process-global baseline taken at test start, so a
   goroutine unwinding from a previous test can mask a same-sized leak here. **Still open for the
-  untagged tests.** The soak solves it for itself with `settledGoroutines`, which takes the
+  untagged tests** *(in `internal/core` only: `internal/daemon`'s now take `settledGoroutines()`,
+  `daemon_test.go`, 2026-09-29)*. The soak solves it for itself with `settledGoroutines`, which takes the
   *minimum* over a settle window so a straggler drags the baseline toward the truth instead of
   inflating it; porting that to `waitForGoroutines` is a small, separate change.
 
@@ -3076,7 +3218,9 @@ none is load-bearing today, all will mislead someone eventually.
 The project's rule is that unrecorded behavior does not get designed around. These are the
 outstanding ones, in priority order:
 
-1. **Interrupting a session with a permission request outstanding.** The interrupt spike named
+1. **~~Interrupting a session with a permission request outstanding.~~ RECORDED 2026-08-09**
+   (`docs/superpowers/notes/2026-08-09-interrupt-permission-findings.md`, `interrupt-pending-*.jsonl`):
+   the ask is withdrawn by a `control_cancel_request` before the turn ends. The interrupt spike named
    this "the likeliest real collision — close this first." Wake will do both constantly.
 2. **~~What a subagent actually looks like on the wire.~~ RECORDED** (`47d3815`) — see I6 above
    for what it found and what it costs. Its own §11 lists thirteen things it did not settle, and
@@ -3101,7 +3245,9 @@ outstanding ones, in priority order:
    cross-session peer message carries `isReplay:true` **and** `isSynthetic:true`, while an ordinary
    replayed stdin send carries `isReplay:true` alone — so both fold to `Echoed:true` and the room's
    existing `typedByHand` fold drops them, surfacing only the envelope-bearing frames.
-4. **`rate_limit_info.status`** has exactly one observed value (`"allowed"`). Any fleet
+4. **`rate_limit_info.status`** has exactly one observed value (`"allowed"`) *(now two:
+   `allowed_warning` is on 9 frames across the corpus against 64 `allowed`; still no refusal value,
+   2026-09-29)*. Any fleet
    indicator built on it is designed against a single sample, and least trustworthy in exactly
    the situation it exists to catch.
 5. `cancel_async_message`, subagent interrupts, queue depth > 1, the interrupt `reason` field.
@@ -3113,11 +3259,11 @@ outstanding ones, in priority order:
 Comment precision, naming, small duplication. Batch these into one pass rather than
 interrupting a task for any of them.
 
-`typeInto` duplicated inline (composer_test.go:64,141) · `"\n "` separator unnamed
+`typeInto` duplicated inline (composer_test.go:64,141 — now :77,168, 2026-09-29) · `"\n "` separator unnamed
 (composer.go:99) · `hintIndentWidth` documents a literal it does not drive · `composer.go:48-50`
 rationale off by one at width 7 · probe-derived marking invisible to `go doc` for
 `EncodeUserMessage`/`EncodeDeny` · one Task 3 test exceeds its own file's 50-line and 4-level
-limits · `truncate` returns the full string when `max<=1` · `Prime` is an exported symbol
+limits · ~~`truncate` returns the full string when `max<=1`~~ (no `truncate` left in the tree, 2026-09-29) · `Prime` is an exported symbol
 outside its brief's list · three findings-note items (nullable `messaging_socket_path`, a §13
 path inconsistency, "exit code 1 / zero bytes on stdout" still testimony).
 
@@ -3141,7 +3287,10 @@ full underneath, because being wrong about which costs matter is the point of wr
   design non-negotiable is that it feels like Claude Code, and a composer that lags a fast typist
   fails that for 0.11 % of a core — against 30 `claude` processes, that is noise. **Revisit only
   if idle measurement ever shows the TUI mattering next to the fleet.**
-- **Still the one that scales, and it is measured now:** the daemon's ~86,400 `ps` spawns a day at
+- **~~Still the one that scales, and it is measured now:~~ FIXED** (verified 2026-09-29): one `ps`
+  answers the whole fleet and the schedule decays (`internal/daemon/livefleet.go`, `watchdog.go`),
+  held flat in fleet size and under one per tick by `psrate_test.go`. Original: the daemon's ~86,400
+  `ps` spawns a day at
   30 agents. Phase 2 Task 16 counted **1.02 spawns per quiet agent per tick** against a real daemon
   with a counting `ps` on `PATH`, which is exactly the arithmetic this note predicted
   (`internal/daemon/psrate_test.go`). The TUI beside it idles at 0.80 % of one core with 30 agents
@@ -3196,7 +3345,9 @@ travel with the branch. It flagged that rather than assuming, and reproduced the
 It also could not transcribe four Minors at all, because I had put the review findings in a
 *message* instead of a file the worktree could read. **Hand a subagent findings as a file path.**
 
-- **§5 says names are "renameable" and no rename verb exists.** `wake new <name>` chooses one at
+- **~~§5 says names are "renameable" and no rename verb exists.~~ DONE** (verified 2026-09-29):
+  `/name` renames (`internal/ui/slash.go`'s `nameCommand` → `rpc.FrameRename`,
+  `internal/daemon/rename.go`). `wake new <name>` chooses one at
   creation; nothing changes it afterwards. This clause of the spec is silently open and was in no
   notes file until now.
 - **Bare repositories are unhandled by `taskLabel`.** Measured: a bare repo labels as its
@@ -3274,8 +3425,9 @@ shape as the guard that could not catch the `⌃F` overflow because it looked fo
 word was what got cut. **A width test that only checks its own chosen width is not checking the
 truncation.**
 
-**Wake — the only proof a woken session came back is that a process started, not that it loaded the
-conversation.** Added 2026-08-10 by park/wake Task 3. The suite asserts the argv end to end
+**~~Wake — the only proof a woken session came back is that a process started, not that it loaded the
+conversation.~~ DONE** (Lane B #1 below): `internal/daemon/continuity_unix_test.go`'s
+`TestAWokenSessionAnswersFromTheConversationItParkedWith` and its across-a-daemon twin. Added 2026-08-10 by park/wake Task 3. The suite asserts the argv end to end
 (`--resume <id>`, no `--session-id`, no `--fork-session`), the identity that survives, and the
 refusals — but the fake `claude` on PATH has no transcript and no notion of resuming one, so
 *nothing here shows a woken session answering from the conversation it parked with*. The recordings
@@ -3291,7 +3443,8 @@ wake in front of a user.**
 Added 2026-08-10 by park/wake Task 3, and recorded because the power section already names the
 daemon's ~86,400 `ps` spawns a day as the cost that scales. This one is on an operator's action
 rather than on a timer, and `idsInUse` takes a slice so *n* ids are one process rather than *n* — the
-restore-on-start path spec §4 describes wakes a whole fleet at once and must use that shape. What is
+restore-on-start path spec §4 describes wakes a whole fleet at once and must use that shape *(that
+path is not built — a daemon restores nothing, `CLAUDE.md` — 2026-09-29)*. What is
 not bounded is the listing itself: on a busy machine `ps -A` output is large and it is read into
 memory whole. Nothing measures it. *What closes it* is a measurement, and the threshold for caring is
 restore-on-start, not `⌃C`.
@@ -3343,9 +3496,13 @@ each left open is recorded under its own entry above rather than here, and none
 of it is a regression from this work:
 
 - **#2** — the wake refusal sentences have unit coverage but none under load.
-- **#3** — a park the daemon cannot *write down* reaches only its log (Task 5's
+- **#3** — **Tier-1 CLOSED 2026-08-24 (`fix/park-writedown-visible`):** `warnUnbooked`
+  (`internal/daemon/park.go`) now broadcasts a `FrameError`; only ⌃Q's teardown half remains.
+  Original: a park the daemon cannot *write down* reaches only its log (Task 5's
   m1), and `⌃Q`'s window genuinely has nowhere to land a refused write.
-- **#8** — with a DM open the last six legend entries are invisible on every
+- **#8** — **SUPERSEDED (`feat/status-bar-legend`, PR #31, 2026-08-31):** the static legend row
+  is gone (drawn only while an arm is live), so nothing is cut. Original: with a DM open the last
+  six legend entries are invisible on every
   terminal up to ~300 columns. A design call: fewer entries, or a second row.
 - **#10** — the first real schema change is the day a second version ships.
 
@@ -3414,7 +3571,12 @@ it with an **assigned** one. The code path is identical and the gap is a fixture
 so it is small — but it is the fixture that would notice a future `labelFor`
 learning to re-derive "only when the label was not set by hand".
 
-### Deferred: no live cap, and `/new` is now a keystroke
+### ~~Deferred: no live cap, and `/new` is now a keystroke~~ — SUPERSEDED (2026-09-29)
+
+**Superseded:** a live cap exists — `daemon.liveCap` (`defaultLiveCap = 30`), refused in `maySpawn`
+and again atomically in `admitLive` (`internal/daemon/mayspawn.go`) — and `FrameSpawn` is now
+*allowed* to the manager on that cap (`cmd/wake/mcpguard_test.go`'s verdict, dated 2026-08-12). Spec
+§6's scheduler (`internal/core/pool.go`) is still not built. Original entry follows.
 
 `/new` is the first way to start an agent without leaving the room, and there is
 still no live cap anywhere in this build. It is bounded by a human typing, which
@@ -3432,7 +3594,12 @@ edited; the contract that matters is enforced instead — every read of either
 field on a live agent goes through the lock (`snapshot`, `rosterRecord`), and
 `launch`'s one unlocked read of `replaces.label` is ordered behind `markParked`.
 
-### Owed, and named here so it is not discovered: rung 7 on `cmd/wake`'s verbs
+### ~~Owed, and named here so it is not discovered: rung 7 on `cmd/wake`'s verbs~~ — DONE (verified 2026-09-29)
+
+**Done:** the parked-attach refusal no longer forbids a spelled `wake resume`; it holds every `wake
+<verb>` it names to the verbs `cmd/wake` dispatches (`requireEveryVerbNamedIsDispatched` in
+`TestAttachRefusesAParkedSessionAndNamesAVerbThatWorks`, `cmd/wake/park_test.go`). Original entry
+follows.
 
 `internal/ui/rename.go` and `new.go` name `wake new` in prose, and
 `cmd/wake/manager_test.go` already holds every `wake <verb>` any sentence names
@@ -3468,7 +3635,11 @@ the turn count under the expensive one, and `TestWhatTheComposerPromisesIsWhatEn
 number on screen equal to the frames ↵ writes. Its closing clause, *"belongs with profiles"*, is
 now true of the config half alone and is the entry above.
 
-### Two status documents will be wrong the moment this merges
+### ~~Two status documents will be wrong the moment this merges~~ — DONE (verified 2026-09-29)
+
+**Done:** both were flipped — `2026-08-12-phase-4-scope.md` §1 reads `~~mention-mode toggle~~ BUILT
+2026-08-12` with the floor at five, and `v1_goals.md`'s routing row reads **Built** with the `⌃T`
+toggle. Original entry follows.
 
 Recorded rather than edited, because this branch is not merged and marking something built before
 it is would be the same lie pointing the other way:
@@ -3586,7 +3757,10 @@ What it would cost, stated so the next person starts from the real shape:
   before it looks at the id space. Pre-existing; `/name` is a second door onto
   it. **Closed in this round** — the predicate now asks "could this be the front
   of a canonical UUID" rather than "is every rune hex".
-- **`agent.go`'s struct layout is the contract and it is now wrong.** `name` and
+- **`agent.go`'s struct layout is the contract and it is now wrong.** **Partly stale
+  (2026-09-29):** `retire`'s lock sentence is corrected (`spawn.go`: *"a.mu → names.mu is the one
+  nesting, in rename"*); the fields are still above `mu` and `agent.go`'s `label`/`parent` comments
+  still read as quoted. Original: `name` and
   `label` are declared above `mu` with everything below it lock-guarded, and both
   are written under `a.mu` by `rename`/`relabel`. The one real race
   (`managerAgent`) is fixed and the class is guarded by
@@ -3698,7 +3872,12 @@ a test, so the assertion had a guard defending it.
 
 ### An import has no TUI surface — DONE (`/adopt`, 2026-08-12)
 
-### One at a time — and the founding ask was about **selection**, not about `--all`
+### One at a time — and the founding ask was about **selection**, not about `--all` — PARTLY STALE (2026-09-29)
+
+**Two facts below have moved:** a live cap exists (`daemon.liveCap`, 30, `internal/daemon/mayspawn.go`;
+imports pass it via `maySpawn`), and marking rows exists — the room's `/resume` picker is a
+multi-select over on-disk sessions too (`⇥` toggles, `↵` resumes the set; PR #102, #112). It resumes
+in place rather than forking, so `/adopt`'s fork-shaped selection is still typed ids.
 
 `wake import` adopts one session per invocation, and this entry was first written as if the gap were
 a convenience flag. **It is a scope gap, and the founding sentence is the evidence:** *"be able to
@@ -3730,7 +3909,8 @@ picker. That is a pane with its own key handling and its own focus, which is a d
 work from a command; `/adopt`'s listing lands in the room's transcript as a preformatted block,
 which is a listing rather than a widget.
 
-**And the live cap is still NOT BUILT, so the bound is still the operator's.** `/adopt` will write
+**And the live cap is still NOT BUILT, so the bound is still the operator's.** *(Stale 2026-09-29:
+`daemon.liveCap` now refuses a spawn past 30 on every path, `/adopt`'s imports included.)* `/adopt` will write
 as many frames as there are words in the draft. That is bounded by typing in a way `--all` would
 not be — every session is named individually, off a listing capped at ten — but it is not a cap, and
 a draft naming thirty sources is thirty processes. The live cap remains the thing that closes it.
@@ -3739,7 +3919,11 @@ a draft naming thirty sources is thirty processes. The live cap remains the thin
 
 What the TUI entry above did not close, and what building it turned up.
 
-### The listing in a pane is a block, not a picker
+### The listing in a pane is a block, not a picker — PARTLY SUPERSEDED (2026-09-29)
+
+**The pane now exists, under `/resume`:** a modal, type-to-search, multi-select picker over parked and
+on-disk sessions (`internal/ui/resumepicker.go`, PR #102/#112). `/adopt` with no argument still
+prints the block below; whether it should open that picker (as a fork) is the open half.
 
 `/adopt` with no argument puts the shell's own listing into the room's transcript, fenced, capped at
 ten rows. It is the right amount of surface for a command and it is not the picker the founding
@@ -3752,7 +3936,10 @@ composers, and a place in `layout.go` — `internal/ui/app.go`, `panes.go` and `
 which is one lane's file. **The cap and the block are the honest intermediate**, not a stub: the row
 count is named, the remainder is named, and the verb that lists all of them is named.
 
-### The listing has no filter, and recency is the only order there is
+### The listing has no filter, and recency is the only order there is — PARTLY SUPERSEDED (2026-09-29)
+
+**The `/resume` picker filters** on name, directory, branch, preview and id (PR #112); `/adopt`'s
+block is still recency-only.
 
 `daemon.Discoverable` sorts by mtime and nothing else. In a pane that makes the cap a *recency*
 window, which is the right question most of the time — the sessions somebody has open in terminals
@@ -3760,7 +3947,12 @@ right now are the recent ones — and useless for "the one in `delta-agent`". A 
 the obvious next thing and it belongs with the pane rather than with the command, because filtering
 without a cursor is a second grammar on the same draft.
 
-### `/adopt` is not in the legend, and that is the legend rule rather than an omission
+### ~~`/adopt` is not in the legend, and that is the legend rule rather than an omission~~ — SUPERSEDED (2026-09-29)
+
+**Superseded:** the room advertises its commands in the `/` completion menu — `commandMenu` lists
+`wakeVerbs()`, `/adopt` among them (`internal/ui/completion.go`, `completionmention_test.go`) — and
+the legend itself is drawn only while an arm is live (PR #31). `⌃X` and `⌃Y` are both bound now.
+Original entry follows.
 
 `ui.legendEntries` names **keys**. `/adopt` is a word typed into a composer, like `/resume`, `/new`,
 `/name` and `/task` — none of which is in the legend either. Whether the room advertises its slash
@@ -3833,7 +4025,9 @@ what a dropped `.WithSessions` looks like.
 `TestEveryRoomThisPackageBuildsCanSeeThisMachine` derives the call sites and is what stands between
 those two, because nothing behavioural can tell them apart.
 
-*Unrecorded:* how long `daemon.Discoverable` takes on a 428-transcript machine. It is off the draw
+*~~Unrecorded~~ Measured (PR #112, 2026-09-22):* 3.58s read sequentially over ~360 transcripts, 0.85s
+fanned across `discoverWorkers`; reads stay whole (deep cwds). Original: how long
+`daemon.Discoverable` takes on a 428-transcript machine. It is off the draw
 goroutine, so a slow walk is a delay before the block appears rather than a frozen room — but
 nobody has measured it, and the number would decide whether the cap should also bound the *walk*.
 
@@ -3863,7 +4057,11 @@ The four with neither are listed with an empty preview line, which is correct an
 `decodeString` treats any non-string shape as absent — so a format change degrades the preview and
 breaks nothing.
 
-### `daemon.oneLine` and `mcp.oneLine` are two functions doing one job
+### `daemon.oneLine` and `mcp.oneLine` are two functions doing one job — PARTLY STALE (2026-09-29)
+
+**Now three:** `internal/ui/oneline.go`'s `oneLine` flattens an agent's stderr and a model-written
+subagent name the same way, and `mcp.oneLine` moved to `internal/mcp/oneline.go`. The leaf package
+is still owed.
 
 Both flatten untrusted text to a single line before it reaches a line-oriented surface. They are
 genuinely not the same call today — `mcp`'s is unexported, in a package `daemon` does not import,
@@ -4019,7 +4217,10 @@ would have left the hole in the direction `cardkeys.go`'s own comment names as u
      agent re-asks (same §9 — *"a denied plan is the more urgent of the two"*).
    Method: `2026-08-09-question-findings.md` §10.
 
-3. **`[d]eny` still cannot carry a typed reason** — the existing Phase 2 Task 10 item stands, and
+3. ~~**`[d]eny` still cannot carry a typed reason**~~ **BUILT (verified 2026-09-29):** `d` opens a
+   `deny reason` box and `↵` sends the typed text (empty keeps `cardDenyReason`) —
+   `internal/ui/cardanswer.go`'s `beginDeny`/`commitAnswer`. Original: the existing Phase 2 Task 10
+   item stands, and
    the two-press settle does **not** close it. But it changes the shape available: the arm is a
    state in which a card is up, the composer is empty, and the next keystroke is already claimed by
    the card. *"Deny with this text"* could plausibly be *"press `d`, type, press `d`"* — which is
@@ -4080,7 +4281,9 @@ hang-up — first one wins.
 
 ### Still open, and re-ranked out of item 3
 
-**A park the daemon could not *write down* reaches only the daemon log.** Task 5's m1, carried
+**~~A park the daemon could not *write down* reaches only the daemon log.~~ Tier-1 CLOSED 2026-08-24
+(`fix/park-writedown-visible`):** `warnUnbooked` (`internal/daemon/park.go`) broadcasts a `FrameError`
+from both `parked.add` failure arms; rendering it through ⌃Q's teardown is what is left. Task 5's m1, carried
 through item 3 and **not taken here**. `completePark`'s `s.parked.add` failure is logged and
 nothing else; `agent.stateLocked` reports the session parked regardless, so `⌃C`'s confirmation
 says *"@alex is parked — /resume alex brings it back"*, which is **true until the daemon exits** and
@@ -4164,7 +4367,12 @@ and the failure the probe exists for is precisely the scan never reaching EOF, b
 holds stdout. So `Wait` is never entered and the child stays an unreaped zombie, which is what
 `ps` state `Z` is detecting. Two consequences worth writing down:
 
-- **The zero-cost fix is real and it lives in `core`.** A `cmd.Wait()` running concurrently with the
+- **The zero-cost fix is real and it lives in `core`.** **DONE in `core` (found by the 2026-09-29
+  audit):** `Session.awaitExit` (`internal/core/ending.go`) is now the session's one `cmd.Wait`, on
+  its own goroutine beside the scan, and the forced close runs only after Wait returns plus
+  `waitDelay` — the ordered teardown described below, which also makes the `wait4` spike moot. The
+  daemon's `ps` probe (`livefleet.go`, `reap_unix.go`) was not retired onto it, so the `SIGCHLD`
+  bullet stays open. A `cmd.Wait()` running concurrently with the
   scan would return within `WaitDelay` of the process exiting even with the pipes held, and that
   return *is* the event — no `ps`, no schedule, nothing on a timer at all. It is not done here
   because the naive version has a serious regression in it: `Wait` closes the stdout pipe when the
@@ -4199,6 +4407,8 @@ which is the accepted-exit-0-and-wrong shape `identityArgs` already exists for. 
 *What would re-open it:* cgo, or a darwin `waitid` wrapper — both a bigger change than the thing
 they buy, unless the `core` item above is taken first, at which point neither is needed.
 
+**FIXED (found by the 2026-09-29 audit):** the fixture ids now carry a per-process nonce
+(`testRunNonce`/`testSessionID`, `internal/daemon/harness_test.go`), this entry's own prescription.
 **Wake — two concurrent runs of `internal/daemon`'s suite on one machine fail each other's wake
 tests, and it is not flakiness.** Found while verifying this work, after wrongly concluding twice
 that the failures were pre-existing and then that they were mine. Neither: `resumeSafe` →
@@ -4237,7 +4447,8 @@ row the frame does not currently expose, and `App.paneAt` would gain arithmetic 
 the failure mode this file's own rule names. *What closes it:* have the composer report the row its
 titled edge lands on, assert that against a rendered frame, and hit-test against **that** rather than
 against a recomputed offset. Until then the mouse closes a pane in two steps — click it, then `⌃W`,
-which is bound and in the legend.
+which is bound and in `legendEntries` (the legend itself is drawn only while an arm is live,
+2026-09-29).
 
 **Wake — the composer's target line and legend are not right-padded, so the rightmost pane's short
 rows stay short.** Found by `internal/ui/frame_test.go`.
@@ -4318,10 +4529,15 @@ still relaunches from the asked-for level, so a probed `auto`/`ultracode` never 
 gap.** `cmd/wake/mcpguard_test.go` already refuses `mode` on the argument that a manager which could
 set one would be *the fleet deciding it will not be asked*, in every future decision that session
 makes rather than one, and that it shows up in no row the tool surface returns. Effort and model are
-the same class and cost more per turn. The MCP surface stays at five tools. *What would reopen it:* a
+the same class and cost more per turn. The MCP surface stays at five tools
+(nine as of 2026-09-29: `send_to_team`, `set_team`, `set_color` came in PRs #106/#110; none sets
+effort or model). *What would reopen it:* a
 version of `managerVerbs` where a configuration change is visible in the room as an event, at which
 point the argument is about cost rather than about invisibility.
 
+**PARTLY DONE (found by the 2026-09-29 audit):** answer mode (`internal/ui/cardanswer.go`) now gives
+an `Other…` row answered in the operator's own words and a `d` refusal whose reason is typed. What
+stays open is a note riding *alongside* a chosen option, which is still unrecorded.
 **Wake — a question card has no free-text channel, where claude's own question screen has two.** The
 native screen offers *"press n to add notes"* and a *"Chat about this"* line beside the options, and
 Wake's card offers neither: the options, the digits, `↑↓`/`↵`, and a refusal carrying one fixed
@@ -4608,7 +4824,8 @@ reason. `TestAMenuNeverMakesAPaneTallerThanItWasGiven` sweeps the whole band aga
 with the draft taken back, rather than against the height asked for, because a pane already refuses
 to shrink below its own floor and that behaviour predates the menu.
 
-**Nothing narrows the offers except a prefix.** `/re` reaches `/resume` and `/rename`; `/rsm` reaches
+**Nothing narrows the offers except a prefix.** (Still true of commands; a conversation's `@` file
+offers are fuzzy since PR #131 — `completionindex.go`'s `pathTier`, 2026-09-29.) `/re` reaches `/resume` and `/rename`; `/rsm` reaches
 nothing. Claude Code fuzzy-matches. A prefix is what makes the match explicable — the operator can
 see why a row is there — and fuzzy matching over 133 commands on every keystroke is a cost nobody has
 priced here. Worth doing only with a measurement in front of it.
@@ -4647,13 +4864,16 @@ The claim is still on the trailing *token* rather than on any token the cursor h
 that is deliberate — an accept replaces the whole draft, and completing mid-draft means preserving a
 tail and placing a cursor inside it, which is a feature rather than a fix.
 
-**A draft with a leading space gets no menu, and `submit` still routes it.** `slash` trims before it
+~~**A draft with a leading space gets no menu, and `submit` still routes it.**~~ **FIXED (found by the
+2026-09-29 audit):** `commandStem` now reads the word at the cursor, so ` /resume` draws the menu
+with the space kept as its `head`. `slash` trims before it
 routes, so ` /resume` is Wake's; `commandStem` does not, so it draws nothing. A missing convenience
 rather than a lie, and the fix is one `TrimLeft` plus an accept that knows how much it trimmed.
 
 **The directory in `/new <name> in <dir>` gets no menu, and the reader for one is already built.**
 The gap is the *trigger*, not the filesystem half. `completing` dispatches on exactly two stems:
-`commandStem`, which returns false the moment the draft contains a word break — so `/new john in
+`commandStem`, which returns false the moment the draft contains a word break (now: unless the
+word at the cursor is a `/command`, which `delta-a` still is not — 2026-09-29) — so `/new john in
 delta-a` stops being a command being typed at the first space — and `mentionStem`, which requires the
 trailing token to start with `@`. A directory typed after `in` is neither, so it draws nothing, while
 the same operator typing `@delta-a` one keystroke earlier gets a bounded, off-the-draw-goroutine
@@ -4706,7 +4926,7 @@ is *not* there", which is the case it is least safe for.
 absence assertions each get a positive predecessor to await. The second is smaller and is what the
 new tests already do.
 
-### And one measurement worth recording: `internal/ui/app.go` is at 794 of 800
+### And one measurement worth recording: `internal/ui/app.go` is at 794 of 800 (now 778, 2026-09-29)
 
 The completion field took it from 789. `TestNoNonTestFileCrossesTheHardMax` fails at 801 and
 `TestCLAUDEmdNamesTheTwoLargestNonTestFiles` prints the count on every run, so this cannot arrive
@@ -4752,7 +4972,7 @@ either flag, and asserting one in a doc would be this repository's most-repeated
 and whether logging can be turned on, without a respawn. Then `parkedRecord` gains the fields that
 cannot be, or the doc says plainly that a park drops them and why.
 
-### `internal/daemon/spawn.go` is at 790 of 800
+### `internal/daemon/spawn.go` is at 790 of 800 (now 785, 2026-09-29)
 
 `spawn` grew four lines for the `configFor` failure path, which is now fallible because a debug log
 name becomes a path and that can fail. Nothing new was put in the file — both new subjects went to
@@ -4766,6 +4986,7 @@ spawn happen at all) and `launch`/`admit`/`withdraw`/`register` are another (tak
 ## 2026-08-21 — next step, owner's call: give the manager a brain, not just tools
 
 What is built, as of Phase 2 Task 15: a real `claude` session holding five bounded tools
+(nine as of 2026-09-29, with `send_to_team`, `set_team` and `set_color`)
 (`internal/mcp/tools.go` — `list_agents`, `agent_status`, `roll_up`, `send_to_agent`,
 `spawn_agent`, `interrupt`) under a system prompt (`managerScope`,
 `internal/daemon/manager.go`) that says what each does and what it may not do. What that prompt
@@ -4809,7 +5030,8 @@ is client state, so detaching mid-answer drops the draft. That is the right defa
 half-written is not an answer — but nothing tells the operator it happened.
 
 **2026-08-28 — owner's ask: a manager tool to *read an agent's whole conversation*, token-aware.**
-The five tools let the manager see the fleet's *shape* — `list_agents`, `agent_status`, `roll_up`
+The five tools (nine as of 2026-09-29, none of which reads a transcript) let the manager see
+the fleet's *shape* — `list_agents`, `agent_status`, `roll_up`
 (the rollup in `internal/mcp/rollup.go`) — but nothing lets it read one agent's actual transcript,
 turn by turn. A true orchestrator (the section above) needs that: to notice three agents are stuck on
 the same thing, or that a five-agent refactor has drifted, it has to be able to *read* what an agent
@@ -4965,7 +5187,8 @@ instance, to be delivered by **profiles**. Profiles were **explicitly ruled out 
 entry above), so the spec's multi-group-per-instance vision is cancelled in its original form rather
 than pending — which is exactly why this wants a fresh ruling before anyone builds it.
 
-**Two things already deferred are adjacent, and neither is a second room:**
+**Two things already deferred are adjacent, and neither is a second room:** (both since built —
+teams in PR #106, the `@john` filter in PR #7, `roomfocus.go` — 2026-09-29)
 - **Teams** (2026-08-16, above): named tags + `@team` fan-out + sidebar grouping. Even its cheap
   first cut groups the roster and routes — **the room stays one**.
 - **`@john` as a room view filter** (2026-08-25, above): narrows what the *one* room *shows* to a
@@ -5079,7 +5302,9 @@ every such resume drew a pooled one. Three things were left:
   The fallback is only logged, as `unparkRecord`'s is; the room just says `@silas has been resumed.`
   Decoupling `--name` from the registry name to dodge this was rejected: the `/rename` mirror rests
   on the two moving together.
-- **Wake's own `/name` never reaches the transcript.** Only claude's `/rename` writes a
+- ~~**Wake's own `/name` never reaches the transcript.**~~ **FIXED (PR #131, 2026-09-29):**
+  `internal/daemon/renamesync.go` follows a Wake rename with a bare `/rename <new>` at idle, which is
+  what writes the `customTitle`. Only claude's `/rename` writes a
   `customTitle` (Wake mirrors it); `/name foo` changes Wake's registry alone, so an on-disk resume
   after it restores the pre-`/name` title. *Closes with:* `/name` also sending claude's `/rename`,
   which is also the only repair after the fallback above.
