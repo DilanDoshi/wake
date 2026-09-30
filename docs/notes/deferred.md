@@ -204,11 +204,15 @@ whose first row opens with a marker (`• `, `N. `, `[ ] `/`[✓] ` — `itemMar
 the marker at the budget less the marker's width and lays its continuations under the text, so the
 hang costs no row its width. `hangIndentLists`/`hangIndent` are deleted; the shift they applied after
 glamour's wrap also spent glamour's far margin (a bullet continuation 55 cells wide in a 54-cell
-layout at width 56), which the tightened width sweep now forbids. A group is an item only where
-glamour starts one — after a blank row, a change of indent, or another item — because a paragraph
-glamour wraps so a row opens `2. Then` reads as an enumerator on its own
-(`TestTheHangLeavesNonListRowsWhereGlamourLaysThem`, widths 53-55). `rejoin.go`'s `hangOf` steps past
-the same markers so a copy rejoins the hang. The original entry is kept below.
+layout at width 56), which the tightened width sweep now forbids. Two things the rendered bytes alone
+could not say, settled at their source: an enumerator or task box is real only when glamour drew it
+for a list item, which the style marks with `itemTag` (an empty SGR, stripped after reflow), because
+`1\.`, a literal `[ ] ` and a ten-digit number render the same bytes as a real marker; and a row
+mid-group splits it only for an item of the group's own list (`startsItem`), because a wrap that
+opens `2. Then` is prose, or a bullet's text. Inside an item, the row glamour leads with a styled
+span's empty escapes is merged back into the item — a code block in an item sits deeper, and any
+other block is a blank row away — so bold, code and links at a wrap no longer drop the hang the old
+shift gave them. `rejoin.go` steps past the same markers so a copy rejoins the hang. The original entry is kept below.
 
 
 **Shipped:** `fix/markdown-list-hanging-indent` hang-indents a wrapped **bullet** item's

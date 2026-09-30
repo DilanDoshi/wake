@@ -116,6 +116,107 @@ func TestAListRightAfterAHeadingOrAFenceHangs(t *testing.T) {
 	}
 }
 
+// stepTwo is a sentence glamour wraps, at some widths, so a row opens `2. Then`
+// - an enumerator on its own, and neither an item nor a place to split.
+const stepTwo = "Upgrade the service to the newest release in step 2. Then restart it and check that every worker comes back up healthy again"
+
+// glamourOpens reports whether glamour's own layout of src at width has a row
+// whose text opens with prefix, so a test about that row is not vacuous.
+func glamourOpens(t *testing.T, src string, width int, prefix string) bool {
+	t.Helper()
+	r, err := rendererFor(width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := lockAndRender(r, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range nonBlank(raw) {
+		if strings.HasPrefix(strings.TrimLeft(ansi.Strip(line), " "), prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestABulletWhoseWrapOpensAnEnumeratorStaysOneItem is the list half of the
+// `2. Then` row: glamour lays a bullet's wrap at the list margin, so a row of it
+// opening `2. ` reads as an ordered item. It is not one - a new list starts only
+// after a blank row, and a bullet's list holds no enumerator - so the whole item
+// hangs under its text.
+func TestABulletWhoseWrapOpensAnEnumeratorStaysOneItem(t *testing.T) {
+	src := "- " + stepTwo
+	hit := false
+	for width := 40; width <= 80; width++ {
+		hit = hit || glamourOpens(t, src, width, "2. ")
+		assertHangsUnder(t, nonBlank(Markdown(src, width)), bullet, 2)
+	}
+	if !hit {
+		t.Fatal("glamour wrapped no row of the bullet to open `2. ` at any width: this asserts nothing")
+	}
+}
+
+// glamourLeadsStyled reports whether glamour opens a row of src at width with
+// styling - a wrap that lands on a bold, code or link span - so a test about that
+// row is not vacuous.
+func glamourLeadsStyled(t *testing.T, src string, width int) bool {
+	t.Helper()
+	r, err := rendererFor(width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := lockAndRender(r, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range nonBlank(stylingOnly(raw)) {
+		if line[0] != ' ' {
+			return true
+		}
+	}
+	return false
+}
+
+// styledWrap is an item whose wrap lands, at some widths, on a styled span, which
+// glamour leads its row with empty styling for - so the row is not reflowable
+// prose by its first byte, and hung nothing (nor did the rows after it).
+func styledWrap(marker, span string) string {
+	return marker + " an item whose text is long enough to wrap so that a later row can open with " +
+		span + " and then keep going for a while longer"
+}
+
+// TestAnItemWhoseWrapOpensWithAStyledSpanStillHangs: the row glamour leads with a
+// bold, code or link span belongs to the item, and so does everything after it.
+func TestAnItemWhoseWrapOpensWithAStyledSpanStillHangs(t *testing.T) {
+	for _, span := range []string{"**bold words**", "`inline code`", "[a link](https://x.io)"} {
+		for _, list := range []struct{ source, marker string }{{"-", bullet}, {"1.", "1. "}} {
+			src, hit := styledWrap(list.source, span), false
+			for width := 30; width <= 90; width++ {
+				hit = hit || glamourLeadsStyled(t, src, width)
+				assertHangsUnder(t, nonBlank(Markdown(src, width)), list.marker, 2)
+			}
+			if !hit {
+				t.Errorf("%s %s: glamour led no row with styling at any width: this asserts nothing", list.source, span)
+			}
+		}
+	}
+}
+
+// TestCodeInsideAnItemKeepsItsLead is the guard on that: a fence inside an item
+// is drawn straight under the item's row with no blank between, but two columns
+// deeper, so it is never taken for the item's styled wrap.
+func TestCodeInsideAnItemKeepsItsLead(t *testing.T) {
+	const src = "- an item long enough to wrap onto a second visual line here for sure now\n  ```\n  code in the item\n  ```"
+	for width := 30; width <= 80; width++ {
+		for _, line := range nonBlank(Markdown(src, width)) {
+			if strings.Contains(ansi.Strip(line), "code in the item") && leadingCols(line) != 4 {
+				t.Errorf("width %d: the item's code moved to lead %d, want 4: %q", width, leadingCols(line), ansi.Strip(line))
+			}
+		}
+	}
+}
+
 // assertHangsUnder finds the item opening with marker at lead and checks every
 // continuation of it sits under its text, the column the marker ends.
 func assertHangsUnder(t *testing.T, lines []string, marker string, lead int) {
@@ -215,7 +316,12 @@ func TestHangIndentKeepsEveryListLineWithinWidth(t *testing.T) {
 func TestTheHangLeavesNonListRowsWhereGlamourLaysThem(t *testing.T) {
 	for _, src := range []string{
 		"A plain paragraph that is long enough to wrap onto a second visual line at this width here now.",
-		"Upgrade the service to the newest release in step 2. Then restart it and check that every worker comes back up healthy again",
+		stepTwo,
+		// Prose that reads like a marker on the page: glamour draws these the same
+		// bytes a real item's marker is, so only the tag tells them apart.
+		"1\\. an escaped enumerator opening a paragraph long enough to wrap onto a second visual line here",
+		"[ ] a literal box opening a paragraph long enough to wrap onto a second visual line here for sure",
+		"1234567890. a ten-digit number opening a paragraph long enough to wrap onto a second line here",
 		"# Heading\n\nbody text that wraps onto a second visual line here for certain now absolutely indeed",
 		"```go\nfunc main() { println(1) }\nvar x = averylongidentifierthatwrapsaround\n```",
 		"> a quoted line long enough to wrap onto a second visual line here for sure now indeed absolutely",

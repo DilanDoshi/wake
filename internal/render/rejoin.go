@@ -26,7 +26,7 @@ type Rejoin struct {
 // whole, which is reflowProse's own conservative limit.
 func Rejoins(rows []string) []Rejoin {
 	out := make([]Rejoin, len(rows))
-	cont := -1 // the lead the group above continues at; -1 outside prose
+	cont, first := -1, "" // where the group above continues (-1 outside prose), and its first row
 	leads := runLeads(rows)
 	for i, row := range rows {
 		lead := leadSpaces(row)
@@ -34,14 +34,28 @@ func Rejoins(rows []string) []Rejoin {
 		case !reflowable(row):
 			cont = -1
 			out[i] = Rejoin{Sep: "\n", Lead: leads[i]}
-		case lead == cont && !opensItem(row):
+		case lead == cont && !splits(first, row, cont):
 			out[i] = Rejoin{Sep: wrapSep(rows[i-1], row), Lead: lead}
 		default:
-			cont = hangOf(row, lead)
+			cont, first = hangOf(row, lead), row
+			if i+1 < len(rows) && leadSpaces(rows[i+1]) != cont {
+				cont = lead // nothing hangs under it: prose that only reads like an item
+			}
 			out[i] = Rejoin{Sep: "\n", Lead: min(lead, int(defaultMargin))}
 		}
 	}
 	return out
+}
+
+// splits reports whether row, at the column the group first opened continues
+// at, starts an item of its own. Under a hang any item marker is a nested list;
+// at the group's own lead only startsItem's rule does, so a paragraph row that
+// wraps to open `2. Then` stays in its paragraph.
+func splits(first, row string, cont int) bool {
+	if cont > leadSpaces(first) {
+		return opensItem(row)
+	}
+	return startsItem(first, row, "")
 }
 
 // hangOf is where a group's continuations sit: under an item's text, which
@@ -49,7 +63,7 @@ func Rejoins(rows []string) []Rejoin {
 // beside it; at the lead for anything else.
 func hangOf(row string, lead int) int {
 	rest, hang := row[lead:], lead
-	for m := itemMarker(rest); m != ""; m = itemMarker(rest) {
+	for m := itemMarker(rest, ""); m != ""; m = itemMarker(rest, "") {
 		rest, hang = rest[len(m):], hang+ansi.StringWidth(m)
 	}
 	return hang

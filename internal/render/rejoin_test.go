@@ -60,6 +60,38 @@ func TestAnEmailCopiesAsParagraphsAndItems(t *testing.T) {
 	}
 }
 
+// A paragraph glamour wraps so a row opens `2. Then` copies back as the one
+// sentence it is: the row is not an item, so it is a wrap like any other.
+func TestAParagraphWhoseWrapOpensAnEnumeratorCopiesWhole(t *testing.T) {
+	hit := false
+	for width := 40; width <= 80; width++ {
+		hit = hit || glamourOpens(t, stepTwo, width, "2. ")
+		if got := unwrapped(Markdown(stepTwo, width)); got != stepTwo {
+			t.Errorf("width %d: copy is\n%q\nwant\n%q", width, got, stepTwo)
+		}
+	}
+	if !hit {
+		t.Fatal("glamour wrapped no row to open `2. ` at any width: this asserts nothing")
+	}
+}
+
+// An item's wrap that glamour opens with a styled span copies back into the
+// item, and prose that only reads like a marker copies back as the one line it is.
+func TestAStyledWrapAndALookalikeMarkerCopyWhole(t *testing.T) {
+	for _, tc := range []struct{ src, want string }{
+		{styledWrap("-", "**bold words**"), "• an item whose text is long enough to wrap so that a later row can open with bold words and then keep going for a while longer"},
+		{styledWrap("-", "`inline code`"), "• an item whose text is long enough to wrap so that a later row can open with inline code and then keep going for a while longer"},
+		{"1\\. an escaped enumerator opening a paragraph long enough to wrap onto a second visual line here",
+			"1. an escaped enumerator opening a paragraph long enough to wrap onto a second visual line here"},
+	} {
+		for width := 30; width <= 90; width++ {
+			if got := unwrapped(Markdown(tc.src, width)); got != tc.want {
+				t.Errorf("width %d: copy is\n%q\nwant\n%q", width, got, tc.want)
+			}
+		}
+	}
+}
+
 // A nested item and an enumerated one are items of their own - a new marker
 // ends the item above - and a nested one keeps its depth under the margin. An
 // enumerated or task item's wrap hangs past its marker, and rejoins from there.

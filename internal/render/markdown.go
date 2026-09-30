@@ -124,38 +124,63 @@ const boxDrawing = "│─┼┌┐└┘├┤┬┴╭╮╰╯"
 // space.
 //
 // An item's continuation hangs under its text, which glamour v1.0.0 lays at the
-// list margin instead. A group is an item only where glamour starts one: after a
-// blank row, a change of indent, or another item. A paragraph glamour wrapped so a
-// row opens `2. Then` splits there but is not an item, and hangs nothing.
+// list margin instead. An item is a group glamour drew a marker for (itemTag),
+// and a row mid-group splits it only where startsItem says glamour started an
+// item there. Inside an item a row glamour leads with a styled span's empty
+// styling is the item's too: a code block in an item sits deeper, and any other
+// block is a blank row away.
 func reflowProse(s string, width int) string {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
-	itemAt := -1 // the lead of the item group that ended on the row above, or -1
 	for i := 0; i < len(lines); {
 		if !reflowable(lines[i]) {
 			out = append(out, lines[i])
-			itemAt = -1
 			i++
 			continue
 		}
 		lead := leadSpaces(lines[i])
-		j := i + 1
-		for j < len(lines) && reflowable(lines[j]) &&
-			leadSpaces(lines[j]) == lead && !opensItem(lines[j]) {
-			j++
+		// Trimmed: a lone bullet's padding would read as the space after it.
+		mark := itemMarker(strings.TrimRight(lines[i][lead:], " "), itemTag)
+		group := []string{lines[i]}
+		for i++; i < len(lines); i++ {
+			row := lines[i]
+			if mark != "" {
+				row = unstyledLead(row)
+			}
+			if !reflowable(row) || leadSpaces(row) != lead || startsItem(group[0], row, itemTag) {
+				break
+			}
+			group = append(group, row)
 		}
-		mark := ""
-		if i == 0 || !reflowable(lines[i-1]) || leadSpaces(lines[i-1]) != lead || itemAt == lead {
-			// Trimmed: a lone bullet's padding would read as the space after it.
-			mark = itemMarker(strings.TrimRight(lines[i][lead:], " "))
-		}
-		out = append(out, rewrapProse(lines[i:j], lead, width, mark)...)
-		if itemAt = -1; mark != "" {
-			itemAt = lead
-		}
-		i = j
+		out = append(out, rewrapProse(group, lead, width, mark)...)
 	}
-	return strings.Join(out, "\n")
+	return strings.ReplaceAll(strings.Join(out, "\n"), itemTag, "")
+}
+
+// startsItem reports whether row, at the lead of the group first opened, starts
+// an item rather than continuing the group. glamour opens a new list only after
+// a blank row, so mid-group a row is an item only of first's own list - an
+// enumerator after an enumerator, a bullet or a task box after either. A wrapped
+// row that happens to open `2. Then` continues a paragraph, or a bullet.
+func startsItem(first, row, tag string) bool {
+	a, b := markerOf(first, tag), markerOf(row, tag)
+	return a != "" && b != "" && enumerator(a) == enumerator(b)
+}
+
+// enumerator reports whether a marker is an `N. ` one.
+func enumerator(mark string) bool { return mark != "" && mark[0] >= '0' && mark[0] <= '9' }
+
+// unstyledLead drops the escapes glamour leads a wrapped row with when a styled
+// span opens it. They end in a reset, so they style nothing.
+func unstyledLead(row string) string {
+	cut := 0
+	for n := sgrRun(row); n > 0; n = sgrRun(row[cut:]) {
+		cut += n
+	}
+	if cut == 0 || !strings.HasSuffix(row[:cut], "\x1b[0m") {
+		return row
+	}
+	return row[cut:]
 }
 
 // reflowable reports whether a line is glamour-rendered prose this pass may
@@ -169,6 +194,8 @@ func reflowProse(s string, width int) string {
 // glamour's wrap. That only forgoes fixing a strand in that one styled paragraph
 // — never corrupts it — and it is what keeps a fenced code block (indistinguishable
 // from styled prose once the leading SGR is stripped) safe from being re-wrapped.
+// A list item takes such a row back, where position alone tells it from code
+// (reflowProse).
 func reflowable(line string) bool {
 	if line == "" || line[0] != ' ' {
 		return false
@@ -186,28 +213,46 @@ func leadSpaces(line string) int {
 	return len(line) - len(strings.TrimLeft(line, " "))
 }
 
-// opensItem reports whether a line begins a new list item, which ends the group
-// before it: a bullet, an `N.` enumeration, or a `[ ]`/`[✓]` task. The head is
-// trimmed of the trailing padding glamour lays out, so a sentence-final number
-// (`DEV-3035.`, wrapped to a line of its own) does not read as an `N.` marker
-// and split a paragraph.
-func opensItem(line string) bool {
-	head := strings.TrimSpace(ansi.Strip(line))
-	return bulletMarker(line, leadSpaces(line)) || enumeratorLen(head) > 0 ||
-		strings.HasPrefix(head, unticked) || strings.HasPrefix(head, ticked)
+// opensItem reports whether a line reads as the start of a list item, marker by
+// marker as it is drawn: after reflowProse no tag is left to say which are real.
+func opensItem(line string) bool { return markerOf(line, "") != "" }
+
+// markerOf is the marker a row opens with at its lead, with tag as itemMarker
+// takes it. A lone bullet counts - its padding reads as the space after it - and
+// otherwise the row is trimmed of that padding, so a sentence-final number
+// wrapped onto a row of its own (`3035.`) is not an `N. `.
+func markerOf(row, tag string) string {
+	lead := leadSpaces(row)
+	if bulletMarker(row, lead) {
+		return bullet
+	}
+	return itemMarker(strings.TrimRight(row[lead:], " "), tag)
 }
 
-// itemMarker is the list marker a row's text opens with - a bullet, an `N. `
-// enumerator or a task box - or "" for none. It reads the raw text: glamour draws
-// a real marker unstyled, so a styled one (code) is not a marker.
-func itemMarker(text string) string {
-	for _, m := range []string{bullet, unticked, ticked} {
+// itemMarker is the list marker text opens with - a bullet, an `N. ` enumerator
+// or a task box, the last two carrying tag the way withTag splices it - or "" for
+// none. It reads raw text: a real marker is unstyled, so code reading `• ` is not.
+func itemMarker(text, tag string) string {
+	if strings.HasPrefix(text, bullet) {
+		return bullet
+	}
+	for _, m := range []string{withTag(unticked, tag), withTag(ticked, tag)} {
 		if strings.HasPrefix(text, m) {
 			return m
 		}
 	}
-	return text[:enumeratorLen(text)]
+	n := 0
+	for n < len(text) && text[n] >= '0' && text[n] <= '9' {
+		n++
+	}
+	if dot := withTag(". ", tag); n > 0 && strings.HasPrefix(text[n:], dot) {
+		return text[:n+len(dot)]
+	}
+	return ""
 }
+
+// withTag is a marker with tag before its trailing space.
+func withTag(marker, tag string) string { return strings.TrimSuffix(marker, " ") + tag + " " }
 
 // rewrapProse re-wraps one paragraph or list item — the group shares an indent —
 // greedily to the width glamour laid it out for, padding each result line to that
@@ -226,7 +271,7 @@ func rewrapProse(group []string, lead, width int, mark string) []string {
 	}
 	var joined strings.Builder
 	for k, line := range group {
-		content := strings.TrimRight(line[lead:], " ")
+		content := trimRightCells(line[lead:])
 		if k > 0 && !hyphenJoin(joined.String(), content) {
 			joined.WriteByte(' ')
 		}
@@ -244,6 +289,25 @@ func rewrapProse(group []string, lead, width int, mark string) []string {
 		out = append(out, first+padRight(wl, budget-hang))
 	}
 	return out
+}
+
+// trimRightCells drops a row's trailing spaces, including the ones glamour keeps
+// inside a styled span at a wrap (`bold \x1b[0m`) or pads a styled row with. The
+// escapes among them stay, in order, so no span is left open.
+func trimRightCells(s string) string {
+	kept, end := "", len(s)
+	for end > 0 {
+		if s[end-1] == ' ' {
+			end--
+			continue
+		}
+		at := strings.LastIndexByte(s[:end], 0x1b)
+		if at < 0 || sgrRun(s[at:end]) != end-at {
+			break
+		}
+		kept, end = s[at:end]+kept, at
+	}
+	return s[:end] + kept
 }
 
 // hyphenJoin reports whether next should abut prev with no space, because
@@ -490,19 +554,6 @@ func fitToWidth(s string, width int) string {
 // precedes it and this returns false — which is what keeps the pass off code.
 func bulletMarker(raw string, lead int) bool {
 	return strings.HasPrefix(raw, strings.Repeat(" ", lead)+bullet)
-}
-
-// enumeratorLen is the byte length of the `N. ` ordered-list marker s begins
-// with, or 0 for none.
-func enumeratorLen(s string) int {
-	n := 0
-	for n < len(s) && s[n] >= '0' && s[n] <= '9' {
-		n++
-	}
-	if n == 0 || !strings.HasPrefix(s[n:], ". ") {
-		return 0
-	}
-	return n + len(". ")
 }
 
 // lockAndRender acquires mu and renders through the shared renderer. Callers

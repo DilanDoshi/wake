@@ -15,9 +15,9 @@ import (
 // its most tiles - plus one for a copy-time render at a fixed width.
 //
 // A wider terminal draws more widths than this. A miss costs one renderer
-// build, ~10µs, and only when a block is rendered - on an event or a re-wrap,
+// build, ~10µs measured, and only when a block is rendered - on an event or a re-wrap,
 // never on a frame, since the panes store rendered lines - so the cap governs
-// the ~36KB a renderer retains rather than the speed of anything.
+// the ~36KB a renderer was measured to retain rather than the speed of anything.
 const CachedWidths = 9
 
 // rendererCache holds the renderers built so far, least recently used first.

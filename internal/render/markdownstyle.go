@@ -70,6 +70,12 @@ const (
 	ticked   = "[✓] "
 )
 
+// itemTag marks the enumerators and task boxes glamour draws for a real list
+// item, which on the page are the same bytes as prose that only reads like one
+// (`1\.`, a literal `[ ] `). SGR 59 closed at once styles nothing and is never
+// glamour's own; reflowProse reads it and strips it.
+const itemTag = "\x1b[59m\x1b[0m"
+
 func stringPtr(s string) *string { return &s }
 func boolPtr(b bool) *bool       { return &b }
 func uintPtr(u uint) *uint       { return &u }
@@ -151,11 +157,11 @@ func claudeStyle(dark bool) gansi.StyleConfig {
 		},
 		Item: gansi.StylePrimitive{BlockPrefix: bullet},
 		Enumeration: gansi.StylePrimitive{
-			BlockPrefix: ". ",
+			BlockPrefix: withTag(". ", itemTag),
 		},
 		Task: gansi.StyleTask{
-			Ticked:   ticked,
-			Unticked: unticked,
+			Ticked:   withTag(ticked, itemTag),
+			Unticked: withTag(unticked, itemTag),
 		},
 
 		// A link is underlined and carries the one colour that says "this is

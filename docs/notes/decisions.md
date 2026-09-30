@@ -18,7 +18,7 @@ the ruling is reversed for them and kept for everything else.
 
 **Markdown rows are classified, not flagged.** `render.Rejoins` reads rendered rows with
 `reflowProse`'s own predicates (`reflowable`, `leadSpaces`, `opensItem`, `hyphenJoin`) plus
-`hangIndentLists`' hang. Rows that pass grouped into one paragraph or list item are wraps by
+the hang it lays an item's wrap at. Rows that pass grouped into one paragraph or list item are wraps by
 construction — markdown renders a source newline as a space — so they rejoin with the space the
 wrap took, or nothing at a hyphen. Carrying a per-row flag out of the renderer was rejected: three
 wrap producers, a new return shape, and nothing the rows don't already say. The known miss is

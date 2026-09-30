@@ -29,8 +29,8 @@ func freshCache(t *testing.T) *int {
 	return built
 }
 
-// A terminal dragged through every width used to leave a renderer (~36KB and
-// its parsed style) cached at each one, for the life of the process. The cache
+// A terminal dragged through every width used to leave a renderer (~36KB
+// retained, measured) cached at each one, for the life of the process. The cache
 // keeps the newest CachedWidths, and those still answer without a rebuild.
 func TestTheRendererCacheKeepsOnlyTheNewestWidths(t *testing.T) {
 	built := freshCache(t)

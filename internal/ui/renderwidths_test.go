@@ -26,6 +26,8 @@ const (
 )
 
 // widthsDrawn is every width a render asked internal/render for while f ran.
+// Each is a renderer of its own: a block is never narrower than minBlockWidth,
+// which is render's own floor, so no two widths asked share one.
 func widthsDrawn(f func()) map[int]bool {
 	was := renderMarkdown
 	seen := map[int]bool{}
