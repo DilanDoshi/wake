@@ -95,12 +95,11 @@ func Markdown(src string, width int) string {
 		return degraded("rendering markdown failed", src, width, err)
 	}
 	// reflowProse re-wraps the prose glamour laid out, restoring the greedy word
-	// wrap its paragraph pass loses without the muesli fork; hangIndentLists then
-	// hangs bullet continuations, joinLoneBullets puts an item that opens with a
-	// list back on its bullet's row, and fitToWidth is the hard width net last of all
-	// — it re-wraps anything the hang shifted past width (an unbreakable token in a
-	// bullet), the one case the shift cannot keep within width itself.
-	return strings.TrimRight(trimOpeningScaffold(fitToWidth(joinLoneBullets(hangIndentLists(reflowProse(stylingOnly(out), width))), width)), "\n")
+	// wrap its paragraph pass loses without the muesli fork and hanging each list
+	// item's continuation under its text; joinLoneBullets puts an item that opens
+	// with a list back on its bullet's row, and fitToWidth is the hard width net
+	// last of all, for the rows glamour could not wrap and reflowProse leaves alone.
+	return strings.TrimRight(trimOpeningScaffold(fitToWidth(joinLoneBullets(reflowProse(stylingOnly(out), width)), width)), "\n")
 }
 
 // boxDrawing marks a rendered line as glamour's own table or block-quote layout,
@@ -118,20 +117,26 @@ const boxDrawing = "│─┼┌┐└┘├┤┬┴╭╮╰╯"
 // the prose wake-side. glamour still lays out every block — margins, lists,
 // tables, block quotes, code — at the real width; this pass only re-wraps the
 // lines those never produce: unstyled prose and list-item text sitting at the
-// block margin. It runs before hangIndentLists, which hangs a bullet's
-// continuation, and before fitToWidth, the width net.
+// block margin. It runs before fitToWidth, the width net.
 //
 // Each maximal run of reflowable lines at one indent is one paragraph or one
 // list item — broken at a new list marker — and is re-wrapped as a unit. The
 // join mirrors what glamour's wrap consumed: a line broken at a hyphen kept the
 // hyphen and took no space, so it rejoins with none; every other break took a
 // space.
+//
+// An item's continuation hangs under its text, which glamour v1.0.0 lays at the
+// list margin instead. A group is an item only where glamour starts one: after a
+// blank row, a change of indent, or another item. A paragraph glamour wrapped so a
+// row opens `2. Then` splits there but is not an item, and hangs nothing.
 func reflowProse(s string, width int) string {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
+	itemAt := -1 // the lead of the item group that ended on the row above, or -1
 	for i := 0; i < len(lines); {
 		if !reflowable(lines[i]) {
 			out = append(out, lines[i])
+			itemAt = -1
 			i++
 			continue
 		}
@@ -141,7 +146,15 @@ func reflowProse(s string, width int) string {
 			leadSpaces(lines[j]) == lead && !opensItem(lines[j]) {
 			j++
 		}
-		out = append(out, rewrapProse(lines[i:j], lead, width)...)
+		mark := ""
+		if i == 0 || !reflowable(lines[i-1]) || leadSpaces(lines[i-1]) != lead || itemAt == lead {
+			// Trimmed: a lone bullet's padding would read as the space after it.
+			mark = itemMarker(strings.TrimRight(lines[i][lead:], " "))
+		}
+		out = append(out, rewrapProse(lines[i:j], lead, width, mark)...)
+		if itemAt = -1; mark != "" {
+			itemAt = lead
+		}
 		i = j
 	}
 	return strings.Join(out, "\n")
@@ -182,18 +195,34 @@ func leadSpaces(line string) int {
 // and split a paragraph.
 func opensItem(line string) bool {
 	head := strings.TrimSpace(ansi.Strip(line))
-	return bulletMarker(line, leadSpaces(line)) || isEnumerated(head) ||
-		strings.HasPrefix(head, "[ ] ") || strings.HasPrefix(head, "[✓] ")
+	return bulletMarker(line, leadSpaces(line)) || enumeratorLen(head) > 0 ||
+		strings.HasPrefix(head, unticked) || strings.HasPrefix(head, ticked)
+}
+
+// itemMarker is the list marker a row's text opens with - a bullet, an `N. `
+// enumerator or a task box - or "" for none. It reads the raw text: glamour draws
+// a real marker unstyled, so a styled one (code) is not a marker.
+func itemMarker(text string) string {
+	for _, m := range []string{bullet, unticked, ticked} {
+		if strings.HasPrefix(text, m) {
+			return m
+		}
+	}
+	return text[:enumeratorLen(text)]
 }
 
 // rewrapProse re-wraps one paragraph or list item — the group shares an indent —
 // greedily to the width glamour laid it out for, padding each result line to that
-// budget so hangIndentLists can reclaim the padding as it hangs a bullet's
-// continuation. Budget is width less the indent and the far margin, which is the
-// content width glamour itself wrapped to (bs.Width = width - indent - margin*2,
-// with indent+margin the lead).
-func rewrapProse(group []string, lead, width int) []string {
+// budget. Budget is width less the indent and the far margin, which is the content
+// width glamour itself wrapped to (bs.Width = width - indent - margin*2, with
+// indent+margin the lead). An item's text after mark wraps at the budget less the
+// marker, its continuations laid under the text, so the hang costs no row its width.
+func rewrapProse(group []string, lead, width int, mark string) []string {
 	budget := width - lead - int(defaultMargin)
+	hang := ansi.StringWidth(mark)
+	if budget-hang < 1 {
+		mark, hang = "", 0
+	}
 	if budget < 1 {
 		return group
 	}
@@ -205,13 +234,16 @@ func rewrapProse(group []string, lead, width int) []string {
 		}
 		joined.WriteString(content)
 	}
-	indent := strings.Repeat(" ", lead)
+	first, rest := strings.Repeat(" ", lead)+mark, strings.Repeat(" ", lead+hang)
 	var out []string
 	// ansi.Wrap, not ansi.Wordwrap: Wrap checks the limit before it writes a
 	// breakpoint rune, so a run of two (`--resume`) does not strand, which is the
 	// exact defect the muesli fork existed to fix; Wordwrap shares the bug.
-	for _, wl := range strings.Split(ansi.Wrap(joined.String(), budget, ""), "\n") {
-		out = append(out, indent+padRight(wl, budget))
+	for k, wl := range strings.Split(ansi.Wrap(joined.String()[len(mark):], budget-hang, ""), "\n") {
+		if k > 0 {
+			first = rest
+		}
+		out = append(out, first+padRight(wl, budget-hang))
 	}
 	return out
 }
@@ -249,7 +281,7 @@ func hyphenJoin(prev, next string) bool {
 }
 
 // padRight pads s with trailing spaces to width display cells, the trailing
-// padding glamour lays every wrapped line out with and hangIndentLists reclaims.
+// padding glamour lays every wrapped line out with.
 func padRight(s string, width int) string {
 	if n := width - ansi.StringWidth(s); n > 0 {
 		return s + strings.Repeat(" ", n)
@@ -476,62 +508,6 @@ func fitToWidth(s string, width int) string {
 	return strings.Join(fitted, "\n")
 }
 
-// hangIndentLists moves a wrapped bullet item's continuation lines under the
-// item text — the hanging indent Claude Code draws and glamour v1.0.0 does not.
-//
-// glamour wraps each bullet's text to the hang-indent budget but then lays the
-// continuation lines at the list margin (under the bullet) instead of under the
-// text. An ordinary continuation is therefore already narrow enough to shift
-// right by the bullet's two columns without exceeding width — the shift only
-// spends trailing padding the line already carried. The one exception is an
-// unbreakable token (a long URL, an identifier, CJK) that glamour could not wrap
-// at all: shifting it right overruns width, so this must run **before**
-// fitToWidth, which re-wraps whatever it left too wide. fitToWidth is the width
-// authority; this pass never promises the bound on its own.
-//
-// It works on the rendered lines, so an item is recognised by its bullet: a line
-// whose text (after the margin) begins with `• ` opens an item and fixes the
-// hang column. A continuation is the next line at the same margin with no blank
-// row between. A blank row, a deeper indent (a fenced block inside the item), or
-// any other line — a table, or a paragraph after the list, which glamour
-// separates with a blank — leaves the block and is never touched.
-//
-// **Code is safe two ways.** A fenced block inside an item is laid deeper than
-// the item margin, so lead != margin and the pass skips it. And a `• ` that is
-// *itself* a line of code (a standalone fence whose text opens with a bullet) is
-// not a marker: glamour paints code with a colour, so its bullet carries a
-// leading escape, whereas a real list marker is unstyled — `bulletMarker` is
-// that discriminator, and without it a code block's later lines were reindented.
-//
-// Ordered lists are deferred: glamour wraps an enumeration's continuation text a
-// cell or two wider than the enumerator, so a pure post-indent would overrun
-// width. An `N. ` marker therefore ends any bullet run and is left at glamour's
-// margin. Task items (`[ ] …`) are the same no-op — glamour's Task style draws
-// no bullet, so bulletMarker never fires (docs/notes/deferred.md).
-func hangIndentLists(s string) string {
-	lines := strings.Split(s, "\n")
-	out := make([]string, len(lines))
-	margin, hang := -1, 0 // margin < 0: not inside a bullet item
-	sawBlank := false
-	for i, line := range lines {
-		plain := ansi.Strip(line)
-		head := strings.TrimLeft(plain, " ")
-		lead := len(plain) - len(head)
-		switch {
-		case strings.TrimSpace(plain) == "":
-			out[i], sawBlank = line, true
-		case bulletMarker(line, lead):
-			margin, hang, sawBlank = lead, lead+ansi.StringWidth(bullet), false
-			out[i] = line
-		case margin >= 0 && !sawBlank && lead == margin && !isEnumerated(head):
-			out[i] = hangIndent(line, hang-margin)
-		default:
-			margin, out[i] = -1, line // enumeration, or any non-continuation, ends the block
-		}
-	}
-	return strings.Join(out, "\n")
-}
-
 // bulletMarker reports whether the rendered line opens a bullet item: the bullet
 // must sit at the margin unstyled. glamour draws a real list marker with no
 // colour, so the raw line carries the `• ` literally after its leading spaces;
@@ -541,29 +517,17 @@ func bulletMarker(raw string, lead int) bool {
 	return strings.HasPrefix(raw, strings.Repeat(" ", lead)+bullet)
 }
 
-// isEnumerated reports whether s begins with an `N. ` ordered-list marker.
-func isEnumerated(s string) bool {
+// enumeratorLen is the byte length of the `N. ` ordered-list marker s begins
+// with, or 0 for none.
+func enumeratorLen(s string) int {
 	n := 0
 	for n < len(s) && s[n] >= '0' && s[n] <= '9' {
 		n++
 	}
-	return n > 0 && strings.HasPrefix(s[n:], ". ")
-}
-
-// hangIndent shifts a continuation line right by add columns, reclaiming the
-// trailing padding glamour left so the line's display width does not grow. The
-// padding is always at least add wide (glamour wrapped the text to the narrower
-// hang budget), so the shift stays within the width the render was built for.
-func hangIndent(line string, add int) string {
-	if add <= 0 {
-		return line
+	if n == 0 || !strings.HasPrefix(s[n:], ". ") {
+		return 0
 	}
-	orig := ansi.StringWidth(line)
-	shifted := strings.TrimRight(strings.Repeat(" ", add)+line, " ")
-	if pad := orig - ansi.StringWidth(shifted); pad > 0 {
-		return shifted + strings.Repeat(" ", pad)
-	}
-	return shifted
+	return n + len(". ")
 }
 
 // lockAndRender acquires mu and renders through the shared renderer. Callers

@@ -341,7 +341,7 @@ yet says so in bold.**
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
-| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy |
+| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · daily notice `updatecheck.go` · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |

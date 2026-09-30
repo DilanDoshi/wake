@@ -38,10 +38,11 @@ func TestABulletOpeningWithANumberKeepsItOnTheBulletsLine(t *testing.T) {
 	if !strings.HasPrefix(got[1], "  • 28. The contracts portal") {
 		t.Errorf("row 1 = %q, want the bullet and its text on one row", got[1])
 	}
-	// The wrapped rest sits under the number, where glamour put it.
-	if lead := leadingCols(lines[2]); lead != 4 {
-		t.Errorf("the item's second row starts at column %d, want 4 (under %q):\n%s",
-			lead, "28.", strings.Join(got, "\n"))
+	// The wrapped rest hangs under the item's text, past its number, as every
+	// enumerated item's does.
+	if lead := leadingCols(lines[2]); lead != 8 {
+		t.Errorf("the item's second row starts at column %d, want 8 (under %q):\n%s",
+			lead, "The", strings.Join(got, "\n"))
 	}
 	if !slices.ContainsFunc(got, func(l string) bool { return strings.HasPrefix(l, "  • 30. The steward portal") }) {
 		t.Errorf("no row holds the second item on its bullet's row:\n%s", strings.Join(got, "\n"))
@@ -90,7 +91,7 @@ func TestABulletOpeningWithCodeOrAQuoteIsLeftAlone(t *testing.T) {
 		if err != nil {
 			t.Fatal(err)
 		}
-		before := hangIndentLists(reflowProse(stylingOnly(raw), 40))
+		before := reflowProse(stylingOnly(raw), 40)
 		if after := joinLoneBullets(before); after != before {
 			t.Errorf("%q: the join changed a bullet opening with a painted block:\n%q\nto\n%q", src, before, after)
 		}

@@ -45,12 +45,12 @@ func Rejoins(rows []string) []Rejoin {
 }
 
 // hangOf is where a group's continuations sit: under an item's text, which
-// hangIndentLists hangs past its bullet and every bullet joinLoneBullets put
+// reflowProse hangs past its marker and every bullet joinLoneBullets put
 // beside it; at the lead for anything else.
 func hangOf(row string, lead int) int {
 	rest, hang := row[lead:], lead
-	for strings.HasPrefix(rest, bullet) {
-		rest, hang = rest[len(bullet):], hang+ansi.StringWidth(bullet)
+	for m := itemMarker(rest); m != ""; m = itemMarker(rest) {
+		rest, hang = rest[len(m):], hang+ansi.StringWidth(m)
 	}
 	return hang
 }

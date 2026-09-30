@@ -63,6 +63,13 @@ const defaultMargin uint = 2
 // run in, unlike the box-drawing characters glamour's stock styles reach for.
 const bullet = "• "
 
+// unticked and ticked are the task boxes glamour draws in a task item's bullet
+// place, named so the list hang can find where the item's text starts.
+const (
+	unticked = "[ ] "
+	ticked   = "[✓] "
+)
+
 func stringPtr(s string) *string { return &s }
 func boolPtr(b bool) *bool       { return &b }
 func uintPtr(u uint) *uint       { return &u }
@@ -147,8 +154,8 @@ func claudeStyle(dark bool) gansi.StyleConfig {
 			BlockPrefix: ". ",
 		},
 		Task: gansi.StyleTask{
-			Ticked:   "[✓] ",
-			Unticked: "[ ] ",
+			Ticked:   ticked,
+			Unticked: unticked,
 		},
 
 		// A link is underlined and carries the one colour that says "this is

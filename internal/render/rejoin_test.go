@@ -61,15 +61,20 @@ func TestAnEmailCopiesAsParagraphsAndItems(t *testing.T) {
 }
 
 // A nested item and an enumerated one are items of their own - a new marker
-// ends the item above - and a nested one keeps its depth under the margin.
+// ends the item above - and a nested one keeps its depth under the margin. An
+// enumerated or task item's wrap hangs past its marker, and rejoins from there.
 func TestAListItemRejoinsItsHangButNotTheNextItem(t *testing.T) {
 	src := "- First, the budget numbers need a second look before Friday afternoon.\n" +
-		"  - nested item here\n\n1. an enumerated item that is long enough to wrap onto a second row"
+		"  - nested item here\n\n1. an enumerated item that is long enough to wrap onto a second row\n\n" +
+		"- [ ] a task item that is long enough to wrap onto a second row here\n\n" +
+		"10. a two-digit one that is long enough to wrap onto a second row too"
 	got := unwrapped(Markdown(src, 40))
 	for _, line := range []string{
 		"• First, the budget numbers need a second look before Friday afternoon.",
 		"  • nested item here",
 		"1. an enumerated item that is long enough to wrap onto a second row",
+		"10. a two-digit one that is long enough to wrap onto a second row too",
+		"[ ] a task item that is long enough to wrap onto a second row here",
 	} {
 		if !strings.Contains(got, line+"\n") && !strings.HasSuffix(got, line) {
 			t.Errorf("copy lacks the line %q:\n%s", line, got)

@@ -197,7 +197,19 @@ with:* factoring the clamp into one unstyled `transcript` method the other two c
 whether `pointIn` should read a freshly measured height the way `startSelection`'s own gate already
 does.
 
-## KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)
+## ~~KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)~~ CLOSED 2026-09-30 (`fix/render-list-hang-cache`)
+
+**Closed by the reflow the entry below names.** `reflowProse` now hangs every item itself: a group
+whose first row opens with a marker (`• `, `N. `, `[ ] `/`[✓] ` — `itemMarker`) wraps the text after
+the marker at the budget less the marker's width and lays its continuations under the text, so the
+hang costs no row its width. `hangIndentLists`/`hangIndent` are deleted; the shift they applied after
+glamour's wrap also spent glamour's far margin (a bullet continuation 55 cells wide in a 54-cell
+layout at width 56), which the tightened width sweep now forbids. A group is an item only where
+glamour starts one — after a blank row, a change of indent, or another item — because a paragraph
+glamour wraps so a row opens `2. Then` reads as an enumerator on its own
+(`TestTheHangLeavesNonListRowsWhereGlamourLaysThem`, widths 53-55). `rejoin.go`'s `hangOf` steps past
+the same markers so a copy rejoins the hang. The original entry is kept below.
+
 
 **Shipped:** `fix/markdown-list-hanging-indent` hang-indents a wrapped **bullet** item's
 continuation lines under the item text (`internal/render/markdown.go`, `hangIndentLists`), matching
