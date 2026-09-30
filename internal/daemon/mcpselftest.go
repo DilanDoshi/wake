@@ -3,14 +3,16 @@ package daemon
 // The manager's startup self-test: before claude is handed mcp.json, run the
 // command it names, ask initialize and tools/list, and refuse the launch unless
 // this build's tools come back. It closes Wake's half of a manager whose tools
-// are silently absent - a binary that moved, one that is not wake, one replaced
-// by another build - and not claude's: whether claude accepts the handshake is
-// still docs/live-testing.md §13.1.
+// are silently wrong or absent - above all a binary replaced by another build
+// under a running daemon - and not claude's: whether claude accepts the
+// handshake is still docs/live-testing.md §13.1.
 //
-// It runs inside launch, on the dispatch goroutine of the client that asked,
-// and stays inline so a refusal is enqueued ahead of any FrameStatus written
-// behind the spawn (cmd/wake's act reads that order as "taken") - which is why
-// the bound is load-bearing. It holds from the moment the process exists: the
+// It runs inside launch, wherever the spawn runs: in line on the asking
+// client's dispatch goroutine for a plain spawn, so a refusal is enqueued ahead
+// of any FrameStatus written behind it (cmd/wake's act reads that order as
+// "taken"), and on the goroutine dispatch already gives a worktree spawn for
+// git. Holding that dispatch is why the bound is load-bearing. It holds from
+// the moment the process exists: the
 // exec itself is the kernel's, as it is for the StartObserved every launch makes
 // of this same binary a few lines later. It is safe there because internal/mcp
 // answers these two requests without its Fleet: the server never dials this

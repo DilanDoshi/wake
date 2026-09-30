@@ -11,10 +11,12 @@ that" and the answer is not in a commit message.
 ## 2026-09-29 — the manager's tools self-test at launch; ordinary agents keep the operator's MCP servers
 
 **Ruling 1 — a manager whose `wake mcp` cannot answer is refused before claude starts.** Until
-now a server that could not start (a binary that moved, one that is not wake, one replaced by
-another build) produced a manager with no tools that said so only in prose. `managerConfig` now runs
-the exact command `mcp.json` names, writes `initialize` and `tools/list`, and refuses the launch
-unless it calls itself wake, offers tools, and lists exactly `mcp.Tools()`
+now a `wake mcp` that could not serve this build's tools — above all a binary replaced by another
+build under a running daemon — produced a manager that started, then held the wrong tools or none
+and said so only in prose. (A binary that *moved* already failed the launch on unix, at the
+supervisor's exec of the same path, with a vaguer message; the self-test now names it first.)
+`managerConfig` now runs the exact command `mcp.json` names, writes `initialize` and `tools/list`,
+and refuses the launch unless it calls itself wake, offers tools, and lists exactly `mcp.Tools()`
 (`internal/daemon/mcpselftest.go`, client half `internal/mcp/selftest.go`).
 
 - **In the daemon, not in `wake manager`**, as deferred.md had costed it: `mcp.json` names the
@@ -22,12 +24,15 @@ unless it calls itself wake, offers tools, and lists exactly `mcp.Tools()`
   one door every spawn, `/manager`, the room's default seat and a wake from park go through. The
   case it catches best is `wake upgrade` under a running daemon followed by `/manager` waking a
   parked manager.
-- **Inline and bounded.** It runs on the asking client's dispatch goroutine so a refusal stays
-  enqueued ahead of any `FrameStatus` written behind the spawn — `cmd/wake`'s `act` reads that
-  order as "taken". So its bound (`mcpSelfTestTimeout`) is load-bearing, with git's process group
-  and `WaitDelay`. It holds once the process exists; the exec itself is as unbounded as the
+- **Where the spawn runs, and bounded.** A plain spawn runs in line on the asking client's
+  dispatch goroutine, so a refusal stays enqueued ahead of any `FrameStatus` written behind it —
+  `cmd/wake`'s `act` reads that order as "taken". A `--worktree` spawn already runs on its own
+  goroutine for git, and the self-test with it; no status-as-ack client sends one for a manager
+  (`act` never spawns a manager, and `wake manager` waits on its own id — Codex pass 2). Holding a
+  dispatch is why its bound (`mcpSelfTestTimeout`) is load-bearing, with git's process group and
+  `WaitDelay`. It holds once the process exists; the exec itself is as unbounded as the
   `StartObserved` every launch makes of the same binary right after (a stalled filesystem blocks
-  both — Codex, 2026-09-29, ruled pre-existing).
+  both — Codex pass 1, ruled pre-existing).
 - **Safe to run there** because internal/mcp answers these two requests without its Fleet: the
   server never dials the socket, opens no client, and cannot move the daemon's client count.
 - **Tool names, not `serverInfo.version`**, which is a hand-kept `"0.2.0"` two builds share.

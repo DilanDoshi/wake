@@ -280,7 +280,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing). Ordinary
   agents get none of the three — they keep the operator's MCP servers (owner's ruling via PR #127).
 - **Every manager launch self-tests its tools** before claude starts: `managerConfig` runs
-  `mcp.json`'s command through `initialize`/`tools/list`, inline and bounded, and refuses unless
+  `mcp.json`'s command through `initialize`/`tools/list` under a bound, and refuses unless
   `mcp.Tools()` comes back. Claude accepting the handshake stays `live-testing.md` §13.1.
   `internal/daemon/mcpselftest.go`.
 - The daemon socket has no caller auth; `managerVerbs` bounds the manager's tool surface, not what
