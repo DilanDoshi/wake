@@ -5313,8 +5313,9 @@ works (`internal/ui/apirecover.go`). Left out, each on purpose:
   wasted wake in a race window, and no recording pins `message.id`'s continuity across a park.
 - **Nothing watches the login while every agent is parked.** With no agent live, only `/login`
   (signed in) or `/resume` brings them back — Wake cannot poll `claude auth status` without a timer.
-- **A usage limit's timed notice outlives the turn that proves the reset** for its ~10s linger; the
-  pin under it goes at once. Clearing a timed notice early is not something `internal/notice` does.
+- ~~**A usage limit's timed notice outlives the turn that proves the reset**~~ **FIXED
+  (`fix/recent-follow-ups`, 2026-09-29):** the pin keeps the text it reported, and `unpinAPIError`
+  clears that notice through `notice.ClearIf` if it is still the newest; a later report stays.
 
 ## 2026-09-28 — a resumed on-disk session keeps its name, with three gaps
 

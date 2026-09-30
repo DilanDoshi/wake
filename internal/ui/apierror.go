@@ -47,11 +47,13 @@ func (a App) apiErrored(sessionID string, ev core.Event) App {
 	case core.NoticeTurnFailed:
 		notice.Report(turnFailedFormat, who, msg)
 	case core.NoticeUsageLimit:
-		notice.Report(usageLimitFormat, who, msg)
-		return a.clearAuthFailed(sessionID).apiAnswered(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, usage: true})
+		said := fmt.Sprintf(usageLimitFormat, who, msg)
+		notice.Report("%s", said)
+		return a.clearAuthFailed(sessionID).apiAnswered(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, said: said, usage: true})
 	case core.NoticeAPIError:
-		notice.Report(apiErrorFormat, who, msg, reauthVerb)
-		return a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, stuckPin{msg: msg})
+		said := fmt.Sprintf(apiErrorFormat, who, msg, reauthVerb)
+		notice.Report("%s", said)
+		return a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, said: said})
 	}
 	return a
 }
@@ -89,10 +91,15 @@ func (a App) pinAPIError(id string, pin stuckPin) App {
 	return a
 }
 
-// unpinAPIError drops a session a healthy turn has proved recovered.
+// unpinAPIError drops a session a healthy turn has proved recovered, and the
+// timed notice that announced its failure if nothing has been reported since.
 func (a App) unpinAPIError(id string) App {
-	if _, held := a.notices.stuck[id]; !held {
+	pin, held := a.notices.stuck[id]
+	if !held {
 		return a
+	}
+	if n, ok := notice.Latest(); ok && n.Text == pin.said {
+		notice.ClearIf(n.Seq)
 	}
 	next := make(map[string]stuckPin, len(a.notices.stuck))
 	for held, p := range a.notices.stuck {
