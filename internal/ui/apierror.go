@@ -102,9 +102,9 @@ func (a App) unpinAPIError(id string) App {
 		notice.ClearIf(n.Seq)
 	}
 	next := make(map[string]stuckPin, len(a.notices.stuck))
-	for held, p := range a.notices.stuck {
-		if held != id {
-			next[held] = p
+	for other, p := range a.notices.stuck {
+		if other != id {
+			next[other] = p
 		}
 	}
 	a.notices.stuck = next
@@ -113,9 +113,10 @@ func (a App) unpinAPIError(id string) App {
 
 // reconciledPins reads recovery off a fleet report: a pinned session seen parked
 // (a fleet row, or after a reattach only the park book) and then live again was
-// resumed, by this window or any other, onto a fresh process. /reauth's park
-// alone does not unpin - it is the step before a resume. A usage limit is not
-// lifted by a new process, so only a turn that goes through unpins it.
+// resumed, by this window or any other, onto a fresh process - so its mark goes
+// with its pin and notice, or this window's /reauth would park the new process.
+// /reauth's park alone does not unpin - it is the step before a resume. A usage
+// limit is not lifted by a new process, so only a turn that goes through unpins it.
 func (a App) reconciledPins() App {
 	if len(a.notices.stuck) == 0 {
 		return a
@@ -125,17 +126,21 @@ func (a App) reconciledPins() App {
 		inBook[s.ID] = true
 	}
 	next := make(map[string]stuckPin, len(a.notices.stuck))
+	var resumed []string
 	for id, p := range a.notices.stuck {
 		agent, ok := a.fleet.Agent(id)
 		switch {
 		case inBook[id] || (ok && agent.State == rpc.StateParked):
 			p.parked = true
 		case ok && agent.State != rpc.StateEnded && p.parked && !p.usage:
-			continue
+			resumed = append(resumed, id)
 		}
 		next[id] = p
 	}
 	a.notices.stuck = next
+	for _, id := range resumed {
+		a = a.clearAuthFailed(id).unpinAPIError(id)
+	}
 	return a
 }
 
