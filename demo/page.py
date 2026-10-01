@@ -1,195 +1,58 @@
 #!/usr/bin/env python3
-"""Builds the landing page: the beat clips, embedded, beside the claim each proves.
+"""Builds the landing site: the beat clips beside the claim each proves.
 
-Artifacts are served under a strict CSP with no external hosts, so every clip
-is a data: URI. That is the whole reason this is a generator rather than a
-hand-written file — and the reason the clips are re-encoded small first.
+    python3 page.py /path/to/wake-landing
 
-The output is copied verbatim into the wake-landing repository as index.html.
-Edit this file, never that one.
+writes index.html (the story), features.html (every beat and the build notes),
+releases.html (the GitHub releases, rendered at build time) and media/ (one
+mp4 and one poster per beat) into that checkout. The site is served under a
+CSP that allows same-origin media and no external hosts but fonts, so clips
+are files beside the pages and the release notes are baked in rather than
+fetched. Edit this file and pagecopy.py, never the output.
 """
 
-import base64
+import html
+import json
 import os
 import subprocess
 import sys
 
+from pagecopy import ALSO, SHOTS, Shot
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, ".work", "out")
-TMP = os.path.join(HERE, ".work", "web")
-PAGE = os.path.join(HERE, "wake-demo-page.html")
-
-# (clip, start, seconds, glyph, who, label, heading, prose)
-#
-# The glyph/name/label triple is the room's own grammar for attributing a line,
-# which is what the page is laid out in.
-SHOTS = [
-    (
-        "03-broadcast",
-        9.5,
-        13,
-        "●",
-        "you",
-        "the room",
-        "One message. Six agents.",
-        "<code>@all</code> reaches every agent in the room at once. They pick up "
-        "their own piece of the work and answer in one thread — and they stay "
-        "quiet unless they have something to say, which is the only reason a room "
-        "of thirty is readable at all. An unaddressed message goes to the manager "
-        "instead, deliberately: a manager told to report on the fleet by a message "
-        "it also received has been given the same job twice.",
-    ),
-    (
-        "12-filter",
-        1.5,
-        21,
-        "●",
-        "you",
-        "group chat › @omar",
-        "One name narrows the room.",
-        "A lone <code>@omar</code> in the composer narrows the group chat to omar's "
-        "thread — his lines, the manager's, every broadcast, and what you said to "
-        "him — for as long as it is the target. It is a view, not a mode: backspace "
-        "the name and the room widens again; <code>@omar hi</code> still routes to "
-        "omar alone, and <code>@omar /model</code> still configures him. Nothing "
-        "leaves the record, only the frame, and the header says so while it is "
-        "narrowed.",
-    ),
-    (
-        "05-blocked",
-        0,
-        13,
-        "▲",
-        "omar",
-        "web · 429 client state",
-        "The one that needs you, found for you.",
-        "Agents rank themselves by whether they need you. When one blocks on a "
-        "permission, it goes to the top of the roster and turns amber without "
-        "anyone watching for it — and <code>⌃X</code> jumps straight to whoever is "
-        "blocked. The ask is answered <em>in the pane that raised it</em>, with the "
-        "turn that led to it still on screen, never in a modal thrown over "
-        "everything.",
-    ),
-    (
-        "07-grid",
-        1.0,
-        22,
-        "○",
-        "priya",
-        "cli · --rate-limit flag",
-        "Open one and you're in Claude Code.",
-        "A conversation is the real thing: the same slash commands (the ones that "
-        "session advertised, not a guess), the same rendering, and a status bar "
-        "naming the branch, the model, the effort and the context left — each read "
-        "back off the wire rather than assumed. Panes are columns, each splittable "
-        "once — bounded on purpose. Wake is not trying to become a multiplexer; the "
-        "group chat is the product and the panes are substrate.",
-    ),
-    (
-        "09-manager",
-        13,
-        15,
-        "◐",
-        "manager",
-        "feat/rate-limit",
-        "Tell the agents working on the api to…",
-        "Every room seats a manager, and it can do exactly three things: send, "
-        "interrupt, spawn. There is no bulk-send primitive — so “tell the agents "
-        "working on the api” is the manager listing the fleet, deciding which rows "
-        "match, and sending to each one. Those are real tool calls against a real "
-        "server, which is why the roster rows light up underneath them.",
-    ),
-    (
-        "10-board",
-        1.0,
-        15,
-        "▪",
-        "the fleet",
-        "one row each",
-        "Thirty agents don't fit in panes.",
-        "<code>/board</code> is the overview: one row per agent carrying its state, "
-        "its label and its own last line. <code>⇥</code> flips the same overview "
-        "into a tiled wall — every agent's live transcript at once — and both stay "
-        "view-only. The board is for triage, so it carries the triage verbs and "
-        "nothing else: jump to one, park one, leave.",
-    ),
-    (
-        "11-leaving",
-        1.5,
-        17,
-        "·",
-        "you",
-        "leaving",
-        "Close the terminal. They keep working.",
-        "<code>⌃O</code> arms the detach and <code>↵</code> confirms it — a "
-        "different key, because a same-key confirm fires on exactly the reflex the "
-        "arm exists to catch. Then the client is gone and the fleet is not: "
-        "<code>wake status</code> from a bare shell still lists every agent, "
-        "including the one still blocked. Run <code>wake</code> again and the room "
-        "comes back, re-derived from Claude's own transcripts rather than from "
-        "anything Wake kept. When you do want it all to stop, <code>⌃Q⌃Q</code> "
-        "parks the whole fleet — and waits for the daemon to say it did before the "
-        "window closes.",
-    ),
-]
-
-# (title, prose) — what landed with no clip of its own. One sentence each.
-ALSO = [
-    ("/color",
-     "Seven named hues. An agent's turns in the room, the composer it types "
-     "into and its roster row are told apart by more than name text."),
-    ("↑↓ prompt history",
-     "Claude Code's own recall key, per pane — derived from the transcript, so "
-     "it works on a reattach and in a conversation this window never opened."),
-    ("Drag to copy, everywhere",
-     "Wake owns the mouse, so it owns selection: drag across a transcript, the "
-     "query box, the roster or the status bar, and the release copies it."),
-    ("esc esc rewind",
-     "Idle and empty, a second <code>⎋</code> opens a picker of earlier prompts "
-     "— Claude Code's own rewind, read tree-aware off its own transcript."),
-    ("Subagents in the sidebar",
-     "Running dispatches list under the agent that started them, with what each "
-     "has spent; <code>⌃D</code> opens one's transcript in the pane."),
-    ("The task board",
-     "An agent's own <code>TaskCreate</code> checklist, pinned above the "
-     "composer where Claude Code draws it, folded live from the ops."),
-    ("Named fleets",
-     "<code>wake --fleet &lt;name&gt;</code>: several fleets in one directory, "
-     "each on its own socket, listed by <code>wake fleets</code>."),
-    ("--worktree · --add-dir",
-     "Start an agent in a fresh git worktree Wake creates and never removes, or "
-     "widen what its tools may reach beyond its own directory."),
-    ("Budget and failover",
-     "<code>--max-budget-usd</code> and <code>--fallback-model</code> — thirty "
-     "unbudgeted agents and one overloaded model both matter only at fleet scale."),
-    ("The done line",
-     "A finished turn leaves <code>✻ Cooked for 1m 59s · done 6:48 PM</code> "
-     "above the composer; <code>/compact</code> draws its own line while it runs."),
-    ("/quit · /login",
-     "End one agent and drop its row from this window; check auth status and "
-     "hand sign-in to a terminal."),
-    ("Peer messages",
-     "A cross-session message from one agent to another shows in the room, "
-     "headed by the sender — and cannot be forged from a pasted envelope."),
-]
+REPO = "DilanDoshi/wake"
+GITHUB = "https://github.com/" + REPO
+LATEST = GITHUB + "/releases/latest"
+INSTALL = (
+    "curl -fsSL https://raw.githubusercontent.com/%s/main/scripts/install.sh | sh"
+    % REPO
+)
+# goreleaser's default changelog, the shape RELEASING.md says not to repeat:
+# shown folded, since it is a commit list rather than notes.
+AUTO_CHANGELOG = "## Changelog"
 
 
-def encode(clip, start, dur):
-    """One clip, small enough to inline. Terminal video is mostly static, so it
+def run(args: list[str]) -> None:
+    subprocess.run(args, check=True)
+
+
+def encode(shot: Shot, media: str) -> int:
+    """One clip and its poster frame. Terminal video is mostly static, so it
     survives a low bitrate far better than camera footage would."""
-    os.makedirs(TMP, exist_ok=True)
-    dst = os.path.join(TMP, "%s.mp4" % clip)
-    subprocess.run(
+    src = os.path.join(OUT, shot.clip + ".mp4")
+    dst = os.path.join(media, shot.clip + ".mp4")
+    run(
         [
             "ffmpeg",
             "-v",
             "error",
             "-ss",
-            str(start),
+            str(shot.start),
             "-t",
-            str(dur),
+            str(shot.dur),
             "-i",
-            os.path.join(OUT, "%s.mp4" % clip),
+            src,
             "-vf",
             "scale=1920:-2",
             "-an",
@@ -205,11 +68,332 @@ def encode(clip, start, dur):
             "+faststart",
             "-y",
             dst,
+        ]
+    )
+    poster = os.path.join(media, shot.clip + ".jpg")
+    run(
+        [
+            "ffmpeg",
+            "-v",
+            "error",
+            "-ss",
+            str(shot.dur * 0.6),
+            "-i",
+            dst,
+            "-frames:v",
+            "1",
+            "-q:v",
+            "5",
+            "-y",
+            poster,
+        ]
+    )
+    return os.path.getsize(dst) + os.path.getsize(poster)
+
+
+def shot_section(shot: Shot) -> str:
+    return f"""
+    <section id="{shot.clip}">
+      <div class="attr"><span class="glyph">{shot.glyph}</span>{shot.who} <span class="lbl">&lt;&gt; {shot.label}</span></div>
+      <h2>{shot.heading}</h2>
+      <p>{shot.prose}</p>
+      <figure>
+        <div class="screen">
+          <video muted loop playsinline preload="none" poster="media/{shot.clip}.jpg">
+            <source src="media/{shot.clip}.mp4" type="video/mp4">
+          </video>
+        </div>
+        <figcaption>Recorded from the running binary — real daemon, real room, real protocol. Click to enlarge.</figcaption>
+      </figure>
+    </section>"""
+
+
+def note(title: str, prose: str) -> str:
+    return f"""
+      <div class="note">
+        <h3>{title}</h3>
+        <p>{prose}</p>
+      </div>"""
+
+
+def nav(active: str) -> str:
+    def link(href: str, label: str) -> str:
+        cur = ' aria-current="page"' if href == active else ""
+        return f'<a href="{href}"{cur}>{label}</a>'
+
+    return f"""
+<nav class="top"><div class="wrap">
+  <a class="brand" href="index.html">WAKE</a>
+  {link("features.html", "Features")}
+  {link("releases.html", "Releases")}
+  <a href="{GITHUB}">GitHub</a>
+  <a class="dl" href="{LATEST}">Download</a>
+</div></nav>"""
+
+
+def page(title: str, active: str, body: str) -> str:
+    return f"""<!DOCTYPE html>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="description" content="Wake — a terminal for running a fleet of Claude Code sessions as a group chat. Requires Claude Code.">
+<title>{title}</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=JetBrains+Mono:wght@400;500;700&display=swap">
+<style>{CSS}</style>
+{nav(active)}
+{body}
+<footer class="wrap">
+  <p class="mono" style="font-size:14px;color:var(--muted)"><a href="{GITHUB}">github.com/{REPO}</a></p>
+  <p class="mono" style="font-size:12.5px;color:var(--muted);margin-top:14px">
+    Wake is not affiliated with, endorsed by, or sponsored by Anthropic. Claude and
+    Claude&nbsp;Code are trademarks of Anthropic.
+  </p>
+</footer>
+<script>{JS}</script>
+"""
+
+
+def hero() -> str:
+    return f"""
+<header class="hero">
+  <div class="wrap">
+    <h1 class="mark">Wake</h1>
+    <p class="thesis">A terminal for running a fleet of Claude&nbsp;Code sessions.</p>
+    <p class="sub">Fifteen to thirty agents is not fifteen to thirty terminal tabs. Wake turns the
+      fleet into a room: one group chat as the primary surface, <code>@name</code> to reach one,
+      <code>@team</code> to reach a group, a roster that ranks agents by whether they need you and
+      marks the ones that are done, and any agent openable as a full conversation at
+      Claude&nbsp;Code fidelity. Currently in beta; the V1 release is coming soon.</p>
+    <div class="meta">
+      <a class="pill" href="{LATEST}"><b>Download</b> — latest release&nbsp;→</a>
+      <span class="pill req"><b>requires Claude&nbsp;Code</b> — installed and signed in</span>
+      <span class="pill"><b>Go</b> · Bubble&nbsp;Tea</span>
+      <span class="pill">no screen-scraping — <b>structured JSON only</b></span>
+      <span class="pill">stream-json over a <b>daemon socket</b></span>
+    </div>
+  </div>
+</header>"""
+
+
+def subhead(eyebrow: str, title: str, sub: str, extra: str = "") -> str:
+    return f"""
+<header class="subhead">
+  <div class="wrap">
+    <div class="attr"><span class="glyph">·</span>{eyebrow}</div>
+    <h1 class="title">{title}</h1>
+    <p class="sub">{sub}</p>{extra}
+  </div>
+</header>"""
+
+
+def more_section() -> str:
+    count = len(SHOTS)
+    return f"""
+  <section>
+    <div class="attr"><span class="glyph">·</span>there's more <span class="lbl">&lt;&gt; {count} recordings in all</span></div>
+    <h2>Everything else Wake does.</h2>
+    <div class="cta">
+      <a class="card" href="features.html"><h3>Features →</h3>
+        <p>Every recording, including the board, the manager, workflows and leaving — and the
+           smaller things that landed with no clip of their own.</p></a>
+      <a class="card" href="releases.html"><h3>Releases →</h3>
+        <p>What changed in each version, newest first, straight from the release notes.</p></a>
+    </div>
+  </section>"""
+
+
+def requirements_section() -> str:
+    return f"""
+  <section>
+    <div class="attr"><span class="glyph">·</span>what you need <span class="lbl">&lt;&gt; before the first wake</span></div>
+    <h2>Wake runs on your Claude&nbsp;Code.</h2>
+    <p>Wake is not a model and not a service. Every agent is your own <code>claude</code> running
+      headless, spawned and supervised by Wake — so Claude&nbsp;Code has to work from your terminal
+      before Wake can do anything, and every turn bills to whatever plan or API key Claude&nbsp;Code
+      is already using.</p>
+    <div class="notes">{
+        note(
+            "Claude Code, signed in",
+            "Installed, on your <code>PATH</code>, and authenticated — a Claude subscription or an "
+            "API key that Claude&nbsp;Code accepts. Wake adds no model access of its own. "
+            "<code>/login</code> inside the room shows the auth status it found.",
+        )
+    }{
+        note(
+            "Install",
+            f'<code>{INSTALL}</code> installs the <a href="{LATEST}">latest release</a> for macOS or '
+            "Linux and puts <code>wake</code> on your <code>PATH</code>; <code>wake upgrade</code> keeps "
+            "it current. Run it in a project and a daemon, a first agent and the room appear.",
+        )
+    }{
+        note(
+            "Any terminal",
+            "Wake is not a multiplexer and asks nothing of the terminal but a tty. "
+            "<code>wake setup-terminal</code> teaches Ghostty, Kitty and Alacritty to send "
+            "<code>⇧↵</code> as a newline, which is the one thing they cannot do unaided.",
+        )
+    }
+    </div>
+  </section>"""
+
+
+def also_section() -> str:
+    notes = "".join(note(t, p) for t, p in ALSO)
+    return f"""
+  <section>
+    <div class="attr"><span class="glyph">·</span>also in the build</div>
+    <h2>The rest of what landed.</h2>
+    <div class="notes dense">{notes}
+    </div>
+  </section>"""
+
+
+def built_section() -> str:
+    return f"""
+  <section>
+    <div class="attr"><span class="glyph">·</span>how it's built <span class="lbl">&lt;&gt; the parts that matter</span></div>
+    <h2>The constraints are the design.</h2>
+    <div class="notes">{
+        note(
+            "Never screen-scraped",
+            "Every agent is a headless <code>claude</code> in stream-json mode with a Wake-assigned "
+            "session id. All state arrives as structured JSON on stdout — nothing is read off a "
+            "rendered screen.",
+        )
+    }{
+        note(
+            "One airlock",
+            "Exactly five files are allowed to know Claude's JSON. Everything above them sees Wake's "
+            "own event type, and a test holds the file set so another cannot be added quietly.",
+        )
+    }{
+        note(
+            "Cheap to leave open",
+            "No work per frame that could be work per change, and no polling. A streamed answer is a "
+            "preview, never a record — re-rendering each token measured 65× the cost.",
+        )
+    }{
+        note(
+            "Wake owns almost no state",
+            "Claude persists the transcripts; Wake reads one back when a conversation opens. It keeps "
+            "only a roster, a park book, groups and layout — so it can crash and lose nothing.",
+        )
+    }
+    </div>
+    <div class="disclosure">
+      <p>Every frame here is the real binary in a real terminal — the daemon, the room, the
+        rendering and the wire protocol are all genuine, and the git branch in the status bar is a
+        real branch. What is scripted is <em>what the models say</em>: the recordings drive a
+        stand-in <code>claude</code> so takes are deterministic, cost nothing, and cannot leak
+        anything from the machine that recorded them.</p>
+    </div>
+  </section>"""
+
+
+def fetch_releases() -> list[dict]:
+    """Every published release, notes rendered to HTML by GitHub itself."""
+    raw = subprocess.run(
+        [
+            "gh",
+            "api",
+            "-H",
+            "Accept: application/vnd.github.full+json",
+            "repos/%s/releases" % REPO,
+            "--paginate",
         ],
         check=True,
+        capture_output=True,
+        text=True,
+    ).stdout
+    return [r for r in json.loads(raw) if not r["draft"]]
+
+
+def release_article(rel: dict, latest: bool) -> str:
+    tag = html.escape(rel["tag_name"])
+    date = rel["published_at"][:10]
+    badge = ' <span class="badge">latest</span>' if latest else ""
+    body = rel["body_html"]
+    if (rel.get("body") or "").lstrip().startswith(AUTO_CHANGELOG):
+        body = f"<details><summary>Commit list</summary>{body}</details>"
+    return f"""
+  <article class="release" id="{tag}">
+    <div class="attr"><span class="glyph">·</span>{date}</div>
+    <h2><a href="{html.escape(rel["html_url"])}">{tag}</a>{badge}</h2>
+    <div class="rel-body">{body}</div>
+  </article>"""
+
+
+def write(path: str, text: str) -> None:
+    with open(path, "w", encoding="utf-8") as fh:
+        fh.write(text)
+
+
+def main() -> None:
+    if len(sys.argv) != 2:
+        sys.exit("usage: page.py <wake-landing checkout>")
+    dest = sys.argv[1]
+    media = os.path.join(dest, "media")
+    os.makedirs(media, exist_ok=True)
+    # First, so a gh that is missing or signed out fails before any page is written.
+    rels = fetch_releases()
+    # GitHub's own "latest": the newest that is not a prerelease, as the Download link resolves.
+    latest = next((r["tag_name"] for r in rels if not r["prerelease"]), None)
+
+    total = 0
+    for shot in SHOTS:
+        size = encode(shot, media)
+        total += size
+        print("  %-18s %7.1f KB" % (shot.clip, size / 1024))
+
+    home = "".join(shot_section(s) for s in SHOTS if s.home)
+    write(
+        os.path.join(dest, "index.html"),
+        page(
+            "Wake",
+            "index.html",
+            hero()
+            + f'<main class="wrap">{home}{more_section()}{requirements_section()}{built_section()}</main>',
+        ),
     )
-    with open(dst, "rb") as fh:
-        return base64.b64encode(fh.read()).decode(), os.path.getsize(dst)
+
+    every = "".join(shot_section(s) for s in SHOTS)
+    write(
+        os.path.join(dest, "features.html"),
+        page(
+            "Wake — features",
+            "features.html",
+            subhead(
+                'features <span class="lbl">&lt;&gt; every recording</span>',
+                "Everything Wake does, recorded.",
+                "Each clip is the real <code>wake</code> binary in a real terminal, driving a "
+                "scripted fleet. Click one to watch it full screen.",
+            )
+            + f'<main class="wrap">{every}{also_section()}</main>',
+        ),
+    )
+
+    articles = "".join(release_article(r, r["tag_name"] == latest) for r in rels)
+    write(
+        os.path.join(dest, "releases.html"),
+        page(
+            "Wake — releases",
+            "releases.html",
+            subhead(
+                'releases <span class="lbl">&lt;&gt; newest first</span>',
+                "What changed, version by version.",
+                "Install the newest with the one-line installer, or run "
+                "<code>wake upgrade</code> on an existing install.",
+                f'<pre class="install"><code>{INSTALL}</code></pre>',
+            )
+            + f'<main class="wrap">{articles}</main>',
+        ),
+    )
+
+    print(
+        "\nsite: %s — %d beats, %.1f MB of media, %d releases"
+        % (dest, len(SHOTS), total / 1e6, len(rels))
+    )
 
 
 CSS = """
@@ -229,6 +413,7 @@ CSS = """
 }
 
 *{box-sizing:border-box}
+html{scroll-padding-top:72px}
 body{
   margin:0; background:var(--ground); color:var(--ink);
   font-family:Newsreader,Georgia,"Times New Roman",serif;
@@ -240,10 +425,24 @@ code{font-family:"JetBrains Mono",ui-monospace,Menlo,monospace;font-size:.86em;
 
 .wrap{max-width:1080px;margin:0 auto;padding:0 32px}
 
+/* Nav ------------------------------------------------------------------- */
+nav.top{position:sticky;top:0;z-index:5;border-bottom:1px solid var(--rule);
+  background:color-mix(in srgb,var(--ground) 90%,transparent);backdrop-filter:blur(8px)}
+nav.top .wrap{display:flex;align-items:center;gap:24px;height:58px;
+  font-family:"JetBrains Mono",monospace;font-size:13px;letter-spacing:.04em}
+nav.top a{color:var(--muted);text-decoration:none}
+nav.top a:hover,nav.top a[aria-current]{color:var(--ink)}
+nav.top .brand{color:var(--ink);font-weight:700;letter-spacing:.22em;margin-right:auto}
+nav.top .dl{color:var(--ground);background:var(--accent);padding:6px 14px;border-radius:999px}
+nav.top .dl:hover{color:var(--ground);filter:brightness(1.08)}
+
 /* Hero ------------------------------------------------------------------ */
-header{padding:104px 0 56px;border-bottom:1px solid var(--rule)}
+header.hero{padding:96px 0 56px;border-bottom:1px solid var(--rule)}
+header.subhead{padding:80px 0 44px;border-bottom:1px solid var(--rule)}
 .mark{font-family:"JetBrains Mono",monospace;font-weight:700;font-size:clamp(52px,8vw,86px);
   letter-spacing:.22em;margin:0 0 4px;text-transform:none}
+.title{font-size:clamp(34px,4.6vw,54px);line-height:1.15;margin:0;font-weight:500;
+  text-wrap:balance;max-width:22ch}
 .thesis{font-size:clamp(22px,2.6vw,30px);line-height:1.34;max-width:22ch;margin:18px 0 0;
   text-wrap:balance;font-weight:400}
 .sub{color:var(--muted);max-width:62ch;margin:22px 0 0}
@@ -274,9 +473,18 @@ figure{margin:0}
 .screen:fullscreen{width:100vw;border:0;border-radius:0;transform:none;margin:0;
   display:flex;align-items:center;background:#141313}
 .screen:fullscreen video{max-height:100vh;object-fit:contain}
-.screen video{display:block;width:100%;height:auto}
+.screen video{display:block;width:100%;height:auto;aspect-ratio:2400/1320}
 figcaption{max-width:64ch;font-family:"JetBrains Mono",monospace;font-size:12px;color:var(--muted);
   margin-top:12px;letter-spacing:.03em}
+
+/* Cards ----------------------------------------------------------------- */
+.cta{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:24px;margin-top:28px}
+.cta .card{display:block;border:1px solid var(--rule);border-radius:10px;padding:26px 28px;
+  background:var(--surface);color:var(--ink);text-decoration:none;transition:border-color .15s,transform .15s}
+.cta .card:hover,.cta .card:focus-visible{border-color:var(--accent);transform:translateY(-2px)}
+.cta .card h3{font-family:"JetBrains Mono",monospace;font-size:14px;letter-spacing:.06em;
+  color:var(--accent);margin:0 0 10px;font-weight:500}
+.cta .card p{margin:0;font-size:17px;color:var(--muted)}
 
 /* Build notes ----------------------------------------------------------- */
 .notes{display:grid;grid-template-columns:repeat(auto-fit,minmax(268px,1fr));gap:34px;margin-top:34px}
@@ -291,19 +499,45 @@ figcaption{max-width:64ch;font-family:"JetBrains Mono",monospace;font-size:12px;
 .disclosure{border-left:2px solid var(--accent);padding:4px 0 4px 20px;margin-top:44px}
 .disclosure p{font-size:17px;color:var(--muted);max-width:66ch;margin:0}
 
+/* Releases -------------------------------------------------------------- */
+pre.install{margin:24px 0 0;max-width:100%;width:max-content;overflow-x:auto;padding:14px 18px;
+  border:1px solid var(--rule);border-radius:8px;background:var(--surface);font-size:14px}
+pre.install code{background:none;color:var(--ink);padding:0;font-size:inherit}
+.release{padding:56px 0;border-bottom:1px solid var(--rule)}
+.release h2 a{color:var(--ink);text-decoration:none;font-family:"JetBrains Mono",monospace;letter-spacing:.04em}
+.release h2 a:hover{color:var(--accent)}
+.badge{font-family:"JetBrains Mono",monospace;font-size:12px;letter-spacing:.08em;vertical-align:middle;
+  margin-left:14px;padding:3px 10px;border-radius:999px;background:var(--accent-soft);color:var(--accent)}
+.rel-body{max-width:72ch}
+.rel-body h2{font-size:22px;margin:34px 0 10px;max-width:none}
+.rel-body h3{font-size:19px;font-weight:600;margin:24px 0 6px}
+.rel-body p,.rel-body li{font-size:17.5px}
+.rel-body ul{padding-left:1.2em}
+.rel-body li{margin:7px 0}
+.rel-body a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-soft)}
+.rel-body pre{background:var(--surface);border:1px solid var(--rule);border-radius:6px;
+  padding:14px 16px;overflow-x:auto;font-size:14px}
+.rel-body pre code,.rel-body pre{color:var(--ink)}
+.rel-body pre code{background:none;padding:0}
+.rel-body .anchor,.rel-body .octicon{display:none}
+.rel-body .markdown-heading{display:block}
+.rel-body details summary{cursor:pointer;color:var(--muted);font-family:"JetBrains Mono",monospace;font-size:13px}
+
 footer{padding:64px 0 96px}
 footer p{max-width:66ch}
 footer a,.note a{color:var(--accent);text-decoration:none;border-bottom:1px solid var(--accent-soft)}
 footer a:hover,footer a:focus-visible,.note a:hover,.note a:focus-visible{border-bottom-color:var(--accent)}
 :focus-visible{outline:2px solid var(--accent);outline-offset:3px}
 
-@media (max-width:640px){ body{font-size:17.5px} section{padding:56px 0} .wrap{padding:0 20px} }
-@media (prefers-reduced-motion:reduce){ .screen video{outline:none} }
+@media (max-width:640px){ body{font-size:17.5px} section{padding:56px 0} .wrap{padding:0 20px}
+  nav.top .wrap{gap:14px;font-size:12px} }
+@media (prefers-reduced-motion:reduce){ .screen video{outline:none} .cta .card{transition:none} }
 """
 
 JS = """
-// Play a clip only while it is on screen. Seven terminal recordings all decoding
-// at once is real work on a laptop, and nothing below the fold is being read.
+// Play a clip only while it is on screen: a dozen terminal recordings all
+// decoding at once is real work on a laptop. preload="none" means a clip is not
+// fetched at all until it is first scrolled to.
 const vids = [...document.querySelectorAll('video')];
 const reduce = matchMedia('(prefers-reduced-motion: reduce)').matches;
 if (!reduce && 'IntersectionObserver' in window) {
@@ -323,164 +557,6 @@ document.querySelectorAll('.screen').forEach(el => {
   });
 });
 """
-
-
-def shot_block(clip, start, dur, glyph, who, label, head, prose):
-    b64, size = encode(clip, start, dur)
-    print("  %-14s %6.1f KB" % (clip, size / 1024))
-    return size, f"""
-    <section>
-      <div class="attr"><span class="glyph">{glyph}</span>{who} <span class="lbl">&lt;&gt; {label}</span></div>
-      <h2>{head}</h2>
-      <p>{prose}</p>
-      <figure>
-        <div class="screen">
-          <video muted loop playsinline preload="metadata"
-                 src="data:video/mp4;base64,{b64}"></video>
-        </div>
-        <figcaption>Recorded from the running binary — real daemon, real room, real protocol. Click to enlarge.</figcaption>
-      </figure>
-    </section>"""
-
-
-def note_block(title, prose):
-    return f"""
-      <div class="note">
-        <h3>{title}</h3>
-        <p>{prose}</p>
-      </div>"""
-
-
-def main():
-    handle = sys.argv[1] if len(sys.argv) > 1 else "github.com/DilanDoshi/wake"
-    total = 0
-    blocks = []
-    for shot in SHOTS:
-        size, block = shot_block(*shot)
-        total += size
-        blocks.append(block)
-    also = "".join(note_block(t, p) for t, p in ALSO)
-
-    html = f"""<!DOCTYPE html>
-<meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Wake — a terminal for running a fleet of Claude Code sessions as a group chat. Requires Claude Code.">
-<title>Wake</title>
-<link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=JetBrains+Mono:wght@400;500;700&display=swap">
-<style>{CSS}</style>
-
-<header>
-  <div class="wrap">
-    <h1 class="mark">Wake</h1>
-    <p class="thesis">A terminal for running a fleet of Claude&nbsp;Code sessions.</p>
-    <p class="sub">Fifteen to thirty agents is not fifteen to thirty terminal tabs. Wake turns the
-      fleet into a room: one group chat as the primary surface, <code>@name</code> to reach one,
-      a roster that ranks agents by whether they need you, and any agent openable as a full
-      conversation at Claude&nbsp;Code fidelity. Currently in beta; the V1 release is coming soon.</p>
-    <div class="meta">
-      <a class="pill" href="https://github.com/DilanDoshi/wake/releases/latest"><b>Download</b> — latest release&nbsp;→</a>
-      <span class="pill req"><b>requires Claude&nbsp;Code</b> — installed and signed in</span>
-      <span class="pill"><b>Go</b> · Bubble&nbsp;Tea</span>
-      <span class="pill">no screen-scraping — <b>structured JSON only</b></span>
-      <span class="pill">stream-json over a <b>daemon socket</b></span>
-    </div>
-  </div>
-</header>
-
-<main class="wrap">{"".join(blocks)}
-
-  <section>
-    <div class="attr"><span class="glyph">·</span>what you need <span class="lbl">&lt;&gt; before the first wake</span></div>
-    <h2>Wake runs on your Claude&nbsp;Code.</h2>
-    <p>Wake is not a model and not a service. Every agent is your own <code>claude</code> running
-      headless, spawned and supervised by Wake — so Claude&nbsp;Code has to work from your terminal
-      before Wake can do anything, and every turn bills to whatever plan or API key Claude&nbsp;Code
-      is already using.</p>
-    <div class="notes">
-      <div class="note">
-        <h3>Claude Code, signed in</h3>
-        <p>Installed, on your <code>PATH</code>, and authenticated — a Claude subscription or an
-           API key that Claude&nbsp;Code accepts. Wake adds no model access of its own.
-           <code>/login</code> inside the room shows the auth status it found.</p>
-      </div>
-      <div class="note">
-        <h3>Install</h3>
-        <p><code>curl -fsSL https://raw.githubusercontent.com/DilanDoshi/wake/main/scripts/install.sh | sh</code>
-           installs the <a href="https://github.com/DilanDoshi/wake/releases/latest">latest release</a> for
-           macOS or Linux and puts <code>wake</code> on your <code>PATH</code>; <code>wake upgrade</code>
-           keeps it current. Run it in a project and a daemon, a first agent and the room appear.</p>
-      </div>
-      <div class="note">
-        <h3>Any terminal</h3>
-        <p>Wake is not a multiplexer and asks nothing of the terminal but a tty.
-           <code>wake setup-terminal</code> teaches Ghostty, Kitty and Alacritty to send
-           <code>⇧↵</code> as a newline, which is the one thing they cannot do unaided.</p>
-      </div>
-    </div>
-  </section>
-
-  <section>
-    <div class="attr"><span class="glyph">·</span>also in the build</div>
-    <h2>The rest of what landed.</h2>
-    <div class="notes dense">{also}
-    </div>
-  </section>
-
-  <section>
-    <div class="attr"><span class="glyph">·</span>how it's built <span class="lbl">&lt;&gt; the parts that matter</span></div>
-    <h2>The constraints are the design.</h2>
-    <div class="notes">
-      <div class="note">
-        <h3>Never screen-scraped</h3>
-        <p>Every agent is a headless <code>claude</code> in stream-json mode with a Wake-assigned
-           session id. All state arrives as structured JSON on stdout — nothing is read off a
-           rendered screen.</p>
-      </div>
-      <div class="note">
-        <h3>One airlock</h3>
-        <p>Exactly four files are allowed to know Claude's JSON. Everything above them sees Wake's
-           own event type, and a test holds the file set so a fifth cannot be added quietly.</p>
-      </div>
-      <div class="note">
-        <h3>Cheap to leave open</h3>
-        <p>No work per frame that could be work per change, and no polling. A streamed answer is a
-           preview, never a record — re-rendering each token measured 65× the cost.</p>
-      </div>
-      <div class="note">
-        <h3>Wake owns almost no state</h3>
-        <p>Claude persists the transcripts; Wake reads one back when a conversation opens. It keeps
-           only a roster, a park book, groups and layout — so it can crash and lose nothing.</p>
-      </div>
-    </div>
-
-    <div class="disclosure">
-      <p>Every frame here is the real binary in a real terminal — the daemon, the room, the
-        rendering and the wire protocol are all genuine, and the git branch in the status bar is a
-        real branch. What is scripted is <em>what the models say</em>: the recordings drive a
-        stand-in <code>claude</code> so takes are deterministic, cost nothing, and cannot leak
-        anything from the machine that recorded them.</p>
-    </div>
-  </section>
-</main>
-
-<footer class="wrap">
-  <p class="mono" style="font-size:14px;color:var(--muted)">
-    <a href="https://{handle}">{handle}</a>
-  </p>
-  <p class="mono" style="font-size:12.5px;color:var(--muted);margin-top:14px">
-    Wake is not affiliated with, endorsed by, or sponsored by Anthropic. Claude and
-    Claude&nbsp;Code are trademarks of Anthropic.
-  </p>
-</footer>
-<script>{JS}</script>
-"""
-    with open(PAGE, "w") as fh:
-        fh.write(html)
-
-    print("\npage: %s" % PAGE)
-    print("  video %.1f MB · page %.1f MB" % (total / 1e6, os.path.getsize(PAGE) / 1e6))
 
 
 if __name__ == "__main__":

@@ -6,7 +6,8 @@
       { "after": 2.2, "text": "Benchmarking the limiter's hot path. A per-request map lookup at gateway volume is worth measuring before it ships, not after." },
       { "after": 1.1, "tool": { "name": "Bash", "input": { "command": "npm run bench -- --filter limiter" }, "result": "limiter/allow      1.8M ops/s\nlimiter/reject     2.1M ops/s", "takes": 1.2 } },
       { "after": 0.8, "text": "1.8M ops/s on the allow path. It isn't the bottleneck." }
-    ] }
+    ] },
+    {"match": "staging", "tokens": 860, "steps": [{"after": 2.0, "text": "Benchmarking the allow path on staging."}, {"after": 0.8, "tool": {"name": "Bash", "input": {"command": "go test ./api/limit -bench Allow -benchtime 2s"}, "result": "BenchmarkAllow-12   \t3421907\t   583 ns/op\t   0 allocs/op", "takes": 2.6}}, {"after": 0.8, "text": "583 ns/op, zero allocations — nothing flaky, and no slower than local."}]}
   ],
   "default": { "tokens": 340, "steps": [ { "after": 1.0, "text": "I'll benchmark it once it lands." } ] }
 }

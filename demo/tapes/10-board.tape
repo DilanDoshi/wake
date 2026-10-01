@@ -1,10 +1,12 @@
-# BEAT 10 — the board. /board is one row per agent: state, label, its own last
+# BEAT 10 — the board, filmed with the fleet already in teams (tapes/_teams.tape),
+# so both views section by team. /board is one row per agent: state, label, its own last
 # line. ⇥ flips the same overview into a tiled wall of live transcripts, still
 # view-only — ↵ and ^Y leave it for a conversation; nothing is operated from it.
 Output .work/out/10-board.mp4
 Source .work/head.tape
 Hide
 Source .work/stage.tape
+Source tapes/_teams.tape
 Type "@all we're adding per-key rate limiting to the gateway. maya take the middleware, omar the 429 state in the client, priya a --rate-limit flag, luca the changelog."
 Enter
 Sleep 14s

@@ -8,30 +8,37 @@ set -euo pipefail
 here="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 root="$(cd "$here/.." && pwd)"
 work="$here/.work"
+# Inside the scratch HOME, so every path on camera is drawn as ~/harbor/… — a
+# path outside it is drawn whole, and that put the operator's name in the frame.
+harbor="$work/claudehome/harbor"
+# `wake status` prints the socket whole, so it lives at a path that names no one.
+sock=/tmp/wake-demo/wake.sock
 
 # Takes are expensive — a full set is ~25 minutes of recording — so re-running
 # setup must never destroy them. Everything below is rebuilt; out/ and cards/
 # are left exactly where they are.
 rm -rf "$work/bin" "$work/harbor" "$work/claudehome" "$work/seg"
-mkdir -p "$work/bin" "$work/out" "$work/cards"
+mkdir -p "$work/bin" "$work/out" "$work/cards" "$(dirname "$sock")"
 
 # The fictional product, as a real git repository — the conversation status bar
 # reads a real branch through internal/gitref, so a drawn one would be a lie on
 # camera.
-cp -R "$here/harbor" "$work/harbor"
-git -C "$work/harbor" init --quiet --initial-branch=main
-git -C "$work/harbor" -c user.email=dev@harbor.dev -c user.name=Harbor \
+mkdir -p "$work/claudehome"
+cp -R "$here/harbor" "$harbor"
+git -C "$harbor" init --quiet --initial-branch=main
+git -C "$harbor" -c user.email=dev@harbor.dev -c user.name=Harbor \
     add -A
-git -C "$work/harbor" -c user.email=dev@harbor.dev -c user.name=Harbor \
+git -C "$harbor" -c user.email=dev@harbor.dev -c user.name=Harbor \
     commit --quiet -m "harbor 0.4.0"
-git -C "$work/harbor" checkout --quiet -b feat/rate-limit
+git -C "$harbor" checkout --quiet -b feat/rate-limit
 
 # What Wake spawns. internal/core resolves `claude` on PATH and nothing else,
 # so a shim directory in front of PATH is the whole substitution.
 ln -sf "$here/agent/claude" "$work/bin/claude"
 
 # The real binary, built from this worktree.
-( cd "$root" && go build -o "$work/bin/wake" ./cmd/wake )
+# No VCS stamp: a worktree build reports "-dirty" in `wake status`, on camera.
+( cd "$root" && go build -buildvcs=false -o "$work/bin/wake" ./cmd/wake )
 
 # A scratch HOME for the whole recording. Wake reads conversations back from
 # $HOME/.claude/projects, so this both gives the fake somewhere to journal and
@@ -46,9 +53,9 @@ cat > "$work/env.sh" <<EOF
 # source this to record
 export PATH="$work/bin:\$PATH"
 export HOME="$work/claudehome"
-export WAKE_SOCKET="$work/wake.sock"
+export WAKE_SOCKET="$sock"
 export WAKE_DEMO_SCENARIOS="$here/scenarios"
-export HARBOR="$work/harbor"
+export HARBOR="$harbor"
 export PS1="%F{244}harbor%f %F{209}\$%f "
 EOF
 
@@ -85,27 +92,27 @@ Sleep 2s
 # operator can address the new agent at once. Here the next line would
 # concatenate onto that mention, so each one is cleared with \`⎋\` — which in
 # the room clears the draft and nothing else.
-Type "/new omar in $work/harbor/web"
+Type "/new omar in $harbor/web"
 Enter
 Sleep 6s
 Escape
 Sleep 500ms
-Type "/new priya in $work/harbor/cli"
+Type "/new priya in $harbor/cli"
 Enter
 Sleep 6s
 Escape
 Sleep 500ms
-Type "/new luca in $work/harbor/docs"
+Type "/new luca in $harbor/docs"
 Enter
 Sleep 6s
 Escape
 Sleep 500ms
-Type "/new nora in $work/harbor/api"
+Type "/new nora in $harbor/api"
 Enter
 Sleep 6s
 Escape
 Sleep 500ms
-Type "/new alex in $work/harbor/api"
+Type "/new alex in $harbor/api"
 Enter
 Sleep 6s
 
@@ -151,6 +158,6 @@ Set WindowBar Colorful
 EOT
 
 echo "workspace ready: $work"
-echo "  harbor  $(git -C "$work/harbor" branch --show-current)"
+echo "  harbor  $(git -C "$harbor" branch --show-current)"
 echo "  claude  $(readlink "$work/bin/claude")"
 echo "  wake    $("$work/bin/wake" --version 2>/dev/null || echo built)"
