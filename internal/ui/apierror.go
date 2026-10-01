@@ -32,11 +32,9 @@ import (
 // A usage limit is only pinned: the quota resets on its own and the same process
 // answers again, so a mark for /reauth or a park would cost a restart for nothing.
 // The API only says it to a login it knows, so it is also proof the login works.
+// Any other failed turn - an overload, a rejected request - is only told: the
+// next send retries it, and a pin is for a condition that stands.
 func (a App) apiErrored(sessionID string, ev core.Event) App {
-	usage := ev.Notice == core.NoticeUsageLimit
-	if ev.Notice != core.NoticeAPIError && !usage {
-		return a
-	}
 	msg := apiErrorFallback
 	if ev.Text != "" {
 		msg = ev.Text
@@ -45,12 +43,19 @@ func (a App) apiErrored(sessionID string, ev core.Event) App {
 	if agent, ok := a.fleet.Agent(sessionID); ok && agent.Name != "" {
 		who = agentPrefix + agent.Name
 	}
-	if usage {
-		notice.Report(usageLimitFormat, who, msg)
-		return a.clearAuthFailed(sessionID).apiAnswered(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, usage: true})
+	switch ev.Notice {
+	case core.NoticeTurnFailed:
+		notice.Report(turnFailedFormat, who, msg)
+	case core.NoticeUsageLimit:
+		said := fmt.Sprintf(usageLimitFormat, who, msg)
+		notice.Report("%s", said)
+		return a.clearAuthFailed(sessionID).apiAnswered(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, said: said, usage: true})
+	case core.NoticeAPIError:
+		said := fmt.Sprintf(apiErrorFormat, who, msg, reauthVerb)
+		notice.Report("%s", said)
+		return a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, said: said})
 	}
-	notice.Report(apiErrorFormat, who, msg, reauthVerb)
-	return a.markAuthFailed(sessionID).bumpAuthRetries(sessionID).pinAPIError(sessionID, stuckPin{msg: msg})
+	return a
 }
 
 const (
@@ -68,6 +73,9 @@ const (
 
 	// usageLimitFormat is a usage limit: nothing to run, only a reset to wait for.
 	usageLimitFormat = "%s: %s — send again once it resets"
+
+	// turnFailedFormat is any other failed turn: who, and what the API said.
+	turnFailedFormat = "%s: %s"
 )
 
 // pinAPIError keeps a session's failure on the notice row until it recovers:
@@ -83,15 +91,20 @@ func (a App) pinAPIError(id string, pin stuckPin) App {
 	return a
 }
 
-// unpinAPIError drops a session a healthy turn has proved recovered.
+// unpinAPIError drops a session a healthy turn has proved recovered, and the
+// timed notice that announced its failure if nothing has been reported since.
 func (a App) unpinAPIError(id string) App {
-	if _, held := a.notices.stuck[id]; !held {
+	pin, held := a.notices.stuck[id]
+	if !held {
 		return a
 	}
+	if n, ok := notice.Latest(); ok && n.Text == pin.said {
+		notice.ClearIf(n.Seq)
+	}
 	next := make(map[string]stuckPin, len(a.notices.stuck))
-	for held, p := range a.notices.stuck {
-		if held != id {
-			next[held] = p
+	for other, p := range a.notices.stuck {
+		if other != id {
+			next[other] = p
 		}
 	}
 	a.notices.stuck = next
@@ -100,9 +113,10 @@ func (a App) unpinAPIError(id string) App {
 
 // reconciledPins reads recovery off a fleet report: a pinned session seen parked
 // (a fleet row, or after a reattach only the park book) and then live again was
-// resumed, by this window or any other, onto a fresh process. /reauth's park
-// alone does not unpin - it is the step before a resume. A usage limit is not
-// lifted by a new process, so only a turn that goes through unpins it.
+// resumed, by this window or any other, onto a fresh process - so its mark goes
+// with its pin and notice, or this window's /reauth would park the new process.
+// /reauth's park alone does not unpin - it is the step before a resume. A usage
+// limit is not lifted by a new process, so only a turn that goes through unpins it.
 func (a App) reconciledPins() App {
 	if len(a.notices.stuck) == 0 {
 		return a
@@ -112,17 +126,21 @@ func (a App) reconciledPins() App {
 		inBook[s.ID] = true
 	}
 	next := make(map[string]stuckPin, len(a.notices.stuck))
+	var resumed []string
 	for id, p := range a.notices.stuck {
 		agent, ok := a.fleet.Agent(id)
 		switch {
 		case inBook[id] || (ok && agent.State == rpc.StateParked):
 			p.parked = true
 		case ok && agent.State != rpc.StateEnded && p.parked && !p.usage:
-			continue
+			resumed = append(resumed, id)
 		}
 		next[id] = p
 	}
 	a.notices.stuck = next
+	for _, id := range resumed {
+		a = a.clearAuthFailed(id).unpinAPIError(id)
+	}
 	return a
 }
 

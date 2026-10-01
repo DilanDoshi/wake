@@ -115,25 +115,16 @@ func (a App) mcp(arg string) (App, tea.Cmd) {
 // conversation you are in (or, in the room, the agent the roster has picked),
 // and @who is that agent.
 func (a App) mcpTarget(arg string) (Agent, bool) {
-	fields := strings.Fields(arg)
-	switch {
-	case len(fields) == 0:
-		if agent, ok := a.conversationAgent(); ok {
-			return agent, true
-		}
-		if agent, ok := a.pickedAgent(); ok {
-			return agent, true
-		}
-		notice.Report("%s", mcpNoTarget)
-	case len(fields) == 1 && strings.HasPrefix(fields[0], agentPrefix):
-		agent, ok := a.fleet.ByName(strings.TrimPrefix(fields[0], agentPrefix))
-		if ok {
-			return agent, true
-		}
-		notice.Report("%s\n%s", noSuchAgent, a.handleList())
-	default:
-		notice.Report("%s", mcpUsage)
+	if fields := strings.Fields(arg); len(fields) > 0 {
+		return a.namedTarget(fields, mcpUsage)
 	}
+	if agent, ok := a.conversationAgent(); ok {
+		return agent, true
+	}
+	if agent, ok := a.pickedAgent(); ok {
+		return agent, true
+	}
+	notice.Report("%s", mcpNoTarget)
 	return Agent{}, false
 }
 

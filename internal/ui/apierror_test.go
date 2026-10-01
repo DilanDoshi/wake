@@ -100,6 +100,34 @@ func TestAnUntrackedAuthFailedSessionIsNotAutoParked(t *testing.T) {
 	}
 }
 
+// Only a dead login marks, counts toward the auto-park, or pins. An overload or a
+// rejected request fails one turn and the next send retries it, so however often
+// it repeats it is a timed notice and nothing else.
+func TestAFailedTurnThatIsNotALoginsOnlyPopsANotice(t *testing.T) {
+	a := sizedApp(t, nil, nil, "s1")
+	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateWorking}}})
+	failed := rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &core.Event{
+		Kind: core.KindAPIError, SessionID: "s1", Text: "API Error: 529 overloaded", Notice: core.NoticeTurnFailed,
+	}}
+	for range authRetryParkAttempt {
+		m, _ := a.Update(frameMsg{Frame: failed})
+		a = m.(App)
+	}
+
+	if n, ok := notice.Latest(); !ok || !strings.Contains(n.Text, "529 overloaded") || strings.Contains(n.Text, reauthVerb) {
+		t.Fatalf("the failure's notice is %q, %v: want the API's message, and no /reauth", n.Text, ok)
+	}
+	if _, marked := a.authFailed["s1"]; marked {
+		t.Error("an overload marked s1 for /reauth, which restarts a process that is fine")
+	}
+	if _, parking := a.parking["s1"]; parking {
+		t.Error("an overload auto-parked s1")
+	}
+	if pin := a.pinnedNotice(); pin != "" {
+		t.Errorf("an overload pinned %q; a pin is for a standing condition", pin)
+	}
+}
+
 func TestAnAPIErrorPopsANoticeAndMarksTheSessionForReauth(t *testing.T) {
 	a := sizedApp(t, nil, nil, "s1")
 

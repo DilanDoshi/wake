@@ -35,7 +35,8 @@
       "steps": [
         { "after": 0.9, "text": "Nothing for me — the counter is server side. I'll surface it on the usage panel once maya's emitting it." }
       ]
-    }
+    },
+    {"match": "503", "tokens": 1400, "steps": [{"after": 2.0, "text": "Same shape for 503 — the gateway sends `Retry-After` when it sheds load too."}, {"after": 1.4, "tool": {"name": "Edit", "input": {"file_path": "web/errors.ts", "old_string": "case 429: {", "new_string": "case 429:\ncase 503: {"}, "result": "The file web/errors.ts has been updated.", "takes": 1.6}}, {"after": 1.8, "text": "Done — both now say when to come back."}]}
   ],
   "default": {
     "tokens": 380,

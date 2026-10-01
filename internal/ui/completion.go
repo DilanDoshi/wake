@@ -40,6 +40,7 @@ package ui
 
 import (
 	"fmt"
+	"iter"
 	"os"
 	"slices"
 	"strings"
@@ -98,13 +99,14 @@ var completionRows = max(minCompletionRows, len(wakeVerbs()))
 // appending, and nothing else writes one.
 type commandSet struct{ names []string }
 
-// words is what the session advertised, and nil for a session that has not
-// said - which is every session before its first turn.
-func (c *commandSet) words() []string {
+// words is what the session advertised, and nothing for a session that has not
+// said - which is every session before its first turn. A sequence rather than
+// the slice, because every Agent copy shares it and no caller may write it.
+func (c *commandSet) words() iter.Seq[string] {
 	if c == nil {
-		return nil
+		return func(func(string) bool) {}
 	}
-	return c.names
+	return slices.Values(c.names)
 }
 
 // same reports whether this set is already exactly these words, which is what
@@ -222,14 +224,29 @@ func (a App) completing() completion {
 // The last token rather than the first, unlike a command: `@` addresses in the
 // room and references a file everywhere, and both can follow prose. A draft
 // ending in a space has no token being typed, which is how a finished mention
-// takes its own menu down.
+// takes its own menu down - except inside an open quote, `@"release n`, which
+// is one token through its spaces until the closing quote, since a session's
+// name may hold them (peerMention).
 func mentionStem(draft string) (head, rest string, ok bool) {
 	at := strings.LastIndexAny(draft, wordBreak) + 1
+	if q := strings.LastIndex(draft, agentPrefix+mentionQuote); q >= 0 && q < at && openQuote(draft, q) {
+		at = q
+	}
 	rest, ok = strings.CutPrefix(draft[at:], agentPrefix)
 	if !ok {
 		return "", "", false
 	}
 	return draft[:at], rest, true
+}
+
+// openQuote reports whether the `@"` at q is a mention still being typed: it
+// begins a word, and what follows could still begin a name peerMention offers -
+// no closing quote, and no whitespace but single spaces.
+func openQuote(draft string, q int) bool {
+	inside := draft[q+len(agentPrefix)+len(mentionQuote):]
+	ends := func(r rune) bool { return r != ' ' && strings.ContainsRune(wordBreak+mentionQuote, r) }
+	return (q == 0 || strings.ContainsRune(wordBreak, rune(draft[q-1]))) &&
+		!strings.ContainsFunc(inside, ends) && !strings.Contains(inside, "  ")
 }
 
 // mentionMenu is `@`, which is overloaded exactly as it is in Claude Code: a
@@ -402,12 +419,12 @@ func (a App) commandMenu(draft, head, word string) completion {
 	// many of them as the bound - leaving them in pushes the agent's own, an
 	// operator's custom skills, below the fold. That is the whole complaint.
 	if agent, ok := a.mentionedAlone(head); ok {
-		for _, name := range agent.advertised.words() {
+		for name := range agent.advertised.words() {
 			add(configureVerb(name))
 		}
 		return completion{pane: a.focus, draft: draft, head: head, names: matched}
 	}
-	for _, name := range a.completionAgent().advertised.words() {
+	for name := range a.completionAgent().advertised.words() {
 		add(configureVerb(name))
 	}
 	for _, verb := range wakeVerbs() {

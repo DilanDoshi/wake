@@ -395,7 +395,7 @@ func benchPanes(b *testing.B, a App) {
 	for b.Loop() {
 		for i, w := range r.Cols {
 			if w > 0 {
-				_ = a.column(i, w, h)
+				_ = a.column(i, w, w, h)
 			}
 		}
 	}

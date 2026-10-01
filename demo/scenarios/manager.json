@@ -3,7 +3,7 @@
   "opening": {
     "tokens": 260,
     "steps": [
-      { "after": 0.5, "text": "Manager up. I can see the fleet, send to an agent, interrupt one, and start one — that's the whole list." }
+      { "after": 0.5, "text": "Manager up. I can see the fleet, message an agent or a team, interrupt one, start one, and sort agents into teams — that's the whole list." }
     ]
   },
   "turns": [

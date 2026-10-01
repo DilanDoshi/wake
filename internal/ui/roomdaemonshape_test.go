@@ -84,10 +84,11 @@ func TestATurnInOneReplyStillDoesNotReachTheRoom(t *testing.T) {
 	}
 }
 
-// A fork's transcript is its parent's up to the fork point, so asking about one
-// draws an hour of the parent's prose a second time under a new name. The
-// ruling says a fork is not asked about; the seed is where it was still asked.
-func TestTheRoomDoesNotAskAboutAForkInItsSeed(t *testing.T) {
+// A fork's transcript is its parent's up to the fork point and its own after it.
+// It is asked about like any session: the copied records share the parent's
+// uuids, so the restore draws them once (forkCopies), and the fork's own turns
+// come back instead of being lost with the copy.
+func TestTheRoomAsksAboutAForkInItsSeed(t *testing.T) {
 	fresh(t)
 	a := NewRoomApp(newRecorder(t), Stream{}, seedOf(
 		rpc.SessionStatus{ID: "s1", Name: "sydney", State: rpc.StateIdle},
@@ -96,14 +97,14 @@ func TestTheRoomDoesNotAskAboutAForkInItsSeed(t *testing.T) {
 	m, cmd := a.Update(tea.WindowSizeMsg{Width: 200, Height: 40})
 
 	asked := roomAsks(t, m.(App), cmd)
-	if len(asked) != 1 || asked[0] != "s1" {
-		t.Errorf("the room asked about %v, want only the parent - a fork's transcript is its parent's", asked)
+	if strings.Join(asked, ",") != "s1,s2" {
+		t.Errorf("the room asked about %v, want the parent and the fork - the fork's own turns are only in its transcript", asked)
 	}
 }
 
 // And a fork that comes back from parked is the same conversation arriving by
-// the other door.
-func TestTheRoomDoesNotAskAboutAForkThatComesBackFromParked(t *testing.T) {
+// the other door, asked about the same way.
+func TestTheRoomAsksAboutAForkThatComesBackFromParked(t *testing.T) {
 	fresh(t)
 	a := NewRoomApp(newRecorder(t), Stream{}, &rpc.Status{
 		Running: true,
@@ -111,11 +112,12 @@ func TestTheRoomDoesNotAskAboutAForkThatComesBackFromParked(t *testing.T) {
 	}).withSize(200, 40).awaitingWake("s9")
 
 	m, cmd := a.Update(frameMsg{Frame: rpc.Frame{Kind: rpc.FrameStatusPush, Status: seedOf(
+		rpc.SessionStatus{ID: "s1", Name: "sydney", State: rpc.StateIdle},
 		rpc.SessionStatus{ID: "s9", Name: "marco", State: rpc.StateIdle, ParentID: "s1"},
 	)}})
 
-	if asked := roomAsks(t, m.(App), cmd); len(asked) != 0 {
-		t.Errorf("the room asked about a resumed fork: %v", asked)
+	if asked := roomAsks(t, m.(App), cmd); len(asked) != 1 || asked[0] != "s9" {
+		t.Errorf("the room asked about %v after a fork's wake, want [s9]", asked)
 	}
 }
 

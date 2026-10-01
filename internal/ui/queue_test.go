@@ -9,6 +9,8 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/google/uuid"
+
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -317,7 +319,7 @@ func TestAQueuedDMMessageKeepsALeadingAtWordInThePin(t *testing.T) {
 // Stripping the room mention keeps the rest, image chip and all, so the pin
 // still says an image is attached.
 func TestAQueuedRoomBroadcastKeepsItsImageChipInThePin(t *testing.T) {
-	a := idleDM(t).enqueue("s1", newQueued("ship it", "@alex ship it [Image #1]", nil, true))
+	a := idleDM(t).enqueue("s1", newQueued(uuid.NewString(), "ship it", "@alex ship it [Image #1]", nil, true))
 	if got := a.queuedTexts("s1"); len(got) != 1 || got[0] != "ship it [Image #1]" {
 		t.Errorf("the pin dropped the image chip along with the mention: %#v", got)
 	}
@@ -327,7 +329,7 @@ func TestAQueuedRoomBroadcastKeepsItsImageChipInThePin(t *testing.T) {
 // message's context, not this agent's own address, so the pin keeps it whole.
 // Only the recipient's *own* @name is a redundant self-mention to strip.
 func TestAQueuedRoomBroadcastKeepsADifferentAgentsMentionInThePin(t *testing.T) {
-	a := idleDM(t).enqueue("s1", newQueued("hello", "@john hello", nil, true))
+	a := idleDM(t).enqueue("s1", newQueued(uuid.NewString(), "hello", "@john hello", nil, true))
 	if got := a.queuedTexts("s1"); len(got) != 1 || got[0] != "@john hello" {
 		t.Errorf("a bystander pin lost another agent's mention: %#v", got)
 	}
@@ -337,7 +339,7 @@ func TestAQueuedRoomBroadcastKeepsADifferentAgentsMentionInThePin(t *testing.T) 
 // not its routing address - the pin keeps it whole rather than clipping to the
 // name, the whole-word failure a display regex like leadingMention would hit.
 func TestAQueuedRoomMessageKeepsALeadingAtWordThatIsNotThisAgent(t *testing.T) {
-	a := idleDM(t).enqueue("s1", newQueued("look", "@alexander take a look", nil, true))
+	a := idleDM(t).enqueue("s1", newQueued(uuid.NewString(), "look", "@alexander take a look", nil, true))
 	if got := a.queuedTexts("s1"); len(got) != 1 || got[0] != "@alexander take a look" {
 		t.Errorf("the pin clipped a longer @word down to this agent's name: %#v", got)
 	}
@@ -346,7 +348,7 @@ func TestAQueuedRoomMessageKeepsALeadingAtWordThatIsNotThisAgent(t *testing.T) {
 // A room message that is only the addressee's @name (no body) keeps the name,
 // rather than stripping to an empty pin row with a bare glyph.
 func TestABareQueuedRoomMentionKeepsItsNameInThePin(t *testing.T) {
-	a := idleDM(t).enqueue("s1", newQueued("", "@alex", nil, true))
+	a := idleDM(t).enqueue("s1", newQueued(uuid.NewString(), "", "@alex", nil, true))
 	if got := a.queuedTexts("s1"); len(got) != 1 || got[0] != "@alex" {
 		t.Errorf("a bare room mention stripped to an empty pin: %#v", got)
 	}

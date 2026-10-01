@@ -147,7 +147,7 @@ func (a App) tile(ag Agent, width, height int, cursored bool) string {
 	if !ok {
 		name = lipgloss.NewStyle().Foreground(border)
 	}
-	head := rowGlyph(ag) + " " + ag.Name
+	head := rowGlyph(ag, a.fleet.done(ag.ID)) + " " + ag.Name
 	body := a.tileBody(ag, width, max(height-2, 1))
 	return titledBox(body, width, boxStyle, oneLine(head), "", name, name)
 }

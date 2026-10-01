@@ -29,9 +29,9 @@ type transcript struct {
 	// appended to on every event and copied on every append - see chunked.
 	lines chunked[string]
 
-	// prefix is a fixed boundary before lines. The room uses it after reclaiming
-	// history; it moves with the oldest retained line without entering the
-	// append-only sequence or the event cap.
+	// prefix is a fixed boundary before lines. The room and a conversation use it
+	// after reclaiming history; it moves with the oldest retained line without
+	// entering the append-only sequence or the event cap.
 	prefix string
 
 	// Where each tool call sits. tools answers a click - which call is on the
@@ -176,7 +176,7 @@ func (t *transcript) mark(b block, at int, added []string) {
 		if t.texts == nil {
 			t.texts = map[int]textRows{}
 		}
-		t.texts[first] = textRows{end: at + len(added), how: b.copied, typed: b.typed}
+		t.texts[first] = textRows{end: at + len(added), how: b.copied, src: b.src}
 	}
 	if b.tool == "" && b.run == "" {
 		return

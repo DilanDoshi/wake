@@ -207,6 +207,8 @@ func TestTheDaemonAnswersAWorkflowsFrame(t *testing.T) {
 	fakeClaudeOnPath(t, "")
 	projects := t.TempDir()
 	t.Setenv("WAKE_PROJECTS", projects)
+	config := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", config)
 	d := startDaemon(t)
 	c := attach(t, d.socket)
 
@@ -219,6 +221,11 @@ func TestTheDaemonAnswersAWorkflowsFrame(t *testing.T) {
 	})
 	if f.Workflow == nil || len(f.Workflow.Runs) != 1 || f.Workflow.Runs[0].TaskID != "wsmc7r0xw" {
 		t.Fatalf("workflows reply = %+v, want one run (wsmc7r0xw)", f.Workflow)
+	}
+	// The save dialog's personal-scope hint is the daemon's own directory, not
+	// one a client derives from an environment that may not be the daemon's.
+	if want := filepath.Join(config, "workflows"); f.Workflow.PersonalDir != want {
+		t.Errorf("the reply names the personal scope %q, want the daemon's %q", f.Workflow.PersonalDir, want)
 	}
 }
 

@@ -386,7 +386,7 @@ var notAuthoredByTheChild = map[string]string{
 	// ids Wake mints or echoes rather than reads as prose.
 	"Event.SessionID": "an address, matched rather than drawn",
 	"Event.RequestID": "the correlator an answer is answered by",
-	"Event.MessageID": "a boundary marker, matched rather than drawn",
+	"Event.MessageID": "an identity - a send's lifecycle, a restored record's uuid - matched rather than drawn",
 
 	// Re-encoded rather than rendered, both of them. The id is what an answer is
 	// addressed to, and Input is what an allow sends back as updatedInput - a

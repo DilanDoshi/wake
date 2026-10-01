@@ -77,7 +77,15 @@ func (d DM) showsLoopWait() bool {
 // records) keeps the line hidden until the agent's next turn or a park - a stuck
 // row was only a phantom sidebar entry before and now costs the done line too.
 func (d DM) showsDone() bool {
-	return d.Agent.State == rpc.StateIdle && !d.Agent.doneAt.IsZero() && d.partial.view == "" && !d.subRunning
+	return turnDone(d.Agent, d.subRunning) && d.partial.view == ""
+}
+
+// turnDone is whether an agent has finished a turn this client watched, with
+// nothing of it still running - the DM's done line, and the roster's ✔ (see
+// Fleet.done). One predicate so the two surfaces cannot disagree. A live loop
+// is not done: it is waiting for its next wakeup (showsLoopWait).
+func turnDone(a Agent, subRunning bool) bool {
+	return a.State == rpc.StateIdle && !a.doneAt.IsZero() && !a.loop.Active && !subRunning
 }
 
 // hasBeat is whether the pane draws the line above the composer at all - the one

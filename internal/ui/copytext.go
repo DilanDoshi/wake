@@ -20,24 +20,28 @@ type rejoin int
 const (
 	rowsAsDrawn  rejoin = iota // every row break is kept
 	markdownRows               // render.Markdown drew them
-	typedRows                  // shadedOwn drew the operator's text
+	typedRows                  // shadedOwn or localReplyBlock drew a known text
 )
 
-// textRows is one block in transcript.texts: where it ends, and how it rejoins.
+// textRows is one block in transcript.texts: where it ends, how it rejoins, and
+// the text its rows were drawn from.
 type textRows struct {
-	end   int
-	how   rejoin
-	typed string
+	end int
+	how rejoin
+	src string
 }
 
-// copiedAs is how the DM draws an event, as far as a copy cares. A subagent's
-// block sits inside a gutter no rule here reads past, so it copies as drawn.
+// copiedAs is how the DM draws an event, as far as a copy cares, and from what.
+// A subagent's block sits inside a gutter no rule here reads past, so it copies
+// as drawn.
 func copiedAs(ev core.Event) (rejoin, string) {
 	switch {
 	case ev.Subagent != nil:
 		return rowsAsDrawn, ""
+	case drawnAsLines(ev):
+		return typedRows, ev.Text
 	case ev.Kind == core.KindAssistantText, ev.Kind == core.KindUserText && ev.Echoed:
-		return markdownRows, ""
+		return markdownRows, ev.Text
 	case ev.Kind == core.KindUserText:
 		return typedRows, ev.Text
 	}
@@ -47,13 +51,19 @@ func copiedAs(ev core.Event) (rejoin, string) {
 // hardBreak is how a row follows the one above it when nothing proves a wrap.
 var hardBreak = render.Rejoin{Sep: "\n"}
 
-// rejoins is how each of lines - what selectionLines returned, lines[0] at
-// absolute index first - follows the row above it.
-func (t transcript) rejoins(lines []string, first int) []render.Rejoin {
-	out := make([]render.Rejoin, len(lines))
-	for i := range out {
-		out[i] = hardBreak
-	}
+// copySpan is one block a copy crosses and the rows it drew. Taken on the
+// Update loop, since texts is written in place as blocks land, so the rejoin -
+// a render per markdown block - can run in the copy's own command.
+type copySpan struct {
+	from int
+	rows []string
+	textRows
+}
+
+// copySpans is every block among lines - what selectionLines returned, lines[0]
+// at absolute index first - whose rows rejoin.
+func (t transcript) copySpans(lines []string, first int) []copySpan {
+	var out []copySpan
 	for from, span := range t.texts {
 		if span.end <= first || from >= first+len(lines) {
 			continue
@@ -62,15 +72,28 @@ func (t transcript) rejoins(lines []string, first int) []render.Rejoin {
 		if clipped(rows, t.width) {
 			continue // the rows hold text the pane never drew
 		}
+		out = append(out, copySpan{from: from, rows: rows, textRows: span})
+	}
+	return out
+}
+
+// rejoinsOf is how each of n lines from absolute index first follows the row
+// above it.
+func rejoinsOf(spans []copySpan, first, n int) []render.Rejoin {
+	out := make([]render.Rejoin, n)
+	for i := range out {
+		out[i] = hardBreak
+	}
+	for _, span := range spans {
 		var js []render.Rejoin
 		switch span.how {
 		case markdownRows:
-			js = render.Rejoins(rows)
+			js = render.Rejoins(span.rows, span.src)
 		case typedRows:
-			js = typedRejoins(rows, span.typed)
+			js = typedRejoins(span.rows, span.src)
 		}
 		for k, j := range js {
-			if i := from + k - first; i >= 0 && i < len(out) {
+			if i := span.from + k - first; i >= 0 && i < n {
 				out[i] = j
 			}
 		}
@@ -89,13 +112,18 @@ func clipped(rows []string, width int) bool {
 	return false
 }
 
-// typedRejoins matches the rows shadedOwn drew back to the text they came from:
-// each row follows exactly the whitespace its wrap consumed, a typed newline
-// included. Rows before the first that opens the text (the DM's "you" label)
-// are kept as drawn. nil when the rows do not match - the copy then keeps every
-// row break, which is never worse than what was drawn.
+// ownTabWidth is how many spaces shadedOwn draws a typed tab as - lipgloss's own
+// default, set by name so typedRejoins can read the text the same way.
+const ownTabWidth = 4
+
+// typedRejoins matches the rows shadedOwn or localReplyBlock drew back to the
+// text they came from: each row follows exactly the whitespace its wrap
+// consumed, a typed newline included, and a typed tab reads as the spaces drawn
+// for it. Rows before the first that opens the text (the DM's "you" label) are
+// kept as drawn. nil when the rows do not match - the copy then keeps every row
+// break, which is never worse than what was drawn.
 func typedRejoins(rows []string, typed string) []render.Rejoin {
-	src := strings.TrimSpace(typed)
+	src := strings.TrimSpace(strings.ReplaceAll(typed, "\t", strings.Repeat(" ", ownTabWidth)))
 	out := make([]render.Rejoin, len(rows))
 	pos := -1 // where in src the rows have reached; -1 before the body
 	for i, row := range rows {

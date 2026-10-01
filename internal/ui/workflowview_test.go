@@ -304,15 +304,47 @@ func TestEnterOnABoardWorkflowRowOpensItsRunLevel(t *testing.T) {
 
 // Every way in queues the runs-on-disk ask, and Update's drain writes it.
 func TestOpeningFromTheSidebarAsksForTheAgentsRuns(t *testing.T) {
-	a := onWorkflowRow(t, workflowFleet(t))
-	next, _, _ := a.key(wfKey(tea.KeyCtrlD))
-	a = next.(App)
-	a, cmd := a.takeHistoryAsks()
-	if got := kindsFor(writtenFrames(t, a, cmd), rpc.FrameWorkflows); len(got) != 1 || got[0] != "s1" {
-		t.Errorf("opening from the sidebar asked for runs of %v, want [s1]", got)
+	byKey := func(k tea.KeyType, below bool) func(*testing.T, App) App {
+		return func(t *testing.T, a App) App {
+			if below {
+				a = a.openDMWith("s2", "sydney")
+			}
+			next, _, _ := onWorkflowRow(t, a).key(wfKey(k))
+			return next.(App)
+		}
 	}
-	if len(a.workflow.asks) != 0 {
-		t.Errorf("the drain left asks queued: %v", a.workflow.asks)
+	for how, open := range map[string]func(*testing.T, App) App{
+		"↵": byKey(tea.KeyEnter, false), "⌃D": byKey(tea.KeyCtrlD, false),
+		"⌃Y": byKey(tea.KeyCtrlY, false), "⌃B": byKey(tea.KeyCtrlB, true),
+		"a click": func(t *testing.T, a App) App {
+			for y := range a.paneHeight() {
+				if _, dispatch, ok := a.clickedAgent(y); ok && dispatch == wfDispatch {
+					a, _ = click(a, a.layout.Width-2, y)
+					return a
+				}
+			}
+			t.Fatal("no screen row of the sidebar is the workflow's")
+			return a
+		},
+		"the board's ↵": func(t *testing.T, a App) App {
+			m, _ := typeAndSubmit(a, boardVerb)
+			a = m.(App)
+			a.board.Selected, a.board.SelectedTask = "s1", wfDispatch
+			a, _, _ = a.boardKey(wfKey(tea.KeyEnter))
+			return a
+		},
+	} {
+		t.Run(how, func(t *testing.T) {
+			a := open(t, workflowFleet(t))
+			requireRunOpen(t, a, how)
+			a, cmd := a.takeHistoryAsks()
+			if got := kindsFor(writtenFrames(t, a, cmd), rpc.FrameWorkflows); len(got) != 1 || got[0] != "s1" {
+				t.Errorf("opening by %s asked for runs of %v, want [s1]", how, got)
+			}
+			if len(a.workflow.asks) != 0 {
+				t.Errorf("the drain left asks queued: %v", a.workflow.asks)
+			}
+		})
 	}
 }
 
@@ -435,8 +467,9 @@ func TestTheViewTakesNoKeysWhileItsPaneIsNotFocused(t *testing.T) {
 
 // --- the mouse ------------------------------------------------------------
 
-// A press over the view is the view's: it never starts a transcript selection,
-// and a phase row under the pointer becomes the cursor.
+// A press over the view is the view's: it never starts a transcript selection -
+// only the screen anchor a drag would copy from - and a phase row under the
+// pointer becomes the cursor.
 func TestAPressInTheViewSelectsARowAndNeverATranscript(t *testing.T) {
 	a := runOpen(t)
 	x, y, ok := viewCell(a, "2 Sum")
@@ -444,8 +477,8 @@ func TestAPressInTheViewSelectsARowAndNeverATranscript(t *testing.T) {
 		t.Fatalf("the Sum phase is not on screen:\n%s", stripANSI(a.View()))
 	}
 	a, _ = a.mouse(pressAt(x, y))
-	if a.selecting || !a.sel.empty() {
-		t.Errorf("a press on the view started a selection: %+v", a.sel)
+	if !a.sel.onScreen || !a.sel.empty() {
+		t.Errorf("a press on the view started %+v, want only a screen anchor", a.sel)
 	}
 	if v := a.workflow.view; v.Column != 0 || v.Cursor != 1 {
 		t.Errorf("a press on the Sum phase left %+v, want it the cursor", v)

@@ -105,8 +105,8 @@ func TestLoopRendersAcrossSurfaces(t *testing.T) {
 
 	working := fixed
 	working.State, working.Tool = rpc.StateWorking, "Bash"
-	if !strings.Contains(headLine(working, 40), loopGlyph) {
-		t.Errorf("roster head line lost the ↻ marker while working: %q", headLine(working, 40))
+	if !strings.Contains(headLine(working, false, 40), loopGlyph) {
+		t.Errorf("roster head line lost the ↻ marker while working: %q", headLine(working, false, 40))
 	}
 	if d := idleDetail(fixed); !strings.Contains(d, "↻ every 5m") {
 		t.Errorf("idle detail = %q, want the cadence", d)

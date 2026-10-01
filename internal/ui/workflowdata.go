@@ -132,6 +132,7 @@ func (a App) workflowReplied(f rpc.Frame) App {
 	var runs []core.WorkflowRun
 	if f.Workflow != nil {
 		runs = f.Workflow.Runs
+		a.workflow.view.Personal = cmp.Or(f.Workflow.PersonalDir, a.workflow.view.Personal)
 	}
 	disk := make(map[string][]core.WorkflowRun, len(a.workflow.disk)+1)
 	maps.Copy(disk, a.workflow.disk)

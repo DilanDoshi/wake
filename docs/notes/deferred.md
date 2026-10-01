@@ -64,12 +64,13 @@ triaged as deferred is recorded here rather than lost with it). Each item was ch
 tree when this entry was written; check again before acting on one.
 
 **Deferred features, owner's triage.**
-- **`@who /workflows` from the room** (M6). `/workflows` in the room lists every agent's runs; there is
-  no way to aim it at one agent the way `@who /mcp` aims the MCP menu. *Closes with:* a
-  `roomTargetCommands` entry and `openWorkflows` taking the resolved id.
-- **The view's text cannot be selected or copied** (M7). A press on the view moves its cursor
-  (`workflowPress`) and never starts a selection, and it leaves an earlier highlight standing. It is the
-  one rendered surface CLAUDE.md's "every other surface is selectable" does not cover, and says so.
+- ~~**`@who /workflows` from the room** (M6).~~ **CLOSED on `fix/workflow-view-gaps`:** a
+  `roomTargetCommands` entry, and `openWorkflows` takes one `@who` (`namedTarget`, now /quit's and
+  /mcp's too); the view's title names whose runs it draws. `@thea /work⇥` still does not complete —
+  behind a lone `@thea ` the menu offers only thea's own commands, as for `/col` today.
+- ~~**The view's text cannot be selected or copied** (M7).~~ **CLOSED on `fix/workflow-view-gaps`:** a
+  press anchors the frame-wide screen selection before `workflowPress` moves the cursor, so a drag
+  copies, a click still only moves the cursor, and multi-click selects a word or row.
 - **The room's list has no way to jump between agents' groups** (M12) — a long fleet list is walked a
   row at a time.
 
@@ -96,8 +97,9 @@ tree when this entry was written; check again before acting on one.
   under it is unattributed in the room.
 - **The save dialog:** `↵` closes it silently if the run left the list underneath; an invalid name is
   refused in the notice slot rather than in the dialog; a `FrameWorkflowSaved` with no payload is
-  dropped silently; the personal-scope path hint ignores `$CLAUDE_CONFIG_DIR`; a one-row body hides the
-  dialog's cue.
+  dropped silently; ~~the personal-scope path hint ignores `$CLAUDE_CONFIG_DIR`~~ (closed on
+  `fix/workflow-view-gaps`: the daemon names its own directory on the runs reply); a one-row body hides
+  the dialog's cue.
 - **`⌃C` in the save dialog closes the dialog alone** (the ruling: parking would end the run being
   saved). A second `⌃C` straight after is the kill switch's `⌃C⌃C` emergency exit, not a park — to park
   from there, press anything else first. The kill switch is deliberately untouched.
@@ -108,28 +110,34 @@ tree when this entry was written; check again before acting on one.
   atomic, and a filesystem without them refuses the save rather than falling back.
 
 **Small code debts.**
-- `stopWorkflow`'s `!ok` branch is unreachable (`workflowKeyed` runs `settledArm` first, so `armedKey`
-  only ever sees a stoppable run); `FrameStopRun` with an empty task id refuses with a trailing space
-  (`"no running workflow "`); `saveWorkflowFrame`'s own unknown-session refusal wants a comment on why it
-  does not go through `withAgent`.
-- `workflowdraw.go`'s `modelFamilies` restates what `core.ModelAliases` knows; `workflowdraw.go` is
-  ~620 lines and its agent level could be its own file.
+- ~~`stopWorkflow`'s `!ok` branch is unreachable; `FrameStopRun` with an empty task id refuses with a
+  trailing space; `saveWorkflowFrame`'s own unknown-session refusal.~~ **CLOSED on
+  `fix/workflow-view-gaps`:** folded into `armedKey`; "a workflow stop needs a task id"; the save goes
+  through `withAgent` (nothing made the split deliberate).
+- ~~`modelFamilies` restates `core.ModelAliases`; the agent level could be its own file.~~ **CLOSED on
+  `fix/workflow-view-gaps`:** `workflowModel` reads `core.ModelAliases`; the agent level is
+  `workflowagent.go`.
 - The airlock is full: `vocabulary.go` 800, `protocol.go` 798, `wire.go` 797, `encode.go` 792 (now
   742/798/798/798, 2026-09-29; *"never by a fifth airlock file"* below is SUPERSEDED — the owner's
   2026-09-27 ruling added `localreply.go` as the fifth, `bf77dce`, PR #131). The next
   decoded field pays for its line by moving Claude-free code out (`rawjson.go`'s precedent), never by a
   fifth airlock file.
-- Tests: `workflowstop_test.go`'s `emitTaskEnded` puts `status` at the top level where recordings nest
-  it under `patch`; the e2e fake's frames omit `last_tool_name`/`uuid`; the sidechain transcript fixture
-  is hand-built rather than recording-derived; the open-key tests that check an ask was written cover
-  `⌃D` and `/workflows`, not `↵`/`⌃Y`/`⌃B`/click/board; the wheel over the view itself under an armed
-  stop is untested.
+- Tests: the e2e fake's frames omit `last_tool_name`/`uuid`; the sidechain transcript fixture is
+  hand-built rather than recording-derived. (~~`emitTaskEnded`'s top-level `status`; the open-key ask
+  tests covering only `⌃D`/`/workflows`; the wheel over the armed view untested~~ — closed on
+  `fix/workflow-view-gaps`.)
 - Demo (`demo/`): `pick_turn` falls through to prose matching for an unadvertised `/<name>`, and
   `workflow_spec` rescans the scenarios on every call.
 
 *Blocks:* nothing shipped. *Closes with:* each item on its own; none is a prerequisite of another.
 
-## KNOWN GAP, 2026-09-15 — a DM reply can miss room-promotion during the 80ms resize settle
+## KNOWN GAP, 2026-09-15 — a DM reply can miss room-promotion during the 80ms resize settle — FIXED (`fix/room-gaps`, 2026-09-29)
+
+**FIXED:** `drawnConversations` now reads `drawnRegions()` (`geometry.go`) — the layout the pending
+geometry commits on the next settle — rather than the committed one. The intersection sketched below is
+wrong in one case: with the DM focused, a wide→narrow resize past the takeover keeps the *DM* (the
+window follows the focused column), so the intersection would promote into a room nobody can see.
+Pending is right in both directions, and `App.wants` inherits it. Pinned by `roomsettle_test.go`.
 
 **Shipped:** `feat/promote-dm-reply-on-leave` promotes a DM-sent turn's prose into the room once its
 DM stops being drawn (the operator has left it), so someone watching the group chat does not miss a
@@ -215,7 +223,25 @@ with:* factoring the clamp into one unstyled `transcript` method the other two c
 whether `pointIn` should read a freshly measured height the way `startSelection`'s own gate already
 does.
 
-## KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)
+## ~~KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)~~ CLOSED 2026-09-30 (`fix/render-list-hang-cache`)
+
+**Closed by the reflow the entry below names.** `reflowProse` now hangs every item itself: a group
+whose first row opens with a marker (`• `, `N. `, `[ ] `/`[✓] ` — `itemMarker`) wraps the text after
+the marker at the budget less the marker's width and lays its continuations under the text, so the
+hang costs no row its width. `hangIndentLists`/`hangIndent` are deleted; the shift they applied after
+glamour's wrap also spent glamour's far margin (a bullet continuation 55 cells wide in a 54-cell
+layout at width 56), which the tightened width sweep now forbids. Two things the rendered bytes alone
+could not say, settled at their source: an enumerator or task box is real only when glamour drew it
+for a list item, which the style marks with `itemTag` (an empty SGR, stripped after reflow), because
+`1\.`, a literal `[ ] ` and a ten-digit number render the same bytes as a real marker; and a row
+mid-group splits it only for an item of the group's own list (`startsItem`), because a wrap that
+opens `2. Then` is prose, or a bullet's text. Inside an item, the row glamour leads with a styled
+span's empty escapes is merged back into the item — a code block in an item sits deeper, and any
+other block is a blank row away — so bold, code and links at a wrap no longer drop the hang the old
+shift gave them — a heading nested in an item, drawn under it the same way, is refused by `headingTag`.
+`sealRows` closes a style a wrap broke a row inside (the reflow's, or `fitToWidth`'s hard wrap of a
+row glamour could not break, which `main` already did), so no row ends styled beside a divider. `rejoin.go` steps past the same markers so a copy rejoins the hang. The original entry is kept below.
+
 
 **Shipped:** `fix/markdown-list-hanging-indent` hang-indents a wrapped **bullet** item's
 continuation lines under the item text (`internal/render/markdown.go`, `hangIndentLists`), matching
@@ -245,7 +271,17 @@ at glamour's margin, unchanged — pinned by `TestOrderedListContinuationIsLeftA
 per-item hang-indent reflow that is width-safe for enumerators, or a glamour release that
 hang-indents lists itself.
 
-## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance
+## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance — DONE (`fix/room-gaps`, 2026-09-29)
+
+**DONE as a client-side annotation, never a state** (the lean below). `turnDone` (`dmbeat.go`) is the
+one predicate — idle, a *witnessed* turn's `doneAt`, no running subagent, no live loop — and the DM's
+done line (`showsDone`, plus its preview gate), the roster/board glyph `✔` (`rowGlyph`) and the strip's
+`✔ N done` (taken out of the idle count) all read it; `Fleet.done(id)` wraps it for the board.
+`stateGlyph`, `stateLabel` and `attentionRank` do not know it, so no totality guard moved. Not `✻`:
+that is a heartbeat frame. **Two limits, left for the owner:** a client that attaches after a turn ended
+shows `○`, not `✔` (`doneAt` is witnessed-only, the done line's own rule); and an agent whose own
+`TaskCreate` checklist still has open items is still marked done — a checklist is the agent's
+bookkeeping and is routinely left open after a turn, so gating on it would break roster == done line.
 
 **Asked for in this version.** A "done" indicator in the right sidebar (the roster) so the operator
 scanning a fleet can see which agents have **finished the requested task**, distinct from ones still
@@ -338,7 +374,18 @@ someone picks this up.
 entry names). *Blocks:* nothing in the product — but it makes the project's **only gate** (`make ci`
 exit 0) unreliable on a loaded machine, which is why it is written down rather than left as folklore.
 
-## KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment
+## ~~KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment~~ CLOSED 2026-09-30 — nothing can deliver one
+
+**Closed without building, on evidence that no `MultiEdit` can arrive.** A guard's domain is what
+can arrive, and in the verified range nothing offers the tool: no `init` in `testdata/stream/`
+(133 of them, across ten versions from 2.1.226 to 2.1.283) lists `MultiEdit` among its tools, the
+installed claude is 2.1.285, and not one transcript under the owner's `~/.claude/projects` holds a
+`MultiEdit` call. A decode and a per-hunk draw for it would be code for a tool no session offers.
+**The one residual:** a pre-2.x transcript read back through history, `/resume` or import still
+decodes its `MultiEdit` calls, and they draw as any tool without a diff does — folded into
+`1 tool use · 1 multiedit`, with nothing behind the fold. If a later Claude Code offers the tool
+again, a recording earns the decode this entry describes. The original entry is kept below.
+
 
 `feat/dm-diff-rendering` made an `Edit`/`Update` draw its diff whole in the DM pane rather than fold
 into a `1 tool use · 1 edit` rollup (see `decisions.md`, 2026-08-28). It keys on `core.ToolDiff`,
@@ -357,7 +404,18 @@ needed — the input shape is the documented `MultiEdit` schema — but a fixtur
 
 ---
 
-## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿` — record shipped 2026-08-31; purple-under-`⎿` presentation still deferred
+## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿` — DONE (`fix/room-gaps`, 2026-09-29)
+
+**DONE:** a settle now resolves the ask's own `⚠ ‹agent› has a question` line in place
+(`cardroom.go`'s `resolveAsk`, re-rendered through `roomexpand.go`'s `relaid`, which `toggleLine`
+shares, so a scrolled reader keeps their place): answered is `● ‹agent› · question answered` in
+`AnsweredStyle` (LastRead's effortUltra purple — never its surface, the last-read rule is a DM's) with
+one `question → answer` row per question under a `⎿`, drawn by `render.ToolResult` collapsed; a refusal
+is the same line muted with no body. An ask line evicted past retention gets the record appended
+instead. Open questions below: **multiple questions** is one row each; **permissions/plans** still post
+nothing; **persistence** stays live-only. Not closed: a question answered in *another* window leaves
+this window's line yellow (only the operator's own settle points author the record; the
+`AskUserQuestion` tool_result would be the wire-side source).
 
 **Partially shipped (`fix/room-question-answered-notice`, PR #40, 2026-08-31).** The "yellow → gone"
 failure below is fixed: a settled question now leaves one line in the group chat — `● ‹agent› ·
@@ -1561,8 +1619,14 @@ None of these are wrong. All are unmeasured at the scale the product claims.
 
 - **One process-global mutex serializes rendering across every session** (`internal/render`).
   Correct; a cache miss blocks every other session. Never profiled under load.
-- **Unbounded renderer cache.** Dragging a terminal resize caches a `TermRenderer` plus its
-  parsed style config at every intermediate width, permanently.
+- ~~**Unbounded renderer cache.** Dragging a terminal resize caches a `TermRenderer` plus its
+  parsed style config at every intermediate width, permanently.~~ **CLOSED 2026-09-30
+  (`fix/render-list-hang-cache`):** `internal/render/renderercache.go` keeps the `CachedWidths` most
+  recently used widths (a renderer is ~36KB retained and ~10µs to build). The cap is derived, not
+  chosen: `internal/ui/renderwidths_test.go` measures the widths a 200-column frame renders at — six
+  columns at distinct widths and a plan card, the tiled board's tile width, one reserved for the copy
+  path — and fails if the constant disagrees. A wider terminal can draw more widths; a miss costs one
+  build per block rendered, and a block renders on an event or a re-wrap, never on a frame.
 - **A session that ends *cleanly* still leaks what it spawned.** **CLOSED 2026-08-24 — PR #103 (`fix/clean-exit-group-sweep`):** `retire`'s ordinary non-park branch now sweeps the group via `core.KillGroup(a.sess.Pgid())`; `completePark` is untouched so a parked session's children survive its wake. Follow-up (c) zombie-reap concurrent-`Wait` ordering **CLOSED 2026-08-25 — PR #112** (`fix/wedged-exit-selfdetect`): Wake owns the stdout pipe and `awaitExit` self-detects a leader that exited while a grandchild holds stdout, so a wedged session ends cleanly and `retire`'s sweep now reaches it too; (b) wedged-logger goroutine leak remains (the log-sink owner's, not a core group-kill). Both kill paths are failure
   paths. An agent that finishes normally after `npm run dev &` leaves the dev server behind.
   Policy belongs to the pool; the *mechanism* cannot — `cmd.Process.Pid` dies with `finish`, so
@@ -1570,7 +1634,17 @@ None of these are wrong. All are unmeasured at the scale the product claims.
 - **A wedged logger leaks one parked goroutine per affected session.** The session itself ends
   and frees its slot; the goroutine does not. Unbounded from inside for the same reason the
   original bug existed — a component cannot bound a sink it does not own. Task 6 owns the sink.
-- **A DM's scrollback is unbounded for the life of the session.** Deliberately left there by
+- ~~**A DM's scrollback is unbounded for the life of the session.**~~ **CLOSED 2026-09-30
+  (`fix/dm-scrollback-bound`):** a conversation keeps its newest `dmRetentionEvents` (3,000 — the
+  re-wrap cost accepted when the settle was designed, 248ms then and 73ms now by
+  `BenchmarkReWrapAtTheRetentionCap`) and reclaims the oldest a chunk at a time under `… older
+  conversation reclaimed` (`internal/ui/dmretention.go`). It cuts only before a non-tool event, so
+  never inside a folded run or between a call and its result, and the lines it keeps are the lines a
+  re-wrap of what it kept draws (`TestAReclaimKeepsTheLinesAReWrapDraws`), stale last-read rules
+  included. History arriving after a reclaim is left out rather than drawn above a gap. **Still
+  unbounded, out of scope here:** `Fleet.subs` and `DM.subs` (subagent transcripts), and a DM's
+  `calls`/`outcomes`/`opened`/`runOpen` maps (one entry per tool call). The original entry:
+  Deliberately left there by
   C2's fix: dropping old events means dropping the lines they rendered to, or a width change
   re-renders a transcript missing its beginning — so a bound on `d.events` is a bound on
   *scrollback depth*, which is a product decision about a view §8 calls "literally Claude
@@ -1731,8 +1805,8 @@ work; the rest is bookkeeping. **Whoever adds the field owns the record.**
 
 **Left open by the same task, and smaller: the manager is an ordinary row on every surface that
 draws one.** It is in the roster, it has an attention rank, `⌃D` opens a DM on it and `⌃C` will park
-it. Parking it is *recoverable* — `restoreParked` (deleted in `6ca7e6b`; `/manager` wakes it now) gives it its name back and `managerConfig` gives
-it its tools back — so nothing is lost, but a manager sitting in the attention ranking between two
+it. Parking it is *recoverable* — `restoreParked` (deleted in `6ca7e6b`; `/manager` wakes it now)
+gives it its name back and `managerConfig` gives it its tools back — so nothing is lost, but a manager sitting in the attention ranking between two
 agents is a design question nobody has answered. It was deliberately not answered here: the settled
 scope was routing (default addressee, broadcast exclusion), and the roster is a different surface
 with a different argument.
@@ -1760,8 +1834,12 @@ with a different argument.
 > costs the one route to its transcript unless something replaces it. **Whoever answers this owns the
 > strip's count too** — the two are the same claim about whether the manager is part of "the fleet".
 
-**Phase 3 or later — `--strict-mcp-config` for *ordinary* agents is unruled.** Added 2026-08-11 by
-Phase 2 Task 15.
+**~~Phase 3 or later — `--strict-mcp-config` for *ordinary* agents is unruled.~~ RULED 2026-09-29:
+ordinary agents inherit** — the owner decided it by building PR #127 on it (every agent's
+`initialize` handshake loads the operator's claude.ai connectors, which `--strict-mcp-config` would
+exclude). Recorded in `decisions.md` (2026-09-29, ruling 2) and held by
+`TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt`. Original entry follows. Added
+2026-08-11 by Phase 2 Task 15.
 
 The manager gets `--mcp-config` and `--strict-mcp-config` as a pair, and the second is what stops it
 inheriting every MCP server in the user's own configuration. **Every other agent Wake spawns still
@@ -1772,8 +1850,12 @@ a ruling the day somebody wants a fleet whose tool surface Wake controls — the
 away, and the argument against is that a Wake agent that can do *less* than the same `claude` in the
 same directory is a surprise nothing on screen explains.
 
-**Phase 3 or later — a manager whose MCP server cannot start is indistinguishable from one whose
-tools are empty.** Added 2026-08-11 by Phase 2 Task 15.
+**~~Phase 3 or later — a manager whose MCP server cannot start is indistinguishable from one whose
+tools are empty.~~ DONE 2026-09-29:** the self-test below shipped, in the daemon's `managerConfig`
+rather than at `wake manager` time (`mcp.json` names the daemon's binary, and `launch` is the one
+door every manager start goes through) — `internal/daemon/mcpselftest.go`, `decisions.md`
+(2026-09-29, ruling 1). Claude's acceptance of the handshake stays `live-testing.md` §13.1. Original
+entry follows. Added 2026-08-11 by Phase 2 Task 15.
 
 `managerConfig` refuses the launch if the config file cannot be **written**. It cannot check that
 the file is *usable*: `wake mcp` is executed by claude, not by Wake, and its failure — a binary that
@@ -4580,7 +4662,27 @@ multi-select entry above is untouched and is still the only field left out.
 
 ---
 
-## 2026-08-14 — a column drag jumps where a row drag glides
+## ~~2026-08-14 — a column drag jumps where a row drag glides~~ CLOSED 2026-09-30 (`fix/divider-drag-glides`)
+
+**Closed the way the entry below says.** Mid-drag each pane is drawn at the width it is wrapped for
+and cut or padded, row by row, to the width the drag gives it (`fitCells`), at `frameRegions` — the
+layout at the pending split (`drawnRegions`, shared with the room's settle fix). A pane is never
+handed the pending width, so no motion re-wraps. Letting go commits the drag at once (`letGo`): the
+settle coalesces motions, and none follow a release. The one mouse event a held button still sends,
+the wheel, hits the columns as drawn. A window drag keeps its clip: its column count can change
+mid-drag. Taking hold of the divider clears the selection, which also closes a hole the entry did not
+name — the divider's settle re-wrapped both panes under a highlight left standing. A release while
+a window drag is also in flight leaves both to the shared settle, since the width is still moving.
+`Layout.DragDivider` now solves the split against the running total `share` rounds on, so among
+three or more columns the divider lands on the pointer's column rather than a cell off it (on
+`main` too, once settled).
+**Left as they were on `main`, and why:** a hand that rests on the divider past `resizeQuiet` gets
+its settle and re-wraps mid-drag — the settle's own rule, which the window drag shares, and what
+gives a resting hand reflowed text rather than a cut; and a grid key (`⌃W`, `⌃Y`) pressed while the
+mouse holds a divider leaves the drag's weights indexed for the old grid, so the split lands on
+whatever column now sits there — `main`'s settle applied the same stale weights. The original
+entry is kept below.
+
 
 **Wake — dragging a vertical divider moves nothing until the drag ends, while dragging a stacked
 column's rule tracks the pointer.** Asked for by the owner after a real screen, and it is the cost
@@ -4627,7 +4729,11 @@ The two alternatives are worse and are written down so nobody re-derives them: l
 248ms the settle exists to avoid, and a rubber-band divider drawn at the pending column while the
 panes stay put draws a `│` through the middle of a pane's text.
 
-**2026-08-15 — a room message aimed at one agent does not come back.** `roomHistoryLines` restores a
+**2026-08-15 — a room message aimed at one agent does not come back.** *FIXED 2026-09-29
+(`fix/room-gaps`) for turns sent after the change: the uuid Wake stamps is recorded as the turn's own,
+so a room send marks its uuid (`roomprovenance.go`) and a direct `@noah` comes back in noah's thread —
+provenance on disk without changing what the model reads (decisions.md, 2026-09-29). Older transcripts
+restore exactly as below.* `roomHistoryLines` restores a
 turn you typed only when two or more transcripts hold the same text within `broadcastWindow`, because
 one transcript cannot distinguish `@noah do this` sent from the room from `do this` typed into noah's
 own pane, and a DM is private. So `@all` and `@noah,@robin` come back and a single-target room
@@ -4651,7 +4757,14 @@ blocks:* nothing; the roster draws a spinner per row and `⌃X` reaches a blocke
 is a decision about what the room may spend on chrome, which is the same question a room last-read
 marker asks, so the two are worth taking together.
 
-**2026-08-15 — a fork's own conversation is not restored to the room either.** `isFork` refuses a room
+**2026-08-15 — a fork's own conversation is not restored to the room either.** *FIXED 2026-09-29
+(`fix/room-gaps`): the corpus was checked — there is no fork marker, but a fork copies its parent's
+records under the same **uuids** (`testdata/transcript/fork-child.jsonl`), so `forkCopies` draws a
+copied record once and `isFork` is gone; forks are asked about while their parent runs, and a woken
+fork's copy no longer passes for a broadcast (decisions.md, 2026-09-29); the daemon leaves a fork's
+inherited records out of its room history against the source transcript read whole (`inheritedBy`).
+**Still open:** a fork woken from the park book has no lineage, so its inherited records are told
+apart only by what the parent's own tail still shows, and kept by arrival order.* `isFork` refuses a room
 history ask for any session carrying a `ParentID`, because a fork's transcript opens with every line
 its parent had at the moment it was taken — and the parent is usually in the same report, so asking
 draws that prose twice under two names. What it costs is the fork's *own* turns after the fork point,
@@ -4671,7 +4784,10 @@ and matching on `(session, kind, text)` is the obvious way and is wrong for an a
 twice. **Do not take this without deciding what identity a room line has.**
 
 **2026-08-15 — a restored room holds the broadcasts and nothing else, which on some fleets is almost
-nothing.** An agent's prose comes back only inside a turn two transcripts prove was a broadcast, and
+nothing.** *Narrowed 2026-09-29 (`fix/room-gaps`): every turn typed in the room after the change
+comes back with its replies, by the uuid marker above — not a zero-width prefix or sentinel, so the
+model reads nothing new. Still true: a fleet driven from conversation panes restores the room's
+share only, which is the privacy rule working.* An agent's prose comes back only inside a turn two transcripts prove was a broadcast, and
 prose with no initiator inside the 400-event window is dropped — which is most of a tail, since a tail
 usually opens mid-conversation. A fleet driven mostly from conversation panes therefore restores a
 nearly empty room. **This is the deliberate cost of the privacy rule** (`decisions.md`), taken by the
@@ -5077,6 +5193,12 @@ recorded bound. It owes the same discipline the rest of the manager was held to 
 guard (`cmd/wake/mcpguard_test.go`), a recorded reason — not just a longer prompt. *Blocks:* the
 orchestrator above; it cannot judge what it cannot read.
 
+**2026-09-29 — still unruled, and the first question is not the budget.** No ruling exists beyond
+the ask. `managerVerbs` refuses `FrameHistory` in writing because a transcript is "the operator's own
+words", so a manager reading one reads the operator's DM turns to that agent. Whether user turns are
+in it at all is the owner's call, before budget or compression; the tool then owes a written
+counter-verdict on that cell.
+
 ---
 
 ## 2026-08-25 — feature idea, owner's ask: `@john` as a room *view* filter, not only a route
@@ -5260,6 +5382,12 @@ park is confirmed.
 
 ## 2026-09-24 — the API-failure pin infers a resume from report order
 
+**CLOSED 2026-09-29 — `fix/recent-follow-ups`.** The reorder was real at every push site: each built
+its snapshot before `broadcast` took `s.mu`. `pushStatus`/`replyStatus` now hold `reportMu` across
+the build and the enqueue, so every client's queue carries reports in build order and "parked, then
+live" proves a resume (`TestAStatusReportIsNeverQueuedBehindANewerOne`). The incarnation id below
+was dropped: three reflective guards, a fence in both reconcilers, and the roster still misdrawn.
+
 `reconciledPins` (`internal/ui/apierror.go`) unpins a failure when its session is reported parked
 and then live again. Codex's review of `fix/notice-expiry` noted that the daemon assembles a status
 snapshot before taking the broadcast lock, so an older `idle` snapshot could in principle arrive
@@ -5294,19 +5422,22 @@ works (`internal/ui/apirecover.go`). Left out, each on purpose:
   daemon's finalizing-park window tries once more on the next parked report, then gives up). A window opened after the park, or a restarted Wake, knows nothing of it and leaves the
   session for `/resume`. *Closes with:* the daemon owning the auto-park and wake, which needs the
   attempt count on its side of the socket.
-- **Any failed turn the auto-park counts is treated as a login failure** - an overload or an
-  `invalid_request` parks after three and wakes on proof like a 401. A deterministic failure wakes
-  once, fails again, and then waits for `/login`; the pin's wording is the login's. Narrowing this
-  needs the error kind (`authentication_failed`) carried past the airlock as a `Notice` of its own.
+- ~~**Any failed turn the auto-park counts is treated as a login failure**~~ **FIXED
+  (`fix/recent-follow-ups`, 2026-09-29):** `apiNotice` reads the failed turn's error kind. Only
+  `authentication_failed` (or a frame naming no kind, the old reading) marks, counts and pins; any
+  other named kind is `core.NoticeTurnFailed`, a timed notice with no mark, park or pin.
 - **Proof is counted per output block, not per API request.** One response streams several frames
   (thinking, then a tool call), so a response that began before a park and lands a later block after
   it reads as post-park proof: the wake can land on a login that expired mid-response. It costs one
   wasted wake - the session fails again and then waits for `/login`. *Closes with:* the API response
   id carried out of the airlock, so a response counts once and only if it began after the park.
+  *Kept deferred 2026-09-29 (fable wake's ruling):* `wire.go` is at 798 of 800, the gain is one
+  wasted wake in a race window, and no recording pins `message.id`'s continuity across a park.
 - **Nothing watches the login while every agent is parked.** With no agent live, only `/login`
   (signed in) or `/resume` brings them back — Wake cannot poll `claude auth status` without a timer.
-- **A usage limit's timed notice outlives the turn that proves the reset** for its ~10s linger; the
-  pin under it goes at once. Clearing a timed notice early is not something `internal/notice` does.
+- ~~**A usage limit's timed notice outlives the turn that proves the reset**~~ **FIXED
+  (`fix/recent-follow-ups`, 2026-09-29):** the pin keeps the text it reported, and `unpinAPIError`
+  clears that notice through `notice.ClearIf` if it is still the newest; a later report stays.
 
 ## 2026-09-28 — a resumed on-disk session keeps its name, with three gaps
 
@@ -5354,6 +5485,10 @@ known. Record a rewind after a background task ends to settle it.
 
 ## 2026-09-28 — `noteSent` marks a turn owed only after its write
 
+**CLOSED 2026-09-29 — `fix/recent-follow-ups`.** `apply` marks owed before the write, as
+`noteRenameSent` does; a failed write clears it only if nothing was owed before, so a type-ahead's
+earlier turn stays owed (`TestATurnIsOwedWhileItsWriteIsInFlight`, `TestARefusedSendLeavesNothingOwed`).
+
 `apply` (`internal/daemon/apply.go`) calls `noteSent` once `Send` has returned, so a turn's end can in
 principle reach fanOut before the turn is marked owed, and `owed` is then left set for a turn that
 has already ended. `noteRenameSent` was moved ahead of the write for exactly this window (at-menu
@@ -5364,9 +5499,8 @@ the liveness tests that read `owed`.
 
 ## 2026-09-28 — Left open by the `@` menu work (at-menu Tasks 3–6)
 
-- **`commandSet.words()` returns the shared slice** (`internal/ui/completion.go`): a caller that
-  mutated it would rewrite every Agent copy's advertised commands. Task 4's `SubagentTypes()` copies;
-  this older reader does not. *Closes with:* a `slices.Clone`, or a test that proves no caller writes.
+- ~~**`commandSet.words()` returns the shared slice**~~ **FIXED (`fix/recent-follow-ups`,
+  2026-09-29):** it returns an `iter.Seq`, so no caller can write the slice every Agent copy shares.
 - **Prompt history recall (`walkPrompts`) replaces the draft without rebuilding the menu**, so a
   recalled `@x` carries the previous menu's peers ask and skips one re-ask; the carried listing still
   shows. Focus away and back has the same shape. *Closes with:* a rebuild there, once a pane whose
@@ -5375,25 +5509,40 @@ the liveness tests that read `owed`.
   `@` insert cannot be read as one mention. Task 5 answered the same question for peers ("never
   offer an insert that cannot resolve"); how Claude Code quotes such a path is unrecorded.
   *Closes with:* a recording of claude's own `@"…"` handling, then quote or skip.
-- **`TestARunningDaemonReestablishesASweptLock` flakes** — 3 of 30 alone under `-race` on
-  `origin/main` (2026-09-27, `lock_test.go:322`, `<nil>`), so a clean 5/5 no longer proves it gone.
-- **`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**, so the
-  workflow kinds are unchecked for collisions. *Closes with:* adding it to the scanned files.
-- **A daemon on an older build answers each conversation's `@` opening with a notice**
+- ~~**`TestARunningDaemonReestablishesASweptLock` flakes**~~ **FIXED (`fix/recent-follow-ups`,
+  2026-09-29):** the test's own race. `reopenLock` creates the file before `explainLock` writes it,
+  and the test read it the moment the inode changed. It now waits for both (1/30 before, 0/160 after).
+- ~~**`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**~~ **CLOSED
+  on `fix/workflow-view-gaps`:** the scan globs every non-test file, and the seven workflow kinds are
+  in `frameKinds`.
+- **WON'T DO (2026-09-29, fable wake's ruling): a daemon on an older build answers each conversation's `@` opening with a notice**
   (`unknown frame kind "peers"`, branch review L2), beside the stale-daemon notice the room opened
   with. Not skipped: `internal/ui` keeps no daemon build, and a build mismatch is also every dev
   rebuild against a daemon that does speak `FramePeers`. Not suppressed: the refusal carries no kind,
-  so only the daemon's sentence could name it. *Closes with:* a typed "unknown kind" on
-  `rpc.FrameError`, which the UI can drop for `FramePeers` alone.
+  so only the daemon's sentence could name it. A typed "unknown kind" on `rpc.FrameError` cannot
+  reach the pre-#131 daemons this is about, and every daemon since knows `FramePeers`; the
+  stale-daemon notice already says to restart.
 
 ## 2026-09-28 — a copy keeps some wraps it cannot prove
 
-`render.Rejoins` rejoins only rows `reflowProse` would group, so these still paste with a break at
-the wrap: a wrapped row that opens with a styled span (bold, inline code, a link — indistinguishable
-from code once rendered), a long link or token `fitToWidth` hard-wrapped, and your own turn when
-lipgloss changed what was typed (a tab expands to spaces). Each falls back to the row as drawn,
-never to wrong text. A peer's cross-session message and a subagent's gutter copy as drawn too.
+**CLOSED 2026-09-29 — `fix/recent-follow-ups`** for markdown and the typed turn. `render.Rejoins`
+matches the drawn rows back to the block's source rendered at `unwrappedWidth` (decisions.md
+2026-09-29), so a row opening with a styled span and a token `fitToWidth` hard-wrapped rejoin, and
+your own turn with a tab rejoins (`ownTabWidth`). Still copying as drawn: a peer's cross-session
+message and a subagent's gutter (neither opts in), and a paragraph or token wider than
+`maxUnwrappedWidth` (8,192 cells) past that point.
 
-*Closes with:* a wrap marker carried out of the renderer for styled rows, which means instrumenting
-glamour's wrap as well as `reflowProse`'s — see decisions.md 2026-09-28 for why that was not the
-first move.
+## 2026-09-30 — two daemon tests that fail under machine load, seen merging #135–#139
+
+- **A wake sent on the first `parked` report can be refused.** `markParked` publishes `parked` before
+  `completePark` has written the roster and the book; `unpark` refuses until `markWakeable` runs
+  (`internal/daemon/park.go`), with *"is not parked, so there is nothing to bring back"*. So a ⌃C then
+  an immediate `/resume` can race too. `TestAForksRoomHistoryIsItsOwnTurnsOnly` (#139) waits on the
+  report and wakes at once: 1 failure in `make ci` and 1 of 15 alone under load (~6), 0 of 80 at
+  rest. #138's in-order status reports deliver the `parked` row sooner, which is plausibly why it
+  surfaced at the merge. *Closes with:* a wake that waits out a finalizing park instead of refusing,
+  or a report that says `parked` only once the row is wakeable.
+- **`TestConcurrentManagerWakesReserveBeforeEitherClaimsAName` fails when `ps` is killed by its own
+  probe timeout** (`ps -A: signal: killed`, the `resumeSafe` refusal arriving instead of the
+  reservation one). 1 failure in a `make ci` under load, 0 of 20 alone. *Closes with:* the test
+  telling a probe failure from the refusal it asserts, or a probe budget the test owns.

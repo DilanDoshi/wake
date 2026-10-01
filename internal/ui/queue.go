@@ -48,7 +48,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
-	"github.com/google/uuid"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -80,10 +79,11 @@ type queuedMsg struct {
 	rename   string
 }
 
-// newQueued builds a message with a freshly minted uuid, so an immediate send and
-// a queued one are stamped the same way.
-func newQueued(wire, echo string, images []core.ImageBlock, fromRoom bool) queuedMsg {
-	return queuedMsg{id: uuid.NewString(), wire: wire, echo: echo, images: images, fromRoom: fromRoom}
+// newQueued builds a message under the uuid it will be stamped with, minted at
+// the send, so an immediate send and a queued one are stamped the same way: a
+// random one for a DM, a room send's (roomprovenance.go) for the room.
+func newQueued(id, wire, echo string, images []core.ImageBlock, fromRoom bool) queuedMsg {
+	return queuedMsg{id: id, wire: wire, echo: echo, images: images, fromRoom: fromRoom}
 }
 
 // shouldQueue is whether a message to this agent must wait rather than go now: it

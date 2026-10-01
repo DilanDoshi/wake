@@ -191,12 +191,20 @@ func (s *server) managerAgent() (*agent, bool) {
 // A failure here **refuses the launch** rather than starting a manager without
 // tools. A session called `manager` that cannot see the fleet is worse than no
 // manager at all: it answers @manager, it is the room's default addressee, and
-// everything it says about the fleet would be invention.
+// everything it says about the fleet would be invention. That includes a server
+// that cannot start, which only the self-test (mcpselftest.go) can see.
 func (s *server) managerConfig(cfg core.Config) (core.Config, error) {
 	if cfg.Name != core.ManagerName {
 		return cfg, nil
 	}
-	path, err := writeMCPConfig(s.socket)
+	srv, err := managerMCPServer(s.socket)
+	if err != nil {
+		return cfg, err
+	}
+	if err := srv.selfTest(); err != nil {
+		return cfg, err
+	}
+	path, err := writeMCPConfig(s.socket, srv)
 	if err != nil {
 		return cfg, err
 	}
@@ -218,22 +226,9 @@ func (s *server) managerConfig(cfg core.Config) (core.Config, error) {
 // no tools and no error anywhere. This was the third hand-rolled copy of that
 // sequence and the one that had already drifted from the other two - see
 // atomicfile.go, which is where it lives now.
-func writeMCPConfig(socket string) (string, error) {
-	exe, err := os.Executable()
-	if err != nil {
-		return "", fmt.Errorf("locate the wake binary for the manager's tools: %w", err)
-	}
+func writeMCPConfig(socket string, srv mcpServer) (string, error) {
 	body, err := json.MarshalIndent(map[string]any{
-		"mcpServers": map[string]any{
-			"wake": map[string]any{
-				"command": exe,
-				"args":    []string{mcpSubcommand},
-				// The socket is passed rather than re-derived, so a manager
-				// started against one daemon cannot end up talking to another
-				// after a restart moved the default.
-				"env": map[string]string{SocketEnv: socket},
-			},
-		},
+		"mcpServers": map[string]any{"wake": srv},
 	}, "", "  ")
 	if err != nil {
 		return "", fmt.Errorf("build the manager's MCP config: %w", err)
@@ -244,4 +239,24 @@ func writeMCPConfig(socket string) (string, error) {
 		return "", err
 	}
 	return path, nil
+}
+
+// mcpServer is the one server a manager's mcp.json names: the command claude
+// runs, and the command the self-test runs first.
+type mcpServer struct {
+	Command string            `json:"command"`
+	Args    []string          `json:"args"`
+	Env     map[string]string `json:"env"`
+}
+
+// managerMCPServer is this binary's own MCP server, pointed at this socket.
+func managerMCPServer(socket string) (mcpServer, error) {
+	exe, err := os.Executable()
+	if err != nil {
+		return mcpServer{}, fmt.Errorf("locate the wake binary for the manager's tools: %w", err)
+	}
+	// The socket is passed rather than re-derived, so a manager started against
+	// one daemon cannot end up talking to another after a restart moved the
+	// default.
+	return mcpServer{Command: exe, Args: []string{mcpSubcommand}, Env: map[string]string{SocketEnv: socket}}, nil
 }

@@ -272,6 +272,26 @@ func TestAWheelOverAnotherPaneTakesTheArmBack(t *testing.T) {
 	requireDisarmedOnReturn(t, m.(App), "a wheel over the room")
 }
 
+// A wheel over the view itself is a mouse message, so Update takes the arm back
+// first (a press's rule) and the wheel still does its own job: it walks a row,
+// writes no stop, and the ↵ after it opens rather than stops.
+func TestAWheelOverTheArmedViewTakesTheArmBackAndWalksItsRows(t *testing.T) {
+	a := armed(t, runOpen(t))
+	x, y, ok := viewCell(a, "2 Sum")
+	if !ok {
+		t.Fatalf("the Sum phase is not on screen:\n%s", stripANSI(a.View()))
+	}
+	m, cmd := a.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonWheelDown, X: x, Y: y})
+	a = m.(App)
+	if got := stopsWritten(t, a, cmd); len(got) != 0 {
+		t.Errorf("a wheel over the armed view wrote %d stops, want none", len(got))
+	}
+	if v := a.workflow.view; v.Armed || v.Cursor != 1 {
+		t.Errorf("a wheel over the armed view left %+v, want it disarmed on the next phase", v)
+	}
+	requireDisarmedOnReturn(t, a, "a wheel over the armed view")
+}
+
 // ⇧←→ are the view's while it holds the keys, so they take the arm back like
 // any other key rather than moving it with the focus.
 func TestShiftArrowsUnderTheArmTakeItBack(t *testing.T) {

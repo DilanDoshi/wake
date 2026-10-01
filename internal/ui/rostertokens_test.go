@@ -16,7 +16,7 @@ import (
 )
 
 func TestARosterRowCarriesItsAgentsTokenCount(t *testing.T) {
-	row := stripANSI(headLine(Agent{ID: "s1", Name: "sydney", State: rpc.StateWorking, TurnTokens: 12_400}, rosterWidth))
+	row := stripANSI(headLine(Agent{ID: "s1", Name: "sydney", State: rpc.StateWorking, TurnTokens: 12_400}, false, rosterWidth))
 
 	if !strings.Contains(row, "12.4k") {
 		t.Errorf("the row is %q, want it to carry the agent's token count", row)
@@ -36,7 +36,7 @@ func TestARosterRowCarriesItsAgentsTokenCount(t *testing.T) {
 // A session that has not finished a turn has no count, and a zero would be a
 // figure rather than an absence.
 func TestARosterRowWithNoTokensSaysNothingAboutThem(t *testing.T) {
-	row := stripANSI(headLine(Agent{ID: "s1", Name: "sydney", State: rpc.StateWorking}, rosterWidth))
+	row := stripANSI(headLine(Agent{ID: "s1", Name: "sydney", State: rpc.StateWorking}, false, rosterWidth))
 
 	if strings.Contains(row, tokenArrow) {
 		t.Errorf("the row is %q, want no count at all before the first turn ends", row)
@@ -52,7 +52,7 @@ func TestARosterRowWithNoTokensSaysNothingAboutThem(t *testing.T) {
 // quietly starts carrying a number.
 func TestOnlyAWorkingRowCarriesATokenCount(t *testing.T) {
 	for state := range stateGlyph {
-		row := stripANSI(headLine(Agent{ID: "s1", Name: "sydney", State: state, TurnTokens: 12_400}, rosterWidth))
+		row := stripANSI(headLine(Agent{ID: "s1", Name: "sydney", State: state, TurnTokens: 12_400}, false, rosterWidth))
 		got := strings.Contains(row, tokenArrow)
 		if want := state == rpc.StateWorking; got != want {
 			t.Errorf("a %s row is %q; carries a count = %v, want %v", state, row, got, want)
@@ -100,7 +100,7 @@ func TestNoTokenCountMakesARowWiderThanTheSidebarOrIsCutIntoADifferentNumber(t *
 // still wins over both, which is the rule that was already here.
 func TestALongNameDropsTheCountRatherThanBeingCutForIt(t *testing.T) {
 	const long = "bartholomew-the-third"
-	row := stripANSI(headLine(Agent{ID: "s1", Name: long, State: rpc.StateWorking, TurnTokens: 12_400}, rosterWidth))
+	row := stripANSI(headLine(Agent{ID: "s1", Name: long, State: rpc.StateWorking, TurnTokens: 12_400}, false, rosterWidth))
 
 	if strings.Contains(row, tokenArrow) {
 		t.Errorf("the row is %q, want the count dropped rather than the name cut to fit it", row)
@@ -108,7 +108,7 @@ func TestALongNameDropsTheCountRatherThanBeingCutForIt(t *testing.T) {
 
 	// And the badge is still budgeted first, which is the older ruling this
 	// must not have quietly reversed.
-	badged := stripANSI(headLine(Agent{ID: "s1", Name: long, State: rpc.StateWorking, TurnTokens: 12_400, Unread: 3}, rosterWidth))
+	badged := stripANSI(headLine(Agent{ID: "s1", Name: long, State: rpc.StateWorking, TurnTokens: 12_400, Unread: 3}, false, rosterWidth))
 	if !strings.HasSuffix(strings.TrimRight(badged, " "), "3") {
 		t.Errorf("the row is %q, want the unread badge kept before anything else", badged)
 	}
@@ -117,7 +117,7 @@ func TestALongNameDropsTheCountRatherThanBeingCutForIt(t *testing.T) {
 // A short name has room for both, which is what makes the test above about the
 // budget rather than about the count never being drawn.
 func TestAShortNameKeepsBothTheCountAndTheBadge(t *testing.T) {
-	row := stripANSI(headLine(Agent{ID: "s1", Name: "jo", State: rpc.StateWorking, TurnTokens: 890, Unread: 3}, rosterWidth))
+	row := stripANSI(headLine(Agent{ID: "s1", Name: "jo", State: rpc.StateWorking, TurnTokens: 890, Unread: 3}, false, rosterWidth))
 
 	for _, want := range []string{"jo", "890", "3"} {
 		if !strings.Contains(row, want) {

@@ -262,7 +262,8 @@ func (s *server) sendWorkflows(c *client, id string) {
 	for i := range runs {
 		runs[i].Script = "" // the daemon's alone: save reads it here, and no client draws one
 	}
-	c.enqueue(rpc.Frame{Kind: rpc.FrameWorkflowsReply, SessionID: id, Workflow: &rpc.WorkflowFrame{Runs: runs}})
+	c.enqueue(rpc.Frame{Kind: rpc.FrameWorkflowsReply, SessionID: id,
+		Workflow: &rpc.WorkflowFrame{Runs: runs, PersonalDir: userWorkflowDir()}})
 }
 
 // sendWorkflowAgent answers a client's FrameWorkflowAgent: one workflow

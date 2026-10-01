@@ -296,6 +296,10 @@ func (s *server) launch(c *client, cfg core.Config, parent string, replaces *age
 	actx, cancel := context.WithCancel(context.Background())
 	sess := core.NewSession(cfg)
 	a := newAgent(cfg.SessionID, cfg.Name, labelFor(cfg.Dir, replaces), cfg.Dir, parent, sess, cancel)
+	a.forkFrom = cfg.ForkFrom
+	if replaces != nil {
+		a.forkFrom = replaces.forkFrom // a wake resumes the fork; its source is unchanged
+	}
 	// Set before the agent is published, so park can write down what it ran at.
 	a.effort = cfg.Effort
 	a.model = cfg.Model
@@ -355,14 +359,14 @@ func (s *server) launch(c *client, cfg core.Config, parent string, replaces *age
 	a.handshake() // before serveInput, so it is the session's first line
 	s.start(a.serveInput)
 	s.start(func() { s.fanOut(a) })
-	c.enqueue(s.statusReply())
+	s.replyStatus(c)
 	// Announced to everybody, not only to the client that asked. The reply
 	// above answers *this* client; a room open in another terminal has asked
 	// nothing and would otherwise not see the new agent until watchLiveness
 	// noticed its state was unreported - which lands on the 30s clamp. A group
 	// chat where a new member appears half a minute late is not one.
 	// Event-driven, so nothing is added to any timer.
-	s.broadcast(s.statusPush())
+	s.pushStatus()
 	return true
 }
 
@@ -749,7 +753,7 @@ func (s *server) retire(a *agent) {
 		// core's bound, and an interrupted session exits 1 saying nothing.
 		logf("wake: session %s ended: %v", a.id, err)
 	}
-	s.broadcast(s.statusPush())
+	s.pushStatus()
 	s.reconsiderEmptyExit()
 }
 

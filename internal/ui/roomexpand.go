@@ -39,11 +39,6 @@ func (r Room) toggleLine(line int) (Room, bool) {
 	if !ok || !roomCollapsible(l.ev, r.blockWidth()) {
 		return r, false
 	}
-	old := r
-	following := old.tr.atBottom()
-	held := r.said.slice(r.said.first(), r.said.len())
-	oldSpans := r.roomSpans(held)
-
 	// Copied on write: Room is handed around by value, so flipping in place
 	// would mutate the map a discarded copy still draws from.
 	expanded := make(map[uint64]bool, len(r.expanded)+1)
@@ -55,11 +50,22 @@ func (r Room) toggleLine(line int) (Room, bool) {
 	} else {
 		expanded[l.id] = true
 	}
-	r.expanded = expanded
+	next := r
+	next.expanded = expanded
+	return next.relaid(r, r.said.slice(r.said.first(), r.said.len()), l.id), true
+}
+
+// relaid re-renders lines - the held lines, one block changed - over what old
+// drew. lineMoves carries a scrolled offset and any live selection across the
+// re-render the way Before does, so changing one block in place (an expand, a
+// resolved question) does not throw the reader to the newest line.
+func (r Room) relaid(old Room, lines []roomLine, changed uint64) Room {
+	following := old.tr.atBottom()
+	oldSpans := old.roomSpans(old.said.slice(old.said.first(), old.said.len()))
 
 	first := r.said.first()
 	base := r.tr.lines.first()
-	combined := append([]roomLine(nil), held...)
+	combined := append([]roomLine(nil), lines...)
 	blocks := renderRoom(r, combined)
 	r.said = chunked[roomLine]{base: first, n: first}.append(combined...)
 	r.tr = r.tr.replaceFrom(blocks, base, r.tr.prefix)
@@ -74,17 +80,17 @@ func (r Room) toggleLine(line int) (Room, bool) {
 			break
 		}
 		// The offset lands nowhere only when the reader had scrolled into rows
-		// this toggle removed - a collapse from deep inside an expanded reply.
+		// this change removed - a collapse from deep inside an expanded reply.
 		// Anchor to the block's own new top rather than the transcript start, so
 		// folding what you are reading keeps it in view instead of throwing the
 		// reader thousands of lines back to the oldest history.
-		if s, ok := newSpans[l.id]; ok {
+		if s, ok := newSpans[changed]; ok {
 			r.tr.scroll = min(max(s.first, r.tr.first()), r.tr.bottom())
 		} else {
 			r.tr.scroll = r.tr.first()
 		}
 	}
-	return r, true
+	return r
 }
 
 // toggleExpandAll flips ⌃E's global expand and re-renders. It returns the

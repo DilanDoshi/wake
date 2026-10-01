@@ -46,6 +46,13 @@ func (f Fleet) copy() Fleet {
 
 func (f Fleet) Agent(id string) (Agent, bool) { a, ok := f.agents[id]; return a, ok }
 
+// done is whether an agent has finished its turn: an annotation over idle for
+// the overview surfaces, never a state. See turnDone.
+func (f Fleet) done(id string) bool {
+	a, ok := f.agents[id]
+	return ok && turnDone(a, len(f.RunningTasks(id)) > 0)
+}
+
 // OnRoster is every agent the sidebar draws and the cursor can land on: the
 // fleet minus the ones that have ended.
 //

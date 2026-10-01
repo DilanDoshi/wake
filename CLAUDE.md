@@ -75,15 +75,18 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
-  conversation, every agent's in the room) — draws Wake's own view in that pane, since headless claude
-  cannot draw its `/workflows` menu: list → run (phases | agents) → agent (prompt, activity off the
-  agent's disk transcript, outcome). `f` filters, `x` then `↵` stops (`stop_task`), `s` saves the
-  script as `/<name>` (project or personal scope; the daemon owns the path, no overwrite). Endings land
-  in the conversation and the room. No pause, restart or per-agent stop — headless refuses or ignores
-  them. `internal/ui/workflowview.go`, `workflowdraw.go`, `workflowdata.go`, `workflowsave.go`.
+  conversation, every agent's in the room; `/workflows @who` or the room's `@who /workflows` one
+  agent's) — draws Wake's own view in that pane, since headless claude cannot draw its `/workflows`
+  menu: list → run (phases | agents) → agent (prompt, activity off the agent's disk transcript,
+  outcome). `f` filters, `x` then `↵` stops (`stop_task`), `s` saves the script as `/<name>` (project
+  or personal scope; the daemon owns the path and names the personal one on its runs reply, no
+  overwrite). Endings land in the conversation and the room. No pause, restart or per-agent stop —
+  headless refuses or ignores them. `internal/ui/workflowview.go`, `workflowdraw.go`,
+  `workflowagent.go`, `workflowdata.go`, `workflowsave.go`.
 - **A conversation's `@` menu** offers what Claude Code's does: the fleet's live peers, then the
   machine's other Claude sessions `(dir)` (a bare one-shot `claude` running `/list-agents`, asked
-  once per opening), then `@agent-<type> (agent)`, then files by fuzzy search. The manager's
+  once per opening; a name past `[A-Za-z0-9_-]` is offered and typed quoted, `@"release notes"`, as
+  Claude Code does), then `@agent-<type> (agent)`, then files by fuzzy search. The manager's
   conversation offers its fleet and files only. `⇥` is the only accept. `internal/ui/completionpeers.go`,
   `completionindex.go`; rulings in `decisions.md` (2026-09-27).
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
@@ -91,7 +94,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
   above the composer, running subagents in the right sidebar, streamed preview tail, DM done line
   (`✻ Cooked for 1m 59s · done 6:48 PM`), compacting line, loop line, question cards as a wizard
-  with a review step, drag-to-select-and-copy on every surface but the `/workflows` view.
+  with a review step, drag-to-select-and-copy on every surface.
 
 ## Non-negotiables
 
@@ -148,7 +151,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   the *confirmed* park: a turn the API accepted from any agent (never a `LocalCommand` reply such as
   `/context`'s), or a signed-in `/login` — never a timer. One that fails again after that wake waits
   for `/login` alone; a hand park cancels it. **A usage limit (`core.NoticeUsageLimit`) never marks
-  or parks** and clears a 401 mark; it stays pinned until a turn goes through. `internal/ui/apirecover.go`.
+  or parks** and clears a 401 mark; it stays pinned until a turn goes through. Any other named failure
+  (`core.NoticeTurnFailed`: an overload, a rejected request) is a timed notice only. `internal/ui/apirecover.go`.
 
 **Keys and the legend**
 - **The legend is drawn only while an arm is live, and then it is only the armed cue:**
@@ -191,20 +195,22 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The grid is bounded:** columns, each split once (spec §8). The room is `Cols[0]` and cannot be
   closed. Arbitrary tiling is out of scope.
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
-  through the 80ms settle; row drags don't. The wheel scrolls the pane under the pointer.
-- **Drag selects, release copies**, on every surface but the `/workflows` view (a press there moves
-  its cursor; `deferred.md`): transcript (anchored to `transcript.lines`
+  through the 80ms settle, drawn at the pointer meanwhile (each pane at its wrap width, cut or padded —
+  `fitCells`) and committed on release; row drags don't settle. The wheel scrolls the pane under the pointer.
+- **Drag selects, release copies**, on every surface: transcript (anchored to `transcript.lines`
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
-  (`screensel.go`). Every keystroke clears the highlight *and* does its job; width change clears,
-  height doesn't; a click copies nothing. Roster click targets are resolved at press.
+  (`screensel.go`) — the `/workflows` view included, where the press still moves its cursor. Every
+  keystroke clears the highlight *and* does its job; width change clears, height doesn't; a click
+  copies nothing. Roster click targets are resolved at press.
 - **A transcript drag at a pane's edge scrolls, and keeps scrolling while held** — the first
   transcript row is the top edge (a pane can start on the window's first row) unless the drag has
   not left the line it was pressed on; below the last row is the bottom. A one-shot tick
   (`edgeScrollEvery`) re-arms only while the pane moved; the highlight ends on a line on screen.
   `internal/ui/edgescroll.go`.
-- **A transcript copy rejoins what the pane wrapped** — markdown by `render.Rejoins` (reflowProse's
-  own predicates), your own turn matched back to what you typed; every other row copies as drawn.
-  `internal/ui/copytext.go`.
+- **A transcript copy rejoins what the pane wrapped** — markdown by `render.Rejoins`, matched back to
+  its source rendered at `unwrappedWidth`, your own turn and a local command's reply matched back to
+  their text; every other
+  row copies as drawn. `internal/ui/copytext.go`.
 - **Double-click selects a word, triple-click its row**, on any selectable surface; the first click
   still does its own job. A timer (`multiClickWindow`) counts clicks but never tells a click from a
   drag. `internal/ui/multiclick.go`.
@@ -219,9 +225,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   through one 80ms settle (`geometry.go`).
 - **A streamed preview never costs the record a slot**: partials fold into one slot and never evict,
   and a dropped partial is not a gap (`inbox.go`, daemon `client.go`'s `partialCeiling`).
+- **A conversation keeps its newest `dmRetentionEvents` (3,000)** — the re-wrap budget — and reclaims
+  the oldest a chunk at a time, only before a non-tool event, under one fixed line (`dmretention.go`).
 - **A preview is never a record**: plain-text tail, bounded by the pane, never through glamour,
   accumulated only for panes on screen (`App.wants`), dropped on leave. No preview in the room or for
   subagents. `internal/ui/partial.go`.
+- **A local command's reply is drawn as its lines** (`/list-agents`, `/cost`, `/config`), as Claude
+  Code draws it; one opening with a markdown heading (`/context`'s) stays markdown.
+  `internal/ui/dm_blocks.go`'s `drawnAsLines`.
 - The composer grows with the draft; the pane bounds it (`composerRowsIn`), never itself. A pane's
   chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
   screen.
@@ -229,7 +240,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`roomWorkingLine`, `roomwords.go`).
 - **The DM's done line** is captured at the working→idle edge (`Fleet.WithStatus`), only for turns
   this client watched start; forgotten on park/end/gap, on new agent content (`notDone`), and hidden
-  while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate.
+  while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate. The roster's `✔`
+  and the strip's `N done` read the same `turnDone` — an annotation over idle, never an `rpc` state.
 - **Every notice times out**: `max(10s, drawn cells × 100ms)`, one tick per `notice.Seq`, armed in
   `App.Update`. An API failure stays pinned under them until a healthy turn or a resume
   (`noticelinger.go`, `apierror.go`'s `pinnedNotice`).
@@ -241,7 +253,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The room re-derives its history from claude's transcripts** (`FrameRoomHistory`,
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
   if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
-  broadcast; agent prose is restored only inside a public turn.
+  broadcast, or was stamped by a room send (`roomprovenance.go`: the uuid Wake stamps is the one on
+  disk; a direct `@name` comes back in that thread); agent prose is restored only inside a public
+  turn. A record in two transcripts (same uuid, `Event.MessageID`) is a fork's copy, drawn once
+  (`forkCopies`); the daemon also leaves a fork's inherited records out of its room history
+  (`inheritedBy`), so forks are asked like any session.
 - A routed message is echoed into the room and into every *held* DM it reached, mention included,
   marked `FromRoom`.
 - **A lone `@name` narrows the room** to that thread (`roomfocus.go`); `⌃A` overrides per target;
@@ -277,7 +293,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each argued in
   `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
 - Its config is a function of its name, applied in `launch`: `--mcp-config` only ever beside
-  `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing).
+  `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing). Ordinary
+  agents get none of the three — they keep the operator's MCP servers (owner's ruling via PR #127).
+- **Every manager launch self-tests its tools** before claude starts: `managerConfig` runs
+  `mcp.json`'s command through `initialize`/`tools/list` under a bound, and refuses unless
+  `mcp.Tools()` comes back. Claude accepting the handshake stays `live-testing.md` §13.1.
+  `internal/daemon/mcpselftest.go`.
 - The daemon socket has no caller auth; `managerVerbs` bounds the manager's tool surface, not what
   the daemon accepts.
 
@@ -321,8 +342,8 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · `lifecycle.go` · `peers.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
-| MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go` · verdicts in `cmd/wake/mcpguard_test.go` |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
+| MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
@@ -332,21 +353,21 @@ yet says so in bold.**
 | Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
-| Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomfocus.go` · `roomfilter.go` |
-| DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` |
+| DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
-| Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
+| Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
-| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy |
+| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · daily notice `updatecheck.go` · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
 | Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) |
-| Demo film | `demo/` (Python stand-in agent, VHS tapes) |
+| Demo film, landing site | `demo/` (Python stand-in agent, VHS tapes) · the site generator `demo/page.py`, its words `demo/pagecopy.py` → the wake-landing repo |
 | Fixture scrubber | `scripts/scrub-fixtures.py` · guard `internal/core/corpus_test.go` |
 
 ## Toolchain
@@ -441,6 +462,9 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - A question killed by closing stdin is indistinguishable from an operator deny.
 - Images: first in the content array, text last. An undecodable image silently degrades to text.
 - A malformed stdin line is echoed to stderr in full, then exit 1.
+- A user line's top-level `uuid` is recorded as that turn's own on disk; a version-8 one is accepted
+  (2.1.285). Wake's room marker depends on it — `roomMessageVersion`, re-check on upgrade. A fork
+  copies records under the same uuids. `docs/superpowers/notes/2026-09-29-transcript-uuid-findings.md`.
 - `/model`, `/clear`, `/compact`, `/context` survive stream-json; `/resume` does not. Bare
   `/effort`/`/model` do nothing (`num_turns: 0`, `$0`).
 - `stream_event` text deltas are byte-identical to the completed `assistant` block
@@ -478,7 +502,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/dm.go` at 799 and `internal/core/encode.go` at 798 — derived by
+  `internal/core/encode.go` at 798 and `internal/core/wire.go` at 798 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

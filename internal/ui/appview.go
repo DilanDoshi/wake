@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/notice"
 )
@@ -42,6 +43,7 @@ func (a App) View() string {
 // it is paid three times.
 func (a App) assembleFrame() string {
 	r := a.regions()
+	drawn := a.frameRegions(r)
 	h := a.paneHeight()
 	agents := a.fleet.OnRoster()
 
@@ -51,7 +53,7 @@ func (a App) assembleFrame() string {
 	// reserved row is where failures go under a TUI.
 	if a.board.Up {
 		frame := a.boardView(a.fleet.sectioned(agents), a.layout.Width) + "\n" +
-			awarenessStrip(agents, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
+			awarenessStrip(agents, a.fleet.RunningTasks, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
 		// clipMidDrag for the grid path's reason: mid-resize the rows were
 		// built for the old width, and a row wider than the window wraps -
 		// which is the frame taller than the terminal on every draw.
@@ -74,7 +76,7 @@ func (a App) assembleFrame() string {
 	}
 	for i, w := range r.Cols {
 		if w > 0 {
-			panels = append(panels, a.column(i, w, h))
+			panels = append(panels, a.column(i, w, max(drawn.Cols[i], 0), h))
 		}
 	}
 	if r.Roster > 0 {
@@ -90,7 +92,7 @@ func (a App) assembleFrame() string {
 	}
 
 	frame := lipgloss.JoinHorizontal(lipgloss.Top, cols...) + "\n" +
-		awarenessStrip(agents, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
+		awarenessStrip(agents, a.fleet.RunningTasks, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
 	// Cut to the terminal, because below their own floors the panes stop
 	// shrinking rather than drawing a broken box - so at a height under that
 	// floor plus these two rows, something has to give. It is the bottom of the
@@ -130,14 +132,22 @@ func (a App) focusedCol() int { return a.columnOf(a.focus) }
 // SplitRows says so - and the lower conversation keeps its transcript for when
 // the window is tall enough again, exactly as a column that does not fit keeps
 // its width for when it does.
-func (a App) column(col, width, height int) string {
+//
+// Each pane is drawn at width, the one it is wrapped for, and fitted to drawn,
+// where a divider mid-drag puts its edge. Never drawn at drawn: DM.View re-wraps
+// for any width it is handed, and that on every motion is the cost the settle
+// exists to spare.
+func (a App) column(col, width, drawn, height int) string {
 	c := a.grid.Cols[col]
+	if drawn == 0 {
+		drawn = width
+	}
 	if c.Bottom == "" {
-		return a.pane(c.Top, width, height)
+		return fitCells(a.pane(c.Top, width, height), width, drawn)
 	}
 	top, bottom := a.layout.SplitRowsIn(col, height)
 	if bottom == 0 {
-		return a.pane(c.Top, width, top)
+		return fitCells(a.pane(c.Top, width, top), width, drawn)
 	}
 	// Each pane is clipped to its own allocation before joining. A pane can draw
 	// taller than it was given - a task board is unbounded and is not in the
@@ -148,10 +158,25 @@ func (a App) column(col, width, height int) string {
 	// answerable permission decision nobody can see. Clipping here keeps one
 	// pane's overflow out of the other.
 	return lipgloss.JoinVertical(lipgloss.Left,
-		firstRows(a.pane(c.Top, width, top), top),
-		HintStyle.Render(strings.Repeat(dividerRow, width)),
-		firstRows(a.pane(c.Bottom, width, bottom), bottom),
+		fitCells(firstRows(a.pane(c.Top, width, top), top), width, drawn),
+		HintStyle.Render(strings.Repeat(dividerRow, drawn)),
+		fitCells(firstRows(a.pane(c.Bottom, width, bottom), bottom), width, drawn),
 	)
+}
+
+// fitCells cuts or pads every row of a pane drawn at width to drawn. A no-op
+// unless a divider is mid-drag: the shrinking pane is cut at its new edge and
+// the growing one gets a blank gutter, and both reflow when the hand lets go.
+func fitCells(block string, width, drawn int) string {
+	if drawn == width {
+		return block
+	}
+	rows := strings.Split(block, "\n")
+	for i, row := range rows {
+		row = ansi.Truncate(row, drawn, "")
+		rows[i] = row + strings.Repeat(" ", max(drawn-ansi.StringWidth(row), 0))
+	}
+	return strings.Join(rows, "\n")
 }
 
 // pane draws one conversation, the room included. "" is the room, which is the
@@ -345,8 +370,11 @@ func (a App) cardOf(id string) (Card, bool) {
 // whole cost that gate exists to refuse. It decides no card - an ask belongs to
 // its agent's conversation whether that column is on screen or slid past. See
 // App.cardOf.
+//
+// Settling, not committed: mid-drag View draws the old layout clipped, so the
+// columns that stay on screen are the ones the settle will commit (drawnRegions).
 func (a App) drawnConversations() func(string) bool {
-	r := a.regions()
+	r := a.drawnRegions()
 	return func(agentID string) bool {
 		if agentID == "" {
 			return false

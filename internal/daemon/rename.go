@@ -246,7 +246,7 @@ func (s *server) relabelSession(c *client, f rpc.Frame) {
 // handle for half a minute is a room whose `@` you cannot trust.
 func (s *server) published(a *agent) {
 	s.record(a, a.sess.Pgid())
-	s.broadcast(s.statusPush())
+	s.pushStatus()
 }
 
 // rename releases one name and takes another, in one locked step.
