@@ -675,6 +675,55 @@ counts the row as padding, so the caret is not drawn until the next character.
 
 ---
 
+## BUG-39 — a conversation's `@` hid every session named with a space
+
+**Reported 2026-09-29**: the owner's `@` menu left out most of the Claude sessions open on the
+machine. The one-shot `/list-agents` listed 29 and `core.PeersFromListAgents` read all 29, but
+`conversationMenu` dropped each name holding whitespace — 10 of them, every hand-named interactive
+session (`/rename` takes spaces; Wake's own names never hold one).
+
+**Root cause: the drop assumed a spaced name cannot be one mention.** Claude Code's cross-session
+messaging docs say otherwise: a name with a space or any character outside letters, digits, `-` and
+`_` is typed in double quotes, `@"release notes"`, and its typeahead inserts the quotes.
+
+**Fix (`completionpeers.go`'s `peerMention`, `completion.go`'s `mentionStem`).** A listed session is
+offered bare when every rune is an ASCII letter, digit, `-` or `_`, and quoted otherwise, so a
+non-ASCII letter is quoted too (a quote claude did not need costs nothing). A name is offered only
+when its row draws exactly what ⇥ inserts: no `"` (it has no escape), no whitespace but single
+spaces (`optionRow` collapses the rest, so `foo bar` and `foo  bar` would be one row), and every rune
+graphic — which drops the raw escape bytes and bidi overrides `main` offered and drew. An open quote is one token through its spaces (`@"release n` narrows), ending at the closing
+quote or anything no offered name holds, so a stray `@"` never turns the prose after it into a
+mention; and an opening quote begins a name even past a `/` (`canBeginName`), since no path holds a
+quote. Subagent types keep the whitespace drop: `@agent-<type>` is the one form claude resolves
+headless (findings §3).
+
+**Residual, not changed:** an outside session sharing a fleet agent's name (another fleet's
+`manager`) is still dropped by `heldNames` — `@manager` would name both, and claude would have to ask.
+
+---
+
+## BUG-40 — a local command's reply was one paragraph in a conversation
+
+**Reported 2026-09-30** (seen on PR #134's video): `/list-agents` in a conversation drew its
+session rows run together as one reflowed paragraph. `/cost`, `/config`, `/mcp` and `/agents` did the
+same — their rows, and `/cost`'s aligned columns, folded into prose.
+
+**Root cause: the reply was drawn as markdown.** A local command's text reaches the DM as assistant
+text marked `LocalCommand` (a `<synthetic>` frame), and `kindBlock` sent all assistant text through
+glamour, which reads a single newline as a space. Claude Code draws local-command output as its
+lines. Probed 2026-09-30 (2.1.285, sterile `HOME`, local commands only): of `/context`, `/cost`,
+`/usage`, `/stats`, `/config`, `/mcp` and `/agents`, only `/context` replies in markdown, opening with
+`## Context Usage`.
+
+**Fix (`dm_blocks.go`'s `drawnAsLines`, `localReplyBlock`).** A local command's reply is drawn as
+its lines — indentation and column alignment kept, wrapped to the pane one margin in — unless it
+opens with a markdown heading, as `/context`'s does. The same predicate sends its copy through
+`typedRejoins` (`copytext.go`), so a copy gives back the rows the command printed.
+
+**Not changed:** the room still draws a public local reply (`@name /list-agents`) as markdown.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

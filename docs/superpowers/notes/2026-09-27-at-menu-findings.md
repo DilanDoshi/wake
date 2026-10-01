@@ -73,3 +73,8 @@ In Claude Code, picking a session from the `@` typeahead inserts `@<name>`, and 
 sends it with `SendMessage` — the operator's text is not delivered verbatim. Every Wake agent has `SendMessage`
 and `ListAgents` in `init.tools`. Typed as plain text, Claude finds the target itself (a `ListAgents` call if it
 needs one). The receiver's side reaches Wake's room as a cross-session envelope (`↪ sender → recipient`).
+
+A name with a space or any character outside letters, digits, hyphens and underscores is mentioned in
+double quotes, `@"release notes"`, and the typeahead inserts the quotes (docs, re-read 2026-09-29). Session
+names are free text — `/rename` takes spaces — so a real machine lists such names beside Wake's own
+(BUG-39).

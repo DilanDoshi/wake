@@ -185,7 +185,7 @@ const (
 // mouse motion. Mirrors drawStatusBar. cardPlanLines is a const and stays out of
 // the memo's key for that reason.
 var planBody = func(plan string, width int) string {
-	return collapsed(render.Markdown(plan, width), words(plan), width, cardPlanLines)
+	return collapsed(renderMarkdown(plan, width), words(plan), width, cardPlanLines)
 }
 
 // View draws the top card, or nothing when there is none.

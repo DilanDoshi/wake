@@ -45,13 +45,11 @@ import (
 //
 // **"Started", not "running", and the difference is the whole of what this
 // command can know.** The daemon's reply proves a `claude` process was spawned
-// under this id. It says nothing about whether `wake mcp` came up behind
-// `--mcp-config` — that server is executed by *claude*, not by Wake, so a
-// binary that moved or a client that rejected the handshake produces a manager
-// whose tools are simply absent and which then reports in prose that it cannot
-// see the fleet. `docs/notes/deferred.md` carries the costed close (a self-test
-// at this point, running `wake mcp` against the same socket) and
-// `live-testing.md` §13.1 is the gate until then.
+// under this id, and the daemon refuses one whose `wake mcp` fails its
+// self-test (internal/daemon/mcpselftest.go). What neither proves is that
+// *claude* accepted the handshake: a client that rejects it produces a manager
+// whose tools are absent and which reports in prose that it cannot see the
+// fleet. `live-testing.md` §13.1 is the gate for that half.
 //
 // It names where to talk to it because the manager has no surface of its own:
 // a person who started a service and was told nothing has no way to find out

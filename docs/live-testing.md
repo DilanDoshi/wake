@@ -591,12 +591,16 @@ a non-nil `tools` capability, a `serverInfo` with both fields — and drives eve
 LLM", because the handshake needs neither a model nor money. What is missing is a **client**, and a
 conformance test against a real MCP client library is a new dependency in a tree that keeps five —
 a trade rather than an obligation, and the honest reason it is here rather than in the suite.
+**Since 2026-09-29 Wake's half is checked on every manager launch too:** the daemon runs the command
+`mcp.json` names through `initialize` and `tools/list` and refuses the manager unless this build's
+tools come back (`internal/daemon/mcpselftest.go`). What stays here is claude as the client.
 
 Everything below item 1 is a judgement a person makes, which is the ordinary reason for this file.
 
 - [ ] **13.1 — the gate.** Point a real `claude` at it (`--mcp-config` naming `wake mcp`) and ask it
-      to list its tools. All six should be there: `list_agents`, `agent_status`, `roll_up`,
-      `spawn_agent`, `send_to_agent`, `interrupt` - the count is `managerScope`'s, which
+      to list its tools. All nine should be there: `list_agents`, `agent_status`, `roll_up`,
+      `send_to_agent`, `send_to_team`, `interrupt`, `spawn_agent`, `set_team`, `set_color` - the
+      count is `managerScope`'s, which
       TestTheScopeNamesEveryToolTheManagerHasAndNoOthers holds to internal/mcp in both directions. **Nothing about the manager is true until this passes.**
 - [ ] **13.2 — and it is now the manager every room starts.** Since 2026-08-15 a bare `wake` seats a
       manager on the way in (`cmd/wake/ensuremanager.go`), so 13.1's silent failure went from

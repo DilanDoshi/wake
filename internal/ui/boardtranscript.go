@@ -151,7 +151,7 @@ func (d DM) transcriptWindow(w, rows int) (DM, string) {
 	w, rows = max(w, minBlockWidth), max(rows, minTranscriptHeight)
 	if w != d.width {
 		d.width = w
-		d.tr = d.tr.replace(renderTranscript(d))
+		d.tr = d.rewrapped()
 	}
 	d.tr = d.tr.sized(w, rows).toBottom()
 	return d, d.tr.view(marked{})
