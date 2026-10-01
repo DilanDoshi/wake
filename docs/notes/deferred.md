@@ -5531,3 +5531,18 @@ matches the drawn rows back to the block's source rendered at `unwrappedWidth` (
 your own turn with a tab rejoins (`ownTabWidth`). Still copying as drawn: a peer's cross-session
 message and a subagent's gutter (neither opts in), and a paragraph or token wider than
 `maxUnwrappedWidth` (8,192 cells) past that point.
+
+## 2026-09-30 — two daemon tests that fail under machine load, seen merging #135–#139
+
+- **A wake sent on the first `parked` report can be refused.** `markParked` publishes `parked` before
+  `completePark` has written the roster and the book; `unpark` refuses until `markWakeable` runs
+  (`internal/daemon/park.go`), with *"is not parked, so there is nothing to bring back"*. So a ⌃C then
+  an immediate `/resume` can race too. `TestAForksRoomHistoryIsItsOwnTurnsOnly` (#139) waits on the
+  report and wakes at once: 1 failure in `make ci` and 1 of 15 alone under load (~6), 0 of 80 at
+  rest. #138's in-order status reports deliver the `parked` row sooner, which is plausibly why it
+  surfaced at the merge. *Closes with:* a wake that waits out a finalizing park instead of refusing,
+  or a report that says `parked` only once the row is wakeable.
+- **`TestConcurrentManagerWakesReserveBeforeEitherClaimsAName` fails when `ps` is killed by its own
+  probe timeout** (`ps -A: signal: killed`, the `resumeSafe` refusal arriving instead of the
+  reservation one). 1 failure in a `make ci` under load, 0 of 20 alone. *Closes with:* the test
+  telling a probe failure from the refusal it asserts, or a probe budget the test owns.
