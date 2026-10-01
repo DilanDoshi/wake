@@ -329,17 +329,45 @@ def write(path: str, text: str) -> None:
         fh.write(text)
 
 
-def main() -> None:
-    if len(sys.argv) != 2:
-        sys.exit("usage: page.py <wake-landing checkout>")
-    dest = sys.argv[1]
-    media = os.path.join(dest, "media")
-    os.makedirs(media, exist_ok=True)
-    # First, so a gh that is missing or signed out fails before any page is written.
-    rels = fetch_releases()
+def write_releases(dest: str, rels: list[dict]) -> None:
     # GitHub's own "latest": the newest that is not a prerelease, as the Download link resolves.
     latest = next((r["tag_name"] for r in rels if not r["prerelease"]), None)
+    articles = "".join(release_article(r, r["tag_name"] == latest) for r in rels)
+    write(
+        os.path.join(dest, "releases.html"),
+        page(
+            "Wake — releases",
+            "releases.html",
+            subhead(
+                'releases <span class="lbl">&lt;&gt; newest first</span>',
+                "What changed, version by version.",
+                "Install the newest with the one-line installer, or run "
+                "<code>wake upgrade</code> on an existing install.",
+                f'<pre class="install"><code>{INSTALL}</code></pre>',
+            )
+            + f'<main class="wrap">{articles}</main>',
+        ),
+    )
 
+
+def main() -> None:
+    args = sys.argv[1:]
+    # A release touches only releases.html: the clips are not re-encoded from
+    # whatever recordings happen to be on this machine (docs/RELEASING.md).
+    releases_only = "--releases-only" in args
+    paths = [a for a in args if a != "--releases-only"]
+    if len(paths) != 1:
+        sys.exit("usage: page.py <wake-landing checkout> [--releases-only]")
+    dest = paths[0]
+    # First, so a gh that is missing or signed out fails before any page is written.
+    rels = fetch_releases()
+    if releases_only:
+        write_releases(dest, rels)
+        print("releases: %s/releases.html — %d releases" % (dest, len(rels)))
+        return
+
+    media = os.path.join(dest, "media")
+    os.makedirs(media, exist_ok=True)
     total = 0
     for shot in SHOTS:
         size = encode(shot, media)
@@ -372,23 +400,7 @@ def main() -> None:
             + f'<main class="wrap">{every}{also_section()}</main>',
         ),
     )
-
-    articles = "".join(release_article(r, r["tag_name"] == latest) for r in rels)
-    write(
-        os.path.join(dest, "releases.html"),
-        page(
-            "Wake — releases",
-            "releases.html",
-            subhead(
-                'releases <span class="lbl">&lt;&gt; newest first</span>',
-                "What changed, version by version.",
-                "Install the newest with the one-line installer, or run "
-                "<code>wake upgrade</code> on an existing install.",
-                f'<pre class="install"><code>{INSTALL}</code></pre>',
-            )
-            + f'<main class="wrap">{articles}</main>',
-        ),
-    )
+    write_releases(dest, rels)
 
     print(
         "\nsite: %s — %d beats, %.1f MB of media, %d releases"
