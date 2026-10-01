@@ -154,9 +154,10 @@ func (a App) press(x, y int) App {
 			return a
 		}
 		// The workflow view is drawn over this pane's transcript, so a press is
-		// the view's and never an anchor into text nobody can see.
+		// the view's and never an anchor into text nobody can see: it copies as
+		// chrome does, anchored before the keys move (startSelection's rule).
 		if a.workflowIn(id) {
-			return a.workflowPress(id, at, top, height, x, y, r)
+			return a.startScreenSelection(x, y).workflowPress(id, at, top, height, x, y, r)
 		}
 		// The anchor is taken before the keys move, because the frame that was
 		// clicked is the one drawn *before* the move: refocus re-sizes the panes,

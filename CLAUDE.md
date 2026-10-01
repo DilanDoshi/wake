@@ -75,12 +75,14 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
-  conversation, every agent's in the room) — draws Wake's own view in that pane, since headless claude
-  cannot draw its `/workflows` menu: list → run (phases | agents) → agent (prompt, activity off the
-  agent's disk transcript, outcome). `f` filters, `x` then `↵` stops (`stop_task`), `s` saves the
-  script as `/<name>` (project or personal scope; the daemon owns the path, no overwrite). Endings land
-  in the conversation and the room. No pause, restart or per-agent stop — headless refuses or ignores
-  them. `internal/ui/workflowview.go`, `workflowdraw.go`, `workflowdata.go`, `workflowsave.go`.
+  conversation, every agent's in the room; `/workflows @who` or the room's `@who /workflows` one
+  agent's) — draws Wake's own view in that pane, since headless claude cannot draw its `/workflows`
+  menu: list → run (phases | agents) → agent (prompt, activity off the agent's disk transcript,
+  outcome). `f` filters, `x` then `↵` stops (`stop_task`), `s` saves the script as `/<name>` (project
+  or personal scope; the daemon owns the path and names the personal one on its runs reply, no
+  overwrite). Endings land in the conversation and the room. No pause, restart or per-agent stop —
+  headless refuses or ignores them. `internal/ui/workflowview.go`, `workflowdraw.go`,
+  `workflowagent.go`, `workflowdata.go`, `workflowsave.go`.
 - **A conversation's `@` menu** offers what Claude Code's does: the fleet's live peers, then the
   machine's other Claude sessions `(dir)` (a bare one-shot `claude` running `/list-agents`, asked
   once per opening; a name past `[A-Za-z0-9_-]` is offered and typed quoted, `@"release notes"`, as
@@ -92,7 +94,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
   above the composer, running subagents in the right sidebar, streamed preview tail, DM done line
   (`✻ Cooked for 1m 59s · done 6:48 PM`), compacting line, loop line, question cards as a wizard
-  with a review step, drag-to-select-and-copy on every surface but the `/workflows` view.
+  with a review step, drag-to-select-and-copy on every surface.
 
 ## Non-negotiables
 
@@ -194,11 +196,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
   through the 80ms settle, drawn at the pointer meanwhile (each pane at its wrap width, cut or padded —
   `fitCells`) and committed on release; row drags don't settle. The wheel scrolls the pane under the pointer.
-- **Drag selects, release copies**, on every surface but the `/workflows` view (a press there moves
-  its cursor; `deferred.md`): transcript (anchored to `transcript.lines`
+- **Drag selects, release copies**, on every surface: transcript (anchored to `transcript.lines`
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
-  (`screensel.go`). Every keystroke clears the highlight *and* does its job; width change clears,
-  height doesn't; a click copies nothing. Roster click targets are resolved at press.
+  (`screensel.go`) — the `/workflows` view included, where the press still moves its cursor. Every
+  keystroke clears the highlight *and* does its job; width change clears, height doesn't; a click
+  copies nothing. Roster click targets are resolved at press.
 - **A transcript drag at a pane's edge scrolls, and keeps scrolling while held** — the first
   transcript row is the top edge (a pane can start on the window's first row) unless the drag has
   not left the line it was pressed on; below the last row is the bottom. A one-shot tick
@@ -349,7 +351,7 @@ yet says so in bold.**
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
-| Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
+| Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |

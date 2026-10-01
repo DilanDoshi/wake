@@ -102,17 +102,28 @@ func repositoryRoot(cwd string) (string, bool) {
 	}
 }
 
-// userWorkflowDir is Claude Code's own personal scope:
-// $CLAUDE_CONFIG_DIR/workflows when that is set, else ~/.claude/workflows.
+// userWorkflowDir is Claude Code's own personal scope, the workflows directory
+// under claudeConfigDir - "" when there is none to name.
 func userWorkflowDir() string {
+	dir := claudeConfigDir()
+	if dir == "" {
+		return ""
+	}
+	return filepath.Join(dir, "workflows")
+}
+
+// claudeConfigDir is where claude keeps its own configuration:
+// $CLAUDE_CONFIG_DIR when that is set, else ~/.claude. Read from the daemon's
+// environment, which is the one every agent it spawns inherits.
+func claudeConfigDir() string {
 	if dir := os.Getenv("CLAUDE_CONFIG_DIR"); dir != "" {
-		return filepath.Join(dir, "workflows")
+		return dir
 	}
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(home, ".claude", "workflows")
+	return filepath.Join(home, ".claude")
 }
 
 func existingDir(path string) bool {
@@ -241,46 +252,36 @@ func closeRoot(root *os.Root) {
 
 // saveWorkflowFrame answers a client's FrameSaveWorkflow: write one of this
 // session's workflow runs to a reusable /<name> command file. Refused like
-// every other verb for an unknown session; every other refusal names its
-// reason in the FrameError's text.
+// every other verb for an unknown session (withAgent); every other refusal
+// names its reason in the FrameError's text.
 func (s *server) saveWorkflowFrame(c *client, f rpc.Frame) {
-	a, ok := s.agent(f.SessionID)
-	if !ok {
-		c.enqueue(errorFrame(f.SessionID, "unknown session "+f.SessionID))
-		return
-	}
-	if f.Workflow == nil {
-		c.enqueue(errorFrame(f.SessionID, "a workflow save needs a task, a name and a scope"))
-		return
-	}
-
-	script, err := workflowScript(a, s.transcriptID(f.SessionID), f.Workflow.Task)
-	if err != nil {
-		c.enqueue(errorFrame(f.SessionID, err.Error()))
-		return
-	}
-
-	var dir string
-	project := f.Workflow.Scope == rpc.ScopeProject
-	switch f.Workflow.Scope {
-	case rpc.ScopeProject:
-		a.mu.Lock()
-		cwd := a.runningIn()
-		a.mu.Unlock()
-		dir = projectWorkflowDir(cwd)
-	case rpc.ScopeUser:
-		dir = userWorkflowDir()
-	default:
-		c.enqueue(errorFrame(f.SessionID, fmt.Sprintf("unknown workflow save scope %q", f.Workflow.Scope)))
-		return
-	}
-
-	path, err := saveWorkflow(dir, f.Workflow.Name, script, project)
-	if err != nil {
-		c.enqueue(errorFrame(f.SessionID, err.Error()))
-		return
-	}
-	c.enqueue(rpc.Frame{Kind: rpc.FrameWorkflowSaved, SessionID: f.SessionID, Workflow: &rpc.WorkflowFrame{Path: path}})
+	s.withAgent(c, f, func(a *agent) error {
+		if f.Workflow == nil {
+			return errors.New("a workflow save needs a task, a name and a scope")
+		}
+		script, err := workflowScript(a, s.transcriptID(f.SessionID), f.Workflow.Task)
+		if err != nil {
+			return err
+		}
+		var dir string
+		switch f.Workflow.Scope {
+		case rpc.ScopeProject:
+			a.mu.Lock()
+			cwd := a.runningIn()
+			a.mu.Unlock()
+			dir = projectWorkflowDir(cwd)
+		case rpc.ScopeUser:
+			dir = userWorkflowDir()
+		default:
+			return fmt.Errorf("unknown workflow save scope %q", f.Workflow.Scope)
+		}
+		path, err := saveWorkflow(dir, f.Workflow.Name, script, f.Workflow.Scope == rpc.ScopeProject)
+		if err != nil {
+			return err
+		}
+		c.enqueue(rpc.Frame{Kind: rpc.FrameWorkflowSaved, SessionID: f.SessionID, Workflow: &rpc.WorkflowFrame{Path: path}})
+		return nil
+	})
 }
 
 // Test seams (workflowsaverace_test.go): the moment between the symlink checks

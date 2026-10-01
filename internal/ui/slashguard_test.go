@@ -259,13 +259,14 @@ func TestABareOnlyCommandIsOnlyTakenBare(t *testing.T) {
 	}
 }
 
-// roomTargetCommands is a subset of commands and holds exactly the five that
-// take an @who (name, task, color, team, quit). A word here that commands does
-// not have would dispatch through a nil function on `@who /that`; the count is
-// the vocabulary's own guard, so a sixth cannot be added without this rule being
-// looked at - the same reason wakeCommandCount and bareOnlyCommandCount carry one.
+// roomTargetCommands is a subset of commands and holds exactly the seven that
+// take an @who (name, task, color, team, quit, mcp, workflows). A word here that
+// commands does not have would dispatch through a nil function on `@who /that`;
+// the count is the vocabulary's own guard, so an eighth cannot be added without
+// this rule being looked at - the same reason wakeCommandCount and
+// bareOnlyCommandCount carry one.
 func TestRoomTargetCommandsAreASubsetOfCommands(t *testing.T) {
-	const roomTargetCommandCount = 6
+	const roomTargetCommandCount = 7
 	if len(roomTargetCommands) != roomTargetCommandCount {
 		t.Errorf("roomTargetCommands has %d entries, want %d: a change to the set of @who commands has to be "+
 			"looked at, not slipped in", len(roomTargetCommands), roomTargetCommandCount)
