@@ -40,6 +40,7 @@ package ui
 
 import (
 	"fmt"
+	"iter"
 	"os"
 	"slices"
 	"strings"
@@ -98,13 +99,14 @@ var completionRows = max(minCompletionRows, len(wakeVerbs()))
 // appending, and nothing else writes one.
 type commandSet struct{ names []string }
 
-// words is what the session advertised, and nil for a session that has not
-// said - which is every session before its first turn.
-func (c *commandSet) words() []string {
+// words is what the session advertised, and nothing for a session that has not
+// said - which is every session before its first turn. A sequence rather than
+// the slice, because every Agent copy shares it and no caller may write it.
+func (c *commandSet) words() iter.Seq[string] {
 	if c == nil {
-		return nil
+		return func(func(string) bool) {}
 	}
-	return c.names
+	return slices.Values(c.names)
 }
 
 // same reports whether this set is already exactly these words, which is what
@@ -417,12 +419,12 @@ func (a App) commandMenu(draft, head, word string) completion {
 	// many of them as the bound - leaving them in pushes the agent's own, an
 	// operator's custom skills, below the fold. That is the whole complaint.
 	if agent, ok := a.mentionedAlone(head); ok {
-		for _, name := range agent.advertised.words() {
+		for name := range agent.advertised.words() {
 			add(configureVerb(name))
 		}
 		return completion{pane: a.focus, draft: draft, head: head, names: matched}
 	}
-	for _, name := range a.completionAgent().advertised.words() {
+	for name := range a.completionAgent().advertised.words() {
 		add(configureVerb(name))
 	}
 	for _, verb := range wakeVerbs() {

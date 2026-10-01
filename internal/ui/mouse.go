@@ -407,7 +407,11 @@ func (a App) endSelection() (App, tea.Cmd) {
 	// what lets a selection that ran past the pane's edge copy the lines it
 	// scrolled to reach.
 	lines, first := tr.selectionLines(m)
-	return a, copyToClipboard(selectedText(lines, first, m, tr.rejoins(lines, first)))
+	if selectedText(lines, first, m, nil) == "" {
+		return a, nil // the drag crossed only blank cells
+	}
+	spans := tr.copySpans(lines, first)
+	return a, copyWhenBuilt(func() string { return selectedText(lines, first, m, rejoinsOf(spans, first, len(lines))) })
 }
 
 // clickedTool opens or folds what a click landed on: in a conversation, a

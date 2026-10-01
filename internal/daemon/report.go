@@ -12,6 +12,24 @@ import (
 	"github.com/DilanDoshi/wake/internal/version"
 )
 
+// replyStatus answers a request. It is never broadcast: a client waiting for
+// the answer to its own question must not be handed an announcement that was
+// already in flight when it asked. See rpc.FrameStatusPush.
+func (s *server) replyStatus(c *client) {
+	s.reportMu.Lock()
+	defer s.reportMu.Unlock()
+	st := s.fleet()
+	c.enqueue(rpc.Frame{Kind: rpc.FrameStatusReply, Status: &st})
+}
+
+// pushStatus is the same report sent unasked. It is never a reply.
+func (s *server) pushStatus() {
+	s.reportMu.Lock()
+	defer s.reportMu.Unlock()
+	st := s.fleet()
+	s.broadcast(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+}
+
 // fleet is the whole fleet as one Status, and the sessions that recently left
 // it - so a client learns how one ended rather than watching a row vanish, and
 // can still learn it after the announcement it missed.

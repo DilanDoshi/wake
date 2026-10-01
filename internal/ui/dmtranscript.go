@@ -38,10 +38,11 @@ type block struct {
 	// line resolves to - see rollup.go and transcript.mark.
 	run string
 
-	// copied is how the block's rows rejoin on the clipboard, and typed the
-	// operator's own text when that is typedRows. See copytext.go.
+	// copied is how the block's rows rejoin on the clipboard, and src the text
+	// they were drawn from - the operator's own, or the markdown source. See
+	// copytext.go.
 	copied rejoin
-	typed  string
+	src    string
 }
 
 // renderMarkdown is the seam every markdown block a pane or a card draws goes

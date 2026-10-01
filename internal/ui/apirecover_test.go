@@ -83,6 +83,27 @@ func TestAUsageLimitUnpinsOnTheFirstTurnAfterTheReset(t *testing.T) {
 	}
 }
 
+// The turn that proves the reset takes the limit's timed notice with its pin, so
+// the row does not say "send again once it resets" for the linger after it has.
+// A notice reported since is someone else's and stays.
+func TestTheTurnAfterTheResetTakesTheLimitsNoticeWithIt(t *testing.T) {
+	a := twoAgents(t).apply(usageLimitFrame("s1"))
+	if n, ok := notice.Latest(); !ok || !strings.Contains(n.Text, "resets 9:50pm") {
+		t.Fatalf("the usage limit reported %q, %v", n.Text, ok)
+	}
+	a.apply(healthyTurn("s1"))
+	if n, ok := notice.Latest(); ok {
+		t.Errorf("the turn after the reset left the limit's notice up: %q", n.Text)
+	}
+
+	a = twoAgents(t).apply(usageLimitFrame("s1"))
+	notice.Report("copied %d chars to clipboard", 5)
+	a.apply(healthyTurn("s1"))
+	if n, ok := notice.Latest(); !ok || !strings.Contains(n.Text, "copied 5 chars") {
+		t.Errorf("the turn after the reset cleared a newer notice: %q, %v", n.Text, ok)
+	}
+}
+
 // apiParkedApp is alex auto-parked after authRetryParkAttempt 401s, the park
 // confirmed by a report, and bea still live.
 func apiParkedApp(t *testing.T) App {

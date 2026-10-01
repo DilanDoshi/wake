@@ -140,6 +140,14 @@ const statusCompacting = "compacting"
 // fixture's findings note.
 const rateLimitAllowed = "allowed"
 
+// A failed turn's top-level error kinds that change what recovers it: a dead
+// login needs a new process (api-error-auth.jsonl), a usage limit waits for its
+// reset. Every other named kind is one turn failing; see apiNotice.
+const (
+	errorKindAuth       = "authentication_failed"
+	errorKindUsageLimit = "rate_limit"
+)
+
 // rateLimitNotice resolves a quota status. Only a status that is *not* the
 // benign one earns a notice; the status string itself still reaches a
 // consumer as Event.Text, so a value nobody has seen is reported rather than

@@ -500,7 +500,8 @@ func TestRetireLeavesTheMapAndEntersTheEndingsInOneStep(t *testing.T) {
 	// s.agents, so the id leaving the live map is exactly the moment its
 	// bookkeeping is over - and the lock above then holds it there.
 	waitUntilRetired(t, s, idAlpha)
-	rows := statusRows(s.statusReply(), idAlpha)
+	st := s.fleet()
+	rows := statusRows(rpc.Frame{Status: &st}, idAlpha)
 
 	s.roster.mu.Unlock()
 	<-done

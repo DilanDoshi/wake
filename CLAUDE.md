@@ -151,7 +151,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   the *confirmed* park: a turn the API accepted from any agent (never a `LocalCommand` reply such as
   `/context`'s), or a signed-in `/login` — never a timer. One that fails again after that wake waits
   for `/login` alone; a hand park cancels it. **A usage limit (`core.NoticeUsageLimit`) never marks
-  or parks** and clears a 401 mark; it stays pinned until a turn goes through. `internal/ui/apirecover.go`.
+  or parks** and clears a 401 mark; it stays pinned until a turn goes through. Any other named failure
+  (`core.NoticeTurnFailed`: an overload, a rejected request) is a timed notice only. `internal/ui/apirecover.go`.
 
 **Keys and the legend**
 - **The legend is drawn only while an arm is live, and then it is only the armed cue:**
@@ -206,8 +207,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   not left the line it was pressed on; below the last row is the bottom. A one-shot tick
   (`edgeScrollEvery`) re-arms only while the pane moved; the highlight ends on a line on screen.
   `internal/ui/edgescroll.go`.
-- **A transcript copy rejoins what the pane wrapped** — markdown by `render.Rejoins` (reflowProse's
-  own predicates), your own turn and a local command's reply matched back to their text; every other
+- **A transcript copy rejoins what the pane wrapped** — markdown by `render.Rejoins`, matched back to
+  its source rendered at `unwrappedWidth`, your own turn and a local command's reply matched back to
+  their text; every other
   row copies as drawn. `internal/ui/copytext.go`.
 - **Double-click selects a word, triple-click its row**, on any selectable surface; the first click
   still does its own job. A timer (`multiClickWindow`) counts clicks but never tells a click from a

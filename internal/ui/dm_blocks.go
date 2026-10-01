@@ -183,7 +183,7 @@ func (d DM) renderEvent(ev core.Event) block {
 		text:   strings.Trim(d.eventBlock(ev), "\n"),
 		joined: ev.Kind == core.KindToolResult,
 	}
-	b.copied, b.typed = copiedAs(ev)
+	b.copied, b.src = copiedAs(ev)
 	// A subagent's call is deliberately unmarked: its block is drawn inside an
 	// attribution gutter, so the ⏺ is not at the start of its line and neither
 	// a recolour nor a click could address it without redrawing the whole
@@ -534,7 +534,7 @@ func shadedOwn(text string, width int) string {
 	if width < 1 {
 		return TextStyle.Render(text)
 	}
-	style := OwnStyle.Width(width)
+	style := OwnStyle.Width(width).TabWidth(ownTabWidth)
 	if width > bodyIndent {
 		style = style.PaddingLeft(bodyIndent)
 	}

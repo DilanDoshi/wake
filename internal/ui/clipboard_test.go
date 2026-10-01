@@ -154,3 +154,22 @@ func TestTheNativeFailureNoticeConfirmsTheCopyAndNamesTheFailure(t *testing.T) {
 		t.Errorf("notice = %q, want it to name the native-clipboard failure, not swallow it", n.Text)
 	}
 }
+
+// A transcript copy re-renders every markdown block it spans (copytext.go), so
+// its text is built when the command runs, off the Update loop, not when the
+// drag is released - a long selection must not stall the inbox's drain.
+func TestACopysTextIsBuiltWhenTheCommandRunsNotWhenAsked(t *testing.T) {
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("TMUX", "")
+	built := false
+	cmd := copyWhenBuilt(func() string { built = true; return "words" })
+	if built {
+		t.Fatal("the copy's text was built on the Update loop, when it was asked for")
+	}
+	if _, ok := cmd().(copiedMsg); !ok || !built {
+		t.Fatalf("running the command built %v and produced %T, want copiedMsg", built, cmd())
+	}
+	if msg := copyWhenBuilt(func() string { return "" })(); msg != nil {
+		t.Errorf("a copy that built nothing produced %T, want nil", msg)
+	}
+}

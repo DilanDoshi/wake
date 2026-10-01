@@ -2,6 +2,7 @@ package ui
 
 import (
 	"encoding/base64"
+	"fmt"
 	"strings"
 	"testing"
 
@@ -94,6 +95,63 @@ func TestCopyingAnAgentsEmailGivesBackItsParagraphs(t *testing.T) {
 	}
 }
 
+// Inline code at the start of a wrapped row is everywhere in agent prose, and
+// such a row looks like code once rendered. Both surfaces hand the copy their
+// source, so it rejoins with the rest.
+//
+// Mutation check: a block that keeps no source (src "") copies every such row as
+// a break of its own.
+func TestCopyingAReplyWithInlineCodeRejoinsItsWraps(t *testing.T) {
+	fresh(t)
+	const reply = "Run the `go test ./...` command, then check `make ci` and `make lint` and `make cover` before you push the branch for review."
+	const want = "Run the go test ./... command, then check make ci and make lint and make cover before you push the branch for review."
+
+	dm := resized(t, dmApp(nil, Stream{}, "s1", "alex"), 44, 40)
+	dm = dm.applyFrame(eventFrame("s1", reply))
+	tr := dm.transcriptIn("s1")
+	if got := copyOf(t, dm, "s1", lineHolding(t, tr, "Run the"), 0, tr.lines.len()-1, tr.width-1); got != want {
+		t.Errorf("the DM copied\n%q\nwant\n%q", got, want)
+	}
+
+	room := NewRoomApp(nil, Stream{}, nil)
+	room.layout.ShowGroups, room.layout.ShowRoster = false, false
+	room = resized(t, room, 44, 40)
+	m, _ := room.Update(eventMsg{Event: core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "\n" + reply + "\n"}})
+	room = m.(App)
+	tr = room.transcriptIn("")
+	if got := copyOf(t, room, "", lineHolding(t, tr, "Run the"), 0, tr.lines.len()-1, tr.width-1); got != want {
+		t.Errorf("the room copied\n%q\nwant\n%q", got, want)
+	}
+}
+
+// A copy's command runs beside the Update loop, which goes on adding blocks to
+// the same transcript and writes texts in place as they land, so the command
+// may read only what endSelection took. Under -race a command reading texts
+// fails here.
+func TestACopysCommandReadsNothingTheNextBlockWrites(t *testing.T) {
+	fresh(t)
+	t.Setenv("PATH", t.TempDir())
+	t.Setenv("TMUX", "")
+	t.Setenv("TERM", "")
+	dm := resized(t, dmApp(nil, Stream{}, "s1", "alex"), 90, 40)
+	dm = dm.applyFrame(eventFrame("s1", email))
+	tr := dm.transcriptIn("s1")
+	dm.sel = selection{pane: "s1", anchor: point{line: lineHolding(t, tr, "Hi Sam")}, head: point{line: tr.lines.len() - 1, col: tr.width - 1}}
+	dm.selecting = true
+	_, cmd := dm.endSelection()
+	done := make(chan tea.Msg)
+	go func() { done <- cmd() }()
+	// Your own turns: they mark texts too, and are drawn by lipgloss rather than
+	// through glamour's mutex, which would otherwise order the two goroutines.
+	for i := range 50 {
+		m, _ := dm.Update(eventMsg{Event: core.Event{Kind: core.KindUserText, SessionID: "s1", Text: fmt.Sprintf("turn %d, typed while the copy is built", i)}})
+		dm = m.(App)
+	}
+	if msg, ok := (<-done).(copiedMsg); !ok || msg.chars != len([]rune(emailCopied)) {
+		t.Fatalf("the copy produced %+v, want the email's %d characters", msg, len([]rune(emailCopied)))
+	}
+}
+
 // A drag that starts and ends mid-paragraph takes the words between, joined
 // across the wrap by the space the wrap consumed.
 func TestAPartialDragAcrossAWrapTakesTheWordsBetween(t *testing.T) {
@@ -141,6 +199,24 @@ func TestCopyingYourOwnTurnGivesBackWhatYouTyped(t *testing.T) {
 	}
 }
 
+// A tab the operator typed is drawn as spaces, so their turn still matches what
+// they typed and rejoins across its wraps, the tab coming back as the spaces
+// drawn for it rather than the block falling back to its row breaks.
+func TestYourOwnTurnWithATabStillRejoins(t *testing.T) {
+	fresh(t)
+	typed := "Run\tthis first: the quick brown fox jumps over the lazy dog again and again until it wraps"
+	room := NewRoomApp(nil, Stream{}, nil)
+	room.layout.ShowGroups, room.layout.ShowRoster = false, false
+	room = resized(t, room, 50, 40)
+	m, _ := room.Update(eventMsg{Event: core.Event{Kind: core.KindUserText, SessionID: "s1", Text: typed}})
+	room = m.(App)
+	tr := room.transcriptIn("")
+	got := copyOf(t, room, "", lineHolding(t, tr, "Run"), 0, tr.lines.len()-1, tr.width-1)
+	if want := strings.ReplaceAll(typed, "\t", strings.Repeat(" ", ownTabWidth)); got != want {
+		t.Errorf("the room copied\n%q\nwant\n%q", got, want)
+	}
+}
+
 // Below minBlockWidth a block is drawn wider than its pane and clipped, so the
 // rows hold text nobody saw. Rejoining their visible halves would present the
 // gap as continuous text; the span copies as drawn instead.
@@ -149,7 +225,7 @@ func TestAClippedBlockCopiesAsDrawn(t *testing.T) {
 	tr := transcript{}.sized(minBlockWidth/2, 20).add(block{text: para, copied: markdownRows})
 	m := marked{from: point{line: 0}, to: point{line: tr.lines.len() - 1, col: lineEnd}}
 	lines, first := tr.selectionLines(m)
-	for i, j := range tr.rejoins(lines, first) {
+	for i, j := range rejoinsOf(tr.copySpans(lines, first), first, len(lines)) {
 		if j != hardBreak {
 			t.Errorf("row %d of a clipped block rejoins as %+v, want it kept as drawn", i, j)
 		}

@@ -312,7 +312,7 @@ var claudeWireVocabulary = wordSet([]string{
 	"tool_use_id", "agent_id", "agentId", "agentType",
 	"tool_use_result", "command_uuid", "new_conversation_id",
 	"rate_limit_info", "isReplay", "isSynthetic", "is_api_error_message", "isApiErrorMessage",
-	"api_retry", "error_status",
+	"api_retry", "error_status", "authentication_failed",
 	"run_in_background", "last_tool_name", "task_id",
 	"non_execution_kind", "permission_denials", "terminal_reason",
 	"modelUsage", "total_cost_usd", "num_turns",
@@ -694,7 +694,9 @@ var notNamedByTheAirlock = map[string]string{
 // localreply.go reads - "Other Claude sessions", "No subagents, teammates or
 // other Claude sessions" and "Session renamed to: ". Recorded in
 // list-agents.jsonl and list-agents-bare*.jsonl.
-const policedWordCount = 209
+// 209 → 210: "authentication_failed", the failed turn's error kind apiNotice
+// reads so only a dead login is parked for a new process. api-error-auth.jsonl.
+const policedWordCount = 210
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

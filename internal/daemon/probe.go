@@ -169,7 +169,7 @@ func (s *server) absorbed(a *agent, ev core.Event) bool {
 	suppress, answered := a.absorbProbe(ev)
 	switch answered {
 	case modelProbe:
-		s.broadcast(s.statusPush()) // the level and model it confirmed
+		s.pushStatus() // the level and model it confirmed
 	}
 	return suppress
 }

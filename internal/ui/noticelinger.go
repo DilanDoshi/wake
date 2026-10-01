@@ -44,11 +44,12 @@ type noticeState struct {
 	stuck map[string]stuckPin
 }
 
-// stuckPin is one pinned failure: the API's message, whether it is a usage
-// limit, and whether its session has been parked since - so its next live
-// report is the resume.
+// stuckPin is one pinned failure: the API's message, the timed notice that
+// announced it, whether it is a usage limit, and whether its session has been
+// parked since - so its next live report is the resume.
 type stuckPin struct {
 	msg    string
+	said   string
 	usage  bool
 	parked bool
 }

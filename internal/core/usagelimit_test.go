@@ -12,7 +12,9 @@ import (
 // its own when the quota resets, so it raises a notice of its own. The frame's
 // top-level "error" names the kind: "authentication_failed" is recorded live in
 // testdata/stream/api-error-auth.jsonl, and "rate_limit" is the value the same
-// synthetic frame carries on disk for a session or weekly limit.
+// synthetic frame carries on disk for a session or weekly limit. Any other named
+// kind fails one turn only; a frame naming none is read as a login's, as every
+// failed turn was before the kinds were told apart.
 func TestAUsageLimitIsToldApartFromAnExpiredLogin(t *testing.T) {
 	for _, tc := range []struct {
 		kind string
@@ -20,8 +22,10 @@ func TestAUsageLimitIsToldApartFromAnExpiredLogin(t *testing.T) {
 	}{
 		{"rate_limit", NoticeUsageLimit},
 		{"authentication_failed", NoticeAPIError},
-		{"server_error", NoticeAPIError},
 		{"", NoticeAPIError},
+		{"server_error", NoticeTurnFailed},
+		{"overloaded", NoticeTurnFailed},
+		{"invalid_request", NoticeTurnFailed},
 	} {
 		line := fmt.Sprintf(`{"type":"assistant","is_api_error_message":true,"error":%q,"session_id":"s1","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"You've hit your session limit · resets 9:50pm (America/Los_Angeles)"}]}}`, tc.kind)
 		evs, err := DecodeLine([]byte(line))
@@ -79,7 +83,7 @@ func TestAClaudeLocalReplyIsMarkedAsNoInference(t *testing.T) {
 }
 
 // The error kind is read raw, so a frame whose "error" is not a string still
-// decodes - as an ordinary failed turn - rather than failing whole.
+// decodes rather than failing whole - naming no kind, it reads as a login's.
 func TestANonStringErrorKindStillDecodes(t *testing.T) {
 	line := `{"type":"assistant","is_api_error_message":true,"error":{"type":"overloaded"},"session_id":"s1","message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":"Overloaded"}]}}`
 	evs, err := DecodeLine([]byte(line))

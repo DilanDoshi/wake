@@ -61,7 +61,7 @@ func (s *server) fanOut(a *agent) {
 		// changed() records the state it announces, so the watchdog does not
 		// repeat this, and it broadcasts on a transition rather than per event.
 		if a.changed() {
-			s.broadcast(s.statusPush())
+			s.pushStatus()
 		}
 
 		// The session's init is the header of the operator's first turn (init

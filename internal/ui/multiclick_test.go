@@ -41,7 +41,7 @@ func selectedNow(a App) string {
 	m := a.sel.marked()
 	tr := a.transcriptIn(a.sel.pane)
 	lines, first := tr.selectionLines(m)
-	return selectedText(lines, first, m, tr.rejoins(lines, first))
+	return selectedText(lines, first, m, rejoinsOf(tr.copySpans(lines, first), first, len(lines)))
 }
 
 // frameRow is one screen row of the drawn frame, without its styling.

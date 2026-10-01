@@ -5341,6 +5341,12 @@ park is confirmed.
 
 ## 2026-09-24 — the API-failure pin infers a resume from report order
 
+**CLOSED 2026-09-29 — `fix/recent-follow-ups`.** The reorder was real at every push site: each built
+its snapshot before `broadcast` took `s.mu`. `pushStatus`/`replyStatus` now hold `reportMu` across
+the build and the enqueue, so every client's queue carries reports in build order and "parked, then
+live" proves a resume (`TestAStatusReportIsNeverQueuedBehindANewerOne`). The incarnation id below
+was dropped: three reflective guards, a fence in both reconcilers, and the roster still misdrawn.
+
 `reconciledPins` (`internal/ui/apierror.go`) unpins a failure when its session is reported parked
 and then live again. Codex's review of `fix/notice-expiry` noted that the daemon assembles a status
 snapshot before taking the broadcast lock, so an older `idle` snapshot could in principle arrive
@@ -5375,19 +5381,22 @@ works (`internal/ui/apirecover.go`). Left out, each on purpose:
   daemon's finalizing-park window tries once more on the next parked report, then gives up). A window opened after the park, or a restarted Wake, knows nothing of it and leaves the
   session for `/resume`. *Closes with:* the daemon owning the auto-park and wake, which needs the
   attempt count on its side of the socket.
-- **Any failed turn the auto-park counts is treated as a login failure** - an overload or an
-  `invalid_request` parks after three and wakes on proof like a 401. A deterministic failure wakes
-  once, fails again, and then waits for `/login`; the pin's wording is the login's. Narrowing this
-  needs the error kind (`authentication_failed`) carried past the airlock as a `Notice` of its own.
+- ~~**Any failed turn the auto-park counts is treated as a login failure**~~ **FIXED
+  (`fix/recent-follow-ups`, 2026-09-29):** `apiNotice` reads the failed turn's error kind. Only
+  `authentication_failed` (or a frame naming no kind, the old reading) marks, counts and pins; any
+  other named kind is `core.NoticeTurnFailed`, a timed notice with no mark, park or pin.
 - **Proof is counted per output block, not per API request.** One response streams several frames
   (thinking, then a tool call), so a response that began before a park and lands a later block after
   it reads as post-park proof: the wake can land on a login that expired mid-response. It costs one
   wasted wake - the session fails again and then waits for `/login`. *Closes with:* the API response
   id carried out of the airlock, so a response counts once and only if it began after the park.
+  *Kept deferred 2026-09-29 (fable wake's ruling):* `wire.go` is at 798 of 800, the gain is one
+  wasted wake in a race window, and no recording pins `message.id`'s continuity across a park.
 - **Nothing watches the login while every agent is parked.** With no agent live, only `/login`
   (signed in) or `/resume` brings them back — Wake cannot poll `claude auth status` without a timer.
-- **A usage limit's timed notice outlives the turn that proves the reset** for its ~10s linger; the
-  pin under it goes at once. Clearing a timed notice early is not something `internal/notice` does.
+- ~~**A usage limit's timed notice outlives the turn that proves the reset**~~ **FIXED
+  (`fix/recent-follow-ups`, 2026-09-29):** the pin keeps the text it reported, and `unpinAPIError`
+  clears that notice through `notice.ClearIf` if it is still the newest; a later report stays.
 
 ## 2026-09-28 — a resumed on-disk session keeps its name, with three gaps
 
@@ -5435,6 +5444,10 @@ known. Record a rewind after a background task ends to settle it.
 
 ## 2026-09-28 — `noteSent` marks a turn owed only after its write
 
+**CLOSED 2026-09-29 — `fix/recent-follow-ups`.** `apply` marks owed before the write, as
+`noteRenameSent` does; a failed write clears it only if nothing was owed before, so a type-ahead's
+earlier turn stays owed (`TestATurnIsOwedWhileItsWriteIsInFlight`, `TestARefusedSendLeavesNothingOwed`).
+
 `apply` (`internal/daemon/apply.go`) calls `noteSent` once `Send` has returned, so a turn's end can in
 principle reach fanOut before the turn is marked owed, and `owed` is then left set for a turn that
 has already ended. `noteRenameSent` was moved ahead of the write for exactly this window (at-menu
@@ -5445,9 +5458,8 @@ the liveness tests that read `owed`.
 
 ## 2026-09-28 — Left open by the `@` menu work (at-menu Tasks 3–6)
 
-- **`commandSet.words()` returns the shared slice** (`internal/ui/completion.go`): a caller that
-  mutated it would rewrite every Agent copy's advertised commands. Task 4's `SubagentTypes()` copies;
-  this older reader does not. *Closes with:* a `slices.Clone`, or a test that proves no caller writes.
+- ~~**`commandSet.words()` returns the shared slice**~~ **FIXED (`fix/recent-follow-ups`,
+  2026-09-29):** it returns an `iter.Seq`, so no caller can write the slice every Agent copy shares.
 - **Prompt history recall (`walkPrompts`) replaces the draft without rebuilding the menu**, so a
   recalled `@x` carries the previous menu's peers ask and skips one re-ask; the carried listing still
   shows. Focus away and back has the same shape. *Closes with:* a rebuild there, once a pane whose
@@ -5456,26 +5468,25 @@ the liveness tests that read `owed`.
   `@` insert cannot be read as one mention. Task 5 answered the same question for peers ("never
   offer an insert that cannot resolve"); how Claude Code quotes such a path is unrecorded.
   *Closes with:* a recording of claude's own `@"…"` handling, then quote or skip.
-- **`TestARunningDaemonReestablishesASweptLock` flakes** — 3 of 30 alone under `-race` on
-  `origin/main` (2026-09-27, `lock_test.go:322`, `<nil>`), so a clean 5/5 no longer proves it gone.
+- ~~**`TestARunningDaemonReestablishesASweptLock` flakes**~~ **FIXED (`fix/recent-follow-ups`,
+  2026-09-29):** the test's own race. `reopenLock` creates the file before `explainLock` writes it,
+  and the test read it the moment the inode changed. It now waits for both (1/30 before, 0/160 after).
 - ~~**`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**~~ **CLOSED
   on `fix/workflow-view-gaps`:** the scan globs every non-test file, and the seven workflow kinds are
   in `frameKinds`.
-- **A daemon on an older build answers each conversation's `@` opening with a notice**
+- **WON'T DO (2026-09-29, fable wake's ruling): a daemon on an older build answers each conversation's `@` opening with a notice**
   (`unknown frame kind "peers"`, branch review L2), beside the stale-daemon notice the room opened
   with. Not skipped: `internal/ui` keeps no daemon build, and a build mismatch is also every dev
   rebuild against a daemon that does speak `FramePeers`. Not suppressed: the refusal carries no kind,
-  so only the daemon's sentence could name it. *Closes with:* a typed "unknown kind" on
-  `rpc.FrameError`, which the UI can drop for `FramePeers` alone.
+  so only the daemon's sentence could name it. A typed "unknown kind" on `rpc.FrameError` cannot
+  reach the pre-#131 daemons this is about, and every daemon since knows `FramePeers`; the
+  stale-daemon notice already says to restart.
 
 ## 2026-09-28 — a copy keeps some wraps it cannot prove
 
-`render.Rejoins` rejoins only rows `reflowProse` would group, so these still paste with a break at
-the wrap: a wrapped row that opens with a styled span (bold, inline code, a link — indistinguishable
-from code once rendered), a long link or token `fitToWidth` hard-wrapped, and your own turn when
-lipgloss changed what was typed (a tab expands to spaces). Each falls back to the row as drawn,
-never to wrong text. A peer's cross-session message and a subagent's gutter copy as drawn too.
-
-*Closes with:* a wrap marker carried out of the renderer for styled rows, which means instrumenting
-glamour's wrap as well as `reflowProse`'s — see decisions.md 2026-09-28 for why that was not the
-first move.
+**CLOSED 2026-09-29 — `fix/recent-follow-ups`** for markdown and the typed turn. `render.Rejoins`
+matches the drawn rows back to the block's source rendered at `unwrappedWidth` (decisions.md
+2026-09-29), so a row opening with a styled span and a token `fitToWidth` hard-wrapped rejoin, and
+your own turn with a tab rejoins (`ownTabWidth`). Still copying as drawn: a peer's cross-session
+message and a subagent's gutter (neither opts in), and a paragraph or token wider than
+`maxUnwrappedWidth` (8,192 cells) past that point.

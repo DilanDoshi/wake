@@ -210,6 +210,14 @@ func TestAResumeFromAnyWindowUnpinsButAnIdleReportDoesNot(t *testing.T) {
 	if pin := a.pinnedNotice(); pin != "" {
 		t.Errorf("another window's resume left the failure pinned: %q", pin)
 	}
+	// Nor the rest of the failure: a mark left here makes this window's /reauth
+	// park the resumed process, and its notice still says to.
+	if _, marked := a.authFailed["s1"]; marked {
+		t.Error("another window's resume left s1 marked, so /reauth here would park the new process")
+	}
+	if n, ok := notice.Latest(); ok && strings.Contains(n.Text, reauthVerb) {
+		t.Errorf("another window's resume left the notice saying %q", n.Text)
+	}
 }
 
 // After a reattach a parked session can be reported only in the park book

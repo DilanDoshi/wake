@@ -304,22 +304,24 @@ func TestARunningDaemonReestablishesASweptLock(t *testing.T) {
 		t.Fatalf("simulate the temp reaper: %v", err)
 	}
 
+	// Both halves are waited for: reopenLock creates the file before it writes
+	// the description, so a read between the two finds it empty.
 	deadline := time.Now().Add(2 * time.Second)
 	for {
 		after, serr := os.Stat(lockPath(d.socket))
-		if serr == nil && !os.SameFile(before, after) {
+		relocked := serr == nil && !os.SameFile(before, after)
+		said, rerr := os.ReadFile(lockPath(d.socket))
+		if relocked && rerr == nil && strings.Contains(string(said), "flock") {
 			break
 		}
 		if time.Now().After(deadline) {
-			t.Fatal("the daemon did not re-establish its lock file after it was swept: a successor would now lock a fresh inode and its reaper would SIGKILL this daemon's fleet")
+			if !relocked {
+				t.Fatal("the daemon did not re-establish its lock file after it was swept: a successor would now lock a fresh inode and its reaper would SIGKILL this daemon's fleet")
+			}
+			// It describes itself again, the way takeLock's explainLock does.
+			t.Fatalf("the re-established lock file does not describe itself: %v\n%s", rerr, said)
 		}
 		time.Sleep(20 * time.Millisecond)
-	}
-
-	// And it describes itself again, the way takeLock's explainLock does.
-	said, err := os.ReadFile(lockPath(d.socket))
-	if err != nil || !strings.Contains(string(said), "flock") {
-		t.Fatalf("the re-established lock file does not describe itself: %v\n%s", err, said)
 	}
 }
 

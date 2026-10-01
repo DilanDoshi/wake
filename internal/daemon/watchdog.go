@@ -170,7 +170,7 @@ func (s *server) watchLiveness(ctx context.Context) {
 			s.lock.verify()
 			s.probeQuietAgents(ctx)
 			if s.statesChanged() {
-				s.broadcast(s.statusPush())
+				s.pushStatus()
 			}
 		}
 	}
