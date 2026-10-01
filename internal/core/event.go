@@ -438,9 +438,15 @@ const (
 	// Event.Text still carries the status itself.
 	NoticeRateLimited Notice = "rate_limited"
 
-	// NoticeAPIError rides a KindAPIError so the UI raises a pop-up like
-	// NoticeRateLimited rather than a transcript line. Text is the API message.
+	// NoticeAPIError rides a KindAPIError for a login the API refused, so the UI
+	// raises a pop-up rather than a transcript line and marks the session for a
+	// new process. Text is the API message.
 	NoticeAPIError Notice = "api_error"
+
+	// NoticeTurnFailed rides a KindAPIError of any other named kind - an
+	// overload, a rejected request. It fails one turn and the next send retries,
+	// so the UI tells it and neither marks nor parks.
+	NoticeTurnFailed Notice = "turn_failed"
 
 	// NoticeUsageLimit rides a KindAPIError that is a session or weekly usage
 	// limit. Unlike every other failed turn it recovers on its own when the quota
@@ -763,10 +769,18 @@ type Event struct {
 	Session *SessionFacts `json:"session,omitempty"`
 }
 
-// apiNotice tells a usage limit, which recovers when the quota resets, from every other failed turn.
+// apiNotice tells a failed turn by what recovers it: a usage limit its reset, a
+// dead login a new process, any other named kind the next send. A kind missing
+// or not a string names nothing, and reads as a login's - as every failed turn
+// did before kinds were told apart.
 func (f wireFrame) apiNotice() Notice {
-	if jsonString(f.APIErrorKind) == "rate_limit" {
+	kind := jsonString(f.APIErrorKind)
+	named := firstJSONByte(f.APIErrorKind) == '"' && kind != ""
+	switch {
+	case kind == errorKindUsageLimit:
 		return NoticeUsageLimit
+	case named && kind != errorKindAuth:
+		return NoticeTurnFailed
 	}
 	return NoticeAPIError
 }

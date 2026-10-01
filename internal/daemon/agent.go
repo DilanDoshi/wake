@@ -578,11 +578,25 @@ func (a *agent) observe(ev core.Event) {
 }
 
 // noteSent records that Wake asked for a turn, which is what makes a later
-// silence mean something.
-func (a *agent) noteSent() {
+// silence mean something. It reports whether a turn was already owed, which is
+// what unsent needs if the write then fails.
+func (a *agent) noteSent() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	was := a.owed
 	a.owed = true
+	return was
+}
+
+// unsent takes back noteSent after a write that failed: nothing reached claude,
+// so only a turn owed before it - a type-ahead's earlier one - is still owed.
+func (a *agent) unsent(was bool) {
+	if was {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.owed = false
 }
 
 // noteUnreachable records that a write to this agent's stdin failed.

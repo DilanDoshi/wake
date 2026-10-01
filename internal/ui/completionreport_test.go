@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"slices"
 	"testing"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -28,7 +29,7 @@ func TestAdvertisedCommandsSurviveAnAttachViaTheReport(t *testing.T) {
 	if !ok {
 		t.Fatal("no agent s1 after the report")
 	}
-	if got := agent.advertised.words(); len(got) != 3 {
+	if got := slices.Collect(agent.advertised.words()); len(got) != 3 {
 		t.Errorf("advertised is %v after a report carrying 3 commands; a client that only has the report "+
 			"(every reattach) never learns them, so /co shows no menu", got)
 	}

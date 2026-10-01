@@ -13,6 +13,8 @@ package ui
 // the save dialog, where closing the dialog is ⌃C's whole, visible, job.
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -20,8 +22,9 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// workflowsTakeNoArgument refuses an argument rather than ignoring it.
-const workflowsTakeNoArgument = workflowsVerb + " opens this pane's workflow runs and takes no argument"
+// workflowsUsage refuses any argument but one @who rather than ignoring it.
+const workflowsUsage = workflowsVerb + " opens this pane's workflow runs, or " + workflowsVerb + " " +
+	agentPrefix + "<who> one agent's"
 
 // workflowStopFailed names the write that could not happen, sendFailed's pattern;
 // workflowStopRefused carries the CLI's own reason, modeRefusedFormat's shape.
@@ -89,8 +92,9 @@ type WorkflowView struct {
 
 	// Armed is a stop x has armed on the open run, drawn until ↵ confirms it,
 	// any other key takes it back, or the run ends under it.
-	Armed bool
-	Save  *saveDialog // the save dialog over the run level, nil while closed
+	Armed    bool
+	Save     *saveDialog // the save dialog over the run level, nil while closed
+	Personal string      // where the daemon puts a personal-scope save, off its latest runs reply
 
 	// Settling is a /workflows view nothing has been pressed in yet. Until then
 	// its level follows the run count, because the runs on disk arrive after it
@@ -132,16 +136,21 @@ func (a App) workflowIn(id string) bool {
 	return a.workflow.view.Open() && a.workflow.view.Pane == id
 }
 
-// openWorkflows is /workflows: this pane's runs, or every agent's in the room.
+// openWorkflows is /workflows: this pane's runs, or every agent's in the room;
+// /workflows @who, typed or aimed by a room mention, is that agent's in this pane.
 func (a App) openWorkflows(arg string) (App, tea.Cmd) {
 	a = a.clearDraft()
-	if arg != "" {
-		notice.Report("%s", workflowsTakeNoArgument)
-		return a, nil
+	session := a.focus
+	if fields := strings.Fields(arg); len(fields) > 0 {
+		agent, ok := a.namedTarget(fields, workflowsUsage)
+		if !ok {
+			return a, nil
+		}
+		session = agent.ID
 	}
-	a = a.showWorkflow(WorkflowView{Up: true, Pane: a.focus, Session: a.focus, Settling: true})
+	a = a.showWorkflow(WorkflowView{Up: true, Pane: a.focus, Session: session, Settling: true})
 	var ids []string
-	for _, ag := range a.workflowScope(a.focus) {
+	for _, ag := range a.workflowScope(session) {
 		ids = append(ids, ag.ID)
 	}
 	return a.settleWorkflow().askWorkflows(ids...).takeWorkflowAsks()
@@ -382,7 +391,7 @@ func (v WorkflowView) back(runs []workflowRunView) WorkflowView {
 		return v
 	case len(runs) > 1:
 		return WorkflowView{Up: true, Pane: v.Pane, Session: v.Session, Level: levelList,
-			Cursor: max(runIndex(runs, v.Task), 0), Filter: v.Filter}
+			Cursor: max(runIndex(runs, v.Task), 0), Filter: v.Filter, Personal: v.Personal}
 	}
 	return WorkflowView{}
 }
@@ -391,23 +400,16 @@ func (v WorkflowView) back(runs []workflowRunView) WorkflowView {
 
 // armedKey is a key against an armed stop: ↵ confirms it, and anything else
 // takes it back and does nothing more - the cue said any key cancels. The
-// confirm is a different key from the arm for detach.go's reason.
+// confirm is a different key from the arm for detach.go's reason. ↵ writes the
+// open run's FrameStopRun to the run's own agent - the room's view names none -
+// and the daemon's gate is the authority: its answer is the run's own ending
+// frames, not a receipt.
 func (a App) armedKey(m tea.KeyMsg) (App, tea.Cmd) {
 	a.workflow.view.Armed = false
 	if m.Type != tea.KeyEnter {
 		return a, nil
 	}
-	return a.stopWorkflow()
-}
-
-// stopWorkflow writes the open run's FrameStopRun, to the run's own agent - the
-// room's view names none. The daemon's gate is the authority and its answer is
-// the run's own ending frames, not a receipt.
-func (a App) stopWorkflow() (App, tea.Cmd) {
-	run, ok := a.stoppable()
-	if !ok {
-		return a, nil
-	}
+	run, _ := a.stoppable() // workflowKeyed's settledArm has just held the arm to a running run
 	return a, a.write(workflowStopFailed, rpc.Frame{Kind: rpc.FrameStopRun, SessionID: run.Session,
 		Workflow: &rpc.WorkflowFrame{Task: run.Task}})
 }
@@ -498,9 +500,12 @@ func (v WorkflowView) agentsOf(s core.WorkflowSnapshot) []core.WorkflowAgent {
 }
 
 // workflowPress is a press on the view's own pane: it takes the keys there and
-// makes the row under the pointer the cursor. It never starts a selection - the
-// transcript one would measure is not what is drawn. The pane is measured with
-// the regions the press landed in, before the keys move (startSelection's rule).
+// makes the row under the pointer the cursor. Its text is copied by the
+// frame-wide screen selection press takes first, never a transcript one: the
+// transcript under the view is not what is drawn, and the view is re-laid every
+// frame, so like the roster it is read off the cells at release. The pane is
+// measured with the regions the press landed in, before the keys move
+// (startSelection's rule).
 func (a App) workflowPress(id string, col, top, height, x, y int, r Regions) App {
 	v := a.workflow.view
 	v.Armed = false // a press is not the confirm

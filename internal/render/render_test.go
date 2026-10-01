@@ -704,7 +704,7 @@ func breakTheRenderer(t *testing.T) {
 
 	mu.Lock()
 	kept := renderers
-	renderers = map[int]*glamour.TermRenderer{}
+	renderers = rendererCache{}
 	mu.Unlock()
 	t.Cleanup(func() {
 		mu.Lock()

@@ -183,7 +183,7 @@ func (d DM) renderEvent(ev core.Event) block {
 		text:   strings.Trim(d.eventBlock(ev), "\n"),
 		joined: ev.Kind == core.KindToolResult,
 	}
-	b.copied, b.typed = copiedAs(ev)
+	b.copied, b.src = copiedAs(ev)
 	// A subagent's call is deliberately unmarked: its block is drawn inside an
 	// attribution gutter, so the ⏺ is not at the start of its line and neither
 	// a recolour nor a click could address it without redrawing the whole
@@ -316,7 +316,10 @@ func gutterLines(s string) string {
 func (d DM) kindBlock(ev core.Event, w int) string {
 	switch ev.Kind {
 	case core.KindAssistantText:
-		return render.Markdown(ev.Text, w)
+		if drawnAsLines(ev) {
+			return localReplyBlock(ev.Text, w)
+		}
+		return renderMarkdown(ev.Text, w)
 	case core.KindCrossSession:
 		return crossSessionBlock(ev, w)
 	case core.KindUserText:
@@ -385,6 +388,25 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		// front of a reader.
 		return ""
 	}
+}
+
+// markdownHeading opens the one local reply written as a markdown document:
+// /context's `## Context Usage` (slash-commands.jsonl).
+const markdownHeading = "#"
+
+// drawnAsLines reports whether ev is a local command's reply printed as lines -
+// /list-agents, /config, /cost - which Claude Code draws as printed and markdown
+// would fold into one paragraph. /context's opens with a heading and stays
+// markdown. copiedAs asks it too, so a copy rejoins such a reply's wraps.
+func drawnAsLines(ev core.Event) bool {
+	return ev.Kind == core.KindAssistantText && ev.LocalCommand &&
+		!strings.HasPrefix(strings.TrimSpace(ev.Text), markdownHeading)
+}
+
+// localReplyBlock draws a local command's reply as its lines, indentation and
+// column alignment kept, wrapped to the pane one margin in as glamour's are.
+func localReplyBlock(text string, width int) string {
+	return lipgloss.NewStyle().Width(width).PaddingLeft(bodyIndent).Render(strings.Trim(text, "\n"))
 }
 
 // crossSessionBlock renders a peer's cross-session message in a DM: the sender's
@@ -462,9 +484,9 @@ func userBlock(ev core.Event, width int) string {
 	}
 	switch {
 	case ev.Subagent != nil:
-		return joinBlock(mutedLine(promptLabel, width), render.Markdown(ev.Text, width))
+		return joinBlock(mutedLine(promptLabel, width), renderMarkdown(ev.Text, width))
 	case ev.Echoed:
-		return joinBlock(mutedLine(echoedLabel, width), render.Markdown(ev.Text, width))
+		return joinBlock(mutedLine(echoedLabel, width), renderMarkdown(ev.Text, width))
 	case ev.FromRoom:
 		// Still your own words, so it keeps the accent and the shading rather
 		// than being muted like a replay. Only the head moves - the mention it
@@ -512,7 +534,7 @@ func shadedOwn(text string, width int) string {
 	if width < 1 {
 		return TextStyle.Render(text)
 	}
-	style := OwnStyle.Width(width)
+	style := OwnStyle.Width(width).TabWidth(ownTabWidth)
 	if width > bodyIndent {
 		style = style.PaddingLeft(bodyIndent)
 	}

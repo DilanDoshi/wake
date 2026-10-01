@@ -261,6 +261,18 @@ func (d DM) trailingRun() []core.Event {
 	return nil
 }
 
+// withTrailingRun re-derives the live run's key and tally from the tail, where
+// the events under it changed wholesale: a restore, or a reclaim that cut into
+// the run.
+func (d DM) withTrailingRun() DM {
+	if run := d.trailingRun(); len(run) > 0 {
+		d.runKey, d.runTally = run[0].Tool.ID, tallyOf(run)
+	} else {
+		d.runKey, d.runTally = "", nil
+	}
+	return d
+}
+
 // appendPerCall draws a run whole - every call as its own block - which is what
 // an expanded run and a subagent's forwarded tools both show.
 func (d DM) appendPerCall(blocks []block, run []core.Event) []block {
@@ -291,7 +303,7 @@ func (d DM) openRun(line int) (DM, bool) {
 	// the click keeps their place - the rule openTool states at length. runKey is
 	// left untouched: this changes no events, so the trailing run is unchanged.
 	following := d.tr.atBottom()
-	d.tr = d.tr.replace(renderTranscript(d))
+	d.tr = d.rewrapped()
 	if following {
 		d.tr = d.tr.toBottom()
 	}

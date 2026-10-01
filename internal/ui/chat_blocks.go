@@ -150,11 +150,11 @@ func roomBlock(ev core.Event, a, to Agent, width int, expanded bool) block {
 	}
 	switch ev.Kind {
 	case core.KindAssistantText:
-		return block{text: agentSaid(ev.Text, ev.OutputTokens, a, w, expanded), copied: markdownRows}
+		return block{text: agentSaid(ev.Text, ev.OutputTokens, a, w, expanded), copied: markdownRows, src: strings.TrimSpace(ev.Text)}
 	case core.KindCrossSession:
 		return block{text: crossSaid(ev.Text, a, to, w, expanded)}
 	case core.KindUserText:
-		return block{text: youSaid(ev.Text, w), copied: typedRows, typed: ev.Text}
+		return block{text: youSaid(ev.Text, w), copied: typedRows, src: ev.Text}
 	case core.KindTurnEnd:
 		return block{text: mutedLine(speaker(a)+markerSep+finishedMarker, w)}
 	case core.KindPermissionRequest:
@@ -199,7 +199,7 @@ func roomBlock(ev core.Event, a, to Agent, width int, expanded bool) block {
 // never put through it twice.
 func agentSaid(text string, count int, a Agent, width int, expanded bool) string {
 	head := speakerStyle(a).MaxWidth(width).Render(speaker(a))
-	return saidBlock(head, render.Markdown(strings.TrimSpace(text), width), tokenLabel(count), width, expanded)
+	return saidBlock(head, renderMarkdown(strings.TrimSpace(text), width), tokenLabel(count), width, expanded)
 }
 
 // crossSaid draws a peer's cross-session message: the sender's name-tag with a
@@ -242,7 +242,7 @@ func roomCollapsible(ev core.Event, width int) bool {
 	w := max(width, minBlockWidth)
 	switch ev.Kind {
 	case core.KindAssistantText:
-		return renderedRows(render.Markdown(strings.TrimSpace(ev.Text), w)) > roomInlineRows
+		return renderedRows(renderMarkdown(strings.TrimSpace(ev.Text), w)) > roomInlineRows
 	case core.KindCrossSession:
 		// The same Muted body crossSaid draws, so the two agree on which
 		// peer messages fold to a pointer.

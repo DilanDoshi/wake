@@ -234,7 +234,7 @@ func (s *server) completePark(a *agent, err error) {
 	if err != nil {
 		logf("wake: session %s parked, having ended with: %v", a.id, err)
 	}
-	s.broadcast(s.statusPush())
+	s.pushStatus()
 	s.reconsiderEmptyExit()
 }
 

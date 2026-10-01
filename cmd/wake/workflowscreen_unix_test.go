@@ -10,6 +10,7 @@ package main
 // real pty.
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -150,5 +151,46 @@ func TestAWorkflowSavesItsScriptFromTheView(t *testing.T) {
 	}
 	if string(got) != workflowScript {
 		t.Errorf("the saved file is %q, want the run's own script %q", got, workflowScript)
+	}
+}
+
+// The view's text is selectable like any chrome: a drag across a phase's title
+// on the real screen lands a highlight on the cells it crossed.
+func TestADragOverTheWorkflowViewHighlightsIt(t *testing.T) {
+	s := workflowScreen(t, "")
+	s.openWorkflowRow()
+	s.await("Phases")
+	s.settle()
+
+	y, x := -1, -1
+	for row, line := range s.lines() {
+		if i := strings.Index(line, " Count"); i >= 0 {
+			y, x = row, utf8.RuneCountInString(line[:i+1])
+			break
+		}
+	}
+	if y < 0 {
+		t.Fatalf("no Count phase on screen to drag across.\n%s", s.dump())
+	}
+	before := s.rowBackgrounds(y)
+	// Across "Count", short for TestADragOverChromeHighlightsIt's reason, and held
+	// rather than released: a release copies, and on darwin that is pbcopy.
+	s.send(fmt.Sprintf("\x1b[<0;%d;%dM", x+1, y+1))
+	for c := x + 1; c <= x+4; c++ {
+		s.send(fmt.Sprintf("\x1b[<32;%d;%dM", c+1, y+1))
+	}
+	s.settle()
+	after := s.rowBackgrounds(y)
+	changed := 0
+	for c := x; c <= x+4; c++ {
+		if before[c] != after[c] {
+			changed++
+		}
+	}
+	if changed == 0 {
+		t.Errorf("a drag across the view's Count phase changed no cell's background.\n%s", s.dump())
+	}
+	if !strings.Contains(s.text(), workflowTitle) {
+		t.Errorf("the drag closed the view.\n%s", s.dump())
 	}
 }

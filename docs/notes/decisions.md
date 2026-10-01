@@ -8,6 +8,69 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-09-29 — a copy matches markdown back to its source
+
+Supersedes "markdown rows are classified, not flagged" below. Classifying rows by `reflowProse`'s
+predicates could not rejoin a wrapped row that opens with a styled span - inline code at a wrap is
+everywhere in agent prose - and escapes cannot tell such a row from code: a fence inside a list item
+draws straight under the item, at the item's hang, with a styled row's shape.
+
+`render.Rejoins(rows, src)` renders the block's own source once more at `unwrappedWidth`, where each
+paragraph, item and line of code is one row, and matches the drawn rows back to it, as `typedRejoins`
+does for a typed turn. A row that continues its unwrapped row takes exactly the whitespace the wrap
+consumed, so hyphen breaks and `fitToWidth`'s hard wraps are exact, not guessed. A row the render
+does not hold is kept, and matching resumes at the next row that opens one. Only a row inside the
+document margin can open one, so the room's speaker is never read as the reply. The width is one
+constant, not one per block, because `rendererFor` caches a renderer per width. It doubles only
+while a row other than a table's reaches half of it, since a wrap always leaves one that wide, and
+stops at `maxUnwrappedWidth` (8,192), where a long unbreakable token starts to cost glamour tens of
+milliseconds. Cost: one more glamour render per copied block (about 12 ms for 2 KB), in the copy's
+own command rather than on the Update loop, so a long selection never stalls the inbox's drain: the
+spans are taken at release, since `texts` is written in place as blocks land.
+
+---
+
+## 2026-09-29 — the manager's tools self-test at launch; ordinary agents keep the operator's MCP servers
+
+**Ruling 1 — a manager whose `wake mcp` cannot answer is refused before claude starts.** Until
+now a `wake mcp` that could not serve this build's tools — above all a binary replaced by another
+build under a running daemon — produced a manager that started, then held the wrong tools or none
+and said so only in prose. (A binary that *moved* already failed the launch on unix, at the
+supervisor's exec of the same path, with a vaguer message; the self-test now names it first.)
+`managerConfig` now runs the exact command `mcp.json` names, writes `initialize` and `tools/list`,
+and refuses the launch unless it calls itself wake, offers tools, and lists exactly `mcp.Tools()`
+(`internal/daemon/mcpselftest.go`, client half `internal/mcp/selftest.go`).
+
+- **In the daemon, not in `wake manager`**, as deferred.md had costed it: `mcp.json` names the
+  *daemon's* executable, which a stale daemon makes different from the client's, and `launch` is the
+  one door every spawn, `/manager`, the room's default seat and a wake from park go through. The
+  case it catches best is `wake upgrade` under a running daemon followed by `/manager` waking a
+  parked manager.
+- **Where the spawn runs, and bounded.** A plain spawn runs in line on the asking client's
+  dispatch goroutine, so a refusal stays enqueued ahead of any `FrameStatus` written behind it —
+  `cmd/wake`'s `act` reads that order as "taken". A `--worktree` spawn already runs on its own
+  goroutine for git, and the self-test with it; no status-as-ack client sends one for a manager
+  (`act` never spawns a manager, and `wake manager` waits on its own id — Codex pass 2). Holding a
+  dispatch is why its bound (`mcpSelfTestTimeout`) is load-bearing, with git's process group and
+  `WaitDelay`. It holds once the process exists; the exec itself is as unbounded as the
+  `StartObserved` every launch makes of the same binary right after (a stalled filesystem blocks
+  both — Codex pass 1, ruled pre-existing).
+- **Safe to run there** because internal/mcp answers these two requests without its Fleet: the
+  server never dials the socket, opens no client, and cannot move the daemon's client count.
+- **Tool names, not `serverInfo.version`**, which is a hand-kept `"0.2.0"` two builds share.
+- **What it does not prove:** that claude accepted the handshake. `live-testing.md` §13.1 stays the
+  gate for that half. Cost: one short process per manager launch, never on a timer.
+
+**Ruling 2 — ordinary agents get neither `--strict-mcp-config` nor `--tools`.** This was open in
+deferred.md as "unruled". The owner ruled it by building PR #127 (2026-09-27) on it: every agent's
+`initialize` handshake exists so a headless session loads the operator's claude.ai connectors, and
+`--strict-mcp-config` would exclude them. So an agent Wake spawns has the MCP servers and built-ins
+the same `claude` would have in the same directory; only the manager is bounded.
+`TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt` holds it. *Recorded as the owner's
+decision, not a new one — veto it in review if that reading is wrong.*
+
+---
+
 ## 2026-09-28 — a copy rejoins what the pane wrapped
 
 The owner copied an email out of chat history and pasted it with a hard line break at every wrap
@@ -16,9 +79,9 @@ newlines are indistinguishable by then") on the grounds that `blockLines` splits
 That reasoning holds for arbitrary rows but not for the two row producers a copy cares about, so
 the ruling is reversed for them and kept for everything else.
 
-**Markdown rows are classified, not flagged.** `render.Rejoins` reads rendered rows with
+**Markdown rows are classified, not flagged.** *(Superseded 2026-09-29, above.)* `render.Rejoins` reads rendered rows with
 `reflowProse`'s own predicates (`reflowable`, `leadSpaces`, `opensItem`, `hyphenJoin`) plus
-`hangIndentLists`' hang. Rows that pass grouped into one paragraph or list item are wraps by
+the hang it lays an item's wrap at. Rows that pass grouped into one paragraph or list item are wraps by
 construction — markdown renders a source newline as a space — so they rejoin with the space the
 wrap took, or nothing at a hyphen. Carrying a per-row flag out of the renderer was rejected: three
 wrap producers, a new return shape, and nothing the rows don't already say. The known miss is
@@ -184,7 +247,10 @@ against and which is fragile (later edits shift the lines). Owner chose to leave
 vocabulary, "Edit" is not wrong, and doing it right means verifying Claude Code's whole display
 mapping (Edit/Write/MultiEdit) against a recording rather than guessing.
 
-**`MultiEdit` gets none of this today, and that is a recorded gap rather than a decision.**
+**`MultiEdit` gets none of this, and since 2026-09-30 that is a decision rather than a gap:** no
+session in the verified range offers the tool (no `init` in `testdata/stream/`, 2.1.226-2.1.283,
+lists it, and no transcript on the owner's machine holds a call), so only a pre-2.x transcript read
+back through history can carry one, and it folds as below. See `deferred.md`. The original reasoning:
 `core.toolDiff` reads a *top-level* `old_string`/`new_string`, which `Edit` and `Update` carry;
 `MultiEdit` nests its hunks in an `edits` array and carries neither at the top level, so its `Diff`
 is nil, `foldExempt` is false, and a `MultiEdit` still folds into `1 tool use · 1 multiedit` — and
@@ -501,7 +567,9 @@ core's `Wait` has returned, so the daemon that wrote it had watched *its own* pr
 is all that travels. Anything can start on the id between two daemons, so a restored row asserts
 identity and location and nothing about liveness, and `unpark` re-proves the rest through
 `resumeSafe`. The corollary is that **`restoreParked` starts nothing**: a restore that resumed N
-sessions would resume N ids it had never checked.
+sessions would resume N ids it had never checked. *(2026-09-29: `restoreParked` is gone —
+`6ca7e6b`, a daemon restores nothing — and the book is read only into `rpc.Status.Parked`, so the
+corollary holds with nothing to restore.)*
 
 **A file format is where rung 6 bites.** A test that writes with the writer and reads with the
 reader proves round-tripping and nothing about the bytes: a reader and a writer that agree on the
@@ -1063,8 +1131,8 @@ are kept, because the wrong half is the lesson.
 `EnsureRunning`, which forks a daemon when nothing is listening, so asking afterwards asks a daemon
 this command just created. The plan asked for the reversing mutation to be killed. It was
 constructed, it compiled, and it survived the whole suite. The task reasoned out *why* — `restoreParked`
-runs before the accept loop, so the daemon a dial forks reports exactly the parked rows that make
-`hasFleet` true — recorded it as surviving in three artefacts rather than dropping it quietly, and
+ran before the accept loop (removed in `6ca7e6b`), so the daemon a dial forks reported exactly the
+parked rows that made `hasFleet` true — recorded it as surviving in three artefacts rather than dropping it quietly, and
 called the ordering *"a statement about the code rather than about an output"*.
 
 **Every sentence of that was true of the configuration it had, and the configuration was the wrong
@@ -1681,8 +1749,8 @@ its real cost; nothing in this tree can measure it without spending money, and i
 `parkBook.add` rewrites the whole file through a temp and a rename on **every** park, so ⌃Q at 30
 agents is 30 rewrites — but the per-park cost only goes 103 µs → 130 µs average, because the
 atomic rename dominates and the JSON does not. Four milliseconds, on a path that already waits for
-processes to die. `restoreParked` is 212 µs before the accept loop, which is what a `wake` waits
-behind while `EnsureRunning` decides whether a daemon exists. Neither is worth changing.
+processes to die. `restoreParked` was 212 µs before the accept loop (removed in `6ca7e6b`), which is what a `wake`
+waited behind while `EnsureRunning` decided whether a daemon exists. Neither is worth changing.
 
 **The fixture had to stop using hex names to measure the real path.** `w00`, not `a00`:
 `normalizeName` refuses a name made only of hex digits, so a hex fixture sends `restoreParked` down

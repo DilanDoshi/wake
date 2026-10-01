@@ -219,12 +219,25 @@ func (a App) settlingLayout() Layout {
 	return l
 }
 
-// drawnRegions is which columns are on screen once the drag settles - which,
-// mid-drag, is not what View draws: that is the old layout clipped to the new
-// terminal, and a column the clip cuts may still be the one below the takeover
-// keeps (the focused one).
+// drawnRegions is the column widths the next settle lays the panes out at - and
+// which columns are on screen once it does. Mid window-drag that is not what View
+// draws: that is the old layout clipped to the new terminal (frameRegions), and a
+// column the clip cuts may still be the one below the takeover keeps (the
+// focused one).
 func (a App) drawnRegions() Regions {
 	return a.settlingLayout().Regions(len(a.grid.Cols), a.focusedCol())
+}
+
+// frameRegions is where the frame draws each column, given r, the layout's own:
+// at the divider a hand is holding, ahead of the settle that re-wraps for it. A
+// window drag is drawn at the old layout and clipped instead (clipMidDrag): its
+// column count can change mid-drag, so there is no one width to fit a pane to.
+// r itself when no split is pending, so an idle frame lays nothing out twice.
+func (a App) frameRegions(r Regions) Regions {
+	if a.pending.width != a.layout.Width || slices.Equal(a.pending.weights, a.layout.Weights) {
+		return r
+	}
+	return a.drawnRegions()
 }
 
 // paneHeight is what is left for a pane once the notice row is taken. Every

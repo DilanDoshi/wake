@@ -101,6 +101,14 @@ type server struct {
 	// takes admitMu, so the order cannot reverse.
 	admitMu sync.Mutex
 
+	// reportMu holds a status report's build and its enqueue together, so every
+	// client's queue carries reports in the order they were built. Apart, two
+	// pushes could queue a stale snapshot behind a newer one, and a client read a
+	// parked session as live again. Taken before mu, a.mu and the park book's
+	// lock, and never while holding any of them; fleet() stats the park book per
+	// record under it, so a push costs one serialized pass over the book.
+	reportMu sync.Mutex
+
 	// verb is why this daemon is ending, and it is only meaningful once
 	// quitting is true: the zero value is quitNone, which is what a daemon
 	// nobody asked to end is doing. Written once by beginQuit and read once by
@@ -642,7 +650,7 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 	case rpc.FrameParkAll:
 		s.beginQuit(quitPark)
 	case rpc.FrameStatus:
-		c.enqueue(s.statusReply())
+		s.replyStatus(c)
 	case rpc.FramePeers:
 		s.askPeers(ctx, c) // never blocks: joins or starts a run, or answers at once
 	case rpc.FrameHistory:
@@ -689,8 +697,8 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 	}
 }
 
-// withAgent runs an ending verb against a named session, reporting an unknown
-// name rather than silently doing nothing.
+// withAgent runs a verb against a named session, reporting an unknown name
+// rather than silently doing nothing, and do's error as the verb's refusal.
 func (s *server) withAgent(c *client, f rpc.Frame, do func(*agent) error) {
 	a, ok := s.agent(f.SessionID)
 	if !ok {
@@ -734,20 +742,6 @@ func (s *server) broadcast(f rpc.Frame) {
 
 func errorFrame(sessionID, text string) rpc.Frame {
 	return rpc.Frame{Kind: rpc.FrameError, SessionID: sessionID, Text: text}
-}
-
-// statusReply answers a request. It is never broadcast: a client waiting for
-// the answer to its own question must not be handed an announcement that was
-// already in flight when it asked. See rpc.FrameStatusPush.
-func (s *server) statusReply() rpc.Frame {
-	st := s.fleet()
-	return rpc.Frame{Kind: rpc.FrameStatusReply, Status: &st}
-}
-
-// statusPush is the same report sent unasked. It is never a reply.
-func (s *server) statusPush() rpc.Frame {
-	st := s.fleet()
-	return rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st}
 }
 
 // recentEndings is how many endings a status report carries after the fact.
