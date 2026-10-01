@@ -83,7 +83,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   them. `internal/ui/workflowview.go`, `workflowdraw.go`, `workflowdata.go`, `workflowsave.go`.
 - **A conversation's `@` menu** offers what Claude Code's does: the fleet's live peers, then the
   machine's other Claude sessions `(dir)` (a bare one-shot `claude` running `/list-agents`, asked
-  once per opening), then `@agent-<type> (agent)`, then files by fuzzy search. The manager's
+  once per opening; a name past `[A-Za-z0-9_-]` is offered and typed quoted, `@"release notes"`, as
+  Claude Code does), then `@agent-<type> (agent)`, then files by fuzzy search. The manager's
   conversation offers its fleet and files only. `⇥` is the only accept. `internal/ui/completionpeers.go`,
   `completionindex.go`; rulings in `decisions.md` (2026-09-27).
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
