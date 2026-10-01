@@ -13,7 +13,8 @@
         "pace": 0.7
       } },
       { "after": 0.9, "text": "Seven cases, four of them ones I'd have missed writing straight through." }
-    ] }
+    ] },
+    {"match": "staging", "tokens": 980, "steps": [{"after": 1.6, "text": "Pointing the limiter tests at staging."}, {"after": 0.8, "tool": {"name": "Bash", "input": {"command": "go test ./api/limit -tags staging"}, "result": "PASS: 14/14 (boundary, burst, refill, multi-key)\nok  \tharbor/api/limit\t1.102s", "takes": 2.2}}, {"after": 0.8, "text": "All fourteen pass, including the request that lands exactly on the ceiling."}]}
   ],
   "default": { "tokens": 300, "steps": [ { "after": 0.9, "text": "Adding a case for that." } ] }
 }

@@ -43,10 +43,12 @@ manager that only *drew* those calls would be a lie on camera.
     agent/wakemcp.py    MCP client, so the manager's fan-out is real
     scenarios/*.json    one per cast member; `_pool.json` is the fallback
     harbor/             the fictional product, copied into a real git repo
-    tapes/*.tape        one per beat
+    tapes/*.tape        one per beat; `_*.tape` are sourced helpers, never recorded
     captions.py         title cards and caption bands, in Wake's own palette
     setup.sh            builds .work/ (and generates .work/stage.tape)
     build.sh            trims, captions, stitches, masters
+    page.py             the landing site (index, features, releases): `page.py <wake-landing>`
+    pagecopy.py         its words — one entry per beat, and the build notes
 
 `setup.sh` generates the staging tape rather than shipping one, because
 `/new <name> in <dir>` resolves a relative directory against the *session's*

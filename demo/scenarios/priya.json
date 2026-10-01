@@ -9,7 +9,8 @@
     ] },
     { "match": "number", "tokens": 560, "steps": [
       { "after": 0.9, "text": "Either. A bare integer is requests per minute. A plan name — `free`, `team` — takes that plan's ceiling from `quota.ts`, so ops can say `--rate-limit team` without knowing the figure, and it moves when the plan does." }
-    ] }
+    ] },
+    {"match": "release", "tokens": 1500, "steps": [{"after": 1.2, "text": "Before I cut it — one choice the flag can't change after it ships."}, {"after": 0.8, "question": {"questions": [{"question": "Which unit should --rate-limit take?", "header": "Unit", "options": [{"label": "Requests per minute", "description": "--rate-limit 600 — the same number the plan stores as perMinute."}, {"label": "Requests per second", "description": "--rate-limit 10 — closer to what the gateway's own logs report."}], "multiSelect": false}]}}, {"after": 0.8, "text": "Per minute it is: `--rate-limit 600` maps straight onto the plan's `perMinute`, so there's no conversion to get wrong."}, {"after": 1.4, "text": "Flag's in and documented in `harborctl keys set --help`. Ready for tonight's release."}]}
   ],
   "default": { "tokens": 320, "steps": [ { "after": 0.9, "text": "Noted." } ] }
 }

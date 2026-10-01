@@ -367,7 +367,7 @@ yet says so in bold.**
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · daily notice `updatecheck.go` · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
 | Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) |
-| Demo film | `demo/` (Python stand-in agent, VHS tapes) |
+| Demo film, landing site | `demo/` (Python stand-in agent, VHS tapes) · the site generator `demo/page.py`, its words `demo/pagecopy.py` → the wake-landing repo |
 | Fixture scrubber | `scripts/scrub-fixtures.py` · guard `internal/core/corpus_test.go` |
 
 ## Toolchain

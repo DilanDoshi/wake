@@ -96,7 +96,8 @@
           "text": "`harbor_ratelimit_rejected_total`, labelled by plan. Cheap \u2014 one increment on the path that was already returning early."
         }
       ]
-    }
+    },
+    {"match": "staging", "tokens": 1240, "steps": [{"after": 1.2, "text": "Running the middleware suite against staging."}, {"after": 0.8, "tool": {"name": "Bash", "input": {"command": "go test ./api/... -run Limit -count=1"}, "result": "ok  \tharbor/api/middleware\t0.418s\nok  \tharbor/api/quota\t0.207s", "takes": 1.8}}, {"after": 0.9, "text": "Green. The case worth watching is clock skew — a lazy refill trusts the request time — and it holds."}]}
   ],
   "default": {
     "tokens": 410,

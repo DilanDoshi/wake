@@ -28,6 +28,7 @@ import random
 import sys
 import threading
 import time
+import uuid as uuidlib
 
 SCENARIO_DIR = os.environ.get(
     "WAKE_DEMO_SCENARIOS",
@@ -69,6 +70,12 @@ def journal(obj):
     line = dict(obj)
     line["timestamp"] = time.strftime("%Y-%m-%dT%H:%M:%S", time.gmtime()) + "Z"
     line["sessionId"] = SID
+    # Every record chains to the one before (testdata/transcript/fork-parent.jsonl):
+    # the daemon walks parentUuid from the last record for the live branch, so a
+    # record without one reads as a rewound dead branch and the room restores nothing.
+    line.setdefault("uuid", str(uuidlib.uuid4()))
+    line["parentUuid"] = LAST_UUID[0]
+    LAST_UUID[0] = line["uuid"]
     try:
         with open(TRANSCRIPT, "a") as fh:
             fh.write(json.dumps(line) + "\n")
@@ -119,6 +126,35 @@ def transcript_path():
 
 
 TRANSCRIPT = transcript_path()
+LAST_UUID = [None]
+
+
+def continue_chain():
+    """A resumed or forked session carries on from the records already there.
+    A fork first copies its parent's under the same uuids, sessionId rewritten
+    (testdata/transcript/fork-child.jsonl)."""
+    if not TRANSCRIPT:
+        return
+    fresh = not os.path.exists(TRANSCRIPT) or os.path.getsize(TRANSCRIPT) == 0
+    if "--fork-session" in sys.argv and fresh:  # a restarted fork has its copy already
+        src = os.path.join(os.path.dirname(TRANSCRIPT), arg("--resume") + ".jsonl")
+        try:
+            with open(src) as fh, open(TRANSCRIPT, "a") as out:
+                for l in fh:
+                    d = json.loads(l)
+                    d["sessionId"] = SID
+                    out.write(json.dumps(d) + "\n")
+        except (OSError, ValueError):
+            pass
+    try:
+        with open(TRANSCRIPT) as fh:
+            for l in fh:
+                LAST_UUID[0] = json.loads(l).get("uuid") or LAST_UUID[0]
+    except (OSError, ValueError):
+        pass
+
+
+continue_chain()
 
 
 def say_init(sc):
@@ -783,6 +819,11 @@ def reader():
             continue
         text = user_text(f)
         if text is not None:
+            # claude records the turn under the uuid Wake stamped on it
+            # (testdata/transcript/room-stamped-uuid.jsonl); the room restores a
+            # message sent to one agent by that uuid alone.
+            with EMIT_LOCK:
+                journal({"type": "user", "message": f.get("message"), "uuid": f.get("uuid") or str(uuidlib.uuid4())})
             inbox.put(("turn", text))
     inbox.put(("eof", None))
 

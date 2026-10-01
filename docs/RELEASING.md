@@ -45,7 +45,24 @@ release should go out. There is no CI release trigger; the timing is entirely yo
    gh release edit v0.1.2 --notes-file /path/to/notes.md
    ```
 
-That builds `wake` for **macOS and Linux, amd64 and arm64**, stamps the version from the tag, and
+6. Put the release on the landing site's `/releases` page with a PR to
+   [wake-landing](https://github.com/DilanDoshi/wake-landing). Do it after step 5, so the page carries
+   the hand-written notes rather than goreleaser's changelog:
+
+   ```sh
+   (cd demo && python3 page.py /path/to/wake-landing --releases-only)   # rewrites releases.html only
+   cd /path/to/wake-landing
+   git fetch origin && git checkout -b release/v0.1.2 origin/main
+   git add releases.html && git commit -m "docs: releases page for v0.1.2"
+   git push -u origin release/v0.1.2 && gh pr create --fill
+   ```
+
+   **`--releases-only` matters.** A full `page.py` run re-encodes every clip from `demo/.work/out/`,
+   which holds whatever this machine last recorded — stale takes would put old frames back on the
+   site. Put a screenshot of the new entry in the PR (Vercel builds a preview for it); merging the PR
+   deploys. Re-run this step whenever a release's notes are edited after the fact.
+
+Step 4 builds `wake` for **macOS and Linux, amd64 and arm64**, stamps the version from the tag, and
 publishes a **GitHub Release** with the binaries and a `checksums.txt`. The version the banner
 reports comes from the tag, via `-ldflags -X …/internal/version.Version` (this is why `Version` is a
 `var`, not a `const` — a `const` can't be stamped).
@@ -94,6 +111,8 @@ section that has nothing in it rather than writing "None" under a heading.
 
 ## After you cut
 
+- **The site lists it.** Once step 6's PR is merged, the landing site's `/releases` page shows the new
+  version at the top with the `latest` badge, and its notes match the GitHub release.
 - **Install from the published artifact on a machine that has never built Wake, and run it.** A
   release nobody has installed from is a release nobody has tested. The install line
   (`curl -fsSL https://raw.githubusercontent.com/DilanDoshi/wake/main/scripts/install.sh | sh`) and
