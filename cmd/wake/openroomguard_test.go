@@ -41,11 +41,11 @@ import (
 //
 // The verdicts and their reasons are in hasFleet's own comment; the one worth
 // naming here is the orphan, because it is the cell that differs from "is this
-// row interesting". Serve runs reapOrphans before restoreParked and before it
-// accepts anything, so the daemon connect() forks ends exactly those processes
-// on the way up: counting them opens the room on rows that are being killed as
-// it draws. That reaping is gated on `lock.exclusive` and the cell survives the
-// exception — see hasFleet, where the second reason is written down.
+// row interesting". Serve runs reapOrphans before it accepts anything, so the
+// daemon connect() forks ends exactly those processes on the way up: counting
+// them opens the room on rows that are being killed as it draws. That reaping
+// is gated on `lock.exclusive` and the cell survives the exception — see
+// hasFleet, where the second reason is written down.
 //
 // Hand-written and checked against a derived set rather than being the derived
 // set, so an eighth state is a build failure until somebody rules on it.

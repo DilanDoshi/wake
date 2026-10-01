@@ -4,8 +4,8 @@ package ui
 //
 // Two halves of one report. The room was silent while an agent waited - the
 // fold routed every KindPermissionRequest into Cards and never into
-// Room.Append, and Cards.Undrawn excludes an agent whose conversation is on
-// screen, so with a DM open the group chat had no card *and* no line. And the
+// Room.Append, and the card used to be drawn only where the conversation was
+// not, so with a DM open the group chat had no card *and* no line. And the
 // conversation drew the same ask three times: the tool call, the ask's label,
 // and the ask's tool call again, with the card above all of it.
 
@@ -22,8 +22,9 @@ import (
 )
 
 // The room announces; it does not offer. The card is still the one surface
-// that answers - see Cards.Undrawn - so this line carries no keys and is a
-// record of a thing that happened, which is what a transcript is.
+// that answers, in its agent's conversation (App.cardOf), so this line carries
+// no keys and is a record of a thing that happened, which is what a transcript
+// is.
 func TestTheRoomSaysWhenAnAgentIsBlocked(t *testing.T) {
 	a := paneAsking(t)
 	out := ansi.Strip(a.room.View(roomWidth, 40))

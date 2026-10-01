@@ -37,17 +37,16 @@
 // path, spawning a fresh agent beside twenty parked ones. daemon.FleetOnDisk reads the
 // park book, so the parked fleet is visible with nothing running.
 //
-// **The ordering has an observable consequence, and this comment used to deny
-// it.** It shipped saying the reversing mutation *"survives the suite"* -
-// reasoned from restoreParked running before the accept loop, so a forked daemon
-// would report the same rows. That reasoning holds only when the dial's outcome
-// is "no daemon". The outcome that matters is the other one: a daemon in
-// graceful shutdown holds its listener, connect() waits that out with **no
-// deadline by design**, and a dial-first version therefore cannot decide
-// anything at all until somebody else's shutdown finishes - while daemon.Status
-// bounds itself at statusTimeout and fleetToReopen answers from the disk in
-// three seconds. Asking first is what makes bare `wake` decidable inside ⌃Q's
-// own window, and
+// **The ordering has an observable consequence, and this comment used to deny it.**
+// It shipped saying the reversing mutation *"survives the suite"* - reasoned from
+// restoreParked (since removed) running before the accept loop, so a forked daemon
+// would report the same rows. That reasoning holds only when the dial's outcome is
+// "no daemon". The outcome that matters is the other one: a daemon in graceful
+// shutdown holds its listener, connect() waits that out with **no deadline by
+// design**, and a dial-first version therefore cannot decide anything at all until
+// somebody else's shutdown finishes - while daemon.Status bounds itself at
+// statusTimeout and fleetToReopen answers from the disk in three seconds. Asking
+// first is what makes bare `wake` decidable inside ⌃Q's own window, and
 // TestBareWakeFindsTheParkedFleetWhileTheDaemonIsStillShuttingDown kills the
 // mutation on the deadline rather than on the answer.
 
@@ -132,10 +131,12 @@ func reopensRoom(st rpc.Status) bool { return hasFleet(st) || len(st.Parked) > 0
 //
 // # What this costs when it is wrong
 //
-// Nothing that lasts. A stale book names sessions the daemon `connect` forks
-// will restore anyway - restoreParked reads the same file - so the room opens on
-// exactly the rows the report will carry. The one thing it must not do is start
-// anything, and it does not: this decides a branch and dials nothing.
+// Nothing that lasts. The room over a book is empty - the daemon `connect` forks
+// restores nothing from it, and `/resume` offers what parkedStatuses keeps - so a
+// wrong "reopen" costs an empty room and a wrong "first run" one extra agent. A
+// record with no transcript is dropped there and never reaches this branch. The
+// one thing it must not do is start anything, and it does not: this decides a
+// branch and dials nothing.
 //
 // Split out of openRoom because it is the whole of the decision and the rest of
 // that function opens a terminal: this is the only part of the branch a test can
@@ -155,9 +156,10 @@ func fleetToReopen(socket string) rpc.Status {
 // state rather than "is this row interesting". Three answers, and each is about
 // what survives into that daemon:
 //
-//   - **Parked counts.** restoreParked reads the book into s.agents before the
-//     accept loop, so a parked row is there in the first report the room is
-//     handed. It is also the whole reason this branch cannot be "is a daemon
+//   - **Parked counts.** A row parked with ⌃C stays in the running daemon's
+//     s.agents, so it is in the first report the room is handed; a book record
+//     parkedStatuses keeps arrives on Status.Parked instead, which reopensRoom
+//     counts. It is also the whole reason this branch cannot be "is a daemon
 //     running": a fleet parked by ⌃Q has none.
 //
 //   - **Ended does not.** A status report carries recent endings so a client can
@@ -169,7 +171,7 @@ func fleetToReopen(socket string) rpc.Status {
 //     every other reader is behind resolveSession, which refuses a report whose
 //     Running is false, and daemon.FleetOnDisk is the only writer of the state. An
 //     orphan is a live process a dead daemon left behind - and Serve runs
-//     reapOrphans *before* restoreParked and before it accepts anything, so the
+//     reapOrphans before it accepts anything, so the
 //     daemon connect() is about to fork ends exactly those processes on its way
 //     up. Counting them would open the room on rows that are being killed as it
 //     draws, which is the empty room the first-run case exists to prevent,
