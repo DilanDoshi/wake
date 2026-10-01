@@ -37,7 +37,10 @@ var testParentLeaseRead *os.File
 // surfaces as "the daemon never started listening" with no explanation
 // anywhere.
 func TestMain(m *testing.M) {
-	if len(os.Args) > 1 && os.Args[1] == cmdDaemon {
+	// And `wake mcp`, which an in-process daemon's manager self-test runs this
+	// binary as. Not when run as the fake claude, whose `claude mcp login` is
+	// fakeClaudeMCP's; core execs claude with Args[0] "claude", never inherited.
+	if len(os.Args) > 1 && (os.Args[1] == cmdDaemon || os.Args[1] == cmdMCP && filepath.Base(os.Args[0]) != "claude") {
 		if err := run(os.Args[1:], os.Stdout); err != nil {
 			fmt.Fprintln(os.Stderr, "wake:", err)
 			os.Exit(1)

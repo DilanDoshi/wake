@@ -60,16 +60,78 @@ func TestAnEmailCopiesAsParagraphsAndItems(t *testing.T) {
 	}
 }
 
+// A paragraph glamour wraps so a row opens `2. Then` copies back as the one
+// sentence it is: the row is not an item, so it is a wrap like any other.
+func TestAParagraphWhoseWrapOpensAnEnumeratorCopiesWhole(t *testing.T) {
+	hit := false
+	for width := 40; width <= 80; width++ {
+		hit = hit || glamourOpens(t, stepTwo, width, "2. ")
+		if got := unwrapped(Markdown(stepTwo, width)); got != stepTwo {
+			t.Errorf("width %d: copy is\n%q\nwant\n%q", width, got, stepTwo)
+		}
+	}
+	if !hit {
+		t.Fatal("glamour wrapped no row to open `2. ` at any width: this asserts nothing")
+	}
+}
+
+// A styled span glamour breaks at its own hyphens comes back whole, drawn and
+// copied: the join reads the rows' text, not the escapes after a trailing `-`.
+// The copy is held where the span fits a row; narrower, the reflow cuts it
+// mid-token, and no copy can tell that cut from a space.
+func TestAHyphenatedSpanRejoinsWithoutASpace(t *testing.T) {
+	const token = "--resume-session-token-value,"
+	const src = "- an item that names a flag long enough to wrap, `--resume-session-token-value`, and more words"
+	const want = "• an item that names a flag long enough to wrap, " + token + " and more words"
+	for width := minMarkdownWidth; width <= 80; width++ {
+		out := Markdown(src, width)
+		for _, row := range strings.Split(ansi.Strip(out), "\n") {
+			// A hyphen then a space mid-row, after a letter or a hyphen, is a join.
+			row = strings.TrimRight(row, " ")
+			if at := strings.Index(row, "- "); at > 0 && row[at-1] != ' ' && row[at-1] != ',' {
+				t.Errorf("width %d: a space was joined into the span: %q", width, row)
+			}
+		}
+		if hang := 4; width-int(defaultMargin)-hang >= len(token) {
+			if got := unwrapped(out); got != want {
+				t.Errorf("width %d: copy is\n%q\nwant\n%q", width, got, want)
+			}
+		}
+	}
+}
+
+// An item's wrap that glamour opens with a styled span copies back into the
+// item, and prose that only reads like a marker copies back as the one line it is.
+func TestAStyledWrapAndALookalikeMarkerCopyWhole(t *testing.T) {
+	for _, tc := range []struct{ src, want string }{
+		{styledWrap("-", "**bold words**"), "• an item whose text is long enough to wrap so that a later row can open with bold words and then keep going for a while longer"},
+		{styledWrap("-", "`inline code`"), "• an item whose text is long enough to wrap so that a later row can open with inline code and then keep going for a while longer"},
+		{"1\\. an escaped enumerator opening a paragraph long enough to wrap onto a second visual line here",
+			"1. an escaped enumerator opening a paragraph long enough to wrap onto a second visual line here"},
+	} {
+		for width := 30; width <= 90; width++ {
+			if got := unwrapped(Markdown(tc.src, width)); got != tc.want {
+				t.Errorf("width %d: copy is\n%q\nwant\n%q", width, got, tc.want)
+			}
+		}
+	}
+}
+
 // A nested item and an enumerated one are items of their own - a new marker
-// ends the item above - and a nested one keeps its depth under the margin.
+// ends the item above - and a nested one keeps its depth under the margin. An
+// enumerated or task item's wrap hangs past its marker, and rejoins from there.
 func TestAListItemRejoinsItsHangButNotTheNextItem(t *testing.T) {
 	src := "- First, the budget numbers need a second look before Friday afternoon.\n" +
-		"  - nested item here\n\n1. an enumerated item that is long enough to wrap onto a second row"
+		"  - nested item here\n\n1. an enumerated item that is long enough to wrap onto a second row\n\n" +
+		"- [ ] a task item that is long enough to wrap onto a second row here\n\n" +
+		"10. a two-digit one that is long enough to wrap onto a second row too"
 	got := unwrapped(Markdown(src, 40))
 	for _, line := range []string{
 		"• First, the budget numbers need a second look before Friday afternoon.",
 		"  • nested item here",
 		"1. an enumerated item that is long enough to wrap onto a second row",
+		"10. a two-digit one that is long enough to wrap onto a second row too",
+		"[ ] a task item that is long enough to wrap onto a second row here",
 	} {
 		if !strings.Contains(got, line+"\n") && !strings.HasSuffix(got, line) {
 			t.Errorf("copy lacks the line %q:\n%s", line, got)

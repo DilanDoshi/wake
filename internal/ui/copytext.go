@@ -20,7 +20,7 @@ type rejoin int
 const (
 	rowsAsDrawn  rejoin = iota // every row break is kept
 	markdownRows               // render.Markdown drew them
-	typedRows                  // shadedOwn drew the operator's text
+	typedRows                  // shadedOwn or localReplyBlock drew a known text
 )
 
 // textRows is one block in transcript.texts: where it ends, and how it rejoins.
@@ -36,6 +36,8 @@ func copiedAs(ev core.Event) (rejoin, string) {
 	switch {
 	case ev.Subagent != nil:
 		return rowsAsDrawn, ""
+	case drawnAsLines(ev):
+		return typedRows, ev.Text
 	case ev.Kind == core.KindAssistantText, ev.Kind == core.KindUserText && ev.Echoed:
 		return markdownRows, ""
 	case ev.Kind == core.KindUserText:
@@ -89,11 +91,11 @@ func clipped(rows []string, width int) bool {
 	return false
 }
 
-// typedRejoins matches the rows shadedOwn drew back to the text they came from:
-// each row follows exactly the whitespace its wrap consumed, a typed newline
-// included. Rows before the first that opens the text (the DM's "you" label)
-// are kept as drawn. nil when the rows do not match - the copy then keeps every
-// row break, which is never worse than what was drawn.
+// typedRejoins matches the rows shadedOwn or localReplyBlock drew back to the
+// text they came from: each row follows exactly the whitespace its wrap
+// consumed, a typed newline included. Rows before the first that opens the text
+// (the DM's "you" label) are kept as drawn. nil when the rows do not match - the
+// copy then keeps every row break, which is never worse than what was drawn.
 func typedRejoins(rows []string, typed string) []render.Rejoin {
 	src := strings.TrimSpace(typed)
 	out := make([]render.Rejoin, len(rows))

@@ -340,7 +340,11 @@ func TestAnOrdinaryAgentIsStillForkableWithTheManagerRunning(t *testing.T) {
 // message and interrupt every agent on the machine.
 func TestTheMCPConfigNamesThisBinaryAndThisSocket(t *testing.T) {
 	socket := tempSocket(t)
-	path, err := writeMCPConfig(socket)
+	srv, err := managerMCPServer(socket)
+	if err != nil {
+		t.Fatalf("managerMCPServer: %v", err)
+	}
+	path, err := writeMCPConfig(socket, srv)
 	if err != nil {
 		t.Fatalf("writeMCPConfig: %v", err)
 	}

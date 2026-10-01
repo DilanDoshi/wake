@@ -20,6 +20,22 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
+// `wake manager` against a real daemon starts a manager whose tools pass the
+// daemon's self-test, which runs this binary as `wake mcp` - through TestMain's
+// intercept here, and not as the fake claude the agents are.
+func TestTheManagerVerbStartsAManagerWhoseToolsPassTheirSelfTest(t *testing.T) {
+	withScriptedAgent(t, "")
+	d := startRealDaemon(t)
+
+	var out bytes.Buffer
+	if err := startManager(d.socket, spawnOpts{}, &out); err != nil {
+		t.Fatalf("`wake manager` against a real daemon was refused: %v", err)
+	}
+	if !strings.Contains(out.String(), managerStarted) {
+		t.Errorf("`wake manager` said %q, want %q", out.String(), managerStarted)
+	}
+}
+
 // The frame is a spawn carrying the manager role and no name.
 //
 // No name because there is nothing for a client to choose: the daemon owns the

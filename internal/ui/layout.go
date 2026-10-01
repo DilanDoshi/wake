@@ -389,13 +389,26 @@ func (l Layout) DragDivider(r Regions, at, x int) Layout {
 	left := clamp(x-edgeOf(r, at), minPaneWidth, space-minPaneWidth)
 
 	// The pair's combined weight is preserved, so the columns beyond them keep
-	// the share they had.
+	// the share they had. The split is solved against the running total share
+	// rounds each edge on - over every drawn column, not the pair alone - so the
+	// divider lands on x rather than a cell off it among three or more columns.
 	pair := l.weight(at) + l.weight(at+1)
 	w := make([]float64, max(len(l.Weights), at+2))
 	for i := range w {
 		w[i] = l.weight(i)
 	}
-	w[at] = pair * float64(left) / float64(space)
+	var total, before float64
+	drawn, edge := 0, 0
+	for i, c := range r.Cols {
+		if c == 0 {
+			continue
+		}
+		total, drawn = total+l.weight(i), drawn+c
+		if i < at {
+			before, edge = before+l.weight(i), edge+c
+		}
+	}
+	w[at] = float64(edge+left)*total/float64(drawn) - before
 	w[at+1] = pair - w[at]
 	l.Weights = w
 	return l

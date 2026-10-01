@@ -80,22 +80,281 @@ func TestNestedListItemContinuationHangsUnderItsText(t *testing.T) {
 	}
 }
 
-// TestOrderedListContinuationIsLeftAtGlamoursMargin pins the deferral: an
-// enumeration's continuation is NOT hang-indented, because glamour wraps ordered
-// text a cell or two wider than the enumerator, so a pure post-indent would
-// overrun width. It stays at glamour's margin (unchanged) rather than overflow.
-// See docs/notes/deferred.md.
-func TestOrderedListContinuationIsLeftAtGlamoursMargin(t *testing.T) {
-	const src = "1. First numbered item that is also long enough to wrap onto a " +
-		"second visual line to reveal the hanging indent for enumerations"
-	lines := nonBlank(Markdown(src, 56))
-	if len(lines) < 2 {
-		t.Fatalf("ordered item did not wrap:\n%s", strings.Join(lines, "\n"))
+// TestOrderedListContinuationHangsUnderItsText is the enumerator's version of
+// the bullet fix: a wrapped `N. ` item's continuation hangs under the item text,
+// at the column the enumerator ends - wider for a wider number, and deeper for a
+// nested list.
+func TestOrderedListContinuationHangsUnderItsText(t *testing.T) {
+	for _, tc := range []struct {
+		name, src, marker string
+		lead              int
+	}{
+		{"one digit", "1. First numbered item that is also long enough to wrap onto a " +
+			"second visual line to reveal the hanging indent for enumerations", "1. ", 2},
+		{"two digits", "9. nine\n10. tenth item padded out so the marker is three digits " +
+			"wide and still wraps onto a second visual line here", "10. ", 2},
+		{"nested", "1. outer\n   1. nested ordered item long enough to wrap onto a " +
+			"second visual line here for certain now", "1. ", 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			assertHangsUnder(t, nonBlank(Markdown(tc.src, 56)), tc.marker, tc.lead)
+		})
 	}
-	for i, line := range lines[1:] {
-		if got := leadingCols(line); got != 2 {
-			t.Errorf("ordered continuation line %d has lead %d, want 2 (unchanged): %q",
-				i+1, got, ansi.Strip(line))
+}
+
+// TestAListRightAfterAHeadingOrAFenceHangs pins what the item rule rests on: a
+// list that opens straight after a heading or a closing fence, with no blank line
+// in the source, still starts after a row reflow cannot touch (glamour's own
+// blank, or the styled row itself), so its first item is an item and hangs - at
+// the widths the prose case splits on and around them.
+func TestAListRightAfterAHeadingOrAFenceHangs(t *testing.T) {
+	const item = "1. an ordered item right under it that is long enough to wrap onto a second visual line here"
+	for _, src := range []string{"# A heading\n" + item, "```\ncode\n```\n" + item} {
+		for width := 40; width <= 80; width++ {
+			assertHangsUnder(t, nonBlank(Markdown(src, width)), "1. ", 2)
+		}
+	}
+}
+
+// stepTwo is a sentence glamour wraps, at some widths, so a row opens `2. Then`
+// - an enumerator on its own, and neither an item nor a place to split.
+const stepTwo = "Upgrade the service to the newest release in step 2. Then restart it and check that every worker comes back up healthy again"
+
+// glamourOpens reports whether glamour's own layout of src at width has a row
+// whose text opens with prefix, so a test about that row is not vacuous.
+func glamourOpens(t *testing.T, src string, width int, prefix string) bool {
+	t.Helper()
+	r, err := rendererFor(width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := lockAndRender(r, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range nonBlank(raw) {
+		if strings.HasPrefix(strings.TrimLeft(ansi.Strip(line), " "), prefix) {
+			return true
+		}
+	}
+	return false
+}
+
+// TestABulletWhoseWrapOpensAnEnumeratorStaysOneItem is the list half of the
+// `2. Then` row: glamour lays a bullet's wrap at the list margin, so a row of it
+// opening `2. ` reads as an ordered item. It is not one - a new list starts only
+// after a blank row, and a bullet's list holds no enumerator - so the whole item
+// hangs under its text.
+func TestABulletWhoseWrapOpensAnEnumeratorStaysOneItem(t *testing.T) {
+	src := "- " + stepTwo
+	hit := false
+	for width := 40; width <= 80; width++ {
+		hit = hit || glamourOpens(t, src, width, "2. ")
+		assertHangsUnder(t, nonBlank(Markdown(src, width)), bullet, 2)
+	}
+	if !hit {
+		t.Fatal("glamour wrapped no row of the bullet to open `2. ` at any width: this asserts nothing")
+	}
+}
+
+// glamourLeadsStyled reports whether glamour opens a row of src at width with
+// styling - a wrap that lands on a bold, code or link span - so a test about that
+// row is not vacuous.
+func glamourLeadsStyled(t *testing.T, src string, width int) bool {
+	t.Helper()
+	r, err := rendererFor(width)
+	if err != nil {
+		t.Fatal(err)
+	}
+	raw, err := lockAndRender(r, src)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, line := range nonBlank(stylingOnly(raw)) {
+		if line[0] != ' ' {
+			return true
+		}
+	}
+	return false
+}
+
+// styledWrap is an item whose wrap lands, at some widths, on a styled span, which
+// glamour leads its row with empty styling for - so the row is not reflowable
+// prose by its first byte, and hung nothing (nor did the rows after it).
+func styledWrap(marker, span string) string {
+	return marker + " an item whose text is long enough to wrap so that a later row can open with " +
+		span + " and then keep going for a while longer"
+}
+
+// TestAnItemWhoseWrapOpensWithAStyledSpanStillHangs: the row glamour leads with a
+// bold, code or link span belongs to the item, and so does everything after it.
+func TestAnItemWhoseWrapOpensWithAStyledSpanStillHangs(t *testing.T) {
+	for _, span := range []string{"**bold words**", "`inline code`", "[a link](https://x.io)"} {
+		for _, list := range []struct{ source, marker string }{{"-", bullet}, {"1.", "1. "}} {
+			src, hit := styledWrap(list.source, span), false
+			for width := 30; width <= 90; width++ {
+				hit = hit || glamourLeadsStyled(t, src, width)
+				assertHangsUnder(t, nonBlank(Markdown(src, width)), list.marker, 2)
+			}
+			if !hit {
+				t.Errorf("%s %s: glamour led no row with styling at any width: this asserts nothing", list.source, span)
+			}
+		}
+	}
+}
+
+// TestCodeInsideAnItemKeepsItsLead is the guard on that: a fence inside an item
+// is drawn straight under the item's row with no blank between, but two columns
+// deeper, so it is never taken for the item's styled wrap.
+func TestCodeInsideAnItemKeepsItsLead(t *testing.T) {
+	const src = "- an item long enough to wrap onto a second visual line here for sure now\n  ```\n  code in the item\n  ```"
+	for width := 30; width <= 80; width++ {
+		for _, line := range nonBlank(Markdown(src, width)) {
+			if strings.Contains(ansi.Strip(line), "code in the item") && leadingCols(line) != 4 {
+				t.Errorf("width %d: the item's code moved to lead %d, want 4: %q", width, leadingCols(line), ansi.Strip(line))
+			}
+		}
+	}
+}
+
+// endsStyled reports whether a row leaves an SGR style on at its end, read
+// independently of the renderer's own bookkeeping.
+func endsStyled(row string) bool {
+	on := false
+	for i := 0; i < len(row); i++ {
+		if row[i] != 0x1b || i+1 >= len(row) || row[i+1] != '[' {
+			continue
+		}
+		j := strings.IndexByte(row[i:], 'm')
+		if j < 0 {
+			break
+		}
+		code := row[i+2 : i+j]
+		on = code != "0" && code != ""
+		i += j
+	}
+	return on
+}
+
+// TestNoRowLeavesAStyleOpen: a wrap inside a styled span - the reflow's, or
+// fitToWidth's hard wrap of a row glamour could not break - used to end the row
+// with the span's style still on, and Wake draws a divider and another pane on
+// the rest of that terminal row, which inherited it.
+func TestNoRowLeavesAStyleOpen(t *testing.T) {
+	for _, src := range []string{
+		"- x `abcdefghijklmnopq`",
+		"- x `abcdefghijklmnopq` and some words after it that wrap too",
+		"a paragraph `abcdefghijklmnopqrstuvwxyzabcdefghij` long code with no break",
+		"- **abcdefghijklmnopqrstuvwxyz** bold run with no break",
+		styledWrap("1.", "[a link](https://x.io)"),
+	} {
+		for width := minMarkdownWidth; width <= 80; width++ {
+			for i, row := range strings.Split(Markdown(src, width), "\n") {
+				if endsStyled(row) {
+					t.Errorf("width %d: row %d of %q ends with a style on: %q", width, i, src, row)
+				}
+			}
+		}
+	}
+}
+
+// TestASpanCutAcrossRowsIsStyledOnEach: closing the style at a row's end is half
+// of it - the span's rest, on the next row, is drawn in it too. The span is
+// digits, which nothing else in the source is.
+func TestASpanCutAcrossRowsIsStyledOnEach(t *testing.T) {
+	for _, src := range []string{
+		"a paragraph `0123456789012345678901234567890123456789` long code with no break",
+		"- x `012345678901234567890123`",
+	} {
+		for width := minMarkdownWidth; width <= 80; width++ {
+			for i, row := range strings.Split(Markdown(src, width), "\n") {
+				if d := unstyledDigit(row); d >= 0 {
+					t.Errorf("width %d: row %d of %q draws the span's digit at byte %d unstyled: %q", width, i, src, d, row)
+				}
+			}
+		}
+	}
+}
+
+// unstyledDigit is the byte offset of the first digit a row draws with no style
+// on, or -1.
+func unstyledDigit(row string) int {
+	on := false
+	for i := 0; i < len(row); i++ {
+		if row[i] == 0x1b {
+			j := strings.IndexByte(row[i:], 'm')
+			if j < 0 {
+				return -1
+			}
+			code := row[i+2 : i+j]
+			on = code != "0" && code != ""
+			i += j
+			continue
+		}
+		if row[i] >= '0' && row[i] <= '9' && !on {
+			return i
+		}
+	}
+	return -1
+}
+
+// TestNoTagSurvivesTheRender holds the tag scheme to its promise: itemTag and
+// headingTag are read by reflowProse and gone from everything Markdown returns.
+func TestNoTagSurvivesTheRender(t *testing.T) {
+	for _, src := range []string{
+		"1. one\n2. two that wraps onto a second visual line at narrow widths here",
+		"- [ ] a task\n- [x] a done task that wraps onto a second visual line here",
+		"# A heading\n\n## Another that wraps onto a second visual line at narrow widths",
+		"- intro\n  # A nested heading",
+		"> - [ ] a quoted task\n> 1. and a quoted enumerator",
+		"| a | b |\n|---|---|\n| 1. x | [ ] y |",
+		"```\n1. code\n- [ ] code\n```",
+	} {
+		for width := minMarkdownWidth; width <= 80; width++ {
+			if out := Markdown(src, width); strings.Contains(out, "\x1b[59") {
+				t.Errorf("width %d: a tag survived rendering %q: %q", width, src, out)
+			}
+		}
+	}
+}
+
+// TestAHeadingInsideAnItemStaysAHeading is the limit on taking a styled row
+// back into an item: glamour draws a heading nested in an item straight under
+// it, led with the same empty styling a styled wrap is, but it is a block of its
+// own - which the style marks (headingTag) - and never the item's prose.
+func TestAHeadingInsideAnItemStaysAHeading(t *testing.T) {
+	for _, src := range []string{
+		"- intro\n  # Important",
+		"- intro\n  # Important and long enough to wrap onto a second row at narrow widths",
+	} {
+		for width := minMarkdownWidth; width <= 80; width++ {
+			for _, line := range nonBlank(Markdown(src, width)) {
+				if plain := ansi.Strip(line); strings.Contains(plain, "Important") && strings.Contains(plain, "intro") {
+					t.Errorf("width %d: the nested heading was folded into the item's text: %q", width, plain)
+				}
+			}
+		}
+	}
+}
+
+// assertHangsUnder finds the item opening with marker at lead and checks every
+// continuation of it sits under its text, the column the marker ends.
+func assertHangsUnder(t *testing.T, lines []string, marker string, lead int) {
+	t.Helper()
+	at := -1
+	for i, line := range lines {
+		if leadingCols(line) == lead && strings.HasPrefix(strings.TrimLeft(ansi.Strip(line), " "), marker) {
+			at = i
+		}
+	}
+	if at < 0 || at+1 >= len(lines) {
+		t.Fatalf("no wrapped item opening %q at lead %d:\n%s", marker, lead, strings.Join(lines, "\n"))
+	}
+	hang := lead + ansi.StringWidth(marker)
+	for i := at + 1; i < len(lines); i++ {
+		if got := leadingCols(lines[i]); got != hang {
+			t.Errorf("continuation %d of %q has lead %d, want %d (hung under the item text): %q",
+				i-at, marker, got, hang, ansi.Strip(lines[i]))
 		}
 	}
 }
@@ -128,16 +387,22 @@ func TestHangIndentNeverReindentsCode(t *testing.T) {
 	}
 }
 
-// TestHangIndentKeepsEveryListLineWithinWidth is the adversarial guard: the
-// shift reclaims trailing padding, so no continuation may grow past the width the
-// render was built for — checked down to a width where the marker and its hang
-// eat most of the line, across deep nesting and ordered lists.
+// TestHangIndentKeepsEveryListLineWithinWidth is the adversarial guard: an item
+// is re-wrapped at the hang, so no row it lays out may grow past the layout glamour
+// gives a paragraph - the width less its far margin - checked down to a width where the
+// marker and its hang eat most of the line, across deep nesting, wide
+// enumerators and task boxes. The hang used to be a shift applied after glamour's
+// wrap, which spent that margin and at width 56 drew a bullet's continuation 55
+// cells wide.
 func TestHangIndentKeepsEveryListLineWithinWidth(t *testing.T) {
 	sources := []string{
 		"- one item long enough to wrap several times over so the continuation is exercised at every width here now indeed",
 		"- outer\n  - nested and long enough to wrap onto more than one visual line for sure absolutely here\n    - deeper still and also long enough to wrap around at least once here now",
 		"1. first ordered item long enough to wrap onto a second and maybe a third visual line at narrow widths here\n2. second\n10. tenth item padded out so the marker is three digits wide and still wraps here now indeed",
 		"- \n- non-empty item that wraps onto a second visual line here for certain now absolutely indeed yes",
+		"- [ ] a task item long enough to wrap onto a second and maybe a third visual line at narrow widths\n- [x] and a ticked one that wraps as well here now",
+		"99. a two-digit enumerator\n100. and a three-digit one long enough to wrap onto a second visual line at any width here",
+		"- bullet item text long enough so that the next word lands at the start `inline code` and more words after it to wrap",
 		// Unbreakable tokens: glamour cannot wrap these, so the shift overruns
 		// width and fitToWidth must re-wrap them — the fitToWidth-hardwrap path
 		// the padding-reclaim assumption does not cover.
@@ -148,29 +413,58 @@ func TestHangIndentKeepsEveryListLineWithinWidth(t *testing.T) {
 	for _, src := range sources {
 		for width := minMarkdownWidth; width <= 80; width++ {
 			for i, line := range strings.Split(Markdown(src, width), "\n") {
-				if got := ansi.StringWidth(line); got > width {
-					t.Errorf("width %d: line %d is %d cells wide: %q",
-						width, i, got, ansi.Strip(line))
+				// A styled token glamour could not wrap (the link) is never reflowed:
+				// fitToWidth hard-wraps it, and width is its only bound.
+				bound := width
+				if reflowable(line) {
+					bound -= int(defaultMargin)
+				}
+				if got := ansi.StringWidth(line); got > bound {
+					t.Errorf("width %d: line %d is %d cells wide, past %d: %q", width, i, got, bound, ansi.Strip(line))
 				}
 			}
 		}
 	}
 }
 
-// TestHangIndentLeavesNonListRendersUnchanged proves the pass is invisible to
-// everything that is not a wrapped list: it must be a byte-for-byte no-op there.
-func TestHangIndentLeavesNonListRendersUnchanged(t *testing.T) {
+// TestTheHangLeavesNonListRowsWhereGlamourLaysThem holds the hang to lists: in a
+// render with no list in it, every row sits at a lead glamour itself laid a row
+// at, so nothing was hung. The prose case is the adversarial one - at widths 53-55
+// glamour wraps it so a row opens `2. Then`, which reads as an enumerator on its
+// own and must not hang the row under it: a real item follows a blank row, a
+// change of indent, or another item.
+func TestTheHangLeavesNonListRowsWhereGlamourLaysThem(t *testing.T) {
 	for _, src := range []string{
 		"A plain paragraph that is long enough to wrap onto a second visual line at this width here now.",
+		stepTwo,
+		// Prose that reads like a marker on the page: glamour draws these the same
+		// bytes a real item's marker is, so only the tag tells them apart.
+		"1\\. an escaped enumerator opening a paragraph long enough to wrap onto a second visual line here",
+		"[ ] a literal box opening a paragraph long enough to wrap onto a second visual line here for sure",
+		"1234567890. a ten-digit number opening a paragraph long enough to wrap onto a second line here",
 		"# Heading\n\nbody text that wraps onto a second visual line here for certain now absolutely indeed",
 		"```go\nfunc main() { println(1) }\nvar x = averylongidentifierthatwrapsaround\n```",
 		"> a quoted line long enough to wrap onto a second visual line here for sure now indeed absolutely",
 		"| col a | col b |\n|---|---|\n| 1 | 2 |",
 	} {
-		for _, width := range []int{40, 56, 80} {
-			out := Markdown(src, width)
-			if got := hangIndentLists(out); got != out {
-				t.Errorf("width %d: hangIndentLists changed a non-list render:\n%q\nwant\n%q", width, got, out)
+		for width := 40; width <= 80; width++ {
+			r, err := rendererFor(width)
+			if err != nil {
+				t.Fatal(err)
+			}
+			raw, err := lockAndRender(r, src)
+			if err != nil {
+				t.Fatal(err)
+			}
+			laid := map[int]bool{}
+			for _, line := range nonBlank(raw) {
+				laid[leadingCols(line)] = true
+			}
+			for _, line := range nonBlank(Markdown(src, width)) {
+				if !laid[leadingCols(line)] {
+					t.Errorf("width %d: a row of a non-list render was moved to lead %d: %q",
+						width, leadingCols(line), ansi.Strip(line))
+				}
 			}
 		}
 	}
@@ -196,22 +490,18 @@ func TestCodeLineThatLooksLikeABulletIsNotAMarker(t *testing.T) {
 	}
 }
 
-// TestTaskListContinuationIsLeftAtGlamoursMargin pins the task-list deferral:
-// glamour renders a checkbox item as `[ ] text` (the Task style replaces the
-// bullet rather than prepending it), so bulletMarker never fires and the
-// continuation stays at glamour's margin — a safe no-op, like ordered lists.
-func TestTaskListContinuationIsLeftAtGlamoursMargin(t *testing.T) {
-	const src = "- [ ] a task item that is long enough to wrap onto a second " +
-		"visual line here for sure now indeed absolutely yes"
-	lines := nonBlank(Markdown(src, 56))
-	if len(lines) < 2 {
-		t.Fatalf("task item did not wrap:\n%s", strings.Join(lines, "\n"))
-	}
-	for i, line := range lines[1:] {
-		if got := leadingCols(line); got != 2 {
-			t.Errorf("task continuation line %d has lead %d, want 2 (unchanged): %q",
-				i+1, got, ansi.Strip(line))
+// TestTaskListContinuationHangsUnderItsText is the same for a checkbox item:
+// glamour's Task style draws `[ ] text` in the bullet's place, and the wrap hangs
+// under the text after the box, ticked or not.
+func TestTaskListContinuationHangsUnderItsText(t *testing.T) {
+	for _, box := range []string{"[ ]", "[x]"} {
+		src := "- " + box + " a task item that is long enough to wrap onto a second " +
+			"visual line here for sure now indeed absolutely yes"
+		marker := unticked
+		if box == "[x]" {
+			marker = ticked
 		}
+		t.Run(box, func(t *testing.T) { assertHangsUnder(t, nonBlank(Markdown(src, 56)), marker, 2) })
 	}
 }
 

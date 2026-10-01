@@ -35,7 +35,7 @@ func (d DM) clearedBySessionReset() DM {
 	// so it goes too - renderTranscript below reads it, and /clear must blank the
 	// pane rather than redraw the pre-clear room turns. See roomseed.go.
 	d.seed = nil
-	d.tr = d.tr.replace(renderTranscript(d)).toBottom()
+	d.tr = d.rewrapped().toBottom()
 	return d.resettleBoard()
 }
 

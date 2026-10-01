@@ -17,7 +17,6 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
-	"github.com/DilanDoshi/wake/internal/render"
 )
 
 const (
@@ -199,7 +198,7 @@ func roomBlock(ev core.Event, a, to Agent, width int, expanded bool) block {
 // never put through it twice.
 func agentSaid(text string, count int, a Agent, width int, expanded bool) string {
 	head := speakerStyle(a).MaxWidth(width).Render(speaker(a))
-	return saidBlock(head, render.Markdown(strings.TrimSpace(text), width), tokenLabel(count), width, expanded)
+	return saidBlock(head, renderMarkdown(strings.TrimSpace(text), width), tokenLabel(count), width, expanded)
 }
 
 // crossSaid draws a peer's cross-session message: the sender's name-tag with a
@@ -242,7 +241,7 @@ func roomCollapsible(ev core.Event, width int) bool {
 	w := max(width, minBlockWidth)
 	switch ev.Kind {
 	case core.KindAssistantText:
-		return renderedRows(render.Markdown(strings.TrimSpace(ev.Text), w)) > roomInlineRows
+		return renderedRows(renderMarkdown(strings.TrimSpace(ev.Text), w)) > roomInlineRows
 	case core.KindCrossSession:
 		// The same Muted body crossSaid draws, so the two agree on which
 		// peer messages fold to a pointer.
