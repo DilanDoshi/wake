@@ -59,7 +59,7 @@ the ruling is reversed for them and kept for everything else.
 
 **Markdown rows are classified, not flagged.** `render.Rejoins` reads rendered rows with
 `reflowProse`'s own predicates (`reflowable`, `leadSpaces`, `opensItem`, `hyphenJoin`) plus
-`hangIndentLists`' hang. Rows that pass grouped into one paragraph or list item are wraps by
+the hang it lays an item's wrap at. Rows that pass grouped into one paragraph or list item are wraps by
 construction — markdown renders a source newline as a space — so they rejoin with the space the
 wrap took, or nothing at a hyphen. Carrying a per-row flag out of the renderer was rejected: three
 wrap producers, a new return shape, and nothing the rows don't already say. The known miss is
@@ -225,7 +225,10 @@ against and which is fragile (later edits shift the lines). Owner chose to leave
 vocabulary, "Edit" is not wrong, and doing it right means verifying Claude Code's whole display
 mapping (Edit/Write/MultiEdit) against a recording rather than guessing.
 
-**`MultiEdit` gets none of this today, and that is a recorded gap rather than a decision.**
+**`MultiEdit` gets none of this, and since 2026-09-30 that is a decision rather than a gap:** no
+session in the verified range offers the tool (no `init` in `testdata/stream/`, 2.1.226-2.1.283,
+lists it, and no transcript on the owner's machine holds a call), so only a pre-2.x transcript read
+back through history can carry one, and it folds as below. See `deferred.md`. The original reasoning:
 `core.toolDiff` reads a *top-level* `old_string`/`new_string`, which `Edit` and `Update` carry;
 `MultiEdit` nests its hunks in an `edits` array and carries neither at the top level, so its `Diff`
 is nil, `foldExempt` is false, and a `MultiEdit` still folds into `1 tool use · 1 multiedit` — and

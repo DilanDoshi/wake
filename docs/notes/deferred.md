@@ -215,7 +215,25 @@ with:* factoring the clamp into one unstyled `transcript` method the other two c
 whether `pointIn` should read a freshly measured height the way `startSelection`'s own gate already
 does.
 
-## KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)
+## ~~KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)~~ CLOSED 2026-09-30 (`fix/render-list-hang-cache`)
+
+**Closed by the reflow the entry below names.** `reflowProse` now hangs every item itself: a group
+whose first row opens with a marker (`• `, `N. `, `[ ] `/`[✓] ` — `itemMarker`) wraps the text after
+the marker at the budget less the marker's width and lays its continuations under the text, so the
+hang costs no row its width. `hangIndentLists`/`hangIndent` are deleted; the shift they applied after
+glamour's wrap also spent glamour's far margin (a bullet continuation 55 cells wide in a 54-cell
+layout at width 56), which the tightened width sweep now forbids. Two things the rendered bytes alone
+could not say, settled at their source: an enumerator or task box is real only when glamour drew it
+for a list item, which the style marks with `itemTag` (an empty SGR, stripped after reflow), because
+`1\.`, a literal `[ ] ` and a ten-digit number render the same bytes as a real marker; and a row
+mid-group splits it only for an item of the group's own list (`startsItem`), because a wrap that
+opens `2. Then` is prose, or a bullet's text. Inside an item, the row glamour leads with a styled
+span's empty escapes is merged back into the item — a code block in an item sits deeper, and any
+other block is a blank row away — so bold, code and links at a wrap no longer drop the hang the old
+shift gave them — a heading nested in an item, drawn under it the same way, is refused by `headingTag`.
+`sealRows` closes a style a wrap broke a row inside (the reflow's, or `fitToWidth`'s hard wrap of a
+row glamour could not break, which `main` already did), so no row ends styled beside a divider. `rejoin.go` steps past the same markers so a copy rejoins the hang. The original entry is kept below.
+
 
 **Shipped:** `fix/markdown-list-hanging-indent` hang-indents a wrapped **bullet** item's
 continuation lines under the item text (`internal/render/markdown.go`, `hangIndentLists`), matching
@@ -338,7 +356,18 @@ someone picks this up.
 entry names). *Blocks:* nothing in the product — but it makes the project's **only gate** (`make ci`
 exit 0) unreliable on a loaded machine, which is why it is written down rather than left as folklore.
 
-## KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment
+## ~~KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment~~ CLOSED 2026-09-30 — nothing can deliver one
+
+**Closed without building, on evidence that no `MultiEdit` can arrive.** A guard's domain is what
+can arrive, and in the verified range nothing offers the tool: no `init` in `testdata/stream/`
+(133 of them, across ten versions from 2.1.226 to 2.1.283) lists `MultiEdit` among its tools, the
+installed claude is 2.1.285, and not one transcript under the owner's `~/.claude/projects` holds a
+`MultiEdit` call. A decode and a per-hunk draw for it would be code for a tool no session offers.
+**The one residual:** a pre-2.x transcript read back through history, `/resume` or import still
+decodes its `MultiEdit` calls, and they draw as any tool without a diff does — folded into
+`1 tool use · 1 multiedit`, with nothing behind the fold. If a later Claude Code offers the tool
+again, a recording earns the decode this entry describes. The original entry is kept below.
+
 
 `feat/dm-diff-rendering` made an `Edit`/`Update` draw its diff whole in the DM pane rather than fold
 into a `1 tool use · 1 edit` rollup (see `decisions.md`, 2026-08-28). It keys on `core.ToolDiff`,
@@ -1561,8 +1590,14 @@ None of these are wrong. All are unmeasured at the scale the product claims.
 
 - **One process-global mutex serializes rendering across every session** (`internal/render`).
   Correct; a cache miss blocks every other session. Never profiled under load.
-- **Unbounded renderer cache.** Dragging a terminal resize caches a `TermRenderer` plus its
-  parsed style config at every intermediate width, permanently.
+- ~~**Unbounded renderer cache.** Dragging a terminal resize caches a `TermRenderer` plus its
+  parsed style config at every intermediate width, permanently.~~ **CLOSED 2026-09-30
+  (`fix/render-list-hang-cache`):** `internal/render/renderercache.go` keeps the `CachedWidths` most
+  recently used widths (a renderer is ~36KB retained and ~10µs to build). The cap is derived, not
+  chosen: `internal/ui/renderwidths_test.go` measures the widths a 200-column frame renders at — six
+  columns at distinct widths and a plan card, the tiled board's tile width, one reserved for the copy
+  path — and fails if the constant disagrees. A wider terminal can draw more widths; a miss costs one
+  build per block rendered, and a block renders on an event or a re-wrap, never on a frame.
 - **A session that ends *cleanly* still leaks what it spawned.** **CLOSED 2026-08-24 — PR #103 (`fix/clean-exit-group-sweep`):** `retire`'s ordinary non-park branch now sweeps the group via `core.KillGroup(a.sess.Pgid())`; `completePark` is untouched so a parked session's children survive its wake. Follow-up (c) zombie-reap concurrent-`Wait` ordering **CLOSED 2026-08-25 — PR #112** (`fix/wedged-exit-selfdetect`): Wake owns the stdout pipe and `awaitExit` self-detects a leader that exited while a grandchild holds stdout, so a wedged session ends cleanly and `retire`'s sweep now reaches it too; (b) wedged-logger goroutine leak remains (the log-sink owner's, not a core group-kill). Both kill paths are failure
   paths. An agent that finishes normally after `npm run dev &` leaves the dev server behind.
   Policy belongs to the pool; the *mechanism* cannot — `cmd.Process.Pid` dies with `finish`, so

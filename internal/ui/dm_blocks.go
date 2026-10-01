@@ -319,7 +319,7 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		if drawnAsLines(ev) {
 			return localReplyBlock(ev.Text, w)
 		}
-		return render.Markdown(ev.Text, w)
+		return renderMarkdown(ev.Text, w)
 	case core.KindCrossSession:
 		return crossSessionBlock(ev, w)
 	case core.KindUserText:
@@ -484,9 +484,9 @@ func userBlock(ev core.Event, width int) string {
 	}
 	switch {
 	case ev.Subagent != nil:
-		return joinBlock(mutedLine(promptLabel, width), render.Markdown(ev.Text, width))
+		return joinBlock(mutedLine(promptLabel, width), renderMarkdown(ev.Text, width))
 	case ev.Echoed:
-		return joinBlock(mutedLine(echoedLabel, width), render.Markdown(ev.Text, width))
+		return joinBlock(mutedLine(echoedLabel, width), renderMarkdown(ev.Text, width))
 	case ev.FromRoom:
 		// Still your own words, so it keeps the accent and the shading rather
 		// than being muted like a replay. Only the head moves - the mention it
