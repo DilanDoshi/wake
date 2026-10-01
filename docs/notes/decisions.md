@@ -30,6 +30,47 @@ spans are taken at release, since `texts` is written in place as blocks land.
 
 ---
 
+## 2026-09-29 — the manager's tools self-test at launch; ordinary agents keep the operator's MCP servers
+
+**Ruling 1 — a manager whose `wake mcp` cannot answer is refused before claude starts.** Until
+now a `wake mcp` that could not serve this build's tools — above all a binary replaced by another
+build under a running daemon — produced a manager that started, then held the wrong tools or none
+and said so only in prose. (A binary that *moved* already failed the launch on unix, at the
+supervisor's exec of the same path, with a vaguer message; the self-test now names it first.)
+`managerConfig` now runs the exact command `mcp.json` names, writes `initialize` and `tools/list`,
+and refuses the launch unless it calls itself wake, offers tools, and lists exactly `mcp.Tools()`
+(`internal/daemon/mcpselftest.go`, client half `internal/mcp/selftest.go`).
+
+- **In the daemon, not in `wake manager`**, as deferred.md had costed it: `mcp.json` names the
+  *daemon's* executable, which a stale daemon makes different from the client's, and `launch` is the
+  one door every spawn, `/manager`, the room's default seat and a wake from park go through. The
+  case it catches best is `wake upgrade` under a running daemon followed by `/manager` waking a
+  parked manager.
+- **Where the spawn runs, and bounded.** A plain spawn runs in line on the asking client's
+  dispatch goroutine, so a refusal stays enqueued ahead of any `FrameStatus` written behind it —
+  `cmd/wake`'s `act` reads that order as "taken". A `--worktree` spawn already runs on its own
+  goroutine for git, and the self-test with it; no status-as-ack client sends one for a manager
+  (`act` never spawns a manager, and `wake manager` waits on its own id — Codex pass 2). Holding a
+  dispatch is why its bound (`mcpSelfTestTimeout`) is load-bearing, with git's process group and
+  `WaitDelay`. It holds once the process exists; the exec itself is as unbounded as the
+  `StartObserved` every launch makes of the same binary right after (a stalled filesystem blocks
+  both — Codex pass 1, ruled pre-existing).
+- **Safe to run there** because internal/mcp answers these two requests without its Fleet: the
+  server never dials the socket, opens no client, and cannot move the daemon's client count.
+- **Tool names, not `serverInfo.version`**, which is a hand-kept `"0.2.0"` two builds share.
+- **What it does not prove:** that claude accepted the handshake. `live-testing.md` §13.1 stays the
+  gate for that half. Cost: one short process per manager launch, never on a timer.
+
+**Ruling 2 — ordinary agents get neither `--strict-mcp-config` nor `--tools`.** This was open in
+deferred.md as "unruled". The owner ruled it by building PR #127 (2026-09-27) on it: every agent's
+`initialize` handshake exists so a headless session loads the operator's claude.ai connectors, and
+`--strict-mcp-config` would exclude them. So an agent Wake spawns has the MCP servers and built-ins
+the same `claude` would have in the same directory; only the manager is bounded.
+`TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt` holds it. *Recorded as the owner's
+decision, not a new one — veto it in review if that reading is wrong.*
+
+---
+
 ## 2026-09-28 — a copy rejoins what the pane wrapped
 
 The owner copied an email out of chat history and pasted it with a hard line break at every wrap
@@ -40,7 +81,7 @@ the ruling is reversed for them and kept for everything else.
 
 **Markdown rows are classified, not flagged.** *(Superseded 2026-09-29, above.)* `render.Rejoins` reads rendered rows with
 `reflowProse`'s own predicates (`reflowable`, `leadSpaces`, `opensItem`, `hyphenJoin`) plus
-`hangIndentLists`' hang. Rows that pass grouped into one paragraph or list item are wraps by
+the hang it lays an item's wrap at. Rows that pass grouped into one paragraph or list item are wraps by
 construction — markdown renders a source newline as a space — so they rejoin with the space the
 wrap took, or nothing at a hyphen. Carrying a per-row flag out of the renderer was rejected: three
 wrap producers, a new return shape, and nothing the rows don't already say. The known miss is
@@ -206,7 +247,10 @@ against and which is fragile (later edits shift the lines). Owner chose to leave
 vocabulary, "Edit" is not wrong, and doing it right means verifying Claude Code's whole display
 mapping (Edit/Write/MultiEdit) against a recording rather than guessing.
 
-**`MultiEdit` gets none of this today, and that is a recorded gap rather than a decision.**
+**`MultiEdit` gets none of this, and since 2026-09-30 that is a decision rather than a gap:** no
+session in the verified range offers the tool (no `init` in `testdata/stream/`, 2.1.226-2.1.283,
+lists it, and no transcript on the owner's machine holds a call), so only a pre-2.x transcript read
+back through history can carry one, and it folds as below. See `deferred.md`. The original reasoning:
 `core.toolDiff` reads a *top-level* `old_string`/`new_string`, which `Edit` and `Update` carry;
 `MultiEdit` nests its hunks in an `edits` array and carries neither at the top level, so its `Diff`
 is nil, `foldExempt` is false, and a `MultiEdit` still folds into `1 tool use · 1 multiedit` — and

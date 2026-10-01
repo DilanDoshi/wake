@@ -49,8 +49,9 @@ func emitTaskStarted(sid, taskID, taskType, workflowName string) {
 
 const fakeScript = "phase('Probe')\n"
 
+// emitTaskEnded nests the status under patch, as every recorded task_updated does.
 func emitTaskEnded(sid, taskID string) {
-	fmt.Printf(`{"type":"system","subtype":"task_updated","session_id":%q,"task_id":%q,"status":"completed"}`+"\n",
+	fmt.Printf(`{"type":"system","subtype":"task_updated","session_id":%q,"task_id":%q,"patch":{"status":"completed"}}`+"\n",
 		sid, taskID)
 }
 
@@ -92,6 +93,23 @@ func TestStopRunReachesOnlyARunningWorkflow(t *testing.T) {
 	})
 	if !strings.Contains(got.Event.Text, `"task_id":"w1"`) {
 		t.Fatalf("stdin did not carry the stop_task request: %s", got.Event.Text)
+	}
+}
+
+// A stop that names no task is refused for that, not as a run with a blank id.
+func TestStopRunWithNoTaskIsRefusedForHavingNone(t *testing.T) {
+	fakeClaudeOnPath(t, "stoprun")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	c.awaitEvent(idAlpha, "ready")
+
+	for how, w := range map[string]*rpc.WorkflowFrame{"no payload": nil, "an empty task": {}} {
+		c.send(rpc.Frame{Kind: rpc.FrameStopRun, SessionID: idAlpha, Workflow: w})
+		got := c.await("the refusal of "+how, func(f rpc.Frame) bool { return f.Kind == rpc.FrameError })
+		if !strings.Contains(got.Text, "a workflow stop needs a task id") {
+			t.Errorf("a stop with %s was refused as %q, want it to say the task id is missing", how, got.Text)
+		}
 	}
 }
 

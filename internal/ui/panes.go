@@ -6,6 +6,7 @@ package ui
 
 import (
 	"maps"
+	"math"
 	"slices"
 
 	tea "github.com/charmbracelet/bubbletea"
@@ -21,11 +22,34 @@ import (
 // reason Fleet copies. It is the one write path into dms, so there is one place
 // for that to be true.
 func (a App) withDM(id string, dm DM) App {
+	was, held := a.dms[id]
 	next := make(map[string]*DM, len(a.dms)+1)
 	maps.Copy(next, a.dms)
 	next[id] = &dm
 	a.dms = next
+	// A reclaim takes the scrollback's oldest lines, and a highlight on them -
+	// the last of them now the reclaimed line's own - or, laying the rest out
+	// again, moves every line under one.
+	if held && dm.events.first() > was.events.first() {
+		first := dm.tr.lines.first()
+		if first == was.tr.lines.first() {
+			first = math.MaxInt
+		}
+		if onLinesBefore(a.sel, id, first) {
+			a.sel, a.selecting = selection{}, false
+		}
+		if onLinesBefore(a.clicks.kept, id, first) {
+			a.clicks.kept = selection{}
+		}
+	}
 	return a
+}
+
+// onLinesBefore reports whether s is a highlight in pane's transcript that
+// reaches a line before first.
+func onLinesBefore(s selection, pane string, first int) bool {
+	return s.pane == pane && !s.inComposer && !s.onScreen && !s.empty() &&
+		min(s.anchor.line, s.head.line) < first
 }
 
 const (

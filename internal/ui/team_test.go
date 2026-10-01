@@ -136,7 +136,7 @@ func TestATeamTargetCommandIsRefusedButClaudesOwnFansOut(t *testing.T) {
 				{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
 			}})
 	}
-	for _, draft := range []string{"@backend /color blue", "@backend /name x", "@backend /task ui", "@backend /quit"} {
+	for _, draft := range []string{"@backend /color blue", "@backend /name x", "@backend /task ui", "@backend /quit", "@backend /workflows"} {
 		t.Run(draft, func(t *testing.T) {
 			fresh(t)
 			m, cmd := typeAndSubmit(teamed(newRecorder(t)), draft)

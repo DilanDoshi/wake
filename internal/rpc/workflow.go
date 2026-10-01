@@ -7,7 +7,8 @@ package rpc
 //
 // FrameStopRun ends a running workflow dispatch.
 // FrameWorkflows/FrameWorkflowsReply ask for and answer a session's own
-// runs - core.WorkflowRun read back off disk, on WorkflowFrame.Runs.
+// runs - core.WorkflowRun read back off disk, on WorkflowFrame.Runs - and
+// where a personal-scope save would land.
 // FrameWorkflowAgent/FrameWorkflowAgentReply ask for and answer one workflow
 // agent's own transcript, named "workflow_transcript" on the wire rather
 // than Claude's own "workflow_agent" - internal/core/airlock_test.go polices
@@ -71,6 +72,12 @@ type WorkflowFrame struct {
 	// Runs is a session's own workflow runs read back off disk,
 	// FrameWorkflowsReply only.
 	Runs []core.WorkflowRun `json:"runs,omitempty"`
+
+	// PersonalDir is the directory a ScopeUser save would land in,
+	// FrameWorkflowsReply only: the daemon resolves it from its own
+	// environment, which a client's need not match, so the save dialog's
+	// hint is the daemon's word rather than a guess.
+	PersonalDir string `json:"personal_dir,omitempty"`
 }
 
 // maxWorkflowName bounds a workflow's file name: one path segment under

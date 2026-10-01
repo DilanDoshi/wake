@@ -13,7 +13,9 @@ import (
 	"go/ast"
 	"go/parser"
 	"go/token"
+	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -66,6 +68,13 @@ var frameKinds = map[string]string{
 	"FrameMCPDisable":         FrameMCPDisable,
 	"FramePeers":              FramePeers,
 	"FramePeersReply":         FramePeersReply,
+	"FrameStopRun":            FrameStopRun,
+	"FrameWorkflows":          FrameWorkflows,
+	"FrameWorkflowsReply":     FrameWorkflowsReply,
+	"FrameWorkflowAgent":      FrameWorkflowAgent,
+	"FrameWorkflowAgentReply": FrameWorkflowAgentReply,
+	"FrameSaveWorkflow":       FrameSaveWorkflow,
+	"FrameWorkflowSaved":      FrameWorkflowSaved,
 }
 
 // The verbs must not collide with each other or with the existing kinds. A
@@ -94,7 +103,7 @@ func TestEveryFrameKindIsDistinct(t *testing.T) {
 // It is the guard that stops that test from being one more of the shape this
 // project keeps finding: a check whose subject can walk out from under it.
 func TestNoFrameKindIsMissingFromTheDistinctnessMap(t *testing.T) {
-	declared := frameKindConstants(t, "wire.go", "lifecycle.go", "history.go", "team.go", "mcp.go", "peers.go")
+	declared := frameKindConstants(t, packageFiles(t)...)
 	if len(declared) < len(frameKinds) {
 		t.Fatalf("found %d Frame* constants across the package, but the map holds %d: the scan is broken and this test is asserting nothing", len(declared), len(frameKinds))
 	}
@@ -108,6 +117,17 @@ func TestNoFrameKindIsMissingFromTheDistinctnessMap(t *testing.T) {
 			t.Errorf("the map has %s = %q, the declaration says %q", name, got, value)
 		}
 	}
+}
+
+// packageFiles is every non-test file of this package, so a file that declares
+// a kind cannot walk out from under the scan the way workflow.go once did.
+func packageFiles(t *testing.T) []string {
+	t.Helper()
+	all, err := filepath.Glob("*.go")
+	if err != nil {
+		t.Fatalf("glob the package: %v", err)
+	}
+	return slices.DeleteFunc(all, func(f string) bool { return strings.HasSuffix(f, "_test.go") })
 }
 
 // frameKindConstants reads every `Frame… = "…"` constant declared in the named

@@ -64,12 +64,13 @@ triaged as deferred is recorded here rather than lost with it). Each item was ch
 tree when this entry was written; check again before acting on one.
 
 **Deferred features, owner's triage.**
-- **`@who /workflows` from the room** (M6). `/workflows` in the room lists every agent's runs; there is
-  no way to aim it at one agent the way `@who /mcp` aims the MCP menu. *Closes with:* a
-  `roomTargetCommands` entry and `openWorkflows` taking the resolved id.
-- **The view's text cannot be selected or copied** (M7). A press on the view moves its cursor
-  (`workflowPress`) and never starts a selection, and it leaves an earlier highlight standing. It is the
-  one rendered surface CLAUDE.md's "every other surface is selectable" does not cover, and says so.
+- ~~**`@who /workflows` from the room** (M6).~~ **CLOSED on `fix/workflow-view-gaps`:** a
+  `roomTargetCommands` entry, and `openWorkflows` takes one `@who` (`namedTarget`, now /quit's and
+  /mcp's too); the view's title names whose runs it draws. `@thea /work⇥` still does not complete —
+  behind a lone `@thea ` the menu offers only thea's own commands, as for `/col` today.
+- ~~**The view's text cannot be selected or copied** (M7).~~ **CLOSED on `fix/workflow-view-gaps`:** a
+  press anchors the frame-wide screen selection before `workflowPress` moves the cursor, so a drag
+  copies, a click still only moves the cursor, and multi-click selects a word or row.
 - **The room's list has no way to jump between agents' groups** (M12) — a long fleet list is walked a
   row at a time.
 
@@ -96,8 +97,9 @@ tree when this entry was written; check again before acting on one.
   under it is unattributed in the room.
 - **The save dialog:** `↵` closes it silently if the run left the list underneath; an invalid name is
   refused in the notice slot rather than in the dialog; a `FrameWorkflowSaved` with no payload is
-  dropped silently; the personal-scope path hint ignores `$CLAUDE_CONFIG_DIR`; a one-row body hides the
-  dialog's cue.
+  dropped silently; ~~the personal-scope path hint ignores `$CLAUDE_CONFIG_DIR`~~ (closed on
+  `fix/workflow-view-gaps`: the daemon names its own directory on the runs reply); a one-row body hides
+  the dialog's cue.
 - **`⌃C` in the save dialog closes the dialog alone** (the ruling: parking would end the run being
   saved). A second `⌃C` straight after is the kill switch's `⌃C⌃C` emergency exit, not a park — to park
   from there, press anything else first. The kill switch is deliberately untouched.
@@ -108,22 +110,22 @@ tree when this entry was written; check again before acting on one.
   atomic, and a filesystem without them refuses the save rather than falling back.
 
 **Small code debts.**
-- `stopWorkflow`'s `!ok` branch is unreachable (`workflowKeyed` runs `settledArm` first, so `armedKey`
-  only ever sees a stoppable run); `FrameStopRun` with an empty task id refuses with a trailing space
-  (`"no running workflow "`); `saveWorkflowFrame`'s own unknown-session refusal wants a comment on why it
-  does not go through `withAgent`.
-- `workflowdraw.go`'s `modelFamilies` restates what `core.ModelAliases` knows; `workflowdraw.go` is
-  ~620 lines and its agent level could be its own file.
+- ~~`stopWorkflow`'s `!ok` branch is unreachable; `FrameStopRun` with an empty task id refuses with a
+  trailing space; `saveWorkflowFrame`'s own unknown-session refusal.~~ **CLOSED on
+  `fix/workflow-view-gaps`:** folded into `armedKey`; "a workflow stop needs a task id"; the save goes
+  through `withAgent` (nothing made the split deliberate).
+- ~~`modelFamilies` restates `core.ModelAliases`; the agent level could be its own file.~~ **CLOSED on
+  `fix/workflow-view-gaps`:** `workflowModel` reads `core.ModelAliases`; the agent level is
+  `workflowagent.go`.
 - The airlock is full: `vocabulary.go` 800, `protocol.go` 798, `wire.go` 797, `encode.go` 792 (now
   742/798/798/798, 2026-09-29; *"never by a fifth airlock file"* below is SUPERSEDED — the owner's
   2026-09-27 ruling added `localreply.go` as the fifth, `bf77dce`, PR #131). The next
   decoded field pays for its line by moving Claude-free code out (`rawjson.go`'s precedent), never by a
   fifth airlock file.
-- Tests: `workflowstop_test.go`'s `emitTaskEnded` puts `status` at the top level where recordings nest
-  it under `patch`; the e2e fake's frames omit `last_tool_name`/`uuid`; the sidechain transcript fixture
-  is hand-built rather than recording-derived; the open-key tests that check an ask was written cover
-  `⌃D` and `/workflows`, not `↵`/`⌃Y`/`⌃B`/click/board; the wheel over the view itself under an armed
-  stop is untested.
+- Tests: the e2e fake's frames omit `last_tool_name`/`uuid`; the sidechain transcript fixture is
+  hand-built rather than recording-derived. (~~`emitTaskEnded`'s top-level `status`; the open-key ask
+  tests covering only `⌃D`/`/workflows`; the wheel over the armed view untested~~ — closed on
+  `fix/workflow-view-gaps`.)
 - Demo (`demo/`): `pick_turn` falls through to prose matching for an unadvertised `/<name>`, and
   `workflow_spec` rescans the scenarios on every call.
 
@@ -215,7 +217,25 @@ with:* factoring the clamp into one unstyled `transcript` method the other two c
 whether `pointIn` should read a freshly measured height the way `startSelection`'s own gate already
 does.
 
-## KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)
+## ~~KNOWN GAP, 2026-08-29 — only **bullet** list continuations are hang-indented (ordered and task lists are not)~~ CLOSED 2026-09-30 (`fix/render-list-hang-cache`)
+
+**Closed by the reflow the entry below names.** `reflowProse` now hangs every item itself: a group
+whose first row opens with a marker (`• `, `N. `, `[ ] `/`[✓] ` — `itemMarker`) wraps the text after
+the marker at the budget less the marker's width and lays its continuations under the text, so the
+hang costs no row its width. `hangIndentLists`/`hangIndent` are deleted; the shift they applied after
+glamour's wrap also spent glamour's far margin (a bullet continuation 55 cells wide in a 54-cell
+layout at width 56), which the tightened width sweep now forbids. Two things the rendered bytes alone
+could not say, settled at their source: an enumerator or task box is real only when glamour drew it
+for a list item, which the style marks with `itemTag` (an empty SGR, stripped after reflow), because
+`1\.`, a literal `[ ] ` and a ten-digit number render the same bytes as a real marker; and a row
+mid-group splits it only for an item of the group's own list (`startsItem`), because a wrap that
+opens `2. Then` is prose, or a bullet's text. Inside an item, the row glamour leads with a styled
+span's empty escapes is merged back into the item — a code block in an item sits deeper, and any
+other block is a blank row away — so bold, code and links at a wrap no longer drop the hang the old
+shift gave them — a heading nested in an item, drawn under it the same way, is refused by `headingTag`.
+`sealRows` closes a style a wrap broke a row inside (the reflow's, or `fitToWidth`'s hard wrap of a
+row glamour could not break, which `main` already did), so no row ends styled beside a divider. `rejoin.go` steps past the same markers so a copy rejoins the hang. The original entry is kept below.
+
 
 **Shipped:** `fix/markdown-list-hanging-indent` hang-indents a wrapped **bullet** item's
 continuation lines under the item text (`internal/render/markdown.go`, `hangIndentLists`), matching
@@ -338,7 +358,18 @@ someone picks this up.
 entry names). *Blocks:* nothing in the product — but it makes the project's **only gate** (`make ci`
 exit 0) unreliable on a loaded machine, which is why it is written down rather than left as folklore.
 
-## KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment
+## ~~KNOWN GAP, 2026-08-28 — `MultiEdit` carries no diff, so it does not get the show-edits-by-default treatment~~ CLOSED 2026-09-30 — nothing can deliver one
+
+**Closed without building, on evidence that no `MultiEdit` can arrive.** A guard's domain is what
+can arrive, and in the verified range nothing offers the tool: no `init` in `testdata/stream/`
+(133 of them, across ten versions from 2.1.226 to 2.1.283) lists `MultiEdit` among its tools, the
+installed claude is 2.1.285, and not one transcript under the owner's `~/.claude/projects` holds a
+`MultiEdit` call. A decode and a per-hunk draw for it would be code for a tool no session offers.
+**The one residual:** a pre-2.x transcript read back through history, `/resume` or import still
+decodes its `MultiEdit` calls, and they draw as any tool without a diff does — folded into
+`1 tool use · 1 multiedit`, with nothing behind the fold. If a later Claude Code offers the tool
+again, a recording earns the decode this entry describes. The original entry is kept below.
+
 
 `feat/dm-diff-rendering` made an `Edit`/`Update` draw its diff whole in the DM pane rather than fold
 into a `1 tool use · 1 edit` rollup (see `decisions.md`, 2026-08-28). It keys on `core.ToolDiff`,
@@ -1561,8 +1592,14 @@ None of these are wrong. All are unmeasured at the scale the product claims.
 
 - **One process-global mutex serializes rendering across every session** (`internal/render`).
   Correct; a cache miss blocks every other session. Never profiled under load.
-- **Unbounded renderer cache.** Dragging a terminal resize caches a `TermRenderer` plus its
-  parsed style config at every intermediate width, permanently.
+- ~~**Unbounded renderer cache.** Dragging a terminal resize caches a `TermRenderer` plus its
+  parsed style config at every intermediate width, permanently.~~ **CLOSED 2026-09-30
+  (`fix/render-list-hang-cache`):** `internal/render/renderercache.go` keeps the `CachedWidths` most
+  recently used widths (a renderer is ~36KB retained and ~10µs to build). The cap is derived, not
+  chosen: `internal/ui/renderwidths_test.go` measures the widths a 200-column frame renders at — six
+  columns at distinct widths and a plan card, the tiled board's tile width, one reserved for the copy
+  path — and fails if the constant disagrees. A wider terminal can draw more widths; a miss costs one
+  build per block rendered, and a block renders on an event or a re-wrap, never on a frame.
 - **A session that ends *cleanly* still leaks what it spawned.** **CLOSED 2026-08-24 — PR #103 (`fix/clean-exit-group-sweep`):** `retire`'s ordinary non-park branch now sweeps the group via `core.KillGroup(a.sess.Pgid())`; `completePark` is untouched so a parked session's children survive its wake. Follow-up (c) zombie-reap concurrent-`Wait` ordering **CLOSED 2026-08-25 — PR #112** (`fix/wedged-exit-selfdetect`): Wake owns the stdout pipe and `awaitExit` self-detects a leader that exited while a grandchild holds stdout, so a wedged session ends cleanly and `retire`'s sweep now reaches it too; (b) wedged-logger goroutine leak remains (the log-sink owner's, not a core group-kill). Both kill paths are failure
   paths. An agent that finishes normally after `npm run dev &` leaves the dev server behind.
   Policy belongs to the pool; the *mechanism* cannot — `cmd.Process.Pid` dies with `finish`, so
@@ -1570,7 +1607,17 @@ None of these are wrong. All are unmeasured at the scale the product claims.
 - **A wedged logger leaks one parked goroutine per affected session.** The session itself ends
   and frees its slot; the goroutine does not. Unbounded from inside for the same reason the
   original bug existed — a component cannot bound a sink it does not own. Task 6 owns the sink.
-- **A DM's scrollback is unbounded for the life of the session.** Deliberately left there by
+- ~~**A DM's scrollback is unbounded for the life of the session.**~~ **CLOSED 2026-09-30
+  (`fix/dm-scrollback-bound`):** a conversation keeps its newest `dmRetentionEvents` (3,000 — the
+  re-wrap cost accepted when the settle was designed, 248ms then and 73ms now by
+  `BenchmarkReWrapAtTheRetentionCap`) and reclaims the oldest a chunk at a time under `… older
+  conversation reclaimed` (`internal/ui/dmretention.go`). It cuts only before a non-tool event, so
+  never inside a folded run or between a call and its result, and the lines it keeps are the lines a
+  re-wrap of what it kept draws (`TestAReclaimKeepsTheLinesAReWrapDraws`), stale last-read rules
+  included. History arriving after a reclaim is left out rather than drawn above a gap. **Still
+  unbounded, out of scope here:** `Fleet.subs` and `DM.subs` (subagent transcripts), and a DM's
+  `calls`/`outcomes`/`opened`/`runOpen` maps (one entry per tool call). The original entry:
+  Deliberately left there by
   C2's fix: dropping old events means dropping the lines they rendered to, or a width change
   re-renders a transcript missing its beginning — so a bound on `d.events` is a bound on
   *scrollback depth*, which is a product decision about a view §8 calls "literally Claude
@@ -1760,8 +1807,12 @@ with a different argument.
 > costs the one route to its transcript unless something replaces it. **Whoever answers this owns the
 > strip's count too** — the two are the same claim about whether the manager is part of "the fleet".
 
-**Phase 3 or later — `--strict-mcp-config` for *ordinary* agents is unruled.** Added 2026-08-11 by
-Phase 2 Task 15.
+**~~Phase 3 or later — `--strict-mcp-config` for *ordinary* agents is unruled.~~ RULED 2026-09-29:
+ordinary agents inherit** — the owner decided it by building PR #127 on it (every agent's
+`initialize` handshake loads the operator's claude.ai connectors, which `--strict-mcp-config` would
+exclude). Recorded in `decisions.md` (2026-09-29, ruling 2) and held by
+`TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt`. Original entry follows. Added
+2026-08-11 by Phase 2 Task 15.
 
 The manager gets `--mcp-config` and `--strict-mcp-config` as a pair, and the second is what stops it
 inheriting every MCP server in the user's own configuration. **Every other agent Wake spawns still
@@ -1772,8 +1823,12 @@ a ruling the day somebody wants a fleet whose tool surface Wake controls — the
 away, and the argument against is that a Wake agent that can do *less* than the same `claude` in the
 same directory is a surprise nothing on screen explains.
 
-**Phase 3 or later — a manager whose MCP server cannot start is indistinguishable from one whose
-tools are empty.** Added 2026-08-11 by Phase 2 Task 15.
+**~~Phase 3 or later — a manager whose MCP server cannot start is indistinguishable from one whose
+tools are empty.~~ DONE 2026-09-29:** the self-test below shipped, in the daemon's `managerConfig`
+rather than at `wake manager` time (`mcp.json` names the daemon's binary, and `launch` is the one
+door every manager start goes through) — `internal/daemon/mcpselftest.go`, `decisions.md`
+(2026-09-29, ruling 1). Claude's acceptance of the handshake stays `live-testing.md` §13.1. Original
+entry follows. Added 2026-08-11 by Phase 2 Task 15.
 
 `managerConfig` refuses the launch if the config file cannot be **written**. It cannot check that
 the file is *usable*: `wake mcp` is executed by claude, not by Wake, and its failure — a binary that
@@ -4580,7 +4635,27 @@ multi-select entry above is untouched and is still the only field left out.
 
 ---
 
-## 2026-08-14 — a column drag jumps where a row drag glides
+## ~~2026-08-14 — a column drag jumps where a row drag glides~~ CLOSED 2026-09-30 (`fix/divider-drag-glides`)
+
+**Closed the way the entry below says.** Mid-drag each pane is drawn at the width it is wrapped for
+and cut or padded, row by row, to the width the drag gives it (`fitCells`), at `frameRegions` — the
+layout at the pending split (`drawnRegions`, shared with the room's settle fix). A pane is never
+handed the pending width, so no motion re-wraps. Letting go commits the drag at once (`letGo`): the
+settle coalesces motions, and none follow a release. The one mouse event a held button still sends,
+the wheel, hits the columns as drawn. A window drag keeps its clip: its column count can change
+mid-drag. Taking hold of the divider clears the selection, which also closes a hole the entry did not
+name — the divider's settle re-wrapped both panes under a highlight left standing. A release while
+a window drag is also in flight leaves both to the shared settle, since the width is still moving.
+`Layout.DragDivider` now solves the split against the running total `share` rounds on, so among
+three or more columns the divider lands on the pointer's column rather than a cell off it (on
+`main` too, once settled).
+**Left as they were on `main`, and why:** a hand that rests on the divider past `resizeQuiet` gets
+its settle and re-wraps mid-drag — the settle's own rule, which the window drag shares, and what
+gives a resting hand reflowed text rather than a cut; and a grid key (`⌃W`, `⌃Y`) pressed while the
+mouse holds a divider leaves the drag's weights indexed for the old grid, so the split lands on
+whatever column now sits there — `main`'s settle applied the same stale weights. The original
+entry is kept below.
+
 
 **Wake — dragging a vertical divider moves nothing until the drag ends, while dragging a stacked
 column's rule tracks the pointer.** Asked for by the owner after a real screen, and it is the cost
@@ -5077,6 +5152,12 @@ recorded bound. It owes the same discipline the rest of the manager was held to 
 guard (`cmd/wake/mcpguard_test.go`), a recorded reason — not just a longer prompt. *Blocks:* the
 orchestrator above; it cannot judge what it cannot read.
 
+**2026-09-29 — still unruled, and the first question is not the budget.** No ruling exists beyond
+the ask. `managerVerbs` refuses `FrameHistory` in writing because a transcript is "the operator's own
+words", so a manager reading one reads the operator's DM turns to that agent. Whether user turns are
+in it at all is the owner's call, before budget or compression; the tool then owes a written
+counter-verdict on that cell.
+
 ---
 
 ## 2026-08-25 — feature idea, owner's ask: `@john` as a room *view* filter, not only a route
@@ -5390,8 +5471,9 @@ the liveness tests that read `owed`.
 - ~~**`TestARunningDaemonReestablishesASweptLock` flakes**~~ **FIXED (`fix/recent-follow-ups`,
   2026-09-29):** the test's own race. `reopenLock` creates the file before `explainLock` writes it,
   and the test read it the moment the inode changed. It now waits for both (1/30 before, 0/160 after).
-- **`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**, so the
-  workflow kinds are unchecked for collisions. *Closes with:* adding it to the scanned files.
+- ~~**`internal/rpc/lifecycle_test.go`'s frame-kind distinctness scan skips `workflow.go`**~~ **CLOSED
+  on `fix/workflow-view-gaps`:** the scan globs every non-test file, and the seven workflow kinds are
+  in `frameKinds`.
 - **WON'T DO (2026-09-29, fable wake's ruling): a daemon on an older build answers each conversation's `@` opening with a notice**
   (`unknown frame kind "peers"`, branch review L2), beside the stale-daemon notice the room opened
   with. Not skipped: `internal/ui` keeps no daemon build, and a build mismatch is also every dev

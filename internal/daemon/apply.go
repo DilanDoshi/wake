@@ -165,6 +165,10 @@ func (a *agent) apply(p pending) {
 		if p.frame.Workflow != nil {
 			id = p.frame.Workflow.Task
 		}
+		if id == "" {
+			a.refuse(p, errors.New("a workflow stop needs a task id"))
+			return
+		}
 		if !a.runningWorkflow(id) {
 			a.refuse(p, fmt.Errorf("no running workflow %s", id))
 			return

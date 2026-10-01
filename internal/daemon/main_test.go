@@ -112,6 +112,10 @@ func TestMain(m *testing.M) {
 	switch {
 	case filepath.Base(os.Args[0]) == "ps":
 		os.Exit(runFakePs())
+	// The manager's self-test runs os.Executable as `wake mcp`; on argv for the
+	// same reason as ps, since it inherits whatever marker the daemon holds.
+	case len(os.Args) > 1 && os.Args[1] == mcpSubcommand:
+		os.Exit(runFakeMCP())
 	case os.Getenv(fakeLingerEnv) == "1":
 		os.Exit(runLinger())
 	case os.Getenv(fakeDaemonEnv) == "1":

@@ -224,14 +224,29 @@ func (a App) completing() completion {
 // The last token rather than the first, unlike a command: `@` addresses in the
 // room and references a file everywhere, and both can follow prose. A draft
 // ending in a space has no token being typed, which is how a finished mention
-// takes its own menu down.
+// takes its own menu down - except inside an open quote, `@"release n`, which
+// is one token through its spaces until the closing quote, since a session's
+// name may hold them (peerMention).
 func mentionStem(draft string) (head, rest string, ok bool) {
 	at := strings.LastIndexAny(draft, wordBreak) + 1
+	if q := strings.LastIndex(draft, agentPrefix+mentionQuote); q >= 0 && q < at && openQuote(draft, q) {
+		at = q
+	}
 	rest, ok = strings.CutPrefix(draft[at:], agentPrefix)
 	if !ok {
 		return "", "", false
 	}
 	return draft[:at], rest, true
+}
+
+// openQuote reports whether the `@"` at q is a mention still being typed: it
+// begins a word, and what follows could still begin a name peerMention offers -
+// no closing quote, and no whitespace but single spaces.
+func openQuote(draft string, q int) bool {
+	inside := draft[q+len(agentPrefix)+len(mentionQuote):]
+	ends := func(r rune) bool { return r != ' ' && strings.ContainsRune(wordBreak+mentionQuote, r) }
+	return (q == 0 || strings.ContainsRune(wordBreak, rune(draft[q-1]))) &&
+		!strings.ContainsFunc(inside, ends) && !strings.Contains(inside, "  ")
 }
 
 // mentionMenu is `@`, which is overloaded exactly as it is in Claude Code: a

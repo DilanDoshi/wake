@@ -5,7 +5,10 @@ package ui
 // takes. dm.go owns the model and how the pane is sized; dm_blocks.go owns what
 // one event looks like; this owns how those blocks become the scrollback.
 
-import "github.com/DilanDoshi/wake/internal/core"
+import (
+	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/render"
+)
 
 // block is one rendered unit of transcript.
 type block struct {
@@ -42,6 +45,11 @@ type block struct {
 	src    string
 }
 
+// renderMarkdown is the seam every markdown block a pane or a card draws goes
+// through, so a test can see the widths a frame asks internal/render for - what
+// render.CachedWidths is sized by (renderwidths_test.go).
+var renderMarkdown = render.Markdown
+
 // renderTranscript is the seam renderAll is reached through, so a test can
 // count how often the whole transcript goes back through glamour. Rendering is
 // the expensive half of this package and View's fast path is a contract a
@@ -67,10 +75,13 @@ func (d DM) renderAll() []block {
 	if d.viewing != "" {
 		return d.renderForwarded()
 	}
-	events := d.events.slice(0, d.events.len())
+	events, base := d.events.slice(0, d.events.len()), d.events.first()
 	blocks := make([]block, 0, len(events)+len(d.seed)+2)
-	// First, so it scrolls away as the conversation fills - see banner.go.
-	blocks = append(blocks, dmBanner(d.Agent, d.blockWidth()))
+	// First, so it scrolls away as the conversation fills - see banner.go - and
+	// gone with the oldest events once they are reclaimed (dmretention.go).
+	if base == 0 {
+		blocks = append(blocks, dmBanner(d.Agent, d.blockWidth()))
+	}
 
 	// The provisional room seed, above the transcript and outside the run fold:
 	// text turns the room already holds, drawn until the on-disk read supersedes
@@ -98,7 +109,7 @@ func (d DM) renderAll() []block {
 	for i := range events {
 		// Before the event, so the boundary lands in the same place whether the
 		// events around it rendered to anything or not. A boundary breaks a run.
-		if m, ok := d.markerBefore(i); ok {
+		if m, ok := d.markerBefore(base + i); ok {
 			flush(i)
 			blocks = append(blocks, m)
 		}
