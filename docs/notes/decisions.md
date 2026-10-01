@@ -2654,7 +2654,9 @@ files claude already writes. The cost of that choice is the whole of `roomhistor
 
 **What it costs, stated so nobody re-derives it as a bug:**
 
-1. **`@noah do this` does not come back.** A user turn on disk is indistinguishable from a private
+1. **`@noah do this` does not come back.** *(Amended 2026-09-29 — it does now, for a turn sent after
+   the change: see "a room turn carries its provenance in its uuid" below. Everything here still
+   governs transcripts written before it.)* A user turn on disk is indistinguishable from a private
    one — `sendRoom` strips the leading `@name` before writing, and `FromRoom` is presentation-only and
    on no wire — so the same bytes are a room message aimed at one agent and a turn typed into that
    agent's pane. The only sound discriminator is multiplicity: **the same text in two or more
@@ -2676,7 +2678,9 @@ reading.
 
 **And it asks at two moments, not on every report.** The seed and `wakeArrived`. Asking whenever an
 unasked-for session appears would have caught **forks**, whose transcript is their parent's — an hour
-of the same prose drawn twice under two names.
+of the same prose drawn twice under two names. *(Fork half superseded 2026-09-29: a fork is asked
+about at both moments now, and its copy of its parent is drawn once by record uuid — see "a fork is
+asked about, and one record in two transcripts is one record" below.)*
 
 ---
 
@@ -2711,7 +2715,8 @@ had no `ParentID` check. The ruling was enforced only for a *later* status push 
 accident, because `askRoomHistory` is never reached from an ordinary report — so a fork already in the
 seed, or one resumed from parked, went straight through and drew its parent's whole conversation a
 second time under a new name. **A rule written in three documents and enforced by nothing is worth
-what a comment is worth.** `isFork` is now checked at both call sites and both are tested.
+what a comment is worth.** `isFork` is now checked at both call sites and both are tested. *(Superseded
+2026-09-29: `isFork` is gone; `forkCopies` replaced the refusal — below.)*
 
 The general lesson is the one about *shape*: all three bugs live in the gap between the data the tests
 construct and the data the wire delivers. A unit test that builds its own input is testing the
@@ -2777,6 +2782,64 @@ whole session lifetime* rather than for algebra found it. That is the second tim
 gap was in what the fixtures were shaped like rather than in the logic, and it is worth stating as a
 habit: **a guard that compares a value at two moments is only as good as the range of starting values
 the tests give it.**
+
+---
+
+## Ruling (2026-09-29): a fork is asked about, and one record in two transcripts is one record
+
+**The refusal cost a fork's own turns, and did not keep out what it was for.** `isFork` read
+`ParentID`, which only the running daemon knows: the park book holds no lineage, so a fork parked and
+woken arrives with none, was asked about like any session, and its copy of its parent — the same
+text at the same *time*, since a fork copies records verbatim — met the parent's copy in
+`broadcastIndex`. Two transcripts, one text, inside the window: **multiplicity proved a broadcast,
+and a private DM turn and the reply to it were restored into the room.** Reproduced by
+`TestAWokenForksCopyOfAPrivateTurnIsNotABroadcast` on the tree before the fix; not seen in real use.
+
+**The record's uuid is the second sound discriminator.** A fork copies its parent's records under the
+same uuids (`testdata/transcript/fork-child.jsonl`), and a send mints a uuid per target, so the same
+uuid in two transcripts is one record a fork copied, never two things said. The airlock carries each
+record's uuid as `Event.MessageID`; `forkCopies` (`roomhistory.go`) drops every copy but one before
+multiplicity or the turn rule sees them, keeping the copy whose session's parent holds none — the
+original, or the oldest ancestor still in the room — and the first in time order when nobody names a
+parent; a dropped user copy still opens or closes its own session's turn as the kept one does.
+
+**And the daemon, which knows the lineage, does it exactly.** A room history is tail-bounded (400
+events), so a parent that talks on past the records a quiet fork copied no longer shows them, and the
+client-side dedupe cannot see the copy — the fork's inherited turns would restore under the fork
+(Codex, second pass). The running daemon keeps each fork's source conversation (`agent.forkFrom`, set
+at launch, carried across a wake, never persisted) and answers a fork's *room* history without every
+record whose uuid is anywhere in the source transcript (`inheritedBy`, read whole, identity only).
+The conversation pane still gets the whole conversation. So forks are asked at the seed and on a wake
+like any running session, parked or ended parent included; `forkCopies` remains for a fork woken from
+the park book, which has no lineage. A live fork still is not asked on the report that announces it:
+its turns arrive on the socket.
+
+---
+
+## Ruling (2026-09-29, flagged for the owner): a room turn carries its provenance in its uuid
+
+**The reason multiplicity was the only discriminator no longer holds.** The ruling above rests on
+"on disk a broadcast and a DM turn are the same bytes". They still are — but the **uuid** is not
+part of the bytes the model reads, and claude records the uuid Wake stamps on a send as that turn's
+own (`testdata/input/room-stamped-uuid.stdin.jsonl` → `testdata/transcript/room-stamped-uuid.jsonl`,
+2.1.285). So a room send stamps its targets with a recognisable uuid (`roomprovenance.go`: a
+`wake` prefix, a version-8 shape, a direct-`@name` flag, one *send* id shared by every target, and
+per-target random bits) and a DM send keeps a random version-4 one. The spirit of the privacy
+ruling — **a private DM turn is never shown** — holds unchanged: an unmarked turn is decided exactly
+as before.
+
+**Precedence, in `broadcastIndex`:** a marked turn is public on its own record; one send is one line
+however many transcripts hold it (grouped by the send, not by text, so two sends of the same words are
+two lines and a DM `status` beside a room `status` is no longer a repeat-sender refusal); a *direct*
+send held by one transcript comes back `@name …` in that agent's thread (`addressedAsSent`), and an
+undirected one unaddressed, as the live echo drew them. Unmarked turns keep the multiplicity rule; a
+fork's copy is in neither (`forkCopies`).
+
+**The dependency, recorded because it is the cost:** the marker rides a field claude validates. A CLI
+that one day insists on version 4 rejects the stdin line — echoed to stderr, exit 1 — so every room
+send would end its agent. `roomMessageVersion` is the one constant to change, and
+`TestTheRoomMessageVersionIsTheOneRecordedAccepted` fails if it drifts from the recording. Re-record on
+a CLI upgrade. It is its own commit so the owner can veto it alone.
 
 ---
 

@@ -88,11 +88,9 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	// (which yields none) never pays for it - work per prose block, not per token,
 	// and App.wants already walks it per token, so the marginal cost is nil.
 	//
-	// drawnConversations reads the committed layout (the one View draws), which
-	// lags the terminal through the 80ms resize settle - so a reply landing during
-	// a wide→narrow resize can briefly miss promotion and fall back to the roster
-	// badge. The exact-visible set is an old-layout∩pending intersection out of
-	// proportion to an 80ms edge App.wants already lives with; see deferred.md.
+	// drawnConversations reads the geometry being settled to, so a reply landing
+	// in the 80ms resize settle is judged by where the frame is going, not by the
+	// wrap View still draws.
 	dmDrawn := false
 	if inDM && len(forRoom) > 0 {
 		dmDrawn = a.drawnConversations()(sessionID)

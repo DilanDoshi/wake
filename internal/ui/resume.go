@@ -290,12 +290,9 @@ func (a App) wakeArrived(st *rpc.Status) App {
 		notice.Report("%s", ResumedNotice(s.Name))
 		a = a.modeReverted(s.ID, s.Name)
 		// The room is missing everything this session said before it was
-		// parked, and this is the only report that says it has been resumed. A fork is
-		// refused here as it is at the seed - its transcript is its parent's.
-		// See roomhistory.go.
-		if !isFork(s) {
-			a = a.askRoomHistory(s.ID)
-		}
+		// parked, and this is the only report that says it has been resumed. A
+		// fork is asked too, as at the seed (liveSessions).
+		a = a.askRoomHistory(s.ID)
 	}
 	return a
 }

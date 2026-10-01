@@ -141,3 +141,14 @@ type TaskUpdate struct {
 	// see workflow.go and protocol.go's workflowOf.
 	Workflow *WorkflowUpdate `json:"workflow,omitempty"`
 }
+
+// taskKind resolves a task_type through vocabulary.go's table, and refuses to
+// guess. A bare map lookup would give an unmapped type the zero value, which is
+// "" and not a kind at all - see TaskKindUnknown for what each wrong guess costs.
+// Claude-free, so it lives here rather than in the airlock.
+func taskKind(s string) TaskKind {
+	if k, ok := taskKinds[s]; ok {
+		return k
+	}
+	return TaskKindUnknown
+}

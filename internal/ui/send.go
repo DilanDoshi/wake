@@ -15,6 +15,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/uuid"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -185,7 +186,7 @@ func (a App) sendDM(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) 
 	// do not drift (renameMirror). The mirror goes with its passthrough: queued
 	// with it, or sequenced just ahead of it, never batched - the daemon must
 	// read it first (renamesync.go), and park.go is the precedent.
-	msg := newQueued(a.composer().WireText(text), text, images, false)
+	msg := newQueued(uuid.NewString(), a.composer().WireText(text), text, images, false)
 	msg.rename = a.renameMirror(text)
 	if a.shouldQueue(id) {
 		a = a.enqueue(id, msg)
@@ -314,8 +315,11 @@ func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock) (App,
 	}
 	var frames []rpc.Frame
 	var now tea.Cmd
+	// One send for every target, so the restore can draw it once; direct is the
+	// rule sendRoom stamps its echo's `to` by.
+	send := newRoomSend(r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0)
 	for _, id := range r.Targets {
-		msg := newQueued(r.Text, text, images, true)
+		msg := newQueued(send.messageID(), r.Text, text, images, true)
 		if id == mirrorID {
 			msg.rename = mirror
 		}
@@ -561,7 +565,7 @@ func (a App) interrupt() (tea.Model, tea.Cmd, bool) {
 	if a.focus != "" {
 		if card, ok := a.cardOf(a.focus); ok && card.Shape() == ShapeQuestion {
 			a.cards = a.cards.Settle(card.AgentID, card.RequestID)
-			a = a.recordQuestionResolved(card.AgentID, false)
+			a = a.recordQuestionResolved(card.AgentID, card.RequestID, false, nil)
 			return a, a.write(answerFailed, card.Deny(escDismissReason)), true
 		}
 	}

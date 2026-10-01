@@ -53,7 +53,7 @@ func (a App) assembleFrame() string {
 	// reserved row is where failures go under a TUI.
 	if a.board.Up {
 		frame := a.boardView(a.fleet.sectioned(agents), a.layout.Width) + "\n" +
-			awarenessStrip(agents, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
+			awarenessStrip(agents, a.fleet.RunningTasks, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
 		// clipMidDrag for the grid path's reason: mid-resize the rows were
 		// built for the old width, and a row wider than the window wraps -
 		// which is the frame taller than the terminal on every draw.
@@ -92,7 +92,7 @@ func (a App) assembleFrame() string {
 	}
 
 	frame := lipgloss.JoinHorizontal(lipgloss.Top, cols...) + "\n" +
-		awarenessStrip(agents, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
+		awarenessStrip(agents, a.fleet.RunningTasks, a.stripWorkspace(), a.layout.Width) + "\n" + a.noticeLine()
 	// Cut to the terminal, because below their own floors the panes stop
 	// shrinking rather than drawing a broken box - so at a height under that
 	// floor plus these two rows, something has to give. It is the bottom of the
@@ -370,8 +370,11 @@ func (a App) cardOf(id string) (Card, bool) {
 // whole cost that gate exists to refuse. It decides no card - an ask belongs to
 // its agent's conversation whether that column is on screen or slid past. See
 // App.cardOf.
+//
+// Settling, not committed: mid-drag View draws the old layout clipped, so the
+// columns that stay on screen are the ones the settle will commit (drawnRegions).
 func (a App) drawnConversations() func(string) bool {
-	r := a.regions()
+	r := a.drawnRegions()
 	return func(agentID string) bool {
 		if agentID == "" {
 			return false

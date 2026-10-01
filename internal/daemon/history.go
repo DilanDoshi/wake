@@ -106,6 +106,25 @@ func activeBranchOf(r io.Reader) (map[string]bool, error) {
 	}
 }
 
+// recordUUIDs is every record uuid in a transcript, dead branches included -
+// identity only, no content, the way activeBranchOf reads it.
+func recordUUIDs(r io.Reader) (map[string]bool, error) {
+	br := bufio.NewReaderSize(r, 64*1024)
+	uuids := make(map[string]bool)
+	for {
+		line, err := readTranscriptLine(br)
+		if n, ok := core.DecodeTranscriptNode(line); len(line) > 0 && ok && n.UUID != "" {
+			uuids[n.UUID] = true
+		}
+		if err != nil {
+			if errors.Is(err, io.EOF) {
+				return uuids, nil
+			}
+			return nil, err
+		}
+	}
+}
+
 // trimRing drops events from the front of ring - and the bytes it counted for
 // them - until both are back within historyEvents/historyBytes. The one
 // tail-keeping rule a session's own history and a workflow agent's own
@@ -275,7 +294,7 @@ func transcriptPath(id string) (string, bool) {
 // now" and "Wake could not tell you what it had", and the pane cannot tell
 // those apart from an empty reply.
 func (s *server) sendHistory(c *client, id string) {
-	s.answerHistory(c, id, rpc.FrameHistoryReply)
+	s.answerHistory(c, id, rpc.FrameHistoryReply, nil)
 }
 
 // sendRoomHistory is the same read answered under the room's kind.
@@ -285,23 +304,61 @@ func (s *server) sendHistory(c *client, id string) {
 // names: a reply kind spelled there would read as a verb the daemon serves and
 // would need a verdict for something no client can send. See
 // cmd/wake/mcpguard_test.go.
+//
+// A fork's room history leaves out what it inherited: the room draws that
+// conversation under the session it came from.
 func (s *server) sendRoomHistory(c *client, id string) {
-	s.answerHistory(c, id, rpc.FrameRoomHistoryReply)
+	s.answerHistory(c, id, rpc.FrameRoomHistoryReply, s.inheritedBy(id))
 }
 
 // answerHistory is the read both asks share. reply is the kind it goes back
-// under; one reader of the format, two ledgers on the client.
-func (s *server) answerHistory(c *client, id, reply string) {
+// under; one reader of the format, two ledgers on the client. An event whose
+// record is in drop is left out.
+func (s *server) answerHistory(c *client, id, reply string, drop map[string]bool) {
 	events, err := History(s.transcriptID(id))
 	if err != nil {
 		c.enqueue(errorFrame(id, "could not read that conversation's transcript: "+err.Error()))
 		return
 	}
-	// Addressed by the id the *client* knows, whatever file it came out of.
-	for i := range events {
-		events[i].SessionID = id
+	kept := make([]core.Event, 0, len(events))
+	for _, ev := range events {
+		if ev.MessageID != "" && drop[ev.MessageID] {
+			continue
+		}
+		// Addressed by the id the *client* knows, whatever file it came out of.
+		ev.SessionID = id
+		kept = append(kept, ev)
 	}
-	c.enqueue(rpc.Frame{Kind: reply, SessionID: id, Events: events})
+	c.enqueue(rpc.Frame{Kind: reply, SessionID: id, Events: kept})
+}
+
+// inheritedBy is every record a fork's transcript copied from the conversation
+// it was taken from - under the same uuids (testdata/transcript/fork-child.jsonl)
+// - read from that transcript whole, since a copy can sit past the source's
+// 400-event tail. nil for a session that is no fork, or whose source is gone.
+func (s *server) inheritedBy(id string) map[string]bool {
+	s.mu.Lock()
+	a, ok := s.agents[id]
+	s.mu.Unlock()
+	if !ok || a.forkFrom == "" {
+		return nil
+	}
+	path, ok := transcriptPath(a.forkFrom)
+	if !ok {
+		return nil
+	}
+	f, err := os.Open(path)
+	if err != nil {
+		logf("wake: fork %s: could not read the conversation it was copied from: %v", id, err)
+		return nil
+	}
+	defer func() { _ = f.Close() }()
+	uuids, err := recordUUIDs(f)
+	if err != nil {
+		logf("wake: fork %s: could not read the conversation it was copied from: %v", id, err)
+		return nil
+	}
+	return uuids
 }
 
 // transcriptID is the id claude is writing this conversation under, which is

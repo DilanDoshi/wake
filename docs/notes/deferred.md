@@ -131,7 +131,13 @@ tree when this entry was written; check again before acting on one.
 
 *Blocks:* nothing shipped. *Closes with:* each item on its own; none is a prerequisite of another.
 
-## KNOWN GAP, 2026-09-15 — a DM reply can miss room-promotion during the 80ms resize settle
+## KNOWN GAP, 2026-09-15 — a DM reply can miss room-promotion during the 80ms resize settle — FIXED (`fix/room-gaps`, 2026-09-29)
+
+**FIXED:** `drawnConversations` now reads `drawnRegions()` (`geometry.go`) — the layout the pending
+geometry commits on the next settle — rather than the committed one. The intersection sketched below is
+wrong in one case: with the DM focused, a wide→narrow resize past the takeover keeps the *DM* (the
+window follows the focused column), so the intersection would promote into a room nobody can see.
+Pending is right in both directions, and `App.wants` inherits it. Pinned by `roomsettle_test.go`.
 
 **Shipped:** `feat/promote-dm-reply-on-leave` promotes a DM-sent turn's prose into the room once its
 DM stops being drawn (the operator has left it), so someone watching the group chat does not miss a
@@ -265,7 +271,17 @@ at glamour's margin, unchanged — pinned by `TestOrderedListContinuationIsLeftA
 per-item hang-indent reflow that is width-safe for enumerators, or a glamour release that
 hang-indents lists itself.
 
-## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance
+## OWNER REQUEST, 2026-08-29 — a "done" state in the roster, so finished agents are tellable at a glance — DONE (`fix/room-gaps`, 2026-09-29)
+
+**DONE as a client-side annotation, never a state** (the lean below). `turnDone` (`dmbeat.go`) is the
+one predicate — idle, a *witnessed* turn's `doneAt`, no running subagent, no live loop — and the DM's
+done line (`showsDone`, plus its preview gate), the roster/board glyph `✔` (`rowGlyph`) and the strip's
+`✔ N done` (taken out of the idle count) all read it; `Fleet.done(id)` wraps it for the board.
+`stateGlyph`, `stateLabel` and `attentionRank` do not know it, so no totality guard moved. Not `✻`:
+that is a heartbeat frame. **Two limits, left for the owner:** a client that attaches after a turn ended
+shows `○`, not `✔` (`doneAt` is witnessed-only, the done line's own rule); and an agent whose own
+`TaskCreate` checklist still has open items is still marked done — a checklist is the agent's
+bookkeeping and is routinely left open after a turn, so gating on it would break roster == done line.
 
 **Asked for in this version.** A "done" indicator in the right sidebar (the roster) so the operator
 scanning a fleet can see which agents have **finished the requested task**, distinct from ones still
@@ -388,7 +404,18 @@ needed — the input shape is the documented `MultiEdit` schema — but a fixtur
 
 ---
 
-## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿` — record shipped 2026-08-31; purple-under-`⎿` presentation still deferred
+## OWNER REQUEST, 2026-08-28 — an answered question should resolve in place in the room: yellow → purple, with the answer under a `⎿` — DONE (`fix/room-gaps`, 2026-09-29)
+
+**DONE:** a settle now resolves the ask's own `⚠ ‹agent› has a question` line in place
+(`cardroom.go`'s `resolveAsk`, re-rendered through `roomexpand.go`'s `relaid`, which `toggleLine`
+shares, so a scrolled reader keeps their place): answered is `● ‹agent› · question answered` in
+`AnsweredStyle` (LastRead's effortUltra purple — never its surface, the last-read rule is a DM's) with
+one `question → answer` row per question under a `⎿`, drawn by `render.ToolResult` collapsed; a refusal
+is the same line muted with no body. An ask line evicted past retention gets the record appended
+instead. Open questions below: **multiple questions** is one row each; **permissions/plans** still post
+nothing; **persistence** stays live-only. Not closed: a question answered in *another* window leaves
+this window's line yellow (only the operator's own settle points author the record; the
+`AskUserQuestion` tool_result would be the wire-side source).
 
 **Partially shipped (`fix/room-question-answered-notice`, PR #40, 2026-08-31).** The "yellow → gone"
 failure below is fixed: a settled question now leaves one line in the group chat — `● ‹agent› ·
@@ -4702,7 +4729,11 @@ The two alternatives are worse and are written down so nobody re-derives them: l
 248ms the settle exists to avoid, and a rubber-band divider drawn at the pending column while the
 panes stay put draws a `│` through the middle of a pane's text.
 
-**2026-08-15 — a room message aimed at one agent does not come back.** `roomHistoryLines` restores a
+**2026-08-15 — a room message aimed at one agent does not come back.** *FIXED 2026-09-29
+(`fix/room-gaps`) for turns sent after the change: the uuid Wake stamps is recorded as the turn's own,
+so a room send marks its uuid (`roomprovenance.go`) and a direct `@noah` comes back in noah's thread —
+provenance on disk without changing what the model reads (decisions.md, 2026-09-29). Older transcripts
+restore exactly as below.* `roomHistoryLines` restores a
 turn you typed only when two or more transcripts hold the same text within `broadcastWindow`, because
 one transcript cannot distinguish `@noah do this` sent from the room from `do this` typed into noah's
 own pane, and a DM is private. So `@all` and `@noah,@robin` come back and a single-target room
@@ -4726,7 +4757,14 @@ blocks:* nothing; the roster draws a spinner per row and `⌃X` reaches a blocke
 is a decision about what the room may spend on chrome, which is the same question a room last-read
 marker asks, so the two are worth taking together.
 
-**2026-08-15 — a fork's own conversation is not restored to the room either.** `isFork` refuses a room
+**2026-08-15 — a fork's own conversation is not restored to the room either.** *FIXED 2026-09-29
+(`fix/room-gaps`): the corpus was checked — there is no fork marker, but a fork copies its parent's
+records under the same **uuids** (`testdata/transcript/fork-child.jsonl`), so `forkCopies` draws a
+copied record once and `isFork` is gone; forks are asked about while their parent runs, and a woken
+fork's copy no longer passes for a broadcast (decisions.md, 2026-09-29); the daemon leaves a fork's
+inherited records out of its room history against the source transcript read whole (`inheritedBy`).
+**Still open:** a fork woken from the park book has no lineage, so its inherited records are told
+apart only by what the parent's own tail still shows, and kept by arrival order.* `isFork` refuses a room
 history ask for any session carrying a `ParentID`, because a fork's transcript opens with every line
 its parent had at the moment it was taken — and the parent is usually in the same report, so asking
 draws that prose twice under two names. What it costs is the fork's *own* turns after the fork point,
@@ -4746,7 +4784,10 @@ and matching on `(session, kind, text)` is the obvious way and is wrong for an a
 twice. **Do not take this without deciding what identity a room line has.**
 
 **2026-08-15 — a restored room holds the broadcasts and nothing else, which on some fleets is almost
-nothing.** An agent's prose comes back only inside a turn two transcripts prove was a broadcast, and
+nothing.** *Narrowed 2026-09-29 (`fix/room-gaps`): every turn typed in the room after the change
+comes back with its replies, by the uuid marker above — not a zero-width prefix or sentinel, so the
+model reads nothing new. Still true: a fleet driven from conversation panes restores the room's
+share only, which is the privacy rule working.* An agent's prose comes back only inside a turn two transcripts prove was a broadcast, and
 prose with no initiator inside the 400-event window is dropped — which is most of a tail, since a tail
 usually opens mid-conversation. A fleet driven mostly from conversation panes therefore restores a
 nearly empty room. **This is the deliberate cost of the privacy rule** (`decisions.md`), taken by the

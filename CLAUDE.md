@@ -240,7 +240,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`roomWorkingLine`, `roomwords.go`).
 - **The DM's done line** is captured at the working→idle edge (`Fleet.WithStatus`), only for turns
   this client watched start; forgotten on park/end/gap, on new agent content (`notDone`), and hidden
-  while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate.
+  while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate. The roster's `✔`
+  and the strip's `N done` read the same `turnDone` — an annotation over idle, never an `rpc` state.
 - **Every notice times out**: `max(10s, drawn cells × 100ms)`, one tick per `notice.Seq`, armed in
   `App.Update`. An API failure stays pinned under them until a healthy turn or a resume
   (`noticelinger.go`, `apierror.go`'s `pinnedNotice`).
@@ -252,7 +253,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **The room re-derives its history from claude's transcripts** (`FrameRoomHistory`,
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
   if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
-  broadcast; agent prose is restored only inside a public turn.
+  broadcast, or was stamped by a room send (`roomprovenance.go`: the uuid Wake stamps is the one on
+  disk; a direct `@name` comes back in that thread); agent prose is restored only inside a public
+  turn. A record in two transcripts (same uuid, `Event.MessageID`) is a fork's copy, drawn once
+  (`forkCopies`); the daemon also leaves a fork's inherited records out of its room history
+  (`inheritedBy`), so forks are asked like any session.
 - A routed message is echoed into the room and into every *held* DM it reached, mention included,
   marked `FromRoom`.
 - **A lone `@name` narrows the room** to that thread (`roomfocus.go`); `⌃A` overrides per target;
@@ -348,7 +353,7 @@ yet says so in bold.**
 | Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
-| Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomfocus.go` · `roomfilter.go` |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
@@ -457,6 +462,9 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - A question killed by closing stdin is indistinguishable from an operator deny.
 - Images: first in the content array, text last. An undecodable image silently degrades to text.
 - A malformed stdin line is echoed to stderr in full, then exit 1.
+- A user line's top-level `uuid` is recorded as that turn's own on disk; a version-8 one is accepted
+  (2.1.285). Wake's room marker depends on it — `roomMessageVersion`, re-check on upgrade. A fork
+  copies records under the same uuids. `docs/superpowers/notes/2026-09-29-transcript-uuid-findings.md`.
 - `/model`, `/clear`, `/compact`, `/context` survive stream-json; `/resume` does not. Bare
   `/effort`/`/model` do nothing (`num_turns: 0`, `$0`).
 - `stream_event` text deltas are byte-identical to the completed `assistant` block
@@ -494,7 +502,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/encode.go` at 798 and `internal/core/protocol.go` at 798 — derived by
+  `internal/core/encode.go` at 798 and `internal/core/wire.go` at 798 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

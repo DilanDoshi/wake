@@ -210,6 +210,7 @@ func (g geometry) withSplitAt(l Layout, r Regions, at, x int) geometry {
 }
 
 // settlingLayout is the layout the pending geometry commits on the next settle.
+// Equal to a.layout except mid-drag, when a.layout still holds the old wrap.
 func (a App) settlingLayout() Layout {
 	l := a.layout
 	if a.pending.width > 0 {
@@ -218,7 +219,11 @@ func (a App) settlingLayout() Layout {
 	return l
 }
 
-// drawnRegions is the column widths the next settle lays the panes out at.
+// drawnRegions is the column widths the next settle lays the panes out at - and
+// which columns are on screen once it does. Mid window-drag that is not what View
+// draws: that is the old layout clipped to the new terminal (frameRegions), and a
+// column the clip cuts may still be the one below the takeover keeps (the
+// focused one).
 func (a App) drawnRegions() Regions {
 	return a.settlingLayout().Regions(len(a.grid.Cols), a.focusedCol())
 }

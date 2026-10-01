@@ -296,6 +296,10 @@ func (s *server) launch(c *client, cfg core.Config, parent string, replaces *age
 	actx, cancel := context.WithCancel(context.Background())
 	sess := core.NewSession(cfg)
 	a := newAgent(cfg.SessionID, cfg.Name, labelFor(cfg.Dir, replaces), cfg.Dir, parent, sess, cancel)
+	a.forkFrom = cfg.ForkFrom
+	if replaces != nil {
+		a.forkFrom = replaces.forkFrom // a wake resumes the fork; its source is unchanged
+	}
 	// Set before the agent is published, so park can write down what it ran at.
 	a.effort = cfg.Effort
 	a.model = cfg.Model

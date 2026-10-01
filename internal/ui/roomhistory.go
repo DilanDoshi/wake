@@ -203,8 +203,10 @@ func (a App) agentFor(id string) Agent {
 }
 
 // liveSessions is every session in a report the room should ask about: the ones
-// that are running and are not forks. Parked rows are disjoint from these by
-// construction - see rpc.Status.Parked - and an ended one has nothing to come
+// that are running, forks included - the daemon leaves out of a fork's room
+// history what it copied from its source (inheritedBy), and forkCopies catches
+// the copy of a fork woken with no lineage. Parked rows are disjoint from these
+// by construction - see rpc.Status.Parked - and an ended one has nothing to come
 // back to.
 func liveSessions(st *rpc.Status) []string {
 	if st == nil {
@@ -212,29 +214,12 @@ func liveSessions(st *rpc.Status) []string {
 	}
 	out := make([]string, 0, len(st.Sessions))
 	for _, s := range st.Sessions {
-		if s.State != rpc.StateEnded && !isFork(s) {
+		if s.State != rpc.StateEnded {
 			out = append(out, s.ID)
 		}
 	}
 	return out
 }
-
-// isFork is a session whose transcript is somebody else's conversation with its
-// own tail on the end.
-//
-// A fork is `--resume <parent> --fork-session`, so its file opens with every
-// line the parent had at the moment it was taken. Restoring it puts an hour of
-// the parent's prose on screen a second time under a new name - and the parent
-// is usually right there in the same report.
-//
-// It is checked in both places a room ask is decided, which is the correction an
-// adversarial review made: the ruling was written down and only the *later*
-// status push enforced it, because askRoomHistory is never reached from an
-// ordinary report. A fork sitting in the seed, or one coming back from parked,
-// went straight through. What it costs is that a fork's own conversation after
-// the fork point does not come back either; deferred.md records why that is the
-// cheaper half.
-func isFork(s rpc.SessionStatus) bool { return s.ParentID != "" }
 
 const (
 	// roomRawEvents bounds Room.raw, and it is a memory backstop rather than a
@@ -333,13 +318,14 @@ func roomHistoryLines(events []core.Event, cutoff time.Time, agentOf func(string
 // suffix is partitioned into same-text anchor runs. The nominal tail boundary
 // may split several interleaved runs transitively, so the cut advances to a
 // fixed point. Refused and ambiguous runs count too: pruning must not make a
-// previously unprovable turn provable under a new anchor.
+// previously unprovable turn provable under a new anchor. A room send's group
+// is not an anchor run and may be cut: each member it keeps is public on its own.
 func trimRoomRaw(lines []roomLine) []roomLine {
 	cut := max(len(lines)-roomRawEvents, 0)
 	if cut == 0 {
 		return lines
 	}
-	runs := broadcastRuns(lines)
+	runs := broadcastRuns(lines, forkCopies(lines))
 	for {
 		next := cut
 		for _, run := range runs {
@@ -404,12 +390,65 @@ func trimRoomRaw(lines []roomLine) []roomLine {
 // member of a currently proved cluster with its logical identity; annotations
 // on refused or no-longer-public runs are cleared.
 func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
-	firsts, public, clusters := broadcastIndex(lines)
+	copied := forkCopies(lines)
+	firsts, public, clusters := broadcastIndex(lines, copied)
 
-	// Reuse an identity only when exactly one old logical cluster contributes
-	// physical members to exactly one current cluster. This preserves a proved
-	// broadcast through reply reordering and raw-front eviction without joining
-	// clusters whose membership actually merged or split.
+	identities := clusterIdentities(lines, clusters, nextID)
+
+	// Per session, because a turn is a property of one transcript. False until
+	// a broadcast opens one: a session whose window starts mid-conversation has
+	// nothing saying its prose was ever public.
+	open := make(map[string]bool, len(lines))
+	out := make([]roomLine, 0, len(lines))
+	for i, l := range lines {
+		if keeper, ok := copied[i]; ok {
+			// A fork's copy of a record another transcript holds: drawn there. A
+			// user copy still stands for that turn in its own session.
+			if l.ev.Kind == core.KindUserText {
+				open[l.ev.SessionID] = public[keeper]
+			}
+			continue
+		}
+		if l.ev.Kind == core.KindCrossSession {
+			// A peer's message is a first-class room line, not agent prose gated
+			// by an open broadcast: it was drawn in the room when it arrived, so
+			// it comes back on any restore. Its speaker is the sender, set in
+			// roomHistoryLines, not the receiving session's open-turn state.
+			out = append(out, l)
+			continue
+		}
+		if l.ev.Kind != core.KindUserText {
+			if open[l.ev.SessionID] {
+				out = append(out, l)
+			}
+			continue
+		}
+		open[l.ev.SessionID] = public[i]
+		if firsts[i] {
+			// The chronological representative can change when an earlier
+			// transcript reply arrives late or the raw backstop evicts one member.
+			// The proved cluster carries a separate logical rendered-block identity.
+			l.id = identities[i]
+			l = addressedAsSent(l, lines, clusters[i])
+			// The operator's own turn has no speaker, the same way a live echo
+			// into the room does not. Under one agent's name it would read as
+			// that agent quoting you.
+			l.by = Agent{}
+			out = append(out, l)
+		}
+	}
+	return out
+}
+
+// clusterIdentities gives every proved cluster its logical rendered-block
+// identity, annotating each member line with it, and returns it by the
+// cluster's start.
+//
+// Reuse an identity only when exactly one old logical cluster contributes
+// physical members to exactly one current cluster. This preserves a proved
+// broadcast through reply reordering and raw-front eviction without joining
+// clusters whose membership actually merged or split.
+func clusterIdentities(lines []roomLine, clusters map[int][]int, nextID *uint64) map[int]uint64 {
 	candidates := make(map[int]uint64, len(clusters))
 	claims := make(map[uint64]int, len(clusters))
 	retainedMembers := make(map[uint64]int, len(clusters))
@@ -452,41 +491,7 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 			lines[i].broadcastID = identity
 		}
 	}
-
-	// Per session, because a turn is a property of one transcript. False until
-	// a broadcast opens one: a session whose window starts mid-conversation has
-	// nothing saying its prose was ever public.
-	open := make(map[string]bool, len(lines))
-	out := make([]roomLine, 0, len(lines))
-	for i, l := range lines {
-		if l.ev.Kind == core.KindCrossSession {
-			// A peer's message is a first-class room line, not agent prose gated
-			// by an open broadcast: it was drawn in the room when it arrived, so
-			// it comes back on any restore. Its speaker is the sender, set in
-			// roomHistoryLines, not the receiving session's open-turn state.
-			out = append(out, l)
-			continue
-		}
-		if l.ev.Kind != core.KindUserText {
-			if open[l.ev.SessionID] {
-				out = append(out, l)
-			}
-			continue
-		}
-		open[l.ev.SessionID] = public[i]
-		if firsts[i] {
-			// The chronological representative can change when an earlier
-			// transcript reply arrives late or the raw backstop evicts one member.
-			// The proved cluster carries a separate logical rendered-block identity.
-			l.id = identities[i]
-			// The operator's own turn has no speaker, the same way a live echo
-			// into the room does not. Under one agent's name it would read as
-			// that agent quoting you.
-			l.by = Agent{}
-			out = append(out, l)
-		}
-	}
-	return out
+	return identities
 }
 
 // broadcastIndex reads every user line and answers two questions about it:
@@ -513,9 +518,9 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 // *earliest* - the private one - to the line the room draws, which opened its
 // turn and restored the reply to it. Refusing costs a real broadcast sent twice
 // inside five seconds, which is the safe direction.
-func broadcastIndex(lines []roomLine) (firsts, public map[int]bool, clusters map[int][]int) {
+func broadcastIndex(lines []roomLine, copied map[int]int) (firsts, public map[int]bool, clusters map[int][]int) {
 	firsts, public, clusters = map[int]bool{}, map[int]bool{}, map[int][]int{}
-	for _, at := range broadcastRuns(lines) {
+	for _, at := range broadcastRuns(lines, copied) {
 		start := at[0]
 		senders := map[string]struct{}{lines[start].ev.SessionID: {}}
 		repeat := false
@@ -534,15 +539,65 @@ func broadcastIndex(lines []roomLine) (firsts, public map[int]bool, clusters map
 			}
 		}
 	}
+	// A turn a room send stamped is public on its own record: provenance, not
+	// multiplicity. One send is one line however many transcripts hold it.
+	for _, at := range roomSendGroups(lines, copied) {
+		firsts[at[0]] = true
+		clusters[at[0]] = at
+		for _, k := range at {
+			public[k] = true
+		}
+	}
 	return firsts, public, clusters
+}
+
+// roomSendGroups is every user line a room send stamped, grouped by that send,
+// in order of each group's first line. A fork's copy is in none, and nor is an
+// image beside a caption: the record's text block, under the same uuid, is the
+// turn. A captionless image is the turn itself.
+func roomSendGroups(lines []roomLine, copied map[int]int) [][]int {
+	captioned := map[string]bool{}
+	for _, l := range lines {
+		if l.ev.Kind == core.KindUserText && l.ev.Text != core.ImagePlaceholder {
+			captioned[l.ev.MessageID] = true
+		}
+	}
+	var order [][6]byte
+	groups := map[[6]byte][]int{}
+	for i, l := range lines {
+		_, isCopy := copied[i]
+		if isCopy || l.ev.Kind != core.KindUserText || l.ev.Text == core.ImagePlaceholder && captioned[l.ev.MessageID] {
+			continue
+		}
+		send, _, ok := roomSendOf(l.ev.MessageID)
+		if !ok {
+			continue
+		}
+		if _, seen := groups[send]; !seen {
+			order = append(order, send)
+		}
+		groups[send] = append(groups[send], i)
+	}
+	out := make([][]int, 0, len(order))
+	for _, send := range order {
+		out = append(out, groups[send])
+	}
+	return out
 }
 
 // broadcastRuns partitions every eligible same-text user line from its own
 // first copy. It deliberately does not decide whether a run is public: raw
-// pruning needs refused and repeated-session runs as well as accepted ones.
-func broadcastRuns(lines []roomLine) [][]int {
+// pruning needs refused and repeated-session runs as well as accepted ones. A
+// fork's copy (copied) is not a line anybody sent, so it is in no run.
+func broadcastRuns(lines []roomLine, copied map[int]int) [][]int {
 	byText := map[string][]int{}
 	for i, l := range lines {
+		// A room send's turn is decided by its provenance (roomSendGroups), and a
+		// fork's copy is not a line anybody sent: multiplicity reads neither.
+		_, isCopy := copied[i]
+		if _, _, room := roomSendOf(l.ev.MessageID); isCopy || room {
+			continue
+		}
 		// Every decoded image carries the one placeholder text, so two private
 		// image sends to two agents inside the window would read as one text from
 		// two senders and be promoted to a broadcast - restoring a private image
@@ -566,6 +621,73 @@ func broadcastRuns(lines []roomLine) [][]int {
 		}
 	}
 	return runs
+}
+
+// addressedAsSent gives a restored room turn the address the live echo had: a
+// lone direct @name that reached one transcript is drawn `@name ...` in that
+// agent's thread (claude received it with the mention stripped). A broadcast, an
+// undirected send and a turn proved by multiplicity stay unaddressed.
+func addressedAsSent(l roomLine, lines []roomLine, members []int) roomLine {
+	_, direct, room := roomSendOf(l.ev.MessageID)
+	if !room || !direct {
+		return l
+	}
+	for _, k := range members {
+		if lines[k].ev.SessionID != l.ev.SessionID {
+			return l
+		}
+	}
+	l.to = l.ev.SessionID
+	if name := l.by.Name; name != "" {
+		l.ev.Text = agentPrefix + name + " " + l.ev.Text
+	}
+	return l
+}
+
+// forkCopies is every restored line that is a fork's copy of a record another
+// transcript also holds. A --fork-session transcript copies its parent's records
+// under the same uuids and times (testdata/transcript/fork-child.jsonl), while a
+// send mints a uuid per target - so the same uuid in two transcripts is one
+// record, never a broadcast, and multiplicity must not read it as one.
+//
+// The copy kept is the one whose session's parent holds none: the original, or
+// the oldest ancestor still here. A fork woken from parked has no ParentID (the
+// park book holds none), so there the first in time order stands. The map is
+// each dropped copy's index to the index kept for it.
+func forkCopies(lines []roomLine) map[int]int {
+	parentOf := make(map[string]string)
+	byRecord := make(map[string][]int)
+	for i, l := range lines {
+		if l.by.ID == l.ev.SessionID {
+			parentOf[l.by.ID] = l.by.ParentID
+		}
+		if l.ev.MessageID != "" {
+			byRecord[l.ev.MessageID] = append(byRecord[l.ev.MessageID], i)
+		}
+	}
+	copied := make(map[int]int)
+	for _, at := range byRecord {
+		holders := make(map[string]bool, len(at))
+		for _, i := range at {
+			holders[lines[i].ev.SessionID] = true
+		}
+		if len(holders) < 2 {
+			continue
+		}
+		keep := at[0]
+		for _, i := range at {
+			if !holders[parentOf[lines[i].ev.SessionID]] {
+				keep = i
+				break
+			}
+		}
+		for _, i := range at {
+			if lines[i].ev.SessionID != lines[keep].ev.SessionID {
+				copied[i] = keep
+			}
+		}
+	}
+	return copied
 }
 
 // roomAskedAs carries what the room holds for an agent's old id onto the id a

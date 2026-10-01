@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/render"
 )
 
 const (
@@ -113,11 +114,11 @@ const (
 	// can precede every report that would have named it.
 	unnamedSpeaker = agentPrefix + "unnamed"
 
-	// A question the operator resolved leaves one line in the group chat, so the
-	// yellow "has a question" the ask posted (roomBlock's KindPermissionRequest
-	// case) gets a close rather than going stale. One line, attributed to the
-	// agent - closer to the "● Subagent finished" a dispatch leaves than to the
-	// live card the room deliberately does not draw. See cardroom.go.
+	// A question the operator resolved turns the yellow "has a question" line the
+	// ask posted (roomBlock's KindPermissionRequest case) into its record, in
+	// place: a headline attributed to the agent and, for an answer, what was
+	// chosen under a ⎿ - closer to the "● Subagent finished" a dispatch leaves
+	// than to the live card the room deliberately does not draw. See cardroom.go.
 	resolvedLead      = "● "
 	resolvedSep       = " · "
 	resolvedAnswered  = "question answered"
@@ -144,7 +145,7 @@ func roomBlock(ev core.Event, a, to Agent, width int, expanded bool) block {
 	// (cardroom.go) and keyed on the notice rather than the kind, so the record
 	// does not depend on which kind carried it. "" for every other notice, so an
 	// ordinary event falls through to its own case unchanged.
-	if line := resolvedLine(ev.Notice, a, w); line != "" {
+	if line := resolvedLine(ev, a, w); line != "" {
 		return block{text: line}
 	}
 	switch ev.Kind {
@@ -423,15 +424,22 @@ func speakerStyle(a Agent) lipgloss.Style {
 }
 
 // resolvedLine is the room's record that a question was resolved by the
-// operator, or "" for any other notice. Green for an answer and muted for a
-// refusal - the operator's own choice, not a fault, the way ⊘ turn interrupted
-// is muted - so the two read as positive and neutral, not only in their
-// wording. Bounded to the width like every other room block, for roomBlock's
-// reason: one over-wide line shoves both sidebars out of place.
-func resolvedLine(n core.Notice, a Agent, width int) string {
-	switch n {
+// operator, or "" for any other notice. Purple for an answer, with ev.Text's
+// "question → answer" rows under it drawn the way a DM draws a tool result, and
+// muted for a refusal - the operator's own choice, not a fault, the way ⊘ turn
+// interrupted is muted. Bounded to the width like every other room block, for
+// roomBlock's reason: one over-wide line shoves both sidebars out of place.
+func resolvedLine(ev core.Event, a Agent, width int) string {
+	switch ev.Notice {
 	case core.NoticeQuestionAnswered:
-		return ToolOkStyle.MaxWidth(width).Render(resolvedLead + speaker(a) + resolvedSep + resolvedAnswered)
+		head := AnsweredStyle.MaxWidth(width).Render(ansi.Truncate(resolvedLead+speaker(a)+resolvedSep+resolvedAnswered, width, ellipsis))
+		// Collapsed, so a long typed answer folds rather than growing the record
+		// back into the card it replaced.
+		body := render.ToolResult(render.Result{Body: ev.Text, Collapsed: true}, render.ToolStyle{Body: HintStyle}, width)
+		if body == "" {
+			return head
+		}
+		return head + "\n" + body
 	case core.NoticeQuestionCancelled:
 		return mutedLine(resolvedLead+speaker(a)+resolvedSep+resolvedCancelled, width)
 	default:
