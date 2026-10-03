@@ -765,8 +765,8 @@ func toolResultText(content json.RawMessage) string {
 	return strings.Join(parts, "\n\n")
 }
 
-// receiptSentence is a text block as prose: a SendMessage receipt - an object of
-// its recorded keys alone, success and message beside msg_id - reads as its
+// receiptSentence is a text block as prose: a SendMessage receipt - its three
+// recorded keys and no other, success, message and a msg_id - reads as its
 // message (manager-relay.jsonl). Any other text, JSON or not, is left whole: the
 // block names no tool, so only the receipt's own shape says it is one.
 func receiptSentence(text string) string {
@@ -777,7 +777,8 @@ func receiptSentence(text string) string {
 	}
 	dec := json.NewDecoder(strings.NewReader(text))
 	dec.DisallowUnknownFields()
-	if !strings.HasPrefix(text, "{") || dec.Decode(&r) != nil || dec.More() || r.Success == nil || r.Message == nil {
+	if !strings.HasPrefix(text, "{") || dec.Decode(&r) != nil || dec.More() ||
+		r.Success == nil || r.Message == nil || r.MsgID == "" {
 		return text
 	}
 	return *r.Message

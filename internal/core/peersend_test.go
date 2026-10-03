@@ -81,6 +81,8 @@ func TestOnlyASendMessageReceiptIsReadAsItsSentence(t *testing.T) {
 		`{"message":"Not Found","documentation_url":"https://example.com"}`,
 		`{"message":""}`,
 		`{"success":true}`,
+		`{"success":false,"message":"permission denied"}`,
+		`{"success":true,"message":"sent","msg_id":""}`,
 	} {
 		if got := toolResultText(block(text)); got != text {
 			t.Errorf("toolResultText(%s) = %q, want it verbatim", text, got)
