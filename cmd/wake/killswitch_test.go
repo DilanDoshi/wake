@@ -83,6 +83,53 @@ func TestADroppedChunkSplitsARawReadButNotAnAlignedOne(t *testing.T) {
 	}
 }
 
+// forward writes a chunk as pieces the pipe publishes whole, each ending on a
+// boundary: a write past pipeAtomic can become readable part by part, and a part
+// ending on a report's ESC looks to alignedPipe like ⎋ with nothing behind it.
+// A lead of 0-12 bytes puts the pipeAtomic edge at every offset of a report.
+func TestForwardWritesAlignedPiecesThePipePublishesWhole(t *testing.T) {
+	report := esc + "[<67;217;52M"
+	for lead := range len(report) {
+		chunk := []byte(strings.Repeat("x", lead) + strings.Repeat(report, 400))
+		var writes writeLog
+		if err := writeWhole(&writes, chunk); err != nil {
+			t.Fatal(err)
+		}
+		for _, w := range writes {
+			if len(w) == 0 || len(w) > pipeAtomic || alignedCut(w) != len(w) {
+				t.Fatalf("lead %d: wrote %d bytes ending %q; want 1-%d ending on a boundary", lead, len(w), w[max(0, len(w)-8):], pipeAtomic)
+			}
+		}
+		if !bytes.Equal(bytes.Join(writes, nil), chunk) {
+			t.Fatalf("lead %d: the writes do not rejoin into the chunk", lead)
+		}
+	}
+	// An ESC that never finishes - what maxCarry flushes - still goes, a bounded piece at a time.
+	var writes writeLog
+	if err := writeWhole(&writes, append([]byte(esc+"["), bytes.Repeat([]byte("1"), 2*pipeAtomic)...)); err != nil {
+		t.Fatal(err)
+	}
+	if len(writes) != 3 || len(writes[0]) != pipeAtomic {
+		t.Fatalf("an unfinished sequence went as writes of %v bytes, want pieces of %d", lens(writes), pipeAtomic)
+	}
+}
+
+// writeLog keeps each Write as its own piece, the boundary a pipe would see.
+type writeLog [][]byte
+
+func (l *writeLog) Write(p []byte) (int, error) {
+	*l = append(*l, bytes.Clone(p))
+	return len(p), nil
+}
+
+func lens(writes [][]byte) []int {
+	var out []int
+	for _, w := range writes {
+		out = append(out, len(w))
+	}
+	return out
+}
+
 // A mouse report split across two short reads - what a byte stream over SSH or
 // tmux can deliver - must not become two droppable chunks. step holds the partial
 // until the report completes, so the report is only ever one whole chunk and a
