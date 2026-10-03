@@ -92,9 +92,10 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   machine's other Claude sessions `(dir)` (a bare one-shot `claude` running `/list-agents`, asked
   once per opening; a name past `[A-Za-z0-9_-]` is offered and typed quoted, `@"release notes"`, as
   Claude Code does), then `@agent-<type> (agent)`, then files by fuzzy search. The manager's
-  conversation offers its fleet and files only; a room draft behind a leading `@who ` that ↵ sends
-  to that one live agent offers that agent's menu. An unreadable listing row costs that row, never
-  the listing.
+  conversation offers no subagent types; a room draft behind a leading `@who ` that ↵ sends to that
+  one live agent offers that agent's menu, and the room's leading `@` offers the machine's sessions
+  after the fleet's while a manager is live to relay. An unreadable listing row costs that row,
+  never the listing.
   `⇥` is the only accept. `internal/ui/completionpeers.go`, `completionindex.go`; rulings in
   `decisions.md` (2026-09-27, 2026-10-03).
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
@@ -298,12 +299,17 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 
 **Manager**
 - **May send, interrupt, spawn (optionally named, under `daemon.liveCap`, into a directory the fleet
-  already occupies), and group (`set_team`, `set_color`)** — nothing else. Rename, label, park,
-  wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each argued in
-  `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
+  already occupies), and group (`set_team`, `set_color`)** — nothing else on the fleet. Rename,
+  label, park, wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each
+  argued in `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
+- **It relays the operator's `@"session" …` with `SendMessage`, its one built-in, unfenced** (owner's
+  2026-10-03 ruling, the accepted risk in `decisions.md`): a room draft whose leading mention names
+  no fleet agent passes through to it, and the room draws each send as `↪ manager → <to>` from the
+  call itself (`observe.go`'s `withManagerSend`).
 - Its config is a function of its name, applied in `launch`: `--mcp-config` only ever beside
-  `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing). Ordinary
-  agents get none of the three — they keep the operator's MCP servers (owner's ruling via PR #127).
+  `--strict-mcp-config` and `--tools SendMessage` (`core.ToolSendMessage`; not `--allowed-tools`,
+  which bounds nothing). Ordinary agents get none of the three — they keep the operator's MCP
+  servers (owner's ruling via PR #127).
 - **Every manager launch self-tests its tools** before claude starts: `managerConfig` runs
   `mcp.json`'s command through `initialize`/`tools/list` under a bound, and refuses unless
   `mcp.Tools()` comes back. Claude accepting the handshake stays `live-testing.md` §13.1.
@@ -447,7 +453,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 | Tool reach | `--add-dir` (Wake emits the repeated form) |
 | Debug | `--debug-file <path>`; `--debug` alone logs nothing observable headless |
 | Isolation | `--worktree` — **not used**; Wake runs `git worktree add` itself |
-| Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools ""`; `--append-system-prompt` |
+| Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools SendMessage`; `--append-system-prompt` |
 | Session listing | `--print --bare --no-session-persistence` + stream-json, one `/list-agents` line (verified 2.1.283) |
 
 ### Traps
