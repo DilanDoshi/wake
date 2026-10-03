@@ -3643,9 +3643,11 @@ permission card) and chose none of it:
 - (c) **No fence is possible in `auto`.** Under an `auto` spawn the only asks the corpus records are
   `AskUserQuestion` and `ExitPlanMode`; an ordinary built-in is approved without reaching Wake. A
   fence needs `default` mode, which the owner also declined — so this is not a fence deferred.
-- (d) **What stays visible:** the room draws every send as `↪ manager → <to>` from the `tool_use`
-  itself (`withManagerSend`), not from the manager's own prose, which injected text could also
-  suppress. A send to a fleet agent is left to the receiver's stream, which draws it already.
+- (d) **What stays visible:** the room draws every send, live, as `↪ manager → <to>` from the
+  `tool_use` itself (`withManagerSend`), not from the manager's own prose, which injected text could
+  also suppress. It shows what the manager tried to send, not that it arrived: the receipt is the
+  manager's turn, and a restored room does not redraw the line (deferred.md). A send to a fleet agent
+  is left to the receiver's stream, which draws it already.
 
 The composer's target line stays `→ @manager`: the frame goes to the manager, and whether the words
 reach the peer is the model's act, not Wake's. A daemon fence would need the quoted-mention parse

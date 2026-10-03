@@ -304,8 +304,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   argued in `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
 - **It relays the operator's `@"session" …` with `SendMessage`, its one built-in, unfenced** (owner's
   2026-10-03 ruling, the accepted risk in `decisions.md`): a room draft whose leading mention names
-  no fleet agent passes through to it, and the room draws each send as `↪ manager → <to>` from the
-  call itself (`observe.go`'s `withManagerSend`).
+  no fleet agent passes through to it, and the room draws each send live as `↪ manager → <to>` from
+  the call itself — the manager's intent, not proof of delivery (`observe.go`'s `withManagerSend`).
+  The room's leading `@` excludes an outside session named like a live team or `all`.
 - Its config is a function of its name, applied in `launch`: `--mcp-config` only ever beside
   `--strict-mcp-config` and `--tools SendMessage` (`core.ToolSendMessage`; not `--allowed-tools`,
   which bounds nothing). Ordinary agents get none of the three — they keep the operator's MCP

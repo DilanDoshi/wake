@@ -21,6 +21,7 @@ package ui
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -125,7 +126,7 @@ func (a App) conversationMenu(c completion, typed string) completion {
 			c.names = append(c.names, agentPrefix+addr.Name)
 		}
 	}
-	c = a.machineSessions(c, typed)
+	c = a.machineSessions(c, typed, nil)
 	if agent.Name == core.ManagerName {
 		return c
 	}
@@ -145,11 +146,12 @@ func mentionMatcher(typed string) func(string) bool {
 
 // machineSessions offers the listing's sessions that match typed after what c
 // holds, and wants this opening's ask. A listed name is offered as peerMention
-// writes it, and one a fleet agent holds is the fleet's.
-func (a App) machineSessions(c completion, typed string) completion {
+// writes it; one a fleet agent holds is the fleet's, and so is one in routed.
+func (a App) machineSessions(c completion, typed string, routed map[string]bool) completion {
 	matches := mentionMatcher(typed)
 	c.peers.wants = true
 	held := a.heldNames()
+	maps.Copy(held, routed)
 	for _, p := range a.completion.peers.listing {
 		key := strings.ToLower(p.Name)
 		mention, ok := peerMention(p.Name)
@@ -203,6 +205,19 @@ func dirLabel(offer, dir string, avail int) string {
 		dir = cut
 	}
 	return name + fmt.Sprintf(peerDirFormat, dir)
+}
+
+// routedNames are what a room's leading mention routes besides an agent: a team
+// with a live member and the broadcast. An outside session of one of those names
+// is never reached from there (core.Resolve), so the room does not offer it.
+func (a App) routedNames() map[string]bool {
+	routed := map[string]bool{core.BroadcastName: true}
+	for _, addr := range a.live() {
+		if addr.Team != "" {
+			routed[addr.Team] = true
+		}
+	}
+	return routed
 }
 
 // heldNames is every name a fleet agent holds - the roster's, parked and the

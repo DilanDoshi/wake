@@ -372,8 +372,10 @@ var claudeWireVocabulary = wordSet([]string{
 	// what put a bare "⏺ Agent" in front of a reader.
 	"Bash", "Read", "Edit", "Write", "Glob",
 	"Grep", "WebFetch", "WebSearch", "Agent", "Task",
-	// The manager's one built-in, and the call the room draws for it.
-	"SendMessage",
+	// The manager's one built-in, and the call the room draws for it - and the
+	// receipt key that, beside success and message, says a result is its own.
+	// The key sits inside a JSON string, so it is in embeddedMarkers below.
+	"SendMessage", "msg_id",
 
 	// The two interactive tools. Policed precisely because neither is ever
 	// named: askKind classifies an ask from requires_user_interaction and its
@@ -713,7 +715,9 @@ var notNamedByTheAirlock = map[string]string{
 // carries between its name and directory. list-agents-bare-renamed.jsonl.
 // 211 → 212: "SendMessage", the manager's one built-in and the call whose
 // recipient and words toolPeerSend reads. manager-tools.jsonl, manager-relay.jsonl.
-const policedWordCount = 212
+// 212 → 213: "msg_id", the SendMessage receipt's own key, which receiptSentence
+// requires so no other JSON result is cut to its message. manager-relay.jsonl.
+const policedWordCount = 213
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -1110,6 +1114,8 @@ var embeddedMarkers = map[string]bool{
 	"No subagents, teammates or other Claude sessions": true,
 	"Session renamed to: ":                             true,
 	"says it was ":                                     true,
+	// The SendMessage receipt's key, inside its JSON-in-text result.
+	"msg_id": true,
 	// Every connector's name begins with it ("claude.ai Gmail"); never whole.
 	"claude.ai ": true,
 }

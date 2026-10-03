@@ -804,3 +804,23 @@ func TestWithNoLiveManagerTheRoomsLeadingMentionOffersNoOutsideSession(t *testin
 		t.Errorf("`@wf` with the manager parked asked %d times and offered %q, want neither", asked, a.completion.offers)
 	}
 }
+
+// An outside session sharing a name the room's leading mention routes elsewhere
+// - a team with a live member, the broadcast - is not offered: ↵ would fan out
+// to the team or the fleet, never reach the session (core.Resolve).
+func TestTheRoomOffersNoOutsideSessionNamedLikeATeamOrTheBroadcast(t *testing.T) {
+	listed := func() App {
+		return roomFleet(t).applyFrame(peersReply(core.Peer{Name: "jets", Dir: "/tmp/jets"}, core.Peer{Name: "all", Dir: "/tmp/all"}))
+	}
+	for _, draft := range []string{"@je", "@al"} {
+		a := listed().withDraft(draft)
+		for _, offer := range a.completion.offers {
+			if a.completion.tags[offer].dir != "" {
+				t.Errorf("%q offered the outside session %q (%s), which ↵ would not reach", draft, offer, a.completion.tags[offer].dir)
+			}
+		}
+	}
+	if got := listed().withDraft("@je").completion.offers; !slices.Contains(got, "@jets") {
+		t.Errorf("`@je` offered %q, want the team @jets still", got)
+	}
+}

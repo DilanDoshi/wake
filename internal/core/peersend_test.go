@@ -68,3 +68,26 @@ func TestOnlyASendMessageWithARecipientAndTextIsASend(t *testing.T) {
 		}
 	}
 }
+
+// Only a receipt of SendMessage's recorded shape is read as its sentence: any
+// other JSON text - an MCP tool's error, an API body - keeps every key it has.
+func TestOnlyASendMessageReceiptIsReadAsItsSentence(t *testing.T) {
+	block := func(text string) json.RawMessage {
+		raw, _ := json.Marshal([]map[string]string{{"type": "text", "text": text}})
+		return raw
+	}
+	for _, text := range []string{
+		`{"message":"failed","code":"E_AUTH","retry_after":30}`,
+		`{"message":"Not Found","documentation_url":"https://example.com"}`,
+		`{"message":""}`,
+		`{"success":true}`,
+	} {
+		if got := toolResultText(block(text)); got != text {
+			t.Errorf("toolResultText(%s) = %q, want it verbatim", text, got)
+		}
+	}
+	receipt := `{"success":true,"message":"“hi” → wf peer","msg_id":"m1"}`
+	if got := toolResultText(block(receipt)); got != "“hi” → wf peer" {
+		t.Errorf("the receipt read as %q, want its sentence", got)
+	}
+}

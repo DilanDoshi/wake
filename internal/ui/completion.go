@@ -268,7 +268,7 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 	case a.focus == "" && !a.behindAddressee(head, typed):
 		c.names, c.tags = a.addressees(typed)
 		if a.relaysLeading(head, typed) {
-			c = a.machineSessions(c, typed)
+			c = a.machineSessions(c, typed, a.routedNames())
 		}
 	case canBeginName(typed):
 		c = a.conversationMenu(c, typed)

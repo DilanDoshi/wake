@@ -61,8 +61,8 @@ func (s *screen) rowsWith(text string) []int {
 	return rows
 }
 
-// The whole menu through one conversation, then the room's, which offers none
-// of the conversation's extras.
+// The whole menu through one conversation, then the room's, which offers the
+// outside sessions its live manager relays to but no subagent type.
 func TestAtMenuOffersPeersSessionsAgentsAndFiles(t *testing.T) {
 	withScriptedAgent(t, scriptAtMenu)
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
@@ -138,7 +138,8 @@ func TestAtMenuOffersPeersSessionsAgentsAndFiles(t *testing.T) {
 	s.await("@" + atMenuPeer)
 	s.await("@wf-alpha")
 	s.settle()
-	if peer, outside := s.rowsWith("@"+atMenuPeer), s.rowsWith("@wf-alpha"); len(peer) != 1 || len(outside) != 1 || peer[0] >= outside[0] {
+	// The peer's row is the first offer, under the cursor; a notice can name it too.
+	if peer, outside := s.rowsWith("› @"+atMenuPeer), s.rowsWith("@wf-alpha"); len(peer) != 1 || len(outside) != 1 || peer[0] >= outside[0] {
 		t.Fatalf("the room does not offer the outside session after the fleet's peer.\n%s", s.dump())
 	}
 	s.send("\x7f\x7f@gen")
