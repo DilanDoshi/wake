@@ -668,3 +668,62 @@ func TestADirectoryTagNeverEmptiesOrOverflows(t *testing.T) {
 		}
 	}
 }
+
+// roomFleet is the room over a fleet holding jade, jane on team jets, a parked
+// jack and the manager.
+func roomFleet(t *testing.T) App {
+	t.Helper()
+	return newRoomApp(t).withSize(200, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{
+		Running: true,
+		Teams:   []string{"jets"},
+		Sessions: []rpc.SessionStatus{
+			{ID: "s1", Name: "jade", State: rpc.StateIdle, Agents: []string{"Explore"}},
+			{ID: "s2", Name: "jane", Team: "jets", State: rpc.StateIdle, Agents: []string{"janes-own"}},
+			{ID: "s3", Name: "jack", State: rpc.StateParked},
+			{ID: "m1", Name: core.ManagerName, State: rpc.StateIdle},
+		},
+	}})
+}
+
+// Behind a leading `@jade ` the room's draft is jade's to read, as her own
+// conversation's is: a later `@` offers what her conversation offers - the
+// machine's sessions quoted as claude types them, her peers but not her, her
+// subagent types - while the leading mention still routes (owner, 2026-10-03).
+func TestBehindAnAddressedAgentTheRoomOffersThatAgentsNames(t *testing.T) {
+	a, asked := typedAsking(t, roomFleet(t), runes(`@jade ask @"wf`)...)
+	if asked != 1 {
+		t.Errorf("`@jade ask @\"wf` asked for the machine's sessions %d times, want once", asked)
+	}
+	a = a.applyFrame(peersReply(core.Peer{Name: "wf beta", Dir: "/tmp/wf-b"}, core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a"}))
+	if got, want := a.completion.offers, []string{`@"wf beta"`, "@wf-alpha"}; !slices.Equal(got, want) {
+		t.Fatalf("`@jade ask @\"wf` offered %q, want %q", got, want)
+	}
+	took, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyTab})
+	if got, want := took.composer().Value(), `@jade ask @"wf beta" `; got != want {
+		t.Errorf("⇥ inserted %q, want %q", got, want)
+	}
+	for draft, want := range map[string]string{
+		"@jade ask @j":      "@jane",
+		"@jade ask @agent-": "@agent-Explore",
+	} {
+		got := roomFleet(t).withDraft(draft).completion.offers
+		if !slices.Contains(got, want) || slices.Contains(got, "@jade") || slices.Contains(got, "@jack") ||
+			slices.Contains(got, "@agent-janes-own") {
+			t.Errorf("%q offered %q, want %q and neither jade herself, parked jack nor jane's types", draft, got, want)
+		}
+	}
+}
+
+// Anything but one live agent behind the leading mention keeps the room's own
+// names: a team or @all reaches several claudes, the manager has no SendMessage,
+// and a parked, unknown or absent name routes to the manager as typed.
+func TestBehindNoOneLiveAgentTheRoomKeepsItsOwnNames(t *testing.T) {
+	for _, draft := range []string{"@jets ask @wf", "@all ask @wf", "@manager ask @wf", "@jack ask @wf",
+		"@nobody ask @wf", "ask @wf", "@wf"} {
+		listed := roomFleet(t).applyFrame(peersReply(core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a"}))
+		a, asked := typedAsking(t, listed, runes(draft)...)
+		if asked != 0 || slices.Contains(a.completion.offers, "@wf-alpha") {
+			t.Errorf("%q asked %d times and offered %q, want no ask and no outside session", draft, asked, a.completion.offers)
+		}
+	}
+}

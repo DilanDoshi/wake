@@ -259,16 +259,28 @@ func openQuote(draft string, q int) bool {
 // `@agent-<type>` resolves headless to an Agent call (§3). So once a character
 // that can begin a name is typed, a conversation offers what Claude Code's own
 // `@` does (the manager's, its fleet only) - the owner's 2026-09-27 reversal of
-// the room-only rule, in completionpeers.go. Paths are offered in both.
+// the room-only rule, in completionpeers.go. So does a room draft behind a
+// leading `@who ` that reaches one live agent, whose claude reads the rest as
+// its conversation would (owner, 2026-10-03). Paths are offered in both.
 func (a App) mentionMenu(draft, head, typed string) completion {
 	c := completion{pane: a.focus, draft: draft, head: head, paths: a.pathMenuFor(typed)}
 	switch {
-	case a.focus == "":
+	case a.focus == "" && !a.behindAddressee(head, typed):
 		c.names, c.tags = a.addressees(typed)
 	case canBeginName(typed):
 		c = a.conversationMenu(c, typed)
 	}
 	return c
+}
+
+// behindAddressee reports whether a room mention being typed follows a leading
+// `@who ` that resolved to one live agent - addressedAgent's direct route.
+func (a App) behindAddressee(head, typed string) bool {
+	if head == "" || !canBeginName(typed) {
+		return false
+	}
+	_, ok := a.addressedAgent()
+	return ok
 }
 
 // addressees is every name a mention could resolve to, in the roster's own

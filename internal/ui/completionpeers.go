@@ -3,6 +3,7 @@ package ui
 // A conversation's `@` names: the fleet's other live agents, the machine's other
 // Claude sessions and the agent's own subagent types - what Claude Code's own
 // `@` typeahead offers (docs/superpowers/notes/2026-09-27-at-menu-findings.md).
+// A room draft behind a leading `@who ` offers who's (mentionMenu).
 //
 // **Nothing here routes.** A DM sends what was typed: claude's model sends
 // `@<session>` with SendMessage (findings §4, from the docs), and `@agent-<type>`
@@ -109,7 +110,8 @@ func canBeginName(typed string) bool {
 		!strings.ContainsRune(typed, os.PathSeparator)
 }
 
-// conversationMenu fills a conversation's `@` names in the order drawn: the
+// conversationMenu fills a conversation's `@` names in the order drawn - or a
+// room draft's behind its `@who `, completionAgent's agent either way: the
 // fleet's live peers, then the listing's sessions and this agent's subagent
 // types - for any agent but the manager, whose `--tools ""` reaches neither.
 // Nothing here routes, so unlike addressees it need not mirror core.Resolve. A
@@ -118,12 +120,12 @@ func canBeginName(typed string) bool {
 func (a App) conversationMenu(c completion, typed string) completion {
 	lower := strings.ToLower(strings.TrimPrefix(typed, mentionQuote))
 	matches := func(word string) bool { return strings.HasPrefix(strings.ToLower(word), lower) }
+	agent := a.completionAgent()
 	for _, addr := range a.live() {
-		if addr.ID != a.focus && matches(addr.Name) {
+		if addr.ID != agent.ID && matches(addr.Name) {
 			c.names = append(c.names, agentPrefix+addr.Name)
 		}
 	}
-	agent := a.completionAgent()
 	if agent.Name == core.ManagerName {
 		return c
 	}
