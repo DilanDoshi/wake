@@ -177,6 +177,8 @@ var claudeWireVocabulary = wordSet([]string{
 	// A message claude took up mid-turn, as it is stored on disk: an attachment
 	// of type queued_command naming the uuid Wake stamped. midturn-absorbed.jsonl.
 	"attachment", "queued_command", "source_uuid", "commandMode",
+	// Every stamped message a turn's result answered (Event.Answered).
+	"user_message_uuids",
 
 	// system subtypes.
 	"compact_boundary", "permission_denied", "hook_started",
@@ -718,7 +720,8 @@ var notNamedByTheAirlock = map[string]string{
 // 213 → 217: "attachment", "queued_command", "source_uuid" and "commandMode",
 // the on-disk record of a message claude took up mid-turn, which
 // DecodeTranscriptLine restores as the turn it was. midturn-absorbed.jsonl.
-const policedWordCount = 217
+// 217 → 218: "user_message_uuids", every stamped message a result answered.
+const policedWordCount = 218
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

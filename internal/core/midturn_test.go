@@ -2,6 +2,7 @@ package core
 
 import (
 	"errors"
+	"slices"
 	"testing"
 )
 
@@ -95,5 +96,19 @@ func TestAMessageTakenUpMidTurnRestoresAsTheTurnItWas(t *testing.T) {
 	node, ok := DecodeTranscriptNode([]byte(lines[1]))
 	if !ok || node.UUID != "c2ca34b2-ac6b-459b-bda5-f119436a07ed" || node.Source != "ce8c17b6-1b7d-41d9-b48d-7592a1a19cdc" {
 		t.Errorf("DecodeTranscriptNode = %+v, %v; want the record's uuid and the stamp it carries", node, ok)
+	}
+}
+
+// A turn's result names every stamped message it answered, one it took up
+// mid-way included - the record that a message was read even if its started
+// lifecycle never reached a reader.
+func TestATurnEndNamesEveryMessageItAnswered(t *testing.T) {
+	events, err := DecodeLine([]byte(fixtureLineContaining(t, "midturn-absent.jsonl", `"type":"result"`)))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := []string{"29f1d565-3815-47c3-b9d2-eb97fc2b984d", "ce8c17b6-1b7d-41d9-b48d-7592a1a19cdc"}
+	if len(events) != 1 || events[0].Kind != KindTurnEnd || !slices.Equal(events[0].Answered, want) {
+		t.Errorf("decoded %+v, want a turn end answering %v", events, want)
 	}
 }

@@ -600,6 +600,11 @@ type Event struct {
 	// identity, matched and never drawn.
 	MessageID string `json:"message_id,omitempty"`
 
+	// Answered is, on a KindTurnEnd, the stamped uuid of every message the turn
+	// answered - a message claude took up mid-turn included. It is how a reader
+	// knows a queued message was read when its started lifecycle went missing.
+	Answered []string `json:"answered,omitempty"`
+
 	// PermissionMode is the mode a session is running in, and it has two
 	// observables that are one fact: a KindControlReceipt answering a
 	// set_permission_mode, and every KindSystem init. One field rather than

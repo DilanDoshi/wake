@@ -49,6 +49,9 @@ type wireFrame struct {
 	// that omits it) is told apart from a real zero. Read only to mark a result
 	// as Claude's local-command reply; see Event.LocalCommand and absorbProbe.
 	NumTurns *int `json:"num_turns"`
+	// UserMessageUUIDs is every stamped message a result's turn answered, one it
+	// took up mid-way included (midturn-absent.jsonl:60). Read on results only.
+	UserMessageUUIDs []string `json:"user_message_uuids"`
 
 	// control_request frames carry no session_id - they, control_response and
 	// control_cancel_request are the only frames in the corpus that do not -
