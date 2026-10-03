@@ -722,7 +722,7 @@ opens with a markdown heading, as `/context`'s does. The same predicate sends it
 
 **Not changed:** the room still draws a public local reply (`@name /list-agents`) as markdown.
 
-## BUG-41 — a subagent's hand-back came back as the operator's own turn
+## BUG-42 — a subagent's hand-back came back as the operator's own turn
 
 **Reported 2026-10-03** (screenshot of a reopened conversation): a code-reviewer subagent's final
 report was drawn as `› you`, envelope and harness guidance included, while a peer's message right
