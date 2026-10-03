@@ -52,9 +52,9 @@ var ErrNotWritten = errors.New("nothing was written")
 // messageID is the uuid stamped on the outgoing frame, or "" for an unstamped
 // send (the effort probe, which wants no lifecycle frames). A stamped message is
 // what the CLI emits command_lifecycle for, so it is how a caller tracks the fate
-// of what it sent - see EncodeUserMessage.
-func (s *Session) Send(text string, images []ImageBlock, messageID string) error {
-	line, err := EncodeUserMessage(text, images, messageID)
+// of what it sent - see EncodeUserMessage, which also says what now does.
+func (s *Session) Send(text string, images []ImageBlock, messageID string, now bool) error {
+	line, err := EncodeUserMessage(text, images, messageID, now)
 	if err != nil {
 		return err
 	}
@@ -245,6 +245,16 @@ func (s *Session) StopTask(taskID string) (string, error) {
 		return "", err
 	}
 	return requestID, nil
+}
+
+// Recall takes back a message claude has not yet taken up, by its stamped uuid.
+// Only its lifecycle says whether it was in time, so the receipt is left alone.
+func (s *Session) Recall(messageID string) error {
+	line, err := EncodeCancelAsyncMessage(uuid.NewString(), messageID)
+	if err != nil {
+		return err
+	}
+	return s.writeLine(line)
 }
 
 // Rewind asks this session to rewind its conversation to targetUUID, declaring

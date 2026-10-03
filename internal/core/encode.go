@@ -56,6 +56,15 @@ type outUserFrame struct {
 	// message - an unstamped one produces none - which is how Wake tracks the fate
 	// of what it sent. omitempty so an unstamped send is byte-identical to before.
 	UUID string `json:"uuid,omitempty"`
+	// Set only on a send-now. "now" with a human origin moves running work to
+	// the background and is read in the same turn; without the origin it ends
+	// the turn instead (midturn-now-human.jsonl, midturn-now-bare.jsonl).
+	Priority string     `json:"priority,omitempty"`
+	Origin   *outOrigin `json:"origin,omitempty"`
+}
+
+type outOrigin struct {
+	Kind string `json:"kind"`
 }
 
 type outUserMessage struct {
@@ -86,16 +95,18 @@ type outImageSource struct {
 	Data      string `json:"data"`
 }
 
-// EncodeUserMessage renders one user turn as a stream-json line. Send it
-// after a KindTurnEnd: the process stays alive across turns, and closing
-// stdin instead would end it.
+// EncodeUserMessage renders one user message as a stream-json line. Written
+// while a turn runs, claude reads it at the next tool boundary, or as the next
+// turn if this one ends first (midturn-absent.jsonl, midturn-text-next.jsonl);
+// now asks for it at once. See docs/superpowers/notes/
+// 2026-10-02-mid-turn-delivery-findings.md.
 //
 // Three rules from the recorded corpus, all in
 // docs/superpowers/notes/2026-08-15-image-input-findings.md: images go first
 // and the text block last (Claude derives the prompt from the final block), an
 // empty content array is silently dropped so a message with neither text nor an
 // image is refused here, and the base64 is handed over raw for Claude to budget.
-func EncodeUserMessage(text string, images []ImageBlock, uuid string) ([]byte, error) {
+func EncodeUserMessage(text string, images []ImageBlock, uuid string, now bool) ([]byte, error) {
 	content := make([]any, 0, len(images)+1)
 	for _, img := range images {
 		content = append(content, outImageBlock{
@@ -109,11 +120,15 @@ func EncodeUserMessage(text string, images []ImageBlock, uuid string) ([]byte, e
 	if len(content) == 0 {
 		return nil, fmt.Errorf("%w: encode user message: nothing to send", ErrNotWritten)
 	}
-	return marshalLine(outUserFrame{
+	frame := outUserFrame{
 		Type:    "user",
 		Message: outUserMessage{Role: "user", Content: content},
 		UUID:    uuid,
-	}, "encode user message")
+	}
+	if now {
+		frame.Priority, frame.Origin = "now", &outOrigin{Kind: "human"}
+	}
+	return marshalLine(frame, "encode user message")
 }
 
 // Permission decisions. "allow" and "deny" are the two behaviors

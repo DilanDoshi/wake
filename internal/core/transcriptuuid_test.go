@@ -42,7 +42,7 @@ func recordUUID(t *testing.T, line []byte) string {
 func TestTheUUIDWakeStampsOnASendIsTheOneOnDisk(t *testing.T) {
 	stdin := readLines(t, "testdata/input/room-stamped-uuid.stdin.jsonl")[0]
 	stamped := recordUUID(t, stdin)
-	encoded, err := EncodeUserMessage("room hello", nil, stamped)
+	encoded, err := EncodeUserMessage("room hello", nil, stamped, false)
 	if err != nil {
 		t.Fatal(err)
 	}

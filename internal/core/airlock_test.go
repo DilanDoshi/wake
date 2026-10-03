@@ -230,6 +230,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// control_request EncodeStopTask sends. "task_id" is already policed above.
 	"stop_task",
 
+	// Taking a queued message back, and a send-now's priority key: what
+	// EncodeCancelAsyncMessage and EncodeUserMessage write
+	// (2026-10-02-mid-turn-delivery-findings.md).
+	"cancel_async_message", "message_uuid", "priority",
+
 	// The live checklist tools and their input keys. TodoWrite is retired in
 	// 2.1.240 and its replacement builds a list across TaskCreate/TaskUpdate
 	// calls (task-checklist.jsonl). "subject" and "taskId" are policed for
@@ -444,6 +449,9 @@ var deliberatelyGeneric = wordSet([]string{
 	// A command_lifecycle state (Event.MessageStarted), generic for "cancelled"'s
 	// reason: Wake spells it itself (core.TaskStarted, two json tags).
 	"started",
+	// A send-now's priority value and origin kind: plain English, and "human"
+	// is already a word Wake spells (mcp's reserved names).
+	"now", "human",
 
 	// init's subagent types. Generic for "model"'s reason: an agent is Wake's
 	// own subject, and core.SessionFacts.Agents keeps the spelling. Not a route
@@ -702,7 +710,9 @@ var notNamedByTheAirlock = map[string]string{
 // list-agents.jsonl and list-agents-bare*.jsonl.
 // 209 → 210: "authentication_failed", the failed turn's error kind apiNotice
 // reads so only a dead login is parked for a new process. api-error-auth.jsonl.
-const policedWordCount = 210
+// 210 → 213: "cancel_async_message" and "message_uuid", the request that takes a
+// queued message back, and "priority", the key a send-now carries. midturn-*.
+const policedWordCount = 213
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -744,6 +754,8 @@ var notWireVocabulary = wordSet([]string{
 	"encode stop task",
 	"%w: encode stop task: empty request id",
 	"%w: encode stop task: empty task id",
+	"encode cancel async message",
+	"%w: encode cancel async message: empty request or message id",
 	"decode workflow run: %w",
 	"decode workflow run: no task id",
 	defaultDenyReason,
@@ -1060,6 +1072,9 @@ var notInTheCorpus = map[string]string{
 	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
 	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
 	"stop_task":                   "outbound only; a recording of stdout cannot contain it",
+	"cancel_async_message":        "outbound only; a recording of stdout cannot contain it",
+	"message_uuid":                "outbound only; the field the cancel request carries",
+	"priority":                    "outbound only; the key a send-now carries",
 
 	// The run record's own two keys with no counterpart on the stream: the
 	// start time (task_progress carries only elapsed usage, never a start

@@ -25,6 +25,12 @@ const (
 	FrameSend  = "send"  // client → daemon: user text for a session
 	FrameSpawn = "spawn" // client → daemon: start a session
 
+	// FrameRecall takes back a FrameSend claude has queued but not yet taken
+	// up, named by its MessageID. Only that message's own lifecycle says
+	// whether it was in time; a separate kind because it unsends rather than
+	// sends.
+	FrameRecall = "recall" // client → daemon
+
 	// FrameFork branches an existing session: a new agent that inherits the
 	// named parent's conversation as of the moment it is taken.
 	//
@@ -317,6 +323,9 @@ type Frame struct {
 	Images []core.ImageBlock `json:"images,omitempty"`
 	// MessageID is a FrameSend's stamped uuid, named by the CLI's command_lifecycle. See EncodeUserMessage.
 	MessageID string `json:"message_id,omitempty"`
+	// Now asks a FrameSend's agent to take it up at once rather than at its next
+	// tool boundary: the operator's send-now. See core.EncodeUserMessage.
+	Now bool `json:"now,omitempty"`
 
 	Event *core.Event `json:"event,omitempty"`
 

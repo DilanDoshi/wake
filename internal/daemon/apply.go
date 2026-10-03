@@ -85,7 +85,7 @@ func (a *agent) apply(p pending) {
 		// takes back only the turn it marked.
 		a.noteRenameSent(p.frame.Text)
 		owed := a.noteSent()
-		if err = a.sess.Send(p.frame.Text, p.frame.Images, p.frame.MessageID); err != nil {
+		if err = a.sess.Send(p.frame.Text, p.frame.Images, p.frame.MessageID, p.frame.Now); err != nil {
 			a.unsent(owed)
 		} else if a.noteEffort(p.frame.Text) || a.noteModel(p.frame.Text) {
 			// An /effort or a /model just changed what the session runs as; the
@@ -104,6 +104,8 @@ func (a *agent) apply(p pending) {
 		if err = a.sess.DenyTool(p.frame.RequestID, p.frame.Reason); err == nil {
 			a.noteAnswered(p.frame.RequestID)
 		}
+	case rpc.FrameRecall:
+		err = a.sess.Recall(p.frame.MessageID)
 	case rpc.FrameInterrupt:
 		// The minted request_id is discarded, deliberately. Nothing here has a
 		// question outstanding to match the receipt against - the receipt goes

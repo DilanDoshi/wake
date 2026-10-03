@@ -202,6 +202,26 @@ type outStopTaskRequest struct {
 	TaskID  string `json:"task_id"`
 }
 
+type outCancelAsyncRequest struct {
+	Subtype     string `json:"subtype"`
+	MessageUUID string `json:"message_uuid"`
+}
+
+// EncodeCancelAsyncMessage takes back a message claude has queued but not yet
+// taken up, by the uuid Wake stamped on it. Its lifecycle then reads cancelled
+// and it never runs; one already taken up is delivered regardless
+// (midturn-cancel.jsonl, midturn-cancel-late.jsonl).
+func EncodeCancelAsyncMessage(requestID, messageUUID string) ([]byte, error) {
+	if requestID == "" || messageUUID == "" {
+		return nil, fmt.Errorf("%w: encode cancel async message: empty request or message id", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request:   outCancelAsyncRequest{Subtype: "cancel_async_message", MessageUUID: messageUUID},
+	}, "encode cancel async message")
+}
+
 // EncodeStopTask stops a running workflow, addressed by its task id. Pause and
 // resume have no wire form (findings.md §6: pause_task is refused outright),
 // so this is the only control Wake can offer over a running workflow. The
