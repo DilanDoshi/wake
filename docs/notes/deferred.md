@@ -184,7 +184,10 @@ and is roughly what Bubble Tea does reading the tty directly — it de-frames a 
 alone too. `TestALoneEscGoesNowOnAShortReadAndWaitsOnAFullOne` pins the ⎋-wins-latency behaviour that
 is the reason the residual exists.
 
-*Blocks:* nothing observed — remote-only, and the reported (local) bug is fully closed. *Closes with:*
+*Blocks:* nothing observed — remote-only. The reported (local) bug was **not** fully closed then:
+Bubble Tea's own 256-byte read of the pipe cut reports too, since aligned chunks run together in the
+pipe, and a sideways-wheel flood typed `[<67;217;52M` (2026-10-02). `alignedPipe` now aligns that read
+(`TestAWheelFloodReachesBubbleTeaAsMouseNeverAsKeys`). *Closes with:*
 a bounded inter-byte timeout that holds a lone ESC a few ms and flushes it as a keypress on the
 deadline or reassembles if the tail arrives first — deliberately not taken, because it puts a timer
 and a second goroutine into the pump whose whole doctrine (its own header) is to stay trivial and

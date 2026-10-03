@@ -190,8 +190,8 @@ type killSwitch struct {
 	tty   *os.File // read from, and the descriptor raw mode is set on
 	out   *os.File // written to, because a tty opened for reading may not take one
 	state *term.State
-	pipe  *os.File // the read end Bubble Tea is handed
-	feed  *os.File // the write end the forwarder writes
+	pipe  *alignedPipe // the read end Bubble Tea is handed
+	feed  *os.File     // the write end the forwarder writes
 	queue chan []byte
 
 	// exit is the seam a test replaces. Nothing but a test assigns it.
@@ -242,7 +242,7 @@ func armKillSwitch() (*killSwitch, error) {
 func newKillSwitch(tty, out *os.File, state *term.State, pipe, feed *os.File) *killSwitch {
 	k := &killSwitch{
 		tty: tty, out: out, state: state,
-		pipe: pipe, feed: feed,
+		pipe: &alignedPipe{File: pipe}, feed: feed,
 		queue: make(chan []byte, forwardQueue),
 		held:  make(chan struct{}), resumed: make(chan cancelreader.CancelReader), done: make(chan struct{}),
 	}
@@ -261,6 +261,28 @@ func (k *killSwitch) Input() io.Reader {
 		return os.Stdin
 	}
 	return k.pipe
+}
+
+// alignedPipe is the pipe as Bubble Tea reads it: every read ends on an
+// escape-sequence boundary.
+//
+// Bubble Tea v1.3.10 reads 256 bytes at a time and, across a full read, holds
+// back an unfinished run of runes but not an unfinished sequence - a full read
+// ending inside a mouse report decodes as alt+[ and the runes `<67;217;52M`,
+// which the composer types. The pump's aligned chunks run together in the pipe,
+// so only the read itself can keep that cut on a boundary. It embeds the
+// *os.File so cancelreader still finds a File (see Input).
+type alignedPipe struct {
+	*os.File
+	chunks chunker
+}
+
+// Read reads only what fits beside the held carry, so the aligned chunk it
+// returns fits p whole and Bubble Tea never cuts it again.
+func (r *alignedPipe) Read(p []byte) (int, error) {
+	room := len(p) - len(r.chunks.carry)
+	n, err := r.File.Read(p[:room])
+	return copy(p, r.chunks.step(p[:n], n == room)), err
 }
 
 // alignedCut is how much of buf ends on an escape-sequence boundary: buf[:cut]
