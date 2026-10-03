@@ -3598,3 +3598,53 @@ server so named loses only the banner's count — `/mcp` still shows it needing 
 **Residual.** An agent's first turn can start before the reconnects land, so a connector can be
 missing from that one turn. The manager is unaffected: `--strict-mcp-config` excludes connectors even
 after the handshake.
+
+---
+
+## 2026-10-02 — `esc esc` restores code too, through claude's own checkpoints
+
+**What changed.** The owner scoped in Claude Code's code restore (the 2026-08-25 rewind spec had it as
+a non-goal; its §10 now says so). Recorded against 2.1.288:
+`docs/superpowers/notes/2026-10-02-file-rewind-findings.md`.
+
+**Ruling 1 — checkpointing is turned on, never owned.** A headless claude saves file checkpoints only
+with `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true` in its environment; `-p` ignores the
+`fileCheckpointingEnabled` setting. `core.agentEnv` adds it to every agent's launch unless the
+operator's environment already names it, and claude itself honours an operator's
+`CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING`. Claude keeps the backups; Wake stores nothing new. The cost
+is the one an interactive `claude` already pays by default, and Wake adds no frame and no poll.
+
+**Ruling 2 — the dry run decides what is offered.** ↵ on a prompt previews its restore
+(`FrameRewindPreview`, `dry_run`) and the code choices appear only when claude names files. So an
+agent started before this change, a prompt before a `/clear`, and a checkpoint swept after 30 days
+all degrade to claude's own sentence rather than a guess. The preview's answer goes to the window
+that asked alone — the MCP answer's routing, since a receipt names no target.
+
+**Ruling 3 — four frame kinds, not a mode field.** `FrameRewind` (conversation), `FrameRewindFiles`,
+`FrameRewindBoth`, `FrameRewindPreview`: no default is safe when one meaning writes files on disk,
+and each kind carries its own manager refusal.
+
+**Ruling 4 — both restores files first, and the conversation only after.** The two requests succeed
+back to back in either order, so order is not correctness; failure is. A restore can fail (swept or
+missing backups, an unwritable file), and a rewound conversation over files that were not put back is
+a known-wrong state. So the daemon queues the conversation rewind — an ordinary `FrameRewind` from the
+asking client — only when the restore's receipt says it succeeded. The reverse failure (files back,
+conversation refused) is reported as exactly that.
+
+**Ruling 5 — restoring code is armed.** First ↵ arms, second restores; `App.disarmed` takes the arm
+back on any input, mouse included, and esc takes it back before it leaves the step. The cue is drawn
+in the picker, not the legend. A live agent sharing the directory is named above the choices (not the
+manager, which has no tools): at 15–30 agents in overlapping trees that is the common case, and the
+file list alone does not say who else is editing those files.
+
+**Ruling 6 — control requests got their own airlock file.** `encode.go`, `wire.go` and
+`protocol.go` were all at the 800-line max with three features waiting to add control requests, so
+the control exchange moved out by subject into `internal/core/control.go`, the sixth airlock file
+(recommended by the plan's checker; **awaiting the owner's ruling** — the alternative was squeezing
+into `vocabulary.go`'s last 50 lines).
+
+**Trap.** The request's dry-run key is `dry_run`. `dryRun` — the TypeScript SDK's option name — is
+silently ignored, and the request restores for real: the recording deleted its files. Pinned
+byte-for-byte by `TestEncodeRewindFilesMatchesTheRecordedRequests`.
+
+**Out.** "Summarize from here / up to here": no headless request is recorded.

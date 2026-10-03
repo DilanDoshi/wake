@@ -883,6 +883,17 @@ has advertised `/list-agents`), with other `claude` sessions open in other termi
 - [ ] `/name` an agent, then run `/list-agents` in another terminal's `claude`: it lists the new name.
 - [ ] In a large repository, typing after `@` stays smooth.
 
+## Rewind — restoring code on a real repository
+
+The tests replay recorded receipts and a scripted agent. In a scratch git repository, with one agent:
+
+- [ ] Have it edit two files with its tools and change a third with a shell command (`sed -i`). esc esc,
+      pick the prompt before, and the preview lists the two tool edits and not the shell one; restore
+      code, and `git status` shows only the shell change left.
+- [ ] Symlink one edited file first: the restore's notice says it left a linked file as it is.
+- [ ] Run a second agent in the same directory: the choices name it, `(working)` while it works.
+- [ ] Park and wake the agent, then restore code to a prompt from before the park.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:
