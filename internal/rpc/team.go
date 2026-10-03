@@ -27,7 +27,7 @@ import (
 // NormalizeTeam on both sides.
 //
 // Declared here rather than in wire.go beside the other frame kinds because
-// wire.go is at the file-size hard max; team.go is where the rest of the team
+// wire.go was at the file-size hard max; team.go is where the rest of the team
 // wire code lives, so the constant sits with its fence.
 const FrameTeam = "team" // client → daemon: set a session's team tag
 

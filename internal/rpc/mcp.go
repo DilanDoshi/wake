@@ -9,7 +9,7 @@ package rpc
 // event stream as a core.KindMCPReply, the way a mode or rewind receipt does,
 // and a client folds only the one it is waiting for.
 //
-// Declared here rather than in wire.go, which is at the file-size hard max.
+// Declared here rather than in wire.go, which was at the file-size hard max.
 // The values are Wake's own words: Claude's (mcp_status, mcp_reconnect,
 // mcp_toggle) are airlock vocabulary.
 const (
