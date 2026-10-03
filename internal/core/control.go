@@ -394,9 +394,9 @@ type wireControlResp struct {
 // is accepted and normalizes to `default` (§6), so the two disagree on a real
 // cycle position rather than only in principle.
 type wireControlBody struct {
-	StillQueued []string `json:"still_queued"`
-	Cancelled   []string `json:"cancelled"`
-	Mode        string   `json:"mode"`
+	StillQueued []string      `json:"still_queued"`
+	Cancelled   wireCancelled `json:"cancelled"`
+	Mode        string        `json:"mode"`
 
 	// Rewind receipt payload. Rewound is a pointer so its *presence* - not its
 	// truth - is the discriminator: a rewind receipt always carries the key
@@ -412,6 +412,20 @@ type wireControlBody struct {
 	// An mcp_status receipt's payload; a pointer so presence, even of an empty
 	// list, is the discriminator. See mcpStatusReply.
 	MCPServers *[]wireMCPStatus `json:"mcpServers"`
+}
+
+// wireCancelled is an interrupt receipt's uuid list, or the bool a
+// cancel_async_message receipt carries under the same key
+// (midturn-cancel.jsonl:33). The bool is not read: the message's own
+// lifecycle says whether it was taken back. Absent and null stay nil.
+type wireCancelled []string
+
+func (c *wireCancelled) UnmarshalJSON(b []byte) error {
+	var recalled bool
+	if json.Unmarshal(b, &recalled) == nil {
+		return nil
+	}
+	return json.Unmarshal(b, (*[]string)(c))
 }
 
 // controlResponseEvent decodes the receipt for a control_request Wake sent -

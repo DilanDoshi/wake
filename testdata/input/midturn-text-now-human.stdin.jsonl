@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Without using any tools, write a 500-word story about a lighthouse keeper. If I send you another message while you write, do what it says as well."}]},"uuid":"447f5852-34f8-44d2-90d8-3c1c828871d0"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Also: end your reply with the word PINEAPPLE."}]},"uuid":"c78ea9b4-edb6-4329-aaa0-a9fd0f0605b1","priority":"now","origin":{"kind":"human"}}

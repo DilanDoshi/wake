@@ -637,8 +637,9 @@ func hasTurnEnd(evs []decodedLine) bool {
 // in either**. The interrupt hit an ask that was still waiting to be allowed,
 // and the CLI still writes the "for tool use" wording, so that literal does not
 // mean a tool was executing. Nothing may read the choice of wording as
-// evidence about what the agent was doing.
-const recordedInterruptMarkers = 10
+// evidence about what the agent was doing. 10 → 11: midturn-esc.jsonl's
+// "for tool use", an interrupt with a message queued behind the Bash it stopped.
+const recordedInterruptMarkers = 11
 
 // The pins above check one line each, and one line cannot show the resolution
 // is a *function of the text* rather than of the fixture it came from.
