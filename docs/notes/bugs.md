@@ -744,7 +744,7 @@ while the header and its count still hold, so the next column claude adds costs 
 than the menu; the daemon logs the count, never the row (owner's ruling, 2026-10-03, decisions.md).
 
 **The room never offered it:** by the 2026-09-27 ruling its `@` held fleet names only. Behind a
-leading `@who ` that reaches one live agent it now offers who's conversation menu
+leading `@who ` that ↵ sends to that one live agent it now offers that agent's conversation menu
 (`completion.go`'s `behindAddressee`). A bare `@"fable wake" hi` as the room's leading mention still
 goes to the manager, which has no `SendMessage` — the manager relay is its own branch.
 

@@ -716,14 +716,25 @@ func TestBehindAnAddressedAgentTheRoomOffersThatAgentsNames(t *testing.T) {
 
 // Anything but one live agent behind the leading mention keeps the room's own
 // names: a team or @all reaches several claudes, the manager has no SendMessage,
-// and a parked, unknown or absent name routes to the manager as typed.
+// and a parked, unknown or absent name routes to the manager as typed. So does
+// open mode, which sends `@jade …` to every agent, and a leading mention still
+// being typed after whitespace, which core.Resolve trims.
 func TestBehindNoOneLiveAgentTheRoomKeepsItsOwnNames(t *testing.T) {
-	for _, draft := range []string{"@jets ask @wf", "@all ask @wf", "@manager ask @wf", "@jack ask @wf",
-		"@nobody ask @wf", "ask @wf", "@wf"} {
-		listed := roomFleet(t).applyFrame(peersReply(core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a"}))
+	open := func(a App) App { a.mention = MentionOpen; return a }
+	same := func(a App) App { return a }
+	for draft, mode := range map[string]func(App) App{
+		"@jets ask @wf": same, "@all ask @wf": same, "@manager ask @wf": same, "@jack ask @wf": same,
+		"@nobody ask @wf": same, "ask @wf": same, "@wf": same, "@jade ask @wf": open,
+	} {
+		listed := mode(roomFleet(t)).applyFrame(peersReply(core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a"}))
 		a, asked := typedAsking(t, listed, runes(draft)...)
 		if asked != 0 || slices.Contains(a.completion.offers, "@wf-alpha") {
 			t.Errorf("%q asked %d times and offered %q, want no ask and no outside session", draft, asked, a.completion.offers)
+		}
+	}
+	for draft, mode := range map[string]func(App) App{"@jets ask @ja": same, "@jade ask @ja": open, " @jade": same} {
+		if got := mode(roomFleet(t)).withDraft(draft).completion.offers; !slices.Contains(got, "@jade") {
+			t.Errorf("%q offered %q, want the room's own names, @jade among them", draft, got)
 		}
 	}
 }

@@ -92,8 +92,9 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   machine's other Claude sessions `(dir)` (a bare one-shot `claude` running `/list-agents`, asked
   once per opening; a name past `[A-Za-z0-9_-]` is offered and typed quoted, `@"release notes"`, as
   Claude Code does), then `@agent-<type> (agent)`, then files by fuzzy search. The manager's
-  conversation offers its fleet and files only; a room draft behind a leading `@who ` that reaches
-  one live agent offers who's. An unreadable listing row costs that row, never the listing.
+  conversation offers its fleet and files only; a room draft behind a leading `@who ` that ↵ sends
+  to that one live agent offers that agent's menu. An unreadable listing row costs that row, never
+  the listing.
   `⇥` is the only accept. `internal/ui/completionpeers.go`, `completionindex.go`; rulings in
   `decisions.md` (2026-09-27, 2026-10-03).
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles

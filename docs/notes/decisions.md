@@ -3613,7 +3613,8 @@ The owner's rulings on BUG-41 (fable wake checked the diagnosis and plan against
   menu** — fleet peers but who, the machine's sessions, who's subagent types. That widens the
   2026-09-27 rule the way `addressedAgent` already did for `@who /cmd`: the leading mention still
   mirrors `core.Resolve`, and the rest of the draft is who's claude's to read. A team, `@all`, the
-  manager, or a parked or unknown name keeps the room's own names.
+  manager, a parked or unknown name, and open mention mode (which sends `@who …` to every agent) keep
+  the room's own names — the menu offers only for the claude ↵ sends to (Codex review).
 - **A bare `@"session" …` as the room's leading mention should reach that session**, through the
   manager: it gets `SendMessage` (`--tools SendMessage`, still no other tool), and its claude sends
   the message as Claude Code does. Claude Code documents no format for posting into another

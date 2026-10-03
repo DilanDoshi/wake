@@ -5,10 +5,8 @@ package daemon
 // every fake agent is, and told apart by the --bare its argv carries.
 
 import (
-	"bytes"
 	"encoding/json"
 	"fmt"
-	"log"
 	"os"
 	"path/filepath"
 	"reflect"
@@ -328,15 +326,13 @@ func TestARenamedPeerStillListsTheMachinesSessions(t *testing.T) {
 // the operator's sessions and directories.
 func TestARowOfAnUnseenShapeIsLeftOutAndCounted(t *testing.T) {
 	oneShotOnPath(t, "", oneShotOddRow)
-	var logged bytes.Buffer
-	log.SetOutput(&logged)
-	t.Cleanup(func() { log.SetOutput(os.Stderr) })
+	logged := lockedLog(t)
 
 	peers, err := newServer(tempSocket(t)).listPeers(t.Context())
 	if err != nil || !reflect.DeepEqual(peers, recordedPeers[:1]) {
 		t.Fatalf("listPeers = (%+v, %v), want only %+v", peers, err, recordedPeers[:1])
 	}
-	if got := logged.String(); !strings.Contains(got, "left 1 ") || strings.Contains(got, "alpha") {
+	if got := logged.String(); !strings.Contains(got, "left 1 of the machine's") || strings.Contains(got, "wake-rec") {
 		t.Errorf("the log read %q, want the one row counted and not quoted", got)
 	}
 }

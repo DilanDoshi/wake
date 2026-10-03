@@ -260,8 +260,8 @@ func openQuote(draft string, q int) bool {
 // that can begin a name is typed, a conversation offers what Claude Code's own
 // `@` does (the manager's, its fleet only) - the owner's 2026-09-27 reversal of
 // the room-only rule, in completionpeers.go. So does a room draft behind a
-// leading `@who ` that reaches one live agent, whose claude reads the rest as
-// its conversation would (owner, 2026-10-03). Paths are offered in both.
+// leading `@who ` that ↵ sends to that one live agent, whose claude reads the
+// rest as its conversation would (owner, 2026-10-03). Paths are offered in both.
 func (a App) mentionMenu(draft, head, typed string) completion {
 	c := completion{pane: a.focus, draft: draft, head: head, paths: a.pathMenuFor(typed)}
 	switch {
@@ -274,13 +274,16 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 }
 
 // behindAddressee reports whether a room mention being typed follows a leading
-// `@who ` that resolved to one live agent - addressedAgent's direct route.
+// `@who ` whose draft ↵ sends to that one live agent. Open mode widens a message
+// to the fleet, and then the room keeps its own names: who's would be offered
+// for a draft every agent reads.
 func (a App) behindAddressee(head, typed string) bool {
-	if head == "" || !canBeginName(typed) {
+	if strings.TrimSpace(head) == "" || !canBeginName(typed) {
 		return false
 	}
-	_, ok := a.addressedAgent()
-	return ok
+	c := a.room.Composer()
+	r := a.route(c.WireText(c.Value()))
+	return r.mentioned && len(r.Targets) == 1
 }
 
 // addressees is every name a mention could resolve to, in the roster's own
