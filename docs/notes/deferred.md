@@ -189,7 +189,8 @@ Bubble Tea's own 256-byte read of the pipe cut reports too, since aligned chunks
 pipe, and a sideways-wheel flood typed `[<67;217;52M` (2026-10-02). `alignedPipe` now aligns that read
 (`TestAWheelFloodReachesBubbleTeaAsMouseNeverAsKeys`), holding a lone ESC that ends a filled read only
 while the pipe has more queued, so ⎋ is never stranded there
-(`TestAnEscapeBehindAFloodIsNeverHeldForInputThatIsNotComing`). *Closes with:*
+(`TestAnEscapeBehindAFloodIsNeverHeldForInputThatIsNotComing`); `forward` writes only aligned pieces a
+pipe publishes whole (`pipeAtomic`), so the pipe's end is always a boundary. *Closes with:*
 a bounded inter-byte timeout that holds a lone ESC a few ms and flushes it as a keypress on the
 deadline or reassembles if the tail arrives first — deliberately not taken, because it puts a timer
 and a second goroutine into the pump whose whole doctrine (its own header) is to stay trivial and

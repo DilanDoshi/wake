@@ -125,6 +125,11 @@ const (
 	// not grow memory on a stream nobody is draining.
 	maxCarry = 64
 
+	// pipeAtomic is the largest write every pipe publishes whole: POSIX's
+	// _POSIX_PIPE_BUF, and darwin's PIPE_BUF exactly. A longer one can become
+	// readable part by part while the pipe is full.
+	pipeAtomic = 512
+
 	// exitEmergency is what the process exits with. 130 is the shell's own
 	// "terminated by ⌃C", which is what this is.
 	exitEmergency = 130
@@ -284,7 +289,8 @@ type alignedPipe struct {
 //
 // A read that filled its room can end on a report's ESC with the rest still in
 // the pipe, or on a real ⎋ with nothing behind it; only the pipe can tell them
-// apart, so it is asked rather than the read's size.
+// apart, so it is asked rather than the read's size. forward's whole-published
+// pieces are what make the pipe's answer exact.
 func (r *alignedPipe) Read(p []byte) (int, error) {
 	room := len(p) - 1 - len(r.chunks.carry)
 	n, err := r.File.Read(p[:room])
@@ -465,11 +471,30 @@ func (k *killSwitch) pump() {
 // forward hands the bytes on, and is allowed to block doing it.
 func (k *killSwitch) forward() {
 	for chunk := range k.queue {
-		if _, err := k.feed.Write(chunk); err != nil {
+		if err := writeWhole(k.feed, chunk); err != nil {
 			return
 		}
 	}
 	_ = k.feed.Close()
+}
+
+// writeWhole writes chunk as aligned pieces of at most pipeAtomic bytes, each of
+// which a pipe publishes whole - so wherever alignedPipe finds the pipe's end,
+// and asks queued about a lone ESC there, is a boundary.
+func writeWhole(w io.Writer, chunk []byte) error {
+	for len(chunk) > 0 {
+		n := len(chunk)
+		if n > pipeAtomic {
+			if n = alignedCut(chunk[:pipeAtomic]); n == 0 {
+				n = pipeAtomic // no boundary inside: an ESC that never finished, which maxCarry flushed
+			}
+		}
+		if _, err := w.Write(chunk[:n]); err != nil {
+			return err
+		}
+		chunk = chunk[n:]
+	}
+	return nil
 }
 
 // restore puts the terminal back the way converseModel found it. Safe to call
