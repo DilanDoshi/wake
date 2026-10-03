@@ -998,27 +998,17 @@ var notInTheCorpus = map[string]string{
 	"Glob": "not advertised by init.tools here, and never called",
 	"Grep": "not advertised by init.tools here, and never called",
 
-	// Edit's input keys. Edit is advertised 46 times and called zero, so the
-	// diff path has no fixture behind it and is exercised by hand-written
-	// unit tests only. That is worth knowing: ToolCall.Diff is the one part
-	// of the airlock ruling the corpus cannot vouch for. new_string does
-	// occur, but only inside the English of an interrupt notice ("if it was
-	// a file edit, the new_string was NOT written"), which is why the check
-	// below matches quoted tokens rather than substrings.
-	"old_string": "Edit is advertised but never called",
-
 	// TodoWrite and its whole-list envelope. Retired in 2.1.240 (off unless
 	// CLAUDE_CODE_ENABLE_TASKS is false) and never called in the corpus, so its
 	// `todos` key stays transcribed from the shipped binary rather than recorded
 	// - task-checklist.jsonl exercises the *replacement*, TaskCreate/TaskUpdate,
 	// not this. "activeForm" and "in_progress" used to sit here for the same
 	// reason and have moved out: the recorded checklist carries both.
-	"todos":      "TodoWrite is retired in 2.1.240 and never called; its list is now TaskCreate/TaskUpdate",
-	"TodoWrite":  "retired in 2.1.240 and never called in the corpus",
-	"deleted":    "the fourth TaskUpdate status; the recorded session never deletes an item",
-	"new_string": "Edit is advertised but never called; occurs only in prose",
+	"todos":     "TodoWrite is retired in 2.1.240 and never called; its list is now TaskCreate/TaskUpdate",
+	"TodoWrite": "retired in 2.1.240 and never called in the corpus",
+	"deleted":   "the fourth TaskUpdate status; the recorded session never deletes an item",
 
-	// primaryArg keys for tools the corpus never exercised, alongside Edit's.
+	// primaryArg keys for tools the corpus never exercised.
 	"pattern": "Glob and Grep are neither advertised here nor called",
 
 	// The token stream's five words moved out of this list on 2026-08-21:

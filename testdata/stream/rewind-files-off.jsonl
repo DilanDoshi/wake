@@ -1,0 +1,4 @@
+{"type":"system","subtype":"hook_started","hook_id":"a6beefe5-f469-4965-ac74-20e1311bf7e7","hook_name":"SessionStart:resume","hook_event":"SessionStart","uuid":"b856df74-338d-40d1-b5ef-643494f1b3a8","session_id":"6eb64b82-d093-45cb-bc15-3de8c3e71be3"}
+{"type":"system","subtype":"hook_response","hook_id":"a6beefe5-f469-4965-ac74-20e1311bf7e7","hook_name":"SessionStart:resume","hook_event":"SessionStart","output":"/bin/sh: node: command not found\n","stdout":"","stderr":"/bin/sh: node: command not found\n","exit_code":127,"outcome":"error","uuid":"09c6dff8-fa82-445a-99a3-a162adf8b4c3","session_id":"6eb64b82-d093-45cb-bc15-3de8c3e71be3"}
+{"type":"control_response","response":{"subtype":"success","request_id":"probe-3ee2d663","response":{"canRewind":false,"error":"File rewinding is not enabled."}}}
+{"type":"control_response","response":{"subtype":"error","request_id":"probe-103a744a","error":"File rewinding is not enabled."}}
