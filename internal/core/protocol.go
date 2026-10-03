@@ -1,5 +1,5 @@
 // AIRLOCK. Wake's knowledge of Claude Code's stream-json wire format lives in
-// five files in this package and nowhere else in the tree. Everything above
+// six files in this package and nowhere else in the tree. Everything above
 // them consumes core.Event.
 //
 //	protocol.go    decoding - one wire line in, core.Events out (this file)
@@ -7,6 +7,7 @@
 //	vocabulary.go  Claude's words resolved into Wake's
 //	encode.go      the frames Wake writes back
 //	localreply.go  the text replies of local commands Wake parses
+//	control.go     control requests Wake writes, and their receipts
 //
 // It was one file until it reached 1031 lines against this project's 800-line
 // hard max. docs/notes/decisions.md ruled ahead of time what to do when that
@@ -14,11 +15,12 @@
 // **before** the change that overflows it lands rather than during. This is
 // that restatement. internal/core/airlock_test.go enforces it over the whole
 // tree from the same list, so the set grows only by a ruling - localreply.go
-// was the owner's, 2026-09-27.
+// was the owner's, 2026-09-27, and control.go 2026-10-02's.
 //
 // The split is by direction and by job rather than by size, so a port has
-// five reviewable units instead of one unreadable one: what arrives, what it
-// becomes, what Wake calls it, what Wake sends, and what a command replies.
+// six reviewable units instead of one unreadable one: what arrives, what it
+// becomes, what Wake calls it, what Wake sends, what a command replies, and
+// the control exchange that steers a running session.
 //
 // Every *inbound* shape is transcribed from testdata/stream/*.jsonl, recorded
 // from live sessions in Task 1 - not from documentation. The outbound shapes
@@ -564,57 +566,6 @@ func controlRequestEvent(f wireFrame, raw json.RawMessage) Event {
 		// this is the Agent half of the two identifier spaces and Dispatch
 		// stays empty - see Subagent.
 		ev.Subagent = &Subagent{Agent: f.Request.AgentID}
-	}
-	return ev
-}
-
-// controlResponseEvent decodes the receipt for a control_request Wake sent -
-// an interrupt, a set_permission_mode, or a rewind_conversation. Mirrors
-// controlRequestEvent, including its ruling on an absent body: everything
-// that identifies a receipt is nested, so one with no body is not a degraded
-// receipt but an empty frame - no subtype to name it, no request_id to
-// attribute it, and nothing to report.
-//
-// Any other subtype still decodes to a receipt. A receipt Wake cannot
-// interpret is not a receipt Wake can afford to drop: the request it answers
-// stays outstanding until something acknowledges it, and only RequestID can.
-func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
-	ev := Event{
-		Kind:      KindUnknown,
-		SessionID: f.SessionID,
-		Text:      f.Type,
-		Raw:       raw,
-	}
-	if f.Response == nil {
-		return ev
-	}
-	ev.RequestID = f.Response.RequestID
-	// Rewind and MCP status receipts are known by a payload key's presence, and
-	// are checked first so neither falls through to the mode/generic path.
-	if ev, ok := mcpStatusReply(ev, f.Response); ok {
-		return ev
-	}
-	if b := f.Response.Response.Rewound; b != nil {
-		ev.Kind = KindRewindReceipt
-		ev.Text = f.Response.Subtype
-		ev.Rewind = &RewindResult{
-			Rewound:                *b,
-			TargetMessageUUID:      f.Response.Response.TargetMessageUUID,
-			PrefillText:            f.Response.Response.PrefillText,
-			PrecedingAssistantUUID: f.Response.Response.PrecedingAssistantUUID,
-			Error:                  f.Response.Response.Error,
-		}
-		return ev
-	}
-	ev.Kind = KindControlReceipt
-	ev.Text = f.Response.Subtype
-	// The mode a set_permission_mode landed on; empty on every other receipt and
-	// on a refusal, whose reason travels in Control.Error instead.
-	ev.PermissionMode = f.Response.Response.Mode
-	ev.Control = &ControlResult{
-		StillQueued: f.Response.Response.StillQueued,
-		Cancelled:   f.Response.Response.Cancelled,
-		Error:       f.Response.Error,
 	}
 	return ev
 }
