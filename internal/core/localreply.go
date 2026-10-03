@@ -6,7 +6,7 @@
 // surely as a JSON key, so the three Wake reads - /model, /list-agents and
 // /rename - are recognised here and nowhere else.
 //
-// The airlock is these five files and nothing else in Wake knows Claude
+// The airlock is these six files and nothing else in Wake knows Claude
 // Code's stream-json format:
 //
 //	protocol.go    decoding - one wire line in, core.Events out
@@ -14,6 +14,7 @@
 //	vocabulary.go  Claude's words resolved into Wake's
 //	encode.go      the frames Wake writes back
 //	localreply.go  the text replies of local commands Wake parses
+//	control.go     control requests Wake writes, and their receipts
 //
 // internal/core/airlock_test.go enforces that over the whole tree and reads
 // the same list. protocol.go's header carries the full rule.

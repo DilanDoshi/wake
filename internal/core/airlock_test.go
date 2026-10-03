@@ -80,12 +80,15 @@ const repoRoot = "../.."
 // checkable rather than a sentence in a header: a member cannot be added
 // without editing it, and the set is what the leak check exempts. The fifth,
 // localreply.go, is the owner's 2026-09-27 ruling: local commands' reply text.
+// The sixth, control.go, is 2026-10-02's: control requests and their receipts,
+// split out by subject when encode.go, wire.go and protocol.go were all full.
 var airlockFiles = wordSet([]string{
 	"internal/core/protocol.go",
 	"internal/core/wire.go",
 	"internal/core/vocabulary.go",
 	"internal/core/encode.go",
 	"internal/core/localreply.go",
+	"internal/core/control.go",
 })
 
 // claudeWireVocabulary is what a file must not name outside the airlock.
@@ -171,6 +174,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// policed below). Policed for "timestamp"'s reason: no file outside this
 	// package names the literal.
 	"origin",
+	// A message claude took up mid-turn, as it is stored on disk: an attachment
+	// of type queued_command naming the uuid Wake stamped. midturn-absorbed.jsonl.
+	"attachment", "queued_command", "source_uuid", "commandMode",
+	// Every stamped message a turn's result answered (Event.Answered).
+	"user_message_uuids",
 
 	// system subtypes.
 	"compact_boundary", "permission_denied", "hook_started",
@@ -226,6 +234,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// The Agent SDK's stopTask(taskId) (findings.md §6), the wire form of the
 	// control_request EncodeStopTask sends. "task_id" is already policed above.
 	"stop_task",
+
+	// Taking a queued message back, and a send-now's priority key: what
+	// EncodeCancelAsyncMessage and EncodeUserMessage write
+	// (2026-10-02-mid-turn-delivery-findings.md).
+	"cancel_async_message", "message_uuid", "priority",
 
 	// The live checklist tools and their input keys. TodoWrite is retired in
 	// 2.1.240 and its replacement builds a list across TaskCreate/TaskUpdate
@@ -438,6 +451,12 @@ var deliberatelyGeneric = wordSet([]string{
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",
+	// A command_lifecycle state (Event.MessageStarted), generic for "cancelled"'s
+	// reason: Wake spells it itself (core.TaskStarted, two json tags).
+	"started",
+	// A send-now's priority value and origin kind: plain English, and "human"
+	// is already a word Wake spells (mcp's reserved names).
+	"now", "human",
 
 	// init's subagent types. Generic for "model"'s reason: an agent is Wake's
 	// own subject, and core.SessionFacts.Agents keeps the spelling. Not a route
@@ -696,7 +715,13 @@ var notNamedByTheAirlock = map[string]string{
 // list-agents.jsonl and list-agents-bare*.jsonl.
 // 209 → 210: "authentication_failed", the failed turn's error kind apiNotice
 // reads so only a dead login is parked for a new process. api-error-auth.jsonl.
-const policedWordCount = 210
+// 210 → 213: "cancel_async_message" and "message_uuid", the request that takes a
+// queued message back, and "priority", the key a send-now carries. midturn-*.
+// 213 → 217: "attachment", "queued_command", "source_uuid" and "commandMode",
+// the on-disk record of a message claude took up mid-turn, which
+// DecodeTranscriptLine restores as the turn it was. midturn-absorbed.jsonl.
+// 217 → 218: "user_message_uuids", every stamped message a result answered.
+const policedWordCount = 218
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -738,6 +763,9 @@ var notWireVocabulary = wordSet([]string{
 	"encode stop task",
 	"%w: encode stop task: empty request id",
 	"%w: encode stop task: empty task id",
+	"encode cancel async message",
+	"%w: encode cancel async message: empty request or message id",
+	"decode transcript line: queued command: %w",
 	"decode workflow run: %w",
 	"decode workflow run: no task id",
 	defaultDenyReason,
@@ -1054,6 +1082,9 @@ var notInTheCorpus = map[string]string{
 	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
 	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
 	"stop_task":                   "outbound only; a recording of stdout cannot contain it",
+	"cancel_async_message":        "outbound only; a recording of stdout cannot contain it",
+	"message_uuid":                "outbound only; the field the cancel request carries",
+	"priority":                    "outbound only; the key a send-now carries",
 
 	// The run record's own two keys with no counterpart on the stream: the
 	// start time (task_progress carries only elapsed usage, never a start
@@ -1232,8 +1263,8 @@ func TestTheThreeListsDoNotOverlap(t *testing.T) {
 
 // The airlock is a set of files in one package, and saying so is what stops
 // the set being widened into an exemption for somewhere else.
-func TestTheAirlockIsFiveFilesInInternalCore(t *testing.T) {
-	const want = 5
+func TestTheAirlockIsSixFilesInInternalCore(t *testing.T) {
+	const want = 6
 	if len(airlockFiles) != want {
 		t.Errorf("the airlock is %d files, want %d - if that is deliberate, CLAUDE.md's rule and protocol.go's header both name the set and must change with it", len(airlockFiles), want)
 	}

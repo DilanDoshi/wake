@@ -160,6 +160,7 @@ var managerVerbs = map[string]verdict{
 
 	rpc.FrameSend: {allowed: true, why: "the whole point of a manager that operates the fleet rather than describing it. It costs a turn, the agent answers into the room where the operator can see it, and nothing it does is unrecoverable"},
 
+	rpc.FrameRecall: {why: "takes back a message claude has queued but not yet read. The manager's own sends need no taking back - it can send a correction - and the operator's are not its to unsend: nothing on this surface tells it which queued message is whose, so a recall from here would silently delete words a human typed"},
 	rpc.FrameInterrupt: {allowed: true, why: "'pause' in the example that settled the manager's shape. It does not end a session: an interrupted process keeps its session id, takes the next message normally and resumes with the aborted turn's context intact (2026-08-08-interrupt-findings.md §6). It is not free, and the cell used to say it destroyed nothing - it **withdraws an outstanding permission ask**, so a human mid-decision on a card loses the question, and it discards the aborted turn's billed work. Both are visible (the DM draws `⊘ permission request withdrawn`) and both are recoverable by asking again, which is what keeps the verdict",
 		rests: []referent{
 			{kind: recording, name: "docs/superpowers/notes/2026-08-08-interrupt-findings.md", why: "the recording that says an interrupted session keeps its id and takes the next message. Without it this is a claim about a CLI nobody read"},

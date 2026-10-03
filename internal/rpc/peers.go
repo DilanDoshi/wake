@@ -1,7 +1,7 @@
 package rpc
 
 // The machine's other Claude sessions, asked of the daemon. Declared here
-// rather than in wire.go for team.go's reason: wire.go is at the file-size
+// rather than in wire.go for team.go's reason: wire.go was at the file-size
 // hard max.
 //
 // The daemon runs a bare one-shot claude for a /list-agents - never an agent,

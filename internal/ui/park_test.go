@@ -956,7 +956,7 @@ func TestTypingIntoAParkedConversationNamesTheCommandThatBringsItBack(t *testing
 		withRoster(rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked}).
 		withDraft("carry on")
 
-	m, cmd := a.sendDM("carry on", nil)
+	m, cmd := a.sendDM("carry on", nil, false)
 	if cmd != nil {
 		t.Fatalf("a message went out to a parked session: %+v", sentFrames(t, m.(App), cmd))
 	}

@@ -56,14 +56,15 @@ func TestTwoQueuedRenamesFlushOnePerTurnEachBehindItsMirror(t *testing.T) {
 	a := m.(App).applyFrame(oneAgent("s1", "alex", rpc.StateIdle))
 
 	a, cmd := a.flushQueued()
-	if got, want := frameKinds(sentFrames(t, a, cmd)), []string{rpc.FrameRename + " s1 bob", rpc.FrameSend + " s1 /rename bob"}; !slices.Equal(got, want) {
+	first := sentFrames(t, a, cmd)
+	if got, want := frameKinds(first), []string{rpc.FrameRename + " s1 bob", rpc.FrameSend + " s1 /rename bob"}; !slices.Equal(got, want) {
 		t.Fatalf("the first turn's flush wrote %v, want %v", got, want)
 	}
 	if _, cmd = a.flushQueued(); cmd != nil {
 		t.Fatal("a second /rename flushed while the first was still in flight")
 	}
 
-	a = a.applyFrame(lifecycleFrame("s1", a.inflight["s1"], "completed"))
+	a = a.applyFrame(lifecycleFrame("s1", first[1].MessageID, "completed"))
 	a, cmd = a.flushQueued()
 	if got, want := frameKinds(sentFrames(t, a, cmd)), []string{rpc.FrameRename + " s1 cat", rpc.FrameSend + " s1 /rename cat"}; !slices.Equal(got, want) {
 		t.Fatalf("the second turn's flush wrote %v, want %v", got, want)

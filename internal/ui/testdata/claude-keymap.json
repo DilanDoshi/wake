@@ -1,7 +1,7 @@
 {
   "_conflicts": {},
   "_script": "n/a - maintained by hand",
-  "_source": "2.1.233",
+  "_source": "2.1.233; history:previous/next added by hand from the 2.1.288 keybindings doc",
   "bindings": {
     "app:toggleTerminal": "meta+j",
     "app:toggleTodos": "ctrl+t",
@@ -19,6 +19,8 @@
     "chat:workflowKeywordToggle": "alt+w",
     "confirm:cycleMode": "shift+tab",
     "confirm:toggleExplanation": "ctrl+e",
+    "history:next": "down",
+    "history:previous": "up",
     "history:search": "ctrl+r",
     "historySearch:cycleScope": "ctrl+s",
     "task:background": "ctrl+b",
