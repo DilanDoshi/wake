@@ -23,6 +23,7 @@ package core
 import (
 	"path/filepath"
 	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"unicode"
@@ -91,34 +92,42 @@ func EffortFromModelReply(text string) (string, bool) {
 //
 //	Other Claude sessions (<n>):
 //	  [<state>]  ·  <name>  ·  <cwd>  ·  started <age>
+//	  [<state>]  ·  <name>  ·  says it was <old> until <age> ago  ·  <cwd>  ·  started <age>
 //
-// or, with nobody else, one line opening with listAgentsNone. Claude's docs
-// name subagent and teammate sections too; a bare one-shot has neither, but
-// any `<Title> (<n>):` section is counted and skipped as tolerance of CLI drift.
-// It is human text rather than a schema, so any other line - a live session's
-// self line included - refuses the reply whole: a wrong row is worse than none.
+// the second for a session renamed after holding its name a while
+// (list-agents-bare-renamed.jsonl), or, with nobody else, one line opening with
+// listAgentsNone. Claude's docs name subagent and teammate sections too; a bare
+// one-shot has neither, but any `<Title> (<n>):` section is counted and skipped
+// as tolerance of CLI drift. It is human text rather than a schema, so any other
+// line - a live session's self line included - refuses the reply whole: a wrong
+// row is worse than none. A `[state]` row of another shape is only dropped, so
+// the next column claude adds costs one session rather than the whole listing.
 const (
 	listAgentsOthers = "Other Claude sessions"
 	listAgentsNone   = "No subagents, teammates or other Claude sessions"
 	listAgentsColumn = "  ·  "
+
+	listAgentsFormer = "says it was "
+	listAgentsUntil  = " until "
+	listAgentsAgo    = " ago"
 )
 
 // listAgentsHeader is a section's unindented title and count.
 var listAgentsHeader = regexp.MustCompile(`^(\S.*) \(([0-9]+)\):$`)
 
 // PeersFromListAgents reads the other sessions out of a bare /list-agents
-// reply, in the order it lists them. ok is false, with nothing else, for any
-// line it does not recognise.
-func PeersFromListAgents(text string) (peers []Peer, ok bool) {
+// reply, in the order it lists them, and counts the rows it dropped. ok is
+// false, with nothing else, for any other line it does not recognise.
+func PeersFromListAgents(text string) (peers []Peer, dropped int, ok bool) {
 	var lines []string
 	for line := range strings.Lines(strings.TrimSpace(text)) {
 		lines = append(lines, strings.TrimRightFunc(line, unicode.IsSpace))
 	}
 	if len(lines) == 0 {
-		return nil, false
+		return nil, 0, false
 	}
 	if onlyNoPeers(lines) {
-		return nil, true
+		return nil, 0, true
 	}
 	return peersFromSections(lines)
 }
@@ -140,8 +149,7 @@ func onlyNoPeers(body []string) bool {
 // peersFromSections walks the sections of a listing. Each header's count must
 // match the indented rows that follow it up to the next blank line or header;
 // rows are read only under listAgentsOthers, the rest only counted.
-func peersFromSections(lines []string) ([]Peer, bool) {
-	var peers []Peer
+func peersFromSections(lines []string) (peers []Peer, dropped int, ok bool) {
 	sections := 0
 	for i := 0; i < len(lines); i++ {
 		if lines[i] == "" {
@@ -151,19 +159,20 @@ func peersFromSections(lines []string) ([]Peer, bool) {
 		rows := indentedRun(lines[i+1:])
 		// The count as written, so "02" is a shape this was not shown.
 		if m == nil || strconv.Itoa(len(rows)) != m[2] {
-			return nil, false
+			return nil, 0, false
 		}
 		if m[1] == listAgentsOthers {
-			found, ok := peersFromRows(rows)
+			found, skipped, ok := peersFromRows(rows)
 			if !ok {
-				return nil, false
+				return nil, 0, false
 			}
 			peers = append(peers, found...)
+			dropped += skipped
 		}
 		sections++
 		i += len(rows)
 	}
-	return peers, sections > 0
+	return peers, dropped, sections > 0
 }
 
 // indentedRun is the run of indented lines that opens lines: a section's rows.
@@ -175,22 +184,42 @@ func indentedRun(lines []string) []string {
 	return lines[:n]
 }
 
-func peersFromRows(rows []string) ([]Peer, bool) {
-	var peers []Peer
+// peersFromRows reads a section's rows, dropping and counting one it cannot
+// read. A line that does not open with a `[state]` column is no row, so it
+// refuses the listing rather than being dropped.
+func peersFromRows(rows []string) (peers []Peer, dropped int, ok bool) {
 	for _, row := range rows {
-		p, ok := peerFromRow(strings.TrimSpace(row))
+		row = strings.TrimSpace(row)
+		if !hasState(row) {
+			return nil, 0, false
+		}
+		p, ok := peerFromRow(row)
 		if !ok {
-			return nil, false
+			dropped++
+			continue
 		}
 		peers = append(peers, p)
 	}
-	return peers, true
+	return peers, dropped, true
 }
 
-// peerFromRow reads one `[state]  ·  name  ·  cwd  ·  started age` row. The
-// state and age are required for the shape and unread.
+// hasState reports whether a row opens with a non-empty `[state]` column.
+func hasState(row string) bool {
+	head, _, _ := strings.Cut(row, listAgentsColumn)
+	state, opened := strings.CutPrefix(head, "[")
+	state, closed := strings.CutSuffix(state, "]")
+	return opened && closed && state != ""
+}
+
+// peerFromRow reads one `[state]  ·  name  ·  cwd  ·  started age` row, or the
+// renamed form with its former name between name and cwd. The state, former
+// name and age are required for the shape and unread: a session answers only to
+// its current name.
 func peerFromRow(row string) (Peer, bool) {
 	cols := strings.Split(row, listAgentsColumn)
+	if len(cols) == 5 && renamedFrom(cols[2]) {
+		cols = slices.Delete(cols, 2, 3)
+	}
 	if len(cols) != 4 {
 		return Peer{}, false
 	}
@@ -199,12 +228,17 @@ func peerFromRow(row string) (Peer, bool) {
 			return Peer{}, false
 		}
 	}
-	state, opened := strings.CutPrefix(cols[0], "[")
-	state, closed := strings.CutSuffix(state, "]")
-	if !opened || !closed || state == "" || !filepath.IsAbs(cols[2]) {
+	if !filepath.IsAbs(cols[2]) {
 		return Peer{}, false
 	}
 	return Peer{Name: cols[1], Dir: cols[2]}, true
+}
+
+// renamedFrom reports whether a column is the `says it was <old> until <age>
+// ago` a renamed session's row carries; it names only the newest former name.
+func renamedFrom(col string) bool {
+	former, ok := strings.CutPrefix(col, listAgentsFormer)
+	return ok && strings.Contains(former, listAgentsUntil) && strings.HasSuffix(former, listAgentsAgo)
 }
 
 // A bare /rename replies with the name it took (list-agents.jsonl), which the

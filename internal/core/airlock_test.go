@@ -411,11 +411,13 @@ var claudeWireVocabulary = wordSet([]string{
 	"Current model:",
 
 	// The bare /list-agents and /rename replies' rendered English, which
-	// localreply.go reads the machine's sessions and a new name out of. Policed
-	// for "Current model:"'s reason, and each is a longer value's leading or
-	// inner phrase, so all three are in embeddedMarkers below.
+	// localreply.go reads the machine's sessions and a new name out of - and a
+	// renamed session's former-name column. Policed for "Current model:"'s
+	// reason, and each is a longer value's leading or inner phrase, so all four
+	// are in embeddedMarkers below.
 	"Other Claude sessions",
 	"No subagents, teammates or other Claude sessions", "Session renamed to: ",
+	"says it was ",
 
 	// Claude Code's /goal lifecycle, the rendered English wire.go's goalOp reads.
 	// "<synthetic>" (the announcement's model) and "No goal set" are whole values;
@@ -459,6 +461,11 @@ var deliberatelyGeneric = wordSet([]string{
 	// origin.kind's own key, the plainest English there is: Wake's own code names
 	// kinds everywhere, and "origin" beside it is policed, so it is no route in.
 	"kind",
+
+	// The rest of a renamed session's former-name column, `says it was <old>
+	// until <age> ago`, whose leading phrase is policed above. Plain English
+	// Wake's own words could not avoid, and no route in without that phrase.
+	" until ", " ago",
 
 	// A workflow_agent's other state words, "start"'s siblings. Neither is
 	// policed: core.TaskProgress and core.TaskDone already spell "progress"
@@ -696,7 +703,9 @@ var notNamedByTheAirlock = map[string]string{
 // list-agents.jsonl and list-agents-bare*.jsonl.
 // 209 → 210: "authentication_failed", the failed turn's error kind apiNotice
 // reads so only a dead login is parked for a new process. api-error-auth.jsonl.
-const policedWordCount = 210
+// 210 → 211: "says it was ", the column a renamed session's /list-agents row
+// carries between its name and directory. list-agents-bare-renamed.jsonl.
+const policedWordCount = 211
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -1089,6 +1098,7 @@ var embeddedMarkers = map[string]bool{
 	"Other Claude sessions":                            true,
 	"No subagents, teammates or other Claude sessions": true,
 	"Session renamed to: ":                             true,
+	"says it was ":                                     true,
 	// Every connector's name begins with it ("claude.ai Gmail"); never whole.
 	"claude.ai ": true,
 }

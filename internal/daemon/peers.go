@@ -162,7 +162,10 @@ func runListAgents(ctx context.Context, dir string) ([]core.Peer, error) {
 			if !ev.LocalCommand {
 				return nil, errModelTurn
 			}
-			if peers, ok := core.PeersFromListAgents(ev.Text); ok {
+			if peers, dropped, ok := core.PeersFromListAgents(ev.Text); ok {
+				if dropped > 0 { // counted, never quoted: a row names the operator's sessions
+					logf("wake: left %d of the machine's Claude sessions out: a row this build cannot read", dropped)
+				}
 				return peers, nil
 			}
 			return nil, errors.New("its listing is a shape this build cannot read")
