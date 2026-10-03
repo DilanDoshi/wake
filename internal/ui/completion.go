@@ -278,10 +278,10 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 // to the fleet, and then the room keeps its own names: who's would be offered
 // for a draft every agent reads.
 func (a App) behindAddressee(head, typed string) bool {
-	if strings.TrimSpace(head) == "" || !canBeginName(typed) {
+	c := a.room.Composer()
+	if c.WireText(head) == "" || !canBeginName(typed) { // nothing the router reads comes first
 		return false
 	}
-	c := a.room.Composer()
 	r := a.route(c.WireText(c.Value()))
 	return r.mentioned && len(r.Targets) == 1
 }

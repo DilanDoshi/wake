@@ -738,3 +738,30 @@ func TestBehindNoOneLiveAgentTheRoomKeepsItsOwnNames(t *testing.T) {
 		}
 	}
 }
+
+// ⌃T rebuilds an open menu: behind `@jade ` it is jade's only while ↵ sends to
+// her alone, and open mode sends the draft to every agent.
+func TestFlippingTheMentionModeRebuildsTheMenuBehindAnAddressee(t *testing.T) {
+	listed := roomFleet(t).applyFrame(peersReply(core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a"}))
+	a, _ := typedAsking(t, listed, runes("@jade ask @wf")...)
+	if !slices.Contains(a.completion.offers, "@wf-alpha") {
+		t.Fatalf("`@jade ask @wf` offered %q before any flip, so this asserts nothing", a.completion.offers)
+	}
+	ctrlT := tea.KeyMsg{Type: tea.KeyCtrlT}
+	open, _ := pressKey(a, ctrlT)
+	if slices.Contains(open.completion.offers, "@wf-alpha") {
+		t.Errorf("after ⌃T to open mode the menu still offered %q for a draft every agent reads", open.completion.offers)
+	}
+	if back, _ := pressKey(open, ctrlT); !slices.Contains(back.completion.offers, "@wf-alpha") {
+		t.Errorf("after ⌃T back to direct the menu offered %q, want jade's again", back.completion.offers)
+	}
+}
+
+// An image chip ahead of the leading mention is no text on the wire, so
+// `[Image #1] @jade` is still the room's first addressee being typed.
+func TestAnImageAheadOfTheLeadingMentionKeepsTheRoomsNames(t *testing.T) {
+	a := dropImage(t, roomFleet(t), writePNG(t, "shot.png")).withDraft(" @jade")
+	if got := a.completion.offers; !slices.Contains(got, "@jade") {
+		t.Errorf("%q offered %q, want the room's own names, @jade among them", a.composer().Value(), got)
+	}
+}

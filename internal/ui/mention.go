@@ -82,7 +82,8 @@ func (a App) flipMention() (tea.Model, tea.Cmd, bool) {
 		a.mention = MentionOpen
 	}
 	notice.Report("%s", mentionFlipped(a.mention))
-	return a.retarget(), nil, true
+	// Rebuilt too: behind `@who ` the menu depends on where ↵ sends.
+	return a.retarget().recompleted(), nil, true
 }
 
 // # Where the mode lives
