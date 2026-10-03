@@ -80,12 +80,15 @@ const repoRoot = "../.."
 // checkable rather than a sentence in a header: a member cannot be added
 // without editing it, and the set is what the leak check exempts. The fifth,
 // localreply.go, is the owner's 2026-09-27 ruling: local commands' reply text.
+// The sixth, control.go, is 2026-10-02's: control requests and their receipts,
+// split out by subject when encode.go, wire.go and protocol.go were all full.
 var airlockFiles = wordSet([]string{
 	"internal/core/protocol.go",
 	"internal/core/wire.go",
 	"internal/core/vocabulary.go",
 	"internal/core/encode.go",
 	"internal/core/localreply.go",
+	"internal/core/control.go",
 })
 
 // claudeWireVocabulary is what a file must not name outside the airlock.
@@ -1232,8 +1235,8 @@ func TestTheThreeListsDoNotOverlap(t *testing.T) {
 
 // The airlock is a set of files in one package, and saying so is what stops
 // the set being widened into an exemption for somewhere else.
-func TestTheAirlockIsFiveFilesInInternalCore(t *testing.T) {
-	const want = 5
+func TestTheAirlockIsSixFilesInInternalCore(t *testing.T) {
+	const want = 6
 	if len(airlockFiles) != want {
 		t.Errorf("the airlock is %d files, want %d - if that is deliberate, CLAUDE.md's rule and protocol.go's header both name the set and must change with it", len(airlockFiles), want)
 	}

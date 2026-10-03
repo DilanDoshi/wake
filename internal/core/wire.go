@@ -7,7 +7,7 @@
 // decoder: Go fails the *entire frame* on a type mismatch, and a frame lost
 // that way is invisible rather than loud.
 //
-// The airlock is these five files and nothing else in Wake knows Claude
+// The airlock is these six files and nothing else in Wake knows Claude
 // Code's stream-json format:
 //
 //	protocol.go    decoding - one wire line in, core.Events out
@@ -15,6 +15,7 @@
 //	vocabulary.go  Claude's words resolved into Wake's
 //	encode.go      the frames Wake writes back
 //	localreply.go  the text replies of local commands Wake parses
+//	control.go     control requests Wake writes, and their receipts
 //
 // internal/core/airlock_test.go enforces that over the whole tree and reads
 // the same list. protocol.go's header carries the full rule.
@@ -330,66 +331,6 @@ const (
 	dispatchCompleted = "completed"
 	dispatchLaunched  = "async_launched"
 )
-
-// wireControlResp is the nested body of a control_response, and the only
-// place both that frame's subtype and its correlator exist.
-//
-// Subtype was "success" on all 12 recorded receipts, including every one
-// that interrupted nothing. It is transport level - "an answer, not a
-// protocol error" - and not a verdict, the same thing the outbound half of
-// this file says about the answer Wake writes.
-//
-// RequestID is absent when Wake's own request omitted it: one recorded
-// receipt reads {"subtype":"success","response":{"still_queued":[]}} and
-// names no request at all. That receipt is unattributable, which is why Wake
-// must always send a request_id even though the CLI does not require one.
-// Error is the refusal half, and it sits at this level rather than in the
-// payload below: a refused control_request answers subtype "error" with the
-// reason top-level and no nested response at all
-// (permission-mode-findings.md §6). That is a different shape from a permission
-// deny, which is a *successful* receipt carrying behavior "deny".
-type wireControlResp struct {
-	Subtype   string          `json:"subtype"`
-	RequestID string          `json:"request_id"`
-	Error     string          `json:"error"`
-	Response  wireControlBody `json:"response"`
-}
-
-// wireControlBody is the receipt's payload, one level below the body that
-// already holds the subtype - a control_response nests twice where a
-// control_request nests once.
-//
-// Four shapes across the 12 recorded receipts: still_queued empty (9), it
-// naming a surviving message uuid (1), and still_queued alongside cancelled
-// either naming a destroyed uuid (1) or empty (1). The findings note's §3
-// lists three and names the fourth in prose below the list; the bytes say
-// four, and the difference is the one that matters - see ControlResult for
-// why an absent cancelled and an empty one are different facts.
-//
-// Mode is a set_permission_mode receipt's whole payload, and it is the
-// authority on what the mode became - never the string that was sent. `manual`
-// is accepted and normalizes to `default` (§6), so the two disagree on a real
-// cycle position rather than only in principle.
-type wireControlBody struct {
-	StillQueued []string `json:"still_queued"`
-	Cancelled   []string `json:"cancelled"`
-	Mode        string   `json:"mode"`
-
-	// Rewind receipt payload. Rewound is a pointer so its *presence* - not its
-	// truth - is the discriminator: a rewind receipt always carries the key
-	// (true or false), a set_permission_mode receipt never does. Error here is
-	// the rewind failure reason and sits at this innermost level, unlike a mode
-	// refusal whose error is one level up on wireControlResp.
-	Rewound                *bool  `json:"rewound"`
-	TargetMessageUUID      string `json:"targetMessageUuid"`
-	PrefillText            string `json:"prefillText"`
-	PrecedingAssistantUUID string `json:"precedingAssistantUuid"`
-	Error                  string `json:"error"`
-
-	// An mcp_status receipt's payload; a pointer so presence, even of an empty
-	// list, is the discriminator. See mcpStatusReply.
-	MCPServers *[]wireMCPStatus `json:"mcpServers"`
-}
 
 // wireRateLimit is rate_limit_info. The frame also carries resetsAt (Unix
 // seconds), rateLimitType, overageStatus, overageDisabledReason and

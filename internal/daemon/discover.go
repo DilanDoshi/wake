@@ -3,9 +3,9 @@
 //
 // # This file is a second airlock leak, and it is confined here on purpose
 //
-// CLAUDE.md's non-negotiable is that internal/core's five files are the only
+// CLAUDE.md's non-negotiable is that internal/core's six files are the only
 // non-test files that know Claude's JSON. That rule is about Claude's *stream*
-// - the thing that makes a Codex port five files - and this reads a different
+// - the thing that makes a Codex port six files - and this reads a different
 // Claude artefact: the transcript on disk. A Codex port rewrites discovery
 // outright, because "where does the tool persist a conversation" has no
 // model-agnostic answer at all.
