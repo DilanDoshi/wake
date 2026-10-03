@@ -34,7 +34,9 @@ carries a subagent's `SendMessage` to its parent.
 Before this fix, live it folded to an Echoed user turn, which the DM and the room drop. On disk it
 decoded as the operator's own turn: `› you` in a reopened conversation, a rewind target, and a
 recallable prompt. `origin.kind` cannot tell it apart, because a real cross-session message is
-`peer` too; the envelope can. Core now drops it on both wires (`isAgentMessage`).
+`peer` too; the envelope can. Core now drops it on both wires: live by `isAgentMessage` on a frame
+claude marks `isSynthetic`, on disk by the `isMeta` fail-safe below. A typed turn quoting the
+envelope carries neither, and stays typed (a hand-started claude writes typed turns as strings).
 
 ## 3. `isMeta` is claude's mark on a line it injected
 

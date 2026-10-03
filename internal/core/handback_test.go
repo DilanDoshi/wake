@@ -41,16 +41,21 @@ func TestASubagentHandbackIsNoEventOnEitherWire(t *testing.T) {
 	}
 }
 
-// The envelope is read on string content only, as crossSession is: Wake's own
-// sends are array content, so a turn that quotes the envelope stays the user's.
-func TestAnArrayContentAgentMessageStaysTheUsersTurn(t *testing.T) {
-	line := []byte(`{"type":"user","session_id":"s1","message":{"role":"user","content":[{"type":"text","text":"look at <agent-message from=\"a1\">report</agent-message>"}]}}`)
-	evs, err := DecodeLine(line)
-	if err != nil {
-		t.Fatalf("DecodeLine: %v", err)
-	}
-	if len(evs) != 1 || evs[0].Kind != KindUserText {
-		t.Errorf("got %+v, want one KindUserText: a quoted envelope is not a hand-back", evs)
+// A turn that quotes the envelope stays the operator's: Wake's own sends are
+// array content, and a hand-started claude writes a typed turn as a string with
+// neither isSynthetic (the live hand-back's mark) nor isMeta (its mark on disk).
+func TestATypedTurnQuotingTheEnvelopeStaysTheUsersTurn(t *testing.T) {
+	const quote = `look at <agent-message from=\"a1\">report</agent-message>`
+	for name, line := range map[string]string{
+		"array":  `{"type":"user","session_id":"s1","message":{"role":"user","content":[{"type":"text","text":"` + quote + `"}]}}`,
+		"string": `{"type":"user","session_id":"s1","message":{"role":"user","content":"` + quote + `"}}`,
+	} {
+		for wire, decode := range map[string]func([]byte) ([]Event, error){"stream": DecodeLine, "disk": DecodeTranscriptLine} {
+			evs, err := decode([]byte(line))
+			if err != nil || len(evs) != 1 || evs[0].Kind != KindUserText {
+				t.Errorf("%s content on the %s: got %+v (err=%v), want the typed turn", name, wire, evs, err)
+			}
+		}
 	}
 }
 

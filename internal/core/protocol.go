@@ -659,7 +659,7 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 			base.Kind, base.Text, base.FromName = KindCrossSession, body, name
 			return one(base)
 		}
-		if f.Type == "user" && (isLocalCommandPlumbing(text) || isAgentMessage(text)) {
+		if f.Type == "user" && (isLocalCommandPlumbing(text) || (f.IsSynthetic && isAgentMessage(text))) {
 			return nil
 		}
 		base.Kind, base.Text, base.Notice = frameText(f.Type, text)

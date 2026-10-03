@@ -618,8 +618,9 @@ func isLocalCommandPlumbing(s string) bool {
 // isAgentMessage reports whether user string content carries the envelope a
 // subagent's message to this session arrives in - its SubagentHandback report
 // (subagent-handback.jsonl), the job <task-notification> did before it - which
-// is claude's note, never the operator's turn. String content only, as
-// crossSession: Wake's own sends are arrays, so a quoted envelope stays typed.
+// is claude's note, never the operator's turn. Asked only of a frame claude
+// marked isSynthetic, so a typed turn quoting it stays typed; on disk the line
+// is isMeta, which decodeTranscript's fail-safe drops.
 func isAgentMessage(s string) bool {
 	open := strings.Index(s, "<agent-message")
 	return open >= 0 && strings.Contains(s[open:], "</agent-message>")
