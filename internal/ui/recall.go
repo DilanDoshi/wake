@@ -55,7 +55,7 @@ type recall struct {
 // never a /rename, and for send-now never a command, which claude runs after the
 // turn (midturn-slash.jsonl) rather than reading as a message.
 func recallable(m queuedMsg, now bool) bool {
-	return !m.held && m.recallID == "" && m.rename == "" && !(now && leadingCommand(m.wire))
+	return !m.held && m.recallID == "" && m.rename == "" && (!now || !leadingCommand(m.wire))
 }
 
 // startRecall marks what id's gesture asks back and returns the frames that

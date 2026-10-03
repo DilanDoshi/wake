@@ -260,7 +260,7 @@ func TestATakeBackWithItsConversationGoneSaysWhatCameBack(t *testing.T) {
 	a, ids := queuedTwo(t)
 	a, _ = hit(t, a, tea.KeyUp)
 	a = a.forgetConversation("s1")
-	a = a.applyFrame(lifecycleFrame("s1", ids[0], "cancelled")).applyFrame(lifecycleFrame("s1", ids[1], "cancelled"))
+	_ = a.applyFrame(lifecycleFrame("s1", ids[0], "cancelled")).applyFrame(lifecycleFrame("s1", ids[1], "cancelled"))
 	if n, ok := notice.Latest(); !ok || !strings.Contains(n.String(), "first") || !strings.Contains(n.String(), "second") {
 		t.Errorf("latest notice %q, want it to carry what came back", n.String())
 	}
