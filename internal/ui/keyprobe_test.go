@@ -110,6 +110,7 @@ func TestTheKeysTheLegendNamesAreTheKeysBubbleteaReports(t *testing.T) {
 		{"↵", "\r", "enter"},
 		{"⌃Y, which opens a conversation in a new column", "\x19", "ctrl+y"},
 		{"⌃B, which stacks one under the focused pane and shadows the text area's CharacterBackward", "\x02", "ctrl+b"},
+		{"⌃], send now: GS, no flow-control byte and no signal", "\x1d", "ctrl+]"},
 		{"⌥↑, which walks the prompt history, in the CSI encoding", "\x1b[1;3A", "alt+up"},
 		{"⌥↓, the same", "\x1b[1;3B", "alt+down"},
 		{"⌥↑, in the Esc+ encoding a terminal set up for a meta key sends instead", "\x1b\x1b[A", "alt+up"},
@@ -152,6 +153,12 @@ func TestTheChordsSpecSixAsksForProduceNoKeyMessageAtAll(t *testing.T) {
 		{"⌘↑", "\x1b[1;9A"},
 		{"⌘↓", "\x1b[1;9B"},
 		{"⌃⌘→, in case the extra modifier finds a different row", "\x1b[1;13C"},
+		// ⌃], send now, in the two protocol encodings: named by nothing, like
+		// every chord above. Wake asks for neither protocol, so a terminal sends
+		// the legacy GS byte the legend table holds; one forced into either
+		// loses ⌃] as it loses the rest.
+		{"⌃], Kitty CSI-u", "\x1b[93;5u"},
+		{"⌃], xterm modifyOtherKeys", "\x1b[27;5;93~"},
 	} {
 		if got := keysFor(t, tc.seq); len(got) != 0 {
 			t.Errorf("%s now reports %v. bubbletea named nothing for it when ⇥ was chosen over it - if that has changed, spec §6's chord is bindable and the legend can say so", tc.what, got)

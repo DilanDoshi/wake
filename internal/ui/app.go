@@ -335,11 +335,13 @@ type App struct {
 	parking  map[string]struct{}
 	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
 
-	// queued is type-ahead waiting for each agent to be free, and inflight is the
-	// uuid of the message last sent it that has not completed - the signal shouldQueue
-	// and flushQueued turn on. Per window, copy-on-write like quitting. See queue.go.
+	// queued is what claude has queued for each agent and not yet taken up (and a
+	// held /rename), inflight the Wake messages it has started and not finished,
+	// and recalls a take-back or send-now waiting on claude. Per window,
+	// copy-on-write like quitting. See queue.go and recall.go.
 	queued   map[string][]queuedMsg
-	inflight map[string]string
+	inflight map[string]map[string]bool
+	recalls  map[string]recall
 
 	// authFailed are sessions whose last turn failed on the API - an expired
 	// login, a rejected key, an overload (core.KindAPIError). observe marks each

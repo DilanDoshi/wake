@@ -106,7 +106,8 @@ const (
 	interruptedFormat = "stopped %s%s's turn"
 )
 
-// submit sends the focused draft.
+// submit sends the focused draft; now is send-now (⌃]), which hurries it past a
+// working agent's tool calls rather than leaving it for the next boundary.
 //
 // # The single-source rule
 //
@@ -121,7 +122,7 @@ const (
 // whoever adds that flag has to delete these echoes in the same change. What
 // the flag emits has never been recorded, which is precisely why the
 // authoritative half is the one Wake can see.
-func (a App) submit() (tea.Model, tea.Cmd) {
+func (a App) submit(now bool) (tea.Model, tea.Cmd) {
 	text := a.composer().Value()
 	// Attachments still referenced by a chip in the draft. A blank draft has no
 	// chips, so it also has no images - the empty guard below stays honest.
@@ -142,14 +143,14 @@ func (a App) submit() (tea.Model, tea.Cmd) {
 		return a, cmd
 	}
 	if a.focus != "" {
-		return a.sendDM(text, images)
+		return a.sendDM(text, images, now)
 	}
-	return a.sendRoom(text, images)
+	return a.sendRoom(text, images, now)
 }
 
 // sendDM writes one message to the one agent a DM is with. There is nothing to
 // route: the pane names its recipient in its own header.
-func (a App) sendDM(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) {
+func (a App) sendDM(text string, images []core.ImageBlock, now bool) (tea.Model, tea.Cmd) {
 	if a.parkedAgent(a.focus) {
 		// Above the ended arm, because a parked session is an ended one from
 		// every angle below the daemon and would otherwise be answered with
@@ -175,22 +176,26 @@ func (a App) sendDM(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) 
 		return next, cmd
 	}
 	id := a.focus
-	// A message typed while this agent is busy waits rather than going to the wire
-	// mid-turn - the "the agent doesn't even see it" fix. It is stamped now so its
-	// lifecycle can be tracked, and delivered when the agent is free (queue.go).
+	// A message typed while this agent is busy is written now, stamped so its
+	// lifecycle can be tracked, and pinned until claude takes it up (queue.go).
 	// The echo keeps the chips (image markers and all); the wire text has them
 	// stripped and their images ride beside it.
 	//
 	// A `/rename bob` is claude's own word, so the router leaves it a message -
 	// and Wake mirrors it onto its own handle, so the roster and claude's title
-	// do not drift (renameMirror). The mirror goes with its passthrough: queued
+	// do not drift (renameMirror). The mirror goes with its passthrough: held
 	// with it, or sequenced just ahead of it, never batched - the daemon must
 	// read it first (renamesync.go), and park.go is the precedent.
 	msg := newQueued(uuid.NewString(), a.composer().WireText(text), text, images, false)
 	msg.rename = a.renameMirror(text)
 	if a.shouldQueue(id) {
-		a = a.enqueue(id, msg)
-		return a.clearDraft(), nil
+		var frames []rpc.Frame
+		a, frames = a.toBusy(id, msg, now)
+		a = a.clearDraft()
+		if len(frames) == 0 {
+			return a, nil
+		}
+		return a, a.write(sendFailed, frames...)
 	}
 	a = a.clearDraft().markSent(id, msg)
 	return a, tea.Sequence(a.mirrorNow(id, msg.rename), a.write(sendFailed, sendFrame(id, msg)))
@@ -206,7 +211,7 @@ func (a App) sendDM(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) 
 // which the per-agent bridge cannot fan out - see the ruling in sendRoom.
 const teamCommandRefused = "/%s can't fan out to @%s — it is per-agent; send it to one member instead"
 
-func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd) {
+func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Model, tea.Cmd) {
 	// The manager is the default addressee when there is one, and nothing is
 	// when there is not - never whichever agent this window happens to have
 	// attached, which is the misroute Route.Resolved exists to prevent.
@@ -270,7 +275,7 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		}
 	}
 	a = a.clearDraft()
-	a, frames, now := a.roomSends(r, text, images)
+	a, frames, mirror := a.roomSends(r, text, images, now)
 	// Echoed as it was typed, mention and all: the room is the record of who you
 	// said it to, chips included, while the agents get r.Text - already routed
 	// off the chip-stripped draft above, so it carries the images' words and not
@@ -285,7 +290,7 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 		to = r.Targets[0]
 	}
 	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
-	return a, tea.Sequence(now, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
+	return a, tea.Sequence(mirror, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
 }
 
 // roomSends takes a routed room message to each target, returning the frames
@@ -303,18 +308,18 @@ func (a App) sendRoom(text string, images []core.ImageBlock) (tea.Model, tea.Cmd
 // mode is MentionOpen and takes no mirror, which is right: it is a broadcast
 // keeping the @name in the text, and no agent gets a leading /rename.
 //
-// A busy target takes the broadcast when its turn ends (queue.go), fromRoom so
-// its held-DM echo reads `from the room`. The room's own line is drawn by the
-// caller regardless - you said it once, whoever is busy - so only the free
-// targets are written and echoed to their DMs here; each frame carries its own
-// stamped uuid.
-func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock) (App, []rpc.Frame, tea.Cmd) {
+// A busy target is written the broadcast too and pins it until claude takes it
+// up (queue.go), fromRoom so its held-DM echo reads `from the room`; send-now
+// hurries it (recall.go). The room's own line is drawn by the caller regardless -
+// you said it once, whoever is busy - and only the free targets are echoed to
+// their DMs here; each frame carries its own stamped uuid.
+func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock, now bool) (App, []rpc.Frame, tea.Cmd) {
 	var mirrorID, mirror string
 	if r.mentioned && r.mode == MentionDirect {
 		mirrorID, mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)
 	}
 	var frames []rpc.Frame
-	var now tea.Cmd
+	var mirrorNow tea.Cmd
 	// One send for every target, so the restore can draw it once; direct is the
 	// rule sendRoom stamps its echo's `to` by.
 	send := newRoomSend(r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0)
@@ -324,16 +329,27 @@ func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock) (App,
 			msg.rename = mirror
 		}
 		if a.shouldQueue(id) {
-			a = a.enqueue(id, msg)
+			var busy []rpc.Frame
+			a, busy = a.toBusy(id, msg, now)
+			frames = append(frames, busy...)
 			continue
 		}
 		a = a.markSent(id, msg)
 		if msg.rename != "" {
-			now = a.mirrorNow(id, msg.rename)
+			mirrorNow = a.mirrorNow(id, msg.rename)
 		}
 		frames = append(frames, sendFrame(id, msg))
 	}
-	return a, frames, now
+	return a, frames, mirrorNow
+}
+
+// toBusy sends one message to a busy agent: hurried for a send-now (a command
+// still waits its turn), queued otherwise.
+func (a App) toBusy(id string, msg queuedMsg, now bool) (App, []rpc.Frame) {
+	if now && !leadingCommand(msg.wire) {
+		return a.hurry(id, msg)
+	}
+	return a.queue(id, msg)
 }
 
 // clearDraft empties the focused composer, re-reads where ↵ would now send, and

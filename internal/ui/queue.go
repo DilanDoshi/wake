@@ -1,43 +1,44 @@
 package ui
 
-// Type-ahead: a message typed while its agent is working waits here rather than
-// going to the wire, and is delivered once the agent is free again.
+// Type-ahead: a message typed while its agent is working goes to claude at once,
+// and claude queues it - read at the next tool boundary in the running turn, or
+// as the next turn if this one ends first; a command waits for the turn to end.
 //
-// # Why the message is held and not sent
+// # Why it is written rather than held
 //
-// A message written to a busy stdin is one the CLI coalesces or drops - the
-// unstamped-mid-turn behaviour is unrecorded (docs/notes runtime findings §3) -
-// so the agent may never see it. The safe answer is to never write mid-turn: a
-// message reaches the agent only when it is free, the same path a first message
-// takes. That is the whole of the "the agent doesn't even see the message" fix.
+// Wake used to hold every such message until the agent was idle, on the
+// assumption that a line written to a busy stdin is coalesced or dropped. That
+// was never recorded; recording it (claude 2.1.288,
+// docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md) showed the
+// opposite: claude queues the line, says so (command_lifecycle "queued"), and
+// takes it up between tool calls (midturn-absent.jsonl). Holding it only kept
+// the agent from reading it - the steer arrived after the work it was meant to
+// steer.
 //
-// # Knowing when the agent is free, deterministically
+// # Pinned until claude takes it up
 //
-// Agent.State lags: the daemon sets a turn owed the instant it writes, but only
-// reports "working" when the agent emits its first event (its init, seconds
-// later). So a fast follow-up typed before that report would see "idle" and race
-// onto a busy stdin. Wake instead stamps every message it sends with a uuid
-// (rpc.Frame.MessageID → core.EncodeUserMessage), which makes the CLI emit a
-// command_lifecycle for it (core.KindMessageState): App.inflight is set the
-// instant a message is dispatched and cleared by that message's
-// completed/cancelled lifecycle. shouldQueue reads it, so a follow-up queues at
-// once rather than lagging behind a status report.
+// What is written but not yet taken up is pinned above the composer, as Claude
+// Code lists its queue. Its "started" lifecycle moves it into the conversation
+// at that point - where the model read it. A lost "started" is backstopped by
+// the message's "completed" and by the turn end naming it (Event.Answered). Until
+// it starts it can be taken back or hurried (recall.go).
 //
-// # The flush, and its backstop
+// # Busy, deterministically
 //
-// An agent is free when it holds no in-flight Wake message and the daemon reports
-// it idle. flushQueued delivers one message to each free agent with a queue - one
-// per turn, so a burst never coalesces. The primary "message over" signal is the
-// lifecycle (observeMessageState); the State working→idle edge is a gap backstop,
-// clearing a stranded inflight if that lifecycle frame was lost. esc rides this
-// for free: an interrupt cancels the running message, its lifecycle reads
-// cancelled, and the next queued message flushes.
+// An idle agent's message is drawn at once. Agent.State lags a send by seconds,
+// so busy also reads inflight - every Wake message claude has started and not
+// finished, set the instant one is sent to an idle agent - and a queue that is
+// not empty. The State working→idle edge clears inflight if a lifecycle was lost.
 //
-// # Where it lives
+// # The one message still held
+//
+// A /rename to a busy agent is held here, not written: its mirror renames Wake
+// when the passthrough goes, and the daemon holds that want until claude's reply,
+// one at a time (renamesync.go). It goes out one per turn once the agent is free,
+// the mechanism every message used before.
 //
 // Per window, keyed by session id, copy-on-write like App.quitting - transient UI
-// state the way a draft is, never persisted, lost on close exactly as Claude Code
-// loses its own queue.
+// state, never persisted, lost on close as Claude Code loses its own queue.
 
 import (
 	"fmt"
@@ -63,20 +64,22 @@ const queuedGlyph = "⧗"
 // row counts the rest (`+N more`), the room working line's own pattern.
 const maxQueuedPinRows = 3
 
-// queuedMsg is one message waiting for an agent to be free. id is the uuid it is
-// stamped with, so its command_lifecycle can be matched back; wire is what
+// queuedMsg is one message waiting for claude to take it up. id is the uuid it
+// is stamped with, so its command_lifecycle can be matched back; wire is what
 // reaches the agent (chip- and mention-stripped, as sendDM/sendRoom produce);
 // echo is what the transcript draws (as typed). fromRoom marks a broadcast, so
 // its held-DM echo heads `from the room` and its provenance is public. rename is
-// a `/rename`'s mirror name, "" for none: written just before this message, so
-// Wake is renamed when the agent gets its own /rename, and not before.
+// a `/rename`'s mirror name, "" for none. held is a /rename not yet written (see
+// the header); recalling is a take-back on its way to claude (recall.go).
 type queuedMsg struct {
-	id       string
-	wire     string
-	echo     string
-	images   []core.ImageBlock
-	fromRoom bool
-	rename   string
+	id        string
+	wire      string
+	echo      string
+	images    []core.ImageBlock
+	fromRoom  bool
+	rename    string
+	held      bool
+	recalling bool
 }
 
 // newQueued builds a message under the uuid it will be stamped with, minted at
@@ -86,128 +89,168 @@ func newQueued(id, wire, echo string, images []core.ImageBlock, fromRoom bool) q
 	return queuedMsg{id: id, wire: wire, echo: echo, images: images, fromRoom: fromRoom}
 }
 
-// shouldQueue is whether a message to this agent must wait rather than go now: it
-// has a Wake message still in flight, its turn is in flight per the daemon, or it
-// already has messages queued (a later one lands behind them, never ahead).
+// shouldQueue is whether a message to this agent waits in claude's queue rather
+// than being read now: a Wake message is in flight, the daemon reports a turn,
+// or something is already queued ahead of it.
 func (a App) shouldQueue(id string) bool {
-	if a.inflight[id] != "" || len(a.queued[id]) > 0 {
+	if len(a.inflight[id]) > 0 || len(a.queued[id]) > 0 {
 		return true
 	}
 	agent, ok := a.fleet.Agent(id)
 	return ok && turnInFlight(agent.State)
 }
 
-// agentFree is whether a queued message may go now: no Wake message in flight and
-// the daemon reports the agent idle. Idle explicitly rather than !turnInFlight, so
-// an agent whose state this client has not yet seen waits for a real idle report.
+// agentFree is whether a held /rename may go now: nothing in flight and the
+// daemon reports the agent idle - idle explicitly, so an agent this client has
+// not yet seen waits for a real report.
 func (a App) agentFree(id string) bool {
 	agent, ok := a.fleet.Agent(id)
-	return a.inflight[id] == "" && ok && agent.State == rpc.StateIdle
+	return len(a.inflight[id]) == 0 && ok && agent.State == rpc.StateIdle
+}
+
+// queue sends one message to a busy agent: written now and pinned, or, for a
+// /rename, held with its mirror. The frame is nil when nothing is written.
+func (a App) queue(id string, msg queuedMsg) (App, []rpc.Frame) {
+	if msg.rename != "" {
+		msg.held = true
+		return a.enqueue(id, msg), nil
+	}
+	return a.enqueue(id, msg), []rpc.Frame{sendFrame(id, msg)}
 }
 
 // enqueue appends one message to an agent's queue, copy-on-write for the reason
 // App.dms is: a discarded App must keep the queue it had.
 func (a App) enqueue(id string, msg queuedMsg) App {
-	next := cloneQueue(a.queued)
-	next[id] = append(slices.Clone(next[id]), msg)
-	a.queued = next
-	return a
+	return a.withQueue(id, append(slices.Clone(a.queued[id]), msg))
 }
 
-// dequeue pops the oldest message for an agent. The bool is false when there was
-// none, which flushQueued reads rather than indexing an empty slice.
-func (a App) dequeue(id string) (App, queuedMsg, bool) {
-	q := a.queued[id]
-	if len(q) == 0 {
-		return a, queuedMsg{}, false
+// withQueue replaces one agent's queue, dropping the key when it empties.
+func (a App) withQueue(id string, q []queuedMsg) App {
+	next := make(map[string][]queuedMsg, len(a.queued)+1)
+	for k, v := range a.queued {
+		next[k] = v
 	}
-	msg := q[0]
-	next := cloneQueue(a.queued)
-	if len(q) == 1 {
+	if len(q) == 0 {
 		delete(next, id)
 	} else {
-		next[id] = slices.Clone(q[1:])
+		next[id] = q
 	}
 	a.queued = next
-	return a, msg, true
+	return a
 }
 
-// dropQueue forgets everything queued for an agent that can no longer receive it,
-// and any in-flight uuid it held - one that ended or parked while its queue waited.
+// unqueue takes one message out of an agent's queue by its uuid.
+func (a App) unqueue(id, msgID string) (App, queuedMsg, bool) {
+	q := a.queued[id]
+	i := slices.IndexFunc(q, func(m queuedMsg) bool { return m.id == msgID })
+	if i < 0 {
+		return a, queuedMsg{}, false
+	}
+	msg := q[i]
+	return a.withQueue(id, slices.Delete(slices.Clone(q), i, i+1)), msg, true
+}
+
+// dropQueue forgets everything queued for an agent that can no longer receive
+// it - one that ended or parked - with its in-flight marks and any take-back.
 func (a App) dropQueue(id string) App {
 	if _, held := a.queued[id]; held {
-		next := cloneQueue(a.queued)
-		delete(next, id)
-		a.queued = next
+		a = a.withQueue(id, nil)
 	}
-	return a.clearInflight(id)
+	return a.clearInflight(id).withoutRecall(id)
 }
 
-// cloneQueue copies the queue map. A local rather than maps.Clone so the slices
-// stay shared until enqueue clones the one it grows - a flush that only deletes a
-// key copies no message.
-func cloneQueue(m map[string][]queuedMsg) map[string][]queuedMsg {
-	next := make(map[string][]queuedMsg, len(m))
-	for k, v := range m {
-		next[k] = v
-	}
-	return next
-}
-
-// withInflight records the uuid of the message just dispatched to an agent, and
-// clearInflight forgets it once that message's turn is over. Copy-on-write.
+// withInflight records a message claude has started for an agent, and
+// clearInflight forgets them all. Copy-on-write; the inner sets are never
+// shared between Apps either.
 func (a App) withInflight(id, msgID string) App {
-	next := make(map[string]string, len(a.inflight)+1)
-	for k, v := range a.inflight {
-		next[k] = v
-	}
-	next[id] = msgID
-	a.inflight = next
-	return a
+	return a.withInflightSet(id, func(s map[string]bool) { s[msgID] = true })
 }
 
 func (a App) clearInflight(id string) App {
-	if _, held := a.inflight[id]; !held {
+	if len(a.inflight[id]) == 0 {
 		return a
 	}
-	next := make(map[string]string, len(a.inflight))
+	return a.withInflightSet(id, func(s map[string]bool) { clear(s) })
+}
+
+func (a App) withInflightSet(id string, edit func(map[string]bool)) App {
+	next := make(map[string]map[string]bool, len(a.inflight)+1)
 	for k, v := range a.inflight {
-		if k != id {
-			next[k] = v
-		}
+		next[k] = v
+	}
+	set := make(map[string]bool, len(next[id])+1)
+	for k := range next[id] {
+		set[k] = true
+	}
+	edit(set)
+	if len(set) == 0 {
+		delete(next, id)
+	} else {
+		next[id] = set
 	}
 	a.inflight = next
 	return a
 }
 
-// forgetInflight drops every in-flight mark, for a reattach: a mark that survived
-// a disconnection is a belief nothing can confirm, and a send that failed across
-// it left one with no lifecycle to clear it. Safe because turnInFlight(State) still
-// gates shouldQueue, so a genuinely running turn keeps a follow-up waiting.
+// forgetInflight drops what a reattach cannot confirm: every in-flight mark, and
+// every written message claude may have taken up while this client was gone,
+// with any take-back of them. A held /rename was never written, so it stays to
+// go out on the next idle.
 func (a App) forgetInflight() App {
-	if len(a.inflight) == 0 {
+	a.inflight = map[string]map[string]bool{}
+	a.recalls = nil
+	for id, q := range a.queued {
+		a = a.withQueue(id, slices.DeleteFunc(slices.Clone(q), func(m queuedMsg) bool { return !m.held }))
+	}
+	return a
+}
+
+// observeMessageState folds a message's lifecycle, and a turn end's list of
+// what it answered, into the queue: taken up moves a pinned message into the
+// conversation, cancelled is a take-back that was in time, and an ending takes
+// it out of flight. Lifecycles for uuids this window did not send are ignored.
+func (a App) observeMessageState(id string, ev core.Event) App {
+	switch {
+	case ev.MessageStarted():
+		a = a.takenUp(id, ev.MessageID, true)
+	case ev.MessageCancelled():
+		a = a.withdrawn(id, ev.MessageID)
+	case ev.MessageEnded():
+		a = a.takenUp(id, ev.MessageID, false)
+	case ev.Kind == core.KindTurnEnd:
+		for _, msgID := range ev.Answered {
+			a = a.takenUp(id, msgID, false)
+		}
+	}
+	if ev.MessageEnded() && a.inflight[id][ev.MessageID] {
+		a = a.withInflightSet(id, func(s map[string]bool) { delete(s, ev.MessageID) })
+	}
+	return a.settleRecall(id)
+}
+
+// takenUp draws a pinned message claude has read, in flight when it is running
+// now rather than already done.
+func (a App) takenUp(id, msgID string, running bool) App {
+	if q := a.queued[id]; !slices.ContainsFunc(q, func(m queuedMsg) bool { return m.id == msgID && !m.held }) {
 		return a
 	}
-	a.inflight = map[string]string{}
-	return a
-}
-
-// observeMessageState clears an agent's in-flight mark when the message it named
-// completes or is cancelled - the deterministic "the turn is over" signal, ahead
-// of the State-edge backstop. Ignores a lifecycle for a uuid this window did not
-// send (another client's, or a stale one).
-func (a App) observeMessageState(id string, ev core.Event) App {
-	if ev.MessageEnded() && ev.MessageID != "" && ev.MessageID == a.inflight[id] {
-		return a.clearInflight(id)
+	a, msg, _ := a.unqueue(id, msgID)
+	if running {
+		a = a.withInflight(id, msgID)
 	}
-	return a
+	return a.echoSent(id, msg)
 }
 
-// markSent records a dispatched message - the in-flight uuid, the room/DM
-// provenance, and the transcript echo - without writing it. The write is the
-// caller's, so a broadcast's frames go out as one command (send.go's rule).
+// markSent records a message an idle agent takes now - in flight, and drawn -
+// without writing it. The write is the caller's, so a broadcast's frames go out
+// as one command (send.go's rule).
 func (a App) markSent(id string, msg queuedMsg) App {
-	a = a.withInflight(id, msg.id)
+	return a.withInflight(id, msg.id).echoSent(id, msg)
+}
+
+// echoSent draws a message as said to an agent: in its held DM, and as the turn
+// the room/DM provenance follows.
+func (a App) echoSent(id string, msg queuedMsg) App {
 	a.fleet = a.fleet.sending(id, !msg.fromRoom)
 	if d, held := a.dms[id]; held {
 		nd := d.Append(core.Event{Kind: core.KindUserText, SessionID: id, Text: msg.echo, FromRoom: msg.fromRoom})
@@ -222,24 +265,13 @@ func sendFrame(id string, msg queuedMsg) rpc.Frame {
 	return rpc.Frame{Kind: rpc.FrameSend, SessionID: id, Text: msg.wire, Images: msg.images, MessageID: msg.id}
 }
 
-// reconcileInflight clears an agent's in-flight mark when the daemon reports its
-// turn over - a working→idle edge - or the agent gone. It is the backstop for a
-// completed lifecycle lost to a frame gap, run per report (from applyStatus)
-// rather than per batch, so an edge that opens and closes inside one inbox drain
-// is not collapsed. prev is the fleet before this one report folded.
-//
-// Clearing an idle agent's mark can never flush anything mid-turn: agentFree also
-// requires the daemon's idle, so a mark cleared while the agent still works leaves
-// it not-free.
+// reconcileInflight clears an agent's in-flight marks when the daemon reports
+// its turn over - a working→idle edge - or the agent gone: the backstop for a
+// completed lifecycle lost to a frame gap, run per report (from applyStatus) so
+// an edge that opens and closes inside one inbox drain is not collapsed. prev is
+// the fleet before this one report folded.
 func (a App) reconcileInflight(prev Fleet) App {
-	if len(a.inflight) == 0 {
-		return a
-	}
-	ids := make([]string, 0, len(a.inflight))
 	for id := range a.inflight {
-		ids = append(ids, id)
-	}
-	for _, id := range ids {
 		agent, ok := a.fleet.Agent(id)
 		switch {
 		case !ok || agent.State == rpc.StateEnded || agent.State == rpc.StateParked:
@@ -251,41 +283,26 @@ func (a App) reconcileInflight(prev Fleet) App {
 	return a
 }
 
-// flushQueued delivers one waiting message to each agent that is now free and
-// drops the queue of any that ended or parked. inflight is reconciled elsewhere
-// (reconcileInflight, observeMessageState), so this only reads agentFree. One
-// message per free agent per call keeps a burst from coalescing: the delivered
-// message sets inflight, so the agent is no longer free until its turn ends.
+// flushQueued writes each held /rename whose agent is now free, its mirror just
+// ahead of it, one per agent per call, and drops the queue of any agent that
+// ended or parked.
 func (a App) flushQueued() (App, tea.Cmd) {
-	if len(a.queued) == 0 {
-		return a, nil
-	}
-	ids := make([]string, 0, len(a.queued))
-	for id := range a.queued {
-		ids = append(ids, id)
-	}
 	var frames []rpc.Frame
-	for _, id := range ids {
+	for id, q := range a.queued {
 		agent, ok := a.fleet.Agent(id)
 		if !ok || agent.State == rpc.StateEnded || agent.State == rpc.StateParked {
-			a = a.dropQueue(id) // also clears any inflight mark
+			a = a.dropQueue(id)
 			continue
 		}
-		if !a.agentFree(id) {
+		i := slices.IndexFunc(q, func(m queuedMsg) bool { return m.held })
+		if i < 0 || !a.agentFree(id) {
 			continue
 		}
-		var (
-			msg queuedMsg
-			had bool
-		)
-		if a, msg, had = a.dequeue(id); had {
-			a = a.markSent(id, msg)
-			if msg.rename != "" {
-				notice.Report(renameAsked, agentPrefix, agent.Name)
-				frames = append(frames, renameFrame(id, msg.rename, true))
-			}
-			frames = append(frames, sendFrame(id, msg))
-		}
+		var msg queuedMsg
+		a, msg, _ = a.unqueue(id, q[i].id)
+		a = a.markSent(id, msg)
+		notice.Report(renameAsked, agentPrefix, agent.Name)
+		frames = append(frames, renameFrame(id, msg.rename, true), sendFrame(id, msg))
 	}
 	if len(frames) == 0 {
 		return a, nil
@@ -346,8 +363,8 @@ func (d DM) queuedRows() int { return min(len(d.queued), maxQueuedPinRows) }
 // queuedPin is the waiting messages above the composer, each a dim ⧗ line
 // truncated to the width, and "" for a conversation with none. Past the cap the
 // last row counts the rest. Where Claude Code shows a queued message: below the
-// input, moving into the transcript when its turn comes (markSent appends the real
-// echo then).
+// input, moving into the transcript when claude takes it up (takenUp appends the
+// real echo then).
 func (d DM) queuedPin(width int) string {
 	if len(d.queued) == 0 {
 		return ""

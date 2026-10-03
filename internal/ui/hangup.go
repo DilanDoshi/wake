@@ -140,11 +140,11 @@ func (a App) reattached(m reattachedMsg) (tea.Model, tea.Cmd) {
 	// further: the boundary that would have cleared it may have been in the gap.
 	// See Fleet.ForgetTurns.
 	a.fleet = a.fleet.ForgetTurns()
-	// A queued message's own send may be what failed and dropped this connection,
-	// leaving its in-flight mark with no lifecycle or edge left to clear it. The
-	// queue itself is kept - it flushes on the next idle - but the marks are a
-	// belief nothing can confirm across the outage, so they go with the rest. See
-	// queue.go.
+	// A send may be what failed and dropped this connection, leaving its
+	// in-flight mark with no lifecycle or edge left to clear it, and claude may
+	// have taken up a queued message while this client was gone. Both are beliefs
+	// nothing can confirm across the outage, so they go with the rest; a held
+	// /rename was never written and stays to go out on the next idle. See queue.go.
 	a = a.forgetInflight()
 	go a.in.pump(m.stream)
 
