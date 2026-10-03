@@ -277,12 +277,19 @@ type alignedPipe struct {
 	chunks chunker
 }
 
-// Read reads only what fits beside the held carry, so the aligned chunk it
-// returns fits p whole and Bubble Tea never cuts it again.
+// Read leaves a byte of p spare and room for the held carry, so the chunk it
+// returns is always a short read to Bubble Tea, which takes one as ending on a
+// boundary - true of an aligned chunk, and it keeps a trailing ⎋ from being held
+// a second time by Bubble Tea's own full-read rule.
+//
+// A read that filled its room can end on a report's ESC with the rest still in
+// the pipe, or on a real ⎋ with nothing behind it; only the pipe can tell them
+// apart, so it is asked rather than the read's size.
 func (r *alignedPipe) Read(p []byte) (int, error) {
-	room := len(p) - len(r.chunks.carry)
+	room := len(p) - 1 - len(r.chunks.carry)
 	n, err := r.File.Read(p[:room])
-	return copy(p, r.chunks.step(p[:n], n == room)), err
+	full := n == room && queued(r.File)
+	return copy(p, r.chunks.step(p[:n], full)), err
 }
 
 // alignedCut is how much of buf ends on an escape-sequence boundary: buf[:cut]

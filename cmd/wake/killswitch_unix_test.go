@@ -384,11 +384,11 @@ func TestThereIsNoKillSwitchWithoutATerminal(t *testing.T) {
 }
 
 // decodedModel is what a real Bubble Tea decoded off the kill switch's Input,
-// and it quits once want messages have arrived.
+// and it quits once until says it has seen enough.
 type decodedModel struct {
-	want int
-	mice int
-	keys []string
+	until func(decodedModel) bool
+	mice  int
+	keys  []string
 }
 
 func (decodedModel) Init() tea.Cmd { return nil }
@@ -400,7 +400,7 @@ func (d decodedModel) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		d.keys = append(slices.Clone(d.keys), msg.String())
 	}
-	if d.mice+len(d.keys) >= d.want {
+	if d.until(d) {
 		return d, tea.Quit
 	}
 	return d, nil
@@ -410,7 +410,7 @@ func (decodedModel) View() string { return "" }
 
 // decodeThroughThePipe writes input to the pipe the pump feeds in one write - an
 // aligned chunk, as forward writes it - and runs a real Bubble Tea over Input.
-func decodeThroughThePipe(t *testing.T, input string, want int) decodedModel {
+func decodeThroughThePipe(t *testing.T, input string, until func(decodedModel) bool) decodedModel {
 	t.Helper()
 	pipe, feed, err := os.Pipe()
 	if err != nil {
@@ -421,7 +421,7 @@ func decodeThroughThePipe(t *testing.T, input string, want int) decodedModel {
 	if _, err := feed.WriteString(input); err != nil {
 		t.Fatal(err)
 	}
-	p := tea.NewProgram(decodedModel{want: want}, tea.WithInput(k.Input()),
+	p := tea.NewProgram(decodedModel{until: until}, tea.WithInput(k.Input()),
 		tea.WithOutput(io.Discard), tea.WithoutSignalHandler())
 	done := make(chan tea.Model, 1)
 	go func() { m, _ := p.Run(); done <- m }()
@@ -431,7 +431,7 @@ func decodeThroughThePipe(t *testing.T, input string, want int) decodedModel {
 	case <-time.After(5 * time.Second):
 		p.Kill()
 		got := (<-done).(decodedModel)
-		t.Fatalf("Bubble Tea decoded %d of %d messages before the deadline (keys %q)", got.mice+len(got.keys), want, got.keys)
+		t.Fatalf("Bubble Tea stalled after %d mouse reports and keys %q", got.mice, got.keys)
 		return got
 	}
 }
@@ -440,26 +440,52 @@ func decodeThroughThePipe(t *testing.T, input string, want int) decodedModel {
 //
 // Bubble Tea v1.3.10 reads 256 bytes at a time and decodes a report its full read
 // ends inside as alt+[ plus the runes `<67;217;52M`, which the composer types -
-// the sideways-wheel bug. A 13-byte report never divides 256, so one write of a
-// hundred puts a read boundary inside one.
+// the sideways-wheel bug. A lead of 0-12 typed bytes puts a read's end at every
+// offset of a 13-byte report, its lone ESC included.
 func TestAWheelFloodReachesBubbleTeaAsMouseNeverAsKeys(t *testing.T) {
 	const reports = 100
 	for _, button := range []int{64, 65, 66, 67} { // wheel up, down, left, right
-		t.Run(fmt.Sprint(button), func(t *testing.T) {
-			report := fmt.Sprintf("\x1b[<%d;217;52M", button)
-			got := decodeThroughThePipe(t, strings.Repeat(report, reports), reports)
-			if len(got.keys) > 0 || got.mice != reports {
-				t.Fatalf("decoded %d mouse reports and keys %q, want %d reports and no keys", got.mice, got.keys, reports)
-			}
-		})
+		report := fmt.Sprintf("\x1b[<%d;217;52M", button)
+		for lead := range len(report) {
+			t.Run(fmt.Sprintf("%d/%d", button, lead), func(t *testing.T) {
+				stray := func(k string) bool { return strings.Trim(k, "x") != "" }
+				got := decodeThroughThePipe(t, strings.Repeat("x", lead)+strings.Repeat(report, reports), func(d decodedModel) bool {
+					return d.mice >= reports || slices.ContainsFunc(d.keys, stray)
+				})
+				if slices.ContainsFunc(got.keys, stray) || got.mice != reports {
+					t.Fatalf("decoded %d mouse reports and keys %q, want %d reports and no keys but x", got.mice, got.keys, reports)
+				}
+			})
+		}
 	}
 }
+
+// sawEscape is until for a test whose input ends in ⎋.
+func sawEscape(d decodedModel) bool { return len(d.keys) > 0 && d.keys[len(d.keys)-1] == "esc" }
 
 // ⎋ alone on the pipe still reaches Bubble Tea at once: aligning the reads must
 // not hold a real Escape keypress for input that is not coming.
 func TestALoneEscapeStillReachesBubbleTea(t *testing.T) {
-	if got := decodeThroughThePipe(t, "\x1b", 1); !slices.Equal(got.keys, []string{"esc"}) {
+	if got := decodeThroughThePipe(t, "\x1b", sawEscape); !slices.Equal(got.keys, []string{"esc"}) {
 		t.Fatalf("decoded keys %q, want one esc", got.keys)
+	}
+}
+
+// ⎋ typed behind a flood's backlog arrives with nothing after it, wherever the
+// reads happen to fall: every count of typed bytes between them puts some read's
+// end on the ⎋, and one that filled its room must not take it for an opener.
+func TestAnEscapeBehindAFloodIsNeverHeldForInputThatIsNotComing(t *testing.T) {
+	flood := strings.Repeat("\x1b[<67;217;52M", 38)
+	for typed := range 256 {
+		ok := t.Run(fmt.Sprint(typed), func(t *testing.T) {
+			got := decodeThroughThePipe(t, flood+strings.Repeat("x", typed)+"\x1b", sawEscape)
+			if got.mice != 38 || strings.Join(got.keys, "") != strings.Repeat("x", typed)+"esc" {
+				t.Fatalf("decoded %d mouse reports and keys %q", got.mice, got.keys)
+			}
+		})
+		if !ok {
+			break // each later count would wait out the same deadline
+		}
 	}
 }
 
