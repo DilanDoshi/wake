@@ -10,16 +10,18 @@ that" and the answer is not in a commit message.
 
 ## 2026-10-03 — claude's drift is watched where it happens first: the operator's own transcripts
 
-A recording is one claude version; BUG-41's envelope went unrecorded for two weeks while 579 hand-backs
+A recording is one claude version; BUG-42's envelope went unrecorded for two weeks while 579 hand-backs
 landed on this machine. Three checks, one rule table (`injected_test.go`'s `ruledOrigins`,
 `ruledPromptSources`):
 
 - **Gate:** no corpus line claude marks as its own (`isMeta`, `isSynthetic`, an origin or
   `promptSource:"system"`) decodes as the operator's turn, and every recorded mark is ruled.
 - **`make drift`** (free, local): the same over `~/.claude/projects`, plus the newest claude seen
-  against the corpus's newest. Never a gate — no other machine has the data.
+  against the corpus's newest. Never a gate — no other machine has the data. Its line heads are the
+  operator's own text, home path cut: never paste the output anywhere public.
 - **`make live`** gains `TestLiveWire`: a real auto-mode session handing a subagent's report back,
-  decoded on stdout and on disk, every frame shape checked against the corpus. An extension of the
+  decoded on stdout and on disk; it fails unless both turns ran, and reports frame shapes no
+  recording carries. An extension of the
   existing `live` target (`TestLiveJourney`), so CLAUDE.md's "never test against a live LLM" holds
   for the suite: neither tag is ever on a gate.
 

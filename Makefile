@@ -132,13 +132,14 @@ live: ## SPENDS MONEY: one fleet of real `claude` agents through the pty harness
 	  || { echo "no TestLiveWire under -tags=live: this target would pass without running anything"; exit 1; }
 	@echo "This spends real money on a real model. Ctrl-C within 3s to stop."
 	@sleep 3
-	go test ./internal/core -tags=live -run TestLiveWire -timeout 10m -v -count=1
+	go test ./internal/core -tags=live -run '^TestLiveWire$$' -timeout 10m -v -count=1
 	go test ./cmd/wake -tags=live -run TestLiveJourney -timeout 20m -v -count=1
 
 drift: ## Audit this machine's own claude transcripts for what the corpus would have caught (free, local, not a gate)
 	@# Reads ~/.claude/projects (or WAKE_PROJECTS), which no other machine has,
 	@# so it can never sit on a gate. Run it after a claude upgrade: a recording
-	@# is one version, this is every version since. Prints counts, never a line.
+	@# is one version, this is every version since. Prints counts and the first
+	@# words of a line, which are the operator's own: never paste them anywhere public.
 	@go test ./internal/core -tags=drift -list='^TestDrift$$' | grep -qx TestDrift \
 	  || { echo "no TestDrift under -tags=drift: this target would pass without running anything"; exit 1; }
 	go test ./internal/core -tags=drift -run '^TestDrift$$' -count=1 -v

@@ -3,14 +3,14 @@
 // The wire half of `make live`, beside cmd/wake's TestLiveJourney: one real
 // headless claude, spawned with this package's argv in auto mode as the daemon
 // spawns an agent, asked to do the thing whose wire shape moved under Wake
-// unrecorded (BUG-41) - hand a background subagent's report back. It checks the
+// unrecorded (BUG-42) - hand a background subagent's report back. It checks the
 // decode, not the screen: on stdout and on the transcript the same session
 // wrote, only the operator's own prompt may come back as the operator's turn,
 // and every frame must be a shape the corpus has recorded.
 //
 // Not a gate: it spends money (one short turn and one follow-up) and needs a
-// login. A subagent may end by task-notification instead of a hand-back - the
-// model chooses - so that path is logged as not exercised, never failed.
+// login. It fails unless both turns ran; a subagent that ends by
+// task-notification instead of a hand-back - the model's choice - is logged.
 
 package core
 
@@ -42,35 +42,69 @@ func TestLiveWire(t *testing.T) {
 	id := uuid.NewString()
 	s := NewSession(Config{SessionID: id, Name: "wire-probe", Dir: t.TempDir(), Model: "sonnet"})
 	ctx, cancel := context.WithTimeout(context.Background(), liveWireBudget)
-	defer cancel()
+	started := false
+	t.Cleanup(func() {
+		// The process goes first: a claude still flushing would write back a
+		// transcript removed before it exited.
+		cancel()
+		if started {
+			for range s.Events() { // closes once the process is gone
+			}
+		}
+		removeLiveTranscript(t, id)
+	})
 	if err := s.Start(ctx); err != nil {
 		t.Fatalf("start claude: %v", err)
 	}
-	t.Cleanup(func() { removeLiveTranscript(t, id) })
+	started = true
 	if err := s.Send(liveWirePrompt, nil, ""); err != nil {
 		t.Fatalf("send: %v", err)
 	}
+	stream, turns := liveEvents(t, s)
+	if err := s.Err(); err != nil || turns < 2 {
+		t.Fatalf("saw %d turn ends, want the prompt's and the one the subagent's ending opens: the scenario never ran (claude: %v)", turns, err)
+	}
+	onStdout, onDisk := checkLiveStream(t, stream), checkLiveTranscript(t, id)
+	if onStdout != onDisk {
+		t.Errorf("a hand-back on stdout: %v, on disk: %v - the two wires disagree", onStdout, onDisk)
+	}
+	if !onStdout && !onDisk {
+		// The model chose task-notification: everything above held, but the
+		// path this probe exists for went unexercised, so it is not a pass.
+		t.Skip("inconclusive: the subagent ended by task-notification, not a hand-back - run it again")
+	}
+}
 
-	stream := liveEvents(t, s)
+// checkLiveStream holds stdout to what the corpus says claude sends, and
+// reports whether a hand-back arrived on it.
+func checkLiveStream(t *testing.T, stream []Event) (handedBack bool) {
 	recorded, unrecorded := recordedShapes(t), map[string]bool{}
 	for _, ev := range stream {
-		if operatorTurn(ev) {
+		handedBack = handedBack || bytes.Contains(ev.Raw, []byte(`"handback":true`))
+		switch {
+		case operatorTurn(ev):
 			t.Errorf("stdout: claude's own frame decoded as the operator's turn: %.80q", ev.Text)
-		}
-		if ev.Kind == KindUnknown {
+		case ev.Kind == KindUnknown:
 			t.Errorf("stdout: a %s frame decoded to nothing Wake knows", shapeOf(ev.Raw))
+		case ev.Kind == KindAPIError:
+			t.Errorf("stdout: the API refused a turn: %.80q", ev.Text)
 		}
 		if shape := shapeOf(ev.Raw); ev.Raw != nil && !recorded[shape] {
 			unrecorded[shape] = true
 		}
 	}
-	// Not a failure: a shape nothing reads costs nothing. It is the list to
-	// record from before a feature reads one.
+	// Reported, not failed: a shape nothing reads costs nothing. It is the list
+	// to record from before a feature reads one.
 	t.Logf("frame shapes no recording carries: %v", slices.Sorted(maps.Keys(unrecorded)))
+	return handedBack
+}
 
-	lines := liveTranscript(t, id)
+// checkLiveTranscript holds the transcript the session wrote to the same rule,
+// and reports whether the subagent handed its report back.
+func checkLiveTranscript(t *testing.T, id string) (handedBack bool) {
 	var typed []string
-	for _, line := range lines {
+	for _, line := range liveTranscript(t, id) {
+		handedBack = handedBack || bytes.Contains(line, []byte(`"handback":true`))
 		evs, err := DecodeTranscriptLine(line)
 		if err != nil {
 			t.Errorf("transcript: %v", err)
@@ -84,25 +118,18 @@ func TestLiveWire(t *testing.T) {
 	if len(typed) != 1 || typed[0] != liveWirePrompt {
 		t.Errorf("transcript: operator turns restored = %.80q, want only the prompt this test sent", typed)
 	}
-	handedBack := false
-	for _, line := range lines {
-		handedBack = handedBack || bytes.Contains(line, []byte(`"handback":true`))
-	}
-	t.Logf("%d stdout events, %d transcript lines; subagent handed back: %v (false means it ended by task-notification and that path went unexercised)",
-		len(stream), len(lines), handedBack)
+	return handedBack
 }
 
 // liveEvents collects until the follow-up turn ends, answering any ask with a
 // deny so the run stays the one dispatch it asked for.
-func liveEvents(t *testing.T, s *Session) []Event {
-	var out []Event
-	turns := 0
+func liveEvents(t *testing.T, s *Session) (out []Event, turns int) {
 	var follow <-chan time.Time
 	for {
 		select {
 		case ev, ok := <-s.Events():
 			if !ok {
-				return out
+				return out, turns
 			}
 			out = append(out, ev)
 			switch ev.Kind {
@@ -171,19 +198,24 @@ func liveTranscript(t *testing.T, id string) [][]byte {
 
 // removeLiveTranscript leaves the operator's projects directory as it was:
 // the session's own file, its subagent directory, and the slug directory the
-// probe's temp project made, if nothing else is in it.
+// probe's temp project made. A failure, or anything of the probe's still there
+// afterwards, fails the test.
 func removeLiveTranscript(t *testing.T, id string) {
 	path := liveTranscriptPath(t, id)
 	if path == "" {
 		return
 	}
-	for _, p := range []string{path, filepath.Join(filepath.Dir(path), id)} {
+	dir := filepath.Dir(path)
+	for _, p := range []string{path, filepath.Join(dir, id)} {
 		if err := os.RemoveAll(p); err != nil {
-			t.Logf("leave %s: %v", p, err)
+			t.Errorf("remove %s: %v", p, err)
+		}
+		if _, err := os.Stat(p); !os.IsNotExist(err) {
+			t.Errorf("the probe left %s behind", p)
 		}
 	}
 	// claude also makes an empty memory directory per project. os.Remove only
 	// ever takes an empty directory, so nothing the operator wrote can go.
-	_ = os.Remove(filepath.Join(filepath.Dir(path), "memory"))
-	_ = os.Remove(filepath.Dir(path))
+	_ = os.Remove(filepath.Join(dir, "memory"))
+	_ = os.Remove(dir)
 }

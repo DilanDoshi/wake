@@ -40,12 +40,20 @@ type userMarks struct {
 	} `json:"origin"`
 }
 
-func marksOf(line []byte) (userMarks, bool) {
-	var m userMarks
-	if json.Unmarshal(line, &m) != nil || m.Type != "user" {
-		return userMarks{}, false
+// marksOf reads a user line's marks. ok is false for a line that is not one;
+// err is a user line whose marks changed type - the drift these tests watch for,
+// so it is reported rather than read as unmarked.
+func marksOf(line []byte) (m userMarks, ok bool, err error) {
+	var kind struct {
+		Type string `json:"type"`
 	}
-	return m, true
+	if json.Unmarshal(line, &kind) != nil || kind.Type != "user" {
+		return userMarks{}, false, nil
+	}
+	if err := json.Unmarshal(line, &m); err != nil {
+		return userMarks{}, false, err
+	}
+	return m, true, nil
 }
 
 func (m userMarks) injected() bool {
@@ -62,15 +70,18 @@ func operatorTurn(ev Event) bool {
 // injected-meta fixtures exist: that is the regression this guard is for.
 func TestNoInjectedLineInTheCorpusIsTheOperatorsTurn(t *testing.T) {
 	seen := map[string]int{}
-	check := func(path string, decode func([]byte) ([]Event, error)) {
+	check := func(wire, path string, decode func([]byte) ([]Event, error)) {
 		for i, line := range fixtureLines(t, path) {
-			m, ok := marksOf([]byte(line))
+			m, ok, err := marksOf([]byte(line))
+			if err != nil {
+				t.Errorf("%s:%d: a mark changed type: %v", path, i+1, err)
+			}
 			if !ok || !m.injected() {
 				continue
 			}
-			for mark, on := range map[string]bool{"isMeta": m.Meta, "isSynthetic": m.Synthetic, "origin": m.Origin.Kind != ""} {
+			for mark, on := range m.present() {
 				if on {
-					seen[mark]++
+					seen[wire+" "+mark]++
 				}
 			}
 			evs, err := decode([]byte(line))
@@ -85,15 +96,46 @@ func TestNoInjectedLineInTheCorpusIsTheOperatorsTurn(t *testing.T) {
 		}
 	}
 	for _, f := range transcriptFiles(t) {
-		check(f, DecodeTranscriptLine)
+		check("transcript", f, DecodeTranscriptLine)
 	}
 	for _, f := range fixtureFiles(t) {
-		check(f, DecodeLine)
+		check("stream", f, DecodeLine)
 	}
-	for _, mark := range []string{"isMeta", "isSynthetic", "origin"} {
-		if seen[mark] == 0 {
-			t.Errorf("no recorded line carries %s: this guard is asserting nothing about it", mark)
+	// Each mark on the wire that carries it, so neither half can go unasserted.
+	for _, want := range []string{"transcript isMeta", "transcript origin", "transcript system", "stream isSynthetic"} {
+		if seen[want] == 0 {
+			t.Errorf("no recorded %s line: this guard is asserting nothing about it", want)
 		}
+	}
+}
+
+// present names the marks a line carries, origin only when it is not a human's.
+func (m userMarks) present() map[string]bool {
+	return map[string]bool{
+		"isMeta": m.Meta, "isSynthetic": m.Synthetic, "system": m.PromptSource == "system",
+		"origin": m.Origin.Kind != "" && m.Origin.Kind != "human",
+	}
+}
+
+// Each mark alone makes a line claude's own, so no arm of injected() can go
+// missing behind another: every recorded system line also carries isMeta.
+func TestEachMarkAloneMakesALineInjected(t *testing.T) {
+	for line, want := range map[string]bool{
+		`{"type":"user","isMeta":true}`:                      true,
+		`{"type":"user","isSynthetic":true}`:                 true,
+		`{"type":"user","promptSource":"system"}`:            true,
+		`{"type":"user","origin":{"kind":"peer"}}`:           true,
+		`{"type":"user","origin":{"kind":"human"}}`:          false,
+		`{"type":"user","promptSource":"sdk"}`:               false,
+		`{"type":"user","isMeta":false,"isSynthetic":false}`: false,
+	} {
+		m, ok, err := marksOf([]byte(line))
+		if !ok || err != nil || m.injected() != want {
+			t.Errorf("%s: injected() = %v (ok=%v err=%v), want %v", line, m.injected(), ok, err, want)
+		}
+	}
+	if _, ok, err := marksOf([]byte(`{"type":"user","isMeta":"yes"}`)); ok || err == nil {
+		t.Error("a mark that changed type was read as unmarked rather than reported")
 	}
 }
 
@@ -102,7 +144,10 @@ func TestNoInjectedLineInTheCorpusIsTheOperatorsTurn(t *testing.T) {
 func TestEveryRecordedMarkIsRuled(t *testing.T) {
 	for _, f := range append(transcriptFiles(t), fixtureFiles(t)...) {
 		for i, line := range fixtureLines(t, f) {
-			m, ok := marksOf([]byte(line))
+			m, ok, err := marksOf([]byte(line))
+			if err != nil {
+				t.Errorf("%s:%d: a mark changed type: %v", f, i+1, err)
+			}
 			if !ok {
 				continue
 			}
