@@ -4,6 +4,7 @@ package main
 
 import "os"
 
-// queued has no FIONREAD to ask off unix, so a read that filled its room keeps
-// chunker's own assumption: more is coming.
+// queued cannot ask the pipe off unix, so a filled read keeps chunker's own
+// assumption that more is coming: no report is de-framed, at the cost of a ⎋
+// that exactly ends a filled read waiting for the next byte, as Bubble Tea's does.
 func queued(*os.File) bool { return true }

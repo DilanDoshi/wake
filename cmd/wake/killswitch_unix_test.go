@@ -471,9 +471,9 @@ func TestALoneEscapeStillReachesBubbleTea(t *testing.T) {
 	}
 }
 
-// ⎋ typed behind a flood's backlog arrives with nothing after it, wherever the
-// reads happen to fall: every count of typed bytes between them puts some read's
-// end on the ⎋, and one that filled its room must not take it for an opener.
+// ⎋ typed behind a flood's backlog arrives with nothing after it. Sweeping the
+// typed count moves where the reads fall, so for some count the read ending on
+// the ⎋ exactly fills its room - and must not take it for an opener.
 func TestAnEscapeBehindAFloodIsNeverHeldForInputThatIsNotComing(t *testing.T) {
 	flood := strings.Repeat("\x1b[<67;217;52M", 38)
 	for typed := range 256 {

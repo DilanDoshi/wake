@@ -282,19 +282,13 @@ type alignedPipe struct {
 	chunks chunker
 }
 
-// Read leaves a byte of p spare and room for the held carry, so the chunk it
-// returns is always a short read to Bubble Tea, which takes one as ending on a
-// boundary - true of an aligned chunk, and it keeps a trailing ⎋ from being held
-// a second time by Bubble Tea's own full-read rule.
-//
-// A read that filled its room can end on a report's ESC with the rest still in
-// the pipe, or on a real ⎋ with nothing behind it; only the pipe can tell them
-// apart, so it is asked rather than the read's size. forward's whole-published
-// pieces are what make the pipe's answer exact.
+// Read leaves room for the carry and a byte spare, so Bubble Tea always gets a
+// short read, which it takes as ending on a boundary and never holds a ⎋ from.
+// A filled read ending on an ESC is an opener only if the pipe has more queued.
 func (r *alignedPipe) Read(p []byte) (int, error) {
 	room := len(p) - 1 - len(r.chunks.carry)
 	n, err := r.File.Read(p[:room])
-	full := n == room && queued(r.File)
+	full := n == room && p[n-1] == keyEsc && queued(r.File)
 	return copy(p, r.chunks.step(p[:n], full)), err
 }
 
@@ -379,13 +373,14 @@ type chunker struct {
 // coincident drop is the same leak a flood's full reads are - so a trailing partial
 // is held whatever the read size.
 //
-// full says the read filled its buffer, so more is likely pending. It decides only
-// the one genuinely ambiguous carry: a lone trailing ESC. On a full read it is the
-// opening of a sequence whose rest is coming, so hold it; on a short read it is a
-// real Escape keypress that must not wait for the next input, so forward it. A
-// partial *sequence* (a split mouse report) is never a keypress, so it is held
-// either way. This is bubbletea's own full-buffer heuristic, narrowed to the one
-// byte it is actually ambiguous for.
+// full says more is coming: for the pump, a read that filled its buffer; for
+// alignedPipe, a filled read with bytes queued behind it. It decides only the one
+// genuinely ambiguous carry: a lone trailing ESC. When more is coming it is the
+// opening of a sequence, so hold it; otherwise it is a real Escape keypress that
+// must not wait for the next input, so forward it. A partial *sequence* (a split
+// mouse report) is never a keypress, so it is held either way. This is
+// bubbletea's own full-buffer heuristic, narrowed to the one byte it is actually
+// ambiguous for.
 //
 // # The one residual, and why the ESC keypress wins it
 //
@@ -478,9 +473,8 @@ func (k *killSwitch) forward() {
 	_ = k.feed.Close()
 }
 
-// writeWhole writes chunk as aligned pieces of at most pipeAtomic bytes, each of
-// which a pipe publishes whole - so wherever alignedPipe finds the pipe's end,
-// and asks queued about a lone ESC there, is a boundary.
+// writeWhole writes chunk as aligned pieces a pipe publishes whole, so the end of
+// what alignedPipe can read is always a boundary and queued's answer is exact.
 func writeWhole(w io.Writer, chunk []byte) error {
 	for len(chunk) > 0 {
 		n := len(chunk)
