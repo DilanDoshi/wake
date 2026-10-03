@@ -165,6 +165,10 @@ type App struct {
 	workflow     workflowState // the /workflows view and the runs it draws; see workflowview.go
 	mcpUI        mcpState      // /mcp's menu and its sign-in; see mcpmenu.go
 
+	// rewindAfterRestore is the session whose both just restored its files, until
+	// its conversation rewind answers. See rewindmenu.go's restoreReported.
+	rewindAfterRestore string
+
 	// completion is the menu under the focused draft: what could finish the
 	// word at the cursor. Rebuilt per keystroke, never per frame, and its `@`
 	// half is read off this goroutine. See completion.go.
@@ -757,7 +761,7 @@ func (a App) apply(f rpc.Frame) App {
 		//
 		// The text says when it could be forked instead; that is the daemon's
 		// sentence and it is reported below unchanged.
-		a = a.startSettled(f.SessionID).mcpRefused(f.SessionID, f.Text).wakeRefused(f.SessionID)
+		a = a.startSettled(f.SessionID).mcpRefused(f.SessionID, f.Text).wakeRefused(f.SessionID).rewindRefused(f.SessionID)
 		notice.Report("%s", a.errorText(f))
 		return a
 

@@ -80,12 +80,15 @@ const repoRoot = "../.."
 // checkable rather than a sentence in a header: a member cannot be added
 // without editing it, and the set is what the leak check exempts. The fifth,
 // localreply.go, is the owner's 2026-09-27 ruling: local commands' reply text.
+// The sixth, control.go, is 2026-10-02's: control requests and their receipts,
+// split out by subject when encode.go, wire.go and protocol.go were all full.
 var airlockFiles = wordSet([]string{
 	"internal/core/protocol.go",
 	"internal/core/wire.go",
 	"internal/core/vocabulary.go",
 	"internal/core/encode.go",
 	"internal/core/localreply.go",
+	"internal/core/control.go",
 })
 
 // claudeWireVocabulary is what a file must not name outside the airlock.
@@ -269,6 +272,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// snake_case counterpart at all, since nothing Wake sends carries them.
 	// rewound is the discriminator itself - see wireControlBody.Rewound.
 	"rewound", "targetMessageUuid", "prefillText", "precedingAssistantUuid",
+
+	// The rewind_files control_request and its receipt: restoring the files a
+	// session's tools edited. dry_run's spelling is the trap the findings note
+	// records - dryRun is ignored, and the request restores for real.
+	"rewind_files", "user_message_id", "dry_run", "canRewind", "filesChanged", "skippedLinks",
 
 	// The three MCP control requests, the server they name, and the one
 	// Claude-spelled key of the status receipt Wake reads (a tool's readOnly
@@ -459,6 +467,10 @@ var deliberatelyGeneric = wordSet([]string{
 	// origin.kind's own key, the plainest English there is: Wake's own code names
 	// kinds everywhere, and "origin" beside it is policed, so it is no route in.
 	"kind",
+
+	// A rewind_files preview's line counts. Plain English a diff names anywhere,
+	// and no route in: a receipt is known only by "canRewind", which is policed.
+	"insertions", "deletions",
 
 	// A workflow_agent's other state words, "start"'s siblings. Neither is
 	// policed: core.TaskProgress and core.TaskDone already spell "progress"
@@ -696,7 +708,10 @@ var notNamedByTheAirlock = map[string]string{
 // list-agents.jsonl and list-agents-bare*.jsonl.
 // 209 → 210: "authentication_failed", the failed turn's error kind apiNotice
 // reads so only a dead login is parked for a new process. api-error-auth.jsonl.
-const policedWordCount = 210
+// 210 → 216: the rewind_files request ("rewind_files", "user_message_id",
+// "dry_run") and its receipt ("canRewind", "filesChanged", "skippedLinks").
+// rewind-files*.jsonl; 2026-10-02-file-rewind-findings.md.
+const policedWordCount = 216
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -735,6 +750,8 @@ var notWireVocabulary = wordSet([]string{
 	"encode rewind",
 	"%w: encode rewind: empty request id",
 	"%w: encode rewind: empty target or last-seen uuid",
+	"encode rewind files",
+	"%w: encode rewind files: empty request id or message uuid",
 	"encode stop task",
 	"%w: encode stop task: empty request id",
 	"%w: encode stop task: empty task id",
@@ -995,27 +1012,17 @@ var notInTheCorpus = map[string]string{
 	"Glob": "not advertised by init.tools here, and never called",
 	"Grep": "not advertised by init.tools here, and never called",
 
-	// Edit's input keys. Edit is advertised 46 times and called zero, so the
-	// diff path has no fixture behind it and is exercised by hand-written
-	// unit tests only. That is worth knowing: ToolCall.Diff is the one part
-	// of the airlock ruling the corpus cannot vouch for. new_string does
-	// occur, but only inside the English of an interrupt notice ("if it was
-	// a file edit, the new_string was NOT written"), which is why the check
-	// below matches quoted tokens rather than substrings.
-	"old_string": "Edit is advertised but never called",
-
 	// TodoWrite and its whole-list envelope. Retired in 2.1.240 (off unless
 	// CLAUDE_CODE_ENABLE_TASKS is false) and never called in the corpus, so its
 	// `todos` key stays transcribed from the shipped binary rather than recorded
 	// - task-checklist.jsonl exercises the *replacement*, TaskCreate/TaskUpdate,
 	// not this. "activeForm" and "in_progress" used to sit here for the same
 	// reason and have moved out: the recorded checklist carries both.
-	"todos":      "TodoWrite is retired in 2.1.240 and never called; its list is now TaskCreate/TaskUpdate",
-	"TodoWrite":  "retired in 2.1.240 and never called in the corpus",
-	"deleted":    "the fourth TaskUpdate status; the recorded session never deletes an item",
-	"new_string": "Edit is advertised but never called; occurs only in prose",
+	"todos":     "TodoWrite is retired in 2.1.240 and never called; its list is now TaskCreate/TaskUpdate",
+	"TodoWrite": "retired in 2.1.240 and never called in the corpus",
+	"deleted":   "the fourth TaskUpdate status; the recorded session never deletes an item",
 
-	// primaryArg keys for tools the corpus never exercised, alongside Edit's.
+	// primaryArg keys for tools the corpus never exercised.
 	"pattern": "Glob and Grep are neither advertised here nor called",
 
 	// The token stream's five words moved out of this list on 2026-08-21:
@@ -1054,6 +1061,9 @@ var notInTheCorpus = map[string]string{
 	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
 	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
 	"stop_task":                   "outbound only; a recording of stdout cannot contain it",
+	"rewind_files":                "outbound only; a recording of stdout cannot contain it",
+	"user_message_id":             "outbound only; the rewind_files request field Wake writes",
+	"dry_run":                     "outbound only; the rewind_files request field Wake writes",
 
 	// The run record's own two keys with no counterpart on the stream: the
 	// start time (task_progress carries only elapsed usage, never a start
@@ -1232,8 +1242,8 @@ func TestTheThreeListsDoNotOverlap(t *testing.T) {
 
 // The airlock is a set of files in one package, and saying so is what stops
 // the set being widened into an exemption for somewhere else.
-func TestTheAirlockIsFiveFilesInInternalCore(t *testing.T) {
-	const want = 5
+func TestTheAirlockIsSixFilesInInternalCore(t *testing.T) {
+	const want = 6
 	if len(airlockFiles) != want {
 		t.Errorf("the airlock is %d files, want %d - if that is deliberate, CLAUDE.md's rule and protocol.go's header both name the set and must change with it", len(airlockFiles), want)
 	}

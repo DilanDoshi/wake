@@ -1,0 +1,4 @@
+{"type":"control_request","request_id":"probe-ce822722","request":{"subtype":"rewind_files","user_message_id":"39bd0038-6c15-4d83-9bfc-004de4189cc0","dry_run":true}}
+{"type":"control_request","request_id":"probe-177c6096","request":{"subtype":"rewind_files","user_message_id":"18e7e6ac-f9e4-4237-8e12-1ac43c09e4fa","dry_run":true}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Write tool to create c.txt containing exactly the word: sea. Reply only 'done'."}]},"uuid":"e8c64c67-676f-4907-b987-ac651ad3494e"}
+{"type":"control_request","request_id":"probe-3b1da9d5","request":{"subtype":"rewind_files","user_message_id":"e8c64c67-676f-4907-b987-ac651ad3494e","dry_run":true}}

@@ -98,6 +98,23 @@ func ListAgentsCommand(ctx context.Context, dir string) *exec.Cmd {
 	return cmd
 }
 
+// fileCheckpointingEnv is what makes a headless claude save file checkpoints,
+// the snapshots rewind_files restores (file-rewind-findings.md §1). A -p
+// session ignores the fileCheckpointingEnabled setting; this is its only switch.
+const fileCheckpointingEnv = "CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING"
+
+// agentEnv is the environment an agent's claude runs with: scrubbedEnv, with
+// file checkpointing on unless the operator's environment already names it.
+func agentEnv(env []string) []string {
+	out := scrubbedEnv(env)
+	for _, kv := range out {
+		if name, _, _ := strings.Cut(kv, "="); name == fileCheckpointingEnv {
+			return out
+		}
+	}
+	return append(out, fileCheckpointingEnv+"=true")
+}
+
 // scrubbedEnv returns a copy without nested-session or private launcher
 // variables, leaving the original untouched.
 func scrubbedEnv(env []string) []string {

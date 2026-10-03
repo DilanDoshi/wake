@@ -8,6 +8,8 @@ genuinely forgetting everything after it.
 
 - **Conversation only.** Claude Code's rewind can also restore the working tree; that is explicitly
   **out**. Wake does not own files, and `rewind_files` is a *separate* Claude subtype we never send.
+  **Superseded 2026-10-02:** the owner scoped file rewind in. Wake still owns no files - claude
+  restores its own checkpoints - and now sends `rewind_files`; see §10.
 - **Full and correct**, not phased: reopen, reattach and the room all stay right after a rewind. No
   known-wrong states.
 - **Trigger is `esc esc`, gated to idle + empty composer.** Wake's invariant is that mashing `esc`
@@ -250,8 +252,9 @@ Write the failing test first at every layer; `make ci` (exit code in the PR) plu
 
 ## 8. Non-goals (v1)
 
-File/working-tree rewind (`rewind_files`); rewind initiated from the room; mid-turn rewind
-(`interrupt_if_running:true`); rewinding a subagent transcript; rewinding a parked session.
+~~File/working-tree rewind (`rewind_files`)~~ - scoped in 2026-10-02, §10; rewind initiated from the
+room; mid-turn rewind (`interrupt_if_running:true`); rewinding a subagent transcript; rewinding a
+parked session.
 
 ## 9. Open questions for review
 
@@ -261,3 +264,24 @@ File/working-tree rewind (`rewind_files`); rewind initiated from the room; mid-t
    also want to show the assistant reply preview per row.
 3. **Room live lag** (§6). Accept the bounded cosmetic gap for v1, or invest in live-path UUIDs now?
 ```
+
+## 10. File rewind (scoped in 2026-10-02)
+
+The owner scoped in Claude Code's code restore: the picker offers its choices - restore conversation,
+code and conversation, code, never mind - for the prompt ↵ picks. Recorded against 2.1.288 in
+`docs/superpowers/notes/2026-10-02-file-rewind-findings.md`.
+
+- **Checkpoints are claude's.** Every agent starts with `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true`
+  (`core.agentEnv`) unless the operator's environment names it; claude keeps the backups and restores
+  them. Wake stores nothing new.
+- **The preview decides.** ↵ on a prompt sends `FrameRewindPreview` (`rewind_files` with `dry_run`); its
+  answer goes to the asking window only, and the code choices appear only when it names files. An
+  agent without checkpoints shows claude's own reason.
+- **Code is armed** - first ↵ arms, second restores; `App.disarmed` takes it back on any other input.
+- **Four frame kinds, no mode field:** `FrameRewind` (conversation, unchanged), `FrameRewindFiles`,
+  `FrameRewindBoth`, `FrameRewindPreview` (`internal/rpc/rewind.go`). Both restores the files first and
+  rewinds the conversation only on the restore's success, holding the agent's input in between; the
+  daemon refuses either restore while a turn is running.
+- **Refused to the manager**, each frame argued in `cmd/wake/mcpguard_test.go`.
+- **Out:** "Summarize from/up to here" - no headless request is recorded.
+

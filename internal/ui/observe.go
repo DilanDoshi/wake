@@ -45,6 +45,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	a = a.observedMode(sessionID, ev)
 	// A rewind receipt is the same non-decision, one kind over. See rewind.go.
 	a = a.noteRewind(sessionID, ev)
+	a = a.noteFilesRewind(sessionID, ev)
 	// And an MCP reply, which only the /mcp menu and a sign-in's sweep read, and a
 	// workflow stop's receipt, which only a refusal makes worth a word.
 	a = a.observedMCP(sessionID, ev)

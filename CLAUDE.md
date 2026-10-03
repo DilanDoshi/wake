@@ -109,7 +109,7 @@ Violating one is a design regression, not a style nit.
 |---|---|
 | **Not a terminal emulator or multiplexer.** No PTY, no VT100, no browser panes, no arbitrary shells. | Chasing it is how this project dies at 40%. |
 | **Cheap to leave open.** No per-frame work that could be per-change, no poll where a wait will do, no process on a timer. | A per-agent cost multiplies by 30. |
-| **Only `internal/core`'s five airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`, and `localreply.go` for the text replies of local commands (owner's 2026-09-27 ruling). | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
+| **Only `internal/core`'s six airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`, `localreply.go` for the text replies of local commands (owner's 2026-09-27 ruling), and `control.go` for the control requests Wake writes and their receipts (2026-10-02). | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
 | **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Use `core.SessionArgvMarkers`. | Enforced by `argv_test.go` tree-wide. |
 | **`attention.go` stays a pure function.** | Hardest logic; testable without spawning. |
 | **The UI never touches an agent's process.** | Keeps the daemon boundary real. |
@@ -194,7 +194,15 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   the mandatory `last_seen_user_message_uuid`. `session_id` never changes.
 - The on-disk transcript is an append-only tree; `core.ActiveBranch` walks `parentUuid` from the live
   leaf. History, room restore and `RewindTargets` share that one reconstruction. On `rewound:true`
-  the pane re-reads itself (`noteRewind`) — the only mechanism. The manager is refused both frames.
+  the pane re-reads itself (`noteRewind`) — the only mechanism. The manager is refused every rewind frame.
+- **Code is restored by claude's own checkpoints** (owner's 2026-10-02 scope-in). Every agent starts
+  with `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true` unless the operator names it (`core.agentEnv`).
+  ↵ on a prompt previews its files (`FrameRewindPreview`, a `rewind_files` dry run, answered to the
+  asking window only); the second step offers restore conversation / code and conversation / code /
+  never mind, the code ones only when the preview names files. Code is armed (↵ arms, ↵ restores,
+  `App.disarmed` takes it back). The daemon refuses a restore unless the agent reads idle; both holds
+  the agent's input, restores files first and rewinds the conversation only on the restore's success.
+  `internal/ui/rewindmenu.go`, `internal/daemon/rewindfiles.go`.
 
 **Layout, mouse, selection**
 - **The grid is bounded:** columns, each split once (spec §8). The room is `Cols[0]` and cannot be
@@ -342,7 +350,7 @@ yet says so in bold.**
 |---|---|
 | Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` · `handover.go` |
-| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) |
+| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
@@ -356,7 +364,7 @@ yet says so in bold.**
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (type-ahead) · `mention.go` · `imagedrop.go` |
 | Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
-| Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
+| Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
@@ -445,6 +453,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 | Isolation | `--worktree` — **not used**; Wake runs `git worktree add` itself |
 | Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools ""`; `--append-system-prompt` |
 | Session listing | `--print --bare --no-session-persistence` + stream-json, one `/list-agents` line (verified 2.1.283) |
+| File checkpoints | no flag: the env var `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true` (`-p` ignores the setting); restored by the `rewind_files` control request (verified 2.1.288) |
 
 ### Traps
 
@@ -490,6 +499,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   `docs/superpowers/notes/2026-09-27-at-menu-findings.md`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
+- **`rewind_files`' preview key is `dry_run`.** `dryRun` is silently ignored and the request restores
+  for real. A refused restore is a bare `error` receipt, so only its request id says what it answers.
+  Checkpoints survive `--resume` and a fork, not `/clear`; Bash and subagent edits are not tracked.
+  `docs/superpowers/notes/2026-10-02-file-rewind-findings.md`.
 - **A headless session loads claude.ai connectors only after an `initialize` control request**
   (never otherwise, even with `ENABLE_CLAUDEAI_MCP_SERVERS=true`), and a loaded connector reads
   `needs-auth` — even one signed in on claude.ai — until an `mcp_reconnect` connects it; one never
@@ -507,7 +520,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/encode.go` at 798 and `internal/core/wire.go` at 798 — derived by
+  `internal/ui/fleet.go` at 797 and `internal/ui/composer.go` at 795 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

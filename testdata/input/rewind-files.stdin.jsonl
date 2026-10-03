@@ -1,0 +1,13 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Write tool to create a.txt containing exactly the word: one. Reply only 'done'."}]},"uuid":"18e7e6ac-f9e4-4237-8e12-1ac43c09e4fa"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Edit tool to change the word one to two in a.txt. Reply only 'done'."}]},"uuid":"39bd0038-6c15-4d83-9bfc-004de4189cc0"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Write tool to create b.txt containing exactly the word: bee. Reply only 'done'."}]},"uuid":"7d41cdec-dcc3-45a9-bf7e-b50af4520a70"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Reply with only the word: hi. Use no tools."}]},"uuid":"c1c3df2c-79be-43bf-9425-b50d5dc6b700"}
+{"type":"control_request","request_id":"probe-98b43fa4","request":{"subtype":"rewind_files","user_message_id":"c1c3df2c-79be-43bf-9425-b50d5dc6b700","dry_run":true}}
+{"type":"control_request","request_id":"probe-2566ff3a","request":{"subtype":"rewind_files","user_message_id":"7d41cdec-dcc3-45a9-bf7e-b50af4520a70","dry_run":true}}
+{"type":"control_request","request_id":"probe-5c216df1","request":{"subtype":"rewind_files","user_message_id":"18e7e6ac-f9e4-4237-8e12-1ac43c09e4fa","dry_run":true}}
+{"type":"control_request","request_id":"probe-12ddf401","request":{"subtype":"rewind_files","user_message_id":"18e7e6ac-f9e4-4237-8e12-1ac43c09e4fa","dryRun":true}}
+{"type":"control_request","request_id":"probe-07d46284","request":{"subtype":"rewind_files","user_message_id":"318d71f2-6c66-4d11-812e-bfe7de8bc022","dry_run":true}}
+{"type":"control_request","request_id":"probe-32e3d84a","request":{"subtype":"rewind_files","user_message_id":"ce1d36f7-af25-4534-804e-a4cd80f4afc0"}}
+{"type":"control_request","request_id":"probe-89968866","request":{"subtype":"rewind_files","user_message_id":"7d41cdec-dcc3-45a9-bf7e-b50af4520a70"}}
+{"type":"control_request","request_id":"probe-cbad85c6","request":{"subtype":"rewind_files","user_message_id":"7d41cdec-dcc3-45a9-bf7e-b50af4520a70","dry_run":true}}
+{"type":"control_request","request_id":"probe-182524d9","request":{"subtype":"rewind_files","user_message_id":"39bd0038-6c15-4d83-9bfc-004de4189cc0","dry_run":true}}
