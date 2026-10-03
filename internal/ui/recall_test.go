@@ -14,6 +14,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -176,7 +177,7 @@ func TestSendNowLeavesAQueuedCommandQueued(t *testing.T) {
 	if f.Kind != rpc.FrameSend || f.Text != "now this" || !f.Now {
 		t.Errorf("⌃] wrote %+v, want the draft alone sent now", f)
 	}
-	if q := a.queued["s1"]; len(q) != 2 || q[0].wire != "/compact" || q[0].recalling {
+	if q := a.queued["s1"]; len(q) != 2 || q[0].wire != "/compact" || q[0].recallID != "" {
 		t.Errorf("queued = %+v, want the /compact left as it was", q)
 	}
 }
@@ -210,5 +211,81 @@ func TestSendNowInTheRoomHurriesOnlyTheWorkingTargets(t *testing.T) {
 	}
 	if len(now) != 2 || !now["s2"] || now["s1"] { // @all is the fleet, the manager aside
 		t.Errorf("now by target = %v, want only the working alex hurried", now)
+	}
+}
+
+// receiptFor is the daemon's report of claude's answer to one recall frame.
+func receiptFor(f rpc.Frame, recalled bool) rpc.Frame {
+	return rpc.Frame{Kind: rpc.FrameEvent, SessionID: f.SessionID, Event: &core.Event{
+		Kind: core.KindControlReceipt, SessionID: f.SessionID, RequestID: f.RequestID,
+		Control: &core.ControlResult{Recalled: &recalled},
+	}}
+}
+
+// A recall's lifecycle can be lost to a frame gap; its receipt then settles it:
+// true gives the message back, false means claude had already read it.
+func TestARecallsReceiptSettlesItWhenItsLifecycleWasLost(t *testing.T) {
+	a, _ := queuedTwo(t)
+	a, cmd := hit(t, a, tea.KeyUp)
+	frames := sentFrames(t, a, cmd)
+	if len(frames) != 2 || frames[0].RequestID == "" || frames[0].RequestID == frames[1].RequestID {
+		t.Fatalf("recall frames %+v, want each under its own request id", frames)
+	}
+	a = a.applyFrame(receiptFor(frames[0], true)).applyFrame(receiptFor(frames[1], false))
+	if got := a.composer().Value(); got != "first" {
+		t.Errorf("the draft is %q, want the one claude gave back", got)
+	}
+	if len(a.queued["s1"]) != 0 || !echoedInDM(a, "s1", "second") {
+		t.Errorf("queued = %v: the one claude had read is not drawn as sent", a.queued["s1"])
+	}
+}
+
+// A send-now whose agent parks before claude answers keeps the draft and what
+// came back: they return to the composer rather than going nowhere.
+func TestASendNowDraftSurvivesItsAgentParking(t *testing.T) {
+	a, ids := queuedTwo(t)
+	a, _ = hit(t, a.withDraft("third"), tea.KeyCtrlCloseBracket)
+	a = a.applyFrame(lifecycleFrame("s1", ids[0], "cancelled"))
+	a, _ = a.applyFrame(oneAgent("s1", "alex", rpc.StateParked)).flushQueued()
+	if got := a.composer().Value(); got != "first\nthird" {
+		t.Errorf("the draft is %q, want what came back and the draft returned", got)
+	}
+}
+
+// A take-back whose conversation is forgotten before claude answers says what
+// came back, rather than dropping it. (⌃W only hides a conversation; its draft
+// keeps what came back for the reopen.)
+func TestATakeBackWithItsConversationGoneSaysWhatCameBack(t *testing.T) {
+	notice.Reset()
+	a, ids := queuedTwo(t)
+	a, _ = hit(t, a, tea.KeyUp)
+	a = a.forgetConversation("s1")
+	a = a.applyFrame(lifecycleFrame("s1", ids[0], "cancelled")).applyFrame(lifecycleFrame("s1", ids[1], "cancelled"))
+	if n, ok := notice.Latest(); !ok || !strings.Contains(n.String(), "first") || !strings.Contains(n.String(), "second") {
+		t.Errorf("latest notice %q, want it to carry what came back", n.String())
+	}
+}
+
+// A held /rename does not go out while a send-now is still waiting on claude:
+// the two would be written by separate commands and could interleave.
+func TestAHeldRenameWaitsForASendNowInFlight(t *testing.T) {
+	a, _ := sendTo(t, busyDM(t), "first")
+	m, _ := typeAndSubmit(a, "/rename bob")
+	a, _ = hit(t, m.(App).withDraft("now"), tea.KeyCtrlCloseBracket)
+	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateIdle))
+	if _, cmd := a.flushQueued(); cmd != nil {
+		t.Error("a held /rename flushed while a send-now was waiting on claude")
+	}
+}
+
+// A second ↑ while a take-back is out does not fall through to the history.
+func TestASecondUpWhileATakeBackIsOutDoesNothing(t *testing.T) {
+	a, _ := sendTo(t, idleDM(t), "in the history")
+	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateWorking))
+	a, _ = sendTo(t, a, "first")
+	a, _ = hit(t, a, tea.KeyUp)
+	a, cmd := hit(t, a, tea.KeyUp)
+	if cmd != nil || a.composer().Value() != "" {
+		t.Errorf("a second ↑ wrote %v or drew %q, want it to wait for claude", cmd != nil, a.composer().Value())
 	}
 }

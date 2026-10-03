@@ -70,16 +70,17 @@ const maxQueuedPinRows = 3
 // echo is what the transcript draws (as typed). fromRoom marks a broadcast, so
 // its held-DM echo heads `from the room` and its provenance is public. rename is
 // a `/rename`'s mirror name, "" for none. held is a /rename not yet written (see
-// the header); recalling is a take-back on its way to claude (recall.go).
+// the header); recallID is the request id of a take-back on its way to claude,
+// "" for none (recall.go).
 type queuedMsg struct {
-	id        string
-	wire      string
-	echo      string
-	images    []core.ImageBlock
-	fromRoom  bool
-	rename    string
-	held      bool
-	recalling bool
+	id       string
+	wire     string
+	echo     string
+	images   []core.ImageBlock
+	fromRoom bool
+	rename   string
+	held     bool
+	recallID string
 }
 
 // newQueued builds a message under the uuid it will be stamped with, minted at
@@ -156,7 +157,7 @@ func (a App) dropQueue(id string) App {
 	if _, held := a.queued[id]; held {
 		a = a.withQueue(id, nil)
 	}
-	return a.clearInflight(id).withoutRecall(id)
+	return a.clearInflight(id).dropRecall(id)
 }
 
 // withInflight records a message claude has started for an agent, and
@@ -198,32 +199,40 @@ func (a App) withInflightSet(id string, edit func(map[string]bool)) App {
 // go out on the next idle.
 func (a App) forgetInflight() App {
 	a.inflight = map[string]map[string]bool{}
-	a.recalls = nil
+	for id := range a.recalls {
+		a = a.dropRecall(id)
+	}
 	for id, q := range a.queued {
 		a = a.withQueue(id, slices.DeleteFunc(slices.Clone(q), func(m queuedMsg) bool { return !m.held }))
 	}
 	return a
 }
 
-// observeMessageState folds a message's lifecycle, and a turn end's list of
-// what it answered, into the queue: taken up moves a pinned message into the
-// conversation, cancelled is a take-back that was in time, and an ending takes
-// it out of flight. Lifecycles for uuids this window did not send are ignored.
+// observeMessageState folds a message's lifecycle, a turn end's list of what it
+// answered, and a take-back's receipt into the queue: taken up moves a pinned
+// message into the conversation, cancelled is a take-back that was in time, and
+// an ending takes it out of flight. What this window did not send is ignored.
 func (a App) observeMessageState(id string, ev core.Event) App {
+	var ended []string
 	switch {
 	case ev.MessageStarted():
 		a = a.takenUp(id, ev.MessageID, true)
 	case ev.MessageCancelled():
-		a = a.withdrawn(id, ev.MessageID)
+		a, ended = a.withdrawn(id, ev.MessageID), []string{ev.MessageID}
 	case ev.MessageEnded():
-		a = a.takenUp(id, ev.MessageID, false)
+		a, ended = a.takenUp(id, ev.MessageID, false), []string{ev.MessageID}
 	case ev.Kind == core.KindTurnEnd:
 		for _, msgID := range ev.Answered {
 			a = a.takenUp(id, msgID, false)
 		}
+		ended = ev.Answered
+	case ev.Kind == core.KindControlReceipt && ev.Control != nil && ev.Control.Recalled != nil:
+		a = a.recallAnswered(id, ev.RequestID, *ev.Control.Recalled)
 	}
-	if ev.MessageEnded() && a.inflight[id][ev.MessageID] {
-		a = a.withInflightSet(id, func(s map[string]bool) { delete(s, ev.MessageID) })
+	for _, msgID := range ended {
+		if a.inflight[id][msgID] {
+			a = a.withInflightSet(id, func(s map[string]bool) { delete(s, msgID) })
+		}
 	}
 	return a.settleRecall(id)
 }
@@ -294,8 +303,10 @@ func (a App) flushQueued() (App, tea.Cmd) {
 			a = a.dropQueue(id)
 			continue
 		}
+		// Not while a take-back or send-now is out: its message goes from another
+		// command, which could land between the mirror and the passthrough.
 		i := slices.IndexFunc(q, func(m queuedMsg) bool { return m.held })
-		if i < 0 || !a.agentFree(id) {
+		if _, out := a.recalls[id]; i < 0 || out || !a.agentFree(id) {
 			continue
 		}
 		var msg queuedMsg

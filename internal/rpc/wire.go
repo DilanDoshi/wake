@@ -26,9 +26,9 @@ const (
 	FrameSpawn = "spawn" // client → daemon: start a session
 
 	// FrameRecall takes back a FrameSend claude has queued but not yet taken
-	// up, named by its MessageID. Only that message's own lifecycle says
-	// whether it was in time; a separate kind because it unsends rather than
-	// sends.
+	// up, named by its MessageID, under the client's RequestID. The message's
+	// lifecycle says whether it was in time, and so does the receipt carrying
+	// that RequestID; a separate kind because it unsends rather than sends.
 	FrameRecall = "recall" // client → daemon
 
 	// FrameFork branches an existing session: a new agent that inherits the

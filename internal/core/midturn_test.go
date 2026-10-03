@@ -112,3 +112,18 @@ func TestATurnEndNamesEveryMessageItAnswered(t *testing.T) {
 		t.Errorf("decoded %+v, want a turn end answering %v", events, want)
 	}
 }
+
+// The receipt's bool is read into Control.Recalled: the second record of
+// whether a take-back was in time, for when its lifecycle is lost.
+func TestARecallsReceiptSaysWhetherItWasInTime(t *testing.T) {
+	for fixture, want := range map[string]bool{"midturn-cancel.jsonl": true, "midturn-cancel-late.jsonl": false} {
+		marker := `"cancelled":true`
+		if !want {
+			marker = `"cancelled":false`
+		}
+		events, err := DecodeLine([]byte(fixtureLineContaining(t, fixture, marker)))
+		if err != nil || len(events) != 1 || events[0].Control == nil || events[0].Control.Recalled == nil || *events[0].Control.Recalled != want {
+			t.Errorf("%s: decoded %+v, %v; want Control.Recalled %v", fixture, events, err, want)
+		}
+	}
+}

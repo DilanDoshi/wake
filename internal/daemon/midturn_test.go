@@ -25,8 +25,8 @@ func TestASendNowAndARecallReachTheAgentAsRecorded(t *testing.T) {
 	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "steer", MessageID: "m1", Now: true})
 	c.awaitEvent(idAlpha, `"uuid":"m1","priority":"now","origin":{"kind":"human"}`)
 
-	c.send(rpc.Frame{Kind: rpc.FrameRecall, SessionID: idAlpha, MessageID: "m1"})
-	c.awaitEvent(idAlpha, `"subtype":"cancel_async_message","message_uuid":"m1"`)
+	c.send(rpc.Frame{Kind: rpc.FrameRecall, SessionID: idAlpha, RequestID: "r1", MessageID: "m1"})
+	c.awaitEvent(idAlpha, `"request_id":"r1","request":{"subtype":"cancel_async_message","message_uuid":"m1"}`)
 }
 
 // absorbedTranscript is testdata/transcript/midturn-absorbed.jsonl with the

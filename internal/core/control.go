@@ -436,16 +436,17 @@ type wireControlBody struct {
 
 // wireCancelled is an interrupt receipt's uuid list, or the bool a
 // cancel_async_message receipt carries under the same key
-// (midturn-cancel.jsonl:33). The bool is not read: the message's own
-// lifecycle says whether it was taken back. Absent and null stay nil.
-type wireCancelled []string
+// (midturn-cancel.jsonl:33). Absent and null leave both nil.
+type wireCancelled struct {
+	uuids    []string
+	recalled *bool
+}
 
 func (c *wireCancelled) UnmarshalJSON(b []byte) error {
-	var recalled bool
-	if json.Unmarshal(b, &recalled) == nil {
+	if json.Unmarshal(b, &c.recalled) == nil {
 		return nil
 	}
-	return json.Unmarshal(b, (*[]string)(c))
+	return json.Unmarshal(b, &c.uuids)
 }
 
 // controlResponseEvent decodes the receipt for a control_request Wake sent -
@@ -493,8 +494,9 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 	ev.PermissionMode = f.Response.Response.Mode
 	ev.Control = &ControlResult{
 		StillQueued: f.Response.Response.StillQueued,
-		Cancelled:   f.Response.Response.Cancelled,
+		Cancelled:   f.Response.Response.Cancelled.uuids,
 		Error:       f.Response.Error,
+		Recalled:    f.Response.Response.Cancelled.recalled,
 	}
 	return ev
 }

@@ -105,7 +105,7 @@ func (a *agent) apply(p pending) {
 			a.noteAnswered(p.frame.RequestID)
 		}
 	case rpc.FrameRecall:
-		err = a.sess.Recall(p.frame.MessageID)
+		err = a.sess.Recall(p.frame.RequestID, p.frame.MessageID)
 	case rpc.FrameInterrupt:
 		// The minted request_id is discarded, deliberately. Nothing here has a
 		// question outstanding to match the receipt against - the receipt goes

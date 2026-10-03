@@ -53,9 +53,9 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	// A compaction brackets itself with two status frames; the DM draws a
 	// "compacting…" line between them. See compacting.go.
 	a = a.observeCompaction(sessionID, ev)
-	// A message Wake sent reports its own fate; a completed/cancelled one frees
-	// the agent to take the next queued message. Folded here for observedMode's
-	// reason - it drives no renderer, only the queue. See queue.go.
+	// A message Wake sent reports its own fate: taken up, it moves from the pin
+	// into the conversation; given back, it returns to the draft; ended, it
+	// leaves flight. See queue.go and recall.go.
 	a = a.observeMessageState(sessionID, ev)
 
 	var forRoom []core.Event

@@ -245,9 +245,10 @@ func (s *Session) StopTask(taskID string) (string, error) {
 }
 
 // Recall takes back a message claude has not yet taken up, by its stamped uuid.
-// Only its lifecycle says whether it was in time, so the receipt is left alone.
-func (s *Session) Recall(messageID string) error {
-	line, err := EncodeCancelAsyncMessage(uuid.NewString(), messageID)
+// Its lifecycle says whether it was in time, and so does the receipt carrying
+// the caller's requestID (Control.Recalled), for when that lifecycle is lost.
+func (s *Session) Recall(requestID, messageID string) error {
+	line, err := EncodeCancelAsyncMessage(requestID, messageID)
 	if err != nil {
 		return err
 	}

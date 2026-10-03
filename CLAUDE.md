@@ -260,8 +260,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   its next turn, and runs a command after the turn. It is pinned `⧗` until its `started` lifecycle
   (backstops: `completed`, the result's `Event.Answered`), then drawn where the model read it. A `/rename`
   to a busy agent is still held, one per turn, for `renamesync.go`'s hold. `internal/ui/queue.go`.
-- **`↑` takes queued messages back** (`FrameRecall` → `cancel_async_message`); only each one's lifecycle
-  says whether it was in time. **`⌃]` takes them back, then sends them with the draft as one
+- **`↑` takes queued messages back** (`FrameRecall` → `cancel_async_message`); each one's lifecycle, or
+  the receipt for its request id, says whether it was in time. **`⌃]` takes them back, then sends them with the draft as one
   `priority:"now"` + human-origin message** — a `now` behind a queued message ends the turn instead of
   backgrounding its work. A queued command is never folded in. Room sends behave the same; a room
   broadcast taken back leaves a muted room record. `internal/ui/recall.go`.
@@ -527,7 +527,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/fleet.go` at 797 and `internal/core/event.go` at 796 — derived by
+  `internal/core/event.go` at 798 and `internal/ui/fleet.go` at 797 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

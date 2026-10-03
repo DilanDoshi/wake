@@ -688,7 +688,8 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		a = a.apply(f)
 	}
 	if m.done {
-		// The held message is dequeued but not sent: the connection is gone.
+		// A held /rename is dequeued and drawn but not sent, and a gone agent's
+		// queue dropped: the connection is gone, so the write is discarded.
 		a, _ = a.flushQueued()
 		return a.hungUp(m.err)
 	}

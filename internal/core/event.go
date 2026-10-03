@@ -559,6 +559,8 @@ type ControlResult struct {
 	StillQueued []string `json:"still_queued"`
 	Cancelled   []string `json:"cancelled"`
 	Error       string   `json:"error,omitempty"`
+	// Recalled is a take-back's answer: whether claude gave the message back.
+	Recalled *bool `json:"recalled,omitempty"`
 }
 
 // CompactSummary is what a successful /compact reports on its compact_boundary

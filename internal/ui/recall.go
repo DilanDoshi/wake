@@ -4,9 +4,10 @@ package ui
 // send-now over its queue.
 //
 // Both start by asking claude to give back what it has queued but not taken up
-// (rpc.FrameRecall, cancel_async_message). Only each message's own lifecycle
-// says whether that was in time: "cancelled" gives it back, "started" means
-// claude read it first, and it stays sent (midturn-cancel.jsonl,
+// (rpc.FrameRecall, cancel_async_message). Each message's own lifecycle says
+// whether that was in time - "cancelled" gives it back, "started" means claude
+// read it first, and it stays sent - and the receipt for its request id says so
+// too, for when the lifecycle is lost (midturn-cancel.jsonl,
 // midturn-cancel-late.jsonl). When none is still on its way back:
 //
 //   - ↑ puts what came back in the composer, one per line, oldest first, ahead
@@ -30,6 +31,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -37,6 +39,9 @@ import (
 // agent, authored here as the question records are (cardroom.go): no frame
 // carries it.
 const noticeTakenBack core.Notice = "taken_back"
+
+// takenBackClosed is said when what came back has no conversation to return to.
+const takenBackClosed = "%s's conversation closed before claude gave this back: %s"
 
 // recall is a take-back or send-now waiting on claude. back is what it has
 // given back so far, in queue order; draft is a send-now's own message.
@@ -50,7 +55,7 @@ type recall struct {
 // never a /rename, and for send-now never a command, which claude runs after the
 // turn (midturn-slash.jsonl) rather than reading as a message.
 func recallable(m queuedMsg, now bool) bool {
-	return !m.held && !m.recalling && m.rename == "" && !(now && leadingCommand(m.wire))
+	return !m.held && m.recallID == "" && m.rename == "" && !(now && leadingCommand(m.wire))
 }
 
 // startRecall marks what id's gesture asks back and returns the frames that
@@ -63,8 +68,8 @@ func (a App) startRecall(id string, r recall) (App, []rpc.Frame, bool) {
 	var frames []rpc.Frame
 	for i, m := range q {
 		if recallable(m, r.now) {
-			q[i].recalling = true
-			frames = append(frames, rpc.Frame{Kind: rpc.FrameRecall, SessionID: id, MessageID: m.id})
+			q[i].recallID = uuid.NewString()
+			frames = append(frames, rpc.Frame{Kind: rpc.FrameRecall, SessionID: id, RequestID: q[i].recallID, MessageID: m.id})
 		}
 	}
 	if len(frames) == 0 {
@@ -94,8 +99,12 @@ func (a App) withoutRecall(id string) App {
 }
 
 // takeBack is ↑ in a conversation with messages queued: ask them all back. ok is
-// false with nothing to take, so ↑ goes on to the prompt history.
+// false with nothing to take, so ↑ goes on to the prompt history; while one is
+// already out ↑ waits for it rather than walking the history under it.
 func (a App) takeBack(id string) (App, tea.Cmd, bool) {
+	if _, out := a.recalls[id]; out {
+		return a, nil, true
+	}
 	a, frames, ok := a.startRecall(id, recall{})
 	if !ok {
 		return a, nil, false
@@ -123,7 +132,7 @@ func nowFrame(id string, msg queuedMsg) rpc.Frame {
 func (a App) withdrawn(id, msgID string) App {
 	a, msg, ok := a.unqueue(id, msgID)
 	r, out := a.recalls[id]
-	if !ok || !out || !msg.recalling {
+	if !ok || !out || msg.recallID == "" {
 		return a
 	}
 	r.back = append(slices.Clone(r.back), msg)
@@ -138,7 +147,21 @@ func (a App) withdrawn(id, msgID string) App {
 
 // claudeAnswered is whether claude has answered every message a recall asked for.
 func (a App) claudeAnswered(id string) bool {
-	return !slices.ContainsFunc(a.queued[id], func(m queuedMsg) bool { return m.recalling })
+	return !slices.ContainsFunc(a.queued[id], func(m queuedMsg) bool { return m.recallID != "" })
+}
+
+// recallAnswered folds a take-back's receipt: the second record of claude's
+// answer, for when the message's own lifecycle was lost to a gap.
+func (a App) recallAnswered(id, requestID string, recalled bool) App {
+	i := slices.IndexFunc(a.queued[id], func(m queuedMsg) bool { return m.recallID == requestID })
+	if i < 0 {
+		return a
+	}
+	msgID := a.queued[id][i].id
+	if recalled {
+		return a.withdrawn(id, msgID)
+	}
+	return a.takenUp(id, msgID, false)
 }
 
 // settleRecall finishes a take-back once claude has answered it: what came back
@@ -149,28 +172,55 @@ func (a App) settleRecall(id string) App {
 	if !out || r.now || !a.claudeAnswered(id) {
 		return a
 	}
-	a = a.withoutRecall(id)
-	if len(r.back) == 0 || a.dms[id] == nil {
+	return a.withoutRecall(id).putBack(id, r.back, nil)
+}
+
+// dropRecall ends a recall claude can no longer finish - its agent ended or
+// parked, or this client reattached - returning what came back and a send-now's
+// draft to the operator rather than letting them go nowhere.
+func (a App) dropRecall(id string) App {
+	r, out := a.recalls[id]
+	if !out {
+		return a
+	}
+	return a.withoutRecall(id).putBack(id, r.back, r.draft)
+}
+
+// putBack returns messages, and a draft that never went, to their
+// conversation's composer, one per line ahead of what is typed there. A room
+// broadcast among them leaves the room a record that it never reached the agent.
+// With the conversation closed, a notice says what came back.
+func (a App) putBack(id string, back []queuedMsg, draft *queuedMsg) App {
+	agent, _ := a.fleet.Agent(id)
+	for _, m := range back {
+		if m.fromRoom {
+			a = a.withRoom(a.room.Append(core.Event{Kind: core.KindSystem, SessionID: id, Notice: noticeTakenBack}, agent))
+		}
+	}
+	if draft != nil {
+		back = append(slices.Clone(back), *draft)
+	}
+	if len(back) == 0 {
+		return a
+	}
+	if a.dms[id] == nil {
+		notice.Report(takenBackClosed, agent.Name, joined(back, nil).wire)
 		return a
 	}
 	c := a.dms[id].Composer()
-	draft := c.Value()
+	typed := c.Value()
 	c = c.WithDraft("")
-	for _, m := range r.back {
+	for _, m := range back {
 		c = c.InsertText(m.wire)
 		for _, img := range m.images {
 			c = c.Attach(img)
 		}
 		c = c.InsertText("\n")
-		if m.fromRoom {
-			agent, _ := a.fleet.Agent(id)
-			a = a.withRoom(a.room.Append(core.Event{Kind: core.KindSystem, SessionID: id, Notice: noticeTakenBack}, agent))
-		}
 	}
-	if draft == "" {
+	if typed == "" {
 		c = c.WithDraft(strings.TrimSuffix(c.Value(), "\n"))
 	} else {
-		c = c.InsertText(draft)
+		c = c.InsertText(typed)
 	}
 	return a.withComposerFor(id, c)
 }

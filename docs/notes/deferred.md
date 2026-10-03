@@ -5565,9 +5565,9 @@ message and a subagent's gutter (neither opts in), and a paragraph or token wide
   restore draws that line from neither transcript's provenance. Accepted; rare.
 - **Rewinding to a message claude took up mid-turn** - its record is an attachment, and what
   `rewind_conversation` does with one is unrecorded. It is offered as no target (`Event.Absorbed`).
-- **A take-back across a disconnection is dropped**: a reattach forgets queued messages and recalls
-  it cannot confirm (`forgetInflight`), so a message taken back during the outage returns to no draft.
-  Likewise one whose conversation pane closed between `↑` and claude's reply.
+- **A take-back across a disconnection keeps only what was already answered**: a reattach forgets the
+  queued messages it cannot confirm (`forgetInflight`) and returns to the draft just what claude had
+  given back, and a send-now's draft; a message whose answer the outage swallowed is in neither.
 - **Taken-back images plus the draft's own may exceed rpc's 16 MiB frame cap** - the aggregate guard
   runs on a drop (`imagedrop.go`), not on a take-back or a send-now's join. The daemon's reader would
   refuse that frame and end the connection, a hangup the client reattaches from.
