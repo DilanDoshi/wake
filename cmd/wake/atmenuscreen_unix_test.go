@@ -130,14 +130,16 @@ func TestAtMenuOffersPeersSessionsAgentsAndFiles(t *testing.T) {
 	s.send("\r")
 	s.await(heardPrefix + atMenuFile)
 
-	// The room's @w: peers only, no outside session and no subagent type.
+	// The room's leading @w: the fleet's peer, then the outside session the live
+	// manager would relay to (owner, 2026-10-03), and no subagent type.
 	s.send("\x17")
 	s.await("group chat")
 	s.send("@w")
 	s.await("@" + atMenuPeer)
+	s.await("@wf-alpha")
 	s.settle()
-	if got := s.rowsWith("@wf-alpha"); len(got) != 0 {
-		t.Fatalf("the room offers an outside session.\n%s", s.dump())
+	if peer, outside := s.rowsWith("@"+atMenuPeer), s.rowsWith("@wf-alpha"); len(peer) != 1 || len(outside) != 1 || peer[0] >= outside[0] {
+		t.Fatalf("the room does not offer the outside session after the fleet's peer.\n%s", s.dump())
 	}
 	s.send("\x7f\x7f@gen")
 	s.settle()

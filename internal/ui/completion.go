@@ -267,10 +267,20 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 	switch {
 	case a.focus == "" && !a.behindAddressee(head, typed):
 		c.names, c.tags = a.addressees(typed)
+		if a.relaysLeading(head, typed) {
+			c = a.machineSessions(c, typed)
+		}
 	case canBeginName(typed):
 		c = a.conversationMenu(c, typed)
 	}
 	return c
+}
+
+// relaysLeading reports whether a room mention being typed is the draft's
+// leading one while a manager is live: ↵ passes a name the fleet does not hold
+// through to the manager, which relays it with SendMessage (owner, 2026-10-03).
+func (a App) relaysLeading(head, typed string) bool {
+	return a.room.Composer().WireText(head) == "" && canBeginName(typed) && a.service().ID != ""
 }
 
 // behindAddressee reports whether a room mention being typed follows a leading
