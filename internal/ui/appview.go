@@ -476,6 +476,9 @@ func (a App) rewindView(width int, id string) string {
 	if !a.rewind.Open() || a.rewind.Session != id {
 		return ""
 	}
+	if a.rewind.Restore.open() {
+		return a.restoreView(width)
+	}
 	return a.rewind.View(width, a.agentName(a.rewind.Session))
 }
 
