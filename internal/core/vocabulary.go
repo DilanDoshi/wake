@@ -159,6 +159,10 @@ func rateLimitNotice(status string) Notice {
 	return NoticeRateLimited
 }
 
+// ToolSendMessage is the one built-in the manager is spawned with: it reaches
+// the operator's other Claude sessions (owner, 2026-10-03; manager-tools.jsonl).
+const ToolSendMessage = "SendMessage"
+
 // primaryArg is the one argument worth showing beside a tool's name.
 // Everything else is noise at a glance.
 //
@@ -445,9 +449,27 @@ func toolCall(id, name string, input map[string]any) *ToolCall {
 		Diff:      toolDiff(input),
 		Todos:     toolTodos(input),
 		Checklist: toolChecklistOp(name, input),
+		Send:      toolPeerSend(name, input),
 		Loop:      toolLoopOp(name, input),
 		Input:     input,
 	}
+}
+
+// SendMessage's input keys: whom it reaches and what it says.
+const (
+	sendToKey   = "to"
+	sendTextKey = "message"
+)
+
+// toolPeerSend is a SendMessage's recipient and words, and nil for every other
+// call or for one with nobody to reach or nothing to say.
+func toolPeerSend(name string, input map[string]any) *PeerSend {
+	to, _ := input[sendToKey].(string)
+	text, _ := input[sendTextKey].(string)
+	if name != ToolSendMessage || strings.TrimSpace(to) == "" || strings.TrimSpace(text) == "" {
+		return nil
+	}
+	return &PeerSend{To: to, Text: text}
 }
 
 // toolChecklistOp unwraps the one create-or-update a TaskCreate/TaskUpdate
@@ -735,12 +757,25 @@ func toolResultText(content json.RawMessage) string {
 		}
 		switch {
 		case b.Type == blockTypeText && b.Text != "":
-			parts = append(parts, b.Text)
+			parts = append(parts, receiptSentence(b.Text))
 		case b.Type == blockTypeImage:
 			parts = append(parts, ImagePlaceholder)
 		}
 	}
 	return strings.Join(parts, "\n\n")
+}
+
+// receiptSentence is a text block as prose: a SendMessage receipt is a JSON
+// object whose "message" is the sentence (manager-relay.jsonl), and any other
+// text is already prose.
+func receiptSentence(text string) string {
+	var r struct {
+		Message *string `json:"message"`
+	}
+	if !strings.HasPrefix(text, "{") || json.Unmarshal([]byte(text), &r) != nil || r.Message == nil {
+		return text
+	}
+	return *r.Message
 }
 
 // MessageEnded reports whether a KindMessageState says the message Wake sent is

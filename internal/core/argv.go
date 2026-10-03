@@ -229,12 +229,12 @@ func (s *Session) buildArgs() ([]string, error) {
 	// there must not be. See Config.MCPConfig, and
 	// TestTheMCPFlagsAreEmittedFromOneAppendOrNotAtAll, which is what holds it.
 	//
-	// `--tools ""` is the third member of that literal and bounds the *built-in*
-	// set: measured at 2.1.228, a session spawned with it reports exactly its
-	// MCP tools in `init.tools` and zero built-ins, and says so when asked to
-	// write a file. MCP tools pass through the flag untouched, named or not, so
-	// the manager keeps everything internal/mcp gives it and holds no Bash, no
-	// Write and no Edit.
+	// `--tools SendMessage` is the third member of that literal and bounds the
+	// *built-in* set to that one tool: `--tools ""` reported exactly the MCP
+	// tools in `init.tools` (2.1.228), and this one adds SendMessage alone
+	// (manager-tools.jsonl, 2.1.288), so the manager can relay the operator's
+	// `@"session"` (owner, 2026-10-03) and still holds no Bash, no Write and no
+	// Edit. MCP tools pass through the flag untouched, named or not.
 	//
 	// It is `--tools` and not `--allowed-tools`: that flag bounds nothing at
 	// all, and in `auto` it does nothing whatever - recorded in
@@ -245,7 +245,7 @@ func (s *Session) buildArgs() ([]string, error) {
 	// - it takes more than one path, and Wake passes exactly one),
 	// `--strict-mcp-config` and `--tools <tools...>`.
 	if s.cfg.MCPConfig != "" {
-		args = append(args, "--mcp-config", s.cfg.MCPConfig, "--strict-mcp-config", "--tools", "")
+		args = append(args, "--mcp-config", s.cfg.MCPConfig, "--strict-mcp-config", "--tools", ToolSendMessage)
 	}
 	// Verified present in claude 2.1.228: `--append-system-prompt <prompt>`.
 	// Append and not --system-prompt, which replaces claude's own.
