@@ -665,7 +665,7 @@ func (a App) write(what string, frames ...rpc.Frame) tea.Cmd {
 			switch {
 			case err == nil:
 			case len(frames) == 1:
-				return errMsg{Err: fmt.Errorf("%s: %w", what, err)}
+				return errMsg{Err: fmt.Errorf("%s: %w", what, err), Unsent: frames}
 			default:
 				// How far it got, in frames (a flushed /rename's mirror counts as
 				// one, and its failure reads as the send's), because the local echo
@@ -679,7 +679,7 @@ func (a App) write(what string, frames ...rpc.Frame) tea.Cmd {
 				// Only when there was more than one frame: the count is noise
 				// on a single write, and the notice row is one truncated line,
 				// so noise in front of the cause is the cause off the end of it.
-				return errMsg{Err: fmt.Errorf("%s (%d of %d sent): %w", what, i, len(frames), err)}
+				return errMsg{Err: fmt.Errorf("%s (%d of %d sent): %w", what, i, len(frames), err), Unsent: frames[i:]}
 			}
 		}
 		return nil

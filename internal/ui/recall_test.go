@@ -6,6 +6,7 @@ package ui
 // recall.go and docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md.
 
 import (
+	"errors"
 	"slices"
 	"strings"
 	"testing"
@@ -287,5 +288,25 @@ func TestASecondUpWhileATakeBackIsOutDoesNothing(t *testing.T) {
 	a, cmd := hit(t, a, tea.KeyUp)
 	if cmd != nil || a.composer().Value() != "" {
 		t.Errorf("a second ↑ wrote %v or drew %q, want it to wait for claude", cmd != nil, a.composer().Value())
+	}
+}
+
+// A recall frame that never reached the daemon gets no answer, so its message
+// is released from the recall at once: a send-now then goes with what it has,
+// and nothing waits for a reply that cannot come.
+func TestARecallThatWasNeverWrittenDoesNotStrandTheDraft(t *testing.T) {
+	a, _ := queuedTwo(t)
+	a, cmd := hit(t, a.withDraft("third"), tea.KeyCtrlCloseBracket)
+	recalls := sentFrames(t, a, cmd)
+	m, cmd := a.Update(errMsg{Err: errors.New("write: deadline"), Unsent: recalls})
+	a = m.(App)
+	if f := sentFrame(t, a, cmd); f.Text != "third" || !f.Now {
+		t.Errorf("after the failed recall ⌃] wrote %+v, want the draft sent now", f)
+	}
+	if _, out := a.recalls["s1"]; out {
+		t.Error("the recall is still out")
+	}
+	if q := a.queued["s1"]; len(q) != 3 || q[0].recallID != "" || q[1].recallID != "" {
+		t.Errorf("queued = %+v, want both messages still pinned and the draft behind them", q)
 	}
 }

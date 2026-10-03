@@ -145,6 +145,23 @@ func (a App) withdrawn(id, msgID string) App {
 	return a
 }
 
+// unrecalled releases each message whose recall frame never reached the daemon:
+// nothing will answer it, so it stays pinned as an ordinary queued message and
+// its recall finishes with what did come back.
+func (a App) unrecalled(unsent []rpc.Frame) App {
+	for _, f := range unsent {
+		q := a.queued[f.SessionID]
+		i := slices.IndexFunc(q, func(m queuedMsg) bool { return m.recallID != "" && m.recallID == f.RequestID })
+		if f.Kind != rpc.FrameRecall || i < 0 {
+			continue
+		}
+		q = slices.Clone(q)
+		q[i].recallID = ""
+		a = a.withQueue(f.SessionID, q).settleRecall(f.SessionID)
+	}
+	return a
+}
+
 // claudeAnswered is whether claude has answered every message a recall asked for.
 func (a App) claudeAnswered(id string) bool {
 	return !slices.ContainsFunc(a.queued[id], func(m queuedMsg) bool { return m.recallID != "" })

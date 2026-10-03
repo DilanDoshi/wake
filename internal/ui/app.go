@@ -104,7 +104,12 @@ type Dialer func(sessionID string) (net.Conn, Stream, rpc.SessionStatus, *rpc.St
 type eventMsg struct{ Event core.Event }
 
 // errMsg carries a transport or session failure into the view.
-type errMsg struct{ Err error }
+// Unsent is a failed write's frames from the one that failed on; recall.go
+// releases any take-back among them, since nothing will answer it.
+type errMsg struct {
+	Err    error
+	Unsent []rpc.Frame
+}
 
 // frameMsg is one frame off the daemon, undecided.
 //
@@ -602,7 +607,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// This is a write that failed, or a reattach that could not connect.
 		a.reattaching = false
 		notice.Report("%v", m.Err)
-		return a, nil
+		return a.unrecalled(m.Unsent).sendRecalled()
 
 	case tea.MouseMsg:
 		// A wheel or a click is the operator plainly doing something else, and
