@@ -631,7 +631,8 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 	case rpc.FrameResume:
 		s.resumeSession(ctx, c, f)
 	case rpc.FrameSend, rpc.FrameAllow, rpc.FrameAnswer, rpc.FrameDeny, rpc.FrameInterrupt, rpc.FrameMode, rpc.FrameRewind, rpc.FrameStop, rpc.FramePark, rpc.FrameStopRun,
-		rpc.FrameMCPList, rpc.FrameMCPReconnect, rpc.FrameMCPEnable, rpc.FrameMCPDisable:
+		rpc.FrameMCPList, rpc.FrameMCPReconnect, rpc.FrameMCPEnable, rpc.FrameMCPDisable,
+		rpc.FrameRewindPreview, rpc.FrameRewindFiles, rpc.FrameRewindBoth:
 		s.submit(c, f)
 	case rpc.FrameWake:
 		s.unpark(ctx, c, f)

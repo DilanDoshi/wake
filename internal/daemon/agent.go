@@ -259,6 +259,10 @@ type agent struct {
 	mcpAskers map[string]*client
 	initID    string
 
+	// rewindsAfter is each FrameRewindBoth's conversation rewind, by the
+	// request id of the restore it waits on. See continueRewind.
+	rewindsAfter map[string]pending
+
 	tool    string
 	toolArg string
 

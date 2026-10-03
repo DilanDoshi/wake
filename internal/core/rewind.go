@@ -21,15 +21,17 @@ type RewindResult struct {
 }
 
 // FilesRewind is the payload of a KindFilesRewindReceipt: claude's answer to a
-// rewind_files request, nil on every other kind. Target and Preview are what
-// was asked, filled in by the session that asked (Session.RewindFiles) - the
-// receipt itself names neither. Files, Insertions and Deletions answer a
-// preview; Skipped, a restore: the paths left alone because a link stood there.
+// rewind_files request, nil on every other kind. Target, Preview and Both are
+// what was asked, filled in by the session that asked (Session.RewindFiles) -
+// the receipt itself names none of them. Both marks a restore a conversation
+// rewind waits on. Files, Insertions and Deletions answer a preview; Skipped, a
+// restore: the paths left alone because a link stood there.
 //
 // Restorable is not omitempty, Rewound's reason: false is the refusal it reports.
 type FilesRewind struct {
 	Target     string   `json:"target,omitempty"`
 	Preview    bool     `json:"dry,omitempty"`
+	Both       bool     `json:"both,omitempty"`
 	Restorable bool     `json:"restorable"`
 	Files      []string `json:"files,omitempty"`
 	Insertions int      `json:"insertions,omitempty"`

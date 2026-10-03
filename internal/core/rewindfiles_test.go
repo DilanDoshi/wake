@@ -100,7 +100,7 @@ func TestDecodeFilesRewindReceipts(t *testing.T) {
 
 func TestTheSessionLabelsAPreviewWithItsTarget(t *testing.T) {
 	s, buf := mcpSession(t)
-	if err := s.RewindFiles("ask-1", "U3", true); err != nil {
+	if err := s.RewindFiles("ask-1", FilesRewind{Target: "U3", Preview: true}); err != nil {
 		t.Fatal(err)
 	}
 	if sent, req := sentRequest(t, buf); sent != "ask-1" || req["subtype"] != "rewind_files" ||
@@ -119,7 +119,7 @@ func TestTheSessionLabelsAPreviewWithItsTarget(t *testing.T) {
 // (rewind-files.jsonl line 58): only the id says it answers a restore.
 func TestARefusedRestoreIsLabelledByTheAsk(t *testing.T) {
 	s, _ := mcpSession(t)
-	if err := s.RewindFiles("probe-32e3d84a", "U9", false); err != nil {
+	if err := s.RewindFiles("probe-32e3d84a", FilesRewind{Target: "U9", Both: true}); err != nil {
 		t.Fatal(err)
 	}
 	line, n := lineContaining(t, "testdata/stream/rewind-files.jsonl", "probe-32e3d84a")
@@ -127,15 +127,15 @@ func TestARefusedRestoreIsLabelledByTheAsk(t *testing.T) {
 		t.Fatalf("the airlock named a bare refusal %q on its own; the session's label is what says", bare.Kind)
 	}
 	ev := s.attribute(onlyEvent(t, line, n))
-	if ev.Kind != KindFilesRewindReceipt || ev.Files == nil || ev.Files.Target != "U9" || ev.Files.Preview ||
+	if ev.Kind != KindFilesRewindReceipt || ev.Files == nil || ev.Files.Target != "U9" || ev.Files.Preview || !ev.Files.Both ||
 		ev.Files.Restorable || ev.Files.Error != "No file checkpoint found for this message." || ev.Control != nil {
-		t.Fatalf("labelled %q files %+v control %+v, want a refused restore of U9", ev.Kind, ev.Files, ev.Control)
+		t.Fatalf("labelled %q files %+v control %+v, want a refused restore of U9, the code half of both", ev.Kind, ev.Files, ev.Control)
 	}
 }
 
 func TestAnUnwrittenRewindFilesIsNotRemembered(t *testing.T) {
 	s := NewSession(Config{SessionID: "s1"})
-	if err := s.RewindFiles("r", "U1", true); err == nil {
+	if err := s.RewindFiles("r", FilesRewind{Target: "U1", Preview: true}); err == nil {
 		t.Fatal("a session that never started accepted a write")
 	}
 	if n := s.pendingAsks(); n != 0 {

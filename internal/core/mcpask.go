@@ -40,13 +40,13 @@ type sentAsk struct {
 }
 
 // RewindFiles asks this session to restore its files to their state at the
-// user message target, or with preview only to say what that would change.
-// The caller mints id, as for an MCP ask: a preview's answer goes only to the
-// window that asked, and a restore's success may have a conversation rewind
-// waiting on it.
-func (s *Session) RewindFiles(id, target string, preview bool) error {
-	return s.ask(id, sentAsk{kind: KindFilesRewindReceipt, files: FilesRewind{Target: target, Preview: preview}},
-		func(id string) ([]byte, error) { return EncodeRewindFiles(id, target, preview) })
+// user message ask.Target, or with ask.Preview only to say what that would
+// change; the receipt comes back labelled with ask. The caller mints id, as for
+// an MCP ask: a preview's answer goes only to the window that asked, and a
+// restore's success may have a conversation rewind waiting on it.
+func (s *Session) RewindFiles(id string, ask FilesRewind) error {
+	return s.ask(id, sentAsk{kind: KindFilesRewindReceipt, files: ask},
+		func(id string) ([]byte, error) { return EncodeRewindFiles(id, ask.Target, ask.Preview) })
 }
 
 // MCPReconnect reconnects one server.
@@ -149,7 +149,7 @@ func answeredFiles(ev Event, asked FilesRewind) Event {
 	switch {
 	case ev.Files != nil:
 		files = *ev.Files
-		files.Target, files.Preview = asked.Target, asked.Preview
+		files.Target, files.Preview, files.Both = asked.Target, asked.Preview, asked.Both
 	case ev.Control != nil:
 		files.Error = ev.Control.Error
 	}
