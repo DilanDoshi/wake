@@ -722,6 +722,24 @@ opens with a markdown heading, as `/context`'s does. The same predicate sends it
 
 **Not changed:** the room still draws a public local reply (`@name /list-agents`) as markdown.
 
+## BUG-42 — a subagent's hand-back came back as the operator's own turn
+
+**Reported 2026-10-03** (screenshot of a reopened conversation): a code-reviewer subagent's final
+report was drawn as `› you`, envelope and harness guidance included, while a peer's message right
+after it drew as `↪ steer`.
+
+**Root cause: an envelope core did not know.** A subagent in auto mode reports through
+`SubagentHandback` (claude 2.1.271+), which arrives as an `<agent-message>` user line instead of the
+`<task-notification>` core already drops. Live it is an Echoed replay, dropped; on disk it is a plain
+string user line, so a reopen, the rewind picker and `↑` all took it for a typed turn. The same
+audit found skill bodies, image notes and idle notices restoring the same way: core read no
+`isMeta`. `docs/superpowers/notes/2026-10-03-subagent-handback-findings.md`.
+
+**Fix (`isAgentMessage`; `decodeTranscript`'s `isMeta` fail-safe).** The envelope yields no event on
+either wire, and an `isMeta` line's plain user turn is dropped on disk. **Decision:** hidden, not
+drawn as a peer line (owner, 2026-10-03). A reopened conversation therefore shows no ending for a
+subagent that handed back. A DM-only restored ending line is the follow-up offered.
+
 ---
 
 ## Residuals carried from bugs that are fixed and merged

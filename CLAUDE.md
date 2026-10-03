@@ -488,6 +488,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   reaches its model next turn. `--name` wins on `--resume`, even over a `/rename`. A `--bare` session
   registers no inbox, so its `/list-agents` has no `This session:` line.
   `docs/superpowers/notes/2026-09-27-at-menu-findings.md`.
+- **A subagent in auto mode can report through `SubagentHandback`** (2.1.271+): an `<agent-message>`
+  user line in place of the `<task-notification>`, replayed live and `isMeta` on disk. Core drops it on
+  both wires, and **an `isMeta` line no decoder claims is never the operator's turn**.
+  `docs/superpowers/notes/2026-10-03-subagent-handback-findings.md`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A headless session loads claude.ai connectors only after an `initialize` control request**

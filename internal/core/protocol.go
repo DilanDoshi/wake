@@ -30,6 +30,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -195,6 +196,7 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 		// speech, and claude's injected task-ending note, as the operator's turn.
 		// isApiErrorMessage is is_api_error_message on the stream.
 		APIError bool `json:"isApiErrorMessage"`
+		Meta     bool `json:"isMeta"` // claude injected the line; see the fail-safe below
 		Origin   struct {
 			Kind string `json:"kind"`
 		} `json:"origin"`
@@ -217,6 +219,9 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 		if tErr == nil {
 			events[i].At = at
 		}
+	}
+	if f.Meta { // a line claude injected is never the operator's turn unless a decoder claimed it (injected-meta.jsonl)
+		events = slices.DeleteFunc(events, func(ev Event) bool { return ev.Kind == KindUserText && ev.Notice == "" })
 	}
 	return events, nil
 }
@@ -654,7 +659,7 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 			base.Kind, base.Text, base.FromName = KindCrossSession, body, name
 			return one(base)
 		}
-		if f.Type == "user" && isLocalCommandPlumbing(text) {
+		if f.Type == "user" && (isLocalCommandPlumbing(text) || (f.IsSynthetic && isAgentMessage(text))) {
 			return nil
 		}
 		base.Kind, base.Text, base.Notice = frameText(f.Type, text)
