@@ -8,6 +8,16 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-03 — `isMeta` is never the operator's turn; what it is is decided per kind
+
+Claude marks a user line it injected with `isMeta:true`: a skill's body, an image note, an idle
+notice, a subagent's hand-back. Core read none of them, so each restored as a turn the operator typed.
+`decodeTranscript` now drops a plain user turn from an `isMeta` line, ordered after every specific
+decoder: one that claims its line (cross-session's `KindCrossSession`, a `Notice`) keeps it. A new
+kind is drawn by adding its decoder with a fixture, not by removing a misattribution. Owner chose to
+hide a hand-back rather than draw it as a peer line; live it was already dropped as an echo.
+`docs/superpowers/notes/2026-10-03-subagent-handback-findings.md`.
+
 ## 2026-09-29 — a copy matches markdown back to its source
 
 Supersedes "markdown rows are classified, not flagged" below. Classifying rows by `reflowProse`'s

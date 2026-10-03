@@ -615,6 +615,16 @@ func isLocalCommandPlumbing(s string) bool {
 		(strings.HasPrefix(t, "<local-command-caveat>") && strings.HasSuffix(t, "</local-command-caveat>"))
 }
 
+// isAgentMessage reports whether user string content carries the envelope a
+// subagent's message to this session arrives in - its SubagentHandback report
+// (subagent-handback.jsonl), the job <task-notification> did before it - which
+// is claude's note, never the operator's turn. String content only, as
+// crossSession: Wake's own sends are arrays, so a quoted envelope stays typed.
+func isAgentMessage(s string) bool {
+	open := strings.Index(s, "<agent-message")
+	return open >= 0 && strings.Contains(s[open:], "</agent-message>")
+}
+
 // forwardedSubagent attributes a frame the CLI forwarded from a subagent, and
 // returns nil for one the agent itself produced.
 //
