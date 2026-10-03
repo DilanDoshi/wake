@@ -3598,3 +3598,24 @@ server so named loses only the banner's count — `/mcp` still shows it needing 
 **Residual.** An agent's first turn can start before the reconnects land, so a connector can be
 missing from that one turn. The manager is unaffected: `--strict-mcp-config` excludes connectors even
 after the handshake.
+
+## 2026-10-03 — a listing row Wake cannot read costs that row; the room's `@` behind `@who ` is who's
+
+The owner's rulings on BUG-41 (fable wake checked the diagnosis and plan against `main`).
+
+- **An unreadable `/list-agents` row is dropped, not the listing.** Refuse-whole guarded nothing a
+  row-drop gives up: a recognised row is accepted only with a `[state]` lead, four non-empty
+  columns and an absolute directory, so a format change that kept that shape would be misread
+  either way, and the row that fails is the one carrying the new information. The frame still
+  refuses whole: no recognised header, a count that disagrees with the rows seen, or a line under
+  it with no `[state]` lead. The daemon logs how many rows it left out, never a row.
+- **Behind a leading `@who ` that reaches one live agent, the room's `@` offers who's conversation
+  menu** — fleet peers but who, the machine's sessions, who's subagent types. That widens the
+  2026-09-27 rule the way `addressedAgent` already did for `@who /cmd`: the leading mention still
+  mirrors `core.Resolve`, and the rest of the draft is who's claude's to read. A team, `@all`, the
+  manager, a parked or unknown name, and open mention mode (which sends `@who …` to every agent) keep
+  the room's own names — the menu offers only for the claude ↵ sends to (Codex review).
+- **A bare `@"session" …` as the room's leading mention should reach that session**, through the
+  manager: it gets `SendMessage` (`--tools SendMessage`, still no other tool), and its claude sends
+  the message as Claude Code does. Claude Code documents no format for posting into another
+  session's inbox, so Wake cannot deliver it itself. Its own branch, after `fix/at-quoted-mention`.

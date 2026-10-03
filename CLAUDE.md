@@ -92,8 +92,11 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   machine's other Claude sessions `(dir)` (a bare one-shot `claude` running `/list-agents`, asked
   once per opening; a name past `[A-Za-z0-9_-]` is offered and typed quoted, `@"release notes"`, as
   Claude Code does), then `@agent-<type> (agent)`, then files by fuzzy search. The manager's
-  conversation offers its fleet and files only. `⇥` is the only accept. `internal/ui/completionpeers.go`,
-  `completionindex.go`; rulings in `decisions.md` (2026-09-27).
+  conversation offers its fleet and files only; a room draft behind a leading `@who ` that ↵ sends
+  to that one live agent offers that agent's menu. An unreadable listing row costs that row, never
+  the listing.
+  `⇥` is the only accept. `internal/ui/completionpeers.go`, `completionindex.go`; rulings in
+  `decisions.md` (2026-09-27, 2026-10-03).
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
   (absent→spawn, parked→wake, running→park); `/manager-stop` ends it.
 - **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
@@ -280,7 +283,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads and the
   conversation's one bounded `git -c core.fsmonitor=false ls-files` per opening run off the draw
   goroutine, and the room keeps the one-directory listing (`completion.go`, `completionpath.go`,
-  `completionindex.go`). The room's menu must mirror `core.Resolve`; a DM routes nothing.
+  `completionindex.go`). The room's menu must mirror `core.Resolve` for the leading mention; a DM
+  routes nothing.
 
 **Cards and asks**
 - **An ask belongs to its agent's conversation; the room draws none** (`Cards.For`, `App.cardOf`).

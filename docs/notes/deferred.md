@@ -5546,3 +5546,15 @@ message and a subagent's gutter (neither opts in), and a paragraph or token wide
   probe timeout** (`ps -A: signal: killed`, the `resumeSafe` refusal arriving instead of the
   reservation one). 1 failure in a `make ci` under load, 0 of 20 alone. *Closes with:* the test
   telling a probe failure from the refusal it asserts, or a probe budget the test owns.
+
+## 2026-10-03 — a bare one-shot's `system/ui_invalidate` frame does not decode
+
+claude 2.1.288's bare `/list-agents` one-shot prints `{"type":"system","subtype":"ui_invalidate",
+"event":"ui.render",…}` before `init`. `wireFrame.StreamEvent` takes `event` as a stream event's
+object, so `core.DecodeLine` errors on a valid line — against its own contract that only malformed
+JSON errors. Harmless today: `runListAgents` skips the line, and neither the take's non-bare
+sessions nor the owner's daemon log (which records every line a live agent fails to decode) has
+shown one. The line is left out of `list-agents-bare-renamed.jsonl` so the
+corpus decodes. Not fixed on `fix/at-quoted-mention` because `protocol.go` and `wire.go` sit at the
+800-line cap and PRs #147/#148 rework both. *Closes with:* a non-object `event` read as nothing, then
+the line restored to the fixture.
