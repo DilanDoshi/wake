@@ -179,10 +179,7 @@ func (a App) noteFilesRewind(sessionID string, ev core.Event) App {
 func (a App) restoreReported(sessionID string, f core.FilesRewind) App {
 	who := agentPrefix + a.agentName(sessionID)
 	if !f.Restorable || f.Error != "" {
-		reason := f.Error
-		if reason == "" {
-			reason = "claude restored nothing"
-		}
+		reason := refusalReason(f)
 		if f.Both {
 			notice.Report("%s's files were not restored, and the conversation was left as it was: %s", who, reason)
 		} else {
@@ -232,7 +229,7 @@ func (a App) restoreView(width int) string {
 func restoreSummary(f core.FilesRewind) string {
 	switch {
 	case !f.Restorable || f.Error != "":
-		return "code can't be restored: " + f.Error
+		return "code can't be restored: " + refusalReason(f)
 	case len(f.Files) == 0:
 		return "no file changes since this prompt"
 	}
@@ -282,6 +279,28 @@ func (a App) sharedDirectory(agent Agent) string {
 		return names[0] + " also runs in this directory"
 	}
 	return strings.Join(names, ", ") + " also run in this directory"
+}
+
+// refusalReason is claude's own reason for refusing a file rewind.
+func refusalReason(f core.FilesRewind) string {
+	if f.Error == "" {
+		return "claude gave no reason"
+	}
+	return f.Error
+}
+
+// rewindRefused folds the daemon's error about sessionID. A preview it could
+// not write will never answer, so a step waiting on one returns to the list;
+// and a both whose conversation half did not follow is forgotten, so no later
+// refusal is worded as its.
+func (a App) rewindRefused(sessionID string) App {
+	if a.rewind.Session == sessionID && a.rewind.Restore.open() && a.rewind.Restore.Preview == nil {
+		a.rewind.Restore = rewindRestore{}
+	}
+	if a.rewindAfterRestore == sessionID {
+		a.rewindAfterRestore = ""
+	}
+	return a
 }
 
 func firstLine(s string) string {

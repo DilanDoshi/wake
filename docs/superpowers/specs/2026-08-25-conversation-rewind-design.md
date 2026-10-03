@@ -280,7 +280,8 @@ code and conversation, code, never mind - for the prompt ↵ picks. Recorded aga
 - **Code is armed** - first ↵ arms, second restores; `App.disarmed` takes it back on any other input.
 - **Four frame kinds, no mode field:** `FrameRewind` (conversation, unchanged), `FrameRewindFiles`,
   `FrameRewindBoth`, `FrameRewindPreview` (`internal/rpc/rewind.go`). Both restores the files first and
-  queues the conversation rewind only on the restore's success.
+  rewinds the conversation only on the restore's success, holding the agent's input in between; the
+  daemon refuses either restore while a turn is running.
 - **Refused to the manager**, each frame argued in `cmd/wake/mcpguard_test.go`.
 - **Out:** "Summarize from/up to here" - no headless request is recorded.
 

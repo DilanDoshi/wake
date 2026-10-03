@@ -158,8 +158,8 @@ func (a *agent) apply(p pending) {
 	case rpc.FrameRewindPreview:
 		err = a.rewindFiles(p) // a preview writes nothing to disk, so an ask does not bar it
 	case rpc.FrameRewindFiles, rpc.FrameRewindBoth:
-		if a.blockedOnAsk() {
-			a.refuse(p, errors.New("this session is stopped on a permission request; answer or withdraw it before restoring its files"))
+		if refusal := a.restoreRefusal(); refusal != nil {
+			a.refuse(p, refusal)
 			return
 		}
 		err = a.rewindFiles(p)

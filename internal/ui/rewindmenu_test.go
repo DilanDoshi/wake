@@ -110,6 +110,9 @@ func TestAPreviewOffersClaudeCodesChoices(t *testing.T) {
 			Target: "u1", Preview: true, Error: "File rewinding is not enabled."}},
 			[]string{"File rewinding is not enabled.", "Restore conversation", "Never mind"},
 			[]string{"Restore code"}},
+		{"refused with no reason", core.Event{Kind: core.KindFilesRewindReceipt, Files: &core.FilesRewind{Target: "u1", Preview: true}},
+			[]string{"code can't be restored: claude gave no reason", "Restore conversation"},
+			[]string{"Restore code"}},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			fresh(t)
@@ -304,4 +307,42 @@ func TestConfirmRestoreRefusesARunningAgent(t *testing.T) {
 		t.Error("confirmRestore against a running agent left the picker open")
 	}
 	noFrame(t, sent, cmd, "confirmRestore against a running agent")
+}
+
+// A preview the daemon could not write never answers; the daemon's error for
+// that session returns the waiting step to the list rather than leaving it
+// checking forever.
+func TestADaemonErrorReturnsAWaitingStepToTheList(t *testing.T) {
+	fresh(t)
+	a := chooseOlder(t, restoreApp(t, nil, rpc.StateIdle), nil)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameError, SessionID: "s1", Text: "session s1 is not reading its input"})
+	if !a.rewind.Open() || a.rewind.Restore.open() {
+		t.Fatalf("after the daemon's error the picker is %+v, want the prompt list", a.rewind)
+	}
+}
+
+// A both whose conversation half could not follow its restore is forgotten,
+// so a later refusal of an unrelated rewind is not worded as its.
+func TestABothThatCouldNotFollowIsForgotten(t *testing.T) {
+	fresh(t)
+	a := restoreApp(t, nil, rpc.StateIdle)
+	a = a.observe("s1", core.Event{Kind: core.KindFilesRewindReceipt, Files: &core.FilesRewind{Target: "u1", Both: true, Restorable: true}})
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameError, SessionID: "s1", Text: "the files were restored but the conversation was not rewound: broken pipe"})
+	a.observe("s1", core.Event{Kind: core.KindRewindReceipt, Rewind: &core.RewindResult{Error: "stale target"}})
+	if n, _ := notice.Latest(); strings.Contains(n.Text, "files were restored, but") {
+		t.Errorf("a later refusal was worded as the forgotten both's: %q", n.Text)
+	}
+}
+
+// The mark is forgotten too once the agent starts a turn: its conversation
+// rewind can no longer be the next receipt.
+func TestABothsMarkIsForgottenWhenATurnStarts(t *testing.T) {
+	fresh(t)
+	a := restoreApp(t, nil, rpc.StateIdle)
+	a = a.observe("s1", core.Event{Kind: core.KindFilesRewindReceipt, Files: &core.FilesRewind{Target: "u1", Both: true, Restorable: true}})
+	a = a.applyFrame(workingAgentFrame("s1", "alex"))
+	a.observe("s1", core.Event{Kind: core.KindRewindReceipt, Rewind: &core.RewindResult{Error: "turn running"}})
+	if n, _ := notice.Latest(); strings.Contains(n.Text, "files were restored, but") {
+		t.Errorf("a refusal after a new turn was worded as the both's: %q", n.Text)
+	}
 }

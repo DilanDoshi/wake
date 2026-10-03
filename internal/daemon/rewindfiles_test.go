@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -15,7 +16,9 @@ import (
 
 // fakeRewind answers rewind_files and rewind_conversation the way 2.1.288 does
 // (rewind-files.jsonl, rewind-files-both.jsonl), and echoes every other line.
-// A restore aimed at "FAIL" is refused with the bare error claude sends.
+// A restore aimed at "FAIL" is refused with the bare error claude sends, one
+// aimed at "SLOW" answers late, and a message saying "hold" starts a turn that
+// does not end.
 func fakeRewind(sid string) int {
 	emitText(sid, "ready")
 	emitResult(sid)
@@ -27,9 +30,14 @@ func fakeRewind(sid string) int {
 		case strings.Contains(line, `"subtype":"rewind_files"`) && strings.Contains(line, `"FAIL"`):
 			fmt.Printf(`{"type":"control_response","response":{"subtype":"error","request_id":%q,"error":"No file checkpoint found for this message."}}`+"\n", id)
 		case strings.Contains(line, `"subtype":"rewind_files"`):
+			if strings.Contains(line, `"SLOW"`) {
+				time.Sleep(300 * time.Millisecond)
+			}
 			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"canRewind":true,"skippedLinks":0}}}`+"\n", id)
 		case strings.Contains(line, `"subtype":"rewind_conversation"`):
 			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"rewound":true,"targetMessageUuid":"T","prefillText":"again","precedingAssistantUuid":"A","error":null}}}`+"\n", id)
+		case strings.Contains(line, "hold"):
+			emitText(sid, "echo: "+line) // and no result: the turn stays open
 		default:
 			emitText(sid, "echo: "+line)
 			emitResult(sid)
@@ -181,6 +189,58 @@ func TestAFileRewindWithoutItsUUIDsIsRefused(t *testing.T) {
 	for _, f := range c.seen {
 		if isFilesReceipt(f) || isConversationReceipt(f) {
 			t.Fatalf("a refused frame still reached stdin: %+v", f.Event)
+		}
+	}
+}
+
+// A restore queued behind another window's send is refused: the send has
+// marked its turn owed by the time the restore is applied, so a restore aimed
+// from a stale idle never rewrites files under a running turn.
+func TestARestoreIsRefusedWhileATurnIsRunning(t *testing.T) {
+	fakeClaudeOnPath(t, "rewind")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	c.awaitEvent(idAlpha, "ready")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold this turn open"})
+	for _, f := range []rpc.Frame{
+		{Kind: rpc.FrameRewindFiles, SessionID: idAlpha, RewindTarget: "T"},
+		{Kind: rpc.FrameRewindBoth, SessionID: idAlpha, RewindTarget: "T", RewindLastSeen: "S"},
+	} {
+		c.send(f)
+		if got := c.await("a refusal", func(f rpc.Frame) bool { return f.Kind == rpc.FrameError }); !strings.Contains(got.Text, "working") {
+			t.Errorf("%s: error = %q, want it to say the session is working", f.Kind, got.Text)
+		}
+	}
+	for _, f := range c.seen {
+		if isFilesReceipt(f) {
+			t.Fatalf("a restore reached a session mid-turn: %+v", f.Event.Files)
+		}
+	}
+}
+
+// Both is one operation on the agent's input: a send queued behind it is not
+// written until the conversation rewind is, so nothing can land between the
+// restore and the rewind - the fake reads its stdin in order, so the
+// conversation's receipt arriving before the send's echo is that order.
+func TestBothHoldsTheAgentsInputUntilItsRestoreAnswers(t *testing.T) {
+	fakeClaudeOnPath(t, "rewind")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	c.awaitEvent(idAlpha, "ready")
+
+	c.send(rpc.Frame{Kind: rpc.FrameRewindBoth, SessionID: idAlpha, RewindTarget: "SLOW", RewindLastSeen: "S"})
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "after"})
+	c.awaitEvent(idAlpha, "after")
+	conversation := false
+	for _, f := range c.seen {
+		if isConversationReceipt(f) {
+			conversation = true
+		}
+		if f.Event != nil && strings.Contains(f.Event.Text, "after") && !conversation {
+			t.Fatal("the send reached stdin between both's restore and its conversation rewind")
 		}
 	}
 }

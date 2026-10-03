@@ -259,9 +259,9 @@ type agent struct {
 	mcpAskers map[string]*client
 	initID    string
 
-	// rewindsAfter is each FrameRewindBoth's conversation rewind, by the
-	// request id of the restore it waits on. See continueRewind.
-	rewindsAfter map[string]pending
+	// restoresAwaited is the input goroutine waiting on each FrameRewindBoth's
+	// restore, by request id. See rewindAfterRestore.
+	restoresAwaited map[string]chan core.Event
 
 	tool    string
 	toolArg string

@@ -761,7 +761,7 @@ func (a App) apply(f rpc.Frame) App {
 		//
 		// The text says when it could be forked instead; that is the daemon's
 		// sentence and it is reported below unchanged.
-		a = a.startSettled(f.SessionID).mcpRefused(f.SessionID, f.Text).wakeRefused(f.SessionID)
+		a = a.startSettled(f.SessionID).mcpRefused(f.SessionID, f.Text).wakeRefused(f.SessionID).rewindRefused(f.SessionID)
 		notice.Report("%s", a.errorText(f))
 		return a
 

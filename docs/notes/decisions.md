@@ -3627,9 +3627,16 @@ and each kind carries its own manager refusal.
 **Ruling 4 — both restores files first, and the conversation only after.** The two requests succeed
 back to back in either order, so order is not correctness; failure is. A restore can fail (swept or
 missing backups, an unwritable file), and a rewound conversation over files that were not put back is
-a known-wrong state. So the daemon queues the conversation rewind — an ordinary `FrameRewind` from the
-asking client — only when the restore's receipt says it succeeded. The reverse failure (files back,
-conversation refused) is reported as exactly that.
+a known-wrong state. So both is one operation on the agent's input goroutine: the restore is written,
+the goroutine waits for its receipt (or the agent's end), and only on success writes the conversation
+rewind — nothing queued behind both, another window's send included, reaches stdin between the two
+halves (Codex adversarial review). The reverse failure (files back, conversation refused) is reported
+as exactly that.
+
+**Ruling 4a — the daemon refuses a restore mid-turn.** The UI gates on idle, but a send from another
+window can be applied first; it marks the turn owed under the agent's lock, and `restoreRefusal`
+reads that lock on the same input goroutine before either restore is written. A restore never
+rewrites files under a running turn.
 
 **Ruling 5 — restoring code is armed.** First ↵ arms, second restores; `App.disarmed` takes the arm
 back on any input, mouse included, and esc takes it back before it leaves the step. The cue is drawn

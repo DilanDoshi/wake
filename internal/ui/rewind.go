@@ -171,6 +171,9 @@ func (a App) rewindRunning(sessionID string) bool {
 // braces for the common case, where the report and the key are two
 // separate Update calls rather than one racing the other.
 func (a App) reconcileRewind() App {
+	if s := a.rewindAfterRestore; s != "" && (a.endedAgent(s) || a.rewindRunning(s)) {
+		a.rewindAfterRestore = "" // its conversation rewind can no longer be the next receipt
+	}
 	if !a.rewind.Open() {
 		return a
 	}
