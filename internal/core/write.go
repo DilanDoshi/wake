@@ -148,14 +148,11 @@ func (s *Session) DenyTool(requestID, reason string) error {
 // (interrupt-queued-survives.jsonl), with it the receipt lists what it destroyed
 // (interrupt-cancel-queued.jsonl).
 //
-// Messages now carry a uuid (the queue's own stamping), so the receipt could name
-// what it cancelled - but false is still right, because Wake's own client-side
-// queue holds every follow-up and hands the CLI at most one message per turn (see
-// internal/ui/queue.go). The CLI's native queue is empty by construction, so
-// cancel_queued would have nothing to destroy, while an interrupt of the running
-// turn is what esc already wants. The stranded worry the old note answered - a
-// destroyed message the receipt could not name, still drawn as sent - cannot
-// arise when nothing is queued at the CLI to destroy.
+// Wake now writes a follow-up to a working agent at once, so claude's queue does
+// hold Wake's messages (internal/ui/queue.go) - and false is still right, because
+// it is Claude Code's own esc: what is queued survives the interrupt and runs next
+// (midturn-esc.jsonl). Taking a queued message back is its own request,
+// cancel_async_message, one message at a time (Recall).
 const interruptCancelQueued = false
 
 // Interrupt aborts the turn this session is running, and returns the

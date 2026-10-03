@@ -883,6 +883,17 @@ has advertised `/list-agents`), with other `claude` sessions open in other termi
 - [ ] `/name` an agent, then run `/list-agents` in another terminal's `claude`: it lists the new name.
 - [ ] In a large repository, typing after `@` stays smooth.
 
+## Steering a working agent — what only a real terminal shows
+
+- [ ] **`⌃]` under tmux and under cmux.** GS has no default binding in either as far as anyone knows, but
+  nothing here measured it (`keyprobe_test.go` reads bytes, not a multiplexer). Press `⌃]` with a draft to
+  a working agent inside each: the draft must go now (the agent answers in the running turn), and the
+  multiplexer must do nothing of its own.
+- [ ] **`⌃]` on a keyboard where `]` sits on AltGr.** Expected to be hard or impossible to type; say which.
+- [ ] **A real steer.** Ask an agent to run a long `make test`, type a correction while it runs, and
+  watch it land at the next tool boundary (the pin moves into the conversation); then `⌃]` a second one
+  and watch the running command move to the background. The recordings used haiku; check one model more.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:

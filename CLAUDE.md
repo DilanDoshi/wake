@@ -58,8 +58,9 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `--fallback-model` (both survive a park), `--worktree <name>` (Wake runs `git worktree add`; never
   passes claude's `--worktree`), `--add-dir` (repeatable), `--debug-file <name>` / `--debug`
   (the daemon owns the directory; `--debug` without a file is refused).
-- **Room keys:** `↵` send/open/confirm · `esc` interrupt · `esc esc` clear draft, or idle+empty →
-  rewind picker · `↑↓` prompt history (or cursor on a multi-line draft) · `⇧↑↓` pick agent · `⌃O`
+- **Room keys:** `↵` send/open/confirm · `⌃]` send now · `esc` interrupt · `esc esc` clear draft, or
+  idle+empty → rewind picker · `↑↓` prompt history (or cursor on a multi-line draft; `↑` with messages
+  queued takes them back) · `⇧↑↓` pick agent · `⌃O`
   arm detach (`↵` confirms, `⌃O` cancels) · `⌃C` park focused · `⌃Q` arm park-all & quit (second
   `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus ·
   `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
@@ -254,6 +255,17 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   keys on `compact_result`, not the boundary. The `compact_boundary` metadata draws
   `✻ Compacted · A → B tokens · …`, live-only.
 
+**Sending to a working agent**
+- **A message to a working agent is written at once** — claude reads it at the next tool boundary, or as
+  its next turn, and runs a command after the turn. It is pinned `⧗` until its `started` lifecycle
+  (backstops: `completed`, the result's `Event.Answered`), then drawn where the model read it. A `/rename`
+  to a busy agent is still held, one per turn, for `renamesync.go`'s hold. `internal/ui/queue.go`.
+- **`↑` takes queued messages back** (`FrameRecall` → `cancel_async_message`); only each one's lifecycle
+  says whether it was in time. **`⌃]` takes them back, then sends them with the draft as one
+  `priority:"now"` + human-origin message** — a `now` behind a queued message ends the turn instead of
+  backgrounding its work. A queued command is never folded in. Room sends behave the same; a room
+  broadcast taken back leaves a muted room record. `internal/ui/recall.go`.
+
 **Room and routing**
 - **The room re-derives its history from claude's transcripts** (`FrameRoomHistory`,
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
@@ -354,7 +366,7 @@ yet says so in bold.**
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
-| Sending | `internal/ui/send.go` · `queue.go` (type-ahead) · `mention.go` · `imagedrop.go` |
+| Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
 | Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
@@ -445,6 +457,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 | Isolation | `--worktree` — **not used**; Wake runs `git worktree add` itself |
 | Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools ""`; `--append-system-prompt` |
 | Session listing | `--print --bare --no-session-persistence` + stream-json, one `/list-agents` line (verified 2.1.283) |
+| Mid-turn delivery | a user line written mid-turn needs no flag; `priority:"now"` + `origin:{kind:"human"}` for send-now; `cancel_async_message` takes one back (verified 2.1.288) |
 
 ### Traps
 
@@ -490,6 +503,13 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   `docs/superpowers/notes/2026-09-27-at-menu-findings.md`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
+- **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only
+  reply it waits for the turn's end, and a command always does. `now` backgrounds running work only with
+  `origin:{kind:"human"}` and only with nothing queued ahead of it; otherwise it ends the turn at the
+  boundary. A `cancel_async_message` receipt carries `cancelled` as a **bool**, the key an interrupt
+  receipt carries as a list. **On disk a line taken up mid-turn is an `attachment` of type
+  `queued_command` under `source_uuid`**, not a user record (`Event.Absorbed`, no rewind target).
+  `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md`.
 - **A headless session loads claude.ai connectors only after an `initialize` control request**
   (never otherwise, even with `ENABLE_CLAUDEAI_MCP_SERVERS=true`), and a loaded connector reads
   `needs-auth` — even one signed in on claude.ai — until an `mcp_reconnect` connects it; one never
