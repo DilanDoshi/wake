@@ -273,6 +273,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// rewound is the discriminator itself - see wireControlBody.Rewound.
 	"rewound", "targetMessageUuid", "prefillText", "precedingAssistantUuid",
 
+	// The rewind_files control_request and its receipt: restoring the files a
+	// session's tools edited. dry_run's spelling is the trap the findings note
+	// records - dryRun is ignored, and the request restores for real.
+	"rewind_files", "user_message_id", "dry_run", "canRewind", "filesChanged", "skippedLinks",
+
 	// The three MCP control requests, the server they name, and the one
 	// Claude-spelled key of the status receipt Wake reads (a tool's readOnly
 	// annotation, which the MCP spec itself calls readOnlyHint).
@@ -462,6 +467,10 @@ var deliberatelyGeneric = wordSet([]string{
 	// origin.kind's own key, the plainest English there is: Wake's own code names
 	// kinds everywhere, and "origin" beside it is policed, so it is no route in.
 	"kind",
+
+	// A rewind_files preview's line counts. Plain English a diff names anywhere,
+	// and no route in: a receipt is known only by "canRewind", which is policed.
+	"insertions", "deletions",
 
 	// A workflow_agent's other state words, "start"'s siblings. Neither is
 	// policed: core.TaskProgress and core.TaskDone already spell "progress"
@@ -699,7 +708,10 @@ var notNamedByTheAirlock = map[string]string{
 // list-agents.jsonl and list-agents-bare*.jsonl.
 // 209 → 210: "authentication_failed", the failed turn's error kind apiNotice
 // reads so only a dead login is parked for a new process. api-error-auth.jsonl.
-const policedWordCount = 210
+// 210 → 216: the rewind_files request ("rewind_files", "user_message_id",
+// "dry_run") and its receipt ("canRewind", "filesChanged", "skippedLinks").
+// rewind-files*.jsonl; 2026-10-02-file-rewind-findings.md.
+const policedWordCount = 216
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -738,6 +750,8 @@ var notWireVocabulary = wordSet([]string{
 	"encode rewind",
 	"%w: encode rewind: empty request id",
 	"%w: encode rewind: empty target or last-seen uuid",
+	"encode rewind files",
+	"%w: encode rewind files: empty request id or message uuid",
 	"encode stop task",
 	"%w: encode stop task: empty request id",
 	"%w: encode stop task: empty task id",
@@ -1047,6 +1061,9 @@ var notInTheCorpus = map[string]string{
 	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
 	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
 	"stop_task":                   "outbound only; a recording of stdout cannot contain it",
+	"rewind_files":                "outbound only; a recording of stdout cannot contain it",
+	"user_message_id":             "outbound only; the rewind_files request field Wake writes",
+	"dry_run":                     "outbound only; the rewind_files request field Wake writes",
 
 	// The run record's own two keys with no counterpart on the stream: the
 	// start time (task_progress carries only elapsed usage, never a start

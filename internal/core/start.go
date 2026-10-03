@@ -102,7 +102,7 @@ func (s *Session) startAgent(ctx context.Context) (*agentProcess, error) {
 		return nil, fmt.Errorf("prepare claude for session %s in %s: %w", s.cfg.SessionID, s.cfg.Dir, err)
 	}
 	if cmd.Env == nil {
-		cmd.Env = scrubbedEnv(os.Environ())
+		cmd.Env = agentEnv(os.Environ())
 	}
 	errTail := &tailWriter{max: stderrTailBytes}
 	cmd.Stderr = errTail

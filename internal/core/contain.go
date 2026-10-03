@@ -124,6 +124,7 @@ func (e Event) contained() Event {
 	e.Task = containedTask(e.Task)
 	e.Control = containedControl(e.Control)
 	e.Rewind = containedRewind(e.Rewind)
+	e.Files = containedFiles(e.Files)
 	e.MCP = containedMCP(e.MCP)
 	e.Goal = containedGoal(e.Goal)
 	e.Compaction = containedCompaction(e.Compaction)
@@ -305,6 +306,18 @@ func containedRewind(r *RewindResult) *RewindResult {
 	c.TargetMessageUUID = Contained(c.TargetMessageUUID)
 	c.PrefillText = Contained(c.PrefillText)
 	c.PrecedingAssistantUUID = Contained(c.PrecedingAssistantUUID)
+	c.Error = Contained(c.Error)
+	return &c
+}
+
+// containedFiles contains a file rewind's paths and refusal: both are drawn.
+func containedFiles(r *FilesRewind) *FilesRewind {
+	if r == nil {
+		return nil
+	}
+	c := *r
+	c.Target = Contained(c.Target)
+	c.Files = containedAll(c.Files)
 	c.Error = Contained(c.Error)
 	return &c
 }

@@ -115,6 +115,9 @@ const (
 	// KindRewindReceipt is Claude's rewind_conversation receipt. See Event.Rewind.
 	KindRewindReceipt EventKind = "rewind_receipt"
 
+	// KindFilesRewindReceipt answers a rewind_files request. See Event.Files.
+	KindFilesRewindReceipt EventKind = "files_rewind_receipt"
+
 	// KindMCPReply answers an MCP ask Wake sent: a status reply is known by its
 	// payload, a reconnect or toggle only by the request id the session minted
 	// (Session.MCPReconnect). See Event.MCP.
@@ -723,6 +726,7 @@ type Event struct {
 	// again for KindRewindReceipt; see RewindResult.
 	Control *ControlResult `json:"control,omitempty"`
 	Rewind  *RewindResult  `json:"rewind,omitempty"`
+	Files   *FilesRewind   `json:"files_rewind,omitempty"`
 
 	// MCP is a KindMCPReply's payload, nil on every other kind.
 	MCP *MCPResult `json:"mcp_reply,omitempty"`

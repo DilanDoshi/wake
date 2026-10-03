@@ -186,7 +186,7 @@ func agentCommand(ctx context.Context, launcher AgentLauncher, dir string, args 
 		return nil, nil, err
 	}
 	cmd := execCommand(ctx, launcher.executable, append([]string{agentLauncherArg}, args...)...)
-	cmd.Env = append(scrubbedEnv(os.Environ()),
+	cmd.Env = append(agentEnv(os.Environ()),
 		agentLauncherMarkerEnv+"="+agentLauncherProtocol,
 		agentLauncherDirEnv+"="+dir,
 	)

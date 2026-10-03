@@ -1,7 +1,7 @@
 package core
 
 // The write half of the MCP asks, and the one piece of state they need -
-// shared by a workflow stop, whose receipt is just as bare.
+// shared by a workflow stop and a file rewind, whose receipts are just as bare.
 //
 // A reconnect, a toggle or a stop_task is answered with the bare receipt a
 // permission-mode change gets - {"subtype":"success"} or an error string - so
@@ -31,10 +31,22 @@ func (s *Session) MCPServers(id string) error {
 }
 
 // sentAsk is what a remembered ask's receipt is labelled as: KindMCPReply,
-// with what was asked, or KindStopReceipt.
+// with what was asked, KindStopReceipt, or KindFilesRewindReceipt, with the
+// message it was aimed at and whether it was a preview.
 type sentAsk struct {
-	kind EventKind
-	mcp  MCPResult
+	kind  EventKind
+	mcp   MCPResult
+	files FilesRewind
+}
+
+// RewindFiles asks this session to restore its files to their state at the
+// user message target, or with preview only to say what that would change.
+// The caller mints id, as for an MCP ask: a preview's answer goes only to the
+// window that asked, and a restore's success may have a conversation rewind
+// waiting on it.
+func (s *Session) RewindFiles(id, target string, preview bool) error {
+	return s.ask(id, sentAsk{kind: KindFilesRewindReceipt, files: FilesRewind{Target: target, Preview: preview}},
+		func(id string) ([]byte, error) { return EncodeRewindFiles(id, target, preview) })
 }
 
 // MCPReconnect reconnects one server.
@@ -96,19 +108,25 @@ func (s *Session) pendingAsks() int {
 }
 
 // answeredMCP labels a receipt for an ask this session sent: a stop's as a
-// stop's, and an MCP ask's with what was asked, of which server, and the
-// verdict. Anything else passes untouched.
+// stop's, a file rewind's with its target, and an MCP ask's with what was
+// asked, of which server, and the verdict. Anything else passes untouched.
 func (s *Session) answeredMCP(ev Event) Event {
-	if ev.RequestID == "" || (ev.Kind != KindControlReceipt && ev.Kind != KindMCPReply) {
+	switch {
+	case ev.RequestID == "":
+		return ev
+	case ev.Kind != KindControlReceipt && ev.Kind != KindMCPReply && ev.Kind != KindFilesRewindReceipt:
 		return ev
 	}
 	sent, ok := s.takeAsk(ev.RequestID)
 	if !ok {
 		return ev
 	}
-	if sent.kind == KindStopReceipt {
+	switch sent.kind {
+	case KindStopReceipt:
 		ev.Kind = KindStopReceipt // Control keeps the verdict
 		return ev
+	case KindFilesRewindReceipt:
+		return answeredFiles(ev, sent.files)
 	}
 	ask := sent.mcp
 	if ev.MCP != nil {
@@ -121,5 +139,22 @@ func (s *Session) answeredMCP(ev Event) Event {
 	ev.Kind = KindMCPReply
 	ev.Control = nil
 	ev.MCP = &ask
+	return ev
+}
+
+// answeredFiles labels a file rewind's receipt with what was asked. A refused
+// restore arrives bare (Control.Error), a preview or a restore with its payload.
+func answeredFiles(ev Event, asked FilesRewind) Event {
+	files := asked
+	switch {
+	case ev.Files != nil:
+		files = *ev.Files
+		files.Target, files.Preview = asked.Target, asked.Preview
+	case ev.Control != nil:
+		files.Error = ev.Control.Error
+	}
+	ev.Kind = KindFilesRewindReceipt
+	ev.Control = nil
+	ev.Files = &files
 	return ev
 }

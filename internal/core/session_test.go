@@ -25,6 +25,7 @@ import (
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strconv"
 	"strings"
 	"sync"
@@ -1272,6 +1273,30 @@ func TestScrubbedEnvDropsNestedSessionIdentityAndKeepsCredentials(t *testing.T) 
 	}
 	if strings.Join(in, "\x00") != before {
 		t.Error("scrubbedEnv modified the environment it was given")
+	}
+}
+
+// Every agent is started able to rewind its files: a headless claude saves
+// no checkpoints without the variable (rewind-files-off.jsonl). The
+// operator's own value wins - an explicit false is an opt-out, and so is
+// CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING, which claude itself honours over it.
+func TestAgentEnvTurnsOnFileCheckpointingUnlessTheOperatorNamedIt(t *testing.T) {
+	in := []string{"PATH=/usr/bin", "CLAUDECODE=1"}
+	before := strings.Join(in, "\x00")
+	got := agentEnv(in)
+	if !slices.Contains(got, fileCheckpointingEnv+"=true") {
+		t.Errorf("agentEnv(%q) = %q, want %s=true added", in, got, fileCheckpointingEnv)
+	}
+	if slices.Contains(got, "CLAUDECODE=1") || !slices.Contains(got, "PATH=/usr/bin") {
+		t.Errorf("agentEnv(%q) = %q, want scrubbedEnv's scrub under it", in, got)
+	}
+	if strings.Join(in, "\x00") != before {
+		t.Error("agentEnv modified the environment it was given")
+	}
+
+	optedOut := []string{"PATH=/usr/bin", fileCheckpointingEnv + "=false"}
+	if got := agentEnv(optedOut); !slices.Equal(got, optedOut) {
+		t.Errorf("agentEnv(%q) = %q, want the operator's own value left alone", optedOut, got)
 	}
 }
 
