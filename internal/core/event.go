@@ -665,6 +665,11 @@ type Event struct {
 	// turn, and nothing may key suppression or de-duplication on it.
 	FromRoom bool `json:"from_room,omitempty"`
 
+	// Absorbed marks an operator turn restored from disk that claude took up
+	// mid-turn: stored as a queued_command attachment rather than a user record
+	// (testdata/transcript/midturn-absorbed.jsonl), so it is no rewind target.
+	Absorbed bool `json:"absorbed,omitempty"`
+
 	// FromName attributes a KindCrossSession event: the peer's display name (its
 	// own --name). It is what the room heads the line with, matched to a fleet
 	// agent for its colour; set by the decoder off the <cross-session-message>

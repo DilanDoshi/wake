@@ -170,7 +170,9 @@ func turnTokensEvent(f wireFrame) []Event {
 // fields stdout never carries, and record types (`custom-title`,
 // `queue-operation`, `attachment`) that exist only on disk. But the two agree
 // on the part Wake reads - `type`, and the Anthropic `message` under it - so
-// this is a filter in front of DecodeLine rather than a second decoder. A
+// this is a filter in front of DecodeLine rather than a second decoder. The one
+// attachment it reads is a message claude took up mid-turn, handed to DecodeLine
+// as the user line it was written as (Event.Absorbed). A
 // second decoder is the parallel implementation this package exists to prevent,
 // and it would drift on exactly the block shapes that are hardest to get right.
 //
@@ -200,22 +202,41 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 		Origin   struct {
 			Kind string `json:"kind"`
 		} `json:"origin"`
+		Attachment json.RawMessage `json:"attachment"`
 	}
 	if err := json.Unmarshal(line, &f); err != nil {
 		return nil, fmt.Errorf("decode transcript line: %w", err)
 	}
-	if f.APIError || f.Origin.Kind == "task-notification" || (f.Sidechain && !keepSidechain) || (f.Type != "assistant" && f.Type != "user") {
+	if f.APIError || f.Origin.Kind == "task-notification" || (f.Sidechain && !keepSidechain) {
+		return nil, nil
+	}
+	// The record's own uuid rides every event it decodes to: a fork copies it,
+	// and on a turn Wake sent it is the one Wake stamped. See Event.MessageID.
+	id, absorbed := f.UUID, false
+	switch {
+	case f.Type == "attachment":
+		q, ok, err := queuedPrompt(f.Attachment)
+		if err == nil && ok {
+			// Its content as the user line it was written as, through DecodeLine.
+			line, err = json.Marshal(q.asUserLine())
+		}
+		if err != nil {
+			return nil, fmt.Errorf("decode transcript line: queued command: %w", err)
+		}
+		if !ok {
+			return nil, nil
+		}
+		id, absorbed = q.SourceUUID, true
+	case f.Type != "assistant" && f.Type != "user":
 		return nil, nil
 	}
 	events, err := DecodeLine(line)
 	if err != nil {
 		return events, err
 	}
-	// The record's own uuid rides every event it decodes to: a fork copies it,
-	// and on a turn Wake sent it is the one Wake stamped. See Event.MessageID.
 	at, tErr := time.Parse(time.RFC3339, f.Timestamp)
 	for i := range events {
-		events[i].MessageID = f.UUID
+		events[i].MessageID, events[i].Absorbed = id, absorbed
 		if tErr == nil {
 			events[i].At = at
 		}
@@ -241,6 +262,11 @@ func DecodeTranscriptNode(line []byte) (TranscriptNode, bool) {
 		Rewound    bool   `json:"rewound"`
 		LeafUUID   string `json:"leafUuid"`
 		Sidechain  bool   `json:"isSidechain"`
+		// any rather than string: only a queued_command's is read, and an
+		// attachment of another shape must not cost its node.
+		Attachment struct {
+			SourceUUID any `json:"source_uuid"`
+		} `json:"attachment"`
 	}
 	if err := json.Unmarshal(line, &f); err != nil {
 		return TranscriptNode{}, false
@@ -254,7 +280,8 @@ func DecodeTranscriptNode(line []byte) (TranscriptNode, bool) {
 	if f.UUID == "" {
 		return TranscriptNode{}, false
 	}
-	return TranscriptNode{UUID: f.UUID, ParentUUID: f.ParentUUID, Kind: f.Type}, true
+	source, _ := f.Attachment.SourceUUID.(string)
+	return TranscriptNode{UUID: f.UUID, ParentUUID: f.ParentUUID, Kind: f.Type, Source: source}, true
 }
 
 func one(ev Event) []Event { return []Event{ev} }

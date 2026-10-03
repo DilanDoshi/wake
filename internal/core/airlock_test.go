@@ -174,6 +174,9 @@ var claudeWireVocabulary = wordSet([]string{
 	// policed below). Policed for "timestamp"'s reason: no file outside this
 	// package names the literal.
 	"origin",
+	// A message claude took up mid-turn, as it is stored on disk: an attachment
+	// of type queued_command naming the uuid Wake stamped. midturn-absorbed.jsonl.
+	"attachment", "queued_command", "source_uuid", "commandMode",
 
 	// system subtypes.
 	"compact_boundary", "permission_denied", "hook_started",
@@ -712,7 +715,10 @@ var notNamedByTheAirlock = map[string]string{
 // reads so only a dead login is parked for a new process. api-error-auth.jsonl.
 // 210 → 213: "cancel_async_message" and "message_uuid", the request that takes a
 // queued message back, and "priority", the key a send-now carries. midturn-*.
-const policedWordCount = 213
+// 213 → 217: "attachment", "queued_command", "source_uuid" and "commandMode",
+// the on-disk record of a message claude took up mid-turn, which
+// DecodeTranscriptLine restores as the turn it was. midturn-absorbed.jsonl.
+const policedWordCount = 217
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -756,6 +762,7 @@ var notWireVocabulary = wordSet([]string{
 	"%w: encode stop task: empty task id",
 	"encode cancel async message",
 	"%w: encode cancel async message: empty request or message id",
+	"decode transcript line: queued command: %w",
 	"decode workflow run: %w",
 	"decode workflow run: no task id",
 	defaultDenyReason,

@@ -72,3 +72,28 @@ func TestARecallIsTheRecordedCancelLine(t *testing.T) {
 		}
 	}
 }
+
+// A message claude took up mid-turn is stored on disk as a queued_command
+// attachment rather than a user record. A re-read conversation shows it as the
+// turn it was, under the uuid Wake stamped (source_uuid), marked Absorbed; and
+// the tree walk names that stamp too, so a fork's copy of it is recognised.
+func TestAMessageTakenUpMidTurnRestoresAsTheTurnItWas(t *testing.T) {
+	lines := fixtureLines(t, "../../testdata/transcript/midturn-absorbed.jsonl")
+	opening, err := DecodeTranscriptLine([]byte(lines[0]))
+	if err != nil || len(opening) != 1 || opening[0].Absorbed {
+		t.Fatalf("the opening user record decoded to %+v, %v; want one turn, not Absorbed", opening, err)
+	}
+	got, err := DecodeTranscriptLine([]byte(lines[1]))
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := "Also: end your reply with the word PINEAPPLE."
+	if len(got) != 1 || got[0].Kind != KindUserText || got[0].Text != want || !got[0].Absorbed ||
+		got[0].MessageID != "ce8c17b6-1b7d-41d9-b48d-7592a1a19cdc" || got[0].At.IsZero() {
+		t.Errorf("the queued_command record decoded to %+v, want the operator's %q under its stamp, Absorbed, timed", got, want)
+	}
+	node, ok := DecodeTranscriptNode([]byte(lines[1]))
+	if !ok || node.UUID != "c2ca34b2-ac6b-459b-bda5-f119436a07ed" || node.Source != "ce8c17b6-1b7d-41d9-b48d-7592a1a19cdc" {
+		t.Errorf("DecodeTranscriptNode = %+v, %v; want the record's uuid and the stamp it carries", node, ok)
+	}
+}
