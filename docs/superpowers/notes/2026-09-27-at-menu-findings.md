@@ -78,3 +78,16 @@ A name with a space or any character outside letters, digits, hyphens and unders
 double quotes, `@"release notes"`, and the typeahead inserts the quotes (docs, re-read 2026-09-29). Session
 names are free text — `/rename` takes spaces — so a real machine lists such names beside Wake's own
 (BUG-39).
+
+## 5. A renamed session's row carries its former name (2.1.288, 2026-10-03)
+
+Recorded under a sterile `HOME` with no shim and local commands only (`$0`, `num_turns: 0`):
+`testdata/stream/list-agents-bare-renamed.jsonl`, sent `testdata/input/list-agents-bare.stdin.jsonl`.
+A session that held its name about 70 s and was then renamed is listed with a column between its
+name and directory, `says it was <old> until <age> ago`; one renamed after 2–4 s is not, and a
+`/clear` before the rename changes nothing. Renamed twice, the row names only the newest former name.
+A peer reached by its former name is claude's business; Wake offers the current name only.
+
+The take opens with a `system/ui_invalidate` frame whose `event` is a string, which `core.DecodeLine`
+refuses (deferred.md, 2026-10-03); that one line is left out of the fixture. The daemon's one-shot
+reader skips a line it cannot decode, so the listing is unaffected.
