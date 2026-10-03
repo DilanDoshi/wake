@@ -441,6 +441,9 @@ var deliberatelyGeneric = wordSet([]string{
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",
+	// A command_lifecycle state (Event.MessageStarted), generic for "cancelled"'s
+	// reason: Wake spells it itself (core.TaskStarted, two json tags).
+	"started",
 
 	// init's subagent types. Generic for "model"'s reason: an agent is Wake's
 	// own subject, and core.SessionFacts.Agents keeps the spelling. Not a route

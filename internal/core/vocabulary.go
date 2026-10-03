@@ -749,3 +749,12 @@ func toolResultText(content json.RawMessage) string {
 func (e Event) MessageEnded() bool {
 	return e.Kind == KindMessageState && (e.Text == "completed" || e.Text == "cancelled")
 }
+
+// MessageStarted reports claude taking up a message Wake sent: into the running
+// turn at a tool boundary, or as a turn of its own (midturn-absent.jsonl:37,
+// midturn-later.jsonl:52).
+func (e Event) MessageStarted() bool { return e.Kind == KindMessageState && e.Text == "started" }
+
+// MessageCancelled reports a message that will never run: taken back before
+// claude took it up (midturn-cancel.jsonl:32), or the running one an interrupt ended.
+func (e Event) MessageCancelled() bool { return e.Kind == KindMessageState && e.Text == "cancelled" }
