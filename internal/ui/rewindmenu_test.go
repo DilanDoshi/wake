@@ -234,6 +234,14 @@ func TestTheChoicesNameAnotherAgentInTheDirectory(t *testing.T) {
 	if view := a.rewindView(160, "s1"); !strings.Contains(view, "@blair (working) also runs in this directory") {
 		t.Errorf("the choices do not warn about blair:\n%s", view)
 	}
+	manager := restoreApp(t, nil, rpc.StateWorking).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "alex", State: rpc.StateIdle, Cwd: restoreCwd},
+		{ID: "s3", Name: core.ManagerName, State: rpc.StateWorking, Cwd: restoreCwd},
+	}}})
+	manager = chooseOlder(t, manager, nil).observe("s1", previewOf("/work/repo/a.go"))
+	if view := manager.rewindView(160, "s1"); strings.Contains(view, core.ManagerName) {
+		t.Errorf("the manager, which has no tools to edit with, is named as sharing the directory:\n%s", view)
+	}
 	gone := restoreApp(t, nil, rpc.StateParked)
 	gone = chooseOlder(t, gone, nil).observe("s1", previewOf("/work/repo/a.go"))
 	if view := gone.rewindView(160, "s1"); strings.Contains(view, "blair") {
@@ -252,7 +260,7 @@ func TestARestoresReceiptsAreReported(t *testing.T) {
 		want string
 	}{
 		{"restored", restore(core.FilesRewind{Restorable: true}), "@alex's files were restored"},
-		{"restored past links", restore(core.FilesRewind{Restorable: true, Skipped: 2}), "2 linked files were left as they are"},
+		{"restored past links", restore(core.FilesRewind{Restorable: true, Skipped: 2}), "2 linked files left as they are"},
 		{"refused", restore(core.FilesRewind{Error: "No files were restored"}), "@alex's files were not restored: No files were restored"},
 		{"refused, both", restore(core.FilesRewind{Both: true, Error: "No files were restored"}),
 			"the conversation was left as it was"},

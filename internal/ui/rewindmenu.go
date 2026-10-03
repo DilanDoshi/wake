@@ -191,7 +191,7 @@ func (a App) restoreReported(sessionID string, f core.FilesRewind) App {
 		return a
 	}
 	if f.Skipped > 0 {
-		notice.Report("%s's files were restored · %d linked files were left as they are", who, f.Skipped)
+		notice.Report("%s's files were restored · %s left as they are", who, plural(f.Skipped, "linked file"))
 	} else {
 		notice.Report("%s's files were restored", who)
 	}
@@ -219,7 +219,7 @@ func (a App) restoreView(width int) string {
 	for i, act := range r.actions() {
 		label := rewindActionLabels[act]
 		if i == r.Cursor && r.Armed {
-			label = fmt.Sprintf("↵ again restores %d files · esc cancel", len(r.Preview.Files))
+			label = "↵ again restores " + plural(len(r.Preview.Files), "file") + " · esc cancel"
 		}
 		rows = append(rows, optionRow(label, width, i == r.Cursor, false, AccentStyle))
 	}
@@ -236,7 +236,7 @@ func restoreSummary(f core.FilesRewind) string {
 	case len(f.Files) == 0:
 		return "no file changes since this prompt"
 	}
-	return fmt.Sprintf("%d files would change · +%d −%d", len(f.Files), f.Insertions, f.Deletions)
+	return fmt.Sprintf("%s would change · +%d −%d", plural(len(f.Files), "file"), f.Insertions, f.Deletions)
 }
 
 // restoreFileRows lists the files a restore would change, relative to the
@@ -245,26 +245,28 @@ func restoreFileRows(files []string, cwd string, width int) []string {
 	rows := make([]string, 0, restoreFilesShown+1)
 	for i, path := range files {
 		if i == restoreFilesShown {
-			rows = append(rows, detailRow(fmt.Sprintf("  +%d more", len(files)-i), width))
+			rows = append(rows, detailRow(fmt.Sprintf("· +%d more", len(files)-i), width))
 			break
 		}
 		if rel, err := filepath.Rel(cwd, path); err == nil && cwd != "" && !strings.HasPrefix(rel, "..") {
 			path = rel
 		}
-		rows = append(rows, detailRow("  "+path, width))
+		rows = append(rows, detailRow("· "+path, width))
 	}
 	return rows
 }
 
 // sharedDirectory names the other live agents running in agent's directory,
-// whose edits a restore can put back too - working ones marked.
+// whose edits a restore can put back too - working ones marked. Not the
+// manager: it runs with no tools, so it has no edits to lose.
 func (a App) sharedDirectory(agent Agent) string {
 	if agent.Cwd == "" {
 		return ""
 	}
 	var names []string
 	for _, other := range a.fleet.Agents() {
-		if other.ID == agent.ID || other.Cwd != agent.Cwd || other.State == rpc.StateEnded || other.State == rpc.StateParked || other.State == rpc.StateOrphaned {
+		if other.ID == agent.ID || other.Cwd != agent.Cwd || other.Name == core.ManagerName ||
+			other.State == rpc.StateEnded || other.State == rpc.StateParked || other.State == rpc.StateOrphaned {
 			continue
 		}
 		name := agentPrefix + other.Name
