@@ -215,7 +215,15 @@ func removeLiveTranscript(t *testing.T, id string) {
 		}
 	}
 	// claude also makes an empty memory directory per project. os.Remove only
-	// ever takes an empty directory, so nothing the operator wrote can go.
+	// ever takes an empty directory, so nothing the operator wrote can go; the
+	// directory is the probe's own temp project's, so anything left is reported.
 	_ = os.Remove(filepath.Join(dir, "memory"))
-	_ = os.Remove(dir)
+	if err := os.Remove(dir); err != nil && !os.IsNotExist(err) {
+		left, _ := os.ReadDir(dir)
+		names := make([]string, 0, len(left))
+		for _, e := range left {
+			names = append(names, e.Name())
+		}
+		t.Errorf("the probe's project directory %s is left holding %v: %v", dir, names, err)
+	}
 }

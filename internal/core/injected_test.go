@@ -2,6 +2,7 @@ package core
 
 import (
 	"encoding/json"
+	"fmt"
 	"strings"
 	"testing"
 )
@@ -53,6 +54,15 @@ func marksOf(line []byte) (m userMarks, ok bool, err error) {
 	if err := json.Unmarshal(line, &m); err != nil {
 		return userMarks{}, false, err
 	}
+	// encoding/json reads a null as the zero value, so a mark claude starts
+	// writing as null would otherwise read as absent.
+	var raw map[string]json.RawMessage
+	_ = json.Unmarshal(line, &raw)
+	for _, key := range []string{"isMeta", "isSynthetic", "promptSource", "origin"} {
+		if string(raw[key]) == "null" {
+			return userMarks{}, false, fmt.Errorf("mark %s is null", key)
+		}
+	}
 	return m, true, nil
 }
 
@@ -102,7 +112,7 @@ func TestNoInjectedLineInTheCorpusIsTheOperatorsTurn(t *testing.T) {
 		check("stream", f, DecodeLine)
 	}
 	// Each mark on the wire that carries it, so neither half can go unasserted.
-	for _, want := range []string{"transcript isMeta", "transcript origin", "transcript system", "stream isSynthetic"} {
+	for _, want := range []string{"transcript isMeta", "transcript origin", "transcript system", "stream isSynthetic", "stream origin"} {
 		if seen[want] == 0 {
 			t.Errorf("no recorded %s line: this guard is asserting nothing about it", want)
 		}
@@ -134,8 +144,10 @@ func TestEachMarkAloneMakesALineInjected(t *testing.T) {
 			t.Errorf("%s: injected() = %v (ok=%v err=%v), want %v", line, m.injected(), ok, err, want)
 		}
 	}
-	if _, ok, err := marksOf([]byte(`{"type":"user","isMeta":"yes"}`)); ok || err == nil {
-		t.Error("a mark that changed type was read as unmarked rather than reported")
+	for _, changed := range []string{`{"type":"user","isMeta":"yes"}`, `{"type":"user","isMeta":null}`, `{"type":"user","origin":null}`} {
+		if _, ok, err := marksOf([]byte(changed)); ok || err == nil {
+			t.Errorf("%s: a mark that changed type was read as unmarked rather than reported", changed)
+		}
 	}
 }
 
