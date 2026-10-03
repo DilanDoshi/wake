@@ -17,8 +17,8 @@ import (
 // fakeRewind answers rewind_files and rewind_conversation the way 2.1.288 does
 // (rewind-files.jsonl, rewind-files-both.jsonl), and echoes every other line.
 // A restore aimed at "FAIL" is refused with the bare error claude sends, one
-// aimed at "SLOW" answers late, and a message saying "hold" starts a turn that
-// does not end.
+// aimed at "SLOW" answers late, one aimed at "NEVER" is never answered, and a
+// message saying "hold" starts a turn that does not end.
 func fakeRewind(sid string) int {
 	emitText(sid, "ready")
 	emitResult(sid)
@@ -27,6 +27,7 @@ func fakeRewind(sid string) int {
 		switch {
 		case strings.Contains(line, `"subtype":"rewind_files"`) && strings.Contains(line, `"dry_run":true`):
 			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"canRewind":true,"filesChanged":["/p/a.txt"],"insertions":1,"deletions":2}}}`+"\n", id)
+		case strings.Contains(line, `"subtype":"rewind_files"`) && strings.Contains(line, `"NEVER"`):
 		case strings.Contains(line, `"subtype":"rewind_files"`) && strings.Contains(line, `"FAIL"`):
 			fmt.Printf(`{"type":"control_response","response":{"subtype":"error","request_id":%q,"error":"No file checkpoint found for this message."}}`+"\n", id)
 		case strings.Contains(line, `"subtype":"rewind_files"`):
@@ -242,5 +243,47 @@ func TestBothHoldsTheAgentsInputUntilItsRestoreAnswers(t *testing.T) {
 		if f.Event != nil && strings.Contains(f.Event.Text, "after") && !conversation {
 			t.Fatal("the send reached stdin between both's restore and its conversation rewind")
 		}
+	}
+}
+
+// A turn Wake did not ask for - a background task's ending, a scheduled loop -
+// runs its tools with nothing owed. The refusal reads the state the report
+// draws, so a restore waits for that tool too.
+func TestARestoreIsRefusedWhileAnUnaskedTurnRunsATool(t *testing.T) {
+	a := newAgent("s1", "alex", "main", "/repo/api", "", nil, func() {})
+	if err := a.restoreRefusal(); err != nil {
+		t.Fatalf("an idle agent refused a restore: %v", err)
+	}
+	a.observe(core.Event{Kind: core.KindToolUse, Tool: &core.ToolCall{Name: "Write", Display: "a.go"}})
+	if err := a.restoreRefusal(); err == nil || !strings.Contains(err.Error(), "working") {
+		t.Fatalf("restoreRefusal = %v with a tool running on an unasked turn, want a refusal naming it working", err)
+	}
+}
+
+// A restore claude never answers frees the agent's input after a bound rather
+// than holding it - and every interrupt and stop queued behind it - for good.
+func TestARestoreThatIsNeverAnsweredFreesTheInput(t *testing.T) {
+	prev := restoreAnswerWait
+	restoreAnswerWait = 200 * time.Millisecond
+	t.Cleanup(func() { restoreAnswerWait = prev })
+	fakeClaudeOnPath(t, "rewind")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	c.awaitEvent(idAlpha, "ready")
+
+	c.send(rpc.Frame{Kind: rpc.FrameRewindBoth, SessionID: idAlpha, RewindTarget: "NEVER", RewindLastSeen: "S"})
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "after"})
+	if got := c.await("the restore's timeout", func(f rpc.Frame) bool { return f.Kind == rpc.FrameError }); !strings.Contains(got.Text, "did not answer") {
+		t.Errorf("error = %q, want it to say the restore went unanswered", got.Text)
+	}
+	c.awaitEvent(idAlpha, "after")
+	for _, f := range c.seen {
+		if isConversationReceipt(f) {
+			t.Fatal("the conversation was rewound over a restore nobody answered")
+		}
+	}
+	if got := stateOf(c.status(), idAlpha); got == rpc.StateSilent {
+		t.Errorf("an unanswered restore marked the agent %q: no write failed", got)
 	}
 }

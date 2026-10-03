@@ -8,6 +8,7 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -15,20 +16,28 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// restoreRefusal is why this agent's files may not be restored now, or nil.
-// Read under the lock on the input goroutine every send also goes through, so
-// a send queued ahead of a restore has already marked its turn owed: a restore
-// aimed from a window's stale idle never rewrites files under a running turn.
+// restoreAnswerWait bounds how long both holds this agent's input for its
+// restore's receipt. Claude answers every control request at once; the bound is
+// for one that never does, which would otherwise hold every interrupt and stop
+// queued behind it for good. A var so a test can shorten it.
+var restoreAnswerWait = 30 * time.Second
+
+// restoreRefusal is why this agent's files may not be restored now, or nil:
+// anything but the idle its report draws. Read under the lock on the input
+// goroutine every send also goes through, so a send queued ahead of a restore
+// has already marked its turn owed, and a turn nobody asked for counts by its
+// running tool - a restore aimed from a stale idle never lands mid-turn.
 func (a *agent) restoreRefusal() error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	switch {
-	case len(a.pending) > 0:
+	switch state := a.stateLocked(time.Now()); state {
+	case rpc.StateIdle:
+		return nil
+	case rpc.StateBlocked:
 		return errors.New("this session is stopped on a permission request; answer or withdraw it before restoring its files")
-	case a.owed:
-		return errors.New("this session is working; let its turn end, or interrupt it, before restoring its files")
+	default:
+		return fmt.Errorf("this session is %s; let its turn end, or interrupt it, before restoring its files", state)
 	}
-	return nil
 }
 
 // rewindFiles writes the preview or restore p's frame names. The id is minted
@@ -56,23 +65,30 @@ func (a *agent) rewindFiles(p pending) error {
 	if answered == nil {
 		return nil
 	}
-	return a.rewindAfterRestore(answered, f)
+	return a.rewindAfterRestore(p, id, answered)
 }
 
 // rewindAfterRestore is both's second half. It runs on the input goroutine,
 // so nothing queued behind both reaches stdin between the restore and the
 // conversation rewind, and it rewinds only once the restore has succeeded: a
 // rewound conversation over files that were not put back is a known-wrong state.
-func (a *agent) rewindAfterRestore(answered <-chan core.Event, f rpc.Frame) error {
+func (a *agent) rewindAfterRestore(p pending, id string, answered <-chan core.Event) error {
 	select {
 	case ev := <-answered:
 		if !ev.Files.Restorable || ev.Files.Error != "" {
 			return nil // the receipt already told every window
 		}
 	case <-a.gone:
+		_ = a.takeRestore(id)
+		return nil
+	case <-time.After(restoreAnswerWait):
+		// Refused rather than returned: a silent answer is not a failed write,
+		// so it must not read the agent unreachable.
+		_ = a.takeRestore(id)
+		a.refuse(p, fmt.Errorf("claude did not answer the file restore within %s; the conversation was left as it was", restoreAnswerWait))
 		return nil
 	}
-	if _, err := a.sess.Rewind(f.RewindTarget, f.RewindLastSeen); err != nil {
+	if _, err := a.sess.Rewind(p.frame.RewindTarget, p.frame.RewindLastSeen); err != nil {
 		return fmt.Errorf("the files were restored but the conversation was not rewound: %w", err)
 	}
 	return nil

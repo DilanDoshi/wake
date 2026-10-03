@@ -3633,10 +3633,18 @@ rewind — nothing queued behind both, another window's send included, reaches s
 halves (Codex adversarial review). The reverse failure (files back, conversation refused) is reported
 as exactly that.
 
-**Ruling 4a — the daemon refuses a restore mid-turn.** The UI gates on idle, but a send from another
-window can be applied first; it marks the turn owed under the agent's lock, and `restoreRefusal`
-reads that lock on the same input goroutine before either restore is written. A restore never
-rewrites files under a running turn.
+**Ruling 4a — the daemon refuses a restore unless the agent reads idle.** The UI gates on idle, but a
+send from another window can be applied first; it marks the turn owed under the agent's lock, and
+`restoreRefusal` reads the same `stateLocked` the report draws — owed, an ask, or a tool running on a
+turn nobody asked for — on the same input goroutine, before either restore is written. Both's wait
+for its restore's receipt is bounded (`restoreAnswerWait`): claude answers at once, and an answer that
+never comes must not hold every interrupt queued behind it. Both kept by the second Codex pass.
+
+**Declined from that pass.** (1) Both rewinds the conversation after a restore that skipped linked
+files: Claude Code's own "Restore code and conversation" does the same with a "skipped N files"
+warning, and Wake's notice names the count. (2) A restore is not re-checked against the transcript tip
+the preview saw: it needs another window to finish a whole turn before this window folds the status
+push that closes its picker, and the fix is a transcript read on the agent's input goroutine.
 
 **Ruling 5 — restoring code is armed.** First ↵ arms, second restores; `App.disarmed` takes the arm
 back on any input, mouse included, and esc takes it back before it leaves the step. The cue is drawn

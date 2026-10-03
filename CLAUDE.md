@@ -200,8 +200,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   ↵ on a prompt previews its files (`FrameRewindPreview`, a `rewind_files` dry run, answered to the
   asking window only); the second step offers restore conversation / code and conversation / code /
   never mind, the code ones only when the preview names files. Code is armed (↵ arms, ↵ restores,
-  `App.disarmed` takes it back). The daemon refuses a restore while a turn is owed; both holds the
-  agent's input, restores files first and rewinds the conversation only on the restore's success.
+  `App.disarmed` takes it back). The daemon refuses a restore unless the agent reads idle; both holds
+  the agent's input, restores files first and rewinds the conversation only on the restore's success.
   `internal/ui/rewindmenu.go`, `internal/daemon/rewindfiles.go`.
 
 **Layout, mouse, selection**
