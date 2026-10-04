@@ -234,25 +234,26 @@ func (a *agent) replyKindLocked(ev core.Event) probeKind {
 	return notProbe
 }
 
-// confirmModelLocked records the level a /model reply names, and the model
-// beside it, reporting whether the level parsed. Requiring the (effort: …)
-// clause as well as the "Current model:" prefix keeps a coincidental line - a
-// with-argument /effort's own confirmation, say - from being recorded as one.
-// A real turn whose prose merely begins "Current model:" still has that block
+// confirmModelLocked records what a /model reply names - the level when it
+// carries the (effort: …) clause, the model when core reads the reply as one -
+// reporting whether either was recorded. A session with no level set replies
+// with no clause, so its model is confirmed alone (bare-model-no-effort.jsonl).
+// core keeps a coincidental "Current model:" line from counting as a reply. A
+// real turn whose prose merely begins "Current model:" still has that block
 // suppressed by absorbProbe's content match - a pre-existing limit the
 // LocalCommand gate on the end does not address. The caller holds a.mu.
 func (a *agent) confirmModelLocked(text string) bool {
-	lvl, ok := core.EffortFromModelReply(text)
-	if !ok {
-		return false
+	lvl, effort := core.EffortFromModelReply(text)
+	if effort {
+		a.confirmedEffort = lvl
 	}
-	a.confirmedEffort = lvl
 	// The same reply names the model; read it back for the status bar so a
 	// runtime /model shows at once rather than at the next turn's init.
-	if model, ok := core.ModelFromModelReply(text); ok {
+	model, named := core.ModelFromModelReply(text)
+	if named {
 		a.confirmedModel = model
 	}
-	return true
+	return effort || named
 }
 
 // firstInit reports whether ev is this session's init and no probe has fired

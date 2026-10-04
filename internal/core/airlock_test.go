@@ -771,6 +771,10 @@ var notWireVocabulary = wordSet([]string{
 	// Wake matches on, not wire words.
 	"[", "]", ":",
 
+	// The backticks a live /model reply wraps its model name in, which
+	// ModelFromModelReply trims. Punctuation Wake matches on.
+	"`",
+
 	// localreply.go's delimiter and pattern: a /list-agents row's column
 	// separator and a section header's title and count. Punctuation and
 	// Wake's construction; the phrases are policed.
@@ -1055,14 +1059,12 @@ var notInTheCorpus = map[string]string{
 	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
 	"stop_task":                   "outbound only; a recording of stdout cannot contain it",
 
-	// The run record's own two keys with no counterpart on the stream: the
-	// start time (task_progress carries only elapsed usage, never a start
-	// clock) and the snapshot wrapper's camelCase spelling (contrast the
-	// recorded workflow_progress, its snake_case sibling on task_progress).
-	// Both are hand-trimmed into workflow_test.go's runRecordFixture (task
-	// wsmc7r0xw, workflow-failed.jsonl) rather than recorded as a testdata/
-	// file of its own.
-	"startTime":        "recorded only in workflow_test.go's runRecordFixture, not testdata/",
+	// The run record's snapshot wrapper, its camelCase spelling with no
+	// counterpart on the stream (contrast the recorded workflow_progress, its
+	// snake_case sibling on task_progress), hand-trimmed into workflow_test.go's
+	// runRecordFixture (task wsmc7r0xw, workflow-failed.jsonl) rather than
+	// recorded as a testdata/ file of its own. Its sibling startTime is recorded
+	// now: an on-disk cost-state record spells it too (model-reply-*.jsonl).
 	"workflowProgress": "recorded only in workflow_test.go's runRecordFixture, not testdata/",
 }
 

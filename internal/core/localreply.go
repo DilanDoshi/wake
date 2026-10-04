@@ -48,6 +48,10 @@ func IsModelReply(text string) bool {
 	return strings.HasPrefix(strings.TrimSpace(text), modelReplyPrefix)
 }
 
+// modelNameQuote wraps the name in a live /model reply, the clause or no
+// clause after it (bare-model-effort.jsonl, bare-model-no-effort.jsonl).
+const modelNameQuote = "`"
+
 // ModelFromModelReply reads the model's display name out of a /model reply, or
 // reports false when the text is not one.
 //
@@ -56,6 +60,10 @@ func IsModelReply(text string) bool {
 // runtime /model the id on the wire is a turn stale, and this is read back at
 // once by re-probing. The name may carry its own parentheses, so the effort
 // clause is removed by pattern rather than by cutting at the first "(".
+//
+// Beside the prefix, a reply is known by its name in backticks - a shape no
+// agent's prose takes - or, in the older shape without them (bare-model.jsonl),
+// by a valid effort clause, so a line an agent wrote is not read as one.
 func ModelFromModelReply(text string) (string, bool) {
 	if !IsModelReply(text) {
 		return "", false
@@ -66,10 +74,15 @@ func ModelFromModelReply(text string) (string, bool) {
 	}
 	line = strings.TrimSpace(strings.TrimPrefix(line, modelReplyPrefix))
 	line = strings.TrimSpace(effortClause.ReplaceAllString(line, ""))
-	if line == "" {
-		return "", false
+	name, opened := strings.CutPrefix(line, modelNameQuote)
+	name, closed := strings.CutSuffix(name, modelNameQuote)
+	if opened && closed && name != "" {
+		return name, true
 	}
-	return line, true
+	if _, effort := EffortFromModelReply(text); effort && !opened && line != "" {
+		return line, true
+	}
+	return "", false
 }
 
 // EffortFromModelReply reads the reasoning level out of a /model reply, or

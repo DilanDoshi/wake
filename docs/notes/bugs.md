@@ -750,6 +750,26 @@ figure instead of drawing a level at or above its own window.
 
 ---
 
+## BUG-44 — the confirmed model wore backticks, and a session with no effort set never got one
+
+**Seen 2026-10-03** while recording the manager relay; checked by fable wake against the owner's own
+transcripts. Since claude 2.1.28x a bare `/model` replies `Current model: \`Opus 5.5 (1M context)\`
+(effort: xhigh)`, the name in backticks (`testdata/stream/bare-model-effort.jsonl`). `ModelFromModelReply`
+trimmed the prefix and the clause but not the backticks, so every confirmed model - the name the status
+bar prefers - carried them. A session with no level set replies with no clause at all
+(`bare-model-no-effort.jsonl`), and `confirmModelLocked` required the clause, so it never confirmed
+the model either.
+
+**Fix (`localreply.go`'s `ModelFromModelReply`, `probe.go`'s `confirmModelLocked`).** The backtick pair is
+trimmed. A reply is known by its name in backticks, or in the older shape by a valid clause, so the
+model is confirmed with no level and the level only with its clause.
+
+**Not a bug, now pinned:** a probe's reply on disk is a `system/local_command` record the transcript
+decoder drops whole, with or without the clause (`testdata/transcript/model-reply-*.jsonl`), so it never
+restores as speech.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

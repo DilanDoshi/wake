@@ -408,3 +408,20 @@ func TestTheProbeConfirmsTheModelAfterAModelChange(t *testing.T) {
 		}
 	}
 }
+
+// A session with no level set gets a reply with no effort clause, but its name
+// in backticks (bare-model-no-effort.jsonl) - a shape no agent's prose takes -
+// so the probe still confirms the model and publishes it; there is no level to
+// confirm.
+func TestAbsorbProbeConfirmsTheModelWithNoEffortClause(t *testing.T) {
+	a := effortAgent(t)
+	a.incProbe(modelProbe)
+
+	suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: `Opus 5.5 (default)`\nUsage: /model <name>."})
+	if !suppress || answered != modelProbe {
+		t.Fatalf("the reply must be suppressed and publish the model: suppress=%v answered=%v", suppress, answered)
+	}
+	if a.confirmedModel != "Opus 5.5 (default)" || a.confirmedEffort != "" {
+		t.Fatalf("confirmed model=%q effort=%q, want the model alone", a.confirmedModel, a.confirmedEffort)
+	}
+}

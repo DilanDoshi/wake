@@ -203,13 +203,12 @@ func liveHistory(r io.Reader, id string, active map[string]bool) ([]core.Event, 
 // probeLine reports whether a restored event is a probe's own: its bare command,
 // or a reply only that command produces.
 //
-// The harmful half - the reply, which reads as an agent turn and names the
-// level - is matched on its own shape, not on the command line above it: the
-// on-disk form of a slash command is not pinned by any transcript fixture
-// (Claude may wrap it), so matching the command is best-effort, but the reply
-// is Claude's own rendered line and only a /model produces it. An operator's
-// /model is intercepted by internal/ui and never sent, so any such line on disk
-// is a probe's. See docs/live-testing.md for the fixture this still owes.
+// The reply is on disk as a system/local_command record, which core drops
+// whole, with or without the effort clause (testdata/transcript/model-reply-*.jsonl),
+// so the assistant arm is belt and braces for an older shape. It matches the
+// reply on its own shape: Claude's rendered line, which only a /model produces.
+// An operator's /model is intercepted by internal/ui and never sent, so any such
+// line on disk is a probe's.
 //
 // A /rename needs no arm: core already drops every line of its recorded on-disk
 // form (testdata/transcript/rename.jsonl), Wake's probe and the operator's alike.

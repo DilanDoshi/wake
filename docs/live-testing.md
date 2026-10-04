@@ -833,23 +833,19 @@ its keystrokes.
 - [ ] **A narrow terminal.** 80 columns: the detail column truncates — does a row still identify
       its agent, and does the key line survive?
 
-## The effort probe — one recording is owed
+## The effort probe
 
-The daemon confirms a session's effort by sending a bare `/model` and reading `Current model: …
-(effort: …)` out of the reply, then suppressing that reply so it never shows. The live half is
-proven against `testdata/stream/bare-model.jsonl`. The **on-disk** half is not: no fixture in
-`testdata/transcript/` records how Claude persists a `/model` command and its reply, so
-`internal/daemon/history.go`'s filter drops the reply on the reply's own shape (robust) and the
-command line only best-effort (it may be wrapped on disk). Two things a real session settles:
+The daemon confirms a session's effort, and its model, by sending a bare `/model` and reading
+`Current model: \`…\` (effort: …)` out of the reply, then suppressing that reply so it never
+shows. Both halves are recorded: the live reply with and without the clause
+(`testdata/stream/bare-model-effort.jsonl`, `bare-model-no-effort.jsonl`), and the on-disk form, a
+`system/local_command` record the transcript decoder drops whole
+(`testdata/transcript/model-reply-*.jsonl`, `TestARecordedModelReplyOnDiskRestoresAsNothing`).
+What only a person can see:
 
-- [ ] **Spawn an agent at a non-default effort, let Wake probe it, then reopen the conversation.**
-      The `Current model: … (effort: …)` line must **not** appear in the restored transcript, and no
-      `✻`/agent turn should show it. If it does, the disk filter missed the reply's shape — capture
-      the raw `~/.claude/projects/…/<uuid>.jsonl` around the probe and add it as a
-      `testdata/transcript/` fixture.
-- [ ] **The status bar shows the confirmed level within a moment of spawn**, on the room (for the
-      `@`-agent you are addressing, or the manager) and in a DM. A default-effort agent should still
-      show a level once probed — that is the whole point.
+- [ ] **The status bar shows the confirmed model and level within a moment of spawn**, on the room
+      (for the `@`-agent you are addressing, or the manager) and in a DM, with no backticks around
+      the model's name. An agent with no level set should still show its model once probed.
 
 ## The /mcp menu — a real sign-in is owed
 
