@@ -238,12 +238,11 @@ func (a *agent) replyKindLocked(ev core.Event) probeKind {
 // carries the (effort: …) clause, the model when core reads the reply as one -
 // reporting whether either was recorded. Only a local command's reply counts,
 // as every recorded one is (bare-model*.jsonl), so an agent's own prose that
-// opens "Current model:" confirms nothing. A reply naming a model with no level
-// says the session has none now (bare-model-no-effort.jsonl), so an earlier
-// confirmed level is dropped. A real turn whose prose merely begins "Current
-// model:" still has that block suppressed by absorbProbe's content match - a
-// pre-existing limit the LocalCommand gate on the end does not address. The
-// caller holds a.mu.
+// opens "Current model:" confirms nothing. A reply with no clause
+// (bare-model-no-effort.jsonl) confirms the model and leaves the level as it
+// was. A real turn whose prose merely begins "Current model:" still has that
+// block suppressed by absorbProbe's content match - a pre-existing limit the
+// LocalCommand gate on the end does not address. The caller holds a.mu.
 func (a *agent) confirmModelLocked(ev core.Event) bool {
 	if !ev.LocalCommand {
 		return false
@@ -252,11 +251,8 @@ func (a *agent) confirmModelLocked(ev core.Event) bool {
 	// The same reply names the model; read it back for the status bar so a
 	// runtime /model shows at once rather than at the next turn's init.
 	model, named := core.ModelFromModelReply(ev.Text)
-	switch {
-	case effort:
+	if effort {
 		a.confirmedEffort = lvl
-	case named:
-		a.confirmedEffort = ""
 	}
 	if named {
 		a.confirmedModel = model

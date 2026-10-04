@@ -437,17 +437,3 @@ func TestAgentProseWithAQuotedNameConfirmsNothing(t *testing.T) {
 		t.Fatalf("agent prose confirmed model=%q effort=%q, want neither", a.confirmedModel, a.confirmedEffort)
 	}
 }
-
-// A reply with no clause says the session has no level now, so a level an
-// earlier reply confirmed does not outlive it on the report.
-func TestAReplyWithNoClauseClearsAConfirmedLevel(t *testing.T) {
-	a := effortAgent(t)
-	a.incProbe(modelProbe)
-	a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: `Opus 5.5 (default)` (effort: xhigh)", LocalCommand: true})
-	a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true})
-	a.incProbe(modelProbe)
-	a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: `Opus 5.5 (default)`", LocalCommand: true})
-	if a.confirmedEffort != "" || a.confirmedModel != "Opus 5.5 (default)" {
-		t.Fatalf("confirmed model=%q effort=%q, want the model and no level", a.confirmedModel, a.confirmedEffort)
-	}
-}
