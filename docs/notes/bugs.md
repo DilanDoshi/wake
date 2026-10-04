@@ -724,6 +724,32 @@ opens with a markdown heading, as `/context`'s does. The same predicate sends it
 
 ---
 
+## BUG-43 — a conversation's `ctx:` read 0% for one turn on a 1M session — PARKED, not reproduced
+
+**Reported 2026-10-03** by the owner: a conversation's status bar showed `ctx:0%` on a
+`claude-opus-5-5[1m]` agent, then read correctly again after its next turn. The daemon's report
+held 1,000,000 / 627,155 for that session (≈ `ctx:37%`) once the owner asked. The turn before the 0%
+had ended on a network failure (`ENOTFOUND`, after claude's own retries); it may or may not be related.
+
+**What is known.** `contextLeft` reads 0% only when the level is ≥ 99% of the window. The session never
+held more than ~640k, so the window the bar held must have been under that. The only writers of
+`ContextWindow`/`ContextTokens` are a result frame's facts (`resultFacts`: `modelUsage`'s window,
+`usage.iterations`' last element) and the daemon's report built from the same frames. Result frames
+are not kept on disk, so the frame that set it cannot be read back.
+
+**Ruled out, each recorded under the owner's permission (scratch takes, not in the corpus):**
+- A subagent's smaller-window model: `modelUsage` keeps every model the epoch used, and the largest wins.
+- A mid-turn API failure (proxy cut after two tool round-trips), retries off and on, on haiku and on
+  `opus[1m]`: the error result still carries `iterations` with the last good call, and the 1M window.
+- Mid-turn deliveries (steer's 30 recordings on `feat/steer-mid-turn`): every result sane.
+- The API omitting `iterations`: all 850 real assistant usages in that session carry it.
+
+**Parked by the owner, 2026-10-03.** The design not built: the daemon logs a result's figures (model
+keys, windows, level) when one leaves a session at or past its window, and the bar keeps its last sane
+figure instead of drawing a level at or above its own window.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
