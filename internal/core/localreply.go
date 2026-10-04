@@ -61,9 +61,10 @@ const modelNameQuote = "`"
 // once by re-probing. The name may carry its own parentheses, so the effort
 // clause is removed by pattern rather than by cutting at the first "(".
 //
-// Beside the prefix, a reply is known by its name in backticks - a shape no
-// agent's prose takes - or, in the older shape without them (bare-model.jsonl),
-// by a valid effort clause, so a line an agent wrote is not read as one.
+// Beside the prefix, a reply is known by one name in backticks, or in the older
+// shape without them (bare-model.jsonl) by a valid effort clause. That is shape
+// alone; that the line is Claude's own reply is the caller's to know - the
+// daemon reads only a local command's (confirmModelLocked).
 func ModelFromModelReply(text string) (string, bool) {
 	if !IsModelReply(text) {
 		return "", false
@@ -76,7 +77,7 @@ func ModelFromModelReply(text string) (string, bool) {
 	line = strings.TrimSpace(effortClause.ReplaceAllString(line, ""))
 	name, opened := strings.CutPrefix(line, modelNameQuote)
 	name, closed := strings.CutSuffix(name, modelNameQuote)
-	if opened && closed && name != "" {
+	if name = strings.TrimSpace(name); opened && closed && name != "" && !strings.Contains(name, modelNameQuote) {
 		return name, true
 	}
 	if _, effort := EffortFromModelReply(text); effort && !opened && line != "" {

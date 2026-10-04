@@ -40,6 +40,11 @@ func TestModelFromModelReply(t *testing.T) {
 		{"the live reply, no effort", "Current model: `Opus 5.5 (default)`\nUsage: /model <name>.", "Opus 5.5 (default)", true},
 		// Neither the backticks nor the clause: a line an agent wrote, not a probe's.
 		{"a bare name with no clause", "Current model: is the phrase this agent chose to open with", "", false},
+		{"an unterminated quote", "Current model: `Opus 5.5", "", false},
+		{"a blank quoted name", "Current model: ` `", "", false},
+		{"two quoted spans", "Current model: `a` and `b`", "", false},
+		{"a quoted name, a level this build does not know", "Current model: `Opus 5.5` (effort: bogus)", "Opus 5.5", true},
+		{"a bare name, a level this build does not know", "Current model: Opus 5.5 (effort: bogus)", "", false},
 		{"the prefix and nothing else", "Current model:", "", false},
 		{"empty", "", "", false},
 	} {
@@ -255,6 +260,9 @@ func TestARecordedModelReplyOnDiskRestoresAsNothing(t *testing.T) {
 			evs, err := DecodeTranscriptLine([]byte(line))
 			if err != nil {
 				t.Fatalf("%s:%d: %v", fixture, n+1, err)
+			}
+			if strings.Contains(line, modelReplyPrefix) && len(evs) != 0 {
+				t.Errorf("%s:%d restored the probe's reply as %d events: %+v", fixture, n+1, len(evs), evs)
 			}
 			for _, ev := range evs {
 				if strings.Contains(ev.Text, modelReplyPrefix) {

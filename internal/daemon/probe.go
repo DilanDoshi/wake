@@ -189,7 +189,7 @@ func (a *agent) absorbProbe(ev core.Event) (suppress bool, answered probeKind) {
 		// closed, so its counter never came back down and stuck every later
 		// turn's own end under a window nothing could legitimately claim again.
 		a.swallowTurnEnd = kind
-		if kind == modelProbe && !a.confirmModelLocked(ev.Text) {
+		if kind == modelProbe && !a.confirmModelLocked(ev) {
 			return true, notProbe
 		}
 		return true, kind
@@ -236,20 +236,28 @@ func (a *agent) replyKindLocked(ev core.Event) probeKind {
 
 // confirmModelLocked records what a /model reply names - the level when it
 // carries the (effort: …) clause, the model when core reads the reply as one -
-// reporting whether either was recorded. A session with no level set replies
-// with no clause, so its model is confirmed alone (bare-model-no-effort.jsonl).
-// core keeps a coincidental "Current model:" line from counting as a reply. A
-// real turn whose prose merely begins "Current model:" still has that block
-// suppressed by absorbProbe's content match - a pre-existing limit the
-// LocalCommand gate on the end does not address. The caller holds a.mu.
-func (a *agent) confirmModelLocked(text string) bool {
-	lvl, effort := core.EffortFromModelReply(text)
-	if effort {
-		a.confirmedEffort = lvl
+// reporting whether either was recorded. Only a local command's reply counts,
+// as every recorded one is (bare-model*.jsonl), so an agent's own prose that
+// opens "Current model:" confirms nothing. A reply naming a model with no level
+// says the session has none now (bare-model-no-effort.jsonl), so an earlier
+// confirmed level is dropped. A real turn whose prose merely begins "Current
+// model:" still has that block suppressed by absorbProbe's content match - a
+// pre-existing limit the LocalCommand gate on the end does not address. The
+// caller holds a.mu.
+func (a *agent) confirmModelLocked(ev core.Event) bool {
+	if !ev.LocalCommand {
+		return false
 	}
+	lvl, effort := core.EffortFromModelReply(ev.Text)
 	// The same reply names the model; read it back for the status bar so a
 	// runtime /model shows at once rather than at the next turn's init.
-	model, named := core.ModelFromModelReply(text)
+	model, named := core.ModelFromModelReply(ev.Text)
+	switch {
+	case effort:
+		a.confirmedEffort = lvl
+	case named:
+		a.confirmedEffort = ""
+	}
 	if named {
 		a.confirmedModel = model
 	}

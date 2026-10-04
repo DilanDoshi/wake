@@ -761,8 +761,10 @@ bar prefers - carried them. A session with no level set replies with no clause a
 the model either.
 
 **Fix (`localreply.go`'s `ModelFromModelReply`, `probe.go`'s `confirmModelLocked`).** The backtick pair is
-trimmed. A reply is known by its name in backticks, or in the older shape by a valid clause, so the
-model is confirmed with no level and the level only with its clause.
+trimmed. A reply is known by one name in backticks, or in the older shape by a valid clause, and only a
+local command's reply is read - every recorded one is - so an agent's own prose that opens
+"Current model:" confirms nothing (both reviews). The model is confirmed with no level, the level only
+with its clause, and a reply with no level drops an earlier confirmed one.
 
 **Not a bug, now pinned:** a probe's reply on disk is a `system/local_command` record the transcript
 decoder drops whole, with or without the clause (`testdata/transcript/model-reply-*.jsonl`), so it never

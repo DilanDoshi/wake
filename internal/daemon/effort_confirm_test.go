@@ -106,7 +106,7 @@ func TestAbsorbProbeSuppressesReplyAndRecordsEffort(t *testing.T) {
 	}
 
 	// The reply: suppressed, level recorded, one publish.
-	suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)"})
+	suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)", LocalCommand: true})
 	if !suppress || answered != modelProbe {
 		t.Fatalf("the reply must be suppressed and publish the effort: suppress=%v answered=%v", suppress, answered)
 	}
@@ -139,7 +139,7 @@ func TestAbsorbProbeSuppressesBothOfTwoOverlappingProbes(t *testing.T) {
 	a.incProbe(modelProbe) // two /model sends went out before either answered
 
 	reply := func(level string) {
-		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: " + level + ")"}); !suppress {
+		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: " + level + ")", LocalCommand: true}); !suppress {
 			t.Fatalf("a probe reply (effort %s) leaked to clients", level)
 		}
 		if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true}); !suppress {
@@ -251,7 +251,7 @@ func TestAbsorbProbeSwallowsTheProbesOwnEndEvenWhenARealTurnHasStarted(t *testin
 	a := effortAgent(t)
 	a.incProbe(modelProbe)
 
-	if suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: high)"}); !suppress || answered != modelProbe {
+	if suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: high)", LocalCommand: true}); !suppress || answered != modelProbe {
 		t.Fatalf("the probe's own reply was not suppressed and published: suppress=%v answered=%v", suppress, answered)
 	}
 
@@ -290,7 +290,7 @@ func TestAbsorbProbeDoesNotEatARealTurnThatLooksLikeAProbeReply(t *testing.T) {
 
 	// The real turn's assistant frame happens to start "Current model:", so it
 	// arms the window and is (pre-existing) suppressed.
-	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: is the phrase this agent chose to open with"}); !suppress {
+	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: is the phrase this agent chose to open with", LocalCommand: true}); !suppress {
 		t.Fatal("a Current-model-shaped assistant frame did not arm the window")
 	}
 	a.owed = true // it is a real inference turn, in flight
@@ -302,7 +302,7 @@ func TestAbsorbProbeDoesNotEatARealTurnThatLooksLikeAProbeReply(t *testing.T) {
 	}
 
 	// The actual probe's reply and its local-command end still confirm cleanly.
-	if suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)"}); !suppress || answered != modelProbe {
+	if suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: Opus 5 (effort: max)", LocalCommand: true}); !suppress || answered != modelProbe {
 		t.Fatalf("the real probe reply did not confirm after the look-alike: suppress=%v answered=%v", suppress, answered)
 	}
 	if suppress, _ := a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "probe end", LocalCommand: true}); !suppress {
@@ -322,7 +322,7 @@ func TestAbsorbProbeClosesTheWindowOnAnUnrecognizedReply(t *testing.T) {
 	a := effortAgent(t)
 	a.incProbe(modelProbe)
 
-	suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: something this build does not recognise"})
+	suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: something this build does not recognise", LocalCommand: true})
 	if !suppress {
 		t.Fatal("an unrecognized /model reply was not suppressed")
 	}
@@ -417,11 +417,37 @@ func TestAbsorbProbeConfirmsTheModelWithNoEffortClause(t *testing.T) {
 	a := effortAgent(t)
 	a.incProbe(modelProbe)
 
-	suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: `Opus 5.5 (default)`\nUsage: /model <name>."})
+	suppress, answered := a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: `Opus 5.5 (default)`\nUsage: /model <name>.", LocalCommand: true})
 	if !suppress || answered != modelProbe {
 		t.Fatalf("the reply must be suppressed and publish the model: suppress=%v answered=%v", suppress, answered)
 	}
 	if a.confirmedModel != "Opus 5.5 (default)" || a.confirmedEffort != "" {
 		t.Fatalf("confirmed model=%q effort=%q, want the model alone", a.confirmedModel, a.confirmedEffort)
+	}
+}
+
+// The model and level are read only off a local command's reply - every recorded
+// one is (bare-model*.jsonl) - so an agent's own prose that opens with a quoted
+// name while a probe is in flight confirms nothing.
+func TestAgentProseWithAQuotedNameConfirmsNothing(t *testing.T) {
+	a := effortAgent(t)
+	a.incProbe(modelProbe)
+	a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: `Sonnet` (effort: low)"})
+	if a.confirmedModel != "" || a.confirmedEffort != "" {
+		t.Fatalf("agent prose confirmed model=%q effort=%q, want neither", a.confirmedModel, a.confirmedEffort)
+	}
+}
+
+// A reply with no clause says the session has no level now, so a level an
+// earlier reply confirmed does not outlive it on the report.
+func TestAReplyWithNoClauseClearsAConfirmedLevel(t *testing.T) {
+	a := effortAgent(t)
+	a.incProbe(modelProbe)
+	a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: `Opus 5.5 (default)` (effort: xhigh)", LocalCommand: true})
+	a.absorbProbe(core.Event{Kind: core.KindTurnEnd, Text: "done", LocalCommand: true})
+	a.incProbe(modelProbe)
+	a.absorbProbe(core.Event{Kind: core.KindAssistantText, Text: "Current model: `Opus 5.5 (default)`", LocalCommand: true})
+	if a.confirmedEffort != "" || a.confirmedModel != "Opus 5.5 (default)" {
+		t.Fatalf("confirmed model=%q effort=%q, want the model and no level", a.confirmedModel, a.confirmedEffort)
 	}
 }
