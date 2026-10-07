@@ -585,6 +585,9 @@ func sealRows(s string) string {
 		}
 		if open = styleOn(row); open != "" {
 			end := len(strings.TrimRight(row, " "))
+			if paintsTrailingBlank(row) { // a painted blank is the span's own
+				end = len(row)
+			}
 			row = row[:end] + sgrReset + row[end:]
 		}
 		rows[i] = row

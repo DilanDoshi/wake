@@ -808,7 +808,8 @@ at the row's end, so such a row read as sealed; `reflowProse`'s rewrap repairs l
 its last escape first (`trimRightCells` keeps every escape, in order, so the row keeps its cell count).
 A row whose trailing blank is drawn with a background or in reverse keeps its blanks where they are:
 chroma's catppuccin themes paint a diff fence's `+`/`-` lines, the line's own trailing spaces included,
-and a blank a terminal shows is text (Codex's review; `paintsTrailingBlank`, `sgrPaint`). Guards
+and a blank a terminal shows is text (Codex's review; `paintsTrailingBlank`, `sgrPaint`); for the same
+reason `sealRows` closes a painted span still open at a row's end after its blanks, not before them. Guards
 (`padstyle_test.go`): `TestAWrappedStyledSpanNeverStylesThePadding` (twelve shapes, every width from the
 floor to the widest shape's longest line, no trailing blank drawn with any style on),
 `TestADiffFenceKeepsItsOwnTrailingBlanks`, and `TestParkPaddingKeepsTheRowsCells`. `trimRightCells`,

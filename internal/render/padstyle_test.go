@@ -118,3 +118,19 @@ func TestADiffFenceKeepsItsOwnTrailingBlanks(t *testing.T) {
 		}
 	}
 }
+
+// TestAnOpenPaintedSpanIsClosedAfterItsBlanks: a background or reverse span still
+// open at a row's end paints the row's trailing blanks, so it closes after them;
+// any other open span closes at its text.
+func TestAnOpenPaintedSpanIsClosedAfterItsBlanks(t *testing.T) {
+	for _, c := range []struct{ open, first string }{
+		{"\x1b[44m", "\x1b[44mword  " + sgrReset},
+		{"\x1b[7m", "\x1b[7mword  " + sgrReset},
+		{"\x1b[4m", "\x1b[4mword" + sgrReset + "  "},
+	} {
+		want := c.first + "\n" + c.open + "next" + sgrReset
+		if got := sealRows(c.open + "word  \nnext"); got != want {
+			t.Errorf("sealRows(%q):\n got %q\nwant %q", c.open+"word  \nnext", got, want)
+		}
+	}
+}
