@@ -6,7 +6,7 @@
 // carries the reason it lives behind the airlock rather than in the renderer
 // that consumes it.
 //
-// The airlock is these five files and nothing else in Wake knows Claude
+// The airlock is these six files and nothing else in Wake knows Claude
 // Code's stream-json format:
 //
 //	protocol.go    decoding - one wire line in, core.Events out
@@ -14,6 +14,7 @@
 //	vocabulary.go  Claude's words resolved into Wake's
 //	encode.go      the frames Wake writes back
 //	localreply.go  the text replies of local commands Wake parses
+//	control.go     control requests Wake writes, and their receipts
 //
 // internal/core/airlock_test.go enforces that over the whole tree and reads
 // the same list. protocol.go's header carries the full rule.
@@ -637,6 +638,17 @@ func isLocalCommandPlumbing(s string) bool {
 		(strings.HasPrefix(t, "<local-command-caveat>") && strings.HasSuffix(t, "</local-command-caveat>"))
 }
 
+// isAgentMessage reports whether user string content carries the envelope a
+// subagent's message to this session arrives in - its SubagentHandback report
+// (subagent-handback.jsonl), the job <task-notification> did before it - which
+// is claude's note, never the operator's turn. Asked only of a frame claude
+// marked isSynthetic, so a typed turn quoting it stays typed; on disk the line
+// is isMeta, which decodeTranscript's fail-safe drops.
+func isAgentMessage(s string) bool {
+	open := strings.Index(s, "<agent-message")
+	return open >= 0 && strings.Contains(s[open:], "</agent-message>")
+}
+
 // forwardedSubagent attributes a frame the CLI forwarded from a subagent, and
 // returns nil for one the agent itself produced.
 //
@@ -789,3 +801,12 @@ func receiptSentence(text string) string {
 func (e Event) MessageEnded() bool {
 	return e.Kind == KindMessageState && (e.Text == "completed" || e.Text == "cancelled")
 }
+
+// MessageStarted reports claude taking up a message Wake sent: into the running
+// turn at a tool boundary, or as a turn of its own (midturn-absent.jsonl:37,
+// midturn-later.jsonl:52).
+func (e Event) MessageStarted() bool { return e.Kind == KindMessageState && e.Text == "started" }
+
+// MessageCancelled reports a message that will never run: taken back before
+// claude took it up (midturn-cancel.jsonl:32), or the running one an interrupt ended.
+func (e Event) MessageCancelled() bool { return e.Kind == KindMessageState && e.Text == "cancelled" }

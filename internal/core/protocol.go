@@ -1,5 +1,5 @@
 // AIRLOCK. Wake's knowledge of Claude Code's stream-json wire format lives in
-// five files in this package and nowhere else in the tree. Everything above
+// six files in this package and nowhere else in the tree. Everything above
 // them consumes core.Event.
 //
 //	protocol.go    decoding - one wire line in, core.Events out (this file)
@@ -7,6 +7,7 @@
 //	vocabulary.go  Claude's words resolved into Wake's
 //	encode.go      the frames Wake writes back
 //	localreply.go  the text replies of local commands Wake parses
+//	control.go     control requests Wake writes, and their receipts
 //
 // It was one file until it reached 1031 lines against this project's 800-line
 // hard max. docs/notes/decisions.md ruled ahead of time what to do when that
@@ -14,11 +15,12 @@
 // **before** the change that overflows it lands rather than during. This is
 // that restatement. internal/core/airlock_test.go enforces it over the whole
 // tree from the same list, so the set grows only by a ruling - localreply.go
-// was the owner's, 2026-09-27.
+// was the owner's, 2026-09-27, and control.go 2026-10-02's.
 //
 // The split is by direction and by job rather than by size, so a port has
-// five reviewable units instead of one unreadable one: what arrives, what it
-// becomes, what Wake calls it, what Wake sends, and what a command replies.
+// six reviewable units instead of one unreadable one: what arrives, what it
+// becomes, what Wake calls it, what Wake sends, what a command replies, and
+// the control exchange that steers a running session.
 //
 // Every *inbound* shape is transcribed from testdata/stream/*.jsonl, recorded
 // from live sessions in Task 1 - not from documentation. The outbound shapes
@@ -30,6 +32,7 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"slices"
 	"time"
 )
 
@@ -72,7 +75,8 @@ func decodeLine(line []byte) ([]Event, error) {
 	case "system":
 		return one(systemEvent(f, raw)), nil
 	case "result":
-		return one(Event{Kind: KindTurnEnd, SessionID: f.SessionID, Text: f.Result, Raw: raw, Session: resultFacts(f), LocalCommand: f.NumTurns != nil && *f.NumTurns == 0}), nil
+		return one(Event{Kind: KindTurnEnd, SessionID: f.SessionID, Text: f.Result, Raw: raw, Session: resultFacts(f), LocalCommand: f.NumTurns != nil && *f.NumTurns == 0,
+			Answered: f.UserMessageUUIDs}), nil
 	case "control_request":
 		// Note f.Request, not f.Subtype: see wireFrame.RequestID.
 		return one(controlRequestEvent(f, raw)), nil
@@ -168,7 +172,9 @@ func turnTokensEvent(f wireFrame) []Event {
 // fields stdout never carries, and record types (`custom-title`,
 // `queue-operation`, `attachment`) that exist only on disk. But the two agree
 // on the part Wake reads - `type`, and the Anthropic `message` under it - so
-// this is a filter in front of DecodeLine rather than a second decoder. A
+// this is a filter in front of DecodeLine rather than a second decoder. The one
+// attachment it reads is a message claude took up mid-turn, handed to DecodeLine
+// as the user line it was written as (Event.Absorbed). A
 // second decoder is the parallel implementation this package exists to prevent,
 // and it would drift on exactly the block shapes that are hardest to get right.
 //
@@ -195,28 +201,51 @@ func decodeTranscript(line []byte, keepSidechain bool) ([]Event, error) {
 		// speech, and claude's injected task-ending note, as the operator's turn.
 		// isApiErrorMessage is is_api_error_message on the stream.
 		APIError bool `json:"isApiErrorMessage"`
+		Meta     bool `json:"isMeta"` // claude injected the line; see the fail-safe below
 		Origin   struct {
 			Kind string `json:"kind"`
 		} `json:"origin"`
+		Attachment json.RawMessage `json:"attachment"`
 	}
 	if err := json.Unmarshal(line, &f); err != nil {
 		return nil, fmt.Errorf("decode transcript line: %w", err)
 	}
-	if f.APIError || f.Origin.Kind == "task-notification" || (f.Sidechain && !keepSidechain) || (f.Type != "assistant" && f.Type != "user") {
+	if f.APIError || f.Origin.Kind == "task-notification" || (f.Sidechain && !keepSidechain) {
+		return nil, nil
+	}
+	// The record's own uuid rides every event it decodes to: a fork copies it,
+	// and on a turn Wake sent it is the one Wake stamped. See Event.MessageID.
+	id, absorbed := f.UUID, false
+	switch {
+	case f.Type == "attachment":
+		q, ok, err := queuedPrompt(f.Attachment)
+		if err == nil && ok {
+			// Its content as the user line it was written as, through DecodeLine.
+			line, err = json.Marshal(q.asUserLine())
+		}
+		if err != nil {
+			return nil, fmt.Errorf("decode transcript line: queued command: %w", err)
+		}
+		if !ok {
+			return nil, nil
+		}
+		id, absorbed = q.SourceUUID, true
+	case f.Type != "assistant" && f.Type != "user":
 		return nil, nil
 	}
 	events, err := DecodeLine(line)
 	if err != nil {
 		return events, err
 	}
-	// The record's own uuid rides every event it decodes to: a fork copies it,
-	// and on a turn Wake sent it is the one Wake stamped. See Event.MessageID.
 	at, tErr := time.Parse(time.RFC3339, f.Timestamp)
 	for i := range events {
-		events[i].MessageID = f.UUID
+		events[i].MessageID, events[i].Absorbed = id, absorbed
 		if tErr == nil {
 			events[i].At = at
 		}
+	}
+	if f.Meta { // a line claude injected is never the operator's turn unless a decoder claimed it (injected-meta.jsonl)
+		events = slices.DeleteFunc(events, func(ev Event) bool { return ev.Kind == KindUserText && ev.Notice == "" })
 	}
 	return events, nil
 }
@@ -239,6 +268,11 @@ func DecodeTranscriptNode(line []byte) (TranscriptNode, bool) {
 		Rewound    bool   `json:"rewound"`
 		LeafUUID   string `json:"leafUuid"`
 		Sidechain  bool   `json:"isSidechain"`
+		// any rather than string: only a queued_command's is read, and an
+		// attachment of another shape must not cost its node.
+		Attachment struct {
+			SourceUUID any `json:"source_uuid"`
+		} `json:"attachment"`
 	}
 	if err := json.Unmarshal(line, &f); err != nil {
 		return TranscriptNode{}, false
@@ -252,7 +286,8 @@ func DecodeTranscriptNode(line []byte) (TranscriptNode, bool) {
 	if f.UUID == "" {
 		return TranscriptNode{}, false
 	}
-	return TranscriptNode{UUID: f.UUID, ParentUUID: f.ParentUUID, Kind: f.Type}, true
+	source, _ := f.Attachment.SourceUUID.(string)
+	return TranscriptNode{UUID: f.UUID, ParentUUID: f.ParentUUID, Kind: f.Type, Source: source}, true
 }
 
 func one(ev Event) []Event { return []Event{ev} }
@@ -568,57 +603,6 @@ func controlRequestEvent(f wireFrame, raw json.RawMessage) Event {
 	return ev
 }
 
-// controlResponseEvent decodes the receipt for a control_request Wake sent -
-// an interrupt, a set_permission_mode, or a rewind_conversation. Mirrors
-// controlRequestEvent, including its ruling on an absent body: everything
-// that identifies a receipt is nested, so one with no body is not a degraded
-// receipt but an empty frame - no subtype to name it, no request_id to
-// attribute it, and nothing to report.
-//
-// Any other subtype still decodes to a receipt. A receipt Wake cannot
-// interpret is not a receipt Wake can afford to drop: the request it answers
-// stays outstanding until something acknowledges it, and only RequestID can.
-func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
-	ev := Event{
-		Kind:      KindUnknown,
-		SessionID: f.SessionID,
-		Text:      f.Type,
-		Raw:       raw,
-	}
-	if f.Response == nil {
-		return ev
-	}
-	ev.RequestID = f.Response.RequestID
-	// Rewind and MCP status receipts are known by a payload key's presence, and
-	// are checked first so neither falls through to the mode/generic path.
-	if ev, ok := mcpStatusReply(ev, f.Response); ok {
-		return ev
-	}
-	if b := f.Response.Response.Rewound; b != nil {
-		ev.Kind = KindRewindReceipt
-		ev.Text = f.Response.Subtype
-		ev.Rewind = &RewindResult{
-			Rewound:                *b,
-			TargetMessageUUID:      f.Response.Response.TargetMessageUUID,
-			PrefillText:            f.Response.Response.PrefillText,
-			PrecedingAssistantUUID: f.Response.Response.PrecedingAssistantUUID,
-			Error:                  f.Response.Response.Error,
-		}
-		return ev
-	}
-	ev.Kind = KindControlReceipt
-	ev.Text = f.Response.Subtype
-	// The mode a set_permission_mode landed on; empty on every other receipt and
-	// on a refusal, whose reason travels in Control.Error instead.
-	ev.PermissionMode = f.Response.Response.Mode
-	ev.Control = &ControlResult{
-		StillQueued: f.Response.Response.StillQueued,
-		Cancelled:   f.Response.Response.Cancelled,
-		Error:       f.Response.Error,
-	}
-	return ev
-}
-
 // messageEvents decodes an assistant or user frame, branching on the two
 // places the wire is polymorphic before it can fail on either.
 func messageEvents(f wireFrame, raw json.RawMessage) []Event {
@@ -654,7 +638,7 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 			base.Kind, base.Text, base.FromName = KindCrossSession, body, name
 			return one(base)
 		}
-		if f.Type == "user" && isLocalCommandPlumbing(text) {
+		if f.Type == "user" && (isLocalCommandPlumbing(text) || (f.IsSynthetic && isAgentMessage(text))) {
 			return nil
 		}
 		base.Kind, base.Text, base.Notice = frameText(f.Type, text)

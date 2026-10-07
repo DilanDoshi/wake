@@ -2,6 +2,8 @@ package core
 
 import (
 	"reflect"
+	"slices"
+	"strings"
 	"testing"
 )
 
@@ -32,6 +34,17 @@ func TestModelFromModelReply(t *testing.T) {
 		{"no note", "Current model: Sonnet 5 (effort: medium)", "Sonnet 5", true},
 		{"leading space", "  Current model: Fable 5 (effort: low)", "Fable 5", true},
 		{"not a model reply", "Sure, the current model is opus", "", false},
+		// The live shape since 2.1.28x wraps the name in backticks, with the clause
+		// or without it (bare-model-effort.jsonl, bare-model-no-effort.jsonl).
+		{"the live reply", "Current model: `Opus 5.5 (1M context)` (effort: xhigh)\nUsage: /model <name>.", "Opus 5.5 (1M context)", true},
+		{"the live reply, no effort", "Current model: `Opus 5.5 (default)`\nUsage: /model <name>.", "Opus 5.5 (default)", true},
+		// Neither the backticks nor the clause: a line an agent wrote, not a probe's.
+		{"a bare name with no clause", "Current model: is the phrase this agent chose to open with", "", false},
+		{"an unterminated quote", "Current model: `Opus 5.5", "", false},
+		{"a blank quoted name", "Current model: ` `", "", false},
+		{"two quoted spans", "Current model: `a` and `b`", "", false},
+		{"a quoted name, a level this build does not know", "Current model: `Opus 5.5` (effort: bogus)", "Opus 5.5", true},
+		{"a bare name, a level this build does not know", "Current model: Opus 5.5 (effort: bogus)", "", false},
 		{"the prefix and nothing else", "Current model:", "", false},
 		{"empty", "", "", false},
 	} {
@@ -261,5 +274,56 @@ func TestRenamedFromReply(t *testing.T) {
 				t.Errorf("RenamedFromReply(%q) = (%q,%v), want (%q,%v)", tc.in, got, ok, tc.want, tc.ok)
 			}
 		})
+	}
+}
+
+// The live /model replies the probe reads (2.1.288): the name in backticks,
+// with the effort clause when the session has a level and without it when not.
+func TestTheRecordedLiveModelRepliesParse(t *testing.T) {
+	for _, tc := range []struct {
+		fixture, model, effort string
+	}{
+		{"../../testdata/stream/bare-model-effort.jsonl", "Opus 5.5 (default)", EffortXHigh},
+		{"../../testdata/stream/bare-model-no-effort.jsonl", "Opus 5.5 (default)", ""},
+	} {
+		results := recordedResults(t, tc.fixture)
+		if len(results) != 1 {
+			t.Fatalf("%s carries %d results, want the one reply", tc.fixture, len(results))
+		}
+		if model, ok := ModelFromModelReply(results[0]); !ok || model != tc.model {
+			t.Errorf("%s: ModelFromModelReply = (%q, %v), want (%q, true)", tc.fixture, model, ok, tc.model)
+		}
+		if effort, ok := EffortFromModelReply(results[0]); effort != tc.effort || ok != (tc.effort != "") {
+			t.Errorf("%s: EffortFromModelReply = (%q, %v), want %q", tc.fixture, effort, ok, tc.effort)
+		}
+	}
+}
+
+// On disk a /model reply is a system/local_command record, which the transcript
+// decoder drops whole, so a probe's reply - with the effort clause or without it
+// - never restores as anybody's speech (model-reply-*.jsonl).
+func TestARecordedModelReplyOnDiskRestoresAsNothing(t *testing.T) {
+	for _, fixture := range []string{
+		"../../testdata/transcript/model-reply-effort.jsonl",
+		"../../testdata/transcript/model-reply-no-effort.jsonl",
+	} {
+		lines := fixtureLines(t, fixture)
+		if !slices.ContainsFunc(lines, func(l string) bool { return strings.Contains(l, modelReplyPrefix) }) {
+			t.Fatalf("%s holds no /model reply, so this asserts nothing", fixture)
+		}
+		for n, line := range lines {
+			evs, err := DecodeTranscriptLine([]byte(line))
+			if err != nil {
+				t.Fatalf("%s:%d: %v", fixture, n+1, err)
+			}
+			if strings.Contains(line, modelReplyPrefix) && len(evs) != 0 {
+				t.Errorf("%s:%d restored the probe's reply as %d events: %+v", fixture, n+1, len(evs), evs)
+			}
+			for _, ev := range evs {
+				if strings.Contains(ev.Text, modelReplyPrefix) {
+					t.Errorf("%s:%d restored the probe's reply as %s: %q", fixture, n+1, ev.Kind, ev.Text)
+				}
+			}
+		}
 	}
 }

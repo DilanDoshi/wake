@@ -570,6 +570,8 @@ type ControlResult struct {
 	StillQueued []string `json:"still_queued"`
 	Cancelled   []string `json:"cancelled"`
 	Error       string   `json:"error,omitempty"`
+	// Recalled is a take-back's answer: whether claude gave the message back.
+	Recalled *bool `json:"recalled,omitempty"`
 }
 
 // CompactSummary is what a successful /compact reports on its compact_boundary
@@ -610,6 +612,11 @@ type Event struct {
 	// (testdata/transcript/room-stamped-uuid.jsonl, fork-child.jsonl). An
 	// identity, matched and never drawn.
 	MessageID string `json:"message_id,omitempty"`
+
+	// Answered is, on a KindTurnEnd, the stamped uuid of every message the turn
+	// answered - a message claude took up mid-turn included. It is how a reader
+	// knows a queued message was read when its started lifecycle went missing.
+	Answered []string `json:"answered,omitempty"`
 
 	// PermissionMode is the mode a session is running in, and it has two
 	// observables that are one fact: a KindControlReceipt answering a
@@ -675,6 +682,11 @@ type Event struct {
 	// it is presentation only for Echoed's reason: a wrong value mislabels a
 	// turn, and nothing may key suppression or de-duplication on it.
 	FromRoom bool `json:"from_room,omitempty"`
+
+	// Absorbed marks an operator turn restored from disk that claude took up
+	// mid-turn: stored as a queued_command attachment rather than a user record
+	// (testdata/transcript/midturn-absorbed.jsonl), so it is no rewind target.
+	Absorbed bool `json:"absorbed,omitempty"`
 
 	// FromName attributes a KindCrossSession event: the peer's display name (its
 	// own --name). It is what the room heads the line with, matched to a fleet

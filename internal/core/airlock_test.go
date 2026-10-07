@@ -80,12 +80,15 @@ const repoRoot = "../.."
 // checkable rather than a sentence in a header: a member cannot be added
 // without editing it, and the set is what the leak check exempts. The fifth,
 // localreply.go, is the owner's 2026-09-27 ruling: local commands' reply text.
+// The sixth, control.go, is 2026-10-02's: control requests and their receipts,
+// split out by subject when encode.go, wire.go and protocol.go were all full.
 var airlockFiles = wordSet([]string{
 	"internal/core/protocol.go",
 	"internal/core/wire.go",
 	"internal/core/vocabulary.go",
 	"internal/core/encode.go",
 	"internal/core/localreply.go",
+	"internal/core/control.go",
 })
 
 // claudeWireVocabulary is what a file must not name outside the airlock.
@@ -171,6 +174,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// policed below). Policed for "timestamp"'s reason: no file outside this
 	// package names the literal.
 	"origin",
+	// A message claude took up mid-turn, as it is stored on disk: an attachment
+	// of type queued_command naming the uuid Wake stamped. midturn-absorbed.jsonl.
+	"attachment", "queued_command", "source_uuid", "commandMode",
+	// Every stamped message a turn's result answered (Event.Answered).
+	"user_message_uuids",
 
 	// system subtypes.
 	"compact_boundary", "permission_denied", "hook_started",
@@ -226,6 +234,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// The Agent SDK's stopTask(taskId) (findings.md §6), the wire form of the
 	// control_request EncodeStopTask sends. "task_id" is already policed above.
 	"stop_task",
+
+	// Taking a queued message back, and a send-now's priority key: what
+	// EncodeCancelAsyncMessage and EncodeUserMessage write
+	// (2026-10-02-mid-turn-delivery-findings.md).
+	"cancel_async_message", "message_uuid", "priority",
 
 	// The live checklist tools and their input keys. TodoWrite is retired in
 	// 2.1.240 and its replacement builds a list across TaskCreate/TaskUpdate
@@ -311,7 +324,7 @@ var claudeWireVocabulary = wordSet([]string{
 	"parent_tool_use_id", "subagent_type", "task_description",
 	"tool_use_id", "agent_id", "agentId", "agentType",
 	"tool_use_result", "command_uuid", "new_conversation_id",
-	"rate_limit_info", "isReplay", "isSynthetic", "is_api_error_message", "isApiErrorMessage",
+	"rate_limit_info", "isReplay", "isSynthetic", "is_api_error_message", "isApiErrorMessage", "isMeta",
 	"api_retry", "error_status", "authentication_failed",
 	"run_in_background", "last_tool_name", "task_id",
 	"non_execution_kind", "permission_denials", "terminal_reason",
@@ -400,6 +413,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// carries attributes, so it is the tag start rather than a whole tag.
 	"<cross-session-message", "</cross-session-message>",
 
+	// The envelope a subagent's message to its own session arrives in - its
+	// SubagentHandback report - dropped whole by isAgentMessage, for the same
+	// reason: the tag is the only thing identifying the line.
+	"<agent-message", "</agent-message>",
+
 	// Claude's abort markers. Policed as hard as any field name, and for a
 	// sharper reason than most: they arrive on a frame with no subtype and no
 	// isSynthetic, so the *string* is the only thing that identifies them, and
@@ -444,6 +462,12 @@ var deliberatelyGeneric = wordSet([]string{
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",
+	// A command_lifecycle state (Event.MessageStarted), generic for "cancelled"'s
+	// reason: Wake spells it itself (core.TaskStarted, two json tags).
+	"started",
+	// A send-now's priority value and origin kind: plain English, and "human"
+	// is already a word Wake spells (mcp's reserved names).
+	"now", "human",
 
 	// init's subagent types. Generic for "model"'s reason: an agent is Wake's
 	// own subject, and core.SessionFacts.Agents keeps the spelling. Not a route
@@ -711,13 +735,23 @@ var notNamedByTheAirlock = map[string]string{
 // list-agents.jsonl and list-agents-bare*.jsonl.
 // 209 → 210: "authentication_failed", the failed turn's error kind apiNotice
 // reads so only a dead login is parked for a new process. api-error-auth.jsonl.
-// 210 → 211: "says it was ", the column a renamed session's /list-agents row
+// 210 → 213: "cancel_async_message" and "message_uuid", the request that takes a
+// queued message back, and "priority", the key a send-now carries. midturn-*.
+// 213 → 217: "attachment", "queued_command", "source_uuid" and "commandMode",
+// the on-disk record of a message claude took up mid-turn, which
+// DecodeTranscriptLine restores as the turn it was. midturn-absorbed.jsonl.
+// 217 → 218: "user_message_uuids", every stamped message a result answered.
+// 218 → 221: the <agent-message envelope's two tags, isAgentMessage's drop of a
+// subagent's hand-back, and "isMeta", claude's on-disk mark on a line it injected,
+// which DecodeTranscriptLine reads so an unclaimed one is never the operator's
+// turn. subagent-handback.jsonl, injected-meta.jsonl.
+// 221 → 222: "says it was ", the column a renamed session's /list-agents row
 // carries between its name and directory. list-agents-bare-renamed.jsonl.
-// 211 → 212: "SendMessage", the manager's one built-in and the call whose
+// 222 → 223: "SendMessage", the manager's one built-in and the call whose
 // recipient and words toolPeerSend reads. manager-tools.jsonl, manager-relay.jsonl.
-// 212 → 213: "msg_id", the SendMessage receipt's own key, which receiptSentence
+// 223 → 224: "msg_id", the SendMessage receipt's own key, which receiptSentence
 // requires so no other JSON result is cut to its message. manager-relay.jsonl.
-const policedWordCount = 213
+const policedWordCount = 224
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -759,6 +793,9 @@ var notWireVocabulary = wordSet([]string{
 	"encode stop task",
 	"%w: encode stop task: empty request id",
 	"%w: encode stop task: empty task id",
+	"encode cancel async message",
+	"%w: encode cancel async message: empty request or message id",
+	"decode transcript line: queued command: %w",
 	"decode workflow run: %w",
 	"decode workflow run: no task id",
 	defaultDenyReason,
@@ -794,6 +831,10 @@ var notWireVocabulary = wordSet([]string{
 
 	// receiptSentence's test for a JSON object, before it tries to read one.
 	"{",
+
+	// The backticks a live /model reply wraps its model name in, which
+	// ModelFromModelReply trims. Punctuation Wake matches on.
+	"`",
 
 	// localreply.go's delimiter and pattern: a /list-agents row's column
 	// separator and a section header's title and count. Punctuation and
@@ -1078,15 +1119,16 @@ var notInTheCorpus = map[string]string{
 	"mcp_toggle":                  "outbound only; the corpus holds its receipts, not the requests",
 	"serverName":                  "outbound only; the field the reconnect and toggle requests carry",
 	"stop_task":                   "outbound only; a recording of stdout cannot contain it",
+	"cancel_async_message":        "outbound only; a recording of stdout cannot contain it",
+	"message_uuid":                "outbound only; the field the cancel request carries",
+	"priority":                    "outbound only; the key a send-now carries",
 
-	// The run record's own two keys with no counterpart on the stream: the
-	// start time (task_progress carries only elapsed usage, never a start
-	// clock) and the snapshot wrapper's camelCase spelling (contrast the
-	// recorded workflow_progress, its snake_case sibling on task_progress).
-	// Both are hand-trimmed into workflow_test.go's runRecordFixture (task
-	// wsmc7r0xw, workflow-failed.jsonl) rather than recorded as a testdata/
-	// file of its own.
-	"startTime":        "recorded only in workflow_test.go's runRecordFixture, not testdata/",
+	// The run record's snapshot wrapper, its camelCase spelling with no
+	// counterpart on the stream (contrast the recorded workflow_progress, its
+	// snake_case sibling on task_progress), hand-trimmed into workflow_test.go's
+	// runRecordFixture (task wsmc7r0xw, workflow-failed.jsonl) rather than
+	// recorded as a testdata/ file of its own. Its sibling startTime is recorded
+	// now: an on-disk cost-state record spells it too (model-reply-*.jsonl).
 	"workflowProgress": "recorded only in workflow_test.go's runRecordFixture, not testdata/",
 }
 
@@ -1104,6 +1146,8 @@ var embeddedMarkers = map[string]bool{
 	"Current model:":           true,
 	"<cross-session-message":   true,
 	"</cross-session-message>": true,
+	"<agent-message":           true,
+	"</agent-message>":         true,
 	// The /goal announcements' leading phrases; "<synthetic>" and "No goal set"
 	// are whole values, so they are matched quoted rather than here.
 	"Goal set: ":          true,
@@ -1259,8 +1303,8 @@ func TestTheThreeListsDoNotOverlap(t *testing.T) {
 
 // The airlock is a set of files in one package, and saying so is what stops
 // the set being widened into an exemption for somewhere else.
-func TestTheAirlockIsFiveFilesInInternalCore(t *testing.T) {
-	const want = 5
+func TestTheAirlockIsSixFilesInInternalCore(t *testing.T) {
+	const want = 6
 	if len(airlockFiles) != want {
 		t.Errorf("the airlock is %d files, want %d - if that is deliberate, CLAUDE.md's rule and protocol.go's header both name the set and must change with it", len(airlockFiles), want)
 	}

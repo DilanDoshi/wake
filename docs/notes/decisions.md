@@ -8,6 +8,33 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-03 — claude's drift is watched where it happens first: the operator's own transcripts
+
+A recording is one claude version; BUG-42's envelope went unrecorded for two weeks while 579 hand-backs
+landed on this machine. Three checks, one rule table (`injected_test.go`'s `ruledOrigins`,
+`ruledPromptSources`):
+
+- **Gate:** no corpus line claude marks as its own (`isMeta`, `isSynthetic`, an origin or
+  `promptSource:"system"`) decodes as the operator's turn, and every recorded mark is ruled.
+- **`make drift`** (free, local): the same over `~/.claude/projects`, plus the newest claude seen
+  against the corpus's newest. Never a gate — no other machine has the data. Its line heads are the
+  operator's own text, home path cut: never paste the output anywhere public.
+- **`make live`** gains `TestLiveWire`: a real auto-mode session handing a subagent's report back,
+  decoded on stdout and on disk; it fails unless both turns ran, and reports frame shapes no
+  recording carries. An extension of the
+  existing `live` target (`TestLiveJourney`), so CLAUDE.md's "never test against a live LLM" holds
+  for the suite: neither tag is ever on a gate.
+
+## 2026-10-03 — `isMeta` is never the operator's turn; what it is is decided per kind
+
+Claude marks a user line it injected with `isMeta:true`: a skill's body, an image note, an idle
+notice, a subagent's hand-back. Core read none of them, so each restored as a turn the operator typed.
+`decodeTranscript` now drops a plain user turn from an `isMeta` line, ordered after every specific
+decoder: one that claims its line (cross-session's `KindCrossSession`, a `Notice`) keeps it. A new
+kind is drawn by adding its decoder with a fixture, not by removing a misattribution. Owner chose to
+hide a hand-back rather than draw it as a peer line; live it was already dropped as an echo.
+`docs/superpowers/notes/2026-10-03-subagent-handback-findings.md`.
+
 ## 2026-09-29 — a copy matches markdown back to its source
 
 Supersedes "markdown rows are classified, not flagged" below. Classifying rows by `reflowProse`'s
@@ -3600,6 +3627,52 @@ server so named loses only the banner's count — `/mcp` still shows it needing 
 missing from that one turn. The manager is unaffected: `--strict-mcp-config` excludes connectors even
 after the handshake.
 
+## 2026-10-02 — A message reaches a working agent mid-turn; ↑ takes it back, ⌃] sends it now
+
+**What changed.** Wake held every message typed to a working agent until the turn ended, on the premise
+that claude coalesces or drops a line written to a busy stdin. That premise was never recorded. Recording
+it on 2.1.288 (`docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md`) showed claude queues the
+line and reads it at the next tool boundary in the same turn - Claude Code's own type-ahead. The hold was
+the conservative choice while nothing was recorded; the recording retires it. `internal/ui/queue.go`'s
+header carries the argument.
+
+**Ruling 1 — everything is written at once, and claude decides when it is read.** A message to a working
+agent is read at the next tool boundary, or as the next turn if the turn ends first; a command waits for
+the turn's end, by claude's own rule. Wake pins it `⧗` until its `started` lifecycle and draws it where
+the model read it. **The one exception is a `/rename` to a busy agent**, still held and sent one per turn:
+its mirror renames Wake when the passthrough goes, and `renamesync.go` holds one such want at a time.
+
+**Ruling 2 — room sends behave exactly as DM sends.** A broadcast is written to every target at once; a
+working target reads it at its next tool boundary. The room draws its line when it is said (the room is
+the record of what you said), and each held DM pins it until that agent takes it up.
+
+**Ruling 3 — take-back and send-now go through claude, never around it.** `↑` (Claude Code's own key
+over its queue) asks claude for each queued message back with `cancel_async_message`; only the
+message's lifecycle says whether that was in time, so a message claude already started stays sent.
+`⌃]` takes the queue back first and sends it with the draft as one `priority:"now"` message: a `now`
+written behind a queued message ends the turn at the boundary instead of backgrounding the work
+(`midturn-next-then-now.jsonl`). A queued command is never folded into a message. A room broadcast
+taken back from one agent leaves the room a muted record that it never reached that agent.
+
+**Ruling 4 — `origin:{kind:"human"}` is written only on a send-now**, the one place it changes what
+claude does (it is what moves running work to the background). The docs recommend it on every
+operator-typed message (it enables e.g. the `ultracode` keyword); that changes every send and is left
+for the owner.
+
+**Ruling 5 — send-now is `⌃]` (GS), recommended to the owner and awaiting their ruling.** Claude Code's
+own keys are `⌃↵`, which bubbletea v1 names nothing for in any encoding, and `⌃X⌃S`, whose `⌃X` is
+Wake's next-blocked. `⌃S` was rejected: it is XOFF (the flow-control pair killswitch.go already avoids)
+and Claude Code's `chat:stash`, the opposite of sending. `⌃\` is SIGQUIT outside raw mode; `⌃G` is
+Claude Code's external editor and reserved for the groups sidebar. `⌃]` is named by bubbletea
+(`keyprobe_test.go`), bound by neither keymap, and no flow-control byte or signal; it is hard to type
+where `]` sits on AltGr. Under tmux and cmux it is a `live-testing.md` check, not a measurement.
+
+**Also.** A message claude took up mid-turn is stored on disk as a `queued_command` attachment, which
+`decodeTranscript` now restores as the turn it was (`Event.Absorbed`, no rewind target); before, a
+re-read conversation lost it - including the manager's sends, which were always written mid-turn. And a
+queued message that opens its own turn now keeps its agent `working` (the daemon owes a result on its
+`started`).
+
 ## 2026-10-03 — a listing row Wake cannot read costs that row; the room's `@` behind `@who ` is who's
 
 The owner's rulings on BUG-41 (fable wake checked the diagnosis and plan against `main`).
@@ -3652,4 +3725,3 @@ permission card) and chose none of it:
 The composer's target line stays `→ @manager`: the frame goes to the manager, and whether the words
 reach the peer is the model's act, not Wake's. A daemon fence would need the quoted-mention parse
 moved into core, so completion, the stamp and the target line read one implementation.
-

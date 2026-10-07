@@ -136,7 +136,7 @@ func (s *server) listPeers(ctx context.Context) ([]core.Peer, error) {
 // runListAgents runs one bare /list-agents in dir and parses the text of the
 // result it prints.
 func runListAgents(ctx context.Context, dir string) ([]core.Peer, error) {
-	ask, err := core.EncodeUserMessage(slashPrefix+listAgentsVerb, nil, "")
+	ask, err := core.EncodeUserMessage(slashPrefix+listAgentsVerb, nil, "", false)
 	if err != nil {
 		return nil, err
 	}

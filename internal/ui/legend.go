@@ -43,6 +43,7 @@ type legendEntry struct{ glyph, what string }
 // bubbletea v1.3.10 names no ctrl+shift+<letter> at all. ⇧⇥ carries it instead.
 var legendEntries = []legendEntry{
 	{sendGlyph, sendLabel},
+	{"⌃]", "send now"},
 	{escGlyph, escInterruptLabel},
 	{detachGlyph, detachLabel},
 	{"⌃C", "park"},
