@@ -386,6 +386,8 @@ make cover     # coverage report; gate is 80%
 make lint      # golangci-lint run
 make ci        # every step the workflow runs
 make soak      # 20 fake sessions replaying fixtures; SOAK_DURATION=1h for the long one
+make drift     # this machine's own transcripts against the corpus's rulings; free, not a gate
+make live      # SPENDS MONEY: real claude, the wire probe and the pty journey; not a gate
 make run       # build and start
 ```
 
@@ -415,6 +417,8 @@ HOME=$(mktemp -d) claude --print --input-format stream-json --output-format stre
 | screen | **A real pty, the real binary, `vt10x`** (`cmd/wake/screen_unix_test.go`) — use for layout, keys, mouse |
 | `cmd/wake` | Fake daemon, in-process `daemon.Serve`, `detach_unix_test.go` |
 | soak | Build tag `soak` |
+| drift | Build tag `drift`: the operator's `~/.claude/projects` held to `injected_test.go`'s rulings — run after a claude upgrade |
+| live | Build tag `live`: a real `claude` (`TestLiveWire` decodes its stdout and transcript; `TestLiveJourney` drives the screen) |
 
 `make test` runs twice (with and without `-race`) — the detector masks ordering bugs. `make ci` may
 not drift from the workflow (`internal/core/citarget_test.go`). A goroutine leak is a bug.
