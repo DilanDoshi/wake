@@ -1320,8 +1320,8 @@ func TestTheThreeListsDoNotOverlap(t *testing.T) {
 
 // The airlock is a set of files in one package, and saying so is what stops
 // the set being widened into an exemption for somewhere else.
-func TestTheAirlockIsSixFilesInInternalCore(t *testing.T) {
-	const want = 6
+func TestTheAirlockIsSevenFilesInInternalCore(t *testing.T) {
+	const want = 7
 	if len(airlockFiles) != want {
 		t.Errorf("the airlock is %d files, want %d - if that is deliberate, CLAUDE.md's rule and protocol.go's header both name the set and must change with it", len(airlockFiles), want)
 	}
