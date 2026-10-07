@@ -357,6 +357,11 @@ func taskUpdate(f wireFrame) *TaskUpdate {
 	if !ok {
 		return nil
 	}
+	// A frame that names no outcome is no ending: task_updated also patches
+	// is_backgrounded, and reading that as the end drops a running shell.
+	if phase == TaskEnded && f.Status == "" && (f.Patch == nil || f.Patch.Status == "") {
+		phase = TaskProgress
+	}
 	kind := taskKind(f.TaskType)
 	return &TaskUpdate{
 		ID:       f.TaskID,
@@ -378,9 +383,9 @@ func taskUpdate(f wireFrame) *TaskUpdate {
 // neither can stand in for the other, so both are read and whichever is
 // present wins.
 //
-// A phase of TaskEnded with no recognised word is TaskStatusUnknown rather
-// than TaskDone: the frame said the task stopped happening, not that it
-// succeeded.
+// A phase of TaskEnded with a word this build does not recognise is
+// TaskStatusUnknown rather than TaskDone: the frame said the task stopped
+// happening, not that it succeeded.
 func taskStatus(phase TaskPhase, f wireFrame) TaskStatus {
 	if phase != TaskEnded {
 		return TaskRunning

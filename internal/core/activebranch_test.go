@@ -5,7 +5,11 @@ package core
 // the rewound turns as a dead branch under an earlier node and writes the
 // continuation after the marker, so newest-branch-wins recovers the live one.
 
-import "testing"
+import (
+	"bytes"
+	"maps"
+	"testing"
+)
 
 // u, a and marker build the three node shapes ActiveBranch reads: a user node,
 // an assistant node, and a rewind marker - a rewound last-prompt line whose
@@ -151,5 +155,40 @@ func TestActiveBranchOverTheRecordedRewind(t *testing.T) {
 		if set[id] {
 			t.Errorf("%s was rewound away but the reconstruction kept it: the rewound turn comes back on reopen", id)
 		}
+	}
+}
+
+// A checkpointing session writes file-history-snapshot and file-history-delta
+// lines between its turns (file-history.jsonl). Neither is a tree node nor an
+// event, so neither moves the active branch or reaches a pane.
+func TestFileHistoryLinesAreNeitherNodesNorEvents(t *testing.T) {
+	lines := readLines(t, "testdata/transcript/file-history.jsonl")
+	var all, without []TranscriptNode
+	history := 0
+	for _, l := range lines {
+		isHistory := bytes.Contains(l, []byte(`"type":"file-history-`))
+		if isHistory {
+			history++
+			if evs, err := DecodeTranscriptLine(l); err != nil || len(evs) != 0 {
+				t.Errorf("a file-history line decoded to %v (err %v), want nothing: %.80s", evs, err, l)
+			}
+		}
+		n, ok := DecodeTranscriptNode(l)
+		if !ok {
+			continue
+		}
+		if isHistory {
+			t.Errorf("a file-history line is a tree node %+v", n)
+		}
+		all = append(all, n)
+		if !isHistory {
+			without = append(without, n)
+		}
+	}
+	if history < 5 {
+		t.Fatalf("found %d file-history lines, want the fixture's snapshots and deltas", history)
+	}
+	if got, want := ActiveBranch(all), ActiveBranch(without); !maps.Equal(got, want) || len(got) == 0 {
+		t.Errorf("the active branch moved with file-history lines in it: %d nodes, want %d", len(got), len(want))
 	}
 }

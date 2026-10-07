@@ -178,7 +178,8 @@ type agent struct {
 	budget   string
 	fallback string
 
-	// commands is the slash commands the last init advertised, kept so they
+	// commands is the slash commands the last init advertised - or, before the
+	// first, the handshake's reply (learnCommands) - kept so they
 	// reach a client that attached after that init - the completion menu's, and
 	// the report is the only route to them for such a client. Display only, like
 	// cwd, and updated on the receipt the same way. See rpc.SessionStatus.Commands.
@@ -258,6 +259,10 @@ type agent struct {
 	// the handshake's, until its reply arrives. See askMCP and handshake.
 	mcpAskers map[string]*client
 	initID    string
+
+	// restoresAwaited is the input goroutine waiting on each FrameRewindBoth's
+	// restore, by request id. See rewindAfterRestore.
+	restoresAwaited map[string]chan core.Event
 
 	tool    string
 	toolArg string

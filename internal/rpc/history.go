@@ -32,24 +32,4 @@ const (
 	// questions about one file, for two surfaces, with two answers.
 	FrameRoomHistory      = "room_history"       // client → daemon: what did this session say, for the room
 	FrameRoomHistoryReply = "room_history_reply" // daemon → client: what it said
-
-	// FrameRewindTargets asks a session's active-branch user prompts, uuid
-	// and text oldest first, and FrameRewindTargetsReply answers. FrameRewind
-	// itself takes a message uuid core.Event never carries, so this is the
-	// UI's only source for one; the last entry is the last_seen tip
-	// RewindLastSeen wants.
-	FrameRewindTargets      = "rewind_targets"       // client → daemon: what could this session be rewound to
-	FrameRewindTargetsReply = "rewind_targets_reply" // daemon → client: its active-branch user prompts, uuid+text, oldest first
 )
-
-// RewindTarget is one user prompt a session could be rewound to: a
-// transcript message's own uuid, paired with the text it carries. See
-// FrameRewindTargets.
-//
-// The json tags spell neither "uuid" nor "text" - both are Claude's own wire
-// words, policed outside the airlock even on Wake's own socket - so this
-// wire deliberately uses different words for the same two things.
-type RewindTarget struct {
-	UUID string `json:"target"`
-	Text string `json:"content"`
-}

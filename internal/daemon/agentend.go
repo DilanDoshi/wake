@@ -71,6 +71,7 @@ func (a *agent) finish(err error) {
 	}
 	a.ended = true
 	a.err = err
+	clear(a.runningTasks) // its shells died with it; their endings may never have come
 	close(a.gone)
 }
 

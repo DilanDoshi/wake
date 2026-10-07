@@ -292,7 +292,9 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (Agent, st
 		// one was hit is measured from the bottom rather than from an offset that
 		// would have to restate whether this agent drew a header or a tool call.
 		if subFrom := len(rl) - len(mine); within >= subFrom {
-			return a, mine[within-subFrom].Dispatch, true
+			if t := mine[within-subFrom]; t.Selectable() {
+				return a, t.Dispatch, true
+			}
 		}
 		return a, "", true
 	}
@@ -616,7 +618,9 @@ func walkable(agents []Agent, subs subsOf) []Roster {
 	for _, a := range agents {
 		out = append(out, Roster{Selected: a.ID})
 		for _, t := range subsFor(subs, a.ID) {
-			out = append(out, Roster{Selected: a.ID, SelectedTask: t.Dispatch})
+			if t.Selectable() {
+				out = append(out, Roster{Selected: a.ID, SelectedTask: t.Dispatch})
+			}
 		}
 	}
 	return out

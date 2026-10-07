@@ -222,7 +222,7 @@ func TestRewindPickerNavigatesAndConfirms(t *testing.T) {
 		}
 	})
 
-	t.Run("enter sends the cursored uuid and the newest as last-seen, then closes", func(t *testing.T) {
+	t.Run("enter previews the cursored uuid, and the conversation then rewinds from the newest", func(t *testing.T) {
 		fresh(t)
 		conn, sent := pipeClient(t)
 		a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
@@ -230,8 +230,16 @@ func TestRewindPickerNavigatesAndConfirms(t *testing.T) {
 		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown}) // cursor onto the older prompt, u1
 
 		after, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+		go func() { _ = runCmdQuietly(cmd) }()
+		if f := awaitFrame(t, sent); f.Kind != rpc.FrameRewindPreview || f.SessionID != "s1" || f.RewindTarget != "u1" {
+			t.Fatalf("enter wrote %+v, want a preview of u1 for s1", f)
+		}
+		after = after.observe("s1", core.Event{Kind: core.KindFilesRewindReceipt,
+			Files: &core.FilesRewind{Target: "u1", Preview: true, Restorable: true}})
+
+		after, cmd = pressKey(after, tea.KeyMsg{Type: tea.KeyEnter})
 		if after.rewind.Open() {
-			t.Error("enter left the picker up")
+			t.Error("restoring the conversation left the picker up")
 		}
 		go func() { _ = runCmdQuietly(cmd) }()
 		f := awaitFrame(t, sent)
@@ -452,7 +460,7 @@ func TestARewindReplyDoesNotOpenOverAnOpenConfigPicker(t *testing.T) {
 	}
 }
 
-// #4: confirmRewind lacks interrupt()'s own endedAgent guard. A picker can
+// #4: chooseRewind keeps interrupt()'s own endedAgent guard. A picker can
 // outlive the agent it was opened for - the reply and the ending can race the
 // same way a reply and a moved focus do in TestAStaleRewindReplyIsDropped -
 // and Enter on it must not write a frame with nobody left to read it.
@@ -480,7 +488,7 @@ func TestConfirmRewindOnAnEndedAgentSendsNothing(t *testing.T) {
 	}
 }
 
-// The receipt, Claude's answer to a FrameRewind confirmRewind already sent -
+// The receipt, Claude's answer to a FrameRewind the picker already sent -
 // see noteRewind in rewind.go.
 
 // A successful rewind clears the focused conversation and re-asks for it, so
@@ -706,28 +714,28 @@ func TestRewindKeyDeclinesEveryKeyOnceItsPickersAgentIsRunning(t *testing.T) {
 	}
 }
 
-// The CRITICAL fix's part 3 in isolation: confirmRewind's own guard, called
+// The CRITICAL fix's part 3 in isolation: chooseRewind's own guard, called
 // directly rather than through rewindKey - which would itself decline first
 // once part 2 is in place, so a test that only ever presses Enter could pass
 // on part 2 alone and never prove this guard does anything. Defense in depth
 // only earns the name if each layer holds up on its own.
-func TestConfirmRewindRefusesARunningAgent(t *testing.T) {
+func TestChooseRewindRefusesARunningAgent(t *testing.T) {
 	fresh(t)
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
 	a = a.applyFrame(workingAgentFrame("s1", "alex"))
 	a.rewind = RewindPicker{Session: "s1", Prompts: []string{"prompt"}, UUIDs: []string{"u1"}, LastSeen: "u1"}
 
-	after, cmd := a.confirmRewind()
+	after, cmd := a.chooseRewind()
 	if after.rewind.Open() {
-		t.Error("confirmRewind against a running agent left the picker open")
+		t.Error("chooseRewind against a running agent left the picker open")
 	}
 	if cmd != nil {
 		go func() { _ = runCmdQuietly(cmd) }()
 	}
 	select {
 	case f := <-sent:
-		t.Errorf("confirmRewind sent %+v to a session that is running, want nothing", f)
+		t.Errorf("chooseRewind sent %+v to a session that is running, want nothing", f)
 	case <-time.After(50 * time.Millisecond):
 	}
 }

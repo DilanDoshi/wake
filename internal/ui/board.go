@@ -343,7 +343,7 @@ func (a App) boardHit(x, y int, agents []Agent) (int, string, bool) {
 				return -1, "", false // clicked the team header band, which opens nothing
 			}
 			within -= hdr
-			if within > 0 {
+			if within > 0 && subs[within-1].Selectable() {
 				return i, subs[within-1].Dispatch, true
 			}
 			return i, "", true
@@ -538,7 +538,7 @@ func (a App) boardView(agents []Agent, width int) string {
 			if len(blocks) >= visible {
 				break
 			}
-			cursored := ag.ID == a.board.Selected && t.Dispatch == a.board.SelectedTask
+			cursored := a.board.SelectedTask != "" && ag.ID == a.board.Selected && t.Dispatch == a.board.SelectedTask
 			blocks = append(blocks, boardSubRow(t, width, cursored))
 		}
 	}

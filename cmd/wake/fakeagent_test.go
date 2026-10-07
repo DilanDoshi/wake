@@ -240,6 +240,8 @@ func runFakeAgent() int {
 		return fakeAgentMCP(sid)
 	case scriptAtMenu:
 		return fakeAgentAtMenu(sid)
+	case scriptHandshakes:
+		return fakeAgentHandshakes(sid)
 	case scriptSteers:
 		return fakeAgentSteers(sid)
 	}
@@ -699,6 +701,10 @@ func fakeAgentRewinds(sid string) int {
 	sayText(sid, "ready")
 	sayResult(sid)
 	for line := range agentStdin() {
+		if id, preview, ok := rewindFilesRequested(line); ok {
+			answerRewindFiles(id, preview)
+			continue
+		}
 		if id, target, ok := rewindRequested(line); ok {
 			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,`+
 				`"response":{"rewound":true,"targetMessageUuid":%q,"prefillText":%q,`+
@@ -719,6 +725,39 @@ func fakeAgentRewinds(sid string) int {
 // rewindPrefillPrefix is what fakeAgentRewinds' receipt puts in front of the
 // target uuid it was asked to rewind to.
 const rewindPrefillPrefix = "rewound to "
+
+// rewindFakeFile is the one file fakeAgentRewinds says a restore would change,
+// in its own directory.
+const rewindFakeFile = "retry.go"
+
+// answerRewindFiles answers a rewind_files request the way 2.1.288 does
+// (rewind-files.jsonl): a preview names one file, a restore succeeds.
+func answerRewindFiles(id string, preview bool) {
+	if !preview {
+		fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"canRewind":true,"skippedLinks":0}}}`+"\n", id)
+		return
+	}
+	cwd, _ := os.Getwd()
+	fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"canRewind":true,"filesChanged":[%q],"insertions":3,"deletions":1}}}`+"\n",
+		id, filepath.Join(cwd, rewindFakeFile))
+}
+
+// rewindFilesRequested reads a rewind_files control request: its id, and
+// whether it only previews.
+func rewindFilesRequested(line string) (id string, preview, ok bool) {
+	var f struct {
+		Type      string `json:"type"`
+		RequestID string `json:"request_id"`
+		Request   struct {
+			Subtype string `json:"subtype"`
+			DryRun  bool   `json:"dry_run"`
+		} `json:"request"`
+	}
+	if err := json.Unmarshal([]byte(line), &f); err != nil || f.Type != "control_request" || f.Request.Subtype != "rewind_files" {
+		return "", false, false
+	}
+	return f.RequestID, f.Request.DryRun, true
+}
 
 // rewindRequested reads the target uuid out of a rewind_conversation control
 // request, one level down beside its subtype - modeRequested's own nesting,

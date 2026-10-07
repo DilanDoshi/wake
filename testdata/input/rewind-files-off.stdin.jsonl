@@ -1,0 +1,2 @@
+{"type":"control_request","request_id":"probe-3ee2d663","request":{"subtype":"rewind_files","user_message_id":"e8c64c67-676f-4907-b987-ac651ad3494e","dry_run":true}}
+{"type":"control_request","request_id":"probe-103a744a","request":{"subtype":"rewind_files","user_message_id":"e8c64c67-676f-4907-b987-ac651ad3494e"}}

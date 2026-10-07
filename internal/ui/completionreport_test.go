@@ -2,7 +2,10 @@ package ui
 
 import (
 	"slices"
+	"strings"
 	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -32,5 +35,42 @@ func TestAdvertisedCommandsSurviveAnAttachViaTheReport(t *testing.T) {
 	if got := slices.Collect(agent.advertised.words()); len(got) != 3 {
 		t.Errorf("advertised is %v after a report carrying 3 commands; a client that only has the report "+
 			"(every reattach) never learns them, so /co shows no menu", got)
+	}
+}
+
+// A just-spawned agent has taken no turn, so no init ever named its commands -
+// the daemon's report is all that does, from the handshake's reply. Typing a
+// first brief to it in the room and ending it with a /command must still offer
+// that agent's skills, and ⇥ must replace only the token being typed (BUG-46).
+func TestAFreshAgentsReportedSkillsCompleteAtTheEndOfALongBrief(t *testing.T) {
+	brief := func(commands []string) App {
+		fresh(t)
+		a := newRoomApp(t).withSize(200, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{
+			Running: true, Sessions: []rpc.SessionStatus{
+				{ID: "s1", Name: "juno", State: rpc.StateIdle, Commands: commands},
+			}}})
+		a = a.withDraft("@juno read the failing test in the parser")
+		for _, line := range []string{"and find out why it only fails on CI", "then, when it is green,"} {
+			a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlJ})
+			a = a.withDraft(line)
+		}
+		return a.withDraft(" run /compl")
+	}
+
+	if none := brief(nil); none.completionUp() {
+		t.Fatalf("an agent with no commands drew a menu %v: the fixture asserts nothing", none.completion.offers)
+	}
+
+	a := brief([]string{"compact", "complete-linear-ticket"})
+	if !a.completionUp() || !slices.Contains(a.completion.offers, "/complete-linear-ticket") {
+		t.Fatalf("a brief ending in /compl drew no offer of the agent's skill: %v", a.completion.offers)
+	}
+	before := a.composer().Value()
+	a, _, ok := a.completionKey(tea.KeyMsg{Type: tea.KeyTab})
+	if !ok {
+		t.Fatal("⇥ was not taken by the completion menu")
+	}
+	if got, want := a.composer().Value(), strings.TrimSuffix(before, "/compl")+"/complete-linear-ticket "; got != want {
+		t.Errorf("⇥ left the draft %q, want only the token replaced: %q", got, want)
 	}
 }

@@ -296,10 +296,16 @@ func runFakeClaude() int {
 		return fakeInterruptible(sid)
 	case "mode":
 		return fakeMode(sid)
+	case "rewind":
+		return fakeRewind(sid)
 	case "mcp":
 		return fakeMCP(sid)
 	case "connectors":
 		return fakeConnectors(sid)
+	case "handshake":
+		return fakeHandshake(sid, false) // see commands_test.go
+	case "handshakerefused":
+		return fakeHandshake(sid, true)
 	case "probe":
 		return fakeModelProbe(sid)
 	case "renamesync":

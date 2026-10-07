@@ -40,6 +40,10 @@ const (
 	// not happen. Its write already succeeded, so nothing else says a word -
 	// mode.go's modeRefusedFormat, one control receipt over.
 	rewindRefusedFormat = "%s%s refused that rewind: %s"
+
+	// rewindAfterRestoreRefusedFormat is both's second half refused after its
+	// first succeeded: the files are back and the conversation is not.
+	rewindAfterRestoreRefusedFormat = "%s%s's files were restored, but the conversation was not rewound: %s"
 )
 
 // RewindPicker is one session's earlier prompts, newest first - so the
@@ -60,6 +64,9 @@ type RewindPicker struct {
 	LastSeen string
 
 	Cursor int
+
+	// Restore is the second step, once ↵ has chosen a prompt. See rewindmenu.go.
+	Restore rewindRestore
 }
 
 // Open reports whether there is a rewind picker at all. The zero value is
@@ -164,6 +171,9 @@ func (a App) rewindRunning(sessionID string) bool {
 // braces for the common case, where the report and the key are two
 // separate Update calls rather than one racing the other.
 func (a App) reconcileRewind() App {
+	if s := a.rewindAfterRestore; s != "" && (a.endedAgent(s) || a.rewindRunning(s)) {
+		a.rewindAfterRestore = "" // its conversation rewind can no longer be the next receipt
+	}
 	if !a.rewind.Open() {
 		return a
 	}
@@ -200,6 +210,9 @@ func (a App) rewindKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		// adversarial review 2026-08-26.
 		return a, nil, false
 	}
+	if a.rewind.Restore.open() {
+		return a.restoreKey(m)
+	}
 	switch m.Type {
 	case tea.KeyUp:
 		return a.moveRewind(-1), nil, true
@@ -208,7 +221,7 @@ func (a App) rewindKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	case tea.KeyEsc:
 		return a.closeRewind(), nil, true
 	case tea.KeyEnter:
-		next, cmd := a.confirmRewind()
+		next, cmd := a.chooseRewind()
 		return next, cmd, true
 	}
 	return a, nil, false
@@ -224,32 +237,8 @@ func (a App) moveRewind(by int) App {
 	return a
 }
 
-// confirmRewind sends the cursored prompt as the rewind target.
-//
-// Only the send: the receipt - re-reading the transcript and prefilling the
-// draft with the rewound turn's own words - is noteRewind's, below, off the
-// core.KindRewindReceipt a FrameRewind's control_response resolves to. The
-// picker closes unconditionally, whether or not the write itself succeeds -
-// confirmPicker's own reasoning about a picker after a choice is made.
-//
-// endedAgent is interrupt()'s own guard: a picker can outlive the agent it
-// was opened for, and a rewind aimed at a process nothing is left to hand it
-// to is a write worth skipping rather than sending. rewindRunning is the
-// same guard rewindKey reads before Enter ever reaches here - kept here too,
-// belt and braces, so Enter reached any other way still refuses to write a
-// live FrameRewind at a session that is mid-turn.
-func (a App) confirmRewind() (App, tea.Cmd) {
-	p := a.rewind
-	if p.Cursor < 0 || p.Cursor >= len(p.UUIDs) || a.endedAgent(p.Session) || a.rewindRunning(p.Session) {
-		return a.closeRewind(), nil
-	}
-	f := rpc.Frame{Kind: rpc.FrameRewind, SessionID: p.Session, RewindTarget: p.UUIDs[p.Cursor], RewindLastSeen: p.LastSeen}
-	a = a.closeRewind()
-	return a, a.write(rewindFailed, f)
-}
-
-// noteRewind folds a KindRewindReceipt: Claude's answer to the FrameRewind
-// confirmRewind sent. The airlock classifies it beside KindControlReceipt for
+// noteRewind folds a KindRewindReceipt: Claude's answer to a FrameRewind, sent
+// from the picker or queued by the daemon behind a both's restore. The airlock classifies it beside KindControlReceipt for
 // drawing purposes - never a transcript event, see fleet_test.go's roomCases
 // and dm_blocks.go's default case - so this is the only place its payload is
 // read, from App.observe.
@@ -269,7 +258,15 @@ func (a App) noteRewind(sessionID string, ev core.Event) App {
 	if ev.Kind != core.KindRewindReceipt || ev.Rewind == nil {
 		return a
 	}
+	afterRestore := a.rewindAfterRestore == sessionID
+	if afterRestore {
+		a.rewindAfterRestore = ""
+	}
 	if !ev.Rewind.Rewound {
+		if afterRestore {
+			notice.Report(rewindAfterRestoreRefusedFormat, agentPrefix, a.agentName(sessionID), ev.Rewind.Error)
+			return a
+		}
 		notice.Report(rewindRefusedFormat, agentPrefix, a.agentName(sessionID), ev.Rewind.Error)
 		return a
 	}

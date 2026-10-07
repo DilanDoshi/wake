@@ -280,6 +280,24 @@ func TestNoAdvertisedCommandRunsNothingAndAnswersAtOnce(t *testing.T) {
 	}
 }
 
+// A fresh agent's handshake names list-agents as truly as an init would - the same
+// claude answers both - so the machine's sessions are listed before any turn.
+func TestAHandshakeNamingListAgentsListsTheSessionsBeforeAnyTurn(t *testing.T) {
+	oneShotOnPath(t, "handshake", "")
+	runs := runsCounted(t)
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+	c.pushedCommands(idAlpha, handshakeCommands)
+
+	if got := askPeersOf(c); !reflect.DeepEqual(got.Peers, recordedPeers) {
+		t.Errorf("a fleet whose fresh agent's handshake named list-agents listed %+v, want %+v", got.Peers, recordedPeers)
+	}
+	if n := runs(); n != 1 {
+		t.Errorf("%d one-shot runs, want 1", n)
+	}
+}
+
 // Every way a run can fail answers "no outside sessions", never a wrong row:
 // the recorded empty listing, a text that is no listing, a non-zero exit or
 // more output than a listing - even after a good listing - and no claude on

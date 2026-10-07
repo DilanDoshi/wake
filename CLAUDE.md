@@ -77,6 +77,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   that server. **Every agent opens with Claude's `initialize` handshake**, which is what makes a
   headless session load the operator's claude.ai connectors; the daemon then reconnects each one
   reading needs-auth, so the signed-in ones work from the start (`daemon/mcpask.go`'s `handshake`).
+  The reply also names the agent's slash commands, which feed the `/` menu before its first turn.
   A connector not signed in points at claude.ai, and the banner's count leaves connectors out.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
@@ -199,7 +200,15 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   the mandatory `last_seen_user_message_uuid`. `session_id` never changes.
 - The on-disk transcript is an append-only tree; `core.ActiveBranch` walks `parentUuid` from the live
   leaf. History, room restore and `RewindTargets` share that one reconstruction. On `rewound:true`
-  the pane re-reads itself (`noteRewind`) — the only mechanism. The manager is refused both frames.
+  the pane re-reads itself (`noteRewind`) — the only mechanism. The manager is refused every rewind frame.
+- **Code is restored by claude's own checkpoints** (owner's 2026-10-02 scope-in). Every agent starts
+  with `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true` unless the operator names it (`core.agentEnv`).
+  ↵ on a prompt previews its files (`FrameRewindPreview`, a `rewind_files` dry run, answered to the
+  asking window only); the second step offers restore conversation / code and conversation / code /
+  never mind, the code ones only when the preview names files. Code is armed (↵ arms, ↵ restores,
+  `App.disarmed` takes it back). The daemon refuses a restore unless the agent reads idle; both holds
+  the agent's input, restores files first and rewinds the conversation only on the restore's success.
+  `internal/ui/rewindmenu.go`, `internal/daemon/rewindfiles.go`.
 
 **Layout, mouse, selection**
 - **The grid is bounded:** columns, each split once (spec §8). The room is `Cols[0]` and cannot be
@@ -250,8 +259,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`roomWorkingLine`, `roomwords.go`).
 - **The DM's done line** is captured at the working→idle edge (`Fleet.WithStatus`), only for turns
   this client watched start; forgotten on park/end/gap, on new agent content (`notDone`), and hidden
-  while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate. The roster's `✔`
-  and the strip's `N done` read the same `turnDone` — an annotation over idle, never an `rpc` state.
+  while a subagent, workflow or background shell runs (`subRunning`; a shell is a sidebar row the
+  cursor skips). `DM.hasBeat` is the one row predicate. The roster's `✔` and the strip's `N done`
+  read the same `turnDone` — an annotation over idle, never an `rpc` state.
 - **Every notice times out**: `max(10s, drawn cells × 100ms)`, one tick per `notice.Seq`, armed in
   `App.Update`. An API failure stays pinned under them until a healthy turn or a resume
   (`noticelinger.go`, `apierror.go`'s `pinnedNotice`).
@@ -379,7 +389,7 @@ yet says so in bold.**
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
 | Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
-| Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `prompts.go` · `mode.go` |
+| Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
@@ -473,6 +483,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 | Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools SendMessage`; `--append-system-prompt` |
 | Session listing | `--print --bare --no-session-persistence` + stream-json, one `/list-agents` line (verified 2.1.283) |
 | Mid-turn delivery | a user line written mid-turn needs no flag; `priority:"now"` + `origin:{kind:"human"}` for send-now; `cancel_async_message` takes one back (verified 2.1.288) |
+| File checkpoints | no flag: the env var `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true` (`-p` ignores the setting); restored by the `rewind_files` control request (verified 2.1.288) |
 
 ### Traps
 
@@ -529,6 +540,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   receipt carries as a list. **On disk a line taken up mid-turn is an `attachment` of type
   `queued_command` under `source_uuid`**, not a user record (`Event.Absorbed`, no rewind target).
   `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md`.
+- **`rewind_files`' preview key is `dry_run`.** `dryRun` is silently ignored and the request restores
+  for real. A refused restore is a bare `error` receipt, so only its request id says what it answers.
+  Checkpoints survive `--resume` and a fork, not `/clear`; Bash and subagent edits are not tracked.
+  `docs/superpowers/notes/2026-10-02-file-rewind-findings.md`.
 - **A headless session loads claude.ai connectors only after an `initialize` control request**
   (never otherwise, even with `ENABLE_CLAUDEAI_MCP_SERVERS=true`), and a loaded connector reads
   `needs-auth` — even one signed in on claude.ai — until an `mcp_reconnect` connects it; one never
@@ -546,7 +561,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/event.go` at 798 and `internal/ui/fleet.go` at 797 — derived by
+  `internal/ui/fleet.go` at 797 and `internal/ui/composer.go` at 795 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

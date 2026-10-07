@@ -241,23 +241,29 @@ func dropTrailingBlank(lines []string) []string {
 	return lines
 }
 
-// tileSubagents is the "⤷ N subagents" line - with its running workflows
-// counted apart, since a workflow is not a subagent - dim and truncated to the
+// tileSubagents is the "⤷ N subagents" line - with its running workflows and
+// shells counted apart, since neither is a subagent - dim and truncated to the
 // tile's inner width: titledBox's Width(edge) word-wraps an over-wide line into
 // a second physical row that would overshoot the cell.
 func tileSubagents(running []Task, inner int) string {
-	flows := 0
+	flows, shells := 0, 0
 	for _, t := range running {
-		if t.Kind == core.TaskWorkflow {
+		switch t.Kind {
+		case core.TaskWorkflow:
 			flows++
+		case core.TaskShell:
+			shells++
 		}
 	}
 	var parts []string
-	if subs := len(running) - flows; subs > 0 || flows == 0 {
+	if subs := len(running) - flows - shells; subs > 0 || flows+shells == 0 {
 		parts = append(parts, plural(subs, "subagent"))
 	}
 	if flows > 0 {
 		parts = append(parts, plural(flows, "workflow"))
+	}
+	if shells > 0 {
+		parts = append(parts, plural(shells, shellWord))
 	}
 	return HintStyle.Render(ansi.Truncate("⤷ "+strings.Join(parts, " · "), inner, ellipsis))
 }

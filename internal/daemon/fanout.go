@@ -31,6 +31,10 @@ func (s *server) fanOut(a *agent) {
 			continue
 		}
 		if a.handshakeAnswered(ev) {
+			// It may have taught the agent its commands, which a client learns only
+			// from a report - no event is replayed - and a state change is not
+			// coming for an agent that has not been asked anything.
+			s.pushStatus()
 			continue
 		}
 		a.observe(ev)
@@ -45,10 +49,11 @@ func (s *server) fanOut(a *agent) {
 		case asked && c == nil:
 			a.connectorsReported(ev) // the daemon's own ask; see handshake
 		case asked:
-			c.enqueue(f) // an MCP answer is its asker's alone; see askMCP
+			c.enqueue(f) // an MCP answer or a preview is its asker's alone; see askMCP
 		default:
 			s.broadcast(f)
 		}
+		a.continueRewind(ev)
 
 		// An ask, an answer and a turn end each change what the roster draws
 		// and what ⇧⇥ can find. Left to watchLiveness, that took up to one

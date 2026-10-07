@@ -427,35 +427,30 @@ func TestARowIsOneRowWhateverTheDispatchIsCalled(t *testing.T) {
 	}
 }
 
-// A background shell is not a subagent and does not get a row.
-//
-// Two reasons, and the second is the one that matters. It is not what this
-// surface says it is listing - a shell carries no subagent_type, so
-// subagentName falls through to its description and it reads exactly like a
-// subagent. And it forwards no frames at all, so a row offering to open it
-// opens an empty pane: Task.Openable is the one place that decides which rows
-// have a conversation behind them, and taskrows.go's own header says a row
-// without one must never offer one.
-func TestABackgroundShellDoesNotGetASubagentRow(t *testing.T) {
+// A running background shell is listed, as its own kind of row: what is running
+// is worth showing whether or not it can be read, and the roster's "is anything
+// still running" answer (the ✔, the done line, the strip) reads this list. It is
+// not a subagent and not selectable - it forwards no frames, so a row offering to
+// open it would open an empty pane (Task.Selectable).
+func TestARunningShellGetsAShellRowThatNothingCanOpen(t *testing.T) {
 	f := NewFleet()
 	f, _ = f.Observe(started("a1", "toolu_1", "Auditing the diff", "code-reviewer", core.TaskAgent), "s1")
 	f, _ = f.Observe(started("b1", "toolu_2", "waiting for the sentinel", "", core.TaskShell), "s1")
 
-	for _, row := range f.RunningTasks("s1") {
-		if row.Kind == core.TaskShell {
-			t.Errorf("a background shell is listed as a subagent: %+v", row)
-		}
-		if !row.Openable() {
+	rows := f.RunningTasks("s1")
+	if len(rows) != 2 {
+		t.Fatalf("got %d rows, want the subagent and the shell: %+v", len(rows), rows)
+	}
+	for _, row := range rows {
+		if row.Kind == core.TaskShell && (row.Openable() || row.Selectable()) {
 			t.Errorf("a row with no conversation behind it is offered as one: %+v", row)
 		}
 	}
-	if got := len(f.RunningTasks("s1")); got != 1 {
-		t.Errorf("got %d rows, want the one real subagent", got)
-	}
 
 	agents := []Agent{{ID: "s1", Name: "alex", State: rpc.StateWorking}}
-	if out := stripANSI(Roster{}.View(agents, f.RunningTasks, rosterWidth, 10)); strings.Contains(out, "sentinel") {
-		t.Errorf("the shell is drawn in the sidebar:\n%s", out)
+	out := stripANSI(Roster{}.View(agents, f.RunningTasks, rosterWidth, 10))
+	if !strings.Contains(out, subGlyph+" "+shellWord+" waiting") { // the column clips the rest
+		t.Errorf("the shell is not drawn in the sidebar as a shell:\n%s", out)
 	}
 }
 
@@ -613,16 +608,5 @@ func TestARunningWorkflowIsListedAndLeavesOnceItEnds(t *testing.T) {
 	}}, "s1")
 	if got := f.RunningTasks("s1"); len(got) != 0 {
 		t.Errorf("RunningTasks() = %+v after the workflow ended, want none", got)
-	}
-}
-
-// A running shell stays excluded from RunningTasks - widening it for a
-// workflow must not widen it for every kind with no transcript.
-func TestARunningShellStaysExcludedFromRunningTasks(t *testing.T) {
-	f := NewFleet()
-	f, _ = f.Observe(started("b1", "toolu_2", "waiting for the sentinel", "", core.TaskShell), "s1")
-
-	if got := f.RunningTasks("s1"); len(got) != 0 {
-		t.Errorf("RunningTasks() = %+v, want a running shell excluded", got)
 	}
 }

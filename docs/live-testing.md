@@ -761,10 +761,10 @@ and not an assertion.
 
 New with the `/`-and-`@` completion. Everything here is a judgement a test cannot make.
 
-- [ ] **Type `/` in a conversation with an agent that has taken a turn.** The menu should list Wake's
-      own commands first and then that agent's — including any `.claude/commands/*.md` of your own.
-      If your own commands are missing, the session had not started a turn yet; take one and look
-      again.
+- [ ] **Type `/` in a conversation with a just-spawned agent, before its first turn.** The menu
+      should list that agent's commands first and then Wake's — including any
+      `.claude/commands/*.md` and skills of your own, from the `initialize` handshake's reply. Do the
+      same in the room, ending a long `@name …` brief with `/`.
 - [ ] **Type `/` in a room with nothing running.** Wake's commands and nothing else, which is
       correct and worth seeing once so it does not read as a failure.
 - [ ] **Where it sits.** The menu draws at the **top** of the pane, where a permission card draws —
@@ -889,6 +889,17 @@ has advertised `/list-agents`), with other `claude` sessions open in other termi
 - [ ] **A real steer.** Ask an agent to run a long `make test`, type a correction while it runs, and
   watch it land at the next tool boundary (the pin moves into the conversation); then `⌃]` a second one
   and watch the running command move to the background. The recordings used haiku; check one model more.
+
+## Rewind — restoring code on a real repository
+
+The tests replay recorded receipts and a scripted agent. In a scratch git repository, with one agent:
+
+- [ ] Have it edit two files with its tools and change a third with a shell command (`sed -i`). esc esc,
+      pick the prompt before, and the preview lists the two tool edits and not the shell one; restore
+      code, and `git status` shows only the shell change left.
+- [ ] Symlink one edited file first: the restore's notice says it left a linked file as it is.
+- [ ] Run a second agent in the same directory: the choices name it, `(working)` while it works.
+- [ ] Park and wake the agent, then restore code to a prompt from before the park.
 
 ## Reporting back
 

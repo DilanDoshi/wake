@@ -287,6 +287,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// rewound is the discriminator itself - see wireControlBody.Rewound.
 	"rewound", "targetMessageUuid", "prefillText", "precedingAssistantUuid",
 
+	// The rewind_files control_request and its receipt: restoring the files a
+	// session's tools edited. dry_run's spelling is the trap the findings note
+	// records - dryRun is ignored, and the request restores for real.
+	"rewind_files", "user_message_id", "dry_run", "canRewind", "filesChanged", "skippedLinks",
+
 	// The three MCP control requests, the server they name, and the one
 	// Claude-spelled key of the status receipt Wake reads (a tool's readOnly
 	// annotation, which the MCP spec itself calls readOnlyHint).
@@ -478,6 +483,12 @@ var deliberatelyGeneric = wordSet([]string{
 	// in on its own - a file cannot reach the list without naming "init".
 	"agents",
 
+	// An initialize receipt's slash commands, generic for "agents"' reason: Wake's
+	// own json tags spell it (rpc.SessionStatus.Commands, core.SessionFacts), so
+	// policing it would fire on Wake. Not a route in on its own - reaching the
+	// receipt still takes naming "control_response", which is policed.
+	"commands",
+
 	// A workflow_agent's own fields, the plainest English among them:
 	// "index" and "title" are a workflow_phase's, "tokens" a
 	// workflow_agent's. Policing any would fire across the tree - Wake's own
@@ -502,6 +513,10 @@ var deliberatelyGeneric = wordSet([]string{
 	// A SendMessage's recipient key, the plainest English there is; no route in
 	// without "SendMessage", which is policed above.
 	"to",
+
+	// A rewind_files preview's line counts. Plain English a diff names anywhere,
+	// and no route in: a receipt is known only by "canRewind", which is policed.
+	"insertions", "deletions",
 
 	// A workflow_agent's other state words, "start"'s siblings. Neither is
 	// policed: core.TaskProgress and core.TaskDone already spell "progress"
@@ -749,13 +764,16 @@ var notNamedByTheAirlock = map[string]string{
 // subagent's hand-back, and "isMeta", claude's on-disk mark on a line it injected,
 // which DecodeTranscriptLine reads so an unclaimed one is never the operator's
 // turn. subagent-handback.jsonl, injected-meta.jsonl.
-// 221 → 222: "says it was ", the column a renamed session's /list-agents row
+// 221 → 227: the rewind_files request ("rewind_files", "user_message_id",
+// "dry_run") and its receipt ("canRewind", "filesChanged", "skippedLinks").
+// rewind-files*.jsonl; 2026-10-02-file-rewind-findings.md.
+// 227 → 228: "says it was ", the column a renamed session's /list-agents row
 // carries between its name and directory. list-agents-bare-renamed.jsonl.
-// 222 → 223: "SendMessage", the manager's one built-in and the call whose
+// 228 → 229: "SendMessage", the manager's one built-in and the call whose
 // recipient and words toolPeerSend reads. manager-tools.jsonl, manager-relay.jsonl.
-// 223 → 224: "msg_id", the SendMessage receipt's own key, which receiptSentence
+// 229 → 230: "msg_id", the SendMessage receipt's own key, which receiptSentence
 // requires so no other JSON result is cut to its message. manager-relay.jsonl.
-const policedWordCount = 224
+const policedWordCount = 230
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -794,6 +812,8 @@ var notWireVocabulary = wordSet([]string{
 	"encode rewind",
 	"%w: encode rewind: empty request id",
 	"%w: encode rewind: empty target or last-seen uuid",
+	"encode rewind files",
+	"%w: encode rewind files: empty request id or message uuid",
 	"encode stop task",
 	"%w: encode stop task: empty request id",
 	"%w: encode stop task: empty task id",
@@ -1064,27 +1084,17 @@ var notInTheCorpus = map[string]string{
 	"Glob": "not advertised by init.tools here, and never called",
 	"Grep": "not advertised by init.tools here, and never called",
 
-	// Edit's input keys. Edit is advertised 46 times and called zero, so the
-	// diff path has no fixture behind it and is exercised by hand-written
-	// unit tests only. That is worth knowing: ToolCall.Diff is the one part
-	// of the airlock ruling the corpus cannot vouch for. new_string does
-	// occur, but only inside the English of an interrupt notice ("if it was
-	// a file edit, the new_string was NOT written"), which is why the check
-	// below matches quoted tokens rather than substrings.
-	"old_string": "Edit is advertised but never called",
-
 	// TodoWrite and its whole-list envelope. Retired in 2.1.240 (off unless
 	// CLAUDE_CODE_ENABLE_TASKS is false) and never called in the corpus, so its
 	// `todos` key stays transcribed from the shipped binary rather than recorded
 	// - task-checklist.jsonl exercises the *replacement*, TaskCreate/TaskUpdate,
 	// not this. "activeForm" and "in_progress" used to sit here for the same
 	// reason and have moved out: the recorded checklist carries both.
-	"todos":      "TodoWrite is retired in 2.1.240 and never called; its list is now TaskCreate/TaskUpdate",
-	"TodoWrite":  "retired in 2.1.240 and never called in the corpus",
-	"deleted":    "the fourth TaskUpdate status; the recorded session never deletes an item",
-	"new_string": "Edit is advertised but never called; occurs only in prose",
+	"todos":     "TodoWrite is retired in 2.1.240 and never called; its list is now TaskCreate/TaskUpdate",
+	"TodoWrite": "retired in 2.1.240 and never called in the corpus",
+	"deleted":   "the fourth TaskUpdate status; the recorded session never deletes an item",
 
-	// primaryArg keys for tools the corpus never exercised, alongside Edit's.
+	// primaryArg keys for tools the corpus never exercised.
 	"pattern": "Glob and Grep are neither advertised here nor called",
 
 	// The token stream's five words moved out of this list on 2026-08-21:
@@ -1126,6 +1136,9 @@ var notInTheCorpus = map[string]string{
 	"cancel_async_message":        "outbound only; a recording of stdout cannot contain it",
 	"message_uuid":                "outbound only; the field the cancel request carries",
 	"priority":                    "outbound only; the key a send-now carries",
+	"rewind_files":                "outbound only; a recording of stdout cannot contain it",
+	"user_message_id":             "outbound only; the rewind_files request field Wake writes",
+	"dry_run":                     "outbound only; the rewind_files request field Wake writes",
 
 	// The run record's snapshot wrapper, its camelCase spelling with no
 	// counterpart on the stream (contrast the recorded workflow_progress, its

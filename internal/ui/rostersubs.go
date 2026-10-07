@@ -29,6 +29,7 @@ package ui
 // figure on screen is worse than no figure.
 
 import (
+	"cmp"
 	"fmt"
 	"strings"
 
@@ -55,11 +56,17 @@ const subGlyph = "⎿"
 // for.
 const workflowGlyph = "◈"
 
+// shellWord heads a running background shell's row.
+const shellWord = "shell"
+
 // subagentRow is one running dispatch: what kind of agent it is, and what it
 // has spent if the column can hold the figure whole.
 func subagentRow(t Task, width int) string {
-	if t.Kind == core.TaskWorkflow {
+	switch t.Kind {
+	case core.TaskWorkflow:
 		return workflowRow(t, width)
+	case core.TaskShell:
+		return shellRow(t, width)
 	}
 	head := strings.Repeat(" ", toolIndent) + subGlyph + " " + subagentName(t)
 	count := tokenArrow + " " + humanTokens(t.Tokens)
@@ -67,6 +74,16 @@ func subagentRow(t Task, width int) string {
 		return clip(head, width)
 	}
 	return clip(head+" "+count, width)
+}
+
+// shellRow is a running background shell's row: the word, then what it was asked
+// to run. No count - a shell reports no usage.
+func shellRow(t Task, width int) string {
+	head := strings.Repeat(" ", toolIndent) + subGlyph + " " + shellWord
+	if what := oneLine(cmp.Or(t.Label, t.Name)); what != "" {
+		head += " " + what
+	}
+	return clip(head, width)
 }
 
 // workflowRow is a running workflow's row: its own short name - never the

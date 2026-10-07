@@ -239,6 +239,36 @@ untouched: `⇥` completes, `⌃N`/`⌃P` walk, `↑↓` stay the roster's. (The
 the arrows to walk the menu; nothing here touches that.) `internal/ui/completion.go`,
 `completion_test.go`'s `TestTheSessionsCommandsComeBeforeWakes`.
 
+**Amendment, 2026-10-06 — a just-spawned agent's menu is filled from the handshake's reply (BUG-46).**
+The "left as is" above stopped being acceptable when the owner typed a first brief to a fresh agent in
+the room, ended it with `/complete-linear-ticket`, and got no menu and a dead `⇥`. The cause is the one
+named above - the list rides every turn's init - but the init is not the only place claude names it:
+the daemon already sends the `initialize` control request at spawn (`daemon/mcpask.go`), and that
+reply carries the session's commands as a list of entries, each with a name, a description, a hint,
+aliases and a built-in flag. Recorded 2026-10-06 against claude 2.1.289 in a sterile HOME
+(`testdata/stream/initialize.jsonl` is the receipt): the reply's names are set-equal to the same
+session's `init.slash_commands` (a hand probe, not committed: one sterile session with one demo skill
+answered the handshake, then a bare `/model` - `num_turns` 0 - brought its init, and the two lists
+matched name for name, 49 each), and a skill marked not user-invocable is absent from both, so the
+reply is the same `/`-invocable list this entry already trusts. `core/control.go` reads only each
+entry's name onto the receipt's `SessionFacts.SlashCommands`; the daemon keeps them for the report when
+the agent has none yet (an init's list is never replaced by the handshake's, and every init after
+replaces it as before) and pushes a status, since a quiet agent has no state change to carry it. The
+reply still reaches no window.
+
+This **supersedes the idea of a launch-time bare `/model` probe for learning a fresh agent's commands**
+(recommended to the slash-menu work on 2026-09-21, never built): a probe is a model-less turn Wake
+would send and suppress, where the handshake costs nothing and is already sent. The probe still earns
+its place for **effort and model**, which the handshake reply does not carry.
+
+The scrubber and the corpus guard were widened on purpose, for a newly decoded field:
+`scripts/scrub-fixtures.py` keeps a reply's `commands` reduced to each
+entry's name (descriptions and hints are an operator's own words) and maps the names through the same
+placeholders an init's `slash_commands` get; `corpus_test.go` holds those names to the slash allowlist
+and fails a reply command carrying any key but `name`. The reply's `agents` is **still banned** until
+something decodes it - it would fill the `@agent-<type>` menu of a fresh agent the same way, and is
+not part of this fix.
+
 ---
 
 ## 2026-08-28 — an edit shows its diff by default, and its "updated" confirmation is dropped
@@ -3672,6 +3702,71 @@ where `]` sits on AltGr. Under tmux and cmux it is a `live-testing.md` check, no
 re-read conversation lost it - including the manager's sends, which were always written mid-turn. And a
 queued message that opens its own turn now keeps its agent `working` (the daemon owes a result on its
 `started`).
+
+---
+
+## 2026-10-02 — `esc esc` restores code too, through claude's own checkpoints
+
+**What changed.** The owner scoped in Claude Code's code restore (the 2026-08-25 rewind spec had it as
+a non-goal; its §10 now says so). Recorded against 2.1.288:
+`docs/superpowers/notes/2026-10-02-file-rewind-findings.md`.
+
+**Ruling 1 — checkpointing is turned on, never owned.** A headless claude saves file checkpoints only
+with `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true` in its environment; `-p` ignores the
+`fileCheckpointingEnabled` setting. `core.agentEnv` adds it to every agent's launch unless the
+operator's environment already names it, and claude itself honours an operator's
+`CLAUDE_CODE_DISABLE_FILE_CHECKPOINTING`. Claude keeps the backups; Wake stores nothing new. The cost
+is the one an interactive `claude` already pays by default, and Wake adds no frame and no poll.
+
+**Ruling 2 — the dry run decides what is offered.** ↵ on a prompt previews its restore
+(`FrameRewindPreview`, `dry_run`) and the code choices appear only when claude names files. So an
+agent started before this change, a prompt before a `/clear`, and a checkpoint swept after 30 days
+all degrade to claude's own sentence rather than a guess. The preview's answer goes to the window
+that asked alone — the MCP answer's routing, since a receipt names no target.
+
+**Ruling 3 — four frame kinds, not a mode field.** `FrameRewind` (conversation), `FrameRewindFiles`,
+`FrameRewindBoth`, `FrameRewindPreview`: no default is safe when one meaning writes files on disk,
+and each kind carries its own manager refusal.
+
+**Ruling 4 — both restores files first, and the conversation only after.** The two requests succeed
+back to back in either order, so order is not correctness; failure is. A restore can fail (swept or
+missing backups, an unwritable file), and a rewound conversation over files that were not put back is
+a known-wrong state. So both is one operation on the agent's input goroutine: the restore is written,
+the goroutine waits for its receipt (or the agent's end), and only on success writes the conversation
+rewind — nothing queued behind both, another window's send included, reaches stdin between the two
+halves (Codex adversarial review). The reverse failure (files back, conversation refused) is reported
+as exactly that.
+
+**Ruling 4a — the daemon refuses a restore unless the agent reads idle.** The UI gates on idle, but a
+send from another window can be applied first; it marks the turn owed under the agent's lock, and
+`restoreRefusal` reads the same `stateLocked` the report draws — owed, an ask, or a tool running on a
+turn nobody asked for — on the same input goroutine, before either restore is written. Both's wait
+for its restore's receipt is bounded (`restoreAnswerWait`): claude answers at once, and an answer that
+never comes must not hold every interrupt queued behind it. Both kept by the second Codex pass.
+
+**Declined from that pass.** (1) Both rewinds the conversation after a restore that skipped linked
+files: Claude Code's own "Restore code and conversation" does the same with a "skipped N files"
+warning, and Wake's notice names the count. (2) A restore is not re-checked against the transcript tip
+the preview saw: it needs another window to finish a whole turn before this window folds the status
+push that closes its picker, and the fix is a transcript read on the agent's input goroutine.
+
+**Ruling 5 — restoring code is armed.** First ↵ arms, second restores; `App.disarmed` takes the arm
+back on any input, mouse included, and esc takes it back before it leaves the step. The cue is drawn
+in the picker, not the legend. A live agent sharing the directory is named above the choices (not the
+manager, which has no tools): at 15–30 agents in overlapping trees that is the common case, and the
+file list alone does not say who else is editing those files.
+
+**Ruling 6 — control requests got their own airlock file.** `encode.go`, `wire.go` and
+`protocol.go` were all at the 800-line max with three features waiting to add control requests, so
+the control exchange moved out by subject into `internal/core/control.go`, the sixth airlock file
+(recommended by the plan's checker; **awaiting the owner's ruling** — the alternative was squeezing
+into `vocabulary.go`'s last 50 lines).
+
+**Trap.** The request's dry-run key is `dry_run`. `dryRun` — the TypeScript SDK's option name — is
+silently ignored, and the request restores for real: the recording deleted its files. Pinned
+byte-for-byte by `TestEncodeRewindFilesMatchesTheRecordedRequests`.
+
+**Out.** "Summarize from here / up to here": no headless request is recorded.
 
 ## 2026-10-03 — a listing row Wake cannot read costs that row; the room's `@` behind `@who ` is who's
 

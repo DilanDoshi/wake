@@ -193,6 +193,29 @@ func EncodeRewind(requestID, targetUUID, lastSeenUUID string) ([]byte, error) {
 	}, "encode rewind")
 }
 
+// outRewindFilesRequest restores the files a session's tools edited to their
+// state at one of its user messages, or with DryRun only says what that would
+// change. DryRun is omitempty because claude's own restore omits the key, and
+// its spelling is load-bearing: dryRun - the TypeScript option's name - is
+// silently ignored, so the request restores for real (file-rewind-findings.md §2).
+type outRewindFilesRequest struct {
+	Subtype       string `json:"subtype"`
+	UserMessageID string `json:"user_message_id"`
+	DryRun        bool   `json:"dry_run,omitempty"`
+}
+
+// EncodeRewindFiles asks the session to restore its files to their state at
+// userMessageID, or with dryRun to preview that. The empty checks are
+// EncodeRewind's, for its reason.
+func EncodeRewindFiles(requestID, userMessageID string, dryRun bool) ([]byte, error) {
+	if requestID == "" || userMessageID == "" {
+		return nil, fmt.Errorf("%w: encode rewind files: empty request id or message uuid", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{Type: "control_request", RequestID: requestID,
+		Request: outRewindFilesRequest{Subtype: "rewind_files", UserMessageID: userMessageID, DryRun: dryRun}},
+		"encode rewind files")
+}
+
 // outStopTaskRequest stops a running dynamic Workflow() by its own task id -
 // the wire form of the Agent SDK's documented stopTask(taskId)
 // (findings.md §6). The same request at a workflow *agent's* agentId is
@@ -430,9 +453,42 @@ type wireControlBody struct {
 	PrecedingAssistantUUID string `json:"precedingAssistantUuid"`
 	Error                  string `json:"error"`
 
+	// A rewind_files receipt's payload, known by canRewind's presence as a
+	// rewind receipt is by rewound's; Error above is its refusal too. See
+	// filesRewindReply.
+	CanRewind    *bool    `json:"canRewind"`
+	FilesChanged []string `json:"filesChanged"`
+	Insertions   int      `json:"insertions"`
+	Deletions    int      `json:"deletions"`
+	SkippedLinks int      `json:"skippedLinks"`
+
 	// An mcp_status receipt's payload; a pointer so presence, even of an empty
 	// list, is the discriminator. See mcpStatusReply.
 	MCPServers *[]wireMCPStatus `json:"mcpServers"`
+
+	// An initialize receipt's commands, the session's slash commands before any
+	// turn has sent an init. Raw so a shape this build cannot read costs the
+	// facts and never the receipt: the handshake's reply must always reach the
+	// daemon. See commandNames.
+	Commands json.RawMessage `json:"commands"`
+}
+
+// commandNames is a receipt's `commands` reduced to each entry's name, the only
+// field read, and nil for anything that is not a list of named entries.
+func commandNames(raw json.RawMessage) []string {
+	var rows []struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(raw, &rows) != nil {
+		return nil
+	}
+	var names []string
+	for _, r := range rows {
+		if r.Name != "" {
+			names = append(names, r.Name)
+		}
+	}
+	return names
 }
 
 // wireCancelled is an interrupt receipt's uuid list, or the bool a
@@ -476,6 +532,9 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 	if ev, ok := mcpStatusReply(ev, f.Response); ok {
 		return ev
 	}
+	if ev, ok := filesRewindReply(ev, f.Response); ok {
+		return ev
+	}
 	if b := f.Response.Response.Rewound; b != nil {
 		ev.Kind = KindRewindReceipt
 		ev.Text = f.Response.Subtype
@@ -499,5 +558,25 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 		Error:       f.Response.Error,
 		Recalled:    f.Response.Response.Cancelled.recalled,
 	}
+	// The handshake's reply names the session's commands ahead of its first
+	// init; only that, so no other fact is claimed by it.
+	if names := commandNames(f.Response.Response.Commands); len(names) > 0 {
+		ev.Session = &SessionFacts{SlashCommands: names}
+	}
 	return ev
+}
+
+// filesRewindReply is a rewind_files receipt. A refused restore carries no
+// payload - a bare error, as a refused mode change does - so it decodes as a
+// generic receipt here and the session that asked relabels it (answeredMCP).
+func filesRewindReply(ev Event, r *wireControlResp) (Event, bool) {
+	b := r.Response.CanRewind
+	if b == nil {
+		return ev, false
+	}
+	ev.Kind = KindFilesRewindReceipt
+	ev.Text = r.Subtype
+	ev.Files = &FilesRewind{Restorable: *b, Files: r.Response.FilesChanged, Insertions: r.Response.Insertions,
+		Deletions: r.Response.Deletions, Skipped: r.Response.SkippedLinks, Error: r.Response.Error}
+	return ev, true
 }

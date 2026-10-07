@@ -7,7 +7,7 @@ package ui
 //
 // DM.subs already holds this, but App.observe only reaches a DM that is in
 // App.dms - a conversation somebody has *opened*. The sidebar's whole promise
-// is that any running dispatch is openable (rostersubs.go), including one
+// is that any running subagent is openable (rostersubs.go), including one
 // under an agent nobody has looked at yet, and Fleet.tasks already answers
 // *that* such a dispatch exists for exactly that agent (fleettasks.go, for
 // the same reason). This answers what it said: opening a dispatch this
