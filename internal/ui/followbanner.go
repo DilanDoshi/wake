@@ -1,21 +1,14 @@
 package ui
 
-// Following: a reader's place against the newest line, every move across it, and
-// the banner that says they have left it.
+// Following: where the reader stands against the newest line, the moves across
+// it, and the banner that says they have left it.
 //
-// A reader at the bottom is following, and that decides what the streamed preview
-// may take (DM.previewCap): a follower gets the pane's room, each row of the answer
-// pushing the transcript up one, while a reader who has scrolled back keeps the
-// floor so nothing they are reading moves. So the moves across the line live
-// together here, and each re-caps the preview: ScrollUp (the wheel, a drag at a
-// pane's edge, the keys), JumpToLatest (a click on the banner) and followed, the
-// one helper every other return goes through (⌃E, a subagent view, a restore).
-// SetSize and Append cross the line too, and re-cap with the follow they sampled
-// before the content moved. A return that skips followed leaves the preview in the
-// floor's box over a pane that wants it larger.
-//
-// The banner is the one line that tells a reader they have scrolled away from the
-// newest message.
+// A follower gets the pane's room for the streamed preview and a scrolled-back
+// reader the floor (DM.previewCap), so every move across the line re-caps it:
+// ScrollUp, JumpToLatest, and followed for every other return (⌃E, a fold that
+// reaches the bottom, a subagent view, a restore). SetSize and Append re-cap with
+// the follow they sampled; clear.go and roomseed.go are not returns - the pane is
+// blank there, or not yet sized.
 //
 // Append deliberately never yanks a scrolled-back reader to the newest line -
 // see dm.go's own comment on that. But the streamed preview and the working
@@ -40,19 +33,25 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
-// ScrollUp moves the reader lines back through the conversation, or forward
-// for a negative count, and stops at either end. The wheel, a drag at a pane's
-// edge and the scroll keys all come here.
+// ScrollUp moves the reader lines back through the conversation, or forward for
+// a negative count, and stops at either end.
 //
-// It is the only way in to a scroll position transcript has tracked and Append
-// has sampled since both were written: Append deliberately does not return a
-// reader who has scrolled back to the newest line, which is a promise nothing
-// could keep - or break - while no caller could scroll. The preview is re-capped
-// for wherever the reader landed, so leaving the bottom gives it back to the
-// floor and wheeling down to the bottom gives it its room again.
+// The stored layout lags the drawn one (View re-lays a copy), so it is brought up
+// to date first and the move is measured on what is on screen. When the move
+// changes the preview's cap the pane is laid out again with the bottom line held
+// where the scroll put it, so n up is n lines back and n down is the newest line.
 func (d DM) ScrollUp(lines int) DM {
+	d = d.drawnLayout()
 	d.tr = d.tr.scrolledUp(lines)
-	d.partial = d.partial.capped(d.previewCap(d.tr.atBottom()))
+	following := d.tr.atBottom()
+	if d.height <= 0 || d.previewCap(following) == d.partial.cap {
+		return d
+	}
+	foot := d.tr.footLine()
+	d = d.SetSize(d.width, d.height) // re-caps, and keeps a follower on the newest line
+	if !following {
+		d.tr = d.tr.withFootAt(foot)
+	}
 	return d
 }
 
@@ -66,6 +65,15 @@ func (d DM) followed() DM {
 	d.tr = d.tr.toBottom()
 	d.partial = d.partial.capped(d.previewCap(true))
 	return d
+}
+
+// footLine is the line on the window's last row, which the banner covers.
+func (t transcript) footLine() int { return t.scroll + t.height - 1 }
+
+// withFootAt scrolls the window so line is on its last row, as far as it can.
+func (t transcript) withFootAt(line int) transcript {
+	t.scroll = min(max(line-t.height+1, t.first()), t.bottom())
+	return t
 }
 
 // followBannerText is the whole of the banner. Short, because it takes the

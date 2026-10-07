@@ -104,7 +104,7 @@ func TestThePreviewIsBoundedToItsRowsHoweverLongTheBlockGets(t *testing.T) {
 // keeps the floor so nothing they read moves. The pane draws exactly its height
 // in every case, which is the alt-screen invariant the fixed cap protected and
 // this must keep.
-func TestThePreviewFillsAnEmptyPaneAndYieldsToAFullOne(t *testing.T) {
+func TestThePreviewFillsAnEmptyPaneAndAFullOneGivesAFollowerItsRoomAndAReaderBackTheFloor(t *testing.T) {
 	const w, h = 60, 30
 	long := strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200)
 

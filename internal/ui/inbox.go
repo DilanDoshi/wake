@@ -116,12 +116,11 @@ const (
 // for as long as it stalls, and appending to a string costs its length. It is
 // taken at the preview's floor, not DM.previewCap's larger pane-filling cap: the
 // DM accumulates its own tail across the frequent consumes that empty this fold,
-// so the cap is fed frame by frame rather than from one fold's buffer. A reader
-// following a full pane is now the common large-cap case, so the shortfall is no
-// longer rare: after a multi-second stall the fold can trim below what previewCap
-// would grow to, and the preview is short by rows until tokens refill it. Briefly
-// short rather than wrong - not worth a larger work bound multiplied across a
-// stalled fleet.
+// so the cap is fed frame by frame rather than from one fold's buffer. 800 x 5 is
+// 4,000 bytes, so after a long stall the fold trims below what previewCap would
+// grow to only where (rows + 2) x width passes that - about 100 columns by 38
+// rows - and the preview is short by rows until tokens refill it. Briefly short
+// rather than wrong, and not worth a larger bound multiplied across a stalled fleet.
 var foldChars = previewChars(foldWidth, minPreviewRows)
 
 // inbox is the frames that have arrived and not yet been drawn.

@@ -231,47 +231,32 @@ func (p partial) rows() int {
 	return strings.Count(p.view, "\n") + 1
 }
 
-// previewCap is how many rows the preview may draw in this pane.
-//
-// A reader who is following gets the pane's room: everything the preview-free
-// chrome and the transcript's one-row floor leave, so each streamed row pushes
-// the conversation up a row, as Claude Code's does, and the answer's start stays
-// on screen. A reader who has scrolled back gets minPreviewRows over a full
-// transcript - nothing they are reading moves - and the rows the transcript is
-// not using over a short one.
-//
-// following is the caller's, never read off tr here: tr.scroll is stale after a
-// width re-wrap, which is why SetSize hands over its own. The pane, never the
-// block, bounds the cap, so the per-token work is flat; it is re-measured in
-// SetSize, Append, ScrollUp and DM.followed, never per token.
-//
-// The pool is the pane less the chrome the preview does not own - the composer
-// as drawn, so the draft wins: a line added to it takes a row from the preview.
-// room keeps the transcript its floor, which keeps DM.View exactly its height.
-// A menu takes the floor: its own allowance already leaves the transcript that
-// floor, so the pool accounting this walks would double-count it.
+// previewCap is how many rows the preview may draw: the pane's room for a reader
+// who follows the newest line, the floor over a full transcript for one scrolled
+// back, and the floor under a menu or a subagent's view (the parent's words are
+// not what they opened). The pool is the pane less the chrome the preview does not
+// own, the composer as drawn, so the draft wins. following is the caller's, never
+// tr.atBottom(), which is stale after a width re-wrap.
 func (d DM) previewCap(following bool) int {
-	if d.height <= 0 || d.menu != "" {
-		return minPreviewRows
+	if d.height <= 0 {
+		return minPreviewRows // a pane never sized: a board tile's
 	}
 	pool := d.height - d.chromeSansPreview()
-	room := pool - minTranscriptHeight // leave the transcript its own floor
-	if following {
-		return max(0, room)
+	room := max(pool-minTranscriptHeight, 0) // the transcript keeps its own floor
+	switch {
+	case d.menu != "" || d.viewing != "":
+		return min(minPreviewRows, room)
+	case following:
+		return room
 	}
 	blank := pool - d.tr.lines.count() // rows the transcript is not using
-	// Floor the target at minPreviewRows, then cap it at room. room can be zero or
-	// negative in a pane too tight to hold the transcript's floor and a preview
-	// both; there the ceiling wins and the preview yields to zero rows rather than
-	// drawing one that does not fit and overflowing the pane.
-	return max(0, min(max(blank, minPreviewRows), room))
+	return min(max(blank, minPreviewRows), room)
 }
 
-// chromeSansPreview is chromeHeight without the preview's own rows: the pool the
-// preview competes with the transcript for is the pane less this. Summed rather
-// than taken as chromeHeight()-partial.rows(), because menuRows is itself a
-// function of the preview - and previewCap is only ever reached with no menu up
-// (its floor branch handles the rest), so menuRows is zero here by construction.
+// chromeSansPreview is chromeHeight without the preview's rows or the menu's: the
+// pool the preview, the menu and the transcript share. Summed rather than taken
+// as chromeHeight()-partial.rows(), because menuRows is itself a function of the
+// preview.
 func (d DM) chromeSansPreview() int {
 	composer := lipgloss.Height(d.composer.View(max(d.width, minComposerWidth)))
 	return composer + d.beatBarRows() + d.checklistRows() + d.queuedRows()

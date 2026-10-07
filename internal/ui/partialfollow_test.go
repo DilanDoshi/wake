@@ -169,6 +169,11 @@ func TestAScrolledBackReaderKeepsTheFloorWhileAnAnswerStreams(t *testing.T) {
 	top := ""
 	for i := range 8 {
 		d, text = streamRows(d, text, len(wrappedRows(text))+1)
+		// Observed off the stored DM, not the frame, which View re-derives: leaving
+		// the bottom must have re-capped what is retained.
+		if got, limit := len(d.partial.text), previewChars(pushW, minPreviewRows); got > limit {
+			t.Fatalf("step %d: the stored preview holds %d characters, want at most %d: leaving the bottom left its cap at the room", i, got, limit)
+		}
 		frame := frameRows(d)
 		if len(frame) != pushH {
 			t.Fatalf("step %d: the scrolled-back pane drew %d rows in a %d-row pane", i, len(frame), pushH)
@@ -207,7 +212,7 @@ func TestEveryReturnToTheNewestLineRestoresThePreviewsRoom(t *testing.T) {
 			d := pushDM(t, pushH)
 			room := previewRoom(d)
 			d, _ = streamRows(d, "", room)
-			d = d.ScrollUp(3)
+			d = d.ScrollUp(10) // further back than the preview's rows, which return to the transcript when it clears
 			d = d.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "a block that landed behind the reader"})
 			d, text := streamRows(d, "", minPreviewRows+2)
 			d = d.SetSize(pushW, pushH) // a resize lands while they read, settling the stored chrome
@@ -331,23 +336,36 @@ func TestTheFinishedBlockReplacesAFullPreviewInPlace(t *testing.T) {
 }
 
 // The pane is exactly its height at every size the preview can be, in every
-// pane from the tightest one up, following or not and under any draft - a frame
-// one row too tall scrolls the alt screen away on every draw.
+// pane from the tightest one up, following or not, under any draft and whatever
+// else is pinned around the box - a frame one row too tall scrolls the alt
+// screen away on every draw.
 func TestThePaneIsItsHeightAtEveryPreviewSize(t *testing.T) {
 	base := pushDM(t, pushH)
-	floor := base.minHeight()
-	for h := floor; h <= floor+30; h++ {
-		for _, scrolled := range []bool{false, true} {
-			for _, draft := range [][]string{nil, {"one", "two", "three"}} {
-				d := withDraft(t, base.WithComposer(NewComposer()).SetSize(pushW, h), draft...)
-				if scrolled {
-					d = d.ScrollUp(3)
-				}
-				text := ""
-				for rows := 0; rows <= 22; rows += 3 {
-					d, text = streamRows(d, text, rows)
-					if got := lipgloss.Height(d.View(pushW, h)); got != h {
-						t.Fatalf("h=%d scrolled=%v draft=%d lines, %d-row answer: the pane drew %d rows", h, scrolled, len(draft), len(wrappedRows(text)), got)
+	for name, chrome := range map[string]func(DM) DM{
+		"bare": func(d DM) DM { return d },
+		"checklist": func(d DM) DM {
+			return d.Append(taskCreate("write the plan", "writing")).Append(taskCreate("run the checks", "running"))
+		},
+		"queue":      func(d DM) DM { return d.WithQueued([]string{"a message typed ahead", "and another one"}) },
+		"menu":       func(d DM) DM { return d.WithMenu("menu row one\nmenu row two\nmenu row three") },
+		"card":       func(d DM) DM { return d.WithMenu("a card\nwith a question\nand two options").WithAsk(true) },
+		"no working": func(d DM) DM { d.Agent.State = rpc.StateIdle; return d },
+	} {
+		fresh := func() DM { return chrome(base.WithComposer(NewComposer())) }
+		floor := fresh().SetSize(pushW, pushH).minHeight()
+		for h := floor; h <= floor+24; h++ {
+			for _, scrolled := range []bool{false, true} {
+				for _, draft := range [][]string{nil, {"one", "two", "three"}} {
+					d := withDraft(t, fresh().SetSize(pushW, h), draft...)
+					if scrolled {
+						d = d.ScrollUp(3)
+					}
+					text := ""
+					for rows := 0; rows <= 22; rows += 3 {
+						d, text = streamRows(d, text, rows)
+						if got := lipgloss.Height(d.View(pushW, h)); got != h {
+							t.Fatalf("%s h=%d scrolled=%v draft=%d lines, %d-row answer: the pane drew %d rows", name, h, scrolled, len(draft), len(wrappedRows(text)), got)
+						}
 					}
 				}
 			}

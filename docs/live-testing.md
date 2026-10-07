@@ -730,8 +730,9 @@ word in the vocabulary. What remains below is what only a human at a terminal ca
 - [ ] **A narrow pane, and a stacked column.** While you follow the newest line, a long answer
       streams into all the room the pane has and pushes the conversation up a row at a time, as
       Claude Code's does; scroll back a notch and it drops to three rows so nothing you read moves,
-      and the transcript steps down by the rows it gave back. In one of four grid panes, say
-      whether pushing the whole pane up is the right trade, and whether that step down reads as
+      and the rows it gave back return to the transcript at once - from there each notch is three
+      lines, and wheeling back down resumes following exactly at the newest line. In one of four
+      grid panes, say whether pushing the whole pane up is the right trade, and whether that step reads as
       the pane making room or as the screen jumping.
 
 ## The pickers

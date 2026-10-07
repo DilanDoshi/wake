@@ -15,7 +15,7 @@ import "github.com/DilanDoshi/wake/internal/core"
 // view onto one, the board of tasks the model set itself, the last-read marks,
 // the tool-call state, the live run fold, and the preview of a block that will
 // never complete. The empty re-render is one banner, the same one a brand-new DM
-// draws, and resettleBoard reclaims the rows the board no longer needs.
+// draws, and drawnLayout reclaims the rows the board no longer needs.
 //
 // It does not re-ask history the way a rewind does (App.resetDM). A rewind keeps
 // the session and has a tree to restore; a /clear leaves an empty successor, and
@@ -36,7 +36,7 @@ func (d DM) clearedBySessionReset() DM {
 	// pane rather than redraw the pre-clear room turns. See roomseed.go.
 	d.seed = nil
 	d.tr = d.rewrapped().toBottom()
-	return d.resettleBoard()
+	return d.drawnLayout()
 }
 
 // forgetHistoryOnReset drops a pending pre-clear history ask when a /clear lands

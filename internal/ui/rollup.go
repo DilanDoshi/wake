@@ -302,10 +302,11 @@ func (d DM) openRun(line int) (DM, bool) {
 	// Opening a run renumbers only the lines below it, so a reader scrolled above
 	// the click keeps their place - the rule openTool states at length. runKey is
 	// left untouched: this changes no events, so the trailing run is unchanged.
+	d = d.drawnLayout() // the click landed on the layout drawn
 	following := d.tr.atBottom()
 	d.tr = d.rewrapped()
-	if following {
-		d.tr = d.tr.toBottom()
+	if following { // opening adds lines, so a reader scrolled back stays so
+		d = d.followed()
 	}
 	return d, true
 }

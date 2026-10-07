@@ -950,15 +950,21 @@ its 2026-10-07 amendment).
 follows the newest line gets the pane's room (the pool less the transcript's one-row floor); one scrolled
 back keeps the old formula, so nothing they read moves. The composer's ceiling leaves the preview's rows
 out and the preview is capped against the composer as drawn, so the draft wins. Every return to the
-newest line goes through `DM.followed()` (⌃E, the banner click, a subagent view, a restore), and
-`ScrollUp` re-caps after it moves; `SetSize` and `Append` pass the `following` they sampled, because
-`tr.atBottom()` is stale after a width re-wrap. `View` re-lays when a menu is up over a preview above
+newest line goes through `DM.followed()` (⌃E, the banner click, a fold, a subagent view, a restore),
+and `ScrollUp` settles the stored layout to the drawn one before it moves and holds the bottom line across
+a change of cap; the layout also settles when the preview clears. `SetSize` and `Append` pass the
+`following` they sampled, because `tr.atBottom()` is stale after a width re-wrap. `View` re-lays when a menu is up over a preview above
 the floor, since a preview at its ceiling made the menu's rows and the dropped `composerGap` cancel in
 `chromeHeight`.
 Regression tests, red on the unmodified tree: `TestAStreamedAnswerPushesTheTranscriptUpAsItGrows`,
 `TestEveryReturnToTheNewestLineRestoresThePreviewsRoom` (wheel, banner click, ⌃E),
 `TestTheDraftWinsOverAFullPreview`, and the follower half of
-`TestThePreviewFillsAnEmptyPaneAndYieldsToAFullOne`. Pinned green beside them:
+`TestThePreviewFillsAnEmptyPaneAndAFullOneGivesAFollowerItsRoomAndAReaderBackTheFloor`.
+Round 1 of review added, red before their fixes: `TestAWheelNotchMovesTheDrawnBottomLineByExactlyTheNotch`,
+`TestAStoredFullPreviewLayoutDoesNotOutliveItsPreview`, `TestAParentTalkingDoesNotSqueezeASubagentView`,
+`TestFoldingALongResultOverAStreamingAnswerRestoresThePreviewsRoom`,
+`TestADragThatPullsAFollowerBackMapsThePointerIntoTheNewWindow`, and the sweep's menu case (a menu
+under a draft in a tight pane drew two rows too many). Pinned green beside them:
 `TestAScrolledBackReaderKeepsTheFloorWhileAnAnswerStreams`, `TestAMenuTakesItsRowsBackFromAFullPreview`,
 `TestTheFinishedBlockReplacesAFullPreviewInPlace`, `TestThePaneIsItsHeightAtEveryPreviewSize`.
 
@@ -967,10 +973,10 @@ for). **The draft wins over the preview.** The preview stays plain text for this
 streams as raw markdown and is redrawn formatted when its block lands; a follow-up formats finished
 paragraphs as they complete (`deferred.md`, 2026-10-07).
 
-**Not changed:** the first wheel notch off the bottom of a long answer re-caps the preview to three
-rows, so the transcript the preview had squeezed to a row or two comes back at once — the rows the
-preview gave back, not three. A scrolled-back reader returning mid-answer regrows the preview from
-about five rows (`deferred.md`, 2026-10-07).
+**Not changed:** the first wheel notch off the bottom of a long answer is exactly three lines, but the
+preview drops to three rows at once, so the rows it gave back return to the transcript in one step. A
+scrolled-back reader returning mid-answer regrows the preview from about five rows (`deferred.md`,
+2026-10-07).
 
 ---
 

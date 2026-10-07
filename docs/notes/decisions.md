@@ -2686,17 +2686,27 @@ Claude Code pushes the whole transcript up a row at a time, and the owner ruled 
   preview's rows: a preview at its ceiling froze the composer and a growing draft wrapped inside a fixed
   box.
 - **Every return to the newest line goes through one helper**, `DM.followed()` (`followbanner.go`):
-  ⌃E, the banner click, a subagent view, a restore. The cap is re-measured in `SetSize`, `Append`,
-  `ScrollUp` and that helper, never per token. Callers hand `previewCap` the `following` they sampled;
-  it never reads `tr.atBottom()`, whose scroll is stale after a width re-wrap. A `toBottom()` that skips
-  the helper leaves the preview in the floor's box over a pane that wants it larger — the original
-  symptom, one key (⌃E) away. `SetSize` and `Append` (which re-cap with the `following` they sampled),
-  `openRun`/`openTool` (they keep the reader where they were), reclaim, and `/clear` (it blanks the
-  pane, and the next prompt's echo is an `Append`) are not returns and do not use it.
-- **A menu takes the floor**, as before, and `View` now re-lays when one is up over a preview above the
-  floor. With the preview at its ceiling the menu's rows and the `composerGap` it drops cancel in
-  `chromeHeight`, which then aliased the stored chrome and the preview never yielded to the menu. A preview
-  already at the floor needs no re-lay, so the ordinary menu frame costs what it did
+  ⌃E, the banner click, a fold that brings the newest line up under a reader who had scrolled into it
+  (`openTool`), a subagent view, a restore. The cap is re-measured in `SetSize`, `Append`, `ScrollUp` and
+  that helper, never per token. Callers hand `previewCap` the `following` they sampled; it never reads
+  `tr.atBottom()`, whose scroll is stale after a width re-wrap. A `toBottom()` that skips the helper
+  leaves the preview in the floor's box over a pane that wants it larger — the original symptom, one key
+  (⌃E) away. `SetSize` and `Append` (which re-cap with the `following` they sampled), reclaim, and `/clear`
+  (it blanks the pane, and the next prompt's echo is an `Append`) are not returns and do not use it.
+- **The stored layout settles before the reader moves.** `View` re-lays only a copy, so the stored
+  layout (`tr.height`, `chrome`, `scroll`) lags what is drawn — by up to a whole pane now that a preview
+  can fill it. `ScrollUp`, `openRun` and `openTool` bring it up to date first (`DM.drawnLayout`), and so
+  does a block landing or a turn ending, so a stale full-preview layout never outlives its preview. A move
+  that changes the cap lays the pane out again with the transcript's bottom line where the scroll put it:
+  n lines up is n lines back, and n down returns to following exactly at the newest line. (Round 1 of
+  review found the wheel landing about six lines back and resuming three early, and a reader boxed at
+  three rows while the pane drew as following with no banner.)
+- **A menu takes the floor, and so does a subagent's view** (the parent's words are not what the reader
+  opened), each bounded by the pane's room, since the draft winning can leave none. `View` re-lays when
+  a menu is up over a preview above the floor: with the preview at its ceiling the menu's rows and the
+  `composerGap` it drops cancel in `chromeHeight`, which then aliased the stored chrome and the preview
+  never yielded to the menu. A preview already at the floor needs no re-lay, so the ordinary menu frame
+  costs what it did
   (`TestTheResumePickerShowsTheCursorAtEveryPaneHeight` caught it in a prototype;
   `TestAMenuTakesItsRowsBackFromAFullPreview` holds it).
 - **The preview is still plain text.** A long answer now streams as raw markdown for rows at a time and

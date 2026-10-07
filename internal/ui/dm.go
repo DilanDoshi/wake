@@ -279,11 +279,8 @@ func (d DM) SetSize(w, h int) DM {
 	}
 	d.height = h
 	// The composer wraps the draft as keys arrive, so it is sized here rather
-	// than only when it is drawn (see Composer.SetWidth). Its ceiling leaves the
-	// preview's rows out: the draft wins, and previewCap below is measured against
-	// the box as drawn, so a line added to the draft takes a row from the preview.
-	// The preview is re-wrapped first so one laid out for the old width is not
-	// measured against rows that no longer exist.
+	// than only when it is drawn (see Composer.SetWidth). The preview is re-wrapped
+	// first, and its rows are left out of the draft's ceiling: the draft wins.
 	d.partial = d.partial.sized(d.blockWidth())
 	// The pinned rows above the composer - the task board and the type-ahead queue
 	// - are reserved from the draft's growth as well as from the transcript's
@@ -293,10 +290,8 @@ func (d DM) SetSize(w, h int) DM {
 	// here, to the draft's own ceiling.
 	d.composer = d.composer.SetWidth(max(w, minComposerWidth)).
 		WithMaxRows(composerRowsIn(h, d.composer.overhead()+d.beatBarRows()+d.checklistRows()+d.queuedRows()))
-	// How many rows the preview may draw depends on the pane and the composer,
-	// both settled now, and on whether the reader follows. The growing preview
-	// retriggers this through View's chrome guard, so a token needs no recompute
-	// of its own (Append).
+	// The preview's cap follows the box as drawn and whether the reader follows. A
+	// growing preview retriggers this through View's chrome guard, not per token.
 	d.partial = d.partial.capped(d.previewCap(following))
 
 	// A height change is not that. It moves a window over lines that already
@@ -348,7 +343,7 @@ func (d DM) Append(ev core.Event) DM {
 	// memo stale, so View re-sizes the pane on a throwaway copy every frame.
 	d, ev = d.foldChecklist(ev)
 	if ev.Tool != nil && ev.Tool.Checklist != nil && ev.Subagent == nil {
-		d = d.resettleBoard()
+		d = d.drawnLayout()
 	}
 	d = d.observedTool(ev).settled(ev)
 
@@ -368,7 +363,13 @@ func (d DM) Append(ev core.Event) DM {
 		// would fold differently after a re-wrap than before. Two turns whose
 		// tools are adjacent with no prose between them fold together, which is
 		// the same thing they do on screen anyway.
-		d.partial = d.partial.cleared()
+		//
+		// Its rows were chrome, so the layout is re-settled without them now, or a
+		// stale full-preview layout outlives the preview.
+		if d.partial.view != "" {
+			d.partial = d.partial.cleared()
+			d = d.drawnLayout()
+		}
 	}
 
 	if dispatch := forwardedTo(ev); dispatch != "" {
@@ -688,7 +689,7 @@ func (d DM) Before(earlier []core.Event) DM {
 	// height is taken out of. Re-settle so the viewport is sized for it - the same
 	// thing Append does after a live checklist op, and the reason the old code did
 	// not need it is that the checklist was drawn in the transcript, not pinned.
-	return d.followed().resettleBoard()
+	return d.followed().drawnLayout()
 }
 
 // Composer is the input box. Hold the one the DM hands back rather than
@@ -756,14 +757,11 @@ func (d DM) baseChrome() int {
 
 // aboveComposerExtra is the rows above the composer that are neither transcript
 // nor the board: the streamed preview, the working/done line with its beatGap,
-// the composerGap, and the status bar. Shared by baseChrome (which adds the
-// board) and SetSize's composer bound (which does not - the board is pinned but
-// the draft grows beneath it). Everything is a count rather than a render,
-// because this runs inside SetSize and on every View: the preview off its wrap,
-// the beat as a predicate (the line costs a shimmer to draw), the bar from its
-// cache (drawing it reads the filesystem). The composerGap is keyed on the raw
-// menu field so this and View never disagree - a mismatch sizes the pane a row
-// out and scrolls the alt screen.
+// the composerGap, and the status bar. baseChrome adds the board; SetSize's draft
+// ceiling uses beatBarRows instead, so the draft wins over the preview. Counts,
+// not renders, because this runs on every View: the preview off its wrap, the beat
+// as a predicate, the bar from its cache. The composerGap is keyed on the raw menu
+// field so this and View never disagree - a row out scrolls the alt screen.
 func (d DM) aboveComposerExtra() int {
 	return d.partial.rows() + d.beatBarRows()
 }

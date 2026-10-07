@@ -178,10 +178,12 @@ func (d DM) openTool(line int) (DM, bool) {
 	// the lines *below* it, so a scroll position above the click still points
 	// at what was being read. Following the conversation is preserved the way
 	// Append preserves it - sampled before the content changes.
+	d = d.drawnLayout() // the click landed on the layout drawn
 	following := d.tr.atBottom()
 	d.tr = d.rewrapped()
-	if following {
-		d.tr = d.tr.toBottom()
+	// A fold can bring the newest line up under a reader who had scrolled into it.
+	if following || d.tr.atBottom() {
+		d = d.followed()
 	}
 	return d, true
 }

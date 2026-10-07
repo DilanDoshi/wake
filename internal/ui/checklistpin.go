@@ -33,14 +33,11 @@ func (d DM) checklistRows() int {
 	return render.TodoRows(d.checklistItems())
 }
 
-// resettleBoard re-sizes the pane once when a checklist op moved the board's
-// height, keeping DM.chrome current off the draw path - the rule the removed
-// dispatch list's projection kept. The width is unchanged, so it re-measures the
-// chrome and the transcript's window rather than re-wrapping through glamour.
-// Called only for a checklist op - a create or delete changes the row count -
-// and a no-op when the count did not move, so a status-only update costs one
-// chromeHeight and no re-size.
-func (d DM) resettleBoard() DM {
+// drawnLayout re-lays the pane when its chrome moved without a resize - a checklist
+// op, a preview that cleared, a scroll about to measure the layout - so the stored
+// layout is the one drawn (View re-lays only a copy). The width is unchanged, so
+// it re-measures the window rather than re-wrapping; a no-op when the chrome held.
+func (d DM) drawnLayout() DM {
 	if d.width <= 0 || d.height <= 0 || d.chromeHeight() == d.chrome {
 		return d
 	}
