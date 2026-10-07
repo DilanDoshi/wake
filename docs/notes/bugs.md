@@ -791,6 +791,31 @@ restores as speech.
 
 ---
 
+## BUG-45 — a wrapped link's underline ran through the row's padding to the pane's right edge
+
+**Reported by the owner, 2026-10-06,** from a screenshot of a list of links: a link glamour wrapped across rows
+was underlined past its last glyph, through the blank cells to the pane's edge. **That shape (a list)
+was already fixed by `0ea85f0` on 2026-09-30**, and the window it was seen in predated that build.
+This entry is for the shapes still broken on main afterwards: a paragraph with a long URL, a line
+opening with a URL or a link, a block quote, a heading that is a URL, strikethrough, and an image's URL.
+
+**Root cause: glamour pads before it resets.** glamour v1.0.0's margin writer pads a row through
+muesli/reflow's `padding.Writer`, whose write on `\n` pads before it resets, so the blanks land inside
+the span the row ends in (`…https://jobs.example.␣␣␣␣␣ESC[0m`). `sealRows` only closed a style still on
+at the row's end, so such a row read as sealed; `reflowProse`'s rewrap repairs list rows only.
+
+**Fix (`markdown.go`'s `sealRows`, `parkPadding`).** `sealRows` moves each row's trailing blanks past
+its last escape first (`trimRightCells` keeps every escape, in order, so the row keeps its cell count).
+Guards (`padstyle_test.go`): `TestAWrappedStyledSpanNeverStylesThePadding` (twelve shapes, every width
+from the floor to 120, no trailing blank drawn with any style on) and
+`TestTheMarkdownStylePaintsNoBackground`, because the move is lossless only while no style fills a cell
+with a background (Wake's style paints none, in either palette).
+
+**Also found:** a fenced block's rows were padded inside a foreground-only span as well. That is
+invisible on a blank cell and the fix moves those pads too; a table never carried one.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

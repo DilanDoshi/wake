@@ -568,11 +568,13 @@ func bulletMarker(raw string, lead int) bool {
 // sealRows closes a style still on at the end of a row, after its text, and
 // reopens it after the next row's indent. A wrap inside a styled span - the
 // reflow's, or fitToWidth's hard wrap - leaves the row ending with it on, and Wake
-// draws a divider and another pane on the rest of that terminal row.
+// draws a divider and another pane on the rest of that terminal row. It first
+// parks each row's blanks past its last escape, so a span stops at its text.
 func sealRows(s string) string {
 	rows := strings.Split(s, "\n")
 	open := ""
 	for i, row := range rows {
+		row = parkPadding(row)
 		if open != "" {
 			lead := leadSpaces(row)
 			row = row[:lead] + open + row[lead:]
@@ -659,4 +661,11 @@ func loneBulletAt(line string) (int, bool) {
 		return 0, false
 	}
 	return ansi.StringWidth(t) - 1, true
+}
+
+// parkPadding moves a row's trailing blanks past its last escape: muesli pads a
+// row before it resets, so the blanks would otherwise be drawn in the span's style.
+func parkPadding(row string) string {
+	kept := trimRightCells(row)
+	return kept + strings.Repeat(" ", len(row)-len(kept))
 }
