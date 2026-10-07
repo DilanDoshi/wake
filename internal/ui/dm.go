@@ -82,10 +82,10 @@ type DM struct {
 	// See WithRunningSub, DM.showsDone.
 	subRunning bool
 
-	// queued is the echo text of each message waiting for this agent to finish
-	// its turn, oldest first - drawn as a pin above the composer so type-ahead is
-	// visible. Draw-time state, set by App.dmFor off App.queued; the messages
-	// themselves live on App (queue.go). See WithQueued, queuedPin.
+	// queued is the echo text of each message claude has queued for this agent
+	// and not yet taken up, oldest first - drawn as a pin above the composer so
+	// type-ahead is visible. Draw-time state, set by App.dmFor off App.queued; the
+	// messages themselves live on App (queue.go). See WithQueued, queuedPin.
 	queued []string
 
 	SessionID string

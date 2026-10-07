@@ -1,0 +1,2 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Reply with exactly: ONE"}]},"uuid":"9f883c5d-f597-4df9-8a10-1ceb7b800aca"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Reply with exactly: TWO"}]},"uuid":"8f90d61c-d447-4bde-baa7-fd422b82c3a5","priority":"now","origin":{"kind":"human"}}

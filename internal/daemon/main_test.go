@@ -955,6 +955,13 @@ func emitText(sid, text string) {
 	fmt.Printf(`{"type":"assistant","session_id":%q,"message":{"role":"assistant","content":[{"type":"text","text":%q}]}}`+"\n", sid, text)
 }
 
+// emitLocalReply answers as claude answers a local command: a <synthetic>
+// assistant frame, then a result that ran no turn (bare-model-effort.jsonl).
+func emitLocalReply(sid, text string) {
+	fmt.Printf(`{"type":"assistant","session_id":%q,"message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":%q}]}}`+"\n", sid, text)
+	fmt.Printf(`{"type":"result","subtype":"success","is_error":false,"num_turns":0,"session_id":%q,"result":%q}`+"\n", sid, text)
+}
+
 // emitInit emits a system/init frame - the frame real claude sends before any
 // input, which initFacts decodes to a SessionFacts and firstInit probes on.
 func emitInit(sid string) {
@@ -981,8 +988,7 @@ func fakeModelProbe(sid string) int {
 		}
 		switch {
 		case strings.Contains(line, `"text":"/model"`):
-			emitText(sid, "Current model: "+model+" (effort: "+effort+")")
-			emitResult(sid)
+			emitLocalReply(sid, "Current model: "+model+" (effort: "+effort+")")
 		case strings.Contains(line, `"text":"/model `):
 			// A runtime /model change: the next bare-/model probe reports it, the
 			// way 2.1.232 renders the newly selected model back.

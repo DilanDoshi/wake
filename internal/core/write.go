@@ -52,9 +52,9 @@ var ErrNotWritten = errors.New("nothing was written")
 // messageID is the uuid stamped on the outgoing frame, or "" for an unstamped
 // send (the effort probe, which wants no lifecycle frames). A stamped message is
 // what the CLI emits command_lifecycle for, so it is how a caller tracks the fate
-// of what it sent - see EncodeUserMessage.
-func (s *Session) Send(text string, images []ImageBlock, messageID string) error {
-	line, err := EncodeUserMessage(text, images, messageID)
+// of what it sent - see EncodeUserMessage, which also says what now does.
+func (s *Session) Send(text string, images []ImageBlock, messageID string, now bool) error {
+	line, err := EncodeUserMessage(text, images, messageID, now)
 	if err != nil {
 		return err
 	}
@@ -148,14 +148,11 @@ func (s *Session) DenyTool(requestID, reason string) error {
 // (interrupt-queued-survives.jsonl), with it the receipt lists what it destroyed
 // (interrupt-cancel-queued.jsonl).
 //
-// Messages now carry a uuid (the queue's own stamping), so the receipt could name
-// what it cancelled - but false is still right, because Wake's own client-side
-// queue holds every follow-up and hands the CLI at most one message per turn (see
-// internal/ui/queue.go). The CLI's native queue is empty by construction, so
-// cancel_queued would have nothing to destroy, while an interrupt of the running
-// turn is what esc already wants. The stranded worry the old note answered - a
-// destroyed message the receipt could not name, still drawn as sent - cannot
-// arise when nothing is queued at the CLI to destroy.
+// Wake now writes a follow-up to a working agent at once, so claude's queue does
+// hold Wake's messages (internal/ui/queue.go) - and false is still right, because
+// it is Claude Code's own esc: what is queued survives the interrupt and runs next
+// (midturn-esc.jsonl). Taking a queued message back is its own request,
+// cancel_async_message, one message at a time (Recall).
 const interruptCancelQueued = false
 
 // Interrupt aborts the turn this session is running, and returns the
@@ -245,6 +242,17 @@ func (s *Session) StopTask(taskID string) (string, error) {
 		return "", err
 	}
 	return requestID, nil
+}
+
+// Recall takes back a message claude has not yet taken up, by its stamped uuid.
+// Its lifecycle says whether it was in time, and so does the receipt carrying
+// the caller's requestID (Control.Recalled), for when that lifecycle is lost.
+func (s *Session) Recall(requestID, messageID string) error {
+	line, err := EncodeCancelAsyncMessage(requestID, messageID)
+	if err != nil {
+		return err
+	}
+	return s.writeLine(line)
 }
 
 // Rewind asks this session to rewind its conversation to targetUUID, declaring

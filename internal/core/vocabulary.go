@@ -6,7 +6,7 @@
 // carries the reason it lives behind the airlock rather than in the renderer
 // that consumes it.
 //
-// The airlock is these five files and nothing else in Wake knows Claude
+// The airlock is these six files and nothing else in Wake knows Claude
 // Code's stream-json format:
 //
 //	protocol.go    decoding - one wire line in, core.Events out
@@ -14,6 +14,7 @@
 //	vocabulary.go  Claude's words resolved into Wake's
 //	encode.go      the frames Wake writes back
 //	localreply.go  the text replies of local commands Wake parses
+//	control.go     control requests Wake writes, and their receipts
 //
 // internal/core/airlock_test.go enforces that over the whole tree and reads
 // the same list. protocol.go's header carries the full rule.
@@ -748,3 +749,12 @@ func toolResultText(content json.RawMessage) string {
 func (e Event) MessageEnded() bool {
 	return e.Kind == KindMessageState && (e.Text == "completed" || e.Text == "cancelled")
 }
+
+// MessageStarted reports claude taking up a message Wake sent: into the running
+// turn at a tool boundary, or as a turn of its own (midturn-absent.jsonl:37,
+// midturn-later.jsonl:52).
+func (e Event) MessageStarted() bool { return e.Kind == KindMessageState && e.Text == "started" }
+
+// MessageCancelled reports a message that will never run: taken back before
+// claude took it up (midturn-cancel.jsonl:32), or the running one an interrupt ended.
+func (e Event) MessageCancelled() bool { return e.Kind == KindMessageState && e.Text == "cancelled" }

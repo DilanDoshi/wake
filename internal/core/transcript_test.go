@@ -47,18 +47,20 @@ func TestEveryRecordedTranscriptLineDecodesWithNoUnknowns(t *testing.T) {
 // They are not frames and have no place in a conversation: an attachment is a
 // file claude read, a queue-operation is a keystroke, a custom-title is the
 // name on a tab. Decoded rather than skipped they would each land in somebody's
-// transcript as an unknown event.
+// transcript as an unknown event. The one exception is the attachment that is
+// the operator's own message, taken up mid-turn - TestAMessageTakenUpMidTurn….
 func TestTheRecordsThatExistOnlyOnDiskAreDropped(t *testing.T) {
 	dropped := 0
 	for _, path := range transcriptFiles(t) {
 		for i, line := range fixtureLines(t, path) {
 			var f struct {
-				Type string `json:"type"`
+				Type       string          `json:"type"`
+				Attachment json.RawMessage `json:"attachment"`
 			}
 			if err := json.Unmarshal([]byte(line), &f); err != nil {
 				t.Fatalf("%s:%d: %v", path, i+1, err)
 			}
-			if f.Type == "user" || f.Type == "assistant" {
+			if _, operators, _ := queuedPrompt(f.Attachment); f.Type == "user" || f.Type == "assistant" || operators {
 				continue
 			}
 			events, err := DecodeTranscriptLine([]byte(line))

@@ -1,9 +1,10 @@
 package ui
 
-// Type-ahead: a message typed while its agent is busy waits rather than going to
-// the wire mid-turn, and is delivered when the agent is free. The trigger is the
-// message lifecycle (a stamped uuid Wake tracks), with the State working→idle edge
-// as a gap backstop. See queue.go.
+// A message typed to a working agent is written at once and reaches it at its
+// next tool boundary, or as its next turn: claude queues it
+// (docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md). Until claude
+// takes it up it is pinned above the composer; then its echo lands where the
+// model read it. A /rename to a busy agent is still held here. See queue.go.
 
 import (
 	"strings"
@@ -15,9 +16,9 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// "completed"/"cancelled" are the CLI's command_lifecycle wire states, the shapes
-// core.messageStateEvent decodes into Event.Text. A test constructs the decoded
-// event directly, the way oneAgent constructs a status.
+// lifecycleFrame is a decoded command_lifecycle, the way oneAgent is a status.
+// "started"/"completed"/"cancelled" are the CLI's own states
+// (testdata/stream/midturn-*.jsonl).
 func lifecycleFrame(id, msgID, state string) rpc.Frame {
 	return rpc.Frame{Kind: rpc.FrameEvent, SessionID: id, Event: &core.Event{
 		Kind: core.KindMessageState, SessionID: id, MessageID: msgID, Text: state,
@@ -30,231 +31,122 @@ func idleDM(t *testing.T) App {
 	return dmApp(newRecorder(t), Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
 }
 
-// sentThenQueued sends one message to an idle s1 (dispatched, in flight) and
-// queues a second behind it. Returns the app and the first message's uuid, read
-// back off App.inflight so a lifecycle frame can name it.
-func sentThenQueued(t *testing.T, first, second string) (App, string) {
+// echoedInDM is whether a conversation draws text as a turn - not as a pin row,
+// and not as the draft, which is blanked first.
+func echoedInDM(a App, id, text string) bool {
+	if d := a.dms[id]; d != nil {
+		a = a.withComposerFor(id, d.Composer().WithDraft(""))
+	}
+	for _, l := range strings.Split(stripANSI(a.dmFor(id).View(200, 40)), "\n") {
+		if strings.Contains(l, text) && !strings.Contains(l, queuedGlyph) {
+			return true
+		}
+	}
+	return false
+}
+
+// sendTo submits text in the DM and returns the frame it wrote.
+func sendTo(t *testing.T, a App, text string) (App, rpc.Frame) {
 	t.Helper()
-	a := idleDM(t)
-	m, _ := typeAndSubmit(a, first)
+	m, cmd := typeAndSubmit(a, text)
 	a = m.(App)
-	firstID := a.inflight["s1"]
-	if firstID == "" {
-		t.Fatalf("an immediate send did not mark s1 in flight")
-	}
-	m2, cmd := typeAndSubmit(a, second)
-	a = m2.(App)
-	if cmd != nil {
-		t.Errorf("a fast follow-up produced a command; it should have queued, not gone to the wire")
-	}
-	if len(a.queued["s1"]) != 1 || a.queued["s1"][0].echo != second {
-		t.Fatalf("the follow-up did not queue behind the in-flight message: %v", a.queued["s1"])
-	}
-	return a, firstID
+	return a, sentFrame(t, a, cmd)
 }
 
-// The bug, stated: a message typed at a working agent must not reach the wire.
-func TestSubmitWhileWorkingQueuesRatherThanSends(t *testing.T) {
-	a := idleDM(t).applyFrame(oneAgent("s1", "alex", rpc.StateWorking))
-
-	m, cmd := typeAndSubmit(a, "run the tests")
-	a = m.(App)
-	if cmd != nil {
-		t.Errorf("a message to a working agent produced a command; nothing should reach the wire mid-turn")
+// A message to a working agent is written now, stamped, and pinned - not
+// echoed, since claude has not read it yet.
+func TestAMessageToAWorkingAgentIsWrittenAtOnceAndPinned(t *testing.T) {
+	a, f := sendTo(t, busyDM(t), "run the tests")
+	if f.Kind != rpc.FrameSend || f.Text != "run the tests" || f.MessageID == "" || f.Now {
+		t.Errorf("wrote %+v, want a stamped ordinary send", f)
 	}
-	if q := a.queued["s1"]; len(q) != 1 || q[0].echo != "run the tests" {
-		t.Errorf("the message was not queued for s1: %v", q)
+	if q := a.queued["s1"]; len(q) != 1 || q[0].id != f.MessageID || q[0].held {
+		t.Errorf("queued = %+v, want the written message pinned", q)
+	}
+	if echoedInDM(a, "s1", "run the tests") {
+		t.Error("the message was drawn as a turn before claude took it up")
 	}
 }
 
-// An idle agent takes its message immediately, and it is stamped so the CLI's
-// lifecycle names it - which is what marks the agent in flight.
-func TestSubmitWhileIdleSendsImmediatelyAndStamps(t *testing.T) {
-	a := idleDM(t)
-
-	m, cmd := typeAndSubmit(a, "hi")
-	a = m.(App)
-	f := sentFrame(t, a, cmd)
-	if f.Kind != rpc.FrameSend || f.SessionID != "s1" || f.Text != "hi" {
-		t.Errorf("an idle agent's message was not sent immediately: %+v", f)
-	}
-	if f.MessageID == "" {
-		t.Errorf("the sent message was not stamped with a uuid, so its lifecycle cannot be tracked")
-	}
-	if a.inflight["s1"] != f.MessageID {
-		t.Errorf("the dispatched message did not mark the agent in flight: inflight=%q, frame=%q", a.inflight["s1"], f.MessageID)
-	}
-	if len(a.queued["s1"]) != 0 {
-		t.Errorf("an idle agent's message was queued instead of sent")
+// An idle agent's message is echoed at once and marks it in flight.
+func TestAnIdleAgentsMessageIsEchoedAtOnce(t *testing.T) {
+	a, f := sendTo(t, idleDM(t), "hi")
+	if !a.inflight["s1"][f.MessageID] || len(a.queued["s1"]) != 0 || !echoedInDM(a, "s1", "hi") {
+		t.Errorf("inflight=%v queued=%v: want the message echoed and in flight", a.inflight, a.queued)
 	}
 }
 
-// The CRITICAL fix: a follow-up typed before the daemon reports the first turn
-// "working" (its init lands seconds later) still queues rather than racing onto a
-// busy stdin - because inflight is set the instant the first is dispatched.
-func TestFastFollowUpToIdleAgentQueuesNotSent(t *testing.T) {
-	// sentThenQueued asserts the follow-up produced no command and queued. The
-	// point of naming it here is the scenario: two submits with no status report
-	// in between, which is what the daemon's lagging "working" makes ordinary.
-	a, _ := sentThenQueued(t, "first", "second")
-	if a.inflight["s1"] == "" {
-		t.Errorf("the first message is no longer tracked in flight")
+// A follow-up typed before the daemon reports the first turn working is written
+// too, and pinned: the first is in flight, so claude has not read it yet.
+func TestAFastFollowUpIsWrittenAndPinned(t *testing.T) {
+	a, _ := sendTo(t, idleDM(t), "first")
+	a, f := sendTo(t, a, "second")
+	if q := a.queued["s1"]; len(q) != 1 || q[0].id != f.MessageID {
+		t.Errorf("queued = %+v, want the follow-up pinned behind the first", q)
 	}
 }
 
-// The primary trigger: the in-flight message's completed lifecycle frees the
-// agent, and the next queued message goes out.
-func TestLifecycleCompletedFlushesTheNextQueued(t *testing.T) {
-	a, firstID := sentThenQueued(t, "first", "second")
-
-	a = a.observeMessageState("s1", core.Event{Kind: core.KindMessageState, SessionID: "s1", MessageID: firstID, Text: "completed"})
-	if a.inflight["s1"] != "" {
-		t.Fatalf("a completed lifecycle did not clear the in-flight mark")
+// claude taking the message up - mid-turn or as its own turn - moves it from
+// the pin into the conversation, at that point.
+func TestAPinnedMessageIsDrawnWhenClaudeTakesItUp(t *testing.T) {
+	a, f := sendTo(t, busyDM(t), "use the other fixture")
+	a = a.applyFrame(lifecycleFrame("s1", f.MessageID, "started"))
+	if len(a.queued["s1"]) != 0 || !echoedInDM(a, "s1", "use the other fixture") {
+		t.Errorf("queued = %v: the started message was not moved into the conversation", a.queued["s1"])
 	}
-	a, cmd := a.flushQueued()
-	f := sentFrame(t, a, cmd)
-	if f.Text != "second" {
-		t.Errorf("the flush sent %q, want the queued message once the first completed", f.Text)
-	}
-	if len(a.queued["s1"]) != 0 {
-		t.Errorf("the queue still holds %d after flushing", len(a.queued["s1"]))
+	if !a.inflight["s1"][f.MessageID] {
+		t.Error("the message claude took up is not in flight")
 	}
 }
 
-// esc rides the same path: interrupting the running message cancels it, and the
-// cancelled lifecycle lets the next queued message through.
-func TestInterruptCancelledFlushesTheNextQueued(t *testing.T) {
-	a, firstID := sentThenQueued(t, "first", "second")
-
-	a = a.observeMessageState("s1", core.Event{Kind: core.KindMessageState, SessionID: "s1", MessageID: firstID, Text: "cancelled"})
-	a, cmd := a.flushQueued()
-	f := sentFrame(t, a, cmd)
-	if f.Text != "second" {
-		t.Errorf("a cancelled in-flight message did not let the next through: sent %q", f.Text)
+// Its started lifecycle lost to a gap, a message is still known read: by its
+// completed lifecycle, or by the turn end that names it.
+func TestAMessageIsKnownReadWithoutItsStart(t *testing.T) {
+	for name, ev := range map[string]func(string) rpc.Frame{
+		"completed": func(id string) rpc.Frame { return lifecycleFrame("s1", id, "completed") },
+		"turn end": func(id string) rpc.Frame {
+			return rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &core.Event{Kind: core.KindTurnEnd, SessionID: "s1", Answered: []string{"other", id}}}
+		},
+	} {
+		a, f := sendTo(t, busyDM(t), "read me")
+		a = a.applyFrame(ev(f.MessageID))
+		if len(a.queued["s1"]) != 0 || !echoedInDM(a, "s1", "read me") {
+			t.Errorf("%s: queued = %v, want the message drawn as read", name, a.queued["s1"])
+		}
 	}
 }
 
-// The State working→idle edge is a backstop: if the completed lifecycle is lost to
-// a frame gap, the daemon's own idle report still frees the agent.
-func TestStateEdgeBackstopsALostLifecycle(t *testing.T) {
-	a, _ := sentThenQueued(t, "first", "second")
-	// The first message's turn ran (working) and ended (idle), but its lifecycle
-	// never arrived - only the status reports did.
-	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateWorking)).applyFrame(oneAgent("s1", "alex", rpc.StateIdle))
-	a, cmd := a.flushQueued()
-
-	f := sentFrame(t, a, cmd)
-	if f.Text != "second" {
-		t.Errorf("the State-edge backstop did not flush when the lifecycle was lost: sent %q", f.Text)
-	}
-	if a.inflight["s1"] != f.MessageID {
-		t.Errorf("the backstop did not re-arm inflight for the flushed message")
-	}
-}
-
-// No flush while a Wake message is genuinely in flight: the next waits for that
-// one to end, so a burst never coalesces.
-func TestNoFlushWhileAMessageIsInFlight(t *testing.T) {
-	a, _ := sentThenQueued(t, "first", "second")
-	// s1 is now working on the first message.
-	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateWorking))
-	a, cmd := a.flushQueued()
-
-	if cmd != nil {
-		t.Errorf("the queue flushed while the first message was still in flight")
-	}
-	if len(a.queued["s1"]) != 1 {
-		t.Errorf("the queued message was drained before its turn came")
-	}
-}
-
-// A message queued against an agent that was busy on its own turn (not a Wake
-// send) flushes when that turn ends and the agent reports idle.
-func TestQueuedMessageFlushesWhenAgentGoesIdle(t *testing.T) {
-	a := idleDM(t).applyFrame(oneAgent("s1", "alex", rpc.StateWorking))
-	m, _ := typeAndSubmit(a, "run the tests")
-	a = m.(App)
-
-	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateIdle))
-	a, cmd := a.flushQueued()
-
-	f := sentFrame(t, a, cmd)
-	if f.Kind != rpc.FrameSend || f.SessionID != "s1" || f.Text != "run the tests" {
-		t.Errorf("the flush wrote %+v, want the queued text sent to s1", f)
-	}
-}
-
-// A message queued for an agent that ends before its turn finishes is dropped,
-// not delivered to nothing.
+// A message queued for an agent that ends is dropped, not drawn later.
 func TestQueueDropsWhenTheAgentEnds(t *testing.T) {
-	a := idleDM(t).applyFrame(oneAgent("s1", "alex", rpc.StateWorking))
-	m, _ := typeAndSubmit(a, "later")
-	a = m.(App)
-
-	a = a.applyFrame(oneAgent("s1", "alex", rpc.StateEnded))
-	a, cmd := a.flushQueued()
-
-	if cmd != nil {
-		t.Errorf("an ended agent's queue was delivered rather than dropped")
-	}
+	a, _ := sendTo(t, busyDM(t), "later")
+	a, _ = a.applyFrame(oneAgent("s1", "alex", rpc.StateEnded)).flushQueued()
 	if _, held := a.queued["s1"]; held {
 		t.Errorf("an ended agent's queue was not dropped")
 	}
 }
 
-// A working→idle edge that opens and closes inside one inbox batch, with the
-// completed lifecycle dropped, still frees the agent: inflight is reconciled per
-// report, not per batch, so the intermediate edge is not collapsed.
-func TestAnIntraBatchEdgeIsNotCollapsed(t *testing.T) {
-	a, _ := sentThenQueued(t, "first", "second")
-
-	// One batch carrying the whole turn - working then idle - and no lifecycle.
-	m, _ := a.Update(streamMsg{gen: a.gen, batch: batch{frames: []rpc.Frame{
-		oneAgent("s1", "alex", rpc.StateWorking),
-		oneAgent("s1", "alex", rpc.StateIdle),
-	}}})
+// A reattach forgets what it cannot confirm: in-flight marks, and messages
+// claude may have taken up while this client was gone. A held /rename was never
+// written, so it survives to go out on the next idle.
+func TestReattachForgetsWhatItCannotConfirm(t *testing.T) {
+	a, _ := sendTo(t, idleDM(t), "first")
+	a, _ = sendTo(t, a, "second")
+	m, _ := typeAndSubmit(a, "/rename bob")
 	a = m.(App)
-
-	// The queue drained: the edge freed the agent (first's mark cleared) and second
-	// flushed. Were the edge collapsed, first would stay in flight and second would
-	// strand. (inflight now holds second's own uuid, which is right.)
-	if len(a.queued["s1"]) != 0 {
-		t.Errorf("the queued message was stranded when the working→idle edge fell inside one batch: %v", a.queued["s1"])
-	}
-}
-
-// A reattach clears in-flight marks: a send that failed across the disconnection
-// left one with no lifecycle to clear it, which would queue every later message
-// forever. The queue itself survives to flush on the next idle.
-func TestReattachForgetsInflight(t *testing.T) {
-	a, _ := sentThenQueued(t, "first", "second")
 
 	next, _ := a.reattached(reattachedMsg{})
 	a = next.(App)
 	if len(a.inflight) != 0 {
-		t.Errorf("reattach left an in-flight mark that nothing can now clear: %v", a.inflight)
+		t.Errorf("reattach left in-flight marks nothing can now clear: %v", a.inflight)
 	}
-	if len(a.queued["s1"]) != 1 {
-		t.Errorf("reattach dropped the queued message; it should survive to flush on the next idle")
-	}
-}
-
-// The flush runs on the batched stream path, which is the one production frames
-// take: a completed lifecycle arriving there drains the queue.
-func TestFlushIsWiredIntoTheStreamPath(t *testing.T) {
-	a, firstID := sentThenQueued(t, "first", "second")
-
-	m, _ := a.Update(streamMsg{gen: a.gen, batch: batch{frames: []rpc.Frame{lifecycleFrame("s1", firstID, "completed")}}})
-	a = m.(App)
-
-	if len(a.queued["s1"]) != 0 {
-		t.Errorf("a completed lifecycle on the stream path did not flush the queue; flushQueued is not wired into stream()")
+	if q := a.queued["s1"]; len(q) != 1 || !q[0].held {
+		t.Errorf("queued after reattach = %+v, want only the held /rename", q)
 	}
 }
 
-// In the room a broadcast reaches idle targets now and holds for busy ones, each
-// stamped so its lifecycle is tracked; the room's own line is drawn once.
-func TestRoomBroadcastQueuesBusyTargetsAndSendsIdle(t *testing.T) {
+// In the room a broadcast is written to every target at once; an idle one draws
+// it now, a working one pins it fromRoom; the room's own line is drawn once.
+func TestARoomBroadcastIsWrittenToEveryTargetAndPinnedForBusyOnes(t *testing.T) {
 	a := newRoomApp(t).withSize(200, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{
 		Running: true,
 		Sessions: []rpc.SessionStatus{
@@ -266,17 +158,16 @@ func TestRoomBroadcastQueuesBusyTargetsAndSendsIdle(t *testing.T) {
 
 	m, cmd := typeAndSubmit(a, "@all ship it")
 	a = m.(App)
-
-	f := sentFrame(t, a, cmd) // only the idle target is written now
-	if f.SessionID != "s1" || f.MessageID == "" {
-		t.Errorf("the idle target was not sent a stamped message: %+v", f)
+	frames := sentFrames(t, a, cmd)
+	if len(frames) != 2 { // @all is the fleet, the manager aside
+		t.Fatalf("wrote %d frames, want one per target: %+v", len(frames), frames)
 	}
 	q := a.queued["s2"]
 	if len(q) != 1 || q[0].echo != "@all ship it" || !q[0].fromRoom || q[0].id == "" {
-		t.Errorf("the working target's broadcast was not queued fromRoom with a uuid: %v", q)
+		t.Errorf("the working target's broadcast was not pinned fromRoom with a uuid: %v", q)
 	}
 	if len(a.queued["s1"]) != 0 {
-		t.Errorf("the idle target's message was queued instead of sent")
+		t.Errorf("the idle target's message was pinned instead of drawn")
 	}
 }
 
