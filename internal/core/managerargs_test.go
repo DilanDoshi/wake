@@ -103,8 +103,9 @@ func TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt(t *testing.T) {
 					continue
 				}
 				carried++
-				if !containsSeq(args, []string{"--mcp-config", cfgPath, "--strict-mcp-config", "--tools", ""}) {
-					t.Errorf("%s: argv = %v, want --mcp-config, its path, --strict-mcp-config and --tools \"\" as one run", d.name, args)
+				if !containsSeq(args, []string{"--mcp-config", cfgPath, "--strict-mcp-config", "--tools", ToolSendMessage}) {
+					t.Errorf("%s: argv = %v, want --mcp-config, its path, --strict-mcp-config and --tools %s as one run",
+						d.name, args, ToolSendMessage)
 				}
 			}
 		}

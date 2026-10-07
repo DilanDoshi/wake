@@ -203,6 +203,13 @@ const (
 	KindUnknown EventKind = "unknown"
 )
 
+// PeerSend is one SendMessage: the session it names and the words it carries.
+// Wake's tags, since this is not an airlock file.
+type PeerSend struct {
+	To   string `json:"recipient"`
+	Text string `json:"text"`
+}
+
 // ToolCall is a tool invocation, its result, or a request to run one.
 type ToolCall struct {
 	ID   string `json:"id"`
@@ -259,6 +266,10 @@ type ToolCall struct {
 	// retired TodoWrite sent the whole list each time - so the accumulation is
 	// a fold above the airlock, and Todos above is the snapshot it produces.
 	Checklist *ChecklistOp `json:"checklist,omitempty"`
+
+	// Send is who a SendMessage call reaches and what it says, and nil for
+	// every other call - the room draws the manager's (ui observe.go).
+	Send *PeerSend `json:"peer_send,omitempty"`
 
 	// Loop is the native /loop a scheduler tool_use carries - a recurring
 	// CronCreate or a ScheduleWakeup - and nil for every other call. Recognized

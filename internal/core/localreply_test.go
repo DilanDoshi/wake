@@ -95,8 +95,15 @@ var recordedPeers = []Peer{
 	{Name: "wf-alpha", Dir: "/private/tmp/wake-rec/alpha"},
 }
 
-// Every result the bare one-shot's recordings carry is read, the empty form
-// included.
+// renamedPeers is list-agents-bare-renamed.jsonl's: a spaced name never renamed,
+// beside wf-alpha renamed to wf-delta after holding its name for a while.
+var renamedPeers = []Peer{
+	{Name: "wf beta", Dir: "/private/tmp/wake-rec/beta"},
+	{Name: "wf-delta", Dir: "/private/tmp/wake-rec/alpha"},
+}
+
+// Every result the bare one-shot's recordings carry is read whole, the empty
+// form and a renamed session's row included.
 func TestEveryRecordedLocalReplyParses(t *testing.T) {
 	for _, tc := range []struct {
 		fixture string
@@ -104,17 +111,39 @@ func TestEveryRecordedLocalReplyParses(t *testing.T) {
 	}{
 		{"../../testdata/stream/list-agents-bare.jsonl", [][]Peer{recordedPeers}},
 		{"../../testdata/stream/list-agents-bare-empty.jsonl", [][]Peer{nil}},
+		{"../../testdata/stream/list-agents-bare-renamed.jsonl", [][]Peer{renamedPeers}},
 	} {
 		results := recordedResults(t, tc.fixture)
 		if len(results) != len(tc.results) {
 			t.Fatalf("%s carries %d results, want %d", tc.fixture, len(results), len(tc.results))
 		}
 		for i, text := range results {
-			peers, ok := PeersFromListAgents(text)
-			if !ok || !reflect.DeepEqual(peers, tc.results[i]) {
-				t.Errorf("%s result %d = (%+v, %v), want (%+v, true)", tc.fixture, i, peers, ok, tc.results[i])
+			peers, dropped, ok := PeersFromListAgents(text)
+			if !ok || dropped != 0 || !reflect.DeepEqual(peers, tc.results[i]) {
+				t.Errorf("%s result %d = (%+v, %d dropped, %v), want (%+v, 0 dropped, true)",
+					tc.fixture, i, peers, dropped, ok, tc.results[i])
 			}
 		}
+	}
+}
+
+// A session renamed after holding its name a while is listed with a column
+// between its name and directory, `says it was <old> until <age> ago`. It is
+// offered under its new name only: a name is never an alias.
+func TestARenamedSessionIsListedUnderItsNewNameOnly(t *testing.T) {
+	const dir = "/private/tmp/wake-rec/alpha"
+	for name, row := range map[string]string{
+		"the recorded row":            "  [idle]  ·  wf-delta  ·  says it was wf-alpha until 3s ago  ·  " + dir + "  ·  started 1m ago",
+		"hours since":                 "  [busy]  ·  wf-delta  ·  says it was wf-alpha until 2h ago  ·  " + dir + "  ·  started 3d ago",
+		"a former name holding until": "  [idle]  ·  wf-delta  ·  says it was wait until noon until 4m ago  ·  " + dir + "  ·  started 1h ago",
+	} {
+		t.Run(name, func(t *testing.T) {
+			peers, dropped, ok := PeersFromListAgents("Other Claude sessions (1):\n" + row)
+			want := []Peer{{Name: "wf-delta", Dir: dir}}
+			if !ok || dropped != 0 || !reflect.DeepEqual(peers, want) {
+				t.Errorf("PeersFromListAgents = (%+v, %d dropped, %v), want (%+v, 0 dropped, true)", peers, dropped, ok, want)
+			}
+		})
 	}
 }
 
@@ -130,7 +159,7 @@ func TestTheRecordedRenameParsesAndALiveListingIsRefused(t *testing.T) {
 		t.Errorf("RenamedFromReply(%q) = (%q, %v), want (\"wf-delta\", true)", results[1], got, ok)
 	}
 	for _, text := range results {
-		if peers, ok := PeersFromListAgents(text); ok || peers != nil {
+		if peers, _, ok := PeersFromListAgents(text); ok || peers != nil {
 			t.Errorf("PeersFromListAgents(%q) = (%+v, %v), want (nil, false)", text, peers, ok)
 		}
 	}
@@ -160,16 +189,17 @@ func TestOtherSectionsAreCountedAndSkipped(t *testing.T) {
 		{"a skipped section alone", subagents, nil},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			peers, ok := PeersFromListAgents(tc.text)
-			if !ok || !reflect.DeepEqual(peers, tc.peers) {
-				t.Errorf("PeersFromListAgents = (%+v, %v), want (%+v, true)", peers, ok, tc.peers)
+			peers, dropped, ok := PeersFromListAgents(tc.text)
+			if !ok || dropped != 0 || !reflect.DeepEqual(peers, tc.peers) {
+				t.Errorf("PeersFromListAgents = (%+v, %d dropped, %v), want (%+v, 0 dropped, true)", peers, dropped, ok, tc.peers)
 			}
 		})
 	}
 }
 
-// A shape the parser was not shown is refused whole - never the rows it could
-// read beside one it could not.
+// A listing whose frame the parser was not shown is refused whole: no
+// recognised header, a count that disagrees with the rows under it, or a line
+// under it that does not open with a `[state]` column.
 func TestAnUnrecognisedListingIsRefusedWhole(t *testing.T) {
 	cases := map[string]string{
 		"empty":                               "",
@@ -183,21 +213,46 @@ func TestAnUnrecognisedListingIsRefusedWhole(t *testing.T) {
 		"an unknown line inside a section":    "Other Claude sessions (2):\n" + betaRow + "\nand one more\n" + alphaRow,
 		"a row under no header":               "Other Claude sessions (1):\n" + betaRow + "\n\n" + alphaRow,
 		"rows parted from their header":       "Other Claude sessions (2):\n\n" + betaRow + "\n" + alphaRow,
-		"a row with a column missing":         "Other Claude sessions (1):\n  [idle]  ·  wf-beta  ·  started 19s ago",
-		"a row with a column more":            "Other Claude sessions (1):\n" + betaRow + "  ·  remote",
 		"a state unbracketed":                 "Other Claude sessions (1):\n  idle  ·  wf-beta  ·  /private/tmp/wake-rec/beta  ·  started 19s ago",
 		"an empty state":                      "Other Claude sessions (1):\n  []  ·  wf-beta  ·  /private/tmp/wake-rec/beta  ·  started 19s ago",
-		"a relative directory":                "Other Claude sessions (1):\n  [idle]  ·  wf-beta  ·  tmp/beta  ·  started 19s ago",
-		"a blank name":                        "Other Claude sessions (1):\n  [idle]  ·    ·  /private/tmp/wake-rec/beta  ·  started 19s ago",
 		"the empty form with more before it":  others + "\n\nNo subagents, teammates or other Claude sessions.",
 		"the empty form with more after it":   "No subagents, teammates or other Claude sessions.\n" + betaRow,
+		"an indented line that is no row":     "Other Claude sessions (2):\n" + betaRow + "\n  and one more",
 	}
 	for name, text := range cases {
 		t.Run(name, func(t *testing.T) {
-			if peers, ok := PeersFromListAgents(text); ok || peers != nil {
+			if peers, _, ok := PeersFromListAgents(text); ok || peers != nil {
 				t.Errorf("PeersFromListAgents = (%+v, %v), want (nil, false)", peers, ok)
 			}
 		})
+	}
+}
+
+// A row of a shape the parser was not shown, in a listing whose frame it was,
+// is dropped and counted: the rows beside it are still offered, so the next
+// column claude adds costs one session rather than the whole menu.
+func TestAnUnrecognisedRowIsDroppedFromARecognisedListing(t *testing.T) {
+	const dir = "  ·  /private/tmp/wake-rec/gamma  ·  started 19s ago"
+	for name, row := range map[string]string{
+		"a column missing":        "  [idle]  ·  wf-gamma  ·  started 19s ago",
+		"a column more":           alphaRow + "  ·  remote",
+		"a relative directory":    "  [idle]  ·  wf-gamma  ·  tmp/gamma  ·  started 19s ago",
+		"a blank name":            "  [idle]  ·  " + dir,
+		"an annotation not shown": "  [idle]  ·  wf-gamma  ·  says hello" + dir,
+		"a renamed row with more": "  [idle]  ·  wf-gamma  ·  says it was wf-alpha until 3s ago" + dir + "  ·  remote",
+		"a rename with no age":    "  [idle]  ·  wf-gamma  ·  says it was wf-alpha" + dir,
+	} {
+		t.Run(name, func(t *testing.T) {
+			peers, dropped, ok := PeersFromListAgents("Other Claude sessions (2):\n" + betaRow + "\n" + row)
+			want := []Peer{recordedPeers[0]}
+			if !ok || dropped != 1 || !reflect.DeepEqual(peers, want) {
+				t.Errorf("PeersFromListAgents = (%+v, %d dropped, %v), want (%+v, 1 dropped, true)", peers, dropped, ok, want)
+			}
+		})
+	}
+	peers, dropped, ok := PeersFromListAgents("Other Claude sessions (1):\n  [idle]  ·  wf-gamma  ·  started 19s ago")
+	if !ok || dropped != 1 || peers != nil {
+		t.Errorf("a listing of one unreadable row = (%+v, %d dropped, %v), want (nil, 1 dropped, true)", peers, dropped, ok)
 	}
 }
 

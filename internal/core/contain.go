@@ -179,6 +179,11 @@ func containedTool(t *ToolCall) *ToolCall {
 		op.ID, op.Text, op.ActiveForm = Contained(op.ID), Contained(op.Text), Contained(op.ActiveForm)
 		c.Checklist = &op
 	}
+	if c.Send != nil {
+		send := *c.Send
+		send.To, send.Text = Contained(send.To), Contained(send.Text)
+		c.Send = &send
+	}
 	if c.Diff != nil {
 		d := *c.Diff
 		d.Old, d.New = Contained(d.Old), Contained(d.New)

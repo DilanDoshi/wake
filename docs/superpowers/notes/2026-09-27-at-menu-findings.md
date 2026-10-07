@@ -78,3 +78,31 @@ A name with a space or any character outside letters, digits, hyphens and unders
 double quotes, `@"release notes"`, and the typeahead inserts the quotes (docs, re-read 2026-09-29). Session
 names are free text — `/rename` takes spaces — so a real machine lists such names beside Wake's own
 (BUG-39).
+
+## 5. A renamed session's row carries its former name (2.1.288, 2026-10-03)
+
+Recorded under a sterile `HOME` with no shim and local commands only (`$0`, `num_turns: 0`):
+`testdata/stream/list-agents-bare-renamed.jsonl`, sent `testdata/input/list-agents-bare.stdin.jsonl`.
+A session that held its name about 70 s and was then renamed is listed with a column between its
+name and directory, `says it was <old> until <age> ago`; one renamed after 2–4 s is not, and a
+`/clear` before the rename changes nothing. Renamed twice, the row names only the newest former name.
+A peer reached by its former name is claude's business; Wake offers the current name only.
+
+The take opens with a `system/ui_invalidate` frame whose `event` is a string, which `core.DecodeLine`
+refuses (deferred.md, 2026-10-03); that one line is left out of the fixture. The daemon's one-shot
+reader skips a line it cannot decode, so the listing is unaffected.
+
+## 6. The manager's one built-in, recorded (2.1.288, 2026-10-03)
+
+- `testdata/stream/manager-tools.jsonl`: sterile `HOME`, local command only. The manager's own tool
+  flags (`--mcp-config` an empty server list, `--strict-mcp-config`, `--tools SendMessage`,
+  `--permission-mode auto`) give `init.tools` = `["SendMessage"]` and nothing else. An unknown
+  `--tools` name is dropped without a word, so a test ties `core.ToolSendMessage` to this init.
+- `testdata/stream/manager-relay.jsonl`: one live model turn under the real `HOME`, `--safe-mode`,
+  scrubbed (owner's permission). A manager-shaped session holding managerScope, sent
+  `@"wf peer" are you there? reply if you can` while a scratch `-p` session named `wf peer` ran,
+  called `SendMessage` with `to: "wf peer"` and the operator's words verbatim (its input also carries
+  `recipient`/`content` copies and a `summary`), with no `ListAgents` and no `can_use_tool` in `auto`.
+  The result is an array holding one text block whose text is a JSON object; its `message` is the
+  sentence Wake draws (`receiptSentence`). The peer received it as a turn of its own.
+

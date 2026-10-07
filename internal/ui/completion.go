@@ -259,16 +259,41 @@ func openQuote(draft string, q int) bool {
 // `@agent-<type>` resolves headless to an Agent call (§3). So once a character
 // that can begin a name is typed, a conversation offers what Claude Code's own
 // `@` does (the manager's, its fleet only) - the owner's 2026-09-27 reversal of
-// the room-only rule, in completionpeers.go. Paths are offered in both.
+// the room-only rule, in completionpeers.go. So does a room draft behind a
+// leading `@who ` that ↵ sends to that one live agent, whose claude reads the
+// rest as its conversation would (owner, 2026-10-03). Paths are offered in both.
 func (a App) mentionMenu(draft, head, typed string) completion {
 	c := completion{pane: a.focus, draft: draft, head: head, paths: a.pathMenuFor(typed)}
 	switch {
-	case a.focus == "":
+	case a.focus == "" && !a.behindAddressee(head, typed):
 		c.names, c.tags = a.addressees(typed)
+		if a.relaysLeading(head, typed) {
+			c = a.machineSessions(c, typed, a.routedNames())
+		}
 	case canBeginName(typed):
 		c = a.conversationMenu(c, typed)
 	}
 	return c
+}
+
+// relaysLeading reports whether a room mention being typed is the draft's
+// leading one while a manager is live: ↵ passes a name the fleet does not hold
+// through to the manager, which relays it with SendMessage (owner, 2026-10-03).
+func (a App) relaysLeading(head, typed string) bool {
+	return a.room.Composer().WireText(head) == "" && canBeginName(typed) && a.service().ID != ""
+}
+
+// behindAddressee reports whether a room mention being typed follows a leading
+// `@who ` whose draft ↵ sends to that one live agent. Open mode widens a message
+// to the fleet, and then the room keeps its own names: who's would be offered
+// for a draft every agent reads.
+func (a App) behindAddressee(head, typed string) bool {
+	c := a.room.Composer()
+	if c.WireText(head) == "" || !canBeginName(typed) { // nothing the router reads comes first
+		return false
+	}
+	r := a.route(c.WireText(c.Value()))
+	return r.mentioned && len(r.Targets) == 1
 }
 
 // addressees is every name a mention could resolve to, in the roster's own

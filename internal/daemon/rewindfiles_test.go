@@ -25,6 +25,12 @@ func fakeRewind(sid string) int {
 	for line := range stdinLines() {
 		id := controlRequestID(line)
 		switch {
+		case strings.Contains(line, `"subtype":"initialize"`):
+			// The daemon's opening handshake, initialize then mcp_status, is answered as
+			// claude does, with no turn: echoing either ended a "hold" turn early.
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"pid":1}}}`+"\n", id)
+		case strings.Contains(line, `"subtype":"mcp_status"`):
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"mcpServers":[]}}}`+"\n", id)
 		case strings.Contains(line, `"subtype":"rewind_files"`) && strings.Contains(line, `"dry_run":true`):
 			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"canRewind":true,"filesChanged":["/p/a.txt"],"insertions":1,"deletions":2}}}`+"\n", id)
 		case strings.Contains(line, `"subtype":"rewind_files"`) && strings.Contains(line, `"NEVER"`):

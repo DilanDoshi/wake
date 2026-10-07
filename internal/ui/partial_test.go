@@ -309,7 +309,7 @@ const streamRateFixture = "testdata/stream-rate.json"
 //
 // internal/ui may not read Claude's JSON, which is why the derivation is a
 // script writing a fixture and not a test walking testdata/stream: the airlock
-// is six files in internal/core, and this package reads only the answer.
+// is seven files in internal/core, and this package reads only the answer.
 func TestTheStreamingConstantsStillDescribeTheCorpus(t *testing.T) {
 	raw, err := os.ReadFile(streamRateFixture)
 	if err != nil {

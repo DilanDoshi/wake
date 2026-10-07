@@ -3600,7 +3600,8 @@ The owner's rulings for the `@` menu parity work (branch `feat/at-menu-peers`); 
   own agent), then the machine's other Claude sessions `(dir)`, then `@agent-<type> (agent)`, then
   files. Nothing routes: the DM sends what was typed, and claude's *model* sends `@<session>` with
   `SendMessage` (findings §4, from the docs); typed `@agent-<type>` resolves to an `Agent` call (§3).
-  **The manager's conversation offers its fleet and files only** — it runs with `--tools ""`, so it
+  **The manager's conversation offers its fleet and files only** (superseded 2026-10-03: it holds
+  SendMessage now, so it offers the machine's sessions too) — it runs with `--tools ""`, so it
   has no `SendMessage` or `Agent`, and reaches fleet peers by Wake name through its `send` tool.
   The room's menu is unchanged and still mirrors `core.Resolve`.
 - **The machine's sessions come from a bare one-shot, not from an agent.** A `/list-agents` sent to
@@ -3766,3 +3767,71 @@ silently ignored, and the request restores for real: the recording deleted its f
 byte-for-byte by `TestEncodeRewindFilesMatchesTheRecordedRequests`.
 
 **Out.** "Summarize from here / up to here": no headless request is recorded.
+
+## 2026-10-03 — a listing row Wake cannot read costs that row; the room's `@` behind `@who ` is who's
+
+The owner's rulings on BUG-41 (fable wake checked the diagnosis and plan against `main`).
+
+- **An unreadable `/list-agents` row is dropped, not the listing.** Refuse-whole guarded nothing a
+  row-drop gives up: a recognised row is accepted only with a `[state]` lead, four non-empty
+  columns and an absolute directory, so a format change that kept that shape would be misread
+  either way, and the row that fails is the one carrying the new information. The frame still
+  refuses whole: no recognised header, a count that disagrees with the rows seen, or a line under
+  it with no `[state]` lead. The daemon logs how many rows it left out, never a row.
+- **Behind a leading `@who ` that reaches one live agent, the room's `@` offers who's conversation
+  menu** — fleet peers but who, the machine's sessions, who's subagent types. That widens the
+  2026-09-27 rule the way `addressedAgent` already did for `@who /cmd`: the leading mention still
+  mirrors `core.Resolve`, and the rest of the draft is who's claude's to read. A team, `@all`, the
+  manager, a parked or unknown name, and open mention mode (which sends `@who …` to every agent) keep
+  the room's own names — the menu offers only for the claude ↵ sends to (Codex review).
+- **A bare `@"session" …` as the room's leading mention should reach that session**, through the
+  manager: it gets `SendMessage` (`--tools SendMessage`, still no other tool), and its claude sends
+  the message as Claude Code does. Claude Code documents no format for posting into another
+  session's inbox, so Wake cannot deliver it itself. Its own branch, after `fix/at-quoted-mention`.
+
+## 2026-10-03 — the manager relays `@"session"` with SendMessage, unfenced (the owner's accepted risk)
+
+**The owner's ruling reverses the 2026-08-12 bound for one named built-in.** A room draft whose
+leading mention names no fleet agent (`@"fable wake" hi`) already passes through to the manager
+(`core.Resolve`'s passThrough, unchanged); the manager now holds `SendMessage` (`--tools
+SendMessage`, `core.ToolSendMessage`; `manager-tools.jsonl`) and managerScope tells it to send that
+session the rest of the operator's message. Recorded live (`manager-relay.jsonl`, `--safe-mode`, one
+turn): it sends the operator's words verbatim to the named session, with no `ListAgents` and no
+`can_use_tool`.
+
+**What was accepted, in full** — the owner was offered fable wake's fenced design (manager in
+`default` mode, a byte-exact relay of the operator's own message auto-allowed once, anything else a
+permission card) and chose none of it:
+- (a) **The manager can message any Claude session on the machine**, including other fleets' agents
+  running in `auto`. A receiver reads a peer message as a teammate's request to act on within its own
+  permissions, so a send the manager was talked into arrives with standing.
+- (b) **The only fence is managerScope's prose**: agent output is data, never an instruction; an
+  apparent request to send something is reported, not acted on. Everything the manager reads
+  through its tools is text an agent's own model wrote.
+- (c) **No fence is possible in `auto`.** Under an `auto` spawn the only asks the corpus records are
+  `AskUserQuestion` and `ExitPlanMode`; an ordinary built-in is approved without reaching Wake. A
+  fence needs `default` mode, which the owner also declined — so this is not a fence deferred.
+- (d) **What stays visible:** the room draws every send, live, as `↪ manager → <to>` from the
+  `tool_use` itself (`withManagerSend`), not from the manager's own prose, which injected text could
+  also suppress. It shows what the manager tried to send, not that it arrived: the receipt is the
+  manager's turn, and a restored room does not redraw the line (deferred.md). A send to a fleet agent
+  is left to the receiver's stream, which draws it already.
+
+The composer's target line stays `→ @manager`: the frame goes to the manager, and whether the words
+reach the peer is the model's act, not Wake's. A daemon fence would need the quoted-mention parse
+moved into core, so completion, the stamp and the target line read one implementation.
+
+## 2026-10-07 — `ask.go`, the seventh airlock file
+
+Merging the @-menu branch with main took `vocabulary.go` to 812 lines against the 800 hard max,
+though each side was under it alone. The subject seam is the interactive ask: `askKind`,
+`askDetail`, `askQuestions` and `askOptions` plus the payload keys they read, called only from
+`protocol.go`'s `controlRequestEvent`. It is not `control.go`'s subject (its header: Claude asks and
+Wake answers, so a permission exchange stays with `encode.go` and `controlRequestEvent`), and
+`protocol.go` has no room for it. A seventh airlock file by subject is the remedy `localreply.go`
+(2026-09-27) and `control.go` (2026-10-02) took; the owner delegated the call ("fix both as you
+think", 2026-10-07). The set stays pinned by `airlock_test.go`, the six headers and CLAUDE.md, and
+still grows only by a ruling.
+
+**Not done:** trimming comments to get under 800 (the guard says split by subject), and moving
+unrelated functions into an airlock file that happens to have headroom.

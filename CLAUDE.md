@@ -94,8 +94,12 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   machine's other Claude sessions `(dir)` (a bare one-shot `claude` running `/list-agents`, asked
   once per opening; a name past `[A-Za-z0-9_-]` is offered and typed quoted, `@"release notes"`, as
   Claude Code does), then `@agent-<type> (agent)`, then files by fuzzy search. The manager's
-  conversation offers its fleet and files only. `⇥` is the only accept. `internal/ui/completionpeers.go`,
-  `completionindex.go`; rulings in `decisions.md` (2026-09-27).
+  conversation offers no subagent types; a room draft behind a leading `@who ` that ↵ sends to that
+  one live agent offers that agent's menu, and the room's leading `@` offers the machine's sessions
+  after the fleet's while a manager is live to relay. An unreadable listing row costs that row,
+  never the listing.
+  `⇥` is the only accept. `internal/ui/completionpeers.go`, `completionindex.go`; rulings in
+  `decisions.md` (2026-09-27, 2026-10-03).
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
   (absent→spawn, parked→wake, running→park); `/manager-stop` ends it.
 - **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
@@ -111,7 +115,7 @@ Violating one is a design regression, not a style nit.
 |---|---|
 | **Not a terminal emulator or multiplexer.** No PTY, no VT100, no browser panes, no arbitrary shells. | Chasing it is how this project dies at 40%. |
 | **Cheap to leave open.** No per-frame work that could be per-change, no poll where a wait will do, no process on a timer. | A per-agent cost multiplies by 30. |
-| **Only `internal/core`'s six airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`, `localreply.go` for the text replies of local commands (owner's 2026-09-27 ruling), and `control.go` for the control requests Wake writes and their receipts (2026-10-02). | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
+| **Only `internal/core`'s seven airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`, `localreply.go` for the text replies of local commands (owner's 2026-09-27 ruling), `control.go` for the control requests Wake writes and their receipts (2026-10-02), and `ask.go` for an interactive ask's kind and payload (2026-10-07). | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
 | **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Use `core.SessionArgvMarkers`. | Enforced by `argv_test.go` tree-wide. |
 | **`attention.go` stays a pure function.** | Hardest logic; testable without spawning. |
 | **The UI never touches an agent's process.** | Keeps the daemon boundary real. |
@@ -302,7 +306,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads and the
   conversation's one bounded `git -c core.fsmonitor=false ls-files` per opening run off the draw
   goroutine, and the room keeps the one-directory listing (`completion.go`, `completionpath.go`,
-  `completionindex.go`). The room's menu must mirror `core.Resolve`; a DM routes nothing.
+  `completionindex.go`). The room's menu must mirror `core.Resolve` for the leading mention; a DM
+  routes nothing.
 
 **Cards and asks**
 - **An ask belongs to its agent's conversation; the room draws none** (`Cards.For`, `App.cardOf`).
@@ -316,12 +321,18 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 
 **Manager**
 - **May send, interrupt, spawn (optionally named, under `daemon.liveCap`, into a directory the fleet
-  already occupies), and group (`set_team`, `set_color`)** — nothing else. Rename, label, park,
-  wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each argued in
-  `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
+  already occupies), and group (`set_team`, `set_color`)** — nothing else on the fleet. Rename,
+  label, park, wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each
+  argued in `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
+- **It relays the operator's `@"session" …` with `SendMessage`, its one built-in, unfenced** (owner's
+  2026-10-03 ruling, the accepted risk in `decisions.md`): a room draft whose leading mention names
+  no fleet agent passes through to it, and the room draws each send live as `↪ manager → <to>` from
+  the call itself — the manager's intent, not proof of delivery (`observe.go`'s `withManagerSend`).
+  The room's leading `@` excludes an outside session named like a live team or `all`.
 - Its config is a function of its name, applied in `launch`: `--mcp-config` only ever beside
-  `--strict-mcp-config` and `--tools ""` (not `--allowed-tools`, which bounds nothing). Ordinary
-  agents get none of the three — they keep the operator's MCP servers (owner's ruling via PR #127).
+  `--strict-mcp-config` and `--tools SendMessage` (`core.ToolSendMessage`; not `--allowed-tools`,
+  which bounds nothing). Ordinary agents get none of the three — they keep the operator's MCP
+  servers (owner's ruling via PR #127).
 - **Every manager launch self-tests its tools** before claude starts: `managerConfig` runs
   `mcp.json`'s command through `initialize`/`tools/list` under a bound, and refuses unless
   `mcp.Tools()` comes back. Claude accepting the handshake stays `live-testing.md` §13.1.
@@ -364,7 +375,7 @@ yet says so in bold.**
 |---|---|
 | Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
-| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) |
+| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
@@ -469,7 +480,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 | Tool reach | `--add-dir` (Wake emits the repeated form) |
 | Debug | `--debug-file <path>`; `--debug` alone logs nothing observable headless |
 | Isolation | `--worktree` — **not used**; Wake runs `git worktree add` itself |
-| Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools ""`; `--append-system-prompt` |
+| Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools SendMessage`; `--append-system-prompt` |
 | Session listing | `--print --bare --no-session-persistence` + stream-json, one `/list-agents` line (verified 2.1.283) |
 | Mid-turn delivery | a user line written mid-turn needs no flag; `priority:"now"` + `origin:{kind:"human"}` for send-now; `cancel_async_message` takes one back (verified 2.1.288) |
 | File checkpoints | no flag: the env var `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true` (`-p` ignores the setting); restored by the `rewind_files` control request (verified 2.1.288) |

@@ -5577,3 +5577,24 @@ message and a subagent's gutter (neither opts in), and a paragraph or token wide
 - **Taken-back images plus the draft's own may exceed rpc's 16 MiB frame cap** - the aggregate guard
   runs on a drop (`imagedrop.go`), not on a take-back or a send-now's join. The daemon's reader would
   refuse that frame and end the connection, a hangup the client reattaches from.
+
+## 2026-10-03 — a bare one-shot's `system/ui_invalidate` frame does not decode
+
+claude 2.1.288's bare `/list-agents` one-shot prints `{"type":"system","subtype":"ui_invalidate",
+"event":"ui.render",…}` before `init`. `wireFrame.StreamEvent` takes `event` as a stream event's
+object, so `core.DecodeLine` errors on a valid line — against its own contract that only malformed
+JSON errors. Harmless today: `runListAgents` skips the line, and neither the take's non-bare
+sessions nor the owner's daemon log (which records every line a live agent fails to decode) has
+shown one. The line is left out of `list-agents-bare-renamed.jsonl` so the
+corpus decodes. Not fixed on `fix/at-quoted-mention` because `protocol.go` and `wire.go` sit at the
+800-line cap and PRs #147/#148 rework both. *Closes with:* a non-object `event` read as nothing, then
+the line restored to the fixture.
+
+## 2026-10-03 — left open by the manager relay
+
+- **A restored room does not redraw the manager's sends.** `↪ manager → <to>` is drawn from the live
+  `tool_use` (`withManagerSend`); `roomhistory.go` re-derives cross-session lines from transcripts but
+  has no case for the manager's SendMessage call. *Closes with:* the same predicate over a restored
+  `tool_use`.
+- **The target line says `→ @manager` for a relayed mention.** True of the frame; a line naming the
+  peer would need the quoted-mention parse in core (decisions.md, 2026-10-03).

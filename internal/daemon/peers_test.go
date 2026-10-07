@@ -34,6 +34,8 @@ const (
 	oneShotTurn    = "turn"    // the listing, from a result that ran a model turn
 	oneShotHang    = "hang"    // never answer
 	oneShotHeld    = "held"    // answer once the release file exists
+	oneShotRenamed = "renamed" // the recorded listing holding a renamed peer's row
+	oneShotOddRow  = "oddrow"  // the listing with one row of a shape never shown
 )
 
 // The recorded bare one-shot, its no-peers form and the line it was sent
@@ -42,6 +44,7 @@ const (
 	bareListingFixture = "list-agents-bare.jsonl"
 	bareEmptyFixture   = "list-agents-bare-empty.jsonl"
 	bareStdinFixture   = "../input/list-agents-bare.stdin.jsonl"
+	bareRenamedFixture = "list-agents-bare-renamed.jsonl"
 )
 
 // recordedPeers is what the bare recording lists.
@@ -83,6 +86,12 @@ func fakeOneShot() int {
 	case oneShotHang:
 		_ = os.WriteFile(os.Getenv(fakeOneShotPIDEnv), []byte(fmt.Sprint(os.Getpid())), 0o600)
 		time.Sleep(lingerFor)
+	case oneShotRenamed:
+		emitLines(readFixture(bareRenamedFixture))
+	case oneShotOddRow:
+		for _, line := range readFixture(bareListingFixture) {
+			fmt.Println(strings.ReplaceAll(line, "/private/tmp/wake-rec/alpha", "tmp/alpha"))
+		}
 	case oneShotHeld:
 		for start := time.Now(); time.Since(start) < lingerFor; time.Sleep(10 * time.Millisecond) {
 			if _, err := os.Stat(os.Getenv(fakeOneShotGateEnv)); err == nil {
@@ -312,6 +321,37 @@ func TestAOneShotThatListsNobodyOrFailsAnswersEmpty(t *testing.T) {
 	oneShotOnPath(t, "", "")
 	if peers, err := newServer(tempSocket(t)).listPeers(t.Context()); err != nil || !reflect.DeepEqual(peers, recordedPeers) {
 		t.Fatalf("listPeers = (%+v, %v), want the recorded %+v", peers, err, recordedPeers)
+	}
+}
+
+// A peer renamed after holding its name a while is listed with its former name
+// in a column of its own (list-agents-bare-renamed.jsonl). That listing is still
+// read, under the new name - it once refused the whole listing, so every
+// conversation's menu lost every outside session.
+func TestARenamedPeerStillListsTheMachinesSessions(t *testing.T) {
+	oneShotOnPath(t, "", oneShotRenamed)
+	want := []core.Peer{
+		{Name: "wf beta", Dir: "/private/tmp/wake-rec/beta"},
+		{Name: "wf-delta", Dir: "/private/tmp/wake-rec/alpha"},
+	}
+	if peers, err := newServer(tempSocket(t)).listPeers(t.Context()); err != nil || !reflect.DeepEqual(peers, want) {
+		t.Fatalf("listPeers = (%+v, %v), want the recorded %+v", peers, err, want)
+	}
+}
+
+// A row of a shape this build was never shown costs that one session, not the
+// listing, and the log says how many were left out - never the row, which names
+// the operator's sessions and directories.
+func TestARowOfAnUnseenShapeIsLeftOutAndCounted(t *testing.T) {
+	oneShotOnPath(t, "", oneShotOddRow)
+	logged := lockedLog(t)
+
+	peers, err := newServer(tempSocket(t)).listPeers(t.Context())
+	if err != nil || !reflect.DeepEqual(peers, recordedPeers[:1]) {
+		t.Fatalf("listPeers = (%+v, %v), want only %+v", peers, err, recordedPeers[:1])
+	}
+	if got := logged.String(); !strings.Contains(got, "left 1 of the machine's") || strings.Contains(got, "wake-rec") {
+		t.Errorf("the log read %q, want the one row counted and not quoted", got)
 	}
 }
 

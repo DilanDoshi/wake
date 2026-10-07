@@ -659,9 +659,10 @@ func TestTheScopeNamesEveryToolTheManagerHasAndNoOthers(t *testing.T) {
 // Bash, has been handed evidence that its own scope is unreliable.
 func TestTheScopeClaimsExactlyTheBoundThisBuildHas(t *testing.T) {
 	// The tools really are the whole of it now: launch gives the manager an
-	// MCPConfig, and argv.go emits `--tools ""` from the same literal, which
-	// empties the built-in set. TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt
-	// is the other half of that chain.
+	// MCPConfig, and argv.go emits `--tools SendMessage` from the same literal,
+	// which bounds the built-in set to that one (owner, 2026-10-03).
+	// TestAnMCPConfigReachesTheCommandLineOnlyWithStrictBesideIt is the other
+	// half of that chain.
 	srv := newServer(filepath.Join(t.TempDir(), "s"))
 	cfg, err := srv.managerConfig(core.Config{Name: core.ManagerName})
 	if err != nil {
@@ -687,9 +688,12 @@ func TestTheScopeClaimsExactlyTheBoundThisBuildHas(t *testing.T) {
 				"manager does not have - and a model told it has a shell will try to use one", gone)
 		}
 	}
-	if !strings.Contains(managerScope, "built-in tools removed") {
-		t.Error("the scope does not say the built-ins are gone. Naming what a model does not have is " +
-			"what stops it spending turns discovering that")
+	// Named from argv's own constant, so the one built-in the scope admits is the
+	// one the manager is spawned with.
+	if !strings.Contains(managerScope, "built-in tool removed but "+core.ToolSendMessage) {
+		t.Errorf("the scope does not say every built-in is gone but %s. Naming what a model does not "+
+			"have is what stops it spending turns discovering that, and naming the one it keeps is what "+
+			"it relays the operator's @session through", core.ToolSendMessage)
 	}
 }
 

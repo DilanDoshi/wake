@@ -742,6 +742,32 @@ subagent that handed back. A DM-only restored ending line is the follow-up offer
 
 ---
 
+## BUG-41 — `@"fable wake"` came and went: one renamed session emptied every `@` menu
+
+**Reported 2026-10-03**: `@"fable wake"` was offered in a conversation only some of the time,
+and never in the room. The daemon log held nine `could not list the machine's Claude sessions:
+its listing is a shape this build cannot read`, the first three seconds after the operator's
+`/clear` then `/rename at-agent-bug` in one agent's conversation.
+
+**Root cause: a renamed session's row has a fifth column.** claude 2.1.288 lists a session renamed
+after holding its name a while as `[idle]  ·  wf-delta  ·  says it was wf-alpha until 3s ago  ·  <cwd>
+·  started 1m ago` (`testdata/stream/list-agents-bare-renamed.jsonl`). `peerFromRow` wanted exactly
+four columns, and `PeersFromListAgents` refused the whole listing for one row it could not read, so
+the daemon answered every `@` opening, in every fleet on the machine, with no outside sessions until
+the annotation aged out. Any Wake `/name` or typed `/rename` of a long-lived agent set it off.
+
+**Fix (`localreply.go`'s `peerFromRow`, `peersFromRows`).** The renamed row is read under its new
+name only — a name is never an alias. A `[state]` row of a shape never shown is dropped and counted
+while the header and its count still hold, so the next column claude adds costs one session rather
+than the menu; the daemon logs the count, never the row (owner's ruling, 2026-10-03, decisions.md).
+
+**The room never offered it:** by the 2026-09-27 ruling its `@` held fleet names only. Behind a
+leading `@who ` that ↵ sends to that one live agent it now offers that agent's conversation menu
+(`completion.go`'s `behindAddressee`). A bare `@"fable wake" hi` as the room's leading mention still
+goes to the manager, which has no `SendMessage` — the manager relay is its own branch.
+
+---
+
 ## BUG-43 — a conversation's `ctx:` read 0% for one turn on a 1M session — PARKED, not reproduced
 
 **Reported 2026-10-03** by the owner: a conversation's status bar showed `ctx:0%` on a

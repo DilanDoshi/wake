@@ -5,7 +5,7 @@ package core
 // but they name no key, no tag and no wire word, so they are not the airlock's
 // to hold - they moved out of protocol.go and wire.go when merging /mcp and
 // workflows filled the four airlock files of the day to the 800-line hard max,
-// and the set is fixed (airlock_test.go's TestTheAirlockIsSixFilesInInternalCore).
+// and the set is fixed (airlock_test.go's TestTheAirlockIsSevenFilesInInternalCore).
 
 import (
 	"bytes"

@@ -82,6 +82,9 @@ const repoRoot = "../.."
 // localreply.go, is the owner's 2026-09-27 ruling: local commands' reply text.
 // The sixth, control.go, is 2026-10-02's: control requests and their receipts,
 // split out by subject when encode.go, wire.go and protocol.go were all full.
+// The seventh, ask.go, is 2026-10-07's: an interactive ask's kind and payload,
+// split out of vocabulary.go by subject when two merged branches took it past
+// the hard max (decisions.md, 2026-10-07).
 var airlockFiles = wordSet([]string{
 	"internal/core/protocol.go",
 	"internal/core/wire.go",
@@ -89,6 +92,7 @@ var airlockFiles = wordSet([]string{
 	"internal/core/encode.go",
 	"internal/core/localreply.go",
 	"internal/core/control.go",
+	"internal/core/ask.go",
 })
 
 // claudeWireVocabulary is what a file must not name outside the airlock.
@@ -390,6 +394,10 @@ var claudeWireVocabulary = wordSet([]string{
 	// what put a bare "⏺ Agent" in front of a reader.
 	"Bash", "Read", "Edit", "Write", "Glob",
 	"Grep", "WebFetch", "WebSearch", "Agent", "Task",
+	// The manager's one built-in, and the call the room draws for it - and the
+	// receipt key that, beside success and message, says a result is its own.
+	// The key sits inside a JSON string, so it is in embeddedMarkers below.
+	"SendMessage", "msg_id",
 
 	// The two interactive tools. Policed precisely because neither is ever
 	// named: askKind classifies an ask from requires_user_interaction and its
@@ -434,11 +442,13 @@ var claudeWireVocabulary = wordSet([]string{
 	"Current model:",
 
 	// The bare /list-agents and /rename replies' rendered English, which
-	// localreply.go reads the machine's sessions and a new name out of. Policed
-	// for "Current model:"'s reason, and each is a longer value's leading or
-	// inner phrase, so all three are in embeddedMarkers below.
+	// localreply.go reads the machine's sessions and a new name out of - and a
+	// renamed session's former-name column. Policed for "Current model:"'s
+	// reason, and each is a longer value's leading or inner phrase, so all four
+	// are in embeddedMarkers below.
 	"Other Claude sessions",
 	"No subagents, teammates or other Claude sessions", "Session renamed to: ",
+	"says it was ",
 
 	// Claude Code's /goal lifecycle, the rendered English wire.go's goalOp reads.
 	// "<synthetic>" (the announcement's model) and "No goal set" are whole values;
@@ -494,6 +504,15 @@ var deliberatelyGeneric = wordSet([]string{
 	// origin.kind's own key, the plainest English there is: Wake's own code names
 	// kinds everywhere, and "origin" beside it is policed, so it is no route in.
 	"kind",
+
+	// The rest of a renamed session's former-name column, `says it was <old>
+	// until <age> ago`, whose leading phrase is policed above. Plain English
+	// Wake's own words could not avoid, and no route in without that phrase.
+	" until ", " ago",
+
+	// A SendMessage's recipient key, the plainest English there is; no route in
+	// without "SendMessage", which is policed above.
+	"to",
 
 	// A rewind_files preview's line counts. Plain English a diff names anywhere,
 	// and no route in: a receipt is known only by "canRewind", which is policed.
@@ -748,7 +767,13 @@ var notNamedByTheAirlock = map[string]string{
 // 221 → 227: the rewind_files request ("rewind_files", "user_message_id",
 // "dry_run") and its receipt ("canRewind", "filesChanged", "skippedLinks").
 // rewind-files*.jsonl; 2026-10-02-file-rewind-findings.md.
-const policedWordCount = 227
+// 227 → 228: "says it was ", the column a renamed session's /list-agents row
+// carries between its name and directory. list-agents-bare-renamed.jsonl.
+// 228 → 229: "SendMessage", the manager's one built-in and the call whose
+// recipient and words toolPeerSend reads. manager-tools.jsonl, manager-relay.jsonl.
+// 229 → 230: "msg_id", the SendMessage receipt's own key, which receiptSentence
+// requires so no other JSON result is cut to its message. manager-relay.jsonl.
+const policedWordCount = 230
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -827,6 +852,9 @@ var notWireVocabulary = wordSet([]string{
 	// the reason follows the "]: " of a Stop-hook feedback frame. Punctuation
 	// Wake matches on, not wire words.
 	"[", "]", ":",
+
+	// receiptSentence's test for a JSON object, before it tries to read one.
+	"{",
 
 	// The backticks a live /model reply wraps its model name in, which
 	// ModelFromModelReply trims. Punctuation Wake matches on.
@@ -1146,6 +1174,9 @@ var embeddedMarkers = map[string]bool{
 	"Other Claude sessions":                            true,
 	"No subagents, teammates or other Claude sessions": true,
 	"Session renamed to: ":                             true,
+	"says it was ":                                     true,
+	// The SendMessage receipt's key, inside its JSON-in-text result.
+	"msg_id": true,
 	// Every connector's name begins with it ("claude.ai Gmail"); never whole.
 	"claude.ai ": true,
 }
@@ -1289,8 +1320,8 @@ func TestTheThreeListsDoNotOverlap(t *testing.T) {
 
 // The airlock is a set of files in one package, and saying so is what stops
 // the set being widened into an exemption for somewhere else.
-func TestTheAirlockIsSixFilesInInternalCore(t *testing.T) {
-	const want = 6
+func TestTheAirlockIsSevenFilesInInternalCore(t *testing.T) {
+	const want = 7
 	if len(airlockFiles) != want {
 		t.Errorf("the airlock is %d files, want %d - if that is deliberate, CLAUDE.md's rule and protocol.go's header both name the set and must change with it", len(airlockFiles), want)
 	}
