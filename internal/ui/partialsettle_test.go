@@ -183,6 +183,40 @@ func TestFoldingAResultDoesNotYankAReaderTwoLinesBackUnderAStreamingAnswer(t *te
 	}
 }
 
+// The stored cap is measured against the composer as it stands, and View
+// re-measures only a copy, so a draft that was tall when a block landed would
+// leave the stored cap squeezed after it is sent: later tokens would be trimmed
+// to it, and the preview would stay short of the pane's room.
+func TestAComposerThatShrinksGivesThePreviewItsRoomBack(t *testing.T) {
+	var draft []string
+	for i := range 10 {
+		draft = append(draft, fmt.Sprintf("draft line %d", i))
+	}
+	d := withDraft(t, pushDM(t, pushH), draft...)
+	squeezed := previewRoom(d)
+	d, _ = streamRows(d, "", squeezed+2)
+	d = landed(d, "a block that landed under a tall draft") // stores the cap the tall box leaves
+
+	d = d.WithComposer(d.Composer().Reset()) // sent
+	room := previewRoom(d)
+	if room < squeezed+4 {
+		t.Fatalf("the one-row box leaves %d rows against %d under the draft: too close to tell a stale cap", room, squeezed)
+	}
+	d, text := streamRows(d, "", room+2)
+
+	frame := frameRows(d)
+	got := previewUnder(t, frame, "a block that landed")
+	if len(got) != room {
+		t.Errorf("the preview drew %d rows after the draft was sent, want the pane's %d", len(got), room)
+	}
+	if last := got[len(got)-1]; !strings.HasSuffix(last, "answer.") || !strings.Contains(strings.Join(got, "\n"), fmt.Sprintf("Sentence %02d", strings.Count(text, "Sentence "))) {
+		t.Errorf("the preview is not the answer's newest words: %q", got)
+	}
+	if len(frame) != pushH {
+		t.Errorf("the pane drew %d rows, want %d", len(frame), pushH)
+	}
+}
+
 // A drag held at a pane's edge scrolls it, and a follower's preview gives its
 // rows back the moment the reader leaves the bottom - so the window the drag was
 // taken in is not the window drawn after the first pull. The pointer must map

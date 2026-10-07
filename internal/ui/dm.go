@@ -697,8 +697,10 @@ func (d DM) Before(earlier []core.Event) DM {
 // is not independently renderable.
 func (d DM) Composer() Composer { return d.composer }
 
-// WithComposer returns a DM carrying c.
-func (d DM) WithComposer(c Composer) DM { d.composer = c; return d }
+// WithComposer returns a DM carrying c, its layout settled: a box that gained or
+// lost rows moves the chrome the stored preview cap is measured against. The one
+// write every stored composer goes through; a no-op while the box's rows hold.
+func (d DM) WithComposer(c Composer) DM { d.composer = c; return d.drawnLayout() }
 
 // WithParentName names the conversation this one was branched from, for the
 // header. Empty for a session that is nobody's fork, which is every session

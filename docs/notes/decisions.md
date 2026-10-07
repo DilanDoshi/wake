@@ -2700,7 +2700,8 @@ Claude Code pushes the whole transcript up a row at a time, and the owner ruled 
   that changes the cap lays the pane out again with the transcript's bottom line where the scroll put it:
   n lines up is n lines back, and n down returns to following exactly at the newest line. (Round 1 of
   review found the wheel landing about six lines back and resuming three early, and a reader boxed at
-  three rows while the pane drew as following with no banner.)
+  three rows while the pane drew as following with no banner; a second pass found a draft that shrank
+  leaving the stored cap squeezed, so every stored composer write now settles through `WithComposer`.)
 - **A menu takes the floor, and so does a subagent's view** (the parent's words are not what the reader
   opened), each bounded by the pane's room, since the draft winning can leave none. `View` re-lays when
   a menu is up over a preview above the floor: with the preview at its ceiling the menu's rows and the
