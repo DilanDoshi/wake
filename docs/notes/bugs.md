@@ -902,7 +902,9 @@ scrubber still deletes it until something decodes it.
 
 ---
 
-## BUG-45 — a wrapped link's underline ran through the row's padding to the pane's right edge
+## BUG-48 — a wrapped link's underline ran through the row's padding to the pane's right edge
+
+*Numbered BUG-45 in PR #155's title and commits; renumbered because #154 merged first holding BUG-45.*
 
 **Reported by the owner, 2026-10-06,** from a screenshot of a list of links: a link glamour wrapped across rows
 was underlined past its last glyph, through the blank cells to the pane's edge. **That shape (a list)
