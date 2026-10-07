@@ -70,12 +70,19 @@ type Task struct {
 // Openable says whether this row has a conversation behind it.
 //
 // Only an agent does: a background shell forwards no frames at all, and an
-// unrecorded kind has not earned the assumption. Both are still listed - what
-// is running is worth showing whether or not it can be read - and the dispatch
-// is required because it is the key the transcript is filed under, so a row
-// without one would open an empty pane.
+// unrecorded kind has not earned the assumption. The dispatch is required
+// because it is the key the transcript is filed under, so a row without one
+// would open an empty pane.
 func (t Task) Openable() bool {
 	return t.Kind == core.TaskAgent && t.Dispatch != ""
+}
+
+// Selectable says whether the sidebar cursor and a click may land on this row: an
+// agent opens its conversation and a workflow its /workflows view. A shell is
+// drawn - it is running work - but nothing opens, so both treat its row as its
+// agent's own.
+func (t Task) Selectable() bool {
+	return t.Openable() || t.Kind == core.TaskWorkflow
 }
 
 // Tasks is a conversation's dispatches, in the order they started.
