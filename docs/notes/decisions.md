@@ -247,18 +247,19 @@ the daemon already sends the `initialize` control request at spawn (`daemon/mcpa
 reply carries the session's commands as a list of entries, each with a name, a description, a hint,
 aliases and a built-in flag. Recorded 2026-10-06 against claude 2.1.289 in a sterile HOME
 (`testdata/stream/initialize.jsonl` is the receipt): the reply's names are set-equal to the same
-session's later `init.slash_commands` (compared name for name, one session, a turn taken after the
-handshake), and a skill marked not user-invocable is absent from both, so the reply is the same
-`/`-invocable list this entry already trusts. `core/control.go` reads only each entry's name onto the
-receipt's `SessionFacts.SlashCommands`; the daemon keeps them for the report when the agent has none
-yet (an init's list is never replaced by the handshake's, and every init after replaces it as before)
-and pushes a status, since a quiet agent has no state change to carry it. The reply still reaches no
-window.
+session's `init.slash_commands` (a hand probe, not committed: one sterile session with one demo skill
+answered the handshake, then a bare `/model` - `num_turns` 0 - brought its init, and the two lists
+matched name for name, 49 each), and a skill marked not user-invocable is absent from both, so the
+reply is the same `/`-invocable list this entry already trusts. `core/control.go` reads only each
+entry's name onto the receipt's `SessionFacts.SlashCommands`; the daemon keeps them for the report when
+the agent has none yet (an init's list is never replaced by the handshake's, and every init after
+replaces it as before) and pushes a status, since a quiet agent has no state change to carry it. The
+reply still reaches no window.
 
 This **supersedes the idea of a launch-time bare `/model` probe for learning a fresh agent's commands**
-(floated 2026-09-21, never built): a probe is a model-less turn Wake would send and suppress, where the
-handshake costs nothing and is already sent. The probe still earns its place for **effort and model**,
-which the handshake reply does not carry.
+(recommended to the slash-menu work on 2026-09-21, never built): a probe is a model-less turn Wake
+would send and suppress, where the handshake costs nothing and is already sent. The probe still earns
+its place for **effort and model**, which the handshake reply does not carry.
 
 The scrubber and the corpus guard were widened on purpose, for a newly decoded field:
 `scripts/scrub-fixtures.py` keeps a reply's `commands` reduced to each

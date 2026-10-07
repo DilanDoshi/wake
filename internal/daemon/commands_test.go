@@ -50,7 +50,7 @@ func TestAReportKeepsTheCommandsWhenAFrameNamesNone(t *testing.T) {
 // offer. These two are what that reply names; the init a turn brings later
 // names others, so a test can tell which one the report carries.
 var (
-	handshakeCommands = []string{"compact", "deploy-prod"}
+	handshakeCommands = []string{"compact", "list-agents"}
 	initCommands      = []string{"deploy-prod", "notebook"}
 )
 

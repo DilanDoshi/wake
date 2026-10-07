@@ -344,8 +344,8 @@ func TestTheHandshakesReplyCarriesTheSessionsCommands(t *testing.T) {
 }
 
 // A refusal, a receipt that names no commands, one naming an empty list and one
-// in a shape this build cannot read say nothing about them, so none carries facts - a consumer must not read an empty
-// list as "this session has no commands".
+// in a shape this build cannot read say nothing about them, so none carries facts:
+// a consumer must not read an empty list as "this session has no commands".
 func TestAReceiptWithoutCommandsCarriesNoFacts(t *testing.T) {
 	for name, line := range map[string]string{
 		"refused": `{"type":"control_response","response":{"subtype":"error","request_id":"h1","error":"not now"}}`,

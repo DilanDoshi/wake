@@ -468,9 +468,10 @@ var deliberatelyGeneric = wordSet([]string{
 	// in on its own - a file cannot reach the list without naming "init".
 	"agents",
 
-	// An initialize receipt's slash commands, generic for "agents"' reason:
-	// core.SessionFacts.SlashCommands keeps the spelling as its json tag. Not a
-	// route in on its own - a file cannot reach it without naming "initialize".
+	// An initialize receipt's slash commands, generic for "agents"' reason: Wake's
+	// own json tags spell it (rpc.SessionStatus.Commands, core.SessionFacts), so
+	// policing it would fire on Wake. Not a route in on its own - reaching the
+	// receipt still takes naming "control_response", which is policed.
 	"commands",
 
 	// A workflow_agent's own fields, the plainest English among them:

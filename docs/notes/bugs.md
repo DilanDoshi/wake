@@ -807,10 +807,13 @@ already sends at spawn is answered with the session's commands, recorded 2026-10
 `SessionFacts.SlashCommands`; `handshakeAnswered` keeps them for the report when the agent has none
 yet, and `fanOut` pushes a status because nothing else changes for a quiet agent. An init's list is
 never replaced by the handshake's. The reply still reaches no window; a refused one folds nothing.
-Regression tests: `core`'s `TestTheHandshakesReplyCarriesTheSessionsCommands`, `daemon`'s
-`TestAFreshAgentReportsTheCommandsItsHandshakeNamed`, `ui`'s
-`TestAFreshAgentsReportedSkillsCompleteAtTheEndOfALongBrief`, and the pty
-`TestAFreshAgentsSkillsCompleteInTheRoomBeforeItsFirstTurn`.
+Regression tests, red without the fix: `core`'s `TestTheHandshakesReplyCarriesTheSessionsCommands`,
+`daemon`'s `TestAFreshAgentReportsTheCommandsItsHandshakeNamed`, and the pty
+`TestAFreshAgentsSkillsCompleteInTheRoomBeforeItsFirstTurn`. `ui`'s
+`TestAFreshAgentsReportedSkillsCompleteAtTheEndOfALongBrief` pins the report → menu → `⇥` path the
+owner's brief takes. A side effect, pinned by `TestAHandshakeNamingListAgentsListsTheSessionsBeforeAnyTurn`:
+the `@` menu's machine-session listing, gated on some agent's claude naming `list-agents`, now opens
+before any turn too.
 
 **Not changed:** the same reply's `agents` would fill the `@agent-<type>` menu of a fresh agent; the
 scrubber still deletes it until something decodes it.
