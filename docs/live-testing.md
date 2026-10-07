@@ -761,10 +761,10 @@ and not an assertion.
 
 New with the `/`-and-`@` completion. Everything here is a judgement a test cannot make.
 
-- [ ] **Type `/` in a conversation with an agent that has taken a turn.** The menu should list Wake's
-      own commands first and then that agent's — including any `.claude/commands/*.md` of your own.
-      If your own commands are missing, the session had not started a turn yet; take one and look
-      again.
+- [ ] **Type `/` in a conversation with a just-spawned agent, before its first turn.** The menu
+      should list that agent's commands first and then Wake's — including any
+      `.claude/commands/*.md` and skills of your own, from the `initialize` handshake's reply. Do the
+      same in the room, ending a long `@name …` brief with `/`.
 - [ ] **Type `/` in a room with nothing running.** Wake's commands and nothing else, which is
       correct and worth seeing once so it does not read as a failure.
 - [ ] **Where it sits.** The menu draws at the **top** of the pane, where a permission card draws —

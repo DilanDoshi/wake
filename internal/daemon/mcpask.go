@@ -83,6 +83,7 @@ func (a *agent) handshake() {
 // the servers it loaded. A loaded connector reads needs-auth until something
 // reconnects it, even one signed in on claude.ai (mcp-connectors.jsonl), so
 // connectorsReported is what makes one usable. A refused handshake loaded none.
+// The reply also names the session's commands, which learnCommands keeps.
 func (a *agent) handshakeAnswered(ev core.Event) bool {
 	a.mu.Lock()
 	mine := ev.RequestID != "" && ev.RequestID == a.initID
@@ -95,9 +96,24 @@ func (a *agent) handshakeAnswered(ev core.Event) bool {
 	case ev.Control != nil && ev.Control.Error != "":
 		logf("wake: session %s: handshake refused: %s", a.id, ev.Control.Error)
 	default:
+		a.learnCommands(ev)
 		a.askOwn(rpc.Frame{Kind: rpc.FrameMCPList, SessionID: a.id})
 	}
 	return mine
+}
+
+// learnCommands keeps the commands the handshake's reply names, for the report:
+// a fresh agent sends no init until its first turn, so this is all its menu has.
+// Never over an init's, which is newer and renews itself every turn.
+func (a *agent) learnCommands(ev core.Event) {
+	if ev.Session == nil || len(ev.Session.SlashCommands) == 0 {
+		return
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if len(a.commands) == 0 {
+		a.commands = ev.Session.SlashCommands
+	}
 }
 
 // connectorsReported reconnects each claude.ai connector a status reply shows

@@ -49,7 +49,9 @@ type SessionFacts struct {
 
 	// SlashCommands is every command the session advertised on its last init,
 	// in the order claude listed them: its own, and the operator's own
-	// `.claude/commands` files beside them.
+	// `.claude/commands` files beside them. An initialize receipt names them
+	// too, which is how a session that has not yet taken a turn - and so sent
+	// no init - still has some.
 	//
 	// Carried whole rather than filtered, for MCPServers' reason. What Wake
 	// does with it is a question about a surface - the composer offers it as a
