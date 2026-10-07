@@ -72,6 +72,7 @@ func roomCases() []roomCase {
 		// receipt, one kind over, and the same non-decision: it is Wake
 		// acknowledging its own request rather than conversation content.
 		{"a rewind receipt", core.Event{Kind: core.KindRewindReceipt}, false},
+		{"a file rewind receipt", core.Event{Kind: core.KindFilesRewindReceipt}, false},
 		{"an MCP reply, which only the /mcp menu reads", core.Event{Kind: core.KindMCPReply}, false},
 		// A stop's receipt: Wake acknowledging its own request, the rewind
 		// receipt's non-decision. A refusal is a notice (observedStop).

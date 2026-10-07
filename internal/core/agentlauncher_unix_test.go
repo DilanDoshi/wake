@@ -51,6 +51,7 @@ type agentLauncherRecord struct {
 	ControlPipeInherited  bool
 	StatusPipeInherited   bool
 	LifetimePipeInherited bool
+	FileCheckpointing     string
 }
 
 func TestMain(m *testing.M) {
@@ -111,6 +112,7 @@ func recordAgentLauncherTarget() {
 	}
 	_, record.LauncherMarkerPresent = os.LookupEnv(agentLauncherMarkerEnv)
 	_, record.LauncherDirPresent = os.LookupEnv(agentLauncherDirEnv)
+	record.FileCheckpointing = os.Getenv(fileCheckpointingEnv)
 	record.ControlPipeInherited = inheritedAgentLauncherPipe(agentLauncherControlFD, agentLauncherTestControlIDEnv)
 	record.StatusPipeInherited = inheritedAgentLauncherPipe(agentLauncherStatusFD, agentLauncherTestStatusIDEnv)
 	record.LifetimePipeInherited = inheritedAgentLauncherPipe(agentLauncherLifetimeFD, agentLauncherTestLifetimeIDEnv)
@@ -407,6 +409,9 @@ func assertAgentLauncherTarget(t *testing.T, s *Session, wantDir string, got age
 	}
 	if got.LifetimePipeInherited {
 		t.Fatal("agent launcher LIFETIME pipe reached claude")
+	}
+	if got.FileCheckpointing != "true" {
+		t.Fatalf("%s = %q at claude, want true: an agent without it has no code to rewind", fileCheckpointingEnv, got.FileCheckpointing)
 	}
 	wantArgs := []string{
 		claudeBinary,
@@ -861,6 +866,31 @@ func TestDirectStartWithoutLauncherUsesClaudeCommand(t *testing.T) {
 	drain(s)
 	if gotName != claudeBinary {
 		t.Fatalf("execCommand name = %q, want %q", gotName, claudeBinary)
+	}
+}
+
+// The direct path hands claude the same environment the launcher does, so
+// an agent started either way can rewind its files.
+func TestDirectStartTurnsOnFileCheckpointing(t *testing.T) {
+	original := execCommand
+	var cmd *exec.Cmd
+	// Env left nil, as exec.CommandContext leaves it, so Start fills it in;
+	// the helper flag reaches the child through this process's environment.
+	t.Setenv("WAKE_WANT_HELPER", "1")
+	execCommand = func(ctx context.Context, name string, args ...string) *exec.Cmd {
+		cmd = fakeExec(ctx, name, args...)
+		cmd.Env = nil
+		return cmd
+	}
+	t.Cleanup(func() { execCommand = original })
+
+	s := NewSession(Config{SessionID: "s1", Dir: t.TempDir()})
+	if err := s.Start(context.Background()); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
+	drain(s)
+	if !slices.Contains(cmd.Env, fileCheckpointingEnv+"=true") {
+		t.Fatalf("claude's environment lacks %s=true", fileCheckpointingEnv)
 	}
 }
 

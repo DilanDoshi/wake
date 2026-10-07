@@ -55,11 +55,11 @@ func (a *agent) takeMCPAsker(id string) (*client, bool) {
 	return c, ok
 }
 
-// mcpAsker is the client that asked the MCP question ev answers, and whether
-// anybody did: nil and true is the daemon's own ask. Every other event is
-// nobody's, and is broadcast as before.
+// mcpAsker is the client that asked the MCP question - or the file rewind
+// preview - ev answers, and whether anybody did: nil and true is the daemon's
+// own ask. Every other event is nobody's, and is broadcast as before.
 func (a *agent) mcpAsker(ev core.Event) (*client, bool) {
-	if ev.Kind != core.KindMCPReply || ev.RequestID == "" {
+	if (ev.Kind != core.KindMCPReply && ev.Kind != core.KindFilesRewindReceipt) || ev.RequestID == "" {
 		return nil, false
 	}
 	return a.takeMCPAsker(ev.RequestID)

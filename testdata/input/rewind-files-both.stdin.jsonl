@@ -1,0 +1,16 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Write tool to create a.txt containing exactly the word: one. Reply only 'done'."}]},"uuid":"2f0036fb-6cef-42d3-b343-21604e1d606d"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Edit tool to change the word one to two in a.txt. Reply only 'done'."}]},"uuid":"04f4ad37-149d-4711-af2f-e2d8683c41b5"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Write tool to create b.txt containing exactly the word: bee. Reply only 'done'."}]},"uuid":"6ba49f3e-d756-4859-a75d-7241de9cf6c6"}
+{"type":"control_request","request_id":"probe-01ebef5e","request":{"subtype":"rewind_files","user_message_id":"6ba49f3e-d756-4859-a75d-7241de9cf6c6"}}
+{"type":"control_request","request_id":"probe-11164fbd","request":{"subtype":"rewind_conversation","target_message_uuid":"6ba49f3e-d756-4859-a75d-7241de9cf6c6","last_seen_user_message_uuid":"6ba49f3e-d756-4859-a75d-7241de9cf6c6","interrupt_if_running":false}}
+{"type":"control_request","request_id":"probe-64f4fc08","request":{"subtype":"rewind_files","user_message_id":"04f4ad37-149d-4711-af2f-e2d8683c41b5","dry_run":true}}
+{"type":"control_request","request_id":"probe-f7989aca","request":{"subtype":"rewind_files","user_message_id":"6ba49f3e-d756-4859-a75d-7241de9cf6c6","dry_run":true}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Write tool to create c.txt containing exactly the word: sea. Reply only 'done'."}]},"uuid":"3d62156e-f322-4c95-bd4d-f245d83633b5"}
+{"type":"control_request","request_id":"probe-a37ce2ae","request":{"subtype":"rewind_conversation","target_message_uuid":"04f4ad37-149d-4711-af2f-e2d8683c41b5","last_seen_user_message_uuid":"3d62156e-f322-4c95-bd4d-f245d83633b5","interrupt_if_running":false}}
+{"type":"control_request","request_id":"probe-3be65739","request":{"subtype":"rewind_files","user_message_id":"04f4ad37-149d-4711-af2f-e2d8683c41b5"}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"/clear"}]},"uuid":"4c8ce03f-10bc-4cb9-82b5-ded1bc993d90"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Write tool to create d.txt containing exactly the word: dee. Reply only 'done'."}]},"uuid":"9c214490-12cb-49af-bf14-dee5aca472a9"}
+{"type":"control_request","request_id":"probe-b04d813b","request":{"subtype":"rewind_files","user_message_id":"9c214490-12cb-49af-bf14-dee5aca472a9","dry_run":true}}
+{"type":"control_request","request_id":"probe-f0c1588c","request":{"subtype":"rewind_files","user_message_id":"2f0036fb-6cef-42d3-b343-21604e1d606d","dry_run":true}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Reply with only the word: hi. Use no tools."}]},"uuid":"65be1f40-b691-4c7e-94e8-450d99626f92"}
+{"type":"control_request","request_id":"probe-fab29262","request":{"subtype":"rewind_files","user_message_id":"9c214490-12cb-49af-bf14-dee5aca472a9","dry_run":true}}

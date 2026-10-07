@@ -329,6 +329,7 @@ func (a App) disarmed() App {
 	a.escArmed = false
 	a.quitArmed = false
 	a.workflow.view.Armed = false
+	a.rewind.Restore.Armed = false
 	return a
 }
 

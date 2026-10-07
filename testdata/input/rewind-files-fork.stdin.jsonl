@@ -1,0 +1,4 @@
+{"type":"control_request","request_id":"probe-1399bdb5","request":{"subtype":"rewind_files","user_message_id":"e8c64c67-676f-4907-b987-ac651ad3494e","dry_run":true}}
+{"type":"control_request","request_id":"probe-432190fa","request":{"subtype":"rewind_files","user_message_id":"39bd0038-6c15-4d83-9bfc-004de4189cc0","dry_run":true}}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Write tool to create d.txt containing exactly the word: dee. Reply only 'done'."}]},"uuid":"e914a662-0a23-4e34-801d-b3392024d286"}
+{"type":"control_request","request_id":"probe-c679d26f","request":{"subtype":"rewind_files","user_message_id":"e914a662-0a23-4e34-801d-b3392024d286","dry_run":true}}

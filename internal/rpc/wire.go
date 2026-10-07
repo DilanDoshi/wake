@@ -206,16 +206,6 @@ const (
 	// --dangerously-skip-permissions - which nothing in this tree passes, so
 	// that mode is unreachable by construction rather than by a check here.
 	FrameMode = "mode" // client → daemon: change a running session's permission mode
-
-	// FrameRewind asks a running session to rewind its conversation to an
-	// earlier user turn - RewindTarget and RewindLastSeen below. It travels the
-	// same control-write path as FrameSend / FrameInterrupt / FrameMode: a line
-	// on the stdin of a process that already exists, behind whatever was
-	// already queued for that agent. And it answers the way FrameMode does -
-	// no FrameRewindReply, only a control_response on the event stream,
-	// arriving as a core.KindRewindReceipt, which is the only authority on
-	// whether it rewound.
-	FrameRewind = "rewind" // client → daemon: rewind a running session's conversation
 )
 
 // RoleManager marks the one session that gets Wake's own tools.
@@ -482,8 +472,8 @@ type Frame struct {
 	// for one thing - Answers' case exactly.
 	Mode string `json:"mode,omitempty"`
 
-	// RewindTarget is the message uuid a FrameRewind asks the session to
-	// rewind to, and RewindLastSeen is the uuid it declares as the tip -
+	// RewindTarget is the message uuid a rewind frame (rewind.go) aims at, and
+	// RewindLastSeen is the uuid a conversation rewind declares as the tip -
 	// Claude's own optimistic-concurrency guard, so a rewind aimed at a
 	// conversation that moved on since is refused rather than landing
 	// somewhere nobody asked for. Both required, on Mode's own argument: core.

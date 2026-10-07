@@ -79,8 +79,50 @@ func TestEscEscOpensARewindPickerOfTheRealActiveBranch(t *testing.T) {
 	s.settle()
 	s.send("\r") // ↵
 
+	// ↵ on a prompt previews its files; the cursor rests on the choice that
+	// writes nothing to disk.
+	s.await("Restore conversation")
+	s.send("\r") // ↵
+
 	// scriptRewinds' receipt carries the *target* uuid back inside
 	// prefillText, so finding it in the composer proves the specific prompt
 	// this test moved onto - not merely that some receipt landed.
+	s.await(rewindPrefillPrefix + rewindFixtureOldestUUID)
+}
+
+// TestEscEscRestoresCodeAndConversation drives the second step on a real pty:
+// the preview the daemon routed back, the armed code choice, and both's chain -
+// the files restored, then the conversation rewound behind them.
+func TestEscEscRestoresCodeAndConversation(t *testing.T) {
+	withScriptedAgent(t, scriptRewinds)
+	projects := t.TempDir()
+	t.Setenv("WAKE_PROJECTS", projects)
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWakeInAConversation(t, 100, 30)
+	s.await("ready")
+	fixture, err := os.ReadFile(filepath.Join("..", "..", "testdata", "transcript", "rewind-tree.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	plantedTranscript(t, projects, liveSessionID(t, s.agentName()), strings.Split(strings.TrimRight(string(fixture), "\n"), "\n")...)
+
+	s.send("\x1b")
+	s.settle()
+	s.send("\x1b")
+	s.await(rewindFixtureOldestText)
+	s.send("\x1b[B") // ↓ onto the older prompt
+	s.settle()
+	s.send("\r")
+
+	s.await("1 file would change · +3 −1")
+	s.await(rewindFakeFile)
+	s.send("\x1b[B") // ↓ onto Restore code and conversation
+	s.settle()
+	s.send("\r")
+	s.await("↵ again restores 1 file")
+	s.send("\r")
+
+	s.await("files were restored")
 	s.await(rewindPrefillPrefix + rewindFixtureOldestUUID)
 }

@@ -296,6 +296,8 @@ func runFakeClaude() int {
 		return fakeInterruptible(sid)
 	case "mode":
 		return fakeMode(sid)
+	case "rewind":
+		return fakeRewind(sid)
 	case "mcp":
 		return fakeMCP(sid)
 	case "connectors":
