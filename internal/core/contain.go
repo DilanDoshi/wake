@@ -397,9 +397,10 @@ var notAuthoredByTheChild = map[string]string{
 	// frame, RequestID answers an ask, and a substitution in either would
 	// break the match rather than protect a surface. They are also the two
 	// ids Wake mints or echoes rather than reads as prose.
-	"Event.SessionID": "an address, matched rather than drawn",
-	"Event.RequestID": "the correlator an answer is answered by",
-	"Event.MessageID": "an identity - a send's lifecycle, a restored record's uuid - matched rather than drawn",
+	"Event.SessionID":  "an address, matched rather than drawn",
+	"Event.RequestID":  "the correlator an answer is answered by",
+	"Event.MessageID":  "an identity - a send's lifecycle, a restored record's uuid - matched rather than drawn",
+	"Event.Answered[]": "MessageID's identities, listed by a turn's end; matched rather than drawn",
 
 	// Re-encoded rather than rendered, both of them. The id is what an answer is
 	// addressed to, and Input is what an allow sends back as updatedInput - a

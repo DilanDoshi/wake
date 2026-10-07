@@ -59,6 +59,7 @@ var legendKeyNames = map[string][]legendKey{
 	"⌃A":   {{name: "KeyCtrlA", msg: tea.KeyMsg{Type: tea.KeyCtrlA}}},
 	"⌃N⌃P": {{name: "KeyCtrlN", msg: tea.KeyMsg{Type: tea.KeyCtrlN}}, {name: "KeyCtrlP", msg: tea.KeyMsg{Type: tea.KeyCtrlP}}},
 	"⌃E":   {{name: "KeyCtrlE", msg: tea.KeyMsg{Type: tea.KeyCtrlE}}},
+	"⌃]":   {{name: "KeyCtrlCloseBracket", msg: tea.KeyMsg{Type: tea.KeyCtrlCloseBracket}}},
 }
 
 // Both directions, and neither is the one that already passed.

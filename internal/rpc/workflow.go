@@ -1,7 +1,7 @@
 package rpc
 
 // A dynamic Workflow() run's own frames and their fence, declared here
-// rather than in wire.go for team.go's reason: wire.go is at the file-size
+// rather than in wire.go for team.go's reason: wire.go was at the file-size
 // hard max, so the constants sit with the payload type and the functions
 // that check it.
 //

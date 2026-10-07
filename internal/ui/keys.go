@@ -206,8 +206,13 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 				return a.openDMWith(agent.ID, agent.Name).viewingWorkflow(agent.ID), nil, true
 			}
 		}
-		model, cmd := a.submit()
+		model, cmd := a.submit(false)
 		return model, cmd, true
+	case tea.KeyCtrlCloseBracket:
+		// Send now: Claude Code's ⌃↵ (chat:sendNow), on the one byte every terminal
+		// delivers and neither keymap binds. What is queued and the draft go to a
+		// working agent at once; an empty draft hurries just the queue. recall.go.
+		return a.sendNow()
 	case tea.KeyUp:
 		// **The bare arrow is the query cursor or the prompt history, and the
 		// roster is ⇧↑↓.** ↑ recalls the previous prompt in Claude Code, so a hand
@@ -230,6 +235,13 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// keeps its line keys. See completion.go.
 		if a.completionUp() {
 			return a.walkCompletion(-1), nil, true
+		}
+		// With messages queued, ↑ takes them back into the draft instead -
+		// Claude Code's own ↑ over its queue. See recall.go.
+		if a.focus != "" {
+			if next, cmd, ok := a.takeBack(a.focus); ok {
+				return next, cmd, true
+			}
 		}
 		return a.walkPrompts(1)
 	case tea.KeyDown:

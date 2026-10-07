@@ -49,6 +49,9 @@ type wireFrame struct {
 	// that omits it) is told apart from a real zero. Read only to mark a result
 	// as Claude's local-command reply; see Event.LocalCommand and absorbProbe.
 	NumTurns *int `json:"num_turns"`
+	// UserMessageUUIDs is every stamped message a result's turn answered, one it
+	// took up mid-way included (midturn-absent.jsonl:60). Read on results only.
+	UserMessageUUIDs []string `json:"user_message_uuids"`
 
 	// control_request frames carry no session_id - they, control_response and
 	// control_cancel_request are the only frames in the corpus that do not -
@@ -736,4 +739,48 @@ func crossSession(frameType, text string) (body, name string, ok bool) {
 		name = m[1]
 	}
 	return strings.TrimSpace(text[open+rel+1 : end]), name, true
+}
+
+// wireQueuedCommand is the on-disk record of a message claude took up
+// mid-turn: an attachment carrying the operator's content and the uuid Wake
+// stamped, where a message that opened its own turn is a user record
+// (2026-10-02-mid-turn-delivery-findings.md).
+type wireQueuedCommand struct {
+	Type        string          `json:"type"`
+	Prompt      json.RawMessage `json:"prompt"`
+	SourceUUID  string          `json:"source_uuid"`
+	CommandMode string          `json:"commandMode"`
+	Origin      struct {
+		Kind string `json:"kind"`
+	} `json:"origin"`
+}
+
+// queuedPrompt reads an attachment as a message the operator typed that claude
+// took up mid-turn. ok is false for any other attachment - read only as far as
+// its type, so one of another shape is dropped as before - and for a queued
+// command of another mode or a task notification.
+func queuedPrompt(raw json.RawMessage) (wireQueuedCommand, bool, error) {
+	var q wireQueuedCommand
+	var head struct {
+		Type string `json:"type"`
+	}
+	if json.Unmarshal(raw, &head) != nil || head.Type != "queued_command" {
+		return q, false, nil
+	}
+	if err := json.Unmarshal(raw, &q); err != nil {
+		return q, false, err
+	}
+	return q, q.CommandMode == "prompt" && q.Origin.Kind != "task-notification" && len(q.Prompt) > 0, nil
+}
+
+// asUserLine is the queued command's content as the user frame it was written as.
+func (q wireQueuedCommand) asUserLine() any {
+	type message struct {
+		Role    string          `json:"role"`
+		Content json.RawMessage `json:"content"`
+	}
+	return struct {
+		Type    string  `json:"type"`
+		Message message `json:"message"`
+	}{"user", message{"user", q.Prompt}}
 }

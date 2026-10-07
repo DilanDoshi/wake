@@ -125,6 +125,11 @@ const (
 	// not grow memory on a stream nobody is draining.
 	maxCarry = 64
 
+	// pipeAtomic is the largest write every pipe publishes whole: POSIX's
+	// _POSIX_PIPE_BUF, and darwin's PIPE_BUF exactly. A longer one can become
+	// readable part by part while the pipe is full.
+	pipeAtomic = 512
+
 	// exitEmergency is what the process exits with. 130 is the shell's own
 	// "terminated by ⌃C", which is what this is.
 	exitEmergency = 130
@@ -190,8 +195,8 @@ type killSwitch struct {
 	tty   *os.File // read from, and the descriptor raw mode is set on
 	out   *os.File // written to, because a tty opened for reading may not take one
 	state *term.State
-	pipe  *os.File // the read end Bubble Tea is handed
-	feed  *os.File // the write end the forwarder writes
+	pipe  *alignedPipe // the read end Bubble Tea is handed
+	feed  *os.File     // the write end the forwarder writes
 	queue chan []byte
 
 	// exit is the seam a test replaces. Nothing but a test assigns it.
@@ -242,7 +247,7 @@ func armKillSwitch() (*killSwitch, error) {
 func newKillSwitch(tty, out *os.File, state *term.State, pipe, feed *os.File) *killSwitch {
 	k := &killSwitch{
 		tty: tty, out: out, state: state,
-		pipe: pipe, feed: feed,
+		pipe: &alignedPipe{File: pipe}, feed: feed,
 		queue: make(chan []byte, forwardQueue),
 		held:  make(chan struct{}), resumed: make(chan cancelreader.CancelReader), done: make(chan struct{}),
 	}
@@ -261,6 +266,30 @@ func (k *killSwitch) Input() io.Reader {
 		return os.Stdin
 	}
 	return k.pipe
+}
+
+// alignedPipe is the pipe as Bubble Tea reads it: every read ends on an
+// escape-sequence boundary.
+//
+// Bubble Tea v1.3.10 reads 256 bytes at a time and, across a full read, holds
+// back an unfinished run of runes but not an unfinished sequence - a full read
+// ending inside a mouse report decodes as alt+[ and the runes `<67;217;52M`,
+// which the composer types. The pump's aligned chunks run together in the pipe,
+// so only the read itself can keep that cut on a boundary. It embeds the
+// *os.File so cancelreader still finds a File (see Input).
+type alignedPipe struct {
+	*os.File
+	chunks chunker
+}
+
+// Read leaves room for the carry and a byte spare, so Bubble Tea always gets a
+// short read, which it takes as ending on a boundary and never holds a ⎋ from.
+// A filled read ending on an ESC is an opener only if the pipe has more queued.
+func (r *alignedPipe) Read(p []byte) (int, error) {
+	room := len(p) - 1 - len(r.chunks.carry)
+	n, err := r.File.Read(p[:room])
+	full := n == room && p[n-1] == keyEsc && queued(r.File)
+	return copy(p, r.chunks.step(p[:n], full)), err
 }
 
 // alignedCut is how much of buf ends on an escape-sequence boundary: buf[:cut]
@@ -344,13 +373,14 @@ type chunker struct {
 // coincident drop is the same leak a flood's full reads are - so a trailing partial
 // is held whatever the read size.
 //
-// full says the read filled its buffer, so more is likely pending. It decides only
-// the one genuinely ambiguous carry: a lone trailing ESC. On a full read it is the
-// opening of a sequence whose rest is coming, so hold it; on a short read it is a
-// real Escape keypress that must not wait for the next input, so forward it. A
-// partial *sequence* (a split mouse report) is never a keypress, so it is held
-// either way. This is bubbletea's own full-buffer heuristic, narrowed to the one
-// byte it is actually ambiguous for.
+// full says more is coming: for the pump, a read that filled its buffer; for
+// alignedPipe, a filled read with bytes queued behind it. It decides only the one
+// genuinely ambiguous carry: a lone trailing ESC. When more is coming it is the
+// opening of a sequence, so hold it; otherwise it is a real Escape keypress that
+// must not wait for the next input, so forward it. A partial *sequence* (a split
+// mouse report) is never a keypress, so it is held either way. This is
+// bubbletea's own full-buffer heuristic, narrowed to the one byte it is actually
+// ambiguous for.
 //
 // # The one residual, and why the ESC keypress wins it
 //
@@ -436,11 +466,29 @@ func (k *killSwitch) pump() {
 // forward hands the bytes on, and is allowed to block doing it.
 func (k *killSwitch) forward() {
 	for chunk := range k.queue {
-		if _, err := k.feed.Write(chunk); err != nil {
+		if err := writeWhole(k.feed, chunk); err != nil {
 			return
 		}
 	}
 	_ = k.feed.Close()
+}
+
+// writeWhole writes chunk as aligned pieces a pipe publishes whole, so the end of
+// what alignedPipe can read is always a boundary and queued's answer is exact.
+func writeWhole(w io.Writer, chunk []byte) error {
+	for len(chunk) > 0 {
+		n := len(chunk)
+		if n > pipeAtomic {
+			if n = alignedCut(chunk[:pipeAtomic]); n == 0 {
+				n = pipeAtomic // no boundary inside: an ESC that never finished, which maxCarry flushed
+			}
+		}
+		if _, err := w.Write(chunk[:n]); err != nil {
+			return err
+		}
+		chunk = chunk[n:]
+	}
+	return nil
 }
 
 // restore puts the terminal back the way converseModel found it. Safe to call

@@ -518,6 +518,13 @@ func (a *agent) observe(ev core.Event) {
 		// client must not have it replayed: the mirror of internal/ui's own
 		// Fleet.Observe dropping f.tasks on a reset. See taskreplay.go.
 		clear(a.runningTasks)
+	case core.KindMessageState:
+		// A message still queued when the last turn ended opens a turn of its own
+		// after that turn's result cleared owed; its start owes the next result.
+		// A no-op for one taken into a running turn, which already owes it.
+		if ev.MessageStarted() {
+			a.owed = true
+		}
 	case core.KindToolUse:
 		// The sidebar's "what is this agent on", and what stateLocked reads as a
 		// tool in flight. ev.Subagent==nil: a subagent's forwarded tool_use is not

@@ -504,7 +504,7 @@ func TestSessionEventsChannelClosesOnExit(t *testing.T) {
 
 func TestSendBeforeStartIsAnError(t *testing.T) {
 	s := NewSession(Config{SessionID: "s1", Dir: t.TempDir()})
-	if err := s.Send("hello", nil, ""); err == nil {
+	if err := s.Send("hello", nil, "", false); err == nil {
 		t.Fatal("want error sending to an unstarted session, got nil")
 	}
 }
@@ -659,7 +659,7 @@ func TestSendReachesTheProcessAcrossTurnsAndStopEndsIt(t *testing.T) {
 	s := startFake(t, Config{SessionID: "s1", Dir: t.TempDir()})
 
 	for _, text := range []string{"ping", "ping again"} {
-		if err := s.Send(text, nil, ""); err != nil {
+		if err := s.Send(text, nil, "", false); err != nil {
 			t.Fatalf("Send(%q): %v", text, err)
 		}
 		echoed := waitForKind(t, s, KindAssistantText)
@@ -684,7 +684,7 @@ func TestSendReachesTheProcessAcrossTurnsAndStopEndsIt(t *testing.T) {
 	if err := s.Stop(); err != nil {
 		t.Errorf("second Stop: %v, want nil - stopping twice is not an error", err)
 	}
-	if err := s.Send("after stop", nil, ""); err == nil {
+	if err := s.Send("after stop", nil, "", false); err == nil {
 		t.Error("want an error sending to a stopped session, got nil")
 	}
 }
@@ -832,7 +832,7 @@ func TestStopIsNotBlockedByAWedgedWrite(t *testing.T) {
 	s := NewSession(Config{SessionID: "s1"})
 	s.stdin = blockingWriteCloser{entered: entered, release: release}
 
-	go func() { _ = s.Send("a message the agent will never read", nil, "") }()
+	go func() { _ = s.Send("a message the agent will never read", nil, "", false) }()
 	select {
 	case <-entered:
 	case <-time.After(5 * time.Second):
@@ -869,7 +869,7 @@ func TestConcurrentSendsDoNotInterleaveFrames(t *testing.T) {
 		wg.Add(1)
 		go func(i int) {
 			defer wg.Done()
-			if err := s.Send(strings.Repeat(strconv.Itoa(i), 4096), nil, ""); err != nil {
+			if err := s.Send(strings.Repeat(strconv.Itoa(i), 4096), nil, "", false); err != nil {
 				t.Errorf("Send: %v", err)
 			}
 		}(i)
@@ -1187,7 +1187,7 @@ func TestSendWritesOneUserFrame(t *testing.T) {
 	s := NewSession(Config{SessionID: "s1"})
 	s.stdin = nopWriteCloser{buf: &buf}
 
-	if err := s.Send("hello\nthere", nil, ""); err != nil {
+	if err := s.Send("hello\nthere", nil, "", false); err != nil {
 		t.Fatalf("Send: %v", err)
 	}
 	got := buf.String()

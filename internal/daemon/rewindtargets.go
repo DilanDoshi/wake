@@ -112,6 +112,8 @@ func livePrompts(r io.Reader, active map[string]bool) ([]rpc.RewindTarget, error
 // answer rather than a second copy of its vocabulary. An event carrying a
 // Notice (Claude's own "[Request interrupted by user]" marker resolves to
 // one) or one that is Echoed is on-disk chatter rather than something typed.
+// An Absorbed one was typed, but claude stored it as an attachment taken up
+// mid-turn, and rewinding to one is unrecorded.
 func promptTarget(line []byte, active map[string]bool) (rpc.RewindTarget, bool) {
 	node, ok := core.DecodeTranscriptNode(line)
 	if !ok || !active[node.UUID] {
@@ -124,7 +126,7 @@ func promptTarget(line []byte, active map[string]bool) (rpc.RewindTarget, bool) 
 	}
 	var text strings.Builder
 	for _, ev := range events {
-		if ev.Kind != core.KindUserText || ev.Notice != "" || ev.Echoed {
+		if ev.Kind != core.KindUserText || ev.Notice != "" || ev.Echoed || ev.Absorbed {
 			continue
 		}
 		if text.Len() > 0 {

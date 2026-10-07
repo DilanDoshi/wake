@@ -1,0 +1,3 @@
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Use the Bash tool, in the foreground (do not run it in the background), to run exactly this command and nothing else: python3 -c 'import time; time.sleep(25)'; echo SLEPT. When it finishes, reply with one short sentence saying it finished. If I send you another message while you work, do what it says as well."}]},"uuid":"6fa7a268-afd5-429e-a02a-2287bde02e82"}
+{"type":"user","message":{"role":"user","content":[{"type":"text","text":"Also: end your reply with the word PINEAPPLE."}]},"uuid":"68453b4d-c902-4256-aa4b-b08880257244","origin":{"kind":"human"}}
+{"type":"control_request","request_id":"cef98133-fbb9-400c-942e-b8ad2a3a052f","request":{"subtype":"interrupt"}}

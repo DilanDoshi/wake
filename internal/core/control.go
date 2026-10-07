@@ -225,6 +225,26 @@ type outStopTaskRequest struct {
 	TaskID  string `json:"task_id"`
 }
 
+type outCancelAsyncRequest struct {
+	Subtype     string `json:"subtype"`
+	MessageUUID string `json:"message_uuid"`
+}
+
+// EncodeCancelAsyncMessage takes back a message claude has queued but not yet
+// taken up, by the uuid Wake stamped on it. Its lifecycle then reads cancelled
+// and it never runs; one already taken up is delivered regardless
+// (midturn-cancel.jsonl, midturn-cancel-late.jsonl).
+func EncodeCancelAsyncMessage(requestID, messageUUID string) ([]byte, error) {
+	if requestID == "" || messageUUID == "" {
+		return nil, fmt.Errorf("%w: encode cancel async message: empty request or message id", ErrNotWritten)
+	}
+	return marshalLine(outControlRequest{
+		Type:      "control_request",
+		RequestID: requestID,
+		Request:   outCancelAsyncRequest{Subtype: "cancel_async_message", MessageUUID: messageUUID},
+	}, "encode cancel async message")
+}
+
 // EncodeStopTask stops a running workflow, addressed by its task id. Pause and
 // resume have no wire form (findings.md §6: pause_task is refused outright),
 // so this is the only control Wake can offer over a running workflow. The
@@ -417,9 +437,9 @@ type wireControlResp struct {
 // is accepted and normalizes to `default` (§6), so the two disagree on a real
 // cycle position rather than only in principle.
 type wireControlBody struct {
-	StillQueued []string `json:"still_queued"`
-	Cancelled   []string `json:"cancelled"`
-	Mode        string   `json:"mode"`
+	StillQueued []string      `json:"still_queued"`
+	Cancelled   wireCancelled `json:"cancelled"`
+	Mode        string        `json:"mode"`
 
 	// Rewind receipt payload. Rewound is a pointer so its *presence* - not its
 	// truth - is the discriminator: a rewind receipt always carries the key
@@ -444,6 +464,21 @@ type wireControlBody struct {
 	// An mcp_status receipt's payload; a pointer so presence, even of an empty
 	// list, is the discriminator. See mcpStatusReply.
 	MCPServers *[]wireMCPStatus `json:"mcpServers"`
+}
+
+// wireCancelled is an interrupt receipt's uuid list, or the bool a
+// cancel_async_message receipt carries under the same key
+// (midturn-cancel.jsonl:33). Absent and null leave both nil.
+type wireCancelled struct {
+	uuids    []string
+	recalled *bool
+}
+
+func (c *wireCancelled) UnmarshalJSON(b []byte) error {
+	if json.Unmarshal(b, &c.recalled) == nil {
+		return nil
+	}
+	return json.Unmarshal(b, &c.uuids)
 }
 
 // controlResponseEvent decodes the receipt for a control_request Wake sent -
@@ -494,8 +529,9 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 	ev.PermissionMode = f.Response.Response.Mode
 	ev.Control = &ControlResult{
 		StillQueued: f.Response.Response.StillQueued,
-		Cancelled:   f.Response.Response.Cancelled,
+		Cancelled:   f.Response.Response.Cancelled.uuids,
 		Error:       f.Response.Error,
+		Recalled:    f.Response.Response.Cancelled.recalled,
 	}
 	return ev
 }

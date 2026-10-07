@@ -184,7 +184,13 @@ and is roughly what Bubble Tea does reading the tty directly — it de-frames a 
 alone too. `TestALoneEscGoesNowOnAShortReadAndWaitsOnAFullOne` pins the ⎋-wins-latency behaviour that
 is the reason the residual exists.
 
-*Blocks:* nothing observed — remote-only, and the reported (local) bug is fully closed. *Closes with:*
+*Blocks:* nothing observed — remote-only. The reported (local) bug was **not** fully closed then:
+Bubble Tea's own 256-byte read of the pipe cut reports too, since aligned chunks run together in the
+pipe, and a sideways-wheel flood typed `[<67;217;52M` (2026-10-02). `alignedPipe` now aligns that read
+(`TestAWheelFloodReachesBubbleTeaAsMouseNeverAsKeys`), holding a lone ESC that ends a filled read only
+while the pipe has more queued, so ⎋ is never stranded there
+(`TestAnEscapeBehindAFloodIsNeverHeldForInputThatIsNotComing`); `forward` writes only aligned pieces a
+pipe publishes whole (`pipeAtomic`), so the pipe's end is always a boundary. *Closes with:*
 a bounded inter-byte timeout that holds a lone ESC a few ms and flushes it as a keypress on the
 deadline or reassembles if the tail arrives first — deliberately not taken, because it puts a timer
 and a second goroutine into the pump whose whole doctrine (its own header) is to stay trivial and
@@ -1561,10 +1567,11 @@ it, and stamping has since shipped without changing that answer.** The type-ahea
 stamps every operator message with a uuid (`internal/ui/queue.go`, `rpc.Frame.MessageID` →
 `EncodeUserMessage`), so the CLI *does* emit `command_lifecycle` for what Wake sends and the queue
 folds those (`core.KindMessageState`, `Event.MessageEnded`) to know when a message is over. But
-`interruptCancelQueued` stays `false`: Wake's own client-side queue hands the CLI at most one
-message per turn, so the CLI's native queue is empty by construction and `cancel_queued` would
-have nothing to destroy — an interrupt of the running turn is all esc wants. Without the flag a
-queued message still runs (`interrupt-queued-survives.jsonl`). See `internal/core/write.go`.
+`interruptCancelQueued` stays `false`. *(Re-argued 2026-10-02.)* Wake now writes a follow-up to a
+working agent at once, so claude's queue does hold Wake's messages - and false is still Claude
+Code's own esc: what is queued survives the interrupt and runs next (`interrupt-queued-survives.jsonl`,
+`midturn-esc.jsonl`). Taking one queued message back is `cancel_async_message`
+(`core.Session.Recall`, `internal/ui/recall.go`). See `internal/core/write.go`.
 
 *Found by review of that commit and fixed in `5dc1f59`, because it is the same failure the legend
 rule exists for, one level up:* the guard that was supposed to hold the legend honest iterated a
@@ -3350,7 +3357,9 @@ outstanding ones, in priority order:
    2026-09-29)*. Any fleet
    indicator built on it is designed against a single sample, and least trustworthy in exactly
    the situation it exists to catch.
-5. `cancel_async_message`, subagent interrupts, queue depth > 1, the interrupt `reason` field.
+5. ~~`cancel_async_message`~~ and ~~queue depth > 1~~ **RECORDED 2026-10-02**
+   (`docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md`: `midturn-cancel*.jsonl`,
+   `midturn-two.jsonl`); still open: subagent interrupts, the interrupt `reason` field.
 
 ---
 
@@ -5546,3 +5555,25 @@ message and a subagent's gutter (neither opts in), and a paragraph or token wide
   probe timeout** (`ps -A: signal: killed`, the `resumeSafe` refusal arriving instead of the
   reservation one). 1 failure in a `make ci` under load, 0 of 20 alone. *Closes with:* the test
   telling a probe failure from the refusal it asserts, or a probe budget the test owns.
+
+## 2026-10-02 — left open by mid-turn delivery (`feat/steer-mid-turn`)
+
+- **`⌃↵` itself.** Send-now is `⌃]` because bubbletea v1 names nothing for `⌃↵` in any encoding
+  (`keyprobe_test.go`). `wake setup-terminal` already maps `⇧↵` to a byte Wake reads; mapping `⌃↵` to
+  GS would give a configured terminal Claude Code's own key. *Closes with:* a snippet line per
+  terminal in `internal/termsetup/knowledge.go`, and the apply path updating a config that already
+  carries the older block.
+- **`origin:{kind:"human"}` on every operator send.** Written only on a send-now (decisions.md,
+  2026-10-02, Ruling 4). The docs recommend it on all typed input; it is what lets checks such as the
+  `ultracode` keyword accept Wake's messages. *Closes with:* the owner's ruling, then a `Human` flag
+  the UI sets and the manager's sends never do.
+- **A send-now that recalls a room broadcast resends it as part of a DM send**, so a later room
+  restore draws that line from neither transcript's provenance. Accepted; rare.
+- **Rewinding to a message claude took up mid-turn** - its record is an attachment, and what
+  `rewind_conversation` does with one is unrecorded. It is offered as no target (`Event.Absorbed`).
+- **A take-back across a disconnection keeps only what was already answered**: a reattach forgets the
+  queued messages it cannot confirm (`forgetInflight`) and returns to the draft just what claude had
+  given back, and a send-now's draft; a message whose answer the outage swallowed is in neither.
+- **Taken-back images plus the draft's own may exceed rpc's 16 MiB frame cap** - the aggregate guard
+  runs on a drop (`imagedrop.go`), not on a take-back or a send-now's join. The daemon's reader would
+  refuse that frame and end the connection, a hangup the client reattaches from.

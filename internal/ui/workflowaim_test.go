@@ -14,7 +14,7 @@ import (
 // aimedWorkflows submits draft from a's composer and returns the App and what it wrote.
 func aimedWorkflows(t *testing.T, a App, draft string) (App, []rpc.Frame) {
 	t.Helper()
-	m, cmd := a.withDraft(draft).submit()
+	m, cmd := a.withDraft(draft).submit(false)
 	next := m.(App)
 	return next, writtenFrames(t, next, cmd)
 }

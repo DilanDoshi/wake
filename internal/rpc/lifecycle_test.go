@@ -37,6 +37,7 @@ var frameKinds = map[string]string{
 	"FrameRewindTargets":      FrameRewindTargets,
 	"FrameRewindTargetsReply": FrameRewindTargetsReply,
 	"FrameSend":               FrameSend,
+	"FrameRecall":             FrameRecall,
 	"FrameSpawn":              FrameSpawn,
 	"FrameFork":               FrameFork,
 	"FrameImport":             FrameImport,

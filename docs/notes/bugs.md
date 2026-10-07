@@ -722,6 +722,73 @@ opens with a markdown heading, as `/context`'s does. The same predicate sends it
 
 **Not changed:** the room still draws a public local reply (`@name /list-agents`) as markdown.
 
+## BUG-42 — a subagent's hand-back came back as the operator's own turn
+
+**Reported 2026-10-03** (screenshot of a reopened conversation): a code-reviewer subagent's final
+report was drawn as `› you`, envelope and harness guidance included, while a peer's message right
+after it drew as `↪ steer`.
+
+**Root cause: an envelope core did not know.** A subagent in auto mode reports through
+`SubagentHandback` (claude 2.1.271+), which arrives as an `<agent-message>` user line instead of the
+`<task-notification>` core already drops. Live it is an Echoed replay, dropped; on disk it is a plain
+string user line, so a reopen, the rewind picker and `↑` all took it for a typed turn. The same
+audit found skill bodies, image notes and idle notices restoring the same way: core read no
+`isMeta`. `docs/superpowers/notes/2026-10-03-subagent-handback-findings.md`.
+
+**Fix (`isAgentMessage`; `decodeTranscript`'s `isMeta` fail-safe).** The envelope yields no event on
+either wire, and an `isMeta` line's plain user turn is dropped on disk. **Decision:** hidden, not
+drawn as a peer line (owner, 2026-10-03). A reopened conversation therefore shows no ending for a
+subagent that handed back. A DM-only restored ending line is the follow-up offered.
+
+---
+
+## BUG-43 — a conversation's `ctx:` read 0% for one turn on a 1M session — PARKED, not reproduced
+
+**Reported 2026-10-03** by the owner: a conversation's status bar showed `ctx:0%` on a
+`claude-opus-5-5[1m]` agent, then read correctly again after its next turn. The daemon's report
+held 1,000,000 / 627,155 for that session (≈ `ctx:37%`) once the owner asked. The turn before the 0%
+had ended on a network failure (`ENOTFOUND`, after claude's own retries); it may or may not be related.
+
+**What is known.** `contextLeft` reads 0% only when the level is ≥ 99% of the window. The session never
+held more than ~640k, so the window the bar held must have been under that. The only writers of
+`ContextWindow`/`ContextTokens` are a result frame's facts (`resultFacts`: `modelUsage`'s window,
+`usage.iterations`' last element) and the daemon's report built from the same frames. Result frames
+are not kept on disk, so the frame that set it cannot be read back.
+
+**Ruled out, each recorded under the owner's permission (scratch takes, not in the corpus):**
+- A subagent's smaller-window model: `modelUsage` keeps every model the epoch used, and the largest wins.
+- A mid-turn API failure (proxy cut after two tool round-trips), retries off and on, on haiku and on
+  `opus[1m]`: the error result still carries `iterations` with the last good call, and the 1M window.
+- Mid-turn deliveries (steer's 30 recordings on `feat/steer-mid-turn`): every result sane.
+- The API omitting `iterations`: all 850 real assistant usages in that session carry it.
+
+**Parked by the owner, 2026-10-03.** The design not built: the daemon logs a result's figures (model
+keys, windows, level) when one leaves a session at or past its window, and the bar keeps its last sane
+figure instead of drawing a level at or above its own window.
+
+---
+
+## BUG-44 — the confirmed model wore backticks, and a session with no effort set never got one
+
+**Seen 2026-10-03** while recording the manager relay; checked by fable wake against the owner's own
+transcripts. Since claude 2.1.28x a bare `/model` replies `Current model: \`Opus 5.5 (1M context)\`
+(effort: xhigh)`, the name in backticks (`testdata/stream/bare-model-effort.jsonl`). `ModelFromModelReply`
+trimmed the prefix and the clause but not the backticks, so every confirmed model - the name the status
+bar prefers - carried them. A session with no level set replies with no clause at all
+(`bare-model-no-effort.jsonl`), and `confirmModelLocked` required the clause, so it never confirmed
+the model either.
+
+**Fix (`localreply.go`'s `ModelFromModelReply`, `probe.go`'s `confirmModelLocked`).** The backtick pair is
+trimmed. A reply is known by one name in backticks, or in the older shape by a valid clause, and only a
+local command's reply is read - every recorded one is - so an agent's own prose that opens
+"Current model:" confirms nothing (both reviews). The model is confirmed with no level, and the level
+only with its clause; a reply with no clause leaves the level as it was, since the report falls back to
+the level Wake asked for and an empty confirmation could not show through it.
+
+**Not a bug, now pinned:** a probe's reply on disk is a `system/local_command` record the transcript
+decoder drops whole, with or without the clause (`testdata/transcript/model-reply-*.jsonl`), so it never
+restores as speech.
+
 ---
 
 ## Residuals carried from bugs that are fixed and merged
