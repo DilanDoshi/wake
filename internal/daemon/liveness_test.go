@@ -318,6 +318,28 @@ func TestASubagentsToolDoesNotKeepTheParentWorkingAfterItsTurnEnds(t *testing.T)
 	}
 }
 
+// A message written while a turn runs and still queued when it ends opens a turn
+// of its own after that turn's result, which cleared what was owed - so its
+// `started` lifecycle is what says a turn is running again
+// (testdata/stream/midturn-later.jsonl:50-52). Without it the agent reads idle
+// for the whole of that turn unless a tool happens to be in flight.
+func TestAQueuedMessageThatOpensItsOwnTurnKeepsTheAgentWorking(t *testing.T) {
+	a := newAgent("s1", "alex", "main", "/repo/api", "", nil, func() {})
+	a.noteSent()
+	a.observe(core.Event{Kind: core.KindMessageState, MessageID: "m2", Text: "queued"})
+	a.observe(core.Event{Kind: core.KindTurnEnd})
+	a.observe(core.Event{Kind: core.KindMessageState, MessageID: "m1", Text: "completed"})
+	a.observe(core.Event{Kind: core.KindMessageState, MessageID: "m2", Text: "started"})
+
+	if got := a.stateLocked(a.lastEvent.Add(time.Second)); got != rpc.StateWorking {
+		t.Errorf("stateLocked = %q while a queued message's own turn runs, want %q", got, rpc.StateWorking)
+	}
+	a.observe(core.Event{Kind: core.KindTurnEnd})
+	if got := a.stateLocked(a.lastEvent.Add(time.Second)); got != rpc.StateIdle {
+		t.Errorf("stateLocked = %q after that turn's result, want %q", got, rpc.StateIdle)
+	}
+}
+
 // The sidebar half of the same rule: a subagent's tool_use does not overwrite
 // what the parent is on. During a foreground dispatch the parent is on its own
 // Task call, and the subagent's Bash beneath it is the subagent's activity, not

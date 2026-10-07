@@ -183,6 +183,9 @@ var agrees = map[collision]string{
 		"the scope differs where the meaning does not.",
 	{"shift+tab", "confirm:cycleMode"}: "Claude Code's confirmation surface cycles the same mode from " +
 		"the same key. Wake answers an ask with the card's own keys, so the two never overlap on screen.",
+	{"up", "history:previous"}: "Both recall the previous prompt, and both take back what is queued " +
+		"instead while something is - Claude Code's ↑ over its queue, Wake's recall.go.",
+	{"down", "history:next"}: "Both walk forward through the prompt history.",
 	{"ctrl+e", "transcript:toggleShowAll"}: "Both reveal what the pane folded away: Claude Code shows " +
 		"the whole transcript, Wake shows its tool results whole (expand.go). **Reached by accident** - " +
 		"⌃E was picked because ⌃O was spent on detach and ⌃E shadows only the text area's line-end - " +

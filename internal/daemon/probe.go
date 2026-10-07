@@ -117,7 +117,7 @@ func (a *agent) sendProbe(p pending) {
 		}
 	}
 	a.incProbe(p.probe)
-	if err := a.sess.Send(text, nil, ""); err != nil {
+	if err := a.sess.Send(text, nil, "", false); err != nil {
 		a.decProbe(p.probe)
 		logf("wake: session %s: probe %q not sent: %v", a.id, text, err)
 	}

@@ -365,7 +365,8 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		// live event) and a benign `allowed` is chrome. Explicit rather than left
 		// to default so the one kind whose transcript block was removed says so
 		// where the block used to be - a rate_limit frame never reaches history
-		// either, since DecodeTranscriptLine keeps only assistant and user lines.
+		// either, since DecodeTranscriptLine keeps only assistant and user lines
+		// (and a message taken up mid-turn, restored as a user turn).
 		return ""
 	case core.KindSystem:
 		// A dispatch ending is the one system frame that leaves a line: it is
@@ -604,8 +605,9 @@ func noticeBlock(ev core.Event, width int) string {
 	// completion line - before, after, freed and duration. A boundary without it
 	// falls back to the plain label below, so it still says a compaction happened
 	// rather than nothing. The line is live-only: a compact_boundary is a system
-	// frame and DecodeTranscriptLine keeps only assistant/user, so it never returns
-	// off disk - on reopen no compacted line is redrawn (deferred.md, 2026-08-15).
+	// frame and DecodeTranscriptLine keeps only conversation (assistant/user, and
+	// a message taken up mid-turn), so it never returns off disk - on reopen no
+	// compacted line is redrawn (deferred.md, 2026-08-15).
 	if ev.Notice == core.NoticeContextCompacted && ev.Compaction != nil {
 		return compactedSummaryLine(ev.Compaction, width)
 	}

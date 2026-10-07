@@ -115,6 +115,10 @@ func recordUUIDs(r io.Reader) (map[string]bool, error) {
 		line, err := readTranscriptLine(br)
 		if n, ok := core.DecodeTranscriptNode(line); len(line) > 0 && ok && n.UUID != "" {
 			uuids[n.UUID] = true
+			// A message taken up mid-turn restores under the stamp it carries.
+			if n.Source != "" {
+				uuids[n.Source] = true
+			}
 		}
 		if err != nil {
 			if errors.Is(err, io.EOF) {

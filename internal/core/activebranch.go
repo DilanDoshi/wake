@@ -18,6 +18,7 @@ type TranscriptNode struct {
 	Kind             string // "user" | "assistant" | "last-prompt" | other
 	Rewound          bool   // true only on a last-prompt rewind marker
 	LeafUUID         string // the active leaf, on a last-prompt marker
+	Source           string // the uuid Wake stamped, on a message claude took up mid-turn
 }
 
 // ActiveBranch returns the uuids on the live path of a conversation's tree,
