@@ -110,23 +110,50 @@ func TestTheUpdateNoticeIsCheckedAndGivenAtMostOnceADay(t *testing.T) {
 		at     time.Time
 		notice bool
 	}{{now, true}, {now.Add(time.Hour), false}, {now.Add(updateCheckEvery + time.Minute), true}} {
-		text, err := dueUpdateNotice(context.Background(), rel, cache, step.at, version.Version)
+		newer, text, err := dueUpdateNotice(context.Background(), rel, cache, step.at, version.Version)
 		if err != nil {
 			t.Fatalf("open %d: %v", i, err)
 		}
 		if (text != "") != step.notice {
 			t.Errorf("open %d: notice %q, want one: %v", i, text, step.notice)
 		}
+		// The marker does not wait on the notice's day: a newer release is named
+		// on every check, whether or not the line is due.
+		if newer != "99.0.0" {
+			t.Errorf("open %d: newer %q, want 99.0.0", i, newer)
+		}
 	}
 	if rel.asked != 2 {
 		t.Errorf("asked GitHub %d times over a day and a minute, want 2", rel.asked)
 	}
 	rel.err = errors.New("offline")
-	if text, err := dueUpdateNotice(context.Background(), rel, cache, now.Add(3*updateCheckEvery), version.Version); err == nil || text != "" {
-		t.Errorf("an offline check: %q, %v", text, err)
+	if newer, text, err := dueUpdateNotice(context.Background(), rel, cache, now.Add(3*updateCheckEvery), version.Version); err == nil || text != "" || newer != "" {
+		t.Errorf("an offline check: %q, %q, %v", newer, text, err)
 	}
 	if _, err := os.Stat(cache); err != nil {
 		t.Errorf("the answer was not kept: %v", err)
+	}
+}
+
+// The current release names nothing, notice or marker.
+func TestTheUpdateCheckNamesNothingForTheCurrentRelease(t *testing.T) {
+	cache := filepath.Join(t.TempDir(), updateCacheFile)
+	rel := &fakeReleases{latest: "v" + version.Version}
+	newer, text, err := dueUpdateNotice(context.Background(), rel, cache, time.Now(), version.Version)
+	if err != nil || newer != "" || text != "" {
+		t.Errorf("the current release: newer %q, notice %q, %v", newer, text, err)
+	}
+}
+
+// WAKE_NO_UPDATE_CHECK (set for this package by TestMain) hands the room no
+// check at all, so it never asks and never draws the marker.
+func TestTheRoomGetsNoUpdateCheckWhenItIsTurnedOff(t *testing.T) {
+	if updateCheck() != nil {
+		t.Errorf("%s is set and the room still got a check", noUpdateCheckEnv)
+	}
+	t.Setenv(noUpdateCheckEnv, "")
+	if updateCheck() == nil {
+		t.Errorf("with %s unset the room got no check", noUpdateCheckEnv)
 	}
 }
 

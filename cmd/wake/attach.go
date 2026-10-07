@@ -386,7 +386,6 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 	kill.watchSignals()
 
 	promptTerminalSetupOnce()
-	checkForUpdate()
 
 	term := &guardedOutput{File: os.Stdout}
 	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithOutput(term)}
@@ -395,7 +394,7 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 		// nobody pressing keys, and the default reader is what it always was.
 		opts = append(opts, tea.WithInput(kill.Input()))
 	}
-	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()), opts...)
+	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithUpdateCheck(updateCheck()), opts...)
 	final, err := p.Run()
 	if err != nil {
 		return err

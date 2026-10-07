@@ -54,7 +54,7 @@ var stateLabel = map[string]string{
 }
 
 // awarenessStrip is the fleet in one row: where you are, and what everyone is
-// doing.
+// doing. App.strip ends it with a newer wake when one is out (upgradeMarked).
 //
 // A segment per state that has anybody in it, in the roster's own order, so the
 // thing worth stopping for is leftmost. States with nobody in them are left out
@@ -192,4 +192,28 @@ func (a App) stripWorkspace() string {
 		return ""
 	}
 	return workspaceName(agent.Cwd)
+}
+
+// upgradeGlyph opens the strip's last segment: a newer wake than this process.
+const upgradeGlyph = "↑"
+
+// upgradeMarked ends a drawn strip with the newer release when one is known and it
+// fits whole. It yields first - before the workspace name, which says where you
+// are - and is dropped rather than cut: "↑ wake 0.1" names no release.
+func upgradeMarked(row, newer string, width int) string {
+	if newer == "" {
+		return row
+	}
+	body := strings.TrimRight(row, " ")
+	mark := HintStyle.Render(stripSep + upgradeGlyph + " wake " + oneLine(newer))
+	pad := width - ansi.StringWidth(body) - ansi.StringWidth(mark)
+	if pad < 0 {
+		return row
+	}
+	return body + mark + strings.Repeat(" ", pad)
+}
+
+// strip is the awareness strip as the frame draws it.
+func (a App) strip(agents []Agent) string {
+	return upgradeMarked(awarenessStrip(agents, a.fleet.RunningTasks, a.stripWorkspace(), a.layout.Width), a.upgrade.newer, a.layout.Width)
 }

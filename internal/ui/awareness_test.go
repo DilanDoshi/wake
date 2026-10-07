@@ -111,7 +111,7 @@ func TestTheCountsSurviveAWidthTheNameDoesNot(t *testing.T) {
 	agents = append(agents, inState(rpc.StateIdle, 3)...)
 
 	for _, width := range []int{40, 50, 60, 80} {
-		out := stripANSI(awarenessStrip(agents, nil, "some-very-long-repository-name-indeed", width))
+		out := stripANSI(upgradeMarked(awarenessStrip(agents, nil, "some-very-long-repository-name-indeed", width), "0.1.9", width))
 		for _, want := range []string{"2 need you", "17 working", "3 idle"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("width %d: %q is missing from %q - the name was budgeted before the counts", width, want, out)
@@ -172,12 +172,14 @@ func TestTheStripIsOneRowAndFitsTheFrame(t *testing.T) {
 	agents = append(agents, inState(rpc.StateParked, 8)...)
 
 	for _, width := range []int{20, 40, 80, 120, 200} {
-		out := awarenessStrip(agents, nil, "a-very-long-workspace-name-indeed", width)
-		if got := strings.Count(out, "\n"); got != 0 {
-			t.Errorf("width %d: the strip is %d rows", width, got+1)
-		}
-		if got := lipgloss.Width(out); got > width {
-			t.Errorf("width %d: the strip measured %d columns: %q", width, got, stripANSI(out))
+		bare := awarenessStrip(agents, nil, "a-very-long-workspace-name-indeed", width)
+		for _, out := range []string{bare, upgradeMarked(bare, "0.1.9", width)} {
+			if got := strings.Count(out, "\n"); got != 0 {
+				t.Errorf("width %d: the strip is %d rows", width, got+1)
+			}
+			if got := lipgloss.Width(out); got > width {
+				t.Errorf("width %d: the strip measured %d columns: %q", width, got, stripANSI(out))
+			}
 		}
 	}
 }
