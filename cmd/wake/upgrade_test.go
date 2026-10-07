@@ -114,7 +114,7 @@ func TestTheUpdateNoticeIsCheckedAndGivenAtMostOnceADay(t *testing.T) {
 		at     time.Time
 		notice bool
 	}{{now, true}, {now.Add(time.Hour), false}, {now.Add(updateCheckEvery + time.Minute), true}} {
-		newer, text, err := dueUpdateNotice(context.Background(), rel, cache, step.at, version.Version)
+		newer, text, err := dueUpdateNotice(context.Background(), rel, cache, &updateCache{}, step.at, version.Version)
 		if err != nil {
 			t.Fatalf("open %d: %v", i, err)
 		}
@@ -131,7 +131,7 @@ func TestTheUpdateNoticeIsCheckedAndGivenAtMostOnceADay(t *testing.T) {
 		t.Errorf("asked GitHub %d times over a day and a minute, want 2", rel.asked)
 	}
 	rel.err = errors.New("offline")
-	if newer, text, err := dueUpdateNotice(context.Background(), rel, cache, now.Add(3*updateCheckEvery), version.Version); err == nil || text != "" || newer != "" {
+	if newer, text, err := dueUpdateNotice(context.Background(), rel, cache, &updateCache{}, now.Add(3*updateCheckEvery), version.Version); err == nil || text != "" || newer != "" {
 		t.Errorf("an offline check: %q, %q, %v", newer, text, err)
 	}
 	if _, err := os.Stat(cache); err != nil {
@@ -143,7 +143,7 @@ func TestTheUpdateNoticeIsCheckedAndGivenAtMostOnceADay(t *testing.T) {
 func TestTheUpdateCheckNamesNothingForTheCurrentRelease(t *testing.T) {
 	cache := filepath.Join(t.TempDir(), updateCacheFile)
 	rel := &fakeReleases{latest: "v" + version.Version}
-	newer, text, err := dueUpdateNotice(context.Background(), rel, cache, time.Now(), version.Version)
+	newer, text, err := dueUpdateNotice(context.Background(), rel, cache, &updateCache{}, time.Now(), version.Version)
 	if err != nil || newer != "" || text != "" {
 		t.Errorf("the current release: newer %q, notice %q, %v", newer, text, err)
 	}
@@ -212,11 +212,44 @@ func TestACacheThatCannotBeKeptStillNamesTheRelease(t *testing.T) {
 		t.Fatal(err)
 	}
 	newer, text, err := dueUpdateNotice(context.Background(), &fakeReleases{latest: "v99.0.0"},
-		filepath.Join(blocker, updateCacheFile), time.Now(), version.Version)
+		filepath.Join(blocker, updateCacheFile), &updateCache{}, time.Now(), version.Version)
 	if err == nil {
 		t.Fatal("baseline: a cache under a file was kept")
 	}
 	if newer != "99.0.0" || text == "" {
 		t.Errorf("an unkeepable cache lost the answer: newer %q, notice %q", newer, text)
+	}
+}
+
+// A cache the disk will not keep is kept by the process: one room asks GitHub
+// about once a day, not on every hour of typing, and gives the notice once.
+func TestAnUnkeepableCacheStillAsksAboutOnceADay(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	cache := filepath.Join(blocker, updateCacheFile)
+	now := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+	for _, latest := range []string{"v" + version.Version, "v99.0.0"} {
+		rel := &fakeReleases{latest: latest}
+		mem := &updateCache{}
+		notices := 0
+		for _, at := range []time.Duration{0, time.Hour, 2 * time.Hour, 23 * time.Hour} {
+			if _, text, _ := dueUpdateNotice(context.Background(), rel, cache, mem, now.Add(at), version.Version); text != "" {
+				notices++
+			}
+		}
+		if rel.asked != 1 {
+			t.Errorf("latest %s: asked GitHub %d times in a day with an unkeepable cache, want 1", latest, rel.asked)
+		}
+		if want := map[bool]int{true: 1, false: 0}[latest == "v99.0.0"]; notices != want {
+			t.Errorf("latest %s: %d notices in a day, want %d", latest, notices, want)
+		}
+		if _, _, err := dueUpdateNotice(context.Background(), rel, cache, mem, now.Add(updateCheckEvery+time.Minute), version.Version); err == nil {
+			t.Errorf("latest %s: the unkeepable cache was kept", latest)
+		}
+		if rel.asked != 2 {
+			t.Errorf("latest %s: a day on, asked %d times in all, want 2", latest, rel.asked)
+		}
 	}
 }
