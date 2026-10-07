@@ -53,10 +53,9 @@ func updateCheck() ui.UpdateCheck {
 	return func() string {
 		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
 		defer cancel()
-		newer, text, err := dueUpdateNotice(ctx, upgrade.GitHub, filepath.Join(root, updateCacheFile), time.Now(), version.Version)
-		if err != nil {
-			return ""
-		}
+		// The error says nothing - a failed courtesy check is not worth the notice
+		// row - and a cache that could not be kept loses only its bookkeeping.
+		newer, text, _ := dueUpdateNotice(ctx, upgrade.GitHub, filepath.Join(root, updateCacheFile), time.Now(), version.Version)
 		if text != "" {
 			notice.Report("%s", text)
 		}
@@ -86,19 +85,16 @@ func dueUpdateNotice(ctx context.Context, rel releases, cachePath string, now ti
 	if isNewer {
 		newer = strings.TrimPrefix(kept.Latest, "v")
 	}
-	due := isNewer && now.Sub(kept.Notified) >= updateCheckEvery
-	if due {
+	if isNewer && now.Sub(kept.Notified) >= updateCheckEvery {
 		kept.Notified, changed = now, true
+	} else {
+		text = ""
 	}
 	if changed {
-		if err := keepUpdateCache(cachePath, kept); err != nil {
-			return "", "", err
-		}
+		// What GitHub said still counts when it cannot be kept.
+		err = keepUpdateCache(cachePath, kept)
 	}
-	if !due {
-		return newer, "", nil
-	}
-	return newer, text, nil
+	return newer, text, err
 }
 
 func keepUpdateCache(path string, kept updateCache) error {

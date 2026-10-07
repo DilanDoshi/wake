@@ -4,8 +4,9 @@ package ui
 // cmd/wake's - the release host and the cache under ~/.wake - and this holds when
 // to ask and what the answer was: on the first frame, then on a keystroke once
 // updateRecheckEvery has passed. Never on a timer, so a room nobody types in does
-// nothing. A newer release, once known, is named on the strip (upgradeMarked) for
-// the life of the process - upgrading and restarting stay the operator's.
+// nothing. A newer release, once known, ends the asking and is named on the strip
+// (upgradeMarked) for the life of the process - upgrading and restarting stay
+// the operator's.
 
 import (
 	"time"
@@ -37,11 +38,12 @@ type updateCheckedMsg struct{ newer string }
 func (a App) WithUpdateCheck(c UpdateCheck) App { a.upgrade.check = c; return a }
 
 // dueUpdateCheck is the check as a Cmd when msg should set one off: the first
-// message, then a keystroke an hour on, never while one is out. Typed on keys,
+// message, then a keystroke an hour on, never while one is out and never once a
+// newer release is known - no later answer changes what to do. Typed on keys,
 // so the composer's blink ticks cost no clock read.
 func (a App) dueUpdateCheck(msg tea.Msg) (App, tea.Cmd) {
 	u := a.upgrade
-	if u.check == nil || u.asking {
+	if u.check == nil || u.asking || u.newer != "" {
 		return a, nil
 	}
 	if !u.asked.IsZero() {
@@ -49,16 +51,13 @@ func (a App) dueUpdateCheck(msg tea.Msg) (App, tea.Cmd) {
 			return a, nil
 		}
 	}
-	a.upgrade.asked, a.upgrade.asking = clock(), true
+	// Wall time: darwin's monotonic clock stops while a laptop sleeps.
+	a.upgrade.asked, a.upgrade.asking = clock().Round(0), true
 	return a, func() tea.Msg { return updateCheckedMsg{newer: u.check()} }
 }
 
-// updateChecked takes an answer. A newer release stays known: a later check
-// that fails answers "", and the release is still out.
+// updateChecked takes an answer: "" is nothing newer, or a check that failed.
 func (a App) updateChecked(m updateCheckedMsg) App {
-	a.upgrade.asking = false
-	if m.newer != "" {
-		a.upgrade.newer = m.newer
-	}
+	a.upgrade.asking, a.upgrade.newer = false, m.newer
 	return a
 }

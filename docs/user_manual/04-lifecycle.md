@@ -93,7 +93,7 @@ wake upgrade
 
 Installs the newest release over the `wake` you ran it as, checked against the release's checksums.
 Wake also looks when the room opens, and again when you type in it an hour or more later - never
-while it sits untouched - asking GitHub at most once a day. A newer release is announced in the notice
+while it sits untouched - asking GitHub about once a day. A newer release is announced in the notice
 row once a day and named at the end of the strip (`↑ wake 0.1.9`) for as long as that room runs, so a
 room left open for days still finds out; `WAKE_NO_UPDATE_CHECK=1` turns that off.
 

@@ -11,6 +11,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -113,9 +114,9 @@ func TestNoCheckMeansNoAskAndNoMarker(t *testing.T) {
 	}
 }
 
-// Once a newer release is known the strip says so for good: a later check that
-// fails, offline, answers "" and must not take the marker away.
-func TestTheStripNamesTheNewerReleaseAndKeepsIt(t *testing.T) {
+// Once a newer release is known the strip names it - on the board too, which
+// draws the same strip under its own rows.
+func TestTheStripNamesTheNewerRelease(t *testing.T) {
 	a := newRoomApp(t).withSize(120, 40)
 	a = a.applyStatus(&rpc.Status{Running: true, Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateIdle}}})
 
@@ -124,9 +125,24 @@ func TestTheStripNamesTheNewerReleaseAndKeepsIt(t *testing.T) {
 	if strip := lastRows(a, 3); !strings.Contains(strip, upgradeGlyph+" wake 0.1.9") {
 		t.Fatalf("the strip does not name the newer release:\n%s", strip)
 	}
-	m, _ = a.Update(updateCheckedMsg{})
-	if strip := lastRows(stripped(m), 3); !strings.Contains(strip, upgradeGlyph+" wake 0.1.9") {
-		t.Errorf("a check that found nothing took the marker away:\n%s", strip)
+	a.board.Up = true
+	if strip := lastRows(a, 3); !strings.Contains(strip, upgradeGlyph+" wake 0.1.9") {
+		t.Errorf("the board's strip does not name the newer release:\n%s", strip)
+	}
+}
+
+// Once a newer release is known there is nothing a later check could add that
+// changes what to do - `wake upgrade` installs the newest - so the room stops
+// asking, and an unwritable cache cannot turn every hour into a GitHub call.
+func TestAKnownNewerReleaseEndsTheAsking(t *testing.T) {
+	start := time.Date(2026, 10, 7, 9, 0, 0, 0, time.UTC)
+	pinClock(t, start)
+	f := &fakeCheck{newer: "0.1.9"}
+	a, _ := asks(newRoomApp(t).WithUpdateCheck(f.check), tea.WindowSizeMsg{Width: 120, Height: 40})
+
+	pinClock(t, start.Add(3*updateRecheckEvery))
+	if _, ok := asks(a, anyKey); ok {
+		t.Errorf("a room that knows of 0.1.9 asked again (asked %d)", f.asked)
 	}
 }
 
@@ -144,6 +160,11 @@ func TestTheMarkerIsDroppedWholeBeforeTheCounts(t *testing.T) {
 			t.Errorf("width %d: the marker was cut rather than dropped: %q", width, got)
 		}
 	}
+	forceTrueColour(t) // the styled path: trimming the pad must not eat an escape
+	coloured := upgradeMarked(awarenessStrip([]Agent{{ID: "s1", Name: "alex", State: rpc.StateIdle}}, nil, "tally", 80), "0.1.9", 80)
+	if got := lipgloss.Width(coloured); got != 80 {
+		t.Errorf("the coloured marked strip is %d cells, want 80: %q", got, coloured)
+	}
 	wide := stripANSI(upgradeMarked(awarenessStrip([]Agent{{ID: "s1", Name: "alex", State: rpc.StateIdle}}, nil, "", 80), "0.1.9", 80))
 	if !strings.Contains(wide, upgradeGlyph+" wake 0.1.9") {
 		t.Errorf("a wide strip dropped the marker: %q", wide)
@@ -152,8 +173,6 @@ func TestTheMarkerIsDroppedWholeBeforeTheCounts(t *testing.T) {
 		t.Errorf("the marked strip is %d cells, want the frame's 80", n)
 	}
 }
-
-func stripped(m tea.Model) App { return m.(App) }
 
 // lastRows is the bottom of the drawn frame, where the strip and the notice row sit.
 func lastRows(a App, n int) string {

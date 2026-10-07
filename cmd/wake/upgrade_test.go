@@ -3,6 +3,8 @@ package main
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"os"
 	"path/filepath"
 	"strings"
@@ -10,6 +12,8 @@ import (
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/daemon"
+	"github.com/DilanDoshi/wake/internal/notice"
+	"github.com/DilanDoshi/wake/internal/upgrade"
 	"github.com/DilanDoshi/wake/internal/version"
 )
 
@@ -163,5 +167,56 @@ func TestTheUpdateNoticeNamesOnlyANewerRelease(t *testing.T) {
 	}
 	if _, ok := updateAvailable("v"+version.Version, version.Version); ok {
 		t.Error("the current release was announced as an update")
+	}
+}
+
+// The check the room runs, end to end: the release host's redirect, the cache
+// under this HOME, the once-a-day notice and the version the strip names.
+func TestTheRoomsCheckNamesTheNewerReleaseAndGivesTheNotice(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Redirect(w, r, "/releases/tag/v99.0.0", http.StatusFound)
+	}))
+	t.Cleanup(srv.Close)
+	host := upgrade.GitHub
+	upgrade.GitHub = upgrade.Releases{Base: srv.URL, Client: srv.Client()}
+	t.Cleanup(func() { upgrade.GitHub = host })
+	t.Setenv("HOME", t.TempDir())
+	t.Setenv(noUpdateCheckEnv, "")
+	notice.Reset()
+	t.Cleanup(notice.Reset)
+
+	check := updateCheck()
+	if check == nil {
+		t.Fatal("no check with the off switch unset")
+	}
+	if got := check(); got != "99.0.0" {
+		t.Errorf("the check named %q, want 99.0.0", got)
+	}
+	if n, ok := notice.Latest(); !ok || !strings.Contains(n.Text, "wake 99.0.0 is out") {
+		t.Errorf("no notice for the newer release: %+v", n)
+	}
+	// Asked again within the day: still named, not announced twice.
+	if got := check(); got != "99.0.0" {
+		t.Errorf("a second check named %q, want 99.0.0", got)
+	}
+	if n, _ := notice.Latest(); n.Count != 1 {
+		t.Errorf("the notice was given %d times in a day, want once", n.Count)
+	}
+}
+
+// What GitHub said still counts when the cache cannot be kept - an unwritable
+// ~/.wake loses only the once-a-day bookkeeping, never the release.
+func TestACacheThatCannotBeKeptStillNamesTheRelease(t *testing.T) {
+	blocker := filepath.Join(t.TempDir(), "not-a-dir")
+	if err := os.WriteFile(blocker, nil, 0o600); err != nil {
+		t.Fatal(err)
+	}
+	newer, text, err := dueUpdateNotice(context.Background(), &fakeReleases{latest: "v99.0.0"},
+		filepath.Join(blocker, updateCacheFile), time.Now(), version.Version)
+	if err == nil {
+		t.Fatal("baseline: a cache under a file was kept")
+	}
+	if newer != "99.0.0" || text == "" {
+		t.Errorf("an unkeepable cache lost the answer: newer %q, notice %q", newer, text)
 	}
 }

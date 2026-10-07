@@ -205,7 +205,7 @@ func upgradeMarked(row, newer string, width int) string {
 		return row
 	}
 	body := strings.TrimRight(row, " ")
-	mark := HintStyle.Render(stripSep + upgradeGlyph + " wake " + oneLine(newer))
+	mark := HintStyle.Render(stripSep + upgradeGlyph + " wake " + newer)
 	pad := width - ansi.StringWidth(body) - ansi.StringWidth(mark)
 	if pad < 0 {
 		return row
