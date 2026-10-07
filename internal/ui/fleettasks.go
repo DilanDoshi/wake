@@ -51,9 +51,8 @@ func (f Fleet) named(sessionID string, ev core.Event) core.Event {
 	return ev
 }
 
-// RunningTasks is the subagents a session is dispatching *now*, in start order.
-//
-// Two filters, and they answer two different questions.
+// RunningTasks is the dispatches a session is running *now*, in start order: its
+// subagents, workflows and background shells.
 //
 // **Running only**, which is the sidebar's rule and not the pane's: the pane
 // keeps a finished dispatch because its transcript is readable and dropping the
@@ -64,27 +63,17 @@ func (f Fleet) named(sessionID string, ev core.Event) core.Event {
 // the life of the session, so a sidebar drawing all of them grows without limit
 // next to thirty agents, where the running ones are few and self-clearing.
 //
-// **Openable only**, which the pane deliberately does not apply - it lists a
-// background shell because what is running is worth showing whether or not it
-// can be read, and marks it with a glyph of its own. This column has neither
-// the width for that distinction nor the standing to make it: a shell carries
-// no subagent_type, so subagentName falls through to its description and it
-// reads exactly like a subagent - under a heading that says these are
-// subagents. And every row here is something ⌃D will open, where the pane's
-// rows are walked by a cursor that refuses the ones with nothing behind them.
-// Task.Openable is the one place that decides which have a conversation, so
-// this asks it rather than restating it.
-//
-// **A running workflow is the one exception to Openable**: it has no
-// transcript of its own to view (Openable's Kind check excludes it, same as a
-// shell), but it is background work an operator is spending on same as a
-// subagent, so it earns the row - and ↵, ⌃D or a click on it opens the
-// /workflows view rather than a transcript (viewingPicked).
+// **A shell is listed but never selectable** (Task.Selectable). It is work the
+// operator is paying for, and "is anything still running" - what turnDone reads
+// off this list - must be true while one goes: an idle agent with a shell
+// running is not done. It forwards no frames, so the cursor and a click treat
+// its row as the agent's own. A workflow is the other row with no transcript:
+// ↵, ⌃D or a click on it opens the /workflows view (viewingPicked).
 func (f Fleet) RunningTasks(sessionID string) []Task {
 	rows := f.tasks[sessionID].Rows()
 	out := make([]Task, 0, len(rows))
 	for _, row := range rows {
-		if row.Status == core.TaskRunning && (row.Openable() || row.Kind == core.TaskWorkflow) {
+		if row.Status == core.TaskRunning && (row.Selectable() || row.Kind == core.TaskShell) {
 			out = append(out, row)
 		}
 	}
