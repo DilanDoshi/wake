@@ -806,10 +806,13 @@ at the row's end, so such a row read as sealed; `reflowProse`'s rewrap repairs l
 
 **Fix (`markdown.go`'s `sealRows`, `parkPadding`).** `sealRows` moves each row's trailing blanks past
 its last escape first (`trimRightCells` keeps every escape, in order, so the row keeps its cell count).
-Guards (`padstyle_test.go`): `TestAWrappedStyledSpanNeverStylesThePadding` (twelve shapes, every width
-from the floor to 120, no trailing blank drawn with any style on) and
-`TestTheMarkdownStylePaintsNoBackground`, because the move is lossless only while no style fills a cell
-with a background (Wake's style paints none, in either palette).
+A row whose trailing blank is drawn with a background or in reverse keeps its blanks where they are:
+chroma's catppuccin themes paint a diff fence's `+`/`-` lines, the line's own trailing spaces included,
+and a blank a terminal shows is text (Codex's review; `paintsTrailingBlank`, `sgrPaint`). Guards
+(`padstyle_test.go`): `TestAWrappedStyledSpanNeverStylesThePadding` (twelve shapes, every width from the
+floor to the widest shape's longest line, no trailing blank drawn with any style on),
+`TestADiffFenceKeepsItsOwnTrailingBlanks`, and `TestParkPaddingKeepsTheRowsCells`. `trimRightCells`,
+now run on every row, gathers its escapes in one pass: a quote row carries one per padded cell.
 
 **Also found:** a fenced block's rows were padded inside a foreground-only span as well. That is
 invisible on a blank cell and the fix moves those pads too; a table never carried one.

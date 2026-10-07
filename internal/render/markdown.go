@@ -9,6 +9,8 @@
 package render
 
 import (
+	"slices"
+	"strconv"
 	"strings"
 	"sync"
 	"unicode/utf8"
@@ -304,7 +306,8 @@ func rewrapProse(group []string, lead, width int, mark string) []string {
 // inside a styled span at a wrap (`bold \x1b[0m`) or pads a styled row with. The
 // escapes among them stay, in order, so no span is left open.
 func trimRightCells(s string) string {
-	kept, end := "", len(s)
+	var kept []string // gathered last first, so a quote row's escape per cell stays linear
+	end := len(s)
 	for end > 0 {
 		if s[end-1] == ' ' {
 			end--
@@ -314,9 +317,10 @@ func trimRightCells(s string) string {
 		if at < 0 || sgrRun(s[at:end]) != end-at {
 			break
 		}
-		kept, end = s[at:end]+kept, at
+		kept, end = append(kept, s[at:end]), at
 	}
-	return s[:end] + kept
+	slices.Reverse(kept)
+	return s[:end] + strings.Join(kept, "")
 }
 
 // hyphenJoin reports whether next should abut prev with no space, because
@@ -665,7 +669,57 @@ func loneBulletAt(line string) (int, bool) {
 
 // parkPadding moves a row's trailing blanks past its last escape: muesli pads a
 // row before it resets, so the blanks would otherwise be drawn in the span's style.
+// A row whose trailing blank is painted keeps them: a diff fence's background on
+// a line's own trailing spaces is the text's.
 func parkPadding(row string) string {
 	kept := trimRightCells(row)
+	if len(kept) == len(row) || paintsTrailingBlank(row) {
+		return row
+	}
 	return kept + strings.Repeat(" ", len(row)-len(kept))
+}
+
+// paintsTrailingBlank reports whether a blank after the row's last glyph is drawn
+// with a background or in reverse video, the two styles a blank cell shows.
+func paintsTrailingBlank(row string) bool {
+	bg, reverse, painted := false, false, false
+	for i := 0; i < len(row); {
+		if n := sgrRun(row[i:]); n > 0 {
+			bg, reverse = sgrPaint(row[i:i+n], bg, reverse)
+			i += n
+			continue
+		}
+		painted = row[i] == ' ' && (painted || bg || reverse)
+		i++
+	}
+	return painted
+}
+
+// sgrPaint folds one SGR run into whether a blank is painted by a background or
+// by reverse video. An extended colour's arguments (`38;5;45`) are skipped, never
+// read as codes.
+func sgrPaint(run string, bg, reverse bool) (bool, bool) {
+	codes := strings.Split(run[len("\x1b["):len(run)-1], ";")
+	for i := 0; i < len(codes); i++ {
+		code, _ := strconv.Atoi(codes[i]) // "" is 0, as `ESC[m` is a reset
+		switch {
+		case code == 0:
+			bg, reverse = false, false
+		case code == 7 || code == 27:
+			reverse = code == 7
+		case code == 49:
+			bg = false
+		case code >= 40 && code <= 48 || code >= 100 && code <= 107:
+			bg = true
+		}
+		if (code == 38 || code == 48 || code == 58) && i+1 < len(codes) {
+			switch codes[i+1] {
+			case "5":
+				i += 2
+			case "2":
+				i += 4
+			}
+		}
+	}
+	return bg, reverse
 }

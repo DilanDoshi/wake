@@ -1,7 +1,7 @@
 package render
 
 import (
-	"reflect"
+	"slices"
 	"strings"
 	"testing"
 
@@ -39,9 +39,15 @@ var styledPadShapes = []struct{ name, src string }{
 // heading, a quote or a strikethrough ran through the padding to the pane's
 // right edge. A trailing blank is drawn with no style on.
 func TestAWrappedStyledSpanNeverStylesThePadding(t *testing.T) {
+	widest := 0 // past its longest line a shape wraps nowhere, so the sweep stops there
+	for _, c := range styledPadShapes {
+		for line := range strings.SplitSeq(c.src, "\n") {
+			widest = max(widest, ansi.StringWidth(line))
+		}
+	}
 	for _, c := range styledPadShapes {
 		t.Run(c.name, func(t *testing.T) {
-			for width := minMarkdownWidth; width <= 120; width++ {
+			for width := minMarkdownWidth; width <= widest; width++ {
 				for _, row := range strings.Split(Markdown(c.src, width), "\n") {
 					if at := styledTrailingBlank(row); at >= 0 {
 						t.Fatalf("width %d: a trailing blank at byte %d is drawn in a style: %q", width, at, row)
@@ -82,6 +88,13 @@ func TestParkPaddingKeepsTheRowsCells(t *testing.T) {
 		{"pad after the reset", "  see " + underline + "a-b" + sgrReset + "   ", "  see " + underline + "a-b" + sgrReset + "   "},
 		{"no escape", "  plain   ", "  plain   "},
 		{"all blank", "     ", "     "},
+		{"a background paints the blanks", "\x1b[48;5;237m-gone  " + sgrReset + "   ", "\x1b[48;5;237m-gone  " + sgrReset + "   "},
+		{"a true-colour background", "\x1b[48;2;1;2;3mword  " + sgrReset, "\x1b[48;2;1;2;3mword  " + sgrReset},
+		{"a basic background", "\x1b[44mword  " + sgrReset, "\x1b[44mword  " + sgrReset},
+		{"reverse video", "\x1b[7mword  " + sgrReset, "\x1b[7mword  " + sgrReset},
+		{"an indexed foreground reading like a background", "\x1b[38;5;45mword  " + sgrReset, "\x1b[38;5;45mword" + sgrReset + "  "},
+		{"a true-colour foreground reading like one", "\x1b[38;2;48;5;100mword  " + sgrReset, "\x1b[38;2;48;5;100mword" + sgrReset + "  "},
+		{"a background closed before the blanks", "\x1b[48;5;237mword\x1b[49m\x1b[4m  " + sgrReset, "\x1b[48;5;237mword\x1b[49m\x1b[4m" + sgrReset + "  "},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			got := parkPadding(c.row)
@@ -95,35 +108,13 @@ func TestParkPaddingKeepsTheRowsCells(t *testing.T) {
 	}
 }
 
-// TestTheMarkdownStylePaintsNoBackground: parkPadding moves trailing blanks out
-// of their span, which is lossless only while no style fills a cell with a
-// background.
-func TestTheMarkdownStylePaintsNoBackground(t *testing.T) {
-	for _, dark := range []bool{true, false} {
-		assertNoBackground(t, "claudeStyle", reflect.ValueOf(claudeStyle(dark)))
-	}
-}
-
-// assertNoBackground walks every field of v, through pointers and embedded
-// structs, and fails on a BackgroundColor that is set or an Inverse that is on.
-func assertNoBackground(t *testing.T, path string, v reflect.Value) {
-	t.Helper()
-	switch v.Kind() {
-	case reflect.Pointer:
-		if !v.IsNil() {
-			assertNoBackground(t, path, v.Elem())
-		}
-	case reflect.Struct:
-		for i := range v.NumField() {
-			name, field := v.Type().Field(i).Name, v.Field(i)
-			switch {
-			case name == "BackgroundColor" && !field.IsNil() && field.Elem().String() != "":
-				t.Errorf("%s.%s is %q: the style paints a background", path, name, field.Elem().String())
-			case name == "Inverse" && !field.IsNil() && field.Elem().Bool():
-				t.Errorf("%s.%s is on: the style paints a background", path, name)
-			default:
-				assertNoBackground(t, path+"."+name, field)
-			}
+// TestADiffFenceKeepsItsOwnTrailingBlanks: chroma paints a diff line's
+// background over the line's own trailing spaces, and a painted blank is text.
+func TestADiffFenceKeepsItsOwnTrailingBlanks(t *testing.T) {
+	rows := strings.Split(Markdown("```diff\n-removed  \n+added   \n```", 60), "\n")
+	for _, want := range []string{"-removed  " + sgrReset, "+added   " + sgrReset} {
+		if !slices.ContainsFunc(rows, func(row string) bool { return strings.Contains(row, want) }) {
+			t.Errorf("no row keeps %q inside its span:\n%q", want, rows)
 		}
 	}
 }
