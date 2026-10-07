@@ -309,6 +309,7 @@ type App struct {
 	cdrag     composerDrag // query-box drag geometry, captured at its start; see composersel.go
 	edge      edgeScroll   // a transcript drag held at a pane's edge; see edgescroll.go
 	rosterHit rosterHit    // the roster row resolved at a press, opened on an empty release; see screensel.go
+	upgrade   updateCue    // whether a newer wake is out, and when to ask; see updatecue.go
 	clicks    clickRun     // the presses landing on one cell in quick succession; see multiclick.go
 
 	// out is the terminal, for the one thing Wake writes that is not a frame.
@@ -545,10 +546,11 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, roomAsk := next.takeRoomHistoryAsks()
 	next, blink := next.refocusBlink(a.focus)
 	next, linger := next.armNoticeLinger()
-	if ask == nil && roomAsk == nil && blink == nil && linger == nil {
+	next, upgrade := next.dueUpdateCheck(msg)
+	if ask == nil && roomAsk == nil && blink == nil && linger == nil && upgrade == nil {
 		return next, cmd
 	}
-	return next, tea.Batch(cmd, ask, roomAsk, blink, linger)
+	return next, tea.Batch(cmd, ask, roomAsk, blink, linger, upgrade)
 }
 
 func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {

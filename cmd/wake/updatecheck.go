@@ -1,7 +1,8 @@
 package main
 
-// The update notice: off the draw path, ask for the newest release at most once
-// a day, and say so - at most once a day - when it is newer than this wake.
+// The update check the room asks (internal/ui/updatecue.go): off the draw path,
+// ask for the newest release at most once a day, say so - at most once a day -
+// when it is newer than this wake, and name it for the strip's standing marker.
 // WAKE_NO_UPDATE_CHECK turns it off.
 
 import (
@@ -15,6 +16,7 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/notice"
+	"github.com/DilanDoshi/wake/internal/ui"
 	"github.com/DilanDoshi/wake/internal/upgrade"
 	"github.com/DilanDoshi/wake/internal/version"
 )
@@ -37,32 +39,39 @@ type updateCache struct {
 	Notified time.Time `json:"notified"`
 }
 
-// checkForUpdate reports the notice when one is due. In the background, so a
-// slow network never holds the room; an offline machine says nothing, since a
-// failed courtesy check is not worth the notice row.
-func checkForUpdate() {
+// updateCheck is the room's check, or nil when it is turned off. The room runs it
+// as a tea.Cmd, so a slow network never holds it; an offline machine says
+// nothing, since a failed courtesy check is not worth the notice row.
+func updateCheck() ui.UpdateCheck {
 	if os.Getenv(noUpdateCheckEnv) != "" {
-		return
+		return nil
 	}
 	root, err := daemon.StateRoot()
 	if err != nil {
-		return
+		return nil
 	}
-	go func() {
+	// What this process has learned, for a cache the disk will not keep. The room
+	// runs one check at a time, so the calls never overlap.
+	var known updateCache
+	return func() string {
 		ctx, cancel := context.WithTimeout(context.Background(), updateCheckTimeout)
 		defer cancel()
-		text, err := dueUpdateNotice(ctx, upgrade.GitHub, filepath.Join(root, updateCacheFile), time.Now(), version.Version)
-		if err == nil && text != "" {
+		// The error says nothing: a failed courtesy check is not worth the notice row.
+		newer, text, _ := dueUpdateNotice(ctx, upgrade.GitHub, filepath.Join(root, updateCacheFile), &known, time.Now(), version.Version)
+		if text != "" {
 			notice.Report("%s", text)
 		}
-	}()
+		return newer
+	}
 }
 
-// dueUpdateNotice is the notice to give now, or nothing. The newest tag is
-// asked for at most once per updateCheckEvery, and a newer one is announced at
-// most once per updateCheckEvery - both kept in cachePath.
-func dueUpdateNotice(ctx context.Context, rel releases, cachePath string, now time.Time, current string) (string, error) {
-	var kept updateCache
+// dueUpdateNotice is the newer release, if there is one, and the notice to give
+// now, or nothing. The newest tag is asked for at most once per
+// updateCheckEvery, and a newer one is announced at most once per
+// updateCheckEvery - both kept in cachePath, and in known for when it cannot be
+// kept - but named on every call.
+func dueUpdateNotice(ctx context.Context, rel releases, cachePath string, known *updateCache, now time.Time, current string) (newer, text string, err error) {
+	kept := *known
 	if b, err := os.ReadFile(cachePath); err == nil {
 		// A torn or foreign file is an empty cache: ask again and rewrite it.
 		_ = json.Unmarshal(b, &kept)
@@ -71,24 +80,25 @@ func dueUpdateNotice(ctx context.Context, rel releases, cachePath string, now ti
 	if kept.Latest == "" || now.Sub(kept.Checked) >= updateCheckEvery {
 		tag, err := rel.Latest(ctx)
 		if err != nil {
-			return "", err
+			return "", "", err
 		}
 		kept.Latest, kept.Checked, changed = tag, now, true
 	}
-	text, newer := updateAvailable(kept.Latest, current)
-	due := newer && now.Sub(kept.Notified) >= updateCheckEvery
-	if due {
+	text, isNewer := updateAvailable(kept.Latest, current)
+	if isNewer {
+		newer = strings.TrimPrefix(kept.Latest, "v")
+	}
+	if isNewer && now.Sub(kept.Notified) >= updateCheckEvery {
 		kept.Notified, changed = now, true
+	} else {
+		text = ""
 	}
+	*known = kept
 	if changed {
-		if err := keepUpdateCache(cachePath, kept); err != nil {
-			return "", err
-		}
+		// What GitHub said still counts when it cannot be kept.
+		err = keepUpdateCache(cachePath, kept)
 	}
-	if !due {
-		return "", nil
-	}
-	return text, nil
+	return newer, text, err
 }
 
 func keepUpdateCache(path string, kept updateCache) error {

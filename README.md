@@ -34,8 +34,9 @@ offers to add it (Claude Code's own installer uses it, so it usually is already)
 if `claude` is missing.
 
 **Upgrading:** `wake upgrade` installs the newest release over the one you have (a build older than
-the verb upgrades by re-running the install line). Wake checks once a day and says in the room when
-a newer release is out; `WAKE_NO_UPDATE_CHECK=1` turns that off.
+the verb upgrades by re-running the install line). Wake checks when the room opens and again as you
+use it, even in a room left open for days: a newer release is announced once a day and named at the
+end of the strip (`↑ wake 0.1.9`) until you upgrade and reopen. `WAKE_NO_UPDATE_CHECK=1` turns that off.
 Fleets that are already running keep the old build until you `⌃Q⌃Q` and reopen them — see
 [the lifecycle chapter](docs/user_manual/04-lifecycle.md#upgrading).
 
