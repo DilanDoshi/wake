@@ -931,6 +931,46 @@ invisible on a blank cell and the fix moves those pads too; a table never carrie
 
 ---
 
+## BUG-47 — a long streamed answer scrolled inside a three-row box while the transcript never moved
+
+**Reported 2026-10-07** by the owner: in a conversation whose transcript already filled the pane, a
+long answer streamed into a box three rows tall at the bottom, scrolling its own text, while the
+conversation above it stood still and the answer's start was cut off. Claude Code pushes the whole
+transcript up a row at a time as the answer grows.
+
+**Root cause: `DM.previewCap` took `max(blank, minPreviewRows)` capped by the room, and `blank` is
+negative over a full transcript.** The cap is three there, by the 2026-09-10 design that grew the
+preview only into rows the transcript was not using. Preview rows are chrome, so a bigger preview
+would have cost the transcript its rows, which that design refused to do (`decisions.md`, 2026-08-15,
+its 2026-10-07 amendment).
+
+**Fix (`partial.go`, `dm.go`, `followbanner.go`, `expand.go`).** `previewCap(following)`: a reader who
+follows the newest line gets the pane's room (the pool less the transcript's one-row floor); one scrolled
+back keeps the old formula, so nothing they read moves. The composer's ceiling leaves the preview's rows
+out and the preview is capped against the composer as drawn, so the draft wins. Every return to the
+newest line goes through `DM.followed()` (⌃E, the banner click, a subagent view, a restore), and
+`ScrollUp` re-caps after it moves; `SetSize` and `Append` pass the `following` they sampled, because
+`tr.atBottom()` is stale after a width re-wrap. `View` re-lays whenever a menu is up, since a preview at
+its ceiling made the menu's rows and the dropped `composerGap` cancel in `chromeHeight`.
+Regression tests, red on the unmodified tree: `TestAStreamedAnswerPushesTheTranscriptUpAsItGrows`,
+`TestEveryReturnToTheNewestLineRestoresThePreviewsRoom` (wheel, banner click, ⌃E),
+`TestTheDraftWinsOverAFullPreview`, and the follower half of
+`TestThePreviewFillsAnEmptyPaneAndYieldsToAFullOne`. Pinned green beside them:
+`TestAScrolledBackReaderKeepsTheFloorWhileAnAnswerStreams`, `TestAMenuTakesItsRowsBackFromAFullPreview`,
+`TestTheFinishedBlockReplacesAFullPreviewInPlace`, `TestThePaneIsItsHeightAtEveryPreviewSize`.
+
+**The owner's rulings.** Following gets the pane (pushing the transcript up is the behaviour asked
+for). **The draft wins over the preview.** The preview stays plain text for this change, so a long answer
+streams as raw markdown and is redrawn formatted when its block lands; a follow-up formats finished
+paragraphs as they complete (`deferred.md`, 2026-10-07).
+
+**Not changed:** the first wheel notch off the bottom of a long answer re-caps the preview to three
+rows, so the transcript the preview had squeezed to a row or two comes back at once — the rows the
+preview gave back, not three. A scrolled-back reader returning mid-answer regrows the preview from
+about five rows (`deferred.md`, 2026-10-07).
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

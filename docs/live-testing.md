@@ -723,12 +723,16 @@ word in the vocabulary. What remains below is what only a human at a terminal ca
       transcript until the agent next speaks. A unit test covers the event ordering it depends on;
       what it cannot cover is a real interrupt's real frame order.
 - [ ] **Do it at fifteen or more working agents, on a wide terminal with a conversation open.** The
-      benchmark says one second of thirty streaming agents costs 0.69% of a core; what it cannot
+      benchmark says one second of thirty streaming agents costs about 2% of a core; what it cannot
       say is whether the *daemon* fans out that many more frames comfortably, or whether the notice
       row starts reporting dropped frames. **A "dropped N frames" notice appearing during ordinary
       streaming is the finding** — see `deferred.md`.
-- [ ] **A narrow pane, and a stacked column.** The preview takes up to three rows out of the
-      transcript's. In one of four grid panes, say whether that is the right trade.
+- [ ] **A narrow pane, and a stacked column.** While you follow the newest line, a long answer
+      streams into all the room the pane has and pushes the conversation up a row at a time, as
+      Claude Code's does; scroll back a notch and it drops to three rows so nothing you read moves,
+      and the transcript steps down by the rows it gave back. In one of four grid panes, say
+      whether pushing the whole pane up is the right trade, and whether that step down reads as
+      the pane making room or as the screen jumping.
 
 ## The pickers
 

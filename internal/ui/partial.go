@@ -17,10 +17,12 @@ package ui
 // agents - it serializes, and the sum is what every other pane's draw waits
 // behind. Streaming a block through it costs the integral rather than one
 // render, which BenchmarkOneBlockStreamed prices against this file at three
-// block sizes: 7.3x at 64 tokens, 19x at 256, and 65x at 1,024 - 4.6ms here
-// against 303ms there. Read the shape rather than the ratio: four times the
-// tokens costs this design 4.2x and then 4.2x, and costs that one 11x and then
-// 14x.
+// block sizes: 3.9x at 64 tokens, 9.7x at 256, and 17x at 1,024 - 22ms here
+// against 363ms there (2026-10-07, a 40-row pane over an empty transcript).
+// Read the shape rather than the ratio: this design's per-token cost stops
+// growing once the retained tail has filled the pane - 20, 24 and 25 microseconds
+// a token at 1,024, 4,096 and 16,384 - and that one's keeps growing with the
+// answer.
 //
 // The four candidates and what the numbers do to them:
 //
@@ -34,15 +36,19 @@ package ui
 //     also a poll where a wait will do, which is the first non-negotiable, and
 //     the deltas themselves are the wait. Dead.
 //   - **plain text, never glamour**: what shipped. One second of thirty
-//     streaming agents costs 7.4-8.3ms - under 1% of one core - through the
-//     real Update and the real View (BenchmarkStreamingFleetSecond).
+//     streaming agents costs 23ms - about 2% of one core, against 74ms for
+//     glamour - through the real Update and the real View
+//     (BenchmarkStreamingFleetSecond; the ruling in decisions.md has the table).
 //
 // It works because the preview is not the record. The same words arrive a
 // moment later as a complete assistant frame and go through glamour exactly
 // once, as they always did - so the transcript is byte-identical to what this
 // build drew before, and the preview costs a wrap of at most the rows the pane
-// can spare (DM.previewCap) - the floor over a full transcript, more over one it
-// does not fill. Nothing about the conversation's length enters that.
+// can spare (DM.previewCap): all of them for a reader following the newest line,
+// each streamed row pushing the transcript up one, as Claude Code's does, and a
+// floor for one scrolled back over a full transcript. Nothing about the
+// conversation's length enters that. What the reader pays is that a long answer
+// streams as raw markdown and is re-drawn formatted when its block lands.
 //
 // # The four properties, each with a test named for it
 //
@@ -99,16 +105,16 @@ func (a App) wants(sessionID string, ev core.Event) bool {
 }
 
 const (
-	// minPreviewRows is the floor the preview always gets, and its cap when the
-	// transcript already fills the pane.
+	// minPreviewRows is the cap of a reader who has scrolled back over a full
+	// transcript, and of a preview the pane never sized (a board tile's).
 	//
 	// It is a preview of the sentence being written rather than of the message,
 	// which arrives whole a moment later and is rendered properly. Three rows
-	// read a sentence at any pane width; over a full transcript spending more
-	// would push read conversation off screen to show something temporary, so
-	// three is the floor. Over an empty or short one there is nothing to push
-	// off, so DM.previewCap grows the preview into the unused rows instead - the
-	// same relaxation boardtile.go took for a tile's live tail.
+	// read a sentence at any pane width, and for a reader who is reading back
+	// nothing may move: more would push what they read off screen to show
+	// something temporary. A reader who is following gets the pane's room instead
+	// (DM.previewCap), as does a scrolled-back one over a transcript that does not
+	// fill the pane - there is nothing to push off.
 	minPreviewRows = 3
 
 	// previewSlack is how many rows of text are kept beyond the drawn ones. The
@@ -133,10 +139,13 @@ func previewChars(w, rows int) int {
 // the reason DM.bar is cached: this sits under a working agent, which is
 // exactly when something is redrawing.
 //
-// cap is how many rows the preview may draw, set by DM.previewCap: the floor
-// over a full pane, more over one the transcript does not fill. It is held on
-// the partial so a token can wrap against it without recomputing the pane, and
-// is refreshed by SetSize (which the growing preview retriggers through View).
+// cap is how many rows the preview may draw, set by DM.previewCap: the pane's
+// room for a reader who follows, the floor for one scrolled back over a full
+// pane. It is held on the partial so a token can wrap against it without
+// recomputing the pane, and is refreshed by SetSize (which the growing preview
+// retriggers through View), a landing block, ScrollUp and DM.followed - so while
+// a reader is scrolled back the retained text follows the floor, and a return
+// to the newest line regrows from there.
 //
 // Its methods take value receivers and return a new partial, like everything
 // else a DM holds.
@@ -222,30 +231,39 @@ func (p partial) rows() int {
 	return strings.Count(p.view, "\n") + 1
 }
 
-// previewCap is how many rows the preview may draw in this pane: the floor over
-// a full transcript, and the rows the transcript is not using over a short one -
-// so a long answer streaming into an empty pane fills it rather than scrolling
-// inside a three-row box, while one over a full pane still yields to the floor
-// and pushes nothing read off screen.
+// previewCap is how many rows the preview may draw in this pane.
 //
-// It is derived from the pool the transcript and preview share (the pane less
-// the preview-free chrome) minus the rows the transcript's own content wants,
-// and is capped a floor short of the pool so the transcript keeps at least
-// minTranscriptHeight - which is what keeps DM.View exactly its height, the
-// alt-screen invariant the fixed cap held. A menu present takes the floor: its
-// own allowance already leaves the transcript that floor, so the pool accounting
-// this walks would double-count it.
-func (d DM) previewCap() int {
+// A reader who is following gets the pane's room: everything the preview-free
+// chrome and the transcript's one-row floor leave, so each streamed row pushes
+// the conversation up a row, as Claude Code's does, and the answer's start stays
+// on screen. A reader who has scrolled back gets minPreviewRows over a full
+// transcript - nothing they are reading moves - and the rows the transcript is
+// not using over a short one.
+//
+// following is the caller's, never read off tr here: tr.scroll is stale after a
+// width re-wrap, which is why SetSize hands over its own. The pane, never the
+// block, bounds the cap, so the per-token work is flat; it is re-measured in
+// SetSize, Append, ScrollUp and DM.followed, never per token.
+//
+// The pool is the pane less the chrome the preview does not own - the composer
+// as drawn, so the draft wins: a line added to it takes a row from the preview.
+// room keeps the transcript its floor, which keeps DM.View exactly its height.
+// A menu takes the floor: its own allowance already leaves the transcript that
+// floor, so the pool accounting this walks would double-count it.
+func (d DM) previewCap(following bool) int {
 	if d.height <= 0 || d.menu != "" {
 		return minPreviewRows
 	}
 	pool := d.height - d.chromeSansPreview()
 	room := pool - minTranscriptHeight // leave the transcript its own floor
+	if following {
+		return max(0, room)
+	}
 	blank := pool - d.tr.lines.count() // rows the transcript is not using
-	// Floor the target at minPreviewRows, then cap it at room. room is the ceiling
-	// and can be zero or negative in a pane too tight to hold the transcript's
-	// floor and a preview both; there the ceiling wins and the preview yields to
-	// zero rows rather than drawing one that does not fit and overflowing the pane.
+	// Floor the target at minPreviewRows, then cap it at room. room can be zero or
+	// negative in a pane too tight to hold the transcript's floor and a preview
+	// both; there the ceiling wins and the preview yields to zero rows rather than
+	// drawing one that does not fit and overflowing the pane.
 	return max(0, min(max(blank, minPreviewRows), room))
 }
 

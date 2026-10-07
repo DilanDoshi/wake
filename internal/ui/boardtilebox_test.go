@@ -59,7 +59,7 @@ func TestATileDrawsThePerAgentStatusBar(t *testing.T) {
 
 // A tile's transcript fills the whole middle of a tall cell rather than stopping
 // at a fixed cap - the fill-the-window guardrail 2. A tall cell shows far more
-// than the DM preview's three rows.
+// than the preview floor's three rows.
 func TestATileTranscriptFillsTheBodyOfATallCell(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true

@@ -95,6 +95,25 @@ func BenchmarkOneBlockStreamed(b *testing.B) {
 			}
 		})
 
+		// The same block into a working agent whose transcript already fills the
+		// pane, following - the shape a long answer is read in, and the one whose
+		// preview is the pane's room rather than the three-row floor. Built once
+		// outside the loop: the arm prices the tokens, not the history.
+		full := fullTranscriptDM()
+		b.Run(fmt.Sprintf("preview-full/tokens=%d", tokens), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				d := full
+				for _, tok := range toks {
+					d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: tok})
+				}
+				if d.partial.view == "" {
+					b.Fatal("the full-transcript arm holds no preview after its block: it is pricing a fold that discarded the tokens")
+				}
+				sinkPreview = d.partial.view
+			}
+		})
+
 		b.Run(fmt.Sprintf("glamour-per-token/tokens=%d", tokens), func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
@@ -106,6 +125,17 @@ func BenchmarkOneBlockStreamed(b *testing.B) {
 			}
 		})
 	}
+}
+
+// fullTranscriptDM is a working agent over a hundred finished blocks, following.
+func fullTranscriptDM() DM {
+	d := NewDM("s1", "alex")
+	d.Agent = Agent{ID: "s1", State: rpc.StateWorking}
+	d = d.SetSize(benchPaneWidth, 40)
+	for i := range 100 {
+		d = d.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: fmt.Sprintf("earlier line %03d", i)})
+	}
+	return d
 }
 
 // BenchmarkStreamingFleetSecond is one second of a working fleet: thirty agents

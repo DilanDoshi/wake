@@ -279,24 +279,25 @@ func (d DM) SetSize(w, h int) DM {
 	}
 	d.height = h
 	// The composer wraps the draft as keys arrive, so it is sized here rather
-	// than only when it is drawn (see Composer.SetWidth), and aboveComposerExtra
-	// is the chrome the draft does not own - taken out of its allowance the way
-	// the transcript's floor is. The preview is re-wrapped first: its rows are
-	// part of that chrome, so one laid out for the old width would size the pane
-	// against rows that no longer exist.
+	// than only when it is drawn (see Composer.SetWidth). Its ceiling leaves the
+	// preview's rows out: the draft wins, and previewCap below is measured against
+	// the box as drawn, so a line added to the draft takes a row from the preview.
+	// The preview is re-wrapped first so one laid out for the old width is not
+	// measured against rows that no longer exist.
 	d.partial = d.partial.sized(d.blockWidth())
 	// The pinned rows above the composer - the task board and the type-ahead queue
 	// - are reserved from the draft's growth as well as from the transcript's
 	// floor, or a full board plus a deep queue plus a growing draft draws the pane
 	// taller than its allocation and the frame's top clip eats the composer.
-	// aboveComposerExtra itself excludes them (baseChrome adds them once); they are
-	// added only here, to the draft's own ceiling.
+	// beatBarRows excludes them (baseChrome adds them once); they are added only
+	// here, to the draft's own ceiling.
 	d.composer = d.composer.SetWidth(max(w, minComposerWidth)).
-		WithMaxRows(composerRowsIn(h, d.composer.overhead()+d.aboveComposerExtra()+d.checklistRows()+d.queuedRows()))
-	// How many rows the preview may draw depends on the pane and the transcript's
-	// own height, both settled now. The growing preview retriggers this through
-	// View's chrome guard, so a token needs no recompute of its own (Append).
-	d.partial = d.partial.capped(d.previewCap())
+		WithMaxRows(composerRowsIn(h, d.composer.overhead()+d.beatBarRows()+d.checklistRows()+d.queuedRows()))
+	// How many rows the preview may draw depends on the pane and the composer,
+	// both settled now, and on whether the reader follows. The growing preview
+	// retriggers this through View's chrome guard, so a token needs no recompute
+	// of its own (Append).
+	d.partial = d.partial.capped(d.previewCap(following))
 
 	// A height change is not that. It moves a window over lines that already
 	// exist, so a reader who has scrolled back keeps their place - which is the
@@ -439,7 +440,7 @@ func (d DM) Append(ev core.Event) DM {
 	// The transcript's height just moved, so the preview's cap is recomputed
 	// against it - the token path returns above and keeps the cap this settled,
 	// so a stream re-measures only when a block lands rather than per token.
-	d.partial = d.partial.capped(d.previewCap())
+	d.partial = d.partial.capped(d.previewCap(following))
 	return d.retained()
 }
 
@@ -506,8 +507,8 @@ func (d DM) Viewing(dispatch string) DM {
 		return d
 	}
 	d.viewing = dispatch
-	d.tr = d.rewrapped().toBottom()
-	return d
+	d.tr = d.rewrapped()
+	return d.followed()
 }
 
 // Viewed is the dispatch this pane is drawing, or "" for the conversation.
@@ -543,7 +544,10 @@ func (d DM) View(width, height int) string {
 	// is - a pane drawn one row taller than it was given scrolls the alt screen
 	// away on every frame, which is what it did.
 	d = d.withBar(max(width, minComposerWidth))
-	if width != d.width || height != d.height || d.chromeHeight() != d.chrome {
+	// A menu always re-lays: with the preview at its ceiling the menu's rows and
+	// the composerGap it drops cancel in chromeHeight, so the sum would alias the
+	// stored chrome and the preview would never yield to it.
+	if width != d.width || height != d.height || d.chromeHeight() != d.chrome || d.menu != "" {
 		d = d.SetSize(width, height)
 	}
 	w := max(width, minComposerWidth)
@@ -677,31 +681,12 @@ func (d DM) Before(earlier []core.Event) DM {
 	// tail alone, so runKey and runTally survive them untouched. Rebuilt from the
 	// tail once here, where the live path keeps them in step incrementally.
 	d = d.withTrailingRun()
-	d.tr = d.rewrapped().toBottom()
+	d.tr = d.rewrapped()
 	// The restored ops may have grown the board, which is chrome the transcript's
 	// height is taken out of. Re-settle so the viewport is sized for it - the same
 	// thing Append does after a live checklist op, and the reason the old code did
 	// not need it is that the checklist was drawn in the transcript, not pinned.
-	return d.resettleBoard()
-}
-
-// ScrollUp moves the reader lines back through the conversation, or forward
-// for a negative count, and stops at either end.
-//
-// It is the only way in to a scroll position transcript has tracked and Append
-// has sampled since both were written: Append deliberately does not return a
-// reader who has scrolled back to the newest line, which is a promise nothing
-// could keep - or break - while no caller could scroll.
-func (d DM) ScrollUp(lines int) DM {
-	d.tr = d.tr.scrolledUp(lines)
-	return d
-}
-
-// JumpToLatest returns to the newest line and resumes following - what a
-// click on the follow banner means. See followbanner.go.
-func (d DM) JumpToLatest() DM {
-	d.tr = d.tr.toBottom()
-	return d
+	return d.followed().resettleBoard()
 }
 
 // Composer is the input box. Hold the one the DM hands back rather than

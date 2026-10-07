@@ -2577,13 +2577,13 @@ That is what licenses every property in `internal/ui/partial.go`:
   is *rendered lines* precisely because re-rendering is expensive (11.3 ms of an 11.5 ms `Append` at
   4,000 events); a per-token writer into it would have been that defect returning through a new door.
 - **It is bounded to the pane (`DM.previewCap`),** and the retained text with it — the tail, because
-  the newest tokens are the ones being read. The cap is `minPreviewRows` (3) over a full transcript,
-  so the preview pushes nothing read off screen, and grows into the unused rows over an empty or short
-  one, so a long answer streaming into a blank pane fills it rather than scrolling inside a three-row
-  box (`fix/streaming-preview-fills-pane`, 2026-09-10). It is the *pane* that bounds it, never the
+  the newest tokens are the ones being read. Its size is the pane's room for a reader
+  following the newest line, and `minPreviewRows` (3) for one scrolled back over a full transcript
+  (*amended 2026-10-07, below*; it was three rows over any full transcript, growing only into unused
+  rows — `fix/streaming-preview-fills-pane`, 2026-09-10). It is the *pane* that bounds it, never the
   block, so the per-token work stays *flat* instead of growing with the answer — the property the
-  linear column above is measuring. Re-measured in `SetSize` and when a block lands (`Append`), never
-  per token.
+  linear column above is measuring. Re-measured in `SetSize`, `Append`, `ScrollUp` and `DM.followed`,
+  never per token.
 - **It is cleared by the block that supersedes it, or by the turn ending.** The second is not
   belt-and-braces: an interrupted turn produces no completed block at all, so nothing else would
   ever clear it and half a sentence would sit under the transcript until the agent next spoke.
@@ -2666,6 +2666,69 @@ so a moved schema costs the preview and never the transcript. What that does not
 only a recording can, is the assumption the whole design rests on: that the completed `assistant`
 frame still arrives. `docs/live-testing.md` §15 asks for it in those words, and `deferred.md` holds
 the rest.
+
+### Amendment, 2026-10-07 — a following reader gets the pane's room, a scrolled-back one the floor (BUG-47)
+
+This replaces the 2026-09-10 sentence above ("`minPreviewRows` over a full transcript"). The owner's
+report: in a conversation whose transcript already filled the pane, a long answer scrolled inside a
+three-row box at the bottom while the transcript never moved, and the answer's start was cut off.
+Claude Code pushes the whole transcript up a row at a time, and the owner ruled for that.
+
+- **A reader following the newest line gets the pane's room** — the pane less the chrome the preview
+  does not own, less the transcript's one-row floor (`DM.previewCap(true)`). Each streamed row
+  pushes the transcript up one row. The pane, never the block, still bounds it.
+- **A reader scrolled back keeps `minPreviewRows`** over a full transcript (the old formula, unchanged:
+  the rows a short transcript is not using, never fewer than three), so nothing they are reading
+  moves, the follow banner stays drawn, and the transcript's top line holds still as tokens arrive.
+- **The draft wins** (owner's ruling). The composer's ceiling leaves the preview's rows out, and the
+  preview is capped against the composer *as drawn*, so a line added to the draft takes a row from the
+  preview and never from the box, and `View` stays exactly its height. The old ceiling counted the
+  preview's rows: a preview at its ceiling froze the composer and a growing draft wrapped inside a fixed
+  box.
+- **Every return to the newest line goes through one helper**, `DM.followed()` (`followbanner.go`):
+  ⌃E, the banner click, a subagent view, a restore. The cap is re-measured in `SetSize`, `Append`,
+  `ScrollUp` and that helper, never per token. Callers hand `previewCap` the `following` they sampled;
+  it never reads `tr.atBottom()`, whose scroll is stale after a width re-wrap. A `toBottom()` that skips
+  the helper leaves the preview in the floor's box over a pane that wants it larger — the original
+  symptom, one key (⌃E) away. `SetSize` and `Append` (which re-cap with the `following` they sampled),
+  `openRun`/`openTool` (they keep the reader where they were), reclaim, and `/clear` (it blanks the
+  pane, and the next prompt's echo is an `Append`) are not returns and do not use it.
+- **A menu takes the floor**, as before, and `View` now re-lays whenever one is up. With the preview at its
+  ceiling the menu's rows and the `composerGap` it drops cancel in `chromeHeight`, which then aliased the
+  stored chrome and the preview never yielded to the menu
+  (`TestTheResumePickerShowsTheCursorAtEveryPaneHeight` caught it in a prototype;
+  `TestAMenuTakesItsRowsBackFromAFullPreview` holds it).
+- **The preview is still plain text.** A long answer now streams as raw markdown for rows at a time and
+  is redrawn formatted when its block lands. The owner accepted that for this change; a follow-up
+  formats finished paragraphs as they complete (`deferred.md`, 2026-10-07).
+
+**The figures above are stale, and these replace them.** The 08-15 tables were taken at the three-row
+cap; the preview arm has priced the pane-filling cap since 09-10 (an empty transcript, a 40-row pane),
+so it costs more per token than they say. Apple M5 Max, darwin 25.4.0, `-benchtime 10x -count 3`, one
+tree, nothing else of mine running:
+
+| one block, 79-column pane | preview | glamour per token | ratio |
+|---|---|---|---|
+| 64 tokens | 0.54–0.62 ms | 2.13–2.17 ms | 3.9× |
+| 256 tokens | 2.57–2.66 ms | 25.1–25.6 ms | 9.7× |
+| 1,024 tokens | 21.4–22.0 ms | 362–365 ms | 17× |
+
+The preview's cost per token stops growing once the retained tail fills the pane — 20.3, 24.1 and
+25.0 µs a token at 1,024, 4,096 and 16,384 tokens in a full-transcript pane — which is the property
+("flat in the length of the block"). The "linear, 4.2× then 4.2×" reading above predates the
+pane-filling cap: the preview grows until the tail saturates, and the glamour arm never does.
+
+| one second of a 30-agent fleet streaming | ns/op | share of one core |
+|---|---|---|
+| preview, one conversation open | 22.7–22.9 ms | 2.3 % |
+| preview, thirty conversations open | 24.1–24.2 ms | 2.4 % |
+| glamour per token | 74.1–75.2 ms | 7.4 % |
+
+**The new arm and what this change cost.** `BenchmarkOneBlockStreamed/preview-full` is a working agent over
+a full transcript, following — the shape a long answer is read in. Interleaved A/B, before → after this
+change: 0.30–0.36 → 0.29–0.37 ms at 64 tokens, 1.53 → 2.25–2.38 ms at 256, 6.4 → 20.5–21.2 ms at 1,024.
+A following reader's preview now costs what an empty pane's always did; the existing arms did not move.
+Only panes on screen accumulate (`App.wants`), so a fleet pays it for the two drawn ones.
 
 ---
 

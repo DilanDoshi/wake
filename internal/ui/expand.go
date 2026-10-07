@@ -74,6 +74,6 @@ func (d DM) toggleExpanded() DM {
 	if !d.expanded {
 		d.runOpen, d.opened = nil, nil
 	}
-	d.tr = d.rewrapped().toBottom()
-	return d
+	d.tr = d.rewrapped()
+	return d.followed()
 }

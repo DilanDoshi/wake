@@ -5598,3 +5598,21 @@ the line restored to the fixture.
   `tool_use`.
 - **The target line says `→ @manager` for a relayed mention.** True of the frame; a line naming the
   peer would need the quoted-mention parse in core (decisions.md, 2026-10-03).
+
+## 2026-10-07 — left open by the following preview (BUG-47, `fix/streamed-preview-scrolls-transcript`)
+
+- **Retention follows the draw cap, so a reader scrolled back holds about five rows of the answer.**
+  While scrolled back the stored cap is the floor (`ScrollUp` and `Append` re-measure it), so
+  `partial.add` keeps `previewChars(width, 3)` of text. Returning to the newest line mid-answer — wheel
+  down, the banner click, ⌃E — gives the cap back, but the preview regrows from those ~5 rows as tokens
+  arrive instead of showing the answer so far. The same shortfall follows `inbox.go`'s `foldChars`
+  after a stall. *Closes with:* retaining a pane's worth whatever the draw cap, which costs a wrap of the
+  larger tail per token while scrolled back. The board tile is the precedent for decoupling retention
+  from the draw (`rowCap`/`maxTileTailRows`, built 2026-08-28 and superseded 2026-09-01 by the
+  transcript-window tile; `decisions.md`, "Ruling: §2c narrows…", its 2026-08-28 amendment).
+- **A long answer streams as raw markdown.** The preview is plain text by ruling (`decisions.md`,
+  2026-08-15), so over a pane's worth of it the reader sees `**bold**` and fences until the block lands
+  and is drawn formatted. The owner accepted this for BUG-47. *Closes with:* a follow-up that sends each
+  *finished* paragraph (a blank line, or a closed fence) through glamour once as it completes — one
+  render per paragraph rather than per token, so the shared-mutex argument still holds — and keeps the
+  open tail as plain text.
