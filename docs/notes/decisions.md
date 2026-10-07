@@ -2693,9 +2693,10 @@ Claude Code pushes the whole transcript up a row at a time, and the owner ruled 
   symptom, one key (⌃E) away. `SetSize` and `Append` (which re-cap with the `following` they sampled),
   `openRun`/`openTool` (they keep the reader where they were), reclaim, and `/clear` (it blanks the
   pane, and the next prompt's echo is an `Append`) are not returns and do not use it.
-- **A menu takes the floor**, as before, and `View` now re-lays whenever one is up. With the preview at its
-  ceiling the menu's rows and the `composerGap` it drops cancel in `chromeHeight`, which then aliased the
-  stored chrome and the preview never yielded to the menu
+- **A menu takes the floor**, as before, and `View` now re-lays when one is up over a preview above the
+  floor. With the preview at its ceiling the menu's rows and the `composerGap` it drops cancel in
+  `chromeHeight`, which then aliased the stored chrome and the preview never yielded to the menu. A preview
+  already at the floor needs no re-lay, so the ordinary menu frame costs what it did
   (`TestTheResumePickerShowsTheCursorAtEveryPaneHeight` caught it in a prototype;
   `TestAMenuTakesItsRowsBackFromAFullPreview` holds it).
 - **The preview is still plain text.** A long answer now streams as raw markdown for rows at a time and
@@ -2728,7 +2729,7 @@ pane-filling cap: the preview grows until the tail saturates, and the glamour ar
 a full transcript, following — the shape a long answer is read in. Interleaved A/B, before → after this
 change: 0.30–0.36 → 0.29–0.37 ms at 64 tokens, 1.53 → 2.25–2.38 ms at 256, 6.4 → 20.5–21.2 ms at 1,024.
 A following reader's preview now costs what an empty pane's always did; the existing arms did not move.
-Only panes on screen accumulate (`App.wants`), so a fleet pays it for the two drawn ones.
+Only panes on screen accumulate (`App.wants`), so a fleet pays it only for the conversations drawn.
 
 ---
 

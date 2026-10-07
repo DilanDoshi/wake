@@ -186,9 +186,10 @@ func TestAScrolledBackReaderKeepsTheFloorWhileAnAnswerStreams(t *testing.T) {
 
 // Every way back to the newest line gives the preview its room again, mid-stream:
 // the wheel, a click on the banner, ⌃E - which is also a re-render, and the one
-// key from the symptom - a subagent's view and back, and a restore. The reader leaves while one answer streams, a block
-// lands behind them and the next answer starts, so the preview the way back finds
-// has been held at the floor by everything that measured it since.
+// key from the symptom - a subagent's view and back, and a restore. The reader
+// leaves while one answer streams, a block lands behind them and the next answer
+// starts, so the preview the way back finds has been held at the floor by
+// everything that measured it since.
 func TestEveryReturnToTheNewestLineRestoresThePreviewsRoom(t *testing.T) {
 	for _, tc := range []struct {
 		name string

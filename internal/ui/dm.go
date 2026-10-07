@@ -544,10 +544,12 @@ func (d DM) View(width, height int) string {
 	// is - a pane drawn one row taller than it was given scrolls the alt screen
 	// away on every frame, which is what it did.
 	d = d.withBar(max(width, minComposerWidth))
-	// A menu always re-lays: with the preview at its ceiling the menu's rows and
-	// the composerGap it drops cancel in chromeHeight, so the sum would alias the
-	// stored chrome and the preview would never yield to it.
-	if width != d.width || height != d.height || d.chromeHeight() != d.chrome || d.menu != "" {
+	// A menu over a preview above the floor re-lays: with the preview at its ceiling
+	// the menu's rows and the composerGap it drops cancel in chromeHeight, so the
+	// sum would alias the stored chrome and the preview would never yield to it. A
+	// preview at the floor already has the cap a menu gives it.
+	menuOverPreview := d.menu != "" && d.partial.rows() > minPreviewRows
+	if width != d.width || height != d.height || d.chromeHeight() != d.chrome || menuOverPreview {
 		d = d.SetSize(width, height)
 	}
 	w := max(width, minComposerWidth)
