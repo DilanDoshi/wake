@@ -324,7 +324,7 @@ var claudeWireVocabulary = wordSet([]string{
 	"parent_tool_use_id", "subagent_type", "task_description",
 	"tool_use_id", "agent_id", "agentId", "agentType",
 	"tool_use_result", "command_uuid", "new_conversation_id",
-	"rate_limit_info", "isReplay", "isSynthetic", "is_api_error_message", "isApiErrorMessage",
+	"rate_limit_info", "isReplay", "isSynthetic", "is_api_error_message", "isApiErrorMessage", "isMeta",
 	"api_retry", "error_status", "authentication_failed",
 	"run_in_background", "last_tool_name", "task_id",
 	"non_execution_kind", "permission_denials", "terminal_reason",
@@ -408,6 +408,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// and a view matching on it would be reading Claude's wire format. The open
 	// carries attributes, so it is the tag start rather than a whole tag.
 	"<cross-session-message", "</cross-session-message>",
+
+	// The envelope a subagent's message to its own session arrives in - its
+	// SubagentHandback report - dropped whole by isAgentMessage, for the same
+	// reason: the tag is the only thing identifying the line.
+	"<agent-message", "</agent-message>",
 
 	// Claude's abort markers. Policed as hard as any field name, and for a
 	// sharper reason than most: they arrive on a frame with no subtype and no
@@ -721,7 +726,11 @@ var notNamedByTheAirlock = map[string]string{
 // the on-disk record of a message claude took up mid-turn, which
 // DecodeTranscriptLine restores as the turn it was. midturn-absorbed.jsonl.
 // 217 → 218: "user_message_uuids", every stamped message a result answered.
-const policedWordCount = 218
+// 218 → 221: the <agent-message envelope's two tags, isAgentMessage's drop of a
+// subagent's hand-back, and "isMeta", claude's on-disk mark on a line it injected,
+// which DecodeTranscriptLine reads so an unclaimed one is never the operator's
+// turn. subagent-handback.jsonl, injected-meta.jsonl.
+const policedWordCount = 221
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -1113,6 +1122,8 @@ var embeddedMarkers = map[string]bool{
 	"Current model:":           true,
 	"<cross-session-message":   true,
 	"</cross-session-message>": true,
+	"<agent-message":           true,
+	"</agent-message>":         true,
 	// The /goal announcements' leading phrases; "<synthetic>" and "No goal set"
 	// are whole values, so they are matched quoted rather than here.
 	"Goal set: ":          true,

@@ -398,6 +398,8 @@ make cover     # coverage report; gate is 80%
 make lint      # golangci-lint run
 make ci        # every step the workflow runs
 make soak      # 20 fake sessions replaying fixtures; SOAK_DURATION=1h for the long one
+make drift     # this machine's own transcripts against the corpus's rulings; free, not a gate
+make live      # SPENDS MONEY: real claude, the wire probe and the pty journey; not a gate
 make run       # build and start
 ```
 
@@ -427,6 +429,8 @@ HOME=$(mktemp -d) claude --print --input-format stream-json --output-format stre
 | screen | **A real pty, the real binary, `vt10x`** (`cmd/wake/screen_unix_test.go`) — use for layout, keys, mouse |
 | `cmd/wake` | Fake daemon, in-process `daemon.Serve`, `detach_unix_test.go` |
 | soak | Build tag `soak` |
+| drift | Build tag `drift`: the operator's `~/.claude/projects` held to `injected_test.go`'s rulings — run after a claude upgrade |
+| live | Build tag `live`: a real `claude` (`TestLiveWire` decodes its stdout and transcript; `TestLiveJourney` drives the screen) |
 
 `make test` runs twice (with and without `-race`) — the detector masks ordering bugs. `make ci` may
 not drift from the workflow (`internal/core/citarget_test.go`). A goroutine leak is a bug.
@@ -501,6 +505,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   reaches its model next turn. `--name` wins on `--resume`, even over a `/rename`. A `--bare` session
   registers no inbox, so its `/list-agents` has no `This session:` line.
   `docs/superpowers/notes/2026-09-27-at-menu-findings.md`.
+- **A subagent in auto mode can report through `SubagentHandback`** (2.1.271+): an `<agent-message>`
+  user line in place of the `<task-notification>`, replayed live and `isMeta` on disk. Core drops it on
+  both wires, and **an `isMeta` line no decoder claims is never the operator's turn**.
+  `docs/superpowers/notes/2026-10-03-subagent-handback-findings.md`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only
