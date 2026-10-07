@@ -608,9 +608,6 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case reattachedMsg:
 		return a.reattached(m)
 
-	case updateCheckedMsg:
-		return a.updateChecked(m), nil
-
 	case errMsg:
 		// Not a hang-up: those arrive as a streamMsg and go through reattach.
 		// This is a write that failed, or a reattach that could not connect.

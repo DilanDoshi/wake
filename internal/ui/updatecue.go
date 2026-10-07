@@ -37,11 +37,16 @@ type updateCheckedMsg struct{ newer string }
 // WithUpdateCheck gives the room its check; nil (WAKE_NO_UPDATE_CHECK) never asks.
 func (a App) WithUpdateCheck(c UpdateCheck) App { a.upgrade.check = c; return a }
 
-// dueUpdateCheck is the check as a Cmd when msg should set one off: the first
+// dueUpdateCheck takes a check's answer ("" is nothing newer, or a check that
+// failed), and is the check as a Cmd when msg should set one off: the first
 // message, then a keystroke an hour on, never while one is out and never once a
 // newer release is known - no later answer changes what to do. Typed on keys,
 // so the composer's blink ticks cost no clock read.
 func (a App) dueUpdateCheck(msg tea.Msg) (App, tea.Cmd) {
+	if m, ok := msg.(updateCheckedMsg); ok {
+		a.upgrade.asking, a.upgrade.newer = false, m.newer
+		return a, nil
+	}
 	u := a.upgrade
 	if u.check == nil || u.asking || u.newer != "" {
 		return a, nil
@@ -54,10 +59,4 @@ func (a App) dueUpdateCheck(msg tea.Msg) (App, tea.Cmd) {
 	// Wall time: darwin's monotonic clock stops while a laptop sleeps.
 	a.upgrade.asked, a.upgrade.asking = clock().Round(0), true
 	return a, func() tea.Msg { return updateCheckedMsg{newer: u.check()} }
-}
-
-// updateChecked takes an answer: "" is nothing newer, or a check that failed.
-func (a App) updateChecked(m updateCheckedMsg) App {
-	a.upgrade.asking, a.upgrade.newer = false, m.newer
-	return a
 }
