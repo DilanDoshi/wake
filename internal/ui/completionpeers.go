@@ -21,6 +21,7 @@ package ui
 
 import (
 	"fmt"
+	"maps"
 	"os"
 	"slices"
 	"strings"
@@ -113,24 +114,44 @@ func canBeginName(typed string) bool {
 // conversationMenu fills a conversation's `@` names in the order drawn - or a
 // room draft's behind its `@who `, completionAgent's agent either way: the
 // fleet's live peers, then the listing's sessions and this agent's subagent
-// types - for any agent but the manager, whose `--tools ""` reaches neither.
-// Nothing here routes, so unlike addressees it need not mirror core.Resolve. A
-// listed name is offered as peerMention writes it; a subagent type holding
+// types. The manager gets no subagent types: its tools hold SendMessage, which
+// reaches the listing, but no Agent (owner, 2026-10-03). Nothing here routes,
+// so unlike addressees it need not mirror core.Resolve. A subagent type holding
 // whitespace is not one `@agent-` mention, so it is not offered.
 func (a App) conversationMenu(c completion, typed string) completion {
-	lower := strings.ToLower(strings.TrimPrefix(typed, mentionQuote))
-	matches := func(word string) bool { return strings.HasPrefix(strings.ToLower(word), lower) }
+	matches := mentionMatcher(typed)
 	agent := a.completionAgent()
 	for _, addr := range a.live() {
 		if addr.ID != agent.ID && matches(addr.Name) {
 			c.names = append(c.names, agentPrefix+addr.Name)
 		}
 	}
+	c = a.machineSessions(c, typed, nil)
 	if agent.Name == core.ManagerName {
 		return c
 	}
+	for _, kind := range agent.SubagentTypes() {
+		if !strings.ContainsFunc(kind, unicode.IsSpace) && (matches(kind) || matches(subagentMention+kind)) {
+			c.names, c.tags = tagged(c.names, c.tags, agentPrefix+subagentMention+kind, offerTag{suffix: subagentMenuSuffix})
+		}
+	}
+	return c
+}
+
+// mentionMatcher matches a name against what is typed, an opening quote aside.
+func mentionMatcher(typed string) func(string) bool {
+	lower := strings.ToLower(strings.TrimPrefix(typed, mentionQuote))
+	return func(word string) bool { return strings.HasPrefix(strings.ToLower(word), lower) }
+}
+
+// machineSessions offers the listing's sessions that match typed after what c
+// holds, and wants this opening's ask. A listed name is offered as peerMention
+// writes it; one a fleet agent holds is the fleet's, and so is one in routed.
+func (a App) machineSessions(c completion, typed string, routed map[string]bool) completion {
+	matches := mentionMatcher(typed)
 	c.peers.wants = true
 	held := a.heldNames()
+	maps.Copy(held, routed)
 	for _, p := range a.completion.peers.listing {
 		key := strings.ToLower(p.Name)
 		mention, ok := peerMention(p.Name)
@@ -139,11 +160,6 @@ func (a App) conversationMenu(c completion, typed string) completion {
 		}
 		held[key] = true // a listing naming one twice, in any case, offers it once
 		c.names, c.tags = tagged(c.names, c.tags, mention, offerTag{dir: shortPath(p.Dir)})
-	}
-	for _, kind := range agent.SubagentTypes() {
-		if !strings.ContainsFunc(kind, unicode.IsSpace) && (matches(kind) || matches(subagentMention+kind)) {
-			c.names, c.tags = tagged(c.names, c.tags, agentPrefix+subagentMention+kind, offerTag{suffix: subagentMenuSuffix})
-		}
 	}
 	return c
 }
@@ -189,6 +205,19 @@ func dirLabel(offer, dir string, avail int) string {
 		dir = cut
 	}
 	return name + fmt.Sprintf(peerDirFormat, dir)
+}
+
+// routedNames are what a room's leading mention routes besides an agent: a team
+// with a live member and the broadcast. An outside session of one of those names
+// is never reached from there (core.Resolve), so the room does not offer it.
+func (a App) routedNames() map[string]bool {
+	routed := map[string]bool{core.BroadcastName: true}
+	for _, addr := range a.live() {
+		if addr.Team != "" {
+			routed[addr.Team] = true
+		}
+	}
+	return routed
 }
 
 // heldNames is every name a fleet agent holds - the roster's, parked and the

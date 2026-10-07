@@ -118,8 +118,9 @@ func TestAConversationOffersItsLivePeers(t *testing.T) {
 	}
 }
 
-// The room's `@` is Wake's routing words and nothing else: a reply's sessions and
-// an agent's subagent types are a conversation's, and the room asks for neither.
+// With no manager to relay through, the room's `@` is Wake's routing words and
+// nothing else: a reply's sessions and an agent's subagent types are a
+// conversation's, and the room asks for neither.
 func TestTheRoomOffersNoOutsideSessionsOrSubagents(t *testing.T) {
 	fresh(t)
 	a := newRoomApp(t).withSize(200, 40).withRoster(
@@ -357,12 +358,10 @@ func TestAReplyReplacesTheListingWhole(t *testing.T) {
 	}
 }
 
-// The manager's own conversation offers its fleet peers (owner's decision 1) and
-// paths, and nothing else: it runs with `--tools ""`, so it has no SendMessage
-// and no Agent tool. It reaches a peer by Wake name through its send tool, and it
-// can reach neither an outside session nor a subagent - so it offers neither,
-// even from a listing another conversation asked for, and asks for none.
-func TestTheManagersConversationOffersOnlyItsFleetPeers(t *testing.T) {
+// The manager's own conversation offers its fleet peers, then the machine's
+// sessions - it relays to those with SendMessage, its one built-in (owner,
+// 2026-10-03) - and paths. It has no Agent tool, so no subagent type is offered.
+func TestTheManagersConversationOffersItsFleetAndTheMachinesSessions(t *testing.T) {
 	manager := func(t *testing.T) App {
 		t.Helper()
 		fresh(t)
@@ -372,11 +371,11 @@ func TestTheManagersConversationOffersOnlyItsFleetPeers(t *testing.T) {
 		).applyFrame(peersReply(core.Peer{Name: "jalen", Dir: "/tmp/j"}))
 	}
 	a, asked := typedAsking(t, manager(t), runes("@j")...)
-	if got, want := a.completion.offers, []string{"@jane"}; !slices.Equal(got, want) {
-		t.Errorf("the manager's `@j` offered %q, want its fleet peer alone %q", got, want)
+	if got, want := a.completion.offers, []string{"@jane", "@jalen"}; !slices.Equal(got, want) {
+		t.Errorf("the manager's `@j` offered %q, want its fleet peer, then the outside session %q", got, want)
 	}
-	if asked != 0 {
-		t.Errorf("the manager's `@j` asked %d times, want none: it cannot message what the listing names", asked)
+	if asked != 1 {
+		t.Errorf("the manager's `@j` asked %d times, want once", asked)
 	}
 	if a, _ = typedAsking(t, manager(t), runes("@agent-")...); a.completion.open() {
 		t.Errorf("the manager's `@agent-` offered %q, want nothing: it has no Agent tool", a.completion.offers)
@@ -690,7 +689,10 @@ func roomFleet(t *testing.T) App {
 // machine's sessions quoted as claude types them, her peers but not her, her
 // subagent types - while the leading mention still routes (owner, 2026-10-03).
 func TestBehindAnAddressedAgentTheRoomOffersThatAgentsNames(t *testing.T) {
-	a, asked := typedAsking(t, roomFleet(t), runes(`@jade ask @"wf`)...)
+	// The leading `@jade` is an opening of its own while a manager is live, so
+	// only the asks of the mention behind it are counted.
+	a, _ := typedAsking(t, roomFleet(t), runes("@jade ask ")...)
+	a, asked := typedAsking(t, a, runes(`@"wf`)...)
 	if asked != 1 {
 		t.Errorf("`@jade ask @\"wf` asked for the machine's sessions %d times, want once", asked)
 	}
@@ -724,10 +726,12 @@ func TestBehindNoOneLiveAgentTheRoomKeepsItsOwnNames(t *testing.T) {
 	same := func(a App) App { return a }
 	for draft, mode := range map[string]func(App) App{
 		"@jets ask @wf": same, "@all ask @wf": same, "@manager ask @wf": same, "@jack ask @wf": same,
-		"@nobody ask @wf": same, "ask @wf": same, "@wf": same, "@jade ask @wf": open,
+		"@nobody ask @wf": same, "ask @wf": same, "@jade ask @wf": open,
 	} {
 		listed := mode(roomFleet(t)).applyFrame(peersReply(core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a"}))
-		a, asked := typedAsking(t, listed, runes(draft)...)
+		at := strings.LastIndex(draft, agentPrefix)
+		a, _ := typedAsking(t, listed, runes(draft[:at])...) // a leading mention may ask, for the manager's relay
+		a, asked := typedAsking(t, a, runes(draft[at:])...)
 		if asked != 0 || slices.Contains(a.completion.offers, "@wf-alpha") {
 			t.Errorf("%q asked %d times and offered %q, want no ask and no outside session", draft, asked, a.completion.offers)
 		}
@@ -763,5 +767,60 @@ func TestAnImageAheadOfTheLeadingMentionKeepsTheRoomsNames(t *testing.T) {
 	a := dropImage(t, roomFleet(t), writePNG(t, "shot.png")).withDraft(" @jade")
 	if got := a.completion.offers; !slices.Contains(got, "@jade") {
 		t.Errorf("%q offered %q, want the room's own names, @jade among them", a.composer().Value(), got)
+	}
+}
+
+// The room's leading `@` also offers the machine's sessions while a manager is
+// live: ↵ passes a name no fleet agent holds through to the manager, which
+// relays it with SendMessage (owner, 2026-10-03). They come after the room's own
+// names, so a fleet name still wins and `@jade` never detours through it.
+func TestTheRoomsLeadingMentionOffersTheMachinesSessionsThroughTheManager(t *testing.T) {
+	a, asked := typedAsking(t, roomFleet(t), runes(`@"wf`)...)
+	if asked != 1 {
+		t.Errorf("the room's leading `@\"wf` asked for the machine's sessions %d times, want once", asked)
+	}
+	a = a.applyFrame(peersReply(core.Peer{Name: "wf beta", Dir: "/tmp/wf-b"}, core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a"}))
+	if got, want := a.completion.offers, []string{`@"wf beta"`, "@wf-alpha"}; !slices.Equal(got, want) {
+		t.Fatalf("the room's `@\"wf` offered %q, want %q", got, want)
+	}
+	if took, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyTab}); took.composer().Value() != `@"wf beta" ` {
+		t.Errorf("⇥ inserted %q, want %q", took.composer().Value(), `@"wf beta" `)
+	}
+	got := roomFleet(t).applyFrame(peersReply(core.Peer{Name: "jo", Dir: "/tmp/jo"})).withDraft("@j").completion.offers
+	if len(got) == 0 || got[len(got)-1] != "@jo" || !slices.Contains(got, "@jade") {
+		t.Errorf("the room's `@j` offered %q, want the fleet's names and then the outside @jo", got)
+	}
+}
+
+// With no live manager nobody relays a leading outside mention, so the room's
+// `@` keeps the fleet's names alone and asks for nothing.
+func TestWithNoLiveManagerTheRoomsLeadingMentionOffersNoOutsideSession(t *testing.T) {
+	listed := newRoomApp(t).withSize(200, 40).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "jade", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "m1", Name: core.ManagerName, State: rpc.StateParked},
+	).applyFrame(peersReply(core.Peer{Name: "wf-alpha", Dir: "/tmp/wf-a"}))
+	a, asked := typedAsking(t, listed, runes("@wf")...)
+	if asked != 0 || slices.Contains(a.completion.offers, "@wf-alpha") {
+		t.Errorf("`@wf` with the manager parked asked %d times and offered %q, want neither", asked, a.completion.offers)
+	}
+}
+
+// An outside session sharing a name the room's leading mention routes elsewhere
+// - a team with a live member, the broadcast - is not offered: ↵ would fan out
+// to the team or the fleet, never reach the session (core.Resolve).
+func TestTheRoomOffersNoOutsideSessionNamedLikeATeamOrTheBroadcast(t *testing.T) {
+	listed := func() App {
+		return roomFleet(t).applyFrame(peersReply(core.Peer{Name: "jets", Dir: "/tmp/jets"}, core.Peer{Name: "all", Dir: "/tmp/all"}))
+	}
+	for _, draft := range []string{"@je", "@al"} {
+		a := listed().withDraft(draft)
+		for _, offer := range a.completion.offers {
+			if a.completion.tags[offer].dir != "" {
+				t.Errorf("%q offered the outside session %q (%s), which ↵ would not reach", draft, offer, a.completion.tags[offer].dir)
+			}
+		}
+	}
+	if got := listed().withDraft("@je").completion.offers; !slices.Contains(got, "@jets") {
+		t.Errorf("`@je` offered %q, want the team @jets still", got)
 	}
 }

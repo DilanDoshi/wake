@@ -372,6 +372,10 @@ var claudeWireVocabulary = wordSet([]string{
 	// what put a bare "⏺ Agent" in front of a reader.
 	"Bash", "Read", "Edit", "Write", "Glob",
 	"Grep", "WebFetch", "WebSearch", "Agent", "Task",
+	// The manager's one built-in, and the call the room draws for it - and the
+	// receipt key that, beside success and message, says a result is its own.
+	// The key sits inside a JSON string, so it is in embeddedMarkers below.
+	"SendMessage", "msg_id",
 
 	// The two interactive tools. Policed precisely because neither is ever
 	// named: askKind classifies an ask from requires_user_interaction and its
@@ -466,6 +470,10 @@ var deliberatelyGeneric = wordSet([]string{
 	// until <age> ago`, whose leading phrase is policed above. Plain English
 	// Wake's own words could not avoid, and no route in without that phrase.
 	" until ", " ago",
+
+	// A SendMessage's recipient key, the plainest English there is; no route in
+	// without "SendMessage", which is policed above.
+	"to",
 
 	// A workflow_agent's other state words, "start"'s siblings. Neither is
 	// policed: core.TaskProgress and core.TaskDone already spell "progress"
@@ -705,7 +713,11 @@ var notNamedByTheAirlock = map[string]string{
 // reads so only a dead login is parked for a new process. api-error-auth.jsonl.
 // 210 → 211: "says it was ", the column a renamed session's /list-agents row
 // carries between its name and directory. list-agents-bare-renamed.jsonl.
-const policedWordCount = 211
+// 211 → 212: "SendMessage", the manager's one built-in and the call whose
+// recipient and words toolPeerSend reads. manager-tools.jsonl, manager-relay.jsonl.
+// 212 → 213: "msg_id", the SendMessage receipt's own key, which receiptSentence
+// requires so no other JSON result is cut to its message. manager-relay.jsonl.
+const policedWordCount = 213
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -779,6 +791,9 @@ var notWireVocabulary = wordSet([]string{
 	// the reason follows the "]: " of a Stop-hook feedback frame. Punctuation
 	// Wake matches on, not wire words.
 	"[", "]", ":",
+
+	// receiptSentence's test for a JSON object, before it tries to read one.
+	"{",
 
 	// localreply.go's delimiter and pattern: a /list-agents row's column
 	// separator and a section header's title and count. Punctuation and
@@ -1099,6 +1114,8 @@ var embeddedMarkers = map[string]bool{
 	"No subagents, teammates or other Claude sessions": true,
 	"Session renamed to: ":                             true,
 	"says it was ":                                     true,
+	// The SendMessage receipt's key, inside its JSON-in-text result.
+	"msg_id": true,
 	// Every connector's name begins with it ("claude.ai Gmail"); never whole.
 	"claude.ai ": true,
 }
