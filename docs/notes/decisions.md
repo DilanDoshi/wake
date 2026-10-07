@@ -3725,3 +3725,18 @@ permission card) and chose none of it:
 The composer's target line stays `→ @manager`: the frame goes to the manager, and whether the words
 reach the peer is the model's act, not Wake's. A daemon fence would need the quoted-mention parse
 moved into core, so completion, the stamp and the target line read one implementation.
+
+## 2026-10-07 — `ask.go`, the seventh airlock file
+
+Merging the @-menu branch with main took `vocabulary.go` to 812 lines against the 800 hard max,
+though each side was under it alone. The subject seam is the interactive ask: `askKind`,
+`askDetail`, `askQuestions` and `askOptions` plus the payload keys they read, called only from
+`protocol.go`'s `controlRequestEvent`. It is not `control.go`'s subject (its header: Claude asks and
+Wake answers, so a permission exchange stays with `encode.go` and `controlRequestEvent`), and
+`protocol.go` has no room for it. A seventh airlock file by subject is the remedy `localreply.go`
+(2026-09-27) and `control.go` (2026-10-02) took; the owner delegated the call ("fix both as you
+think", 2026-10-07). The set stays pinned by `airlock_test.go`, the six headers and CLAUDE.md, and
+still grows only by a ruling.
+
+**Not done:** trimming comments to get under 800 (the guard says split by subject), and moving
+unrelated functions into an airlock file that happens to have headroom.

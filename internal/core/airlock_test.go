@@ -82,6 +82,9 @@ const repoRoot = "../.."
 // localreply.go, is the owner's 2026-09-27 ruling: local commands' reply text.
 // The sixth, control.go, is 2026-10-02's: control requests and their receipts,
 // split out by subject when encode.go, wire.go and protocol.go were all full.
+// The seventh, ask.go, is 2026-10-07's: an interactive ask's kind and payload,
+// split out of vocabulary.go by subject when two merged branches took it past
+// the hard max (decisions.md, 2026-10-07).
 var airlockFiles = wordSet([]string{
 	"internal/core/protocol.go",
 	"internal/core/wire.go",
@@ -89,6 +92,7 @@ var airlockFiles = wordSet([]string{
 	"internal/core/encode.go",
 	"internal/core/localreply.go",
 	"internal/core/control.go",
+	"internal/core/ask.go",
 })
 
 // claudeWireVocabulary is what a file must not name outside the airlock.

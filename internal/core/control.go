@@ -6,9 +6,9 @@
 // servers. Each is answered by a control_response correlated on request_id, and
 // both halves of that exchange live here. A permission answer is the other
 // control_* exchange and is not here: Claude asks and Wake answers, so it stays
-// with encode.go and protocol.go's controlRequestEvent.
+// with encode.go, ask.go and protocol.go's controlRequestEvent.
 //
-// The airlock is these six files and nothing else in Wake knows Claude
+// The airlock is these seven files and nothing else in Wake knows Claude
 // Code's stream-json format:
 //
 //	protocol.go    decoding - one wire line in, core.Events out
@@ -17,6 +17,7 @@
 //	encode.go      the frames Wake writes back
 //	localreply.go  the text replies of local commands Wake parses
 //	control.go     control requests Wake writes, and their receipts
+//	ask.go         an interactive ask's kind and payload, resolved
 //
 // internal/core/airlock_test.go enforces that over the whole tree and reads
 // the same list. protocol.go's header carries the full rule.
