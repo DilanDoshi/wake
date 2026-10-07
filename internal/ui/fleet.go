@@ -401,8 +401,8 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		// (no working report between), so the pre-park summary must not reappear.
 		// inDM goes too - a woken session's first turn must not inherit a stale one.
 		if s.State == rpc.StateParked || s.State == rpc.StateEnded {
-			a.doneAt, a.turnDur, a.watchedStart = time.Time{}, 0, false
-			a.inDM = false
+			a.doneAt, a.turnDur, a.watchedStart, a.inDM = time.Time{}, 0, false, false
+			delete(f.tasks, s.ID) // its shells died with it; their endings may never have come
 		}
 		a.State, a.QuietMS = s.State, s.QuietMS
 		// Only when the report has one. The event stream is the fresher

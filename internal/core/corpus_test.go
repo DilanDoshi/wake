@@ -116,9 +116,11 @@ var environmentKeys = []string{
 }
 
 // replyEnvironmentKeys are the same dump one frame over: an initialize reply
-// lists the machine's commands and agents - the operator's own among them -
-// and nothing decodes either.
-var replyEnvironmentKeys = []string{"agents", "commands"}
+// lists the machine's agents - the operator's own among them - and nothing
+// decodes them. Its `commands` is not here: controlResponseEvent decodes it into
+// SessionFacts.SlashCommands, so it stays, reduced to each entry's name - see
+// TestAReplyCommandCarriesNothingButItsName.
+var replyEnvironmentKeys = []string{"agents"}
 
 // corpusFiles is every file the repository tracks *or* would track, as a path
 // this test can open.
@@ -366,14 +368,7 @@ func TestNoInitFrameAdvertisesAnUnlistedCommand(t *testing.T) {
 			continue
 		}
 		for i, line := range strings.Split(string(body), "\n") {
-			var frame struct {
-				Subtype string   `json:"subtype"`
-				Slash   []string `json:"slash_commands"`
-			}
-			if json.Unmarshal([]byte(line), &frame) != nil || frame.Subtype != "init" {
-				continue
-			}
-			for _, c := range frame.Slash {
+			for _, c := range advertisedNames(line) {
 				if !commandShaped.MatchString(c) {
 					continue // an elision or annotation in a pasted frame, not a command
 				}
@@ -392,6 +387,75 @@ func TestNoInitFrameAdvertisesAnUnlistedCommand(t *testing.T) {
 	// slash_commands makes every assertion above vacuous.
 	if checked == 0 {
 		t.Fatal("no slash_commands entry was checked: the corpus lost its init frames or the walk missed them")
+	}
+}
+
+// advertisedNames is the command names one corpus line lists: an init frame's
+// slash_commands, or the name of each entry in an initialize reply's commands.
+func advertisedNames(line string) []string {
+	var init struct {
+		Subtype string   `json:"subtype"`
+		Slash   []string `json:"slash_commands"`
+	}
+	if json.Unmarshal([]byte(line), &init) == nil && init.Subtype == "init" {
+		return init.Slash
+	}
+	var names []string
+	for _, entry := range replyCommands(line) {
+		var name string
+		if json.Unmarshal(entry["name"], &name) == nil {
+			names = append(names, name)
+		}
+	}
+	return names
+}
+
+// replyCommands is the entries of an initialize reply's `commands` on one
+// corpus line, and nil for any other line.
+func replyCommands(line string) []map[string]json.RawMessage {
+	var frame struct {
+		Type     string `json:"type"`
+		Response struct {
+			Response struct {
+				Commands []map[string]json.RawMessage `json:"commands"`
+			} `json:"response"`
+		} `json:"response"`
+	}
+	if json.Unmarshal([]byte(line), &frame) != nil || frame.Type != "control_response" {
+		return nil
+	}
+	return frame.Response.Response.Commands
+}
+
+// A reply's commands entry carries a description, a hint and aliases beside its
+// name, and an operator's own skill writes those itself. Only the name is
+// decoded, so only the name is kept; scripts/scrub-fixtures.py's scrub_reply
+// strips the rest.
+func TestAReplyCommandCarriesNothingButItsName(t *testing.T) {
+	var checked int
+	for _, path := range corpusFiles(t) {
+		body, err := os.ReadFile(path)
+		if err != nil {
+			t.Fatalf("reading %s: %v", path, err)
+		}
+		if !utf8.Valid(body) {
+			continue
+		}
+		for i, line := range strings.Split(string(body), "\n") {
+			for _, entry := range replyCommands(line) {
+				checked++
+				for key := range entry {
+					if key != "name" {
+						rel, _ := filepath.Rel(repoRoot, path)
+						t.Errorf("%s:%d is an initialize reply whose command still carries %q. "+
+							"Run scripts/scrub-fixtures.py", rel, i+1, key)
+					}
+				}
+			}
+		}
+	}
+	if checked == 0 {
+		t.Fatal("no reply command was checked: the corpus lost its initialize reply or the walk missed it")
 	}
 }
 

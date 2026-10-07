@@ -699,7 +699,7 @@ type Event struct {
 
 	// Session is what the session itself is running as, when a frame says so.
 	// Nil on the conversation frames, which is nearly all of them - only
-	// system/init and result carry any of it.
+	// system/init, result and the initialize receipt (its commands) carry any of it.
 	Session *SessionFacts `json:"session,omitempty"`
 }
 

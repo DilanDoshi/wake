@@ -475,8 +475,9 @@ type SessionStatus struct {
 	// a client that attached late nothing, since no event is replayed. The report
 	// is the only route by which such a client learns it, so a reattach used to
 	// leave the menu empty for every agent. The daemon's own memory of the last
-	// init it decoded; the word is Wake's ("commands"), never claude's wire
-	// `slash_commands`, which only the airlock may name.
+	// init it decoded, or of the handshake's reply before the first; the word is
+	// Wake's ("commands"), never claude's wire `slash_commands`, which only the
+	// airlock may name.
 	Commands []string `json:"commands,omitempty"`
 
 	// Agents is the subagent types this session can run, off its last init - what

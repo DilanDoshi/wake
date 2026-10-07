@@ -157,6 +157,25 @@ func TestTaskUpdatedEndsATaskWithoutNamingItsDispatch(t *testing.T) {
 	}
 }
 
+// task_updated also patches is_backgrounded - a foreground Bash moved to the
+// background so a message can be read (testdata/stream/midturn-now-human.jsonl)
+// - and names no status. A frame that names no outcome is no ending: read as one,
+// it dropped a shell that was still running from every list.
+func TestATaskUpdatedThatNamesNoOutcomeIsNotAnEnding(t *testing.T) {
+	line := `{"type":"system","subtype":"task_updated","task_id":"bivo34qy0","patch":{"is_backgrounded":true}}`
+
+	ev := onlyEvent(t, line, 0)
+	if ev.Task == nil {
+		t.Fatal("Task is nil")
+	}
+	if ev.Task.Phase == TaskEnded || ev.Task.Status != TaskRunning {
+		t.Errorf("Phase = %q, Status = %q: a patch with no status reads as the task's ending", ev.Task.Phase, ev.Task.Status)
+	}
+	if ev.Task.ID != "bivo34qy0" {
+		t.Errorf("ID = %q, want the task_id", ev.Task.ID)
+	}
+}
+
 // The other ending, and the one the async path gets: it names the dispatch and
 // carries a final usage. Both are recorded ×10 and either may arrive first.
 func TestTaskNotificationEndsATaskAndNamesIt(t *testing.T) {

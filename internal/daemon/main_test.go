@@ -302,6 +302,10 @@ func runFakeClaude() int {
 		return fakeMCP(sid)
 	case "connectors":
 		return fakeConnectors(sid)
+	case "handshake":
+		return fakeHandshake(sid, false) // see commands_test.go
+	case "handshakerefused":
+		return fakeHandshake(sid, true)
 	case "probe":
 		return fakeModelProbe(sid)
 	case "renamesync":

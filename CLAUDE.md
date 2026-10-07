@@ -77,6 +77,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   that server. **Every agent opens with Claude's `initialize` handshake**, which is what makes a
   headless session load the operator's claude.ai connectors; the daemon then reconnects each one
   reading needs-auth, so the signed-in ones work from the start (`daemon/mcpask.go`'s `handshake`).
+  The reply also names the agent's slash commands, which feed the `/` menu before its first turn.
   A connector not signed in points at claude.ai, and the banner's count leaves connectors out.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
@@ -254,8 +255,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`roomWorkingLine`, `roomwords.go`).
 - **The DM's done line** is captured at the working→idle edge (`Fleet.WithStatus`), only for turns
   this client watched start; forgotten on park/end/gap, on new agent content (`notDone`), and hidden
-  while a subagent runs (`subRunning`). `DM.hasBeat` is the one row predicate. The roster's `✔`
-  and the strip's `N done` read the same `turnDone` — an annotation over idle, never an `rpc` state.
+  while a subagent, workflow or background shell runs (`subRunning`; a shell is a sidebar row the
+  cursor skips). `DM.hasBeat` is the one row predicate. The roster's `✔` and the strip's `N done`
+  read the same `turnDone` — an annotation over idle, never an `rpc` state.
 - **Every notice times out**: `max(10s, drawn cells × 100ms)`, one tick per `notice.Seq`, armed in
   `App.Update`. An API failure stays pinned under them until a healthy turn or a resume
   (`noticelinger.go`, `apierror.go`'s `pinnedNotice`).

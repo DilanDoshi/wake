@@ -4,7 +4,7 @@
 Wake spawns whatever `claude` is on PATH and reads stream-json off its stdout.
 This speaks that wire well enough to drive a real Wake: init, assistant text,
 tool calls, permission asks, subagent dispatches, dynamic workflows,
-interrupts and per-turn results. It deliberately does **not** emit a
+background shells, interrupts and per-turn results. It deliberately does **not** emit a
 `TodoWrite` checklist: that tool is retired upstream and no fixture calls it,
 so emitting one would put a shape on camera that current Claude Code does not
 produce.
@@ -754,6 +754,48 @@ def stop_task(rid, task):
     run.stop.set()
 
 
+# --- background shells --------------------------------------------------------
+#
+# A Bash call with run_in_background returns at once and the turn ends with the
+# shell still running: the task_started, then the turn's result, then the
+# endings long after (testdata/stream/interrupt-cancel-queued-empty.jsonl). The
+# shell reports nothing in between and forwards no frames of its own. Here the
+# ending is task_updated, an emptied background_tasks_changed and
+# task_notification, with no follow-up turn - a scripted simplification: claude
+# would open a turn on the notification.
+
+def start_shell(spec):
+    """The launch: a Bash call, the set of background tasks, task_started and
+    the tool's receipt - then the shell runs on while the turn ends."""
+    tool = "toolu_%08x" % random.getrandbits(32)
+    task = "b%08x" % random.getrandbits(32)
+    label = spec["label"]
+    say_tool("Bash", {"command": spec["command"], "description": label,
+                      "run_in_background": True}, tool_id=tool)
+    emit({"type": "system", "subtype": "background_tasks_changed",
+          "tasks": [{"task_id": task, "task_type": "local_bash", "description": label}],
+          "uuid": uid(), "session_id": SID})
+    emit({"type": "system", "subtype": "task_started", "task_id": task,
+          "tool_use_id": tool, "description": label, "is_backgrounded": True,
+          "task_type": "local_bash", "uuid": uid(), "session_id": SID})
+    say_tool_result(tool, "Command running in background with ID: %s. Output is being written to: "
+                          "/tmp/claude/tasks/%s.output" % (task, task))
+    threading.Thread(target=end_shell, args=(spec, task, tool), daemon=True).start()
+
+
+def end_shell(spec, task, tool):
+    time.sleep(spec.get("runs", 20))
+    emit({"type": "system", "subtype": "task_updated", "task_id": task,
+          "patch": {"status": "completed", "end_time": now_ms()},
+          "uuid": uid(), "session_id": SID})
+    emit({"type": "system", "subtype": "background_tasks_changed", "tasks": [],
+          "uuid": uid(), "session_id": SID})
+    emit({"type": "system", "subtype": "task_notification", "task_id": task,
+          "tool_use_id": tool, "status": "completed",
+          "output_file": "/tmp/claude/tasks/%s.output" % task,
+          "summary": spec["label"], "uuid": uid(), "session_id": SID})
+
+
 # --- reading what Wake writes ------------------------------------------------
 #
 # Decoded through the nesting rather than grepped: a control_request keeps its
@@ -884,6 +926,8 @@ def run_steps(steps):
             say_dispatch(step["dispatch"])
         elif "workflow" in step:
             start_workflow(SCENARIO[0], step)
+        elif "shell" in step:
+            start_shell(step["shell"])
         elif "fanout" in step:
             if not fanout(step["fanout"]):
                 return False

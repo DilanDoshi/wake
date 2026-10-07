@@ -464,6 +464,30 @@ type wireControlBody struct {
 	// An mcp_status receipt's payload; a pointer so presence, even of an empty
 	// list, is the discriminator. See mcpStatusReply.
 	MCPServers *[]wireMCPStatus `json:"mcpServers"`
+
+	// An initialize receipt's commands, the session's slash commands before any
+	// turn has sent an init. Raw so a shape this build cannot read costs the
+	// facts and never the receipt: the handshake's reply must always reach the
+	// daemon. See commandNames.
+	Commands json.RawMessage `json:"commands"`
+}
+
+// commandNames is a receipt's `commands` reduced to each entry's name, the only
+// field read, and nil for anything that is not a list of named entries.
+func commandNames(raw json.RawMessage) []string {
+	var rows []struct {
+		Name string `json:"name"`
+	}
+	if json.Unmarshal(raw, &rows) != nil {
+		return nil
+	}
+	var names []string
+	for _, r := range rows {
+		if r.Name != "" {
+			names = append(names, r.Name)
+		}
+	}
+	return names
 }
 
 // wireCancelled is an interrupt receipt's uuid list, or the bool a
@@ -532,6 +556,11 @@ func controlResponseEvent(f wireFrame, raw json.RawMessage) Event {
 		Cancelled:   f.Response.Response.Cancelled.uuids,
 		Error:       f.Response.Error,
 		Recalled:    f.Response.Response.Cancelled.recalled,
+	}
+	// The handshake's reply names the session's commands ahead of its first
+	// init; only that, so no other fact is claimed by it.
+	if names := commandNames(f.Response.Response.Commands); len(names) > 0 {
+		ev.Session = &SessionFacts{SlashCommands: names}
 	}
 	return ev
 }

@@ -31,6 +31,10 @@ func (s *server) fanOut(a *agent) {
 			continue
 		}
 		if a.handshakeAnswered(ev) {
+			// It may have taught the agent its commands, which a client learns only
+			// from a report - no event is replayed - and a state change is not
+			// coming for an agent that has not been asked anything.
+			s.pushStatus()
 			continue
 		}
 		a.observe(ev)

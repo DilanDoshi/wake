@@ -50,6 +50,11 @@ corpus. `TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising` needs
 `slash_commands`, the 133 recorded words that make its overlap check exact - the
 guard that caught `/rename` before Wake claimed it.
 
+An initialize reply's `commands` is kept too, reduced to each entry's name
+(`scrub_reply`): `core.SessionFacts.SlashCommands` decodes it, so a fresh agent's
+completion menu knows its skills before its first turn. Its `agents` is still
+deleted until something decodes it.
+
 **"Read by nothing" has to mean read by no *test* either**, not merely absent
 from `wire.go`. This list was wrong twice on exactly that distinction.
 
@@ -82,11 +87,12 @@ DEAD_KEYS = [
     "skills",
 ]
 
-# The same dump in an initialize reply's payload: the machine's commands and
-# agents, the operator's own among them. Keep in step with replyEnvironmentKeys.
+# The same dump in an initialize reply's payload: the machine's agents, the
+# operator's own among them. Keep in step with replyEnvironmentKeys. Its
+# `commands` is decoded (core.SessionFacts.SlashCommands), so it is kept, reduced
+# to each entry's name - see scrub_reply.
 REPLY_DEAD_KEYS = [
     "agents",
-    "commands",
 ]
 
 # A home directory with its owner attached. Two patterns rather than one, and
@@ -147,6 +153,36 @@ def rewrite_paths(text):
     return VARFOLDERS.sub(VARFOLDERS_PLACEHOLDER, text)
 
 
+def reply_body(frame):
+    """Return a control reply's payload dict, or None for any other frame."""
+    if not isinstance(frame, dict) or frame.get("type") != "control_response":
+        return None
+    outer = frame.get("response")
+    body = outer.get("response") if isinstance(outer, dict) else None
+    return body if isinstance(body, dict) else None
+
+
+def scrub_reply(body, slash_mapping):
+    """Scrub an initialize reply's payload in place; report whether it held any.
+
+    `commands` is kept because core decodes it, but only each entry's name: the
+    description, hint and aliases are read by nothing and an operator's own
+    skills write theirs. Names go through the same placeholders an init's
+    slash_commands get.
+    """
+    held = [k for k in REPLY_DEAD_KEYS if k in body]
+    for key in held:
+        del body[key]
+    cmds = body.get("commands")
+    if isinstance(cmds, list):
+        body["commands"] = [
+            {"name": slash_mapping.get(c["name"], c["name"])}
+            for c in cmds
+            if isinstance(c, dict) and isinstance(c.get("name"), str)
+        ]
+    return bool(held) or isinstance(cmds, list)
+
+
 def scrub_text(text, names, slash_mapping):
     """Delete environment keys from init frames, then rewrite what identifies."""
     out = []
@@ -165,12 +201,8 @@ def scrub_text(text, names, slash_mapping):
             # separators=... keeps the compact spelling the corpus is written
             # in, so the diff is the removal rather than a reformat of 80 files.
             line = json.dumps(frame, separators=(",", ":"), ensure_ascii=False)
-        elif isinstance(frame, dict) and frame.get("type") == "control_response":
-            body = (frame.get("response") or {}).get("response")
-            if isinstance(body, dict) and any(k in body for k in REPLY_DEAD_KEYS):
-                for key in REPLY_DEAD_KEYS:
-                    body.pop(key, None)
-                line = json.dumps(frame, separators=(",", ":"), ensure_ascii=False)
+        elif (body := reply_body(frame)) is not None and scrub_reply(body, slash_mapping):
+            line = json.dumps(frame, separators=(",", ":"), ensure_ascii=False)
         out.append(line)
 
     text = rewrite_paths("\n".join(out))
@@ -213,16 +245,24 @@ def load_allowlist(root):
 
 
 def slash_names(text):
-    """Yield every command-shaped slash_commands entry on an init frame."""
+    """Yield every command-shaped name a frame advertises: an init's
+    slash_commands entries and an initialize reply's commands."""
     for line in text.split("\n"):
         try:
             frame = json.loads(line)
         except (json.JSONDecodeError, TypeError):
             continue
         if isinstance(frame, dict) and frame.get("subtype") == "init":
-            for c in frame.get("slash_commands") or []:
-                if isinstance(c, str) and COMMAND.match(c):
-                    yield c
+            listed = frame.get("slash_commands") or []
+        elif (body := reply_body(frame)) is not None:
+            cmds = body.get("commands")
+            listed = [c.get("name") for c in cmds if isinstance(c, dict)] \
+                if isinstance(cmds, list) else []
+        else:
+            continue
+        for c in listed:
+            if isinstance(c, str) and COMMAND.match(c):
+                yield c
 
 
 def build_slash_mapping(personal, taken):

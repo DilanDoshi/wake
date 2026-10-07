@@ -789,6 +789,91 @@ the level Wake asked for and an empty confirmation could not show through it.
 decoder drops whole, with or without the clause (`testdata/transcript/model-reply-*.jsonl`), so it never
 restores as speech.
 
+## BUG-45 — an idle agent with a background shell running read ✔ done, and nothing said a shell was running
+
+**Reported 2026-10-06**, with a screenshot: `merger` had started `make ci` with Bash `run_in_background`, ended
+its turn and gone idle. The roster drew `✔ merger`, the DM `✻ … · done 8:34 PM`, the strip `N done` - and no row,
+anywhere, said a shell was running.
+
+**Root cause: `Fleet.RunningTasks` dropped every shell.** It kept `Running && (Openable() || Workflow)`, and a shell
+is neither - it forwards no frames, so nothing can be opened. Every "is anything still running" gate reads
+`len(RunningTasks) > 0` into `turnDone`'s `subRunning` (`Fleet.done`, `dmFor`, the roster row, the strip), so a shell
+never counted and an idle agent with a witnessed turn was done. The wire side was fine: `task_started`
+`local_bash` decodes to `core.TaskShell` and the daemon retained it. The shape is
+`testdata/stream/interrupt-cancel-queued-empty.jsonl`: the shell starts at line 38, the turn's `result` is line 45,
+and the shell's endings come at 63-64. A short foreground `Bash` emits no task frame; a long one does
+(`midturn-absent.jsonl`, `is_backgrounded:false`), so a `⎿ shell` row also shows while a long foreground command
+runs - the agent is working then, and the ✔ is unaffected.
+
+**A second way a shell stopped being running, found in review.** `task_updated` was always read as an ending, but it
+also patches `is_backgrounded` - ⌃] (send-now) moving a foreground `Bash` to the background
+(`midturn-now-human.jsonl:36`, `midturn-recall-now.jsonl:40`) - and names no status. Read as an ending it dropped the
+shell from the UI list and the daemon's replay set while it ran on, the same bug by another road. A frame that names
+no outcome is no ending (`core.taskUpdate`); `TestAShellMovedToTheBackgroundStaysRunningThroughTheRecordedTurn`
+replays both recordings through the decoder and the fold.
+
+**Fix.** `RunningTasks` lists running shells, and `Task.Selectable()` (agent or workflow - the old filter) is what the
+cursor and a click ask: `walkable` skips a shell, and `Roster.At` and `boardHit` return its agent with no dispatch, so
+nothing opens an empty pane. Drawn by `shellRow` (`⎿ shell <description>`, the roster and board list); a tile counts
+shells apart from subagents. One choke point, so ✔, the done line and `N done` agree.
+
+**A shell outliving its process in the fleet is the common case here, not BUG-35's rare residual.** A graceful
+park closes stdin, and claude then kills the shells it tracks and reports them (`task_updated` killed,
+`task_notification` stopped end `interrupt-cancel-queued-empty.jsonl`, `midturn-now-human.jsonl` and
+`midturn-recall-now.jsonl`, whose recorders only closed stdin) - but a crash, a kill, or a frame a slow client
+dropped delivers no ending. So the parked or ended report is the second observable, as it is for `doneAt`:
+`Fleet.WithStatus` forgets `f.tasks` on it, and the daemon's `finish` clears `a.runningTasks` so a late client is
+not replayed a shell that is gone. Without the first, a woken agent kept a phantom shell and never read ✔ again.
+A park does not sweep the process group (a parked session's untracked children are its woken world), so a shell
+claude failed to kill outlives the park; Wake draws nothing for a parked agent either way.
+
+**What it changes beyond the report.** A long-lived shell (a dev server, a `Monitor`) holds the ✔ and the done line
+back for as long as it runs - the point of the fix. `subRunning` also gates the loop-wait line, so an idle agent with
+a live `/loop` and a running shell draws no beat line in its pane (the sidebar carries both rows).
+
+**Carried, not fixed.** A shell whose terminal frame is lost in a gap holds the ✔ back until the next turn or a park
+(BUG-35's caveat). `⌃C` on an idle agent kills its running shell with the process; there is no refusal and no notice,
+and a one-line "parking @x ends its running shell" is the owner's call. `forkSource` stays agents-only: a shell writes
+nothing into the transcript.
+
+**Not reproduced: "the check did not change while it answered a room message".** The owner saw `✔` stay and the done
+time not move after a 9-second turn. The merger was not stuck (its transcript shows the turn and its `make ci` was
+still running), and a probe through the real daemon `agent` on this shape reports idle → `working` at the send →
+idle at `result`, the shell staying tracked. The one code path that explains both is a lost `working` push
+(`fanOut` pushes only on a transition and `doneAt` is captured only at a witnessed working→idle edge; a slow client's
+`clientQueue` or the inbox ring can drop a frame), or a UI process older than its daemon. No code change until it
+reproduces: ask for the DM's done time after such a turn (8:34 = the edge was missed), any gap notice, and the
+daemon log around the turn.
+
+---
+
+## BUG-46 — a just-spawned agent's `/` menu offered none of its skills
+
+**Reported 2026-10-06** by the owner: typing a first brief to a fresh agent in the room and ending it
+with `/complete-linear-ticket` drew no menu, and `⇥` did nothing. The same agent offered its skills
+once it had taken a turn.
+
+**Root cause: the menu reads `Agent.advertised`, and the only thing that fed it was `init`.** Claude
+sends `init` per turn, so an agent that has not taken one advertises nothing, and the menu has
+nothing to offer (`decisions.md`, 2026-08-28, which had left this half alone).
+
+**Fix (`control.go`, `daemon/mcpask.go`, `daemon/fanout.go`).** The `initialize` handshake the daemon
+already sends at spawn is answered with the session's commands, recorded 2026-10-06 on 2.1.289
+(`testdata/stream/initialize.jsonl`). The airlock reads each entry's name onto the receipt's
+`SessionFacts.SlashCommands`; `handshakeAnswered` keeps them for the report when the agent has none
+yet, and `fanOut` pushes a status because nothing else changes for a quiet agent. An init's list is
+never replaced by the handshake's. The reply still reaches no window; a refused one folds nothing.
+Regression tests, red without the fix: `core`'s `TestTheHandshakesReplyCarriesTheSessionsCommands`,
+`daemon`'s `TestAFreshAgentReportsTheCommandsItsHandshakeNamed`, and the pty
+`TestAFreshAgentsSkillsCompleteInTheRoomBeforeItsFirstTurn`. `ui`'s
+`TestAFreshAgentsReportedSkillsCompleteAtTheEndOfALongBrief` pins the report → menu → `⇥` path the
+owner's brief takes. A side effect, pinned by `TestAHandshakeNamingListAgentsListsTheSessionsBeforeAnyTurn`:
+the `@` menu's machine-session listing, gated on some agent's claude naming `list-agents`, now opens
+before any turn too.
+
+**Not changed:** the same reply's `agents` would fill the `@agent-<type>` menu of a fresh agent; the
+scrubber still deletes it until something decodes it.
+
 ---
 
 ## Residuals carried from bugs that are fixed and merged

@@ -91,8 +91,8 @@ func (b *peerBook) answerLocked(peers []core.Peer) {
 	b.waiting = nil
 }
 
-// advertised reports whether some agent's last init named cmd, so a claude
-// without it is never run for one.
+// advertised reports whether some agent's claude named cmd - on its handshake's
+// reply or an init - so a claude without it is never run for one.
 func (s *server) advertised(cmd string) bool {
 	s.mu.Lock()
 	agents := make([]*agent, 0, len(s.agents))
