@@ -123,6 +123,8 @@ const (
 	resolvedSep       = " · "
 	resolvedAnswered  = "question answered"
 	resolvedCancelled = "question cancelled"
+	// takenBackLead heads the record of a broadcast taken back from one agent.
+	takenBackLead = "↩ took back a message to "
 )
 
 // renderRoomBlock is the one seam through which the Room renders an event. A
@@ -442,6 +444,8 @@ func resolvedLine(ev core.Event, a Agent, width int) string {
 		return head + "\n" + body
 	case core.NoticeQuestionCancelled:
 		return mutedLine(resolvedLead+speaker(a)+resolvedSep+resolvedCancelled, width)
+	case noticeTakenBack:
+		return mutedLine(takenBackLead+a.Name, width)
 	default:
 		return ""
 	}

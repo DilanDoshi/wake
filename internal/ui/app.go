@@ -104,7 +104,12 @@ type Dialer func(sessionID string) (net.Conn, Stream, rpc.SessionStatus, *rpc.St
 type eventMsg struct{ Event core.Event }
 
 // errMsg carries a transport or session failure into the view.
-type errMsg struct{ Err error }
+// Unsent is a failed write's frames from the one that failed on; recall.go
+// releases any take-back among them, since nothing will answer it.
+type errMsg struct {
+	Err    error
+	Unsent []rpc.Frame
+}
 
 // frameMsg is one frame off the daemon, undecided.
 //
@@ -335,11 +340,13 @@ type App struct {
 	parking  map[string]struct{}
 	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
 
-	// queued is type-ahead waiting for each agent to be free, and inflight is the
-	// uuid of the message last sent it that has not completed - the signal shouldQueue
-	// and flushQueued turn on. Per window, copy-on-write like quitting. See queue.go.
+	// queued is what claude has queued for each agent and not yet taken up (and a
+	// held /rename), inflight the Wake messages it has started and not finished,
+	// and recalls a take-back or send-now waiting on claude. Per window,
+	// copy-on-write like quitting. See queue.go and recall.go.
 	queued   map[string][]queuedMsg
-	inflight map[string]string
+	inflight map[string]map[string]bool
+	recalls  map[string]recall
 
 	// authFailed are sessions whose last turn failed on the API - an expired
 	// login, a rejected key, an overload (core.KindAPIError). observe marks each
@@ -600,7 +607,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// This is a write that failed, or a reattach that could not connect.
 		a.reattaching = false
 		notice.Report("%v", m.Err)
-		return a, nil
+		return a.unrecalled(m.Unsent).sendRecalled()
 
 	case tea.MouseMsg:
 		// A wheel or a click is the operator plainly doing something else, and
@@ -686,7 +693,8 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		a = a.apply(f)
 	}
 	if m.done {
-		// The held message is dequeued but not sent: the connection is gone.
+		// A held /rename is dequeued and drawn but not sent, and a gone agent's
+		// queue dropped: the connection is gone, so the write is discarded.
 		a, _ = a.flushQueued()
 		return a.hungUp(m.err)
 	}

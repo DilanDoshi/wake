@@ -57,7 +57,7 @@ func TestLiveWire(t *testing.T) {
 		t.Fatalf("start claude: %v", err)
 	}
 	started = true
-	if err := s.Send(liveWirePrompt, nil, ""); err != nil {
+	if err := s.Send(liveWirePrompt, nil, "", false); err != nil {
 		t.Fatalf("send: %v", err)
 	}
 	stream, turns := liveEvents(t, s)
