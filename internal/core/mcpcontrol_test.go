@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"os"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -302,6 +303,60 @@ func TestTheHandshakesReplyIsAnOrdinaryReceipt(t *testing.T) {
 	ev := onlyEvent0(t, fixtureLineContaining(t, "initialize.jsonl", `"type":"control_response"`))
 	if ev.Kind != KindControlReceipt || ev.MCP != nil || ev.RequestID == "" {
 		t.Errorf("kind %q MCP %+v id %q", ev.Kind, ev.MCP, ev.RequestID)
+	}
+}
+
+// The same reply names the session's slash commands before any turn has run,
+// which is what lets a fresh agent's completion menu offer its skills. The
+// expected list is read off the fixture independently, never counted by hand.
+func TestTheHandshakesReplyCarriesTheSessionsCommands(t *testing.T) {
+	line := fixtureLineContaining(t, "initialize.jsonl", `"type":"control_response"`)
+	var recorded struct {
+		Response struct {
+			Response struct {
+				Commands []struct {
+					Name string `json:"name"`
+				} `json:"commands"`
+			} `json:"response"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal([]byte(line), &recorded); err != nil {
+		t.Fatal(err)
+	}
+	var want []string
+	for _, c := range recorded.Response.Response.Commands {
+		want = append(want, c.Name)
+	}
+	if len(want) == 0 {
+		t.Fatal("the recorded reply names no commands, so this test would assert nothing")
+	}
+
+	ev := onlyEvent0(t, line)
+	if ev.Kind != KindControlReceipt || ev.Control == nil || ev.RequestID == "" {
+		t.Errorf("the commands cost the receipt its shape: kind %q control %+v id %q", ev.Kind, ev.Control, ev.RequestID)
+	}
+	if ev.Session == nil || !slices.Equal(ev.Session.SlashCommands, want) {
+		t.Fatalf("the reply's commands decoded to %+v, want SlashCommands %v", ev.Session, want)
+	}
+	if ev.Session.Model != "" || ev.Session.Dir != "" || ev.Session.MCPServers != nil {
+		t.Errorf("the reply claimed more than its commands: %+v", ev.Session)
+	}
+}
+
+// A refusal, a receipt that names no commands, one naming an empty list and one
+// in a shape this build cannot read say nothing about them, so none carries facts - a consumer must not read an empty
+// list as "this session has no commands".
+func TestAReceiptWithoutCommandsCarriesNoFacts(t *testing.T) {
+	for name, line := range map[string]string{
+		"refused": `{"type":"control_response","response":{"subtype":"error","request_id":"h1","error":"not now"}}`,
+		"mode":    `{"type":"control_response","response":{"subtype":"success","request_id":"h2","response":{"mode":"plan"}}}`,
+		"empty":   `{"type":"control_response","response":{"subtype":"success","request_id":"h3","response":{"commands":[]}}}`,
+		// A shape this build cannot read costs the facts, never the receipt.
+		"unreadable": `{"type":"control_response","response":{"subtype":"success","request_id":"h4","response":{"commands":["a","b"]}}}`,
+	} {
+		if ev := onlyEvent0(t, line); ev.Kind != KindControlReceipt || ev.Session != nil {
+			t.Errorf("%s: kind %q session %+v, want a receipt with no facts", name, ev.Kind, ev.Session)
+		}
 	}
 }
 

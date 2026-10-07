@@ -240,6 +240,8 @@ func runFakeAgent() int {
 		return fakeAgentMCP(sid)
 	case scriptAtMenu:
 		return fakeAgentAtMenu(sid)
+	case scriptHandshakes:
+		return fakeAgentHandshakes(sid)
 	case scriptSteers:
 		return fakeAgentSteers(sid)
 	}

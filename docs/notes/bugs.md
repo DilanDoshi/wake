@@ -791,6 +791,32 @@ restores as speech.
 
 ---
 
+## BUG-46 — a just-spawned agent's `/` menu offered none of its skills
+
+**Reported 2026-10-06** by the owner: typing a first brief to a fresh agent in the room and ending it
+with `/complete-linear-ticket` drew no menu, and `⇥` did nothing. The same agent offered its skills
+once it had taken a turn.
+
+**Root cause: the menu reads `Agent.advertised`, and the only thing that fed it was `init`.** Claude
+sends `init` per turn, so an agent that has not taken one advertises nothing, and the menu has
+nothing to offer (`decisions.md`, 2026-08-28, which had left this half alone).
+
+**Fix (`control.go`, `daemon/mcpask.go`, `daemon/fanout.go`).** The `initialize` handshake the daemon
+already sends at spawn is answered with the session's commands, recorded 2026-10-06 on 2.1.289
+(`testdata/stream/initialize.jsonl`). The airlock reads each entry's name onto the receipt's
+`SessionFacts.SlashCommands`; `handshakeAnswered` keeps them for the report when the agent has none
+yet, and `fanOut` pushes a status because nothing else changes for a quiet agent. An init's list is
+never replaced by the handshake's. The reply still reaches no window; a refused one folds nothing.
+Regression tests: `core`'s `TestTheHandshakesReplyCarriesTheSessionsCommands`, `daemon`'s
+`TestAFreshAgentReportsTheCommandsItsHandshakeNamed`, `ui`'s
+`TestAFreshAgentsReportedSkillsCompleteAtTheEndOfALongBrief`, and the pty
+`TestAFreshAgentsSkillsCompleteInTheRoomBeforeItsFirstTurn`.
+
+**Not changed:** the same reply's `agents` would fill the `@agent-<type>` menu of a fresh agent; the
+scrubber still deletes it until something decodes it.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

@@ -77,6 +77,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   that server. **Every agent opens with Claude's `initialize` handshake**, which is what makes a
   headless session load the operator's claude.ai connectors; the daemon then reconnects each one
   reading needs-auth, so the signed-in ones work from the start (`daemon/mcpask.go`'s `handshake`).
+  The reply also names the agent's slash commands, which feed the `/` menu before its first turn.
   A connector not signed in points at claude.ai, and the banner's count leaves connectors out.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
