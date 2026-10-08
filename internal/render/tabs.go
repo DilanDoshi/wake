@@ -1,25 +1,12 @@
 package render
 
-// Tabs. ansi.StringWidth counts a tab as zero cells, and a terminal moves to
-// the next eight-column stop without erasing the cells it skips - so a row
-// holding one is measured short and drawn long, shows what was there before
-// through the gap, overruns its pane and, past the terminal's width, wraps and
-// shifts every row below it. The cure is to leave none in anything this package
-// returns, which means expanding them where they are still measurable.
-//
-// Two expansion rules coexist, and each surface is self-consistent, so what it
-// draws is what a copy of it reads back:
-//
-//   - ExpandTabs, column-aware to a four-column stop: markdown (at its entry),
-//     diffs and tool results here, and the streamed preview (internal/ui's
-//     partial.go) - the surfaces whose rows this package or the preview measures.
-//   - lipgloss's own fixed four spaces per tab, for the surfaces drawn by
-//     Style.Render alone - the operator's own turn and the cards - which
-//     internal/ui's copytext.go reads back as ownTabWidth.
-//
-// Not at the airlock: core.Contained leaves a tab alone because an answer is
-// keyed on the ask's raw text (EncodeAnswer), and a string stored expanded
-// would no longer match the one the agent sent.
+// Tabs. ansi counts one as no cell; a terminal draws up to eight and erases none of
+// them, so a row that holds one shows the frame before, overruns its pane and, past
+// the terminal's width, wraps every row below. Anything this package measures
+// expands them first, column-aware: markdown, diffs, tool results, and the streamed
+// preview. Surfaces drawn by lipgloss's Render alone (an own turn, cards, local
+// replies, peer messages, workflow sections) get its fixed four spaces before it
+// wraps. Not at the airlock: an answer is keyed on the ask's raw text.
 
 import (
 	"strings"

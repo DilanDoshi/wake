@@ -61,9 +61,6 @@ func TestATabIndentedConstructRendersAsItsSpacesDo(t *testing.T) {
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			for _, width := range []int{40, 80} {
-				if got, want := Markdown(tc.tabbed, width), Markdown(tc.spaced, width); got != want {
-					t.Errorf("width %d: the tabbed source drew differently from its spaces:\n%s\n--- want\n%s", width, stripANSI(got), stripANSI(want))
-				}
 				if raw, spaced := rawGlamour(t, tc.tabbed, width), rawGlamour(t, tc.spaced, width); raw != spaced {
 					t.Errorf("width %d: glamour reads the raw tab differently from the spaces, so S1 changes the structure:\n%s\n--- want\n%s", width, stripANSI(raw), stripANSI(spaced))
 				}

@@ -247,7 +247,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A conversation keeps its newest `dmRetentionEvents` (3,000)** — the re-wrap budget — and reclaims
   the oldest a chunk at a time, only before a non-tool event, under one fixed line (`dmretention.go`).
 - **No tab reaches the terminal**: `ansi` measures one as no cell and a terminal draws up to eight
-  without erasing what it skips, so markdown, the streamed preview, thinking, diffs and tool results
+  without erasing what it skips, so markdown, the streamed preview, diffs and tool results
   expand them column-aware where they are measured (`render.ExpandTabs`); not at the airlock.
 - **A preview is never a record**: plain-text tail, bounded by the pane, never through glamour,
   accumulated only for panes on screen (`App.wants`), dropped on leave. No preview in the room or for

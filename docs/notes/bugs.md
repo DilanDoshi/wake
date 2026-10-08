@@ -942,13 +942,13 @@ to the next eight-column stop without erasing the cells it skips, so the frame b
 row overruns its pane, and a wrap past the terminal's width shifts every row below. The streamed preview
 joined its raw text into the frame. Markdown kept tabs in its stored rows (`stylingOnly` passed them) and
 `transcript.view`'s lipgloss render turned each into four spaces only after it was measured, which cut a
-deep code line off and moved selection columns; thinking blocks wrapped a tab as no cell the same way.
-Diffs and tool results already expanded theirs.
+deep code line off and moved selection columns. Diffs and tool results already expanded theirs; surfaces
+drawn by lipgloss alone (an own turn, cards, local replies, thinking) get its four spaces before it wraps.
 
 **Fix:** `render.ExpandTabs` (`tabs.go`, the old `expandTabs` moved and made cell-aware, the column reset
 at each newline) runs where text is measured: `Markdown`'s source, `partial.add`'s intake (from the column
-its line reached, kept on the partial because the tail's trim can cut the line's start), `thinkingBlock`,
-diffs and tool results. `stylingOnly` turns a tab an entity decoded into a space. Not at the airlock: an
+its line reached, kept on the partial because the tail's trim can cut the line's start), diffs and tool
+results. `stylingOnly` turns a tab an entity decoded into a space. Not at the airlock: an
 answer is keyed on the ask's raw text. Guards: `TestAStreamedGoAnswerLeavesAWholeFrameOnARealScreen`
 (the real binary, dividers and each code line once, red without the fix),
 `TestNoRecordedEventLeavesATabInAFrameOrATranscript` and `…OnTheBoard` (the whole stream corpus with every

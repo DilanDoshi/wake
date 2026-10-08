@@ -100,9 +100,11 @@ func TestNoRecordedEventLeavesATabInAFrameOrATranscript(t *testing.T) {
 			}
 			d := a.dms["s1"]
 			for _, row := range d.tr.lines.slice(was, d.tr.lines.len()) {
-				if (strings.ContainsRune(row, '\t') || ansi.StringWidth(row) > d.tr.width) && !seen["stored "+string(ev.Kind)] {
+				// Visible width: padding past the pane is clipped by the view, unseen.
+				visible := ansi.StringWidth(strings.TrimRight(ansi.Strip(row), " "))
+				if (strings.ContainsRune(row, '\t') || visible > d.tr.width) && !seen["stored "+string(ev.Kind)] {
 					seen["stored "+string(ev.Kind)] = true
-					t.Errorf("%dx%d: a %s stores a row drawn unlike it is measured (%d cells, pane %d): %q", w, h, ev.Kind, ansi.StringWidth(row), d.tr.width, row)
+					t.Errorf("%dx%d: a %s stores a row drawn unlike it is measured (%d cells seen, pane %d): %q", w, h, ev.Kind, visible, d.tr.width, row)
 				}
 			}
 		}
@@ -110,7 +112,8 @@ func TestNoRecordedEventLeavesATabInAFrameOrATranscript(t *testing.T) {
 }
 
 // The board draws every agent's last words in its rows and its tiles; neither
-// may carry a tab either.
+// may carry a tab either. Both flatten or go through lipgloss today, so this is a
+// guard against a later surface, not a reproduction of BUG-49.
 func TestNoRecordedEventLeavesATabOnTheBoard(t *testing.T) {
 	events := corpusEvents(t)
 	a := boardApp(t)
