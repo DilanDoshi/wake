@@ -931,6 +931,35 @@ invisible on a blank cell and the fix moves those pads too; a table never carrie
 
 ---
 
+## BUG-49 — a tab-indented answer left stale rows on the screen
+
+**Seen 2026-10-07** filming the streamed-preview PRs: after an agent streamed a long answer with a
+tab-indented Go fence, the terminal kept fragments of earlier frames (a `}` before `var h Harbor`),
+drew code lines and the composer twice, and lost a pane divider. It happened on `main` too.
+
+**Root cause: a tab reached the terminal.** `ansi.StringWidth` counts a tab as no cell; a terminal moves
+to the next eight-column stop without erasing the cells it skips, so the frame before shows through, the
+row overruns its pane, and a wrap past the terminal's width shifts every row below. The streamed preview
+joined its raw text into the frame. Markdown kept tabs in its stored rows (`stylingOnly` passed them) and
+`transcript.view`'s lipgloss render turned each into four spaces only after it was measured, which cut a
+deep code line off and moved selection columns. Diffs and tool results already expanded theirs; surfaces
+drawn by lipgloss alone (an own turn, cards, local replies, thinking) get its four spaces before it wraps.
+
+**Fix:** `render.ExpandTabs` (`tabs.go`, the old `expandTabs` moved and made cell-aware, the column reset
+at each newline) runs where text is measured: `Markdown`'s source (a fenced block's code from its own edge
+past a list item's or quote's prefix, as CommonMark places it - `expandSource`), `partial.add`'s intake (from the column
+its line reached, kept on the partial because the tail's trim can cut the line's start), diffs and tool
+results. `stylingOnly` turns a tab an entity decoded into a space. Not at the airlock: an
+answer is keyed on the ask's raw text. Guards: `TestAStreamedGoAnswerLeavesAWholeFrameOnARealScreen`
+(the real binary, dividers and each code line once, red without the fix),
+`TestNoRecordedEventLeavesATabInAFrameOrATranscript` and `…OnTheBoard` (the whole stream corpus with every
+space turned into a tab), `TestAMarkdownRowIsDrawnAtTheWidthItIsMeasured`, `TestATabInsideCodeRunsToItsStop`,
+`TestATabInANestedFenceIndentsFromTheCodesEdge`, `TestAStreamedPreviewDrawsNoTab`, `TestExpandTabs`. A copied
+code block now carries spaces where its source had tabs.
+
+**Not this entry:** the non-tab control characters (an escape in a resume row's directory or a peer's
+directory, an SGR an entity decodes) are BUG-50, its own PR; the class is closed when both merge.
+
 ## BUG-50 — text Wake did not write could still drive the terminal: a resumable's directory, and an SGR spelled as a character reference
 
 **Reproduced 2026-10-07 by failing tests** while auditing BUG-9's fence for the control characters

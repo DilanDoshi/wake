@@ -82,6 +82,7 @@ func Markdown(src string, width int) string {
 	if strings.TrimSpace(src) == "" {
 		return ""
 	}
+	src = expandSource(src) // measured as no cell, drawn as up to eight: see tabs.go
 	width = boundedWidth(width)
 
 	r, err := rendererFor(width)
@@ -399,7 +400,7 @@ func stylingOnly(s string) string {
 			continue
 		}
 		r, size := utf8.DecodeRuneInString(s[i:])
-		if r == '\n' || r == '\t' {
+		if r == '\n' { // a tab from the source is expanded already; one an entity decoded is a space
 			b.WriteRune(r)
 		} else if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) || r == '\u2028' || r == '\u2029' {
 			b.WriteByte(' ')
