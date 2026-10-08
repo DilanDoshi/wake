@@ -3835,3 +3835,39 @@ still grows only by a ruling.
 
 **Not done:** trimming comments to get under 800 (the guard says split by subject), and moving
 unrelated functions into an airlock file that happens to have headroom.
+
+## 2026-10-07 — the markdown output fence keeps only the SGR the style emits
+
+`stylingOnly` kept any complete `ESC [ … m`, on the ground that glamour emits only SGR. That held
+for glamour and not for what a reply can spell: glamour decodes `&#x1b;[8m` into a live run, and
+core's `Contained` cannot see a reference, which is printable (BUG-50). So the allowlist sits at the
+**output**:
+
+- **Derived, not listed.** `styleSGR` is exactly the parameters `claudeStyle` and its chroma themes
+  emit - reset, bold, italic, underline, crossed-out, the `59` tags, termenv's `38;2`, chroma's
+  `38;5` and `48;5` - held to a probe rendered in both palettes by
+  `TestTheOutputFenceKeepsExactlyWhatTheStyleEmits`, as an equality. A style that starts emitting a
+  new parameter fails there until the set follows it; 5-8 (blink, conceal, reverse) are asserted
+  absent.
+- **Arguments are arguments.** An extended colour's index or components are skipped, never read as
+  codes: `38;5;7` is colour 7, not reverse.
+- **A refused run is dropped whole.** Drawn as text (its ESC a space, `[8m` left standing) it
+  repeated: reflow, inside glamour, re-opens the last SGR on every row it wraps, so the real binary
+  drew `[8m` once a row, each copy cells glamour had measured as none. Dropping cannot forge an
+  escape - every ESC that survives is inside a whole run the style emits - and the row is drawn at
+  the width glamour measured. Escapes other than SGR keep BUG-9's substitution; reflow does not repeat
+  them.
+- **Not a breach of containment's "substitute, never delete".** contain.go substitutes because its
+  rows were padded and measured before it ran, so a deletion would shift columns. glamour measured an
+  SGR run as no cells, so here a drop is what keeps the row at its measured width and a substitute is
+  what shifts it.
+- **A miss is now silent.** A run the fence forgot would vanish instead of showing as text, so
+  `TestTheOutputFenceDropsNoRunTheRendererEmits` holds every run glamour emits - the probe in both
+  palettes and every recorded answer - to leaving the fence untouched.
+- **Colours are kept, and that is a residual.** The fence cannot tell a smuggled `38;2;…` or
+  `48;5;n` from the theme's own, and refusing either would strip the theme. So a reply can still
+  hide words by painting them near the terminal's background, or painting a background behind them:
+  concealment by colour, not the screen corruption this entry closes. Closing it would mean keeping
+  only the exact runs the theme draws (each chroma token through its own formatter, each
+  `claudeStyle` colour through termenv), which leaves a smuggler only the theme's own colours. Not
+  built; the owner's call.
