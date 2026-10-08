@@ -2815,31 +2815,40 @@ copy every frame while a menu is up.
 assistant block in the corpus and of a seeded grammar of answers at 40, 79 and 120 columns and compares
 plain rows to `Markdown(whole)`: 164 recorded answers, 31 of them cut, 0 widths differing; 300 grammar
 answers, about 270 cut, 0 differing (a further 6,000 across twelve seeds, 0). The fuzz's findings
-changed the code twice (the rule's trailing row; indented top-level fences). **Transient divergences,
-named because they are known and accepted:** a reference-style link or footnote definition further
-down the answer; a definition list across a blank line; a fence in a list item whose body drops back
-to column 0; a bare file name glamour links (`tally.txt`), which it wraps a word earlier than the
-plain wrap does. The answer lands whole and is drawn right then.
+changed the code three times (the rule's trailing row; indented top-level fences; a definition list,
+which goldmark merges across a blank line, so a definition and the block after one are never cut
+from their term). The same check runs the text again a byte and three bytes at a time and requires the
+same cuts, so a decision that waits for characters (`mayBeMarker`, a lone `:`) is exercised too.
+**Transient divergences, known and accepted:** a reference-style link or footnote definition further
+down the answer; a fence in a list item whose body drops back to column 0; a bare file name glamour
+links (`tally.txt`), which it wraps a word earlier than the plain wrap does. The answer lands whole and
+is drawn right then.
 
-**Synced.** A pane that starts accumulating halfway through a block has no way to know a line is
-inside a code block, and would format a fragment as prose. So the splitter runs only while the pane
-has heard every token of the block since its message began (`partial.synced`), and otherwise the
-whole block is previewed raw as it always was. Set at a `message_start` — every API message begins
-with one, and a hidden pane still hears it. Cleared where tokens can be lost: `Leave`; a pane coming
-back on screen (`App.reopened`, from `show` — `⌃D`/`⌃Y`/`⌃B`, a click, `WithOpenDM` — and
-`refocus`, the `⇥` onto a column the width had pushed off), because `App.wants` drops tokens for a pane that is away while message starts and
-landings still reach it; a subagent's text landing between the agent's tokens; and the inbox's
-fold trim, which keeps the newest `foldChars` of a stalled draw loop's tokens and so can drop a fence
-opener. The trim is recorded by slot, handed back on the batch as *positions*, and applied before
-the frame it belongs to — not before the batch, or a message start earlier in the same batch would
-sync it again. A landing alone does **not** sync a pane: the second text block of one message is
-the only thing it would buy, and it puts every fixture that lands blocks and then streams tokens
-without a message start into formatted mode. A board tile (`ensureBoardDMs`) is `raw`: no scan,
-no glamour, the view exactly as before.
+**Synced, and one principle: unsync where a token is lost.** A pane that missed a token has no way to
+know a line is inside a code block, and would format a fragment as prose. So the splitter runs only
+while the pane has heard every token of the block since its message began (`partial.synced`), and
+otherwise the whole block is previewed plain as it always was. A message start syncs a pane (every API
+message begins with one, and a hidden pane still hears it); a landing does not, since the second text
+block of one message is all it would buy and it puts every fixture that lands blocks and then streams
+tokens without a start into formatted mode. A token is lost in a handful of places, and each unsyncs
+there, never where the pane later comes back (the first version did, in `show` and `refocus`, and a
+pane taken off screen by `⌃Y` at takeover width, or by `⌃W` on another pane, never reached either):
 
-**What this does not do.** Tokens lost where the pane cannot see them — a partial dropped on a full
-ring, the daemon client's `partialCeiling` — are not marked, and a terminal resize that takes a pane
-off screen and back does not unsync it (`deferred.md`).
+- `App.wants` refuses it, the pane being off screen (`observe`): every way off screen, once per block;
+- the window's inbox loses it: a fold trimmed to `foldChars`, a token the full ring refuses, a fold the
+  ring evicts. The loss is carried on the next frame added for that session as `rpc.Frame.Lost`, and
+  `App.applied` unsyncs the pane just before that frame, so a message start earlier in the same batch
+  cannot sync it again ahead of the loss. A message start retires a pending mark;
+- the daemon drops it for a slow client past `partialCeiling` (256 queued frames, a stopped UI): the
+  next preview it does queue for that session carries `Lost`, until a message start;
+- the record has a gap (`notedGap`, the ring's drops and the daemon's overflow frame) or the connection
+  was replaced (`reattached`): every pane;
+- `Leave` clears the open text a block would be read from, and a subagent's text landing between the
+  agent's tokens leaves the rest of the block unreadable.
+
+A board tile (`ensureBoardDMs`) is `raw`: no scan, no glamour, the view exactly as before.
+`rpc.Frame.Lost` sits in the padding after `Now`: a Frame is copied by value on every event, and a
+bool of its own grew it a word and cost a fleet's second 8%.
 
 ---
 

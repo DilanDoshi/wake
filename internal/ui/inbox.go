@@ -122,9 +122,8 @@ const (
 // rows - and the preview is short by rows until tokens refill it. Briefly short
 // rather than wrong, and not worth a larger bound multiplied across a stalled fleet.
 //
-// A trim also leaves the DM a block with its beginning missing, and a code block's
-// opener can be what went: the pane is told (inbox.trimmed, batch.trimmed), and
-// previews that block as plain text to its landing (partialchunks.go).
+// A trim leaves the DM a block with its beginning missing, so the frame is marked
+// Lost, as is the next one after any token the ring drops (partialchunks.go).
 var foldChars = previewChars(foldWidth, minPreviewRows)
 
 // inbox is the frames that have arrived and not yet been drawn.
@@ -151,10 +150,10 @@ type inbox struct {
 	// kind for that session closes it.
 	folds map[string]int
 
-	// trimmed is the slots whose fold lost its oldest bytes to foldChars. take
-	// hands them over as positions in the batch, so the pane can be told at the
-	// frame, after what came before it and before the text that lost its start.
-	trimmed map[int]struct{}
+	// pending is the sessions that lost a token the ring held or refused and have no
+	// frame yet to say so. The next preview added for one is marked Lost, until a
+	// message start, where a pane reads afresh.
+	pending map[string]struct{}
 
 	dropped int
 	err     error
@@ -166,7 +165,7 @@ func newInbox() *inbox {
 		ready:   make(chan struct{}, 1),
 		ring:    make([]rpc.Frame, inboxFrames),
 		folds:   make(map[string]int),
-		trimmed: make(map[int]struct{}),
+		pending: make(map[string]struct{}),
 	}
 }
 
@@ -190,6 +189,9 @@ func (b *inbox) add(f rpc.Frame) {
 		// This session's preview is closed by anything else it says: the block
 		// that supersedes one arrives between two turns' tokens.
 		delete(b.folds, f.SessionID)
+		if f.Event != nil && f.Event.Kind == core.KindMessageStart {
+			delete(b.pending, f.SessionID)
+		}
 		if b.n == len(b.ring) {
 			b.evictOldest()
 		}
@@ -207,24 +209,31 @@ func partialFrame(f rpc.Frame) bool {
 
 // addPartial folds this session's tokens into the slot they already have, or
 // takes a free one. It never evicts: a preview is replaced by the completed
-// block a moment later, and the frames it would push out are not.
+// block a moment later, and the frames it would push out are not. What it loses -
+// a fold's oldest bytes, a token with no slot - is said on a frame (Lost).
 func (b *inbox) addPartial(f rpc.Frame) {
 	if at, ok := b.folds[f.SessionID]; ok {
 		// A new Event rather than a write through the pointer: the frame the
 		// socket handed over is not this buffer's to mutate.
 		ev := *b.ring[at].Event
 		ev.Text += f.Event.Text
+		lost := f.Lost
 		if len(ev.Text) > foldChars {
 			// Bytes rather than runes for partial.add's reason: this bounds
 			// work, and a rune halved at the front is dropped by the wrap.
-			ev.Text = ev.Text[len(ev.Text)-foldChars:]
-			b.trimmed[at] = struct{}{}
+			ev.Text, lost = ev.Text[len(ev.Text)-foldChars:], true
 		}
 		b.ring[at].Event = &ev
+		b.ring[at].Lost = b.ring[at].Lost || lost
 		return
 	}
 	if b.n == len(b.ring) {
+		b.pending[f.SessionID] = struct{}{}
 		return
+	}
+	if _, ok := b.pending[f.SessionID]; ok {
+		f.Lost = true
+		delete(b.pending, f.SessionID)
 	}
 	b.folds[f.SessionID] = (b.head + b.n) % len(b.ring)
 	b.put(f)
@@ -239,9 +248,9 @@ func (b *inbox) put(f rpc.Frame) {
 // evictOldest makes room by dropping the frame at the head. A preview there is
 // not counted - what dropped means is that the record has a hole in it.
 func (b *inbox) evictOldest() {
-	delete(b.trimmed, b.head)
 	if partialFrame(b.ring[b.head]) {
 		b.unfold(b.head, b.ring[b.head].SessionID)
+		b.pending[b.ring[b.head].SessionID] = struct{}{}
 	} else {
 		b.dropped++
 	}
@@ -283,10 +292,6 @@ type batch struct {
 	frames  []rpc.Frame
 	dropped int
 
-	// trimmed is which of frames are folds that lost their oldest bytes: the pane
-	// has the end of a block and not its start. See foldChars.
-	trimmed map[int]struct{}
-
 	// done marks the stream ended, with err saying why. It is reported only
 	// after every frame that arrived before it has been handed over, so a
 	// hang-up never overtakes the last thing the agent said.
@@ -305,17 +310,9 @@ func (b *inbox) take(limit int) batch {
 
 	k := min(b.n, limit)
 	out := make([]rpc.Frame, k)
-	var trimmed map[int]struct{}
 	for i := range k {
 		at := (b.head + i) % len(b.ring)
 		out[i] = b.ring[at]
-		if _, ok := b.trimmed[at]; ok {
-			delete(b.trimmed, at)
-			if trimmed == nil {
-				trimmed = map[int]struct{}{}
-			}
-			trimmed[i] = struct{}{}
-		}
 		if partialFrame(out[i]) {
 			// Handed over, so nothing may fold into it any more.
 			b.unfold(at, out[i].SessionID)
@@ -330,7 +327,7 @@ func (b *inbox) take(limit int) batch {
 	b.head = (b.head + k) % len(b.ring)
 	b.n -= k
 
-	got := batch{frames: out, dropped: b.dropped, trimmed: trimmed}
+	got := batch{frames: out, dropped: b.dropped}
 	b.dropped = 0
 	switch {
 	case b.n > 0:
@@ -357,9 +354,12 @@ func (b *inbox) take(limit int) batch {
 // leak an in-flight DM turn's remaining prose into the room. It is reconciled
 // instead at the report's own working→idle edge (Fleet.WithStatus), the
 // gap-robust second observable of the turn-end fold clears it on. See bugs.md.
+//
+// And every pane stops trusting the block it is in: the hole may hold the tokens
+// that opened a fence (partialchunks.go).
 func (a App) notedGap(n int) App {
 	notice.Report("dropped %d frames: this window fell behind, so the conversation above has a gap", n)
-	a = a.forgotModes()
+	a = a.forgotModes().unsyncedAll()
 	a.fleet = a.fleet.ForgetTurns()
 	return a
 }

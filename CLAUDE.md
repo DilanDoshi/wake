@@ -246,10 +246,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   and a dropped partial is not a gap (`inbox.go`, daemon `client.go`'s `partialCeiling`).
 - **A conversation keeps its newest `dmRetentionEvents` (3,000)** — the re-wrap budget — and reclaims
   the oldest a chunk at a time, only before a non-tool event, under one fixed line (`dmretention.go`).
-- **A preview is never a record**: bounded by the pane, accumulated only for panes on screen
-  (`App.wants`), dropped on leave. Each *finished* block goes through glamour once, as it completes
-  (`render.Splitter`) — never per token — and only the open block stays plain text; a pane that did
-  not hear the block begin, and a board tile, keep all of it plain. No preview in the room or for
+- **A preview is never a record**: bounded by the pane (the open block by `render.MaxChunk` too),
+  accumulated only for panes on screen (`App.wants`), dropped on leave. Each *finished* block goes
+  through glamour once, as it completes (`render.Splitter`) — never per token — and only the open
+  block stays plain text. A pane that missed a token (not drawn, a gap, `rpc.Frame.Lost`) or never
+  heard the block begin, and a board tile, keep all of it plain. No preview in the room or for
   subagents. `internal/ui/partial.go`, `partialchunks.go`.
 - **A local command's reply is drawn as its lines** (`/list-agents`, `/cost`, `/config`), as Claude
   Code draws it; one opening with a markdown heading (`/context`'s) stays markdown.

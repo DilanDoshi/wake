@@ -156,18 +156,18 @@ func TestThePreviewKeepsOnlyAPaneOfFinishedRows(t *testing.T) {
 	}
 
 	// Held: enough rows to reach cap+slack, and not one chunk more than that.
-	if len(d.partial.done) == 0 {
+	if len(d.partial.fin.chunks()) == 0 {
 		t.Fatal("no finished block is held")
 	}
-	held := len(d.partial.stack)
+	held := len(d.partial.fin.rows())
 	want := d.partial.cap + previewSlack
 	if held < want {
 		t.Errorf("%d finished rows held, want at least cap+slack = %d", held, want)
 	}
-	if first := d.partial.done[0]; held-len(first.rows)-1 >= want {
+	if first := d.partial.fin.chunks()[0]; held-len(first.rows)-1 >= want {
 		t.Errorf("%d finished rows held, and the oldest chunk (%d rows) is not needed to reach %d", held, len(first.rows), want)
 	}
-	if n := len(d.partial.done); n > want {
+	if n := len(d.partial.fin.chunks()); n > want {
 		t.Errorf("%d finished chunks held for a pane of %d rows", n, d.partial.cap)
 	}
 }
@@ -185,8 +185,8 @@ func TestAWidthChangeReWrapsFinishedChunksAndWrapsTheTail(t *testing.T) {
 
 	*renders = 0
 	d = d.SetSize(40, fmtH)
-	if *renders != len(d.partial.done) || *renders != 1 {
-		t.Errorf("a width change rendered %d times for %d held chunks, want 1 for the one", *renders, len(d.partial.done))
+	if *renders != len(d.partial.fin.chunks()) || *renders != 1 {
+		t.Errorf("a width change rendered %d times for %d held chunks, want 1 for the one", *renders, len(d.partial.fin.chunks()))
 	}
 	if narrow := d.partial.rows(); narrow <= wide {
 		t.Errorf("%d rows at 60 columns and %d at 40: the preview was not re-wrapped", wide, narrow)
@@ -241,6 +241,9 @@ func TestALandedBlockMatchesThePreviewsFinishedRows(t *testing.T) {
 	t.Logf("%d recorded answers streamed: the largest gap between preview and landed rows is %d", checked, worst)
 	if checked < 5 {
 		t.Fatalf("only %d recorded answers have blocks to compare", checked)
+	}
+	if worst > 1 {
+		t.Errorf("a recorded answer's preview and landed block differ by %d rows, want at most 1", worst)
 	}
 }
 
@@ -410,12 +413,12 @@ func TestAnOffScreenPaneRendersNoChunk(t *testing.T) {
 // splitter freezes and the tail is cut as it always was.
 func TestAFormattedPreviewIsBoundedToo(t *testing.T) {
 	d := streamed(formatDM(20), "a finished block.\n\n")
-	if len(d.partial.done) != 0 {
+	if len(d.partial.fin.chunks()) != 0 {
 		t.Fatal("a block was finished before the next one began")
 	}
 	d = streamed(d, "x")
-	if len(d.partial.done) != 1 {
-		t.Fatalf("%d finished blocks held, want 1: this test is about a pane that reads blocks", len(d.partial.done))
+	if len(d.partial.fin.chunks()) != 1 {
+		t.Fatalf("%d finished blocks held, want 1: this test is about a pane that reads blocks", len(d.partial.fin.chunks()))
 	}
 	token := "the quick brown fox jumps over the lazy dog. "
 	for range 400 {
@@ -448,11 +451,11 @@ func TestAFormattedPreviewIsBoundedToo(t *testing.T) {
 func TestAFinishedBlockIsRenderedFromItsUntrimmedSource(t *testing.T) {
 	text := "    indented code opens the answer\n\nthen a paragraph that is still being"
 	d := streamed(formatDM(fmtH), text)
-	if len(d.partial.done) != 1 {
-		t.Fatalf("%d finished blocks, want 1", len(d.partial.done))
+	if len(d.partial.fin.chunks()) != 1 {
+		t.Fatalf("%d finished blocks, want 1", len(d.partial.fin.chunks()))
 	}
 	whole := strings.Split(stripANSI(renderMarkdown(text, fmtW)), "\n")
-	for i, row := range d.partial.done[0].rows {
+	for i, row := range d.partial.fin.chunks()[0].rows {
 		if got := stripANSI(row); got != whole[i] {
 			t.Fatalf("row %d of the finished block is %q, the landed answer draws %q", i, got, whole[i])
 		}

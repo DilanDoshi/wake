@@ -126,7 +126,7 @@ func BenchmarkOneBlockStreamed(b *testing.B) {
 				for _, tok := range md {
 					d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: tok})
 				}
-				finished = len(d.partial.done)
+				finished = len(d.partial.fin.chunks())
 				sinkPreview = d.partial.view
 			}
 			// The arm has to reach the thing it prices: a pane that never read a

@@ -588,7 +588,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		// The frame is folded first, then two things read the result: the
 		// heartbeat, which may need starting, and ⌃Q's ask, which this frame
 		// may have settled. See park.go's closing.
-		next, cmd := a.apply(m.Frame).settle()
+		next, cmd := a.applied([]rpc.Frame{m.Frame}).settle()
 		return next, tea.Batch(cmd, next.closing())
 
 	case heartbeatMsg:
@@ -695,9 +695,7 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		// this shares with the daemon's own gap.
 		a = a.notedGap(m.dropped)
 	}
-	for i, f := range m.frames {
-		a = a.afterFoldTrim(m, i, f).apply(f)
-	}
+	a = a.applied(m.frames)
 	if m.done {
 		// A held /rename is dequeued and drawn but not sent, and a gone agent's
 		// queue dropped: the connection is gone, so the write is discarded.

@@ -273,7 +273,7 @@ func (a App) show(sessionID, name string, place func(Grid) Grid) App {
 	if sessionID == "" {
 		return a
 	}
-	before, was := a.grid, a.drawn()
+	before := a.grid
 	if _, ok := a.dms[sessionID]; !ok {
 		// A conversation opening for the first time seeds itself from the room's
 		// account of this agent's turns, so a room turn that happened before this
@@ -329,21 +329,8 @@ func (a App) show(sessionID, name string, place func(Grid) Grid) App {
 	a.roster.Selected = sessionID
 	// A conversation this client has not seen before comes back with what it
 	// already said; Update writes the ask. See history.go.
-	a = a.askHistory(sessionID).withFocus(sessionID)
-	return a.reopened(was).resizePanes().retarget()
-}
-
-// reopened is Leave's inverse for every pane that has just come back on screen.
-// What a pane hears while it is away is a message start and a landing but never a
-// token (App.wants), so it may be halfway through a block it cannot read: that
-// block is previewed raw (partialchunks.go).
-func (a App) reopened(was []string) App {
-	for _, id := range a.drawn() {
-		if dm, ok := a.dms[id]; ok && !slices.Contains(was, id) {
-			a = a.withDM(id, dm.unsynced())
-		}
-	}
-	return a
+	a = a.askHistory(sessionID)
+	return a.withFocus(sessionID).resizePanes().retarget()
 }
 
 // displacedBy is the conversation that was on screen before and is not now,
@@ -484,7 +471,6 @@ func (a App) showRoom() App { return a.refocus("") }
 func (a App) refocus(next string) App {
 	was := a.drawn()
 	a = a.withFocus(next).resizePanes()
-	a = a.reopened(was)
 	now := a.drawn()
 	for _, id := range was {
 		if id != "" && !slices.Contains(now, id) {

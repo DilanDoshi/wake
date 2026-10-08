@@ -16,6 +16,7 @@ import (
 	"strings"
 	"testing"
 	"time"
+	"unsafe"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -196,6 +197,41 @@ func TestWriteFrameOmitsEmptyFields(t *testing.T) {
 	// null event on every frame would cost real bytes across a fleet.
 	if got := buf.String(); got != `{"kind":"hello"}`+"\n" {
 		t.Errorf("frame = %q, want %q", got, `{"kind":"hello"}`+"\n")
+	}
+}
+
+// Lost is the daemon's word that tokens went missing before a preview frame: it
+// crosses the socket when set and costs nothing on the frames that carry none.
+func TestALostMarkCrossesTheSocketAndCostsAnOrdinaryFrameNothing(t *testing.T) {
+	var buf bytes.Buffer
+	if err := WriteFrame(&buf, Frame{Kind: FrameEvent, SessionID: "s1", Lost: true}); err != nil {
+		t.Fatalf("WriteFrame: %v", err)
+	}
+	if !strings.Contains(buf.String(), `"lost":true`) {
+		t.Errorf("frame = %q, want the mark on the wire", buf.String())
+	}
+	frames, errs := ReadFrames(&buf)
+	if f := <-frames; !f.Lost {
+		t.Errorf("read back %+v, want Lost", f)
+	}
+	for range errs {
+	}
+	buf.Reset()
+	if err := WriteFrame(&buf, Frame{Kind: FrameEvent, SessionID: "s1"}); err != nil {
+		t.Fatalf("WriteFrame: %v", err)
+	}
+	if strings.Contains(buf.String(), "lost") {
+		t.Errorf("frame = %q, want no mark on a frame that carries none", buf.String())
+	}
+}
+
+// A Frame is copied by value on every event a window folds, so its size is on the
+// per-token path: a bool of its own after the strings grew it a word and cost a
+// fleet's second 8%. Lost sits in the padding after Now.
+func TestLostSitsBesideNowInTheFramesPadding(t *testing.T) {
+	var f Frame
+	if gap := unsafe.Offsetof(f.Lost) - unsafe.Offsetof(f.Now); gap != 1 {
+		t.Errorf("Lost is %d bytes after Now, want 1: it grew the Frame, which every event copies", gap)
 	}
 }
 

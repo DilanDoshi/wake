@@ -48,7 +48,7 @@ func (a App) ensureBoardDMs() App {
 		if !ok {
 			nd := NewDM(ag.ID, ag.Name)
 			// A cell of a board: no glamour per block and no scan per token.
-			nd.partial = nd.partial.asRaw()
+			nd.partial.raw = true
 			nd, _ = nd.transcriptWindow(inner, rows) // set the width so the draw never re-wraps
 			if pane, open := a.dms[ag.ID]; open {
 				// Seed from the pane - it already read this conversation off disk,

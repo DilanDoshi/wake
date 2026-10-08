@@ -37,19 +37,15 @@ package ui
 //     the deltas themselves are the wait. Dead.
 //   - **plain text, never glamour**: what shipped first, and still draws the
 //     block being written. One second of thirty streaming agents costs 23ms -
-//     about 2% of one core, against 74ms for glamour - through the real Update
-//     and the real View (BenchmarkStreamingFleetSecond; the ruling in decisions.md
-//     has the table). Its price was a long answer streaming as raw markdown and
-//     snapping to formatted when it landed.
+//     about 2% of one core, against 74ms for glamour (BenchmarkStreamingFleetSecond;
+//     the ruling in decisions.md has the table). Its price was a long answer
+//     streaming as raw markdown and snapping to formatted when it landed.
 //   - **render each finished block once** (2026-10-07, the owner's ruling): the
-//     integral above is the cost of re-rendering a block that keeps growing, and
-//     a block that has finished does not. render.Splitter says where one ends,
-//     each is rendered once through renderMarkdown as it completes and its rows
-//     kept, and only the block still being written stays plain text. One glamour
-//     render per block rather than per token, so the mutex argument does not reach
-//     it: BenchmarkOneBlockStreamed's formatted/ arm prices it, 0.07, 0.29 and
-//     1.07ms of glamour per answer at 64, 256 and 1,024 tokens, 6.4ms in all at
-//     1,024 against 21ms plain and 363ms per token (2026-10-07, decisions.md).
+//     integral above is the price of re-rendering a block that keeps growing, and
+//     a finished one does not. render.Splitter says where one ends and each is
+//     rendered once as it completes (partialchunks.go); only the open block stays
+//     plain text. 1,024 tokens cost 6.4ms against 21ms plain and 363ms per token,
+//     1ms of it glamour (BenchmarkOneBlockStreamed's formatted/ arm).
 //
 // It works because the preview is not the record. The same words arrive a
 // moment later as a complete assistant frame and go through glamour exactly
@@ -58,11 +54,10 @@ package ui
 // can spare (DM.previewCap): all of them for a reader following the newest line,
 // each streamed row pushing the transcript up one, as Claude Code's does, and a
 // floor for one scrolled back over a full transcript. Nothing about the
-// conversation's length enters that: a finished block is kept only while its rows
-// can still be drawn, and the open one whole only up to render.MaxChunk. What the
-// reader pays is a beat of lag - a block is formatted once the next one has begun -
-// and the open block as plain text, drawn at the formatted rows' left edge and wrap
-// (render.Prose) so the block that finishes does not jump.
+// conversation's length enters that: finished blocks are kept only while their rows
+// can be drawn, and the open one whole only up to render.MaxChunk. The reader pays
+// a beat of lag, and the open block as plain text at the formatted rows' left edge
+// and wrap (render.Prose), so the block that finishes does not jump.
 //
 // # The five properties, each with a test named for it
 //
@@ -73,10 +68,9 @@ package ui
 // read. It is **cleared by the block that supersedes it**, or by the turn
 // ending, which is the interrupted case where no block ever arrives. And it is
 // **only accumulated for a pane on screen** - see wants, which is the one of the
-// four that is App's rather than this type's. And it is **read for finished blocks
-// only by a pane that heard the whole of the block** (partialchunks.go's synced): a
-// pane that joined one halfway cannot tell a code block's lines from prose, so it
-// previews that block as plain text, as it always did. A board tile never reads.
+// four that is App's rather than this type's. The fifth: a pane **reads finished
+// blocks only if it has heard every token of the one it is in** (synced; see
+// partialchunks.go), or it would cut inside a fence it never saw open.
 
 import (
 	"strings"
@@ -117,7 +111,9 @@ import (
 // open= arms are the pairing.
 // Accumulation stops here; the tail itself is dropped by DM.Leave, which
 // runs on every path a pane stops being drawn on. Freezing without dropping
-// let a reopened pane splice new tokens onto old ones.
+// let a reopened pane splice new tokens onto old ones. And a token refused here
+// is a token the pane lost, so observe unsyncs it: whichever way it went off
+// screen, it will not read the rest of that block (partialchunks.go).
 func (a App) wants(sessionID string, ev core.Event) bool {
 	return ev.Kind != core.KindPartialText || a.drawnConversations()(sessionID)
 }
@@ -157,34 +153,22 @@ func previewChars(w, rows int) int {
 // the reason DM.bar is cached: this sits under a working agent, which is
 // exactly when something is redrawing.
 //
-// The answer so far is two things. done holds its finished blocks, each rendered
-// once the moment it completed (partialchunks.go), with stack their rows laid one
-// under the other. text is the open block: raw, as written since the last cut,
-// bounded to what a pane can draw once the splitter has stopped reading it.
+// text is the open block, raw, since the last cut; fin the blocks finished above it
+// (partialchunks.go), nil for a pane that reads nothing. cap is how many rows the
+// preview may draw, set by DM.previewCap and refreshed by SetSize, a landing block,
+// ScrollUp and DM.followed. synced is whether this pane has heard every token of
+// the block since its message began; only then are finished blocks read out of it.
+// raw is a pane that never formats: a board tile's.
 //
-// cap is how many rows the preview may draw, set by DM.previewCap: the pane's
-// room for a reader who follows, the floor for one scrolled back over a full
-// pane. It is held on the partial so a token can wrap against it without
-// recomputing the pane, and is refreshed by SetSize (which the growing preview
-// retriggers through View), a landing block, ScrollUp and DM.followed - so while
-// a reader is scrolled back the retained text follows the floor, and a return
-// to the newest line regrows from there.
-//
-// synced is whether this pane has heard every token of the block since its
-// message began; only then are finished blocks read out of it. raw is a pane
-// that never formats: a board tile's.
-//
-// Its methods take value receivers and return a new partial, like everything
-// else a DM holds. The slices are never written in place: a copy of the DM shares
-// them.
+// Its methods take value receivers and return a new partial, like everything else a
+// DM holds; fin is shared by every copy and never written.
 type partial struct {
 	text  string
 	view  string
 	width int
 	cap   int
 
-	done   []chunk
-	stack  []string
+	fin    *blocks
 	scan   render.Splitter
 	synced bool
 	raw    bool
@@ -222,7 +206,7 @@ func (p partial) capped(n int) partial {
 
 // cleared is the preview after the block it was previewing has landed.
 func (p partial) cleared() partial {
-	p.text, p.view, p.done, p.stack, p.scan = "", "", nil, nil, render.Splitter{}
+	p.text, p.view, p.fin, p.scan = "", "", nil, render.Splitter{}
 	return p
 }
 
@@ -235,7 +219,16 @@ func (p partial) sized(w int) partial {
 		return p
 	}
 	p.width = w
-	return p.rerendered().wrapped()
+	if done := p.fin.chunks(); len(done) > 0 {
+		redone := make([]chunk, 0, len(done))
+		for _, c := range done {
+			if rows := p.draw(c.src); len(rows) > 0 {
+				redone = append(redone, chunk{src: c.src, rows: rows})
+			}
+		}
+		p.fin = finishedBlocks(redone, p.wanted())
+	}
+	return p.wrapped()
 }
 
 // wrapped lays the preview out for the pane and keeps the last rows of it.

@@ -5615,18 +5615,9 @@ the line restored to the fixture.
 - **A long answer streams as raw markdown.** *Closed 2026-10-07* by `feat/preview-formats-finished-paragraphs`:
   each finished block is rendered once as it completes and only the open one stays plain text
   (`decisions.md`, 2026-08-15, its 2026-10-07 second amendment). What it leaves is below.
-- **A finished block's formatting can differ from the landed block's in four named cases.** A
+- **A finished block's formatting can differ from the landed block's in three named cases.** A
   reference-style link or footnote definition further down the answer (the renderer resolves those
-  document-wide); a definition list ("Term" over ": definition"), which goldmark merges across a
-  blank line; a code fence opened in a list item whose body drops back to column 0, which CommonMark
+  document-wide); a code fence opened in a list item whose body drops back to column 0, which CommonMark
   closes where the splitter does not; and a bare file name (`tally.txt`) glamour links, whose styled
-  row it wraps itself. All four are transient — the answer lands whole and is drawn right then —
+  row it wraps itself. All three are transient — the answer lands whole and is drawn right then —
   and the splitter names them (`internal/render/splitter.go`).
-- **A pane that comes back by a window resize can read a block it missed.** Coming back by a focus
-  key (`show`, `refocus`) marks the pane unsynced (`App.reopened`); a terminal resize that takes a
-  pane off screen and back does neither that nor `Leave`, which was already so for the plain preview
-  (a spliced tail). *Closes with:* the dropped token being what unsyncs (`observe`, where `wants`
-  refuses it), rather than the pane coming back.
-- **A token dropped between the daemon and the DM is not seen.** The inbox marks a fold that lost
-  its oldest bytes (`foldChars`); a partial dropped where it stands on a full ring, and the daemon
-  client's `partialCeiling`, are not marked. Both are far past a 2,048-frame stall.
