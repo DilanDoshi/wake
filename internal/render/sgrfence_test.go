@@ -70,8 +70,12 @@ func TestARefusedRunInAWrappedParagraphIsNotRepeatedAsText(t *testing.T) {
 // must leave the fence as it entered.
 func TestTheOutputFenceDropsNoRunTheRendererEmits(t *testing.T) {
 	docs := append([]string{styleProbe}, recordedAnswers(t)...)
-	for _, dark := range []bool{true, false} {
-		r, err := glamour.NewTermRenderer(rendererOptions(claudeStyle(dark), 80)...)
+	for _, setting := range []struct {
+		dark  bool
+		width int
+	}{{true, 40}, {true, 80}, {false, 40}, {false, 80}} {
+		dark := setting.dark
+		r, err := glamour.NewTermRenderer(rendererOptions(claudeStyle(dark), setting.width)...)
 		if err != nil {
 			t.Fatalf("build a renderer: %v", err)
 		}
@@ -81,7 +85,7 @@ func TestTheOutputFenceDropsNoRunTheRendererEmits(t *testing.T) {
 				t.Fatalf("render: %v", err)
 			}
 			if in, kept := ansiPattern.FindAllString(out, -1), ansiPattern.FindAllString(stylingOnly(out), -1); !slices.Equal(in, kept) {
-				t.Errorf("the fence dropped runs the renderer emits (dark %v): %d in, %d kept, from %.60q", dark, len(in), len(kept), doc)
+				t.Errorf("the fence dropped runs the renderer emits (%+v): %d in, %d kept, from %.60q", setting, len(in), len(kept), doc)
 			}
 		}
 	}
@@ -134,7 +138,11 @@ const styleProbe = "# One\n\n## Two\n\n###### Six\n\n" +
 	"![an image](https://example.com/x.png) and <https://example.com/auto>.\n\n" +
 	"> a quote with **strong** in it\n\n" +
 	"- an item\n- [ ] a task\n- [x] a done task\n\n1. first\n2. second\n\n" +
-	"| a | b |\n|---|---|\n| 1 | 2 |\n\n---\n\nterm\n: its definition\n\n" +
+	"| a | b |\n|---|---|\n| 1 | 2 |\n\n" +
+	// A styled cell that wraps: lipgloss closes each wrapped row with a bare ESC[m.
+	"| col a | col b |\n|---|---|\n| `an inline code span long enough to wrap inside its column` and " +
+	"**bold words that wrap around the column too** | `a second code span that is long enough to wrap` |\n\n" +
+	"---\n\nterm\n: its definition\n\n" +
 	"```go\npackage main\n\n// a comment\nfunc main() { s, n := \"x\", 42; _ = s; _ = n }\n```\n\n" +
 	"```diff\n@@ -1 +1 @@\n- old\n+ new\n```\n\n" +
 	"```python\ndef f(x):\n    # c\n    return 'y' + str(x)\n```\n\n" +

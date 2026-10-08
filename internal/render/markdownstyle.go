@@ -230,6 +230,7 @@ func chromaTheme(dark bool) string {
 // recolour text (decisions.md, 2026-10-07).
 var styleSGR = map[string]int{
 	"0": 0, "1": 0, "3": 0, "4": 0, "9": 0, // reset, bold, italic, underline, struck
+	"":     0, // a bare ESC[m, the reset lipgloss ends each row of a wrapped table cell with
 	"59":   0, // itemTag and headingTag, which reflowProse strips
 	"38;2": 3, // termenv's colours: three components
 	"38;5": 1, // chroma's terminal256 foreground: an index
