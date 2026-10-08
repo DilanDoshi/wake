@@ -461,3 +461,23 @@ func TestAFinishedBlockIsRenderedFromItsUntrimmedSource(t *testing.T) {
 		}
 	}
 }
+
+// A tab streamed into the preview is expanded before the text is split into
+// blocks and rendered, so none reaches the frame - from a block that finished
+// while the next streamed, or from the one still open.
+func TestATabInAStreamedAnswerNeverReachesTheFrame(t *testing.T) {
+	for name, text := range map[string]string{
+		"a finished block": "```go\nfunc f() {\n\treturn 1\n}\n```\n\nthe next block is still being wri",
+		"the open block":   "the open block holds\n\tan indented line still being wri",
+	} {
+		t.Run(name, func(t *testing.T) {
+			out := visible(streamed(formatDM(fmtH), text), fmtW, fmtH)
+			if strings.Contains(out, "\t") {
+				t.Errorf("a tab reached the frame:\n%q", out)
+			}
+			if !strings.Contains(out, "return 1") && !strings.Contains(out, "an indented line") {
+				t.Errorf("the streamed text is not on screen:\n%s", out)
+			}
+		})
+	}
+}
