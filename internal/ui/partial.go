@@ -2,7 +2,7 @@ package ui
 
 // The preview: the block an agent is writing, shown while it is being written.
 //
-// # Why this is plain text, and why that is the whole feature
+// # Why the open block is plain text, and why a finished one is not
 //
 // Claude Code renders assistant prose as it is generated. Wake renders whole
 // blocks, so before this the heartbeat stood in for progress instead of
@@ -24,7 +24,7 @@ package ui
 // a token at 1,024, 4,096 and 16,384 - and that one's keeps growing with the
 // answer.
 //
-// The four candidates and what the numbers do to them:
+// The five candidates and what the numbers do to them:
 //
 //   - re-render per token: the table above, and it keeps getting worse with the
 //     answer. Dead.
@@ -35,10 +35,21 @@ package ui
 //     grows with the answer, so a tick lowers the rate and not the growth. It is
 //     also a poll where a wait will do, which is the first non-negotiable, and
 //     the deltas themselves are the wait. Dead.
-//   - **plain text, never glamour**: what shipped. One second of thirty
-//     streaming agents costs 23ms - about 2% of one core, against 74ms for
-//     glamour - through the real Update and the real View
-//     (BenchmarkStreamingFleetSecond; the ruling in decisions.md has the table).
+//   - **plain text, never glamour**: what shipped first, and still draws the
+//     block being written. One second of thirty streaming agents costs 23ms -
+//     about 2% of one core, against 74ms for glamour - through the real Update
+//     and the real View (BenchmarkStreamingFleetSecond; the ruling in decisions.md
+//     has the table). Its price was a long answer streaming as raw markdown and
+//     snapping to formatted when it landed.
+//   - **render each finished block once** (2026-10-07, the owner's ruling): the
+//     integral above is the cost of re-rendering a block that keeps growing, and
+//     a block that has finished does not. render.Splitter says where one ends,
+//     each is rendered once through renderMarkdown as it completes and its rows
+//     kept, and only the block still being written stays plain text. One glamour
+//     render per block rather than per token, so the mutex argument does not reach
+//     it: BenchmarkOneBlockStreamed's formatted/ arm prices it, 0.07, 0.29 and
+//     1.07ms of glamour per answer at 64, 256 and 1,024 tokens, 6.4ms in all at
+//     1,024 against 21ms plain and 363ms per token (2026-10-07, decisions.md).
 //
 // It works because the preview is not the record. The same words arrive a
 // moment later as a complete assistant frame and go through glamour exactly
@@ -47,10 +58,13 @@ package ui
 // can spare (DM.previewCap): all of them for a reader following the newest line,
 // each streamed row pushing the transcript up one, as Claude Code's does, and a
 // floor for one scrolled back over a full transcript. Nothing about the
-// conversation's length enters that. What the reader pays is that a long answer
-// streams as raw markdown and is re-drawn formatted when its block lands.
+// conversation's length enters that: a finished block is kept only while its rows
+// can still be drawn, and the open one whole only up to render.MaxChunk. What the
+// reader pays is a beat of lag - a block is formatted once the next one has begun -
+// and the open block as plain text, drawn at the formatted rows' left edge and wrap
+// (render.Prose) so the block that finishes does not jump.
 //
-// # The four properties, each with a test named for it
+// # The five properties, each with a test named for it
 //
 // A preview never enters the transcript, so it cannot make Append superlinear
 // and a resize has nothing extra to re-wrap. It is **bounded to what a pane can
@@ -59,7 +73,10 @@ package ui
 // read. It is **cleared by the block that supersedes it**, or by the turn
 // ending, which is the interrupted case where no block ever arrives. And it is
 // **only accumulated for a pane on screen** - see wants, which is the one of the
-// four that is App's rather than this type's.
+// four that is App's rather than this type's. And it is **read for finished blocks
+// only by a pane that heard the whole of the block** (partialchunks.go's synced): a
+// pane that joined one halfway cannot tell a code block's lines from prose, so it
+// previews that block as plain text, as it always did. A board tile never reads.
 
 import (
 	"strings"
@@ -68,6 +85,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/render"
 )
 
 // wants reports whether an event is worth a write into the conversation it
@@ -133,11 +151,16 @@ func previewChars(w, rows int) int {
 	return max(w, minBlockWidth) * (max(rows, minPreviewRows) + previewSlack)
 }
 
-// partial is the tail of the block being written, and the rows it draws.
+// partial is the block being written, and the rows it draws.
 //
 // view is rendered when the text or the width changes and never per frame, for
 // the reason DM.bar is cached: this sits under a working agent, which is
 // exactly when something is redrawing.
+//
+// The answer so far is two things. done holds its finished blocks, each rendered
+// once the moment it completed (partialchunks.go), with stack their rows laid one
+// under the other. text is the open block: raw, as written since the last cut,
+// bounded to what a pane can draw once the splitter has stopped reading it.
 //
 // cap is how many rows the preview may draw, set by DM.previewCap: the pane's
 // room for a reader who follows, the floor for one scrolled back over a full
@@ -147,26 +170,44 @@ func previewChars(w, rows int) int {
 // a reader is scrolled back the retained text follows the floor, and a return
 // to the newest line regrows from there.
 //
+// synced is whether this pane has heard every token of the block since its
+// message began; only then are finished blocks read out of it. raw is a pane
+// that never formats: a board tile's.
+//
 // Its methods take value receivers and return a new partial, like everything
-// else a DM holds.
+// else a DM holds. The slices are never written in place: a copy of the DM shares
+// them.
 type partial struct {
 	text  string
 	view  string
 	width int
 	cap   int
+
+	done   []chunk
+	stack  []string
+	scan   render.Splitter
+	synced bool
+	raw    bool
 }
 
-// add appends the tokens that just arrived, keeping only what can be drawn.
+// add appends the tokens that just arrived and reads any block they finished,
+// keeping only what can be drawn.
 func (p partial) add(s string) partial {
 	p.text += s
-	if keep := previewChars(p.width, p.cap); len(p.text) > keep {
+	if p.formats() {
+		p = p.cut()
+	}
+	if !p.formats() {
 		// Bytes rather than runes: this is a bound on work, and a multi-byte
 		// rune cut in half at the front is dropped by the wrap below rather
 		// than drawn - which is what the slack is for.
-		p.text = p.text[len(p.text)-keep:]
+		p.text = tail(p.text, previewChars(p.width, p.cap))
 	}
 	return p.wrapped()
 }
+
+// tail is the last n bytes of s.
+func tail(s string, n int) string { return s[max(len(s)-n, 0):] }
 
 // capped sets how many rows the preview may draw and re-wraps to it. A no-op
 // when the cap has not moved, so streaming a token past a settled cap costs
@@ -181,28 +222,32 @@ func (p partial) capped(n int) partial {
 
 // cleared is the preview after the block it was previewing has landed.
 func (p partial) cleared() partial {
-	p.text, p.view = "", ""
+	p.text, p.view, p.done, p.stack, p.scan = "", "", nil, nil, render.Splitter{}
 	return p
 }
 
 // sized re-wraps for a new pane width, and returns the receiver untouched when
 // the width has not moved - a height change does not re-wrap here for the same
-// reason it does not re-wrap the transcript.
+// reason it does not re-wrap the transcript. A finished block is rendered again
+// at the new width, as the transcript's are.
 func (p partial) sized(w int) partial {
 	if w == p.width {
 		return p
 	}
 	p.width = w
-	return p.wrapped()
+	return p.rerendered().wrapped()
 }
 
-// wrapped lays the tail out for the pane and keeps the last rows of it.
+// wrapped lays the preview out for the pane and keeps the last rows of it.
 //
 // The floor is the same one previewChars applies, so the width the tail is cut
 // to and the width it is laid out at cannot drift - and a pane that has not been
 // sized yet wraps at the floor rather than at zero, which is what render.Markdown
 // does one package over and for the same reason.
 func (p partial) wrapped() partial {
+	if p.prose() {
+		return p.proseView()
+	}
 	if p.text == "" {
 		p.view = ""
 		return p

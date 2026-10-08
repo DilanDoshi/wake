@@ -121,6 +121,10 @@ const (
 // grow to only where (rows + 2) x width passes that - about 100 columns by 38
 // rows - and the preview is short by rows until tokens refill it. Briefly short
 // rather than wrong, and not worth a larger bound multiplied across a stalled fleet.
+//
+// A trim also leaves the DM a block with its beginning missing, and a code block's
+// opener can be what went: the pane is told (inbox.trimmed, batch.trimmed), and
+// previews that block as plain text to its landing (partialchunks.go).
 var foldChars = previewChars(foldWidth, minPreviewRows)
 
 // inbox is the frames that have arrived and not yet been drawn.
@@ -147,6 +151,11 @@ type inbox struct {
 	// kind for that session closes it.
 	folds map[string]int
 
+	// trimmed is the slots whose fold lost its oldest bytes to foldChars. take
+	// hands them over as positions in the batch, so the pane can be told at the
+	// frame, after what came before it and before the text that lost its start.
+	trimmed map[int]struct{}
+
 	dropped int
 	err     error
 	ended   bool
@@ -154,9 +163,10 @@ type inbox struct {
 
 func newInbox() *inbox {
 	return &inbox{
-		ready: make(chan struct{}, 1),
-		ring:  make([]rpc.Frame, inboxFrames),
-		folds: make(map[string]int),
+		ready:   make(chan struct{}, 1),
+		ring:    make([]rpc.Frame, inboxFrames),
+		folds:   make(map[string]int),
+		trimmed: make(map[int]struct{}),
 	}
 }
 
@@ -208,6 +218,7 @@ func (b *inbox) addPartial(f rpc.Frame) {
 			// Bytes rather than runes for partial.add's reason: this bounds
 			// work, and a rune halved at the front is dropped by the wrap.
 			ev.Text = ev.Text[len(ev.Text)-foldChars:]
+			b.trimmed[at] = struct{}{}
 		}
 		b.ring[at].Event = &ev
 		return
@@ -228,6 +239,7 @@ func (b *inbox) put(f rpc.Frame) {
 // evictOldest makes room by dropping the frame at the head. A preview there is
 // not counted - what dropped means is that the record has a hole in it.
 func (b *inbox) evictOldest() {
+	delete(b.trimmed, b.head)
 	if partialFrame(b.ring[b.head]) {
 		b.unfold(b.head, b.ring[b.head].SessionID)
 	} else {
@@ -271,6 +283,10 @@ type batch struct {
 	frames  []rpc.Frame
 	dropped int
 
+	// trimmed is which of frames are folds that lost their oldest bytes: the pane
+	// has the end of a block and not its start. See foldChars.
+	trimmed map[int]struct{}
+
 	// done marks the stream ended, with err saying why. It is reported only
 	// after every frame that arrived before it has been handed over, so a
 	// hang-up never overtakes the last thing the agent said.
@@ -289,9 +305,17 @@ func (b *inbox) take(limit int) batch {
 
 	k := min(b.n, limit)
 	out := make([]rpc.Frame, k)
+	var trimmed map[int]struct{}
 	for i := range k {
 		at := (b.head + i) % len(b.ring)
 		out[i] = b.ring[at]
+		if _, ok := b.trimmed[at]; ok {
+			delete(b.trimmed, at)
+			if trimmed == nil {
+				trimmed = map[int]struct{}{}
+			}
+			trimmed[i] = struct{}{}
+		}
 		if partialFrame(out[i]) {
 			// Handed over, so nothing may fold into it any more.
 			b.unfold(at, out[i].SessionID)
@@ -306,7 +330,7 @@ func (b *inbox) take(limit int) batch {
 	b.head = (b.head + k) % len(b.ring)
 	b.n -= k
 
-	got := batch{frames: out, dropped: b.dropped}
+	got := batch{frames: out, dropped: b.dropped, trimmed: trimmed}
 	b.dropped = 0
 	switch {
 	case b.n > 0:

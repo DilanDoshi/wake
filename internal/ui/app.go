@@ -695,8 +695,8 @@ func (a App) stream(m streamMsg) (tea.Model, tea.Cmd) {
 		// this shares with the daemon's own gap.
 		a = a.notedGap(m.dropped)
 	}
-	for _, f := range m.frames {
-		a = a.apply(f)
+	for i, f := range m.frames {
+		a = a.afterFoldTrim(m, i, f).apply(f)
 	}
 	if m.done {
 		// A held /rename is dequeued and drawn but not sent, and a gone agent's
