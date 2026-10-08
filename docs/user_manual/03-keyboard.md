@@ -15,9 +15,10 @@ terminal sends it is [chapter 7](07-troubleshooting.md) and `docs/live-testing.m
 |---|---|
 | `↵` | Send |
 | `⎋` | Interrupt the current turn — safe on a blocked agent, no respawn |
-| `↑↓` | Recall your previous prompts into **this** pane (Claude Code's own history keys), on an empty or single-line draft; on a multi-line one they move the query cursor between its lines. `⌥` held does the same — it is not a separate binding |
+| `↑↓` | Recall your previous prompts into **this** pane (Claude Code's own history keys), on an empty or single-line draft; on a multi-line one they move the query cursor between its lines. `⌥` held does the same — it is not a separate binding. With messages queued to a working agent, `↑` takes them back into the draft instead |
 | `⌥↵` `⌃J` | A newline in the draft, rather than sending it |
-| `⎋⎋` | Clear a conversation's draft — the first `⎋` interrupts *and* arms, the second clears. On an **idle conversation with no draft**, that second `⎋` opens a rewind picker to an earlier prompt instead |
+| `⌃]` | **Send now** to a working agent: takes your queued messages back and sends them with the draft as one message, which moves a running Bash command to the background and is read in the same turn |
+| `⎋⎋` | Clear a conversation's draft — the first `⎋` interrupts *and* arms, the second clears. On an **idle conversation with no draft**, that second `⎋` opens a rewind picker to an earlier prompt instead — restore the conversation, the code, or both; restoring code previews the files first and takes `↵` twice |
 | `⇞` `⇟` | Scroll the pane with the keys |
 | `⌃E` | Expand what the pane folded — a conversation's tool results, or the room's folded responses — and collapse it again |
 
