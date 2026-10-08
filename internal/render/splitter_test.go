@@ -5,6 +5,7 @@ package render
 // left open come out - fed whole, and a few bytes at a time the way tokens arrive.
 
 import (
+	"fmt"
 	"reflect"
 	"strings"
 	"testing"
@@ -158,14 +159,22 @@ func TestTheIncrementalScanAgreesWithTheBatchAtAnyDeltaSize(t *testing.T) {
 	doc := "# Title\n\nSome **bold** prose.\nIt runs two lines.\n\n- one\n\n- two\n  - nested\n\n- three\n\n" +
 		"```go\nfunc main() {\n\n\tprintln(1)\n}\n```\nafter the fence\n\n1. first\n2. second\n\n10. tenth\n\n" +
 		"> quoted\n\n~~~\ntilde\n\n~~~\n\n| a | b |\n|---|---|\n| 1 | 2 |\n\ntrailing words"
-	want, wantOpen := splitAll(doc)
-	if len(want) < 8 {
-		t.Fatalf("the fixture cuts only %d chunks, too few to tell a delta-dependent scan from a steady one", len(want))
+	// The answer past MaxChunk is the case a batch read of everything unread would
+	// freeze at once while the stream cut paragraph by paragraph.
+	long := ""
+	for i := 0; len(long) <= 2*MaxChunk; i++ {
+		long += fmt.Sprintf("Paragraph %03d says a few ordinary words about the harbor parser.\n\n", i)
 	}
-	for _, delta := range []int{1, 2, 3, 5, 11} {
-		got, open, _ := scan(doc, delta)
-		if !reflect.DeepEqual(got, want) || open != wantOpen {
-			t.Errorf("delta %d cut %q (open %q), the batch cut %q (open %q)", delta, got, open, want, wantOpen)
+	for _, doc := range []string{doc, long} {
+		want, wantOpen := splitAll(doc)
+		if len(want) < 8 {
+			t.Fatalf("the fixture cuts only %d chunks, too few to tell a delta-dependent scan from a steady one", len(want))
+		}
+		for _, delta := range []int{1, 2, 3, 5, 11} {
+			got, open, _ := scan(doc, delta)
+			if !reflect.DeepEqual(got, want) || open != wantOpen {
+				t.Errorf("%d bytes by %d: cut %d chunks (open %q), the batch cut %d (open %q)", len(doc), delta, len(got), open, len(want), wantOpen)
+			}
 		}
 	}
 }

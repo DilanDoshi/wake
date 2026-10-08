@@ -115,7 +115,7 @@ func (s Splitter) Next(open string) (int, Splitter) {
 // step reads one line, or decides at one. It returns a cut offset (0 for none),
 // whether there is more to read, and the splitter after it.
 func (s Splitter) step(open string) (int, bool, Splitter) {
-	if s.at > MaxChunk || len(open)-s.at > MaxChunk {
+	if s.at > MaxChunk {
 		s.frozen = true
 		return 0, false, s
 	}
@@ -142,16 +142,23 @@ func (s Splitter) step(open string) (int, bool, Splitter) {
 		s.gap = false
 	}
 	if nl < 0 {
-		return 0, false, s // the line has not ended: it is read when it has
+		return 0, false, s.unended(rest) // the line has not ended: it is read when it has
 	}
 	s.at += nl + 1
 	return 0, true, s.read(rest[:nl])
 }
 
+// unended freezes on a line still being written past MaxChunk. Only that line, never
+// everything unread, so a whole answer read at once cuts where its stream would.
+func (s Splitter) unended(line string) Splitter {
+	s.frozen = s.frozen || len(line) > MaxChunk
+	return s
+}
+
 // inFence reads a line of an open fence: it ends the block only if it closes it.
 func (s Splitter) inFence(rest string, nl int) (int, bool, Splitter) {
 	if nl < 0 {
-		return 0, false, s
+		return 0, false, s.unended(rest)
 	}
 	closes := closesFence(rest[:nl], s.fence, s.fenceN, s.flush)
 	s.at += nl + 1
