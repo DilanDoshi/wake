@@ -360,13 +360,25 @@ func (a App) extendSelection(x, y int) (App, tea.Cmd) {
 	col := a.columnOf(a.sel.pane)
 	left := a.layout.PaneLeft(r, col)
 	a.edge.x, a.edge.y = x, y
-	was := a.transcriptIn(a.sel.pane).scroll
+	was, rows := a.transcriptIn(a.sel.pane).scroll, a.transcriptIn(a.sel.pane).height
 	if pull := a.edgePull(y, a.pointIn(a.sel.pane, x-left, y)); pull != 0 {
 		a = a.scrollPane(a.sel.pane, pull)
+		if a.transcriptIn(a.sel.pane).height != rows {
+			a = a.remeasured(col, r) // the pull changed the preview's rows, so the window drawn is not the one pressed
+		}
 	}
 	a.sel.head = a.pointIn(a.sel.pane, x-left, y)
 	a.sel = a.sel.clampedTo(r.Cols[col])
 	return a.holdAtEdge(a.transcriptIn(a.sel.pane).scroll != was)
+}
+
+// remeasured takes the dragged pane's transcript rows again, for a drag whose pull
+// changed its chrome. The motion path measures once at press, not per cell.
+func (a App) remeasured(col int, r Regions) App {
+	if _, _, height, ok := a.paneAt(col, a.selTop); ok {
+		a.selRows = a.transcriptRows(a.sel.pane, r.Cols[col], height)
+	}
+	return a
 }
 
 // endSelection puts what the drag took on the clipboard and leaves the

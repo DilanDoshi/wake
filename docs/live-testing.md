@@ -716,19 +716,30 @@ word in the vocabulary. What remains below is what only a human at a terminal ca
       agent: they read one field and must never differ. It should reset to nothing when the turn
       ends rather than carrying into the next one.
 - [ ] **Watch an answer arrive in a conversation.** Text should appear under the transcript, above
-      the working line, and should be replaced — not repeated — by the finished block. Anything that
-      renders as markdown syntax (`**bold**`) mid-stream and then re-renders is correct and
-      deliberate: the preview is plain text; see `internal/ui/partial.go`.
+      the working line, and should be replaced — not repeated — by the finished block. Each finished
+      paragraph, list, heading and code block turns formatted as soon as the next one begins (a
+      beat, never a flash of raw `**bold**` over it); the block still being written is plain text at
+      the same left edge, so only it shows markdown syntax. A long answer then lands with about the
+      rows it had (a row either way). Try a numbered list, a code block with a blank line in it, and
+      an HTML tag: a list is never split, a code block turns formatted only once it is closed, and
+      an answer holding an HTML tag stays plain text for the rest of that block. Open a
+      conversation while an agent is mid-answer: that answer draws plain until it lands, and the
+      next one formats. See `internal/ui/partial.go` and `partialchunks.go`.
 - [ ] **Interrupt mid-answer with `⎋`.** The half-sentence must disappear rather than sit under the
       transcript until the agent next speaks. A unit test covers the event ordering it depends on;
       what it cannot cover is a real interrupt's real frame order.
 - [ ] **Do it at fifteen or more working agents, on a wide terminal with a conversation open.** The
-      benchmark says one second of thirty streaming agents costs 0.69% of a core; what it cannot
+      benchmark says one second of thirty streaming agents costs about 2% of a core; what it cannot
       say is whether the *daemon* fans out that many more frames comfortably, or whether the notice
       row starts reporting dropped frames. **A "dropped N frames" notice appearing during ordinary
       streaming is the finding** — see `deferred.md`.
-- [ ] **A narrow pane, and a stacked column.** The preview takes up to three rows out of the
-      transcript's. In one of four grid panes, say whether that is the right trade.
+- [ ] **A narrow pane, and a stacked column.** While you follow the newest line, a long answer
+      streams into all the room the pane has and pushes the conversation up a row at a time, as
+      Claude Code's does; scroll back a notch and it drops to three rows so nothing you read moves,
+      and the rows it gave back return to the transcript at once - from there each notch is three
+      lines, and wheeling back down resumes following exactly at the newest line. In one of four
+      grid panes, say whether pushing the whole pane up is the right trade, and whether that step reads as
+      the pane making room or as the screen jumping.
 
 ## The pickers
 

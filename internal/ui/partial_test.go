@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/render"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -80,29 +81,45 @@ func TestAnInterruptedTurnLeavesNoHalfSentenceUnderTheTranscript(t *testing.T) {
 // arrives, and the work per delta grows with the answer. The cap is the pane's
 // now rather than a fixed three rows, but it is still the pane's and never the
 // block's, so the cost stays flat however long the answer runs.
+//
+// A pane that reads blocks (it saw the message begin) keeps the open one whole,
+// since a block that finishes is rendered from its whole source, until the
+// splitter gives up on it at render.MaxChunk. So its bound is the larger of the two;
+// one that does not read blocks is held to the pane's alone.
 func TestThePreviewIsBoundedToItsRowsHoweverLongTheBlockGets(t *testing.T) {
-	d := NewDM("s1", "alex").SetSize(60, 20)
-	for range 400 {
-		d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: "the quick brown fox jumps over the lazy dog. "})
-	}
-	if limit := d.previewCap(); d.partial.rows() > limit {
-		t.Errorf("the preview draws %d rows, want at most the pane's cap of %d", d.partial.rows(), limit)
-	}
-	if got, want := len(d.partial.text), previewChars(60, d.previewCap()); got > want {
-		t.Errorf("the preview retains %d characters, want at most %d: an unbounded tail is an unbounded wrap on every token", got, want)
-	}
-	// The newest tokens are the ones being read, so the tail is the end.
-	if !strings.HasSuffix(d.partial.text, "lazy dog. ") {
-		t.Errorf("the preview kept the wrong end of the block: %q", lastRunes(d.partial.text, 40))
+	for _, reads := range []bool{false, true} {
+		d := NewDM("s1", "alex").SetSize(60, 20)
+		if reads {
+			d = messageStarted(d)
+		}
+		for range 400 {
+			d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: "the quick brown fox jumps over the lazy dog. "})
+		}
+		if limit := d.previewCap(true); d.partial.rows() > limit {
+			t.Errorf("reads blocks = %v: the preview draws %d rows, want at most the pane's cap of %d", reads, d.partial.rows(), limit)
+		}
+		want := previewChars(60, d.previewCap(true))
+		if reads {
+			want = max(want, render.MaxChunk)
+		}
+		if got := len(d.partial.text); got > want {
+			t.Errorf("reads blocks = %v: the preview retains %d characters, want at most %d: an unbounded tail is an unbounded wrap on every token", reads, got, want)
+		}
+		// The newest tokens are the ones being read, so the tail is the end.
+		if !strings.HasSuffix(d.partial.text, "lazy dog. ") {
+			t.Errorf("reads blocks = %v: the preview kept the wrong end of the block: %q", reads, lastRunes(d.partial.text, 40))
+		}
 	}
 }
 
 // The preview grows to fill an otherwise-empty pane rather than sitting in a
-// three-row box while the rest of it stays blank - and it yields back to its
-// floor once the transcript has filled the pane, so it never pushes read
-// conversation off screen. The pane draws exactly its height in both cases,
-// which is the alt-screen invariant the fixed cap protected and this must keep.
-func TestThePreviewFillsAnEmptyPaneAndYieldsToAFullOne(t *testing.T) {
+// three-row box while the rest of it stays blank. Over a full transcript it is
+// the reader's place that decides: one who follows is given the pane's room, each
+// streamed row pushing the conversation up one, and one who has scrolled back
+// keeps the floor so nothing they read moves. The pane draws exactly its height
+// in every case, which is the alt-screen invariant the fixed cap protected and
+// this must keep.
+func TestThePreviewFillsAnEmptyPaneAndAFullOneGivesAFollowerItsRoomAndAReaderBackTheFloor(t *testing.T) {
 	const w, h = 60, 30
 	long := strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200)
 
@@ -117,20 +134,32 @@ func TestThePreviewFillsAnEmptyPaneAndYieldsToAFullOne(t *testing.T) {
 		t.Fatalf("filling the preview drew %d rows in a %d-row pane: a frame past its height scrolls the alt screen away on every draw", got, h)
 	}
 
-	// Full transcript: the preview yields to its floor so nothing scrolls off.
+	// Full transcript, the agent already working when it is laid out.
 	full := NewDM("s1", "alex")
 	full.Agent = Agent{ID: "s1", State: rpc.StateWorking}
 	full = full.SetSize(w, h)
 	for range 100 {
 		full = full.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "an earlier line of the conversation"})
 	}
-	full.Agent = Agent{ID: "s1", State: rpc.StateWorking}
-	full = tokens(full, long)
-	if got := full.partial.rows(); got != minPreviewRows {
-		t.Errorf("under a full transcript the preview drew %d rows, want the floor of %d: it is shoving read conversation off screen", got, minPreviewRows)
+	full = full.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "the newest line of the conversation"})
+	room := full.tr.height - minTranscriptHeight // laid out with no preview, so this is all it may take
+
+	following := tokens(full, long)
+	frame := strings.Split(visible(following, w, h), "\n")
+	if got := len(previewUnder(t, frame, "the newest line")); got != room {
+		t.Errorf("a reader following a full transcript got a %d-row preview, want the pane's room of %d", got, room)
 	}
-	if got := lipgloss.Height(full.View(w, h)); got != h {
-		t.Fatalf("the preview over a full transcript drew %d rows in a %d-row pane", got, h)
+	if len(frame) != h {
+		t.Fatalf("the preview over a full transcript drew %d rows in a %d-row pane", len(frame), h)
+	}
+
+	scrolled := tokens(full.ScrollUp(3), long)
+	frame = strings.Split(visible(scrolled, w, h), "\n")
+	if got := len(previewUnder(t, frame, followBannerText)); got != minPreviewRows {
+		t.Errorf("a reader scrolled back over a full transcript got a %d-row preview, want the floor of %d: it is shoving what they read off screen", got, minPreviewRows)
+	}
+	if len(frame) != h {
+		t.Fatalf("the preview under a scrolled-back reader drew %d rows in a %d-row pane", len(frame), h)
 	}
 }
 

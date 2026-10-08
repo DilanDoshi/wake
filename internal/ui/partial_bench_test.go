@@ -95,6 +95,47 @@ func BenchmarkOneBlockStreamed(b *testing.B) {
 			}
 		})
 
+		// The same block into a working agent whose transcript already fills the
+		// pane, following - the shape a long answer is read in, and the one whose
+		// preview is the pane's room rather than the three-row floor. Built once
+		// outside the loop: the arm prices the tokens, not the history.
+		full := fullTranscriptDM()
+		b.Run(fmt.Sprintf("preview-full/tokens=%d", tokens), func(b *testing.B) {
+			b.ReportAllocs()
+			for b.Loop() {
+				d := full
+				for _, tok := range toks {
+					d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: tok})
+				}
+				if d.partial.view == "" {
+					b.Fatal("the full-transcript arm holds no preview after its block: it is pricing a fold that discarded the tokens")
+				}
+				sinkPreview = d.partial.view
+			}
+		})
+
+		// The same block written as markdown into a pane that reads it: each
+		// finished paragraph goes through glamour once, as it completes. The added
+		// glamour time per answer is this arm less preview/ above.
+		md := streamedMarkdown(tokens)
+		b.Run(fmt.Sprintf("formatted/tokens=%d", tokens), func(b *testing.B) {
+			b.ReportAllocs()
+			finished := 0
+			for b.Loop() {
+				d := messageStarted(NewDM("s1", "alex").SetSize(benchPaneWidth, 40))
+				for _, tok := range md {
+					d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: tok})
+				}
+				finished = len(d.partial.fin.chunks())
+				sinkPreview = d.partial.view
+			}
+			// The arm has to reach the thing it prices: a pane that never read a
+			// block is the preview arm again, and reads as a free feature.
+			if want := (tokens - 1) / markdownParagraphTokens; finished == 0 || finished > want {
+				b.Fatalf("%d finished blocks held after %d tokens, want 1 to %d: this arm is not pricing the formatting", finished, tokens, want)
+			}
+		})
+
 		b.Run(fmt.Sprintf("glamour-per-token/tokens=%d", tokens), func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
@@ -106,6 +147,32 @@ func BenchmarkOneBlockStreamed(b *testing.B) {
 			}
 		})
 	}
+}
+
+// markdownParagraphTokens is how long a paragraph of streamedMarkdown runs: about
+// the corpus's mean block, which is 252 characters at four a token.
+const markdownParagraphTokens = 40
+
+// streamedMarkdown is a block arriving token by token that is written the way an
+// agent writes: ordinary words, a bold one opening each paragraph, and a blank
+// line between them. The same words as streamedBlock, so the arms price one text.
+func streamedMarkdown(tokens int) []string {
+	out := streamedBlock(tokens)
+	for i := markdownParagraphTokens; i < len(out); i += markdownParagraphTokens {
+		out[i] = "\n\n**" + strings.TrimSpace(out[i]) + "** "
+	}
+	return out
+}
+
+// fullTranscriptDM is a working agent over a hundred finished blocks, following.
+func fullTranscriptDM() DM {
+	d := NewDM("s1", "alex")
+	d.Agent = Agent{ID: "s1", State: rpc.StateWorking}
+	d = d.SetSize(benchPaneWidth, 40)
+	for i := range 100 {
+		d = d.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: fmt.Sprintf("earlier line %03d", i)})
+	}
+	return d
 }
 
 // BenchmarkStreamingFleetSecond is one second of a working fleet: thirty agents

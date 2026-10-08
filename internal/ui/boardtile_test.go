@@ -96,11 +96,13 @@ func TestATileNeverOvershootsItsCellHeightWhenTheTranscriptWraps(t *testing.T) {
 	}
 }
 
-// The tile fills with the transcript window rather than the DM preview's
-// three-row cap (minPreviewRows): a big cell shows as many rows of the
-// conversation as its own body can draw - the board's revised guardrail 2,
-// bounded to the cell body and with no scrollback. The DM preview and the inbox
-// fold keep the three-row cap; the tile shows the whole transcript tail.
+// The tile fills with the transcript window rather than the floor a tile's own
+// preview keeps (minPreviewRows, the cap of a partial no pane ever sized): a big
+// cell shows as many rows of the conversation as its own body can draw - the
+// board's revised guardrail 2, bounded to the cell body and with no scrollback.
+// The tile's preview and the inbox fold keep the three-row floor; the tile shows
+// the whole transcript tail. (A conversation's preview is the pane's room for a
+// reader following, DM.previewCap - the tile never asks it.)
 func TestABigTileFillsWithTranscriptBeyondThePreviewCap(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
@@ -111,7 +113,7 @@ func TestABigTileFillsWithTranscriptBeyondThePreviewCap(t *testing.T) {
 	g := a.boardTileLayout(a.boardAgents())
 	inner := max(g.cellW-boxFrameWidth, 1)
 
-	// Many wrapped rows of output, well past the three-row DM preview cap.
+	// Many wrapped rows of output, well past the three-row floor.
 	a = a.ensureBoardDMs().foldBoard(working.ID, assistantBlock(strings.Repeat("streamed line of output ", 80)))
 	middle := a.tileMiddle(working, inner, g.cellH-tileFrameRows)
 	filled := 0
@@ -121,7 +123,7 @@ func TestABigTileFillsWithTranscriptBeyondThePreviewCap(t *testing.T) {
 		}
 	}
 	if filled <= minPreviewRows {
-		t.Fatalf("the tile filled only %d transcript rows, want more than the DM preview cap of %d", filled, minPreviewRows)
+		t.Fatalf("the tile filled only %d transcript rows, want more than the preview floor of %d", filled, minPreviewRows)
 	}
 }
 

@@ -147,7 +147,11 @@ func (a App) observe(sessionID string, ev core.Event) App {
 		}
 	}
 	a = a.withManagerSend(sessionID, ev, agent)
-	if dm, ok := a.dms[sessionID]; ok && a.wants(sessionID, ev) && !replayedUserEcho(ev) {
+	if dm, ok := a.dms[sessionID]; ok && !a.wants(sessionID, ev) {
+		// A token for a pane nobody is looking at: it never gets it, so it cannot
+		// vouch for the block it is in (partialchunks.go).
+		a = a.unsynced(sessionID)
+	} else if ok && !replayedUserEcho(ev) {
 		// Named from the fold above, which has already seen this frame - an
 		// ending says what it ended only once the row is consulted. The rows
 		// are carried across in the same write rather than a second one, and

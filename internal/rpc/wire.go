@@ -316,6 +316,12 @@ type Frame struct {
 	// Now asks a FrameSend's agent to take it up at once rather than at its next
 	// tool boundary: the operator's send-now. See core.EncodeUserMessage.
 	Now bool `json:"now,omitempty"`
+	// Lost marks a preview frame that follows tokens of the same session's block the
+	// sender dropped for this client, so a window reading the block cannot trust the
+	// rest: the daemon sets it past a client's partialCeiling and the window's own
+	// inbox where it loses tokens. Beside Now so it fits the padding after it: this
+	// frame is copied by value on every event, and growing it cost 8% of a fleet's second.
+	Lost bool `json:"lost,omitempty"`
 
 	Event *core.Event `json:"event,omitempty"`
 

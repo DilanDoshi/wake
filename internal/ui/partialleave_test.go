@@ -9,6 +9,14 @@ package ui
 // from after, with everything generated in between missing: a sentence the
 // agent never wrote, in the one part of the pane that is meant to be a live
 // picture of what it is writing now.
+//
+// Leaving drops more than the text now that finished blocks are drawn formatted:
+// the blocks already read, and the pane's claim to have heard the whole of the
+// block it is in (partial.synced). A message start and a landing still reach a
+// pane that is away and its tokens do not, so one that comes back mid-block has
+// to preview that block as plain text - TestLeavingAConversationMakesItsNext
+// BlockRawUntilAnotherBegins and TestAPaneOpenedMidBlockPreviewsThatBlockRaw
+// (partialformat_test.go) hold that half.
 
 import (
 	"strings"

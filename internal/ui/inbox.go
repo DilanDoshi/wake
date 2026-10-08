@@ -116,11 +116,14 @@ const (
 // for as long as it stalls, and appending to a string costs its length. It is
 // taken at the preview's floor, not DM.previewCap's larger pane-filling cap: the
 // DM accumulates its own tail across the frequent consumes that empty this fold,
-// so the cap is fed frame by frame rather than from one fold's buffer. The only
-// shortfall is a multi-second stall into a wide, empty-transcript pane, where the
-// fold can trim below what previewCap would grow to; the next tokens refill it,
-// so the preview is briefly short rather than wrong - not worth a larger work
-// bound multiplied across a stalled fleet.
+// so the cap is fed frame by frame rather than from one fold's buffer. 800 x 5 is
+// 4,000 bytes, so after a long stall the fold trims below what previewCap would
+// grow to only where (rows + 2) x width passes that - about 100 columns by 38
+// rows - and the preview is short by rows until tokens refill it. Briefly short
+// rather than wrong, and not worth a larger bound multiplied across a stalled fleet.
+//
+// A trim leaves the DM a block with its beginning missing, so the frame is marked
+// Lost, as is the next one after any token the ring drops (partialchunks.go).
 var foldChars = previewChars(foldWidth, minPreviewRows)
 
 // inbox is the frames that have arrived and not yet been drawn.
@@ -147,6 +150,11 @@ type inbox struct {
 	// kind for that session closes it.
 	folds map[string]int
 
+	// pending is the sessions that lost a token the ring held or refused and have no
+	// frame yet to say so. The next preview added for one is marked Lost, until a
+	// message start, where a pane reads afresh.
+	pending map[string]struct{}
+
 	dropped int
 	err     error
 	ended   bool
@@ -154,9 +162,10 @@ type inbox struct {
 
 func newInbox() *inbox {
 	return &inbox{
-		ready: make(chan struct{}, 1),
-		ring:  make([]rpc.Frame, inboxFrames),
-		folds: make(map[string]int),
+		ready:   make(chan struct{}, 1),
+		ring:    make([]rpc.Frame, inboxFrames),
+		folds:   make(map[string]int),
+		pending: make(map[string]struct{}),
 	}
 }
 
@@ -180,6 +189,9 @@ func (b *inbox) add(f rpc.Frame) {
 		// This session's preview is closed by anything else it says: the block
 		// that supersedes one arrives between two turns' tokens.
 		delete(b.folds, f.SessionID)
+		if f.Event != nil && f.Event.Kind == core.KindMessageStart {
+			delete(b.pending, f.SessionID)
+		}
 		if b.n == len(b.ring) {
 			b.evictOldest()
 		}
@@ -197,23 +209,31 @@ func partialFrame(f rpc.Frame) bool {
 
 // addPartial folds this session's tokens into the slot they already have, or
 // takes a free one. It never evicts: a preview is replaced by the completed
-// block a moment later, and the frames it would push out are not.
+// block a moment later, and the frames it would push out are not. What it loses -
+// a fold's oldest bytes, a token with no slot - is said on a frame (Lost).
 func (b *inbox) addPartial(f rpc.Frame) {
 	if at, ok := b.folds[f.SessionID]; ok {
 		// A new Event rather than a write through the pointer: the frame the
 		// socket handed over is not this buffer's to mutate.
 		ev := *b.ring[at].Event
 		ev.Text += f.Event.Text
+		lost := f.Lost
 		if len(ev.Text) > foldChars {
 			// Bytes rather than runes for partial.add's reason: this bounds
 			// work, and a rune halved at the front is dropped by the wrap.
-			ev.Text = ev.Text[len(ev.Text)-foldChars:]
+			ev.Text, lost = ev.Text[len(ev.Text)-foldChars:], true
 		}
 		b.ring[at].Event = &ev
+		b.ring[at].Lost = b.ring[at].Lost || lost
 		return
 	}
 	if b.n == len(b.ring) {
+		b.pending[f.SessionID] = struct{}{}
 		return
+	}
+	if _, ok := b.pending[f.SessionID]; ok {
+		f.Lost = true
+		delete(b.pending, f.SessionID)
 	}
 	b.folds[f.SessionID] = (b.head + b.n) % len(b.ring)
 	b.put(f)
@@ -230,6 +250,7 @@ func (b *inbox) put(f rpc.Frame) {
 func (b *inbox) evictOldest() {
 	if partialFrame(b.ring[b.head]) {
 		b.unfold(b.head, b.ring[b.head].SessionID)
+		b.pending[b.ring[b.head].SessionID] = struct{}{}
 	} else {
 		b.dropped++
 	}
@@ -333,9 +354,12 @@ func (b *inbox) take(limit int) batch {
 // leak an in-flight DM turn's remaining prose into the room. It is reconciled
 // instead at the report's own working→idle edge (Fleet.WithStatus), the
 // gap-robust second observable of the turn-end fold clears it on. See bugs.md.
+//
+// And every pane stops trusting the block it is in: the hole may hold the tokens
+// that opened a fence (partialchunks.go).
 func (a App) notedGap(n int) App {
 	notice.Report("dropped %d frames: this window fell behind, so the conversation above has a gap", n)
-	a = a.forgotModes()
+	a = a.forgotModes().unsyncedAll()
 	a.fleet = a.fleet.ForgetTurns()
 	return a
 }

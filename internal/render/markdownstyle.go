@@ -65,6 +65,9 @@ const defaultMargin uint = 2
 // run in, unlike the box-drawing characters glamour's stock styles reach for.
 const bullet = "• "
 
+// horizontalRule is the row a thematic break draws.
+const horizontalRule = "─────"
+
 // unticked and ticked are the task boxes glamour draws in a task item's bullet
 // place, named so the list hang can find where the item's text starts.
 const (
@@ -158,7 +161,7 @@ func claudeStyle(dark bool) gansi.StyleConfig {
 		Strong:         gansi.StylePrimitive{Bold: boolPtr(true)},
 		Emph:           gansi.StylePrimitive{Italic: boolPtr(true)},
 		Strikethrough:  gansi.StylePrimitive{CrossedOut: boolPtr(true)},
-		HorizontalRule: gansi.StylePrimitive{Color: stringPtr(rule), Format: "\n─────\n"},
+		HorizontalRule: gansi.StylePrimitive{Color: stringPtr(rule), Format: "\n" + horizontalRule + "\n"},
 
 		List: gansi.StyleList{
 			StyleBlock:  gansi.StyleBlock{StylePrimitive: gansi.StylePrimitive{}},

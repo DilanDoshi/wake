@@ -301,7 +301,9 @@ func (a App) dmFor(id string) DM {
 	// The type-ahead pin, off App.queued so both View and transcriptRows measure
 	// the same chrome (queue.go).
 	d = d.WithQueued(a.queuedTexts(id))
-	return d.WithComposer(d.Composer().WithMode(a.modeOf(id)).WithArms(a.armsFor(id)))
+	// A draw copy, never stored, so there is no layout to settle (View re-lays it).
+	d.composer = d.composer.WithMode(a.modeOf(id)).WithArms(a.armsFor(id))
+	return d
 }
 
 // armsFor is which arm this pane's legend names.
