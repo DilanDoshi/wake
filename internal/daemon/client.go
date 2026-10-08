@@ -87,6 +87,11 @@ type client struct {
 	out     chan rpc.Frame
 	dropped atomic.Int64
 
+	// lost is the sessions whose previews were dropped for this client and which no
+	// queued frame has said so for yet. Each session's frames come from its own
+	// fan-out goroutine, so a key has one writer.
+	lost sync.Map
+
 	// pending is the writer goroutine's private encoding buffer. Only that
 	// goroutine touches it, so it needs no lock and is reused rather than
 	// allocated per frame. See send for why it exists at all.
@@ -112,16 +117,30 @@ func newClient(conn net.Conn) *client {
 //
 // A preview is bounded to partialCeiling of the queue and is not counted when
 // it is lost: the completed block replaces it a moment later, so a dropped
-// token is not the gap flush confesses.
+// token is not the gap flush confesses. The window is told another way: the next
+// preview queued for that session says tokens were lost before it (rpc.Frame.Lost),
+// until a message start, which is where a window reads afresh.
 func (c *client) enqueue(f rpc.Frame) {
 	preview := f.Event != nil && f.Event.Kind == core.KindPartialText
+	if f.Event != nil && f.Event.Kind == core.KindMessageStart {
+		c.lost.Delete(f.SessionID)
+	}
+	if preview {
+		_, f.Lost = c.lost.Load(f.SessionID)
+	}
 	if preview && len(c.out) >= partialCeiling {
+		c.lost.Store(f.SessionID, struct{}{})
 		return
 	}
 	select {
 	case c.out <- f:
+		if f.Lost {
+			c.lost.Delete(f.SessionID)
+		}
 	default:
-		if !preview {
+		if preview {
+			c.lost.Store(f.SessionID, struct{}{})
+		} else {
 			c.dropped.Add(1)
 		}
 	}

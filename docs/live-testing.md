@@ -716,9 +716,15 @@ word in the vocabulary. What remains below is what only a human at a terminal ca
       agent: they read one field and must never differ. It should reset to nothing when the turn
       ends rather than carrying into the next one.
 - [ ] **Watch an answer arrive in a conversation.** Text should appear under the transcript, above
-      the working line, and should be replaced — not repeated — by the finished block. Anything that
-      renders as markdown syntax (`**bold**`) mid-stream and then re-renders is correct and
-      deliberate: the preview is plain text; see `internal/ui/partial.go`.
+      the working line, and should be replaced — not repeated — by the finished block. Each finished
+      paragraph, list, heading and code block turns formatted as soon as the next one begins (a
+      beat, never a flash of raw `**bold**` over it); the block still being written is plain text at
+      the same left edge, so only it shows markdown syntax. A long answer then lands with about the
+      rows it had (a row either way). Try a numbered list, a code block with a blank line in it, and
+      an HTML tag: a list is never split, a code block turns formatted only once it is closed, and
+      an answer holding an HTML tag stays plain text for the rest of that block. Open a
+      conversation while an agent is mid-answer: that answer draws plain until it lands, and the
+      next one formats. See `internal/ui/partial.go` and `partialchunks.go`.
 - [ ] **Interrupt mid-answer with `⎋`.** The half-sentence must disappear rather than sit under the
       transcript until the agent next speaks. A unit test covers the event ordering it depends on;
       what it cannot cover is a real interrupt's real frame order.

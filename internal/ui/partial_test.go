@@ -13,6 +13,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/render"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -80,20 +81,34 @@ func TestAnInterruptedTurnLeavesNoHalfSentenceUnderTheTranscript(t *testing.T) {
 // arrives, and the work per delta grows with the answer. The cap is the pane's
 // now rather than a fixed three rows, but it is still the pane's and never the
 // block's, so the cost stays flat however long the answer runs.
+//
+// A pane that reads blocks (it saw the message begin) keeps the open one whole,
+// since a block that finishes is rendered from its whole source, until the
+// splitter gives up on it at render.MaxChunk. So its bound is the larger of the two;
+// one that does not read blocks is held to the pane's alone.
 func TestThePreviewIsBoundedToItsRowsHoweverLongTheBlockGets(t *testing.T) {
-	d := NewDM("s1", "alex").SetSize(60, 20)
-	for range 400 {
-		d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: "the quick brown fox jumps over the lazy dog. "})
-	}
-	if limit := d.previewCap(true); d.partial.rows() > limit {
-		t.Errorf("the preview draws %d rows, want at most the pane's cap of %d", d.partial.rows(), limit)
-	}
-	if got, want := len(d.partial.text), previewChars(60, d.previewCap(true)); got > want {
-		t.Errorf("the preview retains %d characters, want at most %d: an unbounded tail is an unbounded wrap on every token", got, want)
-	}
-	// The newest tokens are the ones being read, so the tail is the end.
-	if !strings.HasSuffix(d.partial.text, "lazy dog. ") {
-		t.Errorf("the preview kept the wrong end of the block: %q", lastRunes(d.partial.text, 40))
+	for _, reads := range []bool{false, true} {
+		d := NewDM("s1", "alex").SetSize(60, 20)
+		if reads {
+			d = messageStarted(d)
+		}
+		for range 400 {
+			d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: "the quick brown fox jumps over the lazy dog. "})
+		}
+		if limit := d.previewCap(true); d.partial.rows() > limit {
+			t.Errorf("reads blocks = %v: the preview draws %d rows, want at most the pane's cap of %d", reads, d.partial.rows(), limit)
+		}
+		want := previewChars(60, d.previewCap(true))
+		if reads {
+			want = max(want, render.MaxChunk)
+		}
+		if got := len(d.partial.text); got > want {
+			t.Errorf("reads blocks = %v: the preview retains %d characters, want at most %d: an unbounded tail is an unbounded wrap on every token", reads, got, want)
+		}
+		// The newest tokens are the ones being read, so the tail is the end.
+		if !strings.HasSuffix(d.partial.text, "lazy dog. ") {
+			t.Errorf("reads blocks = %v: the preview kept the wrong end of the block: %q", reads, lastRunes(d.partial.text, 40))
+		}
 	}
 }
 

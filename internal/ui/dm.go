@@ -354,20 +354,20 @@ func (d DM) Append(ev core.Event) DM {
 	case core.KindPartialText:
 		d.partial = d.partial.sized(d.blockWidth()).add(ev.Text)
 		return d
-	case core.KindAssistantText, core.KindTurnEnd:
-		// The block that supersedes it, or the turn that ended without ever
-		// producing one - an interrupt, where nothing else would clear it.
+	case core.KindMessageStart, core.KindAssistantText, core.KindTurnEnd:
+		// The block that supersedes it, a turn that ended without ever producing
+		// one (an interrupt: nothing else would clear it) or the next message
+		// beginning, which is where a pane may start reading (partialchunks.go).
 		//
 		// A turn end does *not* break the run: it draws nothing and is not
 		// stored, so renderAll never sees it, and breaking a run on it live
 		// would fold differently after a re-wrap than before. Two turns whose
-		// tools are adjacent with no prose between them fold together, which is
-		// the same thing they do on screen anyway.
+		// tools are adjacent with no prose between them fold together on screen.
 		//
-		// Its rows were chrome, so the layout is re-settled without them now, or a
-		// stale full-preview layout outlives the preview.
-		if d.partial.view != "" {
-			d.partial = d.partial.cleared()
+		// Its rows were chrome: re-settle the layout, or a stale full-preview one outlives it.
+		shown := d.partial.view != ""
+		d.partial = d.partial.superseded(ev)
+		if shown {
 			d = d.drawnLayout()
 		}
 	}

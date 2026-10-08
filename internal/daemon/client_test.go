@@ -283,3 +283,111 @@ func shortWriteTimeout(t *testing.T, d time.Duration) {
 	clientWriteTimeout = d
 	t.Cleanup(func() { clientWriteTimeout = prev })
 }
+
+// drained is what a client's queue holds, in order, without writing any of it.
+func drained(c *client) []rpc.Frame {
+	var out []rpc.Frame
+	for {
+		select {
+		case f := <-c.out:
+			out = append(out, f)
+		default:
+			return out
+		}
+	}
+}
+
+// A dropped token leaves the window with a block it has only the end of, and the
+// window has no way to see that: a fence it never saw open reads as prose. So the
+// next preview frame the daemon does queue for that session says tokens were lost
+// before it - and only that session's, and only once.
+func TestThePreviewAfterADroppedOneIsMarked(t *testing.T) {
+	server, peer := net.Pipe()
+	c := newClient(server)
+	t.Cleanup(func() {
+		c.close()
+		_ = peer.Close()
+	})
+
+	for range partialCeiling {
+		c.enqueue(previewFrame("s1", "tok "))
+	}
+	c.enqueue(previewFrame("s1", "dropped "))
+	c.enqueue(previewFrame("s2", "dropped "))
+	if got := len(c.out); got != partialCeiling {
+		t.Fatalf("%d frames queued, want the %d the ceiling allows: the fixture never dropped one", got, partialCeiling)
+	}
+
+	<-c.out
+	<-c.out
+	<-c.out
+	c.enqueue(previewFrame("s1", "after "))
+	c.enqueue(previewFrame("s1", "again "))
+	c.enqueue(previewFrame("s3", "clean "))
+	frames := drained(c)
+	marks := map[string][]bool{}
+	for _, f := range frames[len(frames)-3:] {
+		marks[f.SessionID] = append(marks[f.SessionID], f.Lost)
+	}
+	if got := marks["s1"]; len(got) != 2 || !got[0] || got[1] {
+		t.Errorf("s1's previews after the drop are marked %v, want [true false]: the first says tokens were lost, the next does not repeat it", got)
+	}
+	if got := marks["s3"]; len(got) != 1 || got[0] {
+		t.Errorf("s3 lost nothing and its preview is marked %v", got)
+	}
+	for _, f := range frames[:len(frames)-3] {
+		if f.Lost {
+			t.Fatalf("a preview queued before any drop is marked lost: %+v", f)
+		}
+	}
+}
+
+// A mark that could not be queued is not spent: the frame that carried it was
+// lost too, so the next one says so.
+func TestAMarkOnADroppedPreviewIsNotSpentUntilAFrameCarriesIt(t *testing.T) {
+	server, peer := net.Pipe()
+	c := newClient(server)
+	t.Cleanup(func() {
+		c.close()
+		_ = peer.Close()
+	})
+
+	for range partialCeiling {
+		c.enqueue(previewFrame("s1", "tok "))
+	}
+	c.enqueue(previewFrame("s1", "dropped "))
+	<-c.out
+	for range clientQueue { // the record fills what the ceiling kept free
+		c.enqueue(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s9"})
+	}
+	c.enqueue(previewFrame("s1", "refused by the full queue "))
+	drained(c)
+	c.enqueue(previewFrame("s1", "queued at last "))
+	if f := drained(c); len(f) != 1 || !f[0].Lost {
+		t.Errorf("the preview queued after a refused marked one carries %+v, want Lost", f)
+	}
+}
+
+// A message start is where a window begins reading afresh, so tokens lost in the
+// block before it are not a reason to distrust the one after.
+func TestAMessageStartRetiresTheMark(t *testing.T) {
+	server, peer := net.Pipe()
+	c := newClient(server)
+	t.Cleanup(func() {
+		c.close()
+		_ = peer.Close()
+	})
+
+	for range partialCeiling {
+		c.enqueue(previewFrame("s1", "tok "))
+	}
+	c.enqueue(previewFrame("s1", "dropped "))
+	drained(c)
+	c.enqueue(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &core.Event{Kind: core.KindMessageStart, SessionID: "s1"}})
+	c.enqueue(previewFrame("s1", "the next block "))
+	for _, f := range drained(c) {
+		if f.Lost {
+			t.Errorf("a preview after a message start is marked lost: %+v", f)
+		}
+	}
+}

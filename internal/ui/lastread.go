@@ -152,11 +152,15 @@ var lastReadStyle = lipgloss.NewStyle().Foreground(LastRead)
 // between missing: a sentence the agent never wrote, in the one part of the
 // pane that is meant to be a live picture of what it is writing now.
 //
+// And it forgets that the block was being read: what the pane hears while it is
+// away is a message start and a landing but never a token, so it is not synced to
+// the block it comes back to (App.reopened is the inverse).
+//
 // Before the returns below, because they are about the *marker*. A conversation
 // whose only content is a preview has no events to anchor one to and trips the
 // first of them - which is the case this bug lives in, not an edge of it.
 func (d DM) Leave() DM {
-	d.partial = d.partial.cleared()
+	d.partial = d.partial.cleared().unsynced()
 	at := d.events.len()
 	// A seed-only DM (opened after the agent spoke in the room, no live event yet)
 	// still has a transcript the reader has read - the room turns above events -

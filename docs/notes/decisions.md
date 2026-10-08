@@ -2560,6 +2560,10 @@ in the middle of a long one is the 1,024-token row above, thirty times over.
   getting longer — it lowers the rate and not the growth. It is also a poll where a wait will do,
   which the first non-negotiable forbids, and the deltas themselves are the wait.
 - **Plain text until the block completes.** Shipped.
+- **Render each finished block once, as it completes** *(added 2026-10-07, the second amendment below)*.
+  Not on the original list because the original list priced the *growing* block. A block that has
+  ended does not grow, so it costs one render of 43–70 µs rather than an integral, and only the open
+  block stays plain text.
 
 ### Why the fourth one is not a compromise
 
@@ -2711,8 +2715,8 @@ Claude Code pushes the whole transcript up a row at a time, and the owner ruled 
   (`TestTheResumePickerShowsTheCursorAtEveryPaneHeight` caught it in a prototype;
   `TestAMenuTakesItsRowsBackFromAFullPreview` holds it).
 - **The preview is still plain text.** A long answer now streams as raw markdown for rows at a time and
-  is redrawn formatted when its block lands. The owner accepted that for this change; a follow-up
-  formats finished paragraphs as they complete (`deferred.md`, 2026-10-07).
+  is redrawn formatted when its block lands. The owner accepted that for this change; the follow-up
+  formats finished paragraphs as they complete (*the second amendment, below*).
 
 **The figures above are stale, and these replace them.** The 08-15 tables were taken at the three-row
 cap; the preview arm has priced the pane-filling cap since 09-10 (an empty transcript, a 40-row pane),
@@ -2741,6 +2745,115 @@ a full transcript, following — the shape a long answer is read in. Interleaved
 change: 0.30–0.36 → 0.29–0.37 ms at 64 tokens, 1.53 → 2.25–2.38 ms at 256, 6.4 → 20.5–21.2 ms at 1,024.
 A following reader's preview now costs what an empty pane's always did; the existing arms did not move.
 Only panes on screen accumulate (`App.wants`), so a fleet pays it only for the conversations drawn.
+
+### Second amendment, 2026-10-07 — a finished block is rendered once, as it completes; only the open block is plain text
+
+The owner's ruling (`feat/preview-formats-finished-paragraphs`): a long answer used to stream as raw
+markdown for rows at a time (`**`, `#`, unindented lists) and snap to formatted when the block landed.
+Now **each finished markdown block is drawn formatted as soon as it completes, and only the block still
+being written stays raw.** This amends "glamour never sees one" above to *never per token*; the rest
+stands — a preview is never a record, it is bounded by the pane, accumulated only for panes on screen
+(`App.wants`), and the rejected granularities stay rejected.
+
+**The fifth candidate: render each finished block once.** Glamour's cost is the integral over tokens
+because the block it re-renders keeps growing; a block that has *finished* does not, so it is rendered
+once, at the moment it ends, and its rows are kept. The work is one glamour render per block
+(43–70 µs for a paragraph, behind the same process-global mutex), not one per token, so the argument
+that killed the first two candidates does not reach it. Measured the way the table above is
+(`BenchmarkOneBlockStreamed`, a 40-row empty pane at 79 columns, `-benchtime 10x -count 3`; the
+`formatted/` arm streams the same words as `preview/` with a blank line every 40 tokens):
+
+| one block, 40-row pane | preview (plain, before → after) | **formatted** | glamour per token |
+|---|---|---|---|
+| 64 tokens | 0.70–0.94 → 0.89–0.92 ms | **0.74–0.84 ms** | 2.08–2.33 ms |
+| 256 tokens | 2.56–3.04 → 2.95–3.00 ms | **1.81–2.05 ms** | 24.6–24.8 ms |
+| 1,024 tokens | 20.9–21.0 → 21.0–21.2 ms | **6.80–7.14 ms** | 361–365 ms |
+
+The plain arms did not move (that path is byte-for-byte what it was; `preview-full` 20.0–20.5 → 20.0–20.3 ms
+at 1,024). The formatted arm is *cheaper* than the plain one, not dearer: the open block is a paragraph
+long rather than a pane's worth, so the per-token wrap shrinks by more than the renders add. The glamour
+time added to one answer is what the renderer spends on its finished blocks, timed inside the seam: **0.07
+ms at 64 tokens (1 block), 0.29 ms at 256 (6), 1.07 ms at 1,024 (25)** — 43–70 µs a block, because a
+block is a paragraph and not the answer so far. The worst case is an answer with no blank line in it: a
+1,024-token paragraph read by a pane that heard it begin costs 23.2 ms against 20.6 ms plain (+12%, the
+open block kept to 4 KiB and then frozen), and 2.8 against 2.7 ms at 256. A second of thirty agents
+(`BenchmarkStreamingFleetSecond/preview`, tokens a pane never heard begin, so the plain path) is where the
+cost of a first version showed: 21.4 → 23.4 ms, +9%. It was not the preview. A bool of its own in
+`rpc.Frame` (the daemon's `Lost` mark) grew a struct every event copies by value, and the same bool in
+the base tree alone cost 21.4 → 23.1; placed in the padding after `Now` the arm is 21.4–21.9 ms against
+21.4–21.8 ms before, and a test pins the layout. Apple M5 Max, darwin 25.4.0, `-benchtime 10x`,
+interleaved before/after, load average 2.5 from other sessions.
+
+**The boundary rule** (`render.Splitter`, a pure function of the text with no markdown parser; it
+cuts only where the render of what is above cannot depend on what comes after):
+
+- at a blank line outside a fence, once the next line has started, when that line is at column 0, does
+  not open with `<`, and is not a list marker (`- `, `* `, `+ `, `N. `, `N) `) while the block already
+  holds one — so a list is never split, loose or tight, and an item's own paragraph, or any indented
+  line, goes on with the block above; so does a definition (`: text`, which glamour renders as a list
+  with its term) and the block after one, which may be the next term;
+- just after the closing line of a fence opened at column 0 (the same character, at least as many,
+  at column 0).
+
+Never inside a fence; an indented fence is read through and ends nothing; a closer indented 1–3 spaces
+is valid CommonMark but is read at column 0 only, so the splitter stays in the fence and the block stays
+raw (the safe direction, and a named test). A line opening with `<` freezes cutting for the rest of the
+block (an HTML block, a `<pre>`, can run through blank lines), and so does a block past
+`render.MaxChunk` (4 KiB, counted in whole lines read so the same text cuts the same way at any delta
+size). Frozen is the preview as it was before this: the open block, plain, cut to `previewChars`. The
+decision is made on a prefix, so formatting lags the next block's first one to three characters.
+
+**Rows.** Finished blocks are rendered through the `renderMarkdown` seam at the pane's width, from the
+source passed untrimmed exactly as `kindBlock` passes a landed block, and stacked with one blank row
+between them (`render.Stack`) — except after a horizontal rule, whose own trailing row *is* that row;
+a blank row a code block or nested list ends in is the block's own and takes the separator too. Both
+facts were found by the grammar fuzz, not assumed. The open block is drawn by `render.Prose`, the wrap
+glamour lays prose out with (its margin, width less both margins; `reflowProse`'s own `ansi.Wrap`), so
+it keeps the formatted rows' left edge and its breaks. `partial` keeps the newest chunks whose rows
+reach `cap + previewSlack` and the open block whole up to `MaxChunk` (at most twice that: a long line
+after 4 KiB of lines), a width change re-renders the retained chunks once each and re-wraps the tail,
+and `sized`/`capped` at an unchanged width re-slice cached rows and never render — `View` re-lays a
+copy every frame while a menu is up.
+
+**Verified equal.** `TestEveryChunkSplitRendersAsTheWholeDoes` renders every split of every distinct
+assistant block in the corpus and of a seeded grammar of answers at 40, 79 and 120 columns and compares
+plain rows to `Markdown(whole)`: 164 recorded answers, 31 of them cut, 0 widths differing; 300 grammar
+answers, about 270 cut, 0 differing (a further 6,000 across twelve seeds, 0). The fuzz's findings
+changed the code three times (the rule's trailing row; indented top-level fences; a definition list,
+which goldmark merges across a blank line, so a definition and the block after one are never cut
+from their term). The same check runs the text again a byte and three bytes at a time and requires the
+same cuts, so a decision that waits for characters (`mayBeMarker`, a lone `:`) is exercised too.
+**Transient divergences, known and accepted:** a reference-style link or footnote definition further
+down the answer; a bare file name glamour links (`tally.txt`), which it wraps a word earlier than the
+plain wrap does. The answer lands whole and is drawn right then. A fence in a list item whose body drops
+back to column 0 is not one of them: CommonMark closes it with the list, so the splitter freezes there
+and the block stays raw (Codex's second pass; `TestAListFenceThatLosesItsIndentFreezes`).
+
+**Synced, and one principle: unsync where a token is lost.** A pane that missed a token has no way to
+know a line is inside a code block, and would format a fragment as prose. So the splitter runs only
+while the pane has heard every token of the block since its message began (`partial.synced`), and
+otherwise the whole block is previewed plain as it always was. A message start syncs a pane (every API
+message begins with one, and a hidden pane still hears it); a landing does not, since the second text
+block of one message is all it would buy and it puts every fixture that lands blocks and then streams
+tokens without a start into formatted mode. A token is lost in a handful of places, and each unsyncs
+there, never where the pane later comes back (the first version did, in `show` and `refocus`, and a
+pane taken off screen by `⌃Y` at takeover width, or by `⌃W` on another pane, never reached either):
+
+- `App.wants` refuses it, the pane being off screen (`observe`): every way off screen, once per block;
+- the window's inbox loses it: a fold trimmed to `foldChars`, a token the full ring refuses, a fold the
+  ring evicts. The loss is carried on the next frame added for that session as `rpc.Frame.Lost`, and
+  `App.applied` unsyncs the pane just before that frame, so a message start earlier in the same batch
+  cannot sync it again ahead of the loss. A message start retires a pending mark;
+- the daemon drops it for a slow client past `partialCeiling` (256 queued frames, a stopped UI): the
+  next preview it does queue for that session carries `Lost`, until a message start;
+- the record has a gap (`notedGap`, the ring's drops and the daemon's overflow frame) or the connection
+  was replaced (`reattached`): every pane;
+- `Leave` clears the open text a block would be read from, and a subagent's text landing between the
+  agent's tokens leaves the rest of the block unreadable.
+
+A board tile (`ensureBoardDMs`) is `raw`: no scan, no glamour, the view exactly as before.
+`rpc.Frame.Lost` sits in the padding after `Now`: a Frame is copied by value on every event, and a
+bool of its own grew it a word and cost a fleet's second 8%.
 
 ---
 

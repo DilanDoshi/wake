@@ -5610,9 +5610,13 @@ the line restored to the fixture.
   larger tail per token while scrolled back. The board tile is the precedent for decoupling retention
   from the draw (`rowCap`/`maxTileTailRows`, built 2026-08-28 and superseded 2026-09-01 by the
   transcript-window tile; `decisions.md`, "Ruling: §2c narrows…", its 2026-08-28 amendment).
-- **A long answer streams as raw markdown.** The preview is plain text by ruling (`decisions.md`,
-  2026-08-15), so over a pane's worth of it the reader sees `**bold**` and fences until the block lands
-  and is drawn formatted. The owner accepted this for BUG-47. *Closes with:* a follow-up that sends each
-  *finished* paragraph (a blank line, or a closed fence) through glamour once as it completes — one
-  render per paragraph rather than per token, so the shared-mutex argument still holds — and keeps the
-  open tail as plain text.
+  *Eased 2026-10-07:* a pane that reads blocks keeps the open one whole to `render.MaxChunk`; its
+  finished blocks are still pruned against the cap at each cut, so the shortfall stays for those.
+- **A long answer streams as raw markdown.** *Closed 2026-10-07* by `feat/preview-formats-finished-paragraphs`:
+  each finished block is rendered once as it completes and only the open one stays plain text
+  (`decisions.md`, 2026-08-15, its 2026-10-07 second amendment). What it leaves is below.
+- **A finished block's formatting can differ from the landed block's in two named cases.** A
+  reference-style link or footnote definition further down the answer (the renderer resolves those
+  document-wide), and a bare file name (`tally.txt`) glamour links, whose styled row it wraps itself.
+  Both are transient — the answer lands whole and is drawn right then —
+  and the splitter names them (`internal/render/splitter.go`).
