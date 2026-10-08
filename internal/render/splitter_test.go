@@ -278,3 +278,21 @@ func TestStackSeparatesBlocksByOneBlankRow(t *testing.T) {
 		t.Errorf("Stack wrote into the slice it was given: %q", above)
 	}
 }
+
+// A list item's fence ends where its list does: a line back at column 0 closes the
+// list, and with it the fence, and a fence line there opens a new one - CommonMark's
+// reading, not a closer of the item's. The splitter cannot track the list's indent,
+// so it freezes there and the block stays raw to its landing.
+func TestAListFenceThatLosesItsIndentFreezes(t *testing.T) {
+	for _, text := range []string{
+		"- item\n\n  ```\n  code\n\noutside\n```\n\nafter\n\nmore",
+		"- item\n\n  ```\n  code\n```\n\nafter\n\nmore",
+	} {
+		for _, delta := range []int{1, 3, len(text)} {
+			chunks, open, s := scan(text, delta)
+			if len(chunks) != 0 || open != text || !s.Frozen() {
+				t.Errorf("%q by %d: chunks %q, frozen %v; want nothing cut and the splitter frozen", text, delta, chunks, s.Frozen())
+			}
+		}
+	}
+}

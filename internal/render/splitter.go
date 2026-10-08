@@ -15,14 +15,13 @@ package render
 //     CommonMark but is not read, so the block stays raw - the safe direction).
 //
 // Never inside a fence; an indented one is read through and ends nothing. A line
-// opening with `<` (a <pre> runs through blank lines), or a line past MaxChunk,
-// freezes the block raw. The decision is made on a prefix, so the same text cuts the
-// same way however its tokens arrived.
+// opening with `<` (a <pre> runs through blank lines), a line past MaxChunk, or a
+// list's fence meeting a line back at column 0 freezes the block raw. The decision
+// is made on a prefix, so the same text cuts the same way however its tokens arrived.
 //
 // Transient, since the answer lands whole: a reference or footnote definition below
-// changes how a use above renders; a fence in a list item whose body drops back to
-// column 0 is closed by CommonMark where this reads on; a bare file name glamour
-// links (`tally.txt`) wraps a word earlier than Prose does.
+// changes how a use above renders; a bare file name glamour links (`tally.txt`) wraps
+// a word earlier than Prose does.
 
 import (
 	"strings"
@@ -137,6 +136,10 @@ func (s Splitter) unended(line string) Splitter {
 func (s Splitter) inFence(rest string, nl int) (int, bool, Splitter) {
 	if nl < 0 {
 		return 0, false, s.unended(rest)
+	}
+	if line := rest[:nl]; !s.flush && s.list && !blankLine(line) && line[0] != ' ' && line[0] != '\t' {
+		s.frozen = true // back at column 0 a list item's fence closes with its list, a fence line there opens anew
+		return 0, false, s
 	}
 	closes := closesFence(rest[:nl], s.fence, int(s.fenceN), s.flush)
 	s.at += int32(nl + 1)

@@ -2824,9 +2824,10 @@ which goldmark merges across a blank line, so a definition and the block after o
 from their term). The same check runs the text again a byte and three bytes at a time and requires the
 same cuts, so a decision that waits for characters (`mayBeMarker`, a lone `:`) is exercised too.
 **Transient divergences, known and accepted:** a reference-style link or footnote definition further
-down the answer; a fence in a list item whose body drops back to column 0; a bare file name glamour
-links (`tally.txt`), which it wraps a word earlier than the plain wrap does. The answer lands whole and
-is drawn right then.
+down the answer; a bare file name glamour links (`tally.txt`), which it wraps a word earlier than the
+plain wrap does. The answer lands whole and is drawn right then. A fence in a list item whose body drops
+back to column 0 is not one of them: CommonMark closes it with the list, so the splitter freezes there
+and the block stays raw (Codex's second pass; `TestAListFenceThatLosesItsIndentFreezes`).
 
 **Synced, and one principle: unsync where a token is lost.** A pane that missed a token has no way to
 know a line is inside a code block, and would format a fragment as prose. So the splitter runs only
