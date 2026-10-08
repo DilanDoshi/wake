@@ -467,8 +467,13 @@ func decodeString(line map[string]json.RawMessage, key string) (string, bool) {
 // newline, and one `claude` run there populates the matching project slug, so
 // verifiedDir's comparison self-satisfies.
 //
-// So `cmd/wake`'s picker runs the assembled **row** through this, and a
-// seventh field on FoundSession inherits it.
+// So `wake import`'s and `/adopt`'s listing runs each assembled **row** through
+// this (cmd/wake/import.go's `row`), and a field added to FoundSession inherits
+// it. The resume picker is internal/ui's, which may not import this package, so
+// Dir reaches it as the filesystem has it and its fence is ui's own: each
+// assembled row goes through `collapseWhitespaceOneLine` - ui's oneLine, then
+// whitespace folded. That row once folded whitespace alone, and an escape in a
+// directory's name reached the terminal (docs/notes/bugs.md BUG-50).
 //
 // It maps anything that can act as structure to a space - the C0 and C1
 // ranges, DEL, and U+2028/U+2029 - and **substitutes rather than deletes**,

@@ -842,6 +842,8 @@ func TestAnEntityCannotSmuggleAnEscapeThroughTheRenderer(t *testing.T) {
 		{"hexadecimal", "before&#x1b;[2J&#x1b;[Hafter"},
 		{"a C1 introducer", "a&#155;2Jb"},
 		{"named", "a&Tab;b"},
+		{"a line separator", "a&#x2028;b"},
+		{"a paragraph separator", "a&#8233;b"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := Markdown(tc.src, 60)
@@ -852,7 +854,7 @@ func TestAnEntityCannotSmuggleAnEscapeThroughTheRenderer(t *testing.T) {
 				if r == '\n' || r == '\t' {
 					continue
 				}
-				if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+				if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) || r == '\u2028' || r == '\u2029' {
 					t.Errorf("a character reference reached the render as %#x: %q", r, out)
 				}
 			}
