@@ -62,6 +62,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/render"
 )
 
 // wants reports whether an event is worth a write into the conversation it
@@ -149,6 +150,13 @@ type partial struct {
 
 // add appends the tokens that just arrived, keeping only what can be drawn.
 func (p partial) add(s string) partial {
+	if strings.Contains(s, "\t") {
+		// The line so far is tab-free (each intake expanded its own), so this is s
+		// expanded from the column that line reached. After a front trim that column
+		// is mid-line, and a stop can be up to three cells out until the next newline.
+		line := p.text[strings.LastIndexByte(p.text, '\n')+1:]
+		s = render.ExpandTabs(line + s)[len(line):]
+	}
 	p.text += s
 	if keep := previewChars(p.width, p.cap); len(p.text) > keep {
 		// Bytes rather than runes: this is a bound on work, and a multi-byte

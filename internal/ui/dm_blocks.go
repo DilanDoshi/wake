@@ -553,7 +553,8 @@ func thinkingBlock(text string, width int) string {
 	if strings.TrimSpace(text) == "" {
 		return ""
 	}
-	body := HintStyle.Width(width).PaddingLeft(bodyIndent).Render(text)
+	// lipgloss wraps a tab as no cell and only then widens it: expanded first, it is measured.
+	body := HintStyle.Width(width).PaddingLeft(bodyIndent).Render(render.ExpandTabs(text))
 	return joinBlock(mutedLine(thinkingLabel, width), body)
 }
 

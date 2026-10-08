@@ -849,8 +849,8 @@ func TestAnEntityCannotSmuggleAnEscapeThroughTheRenderer(t *testing.T) {
 			// is left after removing what glamour emits is what nothing in
 			// this package should have produced.
 			for _, r := range stripANSI(out) {
-				if r == '\n' || r == '\t' {
-					continue
+				if r == '\n' {
+					continue // a tab is not let through: Markdown expands them (ExpandTabs)
 				}
 				if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
 					t.Errorf("a character reference reached the render as %#x: %q", r, out)
