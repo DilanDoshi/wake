@@ -64,10 +64,8 @@ func ExpandTabsAt(col int, s string) (string, int) {
 	return b.String(), col
 }
 
-// expandSource is ExpandTabs for markdown, placing each tab where CommonMark would:
-// structure from the line's start, and a fenced block's code from the column its
-// fence opened at, so a tab-indented line of code in a list item or a quote indents
-// from the code's own edge rather than from the container's prefix.
+// expandSource is ExpandTabs for markdown: structure from the line's start, and a
+// fenced block's code from the column its fence opened at, past a list's or quote's prefix.
 func expandSource(src string) string {
 	if !strings.Contains(src, "\t") {
 		return src
@@ -75,11 +73,14 @@ func expandSource(src string) string {
 	lines := strings.Split(src, "\n")
 	run, inset := "", 0 // the open fence's run, and the column its code starts at
 	for i, line := range lines {
+		if run != "" && strings.TrimSpace(line) != "" && indent(line) < inset {
+			run = "" // the fence's container ended, and the fence with it
+		}
 		switch {
 		case run == "":
 			run, inset = fenceOpener(line)
 			lines[i] = ExpandTabs(line)
-		case closes(line, run):
+		case closes(line, run, inset):
 			run = ""
 			lines[i] = ExpandTabs(line)
 		default:
@@ -89,9 +90,8 @@ func expandSource(src string) string {
 	return strings.Join(lines, "\n")
 }
 
-// fenceOpener is the run of a fence that line opens - ``` or ~~~ and their kin -
-// and the column it opens at, past any quote marks, list marker and indent; "" for
-// a line that opens none.
+// fenceOpener is the run of the fence line opens and the column it opens at, past
+// quote marks, a list marker and indent; "" for a line that opens none.
 func fenceOpener(line string) (string, int) {
 	text := ExpandTabs(line)
 	at := len(text) - len(strings.TrimLeft(text, " >"))
@@ -110,15 +110,27 @@ func fenceOpener(line string) (string, int) {
 	return rest[:n], at
 }
 
-// closes reports whether line closes the fence run opened: the same mark, at
-// least as long, and nothing after it but space.
-func closes(line, run string) bool {
+// closes reports whether line closes the fence run opened at inset: the same mark,
+// at least as long, within three columns of the code's edge, and nothing after it.
+func closes(line, run string, inset int) bool {
 	rest := strings.TrimLeft(line, " \t>")
-	return strings.HasPrefix(rest, run) && strings.TrimSpace(strings.TrimLeft(rest, run[:1])) == ""
+	return indent(line)-inset <= 3 && strings.HasPrefix(rest, run) &&
+		strings.TrimSpace(strings.TrimLeft(rest, run[:1])) == ""
+}
+
+// indent is the width of a line's leading spaces and quote marks, a quote mark's
+// optional space counted whether or not it was written.
+func indent(line string) int {
+	text := ExpandTabs(line)
+	n := len(text) - len(strings.TrimLeft(text, " >"))
+	if n > 0 && text[n-1] == '>' {
+		n++
+	}
+	return n
 }
 
 // listMarkerWidth is the width of the list marker text opens with (`-`, `*`, `+`,
-// `1.`, `1)`), followed by a space, or 0.
+// `1.`, `1)`) when a space follows it, or 0.
 func listMarkerWidth(text string) int {
 	if len(text) >= 2 && strings.ContainsRune("-*+", rune(text[0])) && text[1] == ' ' {
 		return 1
@@ -130,9 +142,8 @@ func listMarkerWidth(text string) int {
 	return 0
 }
 
-// expandFrom expands a line of a fence's code whose first inset columns are its
-// container's prefix: the prefix from the line's start, the code from its own edge.
-// A tab that straddles the edge leaves its far part to the code, as CommonMark does.
+// expandFrom expands a line of code whose first inset columns are its container's
+// prefix; a tab straddling the edge leaves its far part to the code, as CommonMark does.
 func expandFrom(line string, inset int) string {
 	var b strings.Builder
 	col, i := 0, 0
@@ -142,9 +153,9 @@ func expandFrom(line string, inset int) string {
 			col++
 			continue
 		}
-		stop := (col/tabWidth + 1) * tabWidth
-		b.WriteString(strings.Repeat(" ", stop-col))
-		col = stop
+		pad := tabWidth - col%tabWidth
+		b.WriteString(strings.Repeat(" ", pad))
+		col += pad
 	}
 	code, _ := ExpandTabsAt(max(col-inset, 0), line[i:])
 	return b.String() + code
