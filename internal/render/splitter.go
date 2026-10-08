@@ -1,51 +1,28 @@
 package render
 
-// Where a streamed answer's finished blocks end.
+// Where a streamed answer's finished blocks end: a pure function of the text read
+// so far, with no markdown parser, that cuts only where what is above cannot depend
+// on what comes after. The argument and the numbers are in docs/notes/decisions.md
+// (2026-08-15, second amendment of 2026-10-07).
 //
-// An answer arrives a token at a time and lands whole a moment later. Rendering it
-// per token is the cost the 2026-08-15 ruling rules out, but a block that has
-// *finished* never changes again, so it may be rendered once, the moment it
-// completes, while only the block still being written stays raw. This finds those
-// moments: a pure function of the text read so far, with no markdown parser, that
-// names a cut only where the render of what is above it cannot depend on what comes
-// after.
+// A cut falls:
 //
-// A cut is allowed at exactly two places:
+//   - at a blank line outside a fence, once the next line has started and sits at
+//     column 0 - never before an indented line, `<`, or (in a block holding a list)
+//     a list marker, and a definition (": text") goes on with its term;
+//   - just after the closing line of a fence opened at column 0 (same character,
+//     at least as long, at column 0: a closer indented 1-3 spaces is valid
+//     CommonMark but is not read, so the block stays raw - the safe direction).
 //
-//   - a blank line outside a fence, once the line after it has started and that
-//     line sits at column 0, does not open with `<`, and is not a list marker while
-//     the block already holds one - so a list is never split, loose or tight, and a
-//     block that carries on (an indented line, an item's paragraph) is never cut
-//     from the line it belongs to;
-//   - just after the closing line of a fence that opened at column 0, a closer of
-//     the same character and at least the opener's length, also at column 0.
+// Never inside a fence; an indented one is read through and ends nothing. A line
+// opening with `<` (a <pre> runs through blank lines), or a line past MaxChunk,
+// freezes the block raw. The decision is made on a prefix, so the same text cuts the
+// same way however its tokens arrived.
 //
-// Never inside a fence. A fence indented 1-3 spaces, an item's or not, is read
-// through - its closer may sit up to 3 spaces in - but ends nothing: a list item's
-// fence gives no cut, and the block ends where the list does. Only a fence opened at
-// column 0 ends the block, and its closer is read at column 0 only; CommonMark also
-// allows that one indented 1-3 spaces, but then the splitter stays in the fence and
-// cuts nothing for the rest of the block, which stays the raw preview it is today -
-// the safe direction.
-//
-// Two things stop cutting for the rest of the block, and the block is then the
-// raw preview it was before this existed: a line opening with `<` (an HTML block
-// can run through blank lines, and a <pre> does), and a block past MaxChunk, so a
-// block this cannot read the end of costs nothing.
-//
-// The decision is made on a prefix. A block is cut when the first characters of the
-// next one are in - one for most, a few more for a number that may be a marker - so
-// formatting lags the next block's first three characters, never its end, and the
-// same text cuts the same way however its tokens were cut.
-//
-// Not covered, and transient - the answer lands whole and is drawn right then: a
-// reference-style link definition or a footnote definition further down changes how
-// a use above it renders, which a block rendered alone cannot know; a definition
-// list ("Term" over ": definition") is one list across a blank line, which two
-// blocks are not; a fence inside a list item whose body drops back to column 0
-// is closed by CommonMark where the splitter reads on; and a bare file name that
-// glamour links (`tally.txt`) is a styled row it wraps itself, a word earlier than
-// Prose would.
+// Transient, since the answer lands whole: a reference or footnote definition below
+// changes how a use above renders; a fence in a list item whose body drops back to
+// column 0 is closed by CommonMark where this reads on; a bare file name glamour
+// links (`tally.txt`) wraps a word earlier than Prose does.
 
 import (
 	"strings"
@@ -64,13 +41,14 @@ const maxMarkerDigits = 9
 // Splitter is where a scan of the open text has got to. The zero value reads the
 // start of a block. It is a value: Next returns the next one.
 type Splitter struct {
-	at      int  // the start of the first line not read yet
-	fence   byte // the character of the open fence, or 0
-	fenceN  int  // how many of it opened the fence
-	flush   bool // the fence opened at column 0, so its closer ends the block
-	content bool // the block holds a line that is not blank
-	list    bool // ... and one opening with a list marker at indent 3 or less
-	gap     bool // blank lines follow the block's last line: a cut may fall at `at`
+	at      int32 // the start of the first line not read yet
+	fenceN  int32 // how many of it opened the fence
+	fence   byte  // the character of the open fence, or 0
+	flush   bool  // the fence opened at column 0, so its closer ends the block
+	content bool  // the block holds a line that is not blank
+	list    bool  // ... and one opening with a list marker at indent 3 or less
+	def     bool  // the block's last line is a definition: ": text"
+	gap     bool  // blank lines follow the block's last line: a cut may fall at `at`
 	frozen  bool
 }
 
@@ -126,7 +104,7 @@ func (s Splitter) step(open string) (int, bool, Splitter) {
 	}
 	if nl >= 0 && blankLine(rest[:nl]) {
 		s.gap = s.gap || s.content
-		s.at += nl + 1
+		s.at += int32(nl + 1)
 		return 0, true, s
 	}
 	if s.gap {
@@ -134,7 +112,7 @@ func (s Splitter) step(open string) (int, bool, Splitter) {
 		case wait:
 			return 0, false, s
 		case cut:
-			return s.at, false, s
+			return int(s.at), false, s
 		case freeze:
 			s.frozen = true
 			return 0, false, s
@@ -144,7 +122,7 @@ func (s Splitter) step(open string) (int, bool, Splitter) {
 	if nl < 0 {
 		return 0, false, s.unended(rest) // the line has not ended: it is read when it has
 	}
-	s.at += nl + 1
+	s.at += int32(nl + 1)
 	return 0, true, s.read(rest[:nl])
 }
 
@@ -160,8 +138,8 @@ func (s Splitter) inFence(rest string, nl int) (int, bool, Splitter) {
 	if nl < 0 {
 		return 0, false, s.unended(rest)
 	}
-	closes := closesFence(rest[:nl], s.fence, s.fenceN, s.flush)
-	s.at += nl + 1
+	closes := closesFence(rest[:nl], s.fence, int(s.fenceN), s.flush)
+	s.at += int32(nl + 1)
 	if !closes {
 		return 0, true, s
 	}
@@ -173,7 +151,7 @@ func (s Splitter) inFence(rest string, nl int) (int, bool, Splitter) {
 		s.frozen = true
 		return 0, false, s
 	}
-	return s.at, false, s
+	return int(s.at), false, s
 }
 
 // read takes a line into the block: the fence it opens, the list it belongs to,
@@ -185,6 +163,7 @@ func (s Splitter) read(line string) Splitter {
 		return s
 	}
 	text := line[indent:]
+	s.def = strings.HasPrefix(text, ": ") || strings.HasPrefix(text, ":\t")
 	if strings.HasPrefix(text, "<") {
 		s.frozen = true
 		return s
@@ -192,7 +171,7 @@ func (s Splitter) read(line string) Splitter {
 	// An indented fence - an item's, or a top-level one - is read through but ends
 	// nothing: the block goes on to where the list or the paragraph does.
 	if ch, n := opensFence(text); n > 0 {
-		s.fence, s.fenceN, s.flush = ch, n, indent == 0
+		s.fence, s.fenceN, s.flush = ch, int32(n), indent == 0
 		return s
 	}
 	if listMarker(text, true) == isMarker {
@@ -215,6 +194,16 @@ func (s Splitter) verdictOn(rest string) verdict {
 		return carry
 	case '<':
 		return freeze
+	case ':': // a definition goes on with its term
+		if len(rest) == 1 {
+			return wait
+		}
+		if rest[1] == ' ' || rest[1] == '\t' {
+			return carry
+		}
+	}
+	if s.def {
+		return carry // the next term of the same definition list
 	}
 	if s.list {
 		switch listMarker(rest, false) {

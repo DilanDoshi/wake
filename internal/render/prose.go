@@ -12,6 +12,10 @@ import (
 	"github.com/charmbracelet/x/ansi"
 )
 
+// proseBudget is the width a block's text wraps at: what is left of width past the
+// block's lead and the far margin, as glamour counts it.
+func proseBudget(width, lead int) int { return width - lead - int(defaultMargin) }
+
 // Prose lays plain text out the way Markdown lays out prose: every source line on
 // its own rows, each inside the document margin and wrapped at width less the
 // margin on both sides. A blank source line is a blank row. Text is never cut or
@@ -19,7 +23,7 @@ import (
 // width Markdown can lay out it wraps at the floor, as Markdown does.
 func Prose(text string, width int) string {
 	margin := strings.Repeat(" ", int(defaultMargin))
-	budget := boundedWidth(width) - 2*int(defaultMargin)
+	budget := proseBudget(boundedWidth(width), int(defaultMargin))
 	lines := strings.Split(text, "\n")
 	rows := make([]string, 0, len(lines))
 	for _, line := range lines {

@@ -66,6 +66,10 @@ func TestABlankLineEndsABlockOnceTheNextOneHasStarted(t *testing.T) {
 		{"blank lines before anything are not a block", "\n\none\n\ntwo", []string{"\n\none\n\n"}, "two"},
 		{"a heading is a block", "# Title\n\nbody", []string{"# Title\n\n"}, "body"},
 		{"the next line is one character in", "one\n\nt", []string{"one\n\n"}, "t"},
+		{"a definition goes on with its term", "Term\n\n: its definition\n\nafter\n\nlast", []string{"Term\n\n: its definition\n\nafter\n\n"}, "last"},
+		{"and the block after it may be the next term", "Term\n: one\n\nAnother\n: two\n\nafter\n\nlast",
+			[]string{"Term\n: one\n\nAnother\n: two\n\nafter\n\n"}, "last"},
+		{"a colon that is not a definition", "Term\n\n:not one\n\nafter", []string{"Term\n\n", ":not one\n\n"}, "after"},
 		{"an indented line goes on with the block above", "one\n\n  two\n\nthree", []string{"one\n\n  two\n\n"}, "three"},
 		{"a tab-indented line too", "one\n\n\ttwo\n\nthree", []string{"one\n\n\ttwo\n\n"}, "three"},
 	})
@@ -105,6 +109,7 @@ func TestAListMarkerThatHasNotFinishedArrivingWaits(t *testing.T) {
 		{"- a\n\nx", true},
 		{"one\n\n-", true}, {"one\n\n2", true}, // no list in this block: nothing to continue
 		{"one\n\n ", false}, {"one\n\n  x", false}, // an indent: not a cut either way
+		{"Term\n\n:", false}, {"Term\n\n: ", false}, {"Term\n\n:x", true}, // a definition marker waits for its space
 	} {
 		cut, _ := Splitter{}.Next(c.open)
 		if (cut > 0) != c.cut {

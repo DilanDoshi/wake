@@ -5,13 +5,14 @@ package render
 // paragraph is drawn one way while the answer streams and another when it lands.
 // Held against what agents actually wrote (the committed corpus, decoded through
 // core as every other corpus test here is) and against a seeded grammar of
-// everything markdown puts between two blank lines.
+// everything markdown puts between two blank lines, whole and a token at a time.
 
 import (
 	"fmt"
 	"math/rand"
 	"os"
 	"path/filepath"
+	"reflect"
 	"regexp"
 	"strings"
 	"testing"
@@ -71,10 +72,28 @@ func divergence(whole, got []string) string {
 	return ""
 }
 
+// sameCuts holds the cuts to being a function of the text and not of how its
+// tokens arrived: the batch scan never reaches a decision that waits for more
+// characters, and a stream does at every other character.
+func sameCuts(t *testing.T, name, doc string) (bad int) {
+	t.Helper()
+	want, wantOpen := splitAll(doc)
+	for _, delta := range []int{1, 3} {
+		if got, open, _ := scan(doc, delta); !reflect.DeepEqual(got, want) || open != wantOpen {
+			bad++
+			if bad <= 3 {
+				t.Errorf("%s by %d bytes cut %d blocks, the whole cut %d\n--- source ---\n%s", name, delta, len(got), len(want), doc)
+			}
+		}
+	}
+	return bad
+}
+
 // checkSplit holds one document to the property at every width and returns how
-// many widths disagreed.
+// many widths disagreed, and how many delta sizes cut it differently.
 func checkSplit(t *testing.T, name, doc string) (bad int) {
 	t.Helper()
+	bad = sameCuts(t, name, doc)
 	for _, w := range corpusWidths {
 		whole := plainRows(Markdown(doc, w))
 		if d := divergence(whole, plainRows(strings.Join(stitched(doc, w), "\n"))); d != "" {
@@ -250,6 +269,8 @@ var fuzzOddities = []string{
 	"***bold italic*** and ~~strike~~ text",
 	"> quote\n\n> second quote", "> quote\nlazy continuation",
 	"- a\n-\n- c", "2. starts at two\n3. three", "0. zero\n1. one", "+ plus\n+ list",
+	"Term\n: its definition", "Term\n\n: its definition", "Term\n: one\n: two",
+	"Term\n: its definition\n\nAnother\n: and its own",
 }
 
 // fuzzBlock is one block of the kinds an agent's answer holds.

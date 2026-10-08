@@ -269,7 +269,7 @@ func withTag(marker, tag string) string { return strings.TrimSuffix(marker, " ")
 // indent+margin the lead). An item's text after mark wraps at the budget less the
 // marker, its continuations laid under the text, so the hang costs no row its width.
 func rewrapProse(group []string, lead, width int, mark string) []string {
-	budget := width - lead - int(defaultMargin)
+	budget := proseBudget(width, lead)
 	hang := ansi.StringWidth(mark)
 	if budget-hang < 1 {
 		mark, hang = "", 0
