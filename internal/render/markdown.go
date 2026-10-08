@@ -82,7 +82,7 @@ func Markdown(src string, width int) string {
 	if strings.TrimSpace(src) == "" {
 		return ""
 	}
-	src = ExpandTabs(src) // measured as no cell, drawn as up to eight: see tabs.go
+	src = expandSource(src) // measured as no cell, drawn as up to eight: see tabs.go
 	width = boundedWidth(width)
 
 	r, err := rendererFor(width)

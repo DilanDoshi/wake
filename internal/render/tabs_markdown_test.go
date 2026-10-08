@@ -74,3 +74,46 @@ func TestATabInsideCodeRunsToItsStop(t *testing.T) {
 		t.Errorf("the code line's tabs did not run to their stops (%q):\n%s", want, out)
 	}
 }
+
+// A fence's content starts where its fence does: inside a list item or a quote the
+// container's prefix is not part of the code, so a tab-indented code line indents
+// from the code's own edge, as its four spaces would.
+func TestATabInANestedFenceIndentsFromTheCodesEdge(t *testing.T) {
+	for _, tc := range []struct{ name, tabbed, spaced string }{
+		{"a fence in an ordered item",
+			"1. step\n\n   ```go\n   func x() {\n   \tif ok {\n   \t\treturn\n   \t}\n   }\n   ```",
+			"1. step\n\n   ```go\n   func x() {\n       if ok {\n           return\n       }\n   }\n   ```"},
+		{"a fence in a bullet",
+			"- step\n\n  ```\n  a\n  \tb\n  ```",
+			"- step\n\n  ```\n  a\n      b\n  ```"},
+		{"a fence in a quote",
+			"> ```\n> func x() {\n> \treturn\n> }\n> ```",
+			"> ```\n> func x() {\n>     return\n> }\n> ```"},
+		{"a fence opened on its item's line",
+			"1. ```\n   a\n   \tb\n   ```",
+			"1. ```\n   a\n       b\n   ```"},
+		{"a fence opened on its bullet's line",
+			"- ```\n  a\n  \tb\n  ```",
+			"- ```\n  a\n      b\n  ```"},
+		{"inline code that opens no fence",
+			"- step\n\n  ```x``` is code\n\n  ```\n  \tb\n  ```",
+			"- step\n\n  ```x``` is code\n\n  ```\n      b\n  ```"},
+		{"a line after the fence has closed",
+			"1. step\n\n   ```\n   a\n   ```\n\n   \tafter",
+			"1. step\n\n   ```\n   a\n   ```\n\n    after"},
+		{"a tab straddling a quote's marker",
+			"> ```\n>\treturn\n> ```",
+			"> ```\n>   return\n> ```"},
+		{"a line inside the code that a closer cannot be",
+			"- step\n\n  ```\n  ```go\n  \tb\n  ```",
+			"- step\n\n  ```\n  ```go\n      b\n  ```"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			for _, width := range []int{40, 80} {
+				if got, want := stripANSI(Markdown(tc.tabbed, width)), stripANSI(Markdown(tc.spaced, width)); got != want {
+					t.Errorf("width %d: the tabbed code drew differently from its spaces:\n%s\n--- want\n%s", width, got, want)
+				}
+			}
+		})
+	}
+}

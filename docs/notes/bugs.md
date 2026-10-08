@@ -946,14 +946,16 @@ deep code line off and moved selection columns. Diffs and tool results already e
 drawn by lipgloss alone (an own turn, cards, local replies, thinking) get its four spaces before it wraps.
 
 **Fix:** `render.ExpandTabs` (`tabs.go`, the old `expandTabs` moved and made cell-aware, the column reset
-at each newline) runs where text is measured: `Markdown`'s source, `partial.add`'s intake (from the column
+at each newline) runs where text is measured: `Markdown`'s source (a fenced block's code from its own edge
+past a list item's or quote's prefix, as CommonMark places it - `expandSource`), `partial.add`'s intake (from the column
 its line reached, kept on the partial because the tail's trim can cut the line's start), diffs and tool
 results. `stylingOnly` turns a tab an entity decoded into a space. Not at the airlock: an
 answer is keyed on the ask's raw text. Guards: `TestAStreamedGoAnswerLeavesAWholeFrameOnARealScreen`
 (the real binary, dividers and each code line once, red without the fix),
 `TestNoRecordedEventLeavesATabInAFrameOrATranscript` and `…OnTheBoard` (the whole stream corpus with every
 space turned into a tab), `TestAMarkdownRowIsDrawnAtTheWidthItIsMeasured`, `TestATabInsideCodeRunsToItsStop`,
-`TestAStreamedPreviewDrawsNoTab`, `TestExpandTabs`.
+`TestATabInANestedFenceIndentsFromTheCodesEdge`, `TestAStreamedPreviewDrawsNoTab`, `TestExpandTabs`. A copied
+code block now carries spaces where its source had tabs.
 
 **Not this entry:** the non-tab control characters (an escape in a resume row's directory or a peer's
 directory, an SGR an entity decodes) are BUG-50, its own PR; the class is closed when both merge.

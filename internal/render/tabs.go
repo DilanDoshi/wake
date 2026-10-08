@@ -63,3 +63,89 @@ func ExpandTabsAt(col int, s string) (string, int) {
 	}
 	return b.String(), col
 }
+
+// expandSource is ExpandTabs for markdown, placing each tab where CommonMark would:
+// structure from the line's start, and a fenced block's code from the column its
+// fence opened at, so a tab-indented line of code in a list item or a quote indents
+// from the code's own edge rather than from the container's prefix.
+func expandSource(src string) string {
+	if !strings.Contains(src, "\t") {
+		return src
+	}
+	lines := strings.Split(src, "\n")
+	run, inset := "", 0 // the open fence's run, and the column its code starts at
+	for i, line := range lines {
+		switch {
+		case run == "":
+			run, inset = fenceOpener(line)
+			lines[i] = ExpandTabs(line)
+		case closes(line, run):
+			run = ""
+			lines[i] = ExpandTabs(line)
+		default:
+			lines[i] = expandFrom(line, inset)
+		}
+	}
+	return strings.Join(lines, "\n")
+}
+
+// fenceOpener is the run of a fence that line opens - ``` or ~~~ and their kin -
+// and the column it opens at, past any quote marks, list marker and indent; "" for
+// a line that opens none.
+func fenceOpener(line string) (string, int) {
+	text := ExpandTabs(line)
+	at := len(text) - len(strings.TrimLeft(text, " >"))
+	rest := text[at:]
+	if n := listMarkerWidth(rest); n > 0 {
+		at += n + len(rest[n:]) - len(strings.TrimLeft(rest[n:], " "))
+		rest = text[at:]
+	}
+	if rest == "" || (rest[0] != '`' && rest[0] != '~') {
+		return "", 0
+	}
+	n := len(rest) - len(strings.TrimLeft(rest, rest[:1]))
+	if n < 3 || (rest[0] == '`' && strings.Contains(rest[n:], "`")) {
+		return "", 0
+	}
+	return rest[:n], at
+}
+
+// closes reports whether line closes the fence run opened: the same mark, at
+// least as long, and nothing after it but space.
+func closes(line, run string) bool {
+	rest := strings.TrimLeft(line, " \t>")
+	return strings.HasPrefix(rest, run) && strings.TrimSpace(strings.TrimLeft(rest, run[:1])) == ""
+}
+
+// listMarkerWidth is the width of the list marker text opens with (`-`, `*`, `+`,
+// `1.`, `1)`), followed by a space, or 0.
+func listMarkerWidth(text string) int {
+	if len(text) >= 2 && strings.ContainsRune("-*+", rune(text[0])) && text[1] == ' ' {
+		return 1
+	}
+	digits := len(text) - len(strings.TrimLeft(text, "0123456789"))
+	if digits > 0 && digits < len(text)-1 && (text[digits] == '.' || text[digits] == ')') && text[digits+1] == ' ' {
+		return digits + 1
+	}
+	return 0
+}
+
+// expandFrom expands a line of a fence's code whose first inset columns are its
+// container's prefix: the prefix from the line's start, the code from its own edge.
+// A tab that straddles the edge leaves its far part to the code, as CommonMark does.
+func expandFrom(line string, inset int) string {
+	var b strings.Builder
+	col, i := 0, 0
+	for ; i < len(line) && col < inset && strings.IndexByte(" >\t", line[i]) >= 0; i++ {
+		if line[i] != '\t' {
+			b.WriteByte(line[i])
+			col++
+			continue
+		}
+		stop := (col/tabWidth + 1) * tabWidth
+		b.WriteString(strings.Repeat(" ", stop-col))
+		col = stop
+	}
+	code, _ := ExpandTabsAt(max(col-inset, 0), line[i:])
+	return b.String() + code
+}
