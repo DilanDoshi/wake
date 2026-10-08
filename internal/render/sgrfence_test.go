@@ -12,13 +12,13 @@ import (
 // docs/notes/bugs.md BUG-50. glamour decodes a numeric character reference, so
 // `&#x1b;[8m` in a reply is a real ESC followed by an SGR - and a complete SGR
 // was all the output fence asked for. A reply could conceal (8), blink (5) or
-// reverse (7) the text after it. The style emits none of those, so none is kept:
-// the run is drawn as the text it arrived as.
+// reverse (7) the text after it. The style emits none of those, so the run is
+// dropped whole and the text it would have hidden is drawn plainly.
 func TestAnEntityCannotSmuggleAnSGRTheStyleDoesNotEmit(t *testing.T) {
-	for _, tc := range []struct{ name, src, shown, code string }{
-		{"conceal", "before&#x1b;[8mafter", "[8m", "8"},
-		{"blink", "before&#27;[5mafter", "[5m", "5"},
-		{"reverse", "before&#x1b;[7mafter", "[7m", "7"},
+	for _, tc := range []struct{ name, src, code string }{
+		{"conceal", "before&#x1b;[8mafter", "8"},
+		{"blink", "before&#27;[5mafter", "5"},
+		{"reverse", "before&#x1b;[7mafter", "7"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			out := Markdown(tc.src, 60)
@@ -27,10 +27,20 @@ func TestAnEntityCannotSmuggleAnSGRTheStyleDoesNotEmit(t *testing.T) {
 					t.Errorf("the render keeps SGR %s, which the style never emits: %q", tc.code, out)
 				}
 			}
-			if text := stripANSI(out); !strings.Contains(text, tc.shown) || !strings.Contains(text, "after") {
-				t.Errorf("the neutralised run is not drawn as the text that arrived: %q", text)
+			if text := stripANSI(out); !strings.Contains(text, "beforeafter") {
+				t.Errorf("the refused run was not dropped whole: %q", text)
 			}
 		})
+	}
+}
+
+// reflow, inside glamour, re-opens the last SGR it saw on every row it wraps, so
+// a refused run drawn as text came back once a row.
+func TestARefusedRunInAWrappedParagraphIsNotRepeatedAsText(t *testing.T) {
+	src := strings.Repeat("tide ", 12) + "&#x1b;[8m" + strings.Repeat("gauge ", 12) + "&#x1b;[0m done"
+	text := stripANSI(Markdown(src, 40))
+	if strings.Contains(text, "[8m") || strings.Count(text, "gauge") != 12 {
+		t.Errorf("the refused run is drawn, or the words it hid are not:\n%s", text)
 	}
 }
 

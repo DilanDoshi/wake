@@ -947,7 +947,8 @@ other than tab (the tab is BUG-49's); not seen on a screen. Two holes and one ga
 - **An SGR through a character reference.** glamour decodes `&#x1b;[8m` into a live run, and
   `stylingOnly` kept any complete `ESC[…m`, so a reply could conceal, blink or reverse what followed.
   **Fix:** `stylingOnly` keeps a run only when the style emits every parameter (`styleSGR`,
-  `styleEmits`; decisions.md, 2026-10-07); a refused run's ESC becomes a space and `[8m` stays as text.
+  `styleEmits`; decisions.md, 2026-10-07); a refused run is dropped whole, so the text it would have hidden
+  is drawn plainly.
 - **U+2028/U+2029 through a reference** passed `stylingOnly`, whose class now matches core's
   `actsOnTheTerminal`.
 

@@ -3851,8 +3851,12 @@ core's `Contained` cannot see a reference, which is printable (BUG-50). So the a
   absent.
 - **Arguments are arguments.** An extended colour's index or components are skipped, never read as
   codes: `38;5;7` is colour 7, not reverse.
-- **A refused run is shown as text.** Its ESC becomes a space and `[8m` stays - contain.go's
-  "honest about what arrived".
+- **A refused run is dropped whole.** Drawn as text (its ESC a space, `[8m` left standing) it
+  repeated: reflow, inside glamour, re-opens the last SGR on every row it wraps, so the real binary
+  drew `[8m` once a row, each copy cells glamour had measured as none. Dropping cannot forge an
+  escape - every ESC that survives is inside a whole run the style emits - and the row is drawn at
+  the width glamour measured. Escapes other than SGR keep BUG-9's substitution; reflow does not repeat
+  them.
 - **Colours are kept.** The fence cannot tell a smuggled `38;5;n` from the theme's own, and refusing
   it would strip the theme. At worst one draws text in the background's colour, which hides nothing
   the reply could not have left out.
