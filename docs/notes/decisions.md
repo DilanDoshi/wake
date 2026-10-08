@@ -2765,9 +2765,9 @@ that killed the first two candidates does not reach it. Measured the way the tab
 
 | one block, 40-row pane | preview (plain, before → after) | **formatted** | glamour per token |
 |---|---|---|---|
-| 64 tokens | 0.89–0.96 → 0.86–1.00 ms | **0.66–0.73 ms** | 2.08–2.33 ms |
-| 256 tokens | 3.01–3.12 → 2.89–3.08 ms | **1.66–1.73 ms** | 24.6–24.8 ms |
-| 1,024 tokens | 20.9–21.4 → 20.9–21.3 ms | **6.35–6.41 ms** | 361–365 ms |
+| 64 tokens | 0.70–0.94 → 0.89–0.92 ms | **0.74–0.84 ms** | 2.08–2.33 ms |
+| 256 tokens | 2.56–3.04 → 2.95–3.00 ms | **1.81–2.05 ms** | 24.6–24.8 ms |
+| 1,024 tokens | 20.9–21.0 → 21.0–21.2 ms | **6.80–7.14 ms** | 361–365 ms |
 
 The plain arms did not move (that path is byte-for-byte what it was; `preview-full` 20.0–20.5 → 20.0–20.3 ms
 at 1,024). The formatted arm is *cheaper* than the plain one, not dearer: the open block is a paragraph
@@ -2777,9 +2777,12 @@ ms at 64 tokens (1 block), 0.29 ms at 256 (6), 1.07 ms at 1,024 (25)** — 43–
 block is a paragraph and not the answer so far. The worst case is an answer with no blank line in it: a
 1,024-token paragraph read by a pane that heard it begin costs 23.2 ms against 20.6 ms plain (+12%, the
 open block kept to 4 KiB and then frozen), and 2.8 against 2.7 ms at 256. A second of thirty agents
-(`BenchmarkStreamingFleetSecond/preview`, tokens a pane never heard begin, so the plain path) went 22.1–22.8
-→ 23.6–24.3 ms: a ~100-byte larger `partial` copied with every DM, about 0.15% of one core. Apple M5 Max,
-darwin 25.4.0, `-benchtime 10x`, interleaved before/after, load average 2.5 from other sessions.
+(`BenchmarkStreamingFleetSecond/preview`, tokens a pane never heard begin, so the plain path) is where the
+cost of a first version showed: 21.4 → 23.4 ms, +9%. It was not the preview. A bool of its own in
+`rpc.Frame` (the daemon's `Lost` mark) grew a struct every event copies by value, and the same bool in
+the base tree alone cost 21.4 → 23.1; placed in the padding after `Now` the arm is 21.4–21.9 ms against
+21.4–21.8 ms before, and a test pins the layout. Apple M5 Max, darwin 25.4.0, `-benchtime 10x`,
+interleaved before/after, load average 2.5 from other sessions.
 
 **The boundary rule** (`render.Splitter`, a pure function of the text with no markdown parser; it
 cuts only where the render of what is above cannot depend on what comes after):
@@ -2787,7 +2790,8 @@ cuts only where the render of what is above cannot depend on what comes after):
 - at a blank line outside a fence, once the next line has started, when that line is at column 0, does
   not open with `<`, and is not a list marker (`- `, `* `, `+ `, `N. `, `N) `) while the block already
   holds one — so a list is never split, loose or tight, and an item's own paragraph, or any indented
-  line, goes on with the block above;
+  line, goes on with the block above; so does a definition (`: text`, which glamour renders as a list
+  with its term) and the block after one, which may be the next term;
 - just after the closing line of a fence opened at column 0 (the same character, at least as many,
   at column 0).
 

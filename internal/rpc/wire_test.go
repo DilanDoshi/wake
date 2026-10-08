@@ -227,11 +227,15 @@ func TestALostMarkCrossesTheSocketAndCostsAnOrdinaryFrameNothing(t *testing.T) {
 
 // A Frame is copied by value on every event a window folds, so its size is on the
 // per-token path: a bool of its own after the strings grew it a word and cost a
-// fleet's second 8%. Lost sits in the padding after Now.
+// fleet's second 8%. Lost sits in the padding after Now, and the pointer behind
+// them stays one word on.
 func TestLostSitsBesideNowInTheFramesPadding(t *testing.T) {
 	var f Frame
 	if gap := unsafe.Offsetof(f.Lost) - unsafe.Offsetof(f.Now); gap != 1 {
 		t.Errorf("Lost is %d bytes after Now, want 1: it grew the Frame, which every event copies", gap)
+	}
+	if gap := unsafe.Offsetof(f.Event) - unsafe.Offsetof(f.Now); gap != unsafe.Sizeof(f.Event) {
+		t.Errorf("Event is %d bytes after Now, want one word: the two bools should share it", gap)
 	}
 }
 
