@@ -3835,3 +3835,24 @@ still grows only by a ruling.
 
 **Not done:** trimming comments to get under 800 (the guard says split by subject), and moving
 unrelated functions into an airlock file that happens to have headroom.
+
+## 2026-10-07 — the markdown output fence keeps only the SGR the style emits
+
+`stylingOnly` kept any complete `ESC [ … m`, on the ground that glamour emits only SGR. That held
+for glamour and not for what a reply can spell: glamour decodes `&#x1b;[8m` into a live run, and
+core's `Contained` cannot see a reference, which is printable (BUG-50). So the allowlist sits at the
+**output**:
+
+- **Derived, not listed.** `styleSGR` is exactly the parameters `claudeStyle` and its chroma themes
+  emit - reset, bold, italic, underline, crossed-out, the `59` tags, termenv's `38;2`, chroma's
+  `38;5` and `48;5` - held to a probe rendered in both palettes by
+  `TestTheOutputFenceKeepsExactlyWhatTheStyleEmits`, as an equality. A style that starts emitting a
+  new parameter fails there until the set follows it; 5-8 (blink, conceal, reverse) are asserted
+  absent.
+- **Arguments are arguments.** An extended colour's index or components are skipped, never read as
+  codes: `38;5;7` is colour 7, not reverse.
+- **A refused run is shown as text.** Its ESC becomes a space and `[8m` stays - contain.go's
+  "honest about what arrived".
+- **Colours are kept.** The fence cannot tell a smuggled `38;5;n` from the theme's own, and refusing
+  it would strip the theme. At worst one draws text in the background's colour, which hides nothing
+  the reply could not have left out.

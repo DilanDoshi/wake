@@ -35,6 +35,8 @@ package render
 // copies cannot drift.
 
 import (
+	"strings"
+
 	gansi "github.com/charmbracelet/glamour/ansi"
 )
 
@@ -218,4 +220,39 @@ func chromaTheme(dark bool) string {
 		return "catppuccin-mocha"
 	}
 	return "catppuccin-latte"
+}
+
+// styleSGR is every SGR parameter claudeStyle and its chroma themes emit, so the
+// only ones stylingOnly keeps - TestTheOutputFenceKeepsExactlyWhatTheStyleEmits
+// holds it to what they emit. An extended colour is keyed by introducer and
+// form, with its argument count. No conceal, blink or reverse: the style draws
+// none. A smuggled colour is kept, as the theme's own would be; it can only
+// recolour text (decisions.md, 2026-10-07).
+var styleSGR = map[string]int{
+	"0": 0, "1": 0, "3": 0, "4": 0, "9": 0, // reset, bold, italic, underline, struck
+	"59":   0, // itemTag and headingTag, which reflowProse strips
+	"38;2": 3, // termenv's colours: three components
+	"38;5": 1, // chroma's terminal256 foreground: an index
+	"48;5": 1, // and its background, which a diff fence paints
+}
+
+// styleEmits reports whether every parameter of an SGR run is one styleSGR
+// names, an extended colour's arguments skipped rather than read as codes: in
+// `38;5;7` the 7 is an index, not reverse.
+func styleEmits(run string) bool {
+	params := strings.Split(run[len("\x1b["):len(run)-1], ";")
+	for i := 0; i < len(params); i++ {
+		if args, ok := styleSGR[params[i]]; ok && args == 0 {
+			continue
+		}
+		if i+1 == len(params) {
+			return false
+		}
+		args, ok := styleSGR[params[i]+";"+params[i+1]]
+		if !ok || i+1+args >= len(params) {
+			return false
+		}
+		i += 1 + args
+	}
+	return true
 }

@@ -931,6 +931,44 @@ invisible on a blank cell and the fix moves those pads too; a table never carrie
 
 ---
 
+## BUG-50 — text Wake did not write could still drive the terminal: a resumable's directory, and an SGR spelled as a character reference
+
+**Reproduced 2026-10-07 by failing tests** while auditing BUG-9's fence for the control characters
+other than tab (the tab is BUG-49's); not seen on a screen. Two holes and one gap:
+
+- **The resume picker's row.** `daemon.OneLine`'s header said the picker ran its assembled row
+  through that fence. The picker moved into `internal/ui` (#112), which may not import the daemon,
+  and its rows went through `collapseWhitespaceOneLine` - whitespace folded, nothing else. A disk
+  session's `Dir` is the filesystem's name, so a directory named `proj\x1b[2J\x1b]0;…\aend` cleared
+  the screen and retitled the terminal when `/resume` drew it. **Fix:** `collapseWhitespaceOneLine`
+  runs ui's `oneLine` first. Its other callers (a card's question, header and labels, `/mcp`'s
+  error and result, the command echo, the `@` menu's name check) gain the same fence; none relied
+  on a control character.
+- **An SGR through a character reference.** glamour decodes `&#x1b;[8m` into a live run, and
+  `stylingOnly` kept any complete `ESC[…m`, so a reply could conceal, blink or reverse what followed.
+  **Fix:** `stylingOnly` keeps a run only when the style emits every parameter (`styleSGR`,
+  `styleEmits`; decisions.md, 2026-10-07); a refused run's ESC becomes a space and `[8m` stays as text.
+- **U+2028/U+2029 through a reference** passed `stylingOnly`, whose class now matches core's
+  `actsOnTheTerminal`.
+
+Regression tests, red without the fix: cmd/wake `TestAResumablesDirCannotDriveTheTerminal` (a
+transcript on disk, discovery, a bare `/resume`, the drawn row); render's separator rows in
+`TestAnEntityCannotSmuggleAnEscapeThroughTheRenderer`, `TestAnEntityCannotSmuggleAnSGRTheStyleDoesNotEmit`
+and `TestTheOutputFenceKeepsExactlyWhatTheStyleEmits` (`TestAnEntitySmuggledColourIsReadAsAColour`
+holds `38;5;7` as a colour); and ui's class guard `TestNoSurfaceDrawsAControlCharacterItWasHanded`,
+whose `frameHoldsNoControlCharacter` reads the whole frame of six surfaces - the picker, the `@`
+menu, a reply, a tool's output, a question card, an `/mcp` server's error.
+
+**Checked, not a hole:** the `@` menu's outside-session directory. `core.Peer` is parsed from a
+`/list-agents` result's `Event.Text`, which `DecodeLine` has already contained
+(`daemon/peers.go`'s `runListAgents`); the class guard plants the listing through that path.
+
+**Not changed:** a colour smuggled through a reference is kept (the decision says why). glamour
+measures a smuggled escape as no cells, so a neutralised one widens its row and `fitToWidth` wraps
+it - cosmetic, as for every escape neutralised since BUG-9.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

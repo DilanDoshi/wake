@@ -377,7 +377,9 @@ func padRight(s string, width int) string {
 // The rule is exact rather than a guess: glamour emits **only** SGR. A document
 // with a heading, bold, inline code, a link, a list, a fence, a table, a quote
 // and a rule produced 162 escape sequences and not one control rune outside
-// them. So a complete `ESC [ … m` run is kept and anything else is a space.
+// them. So a complete `ESC [ … m` run is kept when the style emits every one of
+// its parameters (styleEmits), and anything else is a space - a refused run's
+// `[8m` stays as the text that arrived (BUG-50).
 //
 // Run before fitToWidth, because a neutralised escape stops being zero cells
 // the moment it becomes a space, and the width has to be measured on what is
@@ -385,7 +387,7 @@ func padRight(s string, width int) string {
 func stylingOnly(s string) string {
 	var b strings.Builder
 	for i := 0; i < len(s); {
-		if n := sgrRun(s[i:]); n > 0 {
+		if n := sgrRun(s[i:]); n > 0 && styleEmits(s[i:i+n]) {
 			b.WriteString(s[i : i+n])
 			i += n
 			continue
@@ -393,7 +395,7 @@ func stylingOnly(s string) string {
 		r, size := utf8.DecodeRuneInString(s[i:])
 		if r == '\n' || r == '\t' {
 			b.WriteRune(r)
-		} else if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) {
+		} else if r < 0x20 || r == 0x7f || (r >= 0x80 && r <= 0x9f) || r == '\u2028' || r == '\u2029' {
 			b.WriteByte(' ')
 		} else {
 			b.WriteString(s[i : i+size])
