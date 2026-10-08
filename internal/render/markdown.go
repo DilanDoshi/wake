@@ -380,7 +380,10 @@ func padRight(s string, width int) string {
 // them. So a complete `ESC [ … m` run is kept when the style emits every one of
 // its parameters (styleEmits) and dropped whole when it does not - glamour's
 // wrap re-opens it on every row, so as text it would repeat (BUG-50) - and any
-// other control character is a space.
+// other control character is a space. The drop is contain.go's "substitute,
+// never delete" read from the other side: contain's rows were measured before it
+// ran, so a deletion would shift them; glamour measured an SGR run as no cells, so
+// here the drop keeps the measured width and a substitute would shift it.
 //
 // Run before fitToWidth, because a neutralised escape stops being zero cells
 // the moment it becomes a space, and the width has to be measured on what is

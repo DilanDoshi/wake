@@ -955,6 +955,7 @@ other than tab (the tab is BUG-49's); not seen on a screen. Two holes and one ga
 Regression tests, red without the fix: cmd/wake `TestAResumablesDirCannotDriveTheTerminal` (a
 transcript on disk, discovery, a bare `/resume`, the drawn row); render's separator rows in
 `TestAnEntityCannotSmuggleAnEscapeThroughTheRenderer`, `TestAnEntityCannotSmuggleAnSGRTheStyleDoesNotEmit`
+`TestARefusedRunInAWrappedParagraphIsNotRepeatedAsText`, `TestTheOutputFenceDropsNoRunTheRendererEmits`
 and `TestTheOutputFenceKeepsExactlyWhatTheStyleEmits` (`TestAnEntitySmuggledColourIsReadAsAColour`
 holds `38;5;7` as a colour); and ui's class guard `TestNoSurfaceDrawsAControlCharacterItWasHanded`,
 whose `frameHoldsNoControlCharacter` reads the whole frame of six surfaces - the picker, the `@`

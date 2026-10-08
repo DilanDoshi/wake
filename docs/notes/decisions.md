@@ -3857,6 +3857,13 @@ core's `Contained` cannot see a reference, which is printable (BUG-50). So the a
   escape - every ESC that survives is inside a whole run the style emits - and the row is drawn at
   the width glamour measured. Escapes other than SGR keep BUG-9's substitution; reflow does not repeat
   them.
+- **Not a breach of containment's "substitute, never delete".** contain.go substitutes because its
+  rows were padded and measured before it ran, so a deletion would shift columns. glamour measured an
+  SGR run as no cells, so here a drop is what keeps the row at its measured width and a substitute is
+  what shifts it.
+- **A miss is now silent.** A run the fence forgot would vanish instead of showing as text, so
+  `TestTheOutputFenceDropsNoRunTheRendererEmits` holds every run glamour emits - the probe in both
+  palettes and every recorded answer - to leaving the fence untouched.
 - **Colours are kept.** The fence cannot tell a smuggled `38;5;n` from the theme's own, and refusing
   it would strip the theme. At worst one draws text in the background's colour, which hides nothing
   the reply could not have left out.
