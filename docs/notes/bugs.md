@@ -946,7 +946,8 @@ deep code line off and moved selection columns; thinking blocks wrapped a tab as
 Diffs and tool results already expanded theirs.
 
 **Fix:** `render.ExpandTabs` (`tabs.go`, the old `expandTabs` moved and made cell-aware, the column reset
-at each newline) runs where text is measured: `Markdown`'s source, `partial.add`'s intake, `thinkingBlock`,
+at each newline) runs where text is measured: `Markdown`'s source, `partial.add`'s intake (from the column
+its line reached, kept on the partial because the tail's trim can cut the line's start), `thinkingBlock`,
 diffs and tool results. `stylingOnly` turns a tab an entity decoded into a space. Not at the airlock: an
 answer is keyed on the ask's raw text. Guards: `TestAStreamedGoAnswerLeavesAWholeFrameOnARealScreen`
 (the real binary, dividers and each code line once, red without the fix),

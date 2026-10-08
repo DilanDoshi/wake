@@ -146,17 +146,14 @@ type partial struct {
 	view  string
 	width int
 	cap   int
+	col   int // the cell column text's last line has reached, for its next tab
 }
 
 // add appends the tokens that just arrived, keeping only what can be drawn.
 func (p partial) add(s string) partial {
-	if strings.Contains(s, "\t") {
-		// The line so far is tab-free (each intake expanded its own), so this is s
-		// expanded from the column that line reached. After a front trim that column
-		// is mid-line, and a stop can be up to three cells out until the next newline.
-		line := p.text[strings.LastIndexByte(p.text, '\n')+1:]
-		s = render.ExpandTabs(line + s)[len(line):]
-	}
+	// Expanded from the column the line had reached, kept here because the trim
+	// below can cut the line's start away (bytes an inbox fold drops are not counted).
+	s, p.col = render.ExpandTabsAt(p.col, s)
 	p.text += s
 	if keep := previewChars(p.width, p.cap); len(p.text) > keep {
 		// Bytes rather than runes: this is a bound on work, and a multi-byte
@@ -180,7 +177,7 @@ func (p partial) capped(n int) partial {
 
 // cleared is the preview after the block it was previewing has landed.
 func (p partial) cleared() partial {
-	p.text, p.view = "", ""
+	p.text, p.view, p.col = "", "", 0
 	return p
 }
 
