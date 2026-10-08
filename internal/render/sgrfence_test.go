@@ -71,7 +71,7 @@ func TestARefusedRunInAWrappedParagraphIsNotRepeatedAsText(t *testing.T) {
 func TestTheOutputFenceDropsNoRunTheRendererEmits(t *testing.T) {
 	docs := append([]string{styleProbe}, recordedAnswers(t)...)
 	for _, dark := range []bool{true, false} {
-		r, err := glamour.NewTermRenderer(glamour.WithStyles(claudeStyle(dark)), glamour.WithWordWrap(80))
+		r, err := glamour.NewTermRenderer(rendererOptions(claudeStyle(dark), 80)...)
 		if err != nil {
 			t.Fatalf("build a renderer: %v", err)
 		}
@@ -155,7 +155,7 @@ const styleProbe = "# One\n\n## Two\n\n###### Six\n\n" +
 func TestTheOutputFenceKeepsExactlyWhatTheStyleEmits(t *testing.T) {
 	emitted := map[string]int{}
 	for _, dark := range []bool{true, false} {
-		r, err := glamour.NewTermRenderer(glamour.WithStyles(claudeStyle(dark)), glamour.WithWordWrap(80))
+		r, err := glamour.NewTermRenderer(rendererOptions(claudeStyle(dark), 80)...)
 		if err != nil {
 			t.Fatalf("build a renderer: %v", err)
 		}

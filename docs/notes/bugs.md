@@ -965,7 +965,9 @@ menu, a reply, a tool's output, a question card, an `/mcp` server's error.
 `/list-agents` result's `Event.Text`, which `DecodeLine` has already contained
 (`daemon/peers.go`'s `runListAgents`); the class guard plants the listing through that path.
 
-**Not changed:** a colour smuggled through a reference is kept (the decision says why). glamour
+**Residual:** a colour smuggled through a reference is kept, so a reply can still hide words by
+painting them near the background - concealment by colour, not screen corruption; decisions.md
+(2026-10-07) says how it could be closed. **Not changed:** glamour
 measures a smuggled escape as no cells, so a neutralised one widens its row and `fitToWidth` wraps
 it - cosmetic, as for every escape neutralised since BUG-9.
 

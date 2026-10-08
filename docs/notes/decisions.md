@@ -3864,6 +3864,10 @@ core's `Contained` cannot see a reference, which is printable (BUG-50). So the a
 - **A miss is now silent.** A run the fence forgot would vanish instead of showing as text, so
   `TestTheOutputFenceDropsNoRunTheRendererEmits` holds every run glamour emits - the probe in both
   palettes and every recorded answer - to leaving the fence untouched.
-- **Colours are kept.** The fence cannot tell a smuggled `38;5;n` from the theme's own, and refusing
-  it would strip the theme. At worst one draws text in the background's colour, which hides nothing
-  the reply could not have left out.
+- **Colours are kept, and that is a residual.** The fence cannot tell a smuggled `38;2;…` or
+  `48;5;n` from the theme's own, and refusing either would strip the theme. So a reply can still
+  hide words by painting them near the terminal's background, or painting a background behind them:
+  concealment by colour, not the screen corruption this entry closes. Closing it would mean keeping
+  only the exact runs the theme draws (each chroma token through its own formatter, each
+  `claudeStyle` colour through termenv), which leaves a smuggler only the theme's own colours. Not
+  built; the owner's call.
