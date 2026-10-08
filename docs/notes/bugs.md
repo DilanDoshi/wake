@@ -980,6 +980,75 @@ preview drops to three rows at once, so the rows it gave back return to the tran
 scrolled-back reader returning mid-answer regrows the preview from about five rows (`deferred.md`,
 2026-10-07).
 
+## BUG-49 — a tab-indented answer left stale rows on the screen
+
+**Seen 2026-10-07** filming the streamed-preview PRs: after an agent streamed a long answer with a
+tab-indented Go fence, the terminal kept fragments of earlier frames (a `}` before `var h Harbor`),
+drew code lines and the composer twice, and lost a pane divider. It happened on `main` too.
+
+**Root cause: a tab reached the terminal.** `ansi.StringWidth` counts a tab as no cell; a terminal moves
+to the next eight-column stop without erasing the cells it skips, so the frame before shows through, the
+row overruns its pane, and a wrap past the terminal's width shifts every row below. The streamed preview
+joined its raw text into the frame. Markdown kept tabs in its stored rows (`stylingOnly` passed them) and
+`transcript.view`'s lipgloss render turned each into four spaces only after it was measured, which cut a
+deep code line off and moved selection columns. Diffs and tool results already expanded theirs; surfaces
+drawn by lipgloss alone (an own turn, cards, local replies, thinking) get its four spaces before it wraps.
+
+**Fix:** `render.ExpandTabs` (`tabs.go`, the old `expandTabs` moved and made cell-aware, the column reset
+at each newline) runs where text is measured: `Markdown`'s source (a fenced block's code from its own edge
+past a list item's or quote's prefix, as CommonMark places it - `expandSource`), `partial.add`'s intake (from the column
+its line reached, kept on the partial because the tail's trim can cut the line's start), diffs and tool
+results. `stylingOnly` turns a tab an entity decoded into a space. Not at the airlock: an
+answer is keyed on the ask's raw text. Guards: `TestAStreamedGoAnswerLeavesAWholeFrameOnARealScreen`
+(the real binary, dividers and each code line once, red without the fix),
+`TestNoRecordedEventLeavesATabInAFrameOrATranscript` and `…OnTheBoard` (the whole stream corpus with every
+space turned into a tab), `TestAMarkdownRowIsDrawnAtTheWidthItIsMeasured`, `TestATabInsideCodeRunsToItsStop`,
+`TestATabInANestedFenceIndentsFromTheCodesEdge`, `TestAStreamedPreviewDrawsNoTab`, `TestExpandTabs`. A copied
+code block now carries spaces where its source had tabs.
+
+**Not this entry:** the non-tab control characters (an escape in a resume row's directory or a peer's
+directory, an SGR an entity decodes) are BUG-50, its own PR; the class is closed when both merge.
+
+## BUG-50 — text Wake did not write could still drive the terminal: a resumable's directory, and an SGR spelled as a character reference
+
+**Reproduced 2026-10-07 by failing tests** while auditing BUG-9's fence for the control characters
+other than tab (the tab is BUG-49's); not seen on a screen. Two holes and one gap:
+
+- **The resume picker's row.** `daemon.OneLine`'s header said the picker ran its assembled row
+  through that fence. The picker moved into `internal/ui` (#112), which may not import the daemon,
+  and its rows went through `collapseWhitespaceOneLine` - whitespace folded, nothing else. A disk
+  session's `Dir` is the filesystem's name, so a directory named `proj\x1b[2J\x1b]0;…\aend` cleared
+  the screen and retitled the terminal when `/resume` drew it. **Fix:** `collapseWhitespaceOneLine`
+  runs ui's `oneLine` first. Its other callers (a card's question, header and labels, `/mcp`'s
+  error and result, the command echo, the `@` menu's name check) gain the same fence; none relied
+  on a control character.
+- **An SGR through a character reference.** glamour decodes `&#x1b;[8m` into a live run, and
+  `stylingOnly` kept any complete `ESC[…m`, so a reply could conceal, blink or reverse what followed.
+  **Fix:** `stylingOnly` keeps a run only when the style emits every parameter (`styleSGR`,
+  `styleEmits`; decisions.md, 2026-10-07); a refused run is dropped whole, so the text it would have hidden
+  is drawn plainly.
+- **U+2028/U+2029 through a reference** passed `stylingOnly`, whose class now matches core's
+  `actsOnTheTerminal`.
+
+Regression tests, red without the fix: cmd/wake `TestAResumablesDirCannotDriveTheTerminal` (a
+transcript on disk, discovery, a bare `/resume`, the drawn row); render's separator rows in
+`TestAnEntityCannotSmuggleAnEscapeThroughTheRenderer`, `TestAnEntityCannotSmuggleAnSGRTheStyleDoesNotEmit`
+`TestARefusedRunInAWrappedParagraphIsNotRepeatedAsText`, `TestTheOutputFenceDropsNoRunTheRendererEmits`
+and `TestTheOutputFenceKeepsExactlyWhatTheStyleEmits` (`TestAnEntitySmuggledColourIsReadAsAColour`
+holds `38;5;7` as a colour); and ui's class guard `TestNoSurfaceDrawsAControlCharacterItWasHanded`,
+whose `frameHoldsNoControlCharacter` reads the whole frame of six surfaces - the picker, the `@`
+menu, a reply, a tool's output, a question card, an `/mcp` server's error.
+
+**Checked, not a hole:** the `@` menu's outside-session directory. `core.Peer` is parsed from a
+`/list-agents` result's `Event.Text`, which `DecodeLine` has already contained
+(`daemon/peers.go`'s `runListAgents`); the class guard plants the listing through that path.
+
+**Residual:** a colour smuggled through a reference is kept, so a reply can still hide words by
+painting them near the background - concealment by colour, not screen corruption; decisions.md
+(2026-10-07) says how it could be closed. **Not changed:** glamour
+measures a smuggled escape as no cells, so a neutralised one widens its row and `fitToWidth` wraps
+it - cosmetic, as for every escape neutralised since BUG-9.
+
 ---
 
 ## Residuals carried from bugs that are fixed and merged

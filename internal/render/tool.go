@@ -197,7 +197,7 @@ func wrapBody(text string, width int) []string {
 	}
 	var out []string
 	for _, l := range strings.Split(text, "\n") {
-		l = expandTabs(l)
+		l = ExpandTabs(l)
 		if ansi.StringWidth(l) <= width {
 			out = append(out, l)
 			continue

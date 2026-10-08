@@ -244,6 +244,10 @@ func runFakeAgent() int {
 		return fakeAgentHandshakes(sid)
 	case scriptSteers:
 		return fakeAgentSteers(sid)
+	case scriptCodeStream:
+		return fakeAgentCodeStream(sid, "\t")
+	case scriptCodeStreamSpaces:
+		return fakeAgentCodeStream(sid, "    ")
 	}
 	return fakeAgentEcho(sid)
 }

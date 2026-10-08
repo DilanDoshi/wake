@@ -32,8 +32,10 @@ package core
 // the four oneLine-shaped fences already in the tree. Prose is legitimately
 // multi-line - a markdown paragraph, a code fence, a tool result - so a fence
 // that flattened `\n` would collapse every one of them into a single row, and
-// the renderers that expand `\t` (render/diff.go, render/tool.go) would lose the
-// alignment they expand it for. Nothing else survives: a carriage return
+// the renderers that expand `\t` to its column (render.ExpandTabs: markdown, the
+// streamed preview, diffs, tool results) would lose the alignment they expand it
+// for - and an answer is keyed on an ask's raw text, so this must not expand it
+// either. Nothing else survives: a carriage return
 // redraws the row from column zero, and U+009B is a CSI with no ESC in front of
 // it for a terminal in 8-bit mode.
 //

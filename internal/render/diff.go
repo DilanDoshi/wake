@@ -64,15 +64,6 @@ const MaxDiffLines = 200
 // up with the gutter above it.
 const hiddenLinesFormat = "  " + ellipsis + " %d lines not shown"
 
-// tabWidth is what one tab is expanded to before anything measures a line.
-//
-// Expanded rather than measured, because ansi.StringWidth counts a tab as zero
-// and a terminal does not: `"\tfoo"` measures 3 and occupies 8 columns, so a
-// band padded to fill 20 drew 24 and wrapped into the next row. Source is
-// tab-indented far more often than not, so this is the common case rather than
-// an edge one.
-const tabWidth = 4
-
 // Diff renders a line-level diff. This is a deliberately simple
 // common-prefix/suffix trim rather than a full Myers diff: Edit results
 // are usually one contiguous hunk, and a wrong-but-fast diff is worse
@@ -225,7 +216,7 @@ func band(marker, line, against string, width int, bandStyle, wordStyle lipgloss
 	if width < 1 || room < 1 {
 		return ""
 	}
-	rows := wrapSpans(emphasise(expandTabs(line), expandTabs(against)), room)
+	rows := wrapSpans(emphasise(ExpandTabs(line), ExpandTabs(against)), room)
 	out := make([]string, 0, len(rows))
 	for _, row := range rows {
 		var b strings.Builder
@@ -283,27 +274,6 @@ func wrapSpans(spans []span, width int) [][]span {
 		}
 	}
 	return append(rows, cur)
-}
-
-// expandTabs replaces tabs with spaces to the next stop, so what is measured is
-// what the terminal will draw. See tabWidth.
-func expandTabs(s string) string {
-	if !strings.Contains(s, "\t") {
-		return s
-	}
-	var b strings.Builder
-	col := 0
-	for _, r := range s {
-		if r == '\t' {
-			pad := tabWidth - col%tabWidth
-			b.WriteString(strings.Repeat(" ", pad))
-			col += pad
-			continue
-		}
-		b.WriteRune(r)
-		col++
-	}
-	return b.String()
 }
 
 // emphasise splits line into spans, marking the run that differs from against.

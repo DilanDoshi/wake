@@ -410,9 +410,10 @@ func colourMention(line string) string {
 	return out
 }
 
-// collapseWhitespaceOneLine flattens a multi-line string to one row, for the
-// surfaces that genuinely have one: a collapsed tool line, a notice.
-func collapseWhitespaceOneLine(s string) string { return strings.Join(strings.Fields(s), " ") }
+// collapseWhitespaceOneLine flattens a string to one row: oneLine's containment,
+// then each run of whitespace as one space. The resume picker's rows go through
+// it, so a field added to a row inherits the fence (BUG-50).
+func collapseWhitespaceOneLine(s string) string { return strings.Join(strings.Fields(oneLine(s)), " ") }
 
 // speakerStyle is the colour an agent's name is drawn in when it heads a turn in
 // the room: its own identity hue if /color gave it one, the shared Accent

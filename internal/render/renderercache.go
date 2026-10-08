@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	"github.com/charmbracelet/glamour"
+	gansi "github.com/charmbracelet/glamour/ansi"
 )
 
 // CachedWidths is how many widths keep a renderer. It is the count
@@ -65,13 +66,16 @@ func rendererFor(width int) (*glamour.TermRenderer, error) {
 	if r, ok := renderers.get(width); ok {
 		return r, nil
 	}
-	r, err := newRenderer(
-		glamour.WithStyles(style),
-		glamour.WithWordWrap(width),
-	)
+	r, err := newRenderer(rendererOptions(style, width)...)
 	if err != nil {
 		return nil, err
 	}
 	renderers.put(width, r)
 	return r, nil
+}
+
+// rendererOptions is how a markdown renderer is built: rendererFor's, and the
+// output fence's derivation tests', so what they price is what ships.
+func rendererOptions(style gansi.StyleConfig, width int) []glamour.TermRendererOption {
+	return []glamour.TermRendererOption{glamour.WithStyles(style), glamour.WithWordWrap(width)}
 }
