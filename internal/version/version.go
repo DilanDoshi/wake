@@ -17,7 +17,7 @@ import (
 // Version is the release number. A var, not a const, so a release build stamps
 // it from the git tag with -ldflags -X (see .goreleaser.yaml); the default is
 // what a plain `go build` reports, kept in step with the last tag by hand.
-var Version = "0.1.8"
+var Version = "0.1.9"
 
 // shortRevision is how much of a commit hash a build names.
 const shortRevision = 7

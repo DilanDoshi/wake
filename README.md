@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.8 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.9 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -67,12 +67,16 @@ come back.
 | `↑↓` prompt history | `⇧↑↓` pick agent | `⇧←→` move focus | `⌃X` next blocked |
 | `⌃D` open DM | `⌃Y` open right | `⌃B` open below | `⌃W` close pane |
 | `⌃R` activity | `⇞⇟` scroll | `⌃E` expand | `⌃F` fork |
-| `⌃T` mention mode | `⌃A` show all | `⌥↵`/`⌃J` newline | |
+| `⌃T` mention mode | `⌃A` show all | `⌥↵`/`⌃J` newline | `⌃]` send now |
 
 `↑↓` recall your previous prompts into the query bar (Claude Code's own history keys); `⇧↑↓` walk the
 roster instead — including a conversation's running subagents in the right sidebar — and `↵` or `⌃D`
 opens the one the cursor is on. `⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels.
 While a completion menu is up, `⌃N`/`⌃P` walk it and `⇥` completes.
+
+A message to a working agent is read at its next tool boundary and pinned `⧗` until then; `↑` takes
+queued messages back, and `⌃]` takes them back and sends them now, with your draft. On an idle
+conversation with no draft, `⎋⎋` opens the rewind picker: restore the conversation, the code, or both.
 
 Full reference: [Keyboard shortcuts](docs/user_manual/03-keyboard.md).
 
@@ -112,9 +116,10 @@ slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/ad
 `/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows` and `/groupchat-filter`; `/effort` and `/model`
 configure the session they are addressed to. Everything else you type is passed to the agent byte for
 byte. A lone `@name` narrows the room to that agent's thread; `⌃A` widens it back to everyone while
-still addressing them, and `/groupchat-filter off` flips that default. `/team <name>` groups an agent
-under an operator-named team — heading a roster/board section, addressed as `@team` — and the manager
-can fan a message out to one with its own tool.
+still addressing them, and `/groupchat-filter off` flips that default. A leading `@"session name"`
+that names no agent in your fleet is relayed by the manager to that Claude session. `/team <name>`
+groups an agent under an operator-named team — heading a roster/board section, addressed as `@team` —
+and the manager can fan a message out to one with its own tool.
 
 ## Development
 
