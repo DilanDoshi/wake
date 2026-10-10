@@ -208,7 +208,7 @@ func TestStatusSaysWhatASessionWasForkedFrom(t *testing.T) {
 		{ID: idBeta, Name: "sydney", State: rpc.StateIdle, ParentID: idAlpha},
 	}}
 
-	out := formatStatus(st)
+	out := formatStatus(st, "")
 	if !strings.Contains(out, "forked from alex") {
 		t.Errorf("the listing does not say sydney was forked from alex:\n%s", out)
 	}
@@ -224,7 +224,7 @@ func TestStatusFallsBackToTheParentsShortIdWhenTheReportHasLostIt(t *testing.T) 
 		{ID: idBeta, Name: "sydney", State: rpc.StateIdle, ParentID: idAlpha},
 	}}
 
-	out := formatStatus(st)
+	out := formatStatus(st, "")
 	if !strings.Contains(out, "forked from "+shortID(idAlpha)) {
 		t.Errorf("the listing does not fall back to the parent's short id:\n%s", out)
 	}
@@ -302,7 +302,7 @@ func TestStatusWillNotNameAParentByANameSomethingElseNowHolds(t *testing.T) {
 		{ID: idBeta, Name: "marco", State: rpc.StateIdle, ParentID: idAlpha},
 	}}
 
-	out := formatStatus(st)
+	out := formatStatus(st, "")
 	if strings.Contains(out, "forked from sydney") {
 		t.Errorf("the listing names marco's parent by a name a *different* live session now holds, "+
 			"and `wake attach sydney` reaches that one:\n%s", out)
