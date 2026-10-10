@@ -4059,3 +4059,63 @@ core's `Contained` cannot see a reference, which is printable (BUG-50). So the a
   only the exact runs the theme draws (each chroma token through its own formatter, each
   `claudeStyle` colour through termenv), which leaves a smuggler only the theme's own colours. Not
   built; the owner's call.
+
+## 2026-10-10 — an ordinary agent sees its team through `wake status` and a fleet note, read-only
+
+The owner's ask: agents on a team should be able to see the team and message teammates through Claude
+Code's own peer channel, and "nothing new could start a turn". Built read-only; fable wake confirmed the
+plan against 389eb078.
+
+- **A prompt cannot carry a mutable team.** A team is set after an agent spawns (`/team`; no spawn flag
+  has one), and a running process's `--append-system-prompt` cannot change, so a roster in it is stale by
+  the first change — the objection spec §12 makes to a roster pasted into a prompt. So the live view is
+  `wake status`, which now prints `team <name>` after the id column and takes `--team <name>`; the
+  filter is client-side, so no `rpc` field was added and the three `SessionStatus` guards are untouched.
+- **The note points, and carries one snapshot.** Every ordinary agent starts with `fleetNote`
+  (`internal/daemon/fleetbrief.go`, applied in `launch`, the door spawn, fork, import, wake and resume
+  share): its session id, the two `wake status` forms, and `SendMessage` by name for a teammate. When the
+  agent has a team at launch — only a wake does; a fork, an import and a `/resume` carry no team — it
+  adds one line, labelled "at launch": the team and the other live members. Nothing re-sends it after a
+  later `/team`; the note says to ask again rather than trust an earlier answer.
+- **An id and fenced tokens only, never free text.** A system prompt rides every turn, so a label, a
+  directory or a title never lands in it. The id (a canonical UUID, else no note — the park book can be
+  hand-edited), names (`normalizeName`) and a team (`rpc.NormalizeTeam`) are all it holds;
+  `TestTheFleetNoteHoldsOnlyIdsAndFencedTokens` seeds a hostile directory name and asserts the note is the
+  one built from the id alone. A name or a team is still chosen by the operator or, through the manager's
+  `spawn_agent` and `set_team`, by a model (Codex's review, 2026-10-10), so it is not "minted": the launch
+  line calls them labels and not instructions, and the residual is accepted because a manager that can set
+  a 32-character token could already send the agent any text as a turn (`send_to_agent`), which reads with
+  more standing than a name in a sentence. A teammate must have a process (`PID != 0`): a session admitted
+  by a concurrent wake that then fails to start is withdrawn, and must not be named (the PID is a
+  supervisor's process group, published before the launcher reports ready, so it narrows the window and
+  does not close it: a teammate named at launch is a snapshot, and one that fails in that instant can
+  still be named - not fixed, the note's "ask again" is the cover). The manager is left
+  out of the teammate list: it is the service, nothing in code stops it being tagged, and claude's name for it will
+  not be the Wake name `wake status` prints once the manager's `--name` carries the fleet.
+- **A team cannot start with a dash** (Codex adversarial, 2026-10-10). Agent names must begin with a
+  letter, but a team could begin with a dash, and `wake status --team -ops` is a word `fleetFlag` and
+  `spawnFlags` read as theirs wherever it stands, so such a team could be set and never listed.
+  `rpc.NormalizeTeam` now refuses a leading dash, which closes the collision for every flag spelling at
+  once (`TestNoFlagThisBinaryStripsIsATeamName` derives the spellings from `knownFlags` and
+  `--fleet`); a restored tag that fails the fence is dropped, as any invalid one is.
+- **Read-only, and the exposure predates it.** The note names `wake status` and no other verb
+  (`TestTheFleetNoteNamesNoWakeVerbButStatus`). An agent with `WAKE_SOCKET` and `wake` on its PATH could
+  already run `wake stop`; the daemon has no caller auth (CLAUDE.md, Manager). The note teaches one
+  harmless verb and adds no reach. It writes no frame and starts no turn.
+- **The peer channel is Claude Code's, and it has limits Wake cannot remove.** A session is addressed by
+  claude's name (`--name`, kept in step with Wake's `/name`); names are unique inside a fleet but not
+  across fleets or the machine's other sessions, so a bare name can be ambiguous (an error, not a
+  misdelivery) and a stale one can reach a reissued name — which is why the note says to look the row up
+  first. Delivery is not guaranteed: every agent spawns `auto`, so a peer's message is same-mode by
+  default, and after `⇧⇥` moves one off `auto` Claude Code holds a peer's message for an approval a
+  headless agent cannot give. A message from a peer is a request, not the operator's instruction, and
+  the note says so; that is the 2026-10-03 accepted-risk paragraph's reason.
+- **`manager_test.go` forbade `--append-system-prompt` on an ordinary agent** among the manager's flags,
+  but its argument (every agent with the manager's tools could message and interrupt any other) is about
+  the tools. CLAUDE.md says an ordinary agent gets none of the *three* (`--mcp-config`,
+  `--strict-mcp-config`, `--tools`). The list now holds those and the manager's scope text; the
+  positive pair is `TestAnOrdinaryAgentStartsWithTheFleetNoteAndTheManagerWithItsOwn`.
+- **One live predicate in the daemon.** `liveCount` became `len(liveSessions())`, and the teammate list
+  reads the same snapshots, so the daemon holds no fourth copy of "parked and ended are not live".
+- **Not built:** team tools on ordinary agents (a `wake mcp` for workers), a `--team` spawn flag, and
+  re-sending the note when a team changes — that would be a turn Wake starts.

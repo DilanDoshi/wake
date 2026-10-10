@@ -892,6 +892,19 @@ has a fleet view and fleet tools (spec §12); an ordinary agent has Claude Code'
 channel and no fleet query. Giving every ordinary agent direct team tools is a separate, larger
 change (it would put fleet-command tools on every worker) and is not built.
 
+**Update 2026-10-10: an ordinary agent can now *see* its team, read-only.** `wake status` prints each
+agent's `team <name>` and takes `--team <name>`, and every ordinary agent starts with a short note
+(`internal/daemon/fleetbrief.go`) that teaches it both, gives its session id, and names `SendMessage` as
+the way to reach a teammate. Messaging stays Claude Code's own peer channel; no Wake frame starts a turn.
+Direct team tools on workers, a `--team` spawn flag, and re-sending the note on a `/team` change remain
+unbuilt. The argument is in `decisions.md` (2026-10-10).
+
+**Follow-up, after `feat/manager-fleet-claude-name` is on main:** the fleet note names the manager's claude
+name via `s.managerClaude()`, since an agent reaches the manager through `SendMessage` by that name and not
+by `manager`. It is left out of the note today because the note's scope is teammates (the manager is not
+one) and a branch does not stand on an unmerged PR. Owner's call whether agents need it in the prompt or the
+`wake status` line that branch adds ("Claude sessions know its manager as <name>.") suffices.
+
 **The recorded cost (owner accepted with the mockups):** fixed section order weakens "blocked floats
 to the absolute top of the roster" to "top of its section" — now that the room pins no ask card, the
 awareness strip's `N need you` and `⌃X` are what carry urgency across sections. Keep the strip's
