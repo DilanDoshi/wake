@@ -6,10 +6,13 @@ package ui
 // sent to a session stays in its context.
 
 import (
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -130,5 +133,61 @@ func TestStatusClosesWhenTheKeysLeaveItsPane(t *testing.T) {
 	}
 	if a = a.refocus(""); a.statusUI.Open() {
 		t.Error("/status stayed open after the keys left its conversation")
+	}
+}
+
+// A card that arrives while /status is open is an agent waiting on an answer:
+// its keys reach it, and /status steps aside rather than swallowing them from
+// under a card that may have clipped it out of sight.
+func TestACardsKeysReachItPastAnOpenStatus(t *testing.T) {
+	a, _ := statusIn(t, statusID, "alex", statusReport())
+	a = a.applyFrame(askFrame(statusID, "r1"))
+	if _, _, handled := a.statusKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}); handled {
+		t.Error("/status took a key while its agent's card was up")
+	}
+}
+
+// The MCP row is the banner's words, never its styled string run through the
+// one-row flattening, which would leave the escape's tail on screen.
+func TestTheMCPRowIsTheBannersWordsWithoutItsEscapes(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	fresh(t)
+	st := statusReport()
+	a := dmApp(newRecorder(t), Stream{}, statusID, "alex").withSize(140, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+	a = a.observe(statusID, core.Event{Kind: core.KindSystem, SessionID: statusID,
+		Session: &core.SessionFacts{MCPServers: []core.MCPServer{{Name: "slack", State: core.MCPNeedsAuth}}}})
+	m, cmd := typeAndSubmit(a, statusVerb)
+	drainBatch(cmd)
+	out := shown(m)
+	if !strings.Contains(out, "1 MCP server needs authentication") || strings.Contains(out, "[38;") {
+		t.Errorf("the MCP row is not the banner's plain words:\n%s", out)
+	}
+}
+
+// The branch is read once, when /status opens: the view is redrawn at the
+// shimmer's rate, and a read of .git per frame is the cost the bar caches away.
+func TestStatusReadsTheBranchOnceWhenItOpens(t *testing.T) {
+	repo := t.TempDir()
+	head := filepath.Join(repo, ".git", "HEAD")
+	if err := os.MkdirAll(filepath.Dir(head), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(head, []byte("ref: refs/heads/feat/one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := statusReport()
+	st.Sessions[0].Cwd = repo
+	a, _ := statusIn(t, statusID, "alex", st)
+	if !strings.Contains(shown(a), "feat/one") {
+		t.Fatalf("/status does not name the branch:\n%s", shown(a))
+	}
+	if err := os.WriteFile(head, []byte("ref: refs/heads/feat/two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out := shown(a); strings.Contains(out, "feat/two") {
+		t.Errorf("a redraw read the branch again:\n%s", out)
 	}
 }
