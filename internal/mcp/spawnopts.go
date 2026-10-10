@@ -87,7 +87,7 @@ func optionalString(args map[string]any, key, legal string) (string, error) {
 	}
 	s, ok := raw.(string)
 	if !ok {
-		return "", fmt.Errorf("%s must be a string %s", key, legal)
+		return "", fmt.Errorf("%s must be a string, %s", key, legal)
 	}
 	return s, nil
 }

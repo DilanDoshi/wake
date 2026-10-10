@@ -326,8 +326,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - A `Picker` is not a `Card` — `Cards.Reconcile` would delete it on the next report.
 
 **Manager**
-- **May send, interrupt, spawn (optionally named, at an effort and model only when the operator asked
-  for one, under `daemon.liveCap`, into a directory the fleet already occupies), and group
+- **May send, interrupt, spawn (optionally named, under `daemon.liveCap`, into a directory the fleet
+  already occupies; at an effort and model when the operator asks, a prompt rule), and group
   (`set_team`, `set_color`)** — nothing else on the fleet. Rename, label, park, wake, fork, import,
   stop, allow/deny, mode and the four MCP frames are refused, each argued in
   `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.

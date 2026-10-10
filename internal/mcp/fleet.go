@@ -82,9 +82,9 @@ type Fleet interface {
 	SetColor(ctx context.Context, id, color string) error
 }
 
-// SpawnOpts is what spawn_agent may choose for a new agent. "" in any field is
-// "Wake chose nothing": the flag stays off the argv and claude applies the
-// operator's own default.
+// SpawnOpts is what spawn_agent may choose for a new agent. "" in Effort or
+// Model is "Wake chose nothing": the flag stays off the argv and claude applies
+// the operator's own default. "" in Name has the daemon draw one from the pool.
 //
 // A struct rather than positional strings because Effort and Model sit side by
 // side as two strings, and a swap would compile.

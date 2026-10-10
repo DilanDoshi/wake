@@ -197,6 +197,12 @@ func TestSpawnAgentAdvertisesTheEffortLevelsAndNoModelList(t *testing.T) {
 		if model["type"] != "string" || model["enum"] != nil {
 			t.Errorf("spawn_agent's model is %v, want a string with no enum: core.ValidModel admits any name, and a list would refuse every model released after it", model)
 		}
+		desc, _ := model["description"].(string)
+		for _, alias := range core.ModelAliases {
+			if offered := strings.Contains(desc, " "+alias+","); offered == (alias == core.ModelDefault) {
+				t.Errorf("spawn_agent's model description %q gets %q wrong: every alias is an example but %q, which means no model at all", desc, alias, core.ModelDefault)
+			}
+		}
 		return
 	}
 	t.Fatal("tools/list did not advertise spawn_agent")
