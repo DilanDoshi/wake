@@ -24,8 +24,9 @@ sockets), with nothing to tell an agent which was its own.
   (`nameShaped`: lower case, name runes, at most `maxFleetName`): a directory named like a session
   id cannot put that id in the manager's argv, where the reaper reads it as proof of identity, and
   a named fleet keeps its whole name, so two fleets are never one manager. Codex found both; a
-  relative socket is resolved first, or each would be `manager--`. Residual: two fleets whose
-  names differ only in case are one manager to claude (possible only on a case-sensitive disk).
+  relative socket is resolved first, or each would be `manager--`. Residuals: two fleets whose
+  names differ only in case are one manager to claude (possible only on a case-sensitive disk), and
+  so are two hand-set sockets whose directories share a base name (`/tmp/a`, `/var/a`).
 - **The daemon leaves its own manager out of the peers listing** it answers (`ownManagerLeftOut`),
   so no client offers it as an outside session (in the room ↵ would hand the manager a message to
   relay to itself), whatever its build. Another fleet's manager is offered like any session.
