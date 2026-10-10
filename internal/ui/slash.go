@@ -144,6 +144,9 @@ const SlashPrefix = "/"
 const mcpCommand = "mcp"
 const mcpVerb = SlashPrefix + mcpCommand // for resumeVerb's reason
 
+// statusCommand: claude refuses it headless (testdata/stream/bare-status.jsonl); statuscmd.go.
+const statusCommand, statusVerb = "status", SlashPrefix + "status"
+
 // resumeCommand is the first citizen. Named as a constant because two places
 // need it - the router and the sentence the room says about a parked fleet -
 // and a second spelling is how the offer starts naming a command that is not
@@ -379,6 +382,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	groupchatFilterCommand: App.groupchatFilter,
 	reauthCommand:          App.reauth,
 	workflowsCommand:       App.openWorkflows,
+	statusCommand:          App.status,
 }
 
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
@@ -398,6 +402,7 @@ var roomTargetCommands = map[string]struct{}{
 	quitCommand:      {},
 	mcpCommand:       {},
 	workflowsCommand: {},
+	statusCommand:    {},
 }
 
 // leadingRoomTargetCommand is the roomTargetCommand a draft leads with, if any:
@@ -637,14 +642,6 @@ func (a App) mentionCommand(who, text string) (App, tea.Cmd, bool) {
 	next, cmd := commands[word](a, strings.TrimSpace(agentPrefix+who+" "+arg))
 	return next, cmd, true
 }
-
-// wakeCommandCount holds that map to its size. The list is hand-written - it is a vocabulary rather
-// than something the code declares elsewhere - and docs/notes/decisions.md's rule for one of those is
-// that it carries a count, so a command cannot be added without the passthrough guard being looked at.
-//
-// Named for its half of the overload rather than `commandCount`, which this
-// package's tests already use for how many goroutines one tea.Cmd costs.
-const wakeCommandCount = 16
 
 // slash routes one draft, reporting whether Wake took it.
 //

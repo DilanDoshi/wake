@@ -110,6 +110,9 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if next, cmd, handled := a.mcpMenuKey(m); handled {
 		return next, cmd, true
 	}
+	if next, cmd, handled := a.statusKey(m); handled {
+		return next, cmd, true
+	}
 	// Not while the board was up when the key arrived: the card was on no
 	// screen then, and a rune answering it would arm a settle on an ask nobody
 	// saw - cardFullyDrawn cannot see this, because the board is already
