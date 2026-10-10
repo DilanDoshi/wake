@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -113,10 +114,10 @@ func TestEachFleetsManagerHasItsOwnClaudeName(t *testing.T) {
 }
 
 // A hand-set socket's directory is anybody's text, and it reaches an argv as
-// --name. So it is folded into the shape every name has - lower case, name runes,
-// at most maxNameLen - and can no more carry a session id (the reaper's proof of
-// identity) or an argv marker than a chosen name can. A relative socket names
-// the directory it resolves to, never `.`.
+// --name. So it is folded into a fleet name's shape - lower case, name runes, at
+// most maxFleetName - and can carry neither a session id (the reaper's proof of
+// identity) nor an argv marker. A relative socket names the directory it
+// resolves to, never `.`.
 func TestAManagersClaudeNameHasTheShapeOfAName(t *testing.T) {
 	const id = "a11a0000-0000-4000-8000-00000000a11a"
 	cwd, err := os.Getwd()
@@ -130,11 +131,16 @@ func TestAManagersClaudeNameHasTheShapeOfAName(t *testing.T) {
 		"wake.sock",
 	} {
 		got := managerClaudeName(testRoot(t), socket)
-		if strings.IndexFunc(got, func(r rune) bool { return !isNameRune(r) }) >= 0 || len(got) > maxNameLen {
+		if strings.IndexFunc(got, func(r rune) bool { return !isNameRune(r) }) >= 0 || len(got) > len(managerClaudePrefix)+maxFleetName {
 			t.Errorf("the manager of %q is %q to claude: not a name's shape", socket, got)
 		}
-		if strings.Contains(got, id) || strings.Contains(got, "--resume") {
-			t.Errorf("the manager of %q is %q to claude, which carries a session id or an argv marker", socket, got)
+		if strings.Contains(got, id) {
+			t.Errorf("the manager of %q is %q to claude, which carries a session id", socket, got)
+		}
+		for _, marker := range core.SessionArgvMarkers(id) {
+			if strings.Contains("--name "+got+" ", marker) {
+				t.Errorf("the manager of %q is %q to claude, and its argv carries %q", socket, got, marker)
+			}
 		}
 	}
 	if got, want := managerClaudeName(testRoot(t), "/tmp/Harbor/wake.sock"), "manager-harbor"; got != want {
@@ -142,6 +148,30 @@ func TestAManagersClaudeNameHasTheShapeOfAName(t *testing.T) {
 	}
 	if got, want := managerClaudeName(testRoot(t), "wake.sock"), managerClaudeName(testRoot(t), filepath.Join(cwd, "wake.sock")); got != want {
 		t.Errorf("a relative socket names its manager %q, want %q as its absolute path does", got, want)
+	}
+}
+
+// Two fleets are two managers to claude, however long their names: a fleet's
+// whole name survives, so neither drops the other from the listing nor claims
+// its messages.
+func TestEveryFleetNameGivesItsOwnManager(t *testing.T) {
+	root := testRoot(t)
+	long := strings.Repeat("a", maxFleetName-1)
+	for _, pair := range [][2]string{
+		{"abcdefghijklmnop-one", "abcdefghijklmnop-two"},
+		{long + "x", long + "y"},
+	} {
+		var managers [2]string
+		for i, name := range pair {
+			dir, err := fleetDirIn(root, name)
+			if err != nil {
+				t.Fatalf("fleetDirIn(%q): %v", name, err)
+			}
+			managers[i] = managerClaudeName(root, filepath.Join(dir, socketFileName))
+		}
+		if managers[0] == managers[1] {
+			t.Errorf("fleets %q and %q are both %q to claude", pair[0], pair[1], managers[0])
+		}
 	}
 }
 

@@ -162,12 +162,13 @@ func managerClaudeName(root, socket string) string {
 	if dir == root {
 		fleet = LegacyFleet
 	}
-	return nameShaped(managerClaudePrefix + fleet)
+	return managerClaudePrefix + nameShaped(fleet)
 }
 
-// nameShaped folds s into the shape normalizeName holds every name to - lower
-// case, name runes only, at most maxNameLen - so it can no more carry a session
-// id (the reaper's proof of identity) or an argv marker than a chosen name can.
+// nameShaped folds a directory's name into a fleet name's shape - name runes,
+// lower case, at most maxFleetName - so a named fleet keeps the whole of its
+// name, and no session id (the reaper's proof of identity) fits behind the
+// prefix: 36 characters would have to reach back over the r of `manager-`.
 func nameShaped(s string) string {
 	s = strings.Map(func(r rune) rune {
 		if r = unicode.ToLower(r); isNameRune(r) {
@@ -175,7 +176,7 @@ func nameShaped(s string) string {
 		}
 		return nameOrdinalSep
 	}, s)
-	return s[:min(len(s), maxNameLen)]
+	return s[:min(len(s), maxFleetName)]
 }
 
 // managerClaudePrefix begins every manager's claude name, and normalizeName

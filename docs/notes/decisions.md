@@ -20,10 +20,12 @@ sockets), with nothing to tell an agent which was its own.
 - **The fleet is the socket's directory** (`daemon.managerClaudeName`): a named fleet's own name,
   `default` for `~/.wake`, and a hand-set `$WAKE_SOCKET`'s directory otherwise. That last case is
   most of the collisions observed, so it gets a distinct name rather than plain `manager`. A
-  directory is anybody's text on its way to an argv, so the result is folded into a name's shape
-  (`nameShaped`: lower case, name runes, at most `maxNameLen`): a directory named like a session id
-  cannot put that id in the manager's argv, where the reaper reads it as proof of identity. Codex
-  found this; a relative socket is resolved first, or each would be `manager--`.
+  directory is anybody's text on its way to an argv, so it is folded into a fleet name's shape
+  (`nameShaped`: lower case, name runes, at most `maxFleetName`): a directory named like a session
+  id cannot put that id in the manager's argv, where the reaper reads it as proof of identity, and
+  a named fleet keeps its whole name, so two fleets are never one manager. Codex found both; a
+  relative socket is resolved first, or each would be `manager--`. Residual: two fleets whose
+  names differ only in case are one manager to claude (possible only on a case-sensitive disk).
 - **The daemon leaves its own manager out of the peers listing** it answers (`ownManagerLeftOut`),
   so no client offers it as an outside session (in the room ↵ would hand the manager a message to
   relay to itself), whatever its build. Another fleet's manager is offered like any session.
