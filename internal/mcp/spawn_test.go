@@ -9,9 +9,12 @@ package mcp
 
 import (
 	"errors"
+	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -57,7 +60,7 @@ func TestSpawnAgentPassesAChosenNameToTheFleet(t *testing.T) {
 	if !strings.Contains(got, spawnedID) {
 		t.Errorf("spawn_agent answered %q without the new id", got)
 	}
-	if len(acts.spawned) != 1 || acts.spawned[0].name != "x" {
+	if len(acts.spawned) != 1 || acts.spawned[0].Name != "x" {
 		t.Errorf("the fleet was asked to spawn %v, want name \"x\" in /repo/api. A name the manager typed that never reaches the wire is the feature doing nothing", acts.spawned)
 	}
 }
@@ -74,9 +77,129 @@ func TestSpawnAgentWithoutANameLetsTheDaemonPick(t *testing.T) {
 	if !strings.Contains(got, spawnedID) {
 		t.Errorf("spawn_agent answered %q without the new id", got)
 	}
-	if len(acts.spawned) != 1 || acts.spawned[0].name != "" {
+	if len(acts.spawned) != 1 || acts.spawned[0].Name != "" {
 		t.Errorf("a nameless spawn asked the fleet for %v, want an empty name so the daemon draws one from the pool", acts.spawned)
 	}
+}
+
+// An effort and a model the operator asked for reach the fleet, and the answer
+// names them: agent_status reports an effort but never a model, so this reply
+// is the manager's only record of the model it asked for.
+func TestSpawnAgentCarriesAChosenEffortAndModel(t *testing.T) {
+	acts := &actions{}
+	f := fakeFleet{status: occupied("/repo/api"), acts: acts}
+
+	got := call(t, f, "spawn_agent", map[string]any{dirArg: "/repo/api", effortArg: core.EffortHigh, modelArg: "opus"})
+
+	if len(acts.spawned) != 1 || acts.spawned[0].Effort != core.EffortHigh || acts.spawned[0].Model != "opus" {
+		t.Fatalf("the fleet was asked to spawn %+v, want effort %q and model \"opus\": a choice that never reaches the wire is the feature doing nothing", acts.spawned, core.EffortHigh)
+	}
+	for _, want := range []string{core.EffortHigh, "opus"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("spawn_agent answered %q without %q", got, want)
+		}
+	}
+}
+
+// Choosing neither is the default the operator gets unless they ask: nothing
+// reaches the wire, and the answer is the one every spawn gave before.
+func TestSpawnAgentWithoutEffortOrModelChoosesNeither(t *testing.T) {
+	acts := &actions{}
+	f := fakeFleet{status: occupied("/repo/api"), acts: acts}
+
+	got := call(t, f, "spawn_agent", map[string]any{dirArg: "/repo/api"})
+
+	if len(acts.spawned) != 1 || acts.spawned[0].Effort != "" || acts.spawned[0].Model != "" {
+		t.Errorf("a spawn that chose nothing asked the fleet for %+v. Any value puts a flag on the argv, and the agent stops running on the operator's own default", acts.spawned)
+	}
+	if want := "Started " + spawnedID + " in /repo/api. It has no work yet; send_to_agent gives it some."; got != want {
+		t.Errorf("spawn_agent answered %q, want the unchanged %q", got, want)
+	}
+}
+
+// "" is absent, and so is "default": that word is the /model command's way back
+// to the operator's own configuration, which for a new agent is no flag at all.
+// A model told "use the default" will say it, so it is read rather than refused.
+func TestSpawnAgentReadsAnEmptyOrDefaultChoiceAsNone(t *testing.T) {
+	for _, args := range []map[string]any{
+		{dirArg: "/repo/api", effortArg: "", modelArg: ""},
+		{dirArg: "/repo/api", modelArg: core.ModelDefault},
+	} {
+		acts := &actions{}
+		call(t, fakeFleet{status: occupied("/repo/api"), acts: acts}, "spawn_agent", args)
+		if len(acts.spawned) != 1 || acts.spawned[0].Effort != "" || acts.spawned[0].Model != "" {
+			t.Errorf("spawn_agent(%v) asked the fleet for %+v, want neither chosen", args, acts.spawned)
+		}
+	}
+}
+
+// An effort --effort does not take is refused before anything starts, and the
+// refusal lists the ones it does - the daemon's own "unknown effort" lists none.
+// ultracode is the case that matters: /effort takes it and --effort does not.
+func TestSpawnAgentRefusesAnEffortTheFlagDoesNotTake(t *testing.T) {
+	acts := &actions{}
+	f := fakeFleet{status: occupied("/repo/api"), acts: acts}
+
+	for _, effort := range []string{"extreme", "High", core.EffortUltracode} {
+		_, err := callErr(t, f, "spawn_agent", map[string]any{dirArg: "/repo/api", effortArg: effort})
+		if err == nil {
+			t.Errorf("spawn_agent accepted effort %q, which --effort does not take", effort)
+			continue
+		}
+		if levels := strings.Join(core.EffortLevels, ", "); !strings.Contains(err.Error(), levels) {
+			t.Errorf("the refusal of %q is %q and does not list %s: a model told only 'no' guesses again", effort, err, levels)
+		}
+	}
+	if len(acts.spawned) != 0 {
+		t.Errorf("a refused-effort spawn still started something in %v", acts.spawned)
+	}
+}
+
+// A present effort or model that is not a string is refused before anything
+// starts, for the name's reason: coerced to "", it would be a default agent the
+// manager believes it configured.
+func TestSpawnAgentRefusesANonStringEffortOrModel(t *testing.T) {
+	for _, bad := range []map[string]any{{effortArg: 3}, {modelArg: true}} {
+		acts := &actions{}
+		args := map[string]any{dirArg: "/repo/api"}
+		for k, v := range bad {
+			args[k] = v
+		}
+		_, err := callErr(t, fakeFleet{status: occupied("/repo/api"), acts: acts}, "spawn_agent", args)
+		if err == nil {
+			t.Errorf("spawn_agent(%v) accepted a non-string and started an agent on the default", bad)
+		}
+		if len(acts.spawned) != 0 {
+			t.Errorf("spawn_agent(%v) still started something in %v", bad, acts.spawned)
+		}
+	}
+}
+
+// The levels a model is offered are exactly the ones --effort takes, derived
+// rather than re-spelled. A model is offered no list, because none is knowable.
+func TestSpawnAgentAdvertisesTheEffortLevelsAndNoModelList(t *testing.T) {
+	out := serve(t, fakeFleet{}, []string{requestLine(t, 1, "tools/list", nil)})
+	for _, a := range toolsList(t, out[0]) {
+		if a.Name != "spawn_agent" {
+			continue
+		}
+		props, _ := a.InputSchema["properties"].(map[string]any)
+		effort, _ := props[effortArg].(map[string]any)
+		var offered []string
+		enum, _ := effort["enum"].([]any)
+		for _, level := range enum {
+			offered = append(offered, fmt.Sprint(level))
+		}
+		if !slices.Equal(offered, core.EffortLevels) {
+			t.Errorf("spawn_agent offers effort %v, want exactly %v", offered, core.EffortLevels)
+		}
+		model, _ := props[modelArg].(map[string]any)
+		if model["type"] != "string" || model["enum"] != nil {
+			t.Errorf("spawn_agent's model is %v, want a string with no enum: core.ValidModel admits any name, and a list would refuse every model released after it", model)
+		}
+		return
+	}
+	t.Fatal("tools/list did not advertise spawn_agent")
 }
 
 // A name that is present but not a string is a malformed call, refused before

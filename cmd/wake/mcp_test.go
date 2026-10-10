@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/daemon"
+	"github.com/DilanDoshi/wake/internal/mcp"
 	"github.com/google/uuid"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -319,7 +320,7 @@ func TestADaemonThatHangsUpBeforeAnsweringIsNotReportedAsSent(t *testing.T) {
 func TestASpawnTheDaemonRefusesIsNotReportedAsStarted(t *testing.T) {
 	d := startRealDaemon(t)
 
-	id, err := (socketFleet{socket: d.socket}).Spawn(t.Context(), "not/absolute", "")
+	id, err := (socketFleet{socket: d.socket}).Spawn(t.Context(), "not/absolute", mcp.SpawnOpts{})
 	if err == nil {
 		t.Fatalf("a spawn the daemon refuses was reported as started (id %q): act read the status "+
 			"reply as 'taken' because the refusal was enqueued behind it, so the manager believes in "+
@@ -377,5 +378,26 @@ func TestSpawnAgentPutsOneFrameOnTheSocketCarryingAFreshID(t *testing.T) {
 	}
 	if !strings.Contains(out, got.SessionID) {
 		t.Errorf("spawn_agent answered %q without the id it put on the wire: the manager addresses by id and has no other way to reach what it just started", out)
+	}
+}
+
+// The effort and model the manager chose ride the frame's own fields, and a
+// spawn that chose neither carries neither - which is what leaves --effort and
+// --model off the argv, so the agent runs on the operator's own default.
+func TestSpawnAgentPutsTheChosenEffortAndModelOnTheFrame(t *testing.T) {
+	for _, tc := range []struct {
+		args          map[string]any
+		effort, model string
+	}{
+		{map[string]any{"directory": "/repos/api", "effort": "high", "model": "opus"}, "high", "opus"},
+		{map[string]any{"directory": "/repos/api"}, "", ""},
+	} {
+		d := startFakeDaemon(t, 0, oneAgentFleet(mcpPeter, "peter"))
+		if out, isErr := toolCall(t, d.socket, "spawn_agent", tc.args); isErr {
+			t.Fatalf("spawn_agent(%v) failed: %s", tc.args, out)
+		}
+		if got := d.lastOfKind(rpc.FrameSpawn); got.Effort != tc.effort || got.Model != tc.model {
+			t.Errorf("spawn_agent(%v) sent effort %q and model %q, want %q and %q", tc.args, got.Effort, got.Model, tc.effort, tc.model)
+		}
 	}
 }

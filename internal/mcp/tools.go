@@ -370,9 +370,11 @@ func rollUp() Tool {
 // nameArg is its optional second one: the display name to request, carried to
 // the daemon's own name validation and refused there, never here.
 const (
-	dirArg   = "directory"
-	nameArg  = "name"
-	dirBytes = 200
+	dirArg    = "directory"
+	nameArg   = "name"
+	effortArg = "effort"
+	modelArg  = "model"
+	dirBytes  = 200
 )
 
 // spawnAgent starts one agent, in a directory the fleet is already working in.
@@ -399,28 +401,19 @@ const (
 // "pick one from the pool". FrameLabel is still refused, and the manager still
 // addresses an agent by id, never by name - so naming at spawn is not naming as
 // an address.
+//
+// It also takes an optional effort and model, for when the operator asks for
+// one; left out, the agent runs on the operator's own defaults. See spawnopts.go.
 func spawnAgent() Tool {
 	return Tool{
 		Name: "spawn_agent",
 		Description: "Start one new agent in a directory the fleet is already working in, and return its id. " +
 			"The directory must be one list_agents shows - you cannot start an agent somewhere new. " +
 			"Optionally give it a name to call it (e.g. \"x\"); omit the name to have one assigned. " +
+			"Give it an effort or a model only when the operator asked for one; omit both otherwise. " +
 			"This costs a process and money for as long as it runs, and there is a fleet-wide cap: " +
 			"prefer sending work to an agent that already exists.",
-		Schema: map[string]any{
-			"type": "object",
-			"properties": map[string]any{
-				dirArg: map[string]any{
-					"type":        "string",
-					"description": "Where the agent runs. Exactly a directory from list_agents.",
-				},
-				nameArg: map[string]any{
-					"type":        "string",
-					"description": "Optional display name for the new agent, e.g. \"x\": letters, digits, - and _. Omit it to have one assigned. A name a live agent already has, or one that reads as the operator or the system (operator, system, admin, ...), is refused - address the agent by the id this returns, never by name.",
-				},
-			},
-			"required": []string{dirArg},
-		},
+		Schema: spawnSchema(),
 		Call: func(ctx context.Context, f Fleet, args map[string]any) (string, error) {
 			dir, ok := args[dirArg].(string)
 			if !ok || strings.TrimSpace(dir) == "" {
@@ -433,23 +426,21 @@ func spawnAgent() Tool {
 			if !fleetOccupies(st, dir) {
 				return "", fmt.Errorf("no agent is working in %s. Start one only where the fleet already is - list_agents has the directories", oneLine(dir, dirBytes))
 			}
-			// The name is optional. Absent is "pick one from the pool"; a
-			// present non-string is a malformed call refused before a spawn;
-			// an impersonation name is refused here because only this surface
+			// An impersonation name is refused here because only this surface
 			// knows the requester is the manager. Everything else the name has
 			// to pass is the daemon's - see spawnname.go.
-			name, err := optionalName(args)
+			o, err := spawnOpts(args)
 			if err != nil {
 				return "", err
 			}
-			if impersonatesChrome(name) {
-				return "", fmt.Errorf("%q reads as the operator or the system on the roster and in the room, which an operator reads as Wake's own; a name you give an agent must not be one of those - pick a plain name, or leave it out to have one assigned", name)
+			if impersonatesChrome(o.Name) {
+				return "", fmt.Errorf("%q reads as the operator or the system on the roster and in the room, which an operator reads as Wake's own; a name you give an agent must not be one of those - pick a plain name, or leave it out to have one assigned", o.Name)
 			}
-			id, err := f.Spawn(ctx, dir, name)
+			id, err := f.Spawn(ctx, dir, o)
 			if err != nil {
 				return "", err
 			}
-			return "Started " + id + " in " + oneLine(dir, dirBytes) + ". It has no work yet; send_to_agent gives it some.", nil
+			return "Started " + id + " in " + oneLine(dir, dirBytes) + o.chosen() + ". It has no work yet; send_to_agent gives it some.", nil
 		},
 	}
 }
