@@ -32,6 +32,8 @@ import (
 	"regexp"
 	"sort"
 	"sync"
+
+	"github.com/DilanDoshi/wake/internal/core"
 )
 
 // fleetsDirName holds the named fleets, beside the default fleet's own files
@@ -136,6 +138,34 @@ func fleetDirIn(root, name string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(root, fleetsDirName, name), nil
+}
+
+// managerClaudeName is what claude calls the manager of the fleet at socket:
+// `manager-<fleet>`, so a Claude session can tell one fleet's manager from
+// another's while Wake's own name for it stays core.ManagerName. The fleet is
+// the socket's directory - a named fleet's own name, LegacyFleet for root, and
+// a hand-set $WAKE_SOCKET's directory, which names no fleet but is still the one
+// thing that tells two daemons apart.
+func managerClaudeName(root, socket string) string {
+	dir := filepath.Dir(socket)
+	fleet := filepath.Base(dir)
+	if dir == root {
+		fleet = LegacyFleet
+	}
+	return managerClaudePrefix + fleet
+}
+
+// managerClaudePrefix begins every manager's claude name, and normalizeName
+// refuses it to every agent: one more `manager-harbor` in a Claude session's
+// peer list is one nobody can tell from the real one.
+const managerClaudePrefix = core.ManagerName + "-"
+
+// managerClaude is managerClaudeName for this daemon. With no home directory no
+// socket can sit under ~/.wake, so "" gives the hand-set rule - the right answer
+// rather than a lost error.
+func (s *server) managerClaude() string {
+	root, _ := StateRoot()
+	return managerClaudeName(root, s.socket)
 }
 
 // checkFleetName refuses a name that is not one, saying which rule it broke.

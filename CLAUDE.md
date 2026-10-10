@@ -129,7 +129,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 
 **Identity and lifecycle**
 - A session's name comes from the daemon's 64-name pool. **A name is never an address** — frames
-  carry `SessionID`; names are released and reissued, so a rename has no alias.
+  carry `SessionID`; names are released and reissued, so a rename has no alias. Wake's manager is
+  `manager`; claude's is `manager-<fleet>` (`daemon.managerClaudeName`, from the socket, never a
+  frame; on the report as `rpc.Status.ManagerClaude`), and no agent may take the `manager-` prefix.
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
   everything and clears the park book (`parked.json` beside the socket).
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)

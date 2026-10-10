@@ -39,7 +39,7 @@ func (s *server) pushStatus() {
 // each move an id between them in a single locked step, so no id is ever in
 // both and none is ever in neither.
 func (s *server) fleet() rpc.Status {
-	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: s.socket, Build: version.Build()}
+	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: s.socket, Build: version.Build(), ManagerClaude: s.managerClaude()}
 
 	s.mu.Lock()
 	agents := make([]*agent, 0, len(s.agents))

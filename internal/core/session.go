@@ -131,10 +131,13 @@ const maxLineBytes = 16 * 1024 * 1024
 type Config struct {
 	SessionID string
 	Name      string
-	Dir       string
-	Model     string
-	Effort    string
-	Launcher  AgentLauncher
+	// ClaudeName is what claude is told to call itself; empty means Name. Only
+	// the manager has one: Wake's `manager` is `manager-<fleet>` to claude.
+	ClaudeName string
+	Dir        string
+	Model      string
+	Effort     string
+	Launcher   AgentLauncher
 
 	// PermissionMode is what we spawn with. Do not round-trip it from the
 	// init frame: init normalizes "manual" to "default", so reading it back

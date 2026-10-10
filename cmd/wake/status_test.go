@@ -13,6 +13,20 @@ import (
 	"github.com/DilanDoshi/wake/internal/version"
 )
 
+// Agents find the manager in Claude Code's own list of sessions, so `wake status`
+// says what it is called there: Wake's row says `manager`, that list
+// `manager-harbor`. A daemon from before the name says nothing about it.
+func TestStatusNamesTheManagerAsClaudeSessionsKnowIt(t *testing.T) {
+	st := rpc.Status{Running: true, PID: 4242, Socket: "/tmp/wake.sock", ManagerClaude: "manager-harbor"}
+	if out := formatStatus(st); !strings.Contains(out, "manager-harbor") {
+		t.Errorf("a running daemon reads as %q, without the name Claude sessions know its manager by", out)
+	}
+	st.ManagerClaude = ""
+	if out := formatStatus(st); strings.Contains(out, "know its manager") {
+		t.Errorf("a daemon that named no manager reads as %q", out)
+	}
+}
+
 // Three answers, not two. A daemon that answered, a machine with no daemon,
 // and a machine whose daemon died leaving its agents behind - the last is not
 // "nothing is running", it is 15-30 processes nobody is holding, and it is the

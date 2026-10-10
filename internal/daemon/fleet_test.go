@@ -91,6 +91,27 @@ func TestANamedFleetLivesUnderTheFleetsDirectoryAndTheDefaultDoesNot(t *testing.
 	}
 }
 
+// Every daemon's manager is a different name to claude, so a Claude session can
+// tell one fleet's manager from another's: a named fleet's name, `default` for
+// the unnamed one, and a hand-set socket's own directory - six managers on one
+// machine were all `manager`, and five of them were hand-set sockets.
+func TestEachFleetsManagerHasItsOwnClaudeName(t *testing.T) {
+	root := testRoot(t)
+	harbor, err := fleetDirIn(root, "harbor")
+	if err != nil {
+		t.Fatalf("fleetDirIn(harbor): %v", err)
+	}
+	for _, tc := range []struct{ socket, want string }{
+		{filepath.Join(harbor, socketFileName), "manager-harbor"},
+		{filepath.Join(root, socketFileName), "manager-" + LegacyFleet},
+		{"/tmp/wake-demo/wake.sock", "manager-wake-demo"},
+	} {
+		if got := managerClaudeName(root, tc.socket); got != tc.want {
+			t.Errorf("the manager of %s is %q to claude, want %q", tc.socket, got, tc.want)
+		}
+	}
+}
+
 // Two fleets share nothing, which is the whole feature.
 //
 // Asserted on the paths every piece of per-fleet state derives from: the roster,

@@ -30,8 +30,9 @@ func peerFleet(t *testing.T, dir string, types ...string) App {
 	return dmApp(newRecorder(t), Stream{}, "s1", "jade").withSize(200, 40).applyFrame(rpc.Frame{
 		Kind: rpc.FrameStatusPush,
 		Status: &rpc.Status{
-			Running: true,
-			Teams:   []string{"jets"},
+			Running:       true,
+			ManagerClaude: "manager-Harbor",
+			Teams:         []string{"jets"},
 			Sessions: []rpc.SessionStatus{
 				{ID: "s1", Name: "jade", Dir: dir, State: rpc.StateIdle, Agents: types},
 				{ID: "s2", Name: "jane", Team: "jets", State: rpc.StateIdle, Agents: []string{"janes-own"}},
@@ -220,6 +221,30 @@ func TestAnOutsideSessionNamedLikeAFleetAgentIsDropped(t *testing.T) {
 	if manager = manager.withDraft("@ma"); manager.completion.open() {
 		t.Errorf("`@ma` offered %q: the manager is a fleet agent, so claude's listing of it is dropped",
 			manager.completion.offers)
+	}
+}
+
+// The fleet's manager is `manager` to Wake and `manager-<fleet>` to claude, so
+// claude's listing names it under the second - in its own case, as a fleet
+// named Harbor gets it. It is the fleet's and is dropped
+// like any fleet name - in the room ↵ would hand the manager a message to relay
+// to itself - while another fleet's manager is an outside session like any other.
+func TestTheFleetsOwnManagerIsDroppedUnderTheNameClaudeKnowsItBy(t *testing.T) {
+	listing := peersReply(core.Peer{Name: "Manager-Harbor", Dir: "/tmp/m"}, core.Peer{Name: "manager-atlas", Dir: "/tmp/a"})
+	for where, fleet := range map[string]func(*testing.T) App{
+		"a conversation": func(t *testing.T) App { return peerFleet(t, "") },
+		"the room":       roomFleet,
+	} {
+		menu := fleet(t).applyFrame(listing).withDraft("@manager-").completion
+		var outside []string
+		for _, offer := range menu.offers {
+			if menu.tags[offer].dir != "" {
+				outside = append(outside, offer)
+			}
+		}
+		if want := []string{"@manager-atlas"}; !slices.Equal(outside, want) {
+			t.Errorf("%s offered the outside sessions %q, want %q: this fleet's own manager is not an outside session", where, outside, want)
+		}
 	}
 }
 
@@ -673,8 +698,9 @@ func TestADirectoryTagNeverEmptiesOrOverflows(t *testing.T) {
 func roomFleet(t *testing.T) App {
 	t.Helper()
 	return newRoomApp(t).withSize(200, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &rpc.Status{
-		Running: true,
-		Teams:   []string{"jets"},
+		Running:       true,
+		ManagerClaude: "manager-Harbor",
+		Teams:         []string{"jets"},
 		Sessions: []rpc.SessionStatus{
 			{ID: "s1", Name: "jade", State: rpc.StateIdle, Agents: []string{"Explore"}},
 			{ID: "s2", Name: "jane", Team: "jets", State: rpc.StateIdle, Agents: []string{"janes-own"}},

@@ -8,6 +8,30 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-10 — claude knows each fleet's manager as `manager-<fleet>`
+
+The owner's ask, so agents can find their own manager. Every Wake manager ran `--name manager`, and
+on the day this was written one machine's Claude peer list showed six of them (five on hand-set
+sockets), with nothing to tell an agent which was its own.
+
+- **Only claude's name changes.** Wake's stays `core.ManagerName`: routing, reserved words, the
+  park book and `managerConfig` all key on it. `core.Config.ClaudeName` is what `--name` carries
+  when set, and only `managerConfig` sets it, so a spawn, `/manager` and a wake all get it.
+- **The fleet is the socket's directory** (`daemon.managerClaudeName`): a named fleet's own name,
+  `default` for `~/.wake`, and a hand-set `$WAKE_SOCKET`'s directory otherwise. That last case is
+  most of the collisions observed, so it gets a distinct name rather than plain `manager`.
+- **The daemon serves it on the report** (`rpc.Status.ManagerClaude`) so the UI and `wake status`
+  read it instead of deriving it again. The `@` menu holds it among the fleet's names, so claude's
+  listing never offers this fleet's manager as an outside session (in the room ↵ would hand the
+  manager a message to relay to itself), while another fleet's manager is offered like any session.
+- **`normalizeName` refuses the `manager-` prefix** to every agent - `wake new`, `/name`,
+  `spawn_agent` and a `/resume`'s recorded title all pass it - since one more `manager-harbor` in a
+  peer list is one nobody can tell from the real one. A park book written before this build that
+  names an agent `manager-…` wakes it under a pooled name; no migration branch.
+- **Not changed:** an operator's own `/rename` typed into the manager's conversation still reaches
+  claude and is still refused as a Wake rename, so the two names drift until the next launch, as
+  they did before.
+
 ## 2026-10-03 — claude's drift is watched where it happens first: the operator's own transcripts
 
 A recording is one claude version; BUG-42's envelope went unrecorded for two weeks while 579 hand-backs

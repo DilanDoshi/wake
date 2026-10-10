@@ -140,6 +140,7 @@ func TestAResumeKeepsTheNameTheSessionHad(t *testing.T) {
 		{name: "held by a live agent", recorded: "cursor-bug", held: "cursor-bug"},
 		{name: "not a name Wake can hold", recorded: "potential bug."},
 		{name: "the manager's word", recorded: core.ManagerName},
+		{name: "a manager's claude name", recorded: core.ManagerName + "-harbor"},
 		{name: "nobody named it", recorded: ""},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
