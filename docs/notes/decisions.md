@@ -32,9 +32,15 @@ sockets), with nothing to tell an agent which was its own.
   `spawn_agent` and a `/resume`'s recorded title all pass it - since one more `manager-harbor` in a
   peer list is one nobody can tell from the real one. A park book written before this build that
   names an agent `manager-…` wakes it under a pooled name; no migration branch.
+- **A manager's message to a fleet agent is still the manager's.** It arrives on the receiver's
+  stream under claude's from-name, so the room maps `ManagerClaude` back to the manager before
+  `crossSpeaker` (`observe.go`): the line heads as `manager` and a lone `@manager` keeps it. A room
+  restore heads it with the from-name, as it heads every cross-session sender.
 - **Not changed:** an operator's own `/rename` typed into the manager's conversation still reaches
   claude and is still refused as a Wake rename, so the two names drift until the next launch, as
-  they did before.
+  they did before. A conversation's `@` menu still never offers its own fleet's manager (Claude
+  Code's would); and `@manager-harbor …` typed by hand in the room passes through to the manager,
+  which would be asked to message itself. Both are left for the owner.
 
 ## 2026-10-03 — claude's drift is watched where it happens first: the operator's own transcripts
 

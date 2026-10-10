@@ -39,6 +39,7 @@ func (a App) applyStatus(st *rpc.Status) App {
 	}
 	prev := a.fleet
 	a.fleet = a.fleet.WithStatus(st)
+	a.managerClaude = st.ManagerClaude
 	// The State backstop for the queue: a working→idle edge on this report frees an
 	// agent whose in-flight message's completed lifecycle was lost to a gap. Per
 	// report, so an edge inside one batch is not collapsed. See queue.go.

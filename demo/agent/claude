@@ -106,6 +106,9 @@ SID = arg("--session-id")
 # cast the same script — the command line is the only thing that differs per
 # session.
 ROLE = arg("--name") or os.environ.get("WAKE_DEMO_ROLE", "echo")
+# Claude knows the manager as manager-<fleet>; its script is the manager's in any fleet.
+if ROLE.startswith("manager-"):
+    ROLE = "manager"
 
 
 def transcript_path():
