@@ -224,15 +224,11 @@ func (a App) routedNames() map[string]bool {
 // manager included, and the park book's - so a listed session sharing one is the
 // fleet's and is dropped, which drops the conversation's own agent too. Already
 // lower-case (the daemon's normalizeName), so a listed name folded to one of these
-// matches it in any case. An ended agent's name went back to the pool. The
-// manager is held under claude's name for it too, the one a listing carries.
+// matches it in any case. An ended agent's name went back to the pool.
 func (a App) heldNames() map[string]bool {
 	held := make(map[string]bool)
 	for _, agent := range slices.Concat(a.fleet.OnRoster(), a.fleet.Parked()) {
 		held[agent.Name] = true
-	}
-	if a.managerClaude != "" {
-		held[strings.ToLower(a.managerClaude)] = true
 	}
 	return held
 }

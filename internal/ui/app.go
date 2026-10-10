@@ -155,8 +155,7 @@ type App struct {
 
 	// fleet is every agent this client knows about, and the only thing that
 	// inspects an event. See fleet.go.
-	fleet         Fleet
-	managerClaude string // what claude calls this fleet's manager (rpc.Status.ManagerClaude)
+	fleet Fleet
 
 	room   Room
 	cards  Cards
@@ -458,9 +457,6 @@ func NewRoomApp(conn net.Conn, stream Stream, seed *rpc.Status) App {
 	// the next push: the report carries a request id for exactly the client
 	// that was not there when the ask went past.
 	a.cards = a.cards.Reconcile(seed)
-	if seed != nil {
-		a.managerClaude = seed.ManagerClaude
-	}
 	// The room over a fleet that has been talking since before this window
 	// existed opens with nothing in it. This is where it asks; see
 	// roomhistory.go for the other moment and for why there are only two.

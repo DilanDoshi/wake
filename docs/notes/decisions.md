@@ -19,11 +19,15 @@ sockets), with nothing to tell an agent which was its own.
   when set, and only `managerConfig` sets it, so a spawn, `/manager` and a wake all get it.
 - **The fleet is the socket's directory** (`daemon.managerClaudeName`): a named fleet's own name,
   `default` for `~/.wake`, and a hand-set `$WAKE_SOCKET`'s directory otherwise. That last case is
-  most of the collisions observed, so it gets a distinct name rather than plain `manager`.
-- **The daemon serves it on the report** (`rpc.Status.ManagerClaude`) so the UI and `wake status`
-  read it instead of deriving it again. The `@` menu holds it among the fleet's names, so claude's
-  listing never offers this fleet's manager as an outside session (in the room ↵ would hand the
-  manager a message to relay to itself), while another fleet's manager is offered like any session.
+  most of the collisions observed, so it gets a distinct name rather than plain `manager`. A
+  directory is anybody's text on its way to an argv, so the result is folded into a name's shape
+  (`nameShaped`: lower case, name runes, at most `maxNameLen`): a directory named like a session id
+  cannot put that id in the manager's argv, where the reaper reads it as proof of identity. Codex
+  found this; a relative socket is resolved first, or each would be `manager--`.
+- **The daemon leaves its own manager out of the peers listing** it answers (`ownManagerLeftOut`),
+  so no client offers it as an outside session (in the room ↵ would hand the manager a message to
+  relay to itself), whatever its build. Another fleet's manager is offered like any session.
+  `wake status` prints the name off the report (`rpc.Status.ManagerClaude`).
 - **`normalizeName` refuses the `manager-` prefix** to every agent - `wake new`, `/name`,
   `spawn_agent` and a `/resume`'s recorded title all pass it - since one more `manager-harbor` in a
   peer list is one nobody can tell from the real one. A park book written before this build that

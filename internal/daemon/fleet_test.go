@@ -112,6 +112,39 @@ func TestEachFleetsManagerHasItsOwnClaudeName(t *testing.T) {
 	}
 }
 
+// A hand-set socket's directory is anybody's text, and it reaches an argv as
+// --name. So it is folded into the shape every name has - lower case, name runes,
+// at most maxNameLen - and can no more carry a session id (the reaper's proof of
+// identity) or an argv marker than a chosen name can. A relative socket names
+// the directory it resolves to, never `.`.
+func TestAManagersClaudeNameHasTheShapeOfAName(t *testing.T) {
+	const id = "a11a0000-0000-4000-8000-00000000a11a"
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, socket := range []string{
+		"/tmp/" + id + "/wake.sock",
+		"/tmp/my fleet --resume " + id + "/wake.sock",
+		"/tmp/Harbor/wake.sock",
+		"wake.sock",
+	} {
+		got := managerClaudeName(testRoot(t), socket)
+		if strings.IndexFunc(got, func(r rune) bool { return !isNameRune(r) }) >= 0 || len(got) > maxNameLen {
+			t.Errorf("the manager of %q is %q to claude: not a name's shape", socket, got)
+		}
+		if strings.Contains(got, id) || strings.Contains(got, "--resume") {
+			t.Errorf("the manager of %q is %q to claude, which carries a session id or an argv marker", socket, got)
+		}
+	}
+	if got, want := managerClaudeName(testRoot(t), "/tmp/Harbor/wake.sock"), "manager-harbor"; got != want {
+		t.Errorf("a socket in Harbor names its manager %q, want %q", got, want)
+	}
+	if got, want := managerClaudeName(testRoot(t), "wake.sock"), managerClaudeName(testRoot(t), filepath.Join(cwd, "wake.sock")); got != want {
+		t.Errorf("a relative socket names its manager %q, want %q as its absolute path does", got, want)
+	}
+}
+
 // Two fleets share nothing, which is the whole feature.
 //
 // Asserted on the paths every piece of per-fleet state derives from: the roster,

@@ -31,7 +31,9 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
+	"unicode"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -146,13 +148,34 @@ func fleetDirIn(root, name string) (string, error) {
 // the socket's directory - a named fleet's own name, LegacyFleet for root, and
 // a hand-set $WAKE_SOCKET's directory, which names no fleet but is still the one
 // thing that tells two daemons apart.
+//
+// That directory is anybody's text on its way to an argv, so the result is
+// folded into a name's shape (nameShaped). A relative socket is resolved first,
+// or every one of them would be `manager--`; Abs fails only without a working
+// directory, and then the unresolved one is all there is.
 func managerClaudeName(root, socket string) string {
-	dir := filepath.Dir(socket)
+	dir, err := filepath.Abs(filepath.Dir(socket))
+	if err != nil {
+		dir = filepath.Dir(socket)
+	}
 	fleet := filepath.Base(dir)
 	if dir == root {
 		fleet = LegacyFleet
 	}
-	return managerClaudePrefix + fleet
+	return nameShaped(managerClaudePrefix + fleet)
+}
+
+// nameShaped folds s into the shape normalizeName holds every name to - lower
+// case, name runes only, at most maxNameLen - so it can no more carry a session
+// id (the reaper's proof of identity) or an argv marker than a chosen name can.
+func nameShaped(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r = unicode.ToLower(r); isNameRune(r) {
+			return r
+		}
+		return nameOrdinalSep
+	}, s)
+	return s[:min(len(s), maxNameLen)]
 }
 
 // managerClaudePrefix begins every manager's claude name, and normalizeName
