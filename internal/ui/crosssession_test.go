@@ -63,8 +63,8 @@ func TestACrossSessionMessageFromTheManagerIsTheManagers(t *testing.T) {
 		t.Errorf("the manager's message is not headed as the manager's (\"manager → sydney\"):\n%s", out)
 	}
 	seeded := NewRoomApp(newRecorder(t), Stream{}, &st)
-	if seeded.managerClaude != st.ManagerClaude {
-		t.Errorf("a room opened on a seed knows the manager as %q, want %q before any push", seeded.managerClaude, st.ManagerClaude)
+	if seeded.daemon.managerClaude != st.ManagerClaude {
+		t.Errorf("a room opened on a seed knows the manager as %q, want %q before any push", seeded.daemon.managerClaude, st.ManagerClaude)
 	}
 }
 

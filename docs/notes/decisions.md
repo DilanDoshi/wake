@@ -8,6 +8,28 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-10 — Wake answers `/status`, for every session, the manager's included
+
+The owner's ask ("the manager is just another session"). Headless claude refuses `/status` with no
+turn (`testdata/stream/bare-status.jsonl`), so it was dead in every Wake conversation. Rulings
+(`fable wake`'s, against `origin/main`):
+
+- **A plain claim, not `bareOnlyCommands`:** claude advertises no `status`, and that map is for
+  words claude advertises and does nothing with.
+- **A read-only menu, not a transcript block or a notice.** A block would be the first
+  Wake-authored DM record besides the operator's own `!cmd`, on no disk, so every re-read
+  (`noteRewind`, a restore) would drop it. A notice is one row and times out. The menu is bounded by
+  `menuRoom`, draws nothing into the record, and is what Claude Code's `/status` is: a dialog.
+- **Nothing is written.** A local command sent to a session stays in its context.
+- **Only facts this window holds, through the bar's own builders** (`barModel`, `contextLeft`,
+  `shortPath`, gitref). The permission mode is labelled as this window's belief, since it is not
+  on the report. MCP is the banner's count plus a pointer to `/mcp`, because a server list would
+  need a live ask. The daemon's build shows only when it differs from the window's.
+- **Aimed like `/mcp`** (`commandTarget`, shared): bare is the conversation or the room's roster
+  pick, `@who /status` from the room. No fleet summary: that is `wake status`'s job.
+- **Left out:** claude's own version (deferred.md) and the account, which Wake cannot know.
+  Claude Code's Config and Usage tabs are `/config` and `/usage`, which still pass through.
+
 ## 2026-10-10 — claude knows each fleet's manager as `manager-<fleet>`
 
 The owner's ask, so agents can find their own manager. Every Wake manager ran `--name manager`, and
