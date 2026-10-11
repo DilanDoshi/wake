@@ -65,9 +65,15 @@ func diskEvents(texts ...string) []core.Event {
 	return out
 }
 
+// subagentReply answers the ask outstanding for an agent, echoing its number the
+// way the daemon does.
 func subagentReply(a App, agentID string, events []core.Event) App {
+	return subagentReplyTo(a, agentID, a.subTranscripts.asked[subKey{"s1", agentID}].number, events)
+}
+
+func subagentReplyTo(a App, agentID string, ask uint64, events []core.Event) App {
 	return a.applyFrame(rpc.Frame{Kind: rpc.FrameSubagentReply, SessionID: "s1",
-		Workflow: &rpc.WorkflowFrame{Agent: agentID}, Events: events})
+		Workflow: &rpc.WorkflowFrame{Agent: agentID, Ask: ask}, Events: events})
 }
 
 func paneOf(t *testing.T, a App) DM {
@@ -155,13 +161,37 @@ func TestAShorterTranscriptNeverReplacesALongerLiveOne(t *testing.T) {
 	assertHides(t, d, d.width, d.height, diskSaid)
 }
 
+// An answer for an id nobody asked about does not so much as rebuild the pane:
+// the DM is the same one, which a rebuild would replace.
 func TestAnAnswerNobodyAskedForChangesNothing(t *testing.T) {
 	a := lateAttached(t)
 	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlD}) // opened, but the drain below is never run
+	before := a.dms["s1"]
 
 	a = subagentReply(a, "nosuchagent", diskEvents(diskSaid))
 	d := paneOf(t, a)
 	assertHides(t, d, d.width, d.height, diskSaid)
+	if a.dms["s1"] != before {
+		t.Error("an answer nobody asked for rebuilt the pane")
+	}
+}
+
+// Opening again never shrinks a pane that holds the disk transcript: the
+// fleet's copy a re-open seeds from is only what this client saw live, and
+// replacing the pane's with it would also make the next answer easier to drop.
+func TestReopeningNeverShrinksAPaneThatHoldsTheDiskTranscript(t *testing.T) {
+	a, _ := opened(t, watchedLive(t, "LIVE ONE"))
+	a = subagentReply(a, "a1", diskEvents(diskSaid, "and then this", "and this"))
+	if n := paneOf(t, a).subs["toolu_1"].len(); n != 3 {
+		t.Fatalf("the answer left the pane holding %d events, want its 3", n)
+	}
+
+	a, _ = opened(t, a)
+	d := paneOf(t, a)
+	if n := d.subs["toolu_1"].len(); n != 3 {
+		t.Errorf("a second open left the pane holding %d events, want the 3 it had", n)
+	}
+	assertShows(t, d, d.width, d.height, diskSaid)
 }
 
 // Each open asks again: the fleet's copy this client seeds from is only what it
@@ -173,6 +203,37 @@ func TestEveryOpenAsksAgain(t *testing.T) {
 	_, frames := opened(t, a)
 	if got := len(subagentAsks(frames)); got != 1 {
 		t.Fatalf("a second open wrote %d FrameSubagent, want 1", got)
+	}
+}
+
+// Two opens before either answer are two asks, each its own number, and only the
+// newer one's answer lands - whichever order the two arrive in. An ask keyed on
+// the agent alone let the older answer consume the newer ask and leave the pane
+// on the older snapshot.
+func TestOnlyTheNewestOpensAnswerLands(t *testing.T) {
+	for name, newestFirst := range map[string]bool{"older answer first": false, "newer answer first": true} {
+		t.Run(name, func(t *testing.T) {
+			a, first := opened(t, lateAttached(t))
+			a, second := opened(t, a)
+			older, newer := subagentAsks(first), subagentAsks(second)
+			if len(older) != 1 || len(newer) != 1 || older[0].Workflow.Ask == newer[0].Workflow.Ask {
+				t.Fatalf("two opens wrote asks %+v then %+v, want one each under different numbers", older, newer)
+			}
+			oldReply := func(a App) App {
+				return subagentReplyTo(a, "a1", older[0].Workflow.Ask, diskEvents("OLD SNAPSHOT"))
+			}
+			newReply := func(a App) App {
+				return subagentReplyTo(a, "a1", newer[0].Workflow.Ask, diskEvents("NEW SNAPSHOT", "AND MORE"))
+			}
+			if newestFirst {
+				a = oldReply(newReply(a))
+			} else {
+				a = newReply(oldReply(a))
+			}
+			d := paneOf(t, a)
+			assertShows(t, d, d.width, d.height, "NEW SNAPSHOT")
+			assertHides(t, d, d.width, d.height, "OLD SNAPSHOT")
+		})
 	}
 }
 

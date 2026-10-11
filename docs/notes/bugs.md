@@ -1070,12 +1070,25 @@ same id claude names `subagents/agent-<id>.jsonl` by, on all three recorded disp
 the pane's frames with the answer, attributed to the dispatch (`internal/ui/subtranscript.go`,
 `daemon.AgentHistory`). History's rules apply: dropped if a frame arrived since the ask or a `/clear`
 came, asked afresh on every open - and dropped unless longer than what the pane holds, the daemon's
-read being a bounded tail.
+read being a bounded tail. Each ask carries a number the reply echoes (`WorkflowFrame.Ask`), so two
+opens before either answer cannot leave the older snapshot standing; a re-open never reseeds the pane
+from the fleet's shorter copy (`withSubBacklog` replaces only when the fleet's is longer); and the
+reply is bounded by its encoded size (`fitReply`), because `trimRing` counts an event's `Text` and a
+tool call's command or diff is not `Text` - forty 400 KB commands encoded to 49 MB against rpc's 16 MiB
+cap, which ends the client's connection. That last gap is `History`'s too and is not closed there.
 
 Regression tests, red without the fix: ui `TestOpeningASubagentThisClientNeverWatchedAsksForItsTranscript`
 and its neighbours in `subtranscript_test.go`; daemon `TestAgentHistoryReadsAPlainSubagentsTranscript`
 and `TestTheDaemonAnswersASubagentFrame`; cmd/wake `TestClickingASubagentDrawsWhatItSaidBeforeThisWindowWatched`
 (a real pty, a click on the row).
+
+**Residual, shared with `history.go`:** nothing orders the daemon's disk read against the live fan-out,
+and no live event carries an identity (`Event.MessageID` is set only on a user echo and a local
+command's reply). A line already on disk whose live copy has not yet arrived when the answer lands is
+drawn twice; if claude flushes the file behind its stdout, a live line the disk lacks is lost to the
+replacement. Both are a window of milliseconds on an open, self-healing on the next. Closing it needs
+an identity both sides share - the forwarded frame's own `uuid` against the sidechain line's, if they
+match - and that is a recording to make first.
 
 **Not verified:** every forwarded-frame fixture was recorded at claude 2.1.226 and this was found at
 2.1.296, so a wire change that stopped a *continuously attached* client's pane filling is not ruled out

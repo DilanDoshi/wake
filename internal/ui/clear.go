@@ -39,13 +39,13 @@ func (d DM) clearedBySessionReset() DM {
 	return d.drawnLayout()
 }
 
-// forgetHistoryOnReset drops a pending pre-clear history ask - and a subagent's -
+// forgetHistoryOnReset drops a pending pre-clear history ask, and a subagent's,
 // when a /clear lands (a no-op for every other event), so a reply still in
-// flight is not folded onto
-// the pane clearedBySessionReset just blanked. The blanking returns events.len()
-// to the count askHistory recorded at open, so the count guard alone would read
-// "nothing arrived since" and Before would prepend the pre-clear transcript;
-// forgetting the ask is what lets historyArrived's membership check drop it.
+// flight is not folded onto the pane clearedBySessionReset just blanked. The
+// blanking returns events.len() to the count askHistory recorded at open, so the
+// count guard alone would read "nothing arrived since" and Before would prepend
+// the pre-clear transcript; forgetting the ask is what lets historyArrived's
+// membership check drop it.
 func (a App) forgetHistoryOnReset(sessionID string, ev core.Event) App {
 	if ev.Kind == core.KindSessionReset {
 		return a.forgetHistoryAsk(sessionID).forgetSubagentAsks(sessionID)

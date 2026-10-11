@@ -58,6 +58,11 @@ type WorkflowFrame struct {
 	// id the same way (subagent.go).
 	Agent string `json:"agent,omitempty"`
 
+	// Ask numbers one FrameSubagent among its client's own, and the reply echoes
+	// it, so a client holding two asks for one agent can tell which an answer is
+	// for. Zero on every other kind.
+	Ask uint64 `json:"ask,omitempty"`
+
 	// Name is the file name FrameSaveWorkflow writes under, fenced by
 	// ValidWorkflowName.
 	Name string `json:"name,omitempty"`

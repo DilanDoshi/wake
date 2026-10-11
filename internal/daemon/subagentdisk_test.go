@@ -6,6 +6,8 @@
 package daemon
 
 import (
+	"encoding/json"
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -42,6 +44,11 @@ func plantSubagentTranscript(t *testing.T, dir, agentID string) string {
 		t.Fatalf("write %s: %v", path, err)
 	}
 	return path
+}
+
+// askFor is the request a client writes for one agent's transcript.
+func askFor(kind, session, agentID string, ask uint64) rpc.Frame {
+	return rpc.Frame{Kind: kind, SessionID: session, Workflow: &rpc.WorkflowFrame{Agent: agentID, Ask: ask}}
 }
 
 // decodedCount is how many events the fixture decodes to, so no test here
@@ -147,6 +154,20 @@ func TestTheDaemonAnswersASubagentFrame(t *testing.T) {
 	}
 }
 
+// The ask number comes back on the reply, so a client holding two asks for one
+// agent can tell which an answer is for.
+func TestTheReplyEchoesTheAskNumber(t *testing.T) {
+	dir := workflowSessionDir(t, wfID)
+	plantSubagentTranscript(t, dir, subAgentID)
+	s := newServer(filepath.Join(t.TempDir(), "s"))
+	c := newClient(nil)
+
+	s.sendAgentTranscript(c, askFor(rpc.FrameSubagent, wfID, subAgentID, 7))
+	if f := sentFrame(t, c); f.Kind != rpc.FrameSubagentReply || f.Workflow == nil || f.Workflow.Ask != 7 {
+		t.Fatalf("reply = %+v (workflow %+v), want a FrameSubagentReply echoing ask 7", f, f.Workflow)
+	}
+}
+
 // A malformed id is the request's fault and is refused before it reaches a
 // path - the fence is the one the workflow frame already has.
 func TestTheDaemonRefusesASubagentFrameWithAMalformedID(t *testing.T) {
@@ -160,5 +181,42 @@ func TestTheDaemonRefusesASubagentFrameWithAMalformedID(t *testing.T) {
 	f := c.await("the refusal", func(f rpc.Frame) bool { return f.Kind == rpc.FrameError })
 	if !strings.Contains(f.Text, "agent id") {
 		t.Errorf("refusal reads %q, want the id fence's own reason (not, say, an unknown frame kind)", f.Text)
+	}
+}
+
+// A tool call's command is not Text, so trimRing's accounting never counted it:
+// forty 400 KB commands framed past rpc's 16 MiB cap, which ends the client's
+// connection when the pane opens. The reply is bounded by what it encodes to,
+// and keeps the newest events.
+func TestAnAgentTranscriptReplyFitsTheFrameWhateverItsToolCallsCarry(t *testing.T) {
+	dir := workflowSessionDir(t, wfID)
+	big := strings.Repeat("x", 400<<10)
+	var lines []string
+	for i := range 40 {
+		lines = append(lines, fmt.Sprintf(`{"isSidechain":true,"agentId":%q,"type":"assistant","uuid":"big-%d",`+
+			`"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_big_%d","name":"Bash","input":{"command":%q}}]}}`,
+			subAgentID, i, i, big))
+	}
+	if err := os.MkdirAll(filepath.Join(dir, "subagents"), 0o700); err != nil {
+		t.Fatalf("mkdir: %v", err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "subagents", "agent-"+subAgentID+".jsonl"), []byte(strings.Join(lines, "\n")+"\n"), 0o600); err != nil {
+		t.Fatalf("write: %v", err)
+	}
+
+	s := newServer(filepath.Join(t.TempDir(), "s"))
+	c := newClient(nil)
+	s.sendAgentTranscript(c, askFor(rpc.FrameSubagent, wfID, subAgentID, 0))
+
+	f := sentFrame(t, c)
+	raw, err := json.Marshal(f)
+	if err != nil {
+		t.Fatalf("marshal: %v", err)
+	}
+	if limit := historyBytes + 64<<10; len(raw) > limit {
+		t.Errorf("the reply encodes to %d bytes, want at most %d: it would end the client's connection", len(raw), limit)
+	}
+	if n := len(f.Events); n == 0 || f.Events[n-1].Tool == nil || f.Events[n-1].Tool.ID != "toolu_big_39" {
+		t.Errorf("the reply does not end on the newest event: %d events", n)
 	}
 }

@@ -28,9 +28,10 @@ package ui
 // Skipping the seed whenever DM.subs already held anything - the first
 // version of this - read that partial capture as complete, which permanently
 // dropped the dispatch's opening lines the moment anything live landed before
-// the first open. So withSubBacklog always replaces from the fleet's copy
-// when it is non-empty, which costs a rebuild on every open rather than only
-// the first, and is correct on all three of them.
+// the first open. So withSubBacklog replaces from the fleet's copy whenever it
+// is longer than the DM's, which costs a rebuild on every open rather than only
+// the first, and is correct on all three of them. Longer, not merely non-empty:
+// a DM completed from claude's own file holds more than the fleet's copy does.
 //
 // "Prefix-complete" holds for a client attached before the dispatch began. One
 // that attached later was handed the task_started and nothing it had said
@@ -77,20 +78,9 @@ func (f Fleet) SubBacklog(sessionID, dispatch string) []core.Event {
 	return events.slice(0, events.len())
 }
 
-// agentRow is the subagent a session's dispatch names, the row an open reads
-// the agent id and the type off.
-func (f Fleet) agentRow(sessionID, dispatch string) (Task, bool) {
-	for _, row := range f.tasks[sessionID].Rows() {
-		if row.Kind == core.TaskAgent && row.Dispatch == dispatch {
-			return row, true
-		}
-	}
-	return Task{}, false
-}
-
 // withSubBacklog replaces one dispatch's frames with SubBacklog, the fleet's
-// always-complete copy - see the header for why this must not be conditional
-// on whether the DM already holds something.
+// copy, unless the DM already holds as many or more - see the header for why it
+// is not conditional on the DM holding anything at all.
 //
 // Each event is also folded through observedTool, which Append already does
 // for every event on the live path (dm.go, before the forwarding branch) but
@@ -101,7 +91,7 @@ func (f Fleet) agentRow(sessionID, dispatch string) (Task, bool) {
 // nothing here is drawn yet; renderForwarded builds the block fresh once
 // Viewing runs, reading d.outcomes at that point.
 func (d DM) withSubBacklog(dispatch string, backlog []core.Event) DM {
-	if dispatch == "" || len(backlog) == 0 {
+	if dispatch == "" || len(backlog) <= d.subs[dispatch].len() {
 		return d
 	}
 	subs := make(map[string]chunked[core.Event], len(d.subs)+1)

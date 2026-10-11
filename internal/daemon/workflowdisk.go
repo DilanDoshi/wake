@@ -15,6 +15,7 @@ package daemon
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
@@ -222,8 +223,8 @@ func agentTranscript(root *os.Root, agentID string) (string, bool) {
 	return "", false
 }
 
-// sidechainTail decodes a workflow agent's transcript into the tail History's
-// ring keeps.
+// sidechainTail decodes an agent's transcript into the tail History's ring
+// keeps.
 func sidechainTail(r io.Reader, id, agentID string) ([]core.Event, error) {
 	var ring []core.Event
 	total := 0
@@ -234,14 +235,14 @@ func sidechainTail(r io.Reader, id, agentID string) ([]core.Event, error) {
 			events, decErr := core.DecodeSidechainLine(line)
 			if decErr != nil {
 				// One unreadable line is not an unreadable transcript.
-				logf("wake: workflow agent %s has a transcript line that could not be decoded: %v", agentID, decErr)
+				logf("wake: agent %s has a transcript line that could not be decoded: %v", agentID, decErr)
 			}
 			for _, ev := range events {
 				ev.Raw = nil
 				// Stamped to the id this function was called with - which is
 				// s.transcriptID's *translated* post-/clear id at the
-				// sendWorkflowAgent call site, not the id the client knows.
-				// sendWorkflowAgent restamps with the client-facing one
+				// sendAgentTranscript call site, not the id the client knows.
+				// sendAgentTranscript restamps with the client-facing one
 				// afterward, the way answerHistory restamps History's own
 				// events for the same reason.
 				ev.SessionID = id
@@ -273,12 +274,38 @@ func (s *server) sendWorkflows(c *client, id string) {
 		Workflow: &rpc.WorkflowFrame{Runs: runs, PersonalDir: userWorkflowDir()}})
 }
 
+// fitReply keeps the newest events that encode within historyBytes. trimRing
+// charges an event its Text alone, and a tool call's command or diff is not
+// Text, so a run of large ones could still frame past rpc's cap - which ends
+// the client's connection - however few the events.
+func fitReply(events []core.Event) []core.Event {
+	size := 0
+	for i := len(events) - 1; i >= 0; i-- {
+		raw, err := json.Marshal(events[i])
+		if err != nil {
+			logf("wake: an event that cannot be framed was dropped from an agent's transcript: %v", err)
+			return events[i+1:]
+		}
+		size += len(raw)
+		if size > historyBytes && i < len(events)-1 {
+			return events[i+1:]
+		}
+	}
+	return events
+}
+
 // sendAgentTranscript answers a client's FrameWorkflowAgent or FrameSubagent
-// (ask) under that frame's own reply kind: one agent's own transcript, echoing
-// back the agent id it was asked for.
-func (s *server) sendAgentTranscript(c *client, id, agentID, ask string) {
+// under that frame's own reply kind: one agent's own transcript, echoing back
+// the agent id and ask number it was asked with.
+func (s *server) sendAgentTranscript(c *client, ask rpc.Frame) {
+	id := ask.SessionID
+	var agentID string
+	var askNumber uint64
+	if ask.Workflow != nil {
+		agentID, askNumber = ask.Workflow.Agent, ask.Workflow.Ask
+	}
 	reply := rpc.FrameWorkflowAgentReply
-	if ask == rpc.FrameSubagent {
+	if ask.Kind == rpc.FrameSubagent {
 		reply = rpc.FrameSubagentReply
 	}
 	// A malformed id is the request's fault, so it is refused; everything past
@@ -297,9 +324,10 @@ func (s *server) sendAgentTranscript(c *client, id, agentID, ask string) {
 	// Addressed by the id the client knows, whatever file it came out of -
 	// answerHistory's own reason: s.transcriptID(id) above may be the
 	// post-/clear claude id, and AgentHistory stamped every event with that one.
+	events = fitReply(events)
 	for i := range events {
 		events[i].SessionID = id
 	}
 	c.enqueue(rpc.Frame{Kind: reply, SessionID: id,
-		Workflow: &rpc.WorkflowFrame{Agent: agentID}, Events: events})
+		Workflow: &rpc.WorkflowFrame{Agent: agentID, Ask: askNumber}, Events: events})
 }
