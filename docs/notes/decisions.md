@@ -31,6 +31,11 @@ turn (`testdata/stream/bare-status.jsonl`), so it was dead in every Wake convers
   another's (Codex flagged that case). A ⌃C that only closed it would invite a second press, which
   the kill switch reads as the emergency exit; parking the shown agent instead would make the key
   mean something different under an overlay. A park is recoverable.
+- **One menu at a time, and a card first.** A card arriving under it takes the keys and hides it;
+  a resume picker opening on a late disk walk closes it; a late rewind reply gives up over it.
+- **`@manager /status` in the room is a message to the manager**, not Wake's `/status`: the room
+  routes every `@manager /cmd` to the service (send.go), so `/status @manager`, the manager's own
+  conversation, or the roster pick show its status. Changing that routing is not this ruling's.
 - **Left out:** claude's own version (deferred.md) and the account, which Wake cannot know.
   Claude Code's Config and Usage tabs are `/config` and `/usage`, which still pass through.
 

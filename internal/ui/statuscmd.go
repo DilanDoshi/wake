@@ -19,6 +19,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/gitref"
+	"github.com/DilanDoshi/wake/internal/rpc"
 	"github.com/DilanDoshi/wake/internal/version"
 )
 
@@ -72,10 +73,13 @@ func (a App) statusKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 func (a App) statusView(id string, width, height int, over string) string {
 	v := a.statusUI
 	agent, ok := a.fleet.Agent(v.Session)
-	if !v.Open() || v.Pane != id || !ok {
+	if _, carded := a.cardOf(id); !v.Open() || v.Pane != id || !ok || carded {
 		return ""
 	}
-	room := a.menuRoom(id, width, height) - lipgloss.Height(over)
+	room := a.menuRoom(id, width, height)
+	if over != "" {
+		room -= lipgloss.Height(over)
+	}
 	w := max(width, minBlockWidth)
 	rows := a.statusRows(agent, v)
 	if room < 3 {
@@ -88,7 +92,7 @@ func (a App) statusView(id string, width, height int, over string) string {
 // statusRows are the facts, label and value, built from what the status bar and
 // the banner already say; a fact this window does not hold is left out.
 func (a App) statusRows(agent Agent, v StatusView) [][2]string {
-	rows := [][2]string{{"Name", agent.Name}, {"Session ID", agent.ID}}
+	rows := [][2]string{{"Name", agent.Name + " · " + agent.State}, {"Session ID", agent.ID}}
 	if agent.Conversation != "" && agent.Conversation != agent.ID {
 		rows = append(rows, [2]string{"Conversation", agent.Conversation})
 	}
@@ -99,7 +103,7 @@ func (a App) statusRows(agent Agent, v StatusView) [][2]string {
 		[2]string{"Effort", agent.Effort},
 		[2]string{"Context", contextLeft(agent.ContextTokens, agent.ContextWindow)},
 		[2]string{"Permission mode", a.modeOf(agent.ID) + " (as this window last heard)"},
-		[2]string{"MCP", cmp.Or(mcpWarningText(agent.MCPNeedsAuth), mcpVerb+" lists its servers")},
+		[2]string{"MCP", a.statusMCP(agent)},
 		[2]string{"Team", agent.Team},
 		[2]string{"Task", agent.Label},
 		[2]string{"Wake", a.wakeBuilds()},
@@ -107,14 +111,26 @@ func (a App) statusRows(agent Agent, v StatusView) [][2]string {
 	return rows
 }
 
-// wakeBuilds is this window's version, and the daemon's build beside it when the
-// two differ - the one version fact an operator acts on (staledaemon.go's).
-func (a App) wakeBuilds() string {
-	v := "v" + version.Version
-	if b := a.daemonBuild; b != "" && b != version.Build() {
-		v += fmt.Sprintf(" · daemon on %s", b)
+// statusMCP is the banner's count, or where to look: /mcp asks a live session,
+// so a parked or ended one is pointed nowhere.
+func (a App) statusMCP(agent Agent) string {
+	if text := mcpWarningText(agent.MCPNeedsAuth); text != "" {
+		return text
 	}
-	return v
+	if agent.State == rpc.StateParked || agent.State == rpc.StateEnded {
+		return ""
+	}
+	return mcpVerb + " lists its servers"
+}
+
+// wakeBuilds is this window's version, and both builds when the daemon's
+// differs - the one version fact an operator acts on. Empty is a daemon from
+// before builds were reported, which staledaemon.go also reads as older.
+func (a App) wakeBuilds() string {
+	if b := a.daemonBuild; b != version.Build() {
+		return fmt.Sprintf("%s · daemon %s", version.Build(), cmp.Or(b, "on an older build"))
+	}
+	return "v" + version.Version
 }
 
 // statusLines lays the rows out as a label column and a value, dropping a row

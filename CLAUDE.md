@@ -80,10 +80,13 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   The reply also names the agent's slash commands, which feed the `/` menu before its first turn.
   A connector not signed in points at claude.ai, and the banner's count leaves connectors out.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
-- **`/status`** is Wake's, since headless claude refuses it: one session's facts (name, id, the
-  manager's claude name, directory, branch, model, effort, context, this window's mode, MCP, team,
-  Wake's build and a differing daemon's) in a read-only menu over the composer, aimed like `/mcp`.
-  Nothing is written, so nothing enters the agent's context. `internal/ui/statuscmd.go`.
+- **`/status`** is Wake's, since headless claude refuses it: one session's facts (name and state, id,
+  a `/clear`'s conversation, the manager's claude name, directory and branch read at open, model,
+  effort, context, this window's mode, MCP, team, task, both builds when the daemon's differs) in a
+  read-only menu over the composer, aimed like `/mcp` (`/status @who`). Nothing is written, so
+  nothing enters the agent's context. Any key closes it; a card in its pane comes first.
+  `@manager /status` in the room is a message to the manager, as every `@manager /cmd` is.
+  `internal/ui/statuscmd.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
   conversation, every agent's in the room; `/workflows @who` or the room's `@who /workflows` one
@@ -525,10 +528,9 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   (2.1.285). Wake's room marker depends on it — `roomMessageVersion`, re-check on upgrade. A fork
   copies records under the same uuids. `docs/superpowers/notes/2026-09-29-transcript-uuid-findings.md`.
 - `/model`, `/clear`, `/compact`, `/context` survive stream-json; `/resume` does not. Bare
-  `/effort`/`/model` do nothing (`num_turns: 0`, `$0`). At 2.1.296 `/cost`, `/usage`, `/stats`,
-  `/config` and `/output-style` reply locally; `/status`, `/permissions`, `/memory`, `/hooks`,
-  `/export`, `/help` and ten more answer "isn't available in this environment" with no turn
-  (`testdata/stream/bare-status.jsonl`); `/doctor` and `/todos` become model turns.
+  `/effort`/`/model` do nothing (`num_turns: 0`, `$0`). `/status` answers "isn't available in this
+  environment" with no turn (2.1.296, `testdata/stream/bare-status.jsonl`), as a hand probe found
+  `/permissions`, `/memory`, `/hooks` and `/help` do; only `/status`'s answer is recorded.
 - `stream_event` text deltas are byte-identical to the completed `assistant` block
   (`testdata/stream/partial-turn.jsonl`); unrecognised shapes yield no event.
 - The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id; `TodoWrite` is retired.
