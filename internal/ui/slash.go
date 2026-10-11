@@ -145,7 +145,8 @@ const mcpCommand = "mcp"
 const mcpVerb = SlashPrefix + mcpCommand // for resumeVerb's reason
 
 // statusCommand: claude refuses it headless (testdata/stream/bare-status.jsonl); statuscmd.go.
-const statusCommand, statusVerb = "status", SlashPrefix + "status"
+const statusCommand = "status"
+const statusVerb = SlashPrefix + statusCommand
 
 // resumeCommand is the first citizen. Named as a constant because two places
 // need it - the router and the sentence the room says about a parked fleet -

@@ -138,13 +138,32 @@ func TestStatusClosesWhenTheKeysLeaveItsPane(t *testing.T) {
 }
 
 // A card that arrives while /status is open is an agent waiting on an answer:
-// its keys reach it, and /status steps aside rather than swallowing them from
-// under a card that may have clipped it out of sight.
+// its keys reach it, /status is not drawn under it, and it stays closed after,
+// rather than coming back to eat the next key once the card settles.
 func TestACardsKeysReachItPastAnOpenStatus(t *testing.T) {
 	a, _ := statusIn(t, statusID, "alex", statusReport())
 	a = a.applyFrame(askFrame(statusID, "r1"))
+	if strings.Contains(shown(a), statusHint) {
+		t.Errorf("/status is drawn under its agent's card:\n%s", shown(a))
+	}
 	if _, _, handled := a.statusKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}); handled {
 		t.Error("/status took a key while its agent's card was up")
+	}
+	if a = pressMenu(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}); a.statusUI.Open() {
+		t.Error("/status stayed open behind the card the key went to")
+	}
+}
+
+// A picker that opens on a reply does not land on an open /status: the resume
+// picker closes it, and a rewind reply gives up, as it does over a config picker.
+func TestAPickerOpeningOnAReplyDoesNotStackOnStatus(t *testing.T) {
+	a, _ := statusIn(t, statusID, "alex", statusReport())
+	if b := a.openResume(twoRows(), 0, false); b.statusUI.Open() {
+		t.Error("the resume picker opened over /status and left it open beneath")
+	}
+	reply := rpc.Frame{Kind: rpc.FrameRewindTargetsReply, SessionID: statusID, RewindTargets: []rpc.RewindTarget{{UUID: "u1", Text: "prompt"}}}
+	if b := a.applyFrame(reply); b.rewind.Open() {
+		t.Error("a rewind reply opened its picker over /status")
 	}
 }
 
@@ -202,10 +221,13 @@ func TestCtrlCOverStatusParksThisPanesAgentAsEverywhere(t *testing.T) {
 	st := statusReport()
 	st.Sessions = append(st.Sessions, rpc.SessionStatus{ID: "s9", Name: "sydney", State: rpc.StateIdle})
 	a := dmApp(rec, Stream{}, statusID, "alex").withSize(140, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
-	m, cmd := typeAndSubmit(a, "@sydney "+statusVerb)
+	m, cmd := typeAndSubmit(a, statusVerb+" @sydney")
 	drainBatch(cmd)
 	rec.taken(t)
-	a = pressMenu(m.(App), tea.KeyMsg{Type: tea.KeyCtrlC})
+	if a = m.(App); a.statusUI.Session != "s9" {
+		t.Fatalf("/status @sydney did not open sydney's status: %+v", a.statusUI)
+	}
+	a = pressMenu(a, tea.KeyMsg{Type: tea.KeyCtrlC})
 	got := rec.taken(t)
 	if len(got) != 1 || got[0].Kind != rpc.FramePark || got[0].SessionID != statusID || a.statusUI.Open() {
 		t.Errorf("⌃C over sydney's /status in alex's pane wrote %v (open %v), want alex parked and the view closed", sentKinds(got), a.statusUI.Open())
