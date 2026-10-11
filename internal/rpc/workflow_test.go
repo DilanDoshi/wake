@@ -25,10 +25,10 @@ func TestValidWorkflowNameRefusesWhatIsNotOneFileSegment(t *testing.T) {
 	}
 }
 
-func TestValidWorkflowAgentIDAcceptsClaudesOwnShape(t *testing.T) {
+func TestValidAgentIDAcceptsClaudesOwnShape(t *testing.T) {
 	for _, id := range []string{"a216187ba41a1087e", "abc123", "x"} {
-		if err := ValidWorkflowAgentID(id); err != nil {
-			t.Errorf("ValidWorkflowAgentID(%q) refused a valid id: %v", id, err)
+		if err := ValidAgentID(id); err != nil {
+			t.Errorf("ValidAgentID(%q) refused a valid id: %v", id, err)
 		}
 	}
 }
@@ -36,13 +36,13 @@ func TestValidWorkflowAgentIDAcceptsClaudesOwnShape(t *testing.T) {
 // Refuses everything ValidWorkflowName refuses, plus the two workflow-name
 // examples that carry a dash or underscore - punctuation no recorded
 // workflow agent id has ever carried.
-func TestValidWorkflowAgentIDRefusesWhatIsNotLowerCaseAlphanumeric(t *testing.T) {
+func TestValidAgentIDRefusesWhatIsNotLowerCaseAlphanumeric(t *testing.T) {
 	for _, bad := range []string{
 		"", "../x", "a/b", ".hidden", "Upper", "x y", strings.Repeat("a", maxWorkflowAgentID+1),
 		"count-lines", "deep_research2",
 	} {
-		if err := ValidWorkflowAgentID(bad); err == nil {
-			t.Errorf("ValidWorkflowAgentID(%q) was accepted; an agent id is lower-case alphanumeric only", bad)
+		if err := ValidAgentID(bad); err == nil {
+			t.Errorf("ValidAgentID(%q) was accepted; an agent id is lower-case alphanumeric only", bad)
 		}
 	}
 }

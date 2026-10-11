@@ -111,9 +111,9 @@ func ValidWorkflowName(name string) error {
 // own workflow agent id, read back off a task_progress snapshot.
 const maxWorkflowAgentID = 64
 
-// ValidWorkflowAgentID refuses every id that is not lower-case alphanumeric,
+// ValidAgentID refuses every id that is not lower-case alphanumeric,
 // the shape every recorded workflow agent id has taken.
-func ValidWorkflowAgentID(id string) error {
+func ValidAgentID(id string) error {
 	if id == "" {
 		return fmt.Errorf("a workflow agent id is empty")
 	}

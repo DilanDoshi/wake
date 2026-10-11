@@ -171,15 +171,15 @@ func readRecord(root *os.Root, name string, limit int) ([]byte, error) {
 
 func firstN[T any](s []T, n int) []T { return s[:min(len(s), n)] }
 
-// WorkflowAgentHistory is one workflow agent's own transcript - the
+// AgentHistory is one workflow agent's own transcript - the
 // isSidechain:true lines under <sessiondir>/subagents/workflows/wf_*/agent-
 // <agentID>.jsonl, read through the session's own root and the same bounded
 // scanner and historyEvents/historyBytes ring History reads an ordinary
 // conversation's tail through. An unknown agent id is not an error: the run
 // may have named an agent this session never reached - the caller draws
 // nothing, which is what it would have drawn anyway.
-func WorkflowAgentHistory(id, agentID string) ([]core.Event, error) {
-	if err := rpc.ValidWorkflowAgentID(agentID); err != nil {
+func AgentHistory(id, agentID string) ([]core.Event, error) {
+	if err := rpc.ValidAgentID(agentID); err != nil {
 		return nil, err
 	}
 	root, ok := sessionRoot(id)
@@ -271,11 +271,11 @@ func (s *server) sendWorkflows(c *client, id string) {
 func (s *server) sendWorkflowAgent(c *client, id, agentID string) {
 	// A malformed id is the request's fault, so it is refused; everything past
 	// it is the disk's.
-	if err := rpc.ValidWorkflowAgentID(agentID); err != nil {
+	if err := rpc.ValidAgentID(agentID); err != nil {
 		c.enqueue(errorFrame(id, err.Error()))
 		return
 	}
-	events, err := WorkflowAgentHistory(s.transcriptID(id), agentID)
+	events, err := AgentHistory(s.transcriptID(id), agentID)
 	if err != nil {
 		// Unreadable answers as missing: the client draws the snapshot's previews,
 		// where an error frame would be a notice on every re-ask.
@@ -284,7 +284,7 @@ func (s *server) sendWorkflowAgent(c *client, id, agentID string) {
 	}
 	// Addressed by the id the client knows, whatever file it came out of -
 	// answerHistory's own reason: s.transcriptID(id) above may be the
-	// post-/clear claude id, and WorkflowAgentHistory stamped every event
+	// post-/clear claude id, and AgentHistory stamped every event
 	// with that one.
 	for i := range events {
 		events[i].SessionID = id
