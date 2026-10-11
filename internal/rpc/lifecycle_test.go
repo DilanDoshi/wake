@@ -77,6 +77,8 @@ var frameKinds = map[string]string{
 	"FrameWorkflowsReply":     FrameWorkflowsReply,
 	"FrameWorkflowAgent":      FrameWorkflowAgent,
 	"FrameWorkflowAgentReply": FrameWorkflowAgentReply,
+	"FrameSubagent":           FrameSubagent,
+	"FrameSubagentReply":      FrameSubagentReply,
 	"FrameSaveWorkflow":       FrameSaveWorkflow,
 	"FrameWorkflowSaved":      FrameWorkflowSaved,
 }

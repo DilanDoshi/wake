@@ -339,13 +339,13 @@ func TestAgentHistoryStampsTheClientFacingSessionID(t *testing.T) {
 	plantWorkflowAgentTranscript(t, dir, "wf_a", "abc123")
 
 	c := newClient(nil)
-	s.sendWorkflowAgent(c, wfID, "abc123")
+	s.sendAgentTranscript(c, wfID, "abc123", rpc.FrameWorkflowAgent)
 
 	var f rpc.Frame
 	select {
 	case f = <-c.out:
 	default:
-		t.Fatal("sendWorkflowAgent enqueued nothing")
+		t.Fatal("sendAgentTranscript enqueued nothing")
 	}
 	if f.Kind != rpc.FrameWorkflowAgentReply || f.SessionID != wfID {
 		t.Fatalf("reply = %+v, want FrameWorkflowAgentReply addressed to %q", f, wfID)
@@ -393,7 +393,7 @@ func TestAnUnreadableWorkflowAgentTranscriptIsAnEmptyReplyAndNoErrorFrame(t *tes
 
 	s := newServer(filepath.Join(t.TempDir(), "s"))
 	c := newClient(nil)
-	s.sendWorkflowAgent(c, wfID, "abc123")
+	s.sendAgentTranscript(c, wfID, "abc123", rpc.FrameWorkflowAgent)
 
 	f := sentFrame(t, c)
 	if f.Kind != rpc.FrameWorkflowAgentReply || f.SessionID != wfID {
@@ -409,7 +409,7 @@ func TestAMalformedWorkflowAgentIDIsStillAnErrorFrame(t *testing.T) {
 	workflowSessionDir(t, wfID)
 	s := newServer(filepath.Join(t.TempDir(), "s"))
 	c := newClient(nil)
-	s.sendWorkflowAgent(c, wfID, "../x")
+	s.sendAgentTranscript(c, wfID, "../x", rpc.FrameWorkflowAgent)
 
 	if f := sentFrame(t, c); f.Kind != rpc.FrameError || f.SessionID != wfID {
 		t.Fatalf("a malformed agent id was answered %+v, want a FrameError", f)

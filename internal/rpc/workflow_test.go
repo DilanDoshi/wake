@@ -38,7 +38,7 @@ func TestValidAgentIDAcceptsClaudesOwnShape(t *testing.T) {
 // workflow agent id has ever carried.
 func TestValidAgentIDRefusesWhatIsNotLowerCaseAlphanumeric(t *testing.T) {
 	for _, bad := range []string{
-		"", "../x", "a/b", ".hidden", "Upper", "x y", strings.Repeat("a", maxWorkflowAgentID+1),
+		"", "../x", "a/b", ".hidden", "Upper", "x y", strings.Repeat("a", maxAgentID+1),
 		"count-lines", "deep_research2",
 	} {
 		if err := ValidAgentID(bad); err == nil {
