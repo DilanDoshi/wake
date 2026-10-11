@@ -50,6 +50,8 @@ func (a App) takeHistoryAsks() (App, tea.Cmd) {
 	// A workflow view opened from the sidebar owes a read off disk the same way
 	// and for the same reason: its open keys and its click return no command.
 	a, runs := a.takeWorkflowAsks()
+	a, subs := a.takeSubagentAsks()
+	runs = tea.Batch(runs, subs)
 	if len(a.pendingHistory) == 0 {
 		return a, runs
 	}

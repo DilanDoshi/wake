@@ -32,6 +32,11 @@ package ui
 // when it is non-empty, which costs a rebuild on every open rather than only
 // the first, and is correct on all three of them.
 //
+// "Prefix-complete" holds for a client attached before the dispatch began. One
+// that attached later was handed the task_started and nothing it had said
+// (daemon/taskreplay.go), so its copy is only what it saw - often none - and
+// subtranscript.go completes the pane from claude's own file on every open.
+//
 // # Unlike fleettasks.go, this is a duplicate rather than a move
 //
 // A task row is a few strings and counters; a dispatch's forwarded events can
@@ -70,6 +75,17 @@ func (f Fleet) SubBacklog(sessionID, dispatch string) []core.Event {
 		return nil
 	}
 	return events.slice(0, events.len())
+}
+
+// agentRow is the subagent a session's dispatch names, the row an open reads
+// the agent id and the type off.
+func (f Fleet) agentRow(sessionID, dispatch string) (Task, bool) {
+	for _, row := range f.tasks[sessionID].Rows() {
+		if row.Kind == core.TaskAgent && row.Dispatch == dispatch {
+			return row, true
+		}
+	}
+	return Task{}, false
 }
 
 // withSubBacklog replaces one dispatch's frames with SubBacklog, the fleet's
