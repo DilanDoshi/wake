@@ -912,6 +912,19 @@ The tests replay recorded receipts and a scripted agent. In a scratch git reposi
 - [ ] Run a second agent in the same directory: the choices name it, `(working)` while it works.
 - [ ] Park and wake the agent, then restore code to a prompt from before the park.
 
+## An agent's view of its team — what only a real model shows
+
+- [ ] Put two agents on `/team backend` and a third on `/team docs`. Ask one backend agent "which team
+      are you on, and who are your teammates?" It should run `wake status` (an approval card outside
+      `auto`) and name the other backend agent, not the docs one.
+- [ ] Move that teammate with `/team docs` and ask again. The answer follows; the note's launch-time
+      line does not, which is why it says to ask again.
+- [ ] Park a backend agent with `⌃C` and `/resume` it. It should come back naming its team and the live
+      teammates at that moment (the "At launch" line), and not itself.
+- [ ] Ask an agent to message its teammate. The room draws `↪ sender → recipient`. Move the teammate off
+      `auto` with `⇧⇥` and send again: Claude Code may hold the message for an approval nobody can
+      give — note what you see.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:

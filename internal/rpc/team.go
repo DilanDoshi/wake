@@ -35,6 +35,11 @@ const FrameTeam = "team" // client → daemon: set a session's team tag
 // a real team, or clearing and setting one called "none" would collide.
 const TeamNone = "none"
 
+// TeamFilterFlag is `wake status`'s team filter. Here rather than in cmd/wake
+// because the note the daemon appends to every agent's system prompt names it
+// too, and a flag spelled in two packages is one that can drift.
+const TeamFilterFlag = "--team"
+
 // maxTeamName bounds the tag that heads a section and rides in a mention. A
 // header is a couple of dozen columns and a mention is one token, so a long one
 // serves nobody; the bound is small on purpose, not the OS's own by accident.
@@ -44,7 +49,8 @@ const maxTeamName = 32
 //
 // The empty string and TeamNone both clear. A name folds to lower case, the way
 // NormalizeColor folds a colour, so `@Backend` and `@backend` are one team;
-// anything with whitespace or a character outside the mention set is refused,
+// anything with whitespace or a character outside the mention set is refused, and
+// so is a name that starts with a dash, which a flag parser takes for a flag,
 // because a team that cannot be one `@`-token is a team that cannot be reached.
 func NormalizeTeam(requested string) (string, error) {
 	folded := strings.ToLower(strings.TrimSpace(requested))
@@ -54,6 +60,10 @@ func NormalizeTeam(requested string) (string, error) {
 	if len(folded) > maxTeamName {
 		return "", fmt.Errorf("a team name is at most %d characters, got %d (or %q to clear)",
 			maxTeamName, len(folded), TeamNone)
+	}
+	if strings.HasPrefix(folded, "-") {
+		return "", fmt.Errorf("%q cannot begin with a dash: `wake status %s` would read it as a flag (or %q to clear)",
+			requested, TeamFilterFlag, TeamNone)
 	}
 	for _, r := range folded {
 		switch {

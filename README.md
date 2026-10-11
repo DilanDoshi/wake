@@ -94,7 +94,7 @@ wake setup-terminal     configure your terminal: Shift+Enter → a newline, Cmd+
 wake upgrade            install the newest release over this one
 wake --version          which build you have
 wake manager            start the manager from a shell (the room seats one by default)
-wake status             what is running
+wake status             what is running, and each agent's team (`--team <name>`: one team's members)
 wake stop               stop every session and the daemon — the one irreversible verb
 ```
 
