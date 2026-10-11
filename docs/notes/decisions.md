@@ -27,6 +27,10 @@ turn (`testdata/stream/bare-status.jsonl`), so it was dead in every Wake convers
   need a live ask. The daemon's build shows only when it differs from the window's.
 - **Aimed like `/mcp`** (`commandTarget`, shared): bare is the conversation or the room's roster
   pick, `@who /status` from the room. No fleet summary: that is `wake status`'s job.
+- **⌃C over it is ⌃C: it closes the view and parks this pane's agent**, even when the view shows
+  another's (Codex flagged that case). A ⌃C that only closed it would invite a second press, which
+  the kill switch reads as the emergency exit; parking the shown agent instead would make the key
+  mean something different under an overlay. A park is recoverable.
 - **Left out:** claude's own version (deferred.md) and the account, which Wake cannot know.
   Claude Code's Config and Usage tabs are `/config` and `/usage`, which still pass through.
 

@@ -30,16 +30,17 @@ const (
 )
 
 // StatusView is the open view: Session is the agent it describes, "" meaning
-// none, and Pane is where it was opened and is drawn. Branch is read once, at
-// open: the view redraws at the shimmer's rate, and gitref reads the disk.
-type StatusView struct{ Session, Pane, Branch string }
+// none, and Pane is where it was opened and is drawn. Cwd and its Branch are
+// one reading taken at open: the view redraws at the shimmer's rate, gitref
+// reads the disk, and a directory read later would sit beside another's branch.
+type StatusView struct{ Session, Pane, Cwd, Branch string }
 
 func (v StatusView) Open() bool { return v.Session != "" }
 
 func (a App) status(arg string) (App, tea.Cmd) {
 	a = a.clearDraft()
 	if agent, ok := a.commandTarget(arg, statusUsage, statusNoTarget); ok {
-		a.statusUI = StatusView{Session: agent.ID, Pane: a.focus, Branch: gitref.Of(agent.Cwd).Name()}
+		a.statusUI = StatusView{Session: agent.ID, Pane: a.focus, Cwd: agent.Cwd, Branch: gitref.Of(agent.Cwd).Name()}
 	}
 	return a, nil
 }
@@ -76,7 +77,7 @@ func (a App) statusView(id string, width, height int, over string) string {
 	}
 	room := a.menuRoom(id, width, height) - lipgloss.Height(over)
 	w := max(width, minBlockWidth)
-	rows := a.statusRows(agent, v.Branch)
+	rows := a.statusRows(agent, v)
 	if room < 3 {
 		return HintStyle.Render(ansi.Truncate(statusTitle, w, ellipsis))
 	}
@@ -86,14 +87,14 @@ func (a App) statusView(id string, width, height int, over string) string {
 
 // statusRows are the facts, label and value, built from what the status bar and
 // the banner already say; a fact this window does not hold is left out.
-func (a App) statusRows(agent Agent, branch string) [][2]string {
+func (a App) statusRows(agent Agent, v StatusView) [][2]string {
 	rows := [][2]string{{"Name", agent.Name}, {"Session ID", agent.ID}}
 	if agent.Conversation != "" && agent.Conversation != agent.ID {
 		rows = append(rows, [2]string{"Conversation", agent.Conversation})
 	}
 	rows = append(rows,
-		[2]string{"Directory", shortPath(agent.Cwd)},
-		[2]string{"Branch", branch},
+		[2]string{"Directory", shortPath(v.Cwd)},
+		[2]string{"Branch", v.Branch},
 		[2]string{"Model", barModel(agent)},
 		[2]string{"Effort", agent.Effort},
 		[2]string{"Context", contextLeft(agent.ContextTokens, agent.ContextWindow)},
@@ -117,18 +118,20 @@ func (a App) wakeBuilds() string {
 }
 
 // statusLines lays the rows out as a label column and a value, dropping a row
-// whose value is empty and flattening one that is not Wake's to one line.
+// whose value is empty and flattening one that is not Wake's to one line. The
+// label column takes at most half the width, so a narrow pane keeps its values.
 func statusLines(rows [][2]string, width int) []string {
 	pad := 0
 	for _, r := range rows {
 		pad = max(pad, lipgloss.Width(r[0]))
 	}
+	pad = min(pad, width/2)
 	var out []string
 	for _, r := range rows {
 		if r[1] == "" {
 			continue
 		}
-		label := HintStyle.Render(fmt.Sprintf("%-*s", pad, r[0]))
+		label := HintStyle.Render(fmt.Sprintf("%-*s", pad, ansi.Truncate(r[0], pad, "")))
 		out = append(out, ansi.Truncate(label+"  "+oneRow(r[1]), width, ellipsis))
 	}
 	return out

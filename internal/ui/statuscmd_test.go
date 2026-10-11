@@ -13,6 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -189,5 +190,54 @@ func TestStatusReadsTheBranchOnceWhenItOpens(t *testing.T) {
 	}
 	if out := shown(a); strings.Contains(out, "feat/two") {
 		t.Errorf("a redraw read the branch again:\n%s", out)
+	}
+}
+
+// ⌃C over /status is ⌃C: it closes the view and parks this pane's agent, as it
+// does everywhere, even when the view shows another's. A ⌃C that only closed it
+// would invite a second press, which the kill switch reads as the emergency exit.
+func TestCtrlCOverStatusParksThisPanesAgentAsEverywhere(t *testing.T) {
+	fresh(t)
+	rec := newRecorder(t)
+	st := statusReport()
+	st.Sessions = append(st.Sessions, rpc.SessionStatus{ID: "s9", Name: "sydney", State: rpc.StateIdle})
+	a := dmApp(rec, Stream{}, statusID, "alex").withSize(140, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+	m, cmd := typeAndSubmit(a, "@sydney "+statusVerb)
+	drainBatch(cmd)
+	rec.taken(t)
+	a = pressMenu(m.(App), tea.KeyMsg{Type: tea.KeyCtrlC})
+	got := rec.taken(t)
+	if len(got) != 1 || got[0].Kind != rpc.FramePark || got[0].SessionID != statusID || a.statusUI.Open() {
+		t.Errorf("⌃C over sydney's /status in alex's pane wrote %v (open %v), want alex parked and the view closed", sentKinds(got), a.statusUI.Open())
+	}
+}
+
+// At the narrowest pane the values still show: the label column gives way
+// rather than taking the row, for the manager's longer label too.
+func TestStatusKeepsItsValuesInTheNarrowestPane(t *testing.T) {
+	for _, who := range []struct{ id, name, value string }{
+		{statusID, "alex", statusID[:6]},
+		{"m1", core.ManagerName, "manag"},
+	} {
+		a, _ := statusIn(t, who.id, who.name, statusReport())
+		if out := ansi.Strip(a.statusView(who.id, minPaneWidth, 40, "")); !strings.Contains(out, who.value) {
+			t.Errorf("%s's /status at %d columns lost its values:\n%s", who.name, minPaneWidth, out)
+		}
+	}
+}
+
+// The directory and its branch are one reading, taken when /status opens: an
+// agent that moves while it is up does not get the old branch beside its new
+// directory.
+func TestStatusShowsTheDirectoryItReadTheBranchOf(t *testing.T) {
+	first, second := t.TempDir(), t.TempDir()
+	st := statusReport()
+	st.Sessions[0].Cwd = first
+	a, _ := statusIn(t, statusID, "alex", st)
+	moved := statusReport()
+	moved.Sessions[0].Cwd = second
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &moved})
+	if out := ansi.Strip(a.statusView(statusID, 200, 40, "")); !strings.Contains(out, first) || strings.Contains(out, second) {
+		t.Errorf("/status paired a directory with another's branch:\n%s", out)
 	}
 }
