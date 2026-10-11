@@ -1051,6 +1051,41 @@ it - cosmetic, as for every escape neutralised since BUG-9.
 
 ---
 
+## BUG-51 — a subagent opened from the sidebar drew an empty pane when this client had not watched it speak
+
+**Reported 2026-10-10 by the owner:** a session spawns a general-purpose subagent, the row is in the
+sidebar, clicking it opens a pane with nothing in it - and the composer still works. (The composer
+addresses the *parent*; `deferred.md`'s 2026-08-26 request names that gap, which is not this bug.)
+
+**Cause, read off the code and then reproduced by failing tests - not seen on a screen against a live
+claude.** The pane draws `DM.subs[dispatch]`, and `Task.Openable` lists a row on its `task_started`
+alone. `Fleet.subs` is only the frames this client was sent, and `replayRunningTasks` hands a client
+that attaches after the subagent began the `task_started` and nothing it had said. So a reattach, a
+second window or a room reopened over a running fleet draws the row and has nothing to show for it
+until the subagent speaks again. `668b2746` fixed the same symptom for a DM never opened; this is the
+client never attached.
+
+**Fix:** opening a subagent asks the daemon for its own file (`FrameSubagent`, by the task id - the
+same id claude names `subagents/agent-<id>.jsonl` by, on all three recorded dispatches) and replaces
+the pane's frames with the answer, attributed to the dispatch (`internal/ui/subtranscript.go`,
+`daemon.AgentHistory`). History's rules apply: dropped if a frame arrived since the ask or a `/clear`
+came, asked afresh on every open - and dropped unless longer than what the pane holds, the daemon's
+read being a bounded tail.
+
+Regression tests, red without the fix: ui `TestOpeningASubagentThisClientNeverWatchedAsksForItsTranscript`
+and its neighbours in `subtranscript_test.go`; daemon `TestAgentHistoryReadsAPlainSubagentsTranscript`
+and `TestTheDaemonAnswersASubagentFrame`; cmd/wake `TestClickingASubagentDrawsWhatItSaidBeforeThisWindowWatched`
+(a real pty, a click on the row).
+
+**Not verified:** every forwarded-frame fixture was recorded at claude 2.1.226 and this was found at
+2.1.296, so a wire change that stopped a *continuously attached* client's pane filling is not ruled out
+by this entry. The fix reads claude's own file and does not depend on it, but the re-record
+(`HOME=$(mktemp -d)`, both the stdout stream and the session's `subagents/agent-*.jsonl`) is still owed,
+and with it the premise the fix stands on: that claude writes the subagent's lines to that file as it
+streams them, as the parent does.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

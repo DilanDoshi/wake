@@ -397,6 +397,11 @@ func fakeAgentDispatchesLive(sid string) int {
 		}
 		tool, task := dispatchIDs(turn)
 		turn++
+		// Its own file is on disk before the row is, as claude writes it - and
+		// nothing is forwarded, which is what a client attached late is left with.
+		if projects := os.Getenv("WAKE_PROJECTS"); projects != "" {
+			_ = writeSubagentTranscript(projects, sid, task)
+		}
 		sayDispatch(sid, tool)
 		sayTaskStarted(sid, tool, task)
 		sayTaskProgress(sid, tool, task)
