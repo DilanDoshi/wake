@@ -38,6 +38,18 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## KNOWN GAP, 2026-10-10 — `wake new --model default` puts an unrecorded `--model default` on the argv
+
+**Found by reading** while `feat/manager-spawn-model-effort` taught `spawn_agent` to read
+`"default"` as no model. `core.ValidModel` admits any non-empty name, so `wake new --model default`
+(and `/new --model default`) passes `--model default` to claude. `core.ModelAliases` carries the
+word only because the bare `/model` reply lists it, and that is a `/model` command word. Nothing
+records what `--model default` does at startup.
+
+*Closes with:* a recording of `--model default` in a sterile `HOME`. If claude refuses it or reads it
+as something other than the operator's configuration, `spawnflags.go` reads it as absent the way
+`internal/mcp/spawnopts.go` does. Not bundled into the manager's PR, which never sends it.
+
 ## KNOWN GAP, 2026-09-30 — `$CLAUDE_CONFIG_DIR` moves claude's transcripts and Wake does not follow
 
 **Found by reading, not watched go wrong** (hence here rather than `bugs.md`), while

@@ -1,38 +1,12 @@
 package mcp
 
-// The two checks spawn_agent's optional name passes on this surface, and the
-// whole of what the tool decides about a name. Everything else - the charset,
-// the length, uniqueness, the fleet-wide reserved words - is the daemon's own
-// claim()/normalizeName, because only the daemon sees the whole fleet.
+// The check spawn_agent's optional name passes on this surface beyond being a
+// string (spawnopts.go), and the whole of what the tool decides about a name.
+// Everything else - the charset, the length, uniqueness, the fleet-wide
+// reserved words - is the daemon's own claim()/normalizeName, because only the
+// daemon sees the whole fleet.
 
-import (
-	"errors"
-	"strings"
-)
-
-// optionalName reads spawn_agent's name argument.
-//
-// Absent is "", which the daemon reads as "pick one from the pool" - every
-// spawn before naming existed. A present value that is not a string is a
-// malformed call and is refused here rather than coerced to "": a model that
-// asked for a named agent and silently got a pooled one believes in a name that
-// does not exist, and the daemon would spend a process and money on it. A
-// present string is returned unchanged for the daemon to validate.
-func optionalName(args map[string]any) (string, error) {
-	raw, present := args[nameArg]
-	if !present {
-		return "", nil
-	}
-	name, ok := raw.(string)
-	if !ok {
-		return "", errNonStringName
-	}
-	return name, nil
-}
-
-// errNonStringName is a name field that arrived as something other than a
-// string. One value so the message is one thing wherever it is asserted.
-var errNonStringName = errors.New(nameArg + ` must be a string like "x", or left out to have one assigned`)
+import "strings"
 
 // impersonatesChrome reports whether a manager-requested name would read as the
 // operator, Wake, or a system authority.

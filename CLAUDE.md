@@ -55,7 +55,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   naming a fleet beside it is refused. Each fleet is a directory under `~/.wake/fleets/`; per-fleet
   files are `filepath.Dir(socket)` plus a name.
 - **Spawn flags** (`new`, `manager`, `/new`): `--effort`, `--model`, `--max-budget-usd`,
-  `--fallback-model` (both survive a park), `--worktree <name>` (Wake runs `git worktree add`; never
+  `--fallback-model` (all four survive a park), `--worktree <name>` (Wake runs `git worktree add`; never
   passes claude's `--worktree`), `--add-dir` (repeatable), `--debug-file <name>` / `--debug`
   (the daemon owns the directory; `--debug` without a file is refused).
 - **Room keys:** `↵` send/open/confirm · `⌃]` send now · `esc` interrupt · `esc esc` clear draft, or
@@ -327,9 +327,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 
 **Manager**
 - **May send, interrupt, spawn (optionally named, under `daemon.liveCap`, into a directory the fleet
-  already occupies), and group (`set_team`, `set_color`)** — nothing else on the fleet. Rename,
-  label, park, wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each
-  argued in `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
+  already occupies; at an effort and model when the operator asks, a prompt rule), and group
+  (`set_team`, `set_color`)** — nothing else on the fleet. Rename, label, park, wake, fork, import,
+  stop, allow/deny, mode and the four MCP frames are refused, each argued in
+  `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
 - **It relays the operator's `@"session" …` with `SendMessage`, its one built-in, unfenced** (owner's
   2026-10-03 ruling, the accepted risk in `decisions.md`): a room draft whose leading mention names
   no fleet agent passes through to it, and the room draws each send live as `↪ manager → <to>` from
@@ -387,7 +388,7 @@ yet says so in bold.**
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · `lifecycle.go` · `peers.go` · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
 | Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
-| MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
+| MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
