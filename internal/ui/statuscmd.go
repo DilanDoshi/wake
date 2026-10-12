@@ -105,7 +105,7 @@ func (a App) statusRows(agent Agent, v StatusView) [][2]string {
 		[2]string{"Permission mode", a.modeOf(agent.ID) + " (as this window last heard)"},
 		[2]string{"MCP", a.statusMCP(agent)},
 		[2]string{"Team", agent.Team},
-		[2]string{"Task", agent.Label},
+		[2]string{"Label", agent.Label},
 		[2]string{"Wake", a.wakeBuilds()},
 	)
 	return rows

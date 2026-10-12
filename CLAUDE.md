@@ -82,7 +82,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
 - **`/status`** is Wake's, since headless claude refuses it: one session's facts (name and state, id,
   a `/clear`'s conversation, the manager's claude name, directory and branch read at open, model,
-  effort, context, this window's mode, MCP, team, task, both builds when the daemon's differs) in a
+  effort, context, this window's mode, MCP, team, label, both builds when the daemon's differs) in a
   read-only menu over the composer, aimed like `/mcp` (`/status @who`). Nothing is written, so
   nothing enters the agent's context. Any key closes it; a card in its pane comes first.
   `@manager /status` in the room is a message to the manager, as every `@manager /cmd` is.
