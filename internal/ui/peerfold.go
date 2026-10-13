@@ -23,6 +23,10 @@ const (
 
 	// peerKeyPrefix keeps a peer message's click key apart from a tool_use id.
 	peerKeyPrefix = "peer:"
+
+	// peerKeyBytes is how much of the digest is kept: far more than the messages
+	// of one conversation can collide in.
+	peerKeyBytes = 8
 )
 
 // peerFolds reports whether a peer's message draws as a pointer at this width.
@@ -46,5 +50,5 @@ func peerBody(text string, width int, expanded bool) string {
 // the same words twice open together, which is the same message to read.
 func peerKey(ev core.Event) string {
 	sum := sha256.Sum256([]byte(ev.FromName + "\x00" + ev.Text))
-	return peerKeyPrefix + hex.EncodeToString(sum[:8])
+	return peerKeyPrefix + hex.EncodeToString(sum[:peerKeyBytes])
 }

@@ -186,7 +186,7 @@ func (d DM) renderEvent(ev core.Event) block {
 	b.copied, b.src = copiedAs(ev)
 	// A peer message that folds is a click target, keyed like a tool call so
 	// openTool opens it; one that fits is not, or a click would rewrap for nothing.
-	if ev.Kind == core.KindCrossSession && peerFolds(ev.Text, d.blockWidth()) {
+	if ev.Kind == core.KindCrossSession && peerFolds(ev.Text, d.bodyWidth(ev)) {
 		b.tool = peerKey(ev)
 	}
 	// A subagent's call is deliberately unmarked: its block is drawn inside an
@@ -203,6 +203,15 @@ func (d DM) renderEvent(ev core.Event) block {
 		b.tool = ev.Tool.ID
 	}
 	return b
+}
+
+// bodyWidth is the width kindBlock draws ev at: the pane's, less a subagent's
+// gutter. What decides from what is drawn asks here, so it cannot disagree.
+func (d DM) bodyWidth(ev core.Event) int {
+	if ev.Subagent == nil {
+		return d.blockWidth()
+	}
+	return d.blockWidth() - lipgloss.Width(subagentGutter)
 }
 
 // eventBlock is what one event looks like, or "" for an event with no visual
@@ -230,7 +239,7 @@ func (d DM) eventBlock(ev core.Event) string {
 		// The tag is what ties it to the stream above.
 		return mutedLine(subagentLead+subagentTag(ev.Subagent)+subagentSep+note, w)
 	}
-	body := d.kindBlock(ev, w-lipgloss.Width(subagentGutter))
+	body := d.kindBlock(ev, d.bodyWidth(ev))
 	if body == "" {
 		// No content, so no header either: a lone "⤷ …" naming a subagent
 		// that said nothing is a blank turn in the transcript.

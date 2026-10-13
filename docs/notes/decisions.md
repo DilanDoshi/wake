@@ -4155,6 +4155,8 @@ folded it at all.
   fold in the pane and a click one, the same two gestures a tool result has.
 - **A conversation's click key is a hash of sender and words** (`peerKey`), because a live cross-session
   event carries no id of its own, and rides the tool-result path (`block.tool`, `opened`, `openTool`)
-  rather than a second click mechanism. The same words twice therefore open together. A message that fits
-  three rows gets no key: a click on it would rewrap the transcript to change nothing.
-
+  rather than a second click mechanism. The same words from the same sender therefore open together,
+  and stay open for a later identical message until `⌃E` folds everything or the conversation clears. A
+  message that fits three rows gets no key: a click on it would rewrap the transcript to change nothing.
+  The key and the fold are decided at `DM.bodyWidth`, the width the block is drawn at (a subagent's is a
+  gutter narrower), so a pointer is always a click target.

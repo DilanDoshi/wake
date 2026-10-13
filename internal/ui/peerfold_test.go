@@ -150,6 +150,105 @@ func TestCtrlEOpensAFoldedPeerMessageThroughTheApp(t *testing.T) {
 	}
 }
 
+// A peer's brief is usually one long paragraph, so only wrapping makes it tall:
+// it folds on the rows it draws at this width, never on its newlines, and a width
+// change flips it between whole and folded in both places.
+func TestAPeerParagraphFoldsByItsWrappedRowsAndFollowsTheWidth(t *testing.T) {
+	ev := peerMessage(1)
+	ev.Text = strings.TrimSpace(strings.Repeat("alpha beta gamma delta ", 12))
+	const wide, narrow = 200, 40
+	if rows := renderedRows(crossSessionBody(ev.Text, wide)); rows > peerFoldRows {
+		t.Fatalf("the fixture is %d rows at %d columns, so it cannot be whole there", rows, wide)
+	}
+	if rows := renderedRows(crossSessionBody(ev.Text, narrow)); rows <= peerFoldRows {
+		t.Fatalf("the fixture is %d rows at %d columns, so it cannot fold there", rows, narrow)
+	}
+
+	by, to := Agent{Name: "planner"}, Agent{Name: "sydney"}
+	for w, folds := range map[int]bool{wide: false, narrow: true} {
+		drawn := strings.Contains(roomBlock(ev, by, to, w, false).text, "to expand")
+		if drawn != folds || roomCollapsible(ev, w) != folds {
+			t.Errorf("room at %d columns: pointer drawn = %v, collapsible = %v, want both %v", w, drawn, roomCollapsible(ev, w), folds)
+		}
+	}
+
+	d := NewDM("s1", "sydney").SetSize(wide+10, 40).Append(ev)
+	assertHides(t, d, wide+10, 40, "to expand")
+	d = d.SetSize(narrow, 40)
+	assertShows(t, d, narrow, 40, "to expand")
+	opened, hit := d.openTool(peerRow(t, d, "alpha"))
+	if !hit {
+		t.Fatal("a re-wrap that folded the message did not make it a click target")
+	}
+	assertHides(t, opened, narrow, 40, "to expand")
+	widened := opened.SetSize(wide+10, 40)
+	for line := widened.tr.lines.first(); line < widened.tr.lines.len(); line++ {
+		if _, hit := widened.openTool(line); hit {
+			t.Errorf("line %d is still a click target after the message stopped folding", line)
+		}
+	}
+}
+
+// Every row of a fold is a click target, the head and the pointer included.
+func TestEveryRowOfAFoldedPeerMessageIsClickable(t *testing.T) {
+	d := peerDM(peerFoldRows + 3)
+	first, last := peerRow(t, d, "↪ planner"), peerRow(t, d, "to expand")
+	if last-first != peerFoldRows+1 {
+		t.Fatalf("a fold is a head, %d body rows and a pointer, got rows %d to %d", peerFoldRows, first, last)
+	}
+	for line := first; line <= last; line++ {
+		if _, hit := d.openTool(line); !hit {
+			t.Errorf("row %d of the fold is not a click target", line)
+		}
+	}
+}
+
+// One hidden row is a line, not lines.
+func TestAPeerFoldHidingOneRowSaysLine(t *testing.T) {
+	d := peerDM(peerFoldRows + 1)
+	assertShows(t, d, 60, 40, "+1 line ·")
+	assertHides(t, d, 60, 40, "+1 lines")
+}
+
+// The key is the sender's words, not the words alone: the same text from two
+// sessions is two messages, and opening one leaves the other folded.
+func TestTheSameWordsFromTwoSendersAreTwoMessages(t *testing.T) {
+	first := peerMessage(peerFoldRows + 3)
+	second := first
+	second.FromName = "reviewer"
+	d := NewDM("s1", "sydney").SetSize(60, 80).Append(first).Append(second)
+
+	opened, hit := d.openTool(peerRow(t, d, "peer-00"))
+	if !hit {
+		t.Fatal("a click on the first folded message reported no hit")
+	}
+	if got := strings.Count(visible(opened, 60, 80), "peer-05"); got != 1 {
+		t.Errorf("opening one sender's message left %d copies open, want exactly 1:\n%s", got, visible(opened, 60, 80))
+	}
+}
+
+// A subagent's block is drawn a gutter narrower than the pane, so a message that
+// just fits three rows at the pane's width folds inside it. The click key follows
+// what is drawn: a pointer is always a click target, or it promises a click that
+// does nothing.
+func TestAGutteredPeerMessageIsClickableExactlyWhenItDrawsAPointer(t *testing.T) {
+	d := NewDM("s1", "sydney").SetSize(60, 40)
+	ev := peerMessage(1)
+	ev.Text = strings.Repeat("x", 3*(d.blockWidth()-bodyIndent)) // three rows at the pane's width, four a gutter in
+	ev.Subagent = &core.Subagent{Dispatch: "t1", Agent: "a1"}
+
+	if peerFolds(ev.Text, d.blockWidth()) {
+		t.Fatal("the fixture folds at the pane's width, so it cannot tell the two widths apart")
+	}
+	b := d.renderEvent(ev)
+	if !strings.Contains(b.text, "to expand") {
+		t.Fatalf("the fixture does not fold inside the gutter, so this test proves nothing:\n%s", b.text)
+	}
+	if b.tool == "" {
+		t.Errorf("a peer message drawn with a pointer inside a gutter is not a click target:\n%s", b.text)
+	}
+}
+
 // --- the room --------------------------------------------------------------
 
 func TestTheRoomFoldsAPeerMessageAtTheSameThreeRows(t *testing.T) {
