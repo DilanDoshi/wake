@@ -136,7 +136,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 			// line "sender → recipient"; an unnamed receiver drops the arrow. The
 			// manager signs as claude knows it, `manager-<fleet>`, and is still ours.
 			from := e.FromName
-			if a.managerClaude != "" && strings.EqualFold(from, a.managerClaude) {
+			if a.daemon.managerClaude != "" && strings.EqualFold(from, a.daemon.managerClaude) {
 				from = core.ManagerName
 			}
 			a = a.withRoom(a.room.appendPeer(e, a.fleet.crossSpeaker(from), agent))

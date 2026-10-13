@@ -1,0 +1,265 @@
+package ui
+
+// `/status`: one session's own facts in a read-only menu over the composer.
+// Headless claude refuses the command (testdata/stream/bare-status.jsonl), so
+// Wake draws what it already holds - and writes nothing, since a local command
+// sent to a session stays in its context.
+
+import (
+	"os"
+	"path/filepath"
+	"strings"
+	"testing"
+
+	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
+
+	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/version"
+)
+
+const statusID = "a11a0000-0000-4000-8000-00000000a11a"
+
+// statusReport is a fleet holding alex, its facts filled in, and the manager.
+func statusReport() rpc.Status {
+	return rpc.Status{Running: true, ManagerClaude: "manager-harbor", Sessions: []rpc.SessionStatus{
+		{ID: statusID, Name: "alex", State: rpc.StateIdle, Cwd: "/tmp/harbor/api", Team: "api",
+			Effort: core.EffortHigh, ConfirmedModel: "Opus 5", ContextTokens: 50_000, ContextWindow: 200_000},
+		{ID: "m1", Name: core.ManagerName, State: rpc.StateIdle, Cwd: "/tmp/harbor"},
+	}}
+}
+
+// statusIn opens /status in id's conversation and returns what it wrote.
+func statusIn(t *testing.T, id, name string, st rpc.Status) (App, []rpc.Frame) {
+	t.Helper()
+	fresh(t)
+	rec := newRecorder(t)
+	a := dmApp(rec, Stream{}, id, name).withSize(140, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+	rec.taken(t)
+	m, cmd := typeAndSubmit(a, statusVerb)
+	drainBatch(cmd)
+	return m.(App), rec.taken(t)
+}
+
+// The conversation's own facts, every one Wake already holds, and nothing
+// written: not to claude, whose context a local command would enter, and not
+// to the daemon, which has nothing to add.
+func TestSlashStatusShowsTheConversationsFactsAndWritesNothing(t *testing.T) {
+	a, wrote := statusIn(t, statusID, "alex", statusReport())
+
+	if len(wrote) != 0 {
+		t.Errorf("/status wrote %v; it is drawn from what the window holds", sentKinds(wrote))
+	}
+	out := shown(a)
+	for _, want := range []string{"alex", statusID, "/tmp/harbor/api", "Opus 5", core.EffortHigh, ctxLabel + "75%", "api", "v" + version.Version} {
+		if !strings.Contains(out, want) {
+			t.Errorf("/status does not show %q:\n%s", want, out)
+		}
+	}
+	if a.composer().Value() != "" {
+		t.Errorf("the command stayed in the draft: %q", a.composer().Value())
+	}
+}
+
+// The manager is a session like any other, and its status also says what every
+// Claude session calls it.
+func TestTheManagersStatusNamesItAsClaudeSessionsKnowIt(t *testing.T) {
+	a, _ := statusIn(t, "m1", core.ManagerName, statusReport())
+	if out := shown(a); !strings.Contains(out, "manager-harbor") {
+		t.Errorf("the manager's /status does not name it as claude knows it:\n%s", out)
+	}
+	if b, _ := statusIn(t, statusID, "alex", statusReport()); strings.Contains(shown(b), "manager-harbor") {
+		t.Error("an ordinary agent's /status names the manager's claude name")
+	}
+}
+
+// A daemon on another build is the fact an operator needs from a version line,
+// so it is named only when it differs.
+func TestStatusNamesTheDaemonsBuildOnlyWhenItDiffers(t *testing.T) {
+	st := statusReport()
+	st.Build = "0.0.1-elsewhere"
+	if a, _ := statusIn(t, statusID, "alex", st); !strings.Contains(shown(a), st.Build) {
+		t.Errorf("a daemon on another build is not named:\n%s", shown(a))
+	}
+	st.Build = version.Build()
+	if a, _ := statusIn(t, statusID, "alex", st); strings.Contains(shown(a), "daemon on") {
+		t.Errorf("a daemon on this build is named as if it differed:\n%s", shown(a))
+	}
+}
+
+// Read-only: any key closes it and reaches nothing behind it.
+func TestAnyKeyClosesTheStatusAndReachesNothing(t *testing.T) {
+	for _, k := range []tea.KeyMsg{keyEsc, keyEnter, {Type: tea.KeyRunes, Runes: []rune{'x'}}} {
+		a, _ := statusIn(t, statusID, "alex", statusReport())
+		a = pressMenu(a, k)
+		if a.statusUI.Open() || strings.Contains(shown(a), statusID) {
+			t.Errorf("%q left /status open", k.String())
+		}
+		if a.composer().Value() != "" {
+			t.Errorf("%q reached the draft under /status: %q", k.String(), a.composer().Value())
+		}
+	}
+}
+
+// From the room it is aimed with @who, as /mcp is; with nobody picked, a bare
+// /status says how.
+func TestTheRoomAimsStatusWithAMention(t *testing.T) {
+	fresh(t)
+	st := statusReport()
+	a := NewRoomApp(newRecorder(t), Stream{}, nil).withSize(140, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+
+	m, cmd := typeAndSubmit(a, "@alex "+statusVerb)
+	drainBatch(cmd)
+	if !strings.Contains(shown(m), statusID) {
+		t.Errorf("@alex /status did not show alex's status in the room:\n%s", shown(m))
+	}
+
+	// With nobody in the roster to pick, a bare /status in the room says how.
+	empty := NewRoomApp(newRecorder(t), Stream{}, nil).withSize(140, 40)
+	m, cmd = typeAndSubmit(empty, statusVerb)
+	drainBatch(cmd)
+	if m.(App).statusUI.Open() || !strings.Contains(latestNotice(t), "whose status") {
+		t.Errorf("a bare /status in an empty room opened something, or did not say how (%q)", latestNotice(t))
+	}
+}
+
+// The view belongs to the pane that opened it: moving the keys away closes it,
+// rather than leaving it to come back over whatever that pane draws next.
+func TestStatusClosesWhenTheKeysLeaveItsPane(t *testing.T) {
+	a, _ := statusIn(t, statusID, "alex", statusReport())
+	if !a.statusUI.Open() {
+		t.Fatal("/status did not open")
+	}
+	if a = a.refocus(""); a.statusUI.Open() {
+		t.Error("/status stayed open after the keys left its conversation")
+	}
+}
+
+// A card that arrives while /status is open is an agent waiting on an answer:
+// its keys reach it, /status is not drawn under it, and it stays closed after,
+// rather than coming back to eat the next key once the card settles.
+func TestACardsKeysReachItPastAnOpenStatus(t *testing.T) {
+	a, _ := statusIn(t, statusID, "alex", statusReport())
+	a = a.applyFrame(askFrame(statusID, "r1"))
+	if strings.Contains(shown(a), statusHint) {
+		t.Errorf("/status is drawn under its agent's card:\n%s", shown(a))
+	}
+	if _, _, handled := a.statusKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}); handled {
+		t.Error("/status took a key while its agent's card was up")
+	}
+	if a = pressMenu(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'a'}}); a.statusUI.Open() {
+		t.Error("/status stayed open behind the card the key went to")
+	}
+}
+
+// A picker that opens on a reply does not land on an open /status: the resume
+// picker closes it, and a rewind reply gives up, as it does over a config picker.
+func TestAPickerOpeningOnAReplyDoesNotStackOnStatus(t *testing.T) {
+	a, _ := statusIn(t, statusID, "alex", statusReport())
+	if b := a.openResume(twoRows(), 0, false); b.statusUI.Open() {
+		t.Error("the resume picker opened over /status and left it open beneath")
+	}
+	reply := rpc.Frame{Kind: rpc.FrameRewindTargetsReply, SessionID: statusID, RewindTargets: []rpc.RewindTarget{{UUID: "u1", Text: "prompt"}}}
+	if b := a.applyFrame(reply); b.rewind.Open() {
+		t.Error("a rewind reply opened its picker over /status")
+	}
+}
+
+// The MCP row is the banner's words, never its styled string run through the
+// one-row flattening, which would leave the escape's tail on screen.
+func TestTheMCPRowIsTheBannersWordsWithoutItsEscapes(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(0)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	fresh(t)
+	st := statusReport()
+	a := dmApp(newRecorder(t), Stream{}, statusID, "alex").withSize(140, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+	a = a.observe(statusID, core.Event{Kind: core.KindSystem, SessionID: statusID,
+		Session: &core.SessionFacts{MCPServers: []core.MCPServer{{Name: "slack", State: core.MCPNeedsAuth}}}})
+	m, cmd := typeAndSubmit(a, statusVerb)
+	drainBatch(cmd)
+	out := shown(m)
+	if !strings.Contains(out, "1 MCP server needs authentication") || strings.Contains(out, "[38;") {
+		t.Errorf("the MCP row is not the banner's plain words:\n%s", out)
+	}
+}
+
+// The branch is read once, when /status opens: the view is redrawn at the
+// shimmer's rate, and a read of .git per frame is the cost the bar caches away.
+func TestStatusReadsTheBranchOnceWhenItOpens(t *testing.T) {
+	repo := t.TempDir()
+	head := filepath.Join(repo, ".git", "HEAD")
+	if err := os.MkdirAll(filepath.Dir(head), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(head, []byte("ref: refs/heads/feat/one\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	st := statusReport()
+	st.Sessions[0].Cwd = repo
+	a, _ := statusIn(t, statusID, "alex", st)
+	if !strings.Contains(shown(a), "feat/one") {
+		t.Fatalf("/status does not name the branch:\n%s", shown(a))
+	}
+	if err := os.WriteFile(head, []byte("ref: refs/heads/feat/two\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if out := shown(a); strings.Contains(out, "feat/two") {
+		t.Errorf("a redraw read the branch again:\n%s", out)
+	}
+}
+
+// ⌃C over /status is ⌃C: it closes the view and parks this pane's agent, as it
+// does everywhere, even when the view shows another's. A ⌃C that only closed it
+// would invite a second press, which the kill switch reads as the emergency exit.
+func TestCtrlCOverStatusParksThisPanesAgentAsEverywhere(t *testing.T) {
+	fresh(t)
+	rec := newRecorder(t)
+	st := statusReport()
+	st.Sessions = append(st.Sessions, rpc.SessionStatus{ID: "s9", Name: "sydney", State: rpc.StateIdle})
+	a := dmApp(rec, Stream{}, statusID, "alex").withSize(140, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+	m, cmd := typeAndSubmit(a, statusVerb+" @sydney")
+	drainBatch(cmd)
+	rec.taken(t)
+	if a = m.(App); a.statusUI.Session != "s9" {
+		t.Fatalf("/status @sydney did not open sydney's status: %+v", a.statusUI)
+	}
+	a = pressMenu(a, tea.KeyMsg{Type: tea.KeyCtrlC})
+	got := rec.taken(t)
+	if len(got) != 1 || got[0].Kind != rpc.FramePark || got[0].SessionID != statusID || a.statusUI.Open() {
+		t.Errorf("⌃C over sydney's /status in alex's pane wrote %v (open %v), want alex parked and the view closed", sentKinds(got), a.statusUI.Open())
+	}
+}
+
+// At the narrowest pane the values still show: the label column gives way
+// rather than taking the row, for the manager's longer label too.
+func TestStatusKeepsItsValuesInTheNarrowestPane(t *testing.T) {
+	for _, who := range []struct{ id, name, value string }{
+		{statusID, "alex", statusID[:6]},
+		{"m1", core.ManagerName, "manag"},
+	} {
+		a, _ := statusIn(t, who.id, who.name, statusReport())
+		if out := ansi.Strip(a.statusView(who.id, minPaneWidth, 40, "")); !strings.Contains(out, who.value) {
+			t.Errorf("%s's /status at %d columns lost its values:\n%s", who.name, minPaneWidth, out)
+		}
+	}
+}
+
+// The directory and its branch are one reading, taken when /status opens: an
+// agent that moves while it is up does not get the old branch beside its new
+// directory.
+func TestStatusShowsTheDirectoryItReadTheBranchOf(t *testing.T) {
+	first, second := t.TempDir(), t.TempDir()
+	st := statusReport()
+	st.Sessions[0].Cwd = first
+	a, _ := statusIn(t, statusID, "alex", st)
+	moved := statusReport()
+	moved.Sessions[0].Cwd = second
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &moved})
+	if out := ansi.Strip(a.statusView(statusID, 200, 40, "")); !strings.Contains(out, first) || strings.Contains(out, second) {
+		t.Errorf("/status paired a directory with another's branch:\n%s", out)
+	}
+}

@@ -39,7 +39,7 @@ func (a App) applyStatus(st *rpc.Status) App {
 	}
 	prev := a.fleet
 	a.fleet = a.fleet.WithStatus(st)
-	a.managerClaude = managerClaudeOf(st)
+	a.daemon = daemonFactsOf(st)
 	// The State backstop for the queue: a working→idle edge on this report frees an
 	// agent whose in-flight message's completed lifecycle was lost to a gap. Per
 	// report, so an edge inside one batch is not collapsed. See queue.go.
@@ -59,13 +59,17 @@ func (a App) applyStatus(st *rpc.Status) App {
 	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
 }
 
-// managerClaudeOf is what a seed or a report says claude calls the manager; a
-// nil seed - wait for the first push - says nothing.
-func managerClaudeOf(st *rpc.Status) string {
+// daemonFacts is what a report says of the daemon rather than of a session:
+// what claude calls the manager, and the daemon's build.
+type daemonFacts struct{ managerClaude, build string }
+
+// daemonFactsOf reads them off a seed or a report; a nil seed - wait for the
+// first push - says nothing.
+func daemonFactsOf(st *rpc.Status) daemonFacts {
 	if st == nil {
-		return ""
+		return daemonFacts{}
 	}
-	return st.ManagerClaude
+	return daemonFacts{managerClaude: st.ManagerClaude, build: st.Build}
 }
 
 // refreshedAgents folds each live agent into the conversation this client holds

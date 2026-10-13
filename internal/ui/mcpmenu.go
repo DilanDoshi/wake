@@ -26,7 +26,6 @@ package ui
 
 import (
 	"fmt"
-	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -99,7 +98,7 @@ type mcpState struct {
 // something while the agent answers.
 func (a App) mcp(arg string) (App, tea.Cmd) {
 	a = a.clearDraft()
-	agent, ok := a.mcpTarget(arg)
+	agent, ok := a.commandTarget(arg, mcpUsage, mcpNoTarget)
 	if !ok {
 		return a, nil
 	}
@@ -109,23 +108,6 @@ func (a App) mcp(arg string) (App, tea.Cmd) {
 	}
 	a.mcpUI.menu = MCPMenu{Session: agent.ID, Name: agent.Name, Pane: a.focus}
 	return a, a.write(mcpFailed, rpc.Frame{Kind: rpc.FrameMCPList, SessionID: agent.ID})
-}
-
-// mcpTarget is /quit's rule with the room's roster pick added: bare is the
-// conversation you are in (or, in the room, the agent the roster has picked),
-// and @who is that agent.
-func (a App) mcpTarget(arg string) (Agent, bool) {
-	if fields := strings.Fields(arg); len(fields) > 0 {
-		return a.namedTarget(fields, mcpUsage)
-	}
-	if agent, ok := a.conversationAgent(); ok {
-		return agent, true
-	}
-	if agent, ok := a.pickedAgent(); ok {
-		return agent, true
-	}
-	notice.Report("%s", mcpNoTarget)
-	return Agent{}, false
 }
 
 func (a App) closeMCP() App {

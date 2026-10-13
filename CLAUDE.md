@@ -68,7 +68,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   lone-`@name` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
   `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
-  `/workflows`, `/groupchat-filter`, plus bare `/effort`/`/model` menus. Everything else passes to the agent byte
+  `/workflows`, `/groupchat-filter`, `/status`, plus bare `/effort`/`/model` menus. Everything else passes to the agent byte
   for byte. `@who /cmd` in the room aims a target-command at that agent. A spaced `/team` or
   `/name` argument is hyphenated.
 - **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
@@ -80,6 +80,13 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   The reply also names the agent's slash commands, which feed the `/` menu before its first turn.
   A connector not signed in points at claude.ai, and the banner's count leaves connectors out.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
+- **`/status`** is Wake's, since headless claude refuses it: one session's facts (name and state, id,
+  a `/clear`'s conversation, the manager's claude name, directory and branch read at open, model,
+  effort, context, this window's mode, MCP, team, label, both builds when the daemon's differs) in a
+  read-only menu over the composer, aimed like `/mcp` (`/status @who`). Nothing is written, so
+  nothing enters the agent's context. Any key closes it; a card in its pane comes first.
+  `@manager /status` in the room is a message to the manager, as every `@manager /cmd` is.
+  `internal/ui/statuscmd.go`.
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
   conversation, every agent's in the room; `/workflows @who` or the room's `@who /workflows` one
@@ -396,7 +403,7 @@ yet says so in bold.**
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
-| Slash commands | `internal/ui/slash.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
+| Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` |
@@ -473,7 +480,7 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.240. A
+**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.296. A
 fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 
 | Need | Flag |
@@ -518,7 +525,9 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   (2.1.285). Wake's room marker depends on it — `roomMessageVersion`, re-check on upgrade. A fork
   copies records under the same uuids. `docs/superpowers/notes/2026-09-29-transcript-uuid-findings.md`.
 - `/model`, `/clear`, `/compact`, `/context` survive stream-json; `/resume` does not. Bare
-  `/effort`/`/model` do nothing (`num_turns: 0`, `$0`).
+  `/effort`/`/model` do nothing (`num_turns: 0`, `$0`). `/status` answers "isn't available in this
+  environment" with no turn (2.1.296, `testdata/stream/bare-status.jsonl`), as a hand probe found
+  `/permissions`, `/memory`, `/hooks` and `/help` do; only `/status`'s answer is recorded.
 - `stream_event` text deltas are byte-identical to the completed `assistant` block
   (`testdata/stream/partial-turn.jsonl`); unrecognised shapes yield no event.
 - The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id; `TodoWrite` is retired.

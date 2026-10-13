@@ -38,6 +38,15 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## KNOWN GAP, 2026-10-10 — `/status` does not name claude's own version
+
+Wake's `/status` (`internal/ui/statuscmd.go`) shows Wake's build and a differing daemon's, but not
+the claude version the session runs. `init` carries it, and decoding it is routine in
+`protocol.go`, but carrying it to a client is a new `rpc.SessionStatus` field, which trips three
+reflective guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
+
+*Closes with:* its own small change when somebody needs it, with the three guards' verdicts.
+
 ## KNOWN GAP, 2026-09-30 — `$CLAUDE_CONFIG_DIR` moves claude's transcripts and Wake does not follow
 
 **Found by reading, not watched go wrong** (hence here rather than `bugs.md`), while
