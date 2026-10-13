@@ -8,6 +8,25 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-10 — the manager may choose a spawned agent's effort and model, only when asked
+
+The owner's ask. `spawn_agent` takes an optional `effort` and `model`; left out, nothing reaches the
+frame and the agent runs on the operator's own defaults. The daemon already carried both on
+`FrameSpawn` (`configRefusal`, the park book), so the change is the manager's surface alone
+(`internal/mcp/spawnopts.go`).
+
+- **An effort is checked at the tool** with `core.ValidEffort`, the predicate `wake new --effort`
+  uses, so the refusal names the five levels; the daemon checks again. `/effort`'s extra words
+  (`ultracode`, `auto`) are refused, since `--effort` takes neither.
+- **A model is not checked** (`rpc.Frame.Model`'s argument), and `"default"` reads as absent: it is
+  the `/model` command's word for the operator's configuration, which for a new agent is no flag.
+- **"Only when the operator asked" is the prompt's and the description's rule, not the code's.**
+  Nothing on this surface can tell an operator's request from a model's own idea. The cost that
+  opens (the cap bounds how many agents, not what each costs; `--max-budget-usd` is not offered) is
+  argued in `mcpguard_test.go`'s FrameSpawn verdict.
+- **`agent_status` shows an effort and never a model**: an effort is a closed set and a model is
+  agent-influenced text. The spawn's answer echoes the model it asked for instead.
+
 ## 2026-10-03 — claude's drift is watched where it happens first: the operator's own transcripts
 
 A recording is one claude version; BUG-42's envelope went unrecorded for two weeks while 579 hand-backs

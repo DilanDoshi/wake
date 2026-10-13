@@ -87,14 +87,17 @@ func (f socketFleet) SetColor(_ context.Context, id, color string) error {
 // answer with an id the manager can address before the daemon has finished
 // starting anything.
 //
-// name rides on Frame.Text, which is exactly where `wake new <name>` puts a
+// The name rides on Frame.Text, which is exactly where `wake new <name>` puts a
 // requested name: the daemon's spawn path reads it through spawnName ->
 // claim -> normalizeName, so an empty name means "pick one from the pool" and a
-// chosen one is validated and refused there. Nothing is spelled here that is not
-// already the daemon's rule for every other spawn.
-func (f socketFleet) Spawn(_ context.Context, dir, name string) (string, error) {
+// chosen one is validated and refused there. Effort and Model ride the fields
+// `wake new --effort/--model` fills, so configRefusal checks them as it does
+// those. Nothing is spelled here that is not already the daemon's rule for
+// every other spawn.
+func (f socketFleet) Spawn(_ context.Context, dir string, o mcp.SpawnOpts) (string, error) {
 	id := uuid.NewString()
-	if err := f.act(rpc.Frame{Kind: rpc.FrameSpawn, SessionID: id, Dir: dir, Text: name}); err != nil {
+	spawn := rpc.Frame{Kind: rpc.FrameSpawn, SessionID: id, Dir: dir, Text: o.Name, Effort: o.Effort, Model: o.Model}
+	if err := f.act(spawn); err != nil {
 		return "", err
 	}
 	return id, nil

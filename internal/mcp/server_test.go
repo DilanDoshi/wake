@@ -89,22 +89,24 @@ type sentMessage struct{ id, text string }
 // value reach the wire unedited exactly as spawnCall does for a name.
 type groupSet struct{ id, value string }
 
-// spawnCall is one spawn as the fleet saw it: where, and the name the tool
-// asked for ("" when it asked for none). The name is recorded so a test can
-// see a model's chosen name actually reach the wire, which is the property
-// spawn-with-name adds.
-type spawnCall struct{ dir, name string }
+// spawnCall is one spawn as the fleet saw it: where, and what the tool chose
+// ("" in a field it chose nothing for). Recorded so a test can see a model's
+// choice actually reach the wire.
+type spawnCall struct {
+	dir string
+	SpawnOpts
+}
 
 func (f fakeFleet) List(context.Context) (rpc.Status, error) { return f.status, f.err }
 
 // Spawn records the directory and hands back a fixed id, which is enough for
 // every assertion here: what the tool does with the id is return it.
-func (f fakeFleet) Spawn(_ context.Context, dir, name string) (string, error) {
+func (f fakeFleet) Spawn(_ context.Context, dir string, o SpawnOpts) (string, error) {
 	if f.actErr != nil {
 		return "", f.actErr
 	}
 	if f.acts != nil {
-		f.acts.spawned = append(f.acts.spawned, spawnCall{dir: dir, name: name})
+		f.acts.spawned = append(f.acts.spawned, spawnCall{dir: dir, SpawnOpts: o})
 	}
 	return spawnedID, nil
 }

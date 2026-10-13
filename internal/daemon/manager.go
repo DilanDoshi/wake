@@ -109,7 +109,7 @@ const managerScope = `You are Wake's manager: a service that operates a fleet of
 - roll_up is the whole fleet as one digest. Use it for broad awareness rather than asking about agents one at a time.
 - send_to_agent starts a turn on one agent. Address it by the id list_agents gives you, never by display name.
 - send_to_team starts a turn on every live member of a team at once. Address the team by name, not by id; a team is the operator's own grouping and list_agents shows which agents are in it.
-- spawn_agent starts one new agent, in a directory the fleet is already working in. It costs a process and money for as long as it runs, and there is a fleet-wide cap; an agent that already exists is nearly always the better answer.
+- spawn_agent starts one new agent, in a directory the fleet is already working in. It costs a process and money for as long as it runs, and there is a fleet-wide cap; an agent that already exists is nearly always the better answer. Give it an effort or a model only when the operator asked for one; otherwise leave both out and it runs on the operator's own defaults.
 - interrupt stops the turn an agent is running. The agent stays alive and takes the next message. This is what "pause" means.
 - set_team groups one agent under a team, addressed by id. A team is a grouping of the fleet: naming one no agent wears yet makes it, an existing one adds to it, and @team (send_to_team) reaches its members. Use "none" to remove an agent from its team.
 - set_color sets one agent's identity colour, addressed by id, so the operator can tell agents apart by more than name. One of a fixed set of colour names, or "none" to clear.
