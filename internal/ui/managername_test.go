@@ -144,3 +144,15 @@ func TestTheManagersConversationKeepsItsDrawnName(t *testing.T) {
 		t.Errorf("the manager's conversation is titled %+v, want %q", dm, harborManager)
 	}
 }
+
+// This fleet's manager keeps its default yellow under its drawn name; another
+// fleet's, heading a cross-session line with no row of ours, does not wear it.
+func TestOnlyThisFleetsManagerWearsTheManagersYellow(t *testing.T) {
+	yellow, _ := identityStyle(defaultManagerColor)
+	if got, _ := identityStyleFor(Agent{ID: "m1", Name: harborManager}); got.GetForeground() != yellow.GetForeground() {
+		t.Errorf("this fleet's %s is not drawn in the manager's yellow", harborManager)
+	}
+	if got, _ := identityStyleFor(Agent{Name: "manager-atlas"}); got.GetForeground() == yellow.GetForeground() {
+		t.Error("another fleet's manager is drawn in this fleet's manager yellow")
+	}
+}
