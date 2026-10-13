@@ -227,14 +227,16 @@ type Config struct {
 	MCPConfig string
 
 	// AppendSystemPrompt is text added to claude's own system prompt, passed
-	// as --append-system-prompt. Empty for every agent but the manager.
+	// as --append-system-prompt. launch sets it: the manager's scope
+	// (managerConfig), else every other agent's fleet note (daemon/fleetbrief.go).
 	//
 	// A system prompt rather than a first message, and the difference is what
 	// it is for. Everything the manager reads through its tools is text an
 	// agent's model wrote, so the sentence that says that text is data rather
 	// than instruction is the one thing in its context that must not be
 	// movable: a first message is a turn, later turns can argue a model out of
-	// a turn, and `/clear` drops it. This is not a turn.
+	// a turn, and `/clear` drops it. This is not a turn - which is also why
+	// the fleet note is one: it must survive `/clear` and start no turn.
 	//
 	// Append rather than replace. claude's default system prompt is what makes
 	// the process a working agent at all, and there is no recording of what a
