@@ -64,7 +64,10 @@ package ui
 //     glamour runs per frame, gated on Tiled so a closed or row-mode board holds
 //     none of it.
 //  3. Fixed grid, no per-tile resize, no pane tree. Equal cells sized to fill
-//     the frame, no divider to drag, no split, no nesting.
+//     the frame, no divider to drag, no split, no nesting. Three across at most
+//     and never shorter than minTileHeight: a fleet past the frame scrolls the
+//     grid (boardscroll.go) rather than shrinking the tiles, while a tile's own
+//     transcript stays unscrollable (guardrail 2).
 //  4. Act from it, never in it. ↵ and click leave the wall for the agent's
 //     real DM rather than working inside the tile.
 //
@@ -100,8 +103,8 @@ const (
 	// not bound. Leaving, opening and parking lead; ⌃Y is folded into ↵'s
 	// entry rather than repeated, since openBoardRow now binds them to the
 	// same placement (open beside the room's own focus, a new column).
-	boardKeyLineRows  = "esc close  ↵/⌃Y column  ⌃D open here  ⌃B below  ⌃C park  ↑↓ move  ⇥ rows/tiles"
-	boardKeyLineTiles = "esc close  ↵/⌃Y column  ⌃D open here  ⌃B below  ⌃C park  ↑↓←→ move  ⇥ rows/tiles"
+	boardKeyLineRows  = "esc close  ↵/⌃Y column  ⌃D open here  ⌃B below  ⌃C park  ↑↓ move  ⇥ rows/tiles  PgUp/PgDn scroll"
+	boardKeyLineTiles = "esc close  ↵/⌃Y column  ⌃D open here  ⌃B below  ⌃C park  ↑↓←→ move  ⇥ rows/tiles  PgUp/PgDn scroll"
 
 	// boardChromeRows is what sits above the first row - the title - and the
 	// mouse's row arithmetic reads it too: the draw and the mouse measure one
@@ -141,6 +144,10 @@ type Board struct {
 	// Tiled draws the fleet as a grid of live tiles rather than one row per
 	// agent. The row view is the default; ⇥ toggles (Task 3).
 	Tiled bool
+	// Scroll is the first line of the list the window draws, in either view; the
+	// draw keeps it inside the list and the selection inside the window
+	// (boardscroll.go). Reset by ⇥, since the two views are different lists.
+	Scroll int
 }
 
 // openBoard is /board: it opens the overview over the whole frame.
@@ -182,6 +189,7 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	switch m.Type {
 	case tea.KeyTab:
 		a.board.Tiled = !a.board.Tiled
+		a.board.Scroll = 0
 		if a.board.Tiled {
 			// Tiles have no subagent cursor - they state a count - so a dispatch
 			// selected in rows must not linger and make the next open toggle into
@@ -207,6 +215,14 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 			break
 		}
 		return a.stepBoard(tileRight), nil, true
+	case tea.KeyPgUp:
+		return a.scrollBoard(-a.pageLines()), nil, true
+	case tea.KeyPgDown:
+		return a.scrollBoard(a.pageLines()), nil, true
+	case tea.KeyHome:
+		return a.jumpBoard(false), nil, true
+	case tea.KeyEnd:
+		return a.jumpBoard(true), nil, true
 	case tea.KeyEsc:
 		// Close and nothing else. The modal was opened by the operator, so ⎋
 		// here is "put it away" - pickerKey's meaning - and must not reach an
@@ -245,42 +261,32 @@ func (a App) stepBoard(dir tileDir) App {
 	if a.board.Tiled {
 		a.board.Selected = tileNavSection(a.boardTileLayout(agents).rows, a.board.Selected, dir)
 		a.board.SelectedTask = "" // tiles have no subagent cursor
-		return a
+		return a.revealBoardSelection(agents)
 	}
 	// Rows walk the sidebar's own walkable - each agent, then the dispatches
 	// running under it - so ↑↓ step onto a subagent the way they do there.
 	// Clamped rather than wrapped, the board's own rule (TestTheBoardCursorDoesNotWrap).
-	stops := walkable(agents, a.fleet.RunningTasks)
-	at := stopIndex(stops, Roster{Selected: a.board.Selected, SelectedTask: a.board.SelectedTask})
-	if at < 0 && a.board.SelectedTask != "" {
-		// The dispatch the cursor named has finished; fall back to its agent
-		// rather than the top of the list - Roster.Move's own recovery.
-		at = stopIndex(stops, Roster{Selected: a.board.Selected})
-	}
-	if at < 0 {
-		at = 0
-	}
+	l := a.boardRowLayout(agents)
+	at := l.cur
 	switch dir {
 	case tileUp:
-		at = clamp(at-1, 0, len(stops)-1)
+		at = clamp(at-1, 0, len(l.stops)-1)
 	case tileDown:
-		at = clamp(at+1, 0, len(stops)-1)
+		at = clamp(at+1, 0, len(l.stops)-1)
 	}
-	a.board.Selected = stops[at].Selected
-	a.board.SelectedTask = stops[at].SelectedTask
-	return a
+	return l.selectBand(a, at).revealBoardSelection(agents)
 }
 
-// boardMouse is the wheel walking the cursor and a click opening the tile or
-// row it lands on - the roster's own meaning for both, in whichever geometry
-// is drawn. Everything else the mouse does belongs to surfaces the board is
-// not drawing.
+// boardMouse is the wheel scrolling the window and a click opening the tile or
+// row it lands on - the roster's own meaning for the click, in whichever
+// geometry is drawn. Everything else the mouse does belongs to surfaces the board
+// is not drawing.
 func (a App) boardMouse(m tea.MouseMsg) (App, tea.Cmd) {
 	switch {
 	case m.Button == tea.MouseButtonWheelUp:
-		return a.stepBoard(tileUp), nil
+		return a.scrollBoard(-wheelLines), nil
 	case m.Button == tea.MouseButtonWheelDown:
-		return a.stepBoard(tileDown), nil
+		return a.scrollBoard(wheelLines), nil
 	case m.Action == tea.MouseActionPress && m.Button == tea.MouseButtonLeft:
 		agents := a.boardAgents()
 		i, dispatch, ok := a.boardHit(m.X, m.Y, agents)
@@ -321,36 +327,13 @@ func (a App) boardHit(x, y int, agents []Agent) (int, string, bool) {
 	// Without the upper bound a click on the key line, the strip or the notice
 	// row under it resolved to a row past the window and opened an agent that was
 	// never on screen.
-	visible := a.boardRowsVisible()
+	l := a.boardRowLayout(agents)
 	line := y - boardChromeRows
-	if line < 0 || line >= visible {
+	if line < 0 || line >= l.view {
 		return -1, "", false
 	}
-	// Walk the drawn blocks - an agent row then its running subagent rows - from
-	// the same window start the draw used, so a click on a dispatch resolves to
-	// it and a click one below resolves to the next agent.
-	off := 0
-	for i := a.boardRowFrom(agents, a.boardCursor(agents), visible); i < len(agents) && off < visible; i++ {
-		hdr := 0
-		if teamHeaderAt(agents, i) != "" {
-			hdr = teamHeaderRows
-		}
-		subs := a.fleet.RunningTasks(agents[i].ID)
-		h := hdr + 1 + len(subs)
-		if line < off+h {
-			within := line - off
-			if within < hdr {
-				return -1, "", false // clicked the team header band, which opens nothing
-			}
-			within -= hdr
-			if within > 0 && subs[within-1].Selectable() {
-				return i, subs[within-1].Dispatch, true
-			}
-			return i, "", true
-		}
-		off += h
-	}
-	return -1, "", false
+	i, dispatch := l.hit(l.off + line)
+	return i, dispatch, i >= 0
 }
 
 // boardCursor is the cursored row's index in this draw's order: the selected
@@ -438,13 +421,6 @@ func (a App) boardRowsVisible() int {
 	return max(a.paneHeight()-boardChromeRows-1, 1)
 }
 
-// boardRowHeight is how many lines an agent's block draws: its own row and one
-// per running subagent under it. The draw, the click math and the window all
-// read this one number, so a scrolled click cannot land on the wrong row.
-func (a App) boardRowHeight(ag Agent) int {
-	return 1 + len(a.fleet.RunningTasks(ag.ID))
-}
-
 // boardAgents is the fleet in section-draw order: the board's own OnRoster
 // sectioned, so its rows, headers, scroll and hit all agree on where a team
 // header falls - Fleet.sectioned, the roster's own rule one surface over.
@@ -469,90 +445,41 @@ func teamHeaderBand(team string, width int) []string {
 	return []string{"", teamHeaderLine(team, width)}
 }
 
-// boardBlockHeight is how many lines an agent's block draws including the team
-// header band above it when it is the first of its section - the one number the
-// draw, the scroll (boardRowFrom) and the click (boardHit) all count by.
-func (a App) boardBlockHeight(agents []Agent, i int) int {
-	h := a.boardRowHeight(agents[i])
-	if teamHeaderAt(agents, i) != "" {
-		h += teamHeaderRows
-	}
-	return h
-}
-
-// boardRowFrom is the first agent index the window draws, derived from the
-// cursor rather than stored - the sidebars' rule, for the sidebars' reason: the
-// list re-ranks between frames, and a stored offset would need maintaining
-// against every one. The cursor rides the bottom edge once it is past the first
-// window, so walking down reads as scrolling. Line-aware, so a subagent row
-// counts against the budget rather than an agent index; distinct from the
-// roster's grow-around-cursor window (roster.go) on purpose - the board keeps
-// its own scroll feel.
-func (a App) boardRowFrom(agents []Agent, cursor, budget int) int {
-	if cursor < 0 || cursor >= len(agents) {
-		return 0
-	}
-	used := a.boardBlockHeight(agents, cursor)
-	from := cursor
-	for from > 0 {
-		h := a.boardBlockHeight(agents, from-1)
-		if used+h > budget {
-			break
-		}
-		used += h
-		from--
-	}
-	return from
-}
-
 // boardView is the whole frame's worth of overview: title, one block per agent
-// in attention order (its row and its running subagents), the key line.
+// in attention order (its row and its running subagents) as far as the window
+// shows, the key line.
 func (a App) boardView(agents []Agent, width int) string {
 	if a.board.Tiled {
 		return a.tileView(agents, width)
 	}
-	visible := a.boardRowsVisible()
-	cursor := a.boardCursor(agents)
-	from := a.boardRowFrom(agents, cursor, visible)
-
+	l := a.boardRowLayout(agents)
 	nameW, stateW := boardColumns(agents)
-	blocks := make([]string, 0, visible)
-	for i := from; i < len(agents) && len(blocks) < visible; i++ {
-		ag := agents[i]
-		hdr := teamHeaderAt(agents, i)
-		// A header band and its section's first row are one atomic unit: if they do
-		// not all fit the remaining budget, break before drawing the header, so it
-		// never dangles with no member under it. (Subagent rows below may still be cut.)
-		need := 1
-		if hdr != "" {
-			need += teamHeaderRows
+	cursor := a.boardCursor(agents)
+	var lines []string
+	from, to := l.shown()
+	for i := from; i < to; i++ {
+		ag, b := agents[i], l.blocks[i]
+		if b.hdr > 0 {
+			lines = append(lines, teamHeaderBand(ag.Team, width)...)
 		}
-		if len(blocks)+need > visible {
-			break
-		}
-		if hdr != "" {
-			blocks = append(blocks, teamHeaderBand(hdr, width)...)
-		}
-		blocks = append(blocks, boardRow(ag, a.fleet.done(ag.ID), nameW, stateW, width, i == cursor && a.board.SelectedTask == ""))
-		for _, t := range a.fleet.RunningTasks(ag.ID) {
-			if len(blocks) >= visible {
-				break
-			}
+		lines = append(lines, boardRow(ag, a.fleet.done(ag.ID), nameW, stateW, width, i == cursor && a.board.SelectedTask == ""))
+		for _, t := range b.subs {
 			cursored := a.board.SelectedTask != "" && ag.ID == a.board.Selected && t.Dispatch == a.board.SelectedTask
-			blocks = append(blocks, boardSubRow(t, width, cursored))
+			lines = append(lines, boardSubRow(t, width, cursored))
 		}
 	}
+	// The blocks drawn whole, then cut to the window: one the scroll has half off
+	// the top or the bottom shows the part that is on.
+	if from < to {
+		lines = lines[min(l.off-l.blocks[from].top, len(lines)):]
+	}
+	lines = lines[:min(len(lines), l.view)]
 	// Padded to the height it was given, so the key line and everything under
 	// the frame sit where every other view puts them.
-	for len(blocks) < visible {
-		blocks = append(blocks, "")
+	for len(lines) < l.view {
+		lines = append(lines, "")
 	}
-
-	rows := make([]string, 0, visible+2)
-	rows = append(rows, mutedLine(fmt.Sprintf("%s — %d agents", boardTitle, len(agents)), width))
-	rows = append(rows, blocks...)
-	rows = append(rows, mutedLine(boardKeyLineRows, width))
-	return strings.Join(rows, "\n")
+	return boardTitleLine(agents, l.visibleAgents(), width) + "\n" + strings.Join(lines, "\n") + "\n" + mutedLine(boardKeyLineRows, width)
 }
 
 // boardColumns is the two padded column widths, measured off the drawn fleet
