@@ -48,14 +48,14 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 
 - **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room (spawns one
   agent as a roster row if the machine has nothing); `wake --fleet <name>` returns to one
-  (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status`, `stop`
+  (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status` (`--team <name>` lists one team), `stop`
   (irreversible), `fleets`, `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. A new fleet
   checks `claude` is on this `PATH` first (its daemon inherits it); a spawn from any daemon without
   one says how to install it (`core.claudeMissing`). `$WAKE_SOCKET` wins;
   naming a fleet beside it is refused. Each fleet is a directory under `~/.wake/fleets/`; per-fleet
   files are `filepath.Dir(socket)` plus a name.
 - **Spawn flags** (`new`, `manager`, `/new`): `--effort`, `--model`, `--max-budget-usd`,
-  `--fallback-model` (both survive a park), `--worktree <name>` (Wake runs `git worktree add`; never
+  `--fallback-model` (all four survive a park), `--worktree <name>` (Wake runs `git worktree add`; never
   passes claude's `--worktree`), `--add-dir` (repeatable), `--debug-file <name>` / `--debug`
   (the daemon owns the directory; `--debug` without a file is refused).
 - **Room keys:** `↵` send/open/confirm · `⌃]` send now · `esc` interrupt · `esc esc` clear draft, or
@@ -146,6 +146,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   It keeps the name the transcript recorded (newest `customTitle`, hyphenated), else a pooled one —
   never the manager's (`resumedName`).
 - **Anything waiting on a spawn waits on the id it minted**, never the parent's.
+- **Every ordinary agent starts with a fleet note** (`--append-system-prompt`, `internal/daemon/fleetbrief.go`,
+  applied in `launch`, so spawn, fork, import, wake and resume all carry one): its session id, `wake status`
+  and `wake status --team <name>` as the live view of its team, and `SendMessage` by name to reach a
+  teammate. **An id and fenced tokens only** (a name, a team — the manager can choose either, so the
+  line calls them labels) — never free text such as a label, cwd or title; an id that is not a UUID gets no
+  note. A team is set after spawn, so the team line (own team and teammates that have a process) is a
+  launch-time snapshot only a wake has, and nothing re-sends it. Read-only: it names no other `wake` verb and starts no turn; the manager keeps its own scope.
 - **A `/clear` moves an agent onto a new claude conversation** (`a.claudeID`, via
   `agent.conversation()`). Park records it, a wake resumes it and files the woken agent under it
   (clients follow via `rpc.SessionStatus.Conversation`), and ⌃F forks it. `resumeSafe` cannot see
@@ -327,9 +334,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 
 **Manager**
 - **May send, interrupt, spawn (optionally named, under `daemon.liveCap`, into a directory the fleet
-  already occupies), and group (`set_team`, `set_color`)** — nothing else on the fleet. Rename,
-  label, park, wake, fork, import, stop, allow/deny, mode and the four MCP frames are refused, each
-  argued in `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
+  already occupies; at an effort and model when the operator asks, a prompt rule), and group
+  (`set_team`, `set_color`)** — nothing else on the fleet. Rename, label, park, wake, fork, import,
+  stop, allow/deny, mode and the four MCP frames are refused, each argued in
+  `cmd/wake/mcpguard_test.go`. All tool output goes through `mcp.oneLine`.
 - **It relays the operator's `@"session" …` with `SendMessage`, its one built-in, unfenced** (owner's
   2026-10-03 ruling, the accepted risk in `decisions.md`): a room draft whose leading mention names
   no fleet agent passes through to it, and the room draws each send live as `↪ manager → <to>` from
@@ -379,15 +387,15 @@ yet says so in bold.**
 
 | What | Where |
 |---|---|
-| Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
+| Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
 | Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
-| MCP server for the manager | `internal/mcp/` — `tools.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
+| MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
@@ -486,7 +494,8 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 | Tool reach | `--add-dir` (Wake emits the repeated form) |
 | Debug | `--debug-file <path>`; `--debug` alone logs nothing observable headless |
 | Isolation | `--worktree` — **not used**; Wake runs `git worktree add` itself |
-| Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools SendMessage`; `--append-system-prompt` |
+| Manager | `--mcp-config` only beside `--strict-mcp-config` and `--tools SendMessage`; `--append-system-prompt` is its scope |
+| Fleet note | `--append-system-prompt` on every other agent: `daemon/fleetbrief.go` (`launch` applies it when nothing set one) |
 | Session listing | `--print --bare --no-session-persistence` + stream-json, one `/list-agents` line (verified 2.1.283) |
 | Mid-turn delivery | a user line written mid-turn needs no flag; `priority:"now"` + `origin:{kind:"human"}` for send-now; `cancel_async_message` takes one back (verified 2.1.288) |
 | File checkpoints | no flag: the env var `CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING=true` (`-p` ignores the setting); restored by the `rewind_files` control request (verified 2.1.288) |

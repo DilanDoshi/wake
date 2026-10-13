@@ -38,6 +38,18 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## KNOWN GAP, 2026-10-10 — `wake new --model default` puts an unrecorded `--model default` on the argv
+
+**Found by reading** while `feat/manager-spawn-model-effort` taught `spawn_agent` to read
+`"default"` as no model. `core.ValidModel` admits any non-empty name, so `wake new --model default`
+(and `/new --model default`) passes `--model default` to claude. `core.ModelAliases` carries the
+word only because the bare `/model` reply lists it, and that is a `/model` command word. Nothing
+records what `--model default` does at startup.
+
+*Closes with:* a recording of `--model default` in a sterile `HOME`. If claude refuses it or reads it
+as something other than the operator's configuration, `spawnflags.go` reads it as absent the way
+`internal/mcp/spawnopts.go` does. Not bundled into the manager's PR, which never sends it.
+
 ## KNOWN GAP, 2026-09-30 — `$CLAUDE_CONFIG_DIR` moves claude's transcripts and Wake does not follow
 
 **Found by reading, not watched go wrong** (hence here rather than `bugs.md`), while
@@ -891,6 +903,19 @@ member — N `rpc.FrameSend`s, the frame already allowed the manager, so it adds
 has a fleet view and fleet tools (spec §12); an ordinary agent has Claude Code's one-to-one peer
 channel and no fleet query. Giving every ordinary agent direct team tools is a separate, larger
 change (it would put fleet-command tools on every worker) and is not built.
+
+**Update 2026-10-10: an ordinary agent can now *see* its team, read-only.** `wake status` prints each
+agent's `team <name>` and takes `--team <name>`, and every ordinary agent starts with a short note
+(`internal/daemon/fleetbrief.go`) that teaches it both, gives its session id, and names `SendMessage` as
+the way to reach a teammate. Messaging stays Claude Code's own peer channel; no Wake frame starts a turn.
+Direct team tools on workers, a `--team` spawn flag, and re-sending the note on a `/team` change remain
+unbuilt. The argument is in `decisions.md` (2026-10-10).
+
+**Follow-up, after `feat/manager-fleet-claude-name` is on main:** the fleet note names the manager's claude
+name via `s.managerClaude()`, since an agent reaches the manager through `SendMessage` by that name and not
+by `manager`. It is left out of the note today because the note's scope is teammates (the manager is not
+one) and a branch does not stand on an unmerged PR. Owner's call whether agents need it in the prompt or the
+`wake status` line that branch adds ("Claude sessions know its manager as <name>.") suffices.
 
 **The recorded cost (owner accepted with the mockups):** fixed section order weakens "blocked floats
 to the absolute top of the roster" to "top of its section" — now that the room pins no ask card, the

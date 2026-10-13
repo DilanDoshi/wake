@@ -59,6 +59,22 @@ func TestNormalizeTeamRefusesWhitespaceAndPunctuation(t *testing.T) {
 	}
 }
 
+// Agent names start with a letter; a team may start with a digit or an
+// underscore, but not a dash: `wake status --team <name>` reads a word that
+// starts with one as a flag, and every parser before it would take it for one.
+func TestNormalizeTeamRefusesALeadingDash(t *testing.T) {
+	for _, bad := range []string{"-ops", "-", "--fleet", "--model", "-Ops"} {
+		if _, err := NormalizeTeam(bad); err == nil {
+			t.Errorf("NormalizeTeam(%q) was accepted; a team that starts with a dash cannot be given to a flag", bad)
+		}
+	}
+	for _, ok := range []string{"ops-", "a-b", "_x", "9lives"} {
+		if got, err := NormalizeTeam(ok); err != nil || got != ok {
+			t.Errorf("NormalizeTeam(%q) = %q, %v; a dash is only refused at the front", ok, got, err)
+		}
+	}
+}
+
 func TestNormalizeTeamRefusesAnOverlongName(t *testing.T) {
 	long := strings.Repeat("a", maxTeamName+1)
 	_, err := NormalizeTeam(long)

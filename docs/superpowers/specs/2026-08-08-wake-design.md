@@ -520,6 +520,12 @@ definitions in the manager's context only.
 > can undo it by looking at the room.** Every other verb the daemon serves is refused with its own
 > recorded reason. What that list bounds is the **fleet** — see the note in §17 about what it does
 > not bound.
+>
+> **Amended 2026-10-10.** `spawn_agent` came back the day the live cap shipped (`daemon.liveCap`),
+> and `send_to_team`, `set_team` and `set_color` have joined it. `spawn_agent` takes a directory
+> the fleet occupies, an optional name and, only when the operator asks for one, an effort and a
+> model; left out, the agent runs on the operator's defaults. Every verdict and its argument is in
+> `cmd/wake/mcpguard_test.go`'s `managerVerbs`, which this section does not restate.
 
 ---
 

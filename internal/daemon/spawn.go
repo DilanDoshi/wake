@@ -276,6 +276,7 @@ func (s *server) launch(c *client, cfg core.Config, parent string, replaces *age
 		c.enqueue(errorFrame(cfg.SessionID, err.Error()))
 		return false
 	}
+	cfg = s.withFleetBrief(cfg)
 	// Every agent runs under the durable supervisor, so this daemon keeps an
 	// off-disk handle to its whole process group that outlives the daemon. A
 	// platform without one returns an empty launcher and the agent runs directly.
