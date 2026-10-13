@@ -171,7 +171,8 @@ func (l tileLayout) endpoint(last bool) (agent, task string) {
 // floor stretches to fill the frame; a bigger fleet keeps the floor and scrolls,
 // stretched to a whole number of rows so no frame ends on a blank gap. A frame
 // shorter than the floor gets one tile as tall as itself, never taller: a tile
-// the frame clips loses its status bar.
+// the frame clips loses its status bar. Below minDrawnTileRows the tile is that
+// tall anyway, which the frame then clips.
 func tileCellHeight(rows []tileRow, availH int) int {
 	headerLines, tileRows := 0, 0
 	for _, r := range rows {
@@ -184,7 +185,7 @@ func tileCellHeight(rows []tileRow, availH int) int {
 	// A frame holds one header band along with its rows, however many the fleet
 	// has, so the floor is what is left of the frame beside it.
 	reserve := min(headerLines, teamHeaderRows)
-	floor := min(minTileHeight, max(availH-reserve, 1))
+	floor := max(min(minTileHeight, availH-reserve), minDrawnTileRows)
 	if tileRows == 0 {
 		return floor
 	}

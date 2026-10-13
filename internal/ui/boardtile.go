@@ -28,6 +28,11 @@ const (
 	// shorter than it gets one tile as tall as itself (tileCellHeight).
 	minTileHeight = 20
 
+	// minDrawnTileRows is the least a tile draws: two borders and a row. A cell the
+	// layout counted shorter would be drawn taller than counted, and a click or a
+	// selection past it would disagree with the draw.
+	minDrawnTileRows = 3
+
 	// maxTileCols is the most tiles that share a row, however wide the terminal:
 	// a fourth column halves what each tile can say.
 	maxTileCols = 3

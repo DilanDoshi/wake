@@ -219,13 +219,10 @@ func TestArrowKeysBringTheSelectionIntoView(t *testing.T) {
 	}
 }
 
-// A click lands on the tile it is drawn over, whatever the scroll: the hit walks
-// the same offset the draw used.
-func TestAClickAfterScrollingOpensTheTileUnderThePointer(t *testing.T) {
-	a := fleetBoard(t, 12, 200, 50, true)
-	for range 5 {
-		a = boardWheel(a, tea.MouseButtonWheelDown)
-	}
+// clickEveryTile clicks on each tile title drawn and checks the click
+// opened that tile's agent; it returns how many tiles it clicked.
+func clickEveryTile(t *testing.T, a App) int {
+	t.Helper()
 	clicked := 0
 	for y, ln := range strings.Split(shown(a), "\n") {
 		if !strings.HasPrefix(ln, "╭") {
@@ -237,15 +234,65 @@ func TestAClickAfterScrollingOpensTheTileUnderThePointer(t *testing.T) {
 				continue
 			}
 			x := ansi.StringWidth(ln[:i]) // the glyphs before the name are wider in bytes than in cells
-			m, _ := a.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: x, Y: y + 1})
+			m, _ := a.Update(tea.MouseMsg{Action: tea.MouseActionPress, Button: tea.MouseButtonLeft, X: x, Y: y})
 			if got := m.(App).focus; got != ag.ID {
 				t.Errorf("a click under %s's title opened %q, want %q", ag.Name, got, ag.ID)
 			}
 			clicked++
 		}
 	}
-	if clicked == 0 {
+	return clicked
+}
+
+// A click lands on the tile it is drawn over, whatever the scroll: the hit walks
+// the same offset the draw used.
+func TestAClickAfterScrollingOpensTheTileUnderThePointer(t *testing.T) {
+	a := fleetBoard(t, 12, 200, 50, true)
+	for range 5 {
+		a = boardWheel(a, tea.MouseButtonWheelDown)
+	}
+	if clickEveryTile(t, a) == 0 {
 		t.Fatalf("no tile title was drawn to click:\n%s", shown(a))
+	}
+}
+
+// A tile is never drawn shorter than the layout counts it: the box is two borders
+// and a row, so a cell the layout made one line tall would be drawn three and every
+// click and selection after it would disagree with the draw.
+func TestATileIsNeverCountedShorterThanItIsDrawn(t *testing.T) {
+	a := fleetBoard(t, 2, 100, 30, true)
+	ag := a.boardAgents()[0]
+	for height := 1; height <= 4; height++ {
+		got := strings.Count(a.tile(ag, 30, max(height, minDrawnTileRows), false), "\n") + 1
+		if want := max(height, minDrawnTileRows); got != want {
+			t.Errorf("a tile counted %d lines drew %d", want, got)
+		}
+	}
+	// The layout never counts one below it, with or without a team header spending
+	// two of a tiny frame's lines.
+	for h := 5; h <= 9; h++ { // frames of 1 to 5 lines
+		for _, a := range []App{fleetBoard(t, 4, 100, h, true), teamedFleet(t, 100, h, 2, 2, "backend")} {
+			a.board.Tiled = true
+			if l := a.boardTileLayout(a.boardAgents()); l.cellH < minDrawnTileRows {
+				t.Errorf("height %d: the layout counts a tile %d lines, under the %d it draws", h, l.cellH, minDrawnTileRows)
+			}
+		}
+	}
+}
+
+// At a frame of a few lines the selection stays on screen and every click lands
+// where it is drawn, with a team header elsewhere in the layout.
+func TestTinyFramesKeepSelectionVisibleAndClicksTrue(t *testing.T) {
+	for h := 5; h <= 9; h++ {
+		a := teamedFleet(t, 100, h, 2, 2, "backend")
+		a.board.Tiled = true
+		for range 6 {
+			if name := cursorName(a); !strings.Contains(shown(a), name) {
+				t.Fatalf("height %d: the selection %s is not on screen:\n%s", h, name, shown(a))
+			}
+			clickEveryTile(t, a)
+			a = boardKeyPress(a, tea.KeyDown)
+		}
 	}
 }
 
