@@ -4138,3 +4138,23 @@ plan against 389eb078.
   reads the same snapshots, so the daemon holds no fourth copy of "parked and ended are not live".
 - **Not built:** team tools on ordinary agents (a `wake mcp` for workers), a `--team` spawn flag, and
   re-sending the note when a team changes — that would be a turn Wake starts.
+
+## 2026-10-13 — a peer's cross-session message folds at three rows, in the room and in a conversation
+
+The owner's ask: when sessions message each other, show about three lines of one colour, then a click or
+a key to open the rest. Before, the room folded a peer message only past 24 rows (the reply's cap), under
+`⤷ ⌃D open DM` — a pointer that opens a different surface, not the message — and a conversation never
+folded it at all.
+
+- **Three body rows, then one pointer row** (`peerFoldRows`, `peerfold.go`). A message of three rows draws
+  whole with no pointer; four folds. The reply's 24-row fold and its `⌃D open DM` pointer are unchanged —
+  a reply is for the DM, a peer message is only longer than it needs to be.
+- **One colour.** The body is `HintStyle` (Muted) and so is the pointer, so the fold is a single colour
+  under the head's own.
+- **The pointer names the gesture it offers**: `⤷ +N lines · ⌃E or click to expand`. `⌃E` opens every
+  fold in the pane and a click one, the same two gestures a tool result has.
+- **A conversation's click key is a hash of sender and words** (`peerKey`), because a live cross-session
+  event carries no id of its own, and rides the tool-result path (`block.tool`, `opened`, `openTool`)
+  rather than a second click mechanism. The same words twice therefore open together. A message that fits
+  three rows gets no key: a click on it would rewrap the transcript to change nothing.
+

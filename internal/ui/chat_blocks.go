@@ -201,16 +201,20 @@ func roomBlock(ev core.Event, a, to Agent, width int, expanded bool) block {
 // never put through it twice.
 func agentSaid(text string, count int, a Agent, width int, expanded bool) string {
 	head := speakerStyle(a).MaxWidth(width).Render(speaker(a))
-	return saidBlock(head, renderMarkdown(strings.TrimSpace(text), width), tokenLabel(count), width, expanded)
+	body := renderMarkdown(strings.TrimSpace(text), width)
+	if expanded || renderedRows(body) <= roomInlineRows {
+		return joinBlock(head, body)
+	}
+	return joinBlock(head, collapsed(body, tokenLabel(count), width, roomCollapseLines))
 }
 
 // crossSaid draws a peer's cross-session message: the sender's name-tag with a
 // lead marking it as a message from another session - so it is not mistaken for
 // the sender's own turn in the room - the receiving session after an arrow in its
-// own colour when it is known (to.Name), then the body in Muted, folded past roomInlineRows the
-// way a reply is. Dimmer than a reply so an incoming message reads apart from
-// the agent's own words (crossSessionBody); no token count, since a peer message
-// is not this fleet's spend.
+// own colour when it is known (to.Name), then the body in Muted, folded past
+// peerFoldRows (peerfold.go). Dimmer than a reply so an incoming message reads
+// apart from the agent's own words (crossSessionBody); no token count, since a
+// peer message is not this fleet's spend.
 func crossSaid(text string, a, to Agent, width int, expanded bool) string {
 	name, recipient := crossSessionLead+speaker(a), ""
 	if to.Name != "" {
@@ -218,20 +222,7 @@ func crossSaid(text string, a, to Agent, width int, expanded bool) string {
 		recipient = speakerStyle(to).Render(to.Name)
 	}
 	head := clip(speakerStyle(a).Render(name)+recipient, width)
-	return saidBlock(head, crossSessionBody(text, width), "", width, expanded)
-}
-
-// saidBlock is the shared body of agentSaid and crossSaid: a head, then a
-// pre-rendered body whole if it is short or a pointer if it is taller than the
-// room shows inline. The body is rendered by the caller - markdown for a reply,
-// Muted plain text for a peer message - and passed in once, so a long message
-// never goes through glamour's process-global mutex twice: the height decision
-// and the collapsed preview share the one render.
-func saidBlock(head, body, label string, width int, expanded bool) string {
-	if expanded || renderedRows(body) <= roomInlineRows {
-		return joinBlock(head, body)
-	}
-	return joinBlock(head, collapsed(body, label, width, roomCollapseLines))
+	return joinBlock(head, peerBody(text, width, expanded))
 }
 
 // roomCollapsible reports whether an event draws as a pointer at this width -
@@ -246,9 +237,7 @@ func roomCollapsible(ev core.Event, width int) bool {
 	case core.KindAssistantText:
 		return renderedRows(renderMarkdown(strings.TrimSpace(ev.Text), w)) > roomInlineRows
 	case core.KindCrossSession:
-		// The same Muted body crossSaid draws, so the two agree on which
-		// peer messages fold to a pointer.
-		return renderedRows(crossSessionBody(ev.Text, w)) > roomInlineRows
+		return peerFolds(ev.Text, w)
 	default:
 		return false
 	}
@@ -287,13 +276,20 @@ func renderedRows(rendered string) int {
 // of this in cards.go would be the parallel implementation this project forbids,
 // and the pointer's wording is exactly what must not drift.
 func collapsed(rendered, count string, width, keep int) string {
-	lines := strings.Split(strings.Trim(rendered, "\n"), "\n")
-	kept := lines[:min(len(lines), max(keep, 1))]
 	line := collapsedNoCount
 	if count != "" {
 		line = fmt.Sprintf(collapsedFormat, count)
 	}
-	tail := ansi.Truncate(line, width, ellipsis)
+	return foldWithPointer(rendered, line, width, keep)
+}
+
+// foldWithPointer is the first keep lines of a rendered block and a pointer line under
+// them, in the hint colour - what collapsed draws, and a peer's fold with its own
+// pointer (peerfold.go).
+func foldWithPointer(rendered, pointer string, width, keep int) string {
+	lines := strings.Split(strings.Trim(rendered, "\n"), "\n")
+	kept := lines[:min(len(lines), max(keep, 1))]
+	tail := ansi.Truncate(pointer, width, ellipsis)
 	return strings.Join(append(kept, HintStyle.MaxWidth(width).Render(tail)), "\n")
 }
 
