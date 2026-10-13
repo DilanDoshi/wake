@@ -486,32 +486,6 @@ func TestTheMenuLeavesArrowsToAMultiLineCursor(t *testing.T) {
 	}
 }
 
-// ↵ still sends. The menu appears while somebody types rather than because they
-// asked for it, so it may not change what the one irreversible key does.
-func TestEnterStillSendsWhileTheMenuIsUp(t *testing.T) {
-	fresh(t)
-	conn, sent := pipeClient(t)
-	a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
-	a = a.advertising("s1", "clearly", "clear").withDraft("/clea")
-	if !a.completion.open() {
-		t.Fatal("the fixture drew no menu, so this asserts nothing")
-	}
-
-	m, cmd := a.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if cmd == nil {
-		t.Fatal("↵ with a menu up wrote nothing: the menu took the send")
-	}
-	go func() { _ = runCmdQuietly(cmd) }()
-	f := <-sent
-	if f.Text != "/clea" {
-		t.Errorf("↵ sent %q, want the draft as typed: a menu that completed on ↵ would send a "+
-			"command nobody chose", f.Text)
-	}
-	if m.(App).completionUp() {
-		t.Error("the menu survived the send, so the next ⇥ would complete a word that is gone")
-	}
-}
-
 // The menu belongs to the pane holding the keys, and to the draft it was built
 // for. A pane change leaves a menu describing somebody else's draft.
 func TestTheMenuIsDrawnOnlyForTheDraftItWasBuiltFor(t *testing.T) {

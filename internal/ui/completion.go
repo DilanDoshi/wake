@@ -16,13 +16,22 @@ package ui
 // walks. What is left per frame is a comparison against the pane and the draft
 // it was built for, which is also what closes it.
 //
-// **The menu never takes `↵`, but it takes `↑↓` to walk.** ⇥ completes, ↑↓ walk
-// the offers, and ⌃N/⌃P walk too as aliases - the ⌃ pair read above App.key's
-// switch the way cardKey and pickerKey are, ↑↓ in the KeyUp/KeyDown cases after
-// the cursor-move guard. None takes a legend entry, and the menu advertises the
-// keys on itself. What it may not take is `↵`: the menu arrives while somebody
-// types rather than because they asked, so it may not give the one irreversible
-// key a second meaning.
+// **⇥ and `↵` accept, ↑↓ walk, and ⇥ stays put over a word being typed.** ⌃N/⌃P
+// walk too as aliases - the ⌃ pair read above App.key's switch the way cardKey
+// and pickerKey are, ↑↓ in the KeyUp/KeyDown cases after the cursor-move guard,
+// `↵` in the Enter case behind the newline and the armed detach. None takes a
+// legend entry, and the menu advertises the keys on itself.
+//
+// `↵` takes the highlighted offer only while that would change the draft: a word
+// already typed in full (`/clear`) still sends, or every command would need a
+// second `↵`. This reverses the 2026-09-27 ruling that the menu never takes `↵`
+// (owner, 2026-10-12): a misspelled skill sent a half-typed word, and the menu
+// was the thing on screen asking to finish it.
+//
+// ⇥ over a `/` or `@` word is the draft's whether or not anything matches. It
+// used to fall through to the conversation ring when a misspelled skill left no
+// menu, and land somewhere unexpected; typingWord is that word, by the stems
+// completing() reads.
 //
 // ↑↓ are the menu's only when the text cursor has no row to move into - the
 // single-line `/`or`@` draft, which is the common case. On a multi-line draft the
@@ -64,11 +73,11 @@ const (
 	// expensive.
 	moreFormat = "%d more - keep typing"
 
-	// completionKeys is what the menu advertises about itself: ⇥ to accept and
-	// ↑↓ to walk. ⌃N/⌃P walk too and stay bound as aliases, unadvertised to keep
-	// the line short. None takes a legendEntries slot - the ⌃ pair are read above
-	// App.key's switch, and ↑↓ are the KeyUp/KeyDown cases' own.
-	completionKeys = "⇥ complete   ↑↓ walk"
+	// completionKeys is what the menu advertises about itself: ⇥ or ↵ to accept
+	// and ↑↓ to walk. ⌃N/⌃P walk too and stay bound as aliases, unadvertised to
+	// keep the line short. None takes a legendEntries slot - the ⌃ pair are read
+	// above App.key's switch, and ↑↓ and ↵ are the switch's own cases.
+	completionKeys = "⇥ ↵ complete   ↑↓ walk"
 
 	// wordBreak is what ends the word being typed. One spelling for both stems:
 	// they were a literal space and a set of three, which agreed only because
@@ -567,12 +576,15 @@ func (a App) completionUp() bool {
 		a.completion.draft == a.composer().Value()
 }
 
-// completionKey is ⇥ to complete and ⌃N/⌃P to walk, and nothing else.
+// completionKey is ⇥ to complete and ⌃N/⌃P to walk, and ⇥ taken and ignored
+// over a `/` or `@` word nothing completes. ↑↓ and ↵ are App.key's own cases.
 //
 // Read above App.key's switch, exactly as pickerKey is.
 func (a App) completionKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	if !a.completionUp() {
-		return a, nil, false
+		// A misspelled skill leaves no menu, and ⇥ would then be the conversation
+		// ring's. The word being typed keeps it.
+		return a, nil, m.Type == tea.KeyTab && a.typingWord()
 	}
 	switch m.Type {
 	case tea.KeyTab:
@@ -584,6 +596,38 @@ func (a App) completionKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a.walkCompletion(-1), nil, true
 	}
 	return a, nil, false
+}
+
+// typingWord reports whether the cursor is at the end of a `/` or `@` word, one
+// the menu describes whether or not it has an offer for it. The stems are
+// completing()'s, so a draft ending in any `/word` counts - `see /tmp` included -
+// and one ending in `now` after a command (`/clear now`) does not.
+func (a App) typingWord() bool {
+	if !a.composer().AtEnd() {
+		return false
+	}
+	draft := a.composer().Value()
+	_, _, command := commandStem(draft)
+	_, _, _, _, team := teamArgStem(draft)
+	_, _, mention := mentionStem(draft)
+	return command || team || mention
+}
+
+// enterCompletes is ↵ taking the cursored offer. It declines when there is
+// nothing to take - no menu, or a word already typed exactly as offered, which ↵
+// sends. A directory typed in full (`src/`) is not that case: the offers are then
+// its children, and a bare directory is sent by typing a space, which closes the
+// menu.
+func (a App) enterCompletes() (App, tea.Cmd, bool) {
+	if !a.completionUp() {
+		return a, nil, false
+	}
+	c := a.completion
+	if c.head+c.offers[c.cursor] == c.draft {
+		return a, nil, false
+	}
+	next, scan := a.acceptCompletion()
+	return next, scan, true
 }
 
 // walkCompletion moves the cursor without rebuilding: the draft has not
@@ -607,8 +651,8 @@ func (a App) walkCompletion(by int) App {
 // menu: a word with a space after it is no longer a word being typed.
 //
 // Stepping into a directory is the one accept that needs a read, and it returns
-// the command for it: this key is answered above App.key's switch, so Update's
-// own keystroke path never runs.
+// the command for it: App.key answers this key itself, so Update's own keystroke
+// path never runs.
 func (a App) acceptCompletion() (App, tea.Cmd) {
 	c := a.completion
 	next := c.head + c.offers[c.cursor]

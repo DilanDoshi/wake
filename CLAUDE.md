@@ -62,8 +62,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   idle+empty → rewind picker · `↑↓` prompt history (or cursor on a multi-line draft; `↑` with messages
   queued takes them back) · `⇧↑↓` pick agent · `⌃O`
   arm detach (`↵` confirms, `⌃O` cancels) · `⌃C` park focused · `⌃Q` arm park-all & quit (second
-  `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus ·
-  `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
+  `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus (completes
+  over a `/` or `@` word) · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
   `⌃F` fork · `⌃D` open here · `⌃Y` new column · `⌃B` open below · `⌃W` close pane · `⌃A` toggle the
   lone-`@name` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
@@ -98,8 +98,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   one live agent offers that agent's menu, and the room's leading `@` offers the machine's sessions
   after the fleet's while a manager is live to relay. An unreadable listing row costs that row,
   never the listing.
-  `⇥` is the only accept. `internal/ui/completionpeers.go`, `completionindex.go`; rulings in
-  `decisions.md` (2026-09-27, 2026-10-03).
+  `⇥` and `↵` accept. `internal/ui/completionpeers.go`, `completionindex.go`; rulings in
+  `decisions.md` (2026-09-27, 2026-10-03, 2026-10-12).
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
   (absent→spawn, parked→wake, running→park); `/manager-stop` ends it.
 - **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
@@ -308,8 +308,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`ownerClaimedCommands`). Only `slash.go` decides what a leading slash means.
 - **Open mention mode widens a message, never a command**: `@john /anything` always goes to john
   alone (`mention.go`, `leadingCommand`).
-- **Completion offers, never routes, never takes `↵`.** Session commands/skills first, then Wake's,
-  agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads and the
+- **Completion offers and never routes; `⇥` and `↵` accept the cursored offer** (owner, 2026-10-12,
+  reversing 2026-09-27's "never takes `↵`"). `↵` accepts only while that changes the draft, so a word
+  typed in full (`/clear`) still sends; `⇥` stays put over any `/` or `@` word, matched or not
+  (`typingWord`), and is the conversation ring's everywhere else. Session commands/skills first, then
+  Wake's, agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads and the
   conversation's one bounded `git -c core.fsmonitor=false ls-files` per opening run off the draw
   goroutine, and the room keeps the one-directory listing (`completion.go`, `completionpath.go`,
   `completionindex.go`). The room's menu must mirror `core.Resolve` for the leading mention; a DM

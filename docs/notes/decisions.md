@@ -4078,3 +4078,34 @@ core's `Contained` cannot see a reference, which is printable (BUG-50). So the a
   only the exact runs the theme draws (each chroma token through its own formatter, each
   `claudeStyle` colour through termenv), which leaves a smuggler only the theme's own colours. Not
   built; the owner's call.
+
+## 2026-10-12 — the completion menu's `↵` accepts, and `⇥` stays put over a `/` or `@` word (the owner)
+
+**Reverses** 2026-09-27's "`⇥` stays the only accept; `↵` still sends" and `completion.go`'s "the menu
+never takes `↵`", whose argument was that the menu arrives while somebody types, so it may not give the
+irreversible key a second meaning. The owner's experience was the other half of that trade: a skill
+misspelled so nothing matched left no menu, `⇥` fell through to the conversation ring (`nextChat`) and
+landed in an agent's DM, and a half-typed word sent on `↵`.
+
+- **`↵` accepts the cursored offer while that changes the draft.** `completion.go`'s `enterCompletes`,
+  called from `App.key`'s Enter case *after* the ⌥↵ newline pass-through and the armed detach's
+  confirm - so neither moves - and before the empty-composer open-the-picked-agent branch. Cards and
+  pickers above still win `↵`. The test is `c.head + c.offers[c.cursor] == draft`, the same sum
+  `acceptCompletion` writes: equal means a word already typed exactly as offered (`/clear`, `@maya`),
+  and that sends, so a finished command stays one press. A quoted mention compares equal for free (the
+  offer is already the quoted form). A directory is the one place it surprises: `src` accepts to `src/`
+  with no space, and `src/` typed in full lists its children, so `↵` takes the cursored child; a bare
+  directory is sent by typing a space, which closes the menu.
+- **`⇥` stays put over a `/` or `@` word, matched or not.** `typingWord` is `completing()`'s three stems
+  (`commandStem`, `teamArgStem`, `mentionStem`) with the cursor at the end of the draft, so it is exactly
+  where a menu *could* be. Both stems are mid-text on purpose, so a draft ending in any `/word` (`see
+  /tmp`) keeps `⇥`; `/clear now` ends in `now` and does not. Anywhere else `⇥` is the ring, which is also
+  the one keyboard route back to the room on a terminal narrow enough that a conversation fills the
+  screen. The owner chose this over "only when the draft is empty" and "remove `⇥`'s switching".
+- **Costs, accepted.** `↵` cannot open a sidebar agent while a menu is up - the empty-composer branch is
+  unreachable with a stem typed anyway, so this is nothing new. With a picker up and a `/`-draft, `⇥` is
+  a no-op rather than the ring. A working agent queues on the second `↵`, not the first. The menu's own
+  hint now reads `⇥ ↵ complete   ↑↓ walk`; no legend slot changes.
+- **Tests:** `internal/ui/completionaccept_test.go` (each guard mutation-checked: the swallow, the
+  already-typed rule, the cursor-at-end condition, the armed detach, ⌥↵) and the pty case in
+  `cmd/wake/atmenuscreen_unix_test.go`.

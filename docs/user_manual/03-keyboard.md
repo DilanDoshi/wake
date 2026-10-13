@@ -48,7 +48,7 @@ typed into the room, mention and all.
 
 | Key | Does |
 |---|---|
-| `⇥` | Move the keys between the room and the conversations open beside it |
+| `⇥` | Move the keys between the room and the conversations open beside it — except while you are typing a `/` or `@` word, where it completes it (see below) |
 | `⇧⇥` | Cycle the permission mode of the agent the roster has selected: `default` → `acceptEdits` → `plan` → `auto`, the same four Claude Code walks |
 | `⌃X` | Jump to the next blocked agent |
 | `⇧↑` `⇧↓` | Move the roster cursor — which is what the open keys below read. (Plain `↑↓` are prompt history; the roster took `⇧` when they did) |
@@ -82,18 +82,24 @@ built in parallel and both wanted the pair, and the order they intercept in deci
 
 ## While the completion menu is up — see [chapter 6](06-commands.md)
 
-These three exist only while the word **your cursor is on** has started a `/command` or an `@`, which
+These exist only while the word **your cursor is on** has started a `/command` or an `@`, which
 is why they are not in the legend under the composer. The menu names them itself, on the menu.
 
 | Key | Does |
 |---|---|
-| `⇥` | Take the highlighted completion — otherwise `⇥` moves the keys between panes as usual |
-| `⌃N` `⌃P` | Move down and up the list |
+| `⇥` `↵` | Take the highlighted completion. `↵` sends instead when the word is already typed out exactly as offered (`/clear`), so a finished command is still one press |
+| `⌃N` `⌃P` `↑` `↓` | Move down and up the list (`↑↓` only on a single-line draft; on a longer one they move the text cursor first) |
 
-`↑↓` and `↵` are **not** among them: the menu never claims the arrows or enter — they keep their
-usual jobs (prompt history, or the query cursor in a multi-line draft; enter still sends).
+**`⇥` never leaves a word you are typing.** Over a `/` or `@` word that nothing completes — a
+misspelled skill — it does nothing, instead of moving the keys to another conversation. That holds for
+any draft ending in one, `see /tmp` included, while the cursor is at its end. A draft that ends in
+anything else (`/clear now`, plain text, nothing) leaves `⇥` its usual job.
 
-Move the cursor off that word — or type a space — and all three go back to the text area, where `⌃N`
+While a completion menu is up `↵` cannot open the agent the roster cursor is on; once it is gone —
+one more character, or a space — `↵` goes back to sending, or to opening that agent from an empty
+draft. To send a directory name as it stands (`@src/`), type a space first: that closes the menu.
+
+Move the cursor off that word — or type a space — and these go back to the text area, where `⌃N`
 and `⌃P` are how you move between the lines of a multi-line draft.
 
 ## Other

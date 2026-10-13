@@ -177,13 +177,15 @@ Start a draft with `/` or `@` and a menu appears above the conversation with wha
 
 | Key | Does |
 |---|---|
-| `⇥` | Take the highlighted one |
+| `⇥` `↵` | Take the highlighted one |
 | `⌃N` `⌃P` | Move down and up the list |
 | anything else | Narrows it — the menu follows what you type |
 
-`↵` still sends, always. The menu appears because you started typing rather than because you asked
-for it, so it never changes what enter does — and it is about the word **under your cursor**, so
-moving off that word closes it and hands `⌃N`/`⌃P` back to the draft as line keys.
+`↵` takes the highlighted one, so a misspelled skill is completed instead of sent half-typed — unless
+the word is already typed out exactly as offered (`/clear`), when `↵` sends it. `⇥` over a `/` or `@`
+word that nothing matches does nothing; it never jumps to another conversation mid-word. The menu is
+about the word **under your cursor**, so moving off that word closes it and hands `⌃N`/`⌃P` back to
+the draft as line keys.
 
 **The `/` list is real, not a guess.** Every `claude` session tells Wake its whole command set when a
 turn starts — its own, every `.md` file in your `.claude/commands/`, and your Claude Code **skills**
