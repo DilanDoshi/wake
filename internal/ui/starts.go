@@ -171,9 +171,9 @@ func (a App) draftMention(name string) App {
 // header - the reader can type it.
 func (a App) startedNotice(s rpc.SessionStatus) string {
 	if s.ParentID != "" {
-		return SnapshotNotice(s.Name, a.parentName(s.ID))
+		return SnapshotNotice(a.fleet.shown(s.Name), a.parentName(s.ID))
 	}
-	return startedLine(s.Name, s.Label)
+	return startedLine(a.fleet.shown(s.Name), s.Label)
 }
 
 // isTheAwaitedStart says whether one row of a fleet report is a session this

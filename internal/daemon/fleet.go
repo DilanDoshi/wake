@@ -162,7 +162,7 @@ func managerClaudeName(root, socket string) string {
 	if dir == root {
 		fleet = LegacyFleet
 	}
-	return managerClaudePrefix + nameShaped(fleet)
+	return core.ManagerPrefix + nameShaped(fleet)
 }
 
 // nameShaped folds a directory's name into a fleet name's shape - name runes,
@@ -178,11 +178,6 @@ func nameShaped(s string) string {
 	}, s)
 	return s[:min(len(s), maxFleetName)]
 }
-
-// managerClaudePrefix begins every manager's claude name, and normalizeName
-// refuses it to every agent: one more `manager-harbor` in a Claude session's
-// peer list is one nobody can tell from the real one.
-const managerClaudePrefix = core.ManagerName + "-"
 
 // managerClaude is managerClaudeName for this daemon. With no home directory no
 // socket can sit under ~/.wake, so "" gives the hand-set rule - the right answer

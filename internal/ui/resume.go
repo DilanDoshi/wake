@@ -215,6 +215,7 @@ func (a App) rekeyed(st *rpc.Status) App {
 // name, a parked one still holds its name, and a prefix match belongs to
 // `wake attach` where a person is typing at a shell.
 func (a App) parkedNamed(who string) (Agent, bool) {
+	who = a.fleet.shown(who)
 	for _, agent := range a.parkedAgents() {
 		if strings.EqualFold(agent.Name, who) {
 			return agent, true
@@ -287,8 +288,8 @@ func (a App) wakeArrived(st *rpc.Status) App {
 		// from before the park no longer describes it; if its login is still
 		// expired the next turn re-marks it. See apierror.go.
 		a = a.clearAuthFailed(s.ID)
-		notice.Report("%s", ResumedNotice(s.Name))
-		a = a.modeReverted(s.ID, s.Name)
+		notice.Report("%s", ResumedNotice(a.fleet.shown(s.Name)))
+		a = a.modeReverted(s.ID, a.fleet.shown(s.Name))
 		// The room is missing everything this session said before it was
 		// parked, and this is the only report that says it has been resumed. A
 		// fork is asked too, as at the seed (liveSessions).

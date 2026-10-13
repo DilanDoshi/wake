@@ -18,7 +18,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
-	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/gitref"
 	"github.com/DilanDoshi/wake/internal/rpc"
 	"github.com/DilanDoshi/wake/internal/version"
@@ -97,9 +96,6 @@ func (a App) statusRows(agent Agent, v StatusView) [][2]string {
 	if agent.Conversation != "" && agent.Conversation != agent.ID {
 		rows = append(rows, [2]string{"Conversation", agent.Conversation})
 	}
-	if agent.Name == core.ManagerName && a.daemon.managerClaude != "" {
-		rows = append(rows, [2]string{"Claude name", a.daemon.managerClaude})
-	}
 	rows = append(rows,
 		[2]string{"Directory", shortPath(v.Cwd)},
 		[2]string{"Branch", v.Branch},
@@ -131,7 +127,7 @@ func (a App) statusMCP(agent Agent) string {
 // differs - the one version fact an operator acts on. Empty is a daemon from
 // before builds were reported, which staledaemon.go also reads as older.
 func (a App) wakeBuilds() string {
-	if b := a.daemon.build; b != version.Build() {
+	if b := a.daemonBuild; b != version.Build() {
 		return fmt.Sprintf("%s · daemon %s", version.Build(), cmp.Or(b, "on an older build"))
 	}
 	return "v" + version.Version

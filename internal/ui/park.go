@@ -529,8 +529,8 @@ func (a App) parkArrived(st *rpc.Status) App {
 			}
 		}
 		a.parking = next
-		if !a.reportAPIPark(s.ID, s.Name) {
-			notice.Report(parkConfirmed, agentPrefix, s.Name, s.Name)
+		if name := a.fleet.shown(s.Name); !a.reportAPIPark(s.ID, name) {
+			notice.Report(parkConfirmed, agentPrefix, name, name)
 		}
 	}
 	return a

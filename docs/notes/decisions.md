@@ -45,9 +45,21 @@ The owner's ask, so agents can find their own manager. Every Wake manager ran `-
 on the day this was written one machine's Claude peer list showed six of them (five on hand-set
 sockets), with nothing to tell an agent which was its own.
 
-- **Only claude's name changes.** Wake's stays `core.ManagerName`: routing, reserved words, the
-  park book and `managerConfig` all key on it. `core.Config.ClaudeName` is what `--name` carries
-  when set, and only `managerConfig` sets it, so a spawn, `/manager` and a wake all get it.
+- **The daemon keeps `manager`; the operator sees `manager-<fleet>`.** The daemon, the park book,
+  `managerConfig` and the manager's own tools key on `core.ManagerName`, unchanged.
+  `core.Config.ClaudeName` carries the other name to `--name`, set only by `managerConfig`, so a
+  spawn, `/manager` and a wake all get it. The owner then asked to *see* that name (2026-10-12):
+  the UI's fleet fold names the manager's row by the report (`Fleet.shown`), so the roster, the
+  room's headings, the conversation's title and banner, notices and both `@` menus draw
+  `manager-<fleet>`. Every typed name goes through `Fleet.shown` too, so `@manager`,
+  `/resume manager` and `/quit @manager` still find it, and the room's router takes it as the
+  service's alias (`core.Addressee.Alias`). Identity is the exact `Fleet.isManager`: `manager` or
+  the report's name, never the bare prefix, because a stale daemon or an old park book can still
+  hold an ordinary agent named `manager-x`. The daemon refuses the prefix to teams too, since teams
+  route first. An agent's conversation offers the manager, so an agent can be told to message it. A real rename (the daemon's name too) was the other option.
+  It would touch about 45 identity sites and the park book, and was not taken. A new `Agent` field
+  was ruled out too: room lines hold `Agent` copies, and the retention guard's 6 KiB-per-event
+  budget had 95 bytes of headroom.
 - **The fleet is the socket's directory** (`daemon.managerClaudeName`): a named fleet's own name,
   `default` for `~/.wake`, and a hand-set `$WAKE_SOCKET`'s directory otherwise. That last case is
   most of the collisions observed, so it gets a distinct name rather than plain `manager`. A
@@ -67,14 +79,11 @@ sockets), with nothing to tell an agent which was its own.
   peer list is one nobody can tell from the real one. A park book written before this build that
   names an agent `manager-…` wakes it under a pooled name; no migration branch.
 - **A manager's message to a fleet agent is still the manager's.** It arrives on the receiver's
-  stream under claude's from-name, so the room maps `ManagerClaude` back to the manager before
-  `crossSpeaker` (`observe.go`): the line heads as `manager` and a lone `@manager` keeps it. A room
-  restore heads it with the from-name, as it heads every cross-session sender.
+  stream under claude's from-name, which is now the manager's row's own name, so `crossSpeaker`
+  attributes the line to that row and draws it in the manager's colour.
 - **Not changed:** an operator's own `/rename` typed into the manager's conversation still reaches
   claude and is still refused as a Wake rename, so the two names drift until the next launch, as
-  they did before. A conversation's `@` menu still never offers its own fleet's manager (Claude
-  Code's would); and `@manager-harbor …` typed by hand in the room passes through to the manager,
-  which would be asked to message itself. Both are left for the owner.
+  they did before.
 
 ## 2026-10-03 — claude's drift is watched where it happens first: the operator's own transcripts
 

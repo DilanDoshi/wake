@@ -126,8 +126,13 @@ func (a App) conversationMenu(c completion, typed string) completion {
 			c.names = append(c.names, agentPrefix+addr.Name)
 		}
 	}
+	// The manager by the name claude reaches it under, so an agent can be told
+	// to message it; live() leaves it out, and the daemon drops it from the listing.
+	if m := a.service(); m.ID != "" && m.ID != agent.ID && m.Alias != "" && matches(m.Name) {
+		c.names = append(c.names, agentPrefix+m.Name)
+	}
 	c = a.machineSessions(c, typed, nil)
-	if agent.Name == core.ManagerName {
+	if a.fleet.isManager(agent.Name) {
 		return c
 	}
 	for _, kind := range agent.SubagentTypes() {

@@ -48,10 +48,10 @@ func TestTheRoomNamesSenderAndRecipientOfACrossSessionMessage(t *testing.T) {
 }
 
 // The manager is `manager-<fleet>` to claude, so its message to a fleet agent
-// arrives under that from-name. It is still the manager: its line heads as the
-// manager and a lone-@manager narrowing keeps it, which needs the manager's row.
+// arrives under that from-name, which is now the manager's row's own name: the
+// line is attributed to that row, in the manager's colour.
 func TestACrossSessionMessageFromTheManagerIsTheManagers(t *testing.T) {
-	st := rpc.Status{Running: true, ManagerClaude: "manager-Harbor", Sessions: []rpc.SessionStatus{
+	st := rpc.Status{Running: true, ManagerClaude: "manager-harbor", Sessions: []rpc.SessionStatus{
 		{ID: "m1", Name: core.ManagerName, State: rpc.StateIdle},
 		{ID: "s2", Name: "sydney", State: rpc.StateIdle},
 	}}
@@ -59,12 +59,15 @@ func TestACrossSessionMessageFromTheManagerIsTheManagers(t *testing.T) {
 	a = a.observe("s2", core.Event{Kind: core.KindCrossSession, SessionID: "s2", FromName: "manager-harbor", Text: "rerun the build"})
 
 	out := ansi.Strip(a.View())
-	if !strings.Contains(out, core.ManagerName+" → sydney") || strings.Contains(out, "manager-harbor") {
-		t.Errorf("the manager's message is not headed as the manager's (\"manager → sydney\"):\n%s", out)
+	if !strings.Contains(out, st.ManagerClaude+" → sydney") {
+		t.Errorf("the manager's message is not headed as the manager's (%q):\n%s", st.ManagerClaude+" → sydney", out)
+	}
+	if by := a.room.said.slice(0, a.room.said.len())[a.room.said.len()-1].by; by.ID != "m1" {
+		t.Errorf("the manager's message is attributed to %+v, not the manager's row", by)
 	}
 	seeded := NewRoomApp(newRecorder(t), Stream{}, &st)
-	if seeded.daemon.managerClaude != st.ManagerClaude {
-		t.Errorf("a room opened on a seed knows the manager as %q, want %q before any push", seeded.daemon.managerClaude, st.ManagerClaude)
+	if m, _ := seeded.fleet.Agent("m1"); m.Name != st.ManagerClaude {
+		t.Errorf("a room opened on a seed shows the manager as %q, want %q before any push", m.Name, st.ManagerClaude)
 	}
 }
 
