@@ -94,6 +94,16 @@ func (l rowLayout) selectBand(a App, i int) App {
 	return a
 }
 
+// endpoint is the list's first or last stop: a subagent row when the last agent
+// has one running.
+func (l rowLayout) endpoint(last bool) (agent, task string) {
+	stop := l.stops[0]
+	if last {
+		stop = l.stops[len(l.stops)-1]
+	}
+	return stop.Selected, stop.SelectedTask
+}
+
 // hit is the agent (by index) and running dispatch the list's line `abs` falls on,
 // or -1 for a team header band.
 func (l rowLayout) hit(abs int) (int, string) {

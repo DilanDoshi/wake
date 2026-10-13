@@ -64,9 +64,9 @@ func landing(bands []band, cur, off, view int) int {
 	if bands[cur].mostlyIn(off, view) {
 		return cur
 	}
-	step := 1 // above the window: look down toward it
-	if bands[cur].top >= off+view {
-		step = -1
+	step := 1 // starts above the window's top: look down toward it
+	if bands[cur].top > off {
+		step = -1 // starts inside or below it, clipped at the bottom or out of it: look up
 	}
 	for i := cur + step; i >= 0 && i < len(bands); i += step {
 		if bands[i].mostlyIn(off, view) {
@@ -101,12 +101,13 @@ func (v viewport) settled(scroll int) viewport {
 	return v
 }
 
-// scrollable is what the two views share: a viewport, the agents it touches, and
-// a way to put the selection on one of its bands.
+// scrollable is what the two views share: a viewport, the agents it touches, a
+// way to put the selection on one of its bands, and the stops at either end.
 type scrollable interface {
 	vp() viewport
 	visibleAgents() []Agent
 	selectBand(a App, i int) App
+	endpoint(last bool) (agent, task string) // the first or last stop, for Home and End
 }
 
 func (v viewport) vp() viewport { return v }
@@ -135,18 +136,21 @@ func (a App) scrollBoard(delta int) App {
 }
 
 // jumpBoard is Home and End: the window to the top or the bottom, the selection
-// on the first or last agent.
+// on the first or last stop. The last stop rather than the last agent, so that it
+// is on screen at the bottom even when the last agent's block is taller than the
+// window.
 func (a App) jumpBoard(end bool) App {
 	agents := a.boardAgents()
 	if len(agents) == 0 {
 		return a
 	}
-	pick, scroll := 0, 0
+	s := a.boardScrollable(agents)
+	v := s.vp()
+	a.board.Scroll = 0
 	if end {
-		v := a.boardScrollable(agents).vp()
-		pick, scroll = len(agents)-1, max(v.total-v.view, 0)
+		a.board.Scroll = max(v.total-v.view, 0)
 	}
-	a.board.Selected, a.board.SelectedTask, a.board.Scroll = agents[pick].ID, "", scroll
+	a.board.Selected, a.board.SelectedTask = s.endpoint(end)
 	return a
 }
 

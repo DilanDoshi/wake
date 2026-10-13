@@ -156,6 +156,17 @@ func (l tileLayout) selectBand(a App, i int) App {
 	return a
 }
 
+// endpoint is the grid's first or last tile - the last of the last row, not the
+// column the selection is in.
+func (l tileLayout) endpoint(last bool) (agent, task string) {
+	tiles := l.rows[l.bandRow[0]].tiles
+	if last {
+		tiles = l.rows[l.bandRow[len(l.bandRow)-1]].tiles
+		return tiles[len(tiles)-1].ID, ""
+	}
+	return tiles[0].ID, ""
+}
+
 // tileCellHeight is the height every tile row shares. Everything that fits at the
 // floor stretches to fill the frame; a bigger fleet keeps the floor and scrolls,
 // stretched to a whole number of rows so no frame ends on a blank gap. A frame

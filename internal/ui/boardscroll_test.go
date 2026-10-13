@@ -332,6 +332,9 @@ func TestLandingAfterAScroll(t *testing.T) {
 		{"scrolled past moves down to the first in view", five, 0, 30, 46, []int{1}},
 		{"scrolled up past moves up to the last in view", five, 4, 0, 46, []int{1}},
 		{"nothing mostly in view takes the most shown", tall, 1, 18, 10, []int{0, 1}},
+		// Clipped at the bottom edge, with its top still in the window: the nearest
+		// band is the one above it, not the first of the fully shown ones.
+		{"a sliver at the bottom moves up one", []band{{top: 0, h: 20}, {top: 20, h: 20}, {top: 40, h: 20}, {top: 60, h: 20}}, 3, 6, 62, []int{2}},
 		{"no bands", nil, 0, 0, 46, []int{-1}},
 	} {
 		got := landing(tc.bands, tc.cur, tc.off, tc.view)
@@ -518,5 +521,40 @@ func TestEndShowsTheLastAgentsSubagentRows(t *testing.T) {
 	a = boardKeyPress(a, tea.KeyEnd)
 	if got := strings.Count(shown(a), subGlyph); got != 3 {
 		t.Errorf("End drew %d of the last agent's 3 subagent rows:\n%s", got, shown(a))
+	}
+}
+
+// A last block taller than the window: End is the bottom of the list, so the
+// selection goes to the last stop there, which is on screen, and a second End
+// leaves it where it is. On the last agent's own row it would be pulled back to
+// the top of the block and the last subagent would stay out of view.
+func TestEndReachesTheLastSubagentOfABlockTallerThanTheWindow(t *testing.T) {
+	a := fleetBoard(t, 3, 120, 10, false) // a six-line list
+	last := a.boardAgents()[2]
+	for i := range 6 {
+		ev := started(fmt.Sprintf("t%d", i), fmt.Sprintf("d%d", i), "sub", "general-purpose", core.TaskAgent)
+		a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: last.ID, Event: &ev})
+	}
+	for range 2 {
+		a = boardKeyPress(a, tea.KeyEnd)
+		if got := strings.Count(shown(a), subGlyph); got != 6 {
+			t.Fatalf("End drew %d of the last agent's 6 subagent rows:\n%s", got, shown(a))
+		}
+		if a.board.SelectedTask != "d5" {
+			t.Errorf("End left the selection on dispatch %q, want the last, d5", a.board.SelectedTask)
+		}
+	}
+}
+
+// End is the bottom of the list even below the last stop: a background shell row
+// is listed but never selectable, and it still comes into view.
+func TestEndShowsARunningShellBelowTheLastStop(t *testing.T) {
+	a := fleetBoard(t, 40, 120, 24, false)
+	last := a.boardAgents()[39]
+	ev := started("t0", "d0", "tail -f", "", core.TaskShell)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: last.ID, Event: &ev})
+	a = boardKeyPress(a, tea.KeyEnd)
+	if got := strings.Count(shown(a), subGlyph); got != 1 {
+		t.Errorf("End drew %d of the last agent's rows beneath it, want its shell row:\n%s", got, shown(a))
 	}
 }
