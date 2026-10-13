@@ -156,3 +156,20 @@ func TestOnlyThisFleetsManagerWearsTheManagersYellow(t *testing.T) {
 		t.Error("another fleet's manager is drawn in this fleet's manager yellow")
 	}
 }
+
+// The fleet keeps the manager's drawn name through every copy an event makes:
+// an event that moves an agent rebuilds the Fleet, and losing the name there
+// left the manager's row unrecognised and the room with no one to send to.
+func TestTheManagerStaysTheServiceAcrossAnEvent(t *testing.T) {
+	a, rec := namedManagerRoom(t)
+	a = a.observe("s1", core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "ready"})
+	if s := a.service(); s.ID != "m1" {
+		t.Fatalf("after an event the service is %+v, want the manager m1", s)
+	}
+	m, cmd := typeAndSubmit(a, "go")
+	drainBatch(cmd)
+	_ = m
+	if got := rec.taken(t); len(got) != 1 || got[0].SessionID != "m1" {
+		t.Errorf("an unaddressed draft after an event wrote %v, want it sent to the manager", sentKinds(got))
+	}
+}
