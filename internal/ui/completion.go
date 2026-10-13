@@ -24,14 +24,14 @@ package ui
 //
 // `↵` takes the highlighted offer only while that would change the draft: a word
 // already typed in full (`/clear`) still sends, or every command would need a
-// second `↵`. This reverses the 2026-09-27 ruling that the menu never takes `↵`
-// (owner, 2026-10-12): a misspelled skill sent a half-typed word, and the menu
-// was the thing on screen asking to finish it.
+// second `↵`. bounded() floats that word to the top of the menu, so a longer
+// sibling (`/team-onboarding`) cannot take the cursor from it. This reverses the
+// 2026-09-27 ruling that the menu never takes `↵` (owner, 2026-10-12): `↵` sent a
+// half-typed word while the menu on screen offered to finish it.
 //
-// ⇥ over a `/` or `@` word is the draft's whether or not anything matches. It
-// used to fall through to the conversation ring when a misspelled skill left no
-// menu, and land somewhere unexpected; typingWord is that word, by the stems
-// completing() reads.
+// ⇥ over a word the menu was built for is the draft's whether or not anything
+// matches. It used to fall through to the conversation ring when a misspelled
+// skill left no menu, and land somewhere unexpected; typingWord is that word.
 //
 // ↑↓ are the menu's only when the text cursor has no row to move into - the
 // single-line `/`or`@` draft, which is the common case. On a multi-line draft the
@@ -539,6 +539,12 @@ func (c completion) bounded() completion {
 	c.paths = c.paths.reranked()
 	paths, rest := c.paths.rows()
 	matched := append(slices.Clone(c.names), paths...)
+	// A word already typed exactly as offered goes first, so a longer sibling that
+	// shares its prefix (`/team` beside `/team-onboarding`) neither takes the
+	// cursor from it nor lets the bound cut it - ↵ and ⇥ then act on the word.
+	if i := slices.Index(matched, strings.TrimPrefix(c.draft, c.head)); i > 0 {
+		matched = slices.Concat(matched[i:i+1], matched[:i], matched[i+1:])
+	}
 	c.more = rest
 	if len(matched) > completionRows {
 		c.more += len(matched) - completionRows
@@ -598,19 +604,15 @@ func (a App) completionKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 	return a, nil, false
 }
 
-// typingWord reports whether the cursor is at the end of a `/` or `@` word, one
-// the menu describes whether or not it has an offer for it. The stems are
-// completing()'s, so a draft ending in any `/word` counts - `see /tmp` included -
-// and one ending in `now` after a command (`/clear now`) does not.
+// typingWord reports whether a menu was built for this pane and draft, offers or
+// no: the cursor is at the end of a word completing() describes - a `/` or `@`
+// word, or the `/team` argument where that runs. It reads the menu rather than
+// the stems so the two cannot drift, and so a form the context refuses (`/team`
+// in the room) is no word. A draft ending in any `/word` counts - `see /tmp`
+// included - and one ending in `now` after a command (`/clear now`) does not.
 func (a App) typingWord() bool {
-	if !a.composer().AtEnd() {
-		return false
-	}
-	draft := a.composer().Value()
-	_, _, command := commandStem(draft)
-	_, _, _, _, team := teamArgStem(draft)
-	_, _, mention := mentionStem(draft)
-	return command || team || mention
+	c := a.completion
+	return c.draft != "" && c.pane == a.focus && c.draft == a.composer().Value()
 }
 
 // enterCompletes is ↵ taking the cursored offer. It declines when there is

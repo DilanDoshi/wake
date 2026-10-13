@@ -13,10 +13,6 @@ import (
 	"testing"
 )
 
-// menuHint is the line a completion menu draws about its own keys, and so is on
-// screen only while one is up.
-const menuHint = "⇥ ↵ complete"
-
 func completionKeysScreen(t *testing.T) *screen {
 	t.Helper()
 	withScriptedAgent(t, "")
@@ -33,9 +29,9 @@ func TestEnterCompletesAHalfTypedCommandOnScreen(t *testing.T) {
 	s := completionKeysScreen(t)
 
 	s.send("/resu")
-	s.await(menuHint)
+	s.await(completionKeyHint)
 	s.send("\r")
-	s.awaitGone(menuHint)
+	s.awaitGone(completionKeyHint)
 	s.settle()
 
 	if strings.Contains(s.text(), heardPrefix+"/resu") {
@@ -53,7 +49,7 @@ func TestTabStaysInAMisspelledSkillOnScreen(t *testing.T) {
 
 	s.send("/zzzskil")
 	s.settle()
-	if strings.Contains(s.text(), menuHint) {
+	if strings.Contains(s.text(), completionKeyHint) {
 		t.Fatalf("`/zzzskil` drew a menu, so this is not the no-offer case.\n%s", s.dump())
 	}
 	s.send("\t")

@@ -115,6 +115,76 @@ func TestEnterAcceptsAMentionInTheRoom(t *testing.T) {
 	}
 }
 
+// A finished command that is also the start of a longer one (`/design` beside
+// `/design-sync`, `/team` beside `/team-onboarding`, as real sessions advertise
+// them) must not be completed to the sibling, however the session ordered them:
+// the word that is exactly what is typed goes first, so ↵ sends it, and walking
+// down to the sibling is what takes the sibling.
+func TestAFinishedCommandBeatsALongerSiblingForTheCursor(t *testing.T) {
+	a := typedMenu(t, "/design", "design-sync", "design")
+	if got := a.completion.offers[a.completion.cursor]; got != "/design" {
+		t.Fatalf("the cursor starts on %q among %q, want the offer that is exactly what is typed", got, a.completion.offers)
+	}
+
+	sent, cmd := pressKey(a, confirm)
+	if texts := sentTexts(writtenFrames(t, sent, cmd)); len(texts) != 1 || texts[0] != "/design" {
+		t.Errorf("↵ sent %q, want the finished command as typed", texts)
+	}
+
+	down, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
+	taken, _ := pressKey(down, confirm)
+	if got := taken.composer().Value(); got != "/design-sync " {
+		t.Errorf("↵ after ↓ left the draft %q, want the sibling the cursor was walked to", got)
+	}
+}
+
+// The bound must not cut the finished word either: a session with more skills
+// than the menu draws can push `/new` out of the first rows behind its siblings.
+func TestAFinishedCommandIsNotCutByTheBound(t *testing.T) {
+	var skills []string
+	for i := range completionRows + 4 {
+		skills = append(skills, "new-skill"+string(rune('a'+i)))
+	}
+	skills = append(skills, "new")
+	a := typedMenu(t, "/new", skills...)
+	if got := a.completion.offers[a.completion.cursor]; got != "/new" {
+		t.Fatalf("the cursor is on %q among %d offers, want /new kept inside the bound and first", got, len(a.completion.offers))
+	}
+}
+
+// The word is compared behind whatever came before it: `look at /clear` is
+// already typed in full, and ↵ sends it rather than completing a command that
+// was already finished.
+func TestAFinishedCommandBehindProseSends(t *testing.T) {
+	a := typedMenu(t, "look at /clear", "clear")
+	if got := a.completion.offers[a.completion.cursor]; got != "/clear" {
+		t.Fatalf("the cursor is on %q, so this asserts nothing about a word behind prose", got)
+	}
+
+	a, cmd := pressKey(a, confirm)
+	if sent := sentTexts(writtenFrames(t, a, cmd)); len(sent) != 1 || sent[0] != "look at /clear" {
+		t.Errorf("↵ sent %q, want the draft as typed", sent)
+	}
+}
+
+// An open quote is one word being typed: ↵ completes it to the quoted name, and
+// once the closing quote is typed there is no menu left, so ↵ sends.
+func TestEnterCompletesAnOpenQuotedMention(t *testing.T) {
+	a := spacedListing(t).withDraft(`ask @"foo b`)
+	if !a.completionUp() {
+		t.Fatal("the fixture drew no menu for the open quote, so this asserts nothing")
+	}
+	took, _ := pressKey(a, confirm)
+	if got, want := took.composer().Value(), `ask @"foo bar" `; got != want {
+		t.Errorf("↵ over an open quote left %q, want %q", got, want)
+	}
+
+	closed := spacedListing(t).withDraft(`ask @"foo bar"`)
+	if closed.completionUp() {
+		t.Fatal("a closed quote drew a menu, so ↵ is not the send under test")
+	}
+}
+
 // A working agent queues what is sent, so with a menu up the first ↵ completes the
 // word and only the second queues it.
 func TestTheFirstEnterCompletesAndTheSecondQueuesForAWorkingAgent(t *testing.T) {
@@ -221,7 +291,7 @@ func TestTabStaysPutOnAWordNothingCompletes(t *testing.T) {
 			}
 			a = a.withDraft(tc.draft)
 			if a.completionUp() {
-				t.Skipf("%q draws a menu here, which ⇥ accepts; the case is the one with none", tc.draft)
+				t.Fatalf("%q draws a menu here, which ⇥ accepts; the case is the one with none, so this asserts nothing", tc.draft)
 			}
 			focus := a.focus
 
@@ -233,6 +303,23 @@ func TestTabStaysPutOnAWordNothingCompletes(t *testing.T) {
 				t.Errorf("⇥ changed the draft %q to %q", tc.draft, got)
 			}
 		})
+	}
+}
+
+// ⇥ stays put only where a menu could describe the word. `/team <name>` in the
+// room has no menu to offer - the command is not the room's - so its argument is
+// plain text, and ⇥ is the ring's, where in a conversation the same draft keeps it.
+func TestTabCyclesOverATeamArgumentTheRoomCannotComplete(t *testing.T) {
+	fresh(t)
+	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40).refocus("")
+	a = a.withDraft("/team zzznone")
+	if a.completionUp() {
+		t.Fatal("the room drew a /team menu, so this is not the gated-out case")
+	}
+
+	a, _ = pressKey(a, tabKey)
+	if a.focus != "s1" {
+		t.Errorf("⇥ left the keys on %q, want the next conversation in the ring: the room has no /team menu", a.focus)
 	}
 }
 

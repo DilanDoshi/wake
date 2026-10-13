@@ -3828,8 +3828,8 @@ The owner's rulings for the `@` menu parity work (branch `feat/at-menu-peers`); 
   until claude's reply, so claude never gets it twice; a name claude chose differently from the ask
   (a variant) is never chased. `--name` wins on `--resume` (findings §2), so every relaunch starts in
   step. Cost: a queued `/rename` renames Wake when it is delivered, not when typed.
-- **`⇥` stays the only accept**; `↵` still sends. Label is never insert: `(team)`, `(dir)` and
-  `(agent)` share one per-offer tag.
+- **`⇥` stays the only accept**; `↵` still sends (superseded 2026-10-12: `↵` accepts too, below).
+  Label is never insert: `(team)`, `(dir)` and `(agent)` share one per-offer tag.
 - **The airlock is five files** (`localreply.go` for local-command reply text).
 
 ## 2026-09-27 — every agent opens with the `initialize` handshake, which is what brings claude.ai connectors
@@ -4085,27 +4085,44 @@ core's `Contained` cannot see a reference, which is printable (BUG-50). So the a
 never takes `↵`", whose argument was that the menu arrives while somebody types, so it may not give the
 irreversible key a second meaning. The owner's experience was the other half of that trade: a skill
 misspelled so nothing matched left no menu, `⇥` fell through to the conversation ring (`nextChat`) and
-landed in an agent's DM, and a half-typed word sent on `↵`.
+landed in an agent's DM, and `↵` sent a half-typed word while the menu on screen offered to finish it.
+(A word that matches nothing still has no menu, so `↵` still sends it; only a prefix of something completes.)
 
 - **`↵` accepts the cursored offer while that changes the draft.** `completion.go`'s `enterCompletes`,
   called from `App.key`'s Enter case *after* the ⌥↵ newline pass-through and the armed detach's
   confirm - so neither moves - and before the empty-composer open-the-picked-agent branch. Cards and
   pickers above still win `↵`. The test is `c.head + c.offers[c.cursor] == draft`, the same sum
-  `acceptCompletion` writes: equal means a word already typed exactly as offered (`/clear`, `@maya`),
-  and that sends, so a finished command stays one press. A quoted mention compares equal for free (the
-  offer is already the quoted form). A directory is the one place it surprises: `src` accepts to `src/`
-  with no space, and `src/` typed in full lists its children, so `↵` takes the cursored child; a bare
-  directory is sent by typing a space, which closes the menu.
-- **`⇥` stays put over a `/` or `@` word, matched or not.** `typingWord` is `completing()`'s three stems
-  (`commandStem`, `teamArgStem`, `mentionStem`) with the cursor at the end of the draft, so it is exactly
-  where a menu *could* be. Both stems are mid-text on purpose, so a draft ending in any `/word` (`see
-  /tmp`) keeps `⇥`; `/clear now` ends in `now` and does not. Anywhere else `⇥` is the ring, which is also
-  the one keyboard route back to the room on a terminal narrow enough that a conversation fills the
-  screen. The owner chose this over "only when the draft is empty" and "remove `⇥`'s switching".
+  `acceptCompletion` writes: equal means a word already typed exactly as offered (`/clear`, `look at
+  /clear`, `@maya`), and that sends, so a finished command stays one press.
+- **The finished word goes first.** Menu order is the session's own, so `/team` sits behind
+  `/team-onboarding` and a cursor on the first would complete a finished command to its sibling (the
+  recorded corpus advertises both, and some thirty `new-…` skills). `bounded()` floats the offer that is
+  exactly what is typed to the top - which also stops the bound cutting `/new` out of a long menu - and
+  walking down is what takes a sibling. `⇥` follows the cursor, so on a finished `/team` it now takes
+  `/team `, not the sibling.
+- **Quoted mentions and directories.** An open quote (`@"foo b`) is one word being typed and `↵` completes
+  it to `@"foo bar" `; once the closing quote is typed there is no menu and `↵` sends. A directory is the
+  one place `↵` rewrites finished text: `src` accepts to `src/` with no space, and `src/` typed in full
+  lists its children, so `↵` takes the cursored child - as Claude Code's own path menu does. A bare
+  directory is sent by typing a space first, which closes the menu.
+- **`⇥` stays put over a word the menu was built for, matched or not.** `typingWord` reads the built menu
+  (`completion.draft` is the focused pane's draft, offers or none) rather than copying
+  `completing()`'s stems, so it is where a menu *could* be and cannot drift from it - including the
+  context gates: `/team zzz` in a conversation is a word, in the room it is not (the room has no `/team`
+  menu) and `⇥` is the ring's. Both stems are mid-text on purpose, so a draft ending in any `/word` (`see
+  /tmp`) keeps `⇥`; `/clear now` ends in `now` and does not; a cursor off the end of the draft is no
+  word. Anywhere else `⇥` is the ring, which is also the one keyboard route back to the room on a
+  terminal narrow enough that a conversation fills the screen. The owner chose this over "only when the
+  draft is empty" and "remove `⇥`'s switching". A prompt recalled with `↑` does not rebuild the menu
+  (`walkPrompts` never has), so `⇥` over it is the ring until a keystroke does.
 - **Costs, accepted.** `↵` cannot open a sidebar agent while a menu is up - the empty-composer branch is
   unreachable with a stem typed anyway, so this is nothing new. With a picker up and a `/`-draft, `⇥` is
-  a no-op rather than the ring. A working agent queues on the second `↵`, not the first. The menu's own
-  hint now reads `⇥ ↵ complete   ↑↓ walk`; no legend slot changes.
+  a no-op rather than the ring. A working agent queues on the second `↵`, not the first. **A menu a tall
+  card has clipped off the pane still takes `↵`** (`completionUp` is model state, as it is for `⇥` and
+  `⌃N`/`⌃P`): the draft visibly completes and nothing is sent, so it costs one more `↵`; a layout-aware
+  predicate would be `cardFullyDrawn`'s arithmetic over again, and is not built. The menu's own hint
+  now reads `⇥ ↵ complete   ↑↓ walk`; no legend slot changes.
 - **Tests:** `internal/ui/completionaccept_test.go` (each guard mutation-checked: the swallow, the
-  already-typed rule, the cursor-at-end condition, the armed detach, ⌥↵) and the pty case in
-  `cmd/wake/atmenuscreen_unix_test.go`.
+  already-typed rule with and without its head, the exact-first float, the bound, the cursor-at-end
+  condition, the armed detach, ⌥↵) and the pty cases in `cmd/wake/completionkeysscreen_unix_test.go`.
+  The older menu pty tests match the hint through `completionKeyHint`, which is `⇥ ↵ complete` now.

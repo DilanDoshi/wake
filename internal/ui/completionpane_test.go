@@ -82,7 +82,7 @@ func TestAMenuNeverMakesAPaneTallerThanItWasGiven(t *testing.T) {
 			t.Fatalf("given %d rows the pane drew %d with a menu up and %d without: a frame taller than its pane scrolls the alt screen away on every draw\n%s",
 				h, got, want, pane)
 		}
-		if !strings.Contains(pane, "⇥ complete") {
+		if !strings.Contains(pane, "⇥ ↵ complete") {
 			squeezed = true
 		}
 	}
