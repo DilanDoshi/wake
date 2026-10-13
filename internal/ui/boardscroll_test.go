@@ -336,6 +336,8 @@ func TestLandingAfterAScroll(t *testing.T) {
 		// band is the one above it, not the first of the fully shown ones.
 		{"a sliver at the bottom moves up one", []band{{top: 0, h: 20}, {top: 20, h: 20}, {top: 40, h: 20}, {top: 60, h: 20}}, 3, 6, 62, []int{2}},
 		{"no bands", nil, 0, 0, 46, []int{-1}},
+		// A window wholly inside a header band shows no band at all: stay put.
+		{"nothing in view stays", []band{{top: 0, h: 1}, {top: 3, h: 1, lead: 2}, {top: 6, h: 1}}, 2, 1, 2, []int{2}},
 	} {
 		got := landing(tc.bands, tc.cur, tc.off, tc.view)
 		ok := false
@@ -556,5 +558,40 @@ func TestEndShowsARunningShellBelowTheLastStop(t *testing.T) {
 	a = boardKeyPress(a, tea.KeyEnd)
 	if got := strings.Count(shown(a), subGlyph); got != 1 {
 		t.Errorf("End drew %d of the last agent's rows beneath it, want its shell row:\n%s", got, shown(a))
+	}
+}
+
+// A wheel notch repairs a selection left naming a dispatch that has finished, as
+// stepBoard always did: the highlight is back on the agent's row.
+func TestTheWheelRepairsASelectionNamingAFinishedDispatch(t *testing.T) {
+	a := boardApp(t) // alex (s1) runs dispatch d1 under task t1
+	a.board.Selected, a.board.SelectedTask = "s1", "d1"
+	ev := ended("t1", core.TaskDone)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &ev})
+	a = boardWheel(a, tea.MouseButtonWheelDown)
+	if a.board.SelectedTask != "" {
+		t.Errorf("SelectedTask = %q after a wheel notch, want the finished dispatch dropped", a.board.SelectedTask)
+	}
+}
+
+// A re-rank that takes the selected agent somewhere the window is not brings the
+// window to it: a blocked agent ranks first, and Ctrl-C and Enter act on it.
+func TestAReRankThatStrandsTheSelectionBringsTheWindowBack(t *testing.T) {
+	for _, tiled := range []bool{true, false} {
+		a := fleetBoard(t, 40, 200, 50, tiled)
+		a = boardKeyPress(a, tea.KeyEnd)
+		last := cursorName(a)
+		sessions := make([]rpc.SessionStatus, 40)
+		for i := range sessions {
+			sessions[i] = rpc.SessionStatus{ID: fmt.Sprintf("s%02d", i), Name: fmt.Sprintf("w%02d", i), State: rpc.StateIdle, Dir: "/repos/x"}
+		}
+		sessions[39].State = rpc.StateBlocked // now the first row, far from the bottom the window is at
+		a = a.applyStatus(&rpc.Status{Sessions: sessions})
+		if got := cursorName(a); got != last {
+			t.Fatalf("tiled=%v: the selection moved from %s to %s on a re-rank", tiled, last, got)
+		}
+		if !strings.Contains(shown(a), last) {
+			t.Errorf("tiled=%v: the re-ranked selection %s is not on screen:\n%s", tiled, last, shown(a))
+		}
 	}
 }

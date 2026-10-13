@@ -181,15 +181,16 @@ func tileCellHeight(rows []tileRow, availH int) int {
 			tileRows++
 		}
 	}
-	floor := min(minTileHeight, availH)
+	// A frame holds one header band along with its rows, however many the fleet
+	// has, so the floor is what is left of the frame beside it.
+	reserve := min(headerLines, teamHeaderRows)
+	floor := min(minTileHeight, max(availH-reserve, 1))
 	if tileRows == 0 {
 		return floor
 	}
 	if headerLines+tileRows*floor <= availH {
 		return (availH - headerLines) / tileRows
 	}
-	// A frame holds one header band along with its rows, however many the fleet has.
-	reserve := min(headerLines, teamHeaderRows)
 	fit := max((availH-reserve)/floor, 1)
 	return max((availH-reserve)/fit, floor)
 }

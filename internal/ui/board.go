@@ -215,14 +215,8 @@ func (a App) boardKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 			break
 		}
 		return a.stepBoard(tileRight), nil, true
-	case tea.KeyPgUp:
-		return a.scrollBoard(-a.pageLines()), nil, true
-	case tea.KeyPgDown:
-		return a.scrollBoard(a.pageLines()), nil, true
-	case tea.KeyHome:
-		return a.jumpBoard(false), nil, true
-	case tea.KeyEnd:
-		return a.jumpBoard(true), nil, true
+	case tea.KeyPgUp, tea.KeyPgDown, tea.KeyHome, tea.KeyEnd:
+		return a.boardScrollKey(m.Type), nil, true
 	case tea.KeyEsc:
 		// Close and nothing else. The modal was opened by the operator, so ⎋
 		// here is "put it away" - pickerKey's meaning - and must not reach an

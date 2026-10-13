@@ -13,6 +13,8 @@ package ui
 
 import (
 	"fmt"
+
+	tea "github.com/charmbracelet/bubbletea"
 )
 
 // band is one stop the selection can rest on: the lines it occupies, and the
@@ -73,7 +75,7 @@ func landing(bands []band, cur, off, view int) int {
 			return i
 		}
 	}
-	best, most := cur, -1
+	best, most := cur, bands[cur].overlap(off, view) // a window that shows no band leaves it be
 	for i, b := range bands {
 		if o := b.overlap(off, view); o > most {
 			best, most = i, o
@@ -101,11 +103,10 @@ func (v viewport) settled(scroll int) viewport {
 	return v
 }
 
-// scrollable is what the two views share: a viewport, the agents it touches, a
-// way to put the selection on one of its bands, and the stops at either end.
+// scrollable is what the two views share: a viewport, a way to put the selection
+// on one of its bands, and the stops at either end.
 type scrollable interface {
 	vp() viewport
-	visibleAgents() []Agent
 	selectBand(a App, i int) App
 	endpoint(last bool) (agent, task string) // the first or last stop, for Home and End
 }
@@ -129,10 +130,24 @@ func (a App) scrollBoard(delta int) App {
 	s := a.boardScrollable(agents)
 	v := s.vp()
 	a.board.Scroll = clampScroll(v.off+delta, v.total, v.view)
-	if to := landing(v.bands, v.cur, a.board.Scroll, v.view); to >= 0 && to != v.cur {
+	// Re-seated even when it has not moved, which repairs a selection left naming
+	// a dispatch that has finished.
+	if to := landing(v.bands, v.cur, a.board.Scroll, v.view); to >= 0 {
 		a = s.selectBand(a, to)
 	}
 	return a
+}
+
+// boardScrollKey is PgUp, PgDn, Home and End: a page is half a pane, the size
+// every other pane pages by.
+func (a App) boardScrollKey(k tea.KeyType) App {
+	switch k {
+	case tea.KeyPgUp:
+		return a.scrollBoard(-a.pageLines())
+	case tea.KeyPgDown:
+		return a.scrollBoard(a.pageLines())
+	}
+	return a.jumpBoard(k == tea.KeyEnd)
 }
 
 // jumpBoard is Home and End: the window to the top or the bottom, the selection

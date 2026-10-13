@@ -3576,7 +3576,7 @@ cursor-derived window (`boardRowFrom`, `tileWindow`), which could only scroll by
 
 *How it scrolls* (`boardscroll.go`): `Board.Scroll` is the first line the window draws, in either view.
 The **wheel and `PgUp`/`PgDn` scroll freely** by lines; **`↑↓←→` move the selection and scroll the
-least that shows all of it**; `Home`/`End` jump to the first and last agent. **The selection is always
+least that shows all of it**; `Home`/`End` jump to the first and last stop (the last agent's last subagent row when it has one). **The selection is always
 on screen**, because `⌃C` parks and `↵` opens whatever the highlight is on: a free scroll that leaves
 it mostly out (`landing`: under half its lines, or none) carries it to the nearest tile or row that is
 in, and a re-rank or resize that strands it wholly off screen pulls the window back (`viewport.settled`)

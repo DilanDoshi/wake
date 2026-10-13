@@ -181,6 +181,10 @@ func TestTileLayoutTeamOnlyFreshBoardShowsATile(t *testing.T) {
 	if got := idsOf(l.visibleAgents()); len(got) != 1 || got[0] != "w1" {
 		t.Fatalf("visible = %v, want [w1]: a team-only board with no selection drew no agent at a frame of 8", got)
 	}
+	// The header band is spent from the frame too, so the tile is not clipped by it.
+	if got := l.bands[l.cur].overlap(l.off, l.view); got != l.cellH {
+		t.Errorf("the tile shows %d of its %d lines under the header band", got, l.cellH)
+	}
 }
 
 // A frame shorter than the floor gets one tile as tall as itself, and the
@@ -268,6 +272,7 @@ func TestTileCellHeightTable(t *testing.T) {
 		{"a frame shorter than the floor is one tile", flat(10), 12, 12},
 		{"a header band is reserved when the fleet overflows", withHeader, 46, 22},
 		{"no rows is the floor", nil, 46, 20},
+		{"a header at the top shares a short frame", append([]tileRow{{header: "A"}}, flat(1)...), 18, 16},
 	} {
 		if got := tileCellHeight(tc.rows, tc.availH); got != tc.want {
 			t.Errorf("%s: tileCellHeight(availH=%d) = %d, want %d", tc.name, tc.availH, got, tc.want)
