@@ -439,6 +439,16 @@ func teamHeaderBand(team string, width int) []string {
 	return []string{"", teamHeaderLine(team, width)}
 }
 
+// sectionHeader is the header band the window draws before a section, or blank
+// lines in its place when the window ends before any of the section's members:
+// a divider over nothing reads as an empty team.
+func sectionHeader(team string, width int, orphan bool) []string {
+	if orphan {
+		return make([]string, teamHeaderRows)
+	}
+	return teamHeaderBand(team, width)
+}
+
 // boardView is the whole frame's worth of overview: title, one block per agent
 // in attention order (its row and its running subagents) as far as the window
 // shows, the key line.
@@ -454,7 +464,7 @@ func (a App) boardView(agents []Agent, width int) string {
 	for i := from; i < to; i++ {
 		ag, b := agents[i], l.blocks[i]
 		if b.hdr > 0 {
-			lines = append(lines, teamHeaderBand(ag.Team, width)...)
+			lines = append(lines, sectionHeader(ag.Team, width, b.top+b.hdr >= l.off+l.view)...)
 		}
 		lines = append(lines, boardRow(ag, a.fleet.done(ag.ID), nameW, stateW, width, i == cursor && a.board.SelectedTask == ""))
 		for _, t := range b.subs {

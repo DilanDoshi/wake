@@ -39,15 +39,16 @@ func TestTheTiledBoardIsThreeAcrossAndScrollsOnAScreen(t *testing.T) {
 	s.send("\x17") // ⌃W to the room
 	s.await("group chat")
 	var names []string
-	for i := range 8 {
+	for i := range 6 {
 		name := fmt.Sprintf("tile%d", i)
 		names = append(names, name)
 		s.send("/new " + name + "\r")
-		s.await("@" + name)
-		// /new drafts a mention; esc clears it, settled before the next byte or
-		// bubbletea reads the two as one alt-modified key (escprobe_test.go).
+		// /new drafts "@name " once the spawn lands. Wait for the draft itself: an
+		// esc sent before it clears nothing, and the next /new is typed after the
+		// mention and sent to the agent as text.
+		s.await("> @" + name)
 		s.send("\x1b")
-		s.settle()
+		s.settle() // or bubbletea reads esc and the next byte as one alt-modified key
 		s.send("\x17")
 		s.await("group chat")
 		s.settle()

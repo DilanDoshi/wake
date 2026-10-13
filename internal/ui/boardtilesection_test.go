@@ -284,7 +284,8 @@ func TestTileCellHeightTable(t *testing.T) {
 // divider too, so a team's tiles read as their own chunk (owner's 2026-09-21
 // request), the same gap the rows view draws.
 func TestTiledBoardDrawsABlankAboveEachTeamHeader(t *testing.T) {
-	a := newRoomApp(t).withSize(120, 40)
+	// Tall enough for both shelves at the tile floor, so the header has a tile under it.
+	a := newRoomApp(t).withSize(120, 60)
 	a = a.applyStatus(&rpc.Status{
 		Teams: []string{"backend"},
 		Sessions: []rpc.SessionStatus{

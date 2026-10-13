@@ -595,3 +595,54 @@ func TestAReRankThatStrandsTheSelectionBringsTheWindowBack(t *testing.T) {
 		}
 	}
 }
+
+// teamedFleet is n agents, the first top of them on no team, then per agents in
+// each of the named teams in turn.
+func teamedFleet(t *testing.T, w, h int, top, per int, teams ...string) App {
+	t.Helper()
+	var sessions []rpc.SessionStatus
+	add := func(team string) {
+		i := len(sessions)
+		sessions = append(sessions, rpc.SessionStatus{
+			ID: fmt.Sprintf("s%02d", i), Name: fmt.Sprintf("w%02d", i), State: rpc.StateIdle, Dir: "/repos/x", Team: team,
+		})
+	}
+	for range top {
+		add("")
+	}
+	for _, team := range teams {
+		for range per {
+			add(team)
+		}
+	}
+	a := newRoomApp(t).withSize(w, h).withRoster(sessions...)
+	a = a.applyStatus(&rpc.Status{Teams: teams, Sessions: sessions})
+	m, _ := typeAndSubmit(a, boardVerb)
+	return m.(App)
+}
+
+// A team header the window ends on, with none of the team's members under it, is
+// not drawn: a divider over nothing reads as an empty team, and the board's
+// paging has never left one.
+func TestAHeaderTheWindowEndsOnIsNotDrawnOverNothing(t *testing.T) {
+	// Tiles: a top row, then backend's shelf below a frame that ends on its header.
+	a := teamedFleet(t, 100, 30, 2, 2, "backend")
+	a.board.Tiled = true
+	if out := shown(a); strings.Contains(out, "backend") {
+		t.Errorf("tiles: the frame ends on backend's header with no tile under it:\n%s", out)
+	}
+	if out := shown(boardKeyPress(a, tea.KeyEnd)); !strings.Contains(out, "backend") {
+		t.Errorf("tiles: scrolling to the end never drew backend's shelf:\n%s", out)
+	}
+
+	// Rows: a window of 10 lines that ends on bravo's header band.
+	r := teamedFleet(t, 120, 14, 2, 6, "alpha", "bravo")
+	r.board.Selected, r.board.Scroll = "s07", 2
+	out := shown(r)
+	if !strings.Contains(out, "alpha") {
+		t.Fatalf("rows: precondition: alpha's header should be in the window:\n%s", out)
+	}
+	if strings.Contains(out, "bravo") {
+		t.Errorf("rows: the window ends on bravo's header with no agent under it:\n%s", out)
+	}
+}

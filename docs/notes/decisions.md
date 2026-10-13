@@ -3580,9 +3580,10 @@ least that shows all of it**; `Home`/`End` jump to the first and last stop (the 
 on screen**, because `⌃C` parks and `↵` opens whatever the highlight is on: a free scroll that leaves
 it mostly out (`landing`: under half its lines, or none) carries it to the nearest tile or row that is
 in, and a re-rank or resize that strands it wholly off screen pulls the window back (`viewport.settled`)
-— the wheel never leaves the highlight on something nobody can see. A header band at the edge of the
-window is clipped like any line; the old atomic header-with-first-member rule belonged to whole-block
-paging and goes with it. ⇥ starts the other view at the top: they are different lists.
+— the wheel never leaves the highlight on something nobody can see. A section's header is drawn only
+when some line of its first member is (`sectionHeader`; otherwise blank lines), so it never heads nothing (a
+divider over nothing reads as an empty team), and its own lines clip at the top of the window like any
+line's. ⇥ starts the other view at the top: they are different lists.
 
 ## 2026-09-20 — `/resume` resumes in place with no guard, the one deliberate reversal of the branching non-negotiable
 
