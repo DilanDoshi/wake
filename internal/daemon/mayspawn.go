@@ -120,12 +120,13 @@ func (s *server) admitLive(a, replaces *agent, wake bool) string {
 	return ""
 }
 
-// liveCount is how many sessions hold a process right now.
+// liveSessions is a snapshot of every session that holds a process right now.
 //
 // Parked and ended are not among them: a parked session has no process, which
 // is what parking *is*, and an ended one has none by definition. So the cap
-// counts what is costing money and CPU rather than what is in the roster.
-func (s *server) liveCount() int {
+// counts what is costing money and CPU rather than what is in the roster, and
+// the fleet note names teammates from the same set.
+func (s *server) liveSessions() []rpc.SessionStatus {
 	s.mu.Lock()
 	agents := make([]*agent, 0, len(s.agents))
 	for _, a := range s.agents {
@@ -133,13 +134,16 @@ func (s *server) liveCount() int {
 	}
 	s.mu.Unlock()
 
-	n := 0
+	live := make([]rpc.SessionStatus, 0, len(agents))
 	for _, a := range agents {
-		switch a.snapshot().State {
+		switch st := a.snapshot(); st.State {
 		case rpc.StateParked, rpc.StateEnded:
 		default:
-			n++
+			live = append(live, st)
 		}
 	}
-	return n
+	return live
 }
+
+// liveCount is how many sessions hold a process right now.
+func (s *server) liveCount() int { return len(s.liveSessions()) }

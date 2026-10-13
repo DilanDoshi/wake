@@ -18,11 +18,11 @@ import (
 // `manager-harbor`. A daemon from before the name says nothing about it.
 func TestStatusNamesTheManagerAsClaudeSessionsKnowIt(t *testing.T) {
 	st := rpc.Status{Running: true, PID: 4242, Socket: "/tmp/wake.sock", ManagerClaude: "manager-harbor"}
-	if out := formatStatus(st); !strings.Contains(out, "manager-harbor") {
+	if out := formatStatus(st, ""); !strings.Contains(out, "manager-harbor") {
 		t.Errorf("a running daemon reads as %q, without the name Claude sessions know its manager by", out)
 	}
 	st.ManagerClaude = ""
-	if out := formatStatus(st); strings.Contains(out, "know its manager") {
+	if out := formatStatus(st, ""); strings.Contains(out, "know its manager") {
 		t.Errorf("a daemon that named no manager reads as %q", out)
 	}
 }
@@ -35,12 +35,12 @@ func TestStatusAnswersAllThreeCases(t *testing.T) {
 	running := formatStatus(rpc.Status{
 		Running: true, PID: 4242, Socket: "/tmp/wake.sock",
 		Sessions: []rpc.SessionStatus{{ID: "a11a0000-0000-4000-8000-00000000a11a", Name: "alex", State: rpc.StateWorking}},
-	})
+	}, "")
 	if !strings.Contains(running, "pid 4242") || !strings.Contains(running, "alex") {
 		t.Errorf("a running daemon reads as %q", running)
 	}
 
-	none := formatStatus(rpc.Status{})
+	none := formatStatus(rpc.Status{}, "")
 	if !strings.Contains(none, "No daemon is running") {
 		t.Errorf("an empty machine reads as %q", none)
 	}
@@ -51,7 +51,7 @@ func TestStatusAnswersAllThreeCases(t *testing.T) {
 	orphaned := formatStatus(rpc.Status{Sessions: []rpc.SessionStatus{
 		{ID: "a11a0000-0000-4000-8000-00000000a11a", Name: "alex", State: rpc.StateOrphaned, PID: 900},
 		{ID: "b22b0000-0000-4000-8000-00000000b22b", Name: "sam", State: rpc.StateOrphaned, PID: 901},
-	}})
+	}}, "")
 	if !strings.Contains(orphaned, "left 2 agents behind") {
 		t.Errorf("a fleet whose daemon died reads as %q", orphaned)
 	}
@@ -116,7 +116,7 @@ func TestASessionLineCarriesWhatItsStateOwes(t *testing.T) {
 // A running daemon with nothing on it must not print an empty report that
 // reads as broken.
 func TestAnIdleDaemonSaysItHasNoSessions(t *testing.T) {
-	got := formatStatus(rpc.Status{Running: true, PID: 1, Socket: "/tmp/s"})
+	got := formatStatus(rpc.Status{Running: true, PID: 1, Socket: "/tmp/s"}, "")
 	if !strings.Contains(got, "No sessions") {
 		t.Errorf("formatStatus = %q", got)
 	}
@@ -126,7 +126,7 @@ func TestStatusAgainstARealDaemon(t *testing.T) {
 	d := startRealDaemon(t)
 
 	var out bytes.Buffer
-	if err := printStatus(d.socket, &out); err != nil {
+	if err := printStatus(d.socket, "", &out); err != nil {
 		t.Fatalf("printStatus: %v", err)
 	}
 	if !strings.Contains(out.String(), "wake daemon running") {
@@ -222,7 +222,7 @@ func TestStatusAndStopReachTheirOwnCommands(t *testing.T) {
 func TestStatusListsAParkedSessionAsParked(t *testing.T) {
 	out := formatStatus(rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
 		{ID: idAlpha, Name: "alex", Label: "dev-5748", State: rpc.StateParked},
-	}})
+	}}, "")
 	if !strings.Contains(out, rpc.StateParked) {
 		t.Errorf("the listing does not say a parked session is parked:\n%s", out)
 	}
@@ -298,11 +298,11 @@ func TestTheUsageSaysBareWakeStartsANewFleet(t *testing.T) {
 // `wake status` names the daemon's build, and says what to do when it is not
 // this one - the same words the room uses.
 func TestStatusNamesTheDaemonsBuildAndWhenItIsStale(t *testing.T) {
-	current := formatStatus(rpc.Status{Running: true, PID: 1, Socket: "/tmp/w.sock", Build: version.Build()})
+	current := formatStatus(rpc.Status{Running: true, PID: 1, Socket: "/tmp/w.sock", Build: version.Build()}, "")
 	if !strings.Contains(current, "wake "+version.Build()) || strings.Contains(current, "⌃Q⌃Q") {
 		t.Errorf("a current daemon reads as %q", current)
 	}
-	stale := formatStatus(rpc.Status{Running: true, PID: 1, Socket: "/tmp/w.sock", Build: "0.0.1+0000000"})
+	stale := formatStatus(rpc.Status{Running: true, PID: 1, Socket: "/tmp/w.sock", Build: "0.0.1+0000000"}, "")
 	if !strings.Contains(stale, "0.0.1+0000000") || !strings.Contains(stale, "⌃Q⌃Q") {
 		t.Errorf("a stale daemon reads as %q", stale)
 	}
