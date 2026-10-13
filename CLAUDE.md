@@ -129,9 +129,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 
 **Identity and lifecycle**
 - A session's name comes from the daemon's 64-name pool. **A name is never an address** — frames
-  carry `SessionID`; names are released and reissued, so a rename has no alias. Wake's manager is
-  `manager`; claude's is `manager-<fleet>` (`daemon.managerClaudeName`, from the socket, never a
-  frame, name-shaped), left out of the daemon's peers listing, and no agent may take its prefix.
+  carry `SessionID`; names are released and reissued, so a rename has no alias. The manager is
+  `manager-<fleet>` to claude (`daemon.managerClaudeName`, from the socket, never a frame) and is
+  drawn so: the daemon still calls it `manager`, the UI's fleet fold names its row by the report's
+  `ManagerClaude` (`Fleet.shown`, which every typed name goes through), identity is the exact
+  `Fleet.isManager`, and `@manager` and `@manager-<fleet>` both reach it. No agent or team may take
+  the `manager-` prefix.
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
   everything and clears the park book (`parked.json` beside the socket).
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
@@ -569,7 +572,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/fleet.go` at 797 and `internal/ui/composer.go` at 795 — derived by
+  `internal/ui/fleet.go` at 799 and `internal/ui/composer.go` at 795 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

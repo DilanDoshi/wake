@@ -255,10 +255,11 @@ func (a App) renamed(st *rpc.Status) App {
 			continue
 		}
 		parent := a.parentName(s.ID)
-		if dm.Name == s.Name && dm.ParentName == parent {
+		name := a.fleet.shown(s.Name)
+		if dm.Name == name && dm.ParentName == parent {
 			continue
 		}
-		a = a.withDM(s.ID, dm.WithName(s.Name).WithParentName(parent))
+		a = a.withDM(s.ID, dm.WithName(name).WithParentName(parent))
 	}
 	return a
 }

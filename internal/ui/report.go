@@ -39,7 +39,6 @@ func (a App) applyStatus(st *rpc.Status) App {
 	}
 	prev := a.fleet
 	a.fleet = a.fleet.WithStatus(st)
-	a.managerClaude = managerClaudeOf(st)
 	// The State backstop for the queue: a working→idle edge on this report frees an
 	// agent whose in-flight message's completed lifecycle was lost to a gap. Per
 	// report, so an edge inside one batch is not collapsed. See queue.go.
@@ -57,15 +56,6 @@ func (a App) applyStatus(st *rpc.Status) App {
 	// review CRITICAL finding it closes, 2026-08-26.
 	a = a.reconcileRewind().reconciledMCP()
 	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
-}
-
-// managerClaudeOf is what a seed or a report says claude calls the manager; a
-// nil seed - wait for the first push - says nothing.
-func managerClaudeOf(st *rpc.Status) string {
-	if st == nil {
-		return ""
-	}
-	return st.ManagerClaude
 }
 
 // refreshedAgents folds each live agent into the conversation this client holds

@@ -19,8 +19,10 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -47,6 +49,11 @@ func (a *agent) setTeam(requested string) error {
 	// that check needs the fleet registry and lands with teamOrder - see deferred.md.)
 	if team != "" && reservedNames[team] {
 		return fmt.Errorf("%q is a reserved routing word, not a team name", team)
+	}
+	// Nor the manager's drawn name: the room offers @manager-<fleet> as the
+	// manager, and teams route first, so a team of that name would take its mail.
+	if strings.HasPrefix(team, core.ManagerPrefix) {
+		return fmt.Errorf("%q is how a fleet's manager is named, not a team name", team)
 	}
 	a.team = team
 	return nil

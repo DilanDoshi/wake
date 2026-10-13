@@ -120,7 +120,7 @@ const defaultManagerColor = "yellow"
 // made hueless, which is the point of giving it a default the fleet does not
 // share.
 func identityStyleFor(a Agent) (lipgloss.Style, bool) {
-	if a.Color == "" && a.Name == core.ManagerName {
+	if a.Color == "" && a.ID != "" && core.IsManager(a.Name) {
 		return identityStyle(defaultManagerColor)
 	}
 	return identityStyle(a.Color)

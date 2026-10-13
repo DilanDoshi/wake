@@ -476,3 +476,19 @@ func TestOnlyABroadcastIsMarkedAsOne(t *testing.T) {
 		t.Error("a broadcast is not marked as one: this test would pass against a field nothing ever sets")
 	}
 }
+
+// The service answers to its alias as to its name: the manager is drawn as
+// manager-<fleet>, the name every Claude session knows it by, and @manager
+// still reaches it. Either way the route resolves to the drawn name.
+func TestTheServiceAnswersToItsAliasAsToItsName(t *testing.T) {
+	named := Addressee{ID: "id-manager", Name: "manager-harbor", Alias: ManagerName}
+	for _, text := range []string{"@manager-harbor hi", "@" + ManagerName + " hi"} {
+		got := Resolve(text, nil, named)
+		if len(got.Targets) != 1 || got.Targets[0] != named.ID || got.Text != "hi" || got.Resolved != named.Name {
+			t.Errorf("Resolve(%q) = %+v, want the manager with %q", text, got, named.Name)
+		}
+	}
+	if got := Resolve("@manager-atlas hi", nil, named); len(got.Targets) == 1 && got.Targets[0] == named.ID && got.Text == "hi" {
+		t.Errorf("another fleet's manager's name reached this fleet's manager as an address: %+v", got)
+	}
+}

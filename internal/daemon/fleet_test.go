@@ -131,7 +131,7 @@ func TestAManagersClaudeNameHasTheShapeOfAName(t *testing.T) {
 		"wake.sock",
 	} {
 		got := managerClaudeName(testRoot(t), socket)
-		if strings.IndexFunc(got, func(r rune) bool { return !isNameRune(r) }) >= 0 || len(got) > len(managerClaudePrefix)+maxFleetName {
+		if strings.IndexFunc(got, func(r rune) bool { return !isNameRune(r) }) >= 0 || len(got) > len(core.ManagerPrefix)+maxFleetName {
 			t.Errorf("the manager of %q is %q to claude: not a name's shape", socket, got)
 		}
 		if strings.Contains(got, id) {

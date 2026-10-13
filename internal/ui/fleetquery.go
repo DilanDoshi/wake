@@ -7,6 +7,7 @@ package ui
 
 import (
 	"maps"
+	"strings"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -96,12 +97,31 @@ func (f Fleet) inDM(id string) bool { return f.agents[id].inDM }
 // this unambiguous, and prefix resolution belongs to `wake attach` where a
 // human is typing at a shell rather than routing a message.
 func (f Fleet) ByName(name string) (Agent, bool) {
+	name = f.shown(name)
 	for _, id := range f.order {
 		if a := f.agents[id]; a.Name == name && a.State != rpc.StateEnded {
 			return a, true
 		}
 	}
 	return Agent{}, false
+}
+
+// shown is the name this client draws a session by: the daemon's, except the
+// manager's, drawn as manager-<fleet> - the name every Claude session reaches it
+// under (rpc.Status.ManagerClaude) - once a report says it. A typed `manager`
+// goes through it too, so @manager and /resume manager find the drawn row.
+func (f Fleet) shown(name string) string {
+	if strings.EqualFold(name, core.ManagerName) && f.managerClaude != "" {
+		return f.managerClaude
+	}
+	return name
+}
+
+// isManager reports whether a row's name is this fleet's manager: Wake's own
+// word, or the one its report draws it as. Exact rather than the prefix, so an
+// agent named manager-x before the daemon fenced it is never taken for it.
+func (f Fleet) isManager(name string) bool {
+	return name == core.ManagerName || f.managerClaude != "" && name == f.managerClaude
 }
 
 // crossSpeaker is who to attribute a peer's cross-session message to: the fleet
