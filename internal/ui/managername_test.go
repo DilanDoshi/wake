@@ -57,9 +57,8 @@ func TestTheManagerIsDrawnAsClaudeSessionsKnowIt(t *testing.T) {
 func TestTheRoomRoutesTheManagersShownNameToIt(t *testing.T) {
 	for _, draft := range []string{"@" + harborManager + " status please", "@manager status please"} {
 		a, rec := namedManagerRoom(t)
-		m, cmd := typeAndSubmit(a, draft)
+		_, cmd := typeAndSubmit(a, draft)
 		drainBatch(cmd)
-		_ = m
 		got := rec.taken(t)
 		if len(got) != 1 || got[0].Kind != rpc.FrameSend || got[0].SessionID != "m1" || got[0].Text != "status please" {
 			t.Errorf("%q wrote %v, want one send of the body to the manager", draft, sentKinds(got))
@@ -97,15 +96,14 @@ func TestManagerStillNamesTheDrawnRowInCommands(t *testing.T) {
 	rec := newRecorder(t)
 	a := NewRoomApp(rec, Stream{}, nil).withSize(160, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: parked})
 	rec.taken(t)
-	m, cmd := typeAndSubmit(a, resumeVerb+" "+core.ManagerName)
+	_, cmd := typeAndSubmit(a, resumeVerb+" "+core.ManagerName)
 	drainBatch(cmd)
-	_ = m
 	if got := rec.taken(t); len(got) != 1 || got[0].Kind != rpc.FrameWake || got[0].SessionID != "m1" {
 		t.Errorf("/resume manager over the parked %s wrote %v, want it woken", harborManager, sentKinds(got))
 	}
 
 	b, _ := namedManagerRoom(t)
-	m, cmd = typeAndSubmit(b, "/quit @"+core.ManagerName)
+	_, cmd = typeAndSubmit(b, "/quit @"+core.ManagerName)
 	drainBatch(cmd)
 	if n := latestNotice(t); n != quitIsTheManager {
 		t.Errorf("/quit @manager said %q, want the manager's own refusal %q", n, quitIsTheManager)
@@ -126,9 +124,8 @@ func TestAnAgentNamedLikeAManagerIsNotTheManager(t *testing.T) {
 	if s := a.service(); s.ID != "m1" {
 		t.Errorf("the service is %+v, want the manager m1, not manager-x", s)
 	}
-	m, cmd := typeAndSubmit(a, "@manager-x hi")
+	_, cmd := typeAndSubmit(a, "@manager-x hi")
 	drainBatch(cmd)
-	_ = m
 	if got := rec.taken(t); len(got) != 1 || got[0].SessionID != "x1" || got[0].Text != "hi" {
 		t.Errorf("@manager-x hi wrote %v, want it sent to the agent x1", sentKinds(got))
 	}
@@ -166,9 +163,8 @@ func TestTheManagerStaysTheServiceAcrossAnEvent(t *testing.T) {
 	if s := a.service(); s.ID != "m1" {
 		t.Fatalf("after an event the service is %+v, want the manager m1", s)
 	}
-	m, cmd := typeAndSubmit(a, "go")
+	_, cmd := typeAndSubmit(a, "go")
 	drainBatch(cmd)
-	_ = m
 	if got := rec.taken(t); len(got) != 1 || got[0].SessionID != "m1" {
 		t.Errorf("an unaddressed draft after an event wrote %v, want it sent to the manager", sentKinds(got))
 	}
