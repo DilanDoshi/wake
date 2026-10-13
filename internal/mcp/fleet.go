@@ -64,12 +64,8 @@ type Fleet interface {
 	// confirmed anything - which is what lets the tool answer with something
 	// the manager can address.
 	//
-	// name is the display name to request, or "" to let the daemon draw one
-	// from the pool. It travels as Frame.Text, the same field `wake new
-	// <name>` uses, so the daemon's own claim()/normalizeName is the one
-	// authority on it: only the daemon sees the whole fleet, so only it can
-	// refuse a collision or an invalid word. The tool never validates a name.
-	Spawn(ctx context.Context, dir, name string) (string, error)
+	// o is what the manager chose for the agent; its zero value chose nothing.
+	Spawn(ctx context.Context, dir string, o SpawnOpts) (string, error)
 
 	// SetTeam groups one agent under a team tag, addressed by id. The tag is
 	// the operator's own grouping - and the manager's now too (owner's
@@ -84,4 +80,24 @@ type Fleet interface {
 	// one authority on it - the value is refused unless it is one of
 	// rpc.ColorNames, and "none" or "" clears. The tool never validates the hue.
 	SetColor(ctx context.Context, id, color string) error
+}
+
+// SpawnOpts is what spawn_agent may choose for a new agent. "" in Effort or
+// Model is "Wake chose nothing": the flag stays off the argv and claude applies
+// the operator's own default. "" in Name has the daemon draw one from the pool.
+//
+// A struct rather than positional strings because Effort and Model sit side by
+// side as two strings, and a swap would compile.
+type SpawnOpts struct {
+	// Name is the display name to request, or "" to let the daemon draw one
+	// from the pool. It travels as Frame.Text, the same field `wake new
+	// <name>` uses, so the daemon's own claim()/normalizeName is the one
+	// authority on it: only the daemon sees the whole fleet, so only it can
+	// refuse a collision or an invalid word.
+	Name string
+
+	// Effort and Model ride Frame.Effort and Frame.Model, which the daemon's
+	// configRefusal checks before a name is claimed or a process started.
+	Effort string
+	Model  string
 }
