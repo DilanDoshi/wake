@@ -4096,10 +4096,13 @@ landed in an agent's DM, and `↵` sent a half-typed word while the menu on scre
   /clear`, `@maya`), and that sends, so a finished command stays one press.
 - **The finished word goes first.** Menu order is the session's own, so `/team` sits behind
   `/team-onboarding` and a cursor on the first would complete a finished command to its sibling (the
-  recorded corpus advertises both, and some thirty `new-…` skills). `bounded()` floats the offer that is
-  exactly what is typed to the top - which also stops the bound cutting `/new` out of a long menu - and
-  walking down is what takes a sibling. `⇥` follows the cursor, so on a finished `/team` it now takes
-  `/team `, not the sibling.
+  recorded corpus advertises both, and some thirty `new-…` skills). `bounded()` floats the *name* that is
+  exactly what is typed to the top of the names - which also stops the bound cutting `/new` out of a long
+  menu - and walking down is what takes a sibling. Among the names only: the paths arrive later and rank
+  their own exact match first, and a file promoted over a live agent when its read lands would move row 0
+  under a cursor that stayed on it (`bounded()` reruns then and clamps the cursor, it does not follow), so
+  `↵` would depend on how fast the disk answered. `⇥` follows the cursor, so on a finished `/team` it now
+  takes `/team `, not the sibling.
 - **Quoted mentions and directories.** An open quote (`@"foo b`) is one word being typed and `↵` completes
   it to `@"foo bar" `; once the closing quote is typed there is no menu and `↵` sends. A directory is the
   one place `↵` rewrites finished text: `src` accepts to `src/` with no space, and `src/` typed in full

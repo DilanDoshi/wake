@@ -9,6 +9,7 @@ package ui
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 
@@ -135,6 +136,24 @@ func TestAFinishedCommandBeatsALongerSiblingForTheCursor(t *testing.T) {
 	taken, _ := pressKey(down, confirm)
 	if got := taken.composer().Value(); got != "/design-sync " {
 		t.Errorf("↵ after ↓ left the draft %q, want the sibling the cursor was walked to", got)
+	}
+}
+
+// Names come before paths, and a directory read that lands after the names must
+// not change that: a file that is exactly what is typed would otherwise be promoted
+// over a live agent, moving row 0 under a cursor that stayed on it, so what ↵ did
+// would depend on how fast the disk answered. Here `jan` is a file and `jane` is a
+// live agent, and the agent keeps the top row with the file read in.
+func TestALateExactPathNeverDisplacesAName(t *testing.T) {
+	dir := workdir(t, "jan")
+	a, _ := typedAsking(t, peerFleet(t, dir), runes("@jan")...)
+	if got := a.completion.offers; !slices.Contains(got, "@jan") || len(got) == 0 || got[0] != "@jane" {
+		t.Fatalf("the menu is %q, want the live agent @jane first with the file @jan read in behind it", got)
+	}
+
+	took, _ := pressKey(a, confirm)
+	if got := took.composer().Value(); got != "@jane " {
+		t.Errorf("↵ left %q, want the agent completed: a path that arrived late took the top row", got)
 	}
 }
 

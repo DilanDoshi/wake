@@ -538,13 +538,17 @@ func (a App) mentionedAlone(head string) (Agent, bool) {
 func (c completion) bounded() completion {
 	c.paths = c.paths.reranked()
 	paths, rest := c.paths.rows()
-	matched := append(slices.Clone(c.names), paths...)
-	// A word already typed exactly as offered goes first, so a longer sibling that
-	// shares its prefix (`/team` beside `/team-onboarding`) neither takes the
-	// cursor from it nor lets the bound cut it - ↵ and ⇥ then act on the word.
-	if i := slices.Index(matched, strings.TrimPrefix(c.draft, c.head)); i > 0 {
-		matched = slices.Concat(matched[i:i+1], matched[:i], matched[i+1:])
+	// A name already typed exactly as offered goes first among the names, so a
+	// longer sibling that shares its prefix (`/team` beside `/team-onboarding`)
+	// neither takes the cursor from it nor lets the bound cut it - ↵ and ⇥ then act
+	// on the word. Among the names only: the paths arrive later and rank their own
+	// exact match first, and promoting one over a live name would move row 0 under a
+	// cursor that stayed on it.
+	names := c.names
+	if i := slices.Index(names, strings.TrimPrefix(c.draft, c.head)); i > 0 {
+		names = slices.Concat(names[i:i+1], names[:i], names[i+1:])
 	}
+	matched := append(slices.Clone(names), paths...)
 	c.more = rest
 	if len(matched) > completionRows {
 		c.more += len(matched) - completionRows
