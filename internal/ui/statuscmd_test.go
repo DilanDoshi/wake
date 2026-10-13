@@ -63,15 +63,15 @@ func TestSlashStatusShowsTheConversationsFactsAndWritesNothing(t *testing.T) {
 	}
 }
 
-// The manager is a session like any other, and its status also says what every
-// Claude session calls it.
+// The manager is a session like any other, and its status names it as every
+// Claude session does, since that is the name its row is drawn by.
 func TestTheManagersStatusNamesItAsClaudeSessionsKnowIt(t *testing.T) {
 	a, _ := statusIn(t, "m1", core.ManagerName, statusReport())
-	if out := shown(a); !strings.Contains(out, "manager-harbor") {
+	if out := ansi.Strip(a.statusView("m1", 140, 40, "")); !strings.Contains(out, "manager-harbor") {
 		t.Errorf("the manager's /status does not name it as claude knows it:\n%s", out)
 	}
-	if b, _ := statusIn(t, statusID, "alex", statusReport()); strings.Contains(shown(b), "manager-harbor") {
-		t.Error("an ordinary agent's /status names the manager's claude name")
+	if b, _ := statusIn(t, statusID, "alex", statusReport()); strings.Contains(ansi.Strip(b.statusView(statusID, 140, 40, "")), "manager-harbor") {
+		t.Error("an ordinary agent's /status names the manager")
 	}
 }
 
