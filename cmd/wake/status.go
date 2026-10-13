@@ -43,18 +43,18 @@ const nameLabelSeparator = " <> "
 // tell them apart - so a client that writes FrameStatus and reads the next
 // reply can be handed one that predates its own question. Keeping that one
 // exchange in one place is what lets it be fixed once.
-func printStatus(socket string, out io.Writer) error {
+func printStatus(socket, team string, out io.Writer) error {
 	st, err := daemon.Status(socket)
 	if err != nil {
 		return fmt.Errorf("asking what is running: %w", err)
 	}
-	_, err = io.WriteString(out, formatStatus(st))
+	_, err = io.WriteString(out, formatStatus(st, team))
 	return err
 }
 
 // formatStatus renders a fleet report. It answers three questions, and the
 // third is the one that is easy to leave out.
-func formatStatus(st rpc.Status) string {
+func formatStatus(st rpc.Status, team string) string {
 	var b strings.Builder
 
 	switch {
@@ -75,12 +75,15 @@ func formatStatus(st rpc.Status) string {
 		return "No daemon is running.\n"
 	}
 
-	if len(st.Sessions) == 0 {
-		b.WriteString("No sessions.\n")
+	rows := onTeam(st.Sessions, team)
+	if len(rows) == 0 {
+		b.WriteString(noSessions(team, st.Teams))
 		return b.String()
 	}
+	// Built from the whole report, not the rows: a fork's parent can be on
+	// another team and its row should still say who it was forked from.
 	names := sessionNames(st)
-	for _, s := range st.Sessions {
+	for _, s := range rows {
 		b.WriteString(sessionLine(s, names))
 	}
 	return b.String()
@@ -141,6 +144,9 @@ func sessionLine(s rpc.SessionStatus, names map[string]string) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "  %-*s %-*s %-*s", titleColumn, sessionTitle(s), stateColumn, s.State, idColumn, shortID(s.ID))
 
+	if s.Team != "" {
+		fmt.Fprintf(&b, "  team %s", s.Team)
+	}
 	if s.QuietMS > 0 {
 		fmt.Fprintf(&b, "  quiet %s", quiet(s.QuietMS))
 	}

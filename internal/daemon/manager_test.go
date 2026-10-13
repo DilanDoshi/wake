@@ -51,7 +51,9 @@ func spawnManager(c *testClient, id string) rpc.SessionStatus {
 	return got
 }
 
-// The manager gets the tools and the scope; an ordinary agent gets neither.
+// The manager gets the tools and the scope; an ordinary agent gets neither. It
+// does carry a system prompt of its own (fleetbrief.go), so what is forbidden
+// is the manager's scope and tools, not the flag that carries a prompt.
 //
 // The negative half is the one that matters and it is not symmetry: every agent
 // carrying these tools would let any of thirty of them message and interrupt
@@ -80,7 +82,7 @@ func TestAManagerIsStartedWithItsToolsAndAnOrdinaryAgentIsNot(t *testing.T) {
 
 	spawnFor(c, idBeta, "alex", t.TempDir())
 	ordinary := managerArgv(c, idBeta)
-	for _, forbidden := range []string{"--mcp-config", "--strict-mcp-config", "--append-system-prompt"} {
+	for _, forbidden := range []string{"--mcp-config", "--strict-mcp-config", "Wake's manager"} {
 		if strings.Contains(ordinary, forbidden) {
 			t.Errorf("an ordinary agent was started as\n  %s\nand it carries %q. Every agent holding the "+
 				"manager's tools would let any of them message and interrupt any other", ordinary, forbidden)

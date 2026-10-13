@@ -142,7 +142,7 @@ var usage = `usage:
   wake fork <who> [name]  branch a conversation: a new agent with the same history so far
   wake import [<id>]      list the claude sessions on this machine, or adopt one
   wake manager            start the manager: the session that can see and operate the whole fleet
-  wake status             what is running
+  wake status             what is running, and each agent's team
   wake stop               stop every session and the daemon
   wake fleets             the named fleets on this machine
   wake setup-terminal     Shift+Enter newline, Cmd+Left/Right line start/end, via your terminal
@@ -161,6 +161,9 @@ flags, on the verbs that start a session (` + list(spawningVerbs) + `):
   --add-dir <dir>         let this session's tools reach a directory outside its own; repeatable
   --debug-file <name>     write this session's debug log there, under the fleet's own debug directory
   --debug <categories>    narrow that log, as api,hooks or !1p,!file; needs --debug-file
+
+flags, on wake status:
+  --team <name>           only the agents on that team
 
 flags, on wake setup-terminal:
   --yes, -y               skip the confirmation prompt
@@ -288,6 +291,10 @@ func run(args []string, out io.Writer) error {
 		// spawned a session would make every typo a new agent.
 		return fmt.Errorf("unknown command %q\n\n%s", args[0], usage)
 	}
+	args, team, err := statusFlags(args)
+	if err != nil {
+		return err
+	}
 	if err := checkArity(args); err != nil {
 		return err
 	}
@@ -300,7 +307,7 @@ func run(args []string, out io.Writer) error {
 	case cmdFleets:
 		return printFleets(out)
 	case cmdStatus:
-		return printStatus(socket, out)
+		return printStatus(socket, team, out)
 	case cmdStop:
 		return stopFleet(socket, out)
 	case cmdAttach:
