@@ -591,7 +591,7 @@ type Frame struct {
 	// Workflow carries a dynamic Workflow() run's own frames - FrameStopRun,
 	// FrameWorkflows/Reply, FrameWorkflowAgent/Reply and
 	// FrameSaveWorkflow/FrameWorkflowSaved - declared in workflow.go for its
-	// own header's reason.
+	// own header's reason. FrameSubagent/Reply (subagent.go) ride it too.
 	Workflow *WorkflowFrame `json:"workflow,omitempty"`
 	Peers    *PeersFrame    `json:"peers,omitempty"` // FramePeersReply's listing; see peers.go
 

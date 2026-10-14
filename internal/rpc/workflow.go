@@ -51,11 +51,17 @@ type WorkflowFrame struct {
 	// FrameSaveWorkflow's source (the dispatch whose script is being saved).
 	Task string `json:"task,omitempty"`
 
-	// Agent is one workflow agent's own id, FrameWorkflowAgent's target and
+	// Agent is one agent's own id, FrameWorkflowAgent's target and
 	// FrameWorkflowAgentReply's echo of it - core.WorkflowAgent.AgentID, the
 	// only decoded route to that agent's own transcript, since a workflow
-	// agent forwards nothing.
+	// agent forwards nothing. FrameSubagent and its reply carry a subagent's
+	// id the same way (subagent.go).
 	Agent string `json:"agent,omitempty"`
+
+	// Ask numbers one FrameSubagent among its client's own, and the reply echoes
+	// it, so a client holding two asks for one agent can tell which an answer is
+	// for. Zero on every other kind.
+	Ask uint64 `json:"ask,omitempty"`
 
 	// Name is the file name FrameSaveWorkflow writes under, fenced by
 	// ValidWorkflowName.
@@ -107,22 +113,23 @@ func ValidWorkflowName(name string) error {
 	return nil
 }
 
-// maxWorkflowAgentID bounds an id this package never generates - Claude's
-// own workflow agent id, read back off a task_progress snapshot.
-const maxWorkflowAgentID = 64
+// maxAgentID bounds an id this package never generates - Claude's own agent
+// id, a workflow agent's off a task_progress snapshot or a subagent's off its
+// task_started.
+const maxAgentID = 64
 
-// ValidWorkflowAgentID refuses every id that is not lower-case alphanumeric,
-// the shape every recorded workflow agent id has taken.
-func ValidWorkflowAgentID(id string) error {
+// ValidAgentID refuses every id that is not lower-case alphanumeric, the shape
+// every recorded agent id has taken, workflow agent or subagent.
+func ValidAgentID(id string) error {
 	if id == "" {
-		return fmt.Errorf("a workflow agent id is empty")
+		return fmt.Errorf("an agent id is empty")
 	}
-	if len(id) > maxWorkflowAgentID {
-		return fmt.Errorf("a workflow agent id is at most %d characters, got %d", maxWorkflowAgentID, len(id))
+	if len(id) > maxAgentID {
+		return fmt.Errorf("an agent id is at most %d characters, got %d", maxAgentID, len(id))
 	}
 	for _, r := range id {
 		if (r < 'a' || r > 'z') && (r < '0' || r > '9') {
-			return fmt.Errorf("%q cannot be a workflow agent id: lower-case letters and digits only", id)
+			return fmt.Errorf("%q cannot be an agent id: lower-case letters and digits only", id)
 		}
 	}
 	return nil

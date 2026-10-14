@@ -256,6 +256,8 @@ var managerVerbs = map[string]verdict{
 
 	rpc.FrameWorkflowAgent: {why: "one workflow agent's own transcript, read off disk - the same widest read FrameHistory is refused for, and with less standing than an ordinary conversation: a workflow agent forwards nothing live, so this file is the only route to its words at all, and FrameHistory's ruling refuses a manager that route for an agent Wake itself is watching"},
 
+	rpc.FrameSubagent: {why: "one subagent's own transcript, read off disk - FrameWorkflowAgent's read for the plain kind, refused for the same reason: it is the widest read FrameHistory is refused for, and no manager tool reads a transcript, so a manager that could ask for one would learn what no tool here reports"},
+
 	rpc.FrameMCPList: {why: "an agent's MCP servers are the operator's own machine: each row carries the command line or URL a server is reached at, its config scope and its error text, none of which any reading tool here returns and none of which the manager needs to send, interrupt, spawn or group. Its answer is also a KindMCPReply on the event stream, in no row list_agents or roll_up returns - the same reason FrameRewind's cell gives for a verb whose outcome the manager could not see. And it exists to aim the three refused below"},
 
 	rpc.FrameMCPReconnect: {why: "a reconnect drops and re-dials a live server under whatever tool call is using it, so it can fail another agent's turn in flight - not undoable by looking, the test send and interrupt pass. Its target is a name only FrameMCPList hands out, which is refused above"},
@@ -291,6 +293,7 @@ var notAClientVerb = map[string]string{
 	rpc.FrameWorkflowsReply:     "daemon to client: a session's own workflow runs off disk",
 	rpc.FrameWorkflowAgentReply: "daemon to client: one workflow agent's own transcript",
 	rpc.FrameWorkflowSaved:      "daemon to client: where FrameSaveWorkflow's script landed",
+	rpc.FrameSubagentReply:      "daemon to client: one subagent's own transcript",
 	rpc.FramePeersReply:         "daemon to client: the machine's other Claude sessions, as a bare one-shot claude listed them",
 }
 

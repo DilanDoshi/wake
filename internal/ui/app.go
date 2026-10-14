@@ -205,9 +205,11 @@ type App struct {
 
 	// askedHistory is which sessions this client has already asked for a
 	// transcript, and pendingHistory is the asks Update has not yet written.
-	// Both are copied on write for dms' reason. See history.go.
+	// Both are copied on write for dms' reason. See history.go. subTranscripts
+	// is the same for a subagent's own file (subtranscript.go).
 	askedHistory   map[string]int
 	pendingHistory []string
+	subTranscripts subTranscripts
 
 	// dmOrder is the order those conversations were opened, which is the order
 	// ⇥ moves the keys through them. A map has no order - Go randomises the
@@ -740,6 +742,8 @@ func (a App) apply(f rpc.Frame) App {
 		return a.rewindTargetsArrived(f)
 	case rpc.FramePeersReply:
 		return a.peersArrived(f)
+	case rpc.FrameSubagentReply:
+		return a.subagentArrived(f)
 	case rpc.FrameWorkflowsReply, rpc.FrameWorkflowAgentReply, rpc.FrameWorkflowSaved:
 		return a.workflowReplied(f)
 

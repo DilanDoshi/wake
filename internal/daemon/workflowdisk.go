@@ -15,7 +15,9 @@ package daemon
 
 import (
 	"bufio"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"io/fs"
 	"os"
@@ -171,15 +173,15 @@ func readRecord(root *os.Root, name string, limit int) ([]byte, error) {
 
 func firstN[T any](s []T, n int) []T { return s[:min(len(s), n)] }
 
-// WorkflowAgentHistory is one workflow agent's own transcript - the
-// isSidechain:true lines under <sessiondir>/subagents/workflows/wf_*/agent-
-// <agentID>.jsonl, read through the session's own root and the same bounded
-// scanner and historyEvents/historyBytes ring History reads an ordinary
-// conversation's tail through. An unknown agent id is not an error: the run
-// may have named an agent this session never reached - the caller draws
-// nothing, which is what it would have drawn anyway.
-func WorkflowAgentHistory(id, agentID string) ([]core.Event, error) {
-	if err := rpc.ValidWorkflowAgentID(agentID); err != nil {
+// AgentHistory is one agent's own transcript - a subagent's, or a workflow
+// agent's - the isSidechain:true lines in <sessiondir>/subagents/agent-<agentID>.jsonl
+// or under subagents/workflows/wf_*/, read through the session's own root and
+// the same bounded scanner and historyEvents/historyBytes ring History reads an
+// ordinary conversation's tail through. An unknown agent id is not an error:
+// the run may have named an agent this session never reached - the caller
+// draws nothing, which is what it would have drawn anyway.
+func AgentHistory(id, agentID string) ([]core.Event, error) {
+	if err := rpc.ValidAgentID(agentID); err != nil {
 		return nil, err
 	}
 	root, ok := sessionRoot(id)
@@ -199,24 +201,30 @@ func WorkflowAgentHistory(id, agentID string) ([]core.Event, error) {
 	return sidechainTail(f, id, agentID)
 }
 
+// agentTranscriptGlobs are where claude files an agent's own transcript under
+// its session directory: a subagent's directly, a workflow agent's under its run.
+var agentTranscriptGlobs = []string{"subagents/agent-%s.jsonl", "subagents/workflows/*/agent-%s.jsonl"}
+
 // agentTranscript is agentID's own transcript under root: the first regular
 // file matching, since a symlinked one is never followed. fs.Glob reads through
-// the root, so a symlinked run directory leading out of it matches nothing.
+// the root, so a symlinked directory leading out of it matches nothing.
 func agentTranscript(root *os.Root, agentID string) (string, bool) {
-	matches, err := fs.Glob(root.FS(), "subagents/workflows/*/agent-"+agentID+".jsonl")
-	if err != nil {
-		return "", false // only a malformed pattern, and the id fence rules that out
-	}
-	for _, m := range matches {
-		if info, err := root.Lstat(m); err == nil && info.Mode().IsRegular() {
-			return m, true
+	for _, glob := range agentTranscriptGlobs {
+		matches, err := fs.Glob(root.FS(), fmt.Sprintf(glob, agentID))
+		if err != nil {
+			continue // only a malformed pattern, and the id fence rules that out
+		}
+		for _, m := range matches {
+			if info, err := root.Lstat(m); err == nil && info.Mode().IsRegular() {
+				return m, true
+			}
 		}
 	}
 	return "", false
 }
 
-// sidechainTail decodes a workflow agent's transcript into the tail History's
-// ring keeps.
+// sidechainTail decodes an agent's transcript into the tail History's ring
+// keeps.
 func sidechainTail(r io.Reader, id, agentID string) ([]core.Event, error) {
 	var ring []core.Event
 	total := 0
@@ -227,14 +235,14 @@ func sidechainTail(r io.Reader, id, agentID string) ([]core.Event, error) {
 			events, decErr := core.DecodeSidechainLine(line)
 			if decErr != nil {
 				// One unreadable line is not an unreadable transcript.
-				logf("wake: workflow agent %s has a transcript line that could not be decoded: %v", agentID, decErr)
+				logf("wake: agent %s has a transcript line that could not be decoded: %v", agentID, decErr)
 			}
 			for _, ev := range events {
 				ev.Raw = nil
 				// Stamped to the id this function was called with - which is
 				// s.transcriptID's *translated* post-/clear id at the
-				// sendWorkflowAgent call site, not the id the client knows.
-				// sendWorkflowAgent restamps with the client-facing one
+				// sendAgentTranscript call site, not the id the client knows.
+				// sendAgentTranscript restamps with the client-facing one
 				// afterward, the way answerHistory restamps History's own
 				// events for the same reason.
 				ev.SessionID = id
@@ -266,29 +274,60 @@ func (s *server) sendWorkflows(c *client, id string) {
 		Workflow: &rpc.WorkflowFrame{Runs: runs, PersonalDir: userWorkflowDir()}})
 }
 
-// sendWorkflowAgent answers a client's FrameWorkflowAgent: one workflow
-// agent's own transcript, echoing back the agent id it was asked for.
-func (s *server) sendWorkflowAgent(c *client, id, agentID string) {
+// fitReply keeps the newest events that encode within historyBytes. trimRing
+// charges an event its Text alone, and a tool call's command or diff is not
+// Text, so a run of large ones could still frame past rpc's cap - which ends
+// the client's connection - however few the events.
+func fitReply(events []core.Event) []core.Event {
+	size := 0
+	for i := len(events) - 1; i >= 0; i-- {
+		raw, err := json.Marshal(events[i])
+		if err != nil {
+			logf("wake: an event that cannot be framed was dropped from an agent's transcript: %v", err)
+			return events[i+1:]
+		}
+		size += len(raw)
+		if size > historyBytes && i < len(events)-1 {
+			return events[i+1:]
+		}
+	}
+	return events
+}
+
+// sendAgentTranscript answers a client's FrameWorkflowAgent or FrameSubagent
+// under that frame's own reply kind: one agent's own transcript, echoing back
+// the agent id and ask number it was asked with.
+func (s *server) sendAgentTranscript(c *client, ask rpc.Frame) {
+	id := ask.SessionID
+	var agentID string
+	var askNumber uint64
+	if ask.Workflow != nil {
+		agentID, askNumber = ask.Workflow.Agent, ask.Workflow.Ask
+	}
+	reply := rpc.FrameWorkflowAgentReply
+	if ask.Kind == rpc.FrameSubagent {
+		reply = rpc.FrameSubagentReply
+	}
 	// A malformed id is the request's fault, so it is refused; everything past
 	// it is the disk's.
-	if err := rpc.ValidWorkflowAgentID(agentID); err != nil {
+	if err := rpc.ValidAgentID(agentID); err != nil {
 		c.enqueue(errorFrame(id, err.Error()))
 		return
 	}
-	events, err := WorkflowAgentHistory(s.transcriptID(id), agentID)
+	events, err := AgentHistory(s.transcriptID(id), agentID)
 	if err != nil {
-		// Unreadable answers as missing: the client draws the snapshot's previews,
+		// Unreadable answers as missing: the client draws what it already has,
 		// where an error frame would be a notice on every re-ask.
-		logf("wake: could not read workflow agent %s's transcript for session %s: %v", agentID, id, err)
+		logf("wake: could not read agent %s's transcript for session %s: %v", agentID, id, err)
 		events = nil
 	}
 	// Addressed by the id the client knows, whatever file it came out of -
 	// answerHistory's own reason: s.transcriptID(id) above may be the
-	// post-/clear claude id, and WorkflowAgentHistory stamped every event
-	// with that one.
+	// post-/clear claude id, and AgentHistory stamped every event with that one.
+	events = fitReply(events)
 	for i := range events {
 		events[i].SessionID = id
 	}
-	c.enqueue(rpc.Frame{Kind: rpc.FrameWorkflowAgentReply, SessionID: id,
-		Workflow: &rpc.WorkflowFrame{Agent: agentID}, Events: events})
+	c.enqueue(rpc.Frame{Kind: reply, SessionID: id,
+		Workflow: &rpc.WorkflowFrame{Agent: agentID, Ask: askNumber}, Events: events})
 }

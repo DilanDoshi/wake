@@ -136,11 +136,11 @@ func TestWorkflowRunsSkipsASymlinkedRecord(t *testing.T) {
 	}
 }
 
-// TestWorkflowAgentHistoryReturnsTheSidechainEvents checks the count against
+// TestAgentHistoryReturnsTheSidechainEvents checks the count against
 // what core.DecodeSidechainLine itself gives back for the same fixture,
 // rather than a hardcoded number - the fixture's own event count is not
 // this test's claim to make.
-func TestWorkflowAgentHistoryReturnsTheSidechainEvents(t *testing.T) {
+func TestAgentHistoryReturnsTheSidechainEvents(t *testing.T) {
 	dir := workflowSessionDir(t, wfID)
 	plantWorkflowAgentTranscript(t, dir, "wf_a", "abc123")
 
@@ -160,9 +160,9 @@ func TestWorkflowAgentHistoryReturnsTheSidechainEvents(t *testing.T) {
 		t.Fatal("the fixture itself decodes to no events: this test asserts nothing")
 	}
 
-	events, err := WorkflowAgentHistory(wfID, "abc123")
+	events, err := AgentHistory(wfID, "abc123")
 	if err != nil {
-		t.Fatalf("WorkflowAgentHistory: %v", err)
+		t.Fatalf("AgentHistory: %v", err)
 	}
 	if len(events) != want {
 		t.Fatalf("read %d events, want %d (core.DecodeSidechainLine's own count for this fixture)", len(events), want)
@@ -174,26 +174,26 @@ func TestWorkflowAgentHistoryReturnsTheSidechainEvents(t *testing.T) {
 	}
 }
 
-// TestWorkflowAgentHistoryRefusesATraversalID proves an agent id is fenced
-// by ValidWorkflowAgentID before it ever reaches a path.
-func TestWorkflowAgentHistoryRefusesATraversalID(t *testing.T) {
+// TestAgentHistoryRefusesATraversalID proves an agent id is fenced
+// by ValidAgentID before it ever reaches a path.
+func TestAgentHistoryRefusesATraversalID(t *testing.T) {
 	workflowSessionDir(t, wfID)
 
-	if _, err := WorkflowAgentHistory(wfID, "../x"); err == nil {
-		t.Fatal("WorkflowAgentHistory accepted \"../x\" as an agent id")
+	if _, err := AgentHistory(wfID, "../x"); err == nil {
+		t.Fatal("AgentHistory accepted \"../x\" as an agent id")
 	}
 }
 
-// TestWorkflowAgentHistoryOfAnUnknownAgentIsEmptyAndNotAnError mirrors
+// TestAgentHistoryOfAnUnknownAgentIsEmptyAndNotAnError mirrors
 // History's own ruling for a session with no transcript: the caller draws
 // nothing, which is what it would have drawn anyway.
-func TestWorkflowAgentHistoryOfAnUnknownAgentIsEmptyAndNotAnError(t *testing.T) {
+func TestAgentHistoryOfAnUnknownAgentIsEmptyAndNotAnError(t *testing.T) {
 	dir := workflowSessionDir(t, wfID)
 	plantWorkflowAgentTranscript(t, dir, "wf_a", "abc123")
 
-	events, err := WorkflowAgentHistory(wfID, "nosuchagent")
+	events, err := AgentHistory(wfID, "nosuchagent")
 	if err != nil {
-		t.Fatalf("WorkflowAgentHistory of an unknown agent failed: %v", err)
+		t.Fatalf("AgentHistory of an unknown agent failed: %v", err)
 	}
 	if len(events) != 0 {
 		t.Errorf("read %d events for an unknown agent", len(events))
@@ -285,10 +285,10 @@ func TestWorkflowRunsSkipsARecordThroughASymlinkedIntermediateDirectory(t *testi
 	}
 }
 
-// TestWorkflowAgentHistoryDoesNotFollowASymlinkedIntermediateDirectory is
+// TestAgentHistoryDoesNotFollowASymlinkedIntermediateDirectory is
 // the same escape one level deeper: a symlinked run directory under
 // subagents/workflows/ rather than a symlinked file.
-func TestWorkflowAgentHistoryDoesNotFollowASymlinkedIntermediateDirectory(t *testing.T) {
+func TestAgentHistoryDoesNotFollowASymlinkedIntermediateDirectory(t *testing.T) {
 	path := plantTranscript(t, wfID, userLine("hello"))
 	sessionDir := strings.TrimSuffix(path, ".jsonl")
 
@@ -309,22 +309,22 @@ func TestWorkflowAgentHistoryDoesNotFollowASymlinkedIntermediateDirectory(t *tes
 		t.Fatalf("symlink: %v", err)
 	}
 
-	events, err := WorkflowAgentHistory(wfID, "abc123")
+	events, err := AgentHistory(wfID, "abc123")
 	if err != nil {
-		t.Fatalf("WorkflowAgentHistory: %v", err)
+		t.Fatalf("AgentHistory: %v", err)
 	}
 	if len(events) != 0 {
 		t.Fatalf("read %d events through a symlinked run directory, want 0: the escape was not caught", len(events))
 	}
 }
 
-// TestWorkflowAgentHistoryStampsTheClientFacingSessionID plants the agent
+// TestAgentHistoryStampsTheClientFacingSessionID plants the agent
 // transcript under a *different* id than the one the client asked with -
 // simulating a /clear the way history_test.go's
 // TestAClearedSessionReadsTheTranscriptClaudeIsWritingNow does - and checks
 // the reply's events carry the id the client asked with, not the translated
-// one WorkflowAgentHistory read the file under.
-func TestWorkflowAgentHistoryStampsTheClientFacingSessionID(t *testing.T) {
+// one AgentHistory read the file under.
+func TestAgentHistoryStampsTheClientFacingSessionID(t *testing.T) {
 	s := newServer(filepath.Join(t.TempDir(), "s"))
 	a := &agent{id: wfID, name: "alex"}
 	s.agents[wfID] = a
@@ -339,13 +339,13 @@ func TestWorkflowAgentHistoryStampsTheClientFacingSessionID(t *testing.T) {
 	plantWorkflowAgentTranscript(t, dir, "wf_a", "abc123")
 
 	c := newClient(nil)
-	s.sendWorkflowAgent(c, wfID, "abc123")
+	s.sendAgentTranscript(c, askFor(rpc.FrameWorkflowAgent, wfID, "abc123", 0))
 
 	var f rpc.Frame
 	select {
 	case f = <-c.out:
 	default:
-		t.Fatal("sendWorkflowAgent enqueued nothing")
+		t.Fatal("sendAgentTranscript enqueued nothing")
 	}
 	if f.Kind != rpc.FrameWorkflowAgentReply || f.SessionID != wfID {
 		t.Fatalf("reply = %+v, want FrameWorkflowAgentReply addressed to %q", f, wfID)
@@ -393,7 +393,7 @@ func TestAnUnreadableWorkflowAgentTranscriptIsAnEmptyReplyAndNoErrorFrame(t *tes
 
 	s := newServer(filepath.Join(t.TempDir(), "s"))
 	c := newClient(nil)
-	s.sendWorkflowAgent(c, wfID, "abc123")
+	s.sendAgentTranscript(c, askFor(rpc.FrameWorkflowAgent, wfID, "abc123", 0))
 
 	f := sentFrame(t, c)
 	if f.Kind != rpc.FrameWorkflowAgentReply || f.SessionID != wfID {
@@ -409,7 +409,7 @@ func TestAMalformedWorkflowAgentIDIsStillAnErrorFrame(t *testing.T) {
 	workflowSessionDir(t, wfID)
 	s := newServer(filepath.Join(t.TempDir(), "s"))
 	c := newClient(nil)
-	s.sendWorkflowAgent(c, wfID, "../x")
+	s.sendAgentTranscript(c, askFor(rpc.FrameWorkflowAgent, wfID, "../x", 0))
 
 	if f := sentFrame(t, c); f.Kind != rpc.FrameError || f.SessionID != wfID {
 		t.Fatalf("a malformed agent id was answered %+v, want a FrameError", f)

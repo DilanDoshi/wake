@@ -679,14 +679,10 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		// Off its own goroutine, FrameHistory's reason: workflowdisk.go
 		// globs and reads a session's own wf_*.json records off disk.
 		s.start(func() { s.sendWorkflows(c, f.SessionID) })
-	case rpc.FrameWorkflowAgent:
-		// Same reason. Workflow may be nil on a malformed frame; Agent then
-		// defaults to "" and sendWorkflowAgent's own id check answers it.
-		var agentID string
-		if f.Workflow != nil {
-			agentID = f.Workflow.Agent
-		}
-		s.start(func() { s.sendWorkflowAgent(c, f.SessionID, agentID) })
+	case rpc.FrameWorkflowAgent, rpc.FrameSubagent:
+		// Same reason. Workflow may be nil on a malformed frame, which
+		// sendAgentTranscript's own id check answers.
+		s.start(func() { s.sendAgentTranscript(c, f) })
 	case rpc.FrameSaveWorkflow:
 		// Off its own goroutine, FrameHistory's reason: saveWorkflow writes a
 		// file to disk.
