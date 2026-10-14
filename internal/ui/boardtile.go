@@ -6,7 +6,6 @@ package ui
 // four guardrails that keep this a status wall.
 
 import (
-	"fmt"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -22,11 +21,21 @@ const (
 	// draws a single column. Tuned against the pty harness (spec §9).
 	minTileWidth = 26
 
-	// minTileHeight is the shortest a tile can be and still frame a name, a
-	// state word and a row of live tail. It floors how many tile rows fit in a
-	// frame; the cells then stretch to fill whatever height is left, so a big
-	// window grows the cells rather than the count.
-	minTileHeight = 7
+	// minTileHeight is the shortest a tile is drawn while the frame can hold it
+	// (the owner's 2026-10-12 ask: a large minimum, so each tile stays readable).
+	// It leaves minTileHeight-tileFrameRows rows of transcript. A fleet too big for
+	// the frame at this height scrolls rather than shrinking the tiles; a frame
+	// shorter than it gets one tile as tall as itself (tileCellHeight).
+	minTileHeight = 20
+
+	// minDrawnTileRows is the least a tile draws: two borders and a row. A cell the
+	// layout counted shorter would be drawn taller than counted, and a click or a
+	// selection past it would disagree with the draw.
+	minDrawnTileRows = 3
+
+	// maxTileCols is the most tiles that share a row, however wide the terminal:
+	// a fourth column halves what each tile can say.
+	maxTileCols = 3
 
 	// tileGap is the blank column between neighbouring tiles.
 	tileGap = 1
@@ -42,16 +51,6 @@ const (
 	// budget of its own still keeps one row rather than none.
 	minTileTailRows = 1
 )
-
-// ceilSqrt is the smallest c with c*c >= n, the near-square column count for n
-// tiles. Zero for a non-positive n.
-func ceilSqrt(n int) int {
-	c := 0
-	for c*c < n {
-		c++
-	}
-	return c
-}
 
 // tileCellWidth is each tile's width once the column count is chosen: the frame
 // split evenly, less the gaps between tiles.
@@ -72,19 +71,19 @@ const (
 )
 
 // tileView is the whole frame as a grid of tiles: the same title the row view
-// draws, tiles between them in attention order, and its own key line -
-// boardKeyLineTiles rather than the row view's, since ←→ really move the
-// cursor here.
+// draws, the lines of the shelves the window shows, in attention order, and its
+// own key line - boardKeyLineTiles rather than the row view's, since ←→ really
+// move the cursor here.
 func (a App) tileView(agents []Agent, width int) string {
 	l := a.boardTileLayout(agents)
 	cursor := a.drawnBoardCursor(agents)
 
-	head := mutedLine(fmt.Sprintf("%s — %d agents", boardTitle, len(agents)), width)
-	body := make([]string, 0, l.availH)
-	for ri := l.from; ri < l.to; ri++ {
+	from, to := l.shown()
+	body := make([]string, 0, l.view)
+	for ri := from; ri < to; ri++ {
 		row := l.rows[ri]
 		if row.isHeader() {
-			body = append(body, teamHeaderBand(row.header, width)...)
+			body = append(body, sectionHeader(row.header, width, ri == to-1)...)
 			continue
 		}
 		cells := make([]string, 0, l.cols)
@@ -100,13 +99,19 @@ func (a App) tileView(agents []Agent, width int) string {
 		// headers (one line each) interleave into.
 		body = append(body, strings.Split(joinTilesRow(cells), "\n")...)
 	}
+	// The rows drawn whole, then cut to the window: a row the scroll has half
+	// off the top or the bottom shows the part that is on.
+	if from < to {
+		body = body[min(l.off-l.tops[from], len(body)):]
+	}
+	body = body[:min(len(body), l.view)]
 	// Pad to the height the window was budgeted for, so the key line and the frame
 	// below it sit where every other view puts them.
-	for len(body) < l.availH {
+	for len(body) < l.view {
 		body = append(body, "")
 	}
 	key := mutedLine(boardKeyLineTiles, width)
-	return head + "\n" + strings.Join(body, "\n") + "\n" + key
+	return boardTitleLine(agents, l.visibleAgents(), width) + "\n" + strings.Join(body, "\n") + "\n" + key
 }
 
 // joinTilesRow lays one row of tiles side by side with the gap between them.

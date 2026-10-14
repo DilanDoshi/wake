@@ -91,17 +91,20 @@ tile, and a forged tile impersonates a fleet state.
 ## 5. The grid
 
 Attention-ordered, the roster's order, so blocked agents sort to the top-left. Filled left to right,
-then top to bottom. Cells are equal, sized so roughly **three to four columns** fit a wide terminal;
+then top to bottom. Cells are equal, **three columns at most** (amended 2026-10-12; was three to four on a wide terminal);
 the exact column count is a pure function of width and a fixed minimum tile width, a table test the
 way `layout.go`'s breakpoints are.
 
 - **A 2-D cursor.** The row board walks with `↑↓`; the grid adds `←→`, so `↑↓←→` move the selection
   among tiles. The cursor is still an agent id, not an index — the list re-ranks between frames, and
   an index would hand the cursor to whoever moved into the slot (`boardCursor`'s existing reason).
-- **Windowing, not a scrollbar.** More agents than tiles that fit → the grid pages by *rows of
-  tiles*, the cursor riding the edge, derived from the cursor rather than stored — `boardWindowStart`
-  generalised from one dimension to two. The title still names the whole fleet count, so a window
-  showing fewer tiles is never silently the fleet.
+- **Scrolling, selection-safe** (amended 2026-10-12; the original said "windowing, not a scrollbar":
+  the grid paged by rows of tiles with the cursor riding the edge, derived from the cursor and never
+  stored). A fleet bigger than a frame now scrolls at a 20-row tile floor instead of shrinking the
+  tiles: the wheel and `PgUp`/`PgDn` scroll the window by lines, the arrow keys move the selection and
+  scroll the least that shows it, and the selection is always on screen. The title still names the whole
+  fleet count and, once the window shows less, which agents (`showing 7–12`). See `decisions.md`,
+  2026-10-12.
 - **Narrow degrades.** Fewer columns as the terminal narrows, down to one, the same way the row view
   and the real grid's `dmTakeoverColumns` already degrade.
 

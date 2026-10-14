@@ -3562,6 +3562,29 @@ superseded by the transcript-window tile of 2026-09-01).
 `tileGridFor` is one function read by the draw, the mouse (`boardHit`) and the cursor (`stepBoard`),
 so a click and a tile cannot disagree.
 
+**Amendment, 2026-10-12 — three across, a readable floor, and the grid scrolls.** The near-square grid
+widened a fleet into more columns and shorter tiles: thirty agents drew six columns of nine-row
+tiles, four rows of transcript each — unreadable, which is what the amendment above was written
+against. The owner asked for the opposite trade: **at most three tiles per row** (`maxTileCols`),
+**a 20-row floor** (`minTileHeight`, 15 rows of transcript beside the five of frame), and a fleet
+bigger than a frame **scrolls rather than shrinks** — in both the tiles and the list. A fleet that
+fits still stretches to fill the frame, as the 6-agent screenshot does; a frame shorter than the floor
+gets one tile as tall as itself, since a tile the frame clips loses its status bar
+(`tileCellHeight`). Guardrail 2 is untouched: a tile still holds no scrollback of its own — it is the
+grid of them that scrolls. What this reverses is the spec's "windowing, not a scrollbar" and the
+cursor-derived window (`boardRowFrom`, `tileWindow`), which could only scroll by moving the selection.
+
+*How it scrolls* (`boardscroll.go`): `Board.Scroll` is the first line the window draws, in either view.
+The **wheel and `PgUp`/`PgDn` scroll freely** by lines; **`↑↓←→` move the selection and scroll the
+least that shows all of it**; `Home`/`End` jump to the first and last stop (the last agent's last subagent row when it has one). **The selection is always
+on screen**, because `⌃C` parks and `↵` opens whatever the highlight is on: a free scroll that leaves
+it mostly out (`landing`: under half its lines, or none) carries it to the nearest tile or row that is
+in, and a re-rank or resize that strands it wholly off screen pulls the window back (`viewport.settled`)
+— the wheel never leaves the highlight on something nobody can see. A section's header is drawn only
+when some line of its first member is (`sectionHeader`; otherwise blank lines), so it never heads nothing (a
+divider over nothing reads as an empty team), and its own lines clip at the top of the window like any
+line's. ⇥ starts the other view at the top: they are different lists.
+
 ## 2026-09-20 — `/resume` resumes in place with no guard, the one deliberate reversal of the branching non-negotiable
 
 A bare `/resume` now opens a picker over both **parked** sessions and **on-disk** conversations, and

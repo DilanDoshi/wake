@@ -105,111 +105,178 @@ func TestTileNavSectionSeedsFromAnEmptyCursor(t *testing.T) {
 	}
 }
 
-// The window pages around the cursor's row and pulls its section header into view
-// with it, counting each band by its own height (header teamHeaderRows, tile row cellH).
-func TestTileWindowPagesAroundTheCursorRowWithItsHeader(t *testing.T) {
-	l := tileLayout{cellH: 3, rows: []tileRow{
-		{tiles: []Agent{{ID: "a"}}}, // 3
-		{header: "t1"},              // 2 (blank + divider)
-		{tiles: []Agent{{ID: "b"}}}, // 3
-		{tiles: []Agent{{ID: "c"}}}, // 3
-	}}
-	// total 11 > availH 5: cursor in row 2 fits with its header (row 1), not row 0/3.
-	from, to := tileWindow(l, 2, 5)
-	if from != 1 || to != 3 {
-		t.Errorf("window = [%d,%d), want [1,3): the cursor's tile row and the header above it", from, to)
+// shelvesOf is rows of one tile each, so a row is an agent and the arithmetic
+// reads without a column in it.
+func shelvesOf(sections ...Section) []tileRow { return tileShelves(sections, 1) }
+
+// A selection below the window brings it down by the least that shows its whole
+// row: here 92 lines of four rows in a 46-line frame, the last row selected.
+func TestTileLayoutScrollsToASelectionBelowTheWindow(t *testing.T) {
+	rows := shelvesOf(Section{Agents: []Agent{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}}})
+	l := newTileLayout(rows, 1, 10, 46, 0, "d")
+	if l.cellH != 23 || l.total != 92 {
+		t.Fatalf("cellH=%d total=%d, want 23 and 92: two whole rows to the frame", l.cellH, l.total)
 	}
-	// Everything fits: the whole list.
-	if from, to := tileWindow(l, 0, 100); from != 0 || to != 4 {
-		t.Errorf("window = [%d,%d), want the whole list [0,4) when it all fits", from, to)
+	if l.off != 46 {
+		t.Errorf("off = %d, want 46: the last two rows", l.off)
+	}
+	if got := idsOf(l.visibleAgents()); len(got) != 2 || got[0] != "c" || got[1] != "d" {
+		t.Errorf("visible = %v, want [c d]", got)
+	}
+	// Selected near the top with the same stored scroll: the window stays where it
+	// was put, because the selection is in it.
+	if l := newTileLayout(rows, 1, 10, 46, 0, "b"); l.off != 0 {
+		t.Errorf("off = %d with the selection in view, want the stored 0", l.off)
 	}
 }
 
-// Paging must keep the cursor tile under its OWN team header, not the next
-// team's - the bug two reviewers found: growing down before up paged the cursor
-// under the following team's header, misclassifying it.
-func TestTileWindowKeepsTheCursorTileWithItsTeamHeader(t *testing.T) {
-	l := tileLayout{cellH: 7, rows: []tileRow{
-		{header: "A"},                // 0: 2 (blank + divider)
-		{tiles: []Agent{{ID: "a1"}}}, // 1: 7
-		{tiles: []Agent{{ID: "a2"}}}, // 2: 7 (cursor, team A's second row)
-		{header: "B"},                // 3: 2
-		{tiles: []Agent{{ID: "b1"}}}, // 4: 7
-	}}
-	// availH 16 fits A's header + both A rows (2+7+7); growing down-first would
-	// have paged the cursor under team B's header instead.
-	from, to := tileWindow(l, 2, 16)
-	if from != 0 || to != 3 {
-		t.Fatalf("window = [%d,%d), want [0,3): the cursor with team A's header, not B's", from, to)
+// A free scroll the wheel left half a row down keeps the clipped row, so the
+// frame can end mid-tile; it is the bands the window touches that are drawn.
+func TestTileLayoutDrawsTheRowsAFreeScrollTouches(t *testing.T) {
+	rows := shelvesOf(Section{Agents: []Agent{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}}})
+	l := newTileLayout(rows, 1, 10, 46, 10, "a")
+	if got := idsOf(l.visibleAgents()); len(got) != 3 || got[0] != "a" || got[2] != "c" {
+		t.Errorf("visible = %v at scroll 10, want [a b c]: a is clipped at the top, c at the bottom", got)
 	}
-	if !l.rows[from].isHeader() || l.rows[from].header != "A" {
-		t.Errorf("the window's first row is %+v, want team A's header above the cursor", l.rows[from])
+	if l.off != 10 {
+		t.Errorf("off = %d, want 10: a is still mostly on screen, so the window is left alone", l.off)
 	}
 }
 
-// A header must never be the last row in the window with its member paged off -
-// the row view's atomic rule (rostersection.go glues header to first member).
-func TestTileWindowDropsADanglingTrailingHeader(t *testing.T) {
-	l := tileLayout{cellH: 7, rows: []tileRow{
-		{tiles: []Agent{{ID: "x"}}}, // 0: 7 (cursor, top block)
-		{header: "B"},               // 1: 2 (blank + divider)
-		{tiles: []Agent{{ID: "b"}}}, // 2: 7
-	}}
-	// availH 9 fits the top row (7) and B's header band (2) but not B's tile (7):
-	// the header would dangle at the bottom edge as an empty team without the drop.
-	from, to := tileWindow(l, 0, 9)
-	if from != 0 || to != 1 {
-		t.Fatalf("window = [%d,%d), want [0,1): team B's header must not dangle with its member paged off", from, to)
+// The scroll stays inside the list however far it was asked to go.
+func TestTileLayoutClampsTheScroll(t *testing.T) {
+	rows := shelvesOf(Section{Agents: []Agent{{ID: "a"}, {ID: "b"}, {ID: "c"}, {ID: "d"}}})
+	for _, tc := range []struct {
+		scroll, want int
+		selected     string
+	}{{-9, 0, "a"}, {0, 0, "a"}, {50, 46, "d"}, {500, 46, "d"}} {
+		if got := newTileLayout(rows, 1, 10, 46, tc.scroll, tc.selected).off; got != tc.want {
+			t.Errorf("scroll %d -> off %d, want %d", tc.scroll, got, tc.want)
+		}
 	}
 }
 
-// A fresh team-only tiled board - no selection, so tileFind misses, and every
-// agent on a team, so row 0 is a header - must still show a tile at a frame too
-// short for the header band plus a full cell, never collapse to a blank window.
-// The widened header tipped availH=8 into the windowing path, where the -1 cursor
-// fell onto row 0's header and the dangling-header cleanup then emptied it.
-func TestTileWindowTeamOnlyEmptyCursorShowsATile(t *testing.T) {
-	l := tileLayout{cellH: 7, rows: []tileRow{
-		{header: "backend"},          // 0: 2 (blank + divider)
-		{tiles: []Agent{{ID: "w1"}}}, // 1: 7
-	}}
-	from, to := tileWindow(l, -1, 8) // fresh board: no cursor row
-	if from > 1 || to <= 1 {
-		t.Fatalf("window [%d,%d) excludes the tile row 1: a team-only board with no cursor drew no agent at availH=8", from, to)
+// The first tile of a team brings the team's own header up with it, never the next
+// team's - the bug two reviewers found when the window grew down before up.
+func TestTileLayoutBringsTheSelectionsOwnTeamHeaderIntoView(t *testing.T) {
+	rows := shelvesOf(
+		Section{Agents: []Agent{{ID: "x"}}},
+		Section{Team: "A", Agents: []Agent{{ID: "a1"}, {ID: "a2"}}},
+		Section{Team: "B", Agents: []Agent{{ID: "b1"}}},
+	)
+	// Scrolled to the bottom with a1 selected: a1 is off the top, so the window
+	// comes back for it and A's header is the first line.
+	l := newTileLayout(rows, 1, 10, 46, 1000, "a1")
+	if from, _ := l.shown(); !l.rows[from].isHeader() || l.rows[from].header != "A" {
+		t.Fatalf("the window starts on %+v, want team A's header above the selection", l.rows[from])
 	}
 }
 
-// A frame shorter than one cell still shows the cursor's row (View clips it),
-// never an empty window - the regression the down-first fill would leave when a
-// single row was taller than availH.
-func TestTileWindowAlwaysShowsTheCursorRowEvenTallerThanTheFrame(t *testing.T) {
-	l := tileLayout{cellH: 7, rows: []tileRow{
-		{tiles: []Agent{{ID: "a"}}},
-		{tiles: []Agent{{ID: "b"}}},
-	}}
-	from, to := tileWindow(l, 0, 6)
-	if from != 0 || to != 1 {
-		t.Fatalf("window = [%d,%d), want [0,1): the cursor row shows even when taller than availH", from, to)
+// A fresh team-only tiled board - no selection, and every agent on a team, so the
+// first row is a header - still shows a tile in a frame too short for the header
+// band and a full cell, never an empty window.
+func TestTileLayoutTeamOnlyFreshBoardShowsATile(t *testing.T) {
+	rows := shelvesOf(Section{Team: "backend", Agents: []Agent{{ID: "w1"}}})
+	l := newTileLayout(rows, 1, 10, 8, 0, "")
+	if got := idsOf(l.visibleAgents()); len(got) != 1 || got[0] != "w1" {
+		t.Fatalf("visible = %v, want [w1]: a team-only board with no selection drew no agent at a frame of 8", got)
+	}
+	// The header band is spent from the frame too, so the tile is not clipped by it.
+	if got := l.bands[l.cur].overlap(l.off, l.view); got != l.cellH {
+		t.Errorf("the tile shows %d of its %d lines under the header band", got, l.cellH)
 	}
 }
 
-// Columns widen to fit the frame height, the flat grid's short-frame flatten:
-// nine agents in a short wide frame lay out five-wide (two rows) rather than the
-// near-square three-wide (three rows) that would page a row off screen.
-func TestBoardTileColsWidensToFitAShortFrame(t *testing.T) {
-	top := []Section{{Agents: make([]Agent, 9)}}
-	if got := boardTileCols(top, 9, 200, 15); got != 5 {
-		t.Errorf("boardTileCols(short frame) = %d, want 5 (widen to fit two rows)", got)
+// A frame shorter than the floor gets one tile as tall as itself, and the
+// selection's row still shows - never an empty window.
+func TestTileLayoutAShortFrameStillShowsTheSelection(t *testing.T) {
+	rows := shelvesOf(Section{Agents: []Agent{{ID: "a"}, {ID: "b"}}})
+	l := newTileLayout(rows, 1, 10, 6, 0, "b")
+	if l.cellH != 6 {
+		t.Fatalf("cellH = %d, want the frame's 6", l.cellH)
 	}
-	// A tall frame keeps the near-square choice.
-	if got := boardTileCols(top, 9, 200, 100); got != 3 {
-		t.Errorf("boardTileCols(tall frame) = %d, want 3 (near-square)", got)
+	if got := idsOf(l.visibleAgents()); len(got) != 1 || got[0] != "b" {
+		t.Errorf("visible = %v, want [b]", got)
 	}
-	// A frame too short for even one full cell still flattens to one row so
-	// everyone is on screen (View clips), rather than a 2x2 that pages.
-	four := []Section{{Agents: make([]Agent, 4)}}
-	if got := boardTileCols(four, 4, 200, 6); got != 4 {
-		t.Errorf("boardTileCols(tiny frame) = %d, want 4 (one row, everyone on screen)", got)
+}
+
+// A click at an offset resolves against the lines the draw drew there, a header
+// band and the title row opening nothing.
+func TestTileHitWalksTheScrolledWindow(t *testing.T) {
+	agents := []Agent{{ID: "x"}, {ID: "a"}, {ID: "b"}}
+	rows := shelvesOf(Section{Agents: agents[:1]}, Section{Team: "A", Agents: agents[1:]})
+	l := newTileLayout(rows, 1, 10, 46, 0, "x")
+	// 46 lines: x (22), A's header (2), a (22); b is below the window.
+	for _, tc := range []struct {
+		y, want int
+	}{
+		{0, -1},                     // the title row
+		{boardChromeRows, 0},        // x's top edge
+		{boardChromeRows + 21, 0},   // x's last line
+		{boardChromeRows + 22, -1},  // A's blank
+		{boardChromeRows + 23, -1},  // A's divider
+		{boardChromeRows + 24, 1},   // a's top edge
+		{boardChromeRows + 45, 1},   // a's last visible line
+		{boardChromeRows + 46, -1},  // the key line, below the window
+		{boardChromeRows + 100, -1}, // far below
+	} {
+		if got := l.tileHit(2, tc.y, agents); got != tc.want {
+			t.Errorf("hit at y=%d = %d, want %d", tc.y, got, tc.want)
+		}
+	}
+	// Scrolled to the bottom the same pointer rows land on later agents.
+	s := newTileLayout(rows, 1, 10, 46, 1000, "b")
+	if got := s.tileHit(2, boardChromeRows, agents); got != 1 && got != -1 {
+		t.Errorf("hit at the top of the scrolled window = %d, want a or A's header band", got)
+	}
+	if got := s.tileHit(2, boardChromeRows+45, agents); got != 2 {
+		t.Errorf("hit at the bottom of the scrolled window = %d, want b", got)
+	}
+}
+
+// Three across at most, fewer for a fleet that small or a terminal that narrow:
+// the table the layout's breakpoints are held to.
+func TestBoardTileColsTable(t *testing.T) {
+	for _, tc := range []struct{ n, width, want int }{
+		{0, 200, 1}, {1, 200, 1}, {2, 200, 2}, {3, 200, 3}, {9, 200, 3}, {64, 400, 3},
+		{9, 80, 3}, {9, 79, 2}, {9, 53, 2}, {9, 52, 1}, {9, 10, 1},
+	} {
+		if got := boardTileCols(tc.n, tc.width); got != tc.want {
+			t.Errorf("boardTileCols(%d, %d) = %d, want %d", tc.n, tc.width, got, tc.want)
+		}
+	}
+}
+
+// The cell height: fills the frame when the fleet fits at the floor, keeps the
+// floor in whole rows when it does not, and never exceeds the frame.
+func TestTileCellHeightTable(t *testing.T) {
+	flat := func(rows int) []tileRow {
+		out := make([]tileRow, rows)
+		for i := range out {
+			out[i] = tileRow{tiles: []Agent{{ID: "x"}}}
+		}
+		return out
+	}
+	withHeader := append([]tileRow{{tiles: []Agent{{ID: "x"}}}, {header: "A"}}, flat(2)...)
+	for _, tc := range []struct {
+		name         string
+		rows         []tileRow
+		availH, want int
+	}{
+		{"one row fills a tall frame", flat(1), 86, 86},
+		{"two rows share the frame", flat(2), 46, 23},
+		{"a fleet that fits stretches to fill", flat(3), 86, 28},
+		{"a bigger fleet keeps whole rows", flat(10), 46, 23},
+		{"a frame that holds three floors", flat(10), 62, 20},
+		{"a frame between floors stretches the whole rows", flat(10), 59, 29},
+		{"a frame shorter than the floor is one tile", flat(10), 12, 12},
+		{"a header band is reserved when the fleet overflows", withHeader, 46, 22},
+		{"no rows is the floor", nil, 46, 20},
+		{"a header at the top shares a short frame", append([]tileRow{{header: "A"}}, flat(1)...), 18, 16},
+	} {
+		if got := tileCellHeight(tc.rows, tc.availH); got != tc.want {
+			t.Errorf("%s: tileCellHeight(availH=%d) = %d, want %d", tc.name, tc.availH, got, tc.want)
+		}
 	}
 }
 
@@ -217,7 +284,8 @@ func TestBoardTileColsWidensToFitAShortFrame(t *testing.T) {
 // divider too, so a team's tiles read as their own chunk (owner's 2026-09-21
 // request), the same gap the rows view draws.
 func TestTiledBoardDrawsABlankAboveEachTeamHeader(t *testing.T) {
-	a := newRoomApp(t).withSize(120, 40)
+	// Tall enough for both shelves at the tile floor, so the header has a tile under it.
+	a := newRoomApp(t).withSize(120, 60)
 	a = a.applyStatus(&rpc.Status{
 		Teams: []string{"backend"},
 		Sessions: []rpc.SessionStatus{

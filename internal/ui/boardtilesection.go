@@ -101,15 +101,15 @@ func tileNavSection(rows []tileRow, cursorID string, dir tileDir) string {
 }
 
 // tileLayout is the tiled board's section-aware geometry for one frame: the
-// column width every tile shares, the height a tile row shares, and the window
-// of shelves [from, to) that fit and hold the cursor.
+// column width every tile shares, the height a tile row shares, and the window of
+// lines (viewport) the shelves scroll under. Its bands are the tile rows; a
+// header band is no stop of its own and rides above the row it heads.
 type tileLayout struct {
-	cols     int
-	cellW    int
-	cellH    int
-	availH   int
-	rows     []tileRow
-	from, to int
+	viewport
+	cols, cellW, cellH int
+	rows               []tileRow
+	tops               []int // the first line of each row
+	bandRow            []int // each band's row, in the order the bands run
 }
 
 // rowHeight is a header band (teamHeaderRows: a blank then the divider) or a
@@ -122,19 +122,57 @@ func (l tileLayout) rowHeight(i int) int {
 	return l.cellH
 }
 
-// visibleTiles is the agents drawn this frame - the tiles in the windowed rows -
-// so the transcript seeding asks history for exactly what is on screen.
-func (l tileLayout) visibleTiles() []Agent {
+// shown is the rows the window touches, as a half-open run.
+func (l tileLayout) shown() (from, to int) {
+	for i := range l.rows {
+		if l.tops[i]+l.rowHeight(i) > l.off && l.tops[i] < l.off+l.view {
+			if to == 0 { // the first row the window touches
+				from = i
+			}
+			to = i + 1
+		}
+	}
+	return from, to
+}
+
+// visibleAgents is the tiles any line of which the window shows, so the
+// transcript seeding asks history for exactly what is drawn.
+func (l tileLayout) visibleAgents() []Agent {
 	var out []Agent
-	for _, row := range l.rows[l.from:l.to] {
+	from, to := l.shown()
+	for _, row := range l.rows[from:to] {
 		out = append(out, row.tiles...)
 	}
 	return out
 }
 
-// tileCellHeight fills the frame when the shelves fit at their minimum, else
-// falls to the minimum and lets the window page the overflow - the flat grid's
-// stretch-or-cap rule, counting the header band lines the shelves add.
+// selectBand puts the selection on a tile row, in the column it is already in
+// (a shorter row keeps it in bounds).
+func (l tileLayout) selectBand(a App, i int) App {
+	_, c := tileFind(l.rows, a.board.Selected)
+	tiles := l.rows[l.bandRow[i]].tiles
+	a.board.Selected = tiles[min(max(c, 0), len(tiles)-1)].ID
+	a.board.SelectedTask = ""
+	return a
+}
+
+// endpoint is the grid's first or last tile - the last of the last row, not the
+// column the selection is in.
+func (l tileLayout) endpoint(last bool) (agent, task string) {
+	tiles := l.rows[l.bandRow[0]].tiles
+	if last {
+		tiles = l.rows[l.bandRow[len(l.bandRow)-1]].tiles
+		return tiles[len(tiles)-1].ID, ""
+	}
+	return tiles[0].ID, ""
+}
+
+// tileCellHeight is the height every tile row shares. Everything that fits at the
+// floor stretches to fill the frame; a bigger fleet keeps the floor and scrolls,
+// stretched to a whole number of rows so no frame ends on a blank gap. A frame
+// shorter than the floor gets one tile as tall as itself, never taller: a tile
+// the frame clips loses its status bar. Below minDrawnTileRows the tile is that
+// tall anyway, which the frame then clips.
 func tileCellHeight(rows []tileRow, availH int) int {
 	headerLines, tileRows := 0, 0
 	for _, r := range rows {
@@ -144,148 +182,103 @@ func tileCellHeight(rows []tileRow, availH int) int {
 			tileRows++
 		}
 	}
+	// A frame holds one header band along with its rows, however many the fleet
+	// has, so the floor is what is left of the frame beside it.
+	reserve := min(headerLines, teamHeaderRows)
+	floor := max(min(minTileHeight, availH-reserve), minDrawnTileRows)
 	if tileRows == 0 {
-		return minTileHeight
+		return floor
 	}
-	if headerLines+tileRows*minTileHeight <= availH {
-		return max((availH-headerLines)/tileRows, minTileHeight)
+	if headerLines+tileRows*floor <= availH {
+		return (availH - headerLines) / tileRows
 	}
-	return minTileHeight
+	fit := max((availH-reserve)/floor, 1)
+	return max((availH-reserve)/fit, floor)
 }
 
-// tileWindow is the run of shelves that fits availH and holds the cursor's row,
-// grown around it the way the roster's window is, so the cursor's tile and the
-// header above its section come into view together.
-func tileWindow(l tileLayout, cursorRow, availH int) (from, to int) {
-	if len(l.rows) == 0 {
-		return 0, 0
-	}
-	total := 0
-	for i := range l.rows {
-		total += l.rowHeight(i)
-	}
-	if total <= availH {
-		return 0, len(l.rows)
-	}
-	if cursorRow < 0 {
-		// No selection (a fresh board) or the cursor's agent left: seed at the first
-		// tile row, never a header - tileNavSection's own recovery. Row 0 can be a
-		// header (a team-only fleet), and seeding there collapsed the window to [0,0)
-		// via the dangling-header cleanup at a frame too short for the header + a cell.
-		cursorRow = adjacentTileRow(l.rows, -1, +1)
-		if cursorRow < 0 {
-			return 0, 0 // no tiles at all (a header-only wall)
+// boardTileCols is how many tiles share a row: three across at most, fewer for a
+// fleet that small or a terminal that narrow.
+func boardTileCols(n, width int) int {
+	fits := max((width+tileGap)/(minTileWidth+tileGap), 1)
+	return clamp(n, 1, min(maxTileCols, fits))
+}
+
+// newTileLayout lays the shelves out `availH` lines tall, scrolled to `scroll`,
+// the selection `selected`.
+func newTileLayout(rows []tileRow, cols, cellW, availH, scroll int, selected string) tileLayout {
+	l := tileLayout{cols: cols, cellW: cellW, rows: rows, cellH: tileCellHeight(rows, availH)}
+	l.view = availH
+	l.tops = make([]int, len(rows))
+	line, selRow := 0, -1
+	for i, r := range rows {
+		l.tops[i] = line
+		if r.isHeader() {
+			line += teamHeaderRows
+			continue
 		}
-	}
-	// The cursor's tile row is always in the window - even alone taller than availH
-	// (a frame too short for one cell, which View then clips). Grow up first so the
-	// cursor's own section header pages into view with it rather than the next
-	// team's - the row view's boardRowFrom, the cursor riding the bottom edge -
-	// then fill down.
-	used := l.rowHeight(cursorRow)
-	from, to = cursorRow, cursorRow+1
-	for from > 0 && used+l.rowHeight(from-1) <= availH {
-		used += l.rowHeight(from - 1)
-		from--
-	}
-	for to < len(l.rows) && used+l.rowHeight(to) <= availH {
-		used += l.rowHeight(to)
-		to++
-	}
-	// A header must not be the last row with no member below it - the row view's
-	// atomic rule (boardView breaks before a dangling header). to-1 is never the
-	// cursor row, which is a tile, so this never drops the cursor.
-	if l.rows[to-1].isHeader() {
-		to--
-	}
-	return from, to
-}
-
-// ceilDiv is the number of rows of cols columns that hold n items (>= 1 col).
-func ceilDiv(n, cols int) int {
-	if cols < 1 {
-		cols = 1
-	}
-	return (n + cols - 1) / cols
-}
-
-// tileRowCount is the tile rows the sections wrap into at cols - each team's
-// members over cols columns, summed. Headers are counted separately (one line
-// each); this counts only the cellH-tall rows.
-func tileRowCount(sections []Section, cols int) int {
-	rows := 0
-	for _, s := range sections {
-		rows += ceilDiv(len(s.Agents), cols)
-	}
-	return rows
-}
-
-// boardTileCols is the near-square column count widened until the sectioned tile
-// rows fit the frame height - the flat grid's short-frame flatten (add a column
-// to drop a row), made section-aware and capped at what the width allows. The
-// header lines come off availH first; at least one tile row always fits, so a
-// frame too short for a full cell still lays everyone out on one row (View clips)
-// rather than paging tiles that could have shared a wider row.
-func boardTileCols(sections []Section, n, width, availH int) int {
-	maxCols := max((width+tileGap)/(minTileWidth+tileGap), 1)
-	headerLines := 0
-	for _, s := range sections {
-		if s.Team != "" {
-			headerLines += teamHeaderRows
+		lead := 0
+		if i > 0 && rows[i-1].isHeader() {
+			lead = teamHeaderRows
 		}
+		if tileHas(r, selected) {
+			selRow = len(l.bands)
+		}
+		l.bands = append(l.bands, band{top: line, h: l.cellH, lead: lead})
+		l.bandRow = append(l.bandRow, i)
+		line += l.cellH
 	}
-	maxRows := max((availH-headerLines)/minTileHeight, 1)
-	cols := clamp(ceilSqrt(n), 1, maxCols)
-	for cols < maxCols && tileRowCount(sections, cols) > maxRows {
-		cols++
+	l.total = line
+	// No selection yet, or its agent has left: the first tile, boardCursor's own
+	// "empty or gone -> top".
+	l.cur = max(selRow, 0)
+	if len(l.bands) == 0 {
+		l.cur = -1
 	}
-	return cols
-}
-
-// boardTileLayout is the frame's section-aware tile geometry: cols from the width
-// and the frame height (near-square, widened to fit like the flat grid), cellW to
-// share, the shelves from the sectioned fleet, cellH to fill, and the window
-// around the cursor.
-func (a App) boardTileLayout(agents []Agent) tileLayout {
-	availH := max(a.paneHeight()-boardChromeRows-1, 1)
-	sections := a.fleet.sections(agents)
-	cols := boardTileCols(sections, len(agents), a.layout.Width, availH)
-	l := tileLayout{
-		cols:   cols,
-		cellW:  tileCellWidth(a.layout.Width, cols),
-		availH: availH,
-		rows:   tileShelves(sections, cols),
-	}
-	l.cellH = tileCellHeight(l.rows, availH)
-	cursorRow, _ := tileFind(l.rows, a.board.Selected)
-	l.from, l.to = tileWindow(l, cursorRow, availH)
+	l.viewport = l.settled(scroll)
 	return l
 }
 
+func tileHas(row tileRow, id string) bool {
+	for _, ag := range row.tiles {
+		if ag.ID == id {
+			return true
+		}
+	}
+	return false
+}
+
+// boardTileLayout is the frame's section-aware tile geometry: three columns at
+// most, the shelves from the sectioned fleet, cellH to fill, and the window the
+// board is scrolled to.
+func (a App) boardTileLayout(agents []Agent) tileLayout {
+	availH := max(a.paneHeight()-boardChromeRows-1, 1)
+	cols := boardTileCols(len(agents), a.layout.Width)
+	return newTileLayout(tileShelves(a.fleet.sections(agents), cols), cols,
+		tileCellWidth(a.layout.Width, cols), availH, a.board.Scroll, a.board.Selected)
+}
+
 // tileHit is boardHit's tiled branch: the agent index a click at (x, y) lands on,
-// or -1 for the title row, a header band, or past the last column. It walks the
-// windowed shelves counting each band's height - header (one line) or tile row
-// (cellH) - the one number the draw counts too, so a click and a tile cannot
-// disagree across a section break.
+// or -1 for the title row, a header band, or past the last column. It reads the
+// window the draw used, so a click and a tile cannot disagree across a section
+// break or a scroll.
 func (l tileLayout) tileHit(x, y int, agents []Agent) int {
 	line := y - boardChromeRows
-	if line < 0 {
-		return -1 // the title row
+	if line < 0 || line >= l.view {
+		return -1 // the title row, or below the window (the key line, the strip)
 	}
-	off := 0
-	for ri := l.from; ri < l.to; ri++ {
-		h := l.rowHeight(ri)
-		if line < off+h {
-			if l.rows[ri].isHeader() {
-				return -1 // a header belongs to no agent
-			}
-			col := x / (l.cellW + tileGap)
-			if col < 0 || col >= len(l.rows[ri].tiles) {
-				return -1
-			}
-			return indexOf(agents, l.rows[ri].tiles[col].ID)
+	from, to := l.shown()
+	for ri := from; ri < to; ri++ {
+		if l.off+line >= l.tops[ri]+l.rowHeight(ri) {
+			continue
 		}
-		off += h
+		if l.rows[ri].isHeader() {
+			return -1 // a header belongs to no agent
+		}
+		col := x / (l.cellW + tileGap)
+		if col < 0 || col >= len(l.rows[ri].tiles) {
+			return -1
+		}
+		return indexOf(agents, l.rows[ri].tiles[col].ID)
 	}
 	return -1
 }

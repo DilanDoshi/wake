@@ -218,6 +218,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `internal/ui/rewindmenu.go`, `internal/daemon/rewindfiles.go`.
 
 **Layout, mouse, selection**
+- **The board scrolls, and its selection never leaves the screen.** Tiles are three across at most with
+  a 20-row floor; a fleet past the frame scrolls (wheel and `PgUp`/`PgDn` freely, arrows by the least
+  that shows the selection) rather than shrinking the tiles. `internal/ui/boardscroll.go`, rulings in
+  `decisions.md` (2026-10-12).
 - **The grid is bounded:** columns, each split once (spec §8). The room is `Cols[0]` and cannot be
   closed. Arbitrary tiling is out of scope.
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
@@ -411,7 +415,7 @@ yet says so in bold.**
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
-| Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardtranscript.go` |
+| Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
 | Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) |

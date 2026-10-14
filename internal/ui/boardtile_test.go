@@ -285,7 +285,7 @@ func TestBoardHitInTiledModeReadsTheDrawnGeometry(t *testing.T) {
 	}
 
 	// A click on the key line, past the padded tile body, opens nothing.
-	pastRow := boardChromeRows + l.availH
+	pastRow := boardChromeRows + l.view
 	if _, _, ok := a.boardHit(2, pastRow, agents); ok {
 		t.Error("a click past the last tile row resolved to a tile, want none")
 	}
