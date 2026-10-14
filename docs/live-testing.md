@@ -63,8 +63,8 @@ pressing it on your machine produce anything at all?
 | `⌃O` | Arm a detach; `↵` finishes it. The legend under the box swaps to `↵ detach   …   ⌃O cancel` and stays that way | Some shells and editors bind `⌃O` (nano writes out, readline's `operate-and-get-next`); Wake takes it before the composer, so what to check is that it leaves the *terminal* alone. **Hold `⌃O` down** and let the terminal auto-repeat it: nothing may leave, at any count |
 | `⌃Q` | Park every agent, then close Wake | The one key here whose terminal behaviour is unproved — see the flow-control note below |
 | `⌃T` | Flip the mention mode. The notice row says which reading is now on; with `@name …` in the composer the target line reads `→ @name · open · N turns` or `→ @name · direct` | On macOS `⌃T` is `VSTATUS` and prints a load-average line instead — see the note below |
-| `↵` | Send | |
-| `⇥` *with a completion menu up* | Take the highlighted completion. Without one it moves the keys between panes, as above | The menu and the pane move are the same key and only one of them can be wrong at a time — if `⇥` moves panes while a menu is on screen, the menu is not seeing the key |
+| `↵` | Send. With a completion menu up it takes the highlighted completion instead — unless the word is already typed exactly as offered (`/clear`), when it sends | If `↵` sends a half-typed `/resu` while the menu is on screen, the Enter case is not seeing the menu. If `/clear⏎` needs two presses, the already-typed rule is not holding |
+| `⇥` *with a completion menu up* | Take the highlighted completion. Over a `/` or `@` word nothing completes (a misspelled skill) it does nothing; anywhere else it moves the keys between panes, as above | The menu and the pane move are the same key and only one of them can be wrong at a time — if `⇥` moves panes while a menu is on screen, or while you are mid-`/word`, it is not seeing the draft |
 | `⌃N` / `⌃P` | Walk the completion menu down and up. They do nothing when there is no menu | `⌃N` is `\x0e` (SO) and `⌃P` is `\x10` (DLE). The pty suite proves bubbletea receives both; nothing has proved a real tmux, ssh or terminal emulator passes them through, and readline binds both to history — which is what to watch for |
 | `⌥↵` / `⌃J` | Put a **newline** in the draft instead of sending it | `⌃J` needs no setup and should always work. `⌥↵` is what your terminal sends for it — see the ⇧↵ note below |
 | `⌥↑` / `⌥↓` | Walk back through what you typed into this pane, and forward again | **The one new key here whose delivery depends on a setting.** See the ⌥ note below |
@@ -784,9 +784,11 @@ New with the `/`-and-`@` completion. Everything here is a judgement a test canno
       Say whether it reads wrong; `docs/notes/deferred.md` carries what moving it costs.
 - [ ] **`⌃N` and `⌃P` on your terminal.** This is the whole reason the menu has no arrow keys. If
       either does nothing, say which — the fallback is narrowing by typing, which still works.
-- [ ] **`⇥` while a menu is up, and `⇥` while one is not.** The first completes, the second moves
-      the keys between panes. A key that does two things is a key somebody will be surprised by
-      once; the question is whether it is only once.
+- [ ] **`⇥` and `↵` over a word being typed.** With a menu up both complete the highlighted offer
+      (`↵` sends instead when the word is already typed in full). Over a `/` or `@` word nothing
+      matches — type `/zzzskil` — `⇥` does nothing, and `↵` sends it as text. On any other draft
+      `⇥` still moves the keys between panes. The question is whether a misspelled skill ever
+      still lands you in a conversation you did not choose.
 - [ ] **`@` in the room with 15–30 agents up.** Names first, then paths. Watch whether the bound of
       eight rows is enough to be useful at that size or whether it hides the agent you wanted.
 - [ ] **`@` in a directory with thousands of files** (`node_modules`, a build output). It must not

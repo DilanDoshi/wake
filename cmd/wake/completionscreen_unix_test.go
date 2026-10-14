@@ -145,4 +145,4 @@ const roomBoxTitle = "group chat"
 // `.worktrees/autocomplete` in the status bar's own path, which is a branch
 // name this very feature was written on. A fragment that can appear in a
 // directory somebody is working in is not a fragment.
-const completionKeyHint = "⇥ complete"
+const completionKeyHint = "⇥ ↵ complete"

@@ -6,7 +6,8 @@ package main
 // machine's other Claude sessions from the daemon's bare one-shot, subagent
 // types from the init, and the project's files from git. The unit tests decide
 // what each half offers; this puts the key path, the one-shot, the peers round
-// trip and the drawn labels through a real pty. ⇥ accepts; ↵ still sends.
+// trip and the drawn labels through a real pty. ⇥ accepts, and ↵ sends once the
+// accept has closed the menu (completionkeysscreen_unix_test.go has ↵ accepting).
 
 import (
 	"os"
