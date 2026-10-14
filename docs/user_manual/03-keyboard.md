@@ -33,6 +33,11 @@ summary in the room by design — the group chat is a hub, not a place for deep 
 default stays folded and `⌃E` is the way to see them all in full without leaving the room. To open
 just one, **click** its folded pointer.
 
+A message one Claude session sends another (`↪ sender → recipient`) folds too, in the room and in a
+conversation, at its first three rows under a `⤷ +N lines · ⌃E or click to expand` pointer; a message of
+three rows or fewer is drawn whole. `⌃E` opens every fold in the pane and a click opens one, as for a
+tool result.
+
 Expanding returns you to the newest line. That is the same thing a width change does, for the same
 reason: the lines a scroll position points at have renumbered underneath it.
 
@@ -108,6 +113,7 @@ and `⌃P` are how you move between the lines of a multi-line draft.
 |---|---|
 | `⌃F` | Fork the conversation with the keys — see [chapter 5](05-forking.md) |
 | `⌃T` | Flip the mention mode — whether `@name …` routes to that agent or is read as text |
+| `PgUp` `PgDn` `Home` `End` | In `/board`: scroll a fleet bigger than the screen by a page, or jump to the first and last stop. The wheel scrolls it freely; the arrows move the selection and scroll the least that keeps it on screen |
 
 ## The mouse
 

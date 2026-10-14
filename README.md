@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.9 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.10 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -113,13 +113,21 @@ Flags on the verbs that start a session (`new`, `manager`):
 
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
 slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
-`/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows` and `/groupchat-filter`; `/effort` and `/model`
-configure the session they are addressed to. Everything else you type is passed to the agent byte for
+`/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status` and `/groupchat-filter`; `/effort`
+and `/model` configure the session they are addressed to. `/status [@who]` shows an agent's own facts —
+state, ids, model, context, effort, permission mode, team, builds — without sending it anything, the
+manager's included. Everything else you type is passed to the agent byte for
 byte. A lone `@name` narrows the room to that agent's thread; `⌃A` widens it back to everyone while
 still addressing them, and `/groupchat-filter off` flips that default. A leading `@"session name"`
 that names no agent in your fleet is relayed by the manager to that Claude session. `/team <name>`
 groups an agent under an operator-named team — heading a roster/board section, addressed as `@team` —
-and the manager can fan a message out to one with its own tool.
+and the manager can fan a message out to one with its own tool. An agent can see its team too: `wake
+status` prints each agent's `team <name>` (`--team <name>` lists one team), and every ordinary agent starts
+with a short note on how to ask. `/board` scrolls a fleet bigger than the screen (wheel, `PgUp`/`PgDn`,
+`Home`/`End`), three tiles across. Claude sessions know each fleet's manager as `manager-<fleet>`, so
+managers of several fleets are told apart in Claude's own peer list, and the manager can pick a spawned
+agent's model and effort when you ask it to. A long message one Claude session sends another (`↪ sender →
+recipient`) folds at three rows in the room and in a conversation; `⌃E` or a click opens it.
 
 ## Development
 
@@ -127,6 +135,7 @@ and the manager can fan a message out to one with its own tool.
 make build   # from source: ./bin/wake
 make test    # the suite under -race
 make lint    # golangci-lint
+make quick   # build, lint and a cached plain suite, for iterating — not the gate
 make cover   # the suite without -race, and the coverage gate: 80% per package
 make soak    # 20 fake sessions through a real daemon
 ```
