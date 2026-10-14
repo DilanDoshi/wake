@@ -193,6 +193,23 @@ func TestANameCannotCarryASessionIDIntoAnAgentsArgv(t *testing.T) {
 	}
 }
 
+// `manager-` is how claude knows a fleet's manager, so no agent may wear it: one
+// more `manager-harbor` in every Claude session's peer list is one nobody can
+// tell from the real one. normalizeName is the door every chosen name passes -
+// `wake new`, /name, spawn_agent and a /resume's recorded title.
+func TestNoAgentMayWearAManagersClaudeName(t *testing.T) {
+	for _, name := range []string{"manager-harbor", " Manager-Default ", "manager-x"} {
+		if got, err := normalizeName(name); err == nil {
+			t.Errorf("normalizeName(%q) = %q; claude would know it as some fleet's manager", name, got)
+		}
+	}
+	for _, name := range []string{"managerial", "manager_x", "the-manager-x"} {
+		if _, err := normalizeName(name); err != nil {
+			t.Errorf("normalizeName(%q) was refused, and claude names no manager that way: %v", name, err)
+		}
+	}
+}
+
 // The property the whole registry exists for, measured at the fleet the spec
 // sizes for rather than argued about.
 func TestAFullFleetGetsDistinctNames(t *testing.T) {

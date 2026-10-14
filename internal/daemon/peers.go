@@ -15,6 +15,7 @@ import (
 	"errors"
 	"path/filepath"
 	"slices"
+	"strings"
 	"sync"
 	"time"
 
@@ -130,7 +131,7 @@ func (s *server) listPeers(ctx context.Context) ([]core.Peer, error) {
 	if err != nil {
 		logf("wake: could not list the machine's Claude sessions: %v", err)
 	}
-	return peers, err
+	return ownManagerLeftOut(peers, s.managerClaude()), err
 }
 
 // runListAgents runs one bare /list-agents in dir and parses the text of the
@@ -189,4 +190,12 @@ func (c *capped) Write(p []byte) (int, error) {
 		return len(p), nil
 	}
 	return c.buf.Write(p)
+}
+
+// ownManagerLeftOut is claude's listing without this fleet's own manager: it is
+// the fleet's rather than an outside session, and a client offering it would
+// have the manager relay a message to itself. Here rather than in each client,
+// so one from before the manager had this name cannot offer it either.
+func ownManagerLeftOut(peers []core.Peer, own string) []core.Peer {
+	return slices.DeleteFunc(slices.Clone(peers), func(p core.Peer) bool { return strings.EqualFold(p.Name, own) })
 }

@@ -303,6 +303,8 @@ type Fleet struct {
 	// exist here so `/resume <name>` has something to resolve against, which is
 	// the only surface that reads them.
 	parked []Agent
+
+	managerClaude string // the report's rpc.Status.ManagerClaude: see shown and isManager
 }
 
 func NewFleet() Fleet {
@@ -329,14 +331,14 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 	// The daemon's team order, replacing this fleet's wholesale: it is the whole
 	// live-team list every report, so a fold rather than an append is right, and a
 	// team that emptied stops drawing by leaving it. See sections().
-	f.teamOrder = st.Teams
+	f.teamOrder, f.managerClaude = st.Teams, st.ManagerClaude
 	for _, s := range st.Sessions {
 		a := f.agents[s.ID]
 		if a.ID == "" {
 			a.ID = s.ID
 			f.order = append(f.order, s.ID)
 		}
-		a.Name, a.Label, a.Color, a.Team, a.Cwd, a.ParentID = s.Name, s.Label, s.Color, s.Team, runningIn(s), s.ParentID
+		a.Name, a.Label, a.Color, a.Team, a.Cwd, a.ParentID = f.shown(s.Name), s.Label, s.Color, s.Team, runningIn(s), s.ParentID
 		a.Conversation = s.Conversation
 		a.Effort, a.Budget, a.ConfirmedModel = s.Effort, s.Budget, s.ConfirmedModel
 		// Only when the report names one, so a report assembled before the daemon
@@ -421,7 +423,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 	f.parked = nil
 	for _, s := range st.Parked {
 		f.parked = append(f.parked, Agent{
-			ID: s.ID, Name: s.Name, Label: s.Label, Color: s.Color, Team: s.Team, Cwd: runningIn(s),
+			ID: s.ID, Name: f.shown(s.Name), Label: s.Label, Color: s.Color, Team: s.Team, Cwd: runningIn(s),
 			Effort: s.Effort, State: s.State,
 		})
 	}

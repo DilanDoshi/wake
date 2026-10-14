@@ -70,7 +70,18 @@ const (
 	// It is reserved for the reason BroadcastName is: an agent called manager
 	// would silently take every message meant for the service.
 	ManagerName = "manager"
+
+	// ManagerPrefix begins the name claude knows a fleet's manager by,
+	// manager-<fleet>, which the daemon refuses to every other agent.
+	ManagerPrefix = ManagerName + "-"
 )
+
+// IsManager reports whether name is the manager's: Wake's own word for it, or
+// the manager-<fleet> a client draws it as. The prefix is unambiguous because
+// no other agent may take it.
+func IsManager(name string) bool {
+	return name == ManagerName || strings.HasPrefix(name, ManagerPrefix)
+}
 
 // mentionPrefix is the character that opens a mention, and the whole of the
 // collision this file resolves.
@@ -80,6 +91,10 @@ const mentionPrefix = "@"
 type Addressee struct {
 	ID   string
 	Name string
+	// Alias is a second word the service answers to: the manager is drawn as
+	// manager-<fleet>, the name Claude sessions know it by, and @manager still
+	// reaches it. Empty for every other addressee.
+	Alias string
 
 	// Team is the operator's grouping this addressee belongs to, "" for none, and
 	// it is what `@team` fans out over: a mention that is no live name and no
@@ -186,9 +201,9 @@ func Resolve(text string, live []Addressee, service Addressee) Route {
 		canon := strings.ToLower(mention)
 		return Route{Targets: members, Text: rest, Team: canon, Resolved: canon}
 	}
-	// The service answers to its own name, after the fleet: it is not in live,
-	// and a mention that matches nothing there may still be it.
-	if service.ID != "" && service.Name != "" && service.Name == mention {
+	// The service answers to its own name, and to its alias, after the fleet: it
+	// is not in live, and a mention that matches nothing there may still be it.
+	if service.ID != "" && service.Name != "" && (service.Name == mention || service.Alias != "" && service.Alias == mention) {
 		return Route{Targets: []string{service.ID}, Text: rest, Resolved: service.Name}
 	}
 	// Not a live agent and not the service, so it is a path, or a name that has

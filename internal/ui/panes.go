@@ -522,6 +522,9 @@ func (a App) withFocus(f string) App {
 	if a.mcpUI.menu.Open() && a.mcpUI.menu.Pane != f {
 		a = a.closeMCP() // rewindKey's hygiene: a menu belongs to the pane that opened it
 	}
+	if a.statusUI.Open() && a.statusUI.Pane != f {
+		a.statusUI = StatusView{} // and so does /status's
+	}
 	a.focus = f
 	a.room = a.room.WithComposer(a.room.Composer().Focused(f == ""))
 	for _, id := range a.grid.Panes() {

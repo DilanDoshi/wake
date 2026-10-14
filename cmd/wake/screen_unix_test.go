@@ -380,7 +380,7 @@ var rosterRow = regexp.MustCompile(`(?:^|│)[●◐○▪·] ([a-z][a-z0-9-]*)`
 func agentsOnRoster(s *screen) []string {
 	var out []string
 	for _, name := range s.rosterNames() {
-		if name != core.ManagerName {
+		if !core.IsManager(name) { // the manager is drawn as manager-<fleet>
 			out = append(out, name)
 		}
 	}

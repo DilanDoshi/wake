@@ -31,7 +31,11 @@ import (
 	"path/filepath"
 	"regexp"
 	"sort"
+	"strings"
 	"sync"
+	"unicode"
+
+	"github.com/DilanDoshi/wake/internal/core"
 )
 
 // fleetsDirName holds the named fleets, beside the default fleet's own files
@@ -136,6 +140,51 @@ func fleetDirIn(root, name string) (string, error) {
 		return "", err
 	}
 	return filepath.Join(root, fleetsDirName, name), nil
+}
+
+// managerClaudeName is what claude calls the manager of the fleet at socket:
+// `manager-<fleet>`, so a Claude session can tell one fleet's manager from
+// another's while Wake's own name for it stays core.ManagerName. The fleet is
+// the socket's directory - a named fleet's own name, LegacyFleet for root, and
+// a hand-set $WAKE_SOCKET's directory, which names no fleet but is still the one
+// thing that tells two daemons apart.
+//
+// That directory is anybody's text on its way to an argv, so the result is
+// folded into a name's shape (nameShaped). A relative socket is resolved first,
+// or every one of them would be `manager--`; Abs fails only without a working
+// directory, and then the unresolved one is all there is.
+func managerClaudeName(root, socket string) string {
+	dir, err := filepath.Abs(filepath.Dir(socket))
+	if err != nil {
+		dir = filepath.Dir(socket)
+	}
+	fleet := filepath.Base(dir)
+	if dir == root {
+		fleet = LegacyFleet
+	}
+	return core.ManagerPrefix + nameShaped(fleet)
+}
+
+// nameShaped folds a directory's name into a fleet name's shape - name runes,
+// lower case, at most maxFleetName - so a named fleet keeps the whole of its
+// name, and no session id (the reaper's proof of identity) fits behind the
+// prefix: 36 characters would have to reach back over the r of `manager-`.
+func nameShaped(s string) string {
+	s = strings.Map(func(r rune) rune {
+		if r = unicode.ToLower(r); isNameRune(r) {
+			return r
+		}
+		return nameOrdinalSep
+	}, s)
+	return s[:min(len(s), maxFleetName)]
+}
+
+// managerClaude is managerClaudeName for this daemon. With no home directory no
+// socket can sit under ~/.wake, so "" gives the hand-set rule - the right answer
+// rather than a lost error.
+func (s *server) managerClaude() string {
+	root, _ := StateRoot()
+	return managerClaudeName(root, s.socket)
 }
 
 // checkFleetName refuses a name that is not one, saying which rule it broke.

@@ -150,17 +150,10 @@ func statusBar(a Agent, mode string, width, rows int) string {
 	if width < 1 || rows < 1 {
 		return ""
 	}
-	// The confirmed model wins: it is the name a /model probe read back, which
-	// stays current through a runtime /model where the init frame's id does not.
-	// The init id is the fallback until the probe answers - see modelName.
-	model := a.ConfirmedModel
-	if model == "" {
-		model = modelName(a.Model, a.ContextWindow)
-	}
 	segments := []string{
 		shortPath(a.Cwd),
 		gitref.Of(a.Cwd).Name(),
-		model,
+		barModel(a),
 		contextLeft(a.ContextTokens, a.ContextWindow),
 		effortSegment(a.Effort),
 		prSegment(a.prs),
@@ -234,6 +227,17 @@ func statusBar(a Agent, mode string, width, rows int) string {
 	// the operator's eye rests instead: the room name-tag, the roster row, and
 	// the composer they type into (speakerStyle, headStyle, Composer.boxStyle).
 	return HintStyle.Render(strings.Join(out, "\n"))
+}
+
+// barModel is what the bar calls a session's model. The confirmed one wins: it
+// is the name a /model probe read back, which stays current through a runtime
+// /model where the init frame's id does not. The init id is the fallback until
+// the probe answers - see modelName.
+func barModel(a Agent) string {
+	if a.ConfirmedModel != "" {
+		return a.ConfirmedModel
+	}
+	return modelName(a.Model, a.ContextWindow)
 }
 
 // takeRow greedily packs whole segments into one row of at most width cells,

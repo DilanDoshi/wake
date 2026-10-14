@@ -169,7 +169,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 // stream; Wake's names are lower-case.
 func (a App) withManagerSend(sessionID string, ev core.Event, manager Agent) App {
 	t := ev.Tool
-	if ev.Kind != core.KindToolUse || t == nil || t.Send == nil || ev.Subagent != nil || manager.Name != core.ManagerName {
+	if ev.Kind != core.KindToolUse || t == nil || t.Send == nil || ev.Subagent != nil || !a.fleet.isManager(manager.Name) {
 		return a
 	}
 	if _, fleet := a.fleet.ByName(strings.ToLower(t.Send.To)); fleet {

@@ -262,7 +262,7 @@ func (a App) sharedDirectory(agent Agent) string {
 	}
 	var names []string
 	for _, other := range a.fleet.Agents() {
-		if other.ID == agent.ID || other.Cwd != agent.Cwd || other.Name == core.ManagerName ||
+		if other.ID == agent.ID || other.Cwd != agent.Cwd || a.fleet.isManager(other.Name) ||
 			other.State == rpc.StateEnded || other.State == rpc.StateParked || other.State == rpc.StateOrphaned {
 			continue
 		}

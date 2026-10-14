@@ -206,6 +206,14 @@ func dmBanner(a Agent, width int) block {
 // "something needs attention" across the pane, which is what stops this row and
 // a blocked tool call being two different yellows.
 func mcpWarning(needsAuth int) string {
+	if text := mcpWarningText(needsAuth); text != "" {
+		return warnStyle.Render(text)
+	}
+	return ""
+}
+
+// mcpWarningText is that row's words, unstyled, for /status's MCP line.
+func mcpWarningText(needsAuth int) string {
 	if needsAuth < 1 {
 		return ""
 	}
@@ -213,7 +221,7 @@ func mcpWarning(needsAuth int) string {
 	if needsAuth == 1 {
 		noun = "server needs"
 	}
-	return warnStyle.Render(fmt.Sprintf("%s %d MCP %s authentication · run %s", warnGlyph, needsAuth, noun, mcpVerb))
+	return fmt.Sprintf("%s %d MCP %s authentication · run %s", warnGlyph, needsAuth, noun, mcpVerb)
 }
 
 // sessionLine is what this session is: the agent's name, then - once the model

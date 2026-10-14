@@ -212,6 +212,7 @@ func (s *server) managerConfig(cfg core.Config) (core.Config, error) {
 	}
 	cfg.MCPConfig = path
 	cfg.AppendSystemPrompt = managerScope
+	cfg.ClaudeName = s.managerClaude()
 	return cfg, nil
 }
 

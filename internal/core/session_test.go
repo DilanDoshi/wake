@@ -645,6 +645,27 @@ func TestBuildArgsLeavesOffWhatNobodyChose(t *testing.T) {
 	}
 }
 
+// claude is told ClaudeName when one is set and Name otherwise: the manager is
+// `manager` to Wake and `manager-<fleet>` to every Claude session on the machine.
+func TestBuildArgsNamesTheSessionByClaudeNameWhenOneIsSet(t *testing.T) {
+	for _, tc := range []struct {
+		cfg  Config
+		want string
+	}{
+		{Config{SessionID: "uuid-1", Name: ManagerName, ClaudeName: "manager-harbor"}, "manager-harbor"},
+		{Config{SessionID: "uuid-1", Name: "alex"}, "alex"},
+	} {
+		args, err := NewSession(tc.cfg).buildArgs()
+		if err != nil {
+			t.Fatalf("buildArgs: %v", err)
+		}
+		joined := " " + strings.Join(args, " ") + " "
+		if !strings.Contains(joined, " --name "+tc.want+" ") || strings.Count(joined, " --name ") != 1 {
+			t.Errorf("%+v was started with\n  %s\nwant exactly one --name %s", tc.cfg, joined, tc.want)
+		}
+	}
+}
+
 // --- beyond the brief -------------------------------------------------------
 
 // Send has to reach a live process, not just a buffer, and the process has

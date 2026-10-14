@@ -954,6 +954,11 @@ var allowed = map[string]map[string]bool{
 	// deleted rather than re-argued. An exemption nobody needs is a standing
 	// permission for the whole file.
 	"internal/ui/legend.go": {"interrupt": true},
+	// Wake's own /status command word. Headless claude refuses /status with no
+	// turn (testdata/stream/bare-status.jsonl), so Wake answers it from what it
+	// holds and writes nothing: the word is typed by the operator and never
+	// decoded from, or sent to, claude. rpc/wire.go's FrameStatus is the same case.
+	"internal/ui/slash.go": {"status": true},
 	// The one argument every acting MCP tool takes, and the name a *model*
 	// reads in the schema. Claude's wire carries agent_id too - on a
 	// permission request, naming the subagent that asked - and the two never
@@ -1029,7 +1034,9 @@ var allowed = map[string]map[string]bool{
 // coincidence of subject rather than reuse of the wire.
 // 22 → 25: WorkflowRun's own "script", "status" and "summary" json tags
 // (task 2), reusing three more words the wire also carries.
-const allowlistPairCount = 26
+// 26 → 27: slash.go's /status command word, Wake's own command that claude
+// refuses headless.
+const allowlistPairCount = 27
 
 func TestTheAllowlistDoesNotGrowQuietly(t *testing.T) {
 	pairs := 0

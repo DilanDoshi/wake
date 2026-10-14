@@ -60,6 +60,9 @@ func formatStatus(st rpc.Status, team string) string {
 	switch {
 	case st.Running:
 		fmt.Fprintf(&b, "wake daemon running (pid %d, wake %s) on %s\n", st.PID, daemonBuild(st.Build), st.Socket)
+		if st.ManagerClaude != "" {
+			fmt.Fprintf(&b, "Claude sessions know its manager as %s.\n", st.ManagerClaude)
+		}
 		if text, stale := staleDaemonNotice(&st, version.Build()); stale {
 			b.WriteString(text + "\n")
 		}
