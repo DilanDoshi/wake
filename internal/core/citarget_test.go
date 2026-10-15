@@ -3,6 +3,7 @@ package core
 import (
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -51,7 +52,7 @@ var ciOnlySteps = map[string]string{
 // TestMakeCIRunsEveryStepTheWorkflowRuns holds the two lists together.
 func TestMakeCIRunsEveryStepTheWorkflowRuns(t *testing.T) {
 	workflow, _ := workflowCommands(t)
-	target := makeCICommands(t)
+	target := makeRecipeCommands(t, "ci")
 
 	inTarget := make(map[string]bool, len(target))
 	for _, cmd := range target {
@@ -152,13 +153,13 @@ func workflowCommands(t *testing.T) (cmds []string, blockSteps []string) {
 	return cmds, blockSteps
 }
 
-// makeCICommands returns the commands in the Makefile's ci target.
+// makeRecipeCommands returns the commands in one of the Makefile's targets.
 //
 // `$(MAKE)` is normalised to `make`: the recipe has to use the variable so
 // flags reach the sub-make, and the workflow spells the same step `make test`.
-// Comments and echoes are not commands and are skipped - the target opens with
-// one, reporting the TMPDIR that CI pins for itself.
-func makeCICommands(t *testing.T) []string {
+// Comments and echoes are not commands and are skipped - the ci target opens
+// with one, reporting the TMPDIR that CI pins for itself.
+func makeRecipeCommands(t *testing.T, target string) []string {
 	t.Helper()
 
 	path := filepath.Join(repoRoot, makefileFile)
@@ -168,9 +169,9 @@ func makeCICommands(t *testing.T) []string {
 	}
 
 	var cmds []string
-	found, inRecipe := false, false
+	found, inRecipe, continued := false, false, ""
 	for _, line := range strings.Split(string(b), "\n") {
-		if strings.HasPrefix(line, "ci:") {
+		if strings.HasPrefix(line, target+":") {
 			found, inRecipe = true, true
 			continue
 		}
@@ -186,6 +187,12 @@ func makeCICommands(t *testing.T) []string {
 			break
 		}
 		cmd := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "\t"), "@"))
+		// A trailing backslash continues the command on the next line, as make reads it.
+		if head, ok := strings.CutSuffix(cmd, `\`); ok {
+			continued += head + " "
+			continue
+		}
+		cmd, continued = continued+cmd, ""
 		if cmd == "" || strings.HasPrefix(cmd, "#") || strings.HasPrefix(cmd, "echo ") {
 			continue
 		}
@@ -193,10 +200,10 @@ func makeCICommands(t *testing.T) []string {
 	}
 
 	if !found {
-		t.Fatalf("no `ci:` target in the %s - `make ci` is what this file's guard is about", makefileFile)
+		t.Fatalf("no `%s:` target in the %s, so there is no recipe to read", target, makefileFile)
 	}
 	if len(cmds) == 0 {
-		t.Fatalf("the `ci:` target in the %s has no commands, so it would pass by running nothing", makefileFile)
+		t.Fatalf("the `%s:` target in the %s has no commands, so it would pass by running nothing", target, makefileFile)
 	}
 	return cmds
 }
@@ -209,7 +216,7 @@ func makeCICommands(t *testing.T) []string {
 // run in parallel, so there is no global order to compare against - which
 // leaves this one relation to state on its own.
 func TestMakeCIBuildsBeforeItTests(t *testing.T) {
-	cmds := makeCICommands(t)
+	cmds := makeRecipeCommands(t, "ci")
 
 	at := func(want string) int {
 		for i, cmd := range cmds {
@@ -226,5 +233,49 @@ func TestMakeCIBuildsBeforeItTests(t *testing.T) {
 			"The workflow orders them the other way and says why: the tests do not build "+
 			"cmd/wake, so a broken entrypoint passes the suite. .gitignore once excluded "+
 			"that whole directory.", test, build)
+	}
+}
+
+// TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace holds the Makefile to
+// the suite's two lanes: `make test` under -race with no coverage flag, `make
+// cover` without -race and with the profile (decisions.md, 2026-10-14). Atomic
+// cover counters can hide real races from the detector. This reads what the
+// recipes say; racelane_race_test.go catches coverage that reaches a -race run
+// any other way (GOFLAGS, a variable).
+func TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace(t *testing.T) {
+	lane := func(target string) []string {
+		var tests []string
+		for _, cmd := range makeRecipeCommands(t, target) {
+			if strings.HasPrefix(cmd, "go test ") {
+				tests = append(tests, cmd)
+			}
+		}
+		if len(tests) != 1 {
+			t.Fatalf("`make %s` runs %d `go test` commands, want exactly one: %v\n"+
+				"each target is one lane and `make ci` runs both", target, len(tests), tests)
+		}
+		return strings.Fields(tests[0])
+	}
+	isRace := func(arg string) bool { return arg == "-race" }
+	isCover := func(arg string) bool { return strings.HasPrefix(arg, "-cover") }
+
+	race := lane("test")
+	if !slices.ContainsFunc(race, isRace) {
+		t.Errorf("`make test` is the race lane and has no -race: %v", race)
+	}
+	if slices.ContainsFunc(race, isCover) {
+		t.Errorf("`make test` carries a coverage flag under -race: %v\n"+
+			"atomic cover counters hide real data races from the detector; coverage "+
+			"belongs to `make cover`, which runs without -race", race)
+	}
+
+	cover := lane("cover")
+	if slices.ContainsFunc(cover, isRace) {
+		t.Errorf("`make cover` runs under -race: %v\n"+
+			"that makes it a weaker race lane than `make test` and drops the "+
+			"no-detector run decisions.md says the suite needs", cover)
+	}
+	if !slices.ContainsFunc(cover, func(arg string) bool { return strings.HasPrefix(arg, "-coverprofile=") }) {
+		t.Errorf("`make cover` writes no coverage profile, so the gate would read nothing: %v", cover)
 	}
 }

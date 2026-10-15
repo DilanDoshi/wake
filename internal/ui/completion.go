@@ -152,6 +152,10 @@ type completion struct {
 	// subagents' `(agent)`. Nil for a flat menu.
 	tags map[string]offerTag
 
+	// routed is the offer Wake itself resolves the typed `@manager` to - the drawn
+	// `@manager-<fleet>` - where Wake reads the word, and "" anywhere else.
+	routed string
+
 	// paths is the `@` half, which is a directory read and so is not this
 	// goroutine's. See completionpath.go.
 	paths pathMenu
@@ -276,6 +280,13 @@ func (a App) mentionMenu(draft, head, typed string) completion {
 	switch {
 	case a.focus == "" && !a.behindAddressee(head, typed):
 		c.names, c.tags = a.addressees(typed)
+		// Wake reads the leading mention (core.Resolve, exact, on the wire) and an
+		// @who command's target (on the raw draft, as the slash router splits it).
+		_, cmd := leadingRoomTargetCommand(head)
+		cmd = cmd && len(strings.Fields(head)) == 1 && !strings.ContainsFunc(head, otherSpace)
+		if typed == core.ManagerName && (a.room.Composer().WireText(head) == "" || cmd) {
+			c.routed = agentPrefix + a.fleet.shown(typed)
+		}
 		if a.relaysLeading(head, typed) {
 			c = a.machineSessions(c, typed, a.routedNames())
 		}
@@ -538,14 +549,14 @@ func (a App) mentionedAlone(head string) (Agent, bool) {
 func (c completion) bounded() completion {
 	c.paths = c.paths.reranked()
 	paths, rest := c.paths.rows()
-	// A name already typed exactly as offered goes first among the names, so a
+	// A name already typed as offered (typedAs) goes first among the names, so a
 	// longer sibling that shares its prefix (`/team` beside `/team-onboarding`)
 	// neither takes the cursor from it nor lets the bound cut it - ↵ and ⇥ then act
 	// on the word. Among the names only: the paths arrive later and rank their own
 	// exact match first, and promoting one over a live name would move row 0 under a
 	// cursor that stayed on it.
 	names := c.names
-	if i := slices.Index(names, strings.TrimPrefix(c.draft, c.head)); i > 0 {
+	if i := slices.IndexFunc(names, c.typedAs); i > 0 {
 		names = slices.Concat(names[i:i+1], names[:i], names[i+1:])
 	}
 	matched := append(slices.Clone(names), paths...)
@@ -619,17 +630,23 @@ func (a App) typingWord() bool {
 	return c.draft != "" && c.pane == a.focus && c.draft == a.composer().Value()
 }
 
+// typedAs reports whether offer is the word already being completed: as typed,
+// or as Wake resolves it where Wake reads it (routed).
+func (c completion) typedAs(offer string) bool {
+	return offer == strings.TrimPrefix(c.draft, c.head) || c.routed != "" && offer == c.routed
+}
+
 // enterCompletes is ↵ taking the cursored offer. It declines when there is
-// nothing to take - no menu, or a word already typed exactly as offered, which ↵
-// sends. A directory typed in full (`src/`) is not that case: the offers are then
-// its children, and a bare directory is sent by typing a space, which closes the
-// menu.
+// nothing to take - no menu, or a word already typed as offered (typedAs), which
+// ↵ sends. A directory typed in full (`src/`) is not that case: the offers are
+// then its children, and a bare directory is sent by typing a space, which
+// closes the menu.
 func (a App) enterCompletes() (App, tea.Cmd, bool) {
 	if !a.completionUp() {
 		return a, nil, false
 	}
 	c := a.completion
-	if c.head+c.offers[c.cursor] == c.draft {
+	if c.typedAs(c.offers[c.cursor]) {
 		return a, nil, false
 	}
 	next, scan := a.acceptCompletion()
