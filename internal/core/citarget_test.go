@@ -169,7 +169,7 @@ func makeRecipeCommands(t *testing.T, target string) []string {
 	}
 
 	var cmds []string
-	found, inRecipe := false, false
+	found, inRecipe, continued := false, false, ""
 	for _, line := range strings.Split(string(b), "\n") {
 		if strings.HasPrefix(line, target+":") {
 			found, inRecipe = true, true
@@ -187,6 +187,12 @@ func makeRecipeCommands(t *testing.T, target string) []string {
 			break
 		}
 		cmd := strings.TrimSpace(strings.TrimPrefix(strings.TrimPrefix(line, "\t"), "@"))
+		// A trailing backslash continues the command on the next line, as make reads it.
+		if head, ok := strings.CutSuffix(cmd, `\`); ok {
+			continued += head + " "
+			continue
+		}
+		cmd, continued = continued+cmd, ""
 		if cmd == "" || strings.HasPrefix(cmd, "#") || strings.HasPrefix(cmd, "echo ") {
 			continue
 		}
@@ -194,7 +200,7 @@ func makeRecipeCommands(t *testing.T, target string) []string {
 	}
 
 	if !found {
-		t.Fatalf("no `%s:` target in the %s - this file's guards are about it", target, makefileFile)
+		t.Fatalf("no `%s:` target in the %s, so there is no recipe to read", target, makefileFile)
 	}
 	if len(cmds) == 0 {
 		t.Fatalf("the `%s:` target in the %s has no commands, so it would pass by running nothing", target, makefileFile)
@@ -230,17 +236,12 @@ func TestMakeCIBuildsBeforeItTests(t *testing.T) {
 	}
 }
 
-// TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace keeps the suite's two
-// lanes apart, because merging them is the obvious saving and a wrong one.
-//
-// `-race` forces `-covermode=atomic`, whose counters are sync/atomic calls the
-// detector treats as synchronisation: two goroutines through the same
-// instrumented statement gain a happens-before edge, and a real race on the
-// data beside it goes unreported. Measured on a scratch package (2026-10-14),
-// one test fails under `-race` and passes under `-race -cover`. So the race
-// lane carries no coverage, and the lane that carries the profile carries no
-// detector - which keeps it the no-detector run decisions.md's two-lane ruling
-// is about.
+// TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace holds the Makefile to
+// the suite's two lanes: `make test` under -race with no coverage flag, `make
+// cover` without -race and with the profile (decisions.md, 2026-10-14). Atomic
+// cover counters can hide real races from the detector. This reads what the
+// recipes say; racelane_race_test.go catches coverage that reaches a -race run
+// any other way (GOFLAGS, a variable).
 func TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace(t *testing.T) {
 	lane := func(target string) []string {
 		var tests []string

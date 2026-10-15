@@ -43,12 +43,8 @@ build: ## Compile the wake binary
 run: build ## Build and start wake
 	$(BIN)
 
-# The suite runs twice, once under the race detector and once without it - the
-# detector masks ordering bugs (docs/notes/decisions.md) - and each lane is one
-# target. `make test` is the race lane and carries no coverage: -race forces
-# atomic cover counters, whose sync/atomic calls hide real data races from the
-# detector. `make cover` is the plain lane and carries the coverage profile.
-# `make ci` runs both.
+# Two lanes, one per target, and `make ci` runs both. Never coverage under -race:
+# atomic cover counters can hide real races (decisions.md, 2026-10-14).
 test: ## Run the suite under the race detector (`make cover` is the plain lane)
 	go test $(PKG) -race -count=1
 
@@ -105,12 +101,8 @@ ci: ## Run every step CI runs (see .github/workflows/ci.yml)
 	$(MAKE) test
 	$(MAKE) cover
 
-# NOT the gate: no race lane, no coverage floors, no cross-compile, and a cached
-# "ok" proves less than a fresh one, so nothing may cite it - `make ci` is the
-# only gate. It exists for iterating: Go's test cache re-runs only the packages
-# whose inputs changed. WAKE_SOCKET is one of those inputs, so it is pinned to a
-# stable scratch path here; the fresh one above would miss the cache on every
-# run for each package that reads it. The tests dial sockets of their own.
+# NOT the gate, and nothing cites it. Go's test cache keys on the environment a
+# test reads, so WAKE_SOCKET is pinned to a stable scratch path (decisions.md).
 quick: export WAKE_SOCKET := $(or $(patsubst %/,%,$(TMPDIR)),/tmp)/wake-quick/wake.sock
 quick: ## NOT the gate: build, lint and a cached plain suite, for iterating
 	@mkdir -p $(dir $(WAKE_SOCKET))

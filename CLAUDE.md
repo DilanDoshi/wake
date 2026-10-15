@@ -488,8 +488,9 @@ HOME=$(mktemp -d) claude --print --input-format stream-json --output-format stre
 | live | Build tag `live`: a real `claude` (`TestLiveWire` decodes its stdout and transcript; `TestLiveJourney` drives the screen) |
 
 The suite runs in two lanes, `make test` under `-race` and `make cover` without it — the detector
-masks ordering bugs. **Never put a coverage flag on the race lane:** `-race` forces atomic cover
-counters, which hide real data races from the detector (`TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace`).
+masks ordering bugs. **Never collect coverage under `-race`:** it forces atomic cover counters, which
+can hide real data races from the detector (`citarget_test.go` reads the recipes, `racelane_race_test.go`
+fails such a run however the flag arrived).
 `make ci` runs both and may not drift from the workflow (`internal/core/citarget_test.go`);
 `make quick` is not a gate. A goroutine leak is a bug.
 
