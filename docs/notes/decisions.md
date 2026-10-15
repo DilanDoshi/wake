@@ -4289,3 +4289,26 @@ landed in an agent's DM, and `↵` sent a half-typed word while the menu on scre
   already-typed rule with and without its head, the exact-first float, the bound, the cursor-at-end
   condition, the armed detach, ⌥↵) and the pty cases in `cmd/wake/completionkeysscreen_unix_test.go`.
   The older menu pty tests match the hint through `completionKeyHint`, which is `⇥ ↵ complete` now.
+
+## 2026-10-14 — ↵ over `@manager` sends it where Wake reads the word
+
+`#167` (↵ accepts the cursored offer while that changes the draft) and `#165` (the manager is drawn as
+`manager-<fleet>`, and a typed `manager` goes through `Fleet.shown`) were each green and red together:
+the room's menu offers `@manager-<fleet>` for a typed `@manager`, so ↵ rewrote the word instead of sending
+it. `/quit @manager` stopped reaching the manager's refusal, and a lone `@manager` (an empty message to the
+manager, as a lone `@jade` is to jade) took a second ↵.
+
+- **"Already typed" is judged as Wake reads the word.** `completion.routed` is the drawn `@manager-<fleet>`
+  only where Wake resolves a typed `@manager` itself: the room's leading mention (`core.Resolve` on the wire
+  text, whose alias match is exact, so `@Manager` is not it) and the target right after one of Wake's `@who`
+  commands, judged on the raw draft as `slash` splits it - an ASCII space alone (`otherSpace`), so
+  `/quit` ⌃J `@manager` or an image chip ahead of `/quit` is a message, and a `/task` label is text. `typedAs` - as typed, or as routed - is the one predicate
+  `enterCompletes` and `bounded()`'s exact-first float share, so the manager's row also holds the cursor
+  against an agent whose name merely starts with `manager` (only `manager-` is fenced).
+- **Everywhere else the long form is right.** Prose such as `see @manager` reaches agents as text, and a
+  conversation routes nothing; claude knows the manager only as `manager-<fleet>`, so ↵ still writes it.
+- **An outside session named exactly `manager` is not offered in the room** (`machineSessions` skips the
+  manager's alias): `@manager` reaches the fleet's manager, never that session - a `#165` residual. One named
+  `Manager` still is, since `@Manager` passes through to the manager, which relays it.
+- Not taken: offering `@manager` ahead of the drawn name, which would put a name on the menu that is drawn
+  nowhere else. Tests in `managername_test.go`, every part mutation-checked.

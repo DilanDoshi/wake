@@ -333,7 +333,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   alone (`mention.go`, `leadingCommand`).
 - **Completion offers and never routes; `⇥` and `↵` accept the cursored offer** (owner, 2026-10-12,
   reversing 2026-09-27's "never takes `↵`"). `↵` accepts only while that changes the draft, so a word
-  typed in full (`/clear`) still sends; `⇥` stays put over any `/` or `@` word, matched or not
+  typed in full (`/clear`; `@manager` where Wake reads it - the room's leading mention, an `@who`
+  command's target - is the drawn `@manager-<fleet>`) still sends; `⇥` stays put over any `/` or `@` word, matched or not
   (`typingWord`), and is the conversation ring's everywhere else. Session commands/skills first, then
   Wake's, agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads and the
   conversation's one bounded `git -c core.fsmonitor=false ls-files` per opening run off the draw

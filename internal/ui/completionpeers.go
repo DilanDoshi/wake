@@ -157,10 +157,14 @@ func (a App) machineSessions(c completion, typed string, routed map[string]bool)
 	c.peers.wants = true
 	held := a.heldNames()
 	maps.Copy(held, routed)
+	alias := "" // the room's @manager reaches the fleet's manager, matched exactly (core.Resolve)
+	if routed != nil {
+		alias = a.service().Alias
+	}
 	for _, p := range a.completion.peers.listing {
 		key := strings.ToLower(p.Name)
 		mention, ok := peerMention(p.Name)
-		if held[key] || !matches(p.Name) || !ok {
+		if held[key] || alias != "" && p.Name == alias || !matches(p.Name) || !ok {
 			continue
 		}
 		held[key] = true // a listing naming one twice, in any case, offers it once
