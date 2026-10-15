@@ -47,8 +47,10 @@ func TestWritingTheOperatorsRenameLeavesClaudesNameUnknown(t *testing.T) {
 // (list-agents.jsonl:7-8): the name as the assistant's text, then a local
 // command result. "clash" takes a variant, as a colliding name does. "hold"
 // keeps a turn open, buffering what arrives, until "release"; "renames?"
-// reports every /rename received, and the --name it was started with.
-func fakeRenameSync(sid string) int {
+// reports every /rename received, and the --name it was started with. late
+// answers the handshake, the session's first line, only once the next has
+// arrived, then says "handshake answered".
+func fakeRenameSync(sid string, late bool) int {
 	var renames, held []string
 	holding := false
 	answer := func(line string) {
@@ -69,8 +71,14 @@ func fakeRenameSync(sid string) int {
 			emitResult(sid)
 		}
 	}
-	for line := range stdinLines() {
+	take := func(line string) {
 		switch {
+		case strings.Contains(line, `"subtype":"mcp_status"`):
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"mcpServers":[]}}}`+"\n", controlRequestID(line))
+		case strings.Contains(line, `"type":"control_request"`):
+			// Answered at once and with no turn, as claude answers the handshake
+			// (initialize.jsonl:3): a result would end a turn nobody sent.
+			fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q}}`+"\n", controlRequestID(line))
 		case strings.Contains(line, `"text":"hold"`):
 			holding = true
 		case strings.Contains(line, `"text":"release"`):
@@ -85,6 +93,20 @@ func fakeRenameSync(sid string) int {
 		default:
 			answer(line)
 		}
+	}
+	lines := stdinLines()
+	if late {
+		handshake, next := <-lines, <-lines
+		if !strings.Contains(next, `"text":"hold"`) { // else the test would force nothing
+			fmt.Fprintln(os.Stderr, "renamesynclate: the line after the handshake is not hold:", next)
+			return 1
+		}
+		take(handshake)
+		emitText(sid, "handshake answered")
+		take(next)
+	}
+	for line := range lines {
+		take(line)
 	}
 	return 0
 }
@@ -170,6 +192,33 @@ func TestRenamesDuringATurnReachClaudeAsOneRenameAfterIt(t *testing.T) {
 	}).Event.Text
 	if !strings.HasPrefix(during, "renames: 0 ") {
 		t.Fatalf("claude was sent a /rename during its turn: %q", during)
+	}
+	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [zed]") {
+		t.Fatalf("after the turn claude was sent %q, want one /rename zed", got)
+	}
+}
+
+// The flake in the test above, forced: the fake answers the handshake only
+// after reading "hold", so whatever that answer carries lands inside the held
+// turn. Claude answers a handshake with no turn (initialize.jsonl:3), so the
+// held turn is still owed and the renames still wait for its end.
+func TestRenamesDuringATurnWaitForItWhenTheHandshakeIsAnsweredInsideIt(t *testing.T) {
+	fakeClaudeOnPath(t, "renamesynclate")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "sydney")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "hold"})
+	c.awaitEvent(idAlpha, "handshake answered")
+	renameTo(c, idAlpha, "ann")
+	renameTo(c, idAlpha, "zed")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "renames?"})
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "release"})
+	during := c.await("the count asked mid-turn", func(f rpc.Frame) bool {
+		return f.Kind == rpc.FrameEvent && f.Event != nil && strings.HasPrefix(f.Event.Text, "renames: ")
+	}).Event.Text
+	if !strings.HasPrefix(during, "renames: 0 ") {
+		t.Fatalf("claude was sent a /rename during its turn: %q\nsaw: %s", during, c.transcript())
 	}
 	if got := askRenames(c, idAlpha); !strings.HasPrefix(got, "renames: 1 [zed]") {
 		t.Fatalf("after the turn claude was sent %q, want one /rename zed", got)
