@@ -309,7 +309,9 @@ func runFakeClaude() int {
 	case "probe":
 		return fakeModelProbe(sid)
 	case "renamesync":
-		return fakeRenameSync(sid) // see renamesync_test.go
+		return fakeRenameSync(sid, false) // see renamesync_test.go
+	case "renamesynclate":
+		return fakeRenameSync(sid, true)
 	case "advertises":
 		// An agent whose init advertises list-agents - see peers_test.go.
 		return fakeAdvertises(sid)

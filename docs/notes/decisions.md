@@ -4289,3 +4289,27 @@ landed in an agent's DM, and `↵` sent a half-typed word while the menu on scre
   already-typed rule with and without its head, the exact-first float, the bound, the cursor-at-end
   condition, the armed detach, ⌥↵) and the pty cases in `cmd/wake/completionkeysscreen_unix_test.go`.
   The older menu pty tests match the hint through `completionKeyHint`, which is `⇥ ↵ complete` now.
+
+## 2026-10-14 — a fake answers a control request as claude does: at once, with no turn
+
+The rename-sync e2e tests failed about 1 run in 9 (`TestRenamesDuringATurnReachClaudeAsOneRenameAfterIt`,
+35/300) and 1 in 17 (`TestANameAheadOfAnUnmirroredRenameSendsNoSecondRename`, 18/300) without `-race`, and
+never with it, so they surfaced in `make ci`'s plain lane. The daemon was right; the fake was not.
+`daemon.handshake` writes `initialize` as a session's first line and the spawn reply goes out before it is
+answered. `fakeRenameSync` answered every unknown line - the handshake too - with an echo and a `result`,
+and when that answer arrived after the test's "hold" was written, its turn end cleared `owed` inside the held
+turn, so `/rename` went to claude mid-turn. Claude answers `initialize` with a `control_response` and no
+turn (`testdata/stream/initialize.jsonl:3`: a `control_response` carrying its payload), so against it that
+ordering cannot happen.
+
+- **The fix is the fake's**: it answers a `control_request` at once and with no turn, as recorded (`mcp_status`
+  with no servers, as `fakeHandshake` does). No sleep moved. `TestRenamesDuringATurnWaitForItWhenTheHandshakeIsAnsweredInsideIt` forces the bad ordering
+  causally (the `renamesynclate` fake answers the handshake only once "hold" has arrived): 20/20 red with the
+  old answer, and it still guards the daemon - removing `owed`'s gates in `queueProbeLocked` and
+  `renameWrite` turns it red. After the fix the two tests ran 0/300 each.
+- **Residual, not fixed here:** every other fake that echoes an unknown line still answers the handshake with
+  a turn - `fakeTurns`, `fakeMCP`, `fakeMode`, `fakeModelProbe` (with an `init`), `fakeInterruptible`,
+  `fakeConnectors`, `fakeSlowTurns`, `fakeNoisyExit`, `fakeAdvertises`, `fakeRewind`, `fakeWorkflowFleet` - so
+  a test of theirs that leans on `owed` right after a spawn can flake the same way. And `owed` is one flag any turn end clears, so a probe can queue
+  between a turn's `result` and a type-ahead message's `started`; claude reads a command only after the turn,
+  so nothing is read mid-turn, but the probe's reply window would span a real turn. Unproven; worth its own look.
