@@ -125,9 +125,9 @@ and the manager can fan a message out to one with its own tool.
 
 ```sh
 make build   # from source: ./bin/wake
-make test    # the suite, twice: with and without -race
+make test    # the suite under -race
 make lint    # golangci-lint
-make cover   # coverage gate, 80% per package
+make cover   # the suite without -race, and the coverage gate: 80% per package
 make soak    # 20 fake sessions through a real daemon
 ```
 

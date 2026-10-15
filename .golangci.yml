@@ -22,11 +22,13 @@ run:
   # non-test stubs. procgroup_other_test.go is reached by neither, because
   # `go build` does not compile test files.
   # drift and live for the same reason: the audit and the live probes are
-  # never compiled by `go test ./...`, so lint is the only eye on them.
+  # never compiled by `go test ./...`, so lint is the only eye on them. race
+  # for internal/core/racelane_race_test.go, which only the race lane builds.
   build-tags:
     - soak
     - drift
     - live
+    - race
 
 linters:
   # Nothing is on unless it is named below.
