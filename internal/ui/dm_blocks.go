@@ -184,6 +184,11 @@ func (d DM) renderEvent(ev core.Event) block {
 		joined: ev.Kind == core.KindToolResult,
 	}
 	b.copied, b.src = copiedAs(ev)
+	// A peer message that folds is a click target, keyed like a tool call so
+	// openTool opens it; one that fits is not, or a click would rewrap for nothing.
+	if ev.Kind == core.KindCrossSession && peerFolds(ev.Text, d.bodyWidth(ev)) {
+		b.tool = peerKey(ev)
+	}
 	// A subagent's call is deliberately unmarked: its block is drawn inside an
 	// attribution gutter, so the ⏺ is not at the start of its line and neither
 	// a recolour nor a click could address it without redrawing the whole
@@ -198,6 +203,15 @@ func (d DM) renderEvent(ev core.Event) block {
 		b.tool = ev.Tool.ID
 	}
 	return b
+}
+
+// bodyWidth is the width kindBlock draws ev at: the pane's, less a subagent's
+// gutter. What decides from what is drawn asks here, so it cannot disagree.
+func (d DM) bodyWidth(ev core.Event) int {
+	if ev.Subagent == nil {
+		return d.blockWidth()
+	}
+	return d.blockWidth() - lipgloss.Width(subagentGutter)
 }
 
 // eventBlock is what one event looks like, or "" for an event with no visual
@@ -225,7 +239,7 @@ func (d DM) eventBlock(ev core.Event) string {
 		// The tag is what ties it to the stream above.
 		return mutedLine(subagentLead+subagentTag(ev.Subagent)+subagentSep+note, w)
 	}
-	body := d.kindBlock(ev, w-lipgloss.Width(subagentGutter))
+	body := d.kindBlock(ev, d.bodyWidth(ev))
 	if body == "" {
 		// No content, so no header either: a lone "⤷ …" naming a subagent
 		// that said nothing is a blank turn in the transcript.
@@ -321,7 +335,7 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		}
 		return renderMarkdown(ev.Text, w)
 	case core.KindCrossSession:
-		return crossSessionBlock(ev, w)
+		return crossSessionBlock(ev, w, d.expandedTool(peerKey(ev)))
 	case core.KindUserText:
 		// A user frame the airlock recognised as something other than the user
 		// speaking - Claude's abort marker, which carries nothing else to tell
@@ -411,11 +425,12 @@ func localReplyBlock(text string, width int) string {
 }
 
 // crossSessionBlock renders a peer's cross-session message in a DM: the sender's
-// from-name with the room's ↪ lead, then the body in Muted. Not shadedOwn -
-// these are not the operator's words - and the sender's identity colour is the
-// room's alone, since a DM has no fleet to resolve from-name into an agent.
-func crossSessionBlock(ev core.Event, width int) string {
-	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), crossSessionBody(ev.Text, width))
+// from-name with the room's ↪ lead, then the body in Muted, folded past
+// peerFoldRows (peerfold.go). Not shadedOwn - these are not the operator's words -
+// and the sender's identity colour is the room's alone, since a DM has no fleet to
+// resolve from-name into an agent.
+func crossSessionBlock(ev core.Event, width int, expanded bool) string {
+	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), peerBody(ev.Text, width, expanded))
 }
 
 // crossSessionBody draws a received peer message's body in Muted - Claude's

@@ -25,8 +25,9 @@ type block struct {
 	// halves reads as two unrelated things.
 	joined bool
 
-	// tool is the tool_use id this block belongs to, and "" for every other
-	// block. It is what a click resolves to; see transcript.mark.
+	// tool is the tool_use id this block belongs to - or a folded peer message's
+	// peerKey - and "" for every other block. It is what a click resolves to; see
+	// transcript.mark.
 	tool string
 
 	// head marks the half of a call that opens with the ⏺ line, which is the

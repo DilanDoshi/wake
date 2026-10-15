@@ -243,7 +243,7 @@ func TestACrossSessionMessageBodyIsDimmed(t *testing.T) {
 	muted := fgEscape(t, Muted)
 
 	// The receiver's own 1:1 DM view.
-	dm := crossSessionBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}, 60)
+	dm := crossSessionBlock(core.Event{Kind: core.KindCrossSession, FromName: "planner", Text: "rerun the build"}, 60, false)
 	if !strings.Contains(dm, muted) {
 		t.Errorf("the DM cross-session body is not dimmed to Muted:\n%q", dm)
 	}

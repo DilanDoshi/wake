@@ -4370,3 +4370,25 @@ ordering cannot happen.
   a test of theirs that leans on `owed` right after a spawn can flake the same way. And `owed` is one flag any turn end clears, so a probe can queue
   between a turn's `result` and a type-ahead message's `started`; claude reads a command only after the turn,
   so nothing is read mid-turn, but the probe's reply window would span a real turn. Unproven; worth its own look.
+
+## 2026-10-13 — a peer's cross-session message folds at three rows, in the room and in a conversation
+
+The owner's ask: when sessions message each other, show about three lines of one colour, then a click or
+a key to open the rest. Before, the room folded a peer message only past 24 rows (the reply's cap), under
+`⤷ ⌃D open DM` — a pointer that opens a different surface, not the message — and a conversation never
+folded it at all.
+
+- **Three body rows, then one pointer row** (`peerFoldRows`, `peerfold.go`). A message of three rows draws
+  whole with no pointer; four folds. The reply's 24-row fold and its `⌃D open DM` pointer are unchanged —
+  a reply is for the DM, a peer message is only longer than it needs to be.
+- **One colour.** The body is `HintStyle` (Muted) and so is the pointer, so the fold is a single colour
+  under the head's own.
+- **The pointer names the gesture it offers**: `⤷ +N lines · ⌃E or click to expand`. `⌃E` opens every
+  fold in the pane and a click one, the same two gestures a tool result has.
+- **A conversation's click key is a hash of sender and words** (`peerKey`), because a live cross-session
+  event carries no id of its own, and rides the tool-result path (`block.tool`, `opened`, `openTool`)
+  rather than a second click mechanism. The same words from the same sender therefore open together,
+  and stay open for a later identical message until `⌃E` folds everything or the conversation clears. A
+  message that fits three rows gets no key: a click on it would rewrap the transcript to change nothing.
+  The key and the fold are decided at `DM.bodyWidth`, the width the block is drawn at (a subagent's is a
+  gutter narrower), so a pointer is always a click target.

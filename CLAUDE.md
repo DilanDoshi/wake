@@ -324,7 +324,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `/groupchat-filter off` flips the default per window (`roomfilter.go`).
 - **Peer cross-session messages** show in the room as `↪ sender → recipient`
   (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*
-  content, so pasted text can't forge one. DM replays of Wake's own sends are dropped.
+  content, so pasted text can't forge one. DM replays of Wake's own sends are dropped. A message
+  past three rows folds to them in the room and a conversation, under a pointer in the body's own
+  Muted; `⌃E` or a click opens it (`peerfold.go`).
 - **Slash commands resolve against a closed set Wake owns; anything else is text.** A word claude
   advertises may be claimed only in a form claude is recorded doing nothing with
   (`bareOnlyCommands` names the fixture). `/color` is the owner-claimed exception
@@ -425,7 +427,7 @@ yet says so in bold.**
 | Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
-| Room | `internal/ui/chat.go` · `chat_blocks.go` · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
