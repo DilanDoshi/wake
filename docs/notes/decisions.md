@@ -598,7 +598,8 @@ what this entry said not to do. The split is by direction and job: `protocol.go`
 the 200–400 band, enforced by `airlock_test.go`, which pins the file set and fails on an unlisted member or one outside
 `internal/core`. `control_cancel_request` is now recorded **and decoded** — `core.KindRequestWithdrawn`, merged 2026-08-09. So the entry's prediction was right about the trigger and wrong about which change would reach it first.
 
-**`make test` runs with and without `-race`.** Twice the no-race run caught what the detector hid:
+**`make test` runs with and without `-race`.** *(Superseded 2026-10-14: the two lanes are `make test` and
+`make cover`; see the end of this file.)* Twice the no-race run caught what the detector hid:
 `Getpgid` failing on a zombie, and a timing-dependent exit-status assertion. Both passed 5/5 under
 `-race` and failed 5/5 without. A green race run is not evidence on its own.
 
@@ -4289,6 +4290,39 @@ landed in an agent's DM, and `↵` sent a half-typed word while the menu on scre
   already-typed rule with and without its head, the exact-first float, the bound, the cursor-at-end
   condition, the armed detach, ⌥↵) and the pty cases in `cmd/wake/completionkeysscreen_unix_test.go`.
   The older menu pty tests match the hint through `completionKeyHint`, which is `⇥ ↵ complete` now.
+
+## 2026-10-14 — the suite's two lanes are `make test` (race) and `make cover` (plain, with the profile)
+
+The owner's ask: local `make ci` drained the laptop's battery. It ran the suite three times - `make test`'s
+two lanes, then `make cover` under `-race` again. Rulings (`fable wake`'s, against `origin/main`):
+
+- **A coverage flag never rides the race lane.** `-race` forces `-covermode=atomic` (`set` is refused), whose
+  counters are `sync/atomic` calls the detector treats as synchronisation: a writer that passes a counter after
+  its write, and a reader that passes the same counter before its read, gain a happens-before edge, and the
+  race between them goes unreported. Measured on a scratch package (a writer sets a variable then calls a
+  helper; a reader waits, calls the same helper, reads the variable): `go test -race` reports `DATA RACE` and
+  fails, `go test -race -cover` passes; a race with no shared counter is reported either way. So the old
+  `make cover` was a weaker race lane than `make test`'s, and deleting the "duplicate" race run was never the
+  fix.
+- **The lanes are split by purpose.** `make test` is `go test ./... -race -count=1` and nothing else;
+  `make cover` is `go test ./... -count=1 -coverprofile=coverage.out` without `-race` (covermode `set`: plain
+  stores, no synchronisation edges) plus the gate. That keeps the no-detector run the ruling "`make test` runs
+  with and without `-race`" exists for. `make ci` and the workflow still say `make test` and `make cover`, so
+  `TestMakeCIRunsEveryStepTheWorkflowRuns` is untouched. Two guards hold the split: `citarget_test.go`'s
+  `TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace` reads the recipes, and `racelane_race_test.go`
+  (built only under `-race`) fails a race run that collects coverage by any route the recipes cannot show -
+  `GOFLAGS`, `go env -w`, a passthrough variable.
+- **Cost, accepted.** Two suite runs and two compile flavours instead of three and three; the dropped run was
+  the costliest, `-race` with atomic counters. `make test` alone is now the race lane only; `make ci` is the
+  gate, as it always was. Two weak losses: the plain lane now carries `set` counters, so no lane runs the
+  uninstrumented no-race build a release ships (the counters are plain stores, but they shift inlining and
+  timing a little); and a schedule-dependent race the race lane happens to miss no longer gets the second
+  sample the old third run gave it.
+- **`make quick` is not a gate.** It builds, lints and runs the suite with Go's test cache on, so only packages
+  whose inputs changed re-run. `WAKE_SOCKET` is one of those inputs - the Makefile's fresh `mktemp` per run is
+  a different value each time, so every package that reads it would miss - hence a stable scratch path under
+  the temp directory for that one target. The tests dial per-test sockets of their own. A cached `ok` proves
+  less than a fresh one, so no PR cites `make quick`.
 
 ## 2026-10-14 — ↵ over `@manager` sends it where Wake reads the word
 
