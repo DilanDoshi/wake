@@ -1,4 +1,4 @@
-.PHONY: build test cover lint ci soak live drift run tidy clean help
+.PHONY: build test cover lint ci quick soak live drift run tidy clean help
 
 BIN        := bin/wake
 PKG        := ./...
@@ -43,12 +43,17 @@ build: ## Compile the wake binary
 run: build ## Build and start wake
 	$(BIN)
 
-test: ## Run tests both with and without the race detector
+# The suite runs twice, once under the race detector and once without it - the
+# detector masks ordering bugs (docs/notes/decisions.md) - and each lane is one
+# target. `make test` is the race lane and carries no coverage: -race forces
+# atomic cover counters, whose sync/atomic calls hide real data races from the
+# detector. `make cover` is the plain lane and carries the coverage profile.
+# `make ci` runs both.
+test: ## Run the suite under the race detector (`make cover` is the plain lane)
 	go test $(PKG) -race -count=1
-	go test $(PKG) -count=1
 
-cover: ## Run tests and enforce the coverage gate on every package
-	go test $(PKG) -race -count=1 -coverprofile=coverage.out
+cover: ## Run the suite without the detector and enforce the coverage gate on every package
+	go test $(PKG) -count=1 -coverprofile=coverage.out
 	@go tool cover -func=coverage.out | tail -1
 	@# Nothing is exempt. The gate still takes the two exemption variables
 	@# because that is its interface, and empty is how "no package is exempt" is
@@ -81,7 +86,7 @@ lint: ## Run golangci-lint
 # is a build failure rather than a local check that quietly proves less than it
 # claims. A stand-in nobody can trust is worse than no stand-in.
 #
-# The cheap jobs go first so a typo fails in seconds rather than after three
+# The cheap jobs go first so a typo fails in seconds rather than after two
 # suite runs. Within the test job the workflow's own order is kept: build
 # before test, because the tests do not build cmd/wake and would not notice it
 # was broken.
@@ -99,6 +104,19 @@ ci: ## Run every step CI runs (see .github/workflows/ci.yml)
 	GOOS=windows go build ./...
 	$(MAKE) test
 	$(MAKE) cover
+
+# NOT the gate: no race lane, no coverage floors, no cross-compile, and a cached
+# "ok" proves less than a fresh one, so nothing may cite it - `make ci` is the
+# only gate. It exists for iterating: Go's test cache re-runs only the packages
+# whose inputs changed. WAKE_SOCKET is one of those inputs, so it is pinned to a
+# stable scratch path here; the fresh one above would miss the cache on every
+# run for each package that reads it. The tests dial sockets of their own.
+quick: export WAKE_SOCKET := $(or $(patsubst %/,%,$(TMPDIR)),/tmp)/wake-quick/wake.sock
+quick: ## NOT the gate: build, lint and a cached plain suite, for iterating
+	@mkdir -p $(dir $(WAKE_SOCKET))
+	$(MAKE) build
+	$(MAKE) lint
+	go test $(PKG)
 
 soak: ## 20 fake sessions replaying fixtures, then the same through a daemon (SOAK_DURATION=1h make soak for the long one)
 	@# The guard exists because this target was a green no-op for the whole of

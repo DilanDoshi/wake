@@ -1,10 +1,11 @@
 # CI for Wake.
 #
 # Everything here runs a Makefile target rather than an inlined command. The
-# Makefile is the contract: `make test` runs the suite twice, with and without
-# `-race`, because the detector has twice hidden a real bug in this project, and
-# a workflow that spelled out `go test -race` on its own would silently halve
-# that. If a step here stops matching a target, the target is what to fix.
+# Makefile is the contract: the suite runs twice, under `-race` (`make test`) and
+# without it (`make cover`, which also writes the coverage profile), because the
+# detector has twice hidden a real bug in this project, and a workflow that
+# spelled out `go test -race` on its own would silently drop the other lane. If
+# a step here stops matching a target, the target is what to fix.
 #
 # macos-latest, not ubuntu. The daemon is unix socket semantics, flock, process
 # groups and the output of `ps`, and all four differ across platforms. Wake is
@@ -54,8 +55,9 @@ jobs:
     # Two of the defects this project has found failed by hanging rather than by
     # failing, which reports nothing at all - cmd/wake/main_test.go says so where
     # it defines testTimeout. The default job timeout is six hours of that.
-    # Locally the three suite runs take about 100s; 30 minutes is headroom for a
-    # slower runner, not a budget anything should approach.
+    # Locally `make ci` took about 12 minutes on a busy machine (2026-10-14);
+    # 30 minutes is headroom for a slower runner, not a budget anything should
+    # approach.
     timeout-minutes: 30
 
     steps:
@@ -120,11 +122,12 @@ jobs:
       - name: Cross-compile the non-unix stubs
         run: GOOS=windows go build ./...
 
-      # Both lanes. See the header.
+      # The race lane. See the header.
       - name: Test
         run: make test
 
-      # A third full run, with -race and a coverage profile, gated at 80%.
+      # The plain lane, with a coverage profile gated at 80%. Not under -race:
+      # atomic cover counters would hide real races from the detector.
       - name: Coverage gate
         run: make cover
 

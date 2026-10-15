@@ -447,10 +447,11 @@ Go 1.26+. Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, 
 
 ```bash
 make build     # go build ./cmd/wake
-make test      # go test ./... -race, then again without it
-make cover     # coverage report; gate is 80%
+make test      # go test ./... -race: the race lane
+make cover     # go test ./... without -race, with the coverage profile: the plain lane; gate is 80%
 make lint      # golangci-lint run
 make ci        # every step the workflow runs
+make quick     # build, lint and a cached plain suite, for iterating; NOT the gate
 make soak      # 20 fake sessions replaying fixtures; SOAK_DURATION=1h for the long one
 make drift     # this machine's own transcripts against the corpus's rulings; free, not a gate
 make live      # SPENDS MONEY: real claude, the wire probe and the pty journey; not a gate
@@ -486,8 +487,11 @@ HOME=$(mktemp -d) claude --print --input-format stream-json --output-format stre
 | drift | Build tag `drift`: the operator's `~/.claude/projects` held to `injected_test.go`'s rulings — run after a claude upgrade |
 | live | Build tag `live`: a real `claude` (`TestLiveWire` decodes its stdout and transcript; `TestLiveJourney` drives the screen) |
 
-`make test` runs twice (with and without `-race`) — the detector masks ordering bugs. `make ci` may
-not drift from the workflow (`internal/core/citarget_test.go`). A goroutine leak is a bug.
+The suite runs in two lanes, `make test` under `-race` and `make cover` without it — the detector
+masks ordering bugs. **Never put a coverage flag on the race lane:** `-race` forces atomic cover
+counters, which hide real data races from the detector (`TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace`).
+`make ci` runs both and may not drift from the workflow (`internal/core/citarget_test.go`);
+`make quick` is not a gate. A goroutine leak is a bug.
 
 **Guards that derive claims — never "fix" one by editing the number:**
 `TestCLAUDEmdNamesTheTwoLargestNonTestFiles` and `TestCLAUDEmdDescribesTheLegendItDraws` read this

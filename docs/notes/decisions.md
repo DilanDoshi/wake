@@ -4289,3 +4289,29 @@ landed in an agent's DM, and `↵` sent a half-typed word while the menu on scre
   already-typed rule with and without its head, the exact-first float, the bound, the cursor-at-end
   condition, the armed detach, ⌥↵) and the pty cases in `cmd/wake/completionkeysscreen_unix_test.go`.
   The older menu pty tests match the hint through `completionKeyHint`, which is `⇥ ↵ complete` now.
+
+## 2026-10-14 — the suite's two lanes are `make test` (race) and `make cover` (plain, with the profile)
+
+The owner's ask: local `make ci` drained the laptop's battery. It ran the suite three times - `make test`'s
+two lanes, then `make cover` under `-race` again. Rulings (`fable wake`'s, against `origin/main`):
+
+- **A coverage flag never rides the race lane.** `-race` forces `-covermode=atomic`, whose counters are
+  `sync/atomic` calls the detector treats as synchronisation: two goroutines through one instrumented
+  statement gain a happens-before edge, and a real race on the data beside it goes unreported. Measured on a
+  scratch package (a writer sets a variable then calls a helper; a reader waits, calls the same helper, reads
+  the variable): `go test -race` reports `DATA RACE` and fails, `go test -race -cover` passes. So the old
+  `make cover` was a weaker race lane than `make test`'s, and deleting the "duplicate" race run was never the
+  fix.
+- **The lanes are split by purpose.** `make test` is `go test ./... -race -count=1` and nothing else;
+  `make cover` is `go test ./... -count=1 -coverprofile=coverage.out` without `-race` (covermode `set`: plain
+  stores, no synchronisation edges) plus the gate. That keeps the no-detector run the ruling "`make test` runs
+  with and without `-race`" exists for - the plain lane is still plain. `make ci` and the workflow still say
+  `make test` and `make cover`, so `TestMakeCIRunsEveryStepTheWorkflowRuns` is untouched; `internal/core`'s
+  `TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace` holds the split.
+- **Cost, accepted.** Two suite runs and two compile flavours instead of three and three. `make test` alone is
+  now the race lane only; `make ci` is the gate, as it always was.
+- **`make quick` is not a gate.** It builds, lints and runs the suite with Go's test cache on, so only packages
+  whose inputs changed re-run. `WAKE_SOCKET` is one of those inputs - the Makefile's fresh `mktemp` per run is
+  a different value each time, so every package that reads it would miss - hence a stable scratch path under
+  the temp directory for that one target. The tests dial per-test sockets of their own. A cached `ok` proves
+  less than a fresh one, so no PR cites `make quick`.
