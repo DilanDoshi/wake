@@ -110,6 +110,85 @@ func TestManagerStillNamesTheDrawnRowInCommands(t *testing.T) {
 	}
 }
 
+// ↵ over `@manager` sends it as typed where Wake reads the word - the room's
+// leading mention, an @who command's target - since Wake resolves it to the drawn
+// manager-<fleet>. Prose is read by agents, who know only the long name, and the
+// router's alias match is exact, so there ↵ still writes the long form; so does a
+// conversation, which routes nothing.
+func TestEnterSendsTheManagersShortNameWhereWakeReadsIt(t *testing.T) {
+	for _, tc := range []struct {
+		draft        string
+		image, sends bool
+	}{
+		{"@manager", false, true},
+		{" @manager", true, true}, // an image chip is no text on the wire
+		{"/quit @manager", false, true},
+		{"see @manager", false, false},
+		{"@Manager", false, false},
+		{"/task @jade @manager", false, false}, // the label is text
+		{"/quit\n@manager", false, false},      // the router splits on a space alone
+		{" /quit @manager", true, false},       // a chip ahead makes it a message
+	} {
+		a, _ := namedManagerRoom(t)
+		if tc.image {
+			a = dropImage(t, a, writePNG(t, "shot.png"))
+		}
+		a = a.withDraft(tc.draft)
+		if !a.completionUp() || a.completion.offers[a.completion.cursor] != "@"+harborManager {
+			t.Fatalf("%q drew %q, want @%s under the cursor, so this asserts nothing", tc.draft, a.completion.offers, harborManager)
+		}
+		if next, _, took := a.enterCompletes(); took == tc.sends {
+			t.Errorf("↵ over the room's %q left %q, want sent=%v", tc.draft, next.composer().Value(), tc.sends)
+		}
+	}
+
+	fresh(t)
+	dm := dmApp(newRecorder(t), Stream{}, "s1", "jade").withSize(160, 40).
+		applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: namedManagerReport()}).withDraft("@" + core.ManagerName)
+	if !dm.completionUp() {
+		t.Fatal("jade's conversation drew no menu for @manager, so this asserts nothing")
+	}
+	if next, _, took := dm.enterCompletes(); !took || next.composer().Value() != "@"+harborManager+" " {
+		t.Errorf("↵ over jade's @manager left %q, want @%s: claude knows the manager by that name",
+			next.composer().Value(), harborManager)
+	}
+}
+
+// A typed `@manager` floats the row it routes to, so an agent whose name only
+// starts with it (`managers` - only `manager-` is fenced) cannot take the cursor
+// and ↵ cannot send to it.
+func TestTheManagersRowHoldsTheCursorForATypedManager(t *testing.T) {
+	report := namedManagerReport()
+	report.Sessions = append([]rpc.SessionStatus{{ID: "x1", Name: "managers", State: rpc.StateIdle}}, report.Sessions...)
+	fresh(t)
+	a := NewRoomApp(newRecorder(t), Stream{}, nil).withSize(160, 40).
+		applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: report}).withDraft("@" + core.ManagerName)
+	if !slices.Contains(a.completion.offers, "@managers") {
+		t.Fatalf("the menu is %q, want @managers on it too, so this asserts nothing", a.completion.offers)
+	}
+	if got := a.completion.offers[a.completion.cursor]; got != "@"+harborManager {
+		t.Errorf("the cursor is on %q for a typed @manager, want @%s, the row it routes to", got, harborManager)
+	}
+}
+
+// An outside session named `manager` is not offered in the room: @manager
+// reaches the fleet's manager (core.Resolve's alias, matched exactly), never the
+// session. One named `Manager` is, since @Manager passes through to it.
+func TestTheRoomOffersNoOutsideSessionNamedLikeTheManager(t *testing.T) {
+	a, _ := namedManagerRoom(t)
+	a = a.applyFrame(peersReply(core.Peer{Name: core.ManagerName, Dir: "/tmp/m"})).withDraft("@" + core.ManagerName)
+	for _, offer := range a.completion.offers {
+		if a.completion.tags[offer].dir != "" {
+			t.Errorf("@manager offered the outside session %q (%s), which ↵ would not reach", offer, a.completion.tags[offer].dir)
+		}
+	}
+	b, _ := namedManagerRoom(t)
+	b = b.applyFrame(peersReply(core.Peer{Name: "Manager", Dir: "/tmp/m"})).withDraft("@Manager")
+	if !slices.Contains(b.completion.offers, "@Manager") {
+		t.Errorf("@Manager offered %q, want the outside session @Manager, which ↵ reaches through the manager", b.completion.offers)
+	}
+}
+
 // The check is exact: an agent somebody named manager-x before the daemon
 // fenced the prefix, on a daemon that draws no name, is an agent like any other.
 func TestAnAgentNamedLikeAManagerIsNotTheManager(t *testing.T) {

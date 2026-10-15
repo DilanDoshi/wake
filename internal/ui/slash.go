@@ -515,6 +515,9 @@ func commandStem(draft string) (head, word string, ok bool) {
 	return draft[:at], word, true
 }
 
+// otherSpace is whitespace the slash router does not split a command on.
+func otherSpace(r rune) bool { return r != ' ' && unicode.IsSpace(r) }
+
 // teamArgStem is a draft part-way through the team-name argument of `/team`, in
 // the three forms `/team` runs in (teamUsage, roomTargetCommands): the bare
 // `/team <partial>`, the `/team @who <partial>` inline target, and the room's
@@ -536,7 +539,7 @@ func teamArgStem(draft string) (head, partial, who string, bridge, ok bool) {
 	// not run - it would be sent as prose (the adversarial finding). Reject it, and
 	// strings.Fields below then splits exactly as the router does. The command word
 	// is matched case-insensitively, as the router looks it up.
-	if strings.IndexFunc(head, func(r rune) bool { return r != ' ' && unicode.IsSpace(r) }) >= 0 {
+	if strings.IndexFunc(head, otherSpace) >= 0 {
 		return "", "", "", false, false
 	}
 	cmd := SlashPrefix + teamCommand

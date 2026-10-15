@@ -335,7 +335,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   alone (`mention.go`, `leadingCommand`).
 - **Completion offers and never routes; `⇥` and `↵` accept the cursored offer** (owner, 2026-10-12,
   reversing 2026-09-27's "never takes `↵`"). `↵` accepts only while that changes the draft, so a word
-  typed in full (`/clear`) still sends; `⇥` stays put over any `/` or `@` word, matched or not
+  typed in full (`/clear`; `@manager` where Wake reads it - the room's leading mention, an `@who`
+  command's target - is the drawn `@manager-<fleet>`) still sends; `⇥` stays put over any `/` or `@` word, matched or not
   (`typingWord`), and is the conversation ring's everywhere else. Session commands/skills first, then
   Wake's, agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads and the
   conversation's one bounded `git -c core.fsmonitor=false ls-files` per opening run off the draw
@@ -449,10 +450,11 @@ Go 1.26+. Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, 
 
 ```bash
 make build     # go build ./cmd/wake
-make test      # go test ./... -race, then again without it
-make cover     # coverage report; gate is 80%
+make test      # go test ./... -race: the race lane
+make cover     # go test ./... without -race, with the coverage profile: the plain lane; gate is 80%
 make lint      # golangci-lint run
 make ci        # every step the workflow runs
+make quick     # build, lint and a cached plain suite, for iterating; NOT the gate
 make soak      # 20 fake sessions replaying fixtures; SOAK_DURATION=1h for the long one
 make drift     # this machine's own transcripts against the corpus's rulings; free, not a gate
 make live      # SPENDS MONEY: real claude, the wire probe and the pty journey; not a gate
@@ -488,8 +490,12 @@ HOME=$(mktemp -d) claude --print --input-format stream-json --output-format stre
 | drift | Build tag `drift`: the operator's `~/.claude/projects` held to `injected_test.go`'s rulings — run after a claude upgrade |
 | live | Build tag `live`: a real `claude` (`TestLiveWire` decodes its stdout and transcript; `TestLiveJourney` drives the screen) |
 
-`make test` runs twice (with and without `-race`) — the detector masks ordering bugs. `make ci` may
-not drift from the workflow (`internal/core/citarget_test.go`). A goroutine leak is a bug.
+The suite runs in two lanes, `make test` under `-race` and `make cover` without it — the detector
+masks ordering bugs. **Never collect coverage under `-race`:** it forces atomic cover counters, which
+can hide real data races from the detector (`citarget_test.go` reads the recipes, `racelane_race_test.go`
+fails such a run however the flag arrived).
+`make ci` runs both and may not drift from the workflow (`internal/core/citarget_test.go`);
+`make quick` is not a gate. A goroutine leak is a bug.
 
 **Guards that derive claims — never "fix" one by editing the number:**
 `TestCLAUDEmdNamesTheTwoLargestNonTestFiles` and `TestCLAUDEmdDescribesTheLegendItDraws` read this
@@ -599,7 +605,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/fleet.go` at 799 and `internal/ui/composer.go` at 795 — derived by
+  `internal/ui/fleet.go` at 799 and `internal/ui/app.go` at 797 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

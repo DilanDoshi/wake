@@ -598,7 +598,8 @@ what this entry said not to do. The split is by direction and job: `protocol.go`
 the 200–400 band, enforced by `airlock_test.go`, which pins the file set and fails on an unlisted member or one outside
 `internal/core`. `control_cancel_request` is now recorded **and decoded** — `core.KindRequestWithdrawn`, merged 2026-08-09. So the entry's prediction was right about the trigger and wrong about which change would reach it first.
 
-**`make test` runs with and without `-race`.** Twice the no-race run caught what the detector hid:
+**`make test` runs with and without `-race`.** *(Superseded 2026-10-14: the two lanes are `make test` and
+`make cover`; see the end of this file.)* Twice the no-race run caught what the detector hid:
 `Getpgid` failing on a zombie, and a timing-dependent exit-status assertion. Both passed 5/5 under
 `-race` and failed 5/5 without. A green race run is not evidence on its own.
 
@@ -4289,6 +4290,86 @@ landed in an agent's DM, and `↵` sent a half-typed word while the menu on scre
   already-typed rule with and without its head, the exact-first float, the bound, the cursor-at-end
   condition, the armed detach, ⌥↵) and the pty cases in `cmd/wake/completionkeysscreen_unix_test.go`.
   The older menu pty tests match the hint through `completionKeyHint`, which is `⇥ ↵ complete` now.
+
+## 2026-10-14 — the suite's two lanes are `make test` (race) and `make cover` (plain, with the profile)
+
+The owner's ask: local `make ci` drained the laptop's battery. It ran the suite three times - `make test`'s
+two lanes, then `make cover` under `-race` again. Rulings (`fable wake`'s, against `origin/main`):
+
+- **A coverage flag never rides the race lane.** `-race` forces `-covermode=atomic` (`set` is refused), whose
+  counters are `sync/atomic` calls the detector treats as synchronisation: a writer that passes a counter after
+  its write, and a reader that passes the same counter before its read, gain a happens-before edge, and the
+  race between them goes unreported. Measured on a scratch package (a writer sets a variable then calls a
+  helper; a reader waits, calls the same helper, reads the variable): `go test -race` reports `DATA RACE` and
+  fails, `go test -race -cover` passes; a race with no shared counter is reported either way. So the old
+  `make cover` was a weaker race lane than `make test`'s, and deleting the "duplicate" race run was never the
+  fix.
+- **The lanes are split by purpose.** `make test` is `go test ./... -race -count=1` and nothing else;
+  `make cover` is `go test ./... -count=1 -coverprofile=coverage.out` without `-race` (covermode `set`: plain
+  stores, no synchronisation edges) plus the gate. That keeps the no-detector run the ruling "`make test` runs
+  with and without `-race`" exists for. `make ci` and the workflow still say `make test` and `make cover`, so
+  `TestMakeCIRunsEveryStepTheWorkflowRuns` is untouched. Two guards hold the split: `citarget_test.go`'s
+  `TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace` reads the recipes, and `racelane_race_test.go`
+  (built only under `-race`) fails a race run that collects coverage by any route the recipes cannot show -
+  `GOFLAGS`, `go env -w`, a passthrough variable.
+- **Cost, accepted.** Two suite runs and two compile flavours instead of three and three; the dropped run was
+  the costliest, `-race` with atomic counters. `make test` alone is now the race lane only; `make ci` is the
+  gate, as it always was. Two weak losses: the plain lane now carries `set` counters, so no lane runs the
+  uninstrumented no-race build a release ships (the counters are plain stores, but they shift inlining and
+  timing a little); and a schedule-dependent race the race lane happens to miss no longer gets the second
+  sample the old third run gave it.
+- **`make quick` is not a gate.** It builds, lints and runs the suite with Go's test cache on, so only packages
+  whose inputs changed re-run. `WAKE_SOCKET` is one of those inputs - the Makefile's fresh `mktemp` per run is
+  a different value each time, so every package that reads it would miss - hence a stable scratch path under
+  the temp directory for that one target. The tests dial per-test sockets of their own. A cached `ok` proves
+  less than a fresh one, so no PR cites `make quick`.
+
+## 2026-10-14 — ↵ over `@manager` sends it where Wake reads the word
+
+`#167` (↵ accepts the cursored offer while that changes the draft) and `#165` (the manager is drawn as
+`manager-<fleet>`, and a typed `manager` goes through `Fleet.shown`) were each green and red together:
+the room's menu offers `@manager-<fleet>` for a typed `@manager`, so ↵ rewrote the word instead of sending
+it. `/quit @manager` stopped reaching the manager's refusal, and a lone `@manager` (an empty message to the
+manager, as a lone `@jade` is to jade) took a second ↵.
+
+- **"Already typed" is judged as Wake reads the word.** `completion.routed` is the drawn `@manager-<fleet>`
+  only where Wake resolves a typed `@manager` itself: the room's leading mention (`core.Resolve` on the wire
+  text, whose alias match is exact, so `@Manager` is not it) and the target right after one of Wake's `@who`
+  commands, judged on the raw draft as `slash` splits it - an ASCII space alone (`otherSpace`), so
+  `/quit` ⌃J `@manager` or an image chip ahead of `/quit` is a message, and a `/task` label is text. `typedAs` - as typed, or as routed - is the one predicate
+  `enterCompletes` and `bounded()`'s exact-first float share, so the manager's row also holds the cursor
+  against an agent whose name merely starts with `manager` (only `manager-` is fenced).
+- **Everywhere else the long form is right.** Prose such as `see @manager` reaches agents as text, and a
+  conversation routes nothing; claude knows the manager only as `manager-<fleet>`, so ↵ still writes it.
+- **An outside session named exactly `manager` is not offered in the room** (`machineSessions` skips the
+  manager's alias): `@manager` reaches the fleet's manager, never that session - a `#165` residual. One named
+  `Manager` still is, since `@Manager` passes through to the manager, which relays it.
+- Not taken: offering `@manager` ahead of the drawn name, which would put a name on the menu that is drawn
+  nowhere else. Tests in `managername_test.go`, every part mutation-checked.
+
+## 2026-10-14 — a fake answers a control request as claude does: at once, with no turn
+
+The rename-sync e2e tests failed about 1 run in 9 (`TestRenamesDuringATurnReachClaudeAsOneRenameAfterIt`,
+35/300) and 1 in 17 (`TestANameAheadOfAnUnmirroredRenameSendsNoSecondRename`, 18/300) without `-race`, and
+never with it, so they surfaced in `make ci`'s plain lane. The daemon was right; the fake was not.
+`daemon.handshake` writes `initialize` as a session's first line and the spawn reply goes out before it is
+answered. `fakeRenameSync` answered every unknown line - the handshake too - with an echo and a `result`,
+and when that answer arrived after the test's "hold" was written, its turn end cleared `owed` inside the held
+turn, so `/rename` went to claude mid-turn. Claude answers `initialize` with a `control_response` and no
+turn (`testdata/stream/initialize.jsonl:3`: a `control_response` carrying its payload), so against it that
+ordering cannot happen.
+
+- **The fix is the fake's**: it answers a `control_request` at once and with no turn, as recorded (`mcp_status`
+  with no servers, as `fakeHandshake` does). No sleep moved. `TestRenamesDuringATurnWaitForItWhenTheHandshakeIsAnsweredInsideIt` forces the bad ordering
+  causally (the `renamesynclate` fake answers the handshake only once "hold" has arrived): 20/20 red with the
+  old answer, and it still guards the daemon - removing `owed`'s gates in `queueProbeLocked` and
+  `renameWrite` turns it red. After the fix the two tests ran 0/300 each.
+- **Residual, not fixed here:** every other fake that echoes an unknown line still answers the handshake with
+  a turn - `fakeTurns`, `fakeMCP`, `fakeMode`, `fakeModelProbe` (with an `init`), `fakeInterruptible`,
+  `fakeConnectors`, `fakeSlowTurns`, `fakeNoisyExit`, `fakeAdvertises`, `fakeRewind`, `fakeWorkflowFleet` - so
+  a test of theirs that leans on `owed` right after a spawn can flake the same way. And `owed` is one flag any turn end clears, so a probe can queue
+  between a turn's `result` and a type-ahead message's `started`; claude reads a command only after the turn,
+  so nothing is read mid-turn, but the probe's reply window would span a real turn. Unproven; worth its own look.
 
 ## 2026-10-13 — a peer's cross-session message folds at three rows, in the room and in a conversation
 
