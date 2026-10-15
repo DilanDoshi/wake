@@ -335,6 +335,9 @@ func normalizeName(requested string) (string, error) {
 	if reservedNames[name] {
 		return "", fmt.Errorf("%q is how the room addresses something other than one agent, so it cannot also be an agent's name; choose another", name)
 	}
+	if strings.HasPrefix(name, core.ManagerPrefix) {
+		return "", fmt.Errorf("%q is how Claude Code knows a fleet's manager, so it cannot also be an agent's name; choose another", name)
+	}
 	return name, nil
 }
 

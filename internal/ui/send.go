@@ -458,7 +458,7 @@ func (a App) live() []core.Addressee {
 	agents := a.fleet.Agents()
 	out := make([]core.Addressee, 0, len(agents))
 	for _, agent := range agents {
-		if agent.Name == "" || agent.Name == core.ManagerName ||
+		if agent.Name == "" || a.fleet.isManager(agent.Name) ||
 			agent.State == rpc.StateEnded || agent.State == rpc.StateParked {
 			continue
 		}
@@ -475,7 +475,7 @@ func (a App) live() []core.Addressee {
 // and a parked manager is simply not a target.
 func (a App) hasParkedManager() bool {
 	for _, agent := range a.fleet.Agents() {
-		if agent.Name == core.ManagerName && agent.State == rpc.StateParked {
+		if a.fleet.isManager(agent.Name) && agent.State == rpc.StateParked {
 			return true
 		}
 	}
@@ -497,9 +497,12 @@ func (a App) hasParkedManager() bool {
 // should say what is missing, which is exactly what a zero service makes it do.
 func (a App) service() core.Addressee {
 	for _, agent := range a.fleet.Agents() {
-		if agent.Name != core.ManagerName ||
+		if !a.fleet.isManager(agent.Name) ||
 			agent.State == rpc.StateEnded || agent.State == rpc.StateParked {
 			continue
+		}
+		if agent.Name != core.ManagerName {
+			return core.Addressee{ID: agent.ID, Name: agent.Name, Alias: core.ManagerName}
 		}
 		return core.Addressee{ID: agent.ID, Name: agent.Name}
 	}

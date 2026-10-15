@@ -499,7 +499,7 @@ func TestManagerStopEndsTheManagerRatherThanParkingIt(t *testing.T) {
 	// session leaves the fleet, so `2 idle` becomes `1 idle`.
 	s.await("1 idle")
 
-	if rows := s.rosterNames(); slices.Contains(rows, core.ManagerName) {
+	if rows := s.rosterNames(); slices.ContainsFunc(rows, core.IsManager) {
 		s.t.Fatalf("the roster is %v and still holds the manager after /manager-stop. A park leaves the "+
 			"row behind and a stop does not - if this is the parked glyph, the command parked under a "+
 			"different word.\n%s", rows, s.dump())
@@ -524,7 +524,7 @@ func TestManagerStopEndsTheManagerRatherThanParkingIt(t *testing.T) {
 	// pool rather than leaving a parked row addressable under it.
 	s.send("/manager\r")
 	s.await("2 idle")
-	if rows := s.rosterNames(); !slices.Contains(rows, core.ManagerName) {
+	if rows := s.rosterNames(); !slices.ContainsFunc(rows, core.IsManager) {
 		s.t.Fatalf("the roster is %v and /manager brought no manager back after a stop. Either the name "+
 			"was never released, or the spawn was refused against one still claimed.\n%s", rows, s.dump())
 	}

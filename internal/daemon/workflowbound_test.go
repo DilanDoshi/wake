@@ -1,4 +1,4 @@
-// What WorkflowRuns and WorkflowAgentHistory refuse to read: a session
+// What WorkflowRuns and AgentHistory refuse to read: a session
 // directory that is a symlink, and more of a session's runs than one reply
 // holds - chosen before any record is opened.
 
@@ -36,8 +36,8 @@ func TestASymlinkedSessionDirectoryIsNeverRead(t *testing.T) {
 	if runs, err := WorkflowRuns(wfID); err != nil || len(runs) != 0 {
 		t.Errorf("WorkflowRuns = %d runs, %v; want none through a symlinked session directory", len(runs), err)
 	}
-	if events, err := WorkflowAgentHistory(wfID, "abc123"); err != nil || len(events) != 0 {
-		t.Errorf("WorkflowAgentHistory = %d events, %v; want none through a symlinked session directory", len(events), err)
+	if events, err := AgentHistory(wfID, "abc123"); err != nil || len(events) != 0 {
+		t.Errorf("AgentHistory = %d events, %v; want none through a symlinked session directory", len(events), err)
 	}
 }
 

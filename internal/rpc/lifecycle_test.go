@@ -77,6 +77,8 @@ var frameKinds = map[string]string{
 	"FrameWorkflowsReply":     FrameWorkflowsReply,
 	"FrameWorkflowAgent":      FrameWorkflowAgent,
 	"FrameWorkflowAgentReply": FrameWorkflowAgentReply,
+	"FrameSubagent":           FrameSubagent,
+	"FrameSubagentReply":      FrameSubagentReply,
 	"FrameSaveWorkflow":       FrameSaveWorkflow,
 	"FrameWorkflowSaved":      FrameWorkflowSaved,
 }
@@ -195,9 +197,10 @@ func TestStatusReplyRoundTripsThroughTheWire(t *testing.T) {
 	want := Frame{
 		Kind: FrameStatusReply,
 		Status: &Status{
-			Running: true,
-			PID:     4242,
-			Socket:  "/tmp/wake/daemon.sock",
+			Running:       true,
+			PID:           4242,
+			Socket:        "/tmp/wake/daemon.sock",
+			ManagerClaude: "manager-harbor",
 			Sessions: []SessionStatus{
 				filled,
 				{ID: "s2", Name: "alex", State: StateBlocked, RequestIDs: []string{"req-7"}},

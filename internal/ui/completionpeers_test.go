@@ -382,21 +382,23 @@ func TestTheManagersConversationOffersItsFleetAndTheMachinesSessions(t *testing.
 	}
 }
 
-// ↵ still sends, and sends what was typed: the menu offers and never routes.
-func TestEnterStillSendsOverAConversationsNames(t *testing.T) {
+// ↵ completes the highlighted name rather than sending the half-typed one, and
+// the mention it leaves is the name the offer inserts, never its `(dir)` tag.
+func TestEnterAcceptsOverAConversationsNames(t *testing.T) {
 	fresh(t)
-	conn, sent := pipeClient(t)
-	a := dmApp(conn, Stream{}, "s1", "jade").withSize(200, 40).withRoster(
+	a := dmApp(newRecorder(t), Stream{}, "s1", "jade").withSize(200, 40).withRoster(
 		rpc.SessionStatus{ID: "s1", Name: "jade", State: rpc.StateIdle},
 	).applyFrame(peersReply(core.Peer{Name: "wf-alpha", Dir: "/tmp/a"})).withDraft("@wf")
 	if !a.completionUp() {
 		t.Fatal("the fixture drew no menu, so this asserts nothing")
 	}
 
-	_, cmd := a.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	go func() { _ = runCmdQuietly(cmd) }()
-	if f := awaitFrame(t, sent); f.Kind != rpc.FrameSend || f.Text != "@wf" {
-		t.Errorf("↵ sent %s %q, want the draft %q as typed", f.Kind, f.Text, "@wf")
+	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	if got, want := a.composer().Value(), "@wf-alpha "; got != want {
+		t.Errorf("↵ left the draft %q, want %q", got, want)
+	}
+	if sent := sentTexts(writtenFrames(t, a, cmd)); len(sent) != 0 {
+		t.Errorf("↵ sent %q, want the word completed and nothing sent", sent)
 	}
 }
 

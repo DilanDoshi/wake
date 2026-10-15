@@ -39,7 +39,6 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -93,7 +92,7 @@ func (a App) quitAgent(arg string) (App, tea.Cmd) {
 		// fixed, displayTarget's own trade.
 		return a, nil
 	}
-	if agent.Name == core.ManagerName {
+	if a.fleet.isManager(agent.Name) {
 		notice.Report("%s", quitIsTheManager)
 		return a, nil
 	}

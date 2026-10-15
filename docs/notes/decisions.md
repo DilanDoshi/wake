@@ -8,6 +8,83 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-10 — Wake answers `/status`, for every session, the manager's included
+
+The owner's ask ("the manager is just another session"). Headless claude refuses `/status` with no
+turn (`testdata/stream/bare-status.jsonl`), so it was dead in every Wake conversation. Rulings
+(`fable wake`'s, against `origin/main`):
+
+- **A plain claim, not `bareOnlyCommands`:** claude advertises no `status`, and that map is for
+  words claude advertises and does nothing with.
+- **A read-only menu, not a transcript block or a notice.** A block would be the first
+  Wake-authored DM record besides the operator's own `!cmd`, on no disk, so every re-read
+  (`noteRewind`, a restore) would drop it. A notice is one row and times out. The menu is bounded by
+  `menuRoom`, draws nothing into the record, and is what Claude Code's `/status` is: a dialog.
+- **Nothing is written.** A local command sent to a session stays in its context.
+- **Only facts this window holds, through the bar's own builders** (`barModel`, `contextLeft`,
+  `shortPath`, gitref). The permission mode is labelled as this window's belief, since it is not
+  on the report. MCP is the banner's count plus a pointer to `/mcp`, because a server list would
+  need a live ask. The daemon's build shows only when it differs from the window's.
+- **Aimed like `/mcp`** (`commandTarget`, shared): bare is the conversation or the room's roster
+  pick, `@who /status` from the room. No fleet summary: that is `wake status`'s job.
+- **⌃C over it is ⌃C: it closes the view and parks this pane's agent**, even when the view shows
+  another's (Codex flagged that case). A ⌃C that only closed it would invite a second press, which
+  the kill switch reads as the emergency exit; parking the shown agent instead would make the key
+  mean something different under an overlay. A park is recoverable.
+- **One menu at a time, and a card first.** A card arriving under it takes the keys and hides it;
+  a resume picker opening on a late disk walk closes it; a late rewind reply gives up over it.
+- **`@manager /status` in the room is a message to the manager**, not Wake's `/status`: the room
+  routes every `@manager /cmd` to the service (send.go), so `/status @manager`, the manager's own
+  conversation, or the roster pick show its status. Changing that routing is not this ruling's.
+- **Left out:** claude's own version (deferred.md) and the account, which Wake cannot know.
+  Claude Code's Config and Usage tabs are `/config` and `/usage`, which still pass through.
+
+## 2026-10-10 — claude knows each fleet's manager as `manager-<fleet>`
+
+The owner's ask, so agents can find their own manager. Every Wake manager ran `--name manager`, and
+on the day this was written one machine's Claude peer list showed six of them (five on hand-set
+sockets), with nothing to tell an agent which was its own.
+
+- **The daemon keeps `manager`; the operator sees `manager-<fleet>`.** The daemon, the park book,
+  `managerConfig` and the manager's own tools key on `core.ManagerName`, unchanged.
+  `core.Config.ClaudeName` carries the other name to `--name`, set only by `managerConfig`, so a
+  spawn, `/manager` and a wake all get it. The owner then asked to *see* that name (2026-10-12):
+  the UI's fleet fold names the manager's row by the report (`Fleet.shown`), so the roster, the
+  room's headings, the conversation's title and banner, notices and both `@` menus draw
+  `manager-<fleet>`. Every typed name goes through `Fleet.shown` too, so `@manager`,
+  `/resume manager` and `/quit @manager` still find it, and the room's router takes it as the
+  service's alias (`core.Addressee.Alias`). Identity is the exact `Fleet.isManager`: `manager` or
+  the report's name, never the bare prefix, because a stale daemon or an old park book can still
+  hold an ordinary agent named `manager-x`. The daemon refuses the prefix to teams too, since teams
+  route first. An agent's conversation offers the manager, so an agent can be told to message it. A real rename (the daemon's name too) was the other option.
+  It would touch about 45 identity sites and the park book, and was not taken. A new `Agent` field
+  was ruled out too: room lines hold `Agent` copies, and the retention guard's 6 KiB-per-event
+  budget had 95 bytes of headroom.
+- **The fleet is the socket's directory** (`daemon.managerClaudeName`): a named fleet's own name,
+  `default` for `~/.wake`, and a hand-set `$WAKE_SOCKET`'s directory otherwise. That last case is
+  most of the collisions observed, so it gets a distinct name rather than plain `manager`. A
+  directory is anybody's text on its way to an argv, so it is folded into a fleet name's shape
+  (`nameShaped`: lower case, name runes, at most `maxFleetName`): a directory named like a session
+  id cannot put that id in the manager's argv, where the reaper reads it as proof of identity, and
+  a named fleet keeps its whole name, so two fleets are never one manager. Codex found both; a
+  relative socket is resolved first, or each would be `manager--`. Residuals: two fleets whose
+  names differ only in case are one manager to claude (possible only on a case-sensitive disk), and
+  so are two hand-set sockets whose directories share a base name (`/tmp/a`, `/var/a`).
+- **The daemon leaves its own manager out of the peers listing** it answers (`ownManagerLeftOut`),
+  so no client offers it as an outside session (in the room ↵ would hand the manager a message to
+  relay to itself), whatever its build. Another fleet's manager is offered like any session.
+  `wake status` prints the name off the report (`rpc.Status.ManagerClaude`).
+- **`normalizeName` refuses the `manager-` prefix** to every agent - `wake new`, `/name`,
+  `spawn_agent` and a `/resume`'s recorded title all pass it - since one more `manager-harbor` in a
+  peer list is one nobody can tell from the real one. A park book written before this build that
+  names an agent `manager-…` wakes it under a pooled name; no migration branch.
+- **A manager's message to a fleet agent is still the manager's.** It arrives on the receiver's
+  stream under claude's from-name, which is now the manager's row's own name, so `crossSpeaker`
+  attributes the line to that row and draws it in the manager's colour.
+- **Not changed:** an operator's own `/rename` typed into the manager's conversation still reaches
+  claude and is still refused as a Wake rename, so the two names drift until the next launch, as
+  they did before.
+
 ## 2026-10-10 — the manager may choose a spawned agent's effort and model, only when asked
 
 The owner's ask. `spawn_agent` takes an optional `effort` and `model`; left out, nothing reaches the
@@ -3562,6 +3639,29 @@ superseded by the transcript-window tile of 2026-09-01).
 `tileGridFor` is one function read by the draw, the mouse (`boardHit`) and the cursor (`stepBoard`),
 so a click and a tile cannot disagree.
 
+**Amendment, 2026-10-12 — three across, a readable floor, and the grid scrolls.** The near-square grid
+widened a fleet into more columns and shorter tiles: thirty agents drew six columns of nine-row
+tiles, four rows of transcript each — unreadable, which is what the amendment above was written
+against. The owner asked for the opposite trade: **at most three tiles per row** (`maxTileCols`),
+**a 20-row floor** (`minTileHeight`, 15 rows of transcript beside the five of frame), and a fleet
+bigger than a frame **scrolls rather than shrinks** — in both the tiles and the list. A fleet that
+fits still stretches to fill the frame, as the 6-agent screenshot does; a frame shorter than the floor
+gets one tile as tall as itself, since a tile the frame clips loses its status bar
+(`tileCellHeight`). Guardrail 2 is untouched: a tile still holds no scrollback of its own — it is the
+grid of them that scrolls. What this reverses is the spec's "windowing, not a scrollbar" and the
+cursor-derived window (`boardRowFrom`, `tileWindow`), which could only scroll by moving the selection.
+
+*How it scrolls* (`boardscroll.go`): `Board.Scroll` is the first line the window draws, in either view.
+The **wheel and `PgUp`/`PgDn` scroll freely** by lines; **`↑↓←→` move the selection and scroll the
+least that shows all of it**; `Home`/`End` jump to the first and last stop (the last agent's last subagent row when it has one). **The selection is always
+on screen**, because `⌃C` parks and `↵` opens whatever the highlight is on: a free scroll that leaves
+it mostly out (`landing`: under half its lines, or none) carries it to the nearest tile or row that is
+in, and a re-rank or resize that strands it wholly off screen pulls the window back (`viewport.settled`)
+— the wheel never leaves the highlight on something nobody can see. A section's header is drawn only
+when some line of its first member is (`sectionHeader`; otherwise blank lines), so it never heads nothing (a
+divider over nothing reads as an empty team), and its own lines clip at the top of the window like any
+line's. ⇥ starts the other view at the top: they are different lists.
+
 ## 2026-09-20 — `/resume` resumes in place with no guard, the one deliberate reversal of the branching non-negotiable
 
 A bare `/resume` now opens a picker over both **parked** sessions and **on-disk** conversations, and
@@ -3828,8 +3928,8 @@ The owner's rulings for the `@` menu parity work (branch `feat/at-menu-peers`); 
   until claude's reply, so claude never gets it twice; a name claude chose differently from the ask
   (a variant) is never chased. `--name` wins on `--resume` (findings §2), so every relaunch starts in
   step. Cost: a queued `/rename` renames Wake when it is delivered, not when typed.
-- **`⇥` stays the only accept**; `↵` still sends. Label is never insert: `(team)`, `(dir)` and
-  `(agent)` share one per-offer tag.
+- **`⇥` stays the only accept**; `↵` still sends (superseded 2026-10-12: `↵` accepts too, below).
+  Label is never insert: `(team)`, `(dir)` and `(agent)` share one per-offer tag.
 - **The airlock is five files** (`localreply.go` for local-command reply text).
 
 ## 2026-09-27 — every agent opens with the `initialize` handshake, which is what brings claude.ai connectors
@@ -4138,6 +4238,57 @@ plan against 389eb078.
   reads the same snapshots, so the daemon holds no fourth copy of "parked and ended are not live".
 - **Not built:** team tools on ordinary agents (a `wake mcp` for workers), a `--team` spawn flag, and
   re-sending the note when a team changes — that would be a turn Wake starts.
+
+## 2026-10-12 — the completion menu's `↵` accepts, and `⇥` stays put over a `/` or `@` word (the owner)
+
+**Reverses** 2026-09-27's "`⇥` stays the only accept; `↵` still sends" and `completion.go`'s "the menu
+never takes `↵`", whose argument was that the menu arrives while somebody types, so it may not give the
+irreversible key a second meaning. The owner's experience was the other half of that trade: a skill
+misspelled so nothing matched left no menu, `⇥` fell through to the conversation ring (`nextChat`) and
+landed in an agent's DM, and `↵` sent a half-typed word while the menu on screen offered to finish it.
+(A word that matches nothing still has no menu, so `↵` still sends it; only a prefix of something completes.)
+
+- **`↵` accepts the cursored offer while that changes the draft.** `completion.go`'s `enterCompletes`,
+  called from `App.key`'s Enter case *after* the ⌥↵ newline pass-through and the armed detach's
+  confirm - so neither moves - and before the empty-composer open-the-picked-agent branch. Cards and
+  pickers above still win `↵`. The test is `c.head + c.offers[c.cursor] == draft`, the same sum
+  `acceptCompletion` writes: equal means a word already typed exactly as offered (`/clear`, `look at
+  /clear`, `@maya`), and that sends, so a finished command stays one press.
+- **The finished word goes first.** Menu order is the session's own, so `/team` sits behind
+  `/team-onboarding` and a cursor on the first would complete a finished command to its sibling (the
+  recorded corpus advertises both, and some thirty `new-…` skills). `bounded()` floats the *name* that is
+  exactly what is typed to the top of the names - which also stops the bound cutting `/new` out of a long
+  menu - and walking down is what takes a sibling. Among the names only: the paths arrive later and rank
+  their own exact match first, and a file promoted over a live agent when its read lands would move row 0
+  under a cursor that stayed on it (`bounded()` reruns then and clamps the cursor, it does not follow), so
+  `↵` would depend on how fast the disk answered. `⇥` follows the cursor, so on a finished `/team` it now
+  takes `/team `, not the sibling.
+- **Quoted mentions and directories.** An open quote (`@"foo b`) is one word being typed and `↵` completes
+  it to `@"foo bar" `; once the closing quote is typed there is no menu and `↵` sends. A directory is the
+  one place `↵` rewrites finished text: `src` accepts to `src/` with no space, and `src/` typed in full
+  lists its children, so `↵` takes the cursored child - as Claude Code's own path menu does. A bare
+  directory is sent by typing a space first, which closes the menu.
+- **`⇥` stays put over a word the menu was built for, matched or not.** `typingWord` reads the built menu
+  (`completion.draft` is the focused pane's draft, offers or none) rather than copying
+  `completing()`'s stems, so it is where a menu *could* be and cannot drift from it - including the
+  context gates: `/team zzz` in a conversation is a word, in the room it is not (the room has no `/team`
+  menu) and `⇥` is the ring's. Both stems are mid-text on purpose, so a draft ending in any `/word` (`see
+  /tmp`) keeps `⇥`; `/clear now` ends in `now` and does not; a cursor off the end of the draft is no
+  word. Anywhere else `⇥` is the ring, which is also the one keyboard route back to the room on a
+  terminal narrow enough that a conversation fills the screen. The owner chose this over "only when the
+  draft is empty" and "remove `⇥`'s switching". A prompt recalled with `↑` does not rebuild the menu
+  (`walkPrompts` never has), so `⇥` over it is the ring until a keystroke does.
+- **Costs, accepted.** `↵` cannot open a sidebar agent while a menu is up - the empty-composer branch is
+  unreachable with a stem typed anyway, so this is nothing new. With a picker up and a `/`-draft, `⇥` is
+  a no-op rather than the ring. A working agent queues on the second `↵`, not the first. **A menu a tall
+  card has clipped off the pane still takes `↵`** (`completionUp` is model state, as it is for `⇥` and
+  `⌃N`/`⌃P`): the draft visibly completes and nothing is sent, so it costs one more `↵`; a layout-aware
+  predicate would be `cardFullyDrawn`'s arithmetic over again, and is not built. The menu's own hint
+  now reads `⇥ ↵ complete   ↑↓ walk`; no legend slot changes.
+- **Tests:** `internal/ui/completionaccept_test.go` (each guard mutation-checked: the swallow, the
+  already-typed rule with and without its head, the exact-first float, the bound, the cursor-at-end
+  condition, the armed detach, ⌥↵) and the pty cases in `cmd/wake/completionkeysscreen_unix_test.go`.
+  The older menu pty tests match the hint through `completionKeyHint`, which is `⇥ ↵ complete` now.
 
 ## 2026-10-13 — a peer's cross-session message folds at three rows, in the room and in a conversation
 

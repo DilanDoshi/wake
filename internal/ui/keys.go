@@ -110,6 +110,12 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if next, cmd, handled := a.mcpMenuKey(m); handled {
 		return next, cmd, true
 	}
+	// /status takes its key, or closes and passes it on - keep the close.
+	next, statusCmd, took := a.statusKey(m)
+	if took {
+		return next, statusCmd, true
+	}
+	a = next
 	// Not while the board was up when the key arrived: the card was on no
 	// screen then, and a rune answering it would arm a settle on an ask nobody
 	// saw - cardFullyDrawn cannot see this, because the board is already
@@ -138,10 +144,12 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	escArmed := a.escArmed
 	a = a.disarmed()
 	// Below the disarm and above the switch: ⇥ finishes a word being typed
-	// before it moves the keys to another pane, and ⌃N/⌃P walk the offers. Only
-	// while a menu is up. ↑↓ walk it too, but through the KeyUp/KeyDown cases
-	// below - after the cursor-move guard, so a multi-line draft keeps its line
-	// keys; ↵ still sends. See completion.go.
+	// before it moves the keys to another pane - and keeps them where they are
+	// over a `/` or `@` word nothing matches - and ⌃N/⌃P walk the offers while a
+	// menu is up. ↑↓ walk it too, but through the KeyUp/KeyDown cases below -
+	// after the cursor-move guard, so a multi-line draft keeps its line keys - and
+	// ↵ accepts through the Enter case, behind the newline and the armed detach.
+	// See completion.go.
 	if next, cmd, handled := a.completionKey(m); handled {
 		return next, cmd, true
 	}
@@ -192,6 +200,11 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// as long as it is: `↵ detach` in every pane on screen. See detach.go.
 		if detachArmed {
 			return a, tea.Quit, true
+		}
+		// While a menu is up ↵ completes the word before it sends anything, so a
+		// misspelled skill is not sent half-typed. See completion.go.
+		if next, cmd, ok := a.enterCompletes(); ok {
+			return next, cmd, true
 		}
 		// With nothing to send, ↵ opens the conversation the cursor is on -
 		// which is what every list does, and what ↑↓ leads somebody to try.

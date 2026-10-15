@@ -21,7 +21,7 @@ import (
 // in the windowed shelves tileView draws, so the built set and the drawn set
 // cannot disagree.
 func (a App) visibleBoardAgents() []Agent {
-	return a.boardTileLayout(a.boardAgents()).visibleTiles()
+	return a.boardTileLayout(a.boardAgents()).visibleAgents()
 }
 
 // ensureBoardDMs builds a board DM for each visible tile that lacks one and
@@ -43,7 +43,7 @@ func (a App) ensureBoardDMs() App {
 	l := a.boardTileLayout(a.boardAgents())
 	inner := max(l.cellW-boxFrameWidth, 1)
 	rows := max(l.cellH-tileFrameRows, minTileTailRows)
-	for _, ag := range l.visibleTiles() {
+	for _, ag := range l.visibleAgents() {
 		d, ok := a.boardDMs[ag.ID]
 		if !ok {
 			nd := NewDM(ag.ID, ag.Name)

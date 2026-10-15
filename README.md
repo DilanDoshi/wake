@@ -72,7 +72,7 @@ come back.
 `↑↓` recall your previous prompts into the query bar (Claude Code's own history keys); `⇧↑↓` walk the
 roster instead — including a conversation's running subagents in the right sidebar — and `↵` or `⌃D`
 opens the one the cursor is on. `⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels.
-While a completion menu is up, `⌃N`/`⌃P` walk it and `⇥` completes.
+While a completion menu is up, `⌃N`/`⌃P` walk it and `⇥` or `↵` completes.
 
 A message to a working agent is read at its next tool boundary and pinned `⧗` until then; `↑` takes
 queued messages back, and `⌃]` takes them back and sends them now, with your draft. On an idle

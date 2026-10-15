@@ -28,7 +28,6 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 
-	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -157,12 +156,12 @@ func spawnManagerFrame(newID, dir string) rpc.Frame {
 // daemon's reserved set equal to this package's routing constants.
 func (f Fleet) manager() (Agent, bool) {
 	for _, a := range f.Agents() {
-		if a.Name == core.ManagerName && a.State != rpc.StateEnded {
+		if f.isManager(a.Name) && a.State != rpc.StateEnded {
 			return a, true
 		}
 	}
 	for _, a := range f.parked {
-		if a.Name == core.ManagerName {
+		if f.isManager(a.Name) {
 			return a, true
 		}
 	}

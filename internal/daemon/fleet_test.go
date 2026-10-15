@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -88,6 +89,89 @@ func TestANamedFleetLivesUnderTheFleetsDirectoryAndTheDefaultDoesNot(t *testing.
 	}
 	if def != root {
 		t.Errorf("the default fleet is at %q, want %q: it must keep the path it has always had", def, root)
+	}
+}
+
+// Every daemon's manager is a different name to claude, so a Claude session can
+// tell one fleet's manager from another's: a named fleet's name, `default` for
+// the unnamed one, and a hand-set socket's own directory - six managers on one
+// machine were all `manager`, and five of them were hand-set sockets.
+func TestEachFleetsManagerHasItsOwnClaudeName(t *testing.T) {
+	root := testRoot(t)
+	harbor, err := fleetDirIn(root, "harbor")
+	if err != nil {
+		t.Fatalf("fleetDirIn(harbor): %v", err)
+	}
+	for _, tc := range []struct{ socket, want string }{
+		{filepath.Join(harbor, socketFileName), "manager-harbor"},
+		{filepath.Join(root, socketFileName), "manager-" + LegacyFleet},
+		{"/tmp/wake-demo/wake.sock", "manager-wake-demo"},
+	} {
+		if got := managerClaudeName(root, tc.socket); got != tc.want {
+			t.Errorf("the manager of %s is %q to claude, want %q", tc.socket, got, tc.want)
+		}
+	}
+}
+
+// A hand-set socket's directory is anybody's text, and it reaches an argv as
+// --name. So it is folded into a fleet name's shape - lower case, name runes, at
+// most maxFleetName - and can carry neither a session id (the reaper's proof of
+// identity) nor an argv marker. A relative socket names the directory it
+// resolves to, never `.`.
+func TestAManagersClaudeNameHasTheShapeOfAName(t *testing.T) {
+	const id = "a11a0000-0000-4000-8000-00000000a11a"
+	cwd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, socket := range []string{
+		"/tmp/" + id + "/wake.sock",
+		"/tmp/my fleet --resume " + id + "/wake.sock",
+		"/tmp/Harbor/wake.sock",
+		"wake.sock",
+	} {
+		got := managerClaudeName(testRoot(t), socket)
+		if strings.IndexFunc(got, func(r rune) bool { return !isNameRune(r) }) >= 0 || len(got) > len(core.ManagerPrefix)+maxFleetName {
+			t.Errorf("the manager of %q is %q to claude: not a name's shape", socket, got)
+		}
+		if strings.Contains(got, id) {
+			t.Errorf("the manager of %q is %q to claude, which carries a session id", socket, got)
+		}
+		for _, marker := range core.SessionArgvMarkers(id) {
+			if strings.Contains("--name "+got+" ", marker) {
+				t.Errorf("the manager of %q is %q to claude, and its argv carries %q", socket, got, marker)
+			}
+		}
+	}
+	if got, want := managerClaudeName(testRoot(t), "/tmp/Harbor/wake.sock"), "manager-harbor"; got != want {
+		t.Errorf("a socket in Harbor names its manager %q, want %q", got, want)
+	}
+	if got, want := managerClaudeName(testRoot(t), "wake.sock"), managerClaudeName(testRoot(t), filepath.Join(cwd, "wake.sock")); got != want {
+		t.Errorf("a relative socket names its manager %q, want %q as its absolute path does", got, want)
+	}
+}
+
+// Two fleets are two managers to claude, however long their names: a fleet's
+// whole name survives, so neither drops the other from the listing nor claims
+// its messages.
+func TestEveryFleetNameGivesItsOwnManager(t *testing.T) {
+	root := testRoot(t)
+	long := strings.Repeat("a", maxFleetName-1)
+	for _, pair := range [][2]string{
+		{"abcdefghijklmnop-one", "abcdefghijklmnop-two"},
+		{long + "x", long + "y"},
+	} {
+		var managers [2]string
+		for i, name := range pair {
+			dir, err := fleetDirIn(root, name)
+			if err != nil {
+				t.Fatalf("fleetDirIn(%q): %v", name, err)
+			}
+			managers[i] = managerClaudeName(root, filepath.Join(dir, socketFileName))
+		}
+		if managers[0] == managers[1] {
+			t.Errorf("fleets %q and %q are both %q to claude", pair[0], pair[1], managers[0])
+		}
 	}
 }
 

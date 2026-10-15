@@ -197,6 +197,21 @@ func peersRepliesSeen(c *testClient) int {
 	return n
 }
 
+// This fleet's own manager is the fleet's, not an outside session, so the
+// daemon leaves it out of the listing it answers - in any case, and whatever a
+// client knows of the name - and keeps every other session, other fleets'
+// managers included.
+func TestTheListingLeavesOutThisFleetsOwnManager(t *testing.T) {
+	listed := []core.Peer{{Name: "Manager-Harbor", Dir: "/a"}, {Name: "manager-atlas", Dir: "/b"}, {Name: "rosa", Dir: "/c"}}
+	got := ownManagerLeftOut(listed, "manager-harbor")
+	if want := []core.Peer{{Name: "manager-atlas", Dir: "/b"}, {Name: "rosa", Dir: "/c"}}; !reflect.DeepEqual(got, want) {
+		t.Errorf("the listing answered is %+v, want %+v", got, want)
+	}
+	if listed[0].Name != "Manager-Harbor" || len(listed) != 3 {
+		t.Errorf("the listing read was changed in place: %+v", listed)
+	}
+}
+
 // The whole round trip: one run of the recorded one-shot lists the machine's
 // sessions, and no agent's stdin ever carries the /list-agents.
 func TestABareOneShotListsTheMachinesSessions(t *testing.T) {

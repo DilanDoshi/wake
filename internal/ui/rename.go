@@ -199,6 +199,23 @@ func (a App) conversationAgent() (Agent, bool) {
 	return a.fleet.Agent(a.focus)
 }
 
+// commandTarget is /quit's rule with the room's roster pick added, for the
+// commands that draw one agent (/mcp, /status): bare is the conversation you are
+// in (or, in the room, the agent the roster has picked), and @who is that agent.
+func (a App) commandTarget(arg, usage, noTarget string) (Agent, bool) {
+	if fields := strings.Fields(arg); len(fields) > 0 {
+		return a.namedTarget(fields, usage)
+	}
+	if agent, ok := a.conversationAgent(); ok {
+		return agent, true
+	}
+	if agent, ok := a.pickedAgent(); ok {
+		return agent, true
+	}
+	notice.Report("%s", noTarget)
+	return Agent{}, false
+}
+
 // handleList is every handle that resolves, so a wrong one costs a line rather
 // than a hunt. live() is the list because it is already "every agent that could
 // be addressed", and a second answer to that question is one that drifts.
@@ -255,10 +272,11 @@ func (a App) renamed(st *rpc.Status) App {
 			continue
 		}
 		parent := a.parentName(s.ID)
-		if dm.Name == s.Name && dm.ParentName == parent {
+		name := a.fleet.shown(s.Name)
+		if dm.Name == name && dm.ParentName == parent {
 			continue
 		}
-		a = a.withDM(s.ID, dm.WithName(s.Name).WithParentName(parent))
+		a = a.withDM(s.ID, dm.WithName(name).WithParentName(parent))
 	}
 	return a
 }

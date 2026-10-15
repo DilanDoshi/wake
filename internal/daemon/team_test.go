@@ -163,3 +163,18 @@ func TestTeamOrderFollowsAssignmentNotReportSort(t *testing.T) {
 		t.Errorf("teams = %v, want assignment order [frontend backend], not the report's sort", got)
 	}
 }
+
+// A team may not wear the manager's drawn name: the room's @ menu offers
+// @manager-<fleet> as the manager, and core.Resolve tries teams first, so a team
+// of that name would take every message meant for the manager.
+func TestATeamCannotWearTheManagersPrefix(t *testing.T) {
+	a := teamAgent(t)
+	for _, team := range []string{"manager-harbor", "Manager-X"} {
+		if err := a.setTeam(team); err == nil {
+			t.Errorf("setTeam(%q) was accepted; @%s would route to the team, not the manager", team, team)
+		}
+	}
+	if err := a.setTeam("managers"); err != nil {
+		t.Errorf("setTeam(managers) was refused, and no manager is drawn so: %v", err)
+	}
+}

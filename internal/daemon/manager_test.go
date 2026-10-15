@@ -70,7 +70,10 @@ func TestAManagerIsStartedWithItsToolsAndAnOrdinaryAgentIsNot(t *testing.T) {
 			"keyed on it", sess.Name, core.ManagerName)
 	}
 	argv := managerArgv(c, idAlpha)
-	for _, want := range []string{"--mcp-config ", "--strict-mcp-config", "--append-system-prompt"} {
+	// Claude's name for it is this fleet's own, so a Claude session can tell it
+	// from every other fleet's manager; Wake's name above stays `manager`.
+	claudeName := "--name " + core.ManagerName + "-" + filepath.Base(filepath.Dir(d.socket)) + " "
+	for _, want := range []string{"--mcp-config ", "--strict-mcp-config", "--append-system-prompt", claudeName} {
 		if !strings.Contains(argv, want) {
 			t.Errorf("the manager was started as\n  %s\nand it is missing %q", argv, want)
 		}
@@ -82,11 +85,27 @@ func TestAManagerIsStartedWithItsToolsAndAnOrdinaryAgentIsNot(t *testing.T) {
 
 	spawnFor(c, idBeta, "alex", t.TempDir())
 	ordinary := managerArgv(c, idBeta)
+	if !strings.Contains(ordinary, "--name alex ") {
+		t.Errorf("an ordinary agent was started as\n  %s\nwithout its own name: claude would know it by another", ordinary)
+	}
 	for _, forbidden := range []string{"--mcp-config", "--strict-mcp-config", "Wake's manager"} {
 		if strings.Contains(ordinary, forbidden) {
 			t.Errorf("an ordinary agent was started as\n  %s\nand it carries %q. Every agent holding the "+
 				"manager's tools would let any of them message and interrupt any other", ordinary, forbidden)
 		}
+	}
+}
+
+// The report names the manager as claude knows it, so a client can drop this
+// fleet's own manager from claude's listing without deriving the name again.
+func TestTheReportNamesTheManagerAsClaudeKnowsIt(t *testing.T) {
+	d := startDaemon(t)
+	st, err := Status(d.socket)
+	if err != nil {
+		t.Fatalf("Status: %v", err)
+	}
+	if want := core.ManagerName + "-" + filepath.Base(filepath.Dir(d.socket)); st.ManagerClaude != want {
+		t.Errorf("the report names the manager %q to claude, want %q", st.ManagerClaude, want)
 	}
 }
 
@@ -448,7 +467,8 @@ func TestAWokenManagerComesBackWithItsTools(t *testing.T) {
 		t.Fatalf("the parked manager was not woken, so there is no argv to read: %s", woken.why)
 	}
 	argv := managerArgv(c, idAlpha)
-	for _, want := range []string{"--mcp-config ", "--strict-mcp-config", "--append-system-prompt"} {
+	claudeName := "--name " + core.ManagerName + "-" + filepath.Base(filepath.Dir(d.socket)) + " "
+	for _, want := range []string{"--mcp-config ", "--strict-mcp-config", "--append-system-prompt", claudeName} {
 		if !strings.Contains(argv, want) {
 			t.Errorf("a woken manager was started as\n  %s\nand it is missing %q: it would answer @manager "+
 				"about a fleet it cannot see", argv, want)

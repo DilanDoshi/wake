@@ -81,7 +81,9 @@ func TestTeamSectionsRenderInTheTiledBoard(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 
-	s := startWakeInAConversation(t, 100, 30)
+	// Tall enough for all three shelves at the tile floor (a row is 20 lines, a
+	// header 2); a shorter frame scrolls to them, which boardscrollscreen covers.
+	s := startWakeInAConversation(t, 100, 72)
 	teamedFleet(t, s)
 
 	s.send("/board\r")

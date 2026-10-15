@@ -157,6 +157,9 @@ func subagentName(t Task) string {
 // for the first time - a DM just built by openDMWith has never watched
 // anything live, so without this its own subs would be empty and the pane
 // would draw the dispatch as if it had forwarded nothing. See fleetsubs.go.
+//
+// Then asked for the subagent's own file, for a client that attached after it
+// began and holds none of what it said. See subtranscript.go.
 func (a App) viewingPicked(id string) App {
 	if a.roster.Selected != id {
 		return a
@@ -170,7 +173,8 @@ func (a App) viewingPicked(id string) App {
 		return a.openWorkflow(id, t.ID)
 	}
 	task := a.roster.SelectedTask
-	return a.withDM(id, d.withSubBacklog(task, a.fleet.SubBacklog(id, task)).Viewing(task))
+	a = a.withDM(id, d.withSubBacklog(task, a.fleet.SubBacklog(id, task)).Viewing(task))
+	return a.askSubagent(id, task)
 }
 
 // subsFor is the running dispatches a lookup answers for one agent, and none

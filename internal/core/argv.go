@@ -19,6 +19,7 @@
 package core
 
 import (
+	"cmp"
 	"fmt"
 
 	"github.com/google/uuid"
@@ -170,8 +171,8 @@ func (s *Session) buildArgs() ([]string, error) {
 		return nil, err
 	}
 	args = append(args, identity...)
-	if s.cfg.Name != "" {
-		args = append(args, "--name", s.cfg.Name)
+	if name := cmp.Or(s.cfg.ClaudeName, s.cfg.Name); name != "" {
+		args = append(args, "--name", name)
 	}
 	if s.cfg.PermissionMode != "" {
 		args = append(args, "--permission-mode", s.cfg.PermissionMode)

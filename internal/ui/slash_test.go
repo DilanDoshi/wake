@@ -119,7 +119,9 @@ func TestAnOperatorsOwnCommandStillReachesTheAgent(t *testing.T) {
 		"/deploy staging", // a command with an argument
 		"/sync-notes",     // a hyphenated one, which is what /add-<name> looks like
 		"/resumes",        // a longer word beginning with one of Wake's
-		"/r",              // a shorter one, which is what an abbreviation rule would swallow
+		// A shorter one, which is what an abbreviation rule would swallow, is not
+		// here: ↵ over its menu completes it now, so it is
+		// TestAnAbbreviationOfAWakeCommandStillReachesTheAgentOnceTheMenuIsClosed.
 		// The two the `/add-<agent-name>` ruling is about. `/new-oscar` is one
 		// of eight `new-…` commands in this repository's own recorded corpus,
 		// so it is exactly what a prefix rule on Wake's `/new` would swallow -

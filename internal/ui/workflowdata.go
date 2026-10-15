@@ -194,7 +194,7 @@ func (a App) openAgent() (workflowRunView, core.WorkflowAgent, bool) {
 // notice on every re-ask.
 func (a App) reaskWorkflowAgent() App {
 	run, ag, ok := a.openAgent()
-	if !ok || rpc.ValidWorkflowAgentID(ag.AgentID) != nil || sameProgress(ag, a.workflow.asked) {
+	if !ok || rpc.ValidAgentID(ag.AgentID) != nil || sameProgress(ag, a.workflow.asked) {
 		return a
 	}
 	a.workflow.asked = ag

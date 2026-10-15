@@ -332,7 +332,7 @@ func newAgent(id, name, label, dir, parent string, sess *core.Session, cancel co
 	return &agent{
 		id:           id,
 		name:         name,
-		claudeName:   name, // --name, which wins on --resume too (at-menu findings §2)
+		claudeName:   name, // --name, which wins on --resume too (at-menu findings §2); never a manager's: none is renamed
 		label:        label,
 		dir:          dir,
 		parent:       parent,

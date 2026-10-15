@@ -155,7 +155,9 @@ type App struct {
 
 	// fleet is every agent this client knows about, and the only thing that
 	// inspects an event. See fleet.go.
-	fleet Fleet
+	fleet       Fleet
+	daemonBuild string     // the daemon's build off the last report; see wakeBuilds
+	statusUI    StatusView // /status's view; see statuscmd.go
 
 	room   Room
 	cards  Cards
@@ -205,9 +207,11 @@ type App struct {
 
 	// askedHistory is which sessions this client has already asked for a
 	// transcript, and pendingHistory is the asks Update has not yet written.
-	// Both are copied on write for dms' reason. See history.go.
+	// Both are copied on write for dms' reason. See history.go. subTranscripts
+	// is the same for a subagent's own file (subtranscript.go).
 	askedHistory   map[string]int
 	pendingHistory []string
+	subTranscripts subTranscripts
 
 	// dmOrder is the order those conversations were opened, which is the order
 	// ⇥ moves the keys through them. A map has no order - Go randomises the
@@ -457,6 +461,7 @@ func NewRoomApp(conn net.Conn, stream Stream, seed *rpc.Status) App {
 	// the next push: the report carries a request id for exactly the client
 	// that was not there when the ask went past.
 	a.cards = a.cards.Reconcile(seed)
+	a.daemonBuild = buildOf(seed)
 	// The room over a fleet that has been talking since before this window
 	// existed opens with nothing in it. This is where it asks; see
 	// roomhistory.go for the other moment and for why there are only two.
@@ -740,6 +745,8 @@ func (a App) apply(f rpc.Frame) App {
 		return a.rewindTargetsArrived(f)
 	case rpc.FramePeersReply:
 		return a.peersArrived(f)
+	case rpc.FrameSubagentReply:
+		return a.subagentArrived(f)
 	case rpc.FrameWorkflowsReply, rpc.FrameWorkflowAgentReply, rpc.FrameWorkflowSaved:
 		return a.workflowReplied(f)
 
