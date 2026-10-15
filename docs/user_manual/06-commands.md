@@ -14,7 +14,7 @@ wake fork <who> [name]  branch a conversation: a new agent with the same history
 wake import [<id>]      adopt a claude session this machine already has
 wake manager            start the manager from a shell (the room seats one by default)
 wake setup-terminal     configure your terminal: Shift+Enter → a newline, Cmd+←/→ → line start/end
-wake status             what is running
+wake status             what is running, and each agent's team (`--team <name>`: one team's members)
 wake stop               stop every session and the daemon
 wake upgrade            install the newest release over this one
 wake --version          which build you have
@@ -107,7 +107,11 @@ two you can simply ask for again.
 
 **`wake status`** answers three different questions honestly: a daemon with a fleet, no daemon and
 nothing alive, or — the interesting one — no daemon but processes it left behind, which it reports
-as orphans rather than pretending they are gone.
+as orphans rather than pretending they are gone. A row carries `team <name>` after the id when the
+agent is on a team, and `wake status --team <name>` lists only that team's members (`/team` puts an
+agent on one). An agent that has `wake` on its `PATH` can run it too, which is how it sees its own
+team; each ordinary agent starts with a short note saying so. The report also names what Claude
+sessions know the manager as, `manager-<fleet>`.
 
 **`wake stop` is irreversible.** See [chapter 4](04-lifecycle.md).
 
@@ -129,7 +133,8 @@ Wake owns a short, closed list of slash commands:
 /adopt                         adopt a claude session this machine already has, from the room
 /manager                       the switch: start one, wake a parked one, or park a running one
 /manager-stop                  end the manager for good (a fresh /manager starts a new one)
-/board                         the fleet as one row per agent; ⇥ tiles it into a live wall
+/board                         the fleet as one row per agent; ⇥ tiles it into a live wall; a fleet bigger than the screen scrolls
+/status [@who]                 an agent's own facts — state, ids, model, context, effort, permission mode, team, builds; read-only
 /groupchat-filter [on|off]     whether a lone @name narrows the room by default (bare reports)
 /reauth                        recover a fleet knocked out by an expired shared login
 /mcp [@who]                    an agent's MCP servers: status, sign in, reconnect, on/off, tools
