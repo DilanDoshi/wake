@@ -299,8 +299,10 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 // `@who /rename bob` is claude's own word, so it passes through to the agent
 // like any message - and Wake mirrors it onto its handle for who, the room
 // half of renameMirror's focused case, the mirror going with who's passthrough
-// as sendDM's does. "" for every other draft, so an ordinary broadcast is
-// still one command. See renameMirrorFor.
+// as sendDM's does - and onto the manager, which the room reaches as the service
+// rather than a mention, so `@manager /rename ops` (or an unaddressed one) moves
+// its name too. "" for every other draft, so an ordinary broadcast is still one
+// command. See renameMirrorFor.
 //
 // r.mode is MentionDirect for any slash command now - route never widens a
 // knob - so `@who /rename bob` reaches who alone and the mirror moves who's
@@ -315,8 +317,15 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 // their DMs here; each frame carries its own stamped uuid.
 func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock, now bool) (App, []rpc.Frame, tea.Cmd) {
 	var mirrorID, mirror string
-	if r.mentioned && r.mode == MentionDirect {
-		mirrorID, mirror = a.renameMirrorFor(r.Resolved, r.configureRoute().Text)
+	var who string
+	switch svc := a.service(); {
+	case r.mentioned && r.mode == MentionDirect:
+		who = r.Resolved
+	case svc.ID != "" && len(r.Targets) == 1 && r.Targets[0] == svc.ID:
+		who = svc.Name // the manager is the service, no mention, but its /rename moves its name too
+	}
+	if who != "" {
+		mirrorID, mirror = a.renameMirrorFor(who, r.configureRoute().Text)
 	}
 	var frames []rpc.Frame
 	var mirrorNow tea.Cmd

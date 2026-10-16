@@ -55,6 +55,7 @@ import (
 	"sync"
 	"time"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -130,6 +131,28 @@ type parkedRecord struct {
 	// only by the park, like Color - a running session's /team is refused once it
 	// is parked - so the record is the one writer.
 	Team string `json:"team,omitempty"`
+
+	// ClaudeName is what claude calls the manager, manager-<part>, here for
+	// Team's reason: a part an operator chose and a wake dropped would put the
+	// manager back under the fleet's name, and every agent that reached it by the
+	// chosen one would lose it. Only the manager's record has one; any other
+	// agent's claude name is its Name. Read back through restoredClaudeName.
+	ClaudeName string `json:"claude_name,omitempty"`
+}
+
+// restoredClaudeName is the name a woken manager is to be called, from its
+// record: "" for any other agent's, and for a name the book holds that a rename
+// could not have written - the book is a file somebody may have edited, and this
+// reaches a command line.
+func restoredClaudeName(rec parkedRecord) string {
+	if rec.Name != core.ManagerName {
+		return ""
+	}
+	name, err := managerClaudeNameOf(rec.ClaudeName)
+	if err != nil {
+		return ""
+	}
+	return name
 }
 
 // parkBook is the on-disk record, rewritten whole through a temp file and a

@@ -11,6 +11,9 @@ package daemon
 // command (list-agents.jsonl:7-8), so the only cost is the one line claude's
 // model reads on its next turn, which tells the agent its new name.
 //
+// What claude is to be called is a.claudeWant: Wake's name, except the manager's,
+// which is manager-<part> while Wake's stays `manager` (rename.go).
+//
 // claudeName is what claude calls itself: its launch --name, then each /rename
 // Wake writes, then whatever a rename reply on its stream says, the operator's
 // or Wake's. Only a Wake rename arms the want (rename.go), and it fires only
@@ -46,10 +49,10 @@ func (a *agent) renameTextLocked() (text string, keep bool) {
 		return "", false
 	case a.renameHeld || a.claudeName == "":
 		return "", true
-	case a.claudeName == a.name:
+	case a.claudeName == a.claudeWant:
 		return "", false
 	}
-	return slashPrefix + renameVerb + " " + a.name, false
+	return slashPrefix + renameVerb + " " + a.claudeWant, false
 }
 
 // renameWrite is the line a queued rename probe writes, decided again at the
@@ -68,7 +71,7 @@ func (a *agent) renameWrite() string {
 		a.probeWanted[renameProbe] = true
 	}
 	if text != "" {
-		a.claudeName = a.name
+		a.claudeName = a.claudeWant
 	}
 	return text
 }
@@ -108,7 +111,7 @@ func (a *agent) noteRenamed(ev core.Event) {
 	a.claudeName = name
 	if a.renameHeld && a.pendingProbes[renameProbe] == 0 {
 		// A refused mirror owes claude Wake's name whatever it took, a variant included.
-		keep := name != a.name && (a.renameRefused || name == a.renameAsked)
+		keep := name != a.claudeWant && (a.renameRefused || name == a.renameAsked)
 		a.probeWanted[renameProbe] = a.probeWanted[renameProbe] && keep
 		a.renameHeld, a.renameAsked, a.renameRefused = false, "", false
 	}

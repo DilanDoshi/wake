@@ -141,7 +141,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   drawn so: the daemon still calls it `manager`, the UI's fleet fold names its row by the report's
   `ManagerClaude` (`Fleet.shown`, which every typed name goes through), identity is the exact
   `Fleet.isManager`, and `@manager` and `@manager-<fleet>` both reach it. No agent or team may take
-  the `manager-` prefix.
+  the `manager-` prefix. **Its end part is the operator's** (`@manager /rename ops`, `/name ops`):
+  `manager-ops` is held on the agent (`claudeWant`), synced to claude, served as `ManagerClaude` and
+  kept in the park record; a bare `manager` puts the fleet's back (`decisions.md`, 2026-10-15).
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
   everything and clears the park book (`parked.json` beside the socket).
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)

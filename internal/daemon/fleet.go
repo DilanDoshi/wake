@@ -142,9 +142,10 @@ func fleetDirIn(root, name string) (string, error) {
 	return filepath.Join(root, fleetsDirName, name), nil
 }
 
-// managerClaudeName is what claude calls the manager of the fleet at socket:
-// `manager-<fleet>`, so a Claude session can tell one fleet's manager from
-// another's while Wake's own name for it stays core.ManagerName. The fleet is
+// managerClaudeName is what claude calls the manager of the fleet at socket
+// until it is renamed: `manager-<fleet>`, so a Claude session can tell one
+// fleet's manager from another's while Wake's own name for it stays
+// core.ManagerName. The fleet is
 // the socket's directory - a named fleet's own name, LegacyFleet for root, and
 // a hand-set $WAKE_SOCKET's directory, which names no fleet but is still the one
 // thing that tells two daemons apart.
@@ -179,12 +180,35 @@ func nameShaped(s string) string {
 	return s[:min(len(s), maxFleetName)]
 }
 
-// managerClaude is managerClaudeName for this daemon. With no home directory no
-// socket can sit under ~/.wake, so "" gives the hand-set rule - the right answer
-// rather than a lost error.
-func (s *server) managerClaude() string {
+// managerClaudeDefault is managerClaudeName for this daemon. With no home
+// directory no socket can sit under ~/.wake, so "" gives the hand-set rule - the
+// right answer rather than a lost error.
+func (s *server) managerClaudeDefault() string {
 	root, _ := StateRoot()
 	return managerClaudeName(root, s.socket)
+}
+
+// managerClaude is what claude calls the manager now, for a caller with no
+// listing of its own.
+func (s *server) managerClaude() string {
+	mgr, _ := s.managerAgent()
+	return s.managerClaudeOf(mgr)
+}
+
+// managerClaudeOf is the name the manager's agent holds (a rename's, or the one
+// it was woken under) when there is one, else a parked record's, else the
+// fleet's own. A record comes after the agent because a live row is newer than
+// the book it was woken from.
+func (s *server) managerClaudeOf(mgr *agent) string {
+	if mgr != nil {
+		return mgr.wantedClaude()
+	}
+	for _, rec := range s.parked.records() {
+		if name := restoredClaudeName(rec); name != "" {
+			return name
+		}
+	}
+	return s.managerClaudeDefault()
 }
 
 // checkFleetName refuses a name that is not one, saying which rule it broke.

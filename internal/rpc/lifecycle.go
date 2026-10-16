@@ -219,10 +219,11 @@ type Status struct {
 	// builds were reported.
 	Build string `json:"build,omitempty"`
 
-	// ManagerClaude is what claude calls this fleet's manager, `manager-<fleet>`,
+	// ManagerClaude is what claude calls this fleet's manager, `manager-<part>`,
 	// so a client knows it under the name a Claude session's peer list shows;
-	// Wake's own name for it stays core.ManagerName. The daemon derives it from
-	// its socket, and it is never read off a frame a client wrote.
+	// Wake's own name for it stays core.ManagerName. The part is the fleet's
+	// until the operator renames it; the daemon holds the name (the manager's
+	// agent, or its park record), and no frame a client wrote sets it.
 	ManagerClaude string `json:"manager_claude,omitempty"`
 
 	// Sessions is every session the daemon holds, or - when Running is
