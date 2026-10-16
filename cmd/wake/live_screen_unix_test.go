@@ -238,12 +238,20 @@ func TestLiveJourney(t *testing.T) {
 	s.settle()
 	t.Logf("PHASE 1 - the room, at %dx%d\n%s", liveCols, liveRows, s.dump())
 
+	// Bare `wake` starts only the manager, so the first agent is asked for here,
+	// capped like the second; esc clears /new's drafted mention, as below.
+	liveSay(s, "/new --max-budget-usd "+liveBudget)
+	for deadline := time.Now().Add(liveTimeout); len(agentsOnRoster(s)) == 0 && time.Now().Before(deadline); {
+		time.Sleep(100 * time.Millisecond)
+	}
 	agents := agentsOnRoster(s)
 	if len(agents) == 0 {
-		t.Fatalf("first run spawned no agent.\n%s", s.dump())
+		t.Fatalf("/new spawned no agent.\n%s", s.dump())
 	}
+	s.send("\x1b")
+	s.settle()
 	first := agents[0]
-	t.Logf("first-run agent: %q", first)
+	t.Logf("first agent: %q", first)
 
 	// --- 2. a second agent, capped ------------------------------------------
 	t.Run("spawn", func(t *testing.T) {

@@ -30,7 +30,7 @@ import (
 )
 
 // screenTimeout bounds every wait for something to appear on screen. Generous,
-// because a first run forks a daemon and spawns an agent behind it.
+// because a first `wake` forks a daemon and spawns a session behind it.
 const screenTimeout = 20 * time.Second
 
 var (

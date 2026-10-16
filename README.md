@@ -51,8 +51,9 @@ cd ~/your-project
 wake
 ```
 
-That starts a daemon, spawns an agent, and opens **the room** — the agent is a roster row, and `↵`
-on it opens the conversation. (`wake new` is the verb that opens one for you.) `⌃O` detaches and
+That starts a daemon and opens **the room** with one session in it: the manager, which anything you
+type there without an `@name` reaches. Ask it for agents, or start one with `/new` in the room or
+`wake new` at a shell, which also opens its conversation for you. `⌃O` detaches and
 leaves the fleet working — close the terminal entirely and they keep going. Run `wake` again to
 come back.
 

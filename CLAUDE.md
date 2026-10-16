@@ -46,8 +46,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 
 ### Surfaces (details in the named files)
 
-- **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room (spawns one
-  agent as a roster row if the machine has nothing); `wake --fleet <name>` returns to one
+- **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room with the
+  manager alone, spawning no agent (owner's 2026-10-16 ruling); `wake --fleet <name>` returns to one
   (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status` (`--team <name>` lists one team), `stop`
   (irreversible), `fleets`, `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. A new fleet
   checks `claude` is on this `PATH` first (its daemon inherits it); a spawn from any daemon without

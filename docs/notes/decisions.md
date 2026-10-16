@@ -3398,6 +3398,8 @@ time the turn ends.
 
 ## Ruling: bare `wake` lands on the room, and first run spawns an agent it does not open
 
+*(The spawn half is superseded 2026-10-16, below: bare `wake` spawns no agent. Landing on the room stands.)*
+
 **Every bare `wake` was landing on a conversation, and it took running the shipped binary to see
 it.** `openRoom` branched three ways and two of them opened the room; the third — nothing at all —
 went through `attach`, which spawns *and* opens that agent's DM beside the room. That looked like
@@ -4392,3 +4394,25 @@ folded it at all.
   message that fits three rows gets no key: a click on it would rewrap the transcript to change nothing.
   The key and the fold are decided at `DM.bodyWidth`, the width the block is drawn at (a subagent's is a
   gutter narrower), so a pointer is always a click target.
+
+## 2026-10-16 — bare `wake` starts the manager and no agent (the owner)
+
+**Reverses** the spawn half of "bare `wake` lands on the room, and first run spawns an agent it does
+not open" and lifecycle spec §3's "no fleet exists → first run spawns". The owner's report: a fresh
+`wake` came up with a pooled agent (`alma`, `bruno`) beside the manager, and it should be the manager
+alone. That ruling's premise - "a new user's first command has to produce an agent" - predates the
+manager being started by every verb that opens the room: the room now always has somebody to type to,
+an unaddressed draft reaches the manager, and the manager can spawn. `wake new` and `/new` remain the
+ways to start an agent by hand.
+
+- **The branch is gone, not switched off.** `openRoom` always asks what is running (`requestFleet`,
+  `awaitFleet`) and `ensureManager` seats the manager; `fleetToReopen`, `reopensRoom` and `hasFleet`
+  existed only to decide the spawn, so they and their totality guards are deleted rather than left
+  deciding nothing. ⌃Q's park book needs no special case: the room opens over it like anything else
+  and `/resume` reaches it.
+- **Held by** `TestBareWakeOpensTheRoomWithOnlyTheManager` (a real pty: the room alone, the manager on
+  the roster, no agent, and the daemon holding exactly the manager - the one test that sees a spawn
+  after the seed) and `TestBareWakeSpawnsNothingBeforeTheRoomKnowsWhatIsRunning` (no spawn frame
+  before the room's seed).
+  The pty tests that used first run's agent as a fixture start it with `wake new` and `⌃W` back to the
+  room, as gridscreen already did.
