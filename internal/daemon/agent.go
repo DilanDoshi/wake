@@ -161,10 +161,11 @@ type agent struct {
 	// is unanswered; claudeWant is the name it is to carry: Wake's, except the
 	// manager's manager-<part>. renameHeld keeps a mirrored rename's want from
 	// firing until claude's next rename reply, and renameAsked is what that
-	// /rename asked for; renameRefused marks a hold whose mirror Wake refused.
-	// See renamesync.go.
+	// /rename asked for; renameRefused marks a hold whose mirror Wake refused;
+	// renameSent is what the last rename probe asked of claude. See renamesync.go.
 	claudeName    string
 	claudeWant    string
+	renameSent    string
 	renameHeld    bool
 	renameAsked   string
 	renameRefused bool

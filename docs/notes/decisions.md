@@ -4433,9 +4433,18 @@ should *actually* carry that name so other agents can reach it by it. The owner 
   choice and stays unchased. When claude answers *Wake's own* `/rename manager-ops` with
   `manager-ops-2`, because another session holds the name, `adoptedVariant` makes that the manager's
   name and the report is pushed: a served name that claude does not carry is one `SendMessage`
-  delivers to whichever session does. Only an extension of the current want is taken, so a reply to
-  an older probe cannot undo a newer rename. Not chased further: that is the loop the ordinary rule
-  exists to prevent.
+  delivers to whichever session does. Only a reply that provably answers the current want is taken:
+  the one probe in flight, which asked it (`renameSent`). Two probes can be in flight (a probe does
+  not mark the agent owed), and a stale reply can extend a newer want - `ops-long` then `ops` -
+  which Codex's second pass found in a prefix-only first version. Not chased further: that is the
+  loop the ordinary rule exists to prevent.
 - **Not done:** nothing compares a chosen part with another fleet's manager *before* the rename; the
   collision is answered after, by the variant above. An ordinary agent whose hyphenated `/rename`
   draws a variant is still unchased, as before.
+- **Residual, pre-existing and left for its own change:** `renameHeld` is one boolean for however many
+  mirrored passthroughs are outstanding, so two windows' `/rename`s inside one round trip can release
+  the hold on the first reply. For the manager the sequence is `/rename manager-ops` then
+  `/rename ops` from two windows: the first reply equals the want and clears it, the second leaves
+  claude at `ops` with nothing armed. An ordinary agent has the same hole with `foo-bar` then
+  `foo bar`. Closing it means counting passthroughs (or FIFO-correlating replies), which touches every
+  agent's sync, so it is not bundled here; a later `/name` settles it.

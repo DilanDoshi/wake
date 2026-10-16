@@ -75,7 +75,7 @@ func (a *agent) renameWrite() string {
 		a.probeWanted[renameProbe] = true
 	}
 	if text != "" {
-		a.claudeName = a.claudeWant
+		a.claudeName, a.renameSent = a.claudeWant, a.claudeWant
 	}
 	return text
 }
@@ -130,12 +130,15 @@ func (a *agent) noteRenamed(ev core.Event) {
 // manager's name when it is a variant of the one asked - a collision's -2 - and
 // reports whether the name moved. The report and the park book speak for claude's
 // name, and a manager-<part> that claude does not carry is one SendMessage
-// delivers to whichever session does. A reply that is not an extension of the
-// want (a newer rename's is pending) is left to it.
+// delivers to whichever session does. Only a reply that provably answers the
+// current want is taken: the one probe in flight, which asked it. Two in flight
+// cannot be told apart, and a stale one's reply can extend a newer want
+// (ops-long, then ops), so those are left to the newer rename.
 func (a *agent) adoptedVariant() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	if a.name != core.ManagerName || a.claudeName == a.claudeWant || !strings.HasPrefix(a.claudeName, a.claudeWant) {
+	if a.name != core.ManagerName || a.pendingProbes[renameProbe] != 1 || a.renameSent != a.claudeWant ||
+		a.claudeName == a.claudeWant || !strings.HasPrefix(a.claudeName, a.claudeWant) {
 		return false
 	}
 	a.claudeWant = a.claudeName

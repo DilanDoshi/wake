@@ -412,6 +412,48 @@ func TestTheManagerTakesTheVariantClaudeAnsweredItsOwnRenameWith(t *testing.T) {
 	}
 }
 
+// Two rename probes in flight, the first for a name the second extends: its
+// stale reply is the variant of nothing the manager wants now, and taking it
+// would leave Wake naming a session claude no longer carries.
+func TestAStaleProbeReplyDoesNotRenameTheManagerBackwards(t *testing.T) {
+	a, r := aManager(t)
+	mustRename(t, a, r, "ops-long")
+	queuedRenames(a)
+	if text := a.renameWrite(); text != "/rename manager-ops-long" {
+		t.Fatalf("the first probe wrote %q", text)
+	}
+	a.incProbe(renameProbe)
+	mustRename(t, a, r, "ops")
+	queuedRenames(a)
+	if text := a.renameWrite(); text != "/rename manager-ops" {
+		t.Fatalf("the second probe wrote %q", text)
+	}
+	a.incProbe(renameProbe)
+
+	streamed(a, renamedEvent("manager-ops-long"))
+	if a.adoptedVariant() || a.wantedClaude() != "manager-ops" {
+		t.Fatalf("the stale reply made the manager %q, want manager-ops kept", a.wantedClaude())
+	}
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: manager-ops-long", LocalCommand: true})
+	streamed(a, renamedEvent("manager-ops"))
+	if a.adoptedVariant() || a.wantedClaude() != "manager-ops" {
+		t.Fatalf("after the second reply the manager is %q, want manager-ops", a.wantedClaude())
+	}
+
+	// One probe in flight, and a newer rename that extends what it asked is not
+	// yet written: the reply is exactly what was asked and answers nothing newer.
+	b, rb := aManager(t)
+	mustRename(t, b, rb, "ops-long")
+	queuedRenames(b)
+	b.renameWrite()
+	b.incProbe(renameProbe)
+	mustRename(t, b, rb, "ops")
+	streamed(b, renamedEvent("manager-ops-long"))
+	if b.adoptedVariant() || b.wantedClaude() != "manager-ops" {
+		t.Fatalf("a reply to an older ask made the manager %q, want manager-ops kept", b.wantedClaude())
+	}
+}
+
 // Over a real process: a collision on the whole name leaves the manager the
 // variant claude took, and the report says so.
 func TestTheReportNamesTheManagerClaudeTookNotTheOneAsked(t *testing.T) {
