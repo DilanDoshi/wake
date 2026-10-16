@@ -121,10 +121,9 @@ func openSession(socket, sessionID string, request func(net.Conn) error, confirm
 	}
 	// Every verb that opens a *conversation* ends here, so this is where the
 	// room's default addressee is filled for each of them: `wake new`, `wake
-	// attach`, `wake fork`, `wake import`. Bare `wake` fills it in
-	// conversationOnly, both branches of it, since first run stopped coming
-	// through here. `wake manager` is in neither place - it opens nothing, and
-	// it is asking for this directly.
+	// attach`, `wake fork`, `wake import`. Bare `wake` fills it in openRoom.
+	// `wake manager` is in neither place - it opens nothing, and it is asking
+	// for this directly.
 	ensureManager(conn, fleet)
 	// The confirmation carried the whole fleet, not just the new session, so
 	// the room opens with a roster rather than with an empty one that fills in

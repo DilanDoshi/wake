@@ -225,14 +225,14 @@ type fakeDaemon struct {
 	spawnRefusal string
 
 	// statusesBeforeHangUp is how many status requests this daemon answers
-	// before it starts hanging up on them instead. Zero means it always answers.
+	// before it starts hanging up on them instead. Zero means it always answers;
+	// hangsUpOnEveryStatus means it answers none.
 	//
-	// It exists for one shape a test cannot otherwise reach: bare `wake` against
-	// a fleet ends in a Bubble Tea program, which needs the terminal `go test`
-	// does not have and would write an alt screen over the test's own output. A
-	// daemon that answers daemon.Status - the question the branch is taken on -
-	// and then hangs up on the room's own request turns that path into an error
-	// this package can assert on, without moving the decision anywhere it is not.
+	// It exists for one shape a test cannot otherwise reach: bare `wake` ends in
+	// a Bubble Tea program, which needs the terminal `go test` does not have and
+	// would write an alt screen over the test's own output. A daemon that hangs
+	// up on the room's own request turns that path into an error this package
+	// can assert on.
 	statusesBeforeHangUp int
 
 	// keepSocketFile makes shutdown leave the socket behind, which is what a
@@ -402,7 +402,8 @@ func (d *fakeDaemon) record(f rpc.Frame) {
 // connections asking at once cannot both spend the last one.
 func (d *fakeDaemon) answerStatus(conn net.Conn) bool {
 	d.mu.Lock()
-	if d.statusesBeforeHangUp > 0 && d.answered >= d.statusesBeforeHangUp {
+	budget := d.statusesBeforeHangUp
+	if budget == hangsUpOnEveryStatus || (budget > 0 && d.answered >= budget) {
 		d.mu.Unlock()
 		return false
 	}

@@ -352,11 +352,11 @@ back.**
       negotiable: two processes on one transcript branch it with no error anywhere. Hard to trigger
       by hand — `wake new` mints its own id — so this is a "if you ever see it, report it" rather
       than a step.
-- [ ] **Bare `wake` on a machine with nothing running is still first run**: one command, one agent,
-      **and the room**. The agent is a roster row rather than a pane — `↵` on the row opens the
-      conversation, and `wake new` is the verb that opens one for you. The pty suite holds the pane
-      count, the roster row and that the row opens (`openroomscreen_unix_test.go`); what it cannot
-      say is whether a new user reads an empty room with one row in it as *it worked*.
+- [ ] **Bare `wake` on a machine with nothing running opens the room with the manager alone** — no
+      pooled agent beside it. Typing in the room reaches the manager; `/new` or `wake new` starts an
+      agent. The pty suite holds the pane count, the manager's row and that nothing else was spawned
+      (`openroomscreen_unix_test.go`); what it cannot say is whether a new user reads a room with only
+      the manager in it as *it worked*, and knows to ask it for an agent.
 - [ ] **Bare `wake` while a fleet is already running and you are attached in another terminal.** It
       should open a second room on the same fleet with no new agent in it. Two alt screens over one
       daemon is a thing no test has ever drawn.

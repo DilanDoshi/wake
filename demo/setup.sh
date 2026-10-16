@@ -70,9 +70,8 @@ cat > "$work/stage.tape" <<EOF
 # The fleet every beat is filmed against. Sourced, never recorded: each beat
 # tape wraps it in Hide and calls Show once the room is ready.
 #
-# \`wake new maya\` rather than a bare \`wake\`, because a bare one spawns an
-# agent from the name pool when it finds nothing running — which would put a
-# different random name in the cast on every take.
+# \`wake new maya\` rather than a bare \`wake\`, because a bare one starts the
+# manager and no agent, and the cast needs maya by name.
 
 Set TypingSpeed 8ms
 
