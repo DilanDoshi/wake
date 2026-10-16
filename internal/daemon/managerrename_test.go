@@ -326,3 +326,120 @@ func TestAManagerWokenFromTheBookKeepsItsRename(t *testing.T) {
 	}
 	d.stop(t)
 }
+
+// Claude answers the operator's `/rename ops` with a variant when a session is
+// already called ops. The passthrough never asked for manager-ops, so no reply to
+// it is final: Wake still owes the whole name, once.
+func TestAVariantForTheManagersRenameIsStillChasedToItsWholeName(t *testing.T) {
+	a, r := aManager(t)
+	mustMirror(t, a, r, "ops")
+	a.noteSent()
+	a.noteRenameSent("/rename ops")
+	streamed(a, renamedEvent("ops-2"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: ops-2", LocalCommand: true})
+	a.probeIfWanted()
+	a.probeIfWanted()
+	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename manager-ops"}) {
+		t.Fatalf("claude took ops-2 and Wake queued %q, want one [/rename manager-ops]", got)
+	}
+}
+
+// Two windows' renames in one round trip: the first reply releases the hold while
+// the later passthrough is still unanswered, and the want must survive it.
+func TestTwoWindowsRenamingTheManagerEndAsTheLaterOne(t *testing.T) {
+	a, r := aManager(t)
+	mustMirror(t, a, r, "dev")
+	mustMirror(t, a, r, "ops")
+	a.noteSent()
+	a.noteRenameSent("/rename dev")
+	a.noteRenameSent("/rename ops")
+	streamed(a, renamedEvent("dev"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: dev", LocalCommand: true})
+	streamed(a, renamedEvent("ops"))
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: ops", LocalCommand: true})
+	a.probeIfWanted()
+	a.probeIfWanted()
+	if got := queuedRenames(a); !slices.Equal(got, []string{"/rename manager-ops"}) {
+		t.Fatalf("claude ended as ops and Wake queued %q, want one [/rename manager-ops]", got)
+	}
+}
+
+// When claude answers Wake's own /rename with a variant of the whole name - a
+// session already holds manager-ops - the manager is that variant: the report
+// and the book must not name a session that is somebody else's. A reply that
+// does not extend the want belongs to a newer rename still pending, and an
+// ordinary agent's variant is claude's own choice.
+func TestTheManagerTakesTheVariantClaudeAnsweredItsOwnRenameWith(t *testing.T) {
+	a, r := aManager(t)
+	mustRename(t, a, r, "ops")
+	if got := queuedRenames(a); len(got) != 1 {
+		t.Fatalf("the idle rename queued %q, want one probe", got)
+	}
+	if text := a.renameWrite(); text != "/rename manager-ops" {
+		t.Fatalf("the probe wrote %q, want /rename manager-ops", text)
+	}
+	a.incProbe(renameProbe)
+	streamed(a, renamedEvent("manager-ops-2"))
+	if !a.adoptedVariant() {
+		t.Fatal("the manager did not take the variant claude answered with")
+	}
+	if got := a.wantedClaude(); got != "manager-ops-2" {
+		t.Errorf("the manager is called %q to claude, want manager-ops-2", got)
+	}
+	streamed(a, core.Event{Kind: core.KindTurnEnd, Text: "Session renamed to: manager-ops-2", LocalCommand: true})
+	a.probeIfWanted()
+	if got := queuedRenames(a); len(got) != 0 {
+		t.Errorf("claude was asked again after the variant was taken: %q", got)
+	}
+
+	b, rb := aManager(t)
+	mustRename(t, b, rb, "ops")
+	b.renameWrite()
+	b.incProbe(renameProbe)
+	mustRename(t, b, rb, "dev")
+	streamed(b, renamedEvent("manager-ops-2"))
+	if b.adoptedVariant() || b.wantedClaude() != "manager-dev" {
+		t.Errorf("a newer rename's want was replaced by %q", b.wantedClaude())
+	}
+
+	c, rc := renamingAgent(t)
+	mustRename(t, c, rc, "bob")
+	c.renameWrite()
+	c.incProbe(renameProbe)
+	streamed(c, renamedEvent("bob-2"))
+	if c.adoptedVariant() {
+		t.Error("an ordinary agent took claude's variant as its name")
+	}
+}
+
+// Over a real process: a collision on the whole name leaves the manager the
+// variant claude took, and the report says so.
+func TestTheReportNamesTheManagerClaudeTookNotTheOneAsked(t *testing.T) {
+	fakeClaudeOnPath(t, "renamesync")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+
+	spawnManager(c, idAlpha)
+	c.send(rpc.Frame{Kind: rpc.FrameRename, SessionID: idAlpha, Text: "clash"})
+	awaitManagerNamed(c, "manager-clash-2")
+}
+
+// Two manager records in one book - one spawned while another sat parked - give
+// the report the newest, not whichever the map offers first.
+func TestTheNewestManagerRecordNamesTheParkedManager(t *testing.T) {
+	s := newServer(tempSocket(t))
+	for id, rec := range map[string]parkedRecord{
+		idAlpha: {Name: core.ManagerName, ClaudeName: "manager-old", Parked: time.Date(2026, 10, 1, 0, 0, 0, 0, time.UTC)},
+		idBeta:  {Name: core.ManagerName, ClaudeName: "manager-new", Parked: time.Date(2026, 10, 2, 0, 0, 0, 0, time.UTC)},
+	} {
+		rec.ID = id
+		if err := s.parked.add(rec); err != nil {
+			t.Fatalf("book %s: %v", id, err)
+		}
+	}
+	for range 40 {
+		if got := s.managerClaude(); got != "manager-new" {
+			t.Fatalf("the report names the parked manager %q, want the newest record's manager-new", got)
+		}
+	}
+}

@@ -33,7 +33,11 @@ package daemon
 // A passthrough unwritten after its mirror leaves the hold unreleased, but only
 // a window whose connection is already dead fails that write.
 
-import "github.com/DilanDoshi/wake/internal/core"
+import (
+	"strings"
+
+	"github.com/DilanDoshi/wake/internal/core"
+)
 
 // renameVerb composes the /rename probe, for modelVerb's reason: slashguard
 // refuses a whole-word command literal in this package.
@@ -95,7 +99,10 @@ func (a *agent) noteRenameSent(text string) {
 // which is the next one while a probe is in flight (stdin is FIFO). The release
 // settles the want unless claude took exactly what the passthrough asked and
 // that is not Wake's name (Wake hyphenated it), which leaves one /rename for
-// the next idle: any other name is claude's own choice, never chased.
+// the next idle: any other name is claude's own choice, never chased. The
+// manager's is the exception, since what its passthrough asked is never the
+// manager-<part> Wake wants. When claude answers Wake's own /rename with a
+// variant of that name, adoptedVariant makes it the manager's.
 // Content-matched like every probe reply, so a turn whose prose opens with the
 // same words would be read as one.
 func (a *agent) noteRenamed(ev core.Event) {
@@ -111,8 +118,26 @@ func (a *agent) noteRenamed(ev core.Event) {
 	a.claudeName = name
 	if a.renameHeld && a.pendingProbes[renameProbe] == 0 {
 		// A refused mirror owes claude Wake's name whatever it took, a variant included.
-		keep := name != a.claudeWant && (a.renameRefused || name == a.renameAsked)
+		// So does the manager's: its passthrough asked for the part alone, never
+		// for the manager-<part> Wake wants, so no reply to it is final.
+		keep := name != a.claudeWant && (a.renameRefused || name == a.renameAsked || a.name == core.ManagerName)
 		a.probeWanted[renameProbe] = a.probeWanted[renameProbe] && keep
 		a.renameHeld, a.renameAsked, a.renameRefused = false, "", false
 	}
+}
+
+// adoptedVariant makes what claude answered Wake's own /rename with the
+// manager's name when it is a variant of the one asked - a collision's -2 - and
+// reports whether the name moved. The report and the park book speak for claude's
+// name, and a manager-<part> that claude does not carry is one SendMessage
+// delivers to whichever session does. A reply that is not an extension of the
+// want (a newer rename's is pending) is left to it.
+func (a *agent) adoptedVariant() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.name != core.ManagerName || a.claudeName == a.claudeWant || !strings.HasPrefix(a.claudeName, a.claudeWant) {
+		return false
+	}
+	a.claudeWant = a.claudeName
+	return true
 }

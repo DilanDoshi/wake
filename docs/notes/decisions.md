@@ -4423,9 +4423,19 @@ should *actually* carry that name so other agents can reach it by it. The owner 
 - **The rename survives a park** in `parkedRecord.ClaudeName` (optional, the manager's record only),
   written by `recordFor` and read back through `restoredClaudeName`, which re-fences it like a rename
   would — the book is a file, and the value reaches an argv. A daemon holding only the book serves it
-  too, so a parked row is drawn renamed before it is woken. `/manager-stop` ends the manager and its
+  too, so a parked row is drawn renamed before it is woken; with two manager records in one book the
+  newest wins, since the map they come from has no order. `/manager-stop` ends the manager and its
   name with it: the next one starts as `manager-<fleet>`.
-- **Residual:** nothing compares a chosen part with another fleet's manager. The default is unique by
-  construction (the socket's directory); a chosen part is the operator's call, and two fleets whose
-  managers are both `manager-ops` read as one to claude's peer list, which is the case-fold
-  residual of 2026-10-10 again.
+- **A variant claude answers with is the name it took.** Both reviews found it, and the machine this was
+  built on had five managers in claude's peer list, so it is not far-fetched. `@manager /rename ops`
+  asks claude for `ops`, never for `manager-ops`, so no reply to it is final: the manager's release
+  always owes the whole name once (`noteRenamed`), where an ordinary agent's variant is claude's own
+  choice and stays unchased. When claude answers *Wake's own* `/rename manager-ops` with
+  `manager-ops-2`, because another session holds the name, `adoptedVariant` makes that the manager's
+  name and the report is pushed: a served name that claude does not carry is one `SendMessage`
+  delivers to whichever session does. Only an extension of the current want is taken, so a reply to
+  an older probe cannot undo a newer rename. Not chased further: that is the loop the ordinary rule
+  exists to prevent.
+- **Not done:** nothing compares a chosen part with another fleet's manager *before* the rename; the
+  collision is answered after, by the variant above. An ordinary agent whose hyphenated `/rename`
+  draws a variant is still unchased, as before.

@@ -203,10 +203,17 @@ func (s *server) managerClaudeOf(mgr *agent) string {
 	if mgr != nil {
 		return mgr.wantedClaude()
 	}
+	// The newest manager record, since two can sit in one book (a manager spawned
+	// while another was parked) and the map they come from has no order.
+	var best parkedRecord
+	found := false
 	for _, rec := range s.parked.records() {
-		if name := restoredClaudeName(rec); name != "" {
-			return name
+		if restoredClaudeName(rec) != "" && (!found || rec.Parked.After(best.Parked)) {
+			best, found = rec, true
 		}
+	}
+	if found {
+		return restoredClaudeName(best)
 	}
 	return s.managerClaudeDefault()
 }

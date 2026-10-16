@@ -223,7 +223,8 @@ type Status struct {
 	// so a client knows it under the name a Claude session's peer list shows;
 	// Wake's own name for it stays core.ManagerName. The part is the fleet's
 	// until the operator renames it; the daemon holds the name (the manager's
-	// agent, or its park record), and no frame a client wrote sets it.
+	// agent, or its park record) and reads a client's rename into it only through
+	// managerClaudeNameOf's fence.
 	ManagerClaude string `json:"manager_claude,omitempty"`
 
 	// Sessions is every session the daemon holds, or - when Running is
