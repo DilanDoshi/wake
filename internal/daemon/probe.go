@@ -170,6 +170,10 @@ func (s *server) absorbed(a *agent, ev core.Event) bool {
 	switch answered {
 	case modelProbe:
 		s.pushStatus() // the level and model it confirmed
+	case renameProbe:
+		if a.adoptedVariant() {
+			s.pushStatus() // the manager's name claude actually took
+		}
 	}
 	return suppress
 }

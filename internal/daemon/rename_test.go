@@ -202,31 +202,28 @@ func TestRenamingIsRefusedForAParkedOrEndedSessionAndSaysWhy(t *testing.T) {
 	}
 }
 
-// The manager's name is not display, so it is the one session that cannot be
-// renamed at all.
+// The manager's Wake name is not display, so no rename moves it: what a rename
+// changes is the end part of what claude calls it (managerrename_test.go).
 //
-// Everything that makes a manager a manager is keyed on the name: `launch`
+// Everything that makes a manager a manager is keyed on the Wake name: `launch`
 // applies the MCP configuration and the scoping prompt by it, `internal/mcp`
 // keeps it off its own roster by it, and the room finds its default addressee
 // by it. A manager under a pooled name holds tools that act on the whole fleet,
 // answers to nothing, and appears in `list_agents` as an ordinary agent.
-func TestTheManagerCannotBeRenamed(t *testing.T) {
-	r := newNameRegistry()
-	if _, err := r.claimManager(); err != nil {
-		t.Fatalf("claim the manager name: %v", err)
-	}
-	a := newAgent(idAlpha, core.ManagerName, "dev", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
-
-	if err := a.rename(r, "bob", false); err == nil {
-		t.Fatal("the manager was renamed, so @manager now reaches nothing and the session holding Wake's " +
-			"own tools looks like an ordinary agent")
-	}
-	if a.name != core.ManagerName {
-		t.Errorf("the manager is called %q", a.name)
+func TestTheManagersWakeNameSurvivesEveryRename(t *testing.T) {
+	a, r := aManager(t)
+	for _, to := range []string{"bob", "manager-bob", "alex"} {
+		if err := a.rename(r, to, false); err != nil {
+			t.Fatalf("rename the manager to %q: %v", to, err)
+		}
+		if a.name != core.ManagerName {
+			t.Fatalf("after a rename to %q the manager is called %q, so @manager now reaches nothing and the "+
+				"session holding Wake's own tools looks like an ordinary agent", to, a.name)
+		}
 	}
 	// The other direction is normalizeName's and is checked with the rest of the
 	// reserved words above; asserted here too because "nothing may be renamed to
-	// manager" and "the manager may not be renamed" are two different holes.
+	// manager" and "the manager's name may not move" are two different holes.
 	if _, err := r.rename("alex", core.ManagerName); err == nil {
 		t.Error("an ordinary agent was renamed to the manager's name")
 	}
@@ -439,13 +436,12 @@ func TestTheNameARenamedSessionGaveUpIsFreeForTheNextSpawn(t *testing.T) {
 // change that made it untrue, rather than left to cover whatever is written
 // there next.
 var unlockedReadsOfTheDisplayHalves = map[string]string{
-	"unpark":           "reads a parked agent, and a parked one cannot be renamed. isParked() took a.mu on this goroutine immediately above, which is what orders this read behind markParked's write",
-	"labelFor":         "called from launch on a parked agent being woken, behind unpark's own isParked(); same ordering, same refusal",
-	"retire":           "finish() took a.mu on this goroutine two statements above, and a session that has ended cannot be renamed",
-	"renameTextLocked": "its callers hold a.mu, the Locked suffix's contract: tryProbeLocked under tryProbe's or rename's own lock, and renameWrite",
+	"unpark":   "reads a parked agent, and a parked one cannot be renamed. isParked() took a.mu on this goroutine immediately above, which is what orders this read behind markParked's write",
+	"labelFor": "called from launch on a parked agent being woken, behind unpark's own isParked(); same ordering, same refusal",
+	"retire":   "finish() took a.mu on this goroutine two statements above, and a session that has ended cannot be renamed",
 }
 
-// Four, and newAgent is deliberately not among them: it writes the two fields
+// Three, and newAgent is deliberately not among them: it writes the two fields
 // as composite-literal keys rather than reading them off a receiver, so the
 // scan does not see it and the excuse would have been a dead entry covering
 // whatever was written next. The guard said so on its first run.
@@ -454,9 +450,9 @@ var unlockedReadsOfTheDisplayHalves = map[string]string{
 // when the park book row moved into recordFor, which takes the lock - so their
 // excuses went with them, which is what the second half of this test is for.
 //
-// renameTextLocked made it four: the rename probe compares Wake's name with
-// claude's under a lock its callers take.
-const unlockedDisplayReaderCount = 4
+// renameTextLocked made it four, by comparing Wake's name with claude's under a
+// lock its callers take, and left again when the want moved to claudeWant.
+const unlockedDisplayReaderCount = 3
 
 // The display halves are read under the agent's lock, or by a function that has
 // said why it need not.
