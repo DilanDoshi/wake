@@ -192,7 +192,7 @@ func requestSpawn(conn net.Conn, sessionID, requested, role string, opts spawnOp
 // # Why the whole report and not only this session
 //
 // Because the daemon's confirmation is s.fleet() - every session it holds, not
-// only the one just started - so a bare `wake` already has the roster the room
+// only the one just started - so `wake new` already has the roster the room
 // needs and asking for it again would be a second round trip for an answer
 // already in hand. It would also cost this client the property that lets
 // ui.App read both status kinds without telling them apart: it never writes

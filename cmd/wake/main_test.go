@@ -262,6 +262,9 @@ type fakeDaemon struct {
 	answered int
 }
 
+// hangsUpOnEveryStatus is statusesBeforeHangUp's "answers none".
+const hangsUpOnEveryStatus = -1
+
 func startFakeDaemon(t *testing.T, quitDelay time.Duration, status rpc.Status) *fakeDaemon {
 	t.Helper()
 	return listenAs(t, &fakeDaemon{quitDelay: quitDelay, status: status})

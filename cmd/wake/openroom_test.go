@@ -6,9 +6,10 @@ package main
 //
 // Bare `wake` ends in a Bubble Tea program, which wants a terminal `go test`
 // does not have and would write an alt screen over the test binary's own
-// output. So each test here drives `run` against a daemon that hangs up on the
-// room's own question, which turns the path into an error this package can
-// assert on. The assertions are on the frames the daemon received.
+// output. So the test that drives `run` does it against a daemon that hangs up
+// on the room's own question, which turns the path into an error this package
+// can assert on; the rest drive the pieces before the program. What the room
+// holds once it is up is openroomscreen_unix_test.go's.
 
 import (
 	"errors"
@@ -24,9 +25,6 @@ import (
 	"github.com/DilanDoshi/wake/internal/ui"
 )
 
-// hangsUpOnEveryStatus is statusesBeforeHangUp's "answers none".
-const hangsUpOnEveryStatus = -1
-
 // refusedSpawn is what the fake daemon says when a client asks for a session.
 // Its content does not matter; that it *arrives* is what lets a client that
 // spawned return instead of waiting out a confirmation with no deadline.
@@ -35,9 +33,9 @@ const refusedSpawn = "not right now"
 // startBareWakeDaemon is the fake bare `wake` is driven against: it refuses
 // every spawn and hangs up on every status request, so either path returns an
 // error rather than opening a terminal.
-func startBareWakeDaemon(t *testing.T, status rpc.Status) *fakeDaemon {
+func startBareWakeDaemon(t *testing.T) *fakeDaemon {
 	t.Helper()
-	return listenAs(t, &fakeDaemon{status: status, spawnRefusal: refusedSpawn, statusesBeforeHangUp: hangsUpOnEveryStatus})
+	return listenAs(t, &fakeDaemon{spawnRefusal: refusedSpawn, statusesBeforeHangUp: hangsUpOnEveryStatus})
 }
 
 // bareWake runs `wake` with no arguments and insists it came back.
@@ -59,14 +57,14 @@ func bareWake(t *testing.T) error {
 	}
 }
 
-// Bare `wake` on an empty fleet asks what is running and spawns nothing.
+// Bare `wake` asks what is running before it asks for anything else.
 //
-// That case used to be first run, which spawned a pooled agent beside the
-// manager. Now the manager is the only session a bare `wake` starts, and it is
-// asked for by ensureManager once the room's question is answered - so before
-// that answer nothing may be spawned at all.
-func TestBareWakeOnAnEmptyFleetAsksWhatIsRunningAndSpawnsNothing(t *testing.T) {
-	d := startBareWakeDaemon(t, rpc.Status{Running: true})
+// It used to decide first, and on an empty fleet spawn a pooled agent before
+// the room had a seed. Now the manager is the only session it starts, asked for
+// by ensureManager once the room's question is answered - so nothing may be
+// spawned before that answer. A spawn after it is the pty test's to catch.
+func TestBareWakeSpawnsNothingBeforeTheRoomKnowsWhatIsRunning(t *testing.T) {
+	d := startBareWakeDaemon(t)
 	t.Setenv(daemon.SocketEnv, d.socket)
 
 	if err := bareWake(t); err == nil {
@@ -74,8 +72,8 @@ func TestBareWakeOnAnEmptyFleetAsksWhatIsRunningAndSpawnsNothing(t *testing.T) {
 	}
 	for _, f := range d.frames() {
 		if f.Kind == rpc.FrameSpawn {
-			t.Fatalf("bare `wake` on an empty fleet asked for a session (%+v) before the room knew "+
-				"what was running: the manager is the only session it starts", f)
+			t.Fatalf("bare `wake` asked for a session (%+v) before the room knew what was running: "+
+				"the manager is the only session it starts, and only once the room is seeded", f)
 		}
 	}
 	if n := countKind(d.frames(), rpc.FrameStatus); n != 1 {

@@ -28,9 +28,8 @@ What it still cannot settle, and why every section below survives:
 and leaves the fleet running; `⌃C` parks the focused agent and `⌃Q` parks the fleet and closes
 Wake; `wake stop` ends it. `wake status` says what is alive. **Those three keys changed on
 2026-08-11** — `⌃C` used to detach — so if your hands know the old ones, that is the first thing to
-watch for. **`wake` itself changed the same day**: it reopens the room over an existing fleet and
-spawns nothing, and only starts an agent when there is nothing running. `wake new` is the verb that
-always spawns.
+watch for. **`wake` itself changed the same day**: it opens the room over the fleet, and since
+2026-10-16 it starts only the manager — never an agent. `wake new` is the verb that spawns one.
 
 Mark items as you go. When one fails, the useful report is *what you did, what you saw, and what
 you expected* — a screenshot beats prose for anything visual.

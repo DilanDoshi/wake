@@ -4411,7 +4411,8 @@ ways to start an agent by hand.
   deciding nothing. ⌃Q's park book needs no special case: the room opens over it like anything else
   and `/resume` reaches it.
 - **Held by** `TestBareWakeOpensTheRoomWithOnlyTheManager` (a real pty: the room alone, the manager on
-  the roster, no agent, and the daemon holding exactly the manager) and
-  `TestBareWakeOnAnEmptyFleetAsksWhatIsRunningAndSpawnsNothing` (no spawn frame before the room's seed).
+  the roster, no agent, and the daemon holding exactly the manager - the one test that sees a spawn
+  after the seed) and `TestBareWakeSpawnsNothingBeforeTheRoomKnowsWhatIsRunning` (no spawn frame
+  before the room's seed).
   The pty tests that used first run's agent as a fixture start it with `wake new` and `⌃W` back to the
   room, as gridscreen already did.
