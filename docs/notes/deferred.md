@@ -5450,9 +5450,18 @@ A usage limit (`error:"rate_limit"` on the failed turn's synthetic frame, `core.
 now stays live and pinned, and a session parked for a dead login wakes itself on proof the login
 works (`internal/ui/apirecover.go`). Left out, each on purpose:
 
-- **No message is sent for you at the reset.** Claude Code does not either; the pin names the reset
-  time and the next message works. An auto-send would need a timer per agent, against "no process on
-  a timer", and a guess at what to send.
+- ~~**No message is sent for you at the reset.**~~ **REVERSED 2026-10-17 (the owner):** the daemon
+  resumes a limited agent itself, at the reset or on a login to another account
+  (`internal/daemon/usagelimit.go`, decisions.md). Claude Code does continue at the reset (2.1.234);
+  this note's premise was out of date. What that left:
+  - **A daemon restart forgets a stop**, as a daemon restores nothing; the agent waits for a message.
+    *Closes with:* reading the transcript's last record for a usage limit on wake or reattach.
+  - **The Linux watch is compile-checked only** on this machine (`configwatch_linux.go`); the darwin
+    one is run by `TestTheConfigWatchSeesEveryWayTheFileChanges`.
+  - **A resumed turn's reply reaches the room** even when the limited turn was a DM's: the resume is
+    no DM send, the same as any turn Wake did not start from a conversation.
+  - **The weekly reset's shape** is read off the owner's real limit messages, digits masked, not off a
+    recording; an unrecognised one arms no timer and the login watch still resumes.
 - **The live stream form of a usage-limit frame is unrecorded** — hitting one on purpose costs a
   quota. The decoder keys on the top-level `error` field, which the recorded auth variant carries on
   the stream (`testdata/stream/api-error-auth.jsonl`) and real on-disk usage-limit lines carry as
@@ -5478,6 +5487,8 @@ works (`internal/ui/apirecover.go`). Left out, each on purpose:
   wasted wake in a race window, and no recording pins `message.id`'s continuity across a park.
 - **Nothing watches the login while every agent is parked.** With no agent live, only `/login`
   (signed in) or `/resume` brings them back — Wake cannot poll `claude auth status` without a timer.
+  *(Since 2026-10-17 the daemon does wait on Claude's config file, but only for a live agent a usage
+  limit stopped; a session parked for a dead login still wakes on proof alone.)*
 - ~~**A usage limit's timed notice outlives the turn that proves the reset**~~ **FIXED
   (`fix/recent-follow-ups`, 2026-09-29):** the pin keeps the text it reported, and `unpinAPIError`
   clears that notice through `notice.ClearIf` if it is still the newest; a later report stays.
