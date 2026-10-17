@@ -27,6 +27,10 @@ const (
 	// peerKeyBytes is how much of the digest is kept: far more than the messages
 	// of one conversation can collide in.
 	peerKeyBytes = 8
+
+	// sentKeyLead marks a send's recipient in its key, so it never collides with
+	// an incoming message from a session of the same name.
+	sentKeyLead = "→"
 )
 
 // peerFolds reports whether a peer's message draws as a pointer at this width.
@@ -47,8 +51,31 @@ func peerBody(text string, width int, expanded bool) string {
 
 // peerKey is what a click on a conversation's folded peer message resolves to. A
 // live message carries no id of its own, so the key is its sender and words:
-// the same words twice open together, which is the same message to read.
+// the same words twice open together, which is the same message to read. A send
+// is keyed by its recipient and words, apart from an incoming one's.
 func peerKey(ev core.Event) string {
-	sum := sha256.Sum256([]byte(ev.FromName + "\x00" + ev.Text))
+	from, text := ev.FromName, ev.Text
+	if s := sentOf(ev); s != nil {
+		from, text = sentKeyLead+s.To, s.Text
+	}
+	sum := sha256.Sum256([]byte(from + "\x00" + text))
 	return peerKeyPrefix + hex.EncodeToString(sum[:peerKeyBytes])
+}
+
+// sentOf is the message one of this conversation's own SendMessage calls carries,
+// and nil for any other event - a subagent's send is its own, in its own view.
+func sentOf(ev core.Event) *core.PeerSend {
+	if ev.Kind != core.KindToolUse || ev.Tool == nil || ev.Subagent != nil {
+		return nil
+	}
+	return ev.Tool.Send
+}
+
+// peerWords is the words an event draws as a peer message - an incoming one's, or
+// a send's - and whether it is one.
+func peerWords(ev core.Event) (string, bool) {
+	if s := sentOf(ev); s != nil {
+		return s.Text, true
+	}
+	return ev.Text, ev.Kind == core.KindCrossSession
 }

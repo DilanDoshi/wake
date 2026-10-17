@@ -56,8 +56,9 @@ func toolResultBlock(ev core.Event, call *core.ToolCall, expanded bool, expand s
 	// updated" - and the diff drawn above it (foldExempt) with the ⏺ now green
 	// already say so. Drawing it is the boilerplate Claude Code omits. Append
 	// settles the bullet before an empty body returns (dm.go), so this loses
-	// nothing. A *failed* edit's result is the error and must show.
-	if call != nil && call.Diff != nil && !failed {
+	// nothing. A *failed* edit's result is the error and must show. A delivered
+	// send's is the same: the message above it is the record (owner, 2026-10-16).
+	if call != nil && (call.Diff != nil || call.Send != nil) && !failed {
 		return ""
 	}
 	r := render.Result{

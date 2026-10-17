@@ -184,10 +184,15 @@ func (d DM) renderEvent(ev core.Event) block {
 		joined: ev.Kind == core.KindToolResult,
 	}
 	b.copied, b.src = copiedAs(ev)
-	// A peer message that folds is a click target, keyed like a tool call so
-	// openTool opens it; one that fits is not, or a click would rewrap for nothing.
-	if ev.Kind == core.KindCrossSession && peerFolds(ev.Text, d.bodyWidth(ev)) {
+	// A peer message that folds - an incoming one, or this conversation's own send
+	// - is a click target, keyed like a tool call so openTool opens it; one that
+	// fits is not, or a click would rewrap for nothing.
+	if words, peer := peerWords(ev); peer && peerFolds(words, d.bodyWidth(ev)) {
 		b.tool = peerKey(ev)
+	}
+	// A send draws as a peer message, with no ⏺ for a result to recolour.
+	if sentOf(ev) != nil {
+		return b
 	}
 	// A subagent's call is deliberately unmarked: its block is drawn inside an
 	// attribution gutter, so the ⏺ is not at the start of its line and neither
@@ -358,6 +363,9 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		if ev.Tool == nil {
 			return ""
 		}
+		if s := sentOf(ev); s != nil {
+			return sentBlock(d.Name, s, w, d.expandedTool(peerKey(ev)))
+		}
 		return toolUseBlock(ev.Tool, d.bulletFor(ev.Tool.ID), w)
 	case core.KindToolResult:
 		if ev.Tool == nil {
@@ -431,6 +439,14 @@ func localReplyBlock(text string, width int) string {
 // resolve from-name into an agent.
 func crossSessionBlock(ev core.Event, width int, expanded bool) string {
 	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), peerBody(ev.Text, width, expanded))
+}
+
+// sentBlock renders one of this conversation's own SendMessage calls as the peer
+// message it is: crossSessionBlock's head with this agent as the sender and the
+// recipient after the arrow, then the same Muted, folded body. Drawn from the call
+// - the agent's intent, not proof of delivery - and a failed send's error follows.
+func sentBlock(from string, s *core.PeerSend, width int, expanded bool) string {
+	return joinBlock(accentLine(crossSessionLead+from+crossSessionArrow+s.To, width), peerBody(s.Text, width, expanded))
 }
 
 // crossSessionBody draws a received peer message's body in Muted - Claude's
