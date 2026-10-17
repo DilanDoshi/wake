@@ -944,7 +944,9 @@ count un-truncatable.
   room; a send to ≥2 members does (multiplicity).
 - ~~`@` completion offering team names~~ (DONE, PR #111, 2026-09-22); a member count in section
   headers; refusing the manager a team;
-  the team-echo `to` stamp showing in an unrelated narrowed `@john` thread; direct team tools on
+  ~~the team-echo `to` stamp showing in an unrelated narrowed `@john` thread~~ (DONE 2026-10-17 for the live
+  echo, with `@team` narrowing; a *restored* team send still carries no address and draws in every
+  thread — the transcript has no team marker); direct team tools on
   ordinary (non-manager) agents. Owner's calls.
 ---
 

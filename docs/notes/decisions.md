@@ -4392,3 +4392,32 @@ folded it at all.
   message that fits three rows gets no key: a click on it would rewrap the transcript to change nothing.
   The key and the fold are decided at `DM.bodyWidth`, the width the block is drawn at (a subagent's is a
   gutter narrower), so a pointer is always a click target.
+
+## 2026-10-17 — a lone `@team` narrows the room like a lone `@name`
+
+The owner's ask: `@<team>` filters the group chat the way `@<agent>` does. This reverses the teams spec's
+2026-09-20 line ("a lone `@team` does **not** narrow the room in v1"), which left the per-team room behind the
+multi-room door. It is not a second room: `deferred.md` already named it as the composition of teams
+(membership) and the `@john` filter (narrowing) over the one room.
+
+- **A team's thread is the union of its members' threads.** `focusAdmits` asks each member's own question
+  (`admitsThread`, the old body), so every rule an agent's narrowing keeps holds per member: its prose, the
+  manager's, broadcasts, the operator's turns aimed at it, the peer messages it sent or received. No second
+  predicate.
+- **The room's focus stays one comparable string**: an agent's own id for one agent, the sorted ids for a team
+  (`joinIDs`). A lone `@name` therefore compares, filters and resets `⌃A` exactly as before. **Sorted**
+  because `Fleet.Agents()` is attention-ranked, so a member starting work reorders a team's route; an
+  unsorted key would read that as a new target and reset the override on every report
+  (`TestAMemberChangingStateKeepsTheOverride`).
+- **A team narrows in open mention mode too.** Open mode widens a lone `@name` past its mention, so the view
+  stays wide; it never widens a team send, so the thread the message reaches is the one to read
+  (`roomRoute.thread`, the one place a draft's addressed thread is decided, for the focus and the echo).
+- **A team narrowing draws no agent bar.** The bar is one agent's directory, model and context; a team has no
+  one, and the manager's would say something about someone else.
+- **The echo of a team send is addressed** (`to` = the members' key), which closes the gap the spec named:
+  the room narrowed to `@frontend` no longer shows what you told `backend`. It draws in the team's thread
+  and in each member's.
+- **Edge:** a team whose members change while the draft stands (a `/team`, a park) is a new target and
+  resets `⌃A`'s override; an unknown or all-parked team narrows nothing, as an unknown name does.
+- **Not done:** a restored team send is still unaddressed - the transcript holds no team marker, only the
+  uuid's lone-`@name` bit - so it draws in every thread, as it always did.
