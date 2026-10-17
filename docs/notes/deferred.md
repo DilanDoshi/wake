@@ -5626,9 +5626,9 @@ the line restored to the fixture.
 
 ## 2026-10-03 — left open by the manager relay
 
-- **A restored room does not redraw the manager's sends.** `↪ manager → <to>` is drawn from the live
-  `tool_use` (`withManagerSend`); `roomhistory.go` re-derives cross-session lines from transcripts but
-  has no case for the manager's SendMessage call. *Closes with:* the same predicate over a restored
+- **A restored room does not redraw an agent's sends** (the manager's, and since 2026-10-16 every
+  agent's). `↪ <agent> → <to>` is drawn from the live `tool_use` (`withSend`); `roomhistory.go`
+  re-derives cross-session lines from transcripts but has no case for a SendMessage call. *Closes with:* the same predicate over a restored
   `tool_use`.
 - **The target line says `→ @manager` for a relayed mention.** True of the frame; a line naming the
   peer would need the quoted-mention parse in core (decisions.md, 2026-10-03).
@@ -5654,3 +5654,31 @@ the line restored to the fixture.
   document-wide), and a bare file name (`tally.txt`) glamour links, whose styled row it wraps itself.
   Both are transient — the answer lands whole and is drawn right then —
   and the splitter names them (`internal/render/splitter.go`).
+
+## 2026-10-16 — left open by the outgoing-send rendering (`feat/dm-shows-outbound-send`)
+
+- **The room draws an agent's send from the call, so a denied or errored one still reads as sent.** The
+  `tool_use` frame arrives before `can_use_tool` (`permission.jsonl`), and an ordinary agent can be in a
+  mode that asks (⇧⇥) or have a call blocked; the room line is never corrected, though the DM shows the
+  error under the send. The manager runs in `auto`, so for it this was theoretical. *Closes with:*
+  drawing an ordinary agent's room line on its non-error result, from the stored call (a per-session
+  pending map on `App`), keeping the manager's call-based line.
+- **A parallel tool batch draws a sibling's result under a send.** Read and SendMessage in one assistant
+  message, results arriving after the send block, draw `⎿ Read 3 lines` joined directly under `↪ …`, so
+  it reads as the send's outcome now that the send's own receipt is hidden. Edit and TodoWrite already
+  behave this way (a fold-exempt call breaks the run; a stray result joins what precedes it). *Closes
+  with:* a stray result drawn unjoined or headed by its call's name, in `Append` and `renderAll` alike.
+- **A fleet-to-fleet send can show twice in the room** while the sender addresses an agent by a claude
+  name that lags Wake's (renamesync holds `/rename` until idle) or one this client's report has not
+  named yet: `ByName` misses, so the call's line and the receiver's own both draw. Narrow both ways.
+- **Retention can cut between a call and its failed result** (Codex, second pass). `cutFrom`'s clean cut is
+  the first event with no tool, so a no-tool event between a call and its result - a permission-denied
+  notice - can be the cut, keeping the failed result without its call. True of every tool call, a send
+  included (it then draws an error without the words); it needs a reclaim mark to land exactly there.
+  *Closes with:* a cut chosen by call/result correlation, not by the next event with no tool.
+- **A send restored after a rename carries the conversation's current name.** History drops the on-disk
+  rename events (`TestHistoryDropsTheRecordedOnDiskRename`), so a restored send cannot be stamped with the
+  name it was sent under; `Before` stamps what the conversation is called when it is read back, and it
+  keeps that from then on. A live send keeps its own. *Closes with:* a name timeline from the recorded
+  renames, if the owner wants it.
+
