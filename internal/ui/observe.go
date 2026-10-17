@@ -146,7 +146,7 @@ func (a App) observe(sessionID string, ev core.Event) App {
 			a = a.withRoom(a.room.Append(e, agent))
 		}
 	}
-	a = a.withManagerSend(sessionID, ev, agent)
+	a = a.withSend(sessionID, ev, agent)
 	if dm, ok := a.dms[sessionID]; ok && !a.wants(sessionID, ev) {
 		// A token for a pane nobody is looking at: it never gets it, so it cannot
 		// vouch for the block it is in (partialchunks.go).
@@ -163,20 +163,21 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	return a
 }
 
-// withManagerSend draws the manager's SendMessage, the one tool call the room
-// shows: unfenced, it is shown from the call rather than the manager's prose
-// (owner, 2026-10-03). One to a fleet agent is left to the receiver's own
+// withSend draws an agent's SendMessage to a session outside the fleet, the one
+// tool call the room shows: the manager's is unfenced, so it is shown from the
+// call rather than its prose (owner, 2026-10-03), and the owner widened it to
+// every agent's (2026-10-16). One to a fleet agent is left to the receiver's own
 // stream; Wake's names are lower-case.
-func (a App) withManagerSend(sessionID string, ev core.Event, manager Agent) App {
+func (a App) withSend(sessionID string, ev core.Event, from Agent) App {
 	t := ev.Tool
-	if ev.Kind != core.KindToolUse || t == nil || t.Send == nil || ev.Subagent != nil || !a.fleet.isManager(manager.Name) {
+	if ev.Kind != core.KindToolUse || t == nil || t.Send == nil || ev.Subagent != nil {
 		return a
 	}
 	if _, fleet := a.fleet.ByName(strings.ToLower(t.Send.To)); fleet {
 		return a
 	}
 	peer := core.Event{Kind: core.KindCrossSession, SessionID: sessionID, Text: t.Send.Text}
-	return a.withRoom(a.room.appendPeer(peer, manager, Agent{Name: t.Send.To}))
+	return a.withRoom(a.room.appendPeer(peer, from, Agent{Name: t.Send.To}))
 }
 
 // markRoomAsked records that the room has announced a permission ask, so a

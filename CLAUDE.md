@@ -326,7 +326,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*
   content, so pasted text can't forge one. DM replays of Wake's own sends are dropped. A message
   past three rows folds to them in the room and a conversation, under a pointer in the body's own
-  Muted; `⌃E` or a click opens it (`peerfold.go`).
+  Muted; `⌃E` or a click opens it (`peerfold.go`). **A conversation draws its own agent's
+  `SendMessage` the same way**, `↪ <agent> → <recipient>` and the words, every pane (`dm_blocks.go`'s
+  `sentBlock`; a delivered send's receipt is hidden, a failed one's error shows), and the room draws any
+  agent's send to a session outside the fleet (`observe.go`'s `withSend`).
 - **Slash commands resolve against a closed set Wake owns; anything else is text.** A word claude
   advertises may be claimed only in a form claude is recorded doing nothing with
   (`bareOnlyCommands` names the fixture). `/color` is the owner-claimed exception
@@ -363,7 +366,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **It relays the operator's `@"session" …` with `SendMessage`, its one built-in, unfenced** (owner's
   2026-10-03 ruling, the accepted risk in `decisions.md`): a room draft whose leading mention names
   no fleet agent passes through to it, and the room draws each send live as `↪ manager → <to>` from
-  the call itself — the manager's intent, not proof of delivery (`observe.go`'s `withManagerSend`).
+  the call itself — the manager's intent, not proof of delivery (`observe.go`'s `withSend`, which
+  draws every agent's).
   The room's leading `@` excludes an outside session named like a live team or `all`.
 - Its config is a function of its name, applied in `launch`: `--mcp-config` only ever beside
   `--strict-mcp-config` and `--tools SendMessage` (`core.ToolSendMessage`; not `--allowed-tools`,

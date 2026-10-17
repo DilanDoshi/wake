@@ -5626,9 +5626,9 @@ the line restored to the fixture.
 
 ## 2026-10-03 — left open by the manager relay
 
-- **A restored room does not redraw the manager's sends.** `↪ manager → <to>` is drawn from the live
-  `tool_use` (`withManagerSend`); `roomhistory.go` re-derives cross-session lines from transcripts but
-  has no case for the manager's SendMessage call. *Closes with:* the same predicate over a restored
+- **A restored room does not redraw an agent's sends** (the manager's, and since 2026-10-16 every
+  agent's). `↪ <agent> → <to>` is drawn from the live `tool_use` (`withSend`); `roomhistory.go`
+  re-derives cross-session lines from transcripts but has no case for a SendMessage call. *Closes with:* the same predicate over a restored
   `tool_use`.
 - **The target line says `→ @manager` for a relayed mention.** True of the frame; a line naming the
   peer would need the quoted-mention parse in core (decisions.md, 2026-10-03).
