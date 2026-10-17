@@ -423,6 +423,13 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 			}
 			continue
 		}
+		if l.ev.Notice == core.NoticeAutoResumed {
+			// Wake's resume, never the operator's: drawn as it was live, and its
+			// turn is no DM's, so the reply it got was public too.
+			open[l.ev.SessionID] = true
+			out = append(out, l)
+			continue
+		}
 		open[l.ev.SessionID] = public[i]
 		if firsts[i] {
 			// The chronological representative can change when an earlier

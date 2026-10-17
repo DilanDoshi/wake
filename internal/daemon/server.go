@@ -84,7 +84,8 @@ type server struct {
 	// (team.go); held here rather than derived by a client because only the daemon
 	// sees the whole fleet. Not persisted - see the teams spec.
 	teamOrder []string
-	peers     peerBook // the /list-agents run in flight and its askers; its own lock
+	peers     peerBook   // the /list-agents run in flight and its askers; its own lock
+	limits    limitWatch // resuming agents a usage limit stopped; its own lock
 
 	// taken is set by takeAgents when shutdown snapshots the fleet. An agent
 	// admitted after that snapshot enters a map nothing reads again - its

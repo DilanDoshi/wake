@@ -169,6 +169,7 @@ func (s *server) watchLiveness(ctx context.Context) {
 			// here and spawns nothing, so this adds no process on a timer.
 			s.lock.verify()
 			s.probeQuietAgents(ctx)
+			s.nudgeLimitsDue(limitClock())
 			if s.statesChanged() {
 				s.pushStatus()
 			}

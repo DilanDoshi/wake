@@ -71,8 +71,9 @@ const (
 	// the tail says on what (apirecover.go).
 	apiAwaitFormat = "%s: %s — parked; %s"
 
-	// usageLimitFormat is a usage limit: nothing to run, only a reset to wait for.
-	usageLimitFormat = "%s: %s — send again once it resets"
+	// usageLimitFormat is a usage limit: nothing to run - the daemon resumes the
+	// agent itself (internal/daemon/usagelimit.go).
+	usageLimitFormat = "%s: %s — Wake resumes it at the reset, or when you sign in to another account"
 
 	// turnFailedFormat is any other failed turn: who, and what the API said.
 	turnFailedFormat = "%s: %s"
@@ -249,8 +250,7 @@ func (a App) autoParkStalled() (App, tea.Cmd) {
 // outlived the failure, and a later /reauth re-parked a session that had already
 // recovered. The fleet shares one login, so the same output is the auto-wake's proof.
 func (a App) clearedAuthFailedOn(sessionID string, ev core.Event) App {
-	modelOutput := ev.Kind == core.KindAssistantText || ev.Kind == core.KindToolUse || ev.Kind == core.KindThinking
-	if modelOutput && !ev.LocalCommand {
+	if ev.ModelOutput() {
 		return a.clearAuthFailed(sessionID).unpinAPIError(sessionID).apiAnswered(sessionID)
 	}
 	return a

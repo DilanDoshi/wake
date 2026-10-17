@@ -8,7 +8,7 @@
 // control_* exchange and is not here: Claude asks and Wake answers, so it stays
 // with encode.go, ask.go and protocol.go's controlRequestEvent.
 //
-// The airlock is these seven files and nothing else in Wake knows Claude
+// The airlock is these eight files and nothing else in Wake knows Claude
 // Code's stream-json format:
 //
 //	protocol.go    decoding - one wire line in, core.Events out
@@ -18,6 +18,7 @@
 //	localreply.go  the text replies of local commands Wake parses
 //	control.go     control requests Wake writes, and their receipts
 //	ask.go         an interactive ask's kind and payload, resolved
+//	account.go     the signed-in account, and when a usage limit resets
 //
 // internal/core/airlock_test.go enforces that over the whole tree and reads
 // the same list. protocol.go's header carries the full rule.

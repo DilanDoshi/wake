@@ -334,6 +334,8 @@ func runFakeClaude() int {
 		// Replays a recorded dispatch's start and then holds it running - see
 		// taskreplay_test.go.
 		return fakeSubagentDispatch()
+	case "usagelimit":
+		return fakeUsageLimit(sid) // see usagelimit_e2e_test.go
 	case "stoprun":
 		// Starts a running workflow, a running subagent and a workflow that
 		// immediately ends, then behaves like fakeTurns - see

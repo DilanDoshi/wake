@@ -324,7 +324,7 @@ func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock, now b
 	// rule sendRoom stamps its echo's `to` by.
 	send := newRoomSend(r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0)
 	for _, id := range r.Targets {
-		msg := newQueued(send.messageID(), r.Text, text, images, true)
+		msg := newQueued(send.ID(), r.Text, text, images, true)
 		if id == mirrorID {
 			msg.rename = mirror
 		}
