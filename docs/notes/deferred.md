@@ -5671,3 +5671,14 @@ the line restored to the fixture.
 - **A fleet-to-fleet send can show twice in the room** while the sender addresses an agent by a claude
   name that lags Wake's (renamesync holds `/rename` until idle) or one this client's report has not
   named yet: `ByName` misses, so the call's line and the receiver's own both draw. Narrow both ways.
+- **Retention can cut between a call and its failed result** (Codex, second pass). `cutFrom`'s clean cut is
+  the first event with no tool, so a no-tool event between a call and its result - a permission-denied
+  notice - can be the cut, keeping the failed result without its call. True of every tool call, a send
+  included (it then draws an error without the words); it needs a reclaim mark to land exactly there.
+  *Closes with:* a cut chosen by call/result correlation, not by the next event with no tool.
+- **A send restored after a rename carries the conversation's current name.** History drops the on-disk
+  rename events (`TestHistoryDropsTheRecordedOnDiskRename`), so a restored send cannot be stamped with the
+  name it was sent under; `Before` stamps what the conversation is called when it is read back, and it
+  keeps that from then on. A live send keeps its own. *Closes with:* a name timeline from the recorded
+  renames, if the owner wants it.
+
