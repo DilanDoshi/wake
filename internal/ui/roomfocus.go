@@ -37,28 +37,28 @@ func focusAdmits(l roomLine, focus, managerID string) bool {
 		return true
 	}
 	for id := range splitIDs(focus) {
-		if admitsThread(l, id, managerID) {
+		var admit bool
+		switch l.ev.Kind {
+		case core.KindUserText:
+			admit = l.to == "" || addressedTo(l.to, id)
+		case core.KindCrossSession:
+			// A peer message belongs to both threads: the sender's (l.by,
+			// resolved at Append) and the receiver's (l.ev.SessionID). Either
+			// narrowing shows it. l.by.ID is empty for an outside sender or a
+			// restore, which leaves it in the receiver's thread only - still an
+			// id comparison.
+			admit = l.by.ID == id || l.ev.SessionID == id
+		default:
+			admit = l.ev.SessionID == id || l.ev.SessionID == managerID
+		}
+		if admit {
 			return true
 		}
 	}
 	return false
 }
 
-// admitsThread is one agent's thread: what focusAdmits asks of each member.
-func admitsThread(l roomLine, id, managerID string) bool {
-	if l.ev.Kind == core.KindUserText {
-		return l.to == "" || addressedTo(l.to, id)
-	}
-	if l.ev.Kind == core.KindCrossSession {
-		// A peer message belongs to both threads: the sender's (l.by, resolved
-		// at Append) and the receiver's (l.ev.SessionID). Either narrowing shows
-		// it. l.by.ID is empty for an outside sender or a restore, which leaves
-		// it in the receiver's thread only - still an id comparison.
-		return l.by.ID == id || l.ev.SessionID == id
-	}
-	return l.ev.SessionID == id || l.ev.SessionID == managerID
-}
-
+// addressedTo is whether the thread key a user line was addressed to holds id.
 func addressedTo(to, id string) bool {
 	for t := range splitIDs(to) {
 		if t == id {

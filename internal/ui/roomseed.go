@@ -24,9 +24,9 @@ import "github.com/DilanDoshi/wake/internal/core"
 // order said keeps.
 //
 // Deliberately narrow - an assistant reply the agent produced, and a user turn
-// the operator addressed to this agent alone (l.to == id, the FromRoom echo the
-// live DM shows). A broadcast (to == "") and the manager's own lines are left
-// out: seeding either could show a turn the disk read would not, and the seed
+// the operator addressed to this agent, alone or in a team (addressedTo, the
+// FromRoom echo the live DM shows). A broadcast (to == "") and the manager's own
+// lines are left out: seeding either could show a turn the disk read would not, and the seed
 // must never claim more than the authoritative read will. FromRoom is stamped
 // on the user turn so the DM heads it "from the room", the way the live echo is.
 func (r Room) turnsFor(id string) []core.Event {
@@ -37,7 +37,7 @@ func (r Room) turnsFor(id string) []core.Event {
 	for _, l := range r.said.slice(0, r.said.len()) {
 		switch l.ev.Kind {
 		case core.KindUserText:
-			if l.to == id {
+			if addressedTo(l.to, id) {
 				ev := l.ev
 				ev.SessionID, ev.FromRoom = id, true
 				out = append(out, ev)

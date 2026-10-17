@@ -27,3 +27,19 @@ func TestATeamSendIsAddressedToItsMembers(t *testing.T) {
 		}
 	}
 }
+
+// The room seed gives a never-opened DM the turns the operator addressed to its
+// agent. A team turn was addressed to each member, and is on each one's disk.
+func TestTheRoomSeedHoldsATeamTurnForEachMemberAndNoOneElse(t *testing.T) {
+	a := teamRoom(t)
+	a, _ = pressKey(a.withDraft("@backend run the migrations"), tea.KeyMsg{Type: tea.KeyEnter})
+	for id, want := range map[string]bool{"s1": true, "s2": true, "s3": false, "s4": false} {
+		var got bool
+		for _, ev := range a.room.turnsFor(id) {
+			got = got || strings.Contains(ev.Text, "run the migrations")
+		}
+		if got != want {
+			t.Errorf("the room seed for %s holds the team turn = %v, want %v", id, got, want)
+		}
+	}
+}

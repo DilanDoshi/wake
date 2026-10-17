@@ -10,7 +10,7 @@ package ui
 // The layout is Wake's own inside RFC 9562's version-8 shape:
 //
 //	bytes 0-3    "wake"           recognises it
-//	byte  4      flags            bit 0: a lone direct @name (the echo's `to`)
+//	byte  4      flags            bit 0: a lone direct @name (the address a restore gives it)
 //	bytes 5-10   send             shared by every target of one room send
 //	bytes 11-15  target           per target, so a broadcast's copies stay
 //	                              distinct records and only a fork shares one

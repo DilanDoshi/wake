@@ -316,8 +316,9 @@ func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock, now b
 	}
 	var frames []rpc.Frame
 	var mirrorNow tea.Cmd
-	// One send for every target, so the restore can draw it once; direct is the
-	// rule sendRoom stamps its echo's `to` by.
+	// One send for every target, so the restore can draw it once; direct is
+	// whether a lone @name addressed it, which is all the restore addresses a turn
+	// by - a team's echo is addressed live (roomRoute.thread), a restored one not.
 	send := newRoomSend(r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0)
 	for _, id := range r.Targets {
 		msg := newQueued(send.messageID(), r.Text, text, images, true)
@@ -400,8 +401,8 @@ func (a App) retarget() App {
 }
 
 // withRoomBar refreshes the room's info bar for the agent the composer is
-// addressing: the lone @name it has narrowed to (room.focus), or the manager
-// when it has narrowed to none. A zero Agent - no manager, or a focus that no
+// addressing: the lone @name it has narrowed to (room.focus; a team of one is
+// its member, a larger team no one), or the manager when it has narrowed to none. A zero Agent - no manager, or a focus that no
 // longer resolves - draws no bar, which is how an empty room is spelled. Cached
 // on the room via Room.withBar, so calling it on every retarget and resize is a
 // key comparison rather than a filesystem read.

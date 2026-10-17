@@ -4411,13 +4411,22 @@ multi-room door. It is not a second room: `deferred.md` already named it as the 
   (`TestAMemberChangingStateKeepsTheOverride`).
 - **A team narrows in open mention mode too.** Open mode widens a lone `@name` past its mention, so the view
   stays wide; it never widens a team send, so the thread the message reaches is the one to read
-  (`roomRoute.thread`, the one place a draft's addressed thread is decided, for the focus and the echo).
-- **A team narrowing draws no agent bar.** The bar is one agent's directory, model and context; a team has no
-  one, and the manager's would say something about someone else.
+  (`roomRoute.thread` decides the thread a draft addresses, for the focus and the live echo; the restore's
+  address still comes from the uuid's lone-`@name` bit).
+- **A team of two or more draws no agent bar.** The bar is one agent's directory, model and context; a team has
+  no one, and the manager's would say something about someone else. A team of one is that agent's thread, so
+  its key is the member's id and it draws the member's bar.
 - **The echo of a team send is addressed** (`to` = the members' key), which closes the gap the spec named:
   the room narrowed to `@frontend` no longer shows what you told `backend`. It draws in the team's thread
   and in each member's.
-- **Edge:** a team whose members change while the draft stands (a `/team`, a park) is a new target and
-  resets `⌃A`'s override; an unknown or all-parked team narrows nothing, as an unknown name does.
+- **The target is the name the draft addresses, not who is on the thread.** A team gaining or losing a live
+  member under a standing draft (a `/team`, a park, a manager spawn) is the same target: `⌃A`'s override
+  survives, and the reader keeps their place (`Room.refiltered`, over `relaid`'s line moves) - Review found the
+  first cut threw a scrolled reader to the newest line on any report, against "only a width change returns
+  a reader to the newest line". A reader whose line the change hides goes to the newest line, never back to
+  the oldest history. A selection is still cleared. An unknown or all-parked team narrows nothing, as an
+  unknown name does.
+- **A team turn seeds each member's never-opened DM** (`roomseed.turnsFor` reads `addressedTo`): it was
+  addressed to each of them and is on each one's disk.
 - **Not done:** a restored team send is still unaddressed - the transcript holds no team marker, only the
   uuid's lone-`@name` bit - so it draws in every thread, as it always did.

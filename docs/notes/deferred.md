@@ -5397,6 +5397,9 @@ approve first.
 readings is meant (a filtered view over the one room, which reduces to teams + the `@john` filter; or
 a second room surface, which needs a §2c scope decision), then a plan.
 
+**Update 2026-10-17: the filtered-view reading is built** — a lone `@team` narrows the room to its members'
+thread (`decisions.md`, 2026-10-17). A second room surface is still unbuilt and still needs the §2c ruling.
+
 ---
 
 ## 2026-09-04 — `/reauth` parks then `/resume`s in two steps; one-command park→wake is deferred
@@ -5656,3 +5659,15 @@ the line restored to the fixture.
   document-wide), and a bare file name (`tally.txt`) glamour links, whose styled row it wraps itself.
   Both are transient — the answer lands whole and is drawn right then —
   and the splitter names them (`internal/render/splitter.go`).
+
+## FROM `feat/team-narrows-the-room`, 2026-10-17
+
+Found in review of the `@team` narrowing; both are true of a lone `@name` on `main` too, so neither is
+this branch's to fix, and each is worth its own small PR.
+
+- **Recalling a prompt (`↑`) does not retarget the room.** `walkPrompts` sets the composer and stops, so a
+  recalled `@sydney hello` leaves the room unnarrowed and its target line stale until the next keystroke;
+  Enter still routes to sydney. One call (`retarget`) after the recall closes it; it wants a test per pane.
+- **A wake that re-keys an agent strands its retained room lines.** After a `/clear` then a park and wake,
+  `rekeyed` moves the agent's id to the new conversation and the room does not rewrite its retained lines'
+  `SessionID`, so a narrowing on that agent (or its team) hides the lines from before the wake.

@@ -289,21 +289,31 @@ func (r Room) SetSize(w, h int) Room {
 // past manager lines to reveal - the manager's own lines arrive later through
 // Append with the id already updated here. So a fleet report that starts the
 // manager never yanks a scrolled reader to the bottom.
+//
+// The target is who the draft names (focusName), not who is on the thread: a
+// team gaining or losing a live member under a standing draft is the same
+// target, so the override survives and the reader keeps their place (refiltered).
 // The caller clears any text selection on a focus change (App.retarget), because
 // the re-render renumbers the lines a selection is anchored to - the reason a
 // width change clears it too.
 func (r Room) WithFocus(focus, focusName, managerID string) Room {
+	old := r
 	r.focusName = focusName
 	r.managerID = managerID
-	prevEff := r.effectiveFocus()
+	sameTarget := focusName == old.focusName
 	if r.focus != focus {
 		// A new target resets the ⌃A override: narrowing starts at the default
 		// again. The same target left untouched, so an override survives more
 		// typing into the same draft. See roomfilter.go.
 		r.focus = focus
-		r.narrowed = r.narrowDefault
+		if !sameTarget {
+			r.narrowed = r.narrowDefault
+		}
 	}
-	return r.rerenderOnFocusChange(prevEff)
+	if sameTarget && r.effectiveFocus() != old.effectiveFocus() {
+		return r.refiltered(old)
+	}
+	return r.rerenderOnFocusChange(old.effectiveFocus())
 }
 
 // Append draws one event, attributed to the agent that produced it.
@@ -319,7 +329,7 @@ func (r Room) WithFocus(focus, focusName, managerID string) Room {
 // what makes it true.
 func (r Room) Append(ev core.Event, by Agent) Room { return r.appendLine(roomLine{ev: ev, by: by}) }
 
-// appendUser draws the operator's own room echo, stamped with the agent it was
+// appendUser draws the operator's own room echo, stamped with the thread it was
 // addressed to (or "" for a broadcast). Only this path carries a "to" - an
 // agent's own lines are told apart by session id, not by "to".
 func (r Room) appendUser(ev core.Event, to string) Room { return r.appendLine(roomLine{ev: ev, to: to}) }

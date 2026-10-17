@@ -67,6 +67,19 @@ func (r Room) rerenderOnFocusChange(prevEff string) Room {
 	return r
 }
 
+// refiltered redraws the room for a focus whose members changed under the same
+// target, with the operator doing nothing: the reader keeps their place, as
+// relaid keeps it for a changed block, and returns to the newest line only when
+// the change hides the line they were on.
+func (r Room) refiltered(old Room) Room {
+	r = r.relaid(old, r.said.slice(r.said.first(), r.said.len()), 0)
+	if _, ok := r.lineMoves.translate(old.tr.scroll); !ok && !old.tr.atBottom() {
+		r.tr = r.tr.toBottom()
+	}
+	r.lineMoves = nil // the caller clears a selection, as for any focus change
+	return r
+}
+
 const (
 	// roomFilterDMOnly and roomFilterNoTarget are ⌃A's two refusals: it is a room
 	// view control, so it does nothing from a DM pane and nothing in a room that

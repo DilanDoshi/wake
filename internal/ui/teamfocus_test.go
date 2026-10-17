@@ -7,6 +7,7 @@ package ui
 // received) holds for each member.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -237,5 +238,96 @@ func TestATeamNarrowingDrawsNoAgentBar(t *testing.T) {
 	}
 	if got := a.withDraft("@backend ").room.bar; got != "" {
 		t.Errorf("a team narrowing drew a bar:\n%s", got)
+	}
+}
+
+// A team of one is that agent's thread, so its bar is the agent's own: the key
+// is the member's id, and "a team has no one directory" holds from two members.
+func TestATeamOfOneDrawsItsMembersBar(t *testing.T) {
+	a := teamRoom(t).applyStatus(&rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "sydney", Team: "backend", Cwd: "/tmp/harbor", State: rpc.StateIdle},
+		{ID: "s2", Name: "thea", State: rpc.StateIdle},
+		{ID: "s3", Name: "delta", Team: "frontend", State: rpc.StateIdle},
+		{ID: "s5", Name: core.ManagerName, State: rpc.StateIdle},
+	}})
+	one := a.withDraft("@backend ")
+	if one.room.focus != "s1" || !strings.Contains(one.room.bar, "harbor") {
+		t.Errorf("a team of one: focus %q, bar %q; want the member's own", one.room.focus, one.room.bar)
+	}
+}
+
+// who is on a team changes under a standing draft - a member the manager spawns
+// into it, one parked, one woken - with the operator doing nothing. That is no
+// new target: the reader keeps their place and the ⌃A override survives.
+func addedMember(a App) App {
+	return a.applyStatus(&rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "sydney", Team: "backend", Cwd: "/tmp/harbor", State: rpc.StateIdle},
+		{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
+		{ID: "s3", Name: "delta", Team: "frontend", State: rpc.StateIdle},
+		{ID: "s4", Name: "iris", State: rpc.StateIdle},
+		{ID: "s5", Name: core.ManagerName, State: rpc.StateIdle},
+		{ID: "s6", Name: "kit", Team: "backend", State: rpc.StateIdle},
+	}})
+}
+
+func TestAMemberJoiningKeepsAScrolledReadersPlace(t *testing.T) {
+	a := teamRoom(t)
+	for i := range 80 {
+		a = a.applyFrame(frameText("s1", fmt.Sprintf("sydney note %02d", i)))
+	}
+	a = a.withDraft("@backend ")
+	a.room = a.room.ScrollUp(30)
+	if a.room.tr.atBottom() {
+		t.Fatal("precondition: the reader is at the bottom")
+	}
+	top := func(a App) string { return a.room.tr.lines.slice(a.room.tr.scroll, a.room.tr.scroll+1)[0] }
+	before := top(a)
+
+	a = addedMember(a)
+	if want := joinIDs([]string{"s1", "s2", "s6"}); a.room.focus != want {
+		t.Fatalf("the new member did not join the thread: focus %q, want %q", a.room.focus, want)
+	}
+	if a.room.tr.atBottom() {
+		t.Error("a member joining the team threw the reader to the newest line")
+	}
+	if got := top(a); got != before {
+		t.Errorf("the reader's top line changed from %q to %q", before, got)
+	}
+}
+
+func TestAMemberJoiningKeepsTheOverride(t *testing.T) {
+	a := teamRoom(t).withDraft("@backend ")
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlA})
+	a = addedMember(a)
+	if a.room.effectiveFocus() != "" {
+		t.Errorf("a member joining re-narrowed the room the operator had widened (effectiveFocus=%q)", a.room.effectiveFocus())
+	}
+}
+
+// A reader sitting on the departing member's lines has nowhere to keep: they go
+// to the newest line, not back to the oldest history.
+func TestAMemberLeavingUnderTheReaderSendsThemToTheNewestLine(t *testing.T) {
+	a := teamRoom(t)
+	for i := range 60 {
+		a = a.applyFrame(frameText("s1", fmt.Sprintf("sydney note %02d", i)))
+	}
+	for i := range 60 {
+		a = a.applyFrame(frameText("s2", fmt.Sprintf("thea note %02d", i)))
+	}
+	a = a.withDraft("@backend ")
+	a.room = a.room.ScrollUp(250)
+	if top := a.room.tr.lines.slice(a.room.tr.scroll, a.room.tr.scroll+1)[0]; a.room.tr.atBottom() || !strings.Contains(top, "sydney") {
+		t.Fatalf("precondition: the reader is not on one of sydney's lines: %q", top)
+	}
+	a = a.applyStatus(&rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+		{ID: "s1", Name: "sydney", Team: "frontend", State: rpc.StateIdle},
+		{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
+		{ID: "s5", Name: core.ManagerName, State: rpc.StateIdle},
+	}})
+	if a.room.focus != "s2" {
+		t.Fatalf("precondition: sydney did not leave the team (focus %q)", a.room.focus)
+	}
+	if !a.room.tr.atBottom() {
+		t.Errorf("a member leaving left the reader at line %d of %d, want the newest line", a.room.tr.scroll, a.room.tr.bottom())
 	}
 }
