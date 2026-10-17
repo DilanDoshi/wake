@@ -944,9 +944,8 @@ count un-truncatable.
   room; a send to ≥2 members does (multiplicity).
 - ~~`@` completion offering team names~~ (DONE, PR #111, 2026-09-22); a member count in section
   headers; refusing the manager a team;
-  ~~the team-echo `to` stamp showing in an unrelated narrowed `@john` thread~~ (DONE 2026-10-17 for the live
-  echo, with `@team` narrowing; a *restored* team send still carries no address and draws in every
-  thread — the transcript has no team marker); direct team tools on
+  ~~the team-echo `to` stamp showing in an unrelated narrowed `@john` thread~~ (DONE 2026-10-17, live and
+  restored: the room send's uuid carries a team bit); direct team tools on
   ordinary (non-manager) agents. Owner's calls.
 ---
 
@@ -5668,6 +5667,9 @@ this branch's to fix, and each is worth its own small PR.
 - **Recalling a prompt (`↑`) does not retarget the room.** `walkPrompts` sets the composer and stops, so a
   recalled `@sydney hello` leaves the room unnarrowed and its target line stale until the next keystroke;
   Enter still routes to sydney. One call (`retarget`) after the recall closes it; it wants a test per pane.
+- **A queued message to a busy agent can draw twice in a DM opened while it waits.** The room seed holds
+  the echo of a `@name` turn the agent has not taken up, and the live echo lands when it starts (Codex, pass
+  2). A team turn is left out of the seed for this reason; a lone `@name`'s is not.
 - **A wake that re-keys an agent strands its retained room lines.** After a `/clear` then a park and wake,
   `rekeyed` moves the agent's id to the new conversation and the room does not rewrite its retained lines'
   `SessionID`, so a narrowing on that agent (or its team) hides the lines from before the wake.

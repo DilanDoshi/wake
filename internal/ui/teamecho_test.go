@@ -29,17 +29,17 @@ func TestATeamSendIsAddressedToItsMembers(t *testing.T) {
 }
 
 // The room seed gives a never-opened DM the turns the operator addressed to its
-// agent. A team turn was addressed to each member, and is on each one's disk.
-func TestTheRoomSeedHoldsATeamTurnForEachMemberAndNoOneElse(t *testing.T) {
+// agent alone. A team turn is left out as a broadcast is: it is on each member's
+// disk, and a member's queue is not something the seed can reconcile with, so a
+// queued one would draw twice.
+func TestTheRoomSeedLeavesOutATeamTurn(t *testing.T) {
 	a := teamRoom(t)
 	a, _ = pressKey(a.withDraft("@backend run the migrations"), tea.KeyMsg{Type: tea.KeyEnter})
-	for id, want := range map[string]bool{"s1": true, "s2": true, "s3": false, "s4": false} {
-		var got bool
+	for _, id := range []string{"s1", "s2", "s3", "s4"} {
 		for _, ev := range a.room.turnsFor(id) {
-			got = got || strings.Contains(ev.Text, "run the migrations")
-		}
-		if got != want {
-			t.Errorf("the room seed for %s holds the team turn = %v, want %v", id, got, want)
+			if strings.Contains(ev.Text, "run the migrations") {
+				t.Errorf("the room seed for %s holds the team turn", id)
+			}
 		}
 	}
 }

@@ -58,6 +58,16 @@ func focusAdmits(l roomLine, focus, managerID string) bool {
 	return false
 }
 
+// sharesAgent is whether two thread keys name a common agent.
+func sharesAgent(a, b string) bool {
+	for id := range splitIDs(a) {
+		if addressedTo(b, id) {
+			return true
+		}
+	}
+	return false
+}
+
 // addressedTo is whether the thread key a user line was addressed to holds id.
 func addressedTo(to, id string) bool {
 	for t := range splitIDs(to) {

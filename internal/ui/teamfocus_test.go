@@ -331,3 +331,18 @@ func TestAMemberLeavingUnderTheReaderSendsThemToTheNewestLine(t *testing.T) {
 		t.Errorf("a member leaving left the reader at line %d of %d, want the newest line", a.room.tr.scroll, a.room.tr.bottom())
 	}
 }
+
+// A name can be both an agent's and a team's (the router lets the agent win), so
+// a draft can move from one to the other under its own name when that agent
+// parks. That is a different target - the override does not carry over to it.
+func TestAnAgentAndATeamOfTheSameNameAreNotOneTarget(t *testing.T) {
+	r := NewRoom().SetSize(80, 24).WithFocus("a1", "backend", "mgr")
+	r = r.ToggleNarrow()
+	if r.effectiveFocus() != "" {
+		t.Fatal("precondition: ⌃A did not widen")
+	}
+	r = r.WithFocus(joinIDs([]string{"s1", "s2"}), "backend", "mgr")
+	if r.effectiveFocus() != joinIDs([]string{"s1", "s2"}) {
+		t.Errorf("the team took the agent's override: effectiveFocus=%q", r.effectiveFocus())
+	}
+}

@@ -316,10 +316,12 @@ func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock, now b
 	}
 	var frames []rpc.Frame
 	var mirrorNow tea.Cmd
-	// One send for every target, so the restore can draw it once; direct is
-	// whether a lone @name addressed it, which is all the restore addresses a turn
-	// by - a team's echo is addressed live (roomRoute.thread), a restored one not.
+	// One send for every target, so the restore can draw it once; marked direct
+	// (a lone @name) or a team's, which is what a restore addresses a turn by.
 	send := newRoomSend(r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0)
+	if r.Team != "" {
+		send = send.forTeam()
+	}
 	for _, id := range r.Targets {
 		msg := newQueued(send.messageID(), r.Text, text, images, true)
 		if id == mirrorID {

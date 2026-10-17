@@ -290,9 +290,11 @@ func (r Room) SetSize(w, h int) Room {
 // Append with the id already updated here. So a fleet report that starts the
 // manager never yanks a scrolled reader to the bottom.
 //
-// The target is who the draft names (focusName), not who is on the thread: a
-// team gaining or losing a live member under a standing draft is the same
-// target, so the override survives and the reader keeps their place (refiltered).
+// The target is who the draft names (focusName) over a thread that still shares
+// an agent with the last one, not who is on the thread: a team gaining or losing
+// a live member under a standing draft is the same target, so the override
+// survives and the reader keeps their place (refiltered). An agent and a team of
+// one name share none, so moving from one to the other is a new target.
 // The caller clears any text selection on a focus change (App.retarget), because
 // the re-render renumbers the lines a selection is anchored to - the reason a
 // width change clears it too.
@@ -300,7 +302,7 @@ func (r Room) WithFocus(focus, focusName, managerID string) Room {
 	old := r
 	r.focusName = focusName
 	r.managerID = managerID
-	sameTarget := focusName == old.focusName
+	sameTarget := focusName == old.focusName && sharesAgent(focus, old.focus)
 	if r.focus != focus {
 		// A new target resets the ⌃A override: narrowing starts at the default
 		// again. The same target left untouched, so an override survives more
