@@ -123,12 +123,13 @@ type Room struct {
 	// and the room has no roster of its own. See roomWorkingLine.
 	beat string
 
-	// focus narrows the transcript to one agent's thread; "" is the unfocused
-	// room. managerID and focusName ride with it - the predicate needs the
-	// manager's id, the header needs the focused agent's name. Persistent, not
-	// draw-only: every render path (a width re-wrap, a history merge) must apply
-	// the same filter, and a hidden line stays in said at rows == 0. See
-	// roomfocus.go and WithFocus.
+	// focus narrows the transcript to one thread, an agent's or a team's (the
+	// key joinIDs makes of its members); "" is the unfocused room. managerID and
+	// focusName ride with it - the predicate needs the manager's id, the header
+	// needs the focused agent's or team's name. Persistent, not draw-only: every
+	// render path (a width re-wrap, a history merge) must apply the same filter,
+	// and a hidden line stays in said at rows == 0. See roomfocus.go and
+	// WithFocus.
 	focus     string
 	managerID string
 	focusName string
@@ -277,15 +278,16 @@ func (r Room) SetSize(w, h int) Room {
 	return r
 }
 
-// WithFocus narrows the room to one agent's thread, or widens it when focus is
-// "". A focus-id change re-renders the filtered subset and jumps to bottom - a
-// width change's own semantics (SetSize sets following=true), and the natural
-// read when you enter a focus. managerID and focusName ride on the struct for
-// the predicate and the header to read, but a change in managerID *alone* does
-// not re-render: while unfocused it changes nothing on screen, and at a manager
-// start there are no past manager lines to reveal - the manager's own lines
-// arrive later through Append with the id already updated here. So a fleet
-// report that starts the manager never yanks a scrolled reader to the bottom.
+// WithFocus narrows the room to one thread - an agent's, or a team's when focus
+// is joinIDs of its members - or widens it when focus is "". A focus change
+// re-renders the filtered subset and jumps to bottom - a width change's own
+// semantics (SetSize sets following=true), and the natural read when you enter
+// a focus. managerID and focusName ride on the struct for the predicate and the
+// header to read, but a change in managerID *alone* does not re-render: while
+// unfocused it changes nothing on screen, and at a manager start there are no
+// past manager lines to reveal - the manager's own lines arrive later through
+// Append with the id already updated here. So a fleet report that starts the
+// manager never yanks a scrolled reader to the bottom.
 // The caller clears any text selection on a focus change (App.retarget), because
 // the re-render renumbers the lines a selection is anchored to - the reason a
 // width change clears it too.

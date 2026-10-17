@@ -388,14 +388,16 @@ func (a App) retarget() App {
 	// addressee rather than reading as nothing typed.
 	r := a.route(a.room.Composer().WireText(draft))
 	a.room = a.room.WithComposer(a.room.Composer().WithTarget(r, len(r.Targets)))
-	// A lone direct @name narrows the view to that agent. Open mode is a
-	// broadcast (it widens the message, not the view), and @all/@manager/no
-	// mention resolve mentioned == false - none of them narrow.
-	focusID, focusName := "", ""
-	if r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0 {
-		if ag, ok := a.fleet.Agent(r.Targets[0]); ok {
-			focusID, focusName = ag.ID, ag.Name
+	// A lone direct @name narrows the view to that agent, a lone @team to its
+	// live members. Open mode is a broadcast (it widens the message, not the
+	// view), and @all/@manager/no mention are neither - none of them narrow.
+	focusID, focusName := r.thread(), r.Team
+	if r.Team == "" && focusID != "" {
+		ag, ok := a.fleet.Agent(focusID)
+		if !ok {
+			focusID = ""
 		}
+		focusName = ag.Name
 	}
 	a.room = a.room.WithFocus(focusID, focusName, managerID)
 	return a.withRoomBar().clearedSelOnFocusChange(prev)
