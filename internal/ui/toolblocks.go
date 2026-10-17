@@ -57,8 +57,10 @@ func toolResultBlock(ev core.Event, call *core.ToolCall, expanded bool, expand s
 	// already say so. Drawing it is the boilerplate Claude Code omits. Append
 	// settles the bullet before an empty body returns (dm.go), so this loses
 	// nothing. A *failed* edit's result is the error and must show. A delivered
-	// send's is the same: the message above it is the record (owner, 2026-10-16).
-	if call != nil && (call.Diff != nil || call.Send != nil) && !failed {
+	// send's is the same - the message above it is the record (owner, 2026-10-16) -
+	// but only the recorded receipt for its recipient counts as delivered: is_error
+	// is optional, so any other result degrades toward more output.
+	if call != nil && !failed && (call.Diff != nil || ev.Subagent == nil && delivered(call.Send, ev.Text)) {
 		return ""
 	}
 	r := render.Result{

@@ -85,16 +85,83 @@ func TestTwoOutgoingMessagesOpenSeparately(t *testing.T) {
 }
 
 // A delivered send needs no receipt under the message - the words are the
-// record - but a failed one must still say why.
+// record - but a failed one must still say why, marked or not: is_error is
+// optional on the wire, so only the recorded delivery receipt for this recipient
+// is hidden, and anything else degrades toward more output.
 func TestASuccessfulSendDrawsNoReceiptAndAFailedOneDrawsItsError(t *testing.T) {
-	const receipt = "“relay ping” → sydney (in that session's inbox, not yet read)"
+	const receipt = "“relay ping” → sydney (another Claude session on this machine; in that session's inbox, not yet read by its Claude)"
 	ok := sentDM(sendCall("s1", "sydney", sentWords), sentResult(false, receipt))
 	assertShows(t, ok, 80, 30, sentWords)
 	assertHides(t, ok, 80, 30, "inbox")
 
-	failed := sentDM(sendCall("s1", "sydney", sentWords), sentResult(true, "no session is called sydney"))
-	assertShows(t, failed, 80, 30, sentWords)
-	assertShows(t, failed, 80, 30, "no session is called sydney")
+	for name, result := range map[string]core.Event{
+		"marked":                      sentResult(true, "no session is called sydney"),
+		"unmarked":                    sentResult(false, "permission denied: SendMessage is not allowed"),
+		"another recipient's receipt": sentResult(false, strings.Replace(receipt, "→ sydney", "→ planner", 1)),
+	} {
+		failed := sentDM(sendCall("s1", "sydney", sentWords), result)
+		assertShows(t, failed, 80, 30, sentWords)
+		assertShows(t, failed, 80, 30, strings.SplitN(result.Text, " (", 2)[0])
+		_ = name
+	}
+}
+
+// A subagent's own send keeps the result it always had, even one shaped like a
+// delivery receipt: only the conversation's own sends are drawn this way.
+func TestASubagentsSendResultIsStillDrawn(t *testing.T) {
+	call := sendCall("s1", "sydney", sentWords)
+	call.Subagent = &core.Subagent{Dispatch: "d1"}
+	for _, text := range []string{"Message delivered to parent", "“relay” → sydney (in that session's inbox)"} {
+		result := sentResult(false, text)
+		result.Subagent = &core.Subagent{Dispatch: "d1"}
+		d := sentDM()
+		d.viewing = "d1"
+		d = d.withSubTranscript("d1", []core.Event{call, result})
+		assertShows(t, d, 80, 30, text)
+	}
+}
+
+// A conversation made of nothing but sends still reclaims its oldest events: a
+// send is no tool run to split, so it is a place to cut, or the stored events
+// and the re-wrap that renders them grow without bound.
+func TestAConversationOfOnlySendsStillReclaims(t *testing.T) {
+	d := NewDM("s1", "alex").SetSize(80, 30)
+	for i := range dmRetentionEvents + 2*chunkSize {
+		d = d.Append(sendCall("s1", "sydney", "message "+strings.Repeat("x", i%7)+string(rune('a'+i%26))+string(rune('a'+(i/26)%26))))
+	}
+	if !d.reclaimed() {
+		t.Errorf("%d sends were kept: nothing was reclaimed", d.events.count())
+	}
+	if got := d.events.count(); got > dmRetentionEvents+chunkSize {
+		t.Errorf("a conversation of sends holds %d events, want at most %d", got, dmRetentionEvents+chunkSize)
+	}
+}
+
+// A send keeps the name it was sent under: a rename later changes what new
+// sends say, never what an old one does when a click, ⌃E or a resize lays the
+// transcript out again.
+func TestAnOutgoingMessageKeepsTheNameItWasSentUnder(t *testing.T) {
+	long := strings.Join(repeatLines("sent", peerFoldRows+2), "\n")
+	d := sentDM(sendCall("s1", "sydney", long)).WithName("bob")
+	opened, hit := d.openTool(peerRow(t, d, "sent-00"))
+	if !hit {
+		t.Fatal("a click on the folded send reported no hit")
+	}
+	assertShows(t, opened, 80, 30, crossSessionLead+"alex"+crossSessionArrow+"sydney")
+	assertHides(t, opened, 80, 30, "bob"+crossSessionArrow)
+	assertShows(t, opened.SetSize(60, 30), 60, 30, crossSessionLead+"alex"+crossSessionArrow+"sydney")
+
+	later := d.Append(sendCall("s1", "planner", sentWords))
+	assertShows(t, later, 80, 30, crossSessionLead+"bob"+crossSessionArrow+"planner")
+
+	// Read back off disk, a send is stamped with the name the conversation has
+	// when it arrives, and keeps it from then on.
+	restored := NewDM("s1", "alex").SetSize(80, 30).Before([]core.Event{sendCall("s1", "sydney", long)}).WithName("bob")
+	opened, hit = restored.openTool(peerRow(t, restored, "sent-00"))
+	if !hit {
+		t.Fatal("a click on the restored folded send reported no hit")
+	}
+	assertShows(t, opened, 80, 30, crossSessionLead+"alex"+crossSessionArrow+"sydney")
 }
 
 // The message is its own block: the tool calls around it fold as they always

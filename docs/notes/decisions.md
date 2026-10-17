@@ -4406,7 +4406,17 @@ for the manager's room line.
   hides inside a count. Every pane that draws a conversation does it through `DM.renderEvent`: grid
   panes, restored history and board tiles.
 - **The receipt is hidden on success.** `“<summary>” → <to> (… in that session's inbox, not yet read …)`
-  is boilerplate under the words; a *failed* send still draws its error (owner's pick, 2026-10-16).
+  is boilerplate under the words (owner's pick, 2026-10-16). Only that recorded shape, for that
+  recipient, is hidden (`delivered`): `is_error` is optional on the wire, so an unmarked failure, another
+  shape or a subagent's result all draw, which is the tree's rule that an unmodelled shape degrades
+  toward more output. Both reviews found a first version that hid every unmarked result.
+- **The sender's name is stamped when the send is stored** (`namedSend`, in `Append` and `Before`), so a
+  block keeps the name it was sent under through a rename and every re-wrap after it, as an incoming
+  message keeps its `FromName`.
+- **A conversation of nothing but sends still reclaims** (`cutFrom` may cut before one): a send is
+  fold-exempt, so retention's tool-call fallback had no place to cut it.
+- **The room skips a send to the sender's own subagent**: `SendMessage` to an `agentId` continues a
+  dispatch (its task id is the agentId, `subagent-task.jsonl`), a private brief and no session.
 - **A subagent's own send is unchanged**: drawn in its own view as a tool call. Its name is not this
   conversation's, so `↪ alex → …` would say the wrong thing.
 - **Drawn from the call, not from delivery**, like the manager's room line (2026-10-03): the agent's
@@ -4418,3 +4428,6 @@ for the manager's room line.
   manager-only line at the owner's request ("it should work in all panes"); the manager's reason (an
   unfenced tool, so its sends must stay visible) is unchanged, the rest is visibility. Still live-only:
   a restored room does not redraw it (deferred.md).
+- **Accepted, in deferred.md:** a send the operator denies, or that errors, still shows in the room as
+  sent (the DM shows the error under it); a parallel tool batch can draw a sibling's result joined under
+  a send; and a name window can draw one fleet-to-fleet send twice.

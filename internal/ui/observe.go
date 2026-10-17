@@ -167,13 +167,19 @@ func (a App) observe(sessionID string, ev core.Event) App {
 // tool call the room shows: the manager's is unfenced, so it is shown from the
 // call rather than its prose (owner, 2026-10-03), and the owner widened it to
 // every agent's (2026-10-16). One to a fleet agent is left to the receiver's own
-// stream; Wake's names are lower-case.
+// stream, and one to the sender's own subagent is no session; Wake's names are
+// lower-case.
 func (a App) withSend(sessionID string, ev core.Event, from Agent) App {
 	t := ev.Tool
 	if ev.Kind != core.KindToolUse || t == nil || t.Send == nil || ev.Subagent != nil {
 		return a
 	}
 	if _, fleet := a.fleet.ByName(strings.ToLower(t.Send.To)); fleet {
+		return a
+	}
+	// SendMessage to a subagent's agentId continues it - a task of this sender's,
+	// and no session at all.
+	if _, own := a.fleet.tasks[sessionID].forID(t.Send.To); own {
 		return a
 	}
 	peer := core.Event{Kind: core.KindCrossSession, SessionID: sessionID, Text: t.Send.Text}

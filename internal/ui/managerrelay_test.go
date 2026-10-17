@@ -35,6 +35,18 @@ func TestTheManagersSendIsDrawnInTheRoom(t *testing.T) {
 	}
 }
 
+// An agent continues a subagent with SendMessage to its agentId, which is a
+// task id of its own and no session at all: a private brief that never reaches
+// the room.
+func TestASendToOneOfItsOwnSubagentsIsNotDrawnInTheRoom(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 40).withAgents(core.ManagerName, "jade", "sydney")
+	a = a.observe("s3", started("a73fc145a7d730b54", "a73fc145a7d730b54", "map the repo", "Explore", core.TaskAgent))
+	out := ansi.Strip(a.observe("s3", sendCall("s3", "a73fc145a7d730b54", "now check the daemon too")).View())
+	if strings.Contains(out, "now check the daemon too") {
+		t.Errorf("a continuation of sydney's own subagent reached the room:\n%s", out)
+	}
+}
+
 // Any agent's send to a session outside the fleet is drawn too (owner,
 // 2026-10-16), under that agent's own name. One to a fleet agent is drawn once,
 // by the receiver's own stream, and a subagent's own send not at all.

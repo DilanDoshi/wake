@@ -9,6 +9,7 @@ import (
 	"crypto/sha256"
 	"encoding/hex"
 	"fmt"
+	"strings"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -31,6 +32,9 @@ const (
 	// sentKeyLead marks a send's recipient in its key, so it never collides with
 	// an incoming message from a session of the same name.
 	sentKeyLead = "→"
+
+	// sentArrow is what a delivery receipt puts before the recipient.
+	sentArrow = "→ "
 )
 
 // peerFolds reports whether a peer's message draws as a pointer at this width.
@@ -71,11 +75,8 @@ func sentOf(ev core.Event) *core.PeerSend {
 	return ev.Tool.Send
 }
 
-// peerWords is the words an event draws as a peer message - an incoming one's, or
-// a send's - and whether it is one.
-func peerWords(ev core.Event) (string, bool) {
-	if s := sentOf(ev); s != nil {
-		return s.Text, true
-	}
-	return ev.Text, ev.Kind == core.KindCrossSession
+// delivered reports whether text is the delivery receipt of a send to s.To, the one
+// shape recorded (manager-relay.jsonl): `“summary” → <recipient> (…)`.
+func delivered(s *core.PeerSend, text string) bool {
+	return s != nil && strings.Contains(text, sentArrow+s.To+" (")
 }

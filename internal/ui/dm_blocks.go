@@ -4,6 +4,8 @@ package ui
 // terminal text. dm.go owns how those blocks are laid out together.
 
 import (
+	"cmp"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -187,7 +189,11 @@ func (d DM) renderEvent(ev core.Event) block {
 	// A peer message that folds - an incoming one, or this conversation's own send
 	// - is a click target, keyed like a tool call so openTool opens it; one that
 	// fits is not, or a click would rewrap for nothing.
-	if words, peer := peerWords(ev); peer && peerFolds(words, d.bodyWidth(ev)) {
+	words, peer := ev.Text, ev.Kind == core.KindCrossSession
+	if s := sentOf(ev); s != nil {
+		words, peer = s.Text, true
+	}
+	if peer && peerFolds(words, d.bodyWidth(ev)) {
 		b.tool = peerKey(ev)
 	}
 	// A send draws as a peer message, with no ⏺ for a result to recolour.
@@ -364,7 +370,7 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 			return ""
 		}
 		if s := sentOf(ev); s != nil {
-			return sentBlock(d.Name, s, w, d.expandedTool(peerKey(ev)))
+			return sentBlock(cmp.Or(ev.FromName, d.Name), s, w, d.expandedTool(peerKey(ev)))
 		}
 		return toolUseBlock(ev.Tool, d.bulletFor(ev.Tool.ID), w)
 	case core.KindToolResult:
@@ -439,6 +445,24 @@ func localReplyBlock(text string, width int) string {
 // resolve from-name into an agent.
 func crossSessionBlock(ev core.Event, width int, expanded bool) string {
 	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), peerBody(ev.Text, width, expanded))
+}
+
+// namedSend stamps the conversation's name on one of its own sends, so the block
+// keeps the name it was sent under through a rename and every re-wrap after it.
+func (d DM) namedSend(ev core.Event) core.Event {
+	if sentOf(ev) != nil && ev.FromName == "" {
+		ev.FromName = d.Name
+	}
+	return ev
+}
+
+// namedSends is namedSend over restored history, on a copy of it.
+func (d DM) namedSends(events []core.Event) []core.Event {
+	out := slices.Clone(events)
+	for i := range out {
+		out[i] = d.namedSend(out[i])
+	}
+	return out
 }
 
 // sentBlock renders one of this conversation's own SendMessage calls as the peer
