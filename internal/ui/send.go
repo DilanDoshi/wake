@@ -281,15 +281,11 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	// off the chip-stripped draft above, so it carries the images' words and not
 	// their markers.
 	//
-	// The echo is stamped with the one agent a lone direct @name addressed, so
-	// the view filter can tell it from a broadcast and from a turn aimed
-	// elsewhere. Open mode, @all, @manager and an unaddressed draft are all
+	// The echo is stamped with the thread a lone direct @name or @team
+	// addressed, so the view filter can tell it from a broadcast and from a turn
+	// aimed elsewhere. Open mode, @all, @manager and an unaddressed draft are all
 	// broadcasts (to == "") - open mode widens the message, not the view.
-	to := ""
-	if r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0 {
-		to = r.Targets[0]
-	}
-	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
+	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, r.thread()))
 	return a, tea.Sequence(mirror, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
 }
 

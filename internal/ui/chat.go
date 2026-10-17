@@ -216,10 +216,11 @@ func (r Room) WithMenu(menu string) Room {
 type roomLine struct {
 	ev core.Event
 	by Agent
-	// to is the agent id this user line was addressed to; "" is a broadcast or a
-	// line that is not the operator's own. UI-only, set at creation (never on
-	// core.Event) - the view filter reads it to tell "you → @iris" from a
-	// broadcast and from "you → @john". See roomfocus.go.
+	// to is the thread this user line was addressed to - an agent's id, or a
+	// team's joinIDs key; "" is a broadcast or a line that is not the operator's
+	// own. UI-only, set at creation (never on core.Event) - the view filter reads
+	// it to tell "you → @iris" from a broadcast and from "you → @john". See
+	// roomfocus.go.
 	to string
 	// recipient is the receiving session of a peer's cross-session line, drawn
 	// after the arrow in its own colour; zero on every other line.
