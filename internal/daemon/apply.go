@@ -121,7 +121,9 @@ func (a *agent) apply(p pending) {
 		// a client that wants to correlate one has it. Holding it here would
 		// be state with no reader, and the liveness policy needs none of it:
 		// an aborted turn still ends with a turn end, which is what clears
-		// what this agent owes.
+		// what this agent owes. It also ends a usage-limit stop: whatever the
+		// limit cut off is not to be continued for an operator saying stop.
+		a.dropLimit()
 		_, err = a.sess.Interrupt()
 	case rpc.FrameMode:
 		// Refused while an ask is outstanding. internal/ui makes the same

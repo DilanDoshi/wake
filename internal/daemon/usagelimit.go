@@ -33,13 +33,15 @@ const resetSlack = time.Minute
 var limitClock = time.Now
 
 // usageStop is an agent a usage limit stopped: when, the reset its message
-// named (zero for none, or one already past), who was signed in then, and
-// whether its resume is already queued.
+// named (zero for none, or one already past), who was signed in then, whether
+// its resume is queued, and whether the last try found the input full - then
+// only a nudge retries it, never the timer, or a reset already past would spin.
 type usageStop struct {
 	at      time.Time
 	reset   time.Time
 	account core.Account
 	queued  bool
+	blocked bool
 }
 
 // heldStop is one stopped agent as the resume goroutine sees it: its stop, and
@@ -219,7 +221,7 @@ func (s *server) nextReset() (time.Time, bool) {
 	stops := s.limited()
 	var due time.Time
 	for _, stop := range stops {
-		if stop.ready && !stop.reset.IsZero() && (due.IsZero() || stop.reset.Before(due)) {
+		if stop.ready && !stop.blocked && !stop.reset.IsZero() && (due.IsZero() || stop.reset.Before(due)) {
 			due = stop.reset
 		}
 	}
@@ -255,18 +257,29 @@ func (s *server) resumeDue(now time.Time) {
 	}
 }
 
-// nudgeLimitsDue wakes the resume goroutine when a reset has passed, for the
-// liveness tick: a timer counts no time while the machine sleeps.
+// nudgeLimitsDue wakes the resume goroutine on the liveness tick when a reset
+// has passed - a timer counts no time while the machine sleeps - or a resume
+// found the agent's input full and is waiting to try again.
 func (s *server) nudgeLimitsDue(now time.Time) {
-	if due, _ := s.nextReset(); !due.IsZero() && !now.Before(due.Add(resetSlack)) {
+	due, _ := s.nextReset()
+	if !due.IsZero() && !now.Before(due.Add(resetSlack)) || s.anyBlocked() {
 		s.limitHit()
 	}
 }
 
+// anyBlocked reports a resume waiting for an agent's input to have room.
+func (s *server) anyBlocked() bool {
+	for _, stop := range s.limited() {
+		if stop.blocked {
+			return true
+		}
+	}
+	return false
+}
+
 // resume queues the "continue" behind whatever the agent's input already
 // holds, marking the stop it answers queued; sendResume decides at the write
-// whether it is still owed. A full input is an agent not reading it: the stop
-// stays queued rather than ready, or a reset already past would retry at once.
+// whether it is still owed. A full input blocks it until the next nudge.
 func (s *server) resume(a *agent, at time.Time, why string) {
 	if !a.queueResume(at, true) {
 		return
@@ -279,8 +292,26 @@ func (s *server) resume(a *agent, at time.Time, why string) {
 	select {
 	case a.in <- pending{frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: resumeText}, resume: ask}:
 	default:
-		logf("wake: session %s: input full, not resumed after its usage limit", a.id)
+		a.blockResume(at)
+		logf("wake: session %s: input full, its resume waits for the next try", a.id)
 	}
+}
+
+// blockResume marks the stop that hit at as waiting for room in the input.
+func (a *agent) blockResume(at time.Time) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.limit.at.Equal(at) {
+		a.limit.queued, a.limit.blocked = false, true
+	}
+}
+
+// dropLimit ends the stop: the operator interrupted, so whatever the limit cut
+// off is not to be continued for them.
+func (a *agent) dropLimit() {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.limit = usageStop{}
 }
 
 // queueResume marks the stop that hit at at queued or not, reporting whether
@@ -292,6 +323,9 @@ func (a *agent) queueResume(at time.Time, queued bool) bool {
 		return false
 	}
 	a.limit.queued = queued
+	if queued {
+		a.limit.blocked = false
+	}
 	return true
 }
 

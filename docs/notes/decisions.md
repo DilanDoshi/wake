@@ -4404,15 +4404,16 @@ another terminal.
 
 - **The daemon decides, once.** `internal/daemon/usagelimit.go` records a stop when a turn ends on
   `core.NoticeUsageLimit` (the reset it named, and the account signed in then), clears it on the
-  agent's own model output or a `/clear` - not on a send, which holds a resume off while its turn is
-  in flight, and whose local command (`/model`) runs no turn - and while one is held runs one
+  agent's own model output, a `/clear` or an interrupt (an operator saying stop is not to be
+  continued for) - not on a send, which holds a resume off while its turn is in flight, and whose
+  local command (`/model`) runs no turn - and while one is held runs one
   goroutine waiting on Claude's config file
   (`configwatch_darwin.go` kqueue, `_linux.go` inotify, `_other.go` none - a wait, never a poll) and
   one timer. It writes `continue` when `oauthAccount`'s ids name another account, or the reset plus a
   minute has passed (wall clock, so the liveness tick catches a reset slept through). Only an idle
   agent with nothing queued is resumed, and a queued resume answers only the stop it was queued for;
-  a busy one is nudged again at its turn end, and one whose input is full stays queued rather than
-  retrying. A reset not after the hit arms nothing, so a stale message cannot loop. The manager is
+  a busy one is nudged again at its turn end, and one whose input is full is blocked - no timer -
+  and retried on the liveness tick or its next turn end. A reset not after the hit arms nothing, so a stale message cannot loop. The manager is
   resumed like any agent. A resume is never counted toward proving a typed turn a broadcast, so a DM
   "continue" beside one stays private.
 - **Drawn as Wake's.** The resume is stamped `rpc.MessageResumed` in the uuid layout room sends

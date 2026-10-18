@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"context"
 	"encoding/json"
 	"os"
 	"path/filepath"
@@ -234,20 +235,51 @@ func TestNoResumeBeforeTheResetAndItsSlack(t *testing.T) {
 	}
 }
 
-// A full input queue leaves the resume queued, so a reset already past cannot
-// spin the goroutine retrying it; a send of the operator's ends the wait.
-func TestAFullInputQueueLeavesTheResumeQueued(t *testing.T) {
-	a := stoppedAgent(t, time.Now())
+// A full input queue blocks the resume rather than queueing it: no timer is
+// armed for it, so a reset already past cannot spin, and the next nudge - the
+// liveness tick, a turn end - tries again, once, when the input has room.
+func TestAFullInputQueueRetriesOnTheNextNudgeNotAtOnce(t *testing.T) {
+	la := losAngeles(t)
+	a := stoppedAgent(t, time.Date(2026, 10, 17, 14, 43, 25, 0, la))
 	for len(a.in) < cap(a.in) {
 		a.in <- pending{}
 	}
 	s := fleetOf(t, a)
-	s.resume(a, a.limit.at, "a test")
-	if !a.limit.queued {
-		t.Error("a resume that found the input full is ready again, so a past reset retries at once")
+	past := a.limit.reset.Add(2 * resetSlack)
+	s.resumeDue(past)
+	if !a.limit.blocked || a.limit.queued {
+		t.Fatalf("a resume that found the input full: blocked %v, queued %v; want true, false", a.limit.blocked, a.limit.queued)
 	}
 	if due, _ := s.nextReset(); !due.IsZero() {
-		t.Errorf("an agent whose resume could not be queued still arms the timer at %v", due)
+		t.Errorf("a blocked resume still arms the timer at %v, which a past reset fires at once", due)
+	}
+	queuedResumes(a) // the input drains
+	s.resumeDue(past)
+	if n := queuedResumes(a); n != 1 || a.limit.blocked {
+		t.Errorf("once the input drained the retry queued %d resumes, blocked %v; want 1, false", n, a.limit.blocked)
+	}
+}
+
+// An interrupt is the operator saying stop: it ends the stop, so a turn they
+// aborted before it produced anything is never restarted by a resume.
+func TestAnInterruptEndsTheStop(t *testing.T) {
+	fakeClaudeOnPath(t, "usagelimit")
+	a := stoppedAgent(t, time.Now())
+	ctx, cancel := context.WithCancel(context.Background())
+	a.sess = core.NewSession(core.Config{SessionID: idAlpha})
+	if err := a.sess.Start(ctx); err != nil {
+		cancel()
+		t.Fatalf("start: %v", err)
+	}
+	t.Cleanup(func() {
+		_ = a.sess.Stop()
+		for range a.sess.Events() {
+		}
+		cancel()
+	})
+	a.apply(pending{frame: rpc.Frame{Kind: rpc.FrameInterrupt, SessionID: idAlpha}})
+	if a.usageStopped() {
+		t.Error("an interrupt left the stop, so the turn it aborted would be resumed")
 	}
 }
 
