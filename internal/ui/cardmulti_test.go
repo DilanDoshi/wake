@@ -319,3 +319,21 @@ func TestTypingInOtherLandsOnTheRowThatWalksOn(t *testing.T) {
 		t.Errorf("a second ↵ did not walk on with the typed words kept: review %v, typed %q", got.OnReview(), got.typed(0))
 	}
 }
+
+// The wrap is bounded: an answer taller than the pane would push Submit off the
+// card, and a card not drawn in full takes no keys. A long typed answer still
+// reaches the review and submits whole.
+func TestAnAnswerTallerThanThePaneStillSubmits(t *testing.T) {
+	a := paneAskingMany(t)
+	long := strings.Repeat("a long answer of the operator's own ", 120)
+	card := topCard(t, a)
+	a.cards = a.cards.With(card.answer(0, long).atOption(nextIndex(card.Detail.Questions[0])))
+	a = enter(a)
+	if !topCard(t, a).OnReview() || !a.cardFullyDrawn() {
+		t.Fatalf("the review is not drawn in full: review %v, drawn %v", topCard(t, a).OnReview(), a.cardFullyDrawn())
+	}
+	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	if got := sentFrame(t, a, cmd).Answers[card.Detail.Questions[0].Text]; got != strings.TrimSpace(long) {
+		t.Errorf("sent %d bytes, want the whole %d-byte answer", len(got), len(strings.TrimSpace(long)))
+	}
+}

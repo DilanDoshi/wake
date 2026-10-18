@@ -4411,6 +4411,8 @@ over a minimal version (`docs/superpowers/notes/2026-10-18-multiselect-question-
 - **A replayed ask keeps its card.** A reattach replays every pending ask; one the list already holds
   with its payload is kept as it is (`Cards.Add`), since a request id names one ask and the replay
   would only reset the ticks. A card known only from a report still takes the payload.
-- **The review wraps a long answer** rather than cutting it: it is the last look at what goes out.
+- **The review wraps a long answer to three rows** rather than cutting it to one: it is the last look
+  at what goes out. Bounded, because a card taller than its pane takes no keys and Submit would leave
+  it (Codex, second pass).
 - **A pick replaces typed words on a single-select question** (fixed in the same branch). Typing
   already cleared a pick, but a pick left the typed answer in place, and the typed one was sent.

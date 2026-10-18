@@ -33,6 +33,11 @@ const (
 	// reviewAnswerLead marks the answer under the question it belongs to.
 	reviewAnswerLead = "  → "
 
+	// reviewAnswerRows bounds one answer's wrap. A multi-select answer is long
+	// enough to need more than a row, and a typed one can be any length - a
+	// card taller than its pane takes no keys, so Submit must stay on it.
+	reviewAnswerRows = 3
+
 	// reviewQuestionLead marks a question in the list. The same bullet a
 	// finished thing wears elsewhere in this build.
 	reviewQuestionLead = "● "
@@ -65,12 +70,18 @@ func (c Card) reviewBody(width int) string {
 	return strings.Join(rows, "\n")
 }
 
-// reviewAnswer is one answer under its question, wrapped rather than cut: the
-// review is the last look at what goes out, and a multi-select answer is long.
+// reviewAnswer is one answer under its question, wrapped rather than cut to a
+// row - the review is the last look at what goes out, and a multi-select answer
+// is long - but to reviewAnswerRows at most, ending in an ellipsis.
 func reviewAnswer(answer string, width int) string {
 	lead := ansi.StringWidth(reviewAnswerLead)
 	room := max(width-lead, 1)
 	lines := strings.Split(HintStyle.Width(room).MaxWidth(room).Render(answer), "\n")
+	if len(lines) > reviewAnswerRows {
+		lines = lines[:reviewAnswerRows]
+		last := ansi.Truncate(lines[reviewAnswerRows-1], max(room-ansi.StringWidth(ellipsis), 0), "")
+		lines[reviewAnswerRows-1] = last + HintStyle.Render(ellipsis)
+	}
 	for i, ln := range lines {
 		pad := strings.Repeat(" ", lead)
 		if i == 0 {
