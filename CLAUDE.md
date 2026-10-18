@@ -65,7 +65,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus (completes
   over a `/` or `@` word) · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
   `⌃F` fork · `⌃D` open here · `⌃Y` new column · `⌃B` open below · `⌃W` close pane · `⌃A` toggle the
-  lone-`@name` narrowing · `⌃E` expand folded results / card descriptions.
+  lone-`@name`/`@team` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
   `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
   `/workflows`, `/groupchat-filter`, `/status`, plus bare `/effort`/`/model` menus. Everything else passes to the agent byte
@@ -314,14 +314,15 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
   if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
   broadcast, or was stamped by a room send (`roomprovenance.go`: the uuid Wake stamps is the one on
-  disk; a direct `@name` comes back in that thread); agent prose is restored only inside a public
+  disk; a direct `@name` comes back in that thread, a team send in its members'); agent prose is restored only inside a public
   turn. A record in two transcripts (same uuid, `Event.MessageID`) is a fork's copy, drawn once
   (`forkCopies`); the daemon also leaves a fork's inherited records out of its room history
   (`inheritedBy`), so forks are asked like any session.
 - A routed message is echoed into the room and into every *held* DM it reached, mention included,
   marked `FromRoom`.
-- **A lone `@name` narrows the room** to that thread (`roomfocus.go`); `⌃A` overrides per target;
-  `/groupchat-filter off` flips the default per window (`roomfilter.go`).
+- **A lone `@name` narrows the room** to that thread, a lone `@team` to its live members' (a union of their
+  threads, keyed by `joinIDs`; open mode never widens a team, so it narrows there too) (`roomfocus.go`);
+  `⌃A` overrides per target; `/groupchat-filter off` flips the default per window (`roomfilter.go`).
 - **Peer cross-session messages** show in the room as `↪ sender → recipient`
   (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*
   content, so pasted text can't forge one. DM replays of Wake's own sends are dropped. A message

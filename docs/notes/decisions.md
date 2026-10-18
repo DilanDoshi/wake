@@ -4392,3 +4392,46 @@ folded it at all.
   message that fits three rows gets no key: a click on it would rewrap the transcript to change nothing.
   The key and the fold are decided at `DM.bodyWidth`, the width the block is drawn at (a subagent's is a
   gutter narrower), so a pointer is always a click target.
+
+## 2026-10-17 — a lone `@team` narrows the room like a lone `@name`
+
+The owner's ask: `@<team>` filters the group chat the way `@<agent>` does. This reverses the teams spec's
+2026-09-20 line ("a lone `@team` does **not** narrow the room in v1"), which left the per-team room behind the
+multi-room door. It is not a second room: `deferred.md` already named it as the composition of teams
+(membership) and the `@john` filter (narrowing) over the one room.
+
+- **A team's thread is the union of its members' threads.** `focusAdmits` asks each member's own question
+  (`admitsThread`, the old body), so every rule an agent's narrowing keeps holds per member: its prose, the
+  manager's, broadcasts, the operator's turns aimed at it, the peer messages it sent or received. No second
+  predicate.
+- **The room's focus stays one comparable string**: an agent's own id for one agent, the sorted ids for a team
+  (`joinIDs`). A lone `@name` therefore compares, filters and resets `⌃A` exactly as before. **Sorted**
+  because `Fleet.Agents()` is attention-ranked, so a member starting work reorders a team's route; an
+  unsorted key would read that as a new target and reset the override on every report
+  (`TestAMemberChangingStateKeepsTheOverride`).
+- **A team narrows in open mention mode too.** Open mode widens a lone `@name` past its mention, so the view
+  stays wide; it never widens a team send, so the thread the message reaches is the one to read
+  (`roomRoute.thread` decides the thread a draft addresses, for the focus and the live echo).
+- **A team of two or more draws no agent bar.** The bar is one agent's directory, model and context; a team has
+  no one, and the manager's would say something about someone else. A team of one is that agent's thread, so
+  its key is the member's id and it draws the member's bar.
+- **The echo of a team send is addressed** (`to` = the members' key), which closes the gap the spec named:
+  the room narrowed to `@frontend` no longer shows what you told `backend`. It draws in the team's thread
+  and in each member's.
+- **The target is the name the draft addresses over a thread that still shares an agent.** A team gaining or
+  losing a live member under a standing draft (a `/team`, a park, a manager spawn) is the same target: `⌃A`'s override
+  survives, and the reader keeps their place (`Room.refiltered`, over `relaid`'s line moves) - Review found the
+  first cut threw a scrolled reader to the newest line on any report, against "only a width change returns
+  a reader to the newest line". A reader whose line the change hides goes to the newest line, never back to
+  the oldest history. A selection is still cleared. An unknown or all-parked team narrows nothing, as an
+  unknown name does. An agent and a team can share a name (the router lets the agent win): when the agent
+  parks the same draft addresses the team, and the two share no id, so it is a new target and resets the
+  override (Codex, pass 2).
+- **A team turn is not seeded into a never-opened DM** (`roomseed.turnsFor` still reads `to == id`), as a
+  broadcast is not: it is on each member's disk, and the seed cannot be reconciled with a member's queue,
+  so a queued one would draw twice. A team of one has the member's id for its key and seeds like `@name`.
+- **A restored team send is addressed to the members that hold it.** The room send's uuid carries a second
+  flag (bit 1, `roomSendTeam`) and `addressedAsSent` addresses the restored line to the sessions whose
+  transcripts hold the send, so a restart no longer turns what you told `backend` into a broadcast that
+  draws in every thread (Codex, pass 2). Only the members read back are in the key, never more than the disk
+  holds, and the line is not prefixed with `@team`: the team's name is not on disk.

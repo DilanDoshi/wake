@@ -281,15 +281,11 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	// off the chip-stripped draft above, so it carries the images' words and not
 	// their markers.
 	//
-	// The echo is stamped with the one agent a lone direct @name addressed, so
-	// the view filter can tell it from a broadcast and from a turn aimed
-	// elsewhere. Open mode, @all, @manager and an unaddressed draft are all
+	// The echo is stamped with the thread a lone direct @name or @team
+	// addressed, so the view filter can tell it from a broadcast and from a turn
+	// aimed elsewhere. Open mode, @all, @manager and an unaddressed draft are all
 	// broadcasts (to == "") - open mode widens the message, not the view.
-	to := ""
-	if r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0 {
-		to = r.Targets[0]
-	}
-	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
+	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, r.thread()))
 	return a, tea.Sequence(mirror, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
 }
 
@@ -320,9 +316,12 @@ func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock, now b
 	}
 	var frames []rpc.Frame
 	var mirrorNow tea.Cmd
-	// One send for every target, so the restore can draw it once; direct is the
-	// rule sendRoom stamps its echo's `to` by.
+	// One send for every target, so the restore can draw it once; marked direct
+	// (a lone @name) or a team's, which is what a restore addresses a turn by.
 	send := newRoomSend(r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0)
+	if r.Team != "" {
+		send = send.forTeam()
+	}
 	for _, id := range r.Targets {
 		msg := newQueued(send.messageID(), r.Text, text, images, true)
 		if id == mirrorID {
@@ -388,22 +387,24 @@ func (a App) retarget() App {
 	// addressee rather than reading as nothing typed.
 	r := a.route(a.room.Composer().WireText(draft))
 	a.room = a.room.WithComposer(a.room.Composer().WithTarget(r, len(r.Targets)))
-	// A lone direct @name narrows the view to that agent. Open mode is a
-	// broadcast (it widens the message, not the view), and @all/@manager/no
-	// mention resolve mentioned == false - none of them narrow.
-	focusID, focusName := "", ""
-	if r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0 {
-		if ag, ok := a.fleet.Agent(r.Targets[0]); ok {
-			focusID, focusName = ag.ID, ag.Name
+	// A lone direct @name narrows the view to that agent, a lone @team to its
+	// live members. Open mode is a broadcast (it widens the message, not the
+	// view), and @all/@manager/no mention are neither - none of them narrow.
+	focusID, focusName := r.thread(), r.Team
+	if r.Team == "" && focusID != "" {
+		ag, ok := a.fleet.Agent(focusID)
+		if !ok {
+			focusID = ""
 		}
+		focusName = ag.Name
 	}
 	a.room = a.room.WithFocus(focusID, focusName, managerID)
 	return a.withRoomBar().clearedSelOnFocusChange(prev)
 }
 
 // withRoomBar refreshes the room's info bar for the agent the composer is
-// addressing: the lone @name it has narrowed to (room.focus), or the manager
-// when it has narrowed to none. A zero Agent - no manager, or a focus that no
+// addressing: the lone @name it has narrowed to (room.focus; a team of one is
+// its member, a larger team no one), or the manager when it has narrowed to none. A zero Agent - no manager, or a focus that no
 // longer resolves - draws no bar, which is how an empty room is spelled. Cached
 // on the room via Room.withBar, so calling it on every retarget and resize is a
 // key comparison rather than a filesystem read.
