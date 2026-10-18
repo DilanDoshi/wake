@@ -32,9 +32,9 @@ type pending struct {
 	frame rpc.Frame
 	probe probeKind
 
-	// resumed marks the daemon's own "continue" to an agent a usage limit
-	// stopped, and announces it under the uuid it is written with (usagelimit.go).
-	resumed func(messageID string)
+	// resume marks the daemon's own "continue" to an agent a usage limit
+	// stopped (usagelimit.go).
+	resume *resumeAsk
 }
 
 // submit queues one stdin-bound frame for this agent.
@@ -84,8 +84,8 @@ func (a *agent) apply(p pending) {
 			a.sendProbe(p)
 			return
 		}
-		if p.resumed != nil {
-			a.sendResume(p)
+		if p.resume != nil {
+			a.sendResume(*p.resume)
 			return
 		}
 		// Both marked before the write: its reply can reach fanOut before this

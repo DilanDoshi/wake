@@ -74,3 +74,30 @@ func TestRestoredResumesAreWakesLinesNotABroadcast(t *testing.T) {
 		t.Errorf("the restored room drew Wake's \"continue\" as words:\n%s", view)
 	}
 }
+
+// A resume is Wake's, so it never counts toward proving a typed turn was a
+// broadcast: the operator's "continue" in one DM beside another agent's resume
+// is still a private turn, and its reply stays out of the restored room.
+func TestADMContinueBesideAResumeStaysPrivate(t *testing.T) {
+	a := roomWithHistoryAsked(t)
+	long := clock().Add(-time.Hour)
+	m := a.apply(oneReply("s1",
+		core.Event{Kind: core.KindUserText, SessionID: "s1", Text: "continue", At: long},
+		core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "the private reply", At: long.Add(time.Second)},
+	))
+	m = m.apply(oneReply("s2", resumeEvent("s2", long.Add(2*time.Second))))
+	if view := shown(m); strings.Contains(view, "the private reply") {
+		t.Errorf("a DM turn read as a broadcast because a resume shared its words:\n%s", view)
+	}
+}
+
+// The resume's uuid is Wake's but no room send's, so the restore never reads it
+// as one.
+func TestAResumeIsNeverARoomSend(t *testing.T) {
+	if _, _, ok := roomSendOf(rpc.NewMessageSend(rpc.MessageResumed).ID()); ok {
+		t.Error("a resume's uuid reads as a room send")
+	}
+	if _, _, ok := roomSendOf(newRoomSend(false).ID()); !ok {
+		t.Error("a room send no longer reads as one")
+	}
+}

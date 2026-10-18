@@ -74,8 +74,9 @@ reset, or when you sign in to another account` until a turn goes through.
 You don't have to send anything. Wake writes `continue` to every agent the limit stopped, once, either
 when the reset it named has passed or as soon as you sign in to a different Claude account in any
 other terminal (`/login` in another Claude Code session counts). It shows as `↻ resumed after the
-usage limit`, not as your words. A message you send yourself first takes its place. Signing in again
-to the same account changes nothing — only a different account, or the reset, lifts the limit.
+usage limit`, not as your words. If you message the agent first, the resume waits for that turn, and
+if it goes through nothing more is sent. Signing in again to the same account changes nothing — only
+a different account, or the reset, lifts the limit.
 
 ## A key does nothing
 

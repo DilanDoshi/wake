@@ -61,8 +61,12 @@ func (w *inotifyWatch) run() {
 			return
 		}
 		n, err := unix.Read(w.fd, buf)
+		if errors.Is(err, unix.EAGAIN) || errors.Is(err, unix.EINTR) {
+			continue // a spurious wake
+		}
 		if err != nil {
-			continue // EAGAIN after a spurious wake
+			logf("wake: watch %s: %v", w.base, err)
+			return
 		}
 		if namesFile(buf[:n], w.base) {
 			select {
@@ -73,10 +77,14 @@ func (w *inotifyWatch) run() {
 	}
 }
 
-// namesFile reports whether a read of inotify events names the file.
+// namesFile reports whether a read of inotify events names the file, or lost
+// some to an overflow, which may have named it.
 func namesFile(buf []byte, name string) bool {
 	for off := 0; off+unix.SizeofInotifyEvent <= len(buf); {
 		ev := (*unix.InotifyEvent)(unsafe.Pointer(&buf[off]))
+		if ev.Mask&unix.IN_Q_OVERFLOW != 0 {
+			return true
+		}
 		start := off + unix.SizeofInotifyEvent
 		end := start + int(ev.Len)
 		if end > len(buf) {

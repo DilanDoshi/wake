@@ -600,9 +600,10 @@ func broadcastRuns(lines []roomLine, copied map[int]int) [][]int {
 	byText := map[string][]int{}
 	for i, l := range lines {
 		// A room send's turn is decided by its provenance (roomSendGroups), and a
-		// fork's copy is not a line anybody sent: multiplicity reads neither.
+		// fork's copy or the daemon's resume is not a line the operator sent:
+		// multiplicity reads none of them, or a resume would make a DM public.
 		_, isCopy := copied[i]
-		if _, _, room := roomSendOf(l.ev.MessageID); isCopy || room {
+		if _, _, room := roomSendOf(l.ev.MessageID); isCopy || room || l.ev.Notice == core.NoticeAutoResumed {
 			continue
 		}
 		// Every decoded image carries the one placeholder text, so two private

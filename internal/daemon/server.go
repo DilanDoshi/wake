@@ -144,6 +144,7 @@ func newServer(socket string) *server {
 		debugFiles: make(map[string]string),
 		quit:       make(chan struct{}),
 		done:       make(chan struct{}),
+		limits:     limitWatch{nudge: make(chan struct{}, 1)},
 	}
 }
 

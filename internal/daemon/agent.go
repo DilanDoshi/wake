@@ -601,7 +601,6 @@ func (a *agent) noteSent() bool {
 	defer a.mu.Unlock()
 	was := a.owed
 	a.owed = true
-	a.limit = usageStop{} // a send of anyone's is the resume
 	return was
 }
 

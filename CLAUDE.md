@@ -185,7 +185,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (owner's 2026-10-17 ruling): one `continue` per stop, stamped `rpc.MessageResumed` and drawn as
   `↻ … resumed after the usage limit`, when Claude's config file names another account (a kqueue or
   inotify wait, armed only while an agent is stopped) or the reset the limit named has passed (one
-  timer; a stale reset arms none). A send of anyone's cancels it. `internal/daemon/usagelimit.go`.
+  timer; a stale reset arms none). The agent's own turn going through, or a `/clear`, ends the stop;
+  a resume never lands on a turn in flight, and never answers a newer stop. `internal/daemon/usagelimit.go`.
   Any other named failure (`core.NoticeTurnFailed`: an overload, a rejected request) is a timed
   notice only. `internal/ui/apirecover.go`.
 

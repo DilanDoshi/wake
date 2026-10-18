@@ -12,6 +12,7 @@ package daemon
 // stopped, waiting on the file and a timer, never polling.
 
 import (
+	"errors"
 	"os"
 	"sync"
 	"time"
@@ -51,11 +52,17 @@ type heldStop struct {
 
 func (u usageStop) stopped() bool { return !u.at.IsZero() }
 
-// limited reports whether a usage limit has this agent stopped.
-func (a *agent) limited() bool {
+// usageStopped reports whether a usage limit has this agent stopped.
+func (a *agent) usageStopped() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.limit.stopped()
+}
+
+// resumeAsk is one queued resume: the stop it answers, and how to announce it.
+type resumeAsk struct {
+	at       time.Time
+	announce func(messageID string)
 }
 
 // limitWatch is the goroutine resuming stopped agents, and the nudge that
@@ -66,17 +73,23 @@ type limitWatch struct {
 	nudge   chan struct{}
 }
 
-// noteLimit records the stop a usage limit leaves, or clears it on model
-// output, reporting a new stop. A reset not after the hit is stale - it would
-// fire at once and stop again - so it arms no timer.
+// noteLimit records the stop a usage limit leaves, reporting a new one, and
+// clears it when the agent's own turn goes through or a /clear abandons the
+// conversation. A send does not: its turn is in flight, which already holds a
+// resume off, and a local command runs no turn. A subagent's events are not the
+// agent's. A reset not after the hit is stale - it would fire at once and stop
+// again - so it arms no timer.
 func (a *agent) noteLimit(ev core.Event, now time.Time) bool {
-	if ev.ModelOutput() {
+	if ev.Subagent != nil {
+		return false
+	}
+	if ev.ModelOutput() || ev.Kind == core.KindSessionReset {
 		a.mu.Lock()
 		a.limit = usageStop{}
 		a.mu.Unlock()
 		return false
 	}
-	if ev.Kind != core.KindAPIError || ev.Notice != core.NoticeUsageLimit || ev.Subagent != nil {
+	if ev.Kind != core.KindAPIError || ev.Notice != core.NoticeUsageLimit {
 		return false
 	}
 	reset, ok := core.UsageLimitReset(ev.Text, now)
@@ -108,9 +121,6 @@ func signedIn() core.Account {
 func (s *server) limitHit() {
 	s.limits.mu.Lock()
 	defer s.limits.mu.Unlock()
-	if s.limits.nudge == nil {
-		s.limits.nudge = make(chan struct{}, 1)
-	}
 	if s.limits.running {
 		select {
 		case s.limits.nudge <- struct{}{}:
@@ -137,8 +147,8 @@ func (s *server) watchLimits() {
 	defer timer.Stop()
 	s.resumeOnLogin() // a login between a stop's read and the watch
 	for {
-		due, any := s.nextReset()
-		if !any && s.limitsIdle() {
+		due, held := s.nextReset()
+		if !held && s.limitsIdle() {
 			return
 		}
 		rearm(timer, due)
@@ -255,20 +265,20 @@ func (s *server) nudgeLimitsDue(now time.Time) {
 
 // resume queues the "continue" behind whatever the agent's input already
 // holds, marking the stop it answers queued; sendResume decides at the write
-// whether it is still owed.
+// whether it is still owed. A full input is an agent not reading it: the stop
+// stays queued rather than ready, or a reset already past would retry at once.
 func (s *server) resume(a *agent, at time.Time, why string) {
 	if !a.queueResume(at, true) {
 		return
 	}
-	p := pending{frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: resumeText}, resumed: func(id string) {
+	ask := &resumeAsk{at: at, announce: func(id string) {
 		logf("wake: session %s resumed after its usage limit, on %s", a.id, why)
 		ev := core.Event{Kind: core.KindUserText, Notice: core.NoticeAutoResumed, Text: resumeText, MessageID: id}
 		s.broadcast(rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev})
 	}}
 	select {
-	case a.in <- p:
+	case a.in <- pending{frame: rpc.Frame{Kind: rpc.FrameSend, SessionID: a.id, Text: resumeText}, resume: ask}:
 	default:
-		a.queueResume(at, false)
 		logf("wake: session %s: input full, not resumed after its usage limit", a.id)
 	}
 }
@@ -285,17 +295,20 @@ func (a *agent) queueResume(at time.Time, queued bool) bool {
 	return true
 }
 
-// sendResume writes the resume only if the agent is still stopped and idle: an
-// operator's send ahead of it cleared the stop, and a second trigger finds it
-// cleared by the first. Announced before the write, so the line lands ahead of
-// the reply.
-func (a *agent) sendResume(p pending) {
+// sendResume writes the resume only for the stop it was queued for, and only
+// while the agent is idle: a turn in flight holds it off and leaves the stop for
+// a later trigger, a newer stop is not this resume's, and a second trigger finds
+// the stop cleared by the first. Announced before the write, so the line lands
+// ahead of the reply; a failed write is reported as apply reports one.
+func (a *agent) sendResume(r resumeAsk) {
 	a.mu.Lock()
-	ready := a.limit.stopped() && !a.owed && len(a.pending) == 0 && a.tool == "" && !a.stopped && !a.ended && !a.parking
-	if ready {
+	mine := a.limit.at.Equal(r.at)
+	ready := mine && !a.owed && len(a.pending) == 0 && a.tool == "" && !a.stopped && !a.ended && !a.parking
+	switch {
+	case ready:
 		a.limit = usageStop{}
 		a.owed = true
-	} else {
+	case mine:
 		a.limit.queued = false // a later trigger may try again
 	}
 	a.mu.Unlock()
@@ -303,10 +316,12 @@ func (a *agent) sendResume(p pending) {
 		return
 	}
 	id := rpc.NewMessageSend(rpc.MessageResumed).ID()
-	p.resumed(id)
+	r.announce(id)
 	if err := a.sess.Send(resumeText, nil, id, false); err != nil {
 		a.unsent(false)
-		a.noteUnreachable(err)
+		if !errors.Is(err, core.ErrNotWritten) {
+			a.noteUnreachable(err)
+		}
 		logf("wake: session %s: resume not sent: %v", a.id, err)
 	}
 }

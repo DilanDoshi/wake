@@ -5456,8 +5456,8 @@ works (`internal/ui/apirecover.go`). Left out, each on purpose:
   this note's premise was out of date. What that left:
   - **A daemon restart forgets a stop**, as a daemon restores nothing; the agent waits for a message.
     *Closes with:* reading the transcript's last record for a usage limit on wake or reattach.
-  - **The Linux watch is compile-checked only** on this machine (`configwatch_linux.go`); the darwin
-    one is run by `TestTheConfigWatchSeesEveryWayTheFileChanges`.
+  - **The Linux watch is not run by `make ci` here** (this machine is darwin): the watch test and the
+    daemon's resume tests were run green in a `golang:1.26` container on 2026-10-17.
   - **A resumed turn's reply reaches the room** even when the limited turn was a DM's: the resume is
     no DM send, the same as any turn Wake did not start from a conversation.
   - **The weekly reset's shape** is read off the owner's real limit messages, digits masked, not off a

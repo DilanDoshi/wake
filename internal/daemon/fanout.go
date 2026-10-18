@@ -42,7 +42,7 @@ func (s *server) fanOut(a *agent) {
 		a.observe(ev)
 		// Before the broadcast, so the resume is armed by the time a client
 		// draws the limit; a turn end on a stopped agent may free it to resume.
-		if a.noteLimit(ev, time.Now()) || (ev.Kind == core.KindTurnEnd && a.limited()) {
+		if a.noteLimit(ev, time.Now()) || (ev.Kind == core.KindTurnEnd && a.usageStopped()) {
 			s.limitHit()
 		}
 		// One Event, one pointer, shared by every client's copy of the
