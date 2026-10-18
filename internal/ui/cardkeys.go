@@ -186,7 +186,7 @@ func (a App) cardKey(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	case tea.KeySpace:
 		// Claude Code's tick key on a multi-select question, and a character
 		// everywhere else.
-		if top.OnReview() || !top.multi(top.Cursor) {
+		if !top.multi(top.Cursor) {
 			return a, nil, false
 		}
 		return a.chooseCursored(top)

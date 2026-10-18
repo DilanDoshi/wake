@@ -229,3 +229,93 @@ func TestPickingAnOptionReplacesATypedAnswer(t *testing.T) {
 		t.Errorf("after picking option 1 the answer is %q and the typed words %q", card.answers()[q.Text], card.typed(0))
 	}
 }
+
+// A reattach replays every pending ask. The replay names the same ask, so the
+// ticks made before it survive rather than being reset under the operator.
+func TestAReplayedAskKeepsWhatWasTicked(t *testing.T) {
+	ev := recordedAsks(t, multiFixture)[0]
+	cs := Cards{}.Add("s1", ev)
+	card, _ := cs.Top()
+	cs = cs.With(card.Toggle(0, 1).Move(0, 2))
+
+	card, _ = cs.Add("s1", ev).Top()
+	if !card.ticked(0, 1) || card.Option != 2 {
+		t.Errorf("the replayed ask reset the card: ticks %v, option %d", card.Ticks, card.Option)
+	}
+
+	// A card known only from a report still takes the replay's payload.
+	bare := Cards{}.Reconcile(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", RequestIDs: []string{ev.RequestID}, State: rpc.StateBlocked}}})
+	if card, _ := bare.Add("s1", ev).Top(); card.Detail == nil {
+		t.Error("a report-only card was not filled in by the ask's own event")
+	}
+}
+
+// The review is the last look at what goes out, so a joined answer too long for
+// the pane wraps rather than being cut.
+func TestTheReviewWrapsALongJoinedAnswer(t *testing.T) {
+	card := cardFor(t, recordedAsks(t, multiFixture)[0])
+	for o := range card.Detail.Questions[0].Options {
+		card = card.Toggle(0, o)
+	}
+	card = card.toStep(1)
+	want, _ := card.answerOf(0)
+	out := strings.Join(strings.Fields(ansi.Strip(card.reviewBody(30))), " ")
+	if !strings.Contains(out, strings.Join(strings.Fields(want), " ")) {
+		t.Errorf("the review at 30 columns does not show the whole answer %q:\n%s", want, ansi.Strip(card.reviewBody(30)))
+	}
+}
+
+// Space is Claude Code's tick key on a multi-select question only. Everywhere
+// else it is a character, so it reaches the composer and leaves the card alone.
+func TestSpaceIsACharacterAnywhereButAMultiSelectQuestion(t *testing.T) {
+	spaceOn := func(t *testing.T, a App) {
+		t.Helper()
+		before := topCard(t, a)
+		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeySpace, Runes: []rune{' '}})
+		if got := a.composer().Value(); got != " " {
+			t.Errorf("space did not reach the composer: %q", got)
+		}
+		if after := topCard(t, a); after.Cursor != before.Cursor || after.Option != before.Option || after.chosen(0) != before.chosen(0) {
+			t.Errorf("space moved or answered the card")
+		}
+	}
+	t.Run("single-select", func(t *testing.T) { spaceOn(t, paneAsking(t)) })
+	t.Run("review", func(t *testing.T) {
+		a := paneAskingMany(t)
+		a, _ = press(a, cardFirstOption)
+		spaceOn(t, enter(walkTo(a, nextIndex(topCard(t, a).Detail.Questions[0]))))
+	})
+	t.Run("permission", func(t *testing.T) { spaceOn(t, blockedPane(t)) })
+}
+
+// The Next row under an earlier question walks on to the next question.
+func TestTheNextRowWalksToTheNextQuestion(t *testing.T) {
+	a := paneAsking(t)
+	card := Card{AgentID: "s1", RequestID: "r9", Ask: core.AskChoice, Detail: &core.AskDetail{Questions: []core.Question{
+		{Text: "Which toppings?", Multi: true, Options: []core.Option{{Label: "Cheese"}, {Label: "Olives"}}},
+		{Text: "Which size?", Options: []core.Option{{Label: "Small"}, {Label: "Large"}}},
+	}}, Choice: []int{noChoice, noChoice}, Typed: []string{"", ""}, Ticks: make([][]int, 2)}
+	a.cards = Cards{}.with(card)
+	if c, ok := a.cardOf(a.focus); !ok || c.RequestID != "r9" {
+		t.Fatal("the hand-built card is not the focused pane's")
+	}
+	a = enter(walkTo(a, nextIndex(card.Detail.Questions[0])))
+	if got := topCard(t, a); got.Cursor != 1 || got.OnReview() {
+		t.Errorf("↵ on Next left the cursor on step %d, want the second question", got.Cursor)
+	}
+}
+
+// Words typed in the Other row land the cursor on the row that walks on, so a
+// reflexive second ↵ moves on rather than clearing what was just typed.
+func TestTypingInOtherLandsOnTheRowThatWalksOn(t *testing.T) {
+	a := paneAskingMany(t)
+	q := topCard(t, a).Detail.Questions[0]
+	a, _ = press(a, rune(cardFirstOption+otherIndex(q)))
+	a = enter(typeDraft(a, "anchovies"))
+	if got := topCard(t, a); got.Option != nextIndex(q) || got.typed(0) != "anchovies" {
+		t.Fatalf("after typing, the cursor is on row %d with %q, want the Next row %d", got.Option, got.typed(0), nextIndex(q))
+	}
+	if got := topCard(t, enter(a)); !got.OnReview() || got.typed(0) != "anchovies" {
+		t.Errorf("a second ↵ did not walk on with the typed words kept: review %v, typed %q", got.OnReview(), got.typed(0))
+	}
+}

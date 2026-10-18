@@ -42,7 +42,6 @@ package ui
 // every fleet report, in both directions.
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -229,22 +228,6 @@ func (c Card) Pick(question, option int) Card {
 	return c
 }
 
-// Toggle ticks an option of a multi-select question, or unticks it, keeping the
-// order the rest were ticked in. Out-of-range indices are ignored, as in Pick.
-func (c Card) Toggle(question, option int) Card {
-	if !c.inRange(question, option) || question >= len(c.Ticks) {
-		return c
-	}
-	ticks := append([][]int(nil), c.Ticks...)
-	kept := slices.DeleteFunc(slices.Clone(ticks[question]), func(o int) bool { return o == option })
-	if len(kept) == len(ticks[question]) {
-		kept = append(kept, option)
-	}
-	ticks[question] = kept
-	c.Ticks = ticks
-	return c
-}
-
 // Move walks the cursor: questions forward or back, and options within the
 // question the cursor is on. Both are clamped, because a cursor is a place to
 // look rather than an answer.
@@ -307,6 +290,9 @@ func (c Card) answers() map[string]string {
 // label the options did not contain. A multi-select one sends its ticks in the
 // order ticked and the typed words last, joined as Claude Code joins them.
 func (c Card) answerOf(i int) (string, bool) {
+	if c.Detail == nil || i < 0 || i >= len(c.Detail.Questions) {
+		return "", false
+	}
 	q := c.Detail.Questions[i]
 	if q.Multi {
 		labels := make([]string, 0, len(c.ticksOf(i))+1)
@@ -326,22 +312,6 @@ func (c Card) answerOf(i int) (string, bool) {
 		return "", false
 	}
 	return q.Options[o].Label, true
-}
-
-// ticksOf is the options ticked on question i, in the order ticked.
-func (c Card) ticksOf(i int) []int {
-	if i < 0 || i >= len(c.Ticks) {
-		return nil
-	}
-	return c.Ticks[i]
-}
-
-// ticked reports whether option o of question i is ticked.
-func (c Card) ticked(i, o int) bool { return slices.Contains(c.ticksOf(i), o) }
-
-// multi reports whether question i takes several options.
-func (c Card) multi(i int) bool {
-	return c.Detail != nil && i >= 0 && i < len(c.Detail.Questions) && c.Detail.Questions[i].Multi
 }
 
 // typed is the operator's own answer to question i, or "".
@@ -495,7 +465,9 @@ func (cs Cards) armedFor(c Card, key rune) bool {
 // An ask this list already holds is replaced in place rather than appended: a
 // reattach can deliver the same ask twice, once as an event and once through a
 // report, and a card that jumped to the end of the queue on a duplicate would
-// move under the operator's hand.
+// move under the operator's hand. One that already carries its payload is kept
+// as it is: a request id names one ask, so a replay brings nothing new and would
+// only reset what the operator had chosen and ticked.
 func (cs Cards) Add(agentID string, ev core.Event) Cards {
 	if ev.RequestID == "" {
 		return cs
@@ -504,6 +476,9 @@ func (cs Cards) Add(agentID string, ev core.Event) Cards {
 	case core.KindRequestWithdrawn:
 		return cs.Settle(agentID, ev.RequestID)
 	case core.KindPermissionRequest:
+		if held, ok := cs.byRequest(agentID, ev.RequestID); ok && held.Detail != nil {
+			return cs
+		}
 		return cs.with(newCard(agentID, ev))
 	default:
 		return cs

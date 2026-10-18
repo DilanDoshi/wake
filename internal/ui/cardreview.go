@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -54,7 +55,7 @@ func (c Card) reviewBody(width int) string {
 	rows := []string{stepHeader(c, width), "", AccentStyle.MaxWidth(width).Render(reviewTitle), ""}
 	for i, q := range c.Detail.Questions {
 		rows = append(rows, TextStyle.Width(width).MaxWidth(width).Render(reviewQuestionLead+collapseWhitespaceOneLine(q.Text)))
-		rows = append(rows, mutedLine(reviewAnswerLead+c.answerLabel(i), width))
+		rows = append(rows, reviewAnswer(c.answerLabel(i), width))
 	}
 	rows = append(rows, "", mutedLine(reviewReady, width))
 	for i, label := range [reviewOptions]string{reviewSubmitLabel, reviewCancelLabel} {
@@ -62,6 +63,22 @@ func (c Card) reviewBody(width int) string {
 		rows = append(rows, optionRow(numbered, width, i == c.Option, false, AccentStyle))
 	}
 	return strings.Join(rows, "\n")
+}
+
+// reviewAnswer is one answer under its question, wrapped rather than cut: the
+// review is the last look at what goes out, and a multi-select answer is long.
+func reviewAnswer(answer string, width int) string {
+	lead := ansi.StringWidth(reviewAnswerLead)
+	room := max(width-lead, 1)
+	lines := strings.Split(HintStyle.Width(room).MaxWidth(room).Render(answer), "\n")
+	for i, ln := range lines {
+		pad := strings.Repeat(" ", lead)
+		if i == 0 {
+			pad = reviewAnswerLead
+		}
+		lines[i] = HintStyle.Render(pad) + ln
+	}
+	return strings.Join(lines, "\n")
 }
 
 // answerLabel is what question i will send, or the word for a gap.

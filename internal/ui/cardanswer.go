@@ -98,10 +98,6 @@ func (cs Cards) writingFor(c Card) (int, bool) {
 // otherIndex is the row past the options the model supplied.
 func otherIndex(q core.Question) int { return len(q.Options) }
 
-// nextIndex is the row under a multi-select question's Other row, which walks
-// on: ticking there does not.
-func nextIndex(q core.Question) int { return otherIndex(q) + 1 }
-
 // answerTitle is what the composer of this pane is titled while it holds an
 // answer, and "" when it holds an ordinary draft.
 //
@@ -165,9 +161,12 @@ func (a App) commitAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 		return a, nil, true
 	}
 	answered := c.answer(question, text)
-	if !c.multi(question) {
-		// Words in a multi-select question's Other row tick it, and the
-		// question stays up for the rest; a single-select one is answered.
+	if c.multi(question) {
+		// Words in a multi-select question's Other row tick it and the question
+		// stays up for the rest. The cursor lands on the row that walks on, so a
+		// reflexive second ↵ moves on rather than unticking what was typed.
+		answered = answered.atOption(nextIndex(c.Detail.Questions[question]))
+	} else {
 		answered = answered.Move(1, 0)
 	}
 	a.cards = a.cards.With(answered).stopWriting().disarm()
