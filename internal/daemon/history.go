@@ -169,9 +169,10 @@ func liveHistory(r io.Reader, id string, active map[string]bool) ([]core.Event, 
 	// A probe (probe.go) leaves its command and its reply on disk; Wake
 	// suppresses them live and drops them here on the way back, so a reopened
 	// conversation never shows a question Wake asked on its own. See probeLine.
+	// A resume (usagelimit.go) is kept, marked as Wake's.
 	keepFiltered := func(ev core.Event) {
 		if !probeLine(ev) {
-			keep(ev)
+			keep(resumedLine(ev))
 		}
 	}
 

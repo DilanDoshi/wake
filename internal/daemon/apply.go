@@ -31,6 +31,10 @@ type pending struct {
 	from  *client
 	frame rpc.Frame
 	probe probeKind
+
+	// resume marks the daemon's own "continue" to an agent a usage limit
+	// stopped (usagelimit.go).
+	resume *resumeAsk
 }
 
 // submit queues one stdin-bound frame for this agent.
@@ -80,6 +84,10 @@ func (a *agent) apply(p pending) {
 			a.sendProbe(p)
 			return
 		}
+		if p.resume != nil {
+			a.sendResume(*p.resume)
+			return
+		}
 		// Both marked before the write: its reply can reach fanOut before this
 		// returns. A failed write leaves claude's name unknown, fail-safe, and
 		// takes back only the turn it marked.
@@ -113,7 +121,9 @@ func (a *agent) apply(p pending) {
 		// a client that wants to correlate one has it. Holding it here would
 		// be state with no reader, and the liveness policy needs none of it:
 		// an aborted turn still ends with a turn end, which is what clears
-		// what this agent owes.
+		// what this agent owes. It also ends a usage-limit stop: whatever the
+		// limit cut off is not to be continued for an operator saying stop.
+		a.dropLimit()
 		_, err = a.sess.Interrupt()
 	case rpc.FrameMode:
 		// Refused while an ask is outstanding. internal/ui makes the same

@@ -5,6 +5,8 @@ package daemon
 // is its own: spawn.go starts a process, this forwards what the process says.
 
 import (
+	"time"
+
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -38,6 +40,11 @@ func (s *server) fanOut(a *agent) {
 			continue
 		}
 		a.observe(ev)
+		// Before the broadcast, so the resume is armed by the time a client
+		// draws the limit; a turn end on a stopped agent may free it to resume.
+		if a.noteLimit(ev, time.Now()) || (ev.Kind == core.KindTurnEnd && a.usageStopped()) {
+			s.limitHit()
+		}
 		// One Event, one pointer, shared by every client's copy of the
 		// frame. Nothing mutates an Event after the airlock decodes it, and
 		// at 30 sessions a copy per client per event is the difference

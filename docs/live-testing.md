@@ -927,6 +927,16 @@ The tests replay recorded receipts and a scripted agent. In a scratch git reposi
       `auto` with `⇧⇥` and send again: Claude Code may hold the message for an approval nobody can
       give — note what you see.
 
+## A usage limit — what only a real plan shows
+
+- [ ] **Hit a real session limit with a few agents mid-task, then `/login` to a different account in
+      another Claude Code window.** Every stopped agent should show `↻ resumed after the usage limit`
+      within a second or two of the login and carry on. The suite drives this against a fake and a
+      rewritten config file (`TestAnAgentALimitStoppedResumesWhenYouSignInElsewhere`); what it cannot
+      say is whether a real `/login` rewrites `~/.claude.json` the way the fake does, and whether the
+      running processes take the new account on that very turn.
+- [ ] **Or wait the limit out:** a minute after the reset the pin names, each stopped agent resumes.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:

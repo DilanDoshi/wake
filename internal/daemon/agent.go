@@ -267,6 +267,10 @@ type agent struct {
 	tool    string
 	toolArg string
 
+	// limit is set while this agent's last turn ended on a usage limit and
+	// nothing has run since: what resumes it. See usagelimit.go.
+	limit usageStop
+
 	// runningSubs is the set of agent dispatches (subagents) this session has
 	// running now, keyed on the task id. It is what forkSource refuses a fork on
 	// while a background subagent is still writing this session's transcript past

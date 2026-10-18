@@ -729,3 +729,14 @@ func (f wireFrame) apiNotice() Notice {
 	}
 	return NoticeAPIError
 }
+
+// ModelOutput reports inference the API accepted - prose, a tool call, thinking -
+// which a failed turn never produces. A local command's reply ran none, so it
+// proves nothing about a login or a limit.
+func (e Event) ModelOutput() bool {
+	switch e.Kind {
+	case KindAssistantText, KindToolUse, KindThinking:
+		return !e.LocalCommand
+	}
+	return false
+}
