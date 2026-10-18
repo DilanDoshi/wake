@@ -46,6 +46,10 @@ const (
 	cardChooseFmt = "[1-%d] choose"
 	cardChooseOne = "[1] choose"
 
+	// cardToggleFmt is the digits on a multi-select question, where they tick.
+	// Its rows are the options plus Other, so there are always two or more.
+	cardToggleFmt = "[1-%d] toggle"
+
 	// cardKeySep separates two affordances, matching the spacing inside each.
 	cardKeySep = "  "
 
@@ -110,6 +114,10 @@ const (
 	// cardKey hands both keys back on every other shape.
 	cardMoveKeys = "↑↓ move" + cardKeySep + cardConfirmGlyph + " choose"
 
+	// cardMoveTickKeys is the same pair on a multi-select question, where ↵
+	// ticks the cursored row rather than answering with it.
+	cardMoveTickKeys = "↑↓ move" + cardKeySep + cardConfirmGlyph + " toggle"
+
 	// cardExpandDetail and cardCollapseDetail advertise ⌃E, which opens the
 	// cursored option's whole description (Card.DetailExpanded) - the one row a
 	// card truncates and cannot scroll to. Unbracketed like cardMoveKeys, so the
@@ -160,6 +168,17 @@ const (
 	cardChosen   = "▸ "
 	cardUnchosen = "  "
 	cardCursor   = "› "
+
+	// A multi-select question's boxes, as Claude Code draws them, with the
+	// cursor marker still beside them: what is ticked and where the operator is
+	// looking stay two separate marks.
+	multiOn  = "[✔] "
+	multiOff = "[ ] "
+
+	// multiNextLabel is the row under a multi-select question that walks on to
+	// the next one - Claude Code's word. Under the last question it is the
+	// review's own name, stripSubmitLabel.
+	multiNextLabel = "Next"
 
 	// cardPlanLines is how much of a plan a card shows. A plan is markdown a
 	// model wrote to be read and the card is pinned above a composer, so the
@@ -385,9 +404,13 @@ func (c Card) questionKeys(room int) string {
 	if !ok || len(q.Options) == 0 {
 		return settle
 	}
-	need := chooseKeys(min(otherIndex(q)+1, cardMaxOptions)) + cardKeySep + settle
+	move, digits := cardMoveKeys, chooseKeys(min(otherIndex(q)+1, cardMaxOptions))
+	if q.Multi {
+		move, digits = cardMoveTickKeys, fmt.Sprintf(cardToggleFmt, min(otherIndex(q)+1, cardMaxOptions))
+	}
+	need := digits + cardKeySep + settle
 	line := need
-	if full := cardMoveKeys + cardKeySep + need; ansi.StringWidth(full) <= room {
+	if full := move + cardKeySep + need; ansi.StringWidth(full) <= room {
 		line = full
 	}
 	// ⌃E last, so it is dropped before the digits and the refusal - the
@@ -481,6 +504,9 @@ func (c Card) questionBody(width int) string {
 		rows = append(rows, c.optionRow(i, o.Label, options))
 	}
 	rows = append(rows, c.optionRow(otherIndex(q), c.otherRowLabel(), options))
+	if q.Multi {
+		rows = append(rows, optionRow(c.walkOnLabel(), options, c.Option == nextIndex(q), false, AccentStyle))
+	}
 	// The cursored option's explanation, in a fixed slot *below* the list
 	// rather than inline under the row it describes.
 	//
@@ -529,12 +555,30 @@ func (c Card) sample(q core.Question) string {
 // what will be sent, and what a key would change.
 func (c Card) optionRow(i int, label string, width int) string {
 	chosen := c.picked(c.Cursor, i)
-	if q, ok := c.question(); ok && i == otherIndex(q) {
+	q, ok := c.question()
+	if ok && i == otherIndex(q) {
 		// The Other row is marked chosen by there being words in it, since it
 		// holds no option index for picked to match.
 		chosen = c.typed(c.Cursor) != ""
 	}
+	if ok && q.Multi {
+		// A box carries the tick, so the lead is left to the cursor.
+		box := multiOff
+		if chosen || c.ticked(c.Cursor, i) {
+			box = multiOn
+		}
+		return optionRow(box+label, width, i == c.Option, false, AccentStyle)
+	}
 	return optionRow(label, width, i == c.Option, chosen, AccentStyle)
+}
+
+// walkOnLabel names the row under a multi-select question: Next, or under the
+// last question the review it leads to.
+func (c Card) walkOnLabel() string {
+	if c.Cursor >= len(c.Detail.Questions)-1 {
+		return stripSubmitLabel
+	}
+	return multiNextLabel
 }
 
 // otherRowLabel is the Other row: the invitation, or the answer already

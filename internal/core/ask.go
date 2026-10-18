@@ -23,6 +23,8 @@
 
 package core
 
+import "strings"
+
 // The three keys an interactive ask and its answer are spelled with.
 //
 // questionsKey rides the ask's input and is echoed back unchanged inside the
@@ -48,18 +50,24 @@ const (
 // detailKey is Claude's "description", which vocabulary.go's toolShapes also
 // reads, for a Bash call's title - one word, two unrelated jobs, one const.
 // planKey is the whole payload of an ExitPlanMode ask.
-//
-// Deliberately absent: multiSelect, and only that. AskDetail's doc comment
-// carries why, and the short version is that its answer encoding has no
-// recording behind it.
 const (
-	optionsKey = "options"
-	labelKey   = "label"
-	detailKey  = "description"
-	planKey    = "plan"
-	headerKey  = "header"
-	previewKey = "preview"
+	optionsKey     = "options"
+	labelKey       = "label"
+	detailKey      = "description"
+	planKey        = "plan"
+	headerKey      = "header"
+	previewKey     = "preview"
+	multiSelectKey = "multiSelect"
 )
+
+// choiceSep joins a multi-select question's choices into its one answer string,
+// as Claude Code's own question screen does (question-multiselect.jsonl's
+// answer, and the findings note dated 2026-10-18).
+const choiceSep = ", "
+
+// JoinChoices is one multi-select answer: the labels in the order they were
+// ticked, any words of the operator's own last - the order Claude Code sends.
+func JoinChoices(labels []string) string { return strings.Join(labels, choiceSep) }
 
 // askKind classifies a permission ask by what it needs from the operator. See
 // AskKind for why one control_request subtype needs three answers, and why
@@ -138,7 +146,8 @@ func askQuestions(input map[string]any) []Question {
 		// on, so a question with no header is still perfectly answerable and is
 		// kept. Only a missing text drops one.
 		header, _ := obj[headerKey].(string)
-		out = append(out, Question{Text: text, Header: header, Options: askOptions(obj[optionsKey])})
+		multi, _ := obj[multiSelectKey].(bool)
+		out = append(out, Question{Text: text, Header: header, Multi: multi, Options: askOptions(obj[optionsKey])})
 	}
 	return out
 }

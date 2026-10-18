@@ -65,19 +65,12 @@ func (c Card) reviewBody(width int) string {
 }
 
 // answerLabel is what question i will send, or the word for a gap.
-//
-// It reads the typed answer first, for the reason Card.answers does: an
-// operator's own words are the answer when they wrote one, and the option
-// label only when they picked one.
 func (c Card) answerLabel(i int) string {
-	if typed := c.typed(i); typed != "" {
-		return collapseWhitespaceOneLine(typed)
-	}
-	o := c.chosen(i)
-	if o < 0 || o >= len(c.Detail.Questions[i].Options) {
+	answer, ok := c.answerOf(i)
+	if !ok {
 		return reviewUnanswered
 	}
-	return collapseWhitespaceOneLine(c.Detail.Questions[i].Options[o].Label)
+	return collapseWhitespaceOneLine(answer)
 }
 
 // reviewChoose settles the ask, or does the one thing that is not settling it.

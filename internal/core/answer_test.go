@@ -272,3 +272,68 @@ func TestAnsweringThroughASessionEitherReachesStdinOrSaysNothingWasWritten(t *te
 		t.Errorf("the line that reached stdin carries no updatedInput: %s", line)
 	}
 }
+
+// A multi-select answer is one string per question, and the recorded line is the
+// golden: the labels ticked, in the order ticked, then the operator's own words,
+// joined the way Claude Code's own question screen joins them. Rebuilt here from
+// the recorded ask and diffed against the line the recorded process accepted
+// (testdata/input/question-multiselect.stdin.jsonl).
+func TestAMultiSelectAnswerIsTheLineTheRecordedProcessAccepted(t *testing.T) {
+	line, _ := findFixtureLine(t, "question-multiselect.jsonl", `"subtype":"can_use_tool"`)
+	var req struct {
+		RequestID string `json:"request_id"`
+		Request   struct {
+			Input map[string]any `json:"input"`
+		} `json:"request"`
+	}
+	if err := json.Unmarshal([]byte(line), &req); err != nil {
+		t.Fatalf("decode the recorded ask: %v", err)
+	}
+	evs, err := DecodeLine([]byte(line))
+	if err != nil || len(evs) != 1 || evs[0].Tool == nil || evs[0].Tool.Ask == nil {
+		t.Fatalf("the recorded ask did not resolve: %v %v", evs, err)
+	}
+	q := evs[0].Tool.Ask.Questions[0]
+	// Ticked Mushrooms then Cheese, then typed one of the operator's own.
+	answer := JoinChoices([]string{q.Options[1].Label, q.Options[0].Label, "anchovies"})
+	got, err := EncodeAnswer(req.RequestID, req.Request.Input, map[string]string{q.Text: answer})
+	if err != nil {
+		t.Fatalf("encode: %v", err)
+	}
+
+	sent := fixtureLines(t, "../../testdata/input/question-multiselect.stdin.jsonl")
+	var want, have any
+	if err := json.Unmarshal([]byte(sent[len(sent)-1]), &want); err != nil {
+		t.Fatalf("decode the recorded answer: %v", err)
+	}
+	if err := json.Unmarshal(got, &have); err != nil {
+		t.Fatalf("decode the encoded answer: %v", err)
+	}
+	if !reflect.DeepEqual(have, want) {
+		t.Errorf("the multi-select answer differs from the one the recorded process accepted\n got: %s\nwant: %s", got, sent[len(sent)-1])
+	}
+}
+
+// One label is just that label: a multi-select question answered with a single
+// tick sends what a single-select one would.
+func TestOneChoiceJoinsToItself(t *testing.T) {
+	if got := JoinChoices([]string{"Cheese"}); got != "Cheese" {
+		t.Errorf("JoinChoices of one label = %q", got)
+	}
+}
+
+// 2.1.302 replays the answer Wake wrote back on stdout. It decodes as a receipt
+// that carries nothing a client acts on - no refusal, no mode, no recall - so
+// the replay cannot be read as a mode change or a taken-back message.
+func TestTheAnswerReplayedOnStdoutIsAnInertReceipt(t *testing.T) {
+	line, _ := findFixtureLine(t, "question-multiselect.jsonl", `"type":"control_response"`)
+	evs, err := DecodeLine([]byte(line))
+	if err != nil || len(evs) != 1 {
+		t.Fatalf("decode the replayed answer: %v %v", evs, err)
+	}
+	ev := evs[0]
+	if ev.Kind != KindControlReceipt || ev.PermissionMode != "" || ev.Control == nil ||
+		ev.Control.Error != "" || ev.Control.Recalled != nil || len(ev.Control.Cancelled) != 0 {
+		t.Errorf("the replayed answer decoded as something a client acts on: %+v %+v", ev, ev.Control)
+	}
+}

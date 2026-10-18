@@ -328,6 +328,7 @@ var claudeWireVocabulary = wordSet([]string{
 	// both reach a renderer as Question.Header and Option.Preview, which are
 	// Wake's words for them.
 	"questions", "question", "options", "answers", "plan", "header", "preview",
+	"multiSelect",
 
 	// Field names that only a decoder needs.
 	"parent_tool_use_id", "subagent_type", "task_description",
@@ -773,7 +774,7 @@ var notNamedByTheAirlock = map[string]string{
 // recipient and words toolPeerSend reads. manager-tools.jsonl, manager-relay.jsonl.
 // 229 → 230: "msg_id", the SendMessage receipt's own key, which receiptSentence
 // requires so no other JSON result is cut to its message. manager-relay.jsonl.
-const policedWordCount = 230
+const policedWordCount = 231
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -797,6 +798,8 @@ var notWireVocabulary = wordSet([]string{
 	"%w: encode mcp toggle: empty request id or server",
 	// The separator a stdio server's command line is joined with.
 	" ",
+	// The separator a multi-select answer's choices are joined with.
+	", ",
 	// The text a decoded image block carries up in place of its bytes.
 	ImagePlaceholder,
 	// Wake's own surfacing text for a 401 api_retry, which carries no message of
@@ -1124,11 +1127,11 @@ var notInTheCorpus = map[string]string{
 	// Outbound. Wake writes these and never reads them, so no recording of
 	// stdout can contain them - encode.go's header says the same, and says
 	// why that makes them the least trustworthy shapes in the airlock.
-	"updatedInput":                "outbound only; a recording of stdout cannot contain it",
+	// "updatedInput" and "allow" left this list on 2026-10-18: 2.1.302 replays
+	// the answer Wake wrote on stdout (question-multiselect.jsonl).
 	"cancel_queued":               "outbound only; a recording of stdout cannot contain it",
 	"interrupt":                   "outbound only; a recording of stdout cannot contain it",
 	"set_permission_mode":         "outbound only; the corpus holds its receipts, not the requests",
-	"allow":                       "outbound only; the behavior value Wake writes",
 	"deny":                        "outbound only; the behavior value Wake writes",
 	"rewind_conversation":         "outbound only; a recording of stdout cannot contain it",
 	"target_message_uuid":         "outbound only; rewind request field Wake writes",

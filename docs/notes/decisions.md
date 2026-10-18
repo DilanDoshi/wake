@@ -4392,3 +4392,20 @@ folded it at all.
   message that fits three rows gets no key: a click on it would rewrap the transcript to change nothing.
   The key and the fold are decided at `DM.bodyWidth`, the width the block is drawn at (a subagent's is a
   gutter narrower), so a pointer is always a click target.
+
+## 2026-10-18 — a multi-select question is answered the way Claude Code answers one (the owner)
+
+The owner asked for the "select several" question menu, and chose to match Claude Code's own screen
+over a minimal version (`docs/superpowers/notes/2026-10-18-multiselect-question-findings.md`):
+
+- **Boxes, ticked in place.** `[ ]`/`[✔]` on every row, the Other row included. `↵`, the option's
+  digit and space tick without moving on. Space is read only on a multi-select question step, so it
+  is still a character everywhere else.
+- **A Next/Submit row walks on**, Claude Code's words, because ticking does not.
+- **The order ticked, typed words last, joined by `", "`.** That is the string Claude Code sends, so
+  `Card.Ticks` keeps the order rather than a set. The join lives in the airlock (`core.JoinChoices`)
+  because it is Claude's convention; the rpc frame still carries one string per question.
+- **Choosing a filled Other row again clears it.** It is a box, so a second press unticks it rather
+  than reopening the composer.
+- **A pick replaces typed words on a single-select question** (fixed in the same branch). Typing
+  already cleared a pick, but a pick left the typed answer in place, and the typed one was sent.

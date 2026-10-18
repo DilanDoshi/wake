@@ -42,6 +42,7 @@ package ui
 // every fleet report, in both directions.
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -92,15 +93,9 @@ type Card struct {
 	// whose payload this build cannot read.
 	Detail *core.AskDetail
 
-	// Choice is the option index chosen for each question, noChoice for one
-	// nobody has answered. Its length tracks Detail.Questions.
-	//
-	// One index per question, never a set. Multi-select is false on every
-	// recorded question and the comma-separated encoding for it is a read of
-	// the CLI binary with no recording behind it, which §9 of the question
-	// findings forbids building against. A multi-select question therefore
-	// takes one answer here - a real label the tool accepts - rather than a
-	// guess about how two are joined.
+	// Choice is the option index chosen for each single-select question,
+	// noChoice for one nobody has answered and for every multi-select one. Its
+	// length tracks Detail.Questions.
 	Choice []int
 
 	// Typed is the operator's own words for each question, empty for one
@@ -112,6 +107,11 @@ type Card struct {
 	// costs on the wire: the schema is already question text to a *label*, and
 	// a typed answer is a label the options did not contain.
 	Typed []string
+
+	// Ticks is the options ticked on each multi-select question, in the order
+	// they were ticked - the order Claude Code's own answer lists them in. Its
+	// length tracks Detail.Questions.
+	Ticks [][]int
 
 	// Cursor is which step the operator is on - a question, or the review past
 	// the last one - and Option which choice within it. Both are presentation
@@ -219,6 +219,29 @@ func (c Card) Pick(question, option int) Card {
 	choice := append([]int(nil), c.Choice...)
 	choice[question] = option
 	c.Choice = choice
+	// One answer per question: a pick replaces typed words, as typing replaces
+	// a pick (Card.answer).
+	if question < len(c.Typed) {
+		typed := append([]string(nil), c.Typed...)
+		typed[question] = ""
+		c.Typed = typed
+	}
+	return c
+}
+
+// Toggle ticks an option of a multi-select question, or unticks it, keeping the
+// order the rest were ticked in. Out-of-range indices are ignored, as in Pick.
+func (c Card) Toggle(question, option int) Card {
+	if !c.inRange(question, option) || question >= len(c.Ticks) {
+		return c
+	}
+	ticks := append([][]int(nil), c.Ticks...)
+	kept := slices.DeleteFunc(slices.Clone(ticks[question]), func(o int) bool { return o == option })
+	if len(kept) == len(ticks[question]) {
+		kept = append(kept, option)
+	}
+	ticks[question] = kept
+	c.Ticks = ticks
 	return c
 }
 
@@ -266,23 +289,59 @@ func (c Card) answers() map[string]string {
 	}
 	out := make(map[string]string, len(c.Detail.Questions))
 	for i, q := range c.Detail.Questions {
-		// The operator's own words first. A typed answer is a label the
-		// options did not contain, which is the whole of what free text costs
-		// on this wire - the schema is already question text to a label.
-		if typed := c.typed(i); typed != "" {
-			out[q.Text] = typed
-			continue
+		if answer, ok := c.answerOf(i); ok {
+			out[q.Text] = answer
 		}
-		o := c.chosen(i)
-		if o < 0 || o >= len(q.Options) {
-			continue
-		}
-		out[q.Text] = q.Options[o].Label
 	}
 	if len(out) == 0 {
 		return nil
 	}
 	return out
+}
+
+// answerOf is what question i will send, and whether it sends anything. The one
+// account of an answer: the wire, the review, the room record and the strip all
+// read it.
+//
+// The operator's own words win a single-select question - a typed answer is a
+// label the options did not contain. A multi-select one sends its ticks in the
+// order ticked and the typed words last, joined as Claude Code joins them.
+func (c Card) answerOf(i int) (string, bool) {
+	q := c.Detail.Questions[i]
+	if q.Multi {
+		labels := make([]string, 0, len(c.ticksOf(i))+1)
+		for _, o := range c.ticksOf(i) {
+			labels = append(labels, q.Options[o].Label)
+		}
+		if typed := c.typed(i); typed != "" {
+			labels = append(labels, typed)
+		}
+		return core.JoinChoices(labels), len(labels) > 0
+	}
+	if typed := c.typed(i); typed != "" {
+		return typed, true
+	}
+	o := c.chosen(i)
+	if o < 0 || o >= len(q.Options) {
+		return "", false
+	}
+	return q.Options[o].Label, true
+}
+
+// ticksOf is the options ticked on question i, in the order ticked.
+func (c Card) ticksOf(i int) []int {
+	if i < 0 || i >= len(c.Ticks) {
+		return nil
+	}
+	return c.Ticks[i]
+}
+
+// ticked reports whether option o of question i is ticked.
+func (c Card) ticked(i, o int) bool { return slices.Contains(c.ticksOf(i), o) }
+
+// multi reports whether question i takes several options.
+func (c Card) multi(i int) bool {
+	return c.Detail != nil && i >= 0 && i < len(c.Detail.Questions) && c.Detail.Questions[i].Multi
 }
 
 // typed is the operator's own answer to question i, or "".
@@ -466,6 +525,7 @@ func newCard(agentID string, ev core.Event) Card {
 		card.Choice[i] = noChoice
 	}
 	card.Typed = make([]string, len(card.Detail.Questions))
+	card.Ticks = make([][]int, len(card.Detail.Questions))
 	return card
 }
 

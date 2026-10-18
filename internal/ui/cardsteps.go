@@ -65,8 +65,14 @@ func (c Card) optionsAt(step int) int {
 	}
 	// One past the options the model supplied: the row that takes an answer
 	// of the operator's own. It is always offered, so the count does not
-	// depend on whether this question happens to suit its own list.
-	return len(c.Detail.Questions[step].Options) + 1
+	// depend on whether this question happens to suit its own list. A
+	// multi-select question adds the row that walks on, since choosing there
+	// does not.
+	q := c.Detail.Questions[step]
+	if q.Multi {
+		return nextIndex(q) + 1
+	}
+	return otherIndex(q) + 1
 }
 
 // firstUnanswered is the earliest question with no choice, and whether there
@@ -78,11 +84,10 @@ func (c Card) firstUnanswered() (int, bool) {
 		return 0, false
 	}
 	for i := range c.Detail.Questions {
-		// Typed as well as picked, for Answered's reason: an answer in the
-		// operator's own words is an answer. Reading only Choice sent Submit
-		// back to a question that had been answered, with nothing on screen
-		// saying why.
-		if c.chosen(i) == noChoice && c.typed(i) == "" {
+		// Through answerOf, for Answered's reason: typed words and ticks are
+		// answers too. Reading only Choice sent Submit back to a question that
+		// had been answered, with nothing on screen saying why.
+		if _, ok := c.answerOf(i); !ok {
 			return i, true
 		}
 	}
@@ -152,7 +157,7 @@ func (c Card) stepStrip(width int) string {
 	tabs := make([]string, 0, len(c.Detail.Questions)+1)
 	for i, q := range c.Detail.Questions {
 		mark := stripUnchecked
-		if c.chosen(i) != noChoice || c.typed(i) != "" {
+		if _, ok := c.answerOf(i); ok {
 			mark = stripChecked
 		}
 		tabs = append(tabs, c.stripTab(i, mark+stripTabName(q.Header, i)))
