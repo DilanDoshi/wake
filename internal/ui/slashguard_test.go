@@ -164,7 +164,9 @@ var recordedCommandCorpus = filepath.Join("..", "..", "testdata", "stream")
 // operator's own command set. See slash.go's header for the ruling.
 func TestWakeOwnsNoCommandTheRecordedCorpusShowsClaudeAdvertising(t *testing.T) {
 	seen := recordedClaudeCommands(t)
-	for word := range commands {
+	// The room's own commands are claims on a word too, so they are held to the
+	// same corpus.
+	for word := range wakeOwned() {
 		if _, exempt := redirectOnlyCommands[word]; exempt {
 			continue
 		}
@@ -1017,11 +1019,11 @@ func TestEverySlashCommandAnySentenceNamesIsOneThisPackageAnswers(t *testing.T) 
 				for _, m := range slashInAProse.FindAllStringSubmatch(text, -1) {
 					word := strings.TrimPrefix(m[1], SlashPrefix)
 					named++
-					if _, answered := commands[word]; !answered {
+					if _, answered := wakeOwned()[word]; !answered {
 						t.Errorf("%s tells somebody to type %q and this package answers no such command "+
 							"(it has %v). A missing feature is not trusted and a lying one is, and this "+
 							"one is advice given at the moment somebody has already failed to do what "+
-							"they wanted", path, m[1], slices.Sorted(maps.Keys(commands)))
+							"they wanted", path, m[1], slices.Sorted(maps.Keys(wakeOwned())))
 					}
 				}
 				return true
@@ -1092,6 +1094,22 @@ func TestEveryRedirectOnlyCommandNamesARecordingThatShowsTheRedirect(t *testing.
 // redirectOnlyCommands and the exception is retired. See docs/notes/deferred.md.
 var ownerClaimedCommands = map[string]string{
 	colorCommand: "owner ruling 2026-08-27; no headless recording yet",
+	// The room's /clear, bare and in the room only: in a conversation and as
+	// `@who /clear` the word still reaches the agent.
+	clearCommand: "owner ruling 2026-10-19; room only, so claude's /clear keeps working everywhere it did",
+}
+
+// wakeOwned is every word Wake answers in some pane: the commands, and the
+// room's own.
+func wakeOwned() map[string]struct{} {
+	out := make(map[string]struct{}, len(commands)+len(roomCommands))
+	for w := range commands {
+		out[w] = struct{}{}
+	}
+	for w := range roomCommands {
+		out[w] = struct{}{}
+	}
+	return out
 }
 
 // The owner exemption is not a hole: every word in it is one Wake actually owns
@@ -1099,7 +1117,7 @@ var ownerClaimedCommands = map[string]string{
 func TestEveryOwnerClaimedCommandIsOwnedAndAdvertised(t *testing.T) {
 	seen := recordedClaudeCommands(t)
 	for word, reason := range ownerClaimedCommands {
-		if _, mine := commands[word]; !mine {
+		if _, mine := wakeOwned()[word]; !mine {
 			t.Errorf("%q is owner-claimed and Wake does not own it: an exemption for a word nobody took "+
 				"is a rule with a hole in it", word)
 		}

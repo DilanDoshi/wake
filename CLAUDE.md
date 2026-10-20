@@ -68,7 +68,10 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   lone-`@name` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
   `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
-  `/workflows`, `/groupchat-filter`, `/status`, plus bare `/effort`/`/model` menus. Everything else passes to the agent byte
+  `/workflows`, `/groupchat-filter`, `/status`, plus bare `/effort`/`/model` menus, and in the room alone a
+  bare `/clear` (`roomCommands`, `roomclear.go`): it empties this window's group chat and reaches no agent,
+  keeps ↑'s prompts, keeps restored history older than it out, and the room notes every 1,000 messages it
+  holds in an ordinary timed notice. Everything else passes to the agent byte
   for byte. `@who /cmd` in the room aims a target-command at that agent. A spaced `/team` or
   `/name` argument is hyphenated.
 - **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
@@ -329,8 +332,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   Muted; `⌃E` or a click opens it (`peerfold.go`).
 - **Slash commands resolve against a closed set Wake owns; anything else is text.** A word claude
   advertises may be claimed only in a form claude is recorded doing nothing with
-  (`bareOnlyCommands` names the fixture). `/color` is the owner-claimed exception
-  (`ownerClaimedCommands`). Only `slash.go` decides what a leading slash means.
+  (`bareOnlyCommands` names the fixture). `/color` and the room's bare `/clear` are the owner-claimed
+  exceptions (`ownerClaimedCommands`). Only `slash.go` decides what a leading slash means.
 - **Open mention mode widens a message, never a command**: `@john /anything` always goes to john
   alone (`mention.go`, `leadingCommand`).
 - **Completion offers and never routes; `⇥` and `↵` accept the cursored offer** (owner, 2026-10-12,
@@ -427,7 +430,7 @@ yet says so in bold.**
 | Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
-| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |

@@ -4392,3 +4392,22 @@ folded it at all.
   message that fits three rows gets no key: a click on it would rewrap the transcript to change nothing.
   The key and the fold are decided at `DM.bodyWidth`, the width the block is drawn at (a subagent's is a
   gutter narrower), so a pointer is always a click target.
+
+## 2026-10-19 — a bare `/clear` in the room empties the group chat, and nothing else (the owner)
+
+The owner asked for a `/clear` for the room, for when the group chat grows heavy enough to slow the
+machine, and ruled that it affect the group chat only — no agent and no conversation.
+
+- **Bare, and in the room only** (`roomCommands`, asked by `sendRoom` before any routing). Before this,
+  a bare `/clear` in the room went to the default addressee — the manager, or the agent a lone
+  `@name` had narrowed to — and wiped that conversation. `@name /clear` in the room and `/clear` in a
+  conversation still reach the agent, so claude's command keeps working everywhere it did. The word
+  is claude's, so it is owner-claimed (`ownerClaimedCommands`), like `/color`.
+- **With an argument it is refused**, naming `@name /clear`, rather than guessed at.
+- **This window's.** It writes no frame. A window opened later rebuilds the room from the transcripts,
+  which is acceptable because the cost being relieved is this window holding the lines. Restored
+  history older than the clear stays out of this window (`Room.sinceClear`), and ↑ keeps the prompts
+  typed before it (Claude Code's prompt history outlives its `/clear` too).
+- **The reminder** is `the room holds N,000 messages — /clear to lighten it`, once per thousand the
+  room holds, counted from the last clear, as an ordinary notice that times out (the owner asked that
+  it be temporary). The room caps itself at `roomRetentionEvents`, so the last reminder is at that cap.
