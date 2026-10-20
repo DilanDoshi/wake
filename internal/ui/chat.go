@@ -123,12 +123,13 @@ type Room struct {
 	// and the room has no roster of its own. See roomWorkingLine.
 	beat string
 
-	// focus narrows the transcript to one agent's thread; "" is the unfocused
-	// room. managerID and focusName ride with it - the predicate needs the
-	// manager's id, the header needs the focused agent's name. Persistent, not
-	// draw-only: every render path (a width re-wrap, a history merge) must apply
-	// the same filter, and a hidden line stays in said at rows == 0. See
-	// roomfocus.go and WithFocus.
+	// focus narrows the transcript to one thread, an agent's or a team's (the
+	// key joinIDs makes of its members); "" is the unfocused room. managerID and
+	// focusName ride with it - the predicate needs the manager's id, the header
+	// needs the focused agent's or team's name. Persistent, not draw-only: every
+	// render path (a width re-wrap, a history merge) must apply the same filter,
+	// and a hidden line stays in said at rows == 0. See roomfocus.go and
+	// WithFocus.
 	focus     string
 	managerID string
 	focusName string
@@ -215,10 +216,11 @@ func (r Room) WithMenu(menu string) Room {
 type roomLine struct {
 	ev core.Event
 	by Agent
-	// to is the agent id this user line was addressed to; "" is a broadcast or a
-	// line that is not the operator's own. UI-only, set at creation (never on
-	// core.Event) - the view filter reads it to tell "you → @iris" from a
-	// broadcast and from "you → @john". See roomfocus.go.
+	// to is the thread this user line was addressed to - an agent's id, or a
+	// team's joinIDs key; "" is a broadcast or a line that is not the operator's
+	// own. UI-only, set at creation (never on core.Event) - the view filter reads
+	// it to tell "you → @iris" from a broadcast and from "you → @john". See
+	// roomfocus.go.
 	to string
 	// recipient is the receiving session of a peer's cross-session line, drawn
 	// after the arrow in its own colour; zero on every other line.
@@ -277,30 +279,43 @@ func (r Room) SetSize(w, h int) Room {
 	return r
 }
 
-// WithFocus narrows the room to one agent's thread, or widens it when focus is
-// "". A focus-id change re-renders the filtered subset and jumps to bottom - a
-// width change's own semantics (SetSize sets following=true), and the natural
-// read when you enter a focus. managerID and focusName ride on the struct for
-// the predicate and the header to read, but a change in managerID *alone* does
-// not re-render: while unfocused it changes nothing on screen, and at a manager
-// start there are no past manager lines to reveal - the manager's own lines
-// arrive later through Append with the id already updated here. So a fleet
-// report that starts the manager never yanks a scrolled reader to the bottom.
+// WithFocus narrows the room to one thread - an agent's, or a team's when focus
+// is joinIDs of its members - or widens it when focus is "". A focus change
+// re-renders the filtered subset and jumps to bottom - a width change's own
+// semantics (SetSize sets following=true), and the natural read when you enter
+// a focus. managerID and focusName ride on the struct for the predicate and the
+// header to read, but a change in managerID *alone* does not re-render: while
+// unfocused it changes nothing on screen, and at a manager start there are no
+// past manager lines to reveal - the manager's own lines arrive later through
+// Append with the id already updated here. So a fleet report that starts the
+// manager never yanks a scrolled reader to the bottom.
+//
+// The target is who the draft names (focusName) over a thread that still shares
+// an agent with the last one, not who is on the thread: a team gaining or losing
+// a live member under a standing draft is the same target, so the override
+// survives and the reader keeps their place (refiltered). An agent and a team of
+// one name share none, so moving from one to the other is a new target.
 // The caller clears any text selection on a focus change (App.retarget), because
 // the re-render renumbers the lines a selection is anchored to - the reason a
 // width change clears it too.
 func (r Room) WithFocus(focus, focusName, managerID string) Room {
+	old := r
 	r.focusName = focusName
 	r.managerID = managerID
-	prevEff := r.effectiveFocus()
+	sameTarget := focusName == old.focusName && sharesAgent(focus, old.focus)
 	if r.focus != focus {
 		// A new target resets the ⌃A override: narrowing starts at the default
 		// again. The same target left untouched, so an override survives more
 		// typing into the same draft. See roomfilter.go.
 		r.focus = focus
-		r.narrowed = r.narrowDefault
+		if !sameTarget {
+			r.narrowed = r.narrowDefault
+		}
 	}
-	return r.rerenderOnFocusChange(prevEff)
+	if sameTarget && r.effectiveFocus() != old.effectiveFocus() {
+		return r.refiltered(old)
+	}
+	return r.rerenderOnFocusChange(old.effectiveFocus())
 }
 
 // Append draws one event, attributed to the agent that produced it.
@@ -316,7 +331,7 @@ func (r Room) WithFocus(focus, focusName, managerID string) Room {
 // what makes it true.
 func (r Room) Append(ev core.Event, by Agent) Room { return r.appendLine(roomLine{ev: ev, by: by}) }
 
-// appendUser draws the operator's own room echo, stamped with the agent it was
+// appendUser draws the operator's own room echo, stamped with the thread it was
 // addressed to (or "" for a broadcast). Only this path carries a "to" - an
 // agent's own lines are told apart by session id, not by "to".
 func (r Room) appendUser(ev core.Event, to string) Room { return r.appendLine(roomLine{ev: ev, to: to}) }

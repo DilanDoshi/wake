@@ -944,7 +944,8 @@ count un-truncatable.
   room; a send to ≥2 members does (multiplicity).
 - ~~`@` completion offering team names~~ (DONE, PR #111, 2026-09-22); a member count in section
   headers; refusing the manager a team;
-  the team-echo `to` stamp showing in an unrelated narrowed `@john` thread; direct team tools on
+  ~~the team-echo `to` stamp showing in an unrelated narrowed `@john` thread~~ (DONE 2026-10-17, live and
+  restored: the room send's uuid carries a team bit); direct team tools on
   ordinary (non-manager) agents. Owner's calls.
 ---
 
@@ -5395,6 +5396,9 @@ approve first.
 readings is meant (a filtered view over the one room, which reduces to teams + the `@john` filter; or
 a second room surface, which needs a §2c scope decision), then a plan.
 
+**Update 2026-10-17: the filtered-view reading is built** — a lone `@team` narrows the room to its members'
+thread (`decisions.md`, 2026-10-17). A second room surface is still unbuilt and still needs the §2c ruling.
+
 ---
 
 ## 2026-09-04 — `/reauth` parks then `/resume`s in two steps; one-command park→wake is deferred
@@ -5704,3 +5708,17 @@ leaks (BUG-52); these two are not proven to be Wake's.
   keeps that from then on. A live send keeps its own. *Closes with:* a name timeline from the recorded
   renames, if the owner wants it.
 
+## FROM `feat/team-narrows-the-room`, 2026-10-17
+
+Found in review of the `@team` narrowing; both are true of a lone `@name` on `main` too, so neither is
+this branch's to fix, and each is worth its own small PR.
+
+- **Recalling a prompt (`↑`) does not retarget the room.** `walkPrompts` sets the composer and stops, so a
+  recalled `@sydney hello` leaves the room unnarrowed and its target line stale until the next keystroke;
+  Enter still routes to sydney. One call (`retarget`) after the recall closes it; it wants a test per pane.
+- **A queued message to a busy agent can draw twice in a DM opened while it waits.** The room seed holds
+  the echo of a `@name` turn the agent has not taken up, and the live echo lands when it starts (Codex, pass
+  2). A team turn is left out of the seed for this reason; a lone `@name`'s is not.
+- **A wake that re-keys an agent strands its retained room lines.** After a `/clear` then a park and wake,
+  `rekeyed` moves the agent's id to the new conversation and the room does not rewrite its retained lines'
+  `SessionID`, so a narrowing on that agent (or its team) hides the lines from before the wake.

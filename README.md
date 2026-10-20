@@ -118,8 +118,8 @@ slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/ad
 and `/model` configure the session they are addressed to. `/status [@who]` shows an agent's own facts —
 state, ids, model, context, effort, permission mode, team, builds — without sending it anything, the
 manager's included. Everything else you type is passed to the agent byte for
-byte. A lone `@name` narrows the room to that agent's thread; `⌃A` widens it back to everyone while
-still addressing them, and `/groupchat-filter off` flips that default. A leading `@"session name"`
+byte. A lone `@name` narrows the room to that agent's thread, and a lone `@team` to its members'; `⌃A` widens it
+back to everyone while still addressing them, and `/groupchat-filter off` flips that default. A leading `@"session name"`
 that names no agent in your fleet is relayed by the manager to that Claude session. `/team <name>`
 groups an agent under an operator-named team — heading a roster/board section, addressed as `@team` —
 and the manager can fan a message out to one with its own tool. An agent can see its team too: `wake
