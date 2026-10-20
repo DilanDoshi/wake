@@ -477,6 +477,10 @@ func (a App) refocus(next string) App {
 			a = a.withDM(id, a.dms[id].Leave())
 		}
 	}
+	if next == "" {
+		// A reminder the room passed while a conversation held the keys is owed now.
+		a.room = a.room.remind()
+	}
 	return a
 }
 

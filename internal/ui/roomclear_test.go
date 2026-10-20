@@ -265,8 +265,8 @@ func TestTheReminderWaitsForTheRoomToHoldTheKeys(t *testing.T) {
 	if strings.Contains(noticeNow(), "/clear") {
 		t.Fatalf("the reminder fired while a conversation held the keys: %q", noticeNow())
 	}
-	a.focus = ""
-	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1"))
+	// Back to the room with nothing more arriving: the reminder owed is said now.
+	a = a.showRoom()
 	if got := noticeNow(); !strings.Contains(got, roomFullNotice(1)) {
 		t.Errorf("back in the room the reminder still did not show: %q", got)
 	}
