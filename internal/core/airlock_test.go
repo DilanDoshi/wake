@@ -84,7 +84,9 @@ const repoRoot = "../.."
 // split out by subject when encode.go, wire.go and protocol.go were all full.
 // The seventh, ask.go, is 2026-10-07's: an interactive ask's kind and payload,
 // split out of vocabulary.go by subject when two merged branches took it past
-// the hard max (decisions.md, 2026-10-07).
+// the hard max (decisions.md, 2026-10-07). The eighth, account.go, is
+// 2026-10-17's: the signed-in account in Claude's config file and the reset a
+// usage-limit message names, read to resume the agents a limit stopped.
 var airlockFiles = wordSet([]string{
 	"internal/core/protocol.go",
 	"internal/core/wire.go",
@@ -93,6 +95,7 @@ var airlockFiles = wordSet([]string{
 	"internal/core/localreply.go",
 	"internal/core/control.go",
 	"internal/core/ask.go",
+	"internal/core/account.go",
 })
 
 // claudeWireVocabulary is what a file must not name outside the airlock.
@@ -127,6 +130,10 @@ var claudeWireVocabulary = wordSet([]string{
 
 	// Block types.
 	"tool_use", "tool_result", "thinking",
+
+	// The signed-in account in Claude's config file, which account.go reads to
+	// tell a login to another account from a rewrite of the same one.
+	"oauthAccount", "accountUuid", "organizationUuid",
 
 	// The image block and its base64 source. Recorded only in
 	// testdata/input/image-block.stdin.jsonl (see notInTheCorpus): Wake writes
@@ -328,6 +335,7 @@ var claudeWireVocabulary = wordSet([]string{
 	// both reach a renderer as Question.Header and Option.Preview, which are
 	// Wake's words for them.
 	"questions", "question", "options", "answers", "plan", "header", "preview",
+	"multiSelect",
 
 	// Field names that only a decoder needs.
 	"parent_tool_use_id", "subagent_type", "task_description",
@@ -773,7 +781,7 @@ var notNamedByTheAirlock = map[string]string{
 // recipient and words toolPeerSend reads. manager-tools.jsonl, manager-relay.jsonl.
 // 229 → 230: "msg_id", the SendMessage receipt's own key, which receiptSentence
 // requires so no other JSON result is cut to its message. manager-relay.jsonl.
-const policedWordCount = 230
+const policedWordCount = 234
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -792,11 +800,18 @@ var notWireVocabulary = wordSet([]string{
 	"encode user message",
 	"%w: encode user message: nothing to send",
 	"encode ", "encode mcp reconnect", "encode mcp toggle",
+	// account.go: where Claude's config file lives (named outside core too),
+	// the reset clause of a usage-limit message, and the parse of its date.
+	"CLAUDE_CONFIG_DIR", ".claude.json",
+	`resets (?:([A-Z][a-z]{2}) (\d{1,2}) at )?(\d{1,2})(?::(\d{2}))?(am|pm) \(([^)]+)\)`,
+	"Jan 2", "pm",
 	"%w: encode %s: empty request id",
 	"%w: encode mcp reconnect: empty request id or server",
 	"%w: encode mcp toggle: empty request id or server",
 	// The separator a stdio server's command line is joined with.
 	" ",
+	// The separator a multi-select answer's choices are joined with.
+	", ",
 	// The text a decoded image block carries up in place of its bytes.
 	ImagePlaceholder,
 	// Wake's own surfacing text for a 401 api_retry, which carries no message of
@@ -1085,6 +1100,12 @@ func TestNoClaudeWireVocabularyOutsideTheAirlock(t *testing.T) {
 // keeps, and a lint whose word list is half invented would be enforcing
 // somebody's memory of Claude rather than Claude.
 var notInTheCorpus = map[string]string{
+	// Claude's config file, not its stream: no recording carries it, and the
+	// key names were read off a real one, values unread (decisions.md, 2026-10-17).
+	"oauthAccount":     "a key of Claude's config file, never of its stream",
+	"accountUuid":      "a key of Claude's config file, never of its stream",
+	"organizationUuid": "a key of Claude's config file, never of its stream",
+
 	// Not on init.tools on the machine that recorded the corpus, and never
 	// called. They were in render/tool.go's map - the leak this test closes -
 	// so dropping them would leave a closed hole unguarded.
@@ -1124,11 +1145,11 @@ var notInTheCorpus = map[string]string{
 	// Outbound. Wake writes these and never reads them, so no recording of
 	// stdout can contain them - encode.go's header says the same, and says
 	// why that makes them the least trustworthy shapes in the airlock.
-	"updatedInput":                "outbound only; a recording of stdout cannot contain it",
+	// "updatedInput" and "allow" left this list on 2026-10-18: 2.1.302 replays
+	// the answer Wake wrote on stdout (question-multiselect.jsonl).
 	"cancel_queued":               "outbound only; a recording of stdout cannot contain it",
 	"interrupt":                   "outbound only; a recording of stdout cannot contain it",
 	"set_permission_mode":         "outbound only; the corpus holds its receipts, not the requests",
-	"allow":                       "outbound only; the behavior value Wake writes",
 	"deny":                        "outbound only; the behavior value Wake writes",
 	"rewind_conversation":         "outbound only; a recording of stdout cannot contain it",
 	"target_message_uuid":         "outbound only; rewind request field Wake writes",
@@ -1327,8 +1348,8 @@ func TestTheThreeListsDoNotOverlap(t *testing.T) {
 
 // The airlock is a set of files in one package, and saying so is what stops
 // the set being widened into an exemption for somewhere else.
-func TestTheAirlockIsSevenFilesInInternalCore(t *testing.T) {
-	const want = 7
+func TestTheAirlockIsEightFilesInInternalCore(t *testing.T) {
+	const want = 8
 	if len(airlockFiles) != want {
 		t.Errorf("the airlock is %d files, want %d - if that is deliberate, CLAUDE.md's rule and protocol.go's header both name the set and must change with it", len(airlockFiles), want)
 	}

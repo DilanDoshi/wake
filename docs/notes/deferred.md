@@ -944,7 +944,8 @@ count un-truncatable.
   room; a send to ≥2 members does (multiplicity).
 - ~~`@` completion offering team names~~ (DONE, PR #111, 2026-09-22); a member count in section
   headers; refusing the manager a team;
-  the team-echo `to` stamp showing in an unrelated narrowed `@john` thread; direct team tools on
+  ~~the team-echo `to` stamp showing in an unrelated narrowed `@john` thread~~ (DONE 2026-10-17, live and
+  restored: the room send's uuid carries a team bit); direct team tools on
   ordinary (non-manager) agents. Owner's calls.
 ---
 
@@ -2975,7 +2976,11 @@ both before the composer sees them. Deliberate - they are the keys the brief nam
 and the composer is one line high where forward-delete is rarely reached for - but somebody with
 readline muscle memory will find `⌃W` does not delete a word. `⌃G`, `⌃R` and `⇥` shadow nothing.
 
-**Phase 2 Task 5 left one thing undesigned, deliberately: multi-select.** `core.AskDetail` cannot
+**~~Phase 2 Task 5 left one thing undesigned, deliberately: multi-select.~~ CLOSED 2026-10-18
+(`feat/multi-select-questions`):** a `multiSelect: true` ask was recorded on 2.1.302
+(`question-multiselect.jsonl`; `docs/superpowers/notes/2026-10-18-multiselect-question-findings.md`),
+and the card now ticks several options and sends them joined, as Claude Code does. The original
+entry follows. `core.AskDetail` cannot
 express it and `Card.Choice` is one index per question, because every recorded question carries
 `multiSelect: false` and the comma-separated answer encoding for `true` is a read of the 2.1.226
 binary that §9 of the question findings explicitly forbids building against. A multi-select
@@ -4701,7 +4706,7 @@ which is a 1:1 pane with room to read in. `Question.Header` and `Option.Preview`
 `header` and `preview` are policed vocabulary, and `internal/ui/preview.go` draws the sample in three
 tiers — beside the options, stacked under them, or dropped. **The room's original ruling survives as
 the third tier**, which is why dropping is a designed outcome rather than a failure case. The
-multi-select entry above is untouched and is still the only field left out.
+multi-select entry above was the only field left out, and it closed on 2026-10-18.
 
 ---
 
@@ -5395,6 +5400,9 @@ approve first.
 readings is meant (a filtered view over the one room, which reduces to teams + the `@john` filter; or
 a second room surface, which needs a §2c scope decision), then a plan.
 
+**Update 2026-10-17: the filtered-view reading is built** — a lone `@team` narrows the room to its members'
+thread (`decisions.md`, 2026-10-17). A second room surface is still unbuilt and still needs the §2c ruling.
+
 ---
 
 ## 2026-09-04 — `/reauth` parks then `/resume`s in two steps; one-command park→wake is deferred
@@ -5450,9 +5458,18 @@ A usage limit (`error:"rate_limit"` on the failed turn's synthetic frame, `core.
 now stays live and pinned, and a session parked for a dead login wakes itself on proof the login
 works (`internal/ui/apirecover.go`). Left out, each on purpose:
 
-- **No message is sent for you at the reset.** Claude Code does not either; the pin names the reset
-  time and the next message works. An auto-send would need a timer per agent, against "no process on
-  a timer", and a guess at what to send.
+- ~~**No message is sent for you at the reset.**~~ **REVERSED 2026-10-17 (the owner):** the daemon
+  resumes a limited agent itself, at the reset or on a login to another account
+  (`internal/daemon/usagelimit.go`, decisions.md). Claude Code does continue at the reset (2.1.234);
+  this note's premise was out of date. What that left:
+  - **A daemon restart forgets a stop**, as a daemon restores nothing; the agent waits for a message.
+    *Closes with:* reading the transcript's last record for a usage limit on wake or reattach.
+  - **The Linux watch is not run by `make ci` here** (this machine is darwin): the watch test and the
+    daemon's resume tests were run green in a `golang:1.26` container on 2026-10-17.
+  - **A resumed turn's reply reaches the room** even when the limited turn was a DM's: the resume is
+    no DM send, the same as any turn Wake did not start from a conversation.
+  - **The weekly reset's shape** is read off the owner's real limit messages, digits masked, not off a
+    recording; an unrecognised one arms no timer and the login watch still resumes.
 - **The live stream form of a usage-limit frame is unrecorded** — hitting one on purpose costs a
   quota. The decoder keys on the top-level `error` field, which the recorded auth variant carries on
   the stream (`testdata/stream/api-error-auth.jsonl`) and real on-disk usage-limit lines carry as
@@ -5478,6 +5495,8 @@ works (`internal/ui/apirecover.go`). Left out, each on purpose:
   wasted wake in a race window, and no recording pins `message.id`'s continuity across a park.
 - **Nothing watches the login while every agent is parked.** With no agent live, only `/login`
   (signed in) or `/resume` brings them back — Wake cannot poll `claude auth status` without a timer.
+  *(Since 2026-10-17 the daemon does wait on Claude's config file, but only for a live agent a usage
+  limit stopped; a session parked for a dead login still wakes on proof alone.)*
 - ~~**A usage limit's timed notice outlives the turn that proves the reset**~~ **FIXED
   (`fix/recent-follow-ups`, 2026-09-29):** the pin keeps the text it reported, and `unpinAPIError`
   clears that notice through `notice.ClearIf` if it is still the newest; a later report stays.
@@ -5626,9 +5645,9 @@ the line restored to the fixture.
 
 ## 2026-10-03 — left open by the manager relay
 
-- **A restored room does not redraw the manager's sends.** `↪ manager → <to>` is drawn from the live
-  `tool_use` (`withManagerSend`); `roomhistory.go` re-derives cross-session lines from transcripts but
-  has no case for the manager's SendMessage call. *Closes with:* the same predicate over a restored
+- **A restored room does not redraw an agent's sends** (the manager's, and since 2026-10-16 every
+  agent's). `↪ <agent> → <to>` is drawn from the live `tool_use` (`withSend`); `roomhistory.go`
+  re-derives cross-session lines from transcripts but has no case for a SendMessage call. *Closes with:* the same predicate over a restored
   `tool_use`.
 - **The target line says `→ @manager` for a relayed mention.** True of the frame; a line naming the
   peer would need the quoted-mention parse in core (decisions.md, 2026-10-03).
@@ -5654,3 +5673,67 @@ the line restored to the fixture.
   document-wide), and a bare file name (`tally.txt`) glamour links, whose styled row it wraps itself.
   Both are transient — the answer lands whole and is drawn right then —
   and the splitter names them (`internal/render/splitter.go`).
+
+## FROM `fix/record-ends-its-fleet`, 2026-10-19
+
+Found checking whether Wake leaks daemons. `record.sh` and the README's bare `vhs` were the demonstrated
+leaks (BUG-52); these two are not proven to be Wake's.
+
+- **A test-run daemon that nothing ended.** One `wake.test daemon` survived eight days: parent launchd, a
+  real `claude` for the manager and one for a pooled agent, `WAKE_TEST_DIRECT_LAUNCHER=1`, and a scratch
+  directory whose socket and log were unlinked within a minute of the start while its lock, roster and
+  manager config stayed. The harness already ends a daemon three ways (`stopFleet` in `t.Cleanup`, a process
+  group kill, and `internal/daemon/lease_unix.go`, which makes a daemon forked by a test exit when the test
+  process does), and seven full `make ci` runs on 2026-10-17 - one cut by a timeout panic in `cmd/wake`, one
+  killed outright - left none behind, so the cause of this one is not known: which test, why the lease did
+  not end it, and why it had real `claude` agents are all open. The daemon's stack could not be sampled. A
+  post-run check in `cmd/wake`'s `TestMain` - no process running this test binary as `daemon` may outlive
+  `m.Run` - would turn the next occurrence into a failing test; it is not built because nothing yet says
+  which path leaks.
+- **A daemon freezes the environment of the terminal that started it.** An agent's `claude` inherits it, and a
+  terminal multiplexer that puts a per-launch credential in its variables (cmux's `CMUX_SOCKET_CAPABILITY`,
+  new on every launch) leaves every fleet started under an older launch with a value its hooks can no longer
+  use, until that fleet is restarted. Not a Wake defect on its own; Wake could hand a newly attaching
+  client's terminal variables to the agents it spawns after that, or drop terminal-session variables when it
+  forks the daemon. Neither is built: both change what an agent inherits, which is the owner's call.
+## 2026-10-16 — left open by the outgoing-send rendering (`feat/dm-shows-outbound-send`)
+
+- **The room draws an agent's send from the call, so a denied or errored one still reads as sent.** The
+  `tool_use` frame arrives before `can_use_tool` (`permission.jsonl`), and an ordinary agent can be in a
+  mode that asks (⇧⇥) or have a call blocked; the room line is never corrected, though the DM shows the
+  error under the send. The manager runs in `auto`, so for it this was theoretical. *Closes with:*
+  drawing an ordinary agent's room line on its non-error result, from the stored call (a per-session
+  pending map on `App`), keeping the manager's call-based line.
+- **A parallel tool batch draws a sibling's result under a send.** Read and SendMessage in one assistant
+  message, results arriving after the send block, draw `⎿ Read 3 lines` joined directly under `↪ …`, so
+  it reads as the send's outcome now that the send's own receipt is hidden. Edit and TodoWrite already
+  behave this way (a fold-exempt call breaks the run; a stray result joins what precedes it). *Closes
+  with:* a stray result drawn unjoined or headed by its call's name, in `Append` and `renderAll` alike.
+- **A fleet-to-fleet send can show twice in the room** while the sender addresses an agent by a claude
+  name that lags Wake's (renamesync holds `/rename` until idle) or one this client's report has not
+  named yet: `ByName` misses, so the call's line and the receiver's own both draw. Narrow both ways.
+- **Retention can cut between a call and its failed result** (Codex, second pass). `cutFrom`'s clean cut is
+  the first event with no tool, so a no-tool event between a call and its result - a permission-denied
+  notice - can be the cut, keeping the failed result without its call. True of every tool call, a send
+  included (it then draws an error without the words); it needs a reclaim mark to land exactly there.
+  *Closes with:* a cut chosen by call/result correlation, not by the next event with no tool.
+- **A send restored after a rename carries the conversation's current name.** History drops the on-disk
+  rename events (`TestHistoryDropsTheRecordedOnDiskRename`), so a restored send cannot be stamped with the
+  name it was sent under; `Before` stamps what the conversation is called when it is read back, and it
+  keeps that from then on. A live send keeps its own. *Closes with:* a name timeline from the recorded
+  renames, if the owner wants it.
+
+## FROM `feat/team-narrows-the-room`, 2026-10-17
+
+Found in review of the `@team` narrowing; both are true of a lone `@name` on `main` too, so neither is
+this branch's to fix, and each is worth its own small PR.
+
+- **Recalling a prompt (`↑`) does not retarget the room.** `walkPrompts` sets the composer and stops, so a
+  recalled `@sydney hello` leaves the room unnarrowed and its target line stale until the next keystroke;
+  Enter still routes to sydney. One call (`retarget`) after the recall closes it; it wants a test per pane.
+- **A queued message to a busy agent can draw twice in a DM opened while it waits.** The room seed holds
+  the echo of a `@name` turn the agent has not taken up, and the live echo lands when it starts (Codex, pass
+  2). A team turn is left out of the seed for this reason; a lone `@name`'s is not.
+- **A wake that re-keys an agent strands its retained room lines.** After a `/clear` then a park and wake,
+  `rekeyed` moves the agent's id to the new conversation and the room does not rewrite its retained lines'
+  `SessionID`, so a narrowing on that agent (or its team) hides the lines from before the wake.

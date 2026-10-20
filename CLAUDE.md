@@ -46,8 +46,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 
 ### Surfaces (details in the named files)
 
-- **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room (spawns one
-  agent as a roster row if the machine has nothing); `wake --fleet <name>` returns to one
+- **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room with the
+  manager alone, spawning no agent (owner's 2026-10-16 ruling); `wake --fleet <name>` returns to one
   (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status` (`--team <name>` lists one team), `stop`
   (irreversible), `fleets`, `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. A new fleet
   checks `claude` is on this `PATH` first (its daemon inherits it); a spawn from any daemon without
@@ -65,7 +65,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus (completes
   over a `/` or `@` word) · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
   `⌃F` fork · `⌃D` open here · `⌃Y` new column · `⌃B` open below · `⌃W` close pane · `⌃A` toggle the
-  lone-`@name` narrowing · `⌃E` expand folded results / card descriptions.
+  lone-`@name`/`@team` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
   `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
   `/workflows`, `/groupchat-filter`, `/status`, plus bare `/effort`/`/model` menus, and in the room alone a
@@ -125,7 +125,7 @@ Violating one is a design regression, not a style nit.
 |---|---|
 | **Not a terminal emulator or multiplexer.** No PTY, no VT100, no browser panes, no arbitrary shells. | Chasing it is how this project dies at 40%. |
 | **Cheap to leave open.** No per-frame work that could be per-change, no poll where a wait will do, no process on a timer. | A per-agent cost multiplies by 30. |
-| **Only `internal/core`'s seven airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`, `localreply.go` for the text replies of local commands (owner's 2026-09-27 ruling), `control.go` for the control requests Wake writes and their receipts (2026-10-02), and `ask.go` for an interactive ask's kind and payload (2026-10-07). | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
+| **Only `internal/core`'s eight airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`, `localreply.go` for the text replies of local commands (owner's 2026-09-27 ruling), `control.go` for the control requests Wake writes and their receipts (2026-10-02), `ask.go` for an interactive ask's kind and payload (2026-10-07), and `account.go` for the signed-in account in Claude's config file and a usage limit's reset (2026-10-17). | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
 | **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Use `core.SessionArgvMarkers`. | Enforced by `argv_test.go` tree-wide. |
 | **`attention.go` stays a pure function.** | Hardest logic; testable without spawning. |
 | **The UI never touches an agent's process.** | Keeps the daemon boundary real. |
@@ -140,11 +140,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 **Identity and lifecycle**
 - A session's name comes from the daemon's 64-name pool. **A name is never an address** — frames
   carry `SessionID`; names are released and reissued, so a rename has no alias. The manager is
-  `manager-<fleet>` to claude (`daemon.managerClaudeName`, from the socket, never a frame) and is
-  drawn so: the daemon still calls it `manager`, the UI's fleet fold names its row by the report's
+  `manager-<fleet>` to claude (`daemon.managerClaudeName`, from the socket) and is drawn so: the daemon still calls it `manager`, the UI's fleet fold names its row by the report's
   `ManagerClaude` (`Fleet.shown`, which every typed name goes through), identity is the exact
-  `Fleet.isManager`, and `@manager` and `@manager-<fleet>` both reach it. No agent or team may take
-  the `manager-` prefix.
+  `Fleet.isManager`, and `@manager` and the drawn `@manager-<part>` both reach it. No agent or team
+  may take the `manager-` prefix. **Its end part is the operator's** (`@manager /rename ops`,
+  `/name ops`): `manager-ops` is held on the agent (`claudeWant`), synced to claude, served as
+  `ManagerClaude` and kept in the park record; a bare `manager` puts the fleet's back, and a variant
+  claude answers with is the name it takes (`decisions.md`, 2026-10-15).
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
   everything and clears the park book (`parked.json` beside the socket).
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
@@ -184,8 +186,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   the *confirmed* park: a turn the API accepted from any agent (never a `LocalCommand` reply such as
   `/context`'s), or a signed-in `/login` — never a timer. One that fails again after that wake waits
   for `/login` alone; a hand park cancels it. **A usage limit (`core.NoticeUsageLimit`) never marks
-  or parks** and clears a 401 mark; it stays pinned until a turn goes through. Any other named failure
-  (`core.NoticeTurnFailed`: an overload, a rejected request) is a timed notice only. `internal/ui/apirecover.go`.
+  or parks** and clears a 401 mark; it stays pinned until a turn goes through. **The daemon resumes it**
+  (owner's 2026-10-17 ruling): one `continue` per stop, stamped `rpc.MessageResumed` and drawn as
+  `↻ … resumed after the usage limit`, when Claude's config file names another account (a kqueue or
+  inotify wait, armed only while an agent is stopped) or the reset the limit named has passed (one
+  timer; a stale reset arms none). The agent's own turn going through, a `/clear` or an interrupt ends the stop;
+  a resume never lands on a turn in flight, and never answers a newer stop. `internal/daemon/usagelimit.go`.
+  Any other named failure (`core.NoticeTurnFailed`: an overload, a rejected request) is a timed
+  notice only. `internal/ui/apirecover.go`.
 
 **Keys and the legend**
 - **The legend is drawn only while an arm is live, and then it is only the armed cue:**
@@ -317,19 +325,23 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
   if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
   broadcast, or was stamped by a room send (`roomprovenance.go`: the uuid Wake stamps is the one on
-  disk; a direct `@name` comes back in that thread); agent prose is restored only inside a public
+  disk; a direct `@name` comes back in that thread, a team send in its members'); agent prose is restored only inside a public
   turn. A record in two transcripts (same uuid, `Event.MessageID`) is a fork's copy, drawn once
   (`forkCopies`); the daemon also leaves a fork's inherited records out of its room history
   (`inheritedBy`), so forks are asked like any session.
 - A routed message is echoed into the room and into every *held* DM it reached, mention included,
   marked `FromRoom`.
-- **A lone `@name` narrows the room** to that thread (`roomfocus.go`); `⌃A` overrides per target;
-  `/groupchat-filter off` flips the default per window (`roomfilter.go`).
+- **A lone `@name` narrows the room** to that thread, a lone `@team` to its live members' (a union of their
+  threads, keyed by `joinIDs`; open mode never widens a team, so it narrows there too) (`roomfocus.go`);
+  `⌃A` overrides per target; `/groupchat-filter off` flips the default per window (`roomfilter.go`).
 - **Peer cross-session messages** show in the room as `↪ sender → recipient`
   (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*
   content, so pasted text can't forge one. DM replays of Wake's own sends are dropped. A message
   past three rows folds to them in the room and a conversation, under a pointer in the body's own
-  Muted; `⌃E` or a click opens it (`peerfold.go`).
+  Muted; `⌃E` or a click opens it (`peerfold.go`). **A conversation draws its own agent's
+  `SendMessage` the same way**, `↪ <agent> → <recipient>` and the words, every pane (`dm_blocks.go`'s
+  `sentBlock`; a delivered send's receipt is hidden, a failed one's error shows), and the room draws any
+  agent's send to a session outside the fleet (`observe.go`'s `withSend`).
 - **Slash commands resolve against a closed set Wake owns; anything else is text.** A word claude
   advertises may be claimed only in a form claude is recorded doing nothing with
   (`bareOnlyCommands` names the fixture). `/color` and the room's bare `/clear` are the owner-claimed
@@ -339,7 +351,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **Completion offers and never routes; `⇥` and `↵` accept the cursored offer** (owner, 2026-10-12,
   reversing 2026-09-27's "never takes `↵`"). `↵` accepts only while that changes the draft, so a word
   typed in full (`/clear`; `@manager` where Wake reads it - the room's leading mention, an `@who`
-  command's target - is the drawn `@manager-<fleet>`) still sends; `⇥` stays put over any `/` or `@` word, matched or not
+  command's target - is the drawn `@manager-<part>`) still sends; `⇥` stays put over any `/` or `@` word, matched or not
   (`typingWord`), and is the conversation ring's everywhere else. Session commands/skills first, then
   Wake's, agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads and the
   conversation's one bounded `git -c core.fsmonitor=false ls-files` per opening run off the draw
@@ -354,7 +366,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   composer, mouse, digit).
 - Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer
   mode, where the card takes only `↵` (`cardanswer.go`). Arrows reach the card with or without a
-  draft; `←→` only on an empty composer.
+  draft; `←→` only on an empty composer. **A multi-select question** (`core.Question.Multi`) draws
+  `[ ]`/`[✔]` boxes, ticks in place on `↵`, a digit or space, walks on by its Next/Submit row, and sends
+  the ticks in the order ticked with typed words last, joined by `core.JoinChoices` as Claude Code
+  joins them (`Card.answerOf` is the one account of an answer). Findings
+  `docs/superpowers/notes/2026-10-18-multiselect-question-findings.md`.
 - A `Picker` is not a `Card` — `Cards.Reconcile` would delete it on the next report.
 
 **Manager**
@@ -366,7 +382,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **It relays the operator's `@"session" …` with `SendMessage`, its one built-in, unfenced** (owner's
   2026-10-03 ruling, the accepted risk in `decisions.md`): a room draft whose leading mention names
   no fleet agent passes through to it, and the room draws each send live as `↪ manager → <to>` from
-  the call itself — the manager's intent, not proof of delivery (`observe.go`'s `withManagerSend`).
+  the call itself — the manager's intent, not proof of delivery (`observe.go`'s `withSend`, which
+  draws every agent's).
   The room's leading `@` excludes an outside session named like a live team or `all`.
 - Its config is a function of its name, applied in `launch`: `--mcp-config` only ever beside
   `--strict-mcp-config` and `--tools SendMessage` (`core.ToolSendMessage`; not `--allowed-tools`,
@@ -414,12 +431,12 @@ yet says so in bold.**
 |---|---|
 | Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
-| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) |
+| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
-| Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` |
+| Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -429,7 +446,7 @@ yet says so in bold.**
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
 | Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
-| Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardroom.go` |
+| Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
@@ -509,7 +526,7 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.296. A
+**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.302. A
 fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 
 | Need | Flag |
@@ -549,10 +566,12 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - One `can_use_tool` carries three shapes; `AskUserQuestion` answers ride in
   `updatedInput.answers` (`core.askKind`, decided by payload shape, never tool name).
 - A question killed by closing stdin is indistinguishable from an operator deny.
+- **2.1.302 replays the permission answer Wake wrote** (`control_response`) on stdout; it decodes as a
+  receipt nothing acts on (`question-multiselect.jsonl`).
 - Images: first in the content array, text last. An undecodable image silently degrades to text.
 - A malformed stdin line is echoed to stderr in full, then exit 1.
 - A user line's top-level `uuid` is recorded as that turn's own on disk; a version-8 one is accepted
-  (2.1.285). Wake's room marker depends on it — `roomMessageVersion`, re-check on upgrade. A fork
+  (2.1.285). Wake's room and resume markers depend on it — `rpc`'s `messageVersion`, re-check on upgrade. A fork
   copies records under the same uuids. `docs/superpowers/notes/2026-09-29-transcript-uuid-findings.md`.
 - `/model`, `/clear`, `/compact`, `/context` survive stream-json; `/resume` does not. Bare
   `/effort`/`/model` do nothing (`num_turns: 0`, `$0`). `/status` answers "isn't available in this

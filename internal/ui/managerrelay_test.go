@@ -3,6 +3,7 @@ package ui
 // The manager relays the operator's `@"session" …` with SendMessage (owner,
 // 2026-10-03). With no fence on that tool, the room line drawn from the call
 // itself is what keeps a send visible: it does not wait on the manager's prose.
+// Every agent's send outside the fleet is drawn the same way (2026-10-16).
 
 import (
 	"strings"
@@ -34,17 +35,35 @@ func TestTheManagersSendIsDrawnInTheRoom(t *testing.T) {
 	}
 }
 
-// Only the manager's: an agent's own send stays in its conversation, as every
-// tool call does, and a send to a fleet agent is drawn once, by the receiver's
-// own stream.
-func TestOnlyTheManagersSendOutsideTheFleetIsDrawn(t *testing.T) {
+// An agent continues a subagent with SendMessage to its agentId, which is a
+// task id of its own and no session at all: a private brief that never reaches
+// the room.
+func TestASendToOneOfItsOwnSubagentsIsNotDrawnInTheRoom(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 40).withAgents(core.ManagerName, "jade", "sydney")
+	a = a.observe("s3", started("a73fc145a7d730b54", "a73fc145a7d730b54", "map the repo", "Explore", core.TaskAgent))
+	out := ansi.Strip(a.observe("s3", sendCall("s3", "a73fc145a7d730b54", "now check the daemon too")).View())
+	if strings.Contains(out, "now check the daemon too") {
+		t.Errorf("a continuation of sydney's own subagent reached the room:\n%s", out)
+	}
+}
+
+// Any agent's send to a session outside the fleet is drawn too (owner,
+// 2026-10-16), under that agent's own name. One to a fleet agent is drawn once,
+// by the receiver's own stream, and a subagent's own send not at all.
+func TestAnyAgentsSendOutsideTheFleetIsDrawnAndOnlyThat(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 40).withAgents(core.ManagerName, "jade", "sydney")
+	out := ansi.Strip(a.observe("s3", sendCall("s3", "wf peer", "hello from sydney")).View())
+	if !strings.Contains(out, "sydney"+crossSessionArrow+"wf peer") || !strings.Contains(out, "hello from sydney") {
+		t.Errorf("the room does not show sydney's send to wf peer:\n%s", out)
+	}
+
 	for name, tc := range map[string]struct{ sid, to string }{
-		"an agent's send":       {"s2", "wf peer"},
-		"the manager to jade":   {"s1", "jade"},
-		"the manager to Jade":   {"s1", "Jade"},
-		"a subagent's own send": {"s1", "wf peer"},
+		"the manager to jade":       {"s1", "jade"},
+		"the manager to Jade":       {"s1", "Jade"},
+		"an agent to a fleet agent": {"s3", "jade"},
+		"a subagent's own send":     {"s3", "wf peer"},
 	} {
-		a := newRoomApp(t).withSize(120, 40).withAgents(core.ManagerName, "jade")
+		a := newRoomApp(t).withSize(120, 40).withAgents(core.ManagerName, "jade", "sydney")
 		ev := sendCall(tc.sid, tc.to, "hello there")
 		if name == "a subagent's own send" {
 			ev.Subagent = &core.Subagent{}

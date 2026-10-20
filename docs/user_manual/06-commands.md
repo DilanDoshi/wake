@@ -23,9 +23,8 @@ wake help               this list
 
 **`wake` starts a fleet and opens the room; `wake new` opens a conversation.** A bare `wake` makes a
 *new* fleet each time and names it from the pool, so the obvious command is no longer the way back —
-`wake --fleet <name>` reopens one you already have, and `wake fleets` lists them. On a machine with
-nothing at all it spawns an agent too, because a first command has to produce one, but that agent is
-a roster row you press `↵` on rather than a pane.
+`wake --fleet <name>` reopens one you already have, and `wake fleets` lists them. It spawns no agent:
+the room opens with the manager alone, and `/new` or `wake new` starts one.
 
 **`<who>`** is a name or a session id, and a unique prefix of either works — `wake attach syd`, or
 the first few characters of the id `wake status` prints. If a prefix is ambiguous Wake lists the

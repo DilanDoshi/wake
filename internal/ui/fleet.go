@@ -670,7 +670,7 @@ func fold(a Agent, ev core.Event, sessionID string) (Agent, []core.Event) {
 		// The same question the prompt walk asks of the same frames, so the two
 		// cannot come to different answers about whose words they are - see
 		// typedByHand in prompts.go.
-		if !typedByHand(ev) {
+		if !typedByHand(ev) && ev.Notice != core.NoticeAutoResumed { // Wake's resume is drawn too
 			return a, nil
 		}
 		return a, []core.Event{ev}

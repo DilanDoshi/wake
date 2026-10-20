@@ -91,3 +91,24 @@ func TestANonStringErrorKindStillDecodes(t *testing.T) {
 		t.Fatalf("an object error kind decoded as %+v, %v; want one KindAPIError/NoticeAPIError", evs, err)
 	}
 }
+
+// Model output is the proof a turn went through: prose, a tool call or thinking,
+// and never a local command's reply, which ran no inference.
+func TestModelOutputIsInferenceTheAPIAccepted(t *testing.T) {
+	for _, tc := range []struct {
+		ev   Event
+		want bool
+	}{
+		{Event{Kind: KindAssistantText, Text: "done"}, true},
+		{Event{Kind: KindToolUse}, true},
+		{Event{Kind: KindThinking}, true},
+		{Event{Kind: KindAssistantText, Text: "Set model to Opus", LocalCommand: true}, false},
+		{Event{Kind: KindAPIError, Notice: NoticeUsageLimit}, false},
+		{Event{Kind: KindUserText, Text: "continue"}, false},
+		{Event{Kind: KindTurnEnd}, false},
+	} {
+		if got := tc.ev.ModelOutput(); got != tc.want {
+			t.Errorf("%+v: ModelOutput() = %v, want %v", tc.ev, got, tc.want)
+		}
+	}
+}

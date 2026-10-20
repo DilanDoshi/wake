@@ -268,7 +268,7 @@ type ToolCall struct {
 	Checklist *ChecklistOp `json:"checklist,omitempty"`
 
 	// Send is who a SendMessage call reaches and what it says, and nil for
-	// every other call - the room draws the manager's (ui observe.go).
+	// every other call - the room and a conversation draw it (ui observe.go, dm_blocks.go).
 	Send *PeerSend `json:"peer_send,omitempty"`
 
 	// Loop is the native /loop a scheduler tool_use carries - a recurring
@@ -324,15 +324,7 @@ type ToolCall struct {
 // AskDetail is what an interactive ask is putting to the operator: the
 // questions an AskChoice asks, or the plan an AskApproval offers.
 //
-// Resolved behind the airlock, and resolved rather than passed through. The
-// wire's own payload carries one thing more than this - a multi-select flag -
-// and that is the one this type deliberately cannot express, because every
-// recorded question carries it false and the comma-separated answer encoding
-// is matched against Claude Code 2.1.226 with no recording behind it. §9 of the
-// question findings says in so many words that Wake must not build against it.
-// A multi-select question therefore degrades to one choice, which is a real
-// label the tool accepts, rather than to a guess about how two of them are
-// joined.
+// Resolved behind the airlock, and resolved rather than passed through.
 //
 // The per-question header and the per-option preview *are* resolved, and were
 // not until a question turned out to be answerable in a conversation as well as
@@ -373,6 +365,11 @@ type Question struct {
 	// keyed on it would answer nothing, which is the reason both are here
 	// rather than one being derived from the other.
 	Header string `json:"chip,omitempty"`
+
+	// Multi is whether the question takes several options at once. Its answer
+	// is still one string - the choices joined by JoinChoices, as Claude Code
+	// joins them (question-multiselect.jsonl).
+	Multi bool `json:"multi,omitempty"`
 
 	// Options are what may be chosen. The schema says 2-4 and every recorded
 	// question carries 2 or 3.
@@ -728,4 +725,15 @@ func (f wireFrame) apiNotice() Notice {
 		return NoticeTurnFailed
 	}
 	return NoticeAPIError
+}
+
+// ModelOutput reports inference the API accepted - prose, a tool call, thinking -
+// which a failed turn never produces. A local command's reply ran none, so it
+// proves nothing about a login or a limit.
+func (e Event) ModelOutput() bool {
+	switch e.Kind {
+	case KindAssistantText, KindToolUse, KindThinking:
+		return !e.LocalCommand
+	}
+	return false
 }

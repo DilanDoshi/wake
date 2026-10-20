@@ -276,7 +276,7 @@ const managerCommand = "manager"
 // pane below. See board.go for the whole argument.
 const boardCommand = "board"
 
-// groupchatFilterCommand toggles whether a lone @name narrows the room's view.
+// groupchatFilterCommand toggles whether a lone @name or @team narrows the room's view.
 // Wake-addressed (target-independent) like /manager: it configures this client,
 // not a session. See roomfilter.go.
 const groupchatFilterCommand = "groupchat-filter"

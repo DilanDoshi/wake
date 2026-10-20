@@ -144,7 +144,7 @@ func TestRestoredHistoryOlderThanTheClearStaysCleared(t *testing.T) {
 // roomSendID is a uuid stamped by a room send, so the restore keeps the turn.
 func roomSendID(t *testing.T) string {
 	t.Helper()
-	return newRoomSend(true).messageID()
+	return newRoomSend(true).ID()
 }
 
 // ↑ still recalls what was typed before the clear, as Claude Code's prompt

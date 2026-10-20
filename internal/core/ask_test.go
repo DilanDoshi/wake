@@ -152,7 +152,8 @@ func TestEveryRecordedAskIsClassifiedFromItsOwnWireFields(t *testing.T) {
 		// sharpest: its first Write asks and its second, after the mode change,
 		// does not appear here at all because no ask was raised for it.
 		{AskPermission, 14, "ordinary permission asks, none of which carries requires_user_interaction"},
-		{AskChoice, 6, "AskUserQuestion asks, each carrying questions"},
+		// 7 since question-multiselect.jsonl, the one multi-select ask.
+		{AskChoice, 7, "AskUserQuestion asks, each carrying questions"},
 		// 3 since the permission-mode spike, which added exactly one:
 		// mode-cycle's ExitPlanMode, raised by a session put into plan mode by
 		// a set_permission_mode control request rather than by

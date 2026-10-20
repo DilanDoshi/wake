@@ -32,6 +32,7 @@ import (
 // stop saying which.
 const (
 	askChoiceFixture  = "question-answer.jsonl"
+	askMultiFixture   = "question-multiselect.jsonl"
 	askPlanFixture    = "question-plan.jsonl"
 	permissionFixture = "permission.jsonl"
 )
@@ -85,7 +86,8 @@ func rawAskInput(t *testing.T, line string) map[string]any {
 // unresolved payload is an operator choosing between options they cannot see -
 // and, worse, a client that cannot key an answer to anything.
 func TestAQuestionAskResolvesTheQuestionsAndOptionsTheWireCarried(t *testing.T) {
-	for _, p := range recordedAsks(t, askChoiceFixture) {
+	multi := 0
+	for _, p := range append(recordedAsks(t, askChoiceFixture), recordedAsks(t, askMultiFixture)...) {
 		if p.ev.Ask != AskChoice {
 			t.Fatalf("ask kind = %q, want %q", p.ev.Ask, AskChoice)
 		}
@@ -105,8 +107,17 @@ func TestAQuestionAskResolvesTheQuestionsAndOptionsTheWireCarried(t *testing.T) 
 			if got[i].Header != want[i].header {
 				t.Errorf("question %d resolved to header %q, the wire says %q: the chip is what tells one question of four from the next", i, got[i].Header, want[i].header)
 			}
+			if got[i].Multi != want[i].multi {
+				t.Errorf("question %d resolved multi-select %v, the wire says %v: a card that offers one choice where the ask takes many answers a different question", i, got[i].Multi, want[i].multi)
+			}
+			if want[i].multi {
+				multi++
+			}
 			assertOptions(t, got[i].Options, want[i].options)
 		}
+	}
+	if multi == 0 {
+		t.Fatalf("%s resolved no multi-select question: the flag is asserted only ever false", askMultiFixture)
 	}
 }
 
@@ -131,6 +142,7 @@ func assertOptions(t *testing.T, got []Option, want []rawOption) {
 type rawQuestion struct {
 	text    string
 	header  string
+	multi   bool
 	options []rawOption
 }
 
@@ -147,6 +159,7 @@ func rawQuestions(t *testing.T, input map[string]any) []rawQuestion {
 	var qs []struct {
 		Question string `json:"question"`
 		Header   string `json:"header"`
+		Multi    bool   `json:"multiSelect"`
 		Options  []struct {
 			Label       string `json:"label"`
 			Description string `json:"description"`
@@ -165,7 +178,7 @@ func rawQuestions(t *testing.T, input map[string]any) []rawQuestion {
 		for _, o := range q.Options {
 			opts = append(opts, rawOption{label: o.Label, detail: o.Description, preview: o.Preview})
 		}
-		out = append(out, rawQuestion{text: q.Question, header: q.Header, options: opts})
+		out = append(out, rawQuestion{text: q.Question, header: q.Header, multi: q.Multi, options: opts})
 	}
 	return out
 }

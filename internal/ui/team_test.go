@@ -99,9 +99,10 @@ func TestTheTeamOnAReportFoldsOntoTheAgent(t *testing.T) {
 }
 
 // `@team` fans a room draft out to its live members - a scoped broadcast, not a
-// single mention (so it does not narrow the room and does not bridge to a
-// per-agent command) and not @all (it carries its own team marker).
-func TestATeamDraftRoutesToItsMembersAndDoesNotNarrow(t *testing.T) {
+// single mention (so it does not bridge to a per-agent command) and not @all (it
+// carries its own team marker). It narrows the room as a thread of its own:
+// teamfocus_test.go.
+func TestATeamDraftRoutesToItsMembersAsAScopedBroadcast(t *testing.T) {
 	fresh(t)
 	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withSize(200, 40).showRoom()
 	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{
@@ -118,7 +119,7 @@ func TestATeamDraftRoutesToItsMembersAndDoesNotNarrow(t *testing.T) {
 		t.Errorf("route.Team = %q, want backend", r.Team)
 	}
 	if r.mentioned {
-		t.Error("a team route is marked mentioned; retarget would narrow to one member and the bridge would fire")
+		t.Error("a team route is marked mentioned; the per-agent bridge would fire on it")
 	}
 	if r.Text != "ship it" {
 		t.Errorf("text = %q, want the @team stripped", r.Text)

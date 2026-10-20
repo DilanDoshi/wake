@@ -51,8 +51,9 @@ cd ~/your-project
 wake
 ```
 
-That starts a daemon, spawns an agent, and opens **the room** — the agent is a roster row, and `↵`
-on it opens the conversation. (`wake new` is the verb that opens one for you.) `⌃O` detaches and
+That starts a daemon and opens **the room** with one session in it: the manager, which anything you
+type there without an `@name` reaches. Ask it for agents, or start one with `/new` in the room or
+`wake new` at a shell, which also opens its conversation for you. `⌃O` detaches and
 leaves the fleet working — close the terminal entirely and they keep going. Run `wake` again to
 come back.
 
@@ -117,16 +118,16 @@ slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/ad
 and `/model` configure the session they are addressed to. `/status [@who]` shows an agent's own facts —
 state, ids, model, context, effort, permission mode, team, builds — without sending it anything, the
 manager's included. Everything else you type is passed to the agent byte for
-byte. A lone `@name` narrows the room to that agent's thread; `⌃A` widens it back to everyone while
-still addressing them, and `/groupchat-filter off` flips that default. A leading `@"session name"`
+byte. A lone `@name` narrows the room to that agent's thread, and a lone `@team` to its members'; `⌃A` widens it
+back to everyone while still addressing them, and `/groupchat-filter off` flips that default. A leading `@"session name"`
 that names no agent in your fleet is relayed by the manager to that Claude session. `/team <name>`
 groups an agent under an operator-named team — heading a roster/board section, addressed as `@team` —
 and the manager can fan a message out to one with its own tool. An agent can see its team too: `wake
 status` prints each agent's `team <name>` (`--team <name>` lists one team), and every ordinary agent starts
 with a short note on how to ask. `/board` scrolls a fleet bigger than the screen (wheel, `PgUp`/`PgDn`,
 `Home`/`End`), three tiles across. Claude sessions know each fleet's manager as `manager-<fleet>`, so
-managers of several fleets are told apart in Claude's own peer list, and the manager can pick a spawned
-agent's model and effort when you ask it to. A long message one Claude session sends another (`↪ sender →
+managers of several fleets are told apart in Claude's own peer list (`@manager /rename ops` makes it
+`manager-ops`), and the manager can pick a spawned agent's model and effort when you ask it to. A long message one Claude session sends another (`↪ sender →
 recipient`) folds at three rows in the room and in a conversation; `⌃E` or a click opens it.
 
 ## Development

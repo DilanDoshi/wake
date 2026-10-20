@@ -68,8 +68,8 @@ func (d DM) retained() DM {
 // cutFrom is where a reclaim cuts, looking a chunk past mark at most: before an
 // event of no tool call, so no run is split and no result - fold-exempt ones
 // included - is kept without its call (clean); failing that, a stream of nothing
-// but tool calls is cut before a call, never a result, and laid out again. -1
-// is a chunk with neither.
+// but tool calls is cut before a call, a send included (it is no run to split),
+// never a result, and laid out again. -1 is a chunk with neither.
 func (d DM) cutFrom(mark int) (int, bool) {
 	for cut := mark; cut < mark+chunkSize; cut++ {
 		if d.events.at(cut).Tool == nil {
@@ -77,7 +77,7 @@ func (d DM) cutFrom(mark int) (int, bool) {
 		}
 	}
 	for cut := mark; cut < mark+chunkSize; cut++ {
-		if isToolUse(d.events.at(cut)) {
+		if ev := d.events.at(cut); isToolUse(ev) || sentOf(ev) != nil {
 			return cut, false
 		}
 	}
