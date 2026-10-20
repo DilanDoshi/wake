@@ -632,8 +632,8 @@ func isSessionID(s string) bool {
 // # Why this is an allow-list, and why it is the one that had to be
 //
 // It was a deny-list - three states named, everything else kept - and it was
-// the **only** state filter in the tree written that way round. hasFleet,
-// parkStates, forkArrivalStates, forkParentStates and forkRefusal all fall to a
+// the **only** state filter in the tree written that way round. parkStates,
+// forkArrivalStates, forkParentStates and forkRefusal all fall to a
 // default that refuses or to a table that fails the build, so a state nobody
 // has ruled on is excluded until somebody rules on it. Here an unruled state
 // was *included*.

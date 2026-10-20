@@ -15,8 +15,10 @@ func TestTheTiledBoardDrawsAndClicksOnAScreen(t *testing.T) {
 	withScriptedAgent(t, "")
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 
-	s := startWake(t, 100, 30)
+	s := startWakeInAConversation(t, 100, 30)
 	s.await("ready")
+	s.send("\x17") // ⌃W back to the room
+	s.await("group chat")
 	names := agentsOnRoster(s)
 	if len(names) != 1 {
 		t.Fatalf("want one agent on the roster, got %v.\n%s", names, s.dump())
