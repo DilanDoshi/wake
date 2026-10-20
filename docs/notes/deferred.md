@@ -2976,7 +2976,11 @@ both before the composer sees them. Deliberate - they are the keys the brief nam
 and the composer is one line high where forward-delete is rarely reached for - but somebody with
 readline muscle memory will find `⌃W` does not delete a word. `⌃G`, `⌃R` and `⇥` shadow nothing.
 
-**Phase 2 Task 5 left one thing undesigned, deliberately: multi-select.** `core.AskDetail` cannot
+**~~Phase 2 Task 5 left one thing undesigned, deliberately: multi-select.~~ CLOSED 2026-10-18
+(`feat/multi-select-questions`):** a `multiSelect: true` ask was recorded on 2.1.302
+(`question-multiselect.jsonl`; `docs/superpowers/notes/2026-10-18-multiselect-question-findings.md`),
+and the card now ticks several options and sends them joined, as Claude Code does. The original
+entry follows. `core.AskDetail` cannot
 express it and `Card.Choice` is one index per question, because every recorded question carries
 `multiSelect: false` and the comma-separated answer encoding for `true` is a read of the 2.1.226
 binary that §9 of the question findings explicitly forbids building against. A multi-select
@@ -4702,7 +4706,7 @@ which is a 1:1 pane with room to read in. `Question.Header` and `Option.Preview`
 `header` and `preview` are policed vocabulary, and `internal/ui/preview.go` draws the sample in three
 tiers — beside the options, stacked under them, or dropped. **The room's original ruling survives as
 the third tier**, which is why dropping is a designed outcome rather than a failure case. The
-multi-select entry above is untouched and is still the only field left out.
+multi-select entry above was the only field left out, and it closed on 2026-10-18.
 
 ---
 

@@ -183,6 +183,13 @@ func (a App) cardKey(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 			return a.reviewChoose(top)
 		}
 		return a.chooseCursored(top)
+	case tea.KeySpace:
+		// Claude Code's tick key on a multi-select question, and a character
+		// everywhere else.
+		if !top.multi(top.Cursor) {
+			return a, nil, false
+		}
+		return a.chooseCursored(top)
 	}
 	if m.Type != tea.KeyRunes || len(m.Runes) != 1 {
 		return a, nil, false
@@ -380,6 +387,11 @@ func (a App) chooseCursored(c Card) (tea.Model, tea.Cmd, bool) {
 	if c.Shape() != ShapeQuestion {
 		return a, nil, false
 	}
+	if q, ok := c.question(); ok && q.Multi && c.Option == nextIndex(q) {
+		// The row under a multi-select question walks on, since ticking does not.
+		a.cards = a.cards.With(c.Move(1, 0)).disarm()
+		return a, nil, true
+	}
 	return a.pickOption(c, c.Option)
 }
 
@@ -404,12 +416,23 @@ func (a App) pickOption(c Card, option int) (tea.Model, tea.Cmd, bool) {
 		return a.reviewChoose(c.atOption(option))
 	}
 	if q, ok := c.question(); ok && option == otherIndex(q) {
+		if q.Multi && c.typed(c.Cursor) != "" {
+			// A filled Other row on a multi-select question is a ticked box,
+			// and choosing it again unticks it.
+			a.cards = a.cards.With(c.answer(c.Cursor, "")).disarm()
+			return a, nil, true
+		}
 		// The row past the model's own options: an answer in the operator's
 		// words, which is a label the list did not contain.
 		return a.beginAnswer(c, c.Cursor)
 	}
 	if !c.inRange(c.Cursor, option) {
 		return a, nil, false
+	}
+	if c.multi(c.Cursor) {
+		// A tick, in place: the question takes more than one.
+		a.cards = a.cards.With(c.Toggle(c.Cursor, option)).disarm()
+		return a, nil, true
 	}
 	// Choosing is not confirming, so it takes an armed settle back like every
 	// other key. It is also the likeliest deliberate one: the operator meant to

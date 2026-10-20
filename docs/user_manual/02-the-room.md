@@ -112,7 +112,9 @@ Three kinds arrive through one mechanism:
 
 - **A permission request** — it wants to run a tool.
 - **A plan** — it wants approval to proceed.
-- **A question** — it is asking you to choose between options.
+- **A question** — it is asking you to choose between options. A question that takes several
+  draws a box on each: `↵`, the option's digit or space ticks one without moving on, and the
+  Next or Submit row under them walks on.
 
 The third is why these are not one thing: a bare "allow" answers the first two, but a question
 needs your *answer* carried with the approval. Approving a question without answering it tells the

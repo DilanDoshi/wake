@@ -4585,3 +4585,26 @@ another terminal.
   `TestARewriteOfTheSameAccountResumesNothing`, `TestTheResetTheLimitNamesResumesIt` and the
   edge-case units in internal/daemon; the UI's restore and live tests; and the pty
   `TestAnAgentALimitStoppedResumesWhenYouSignInElsewhere`, each mutation-checked.
+## 2026-10-18 — a multi-select question is answered the way Claude Code answers one (the owner)
+
+The owner asked for the "select several" question menu, and chose to match Claude Code's own screen
+over a minimal version (`docs/superpowers/notes/2026-10-18-multiselect-question-findings.md`):
+
+- **Boxes, ticked in place.** `[ ]`/`[✔]` on every row, the Other row included. `↵`, the option's
+  digit and space tick without moving on. Space is read only on a multi-select question step, so it
+  is still a character everywhere else.
+- **A Next/Submit row walks on**, Claude Code's words, because ticking does not.
+- **The order ticked, typed words last, joined by `", "`.** That is the string Claude Code sends, so
+  `Card.Ticks` keeps the order rather than a set. The join lives in the airlock (`core.JoinChoices`)
+  because it is Claude's convention; the rpc frame still carries one string per question.
+- **Choosing a filled Other row again clears it.** It is a box, so a second press unticks it rather
+  than reopening the composer. Typing there lands the cursor on the Next/Submit row, so a reflexive
+  second `↵` walks on instead of clearing what was just typed.
+- **A replayed ask keeps its card.** A reattach replays every pending ask; one the list already holds
+  with its payload is kept as it is (`Cards.Add`), since a request id names one ask and the replay
+  would only reset the ticks. A card known only from a report still takes the payload.
+- **The review wraps a long answer to three rows** rather than cutting it to one: it is the last look
+  at what goes out. Bounded, because a card taller than its pane takes no keys and Submit would leave
+  it (Codex, second pass).
+- **A pick replaces typed words on a single-select question** (fixed in the same branch). Typing
+  already cleared a pick, but a pick left the typed answer in place, and the typed one was sent.

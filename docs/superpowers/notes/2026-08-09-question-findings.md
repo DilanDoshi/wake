@@ -424,7 +424,7 @@ cannot prove a negative about a mechanism it never exercised).
 
 - **`multiSelect: true`.** Every recorded question carried `false`. The comma-separated answer
   encoding is `[binary]` only, and Wake must not build a multi-select UI against it without a
-  recording.
+  recording. **Recorded 2026-10-18** (2.1.302): see `2026-10-18-multiselect-question-findings.md`.
 - **`response` (freeform) and `annotations` on the answer.** Both are in the schema, neither was
   ever sent, so what the model receives for a freeform reply is unknown. This is the shape a Wake
   operator would most plausibly want ("neither — do X instead").

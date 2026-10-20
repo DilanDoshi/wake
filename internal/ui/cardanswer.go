@@ -160,7 +160,16 @@ func (a App) commitAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 		// is still in the middle of writing one - ⎋ is how they say otherwise.
 		return a, nil, true
 	}
-	a.cards = a.cards.With(c.answer(question, text).Move(1, 0)).stopWriting().disarm()
+	answered := c.answer(question, text)
+	if c.multi(question) {
+		// Words in a multi-select question's Other row tick it and the question
+		// stays up for the rest. The cursor lands on the row that walks on, so a
+		// reflexive second ↵ moves on rather than unticking what was typed.
+		answered = answered.atOption(nextIndex(c.Detail.Questions[question]))
+	} else {
+		answered = answered.Move(1, 0)
+	}
+	a.cards = a.cards.With(answered).stopWriting().disarm()
 	return a.clearDraft(), nil, true
 }
 
@@ -172,7 +181,8 @@ func (a App) cancelAnswer() App {
 
 // answer records the operator's own words for one question, clearing any
 // option that had been picked for it - two answers to one question is the one
-// state answers() could not resolve honestly.
+// state answers() could not resolve honestly. A multi-select question's ticks
+// stay: the words are one more choice beside them.
 func (c Card) answer(question int, text string) Card {
 	if c.Detail == nil || question < 0 || question >= len(c.Detail.Questions) {
 		return c

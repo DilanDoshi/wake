@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -31,6 +32,11 @@ const (
 
 	// reviewAnswerLead marks the answer under the question it belongs to.
 	reviewAnswerLead = "  → "
+
+	// reviewAnswerRows bounds one answer's wrap. A multi-select answer is long
+	// enough to need more than a row, and a typed one can be any length - a
+	// card taller than its pane takes no keys, so Submit must stay on it.
+	reviewAnswerRows = 3
 
 	// reviewQuestionLead marks a question in the list. The same bullet a
 	// finished thing wears elsewhere in this build.
@@ -54,7 +60,7 @@ func (c Card) reviewBody(width int) string {
 	rows := []string{stepHeader(c, width), "", AccentStyle.MaxWidth(width).Render(reviewTitle), ""}
 	for i, q := range c.Detail.Questions {
 		rows = append(rows, TextStyle.Width(width).MaxWidth(width).Render(reviewQuestionLead+collapseWhitespaceOneLine(q.Text)))
-		rows = append(rows, mutedLine(reviewAnswerLead+c.answerLabel(i), width))
+		rows = append(rows, reviewAnswer(c.answerLabel(i), width))
 	}
 	rows = append(rows, "", mutedLine(reviewReady, width))
 	for i, label := range [reviewOptions]string{reviewSubmitLabel, reviewCancelLabel} {
@@ -64,20 +70,35 @@ func (c Card) reviewBody(width int) string {
 	return strings.Join(rows, "\n")
 }
 
-// answerLabel is what question i will send, or the word for a gap.
-//
-// It reads the typed answer first, for the reason Card.answers does: an
-// operator's own words are the answer when they wrote one, and the option
-// label only when they picked one.
-func (c Card) answerLabel(i int) string {
-	if typed := c.typed(i); typed != "" {
-		return collapseWhitespaceOneLine(typed)
+// reviewAnswer is one answer under its question, wrapped rather than cut to a
+// row - the review is the last look at what goes out, and a multi-select answer
+// is long - but to reviewAnswerRows at most, ending in an ellipsis.
+func reviewAnswer(answer string, width int) string {
+	lead := ansi.StringWidth(reviewAnswerLead)
+	room := max(width-lead, 1)
+	lines := strings.Split(HintStyle.Width(room).MaxWidth(room).Render(answer), "\n")
+	if len(lines) > reviewAnswerRows {
+		lines = lines[:reviewAnswerRows]
+		last := ansi.Truncate(lines[reviewAnswerRows-1], max(room-ansi.StringWidth(ellipsis), 0), "")
+		lines[reviewAnswerRows-1] = last + HintStyle.Render(ellipsis)
 	}
-	o := c.chosen(i)
-	if o < 0 || o >= len(c.Detail.Questions[i].Options) {
+	for i, ln := range lines {
+		pad := strings.Repeat(" ", lead)
+		if i == 0 {
+			pad = reviewAnswerLead
+		}
+		lines[i] = HintStyle.Render(pad) + ln
+	}
+	return strings.Join(lines, "\n")
+}
+
+// answerLabel is what question i will send, or the word for a gap.
+func (c Card) answerLabel(i int) string {
+	answer, ok := c.answerOf(i)
+	if !ok {
 		return reviewUnanswered
 	}
-	return collapseWhitespaceOneLine(c.Detail.Questions[i].Options[o].Label)
+	return collapseWhitespaceOneLine(answer)
 }
 
 // reviewChoose settles the ask, or does the one thing that is not settling it.
