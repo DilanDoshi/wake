@@ -5654,3 +5654,26 @@ the line restored to the fixture.
   document-wide), and a bare file name (`tally.txt`) glamour links, whose styled row it wraps itself.
   Both are transient — the answer lands whole and is drawn right then —
   and the splitter names them (`internal/render/splitter.go`).
+
+## FROM `fix/record-ends-its-fleet`, 2026-10-19
+
+Found checking whether Wake leaks daemons. `record.sh` and the README's bare `vhs` were the demonstrated
+leaks (BUG-52); these two are not proven to be Wake's.
+
+- **A test-run daemon that nothing ended.** One `wake.test daemon` survived eight days: parent launchd, a
+  real `claude` for the manager and one for a pooled agent, `WAKE_TEST_DIRECT_LAUNCHER=1`, and a scratch
+  directory whose socket and log were unlinked within a minute of the start while its lock, roster and
+  manager config stayed. The harness already ends a daemon three ways (`stopFleet` in `t.Cleanup`, a process
+  group kill, and `internal/daemon/lease_unix.go`, which makes a daemon forked by a test exit when the test
+  process does), and seven full `make ci` runs on 2026-10-17 - one cut by a timeout panic in `cmd/wake`, one
+  killed outright - left none behind, so the cause of this one is not known: which test, why the lease did
+  not end it, and why it had real `claude` agents are all open. The daemon's stack could not be sampled. A
+  post-run check in `cmd/wake`'s `TestMain` - no process running this test binary as `daemon` may outlive
+  `m.Run` - would turn the next occurrence into a failing test; it is not built because nothing yet says
+  which path leaks.
+- **A daemon freezes the environment of the terminal that started it.** An agent's `claude` inherits it, and a
+  terminal multiplexer that puts a per-launch credential in its variables (cmux's `CMUX_SOCKET_CAPABILITY`,
+  new on every launch) leaves every fleet started under an older launch with a value its hooks can no longer
+  use, until that fleet is restarted. Not a Wake defect on its own; Wake could hand a newly attaching
+  client's terminal variables to the agents it spawns after that, or drop terminal-session variables when it
+  forks the daemon. Neither is built: both change what an agent inherits, which is the owner's call.
