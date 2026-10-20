@@ -8,7 +8,8 @@
 #
 # Two idle real sessions, api-refactor and web-polish, stand in for another
 # terminal's claude: they register at start with no turn. `sleep 917` holds
-# their stdin; after the take, `pkill -f 'sleep 917'` ends both.
+# their stdin; they end on their own when it does, fifteen minutes on. Never
+# `pkill -f` them: the pattern matches other sessions' processes.
 #
 # `unset WAKE_SOCKET` comes first and the guard refuses a socket that is not
 # this take's own - the recorder inherits the operator's real fleet.

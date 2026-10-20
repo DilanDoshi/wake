@@ -126,8 +126,8 @@ and the manager can fan a message out to one with its own tool. An agent can see
 status` prints each agent's `team <name>` (`--team <name>` lists one team), and every ordinary agent starts
 with a short note on how to ask. `/board` scrolls a fleet bigger than the screen (wheel, `PgUp`/`PgDn`,
 `Home`/`End`), three tiles across. Claude sessions know each fleet's manager as `manager-<fleet>`, so
-managers of several fleets are told apart in Claude's own peer list, and the manager can pick a spawned
-agent's model and effort when you ask it to. A long message one Claude session sends another (`↪ sender →
+managers of several fleets are told apart in Claude's own peer list (`@manager /rename ops` makes it
+`manager-ops`), and the manager can pick a spawned agent's model and effort when you ask it to. A long message one Claude session sends another (`↪ sender →
 recipient`) folds at three rows in the room and in a conversation; `⌃E` or a click opens it.
 
 ## Development

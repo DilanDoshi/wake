@@ -36,6 +36,7 @@
 package daemon
 
 import (
+	"cmp"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -175,7 +176,12 @@ func (s *server) managerAgent() (*agent, bool) {
 		agents = append(agents, a)
 	}
 	s.mu.Unlock()
+	return managerIn(agents)
+}
 
+// managerIn is the manager among agents already listed, for a caller that holds
+// the list and must not take another snapshot of the fleet (report.go).
+func managerIn(agents []*agent) (*agent, bool) {
 	for _, a := range agents {
 		if a.named(core.ManagerName) {
 			return a, true
@@ -212,7 +218,7 @@ func (s *server) managerConfig(cfg core.Config) (core.Config, error) {
 	}
 	cfg.MCPConfig = path
 	cfg.AppendSystemPrompt = managerScope
-	cfg.ClaudeName = s.managerClaude()
+	cfg.ClaudeName = cmp.Or(cfg.ClaudeName, s.managerClaudeDefault())
 	return cfg, nil
 }
 
