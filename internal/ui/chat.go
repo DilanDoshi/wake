@@ -18,6 +18,7 @@ package ui
 import (
 	"cmp"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/lipgloss"
 
@@ -153,6 +154,13 @@ type Room struct {
 	// transcript, most of a pane away from the draft. Below the transcript they
 	// also stop being rows mouse.go's startSelection has to know about.
 	menu string
+
+	// clearedAt is when /clear last emptied this room: restored history older
+	// than it stays out. reminded is the thousands the room has said it holds,
+	// and earlier is ↑'s prompts from before the clear. See roomclear.go.
+	clearedAt time.Time
+	reminded  int
+	earlier   []string
 
 	// chrome is what chromeHeight returned when the transcript was last sized,
 	// which is DM.chrome's rule read for this pane.
@@ -395,7 +403,7 @@ func (r Room) appendLine(line roomLine) Room {
 // reading, and a room that yanks them to the bottom when a resume lands is
 // worse than one with no scrollback.
 func (r Room) Before(earlier []roomLine) Room {
-	if len(earlier) == 0 {
+	if earlier = r.sinceClear(earlier); len(earlier) == 0 {
 		return r
 	}
 	following := r.tr.atBottom()

@@ -212,6 +212,11 @@ func (a App) sendDM(text string, images []core.ImageBlock, now bool) (tea.Model,
 const teamCommandRefused = "/%s can't fan out to @%s — it is per-agent; send it to one member instead"
 
 func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Model, tea.Cmd) {
+	// The room's own commands first: a bare /clear is this room's, addressed to
+	// nobody, so it is asked before there is anybody to route to.
+	if next, cmd, ok := a.roomCommand(text); ok {
+		return next, cmd
+	}
 	// The manager is the default addressee when there is one, and nothing is
 	// when there is not - never whichever agent this window happens to have
 	// attached, which is the misroute Route.Resolved exists to prevent.

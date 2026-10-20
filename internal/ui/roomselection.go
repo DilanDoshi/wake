@@ -5,6 +5,9 @@ package ui
 func (a App) withRoom(room Room) App {
 	moves := room.lineMoves
 	room.lineMoves = nil
+	if a.focus == "" {
+		room = room.remind()
+	}
 	a.room = room
 	if moves != nil && a.clicks.kept.pane == "" && !a.clicks.kept.inComposer && !a.clicks.kept.onScreen {
 		a.clicks.kept = selection{} // a row a fourth click would restore may no longer be that line

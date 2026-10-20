@@ -102,7 +102,7 @@ func (r Room) prompts() []string {
 	for i, l := range said {
 		evs[i] = l.ev
 	}
-	return promptsIn(evs)
+	return append(append([]string(nil), r.earlier...), promptsIn(evs)...)
 }
 
 // promptsIn is the user turns among these events, in the order they were typed.

@@ -135,6 +135,7 @@ Wake owns a short, closed list of slash commands:
 /board                         the fleet as one row per agent; ⇥ tiles it into a live wall; a fleet bigger than the screen scrolls
 /status [@who]                 an agent's own facts — state, ids, model, context, effort, permission mode, team, builds; read-only
 /groupchat-filter [on|off]     whether a lone @name narrows the room by default (bare reports)
+/clear                         in the room only: empty the group chat in this window (agents untouched)
 /reauth                        recover a fleet knocked out by an expired shared login
 /mcp [@who]                    an agent's MCP servers: status, sign in, reconnect, on/off, tools
 /login                         the auth panel — sign in or check status
@@ -156,6 +157,10 @@ expanded — nothing else on the way from a composer would do it.
 
 **Everything else beginning with `/` goes straight to the agent**, exactly as in Claude Code —
 `/model opus`, `/clear`, `/compact`, `/context`, and every command you have in `.claude/commands/`.
+The one exception is a bare `/clear` typed in the room: it empties the group chat in this window and
+reaches no agent. In a conversation, and as `@name /clear` in the room, `/clear` still clears that
+agent's conversation. A room heavy with messages says so every 1,000, briefly, in the notice row.
+A window opened later rebuilds the room from the transcripts, so the clear is this window's.
 Wake claims those words and passes the rest through untouched, and there is a guard whose whole job
 is to keep it that way. If Wake ever swallowed one of yours you would lose a Claude Code feature
 with no error, which is why the guard is over *what Wake must not claim* rather than over what it does.

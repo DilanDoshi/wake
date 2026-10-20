@@ -386,6 +386,30 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	statusCommand:          App.status,
 }
 
+// clearCommand is the room's own /clear (roomclear.go). The word is claude's, so
+// it is Wake's only bare and only in the room - in a conversation, and as
+// `@who /clear`, it still reaches the agent (owner's 2026-10-19 ruling).
+const clearCommand = "clear"
+
+// roomCommands are Wake's in the room alone, asked by roomCommand.
+var roomCommands = map[string]func(App, string) (App, tea.Cmd){clearCommand: App.clearRoom}
+
+// roomCommand runs a roomCommands draft typed in the room, reporting whether
+// Wake took it; anything else is the room's to route.
+func (a App) roomCommand(text string) (App, tea.Cmd, bool) {
+	body, ok := strings.CutPrefix(strings.TrimSpace(text), SlashPrefix)
+	if !ok {
+		return a, nil, false
+	}
+	word, arg, _ := strings.Cut(body, " ")
+	run, mine := roomCommands[strings.ToLower(word)]
+	if !mine {
+		return a, nil, false
+	}
+	next, cmd := run(a, strings.TrimSpace(arg))
+	return next, cmd, mine
+}
+
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
 // aimed by a room mention: `@thea /color green` means `/color @thea green`.
 // name, task and colour read displayTarget for the value beside the target; quit,
@@ -478,8 +502,11 @@ func configureVerb(word string) string { return SlashPrefix + word }
 // cannot advertise a word this file does not answer. Sorted, because a Go map
 // has no order and a menu that reshuffled between frames is unreadable.
 func wakeVerbs() []string {
-	out := make([]string, 0, len(commands)+len(bareOnlyCommands))
+	out := make([]string, 0, len(commands)+len(bareOnlyCommands)+len(roomCommands))
 	for word := range commands {
+		out = append(out, configureVerb(word))
+	}
+	for word := range roomCommands {
 		out = append(out, configureVerb(word))
 	}
 	for word := range bareOnlyCommands {
@@ -673,50 +700,6 @@ func (a App) slash(text string) (App, tea.Cmd, bool) {
 	// answer "Wake took this" is the lookup that just said so.
 	next, cmd := run(a, strings.TrimSpace(arg))
 	return next, cmd, mine
-}
-
-// renameMirror is Wake's half of a `/rename bob` typed in a conversation: the
-// name that moves this conversation's own handle for its agent, so the roster
-// and claude's title do not drift - or "" for any draft that is not one. The
-// room's `@who /rename bob` is renameMirrorFor, off the router's resolved
-// mention.
-//
-// It is here, not in send.go, because recognising the draft means knowing what
-// a leading slash means, which is this file's alone
-// (TestNothingButTheRouterKnowsWhatASlashMeans). It is deliberately not a
-// commands entry: `rename` is a word claude advertises, so slash leaves the
-// draft a message and it still reaches the agent - the caller writes the mirror
-// just before the send, never instead of it, so claude's own rename keeps working.
-//
-// It mirrors claude's grammar rather than `/name`'s, and the difference is the
-// whole correctness of it. Claude's `/rename` renames the session it is typed
-// in, so a focused conversation's mirror moves *that* agent and a leading `@who`
-// is just a word - two of them, so renameMirrorArg declines - never a Wake
-// target, which would rename one agent while claude renamed the one the DM is
-// with. The room is the opposite case: an `@who` there is the router's routing
-// target, so claude and Wake rename the same agent, and renameMirrorFor honours
-// it the way `/color` and `/name` take a room mention.
-func (a App) renameMirror(text string) string {
-	if a.focus == "" {
-		return ""
-	}
-	if _, ok := a.fleet.Agent(a.focus); !ok {
-		return ""
-	}
-	return renameMirrorArg(text)
-}
-
-// renameMirrorFor is the room's half of `@who /rename bob`: it mirrors claude's
-// rename onto the mentioned agent, just before the passthrough that carries /rename
-// to claude. who is the router's resolved mention - a live fleet name - so it
-// resolves the same way mentionCommand's reconstructed `@who` does - its id and
-// the mirror's name, "" when the mention no longer names a live agent.
-func (a App) renameMirrorFor(who, text string) (id, name string) {
-	agent, ok := a.fleet.ByName(who)
-	if !ok {
-		return "", ""
-	}
-	return agent.ID, renameMirrorArg(text)
 }
 
 // renameMirrorArg is the shared recogniser behind both mirrors: a `/rename bob`
