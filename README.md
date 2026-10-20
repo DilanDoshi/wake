@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.10 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.11 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -117,8 +117,10 @@ slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/ad
 `/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status` and `/groupchat-filter`; `/effort`
 and `/model` configure the session they are addressed to. `/status [@who]` shows an agent's own facts —
 state, ids, model, context, effort, permission mode, team, builds — without sending it anything, the
-manager's included. Everything else you type is passed to the agent byte for
-byte. A lone `@name` narrows the room to that agent's thread, and a lone `@team` to its members'; `⌃A` widens it
+manager's included. A bare `/clear` typed in the room is Wake's own: it empties this window's group chat
+and reaches no agent (conversations and `↑` history are kept), and the room notes every 1,000 messages it
+holds; `@name /clear`, and `/clear` in a conversation, still clear that agent. Everything else you type
+is passed to the agent byte for byte. A lone `@name` narrows the room to that agent's thread, and a lone `@team` to its members'; `⌃A` widens it
 back to everyone while still addressing them, and `/groupchat-filter off` flips that default. A leading `@"session name"`
 that names no agent in your fleet is relayed by the manager to that Claude session. `/team <name>`
 groups an agent under an operator-named team — heading a roster/board section, addressed as `@team` —
@@ -128,7 +130,11 @@ with a short note on how to ask. `/board` scrolls a fleet bigger than the screen
 `Home`/`End`), three tiles across. Claude sessions know each fleet's manager as `manager-<fleet>`, so
 managers of several fleets are told apart in Claude's own peer list (`@manager /rename ops` makes it
 `manager-ops`), and the manager can pick a spawned agent's model and effort when you ask it to. A long message one Claude session sends another (`↪ sender →
-recipient`) folds at three rows in the room and in a conversation; `⌃E` or a click opens it.
+recipient`) folds at three rows in the room and in a conversation; `⌃E` or a click opens it, and a conversation
+draws its own agent's sends the same way. A question that takes several answers draws `[ ]` boxes you
+tick with `↵`, the option's digit or space, and Next or Submit walks on. When a usage limit stops agents,
+Wake resumes each once — when you sign in to another account anywhere, or at the reset the limit named —
+and draws it as `↻ resumed after the usage limit`, never as your words.
 
 ## Development
 
