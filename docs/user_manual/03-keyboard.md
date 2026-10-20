@@ -62,7 +62,7 @@ typed into the room, mention and all.
 | `⌃B` | Open the selected agent **below** the focused pane |
 | `⌃W` | Close the open conversation |
 | `⌃R` | Toggle the activity sidebar |
-| `⌃A` | **Show all** — widen a room a lone `@name` has narrowed back to every agent's lines, while still addressing that one; a second `⌃A` re-narrows |
+| `⌃A` | **Show all** — widen a room a lone `@name` or `@team` has narrowed back to every agent's lines, while still addressing them; a second `⌃A` re-narrows |
 | `⇧←` `⇧→` | Move the keys to the pane that way. It moves among panes **already drawn** and opens nothing — that is the whole difference from `⇥`, and why a direction with no pane in it names `⇥` instead of wrapping. There is no vertical version: the lower pane of a split column is reached by `⇥` or a click |
 | `⌃N` `⌃P` | Walk the **dispatch list** — the subagents the focused conversation has spawned. While a completion menu is open they walk that instead |
 
