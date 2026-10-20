@@ -3398,6 +3398,8 @@ time the turn ends.
 
 ## Ruling: bare `wake` lands on the room, and first run spawns an agent it does not open
 
+*(The spawn half is superseded 2026-10-16, below: bare `wake` spawns no agent. Landing on the room stands.)*
+
 **Every bare `wake` was landing on a conversation, and it took running the shipped binary to see
 it.** `openRoom` branched three ways and two of them opened the room; the third — nothing at all —
 went through `attach`, which spawns *and* opens that agent's DM beside the room. That looked like
@@ -4393,6 +4395,82 @@ folded it at all.
   The key and the fold are decided at `DM.bodyWidth`, the width the block is drawn at (a subagent's is a
   gutter narrower), so a pointer is always a click target.
 
+## 2026-10-15 — the manager's end part is the operator's: `manager-<part>`
+
+The owner's ask: the end of `manager-<fleet>` should be renameable, and the manager's Claude session
+should *actually* carry that name so other agents can reach it by it. The owner chose the command:
+`@manager /rename <part>`.
+
+- **Wake keeps `manager`; only what claude calls it moves** (2026-10-10's split, unchanged). The name
+  claude is to carry is `agent.claudeWant` — Wake's name for everyone, `manager-<part>` for the manager.
+  Launch sets it from `managerConfig` (the socket's fleet unless a wake carried one), `agent.rename`
+  sets it, and `renamesync.go` compares and sends against it, so claude is told with the same idle
+  `/rename` any rename uses and a woken manager starts as `--name manager-<part>`.
+- **What is typed** (`managerClaudeNameOf`): the part or the whole `manager-<part>` pasted back, folded
+  to lower case; name runes only, at most `maxFleetName`, which is what keeps a session id (36) out of
+  the argv behind the 8-character prefix. It may start with a digit. `manager`, `manager-` and
+  nothing are refused; spaces are hyphenated by the UI as for every `/name`. **A bare `manager` resets
+  to the fleet's name** (`server.renameText`, the one place that knows the socket).
+- **Three ways in, one daemon path**: `/name ops` in the manager's conversation, `/name @manager ops`
+  in the room, and `@manager /rename ops`. The last passes `/rename ops` to claude *and* mirrors it, as
+  `@who /rename` does for any agent — but the room routes the manager as the service rather than a
+  mention, so `roomSends` mirrors a `/rename` that reaches the one service target too. Without it
+  claude would have been named `ops` while Wake still drew `manager-harbor`. Claude carries `ops`
+  until its reply releases the held want and the daemon sends `/rename manager-ops`, the same
+  dance as a hyphenated name.
+- **The report serves the current name** (`server.managerClaude`): the manager's agent, else a park
+  record, else the fleet's. Clients already draw `ManagerClaude` (`Fleet.shown`), so rows, headers and
+  `@` routing follow with no UI change; the old handle resolves to nothing, as for any rename, and
+  `@manager` still reaches it. The peers listing leaves out the *current* name.
+- **The rename survives a park** in `parkedRecord.ClaudeName` (optional, the manager's record only),
+  written by `recordFor` and read back through `restoredClaudeName`, which re-fences it like a rename
+  would — the book is a file, and the value reaches an argv. A daemon holding only the book serves it
+  too, so a parked row is drawn renamed before it is woken; with two manager records in one book the
+  newest wins, since the map they come from has no order. `/manager-stop` ends the manager and its
+  name with it: the next one starts as `manager-<fleet>`.
+- **A variant claude answers with is the name it took.** Both reviews found it, and the machine this was
+  built on had five managers in claude's peer list, so it is not far-fetched. `@manager /rename ops`
+  asks claude for `ops`, never for `manager-ops`, so no reply to it is final: the manager's release
+  always owes the whole name once (`noteRenamed`), where an ordinary agent's variant is claude's own
+  choice and stays unchased. When claude answers *Wake's own* `/rename manager-ops` with
+  `manager-ops-2`, because another session holds the name, `adoptedVariant` makes that the manager's
+  name and the report is pushed: a served name that claude does not carry is one `SendMessage`
+  delivers to whichever session does. Only a reply that provably answers the current want is taken:
+  the one probe in flight, which asked it (`renameSent`). Two probes can be in flight (a probe does
+  not mark the agent owed), and a stale reply can extend a newer want - `ops-long` then `ops` -
+  which Codex's second pass found in a prefix-only first version. Not chased further: that is the
+  loop the ordinary rule exists to prevent.
+- **Not done:** nothing compares a chosen part with another fleet's manager *before* the rename; the
+  collision is answered after, by the variant above. An ordinary agent whose hyphenated `/rename`
+  draws a variant is still unchased, as before.
+- **Residual, pre-existing and left for its own change:** `renameHeld` is one boolean for however many
+  mirrored passthroughs are outstanding, so two windows' `/rename`s inside one round trip can release
+  the hold on the first reply. For the manager the sequence is `/rename manager-ops` then
+  `/rename ops` from two windows: the first reply equals the want and clears it, the second leaves
+  claude at `ops` with nothing armed. An ordinary agent has the same hole with `foo-bar` then
+  `foo bar`. Closing it means counting passthroughs (or FIFO-correlating replies), which touches every
+  agent's sync, so it is not bundled here; a later `/name` settles it.
+## 2026-10-16 — bare `wake` starts the manager and no agent (the owner)
+
+**Reverses** the spawn half of "bare `wake` lands on the room, and first run spawns an agent it does
+not open" and lifecycle spec §3's "no fleet exists → first run spawns". The owner's report: a fresh
+`wake` came up with a pooled agent (`alma`, `bruno`) beside the manager, and it should be the manager
+alone. That ruling's premise - "a new user's first command has to produce an agent" - predates the
+manager being started by every verb that opens the room: the room now always has somebody to type to,
+an unaddressed draft reaches the manager, and the manager can spawn. `wake new` and `/new` remain the
+ways to start an agent by hand.
+
+- **The branch is gone, not switched off.** `openRoom` always asks what is running (`requestFleet`,
+  `awaitFleet`) and `ensureManager` seats the manager; `fleetToReopen`, `reopensRoom` and `hasFleet`
+  existed only to decide the spawn, so they and their totality guards are deleted rather than left
+  deciding nothing. ⌃Q's park book needs no special case: the room opens over it like anything else
+  and `/resume` reaches it.
+- **Held by** `TestBareWakeOpensTheRoomWithOnlyTheManager` (a real pty: the room alone, the manager on
+  the roster, no agent, and the daemon holding exactly the manager - the one test that sees a spawn
+  after the seed) and `TestBareWakeSpawnsNothingBeforeTheRoomKnowsWhatIsRunning` (no spawn frame
+  before the room's seed).
+  The pty tests that used first run's agent as a fixture start it with `wake new` and `⌃W` back to the
+  room, as gridscreen already did.
 ## 2026-10-16 — a conversation draws its own agent's `SendMessage`, and the room draws any agent's outside send
 
 The owner's ask: an agent's outgoing message should render like an incoming one, `<this session> →

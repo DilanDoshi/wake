@@ -6,8 +6,11 @@ and the protocol are all genuine. The only scripted part is what the models
 say.
 
     ./setup.sh          # build the workspace: Harbor, the PATH shim, a scratch HOME
-    vhs tapes/03-broadcast.tape   # record one beat
+    ./record.sh tapes/03-broadcast.tape   # record one beat
     ./build.sh          # caption, stitch, master out
+
+`record.sh` counts the fleet a take staged and then **ends it**: the daemon is detached and outlives
+`vhs`, so a bare `vhs tapes/…` leaves it, and its agents, running until `wake stop`.
 
 ## Why the agents are fake
 

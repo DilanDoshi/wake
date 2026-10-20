@@ -20,8 +20,8 @@
 // carried across a **restart**: nothing is faked but the model. A real daemon on
 // a real socket, a real forked `claude`, real bytes on a terminal pipe
 // ("\x03" and "\x11" are what a keyboard sends), a real second daemon started
-// through the same EnsureRunning the client path uses, and the real front door
-// deciding which branch to take with nothing listening.
+// through the same EnsureRunning the client path uses, and the room's real seed
+// asked of it.
 //
 // It is one test rather than ten because the subject is the chain. Split into
 // hops, each half would rebuild the state the previous one left - and rebuilding
@@ -57,8 +57,6 @@ import (
 //
 //   - `⌃C` writing no `FramePark` - the key does nothing and the room looks fine.
 //   - `completePark` writing no book entry - parking works and nothing survives.
-//   - `openRoom` not asking about the park book - bare `wake` takes the
-//     first-run path and spawns a fresh agent beside the parked fleet.
 //   - `fleet()` not carrying the book onto `Status.Parked` - `/resume` has
 //     nothing to resolve a name against and the fleet is unreachable.
 //   - a record losing its `Dir` - the wake is refused, or worse resumes
@@ -79,11 +77,6 @@ import (
 //     `daemon.TestTheParkBookIsWrittenEarlyAndForgottenLate` reads out of the
 //     AST, for the reason it says: an end-state assertion cannot see which of
 //     two writers got there first.
-//   - **`fleetToReopen` trusting an errored `Status`.** By the time this asks,
-//     the daemon has fully exited, so there is no error to mishandle. The window
-//     where there is one is a daemon still in graceful shutdown, which
-//     `TestBareWakeFindsTheParkedFleetWhileTheDaemonIsStillShuttingDown` builds
-//     deliberately.
 //   - **`unpark` without `resumeSafe`.** Nothing here holds the id, so the check
 //     has nothing to find. It needs a real bystander process and no daemon, which
 //     is `daemon.TestWakingARestoredSessionStillProvesNothingHoldsItsId`.
@@ -131,17 +124,6 @@ func TestTheWholeLifecycleComposesFromAKeyboard(t *testing.T) {
 	if recs := parkBookRecords(t, socket); len(recs) != 1 {
 		t.Fatalf("the park book holds %+v once the daemon has gone, want the parked session to have "+
 			"survived it: the book is the one thing that outlives a daemon", recs)
-	}
-
-	// --- bare `wake` finds a book with no daemon and no fleet behind it -------
-	reopen := fleetToReopen(socket)
-	if hasFleet(reopen) {
-		t.Fatalf("bare `wake` reads %+v as a live fleet: a parked session is not one, and counting it "+
-			"is what used to put the whole roster back in front of somebody who had just quit", reopen)
-	}
-	if len(reopen.Parked) != 1 {
-		t.Fatalf("bare `wake` reads %+v as an empty park book, so it takes the first-run path and "+
-			"spawns a fresh agent beside the parked one", reopen)
 	}
 
 	// --- the next daemon holds nothing, and /resume brings it back -----------

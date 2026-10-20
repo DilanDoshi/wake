@@ -248,3 +248,48 @@ func TestTheManagerStaysTheServiceAcrossAnEvent(t *testing.T) {
 		t.Errorf("an unaddressed draft after an event wrote %v, want it sent to the manager", sentKinds(got))
 	}
 }
+
+// The operator renames the manager's end part with the command that renames any
+// agent: `@manager /rename ops` reaches claude and mirrors onto Wake's handle
+// for the manager, by either name it answers to - and unaddressed, since the
+// manager is the room's default. The manager is the service rather than a
+// mention, which is why this is its own test. The daemon decides what the mirror
+// makes it (manager-ops), so the mirror carries what was typed.
+func TestRenamingTheManagersEndPartFromTheRoom(t *testing.T) {
+	for _, who := range []string{"@" + core.ManagerName + " ", "@" + harborManager + " ", ""} {
+		a, _ := namedManagerRoom(t)
+		_, cmd := typeAndSubmit(a, who+"/rename ops")
+		var mirrored, passed bool
+		for _, f := range batchFrames(t, a, cmd) {
+			mirrored = mirrored || f.Kind == rpc.FrameRename && f.SessionID == "m1" && f.Text == "ops" && f.SelfRenames
+			passed = passed || f.Kind == rpc.FrameSend && f.SessionID == "m1" && strings.Contains(f.Text, "rename ops")
+		}
+		if !mirrored || !passed {
+			t.Errorf("%s/rename ops mirrored %v and reached claude %v, want both", who, mirrored, passed)
+		}
+	}
+}
+
+// Once the report names the manager differently every surface follows: the
+// row, an open conversation's header, and what resolves - the old handle
+// resolves to nothing, as for any rename, and Wake's own word still finds it.
+func TestTheManagersRenameIsFollowedByEverySurface(t *testing.T) {
+	fresh(t)
+	a := dmApp(newRecorder(t), Stream{}, "m1", core.ManagerName).withSize(160, 40).
+		applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: namedManagerReport()})
+	renamed := namedManagerReport()
+	renamed.ManagerClaude = "manager-ops"
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: renamed})
+
+	if m, _ := a.fleet.Agent("m1"); m.Name != "manager-ops" || !a.fleet.isManager(m.Name) {
+		t.Errorf("the manager's row is %q, want manager-ops and still the manager", m.Name)
+	}
+	if got := a.dms["m1"].Name; got != "manager-ops" {
+		t.Errorf("the manager's open conversation is headed %q, want manager-ops", got)
+	}
+	for who, want := range map[string]bool{"manager-ops": true, core.ManagerName: true, harborManager: false} {
+		if _, ok := a.fleet.ByName(who); ok != want {
+			t.Errorf("%q resolves to the manager: %v, want %v", who, ok, want)
+		}
+	}
+}

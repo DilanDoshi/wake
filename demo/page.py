@@ -224,7 +224,7 @@ def requirements_section() -> str:
             "Install",
             f'<code>{INSTALL}</code> installs the <a href="{LATEST}">latest release</a> for macOS or '
             "Linux and puts <code>wake</code> on your <code>PATH</code>; <code>wake upgrade</code> keeps "
-            "it current. Run it in a project and a daemon, a first agent and the room appear.",
+            "it current. Run it in a project and a daemon, the manager and the room appear.",
         )
     }{
         note(

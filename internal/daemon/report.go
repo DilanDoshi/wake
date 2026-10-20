@@ -39,7 +39,7 @@ func (s *server) pushStatus() {
 // each move an id between them in a single locked step, so no id is ever in
 // both and none is ever in neither.
 func (s *server) fleet() rpc.Status {
-	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: s.socket, Build: version.Build(), ManagerClaude: s.managerClaude()}
+	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: s.socket, Build: version.Build()}
 
 	s.mu.Lock()
 	agents := make([]*agent, 0, len(s.agents))
@@ -54,6 +54,11 @@ func (s *server) fleet() rpc.Status {
 		st.Sessions = append(st.Sessions, a.snapshot())
 		held[a.conversation()] = true
 	}
+	// From the agents just listed, not a second snapshot: the name then comes
+	// from the fleet this report lists, and no agent lock is taken before the
+	// listing is.
+	mgr, _ := managerIn(agents)
+	st.ManagerClaude = s.managerClaudeOf(mgr)
 	sortSessions(st.Sessions)
 	st.Teams = s.orderTeams(st.Sessions)
 

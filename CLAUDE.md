@@ -46,8 +46,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 
 ### Surfaces (details in the named files)
 
-- **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room (spawns one
-  agent as a roster row if the machine has nothing); `wake --fleet <name>` returns to one
+- **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room with the
+  manager alone, spawning no agent (owner's 2026-10-16 ruling); `wake --fleet <name>` returns to one
   (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status` (`--team <name>` lists one team), `stop`
   (irreversible), `fleets`, `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. A new fleet
   checks `claude` is on this `PATH` first (its daemon inherits it); a spawn from any daemon without
@@ -137,11 +137,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 **Identity and lifecycle**
 - A session's name comes from the daemon's 64-name pool. **A name is never an address** — frames
   carry `SessionID`; names are released and reissued, so a rename has no alias. The manager is
-  `manager-<fleet>` to claude (`daemon.managerClaudeName`, from the socket, never a frame) and is
-  drawn so: the daemon still calls it `manager`, the UI's fleet fold names its row by the report's
+  `manager-<fleet>` to claude (`daemon.managerClaudeName`, from the socket) and is drawn so: the daemon still calls it `manager`, the UI's fleet fold names its row by the report's
   `ManagerClaude` (`Fleet.shown`, which every typed name goes through), identity is the exact
-  `Fleet.isManager`, and `@manager` and `@manager-<fleet>` both reach it. No agent or team may take
-  the `manager-` prefix.
+  `Fleet.isManager`, and `@manager` and the drawn `@manager-<part>` both reach it. No agent or team
+  may take the `manager-` prefix. **Its end part is the operator's** (`@manager /rename ops`,
+  `/name ops`): `manager-ops` is held on the agent (`claudeWant`), synced to claude, served as
+  `ManagerClaude` and kept in the park record; a bare `manager` puts the fleet's back, and a variant
+  claude answers with is the name it takes (`decisions.md`, 2026-10-15).
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
   everything and clears the park book (`parked.json` beside the socket).
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
@@ -339,7 +341,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **Completion offers and never routes; `⇥` and `↵` accept the cursored offer** (owner, 2026-10-12,
   reversing 2026-09-27's "never takes `↵`"). `↵` accepts only while that changes the draft, so a word
   typed in full (`/clear`; `@manager` where Wake reads it - the room's leading mention, an `@who`
-  command's target - is the drawn `@manager-<fleet>`) still sends; `⇥` stays put over any `/` or `@` word, matched or not
+  command's target - is the drawn `@manager-<part>`) still sends; `⇥` stays put over any `/` or `@` word, matched or not
   (`typingWord`), and is the conversation ring's everywhere else. Session commands/skills first, then
   Wake's, agents, teams (live members only), paths. It belongs to a cursor and a pane; directory reads and the
   conversation's one bounded `git -c core.fsmonitor=false ls-files` per opening run off the draw

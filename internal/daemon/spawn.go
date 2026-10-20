@@ -297,6 +297,9 @@ func (s *server) launch(c *client, cfg core.Config, parent string, replaces *age
 	actx, cancel := context.WithCancel(context.Background())
 	sess := core.NewSession(cfg)
 	a := newAgent(cfg.SessionID, cfg.Name, labelFor(cfg.Dir, replaces), cfg.Dir, parent, sess, cancel)
+	if cfg.ClaudeName != "" { // the manager's: claude's name is manager-<part>, not Wake's
+		a.claudeName, a.claudeWant = cfg.ClaudeName, cfg.ClaudeName
+	}
 	a.forkFrom = cfg.ForkFrom
 	if replaces != nil {
 		a.forkFrom = replaces.forkFrom // a wake resumes the fork; its source is unchanged

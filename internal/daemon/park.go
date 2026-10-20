@@ -254,12 +254,16 @@ func (s *server) completePark(a *agent, err error) {
 func recordFor(a *agent) parkedRecord {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	return parkedRecord{
+	rec := parkedRecord{
 		ID: a.conversationLocked(), Name: a.name, Label: a.label, Color: a.color, Team: a.team, Dir: a.dir,
 		Effort: a.effort, Model: a.model,
 		MaxBudgetUSD: a.budget, FallbackModel: a.fallback,
 		Parked: time.Now(),
 	}
+	if a.name == core.ManagerName {
+		rec.ClaudeName = a.claudeWant
+	}
+	return rec
 }
 
 // warnUnbooked tells every attached client that a session parked but could not
@@ -463,6 +467,9 @@ func (s *server) unpark(ctx context.Context, c *client, f rpc.Frame) {
 		// wake is bringing back. Display only, so it needs no narrowing.
 		Color: a.color,
 		Team:  a.team,
+		// What the park would have booked, so a rename survives a wake whether or
+		// not the book could be written.
+		ClaudeName: restoredClaudeName(recordFor(a)),
 	}, a.parent, a, s.parkLaunchOutcome(rec, reserved))
 }
 
@@ -559,8 +566,9 @@ func (s *server) unparkRecord(c *client, id string) {
 		// From the record this time rather than a live agent - the book is the
 		// only thing that carried the colour across the daemon restart. Display
 		// only, so it is taken as written, like the name.
-		Color: rec.Color,
-		Team:  rec.Team,
+		Color:      rec.Color,
+		Team:       rec.Team,
+		ClaudeName: restoredClaudeName(rec),
 	}, "", nil, s.parkLaunchOutcome(rec, true))
 }
 
