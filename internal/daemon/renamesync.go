@@ -11,6 +11,9 @@ package daemon
 // command (list-agents.jsonl:7-8), so the only cost is the one line claude's
 // model reads on its next turn, which tells the agent its new name.
 //
+// What claude is to be called is a.claudeWant: Wake's name, except the manager's,
+// which is manager-<part> while Wake's stays `manager` (rename.go).
+//
 // claudeName is what claude calls itself: its launch --name, then each /rename
 // Wake writes, then whatever a rename reply on its stream says, the operator's
 // or Wake's. Only a Wake rename arms the want (rename.go), and it fires only
@@ -30,7 +33,11 @@ package daemon
 // A passthrough unwritten after its mirror leaves the hold unreleased, but only
 // a window whose connection is already dead fails that write.
 
-import "github.com/DilanDoshi/wake/internal/core"
+import (
+	"strings"
+
+	"github.com/DilanDoshi/wake/internal/core"
+)
 
 // renameVerb composes the /rename probe, for modelVerb's reason: slashguard
 // refuses a whole-word command literal in this package.
@@ -46,10 +53,10 @@ func (a *agent) renameTextLocked() (text string, keep bool) {
 		return "", false
 	case a.renameHeld || a.claudeName == "":
 		return "", true
-	case a.claudeName == a.name:
+	case a.claudeName == a.claudeWant:
 		return "", false
 	}
-	return slashPrefix + renameVerb + " " + a.name, false
+	return slashPrefix + renameVerb + " " + a.claudeWant, false
 }
 
 // renameWrite is the line a queued rename probe writes, decided again at the
@@ -68,7 +75,7 @@ func (a *agent) renameWrite() string {
 		a.probeWanted[renameProbe] = true
 	}
 	if text != "" {
-		a.claudeName = a.name
+		a.claudeName, a.renameSent = a.claudeWant, a.claudeWant
 	}
 	return text
 }
@@ -92,7 +99,10 @@ func (a *agent) noteRenameSent(text string) {
 // which is the next one while a probe is in flight (stdin is FIFO). The release
 // settles the want unless claude took exactly what the passthrough asked and
 // that is not Wake's name (Wake hyphenated it), which leaves one /rename for
-// the next idle: any other name is claude's own choice, never chased.
+// the next idle: any other name is claude's own choice, never chased. The
+// manager's is the exception, since what its passthrough asked is never the
+// manager-<part> Wake wants. When claude answers Wake's own /rename with a
+// variant of that name, adoptedVariant makes it the manager's.
 // Content-matched like every probe reply, so a turn whose prose opens with the
 // same words would be read as one.
 func (a *agent) noteRenamed(ev core.Event) {
@@ -108,8 +118,29 @@ func (a *agent) noteRenamed(ev core.Event) {
 	a.claudeName = name
 	if a.renameHeld && a.pendingProbes[renameProbe] == 0 {
 		// A refused mirror owes claude Wake's name whatever it took, a variant included.
-		keep := name != a.name && (a.renameRefused || name == a.renameAsked)
+		// So does the manager's: its passthrough asked for the part alone, never
+		// for the manager-<part> Wake wants, so no reply to it is final.
+		keep := name != a.claudeWant && (a.renameRefused || name == a.renameAsked || a.name == core.ManagerName)
 		a.probeWanted[renameProbe] = a.probeWanted[renameProbe] && keep
 		a.renameHeld, a.renameAsked, a.renameRefused = false, "", false
 	}
+}
+
+// adoptedVariant makes what claude answered Wake's own /rename with the
+// manager's name when it is a variant of the one asked - a collision's -2 - and
+// reports whether the name moved. The report and the park book speak for claude's
+// name, and a manager-<part> that claude does not carry is one SendMessage
+// delivers to whichever session does. Only a reply that provably answers the
+// current want is taken: the one probe in flight, which asked it. Two in flight
+// cannot be told apart, and a stale one's reply can extend a newer want
+// (ops-long, then ops), so those are left to the newer rename.
+func (a *agent) adoptedVariant() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.name != core.ManagerName || a.pendingProbes[renameProbe] != 1 || a.renameSent != a.claudeWant ||
+		a.claudeName == a.claudeWant || !strings.HasPrefix(a.claudeName, a.claudeWant) {
+		return false
+	}
+	a.claudeWant = a.claudeName
+	return true
 }

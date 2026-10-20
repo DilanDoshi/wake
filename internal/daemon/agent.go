@@ -158,10 +158,14 @@ type agent struct {
 	probeWanted [probeKinds]bool
 
 	// claudeName is claude's own session name, "" while an operator's /rename
-	// is unanswered; renameHeld keeps a mirrored rename's want from firing until
-	// claude's next rename reply, and renameAsked is what that /rename asked
-	// for; renameRefused marks a hold whose mirror Wake refused. See renamesync.go.
+	// is unanswered; claudeWant is the name it is to carry: Wake's, except the
+	// manager's manager-<part>. renameHeld keeps a mirrored rename's want from
+	// firing until claude's next rename reply, and renameAsked is what that
+	// /rename asked for; renameRefused marks a hold whose mirror Wake refused;
+	// renameSent is what the last rename probe asked of claude. See renamesync.go.
 	claudeName    string
+	claudeWant    string
+	renameSent    string
 	renameHeld    bool
 	renameAsked   string
 	renameRefused bool
@@ -332,7 +336,8 @@ func newAgent(id, name, label, dir, parent string, sess *core.Session, cancel co
 	return &agent{
 		id:           id,
 		name:         name,
-		claudeName:   name, // --name, which wins on --resume too (at-menu findings §2); never a manager's: none is renamed
+		claudeName:   name, // --name, which wins on --resume too (at-menu findings §2); launch gives the manager its own
+		claudeWant:   name,
 		label:        label,
 		dir:          dir,
 		parent:       parent,

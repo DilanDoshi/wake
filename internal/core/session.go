@@ -132,7 +132,7 @@ type Config struct {
 	SessionID string
 	Name      string
 	// ClaudeName is what claude is told to call itself; empty means Name. Only
-	// the manager has one: Wake's `manager` is `manager-<fleet>` to claude.
+	// the manager has one: Wake's `manager` is `manager-<part>` to claude.
 	ClaudeName string
 	Dir        string
 	Model      string
