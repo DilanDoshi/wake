@@ -4,6 +4,8 @@ package ui
 // terminal text. dm.go owns how those blocks are laid out together.
 
 import (
+	"cmp"
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -41,6 +43,10 @@ const (
 	// fault. One label for both recorded wordings - whether a tool was running
 	// is already visible in the rejected tool result directly above it.
 	interruptedLabel = "⊘ turn interrupted"
+
+	// autoResumedLabel is the daemon's own "continue" to an agent a usage limit
+	// stopped (internal/daemon/usagelimit.go): Wake's words, so drawn as Wake's.
+	autoResumedLabel = "↻ resumed after the usage limit"
 
 	// withdrawnLabel retires the ⚠ above it: the request is dead and the
 	// answer this view was inviting would go nowhere. Muted for the same
@@ -162,6 +168,7 @@ var (
 		core.NoticeContextCompacted: compactedLabel,
 		core.NoticeToolDenied:       deniedLabel,
 		core.NoticeTurnInterrupted:  interruptedLabel,
+		core.NoticeAutoResumed:      autoResumedLabel,
 	}
 )
 
@@ -184,10 +191,19 @@ func (d DM) renderEvent(ev core.Event) block {
 		joined: ev.Kind == core.KindToolResult,
 	}
 	b.copied, b.src = copiedAs(ev)
-	// A peer message that folds is a click target, keyed like a tool call so
-	// openTool opens it; one that fits is not, or a click would rewrap for nothing.
-	if ev.Kind == core.KindCrossSession && peerFolds(ev.Text, d.bodyWidth(ev)) {
+	// A peer message that folds - an incoming one, or this conversation's own send
+	// - is a click target, keyed like a tool call so openTool opens it; one that
+	// fits is not, or a click would rewrap for nothing.
+	words, peer := ev.Text, ev.Kind == core.KindCrossSession
+	if s := sentOf(ev); s != nil {
+		words, peer = s.Text, true
+	}
+	if peer && peerFolds(words, d.bodyWidth(ev)) {
 		b.tool = peerKey(ev)
+	}
+	// A send draws as a peer message, with no ⏺ for a result to recolour.
+	if sentOf(ev) != nil {
+		return b
 	}
 	// A subagent's call is deliberately unmarked: its block is drawn inside an
 	// attribution gutter, so the ⏺ is not at the start of its line and neither
@@ -358,6 +374,9 @@ func (d DM) kindBlock(ev core.Event, w int) string {
 		if ev.Tool == nil {
 			return ""
 		}
+		if s := sentOf(ev); s != nil {
+			return sentBlock(cmp.Or(ev.FromName, d.Name), s, w, d.expandedTool(peerKey(ev)))
+		}
 		return toolUseBlock(ev.Tool, d.bulletFor(ev.Tool.ID), w)
 	case core.KindToolResult:
 		if ev.Tool == nil {
@@ -431,6 +450,32 @@ func localReplyBlock(text string, width int) string {
 // resolve from-name into an agent.
 func crossSessionBlock(ev core.Event, width int, expanded bool) string {
 	return joinBlock(accentLine(crossSessionLead+ev.FromName, width), peerBody(ev.Text, width, expanded))
+}
+
+// namedSend stamps the conversation's name on one of its own sends, so the block
+// keeps the name it was sent under through a rename and every re-wrap after it.
+func (d DM) namedSend(ev core.Event) core.Event {
+	if sentOf(ev) != nil && ev.FromName == "" {
+		ev.FromName = d.Name
+	}
+	return ev
+}
+
+// namedSends is namedSend over restored history, on a copy of it.
+func (d DM) namedSends(events []core.Event) []core.Event {
+	out := slices.Clone(events)
+	for i := range out {
+		out[i] = d.namedSend(out[i])
+	}
+	return out
+}
+
+// sentBlock renders one of this conversation's own SendMessage calls as the peer
+// message it is: crossSessionBlock's head with this agent as the sender and the
+// recipient after the arrow, then the same Muted, folded body. Drawn from the call
+// - the agent's intent, not proof of delivery - and a failed send's error follows.
+func sentBlock(from string, s *core.PeerSend, width int, expanded bool) string {
+	return joinBlock(accentLine(crossSessionLead+from+crossSessionArrow+s.To, width), peerBody(s.Text, width, expanded))
 }
 
 // crossSessionBody draws a received peer message's body in Muted - Claude's

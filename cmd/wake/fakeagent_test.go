@@ -242,6 +242,8 @@ func runFakeAgent() int {
 		return fakeAgentAtMenu(sid)
 	case scriptHandshakes:
 		return fakeAgentHandshakes(sid)
+	case scriptUsageLimits:
+		return fakeAgentUsageLimits(sid)
 	case scriptSteers:
 		return fakeAgentSteers(sid)
 	case scriptCodeStream:

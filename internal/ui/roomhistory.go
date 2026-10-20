@@ -423,6 +423,13 @@ func collapseBroadcasts(lines []roomLine, nextID *uint64) []roomLine {
 			}
 			continue
 		}
+		if l.ev.Notice == core.NoticeAutoResumed {
+			// Wake's resume, never the operator's: drawn as it was live, and its
+			// turn is no DM's, so the reply it got was public too.
+			open[l.ev.SessionID] = true
+			out = append(out, l)
+			continue
+		}
 		open[l.ev.SessionID] = public[i]
 		if firsts[i] {
 			// The chronological representative can change when an earlier
@@ -593,9 +600,10 @@ func broadcastRuns(lines []roomLine, copied map[int]int) [][]int {
 	byText := map[string][]int{}
 	for i, l := range lines {
 		// A room send's turn is decided by its provenance (roomSendGroups), and a
-		// fork's copy is not a line anybody sent: multiplicity reads neither.
+		// fork's copy or the daemon's resume is not a line the operator sent:
+		// multiplicity reads none of them, or a resume would make a DM public.
 		_, isCopy := copied[i]
-		if _, _, room := roomSendOf(l.ev.MessageID); isCopy || room {
+		if _, _, room := roomSendOf(l.ev.MessageID); isCopy || room || l.ev.Notice == core.NoticeAutoResumed {
 			continue
 		}
 		// Every decoded image carries the one placeholder text, so two private
@@ -625,10 +633,19 @@ func broadcastRuns(lines []roomLine, copied map[int]int) [][]int {
 
 // addressedAsSent gives a restored room turn the address the live echo had: a
 // lone direct @name that reached one transcript is drawn `@name ...` in that
-// agent's thread (claude received it with the mention stripped). A broadcast, an
+// agent's thread (claude received it with the mention stripped), and a team send
+// is addressed to the members whose transcripts hold it. A broadcast, an
 // undirected send and a turn proved by multiplicity stay unaddressed.
 func addressedAsSent(l roomLine, lines []roomLine, members []int) roomLine {
 	_, direct, room := roomSendOf(l.ev.MessageID)
+	if room && roomSendTeam(l.ev.MessageID) {
+		held := make([]string, 0, len(members))
+		for _, k := range members {
+			held = append(held, lines[k].ev.SessionID)
+		}
+		l.to = joinIDs(held)
+		return l
+	}
 	if !room || !direct {
 		return l
 	}

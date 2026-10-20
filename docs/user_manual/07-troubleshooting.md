@@ -68,8 +68,15 @@ to end the retry hang, and wakes the same way. If one fails again after waking, 
 ## A usage limit
 
 A session or weekly usage limit is not a broken login, so Wake neither parks the agent nor asks for
-`/reauth`. The notice row keeps `@x: You've hit your session limit · resets … — send again once it
-resets` until a turn goes through; after the reset, just send the next message.
+`/reauth`. The notice row keeps `@x: You've hit your session limit · resets … — Wake resumes it at the
+reset, or when you sign in to another account` until a turn goes through.
+
+You don't have to send anything. Wake writes `continue` to every agent the limit stopped, once, either
+when the reset it named has passed or as soon as you sign in to a different Claude account in any
+other terminal (`/login` in another Claude Code session counts). It shows as `↻ resumed after the
+usage limit`, not as your words. If you message the agent first, the resume waits for that turn, and
+if it goes through nothing more is sent; `esc` on the agent cancels the resume. Signing in again to the same account changes nothing — only
+a different account, or the reset, lifts the limit.
 
 ## A key does nothing
 

@@ -3398,6 +3398,8 @@ time the turn ends.
 
 ## Ruling: bare `wake` lands on the room, and first run spawns an agent it does not open
 
+*(The spawn half is superseded 2026-10-16, below: bare `wake` spawns no agent. Landing on the room stands.)*
+
 **Every bare `wake` was landing on a conversation, and it took running the shipped binary to see
 it.** `openRoom` branched three ways and two of them opened the room; the third — nothing at all —
 went through `attach`, which spawns *and* opens that agent's DM beside the room. That looked like
@@ -4120,7 +4122,7 @@ permission card) and chose none of it:
   `AskUserQuestion` and `ExitPlanMode`; an ordinary built-in is approved without reaching Wake. A
   fence needs `default` mode, which the owner also declined — so this is not a fence deferred.
 - (d) **What stays visible:** the room draws every send, live, as `↪ manager → <to>` from the
-  `tool_use` itself (`withManagerSend`), not from the manager's own prose, which injected text could
+  `tool_use` itself (`withManagerSend`, now `withSend`), not from the manager's own prose, which injected text could
   also suppress. It shows what the manager tried to send, not that it arrived: the receipt is the
   manager's turn, and a restored room does not redraw the line (deferred.md). A send to a fleet agent
   is left to the receiver's stream, which draws it already.
@@ -4393,6 +4395,196 @@ folded it at all.
   The key and the fold are decided at `DM.bodyWidth`, the width the block is drawn at (a subagent's is a
   gutter narrower), so a pointer is always a click target.
 
+## 2026-10-15 — the manager's end part is the operator's: `manager-<part>`
+
+The owner's ask: the end of `manager-<fleet>` should be renameable, and the manager's Claude session
+should *actually* carry that name so other agents can reach it by it. The owner chose the command:
+`@manager /rename <part>`.
+
+- **Wake keeps `manager`; only what claude calls it moves** (2026-10-10's split, unchanged). The name
+  claude is to carry is `agent.claudeWant` — Wake's name for everyone, `manager-<part>` for the manager.
+  Launch sets it from `managerConfig` (the socket's fleet unless a wake carried one), `agent.rename`
+  sets it, and `renamesync.go` compares and sends against it, so claude is told with the same idle
+  `/rename` any rename uses and a woken manager starts as `--name manager-<part>`.
+- **What is typed** (`managerClaudeNameOf`): the part or the whole `manager-<part>` pasted back, folded
+  to lower case; name runes only, at most `maxFleetName`, which is what keeps a session id (36) out of
+  the argv behind the 8-character prefix. It may start with a digit. `manager`, `manager-` and
+  nothing are refused; spaces are hyphenated by the UI as for every `/name`. **A bare `manager` resets
+  to the fleet's name** (`server.renameText`, the one place that knows the socket).
+- **Three ways in, one daemon path**: `/name ops` in the manager's conversation, `/name @manager ops`
+  in the room, and `@manager /rename ops`. The last passes `/rename ops` to claude *and* mirrors it, as
+  `@who /rename` does for any agent — but the room routes the manager as the service rather than a
+  mention, so `roomSends` mirrors a `/rename` that reaches the one service target too. Without it
+  claude would have been named `ops` while Wake still drew `manager-harbor`. Claude carries `ops`
+  until its reply releases the held want and the daemon sends `/rename manager-ops`, the same
+  dance as a hyphenated name.
+- **The report serves the current name** (`server.managerClaude`): the manager's agent, else a park
+  record, else the fleet's. Clients already draw `ManagerClaude` (`Fleet.shown`), so rows, headers and
+  `@` routing follow with no UI change; the old handle resolves to nothing, as for any rename, and
+  `@manager` still reaches it. The peers listing leaves out the *current* name.
+- **The rename survives a park** in `parkedRecord.ClaudeName` (optional, the manager's record only),
+  written by `recordFor` and read back through `restoredClaudeName`, which re-fences it like a rename
+  would — the book is a file, and the value reaches an argv. A daemon holding only the book serves it
+  too, so a parked row is drawn renamed before it is woken; with two manager records in one book the
+  newest wins, since the map they come from has no order. `/manager-stop` ends the manager and its
+  name with it: the next one starts as `manager-<fleet>`.
+- **A variant claude answers with is the name it took.** Both reviews found it, and the machine this was
+  built on had five managers in claude's peer list, so it is not far-fetched. `@manager /rename ops`
+  asks claude for `ops`, never for `manager-ops`, so no reply to it is final: the manager's release
+  always owes the whole name once (`noteRenamed`), where an ordinary agent's variant is claude's own
+  choice and stays unchased. When claude answers *Wake's own* `/rename manager-ops` with
+  `manager-ops-2`, because another session holds the name, `adoptedVariant` makes that the manager's
+  name and the report is pushed: a served name that claude does not carry is one `SendMessage`
+  delivers to whichever session does. Only a reply that provably answers the current want is taken:
+  the one probe in flight, which asked it (`renameSent`). Two probes can be in flight (a probe does
+  not mark the agent owed), and a stale reply can extend a newer want - `ops-long` then `ops` -
+  which Codex's second pass found in a prefix-only first version. Not chased further: that is the
+  loop the ordinary rule exists to prevent.
+- **Not done:** nothing compares a chosen part with another fleet's manager *before* the rename; the
+  collision is answered after, by the variant above. An ordinary agent whose hyphenated `/rename`
+  draws a variant is still unchased, as before.
+- **Residual, pre-existing and left for its own change:** `renameHeld` is one boolean for however many
+  mirrored passthroughs are outstanding, so two windows' `/rename`s inside one round trip can release
+  the hold on the first reply. For the manager the sequence is `/rename manager-ops` then
+  `/rename ops` from two windows: the first reply equals the want and clears it, the second leaves
+  claude at `ops` with nothing armed. An ordinary agent has the same hole with `foo-bar` then
+  `foo bar`. Closing it means counting passthroughs (or FIFO-correlating replies), which touches every
+  agent's sync, so it is not bundled here; a later `/name` settles it.
+## 2026-10-16 — bare `wake` starts the manager and no agent (the owner)
+
+**Reverses** the spawn half of "bare `wake` lands on the room, and first run spawns an agent it does
+not open" and lifecycle spec §3's "no fleet exists → first run spawns". The owner's report: a fresh
+`wake` came up with a pooled agent (`alma`, `bruno`) beside the manager, and it should be the manager
+alone. That ruling's premise - "a new user's first command has to produce an agent" - predates the
+manager being started by every verb that opens the room: the room now always has somebody to type to,
+an unaddressed draft reaches the manager, and the manager can spawn. `wake new` and `/new` remain the
+ways to start an agent by hand.
+
+- **The branch is gone, not switched off.** `openRoom` always asks what is running (`requestFleet`,
+  `awaitFleet`) and `ensureManager` seats the manager; `fleetToReopen`, `reopensRoom` and `hasFleet`
+  existed only to decide the spawn, so they and their totality guards are deleted rather than left
+  deciding nothing. ⌃Q's park book needs no special case: the room opens over it like anything else
+  and `/resume` reaches it.
+- **Held by** `TestBareWakeOpensTheRoomWithOnlyTheManager` (a real pty: the room alone, the manager on
+  the roster, no agent, and the daemon holding exactly the manager - the one test that sees a spawn
+  after the seed) and `TestBareWakeSpawnsNothingBeforeTheRoomKnowsWhatIsRunning` (no spawn frame
+  before the room's seed).
+  The pty tests that used first run's agent as a fixture start it with `wake new` and `⌃W` back to the
+  room, as gridscreen already did.
+## 2026-10-16 — a conversation draws its own agent's `SendMessage`, and the room draws any agent's outside send
+
+The owner's ask: an agent's outgoing message should render like an incoming one, `<this session> →
+<other session>` with the words under it, in every pane. Before, a DM drew `⏺ SendMessage` and nothing
+else, folded into `1 tool use`: the recipient and the words were decoded (`ToolCall.Send`) and used only
+for the manager's room line.
+
+- **The DM draws it as the peer message it is** (`sentBlock`): the `↪` head with `DM.Name` as the sender,
+  an arrow, the recipient, then the body in Muted, folded at three rows with the same `⌃E`/click
+  (`peerfold.go`). It is the call's own block, so a send is `foldExempt` like an edit's diff and never
+  hides inside a count. Every pane that draws a conversation does it through `DM.renderEvent`: grid
+  panes, restored history and board tiles.
+- **The receipt is hidden on success.** `“<summary>” → <to> (… in that session's inbox, not yet read …)`
+  is boilerplate under the words (owner's pick, 2026-10-16). Only that recorded shape, for that
+  recipient, is hidden (`delivered`): `is_error` is optional on the wire, so an unmarked failure, another
+  shape or a subagent's result all draw, which is the tree's rule that an unmodelled shape degrades
+  toward more output. Both reviews found a first version that hid every unmarked result.
+- **The sender's name is stamped when the send is stored** (`namedSend`, in `Append` and `Before`), so a
+  block keeps the name it was sent under through a rename and every re-wrap after it, as an incoming
+  message keeps its `FromName`.
+- **A conversation of nothing but sends still reclaims** (`cutFrom` may cut before one): a send is
+  fold-exempt, so retention's tool-call fallback had no place to cut it.
+- **The room skips a send to the sender's own subagent**: `SendMessage` to an `agentId` continues a
+  dispatch (its task id is the agentId, `subagent-task.jsonl`), a private brief and no session.
+- **A subagent's own send is unchanged**: drawn in its own view as a tool call. Its name is not this
+  conversation's, so `↪ alex → …` would say the wrong thing.
+- **Drawn from the call, not from delivery**, like the manager's room line (2026-10-03): the agent's
+  intent. The receipt that said otherwise is hidden, so a send the recipient never reads still reads as
+  sent.
+- **The room draws any agent's send to a session outside the fleet** (`withSend`, was manager-only).
+  Fleet-to-fleet was already drawn, once, from the receiver's stream, and still is; a send the call
+  names to a fleet agent is not drawn from the call, or it would show twice. This widens 2026-10-03's
+  manager-only line at the owner's request ("it should work in all panes"); the manager's reason (an
+  unfenced tool, so its sends must stay visible) is unchanged, the rest is visibility. Still live-only:
+  a restored room does not redraw it (deferred.md).
+- **Accepted, in deferred.md:** a send the operator denies, or that errors, still shows in the room as
+  sent (the DM shows the error under it); a parallel tool batch can draw a sibling's result joined under
+  a send; and a name window can draw one fleet-to-fleet send twice.
+## 2026-10-17 — a lone `@team` narrows the room like a lone `@name`
+
+The owner's ask: `@<team>` filters the group chat the way `@<agent>` does. This reverses the teams spec's
+2026-09-20 line ("a lone `@team` does **not** narrow the room in v1"), which left the per-team room behind the
+multi-room door. It is not a second room: `deferred.md` already named it as the composition of teams
+(membership) and the `@john` filter (narrowing) over the one room.
+
+- **A team's thread is the union of its members' threads.** `focusAdmits` asks each member's own question
+  (`admitsThread`, the old body), so every rule an agent's narrowing keeps holds per member: its prose, the
+  manager's, broadcasts, the operator's turns aimed at it, the peer messages it sent or received. No second
+  predicate.
+- **The room's focus stays one comparable string**: an agent's own id for one agent, the sorted ids for a team
+  (`joinIDs`). A lone `@name` therefore compares, filters and resets `⌃A` exactly as before. **Sorted**
+  because `Fleet.Agents()` is attention-ranked, so a member starting work reorders a team's route; an
+  unsorted key would read that as a new target and reset the override on every report
+  (`TestAMemberChangingStateKeepsTheOverride`).
+- **A team narrows in open mention mode too.** Open mode widens a lone `@name` past its mention, so the view
+  stays wide; it never widens a team send, so the thread the message reaches is the one to read
+  (`roomRoute.thread` decides the thread a draft addresses, for the focus and the live echo).
+- **A team of two or more draws no agent bar.** The bar is one agent's directory, model and context; a team has
+  no one, and the manager's would say something about someone else. A team of one is that agent's thread, so
+  its key is the member's id and it draws the member's bar.
+- **The echo of a team send is addressed** (`to` = the members' key), which closes the gap the spec named:
+  the room narrowed to `@frontend` no longer shows what you told `backend`. It draws in the team's thread
+  and in each member's.
+- **The target is the name the draft addresses over a thread that still shares an agent.** A team gaining or
+  losing a live member under a standing draft (a `/team`, a park, a manager spawn) is the same target: `⌃A`'s override
+  survives, and the reader keeps their place (`Room.refiltered`, over `relaid`'s line moves) - Review found the
+  first cut threw a scrolled reader to the newest line on any report, against "only a width change returns
+  a reader to the newest line". A reader whose line the change hides goes to the newest line, never back to
+  the oldest history. A selection is still cleared. An unknown or all-parked team narrows nothing, as an
+  unknown name does. An agent and a team can share a name (the router lets the agent win): when the agent
+  parks the same draft addresses the team, and the two share no id, so it is a new target and resets the
+  override (Codex, pass 2).
+- **A team turn is not seeded into a never-opened DM** (`roomseed.turnsFor` still reads `to == id`), as a
+  broadcast is not: it is on each member's disk, and the seed cannot be reconciled with a member's queue,
+  so a queued one would draw twice. A team of one has the member's id for its key and seeds like `@name`.
+- **A restored team send is addressed to the members that hold it.** The room send's uuid carries a second
+  flag (bit 1, `roomSendTeam`) and `addressedAsSent` addresses the restored line to the sessions whose
+  transcripts hold the send, so a restart no longer turns what you told `backend` into a broadcast that
+  draws in every thread (Codex, pass 2). Only the members read back are in the key, never more than the disk
+  holds, and the line is not prefixed with `@team`: the team's name is not on disk.
+## 2026-10-17 — the daemon resumes the agents a usage limit stopped (the owner)
+
+**Reverses** deferred.md's 2026-09-27 "no message is sent for you at the reset" and "nothing watches
+the login". The owner hit a session limit, signed in to another account in another session, and Wake
+sat still until an `@all`: fifteen agents stopped at 21:43Z answered within fifteen seconds of it at
+22:43Z, with no restart, so a message is all a resume needs. Claude Code itself continues at the reset
+(2.1.234, `autoContinueAtUsageLimit`); a headless session does not, and only Wake can see a login in
+another terminal.
+
+- **The daemon decides, once.** `internal/daemon/usagelimit.go` records a stop when a turn ends on
+  `core.NoticeUsageLimit` (the reset it named, and the account signed in then), clears it on the
+  agent's own model output, a `/clear` or an interrupt (an operator saying stop is not to be
+  continued for) - not on a send, which holds a resume off while its turn is in flight, and whose
+  local command (`/model`) runs no turn - and while one is held runs one
+  goroutine waiting on Claude's config file
+  (`configwatch_darwin.go` kqueue, `_linux.go` inotify, `_other.go` none - a wait, never a poll) and
+  one timer. It writes `continue` when `oauthAccount`'s ids name another account, or the reset plus a
+  minute has passed (wall clock, so the liveness tick catches a reset slept through). Only an idle
+  agent with nothing queued is resumed, and a queued resume answers only the stop it was queued for;
+  a busy one is nudged again at its turn end, and one whose input is full is blocked - no timer -
+  and retried on the liveness tick or its next turn end. A reset not after the hit arms nothing, so a stale message cannot loop. The manager is
+  resumed like any agent. A resume is never counted toward proving a typed turn a broadcast, so a DM
+  "continue" beside one stays private.
+- **Drawn as Wake's.** The resume is stamped `rpc.MessageResumed` in the uuid layout room sends
+  already used (moved to `rpc/messageid.go`), announced live as `core.NoticeAutoResumed`, and marked
+  on restore from disk - `↻ … resumed after the usage limit` in the room and the conversation, never
+  the operator's words, and never a broadcast when several agents resume in one second.
+- **The eighth airlock file**, `core/account.go`: the account decode and the reset parse (session
+  `resets 6:50pm (Zone)` and weekly `resets Oct 20 at 9am (Zone)`, both read off real limit messages
+  by shape). Its three config keys are policed and excused as absent from the stream corpus.
+- **Held by** core's decoder tables; `TestALoginToAnotherAccountResumesTheAgentsALimitStopped`,
+  `TestARewriteOfTheSameAccountResumesNothing`, `TestTheResetTheLimitNamesResumesIt` and the
+  edge-case units in internal/daemon; the UI's restore and live tests; and the pty
+  `TestAnAgentALimitStoppedResumesWhenYouSignInElsewhere`, each mutation-checked.
 ## 2026-10-18 — a multi-select question is answered the way Claude Code answers one (the owner)
 
 The owner asked for the "select several" question menu, and chose to match Claude Code's own screen

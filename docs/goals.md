@@ -128,8 +128,8 @@ the right sidebar, both of which are surface rather than capability.
 the whole fleet and exits; **`⌃O`** detaches; `/resume` brings a parked session back; and **bare
 `wake` reopens the room** rather than always spawning — over whatever fleet there is, over a fleet
 parked by `⌃Q` with no daemon behind it at all, and, on a machine with nothing running, as first run,
-which still spawns. A room that opens on parked sessions **offers them back**: one line naming who is
-parked and `/resume all`.
+which still spawns (no longer: since 2026-10-16 bare `wake` starts the manager and no agent). A room
+that opens on parked sessions **offers them back**: one line naming who is parked and `/resume all`.
 
 **The offer is a line rather than an automatic restore, and that is a decision rather than a
 shortcut.** Waking N sessions on start would put N spawns in front of the `FrameHello` that

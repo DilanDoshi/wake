@@ -53,6 +53,7 @@ package daemon
 import (
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -81,15 +82,12 @@ const (
 	endedDisplay = "this session has ended, so its name has already gone back to the pool and may belong to " +
 		"another agent by now"
 
-	// renameManager is the one name that is not display. daemon/manager.go keys
-	// the MCP configuration and the scoping prompt off `core.ManagerName`,
-	// internal/mcp keeps the manager off its own roster by it, and the room's
-	// default addressee is found by it - so a manager under a pooled name is a
-	// session holding tools that act on the whole fleet, which `@manager`
-	// reaches nothing of and which `list_agents` would offer as an ordinary
-	// agent.
-	renameManager = "the manager's name is what makes it the manager - the tools it holds and the room's " +
-		"default addressee are both keyed on it - so it cannot be called anything else"
+	// managerPartNeeded is a manager rename that names no end part. The manager's
+	// Wake name is not display - its tools and the room's default addressee are
+	// keyed on it - so what a rename moves is the part of the name claude knows
+	// it by after manager-, and a bare `manager` or `manager-` has none to give.
+	managerPartNeeded = "the manager is called manager-<part> to Claude, so a rename needs the part after " +
+		"manager-, for example ops for manager-ops"
 
 	// renameNothing is a rename frame carrying no name. Refused rather than
 	// read as claim reads an empty request: there, empty means "pick one from
@@ -119,21 +117,32 @@ const (
 // would make renaming a wedged session impossible. Claude's own /rename only
 // follows as a probe, queued without waiting, and held when the keystroke
 // sends claude one itself (renamesync.go).
+//
+// The manager is renamed in its end part only: manager-<part> is what claude
+// calls it, so the registry is untouched and a.name stays core.ManagerName.
 func (a *agent) rename(names *nameRegistry, requested string, held bool) error {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	if why := renameableStates[a.stateLocked(time.Now())]; why != "" {
 		return errors.New(why)
 	}
-	if a.name == core.ManagerName {
-		return errors.New(renameManager)
+	manager := a.name == core.ManagerName
+	var to string
+	var err error
+	if manager {
+		to, err = managerClaudeNameOf(requested)
+	} else {
+		to, err = names.rename(a.name, requested)
 	}
-	to, err := names.rename(a.name, requested)
 	if err != nil && !held {
 		return err
 	}
 	if err == nil {
-		a.name = to
+		// The manager keeps Wake's name: only what claude calls it moves.
+		a.claudeWant = to
+		if !manager {
+			a.name = to
+		}
 	}
 	// A /name over a held want - another window's, during the passthrough's
 	// round trip - keeps it held: that reply decides what, if anything, to send.
@@ -188,6 +197,14 @@ func (a *agent) currentModel() string {
 	return a.model
 }
 
+// wantedClaude is the name claude is to carry, under the agent's own lock:
+// Wake's name, or for the manager the manager-<part> a rename chose.
+func (a *agent) wantedClaude() string {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.claudeWant
+}
+
 // currentSpend is the ceiling and the failover chain, under the agent's own
 // lock. One reader for both because they are read together everywhere - the
 // park record and the fleet report - and two calls would take the lock twice
@@ -218,12 +235,21 @@ func (a *agent) rosterRecord(pgid int) record {
 // dies.
 func (s *server) renameSession(c *client, f rpc.Frame) {
 	s.withAgent(c, f, func(a *agent) error {
-		if err := a.rename(s.names, f.Text, f.SelfRenames); err != nil {
+		if err := a.rename(s.names, s.renameText(a, f.Text), f.SelfRenames); err != nil {
 			return err
 		}
 		s.published(a)
 		return nil
 	})
+}
+
+// renameText is what a rename frame asks for. A manager asked for the bare word
+// names no end part, so it gets the fleet's own back; anything else is as typed.
+func (s *server) renameText(a *agent, text string) string {
+	if a.named(core.ManagerName) && strings.EqualFold(strings.TrimSpace(text), core.ManagerName) {
+		return s.managerClaudeDefault()
+	}
+	return text
 }
 
 func (s *server) relabelSession(c *client, f rpc.Frame) {

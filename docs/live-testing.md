@@ -28,9 +28,8 @@ What it still cannot settle, and why every section below survives:
 and leaves the fleet running; `⌃C` parks the focused agent and `⌃Q` parks the fleet and closes
 Wake; `wake stop` ends it. `wake status` says what is alive. **Those three keys changed on
 2026-08-11** — `⌃C` used to detach — so if your hands know the old ones, that is the first thing to
-watch for. **`wake` itself changed the same day**: it reopens the room over an existing fleet and
-spawns nothing, and only starts an agent when there is nothing running. `wake new` is the verb that
-always spawns.
+watch for. **`wake` itself changed the same day**: it opens the room over the fleet, and since
+2026-10-16 it starts only the manager — never an agent. `wake new` is the verb that spawns one.
 
 Mark items as you go. When one fails, the useful report is *what you did, what you saw, and what
 you expected* — a screenshot beats prose for anything visual.
@@ -352,11 +351,11 @@ back.**
       negotiable: two processes on one transcript branch it with no error anywhere. Hard to trigger
       by hand — `wake new` mints its own id — so this is a "if you ever see it, report it" rather
       than a step.
-- [ ] **Bare `wake` on a machine with nothing running is still first run**: one command, one agent,
-      **and the room**. The agent is a roster row rather than a pane — `↵` on the row opens the
-      conversation, and `wake new` is the verb that opens one for you. The pty suite holds the pane
-      count, the roster row and that the row opens (`openroomscreen_unix_test.go`); what it cannot
-      say is whether a new user reads an empty room with one row in it as *it worked*.
+- [ ] **Bare `wake` on a machine with nothing running opens the room with the manager alone** — no
+      pooled agent beside it. Typing in the room reaches the manager; `/new` or `wake new` starts an
+      agent. The pty suite holds the pane count, the manager's row and that nothing else was spawned
+      (`openroomscreen_unix_test.go`); what it cannot say is whether a new user reads a room with only
+      the manager in it as *it worked*, and knows to ask it for an agent.
 - [ ] **Bare `wake` while a fleet is already running and you are attached in another terminal.** It
       should open a second room on the same fleet with no new agent in it. Two alt screens over one
       daemon is a thing no test has ever drawn.
@@ -926,6 +925,16 @@ The tests replay recorded receipts and a scripted agent. In a scratch git reposi
 - [ ] Ask an agent to message its teammate. The room draws `↪ sender → recipient`. Move the teammate off
       `auto` with `⇧⇥` and send again: Claude Code may hold the message for an approval nobody can
       give — note what you see.
+
+## A usage limit — what only a real plan shows
+
+- [ ] **Hit a real session limit with a few agents mid-task, then `/login` to a different account in
+      another Claude Code window.** Every stopped agent should show `↻ resumed after the usage limit`
+      within a second or two of the login and carry on. The suite drives this against a fake and a
+      rewritten config file (`TestAnAgentALimitStoppedResumesWhenYouSignInElsewhere`); what it cannot
+      say is whether a real `/login` rewrites `~/.claude.json` the way the fake does, and whether the
+      running processes take the new account on that very turn.
+- [ ] **Or wait the limit out:** a minute after the reset the pin names, each stopped agent resumes.
 
 ## Reporting back
 

@@ -341,6 +341,34 @@ func normalizeName(requested string) (string, error) {
 	return name, nil
 }
 
+// managerClaudeNameOf reads what an operator typed for the manager - its end
+// part, or the whole manager-<part> pasted back from where it is drawn - into
+// the name claude carries.
+//
+// The part is a name's characters and at most a fleet name's length, which is
+// what keeps a session id from fitting behind the prefix (nameShaped holds the
+// derived one to the same bound); unlike an agent's name it may begin with a
+// digit, since manager- is what begins the whole.
+func managerClaudeNameOf(requested string) (string, error) {
+	text := strings.ToLower(strings.TrimSpace(requested))
+	if text == "" {
+		return "", errors.New(renameNothing)
+	}
+	part, _ := strings.CutPrefix(text, core.ManagerPrefix)
+	switch {
+	case text == core.ManagerName || part == "":
+		return "", errors.New(managerPartNeeded)
+	case len(part) > maxFleetName:
+		return "", fmt.Errorf("the part after manager- is at most %d characters and %q is %d", maxFleetName, part, len(part))
+	}
+	for _, r := range part {
+		if !isNameRune(r) {
+			return "", fmt.Errorf("a name may hold letters, digits, %q and %q, and %q holds more than that", "-", "_", part)
+		}
+	}
+	return core.ManagerPrefix + part, nil
+}
+
 // couldPrefixASessionID reports whether a name can be the front of a session id.
 //
 // This is the third pool property, and it is enforced on a name somebody

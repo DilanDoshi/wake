@@ -1,5 +1,5 @@
 // AIRLOCK. Wake's knowledge of Claude Code's stream-json wire format lives in
-// seven files in this package and nowhere else in the tree. Everything above
+// eight files in this package and nowhere else in the tree. Everything above
 // them consumes core.Event.
 //
 //	protocol.go    decoding - one wire line in, core.Events out (this file)
@@ -9,6 +9,7 @@
 //	localreply.go  the text replies of local commands Wake parses
 //	control.go     control requests Wake writes, and their receipts
 //	ask.go         an interactive ask's kind and payload, resolved
+//	account.go     the signed-in account, and when a usage limit resets
 //
 // It was one file until it reached 1031 lines against this project's 800-line
 // hard max. docs/notes/decisions.md ruled ahead of time what to do when that
@@ -16,13 +17,14 @@
 // **before** the change that overflows it lands rather than during. This is
 // that restatement. internal/core/airlock_test.go enforces it over the whole
 // tree from the same list, so the set grows only by a ruling - localreply.go
-// was the owner's, 2026-09-27, control.go 2026-10-02's and ask.go 2026-10-07's.
+// was the owner's, 2026-09-27, control.go 2026-10-02's, ask.go 2026-10-07's and
+// account.go 2026-10-17's.
 //
 // The split is by direction and by job rather than by size, so a port has
-// seven reviewable units instead of one unreadable one: what arrives, what it
+// eight reviewable units instead of one unreadable one: what arrives, what it
 // becomes, what Wake calls it, what Wake sends, what a command replies, the
-// control exchange that steers a running session, and what an interactive ask
-// puts to the operator.
+// control exchange that steers a running session, what an interactive ask puts
+// to the operator, and who is signed in and when a usage limit lifts.
 //
 // Every *inbound* shape is transcribed from testdata/stream/*.jsonl, recorded
 // from live sessions in Task 1 - not from documentation. The outbound shapes

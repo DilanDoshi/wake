@@ -29,7 +29,7 @@ the model never sees it. `internal/ui` uses it to mark a turn typed in the room 
 
 **The dependency this creates:** the marker rides a field claude validates. A future CLI that insisted
 on v4 would reject the stdin line, and a rejected line is echoed to stderr and exits 1 - every room
-send would end its agent. The version nibble is one named constant (`roomMessageVersion`) so falling
+send would end its agent. The version nibble is one named constant (`rpc`'s `messageVersion`) so falling
 back to v4 is one line; re-check on a CLI upgrade.
 
 ## 2. A fork copies its parent's records under the same uuids

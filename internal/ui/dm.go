@@ -327,6 +327,7 @@ func (d DM) Append(ev core.Event) DM {
 	if ev.Kind == core.KindSessionReset {
 		return d.clearedBySessionReset()
 	}
+	ev = d.namedSend(ev)
 
 	// Before the guards below, because a tool result with an empty body draws
 	// nothing and still settles the call above it, so a bullet left dim by an
@@ -651,7 +652,7 @@ func (d DM) Before(earlier []core.Event) DM {
 	// invisible one either. A blank assistant block or a turn end read back off
 	// disk would otherwise split a run here that the live path kept whole - the
 	// resize-versus-restore disagreement this fold has to avoid. See renderAll.
-	earlier = d.storable(earlier)
+	earlier = d.storable(d.namedSends(earlier))
 	if len(earlier) == 0 || d.reclaimed() {
 		return d
 	}
