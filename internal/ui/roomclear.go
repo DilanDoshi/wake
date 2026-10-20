@@ -54,7 +54,9 @@ func (r Room) cleared(at time.Time) Room {
 	r.said = chunked[roomLine]{base: n, n: n}
 	r.raw, r.hist, r.reclaimed, r.expanded, r.lineMoves = nil, 0, false, nil, nil
 	r.clearedAt, r.reminded, r.earlier = at, 0, prompts[max(len(prompts)-promptWindow, 0):]
-	r.tr = r.tr.replace(renderRoom(r, nil)).toBottom()
+	// No prefix: a room past its cap marks the history it reclaimed, and a
+	// cleared room has reclaimed nothing.
+	r.tr = r.tr.replaceFrom(renderRoom(r, nil), 0, "").toBottom()
 	return r
 }
 

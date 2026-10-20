@@ -207,3 +207,17 @@ func TestTheRoomRemindsEveryThousandMessages(t *testing.T) {
 		t.Errorf("after a clear the count did not start again: %q", got)
 	}
 }
+
+// A room past its retention cap has a marker for the history it reclaimed; a
+// clear is a fresh room, so the marker goes with everything else.
+func TestClearingAReclaimedRoomDropsTheReclaimedMarker(t *testing.T) {
+	a := roomSaying(t, "alpha", "bravo")
+	a = a.withRoom(a.room.reclaimOldest(1))
+	if !a.room.reclaimed || a.room.tr.prefix == "" {
+		t.Fatal("the fixture did not reclaim, so there is no marker to clear")
+	}
+	a = submitRoom(t, a, "/clear")
+	if a.room.tr.prefix != "" || strings.Contains(shown(a), roomReclaimedHistory) {
+		t.Errorf("the cleared room still says history was reclaimed:\n%s", shown(a))
+	}
+}
