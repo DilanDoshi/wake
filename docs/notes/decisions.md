@@ -4122,7 +4122,7 @@ permission card) and chose none of it:
   `AskUserQuestion` and `ExitPlanMode`; an ordinary built-in is approved without reaching Wake. A
   fence needs `default` mode, which the owner also declined — so this is not a fence deferred.
 - (d) **What stays visible:** the room draws every send, live, as `↪ manager → <to>` from the
-  `tool_use` itself (`withManagerSend`), not from the manager's own prose, which injected text could
+  `tool_use` itself (`withManagerSend`, now `withSend`), not from the manager's own prose, which injected text could
   also suppress. It shows what the manager tried to send, not that it arrived: the receipt is the
   manager's turn, and a restored room does not redraw the line (deferred.md). A send to a fleet agent
   is left to the receiver's stream, which draws it already.
@@ -4471,3 +4471,41 @@ ways to start an agent by hand.
   before the room's seed).
   The pty tests that used first run's agent as a fixture start it with `wake new` and `⌃W` back to the
   room, as gridscreen already did.
+## 2026-10-16 — a conversation draws its own agent's `SendMessage`, and the room draws any agent's outside send
+
+The owner's ask: an agent's outgoing message should render like an incoming one, `<this session> →
+<other session>` with the words under it, in every pane. Before, a DM drew `⏺ SendMessage` and nothing
+else, folded into `1 tool use`: the recipient and the words were decoded (`ToolCall.Send`) and used only
+for the manager's room line.
+
+- **The DM draws it as the peer message it is** (`sentBlock`): the `↪` head with `DM.Name` as the sender,
+  an arrow, the recipient, then the body in Muted, folded at three rows with the same `⌃E`/click
+  (`peerfold.go`). It is the call's own block, so a send is `foldExempt` like an edit's diff and never
+  hides inside a count. Every pane that draws a conversation does it through `DM.renderEvent`: grid
+  panes, restored history and board tiles.
+- **The receipt is hidden on success.** `“<summary>” → <to> (… in that session's inbox, not yet read …)`
+  is boilerplate under the words (owner's pick, 2026-10-16). Only that recorded shape, for that
+  recipient, is hidden (`delivered`): `is_error` is optional on the wire, so an unmarked failure, another
+  shape or a subagent's result all draw, which is the tree's rule that an unmodelled shape degrades
+  toward more output. Both reviews found a first version that hid every unmarked result.
+- **The sender's name is stamped when the send is stored** (`namedSend`, in `Append` and `Before`), so a
+  block keeps the name it was sent under through a rename and every re-wrap after it, as an incoming
+  message keeps its `FromName`.
+- **A conversation of nothing but sends still reclaims** (`cutFrom` may cut before one): a send is
+  fold-exempt, so retention's tool-call fallback had no place to cut it.
+- **The room skips a send to the sender's own subagent**: `SendMessage` to an `agentId` continues a
+  dispatch (its task id is the agentId, `subagent-task.jsonl`), a private brief and no session.
+- **A subagent's own send is unchanged**: drawn in its own view as a tool call. Its name is not this
+  conversation's, so `↪ alex → …` would say the wrong thing.
+- **Drawn from the call, not from delivery**, like the manager's room line (2026-10-03): the agent's
+  intent. The receipt that said otherwise is hidden, so a send the recipient never reads still reads as
+  sent.
+- **The room draws any agent's send to a session outside the fleet** (`withSend`, was manager-only).
+  Fleet-to-fleet was already drawn, once, from the receiver's stream, and still is; a send the call
+  names to a fleet agent is not drawn from the call, or it would show twice. This widens 2026-10-03's
+  manager-only line at the owner's request ("it should work in all panes"); the manager's reason (an
+  unfenced tool, so its sends must stay visible) is unchanged, the rest is visibility. Still live-only:
+  a restored room does not redraw it (deferred.md).
+- **Accepted, in deferred.md:** a send the operator denies, or that errors, still shows in the room as
+  sent (the DM shows the error under it); a parallel tool batch can draw a sibling's result joined under
+  a send; and a name window can draw one fleet-to-fleet send twice.

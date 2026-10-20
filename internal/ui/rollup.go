@@ -71,7 +71,7 @@ func (d DM) exempt(ev core.Event) bool {
 }
 
 // foldExempt marks a tool call the rollup keeps out of a run rather than folding
-// into a count. Two reasons, not one.
+// into a count. Three reasons, not two.
 //
 // **Live status.** A legacy TodoWrite carries its whole list as `Todos` and
 // still draws that list whole as its own block; a TaskCreate/TaskUpdate carries
@@ -85,11 +85,14 @@ func (d DM) exempt(ev core.Event) bool {
 // 2026-08-28 request). A no-op edit carries a `Diff` too and draws its bare
 // header, which is rare and harmless.
 //
-// All three break the run around them either way. A checklist op and a diff are
-// carried by the *use*; a result carries neither of its own, so it inherits this
-// through the stored call (see exempt).
+// **The words sent.** A SendMessage is a message to another session, drawn whole
+// as the peer message it is (sentBlock), not counted among the reads around it.
+//
+// All of them break the run around them either way. A checklist op, a diff and a
+// send are carried by the *use*; a result carries none of its own, so it inherits
+// this through the stored call (see exempt).
 func foldExempt(tool *core.ToolCall) bool {
-	return len(tool.Todos) > 0 || tool.Checklist != nil || tool.Diff != nil
+	return len(tool.Todos) > 0 || tool.Checklist != nil || tool.Diff != nil || tool.Send != nil
 }
 
 // expandedRun reports whether a run is drawn as its per-call blocks: either the
