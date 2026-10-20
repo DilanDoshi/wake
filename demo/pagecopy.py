@@ -9,6 +9,26 @@ from collections import namedtuple
 # the features page carries every shot.
 Shot = namedtuple("Shot", "clip start dur glyph who label heading prose home")
 
+# Each page's <title> and its search-result description, kept short enough for a
+# results page to show whole. The keys are the pages, in sitemap order.
+META = {
+    "index.html": (
+        "Wake — run a fleet of Claude Code sessions as a group chat",
+        "Wake is a terminal app for running 15–30 Claude Code sessions at once: one "
+        "group chat, @name routing, teams, a manager agent and an attention-ranked roster.",
+    ),
+    "features.html": (
+        "Wake features — a group chat for your Claude Code agents",
+        "Everything Wake does, recorded from the real binary: @all broadcasts, teams, "
+        "a manager agent, a task board, question cards and a workflow view.",
+    ),
+    "releases.html": (
+        "Wake releases — release notes for every version",
+        "What changed in each Wake release, the terminal for a fleet of Claude Code "
+        "sessions, with the one-line installer.",
+    ),
+}
+
 SHOTS = [
     Shot(
         "03-broadcast",

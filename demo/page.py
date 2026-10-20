@@ -4,8 +4,9 @@
     python3 page.py /path/to/wake-landing
 
 writes index.html (the story), features.html (every beat and the build notes),
-releases.html (the GitHub releases, rendered at build time) and media/ (one
-mp4 and one poster per beat) into that checkout. The site is served under a
+releases.html (the GitHub releases, rendered at build time), media/ (one
+mp4 and one poster per beat) and what a search engine reads first (robots.txt,
+sitemap.xml, favicon.svg) into that checkout. The site is served under a
 CSP that allows same-origin media and no external hosts but fonts, so clips
 are files beside the pages and the release notes are baked in rather than
 fetched. Edit this file and pagecopy.py, never the output.
@@ -17,13 +18,22 @@ import os
 import subprocess
 import sys
 
-from pagecopy import ALSO, SHOTS, Shot
+from pagecopy import ALSO, META, SHOTS, Shot
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, ".work", "out")
 REPO = "DilanDoshi/wake"
 GITHUB = "https://github.com/" + REPO
 LATEST = GITHUB + "/releases/latest"
+# Where the site is served: canonical links, the sitemap and the share image
+# are absolute. Change it here when the site moves to its own domain.
+SITE = "https://wake-landing-rouge.vercel.app"
+# A "W" in the site's --accent, drawn as a stroke so it needs no font.
+FAVICON = """<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32">
+<rect width="32" height="32" rx="7" fill="#c2603f"/>
+<path d="M7 9l4.5 14L16 13l4.5 10L25 9" fill="none" stroke="#fff" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/>
+</svg>
+"""
 INSTALL = (
     "curl -fsSL https://raw.githubusercontent.com/%s/main/scripts/install.sh | sh"
     % REPO
@@ -131,12 +141,50 @@ def nav(active: str) -> str:
 </div></nav>"""
 
 
-def page(title: str, active: str, body: str) -> str:
+def url_of(active: str) -> str:
+    """The URL Vercel's cleanUrls serves a page at, which is its canonical one."""
+    return SITE + (
+        "/" if active == "index.html" else "/" + active.removesuffix(".html")
+    )
+
+
+def software_ld() -> str:
+    """The front page as schema.org's SoftwareApplication."""
+    data = {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "Wake",
+        "description": META["index.html"][1],
+        "url": url_of("index.html"),
+        "downloadUrl": LATEST,
+        "applicationCategory": "DeveloperApplication",
+        "operatingSystem": "macOS, Linux",
+        "license": "https://www.apache.org/licenses/LICENSE-2.0",
+        "offers": {"@type": "Offer", "price": "0", "priceCurrency": "USD"},
+        "sameAs": [GITHUB],
+    }
+    return '<script type="application/ld+json">%s</script>' % json.dumps(data)
+
+
+def page(active: str, body: str, head: str = "") -> str:
+    title, description = (html.escape(s) for s in META[active])
+    url = url_of(active)
     return f"""<!DOCTYPE html>
+<html lang="en">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<meta name="description" content="Wake — a terminal for running a fleet of Claude Code sessions as a group chat. Requires Claude Code.">
 <title>{title}</title>
+<meta name="description" content="{description}">
+<link rel="canonical" href="{url}">
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<meta property="og:type" content="website">
+<meta property="og:site_name" content="Wake">
+<meta property="og:title" content="{title}">
+<meta property="og:description" content="{description}">
+<meta property="og:url" content="{url}">
+<meta property="og:image" content="{SITE}/media/{SHOTS[0].clip}.jpg">
+<meta property="og:image:alt" content="Wake's room: one group chat with a fleet of Claude Code agents">
+<meta name="twitter:card" content="summary_large_image">{head}
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Newsreader:ital,opsz,wght@0,6..72,300..600;1,6..72,300..500&family=JetBrains+Mono:wght@400;500;700&display=swap">
@@ -336,7 +384,6 @@ def write_releases(dest: str, rels: list[dict]) -> None:
     write(
         os.path.join(dest, "releases.html"),
         page(
-            "Wake — releases",
             "releases.html",
             subhead(
                 'releases <span class="lbl">&lt;&gt; newest first</span>',
@@ -348,6 +395,22 @@ def write_releases(dest: str, rels: list[dict]) -> None:
             + f'<main class="wrap">{articles}</main>',
         ),
     )
+
+
+def write_crawl_files(dest: str) -> None:
+    """What a crawler reads before any page: where the pages are, and the icon."""
+    urls = "".join(f"  <url><loc>{url_of(p)}</loc></url>\n" for p in META)
+    write(
+        os.path.join(dest, "sitemap.xml"),
+        '<?xml version="1.0" encoding="UTF-8"?>\n'
+        '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">\n'
+        f"{urls}</urlset>\n",
+    )
+    write(
+        os.path.join(dest, "robots.txt"),
+        f"User-agent: *\nAllow: /\n\nSitemap: {SITE}/sitemap.xml\n",
+    )
+    write(os.path.join(dest, "favicon.svg"), FAVICON)
 
 
 def main() -> None:
@@ -378,10 +441,10 @@ def main() -> None:
     write(
         os.path.join(dest, "index.html"),
         page(
-            "Wake",
             "index.html",
             hero()
             + f'<main class="wrap">{home}{more_section()}{requirements_section()}{built_section()}</main>',
+            software_ld(),
         ),
     )
 
@@ -389,7 +452,6 @@ def main() -> None:
     write(
         os.path.join(dest, "features.html"),
         page(
-            "Wake — features",
             "features.html",
             subhead(
                 'features <span class="lbl">&lt;&gt; every recording</span>',
@@ -401,6 +463,7 @@ def main() -> None:
         ),
     )
     write_releases(dest, rels)
+    write_crawl_files(dest)
 
     print(
         "\nsite: %s — %d beats, %.1f MB of media, %d releases"

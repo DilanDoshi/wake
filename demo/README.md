@@ -50,8 +50,10 @@ manager that only *drew* those calls would be a lie on camera.
     captions.py         title cards and caption bands, in Wake's own palette
     setup.sh            builds .work/ (and generates .work/stage.tape)
     build.sh            trims, captions, stitches, masters
-    page.py             the landing site (index, features, releases): `page.py <wake-landing>`
-    pagecopy.py         its words — one entry per beat, and the build notes
+    page.py             the landing site (index, features, releases, and the robots.txt,
+                        sitemap.xml and favicon a search engine reads): `page.py <wake-landing>`
+    pagecopy.py         its words — one entry per beat, the build notes, each page's title
+                        and description
 
 `setup.sh` generates the staging tape rather than shipping one, because
 `/new <name> in <dir>` resolves a relative directory against the *session's*
