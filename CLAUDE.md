@@ -432,7 +432,7 @@ yet says so in bold.**
 
 | What | Where |
 |---|---|
-| Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
+| Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · `--max-agents`: `maxagents.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
 | Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |

@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/daemon"
+	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -107,5 +108,54 @@ func TestStatusSaysHowManyOfTheCapAreRunning(t *testing.T) {
 	}}, "")
 	if !strings.Contains(got, "1 of 50 sessions running") {
 		t.Errorf("status does not say how many of the cap are running:\n%s", got)
+	}
+}
+
+// The cap is sent once per command. A reconnect does not send it again, so it
+// cannot put back a cap another window has since changed.
+func TestAReconnectDoesNotResendTheCap(t *testing.T) {
+	d := startRealDaemon(t)
+	fleetMaxAgents = 4
+	t.Cleanup(func() { fleetMaxAgents = 0 })
+	first, _, err := connect(d.socket, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = first.Close() }()
+	if fleetMaxAgents != 0 {
+		t.Fatalf("the cap was not spent by the connect that sent it: %d", fleetMaxAgents)
+	}
+	if err := rpc.WriteFrameTo(first, rpc.Frame{Kind: rpc.FrameSetMaxAgents, MaxAgents: 9}); err != nil {
+		t.Fatalf("another window's cap: %v", err)
+	}
+	again, _, err := connect(d.socket, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("reconnect: %v", err)
+	}
+	defer func() { _ = again.Close() }()
+	var st rpc.Status
+	for range 50 {
+		if st, err = daemon.Status(d.socket); err == nil && st.MaxAgents == 9 {
+			return
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	t.Errorf("after a reconnect the cap is %d, want the other window's 9 kept", st.MaxAgents)
+}
+
+// One is a session, not "1 sessions".
+func TestACapOfOneSaysSession(t *testing.T) {
+	d := startRealDaemon(t)
+	notice.Reset()
+	t.Cleanup(notice.Reset)
+	fleetMaxAgents = 1
+	t.Cleanup(func() { fleetMaxAgents = 0 })
+	conn, _, err := connect(d.socket, &bytes.Buffer{})
+	if err != nil {
+		t.Fatalf("connect: %v", err)
+	}
+	defer func() { _ = conn.Close() }()
+	if n, ok := notice.Latest(); !ok || !strings.Contains(n.String(), "up to 1 session at once") {
+		t.Errorf("the notice for a cap of 1 reads %v", n)
 	}
 }

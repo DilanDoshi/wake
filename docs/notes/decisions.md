@@ -4636,8 +4636,9 @@ machine, and ruled that it affect the group chat only — no agent and no conver
 
 ## 2026-10-20 — a fleet runs up to 50 sessions at once, and `--max-agents` sets fewer (the owner)
 
-The owner asked to raise the 30-session cap. Ruled: **50 by default and 50 the most**, set per fleet
-with a flag on `wake`.
+The owner asked to raise the 30-session cap. Ruled: **50 by default and 50 the highest cap**, set per
+fleet with a flag on `wake`. The cap bounds new sessions; a wake of a parked one stays exempt, as it
+always was, so a fleet can read more than its cap after waking some.
 
 - **`--max-agents <n>`, 1 to 50**, legal anywhere like `--fleet` but only with a verb that opens the
   room or a conversation (`wake`, `new`, `attach`, `manager`); on `status`, `stop`, `fleets`, `fork`
@@ -4646,10 +4647,15 @@ with a flag on `wake`.
   until that daemon stops; a fresh fleet runs 50. It is sent from `connect`, on the verb's own
   connection, because a daemon with no agents exits when its last client leaves
   (`reconsiderEmptyExit`) - a cap sent on a connection of its own was lost to the fresh daemon the
-  verb then started. The room's reconnects carry it too.
+  verb then started. It is sent once per command: a reconnect does not re-send it, so it cannot put
+  back a cap another window changed since.
 - **Lowering it stops nothing**; the next spawn is refused until the count is under it, and the refusal
   says `--max-agents` raises it. A wake is still exempt, as before.
 - **The manager may not set it**: it is the bound FrameSpawn's verdict rests on.
 - `wake status` says `N of M sessions running`.
+- **The manager's digest is sized for the ceiling**: `internal/mcp/rollup.go`'s `designFleet` is
+  `rpc.MaxAgentsCeiling` and its backstop 25 KiB, the worst arrangement of 50 agents (code review).
+- A `/resume` of an on-disk session is capped at `maySpawn` only; `admitLive` treats it like a wake,
+  so two resumes racing a full fleet can land one over. That predates this ruling and is unchanged.
 - Memory, measured: about 475 MB per `claude` process on the owner's machine, so 50 agents is roughly
   24 GB. The tighter limit in practice is the account's usage window, not RAM.

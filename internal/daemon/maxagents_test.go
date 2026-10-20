@@ -4,11 +4,13 @@ package daemon
 // running fleet by FrameSetMaxAgents, and never more than fifty.
 
 import (
+	"path/filepath"
 	"strings"
 	"testing"
 
 	"github.com/google/uuid"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -85,4 +87,21 @@ func TestACapOutsideOneToFiftyIsRefused(t *testing.T) {
 		})
 	}
 	awaitCap(c, rpc.MaxAgentsCeiling)
+}
+
+// The last door honours the fleet's cap too: admitLive is what holds it when
+// two spawns race past maySpawn's count.
+func TestTheLastDoorHoldsTheFleetsCap(t *testing.T) {
+	s := newServer(filepath.Join(t.TempDir(), "s"))
+	s.maxAgents.Store(1)
+	first := core.Config{SessionID: idAlpha, Name: "sydney", Dir: t.TempDir()}
+	a := newAgent(first.SessionID, first.Name, "task", first.Dir, "", core.NewSession(first), func() {})
+	if why := s.admitLive(a, nil, false); why != "" {
+		t.Fatalf("the first session under a cap of 1 was refused: %s", why)
+	}
+	second := core.Config{SessionID: testSessionID("b2b2"), Name: "alex", Dir: t.TempDir()}
+	b := newAgent(second.SessionID, second.Name, "task", second.Dir, "", core.NewSession(second), func() {})
+	if why := s.admitLive(b, nil, false); !strings.Contains(why, "cap") {
+		t.Errorf("a second session under a cap of 1 was admitted at the last door: %q", why)
+	}
 }

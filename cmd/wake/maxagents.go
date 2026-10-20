@@ -1,9 +1,9 @@
 package main
 
 // `--max-agents N`: how many sessions a fleet runs at once, the manager
-// included - fifty unless set, never more (owner's 2026-10-20 ruling). It is set
-// on the fleet's running daemon, so it works on a fleet already open and lasts
-// until that fleet stops.
+// included - fifty unless set, and never set above fifty (owner's 2026-10-20
+// ruling). It is set on the fleet's running daemon, so it works on a fleet
+// already open and lasts until that fleet stops.
 
 import (
 	"fmt"
@@ -18,11 +18,11 @@ import (
 const maxAgentsFlagName = "--max-agents"
 
 // maxAgentsSet is what the room says once the cap is sent.
-const maxAgentsSet = "this fleet now runs up to %d sessions at once"
+const maxAgentsSet = "this fleet now runs up to %d %s at once"
 
 // fleetMaxAgents is this invocation's --max-agents, or 0. Set by run before any
-// verb connects, and read by connect, so every way a verb reaches its daemon -
-// a reconnect after the daemon restarts included - carries the cap.
+// verb connects and spent by the first connect, so a reconnect cannot put back
+// a cap another window has since changed.
 var fleetMaxAgents int
 
 // maxAgentsFlag takes `--max-agents N` off the arguments, fleetFlag's way: legal
@@ -70,12 +70,18 @@ func maxAgentsGoesWith(args []string) error {
 // client leaves, so a cap sent on a connection of its own could be lost to a
 // fresh daemon before the verb arrived.
 func sendMaxAgents(conn net.Conn) error {
-	if fleetMaxAgents == 0 {
+	n := fleetMaxAgents
+	if n == 0 {
 		return nil
 	}
-	if err := rpc.WriteFrameTo(conn, rpc.Frame{Kind: rpc.FrameSetMaxAgents, MaxAgents: fleetMaxAgents}); err != nil {
+	if err := rpc.WriteFrameTo(conn, rpc.Frame{Kind: rpc.FrameSetMaxAgents, MaxAgents: n}); err != nil {
 		return fmt.Errorf("setting the fleet's cap: %w", err)
 	}
-	notice.Report(maxAgentsSet, fleetMaxAgents)
+	fleetMaxAgents = 0
+	noun := "sessions"
+	if n == 1 {
+		noun = "session"
+	}
+	notice.Report(maxAgentsSet, n, noun)
 	return nil
 }

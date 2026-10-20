@@ -67,7 +67,7 @@ func formatStatus(st rpc.Status, team string) string {
 			b.WriteString(text + "\n")
 		}
 		if st.MaxAgents > 0 {
-			fmt.Fprintf(&b, "%d of %d sessions running (%s sets how many).\n", running(st.Sessions), st.MaxAgents, maxAgentsFlagName)
+			fmt.Fprintf(&b, "%d of %d sessions running (%s sets how many).\n", runningCount(st), st.MaxAgents, maxAgentsFlagName)
 		}
 
 	case len(st.Sessions) > 0:
@@ -220,16 +220,4 @@ func quiet(ms int64) time.Duration {
 		return d.Round(100 * time.Millisecond)
 	}
 	return d.Round(time.Second)
-}
-
-// running is how many of these sessions hold a process, which is what the cap
-// counts: parked and ended ones do not.
-func running(sessions []rpc.SessionStatus) int {
-	n := 0
-	for _, s := range sessions {
-		if s.State != rpc.StateParked && s.State != rpc.StateEnded {
-			n++
-		}
-	}
-	return n
 }

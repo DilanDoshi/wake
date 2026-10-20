@@ -86,7 +86,7 @@ var liveCap = defaultLiveCap
 func capRefusal(n, limit int) string {
 	why := fmt.Sprintf("%d sessions are already running, which is this fleet's cap. ⌃C parks one and /resume brings it back, or `wake stop` ends the fleet", n)
 	if limit < rpc.MaxAgentsCeiling {
-		why += fmt.Sprintf("; --max-agents raises the cap, up to %d", rpc.MaxAgentsCeiling)
+		why += fmt.Sprintf("; `wake --fleet <this fleet> --max-agents <n>` raises the cap, up to %d", rpc.MaxAgentsCeiling)
 	}
 	return why
 }

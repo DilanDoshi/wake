@@ -574,6 +574,7 @@ type SessionStatus struct {
 	PID int `json:"pid,omitempty"`
 }
 
-// MaxAgentsCeiling is the most sessions a fleet may run at once, and the
-// number it runs when nobody set one (owner's 2026-10-20 ruling).
+// MaxAgentsCeiling is the highest cap a fleet may be set to, and the cap it runs
+// at when nobody set one (owner's 2026-10-20 ruling). It bounds new sessions;
+// waking a parked one is exempt from any cap, as it always was.
 const MaxAgentsCeiling = 50
