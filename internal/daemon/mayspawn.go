@@ -84,11 +84,12 @@ var liveCap = defaultLiveCap
 // capRefusal is what a spawn past the cap is told, and it names the two things
 // that make room rather than only saying no.
 func capRefusal(n, limit int) string {
-	why := fmt.Sprintf("%d sessions are already running, which is this fleet's cap. ⌃C parks one and /resume brings it back, or `wake stop` ends the fleet", n)
+	raise := ""
 	if limit < rpc.MaxAgentsCeiling {
-		why += fmt.Sprintf("; `wake --fleet <this fleet> --max-agents <n>` raises the cap, up to %d", rpc.MaxAgentsCeiling)
+		// First, so a one-row notice that cuts the sentence still shows it.
+		raise = fmt.Sprintf(" (--max-agents raises it, up to %d)", rpc.MaxAgentsCeiling)
 	}
-	return why
+	return fmt.Sprintf("%d sessions are already running, which is this fleet's cap%s. ⌃C parks one and /resume brings it back, or `wake stop` ends the fleet", n, raise)
 }
 
 // agentCap is this fleet's cap now.
