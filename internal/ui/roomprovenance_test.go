@@ -15,11 +15,12 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 func TestARoomMessageIDIsAUUIDTheRestoreRecognises(t *testing.T) {
 	send := newRoomSend(true)
-	a, b := send.messageID(), send.messageID()
+	a, b := send.ID(), send.ID()
 	for _, id := range []string{a, b} {
 		u, err := uuid.Parse(id)
 		if err != nil {
@@ -37,11 +38,11 @@ func TestARoomMessageIDIsAUUIDTheRestoreRecognises(t *testing.T) {
 	}
 	sa, _, _ := roomSendOf(a)
 	sb, _, _ := roomSendOf(b)
-	other, _, _ := roomSendOf(newRoomSend(true).messageID())
+	other, _, _ := roomSendOf(newRoomSend(true).ID())
 	if sa != sb || sa == other {
 		t.Errorf("the send a uuid carries is not what groups one send's targets (same send %v, other send %v)", sa == sb, sa == other)
 	}
-	if _, direct, _ := roomSendOf(newRoomSend(false).messageID()); direct {
+	if _, direct, _ := roomSendOf(newRoomSend(false).ID()); direct {
 		t.Error("an undirected send reads as direct")
 	}
 	if _, _, ok := roomSendOf(uuid.NewString()); ok {
@@ -64,7 +65,7 @@ func TestTheRoomMessageVersionIsTheOneRecordedAccepted(t *testing.T) {
 		t.Fatal(err)
 	}
 	recorded := uuid.MustParse(f.UUID).Version()
-	minted := uuid.MustParse(newRoomSend(false).messageID()).Version()
+	minted := uuid.MustParse(newRoomSend(false).ID()).Version()
 	if minted != recorded {
 		t.Errorf("room sends are minted as version %d; claude was recorded accepting version %d", minted, recorded)
 	}
@@ -98,8 +99,8 @@ func TestARoomSendIsMarkedAndADMSendIsNot(t *testing.T) {
 }
 
 // roomTyped is a turn restored from a transcript record a room send stamped.
-func roomTyped(id, text string, at time.Time, send roomSend) core.Event {
-	return record(typed(id, text, at), send.messageID())
+func roomTyped(id, text string, at time.Time, send rpc.MessageSend) core.Event {
+	return record(typed(id, text, at), send.ID())
 }
 
 // A room message to one agent comes back, as the room drew it - `@john ...`,
@@ -180,7 +181,7 @@ func TestTwoRoomSendsOfTheSameWordsAreTwoLines(t *testing.T) {
 // text last (EncodeUserMessage) - so both events carry its uuid. The text is
 // the turn; the image is dropped from a restore the way multiplicity drops it.
 func TestAMarkedRoomSendWithAnImageComesBackWithItsText(t *testing.T) {
-	id := newRoomSend(true).messageID()
+	id := newRoomSend(true).ID()
 	r := restored([]core.Event{
 		record(typed("s1", core.ImagePlaceholder, base), id),
 		record(typed("s1", "what is wrong with this chart?", base), id),
@@ -196,7 +197,7 @@ func TestAMarkedRoomSendWithAnImageComesBackWithItsText(t *testing.T) {
 // it is the turn, and it opens the reply.
 func TestAMarkedImageOnlyRoomSendComesBack(t *testing.T) {
 	r := restored([]core.Event{
-		record(typed("s1", core.ImagePlaceholder, base), newRoomSend(true).messageID()),
+		record(typed("s1", core.ImagePlaceholder, base), newRoomSend(true).ID()),
 		heard("s1", "that is the staging dashboard", base.Add(time.Second)),
 	})
 	got := strings.Join(texts(r), "|")

@@ -25,7 +25,7 @@ func TestARoomSendToATeamIsMarkedAsOne(t *testing.T) {
 
 func TestARestoredTeamSendIsAddressedToTheMembersThatHoldIt(t *testing.T) {
 	const mgr = "mgr"
-	send := newRoomSend(false).forTeam()
+	send := newRoomSend(false).ForTeam()
 	r := restored(
 		[]core.Event{roomTyped("s1", "run the migrations", base, send), heard("s1", "sydney migrated", base.Add(time.Second))},
 		[]core.Event{roomTyped("s2", "run the migrations", base.Add(80*time.Millisecond), send), heard("s2", "thea migrated", base.Add(time.Second+80*time.Millisecond))},

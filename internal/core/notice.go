@@ -80,4 +80,10 @@ const (
 	// internal/ui/cardroom.go.
 	NoticeQuestionAnswered  Notice = "question_answered"
 	NoticeQuestionCancelled Notice = "question_cancelled"
+
+	// NoticeAutoResumed rides the "continue" the daemon writes to an agent a
+	// usage limit stopped, once a login elsewhere or the reset lifts it - Wake's
+	// words, not the operator's. Authored above the airlock like the two above,
+	// live by the daemon and on restore from the uuid it stamped (rpc.MessageResumed).
+	NoticeAutoResumed Notice = "auto_resumed"
 )

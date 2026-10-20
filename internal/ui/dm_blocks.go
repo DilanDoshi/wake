@@ -44,6 +44,10 @@ const (
 	// is already visible in the rejected tool result directly above it.
 	interruptedLabel = "⊘ turn interrupted"
 
+	// autoResumedLabel is the daemon's own "continue" to an agent a usage limit
+	// stopped (internal/daemon/usagelimit.go): Wake's words, so drawn as Wake's.
+	autoResumedLabel = "↻ resumed after the usage limit"
+
 	// withdrawnLabel retires the ⚠ above it: the request is dead and the
 	// answer this view was inviting would go nowhere. Muted for the same
 	// reason interruptedLabel is - in every recording this is the operator's
@@ -164,6 +168,7 @@ var (
 		core.NoticeContextCompacted: compactedLabel,
 		core.NoticeToolDenied:       deniedLabel,
 		core.NoticeTurnInterrupted:  interruptedLabel,
+		core.NoticeAutoResumed:      autoResumedLabel,
 	}
 )
 

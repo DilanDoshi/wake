@@ -4551,3 +4551,37 @@ multi-room door. It is not a second room: `deferred.md` already named it as the 
   transcripts hold the send, so a restart no longer turns what you told `backend` into a broadcast that
   draws in every thread (Codex, pass 2). Only the members read back are in the key, never more than the disk
   holds, and the line is not prefixed with `@team`: the team's name is not on disk.
+## 2026-10-17 — the daemon resumes the agents a usage limit stopped (the owner)
+
+**Reverses** deferred.md's 2026-09-27 "no message is sent for you at the reset" and "nothing watches
+the login". The owner hit a session limit, signed in to another account in another session, and Wake
+sat still until an `@all`: fifteen agents stopped at 21:43Z answered within fifteen seconds of it at
+22:43Z, with no restart, so a message is all a resume needs. Claude Code itself continues at the reset
+(2.1.234, `autoContinueAtUsageLimit`); a headless session does not, and only Wake can see a login in
+another terminal.
+
+- **The daemon decides, once.** `internal/daemon/usagelimit.go` records a stop when a turn ends on
+  `core.NoticeUsageLimit` (the reset it named, and the account signed in then), clears it on the
+  agent's own model output, a `/clear` or an interrupt (an operator saying stop is not to be
+  continued for) - not on a send, which holds a resume off while its turn is in flight, and whose
+  local command (`/model`) runs no turn - and while one is held runs one
+  goroutine waiting on Claude's config file
+  (`configwatch_darwin.go` kqueue, `_linux.go` inotify, `_other.go` none - a wait, never a poll) and
+  one timer. It writes `continue` when `oauthAccount`'s ids name another account, or the reset plus a
+  minute has passed (wall clock, so the liveness tick catches a reset slept through). Only an idle
+  agent with nothing queued is resumed, and a queued resume answers only the stop it was queued for;
+  a busy one is nudged again at its turn end, and one whose input is full is blocked - no timer -
+  and retried on the liveness tick or its next turn end. A reset not after the hit arms nothing, so a stale message cannot loop. The manager is
+  resumed like any agent. A resume is never counted toward proving a typed turn a broadcast, so a DM
+  "continue" beside one stays private.
+- **Drawn as Wake's.** The resume is stamped `rpc.MessageResumed` in the uuid layout room sends
+  already used (moved to `rpc/messageid.go`), announced live as `core.NoticeAutoResumed`, and marked
+  on restore from disk - `↻ … resumed after the usage limit` in the room and the conversation, never
+  the operator's words, and never a broadcast when several agents resume in one second.
+- **The eighth airlock file**, `core/account.go`: the account decode and the reset parse (session
+  `resets 6:50pm (Zone)` and weekly `resets Oct 20 at 9am (Zone)`, both read off real limit messages
+  by shape). Its three config keys are policed and excused as absent from the stream corpus.
+- **Held by** core's decoder tables; `TestALoginToAnotherAccountResumesTheAgentsALimitStopped`,
+  `TestARewriteOfTheSameAccountResumesNothing`, `TestTheResetTheLimitNamesResumesIt` and the
+  edge-case units in internal/daemon; the UI's restore and live tests; and the pty
+  `TestAnAgentALimitStoppedResumesWhenYouSignInElsewhere`, each mutation-checked.
