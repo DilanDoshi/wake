@@ -475,6 +475,24 @@ func TestTheCommandSetIsExactlyTheMapLiteralInThisFile(t *testing.T) {
 // every one of those has to make the router say true somewhere other than
 // where the lookup did. So that is what is denied.
 func TestOnlyTheCommandLookupCanAnswerThatWakeTookADraft(t *testing.T) {
+	requireOnlyTheLookupAnswers(t, slashRouter, commandsVar)
+}
+
+// The room's router is held to the same: only its own map may say a room draft
+// is Wake's, so a word near `clear` still reaches the agent.
+func TestOnlyTheRoomLookupCanAnswerThatWakeTookARoomDraft(t *testing.T) {
+	requireOnlyTheLookupAnswers(t, "roomCommand", "roomCommands")
+	const roomCommandCount = 1
+	if len(roomCommands) != roomCommandCount {
+		t.Errorf("the room owns %d commands and roomCommandCount says %d: a room word added without "+
+			"looking at the passthrough is one that may already work for the agent", len(roomCommands), roomCommandCount)
+	}
+}
+
+// requireOnlyTheLookupAnswers holds router to answering "Wake took this" only
+// with the flag its lookup in mapVar bound.
+func requireOnlyTheLookupAnswers(t *testing.T, slashRouter, commandsVar string) {
+	t.Helper()
 	fn := funcDeclIn(t, slashFile, slashRouter)
 	found := commandLookup(t, fn, commandsVar)
 

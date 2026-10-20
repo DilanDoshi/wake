@@ -281,18 +281,13 @@ func (a App) renamed(st *rpc.Status) App {
 	return a
 }
 
-// Sentences that *spell* a command - the usage lines, and the two refusals that
-// name the way round - live in slash.go, which is where a leading slash is
-// known. See newUsage. What is here is what does not spell one.
-
 // renameMirror is Wake's half of a `/rename bob` typed in a conversation: the
 // name that moves this conversation's own handle for its agent, so the roster
 // and claude's title do not drift - or "" for any draft that is not one. The
 // room's `@who /rename bob` is renameMirrorFor, off the router's resolved
 // mention.
 //
-// It is here, not in send.go, because recognising the draft means knowing what
-// a leading slash means, which is this file's alone
+// It reads no slash itself: renameMirrorArg, in slash.go, recognises the draft
 // (TestNothingButTheRouterKnowsWhatASlashMeans). It is deliberately not a
 // commands entry: `rename` is a word claude advertises, so slash leaves the
 // draft a message and it still reaches the agent - the caller writes the mirror
@@ -328,3 +323,7 @@ func (a App) renameMirrorFor(who, text string) (id, name string) {
 	}
 	return agent.ID, renameMirrorArg(text)
 }
+
+// Sentences that *spell* a command - the usage lines, and the two refusals that
+// name the way round - live in slash.go, which is where a leading slash is
+// known. See newUsage. What is here is what does not spell one.

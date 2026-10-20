@@ -5,6 +5,8 @@ package ui
 // says, briefly, each time it passes another thousand messages.
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -116,6 +118,7 @@ func TestRestoredHistoryOlderThanTheClearStaysCleared(t *testing.T) {
 		t.Fatalf("the fixture restored nothing to clear:\n%s", shown(asked))
 	}
 	prev := clock
+	t.Cleanup(func() { clock = prev })
 	clock = func() time.Time { return now.Add(-2 * time.Hour) }
 	a := submitRoom(t, asked, "/clear")
 	clock = prev
@@ -219,5 +222,75 @@ func TestClearingAReclaimedRoomDropsTheReclaimedMarker(t *testing.T) {
 	a = submitRoom(t, a, "/clear")
 	if a.room.tr.prefix != "" || strings.Contains(shown(a), roomReclaimedHistory) {
 		t.Errorf("the cleared room still says history was reclaimed:\n%s", shown(a))
+	}
+}
+
+// The order it happens in: asked at the window's open, cleared, then answered.
+// Everything the reply holds is older than the clear, so none of it comes back.
+func TestAHistoryReplyAfterTheClearRestoresNothingOlder(t *testing.T) {
+	a := submitRoom(t, roomWithHistoryAsked(t), "/clear")
+	m := a.apply(oneReply("s1", core.Event{Kind: core.KindUserText, SessionID: "s1", Text: "from before", At: clock().Add(-time.Hour), MessageID: roomSendID(t)}))
+	if strings.Contains(shown(m), "from before") || m.room.said.count() != 0 {
+		t.Errorf("a reply answered after the clear restored history older than it:\n%s", shown(m))
+	}
+}
+
+// A session the room held lines for is not asked again after the clear, the way
+// it was not before it: a park and a wake would restore a turn whose live echo
+// is still on screen.
+func TestAClearedSessionIsNotAskedForItsHistoryAgain(t *testing.T) {
+	a := roomSaying(t, "alpha")
+	// sydney as a session that arrived after the room opened - a spawn, which is
+	// never asked about - so only her lines on screen refuse an ask.
+	at := maps.Clone(a.roomAsk.at)
+	delete(at, "s1")
+	a.roomAsk.at = at
+	if pre := a.askRoomHistory("s1"); slices.Contains(pre.roomAsk.pending, "s1") {
+		t.Fatal("before the clear the room already asks sydney, so this proves nothing")
+	}
+	a = submitRoom(t, a, "/clear")
+	if next := a.askRoomHistory("s1"); slices.Contains(next.roomAsk.pending, "s1") {
+		t.Error("a session the cleared room held lines for was asked for its history again")
+	}
+}
+
+// The reminder is advice about the room, so it waits while a conversation holds
+// the keys - /clear typed there would clear that agent's.
+func TestTheReminderWaitsForTheRoomToHoldTheKeys(t *testing.T) {
+	a := roomWithHistoryAsked(t)
+	a.focus = "s1"
+	for range roomReminderEvery {
+		a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1"))
+	}
+	if strings.Contains(noticeNow(), "/clear") {
+		t.Fatalf("the reminder fired while a conversation held the keys: %q", noticeNow())
+	}
+	a.focus = ""
+	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1"))
+	if got := noticeNow(); !strings.Contains(got, roomFullNotice(1)) {
+		t.Errorf("back in the room the reminder still did not show: %q", got)
+	}
+}
+
+// Any other word typed bare in the room is not the room's: it goes to the
+// default addressee exactly as it did, the words that begin like clear included.
+func TestOtherSlashWordsInTheRoomStillReachTheDefaultAddressee(t *testing.T) {
+	for _, text := range []string{"/compact", "/cleanup", "/clear-cache", "/clearance", "/deploy x"} {
+		t.Run(text, func(t *testing.T) {
+			fresh(t)
+			a := newRoomApp(t).withSize(200, 40).withAgents("sydney", core.ManagerName)
+			managerID := idOfAgentNamed(t, a, core.ManagerName)
+			recorderOf(t, a).taken(t)
+			m := submitRoom(t, a, text)
+			var sent []string
+			for _, f := range recorderOf(t, m).taken(t) {
+				if f.SessionID == managerID {
+					sent = append(sent, f.Text)
+				}
+			}
+			if !slices.Contains(sent, text) {
+				t.Errorf("%q typed in the room reached the manager as %q, want it unchanged", text, sent)
+			}
+		})
 	}
 }

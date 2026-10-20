@@ -25,11 +25,11 @@ const (
 	roomCleared    = "cleared the group chat — agents and their conversations are untouched"
 	roomClearUsage = "/clear on its own clears the group chat; @name /clear clears one agent's conversation"
 
-	// roomFullFmt takes the count in thousands.
-	roomFullFmt = "the room holds %d,000 messages — /clear to lighten it"
+	roomFullFmt = "the room holds %s messages — /clear to lighten it"
 )
 
-func roomFullNotice(thousands int) string { return fmt.Sprintf(roomFullFmt, thousands) }
+// roomFullNotice is the reminder at k reminders' worth of messages.
+func roomFullNotice(k int) string { return fmt.Sprintf(roomFullFmt, thousands(k*roomReminderEvery)) }
 
 // clearRoom is the room's /clear. An argument is refused rather than guessed at:
 // the room's clear takes none, and an agent is cleared by @name /clear.
@@ -38,7 +38,7 @@ func (a App) clearRoom(arg string) (App, tea.Cmd) {
 		notice.Report("%s", roomClearUsage)
 		return a, nil
 	}
-	a = a.clearDraft()
+	a = a.clearDraft().heldAsked()
 	a = a.withRoom(a.room.cleared(clock()))
 	a.sel, a.selecting = selection{}, false
 	notice.Report("%s", roomCleared)
@@ -60,8 +60,27 @@ func (r Room) cleared(at time.Time) Room {
 	return r
 }
 
+// heldAsked marks every session the room holds lines for as already asked, the
+// way askRoomHistory refuses one with lines on screen: a park and wake after the
+// clear would otherwise ask, and restore a turn whose live echo is still here.
+func (a App) heldAsked() App {
+	next := roomAsk{at: make(map[string]askedAt, len(a.roomAsk.at)), pending: append([]string(nil), a.roomAsk.pending...)}
+	for k, v := range a.roomAsk.at {
+		next.at[k] = v
+	}
+	for _, l := range a.room.said.slice(a.room.said.first(), a.room.said.len()) {
+		if _, asked := next.at[l.ev.SessionID]; l.ev.SessionID != "" && !asked {
+			next.at[l.ev.SessionID] = askedAt{}
+		}
+	}
+	a.roomAsk = next
+	return a
+}
+
 // remind says so once each time the room passes another roomReminderEvery
-// messages. An ordinary notice, so it times out like every other.
+// messages. An ordinary notice, so it times out like every other; App.withRoom
+// asks only while the room holds the keys, since /clear typed in a conversation
+// clears that agent's.
 func (r Room) remind() Room {
 	if k := r.said.count() / roomReminderEvery; k > r.reminded {
 		r.reminded = k

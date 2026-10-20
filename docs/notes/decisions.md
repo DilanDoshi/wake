@@ -4411,3 +4411,9 @@ machine, and ruled that it affect the group chat only — no agent and no conver
 - **The reminder** is `the room holds N,000 messages — /clear to lighten it`, once per thousand the
   room holds, counted from the last clear, as an ordinary notice that times out (the owner asked that
   it be temporary). The room caps itself at `roomRetentionEvents`, so the last reminder is at that cap.
+  **It waits for the room to hold the keys** (code review): `/clear` typed in a conversation clears that
+  agent's, so the advice is never shown where following it would do that.
+- **Guarded like the main router**: `roomCommand` answers only with its lookup's flag and
+  `roomCommands` is held to a count, and a room test sends `/cleanup`, `/clear-cache` and their like
+  to the default addressee unchanged. A session the cleared room held lines for stays marked asked, so
+  a park and wake does not restore a turn whose live echo is still on screen.

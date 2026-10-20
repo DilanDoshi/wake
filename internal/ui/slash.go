@@ -398,13 +398,16 @@ var roomCommands = map[string]func(App, string) (App, tea.Cmd){clearCommand: App
 // Wake took it; anything else is the room's to route.
 func (a App) roomCommand(text string) (App, tea.Cmd, bool) {
 	body, ok := strings.CutPrefix(strings.TrimSpace(text), SlashPrefix)
+	if !ok {
+		return a, nil, false
+	}
 	word, arg, _ := strings.Cut(body, " ")
 	run, mine := roomCommands[strings.ToLower(word)]
-	if !ok || !mine {
+	if !mine {
 		return a, nil, false
 	}
 	next, cmd := run(a, strings.TrimSpace(arg))
-	return next, cmd, true
+	return next, cmd, mine
 }
 
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
