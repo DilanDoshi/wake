@@ -207,12 +207,12 @@ func TestAnotherClientsFailureIsNotReadAsThisCallsRefusal(t *testing.T) {
 // Nothing here starts a daemon.
 //
 // connect() calls daemon.EnsureRunning, which *forks* one when nothing is
-// listening - and that is right for a person typing `wake`, whose first run
-// should get an agent. It is wrong here twice over: `wake mcp` is spawned by a
-// manager session rather than by a person, so a fork would put a daemon on the
-// machine nobody asked for; and the daemon it forked would hold no sessions, so
-// every tool would answer confidently about an empty fleet that is not the one
-// the manager is managing.
+// listening - and that is right for a person typing `wake`, who should get a
+// room. It is wrong here twice over: `wake mcp` is spawned by a manager session
+// rather than by a person, so a fork would put a daemon on the machine nobody
+// asked for; and the daemon it forked would hold no sessions, so every tool
+// would answer confidently about an empty fleet that is not the one the manager
+// is managing.
 func TestTheMCPServerNeverStartsADaemon(t *testing.T) {
 	socket := tempSocket(t)
 

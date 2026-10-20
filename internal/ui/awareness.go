@@ -139,8 +139,8 @@ func loopingCount(agents []Agent) int {
 // and the ellipsis that says there was more.
 const minWorkspaceWidth = 4
 
-// noFleet is a strip with nothing to say, which is a real state: bare `wake` on
-// a machine with nothing running draws one before its first agent answers.
+// noFleet is a strip with nothing to say, which is a real state: a fresh room
+// draws one before its first session arrives.
 const noFleet = "no agents"
 
 // statesByAttention is the states anybody is in, ranked the way the roster

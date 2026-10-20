@@ -50,7 +50,7 @@ func (a *agent) setTeam(requested string) error {
 	if team != "" && reservedNames[team] {
 		return fmt.Errorf("%q is a reserved routing word, not a team name", team)
 	}
-	// Nor the manager's drawn name: the room offers @manager-<fleet> as the
+	// Nor the manager's drawn name: the room offers @manager-<part> as the
 	// manager, and teams route first, so a team of that name would take its mail.
 	if strings.HasPrefix(team, core.ManagerPrefix) {
 		return fmt.Errorf("%q is how a fleet's manager is named, not a team name", team)

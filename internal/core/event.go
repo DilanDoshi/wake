@@ -268,7 +268,7 @@ type ToolCall struct {
 	Checklist *ChecklistOp `json:"checklist,omitempty"`
 
 	// Send is who a SendMessage call reaches and what it says, and nil for
-	// every other call - the room draws the manager's (ui observe.go).
+	// every other call - the room and a conversation draw it (ui observe.go, dm_blocks.go).
 	Send *PeerSend `json:"peer_send,omitempty"`
 
 	// Loop is the native /loop a scheduler tool_use carries - a recurring

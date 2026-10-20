@@ -107,7 +107,7 @@ func (f Fleet) ByName(name string) (Agent, bool) {
 }
 
 // shown is the name this client draws a session by: the daemon's, except the
-// manager's, drawn as manager-<fleet> - the name every Claude session reaches it
+// manager's, drawn as manager-<part> - the name every Claude session reaches it
 // under (rpc.Status.ManagerClaude) - once a report says it. A typed `manager`
 // goes through it too, so @manager and /resume manager find the drawn row.
 func (f Fleet) shown(name string) string {

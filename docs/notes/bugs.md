@@ -1099,6 +1099,47 @@ streams them, as the parent does.
 
 ---
 
+## BUG-52 — a recorded demo take could leave its fleet running, and the script would have ended a real one
+
+**Found 2026-10-19, checking a report that "Wake daemons are not shut down by demo and test runs".** Of 24
+daemons on the owner's machine, 17 were demo or take kits: sockets in `/tmp/wake-take.*`, parent launchd, 8 to
+20 days old, two or three agents each, every socket still alive - so a `wake stop` would have ended them. Which
+run made which is not known. What was watched: a `record.sh` run of the staged beats left its seven-agent fleet
+running until it was stopped by hand, and on the real binary the same beat recorded with `main`'s script left a
+daemon and seven agents behind where the fixed one left none.
+
+**Causes, read off the script and then reproduced by failing tests.** `demo/record.sh` ended a fleet in one
+place: the success path of a tape that wrote `.work/take-socket`. The staged fleet (`/tmp/wake-demo`, every
+ordinary beat) was never ended - the next beat's staging stops it, so the last take of a session left one;
+`vhs` failing (`exit 1` before the stop), an interrupt, and a stop that failed (`>/dev/null 2>&1 || true`) all
+left a detached daemon behind; and `demo/README.md` told its reader to run a bare `vhs`, which ends nothing.
+And the socket it counted and stopped was whatever the tape wrote: nothing checked it was scratch, in a
+recorder that inherits the operator's real fleet.
+
+**Fix:** `record.sh` ends every fleet it staged or a tape minted, on every exit but SIGKILL, and the README names
+it as the way to record. A socket is counted or ended only if it is a `wake.sock` (no real fleet's is called that)
+that resolves - no `..`, no link, in the physical directory - to `/tmp/wake-demo/` or `/tmp/wake-take.*`. A stop
+that fails is said, keeps the take's record so the exit hook tries again, and fails the run; a signal during
+cleanup does not cut it short; a run killed outright leaves its record and the next run ends what it names. The
+shared staged socket is ended only by a run whose tape has a `Source .work/stage.tape` line, so a run that films
+a take with its own socket cannot stop another checkout's staged take. A record that names nothing fails the run
+instead of reading as a fleet that was ended, and one recorder owns a checkout at a time (a pid claim): a second
+refuses, running no cleanup, rather than ending the first one's fleet.
+
+Regression tests, `internal/core/recordsh_unix_test.go`, over a stub `wake` and `vhs` (never a real fleet): the
+staged fleet is ended, a failed recording still ends it, a tape that stages nothing leaves the shared socket
+alone, a tape's own socket is ended once whether vhs finished or failed, a killed run's record is ended first,
+five spellings of a socket that is not scratch are neither counted nor stopped, a failed stop is said and
+retried and fails the run, a second Ctrl-C during cleanup leaves no fleet behind and does not reach the stop it
+waits on, a recorder refuses while another is live and recovers a dead one's record, and a record that names
+nothing fails. All are red on `main`'s
+script but the one that keeps the shared staged socket from the fix's own reach (`main` never touched it).
+
+**Not this bug, and not proven to be Wake's:** one test-run daemon from 2026-10-10 that nothing ended, and
+daemons that carry the cmux environment of an older cmux launch - both in `deferred.md`.
+
+---
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

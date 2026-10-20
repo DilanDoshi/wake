@@ -12,12 +12,14 @@ func TestAFreshAgentsSkillsCompleteInTheRoomBeforeItsFirstTurn(t *testing.T) {
 	withScriptedAgent(t, scriptHandshakes)
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 
-	s := startWake(t, 120, 32) // the room, with one fresh agent on its roster
+	s := startWakeInAConversation(t, 120, 32)
 	s.await(handshakeKnown)
+	s.send("\x17") // ⌃W: the room, with one fresh agent on its roster
+	s.await("group chat")
 	s.settle()
 	names := agentsOnRoster(s)
 	if len(names) != 1 {
-		t.Fatalf("want the one agent bare wake spawned, got %v.\n%s", names, s.dump())
+		t.Fatalf("want the one agent `wake new` spawned, got %v.\n%s", names, s.dump())
 	}
 
 	s.send("@" + names[0] + " read the failing test\n")
