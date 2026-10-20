@@ -147,10 +147,9 @@ Rulings (each gets a test):
 - **Collisions are refused daemon-side, both directions**, since only the daemon sees
   both sets: a `/team` that equals a live agent name, and a `/name` into an existing
   team name, are refused; `all`/`manager`/`none` are reserved.
-- Room narrowing: a lone `@team` does **not** narrow the room in v1 (that is the
-  per-team filtered room `deferred.md` keeps behind the multi-room door). The team
-  echo's `to` stamp: a team send stamped `to == ""` would show inside every narrowed
-  `@john` thread; stamp it to members or record the gap.
+- Room narrowing: a lone `@team` did not narrow the room in v1. **Since 2026-10-17 it does**, as the union of
+  its live members' threads (`decisions.md`, 2026-10-17), and the team echo's `to` stamp is the members' key
+  so a team send shows only in its own and its members' threads.
 - The manager is refused a team of its own — spec §12 gives it a seat in every group.
 
 ## Phases 3–6 — ordering and rendering
@@ -180,5 +179,5 @@ header lines and the grouping they imply.
   restore into the room; a send to ≥2 members does (multiplicity), consistent with
   `roomhistory.go` erring toward silence.
 - `@` completion should offer team names (else `@back⇥` completes a path).
-- A lone `@team` narrowing the room (the per-team filtered room) — the multi-room
-  door, left closed.
+- ~~A lone `@team` narrowing the room (the per-team filtered room)~~ — built 2026-10-17 as a view filter over
+  the one room; a second room stays closed.

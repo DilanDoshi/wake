@@ -4,7 +4,7 @@
 // convention:
 //
 //   - wake                  the front door: start a new fleet, name it, and
-//     open its room with a first agent in it.
+//     open its room with the manager and no agent.
 //   - wake new [name]       spawn: a new agent, with a name chosen rather
 //     than drawn.
 //   - wake attach <who>     the same conversation with an agent already
@@ -46,16 +46,14 @@
 // unreachable until it existed. **Bare `wake` used to be the only way back into
 // the room, and it spawned to get there** - so seeing the fleet meant naming a
 // person, and every `wake` typed to look at the room left a new agent nobody
-// asked for. It branches now: a fleet gets the room and nothing else, and an
-// empty machine gets first run, which still spawns - into that same room, since
-// the agent is a roster row rather than a pane. See openroom.go.
+// asked for. It spawns no agent now: every bare `wake` opens the room, and the
+// manager is the only session it starts. See openroom.go.
 //
-// `wake new` is that spawn with a name on it, and it opens the conversation
-// too - which is the whole of what it has that bare `wake` on an empty machine
-// does not. It is a verb rather than a flag, and a verb rather than a bare
-// `wake <name>`, because the dispatch below refuses an unrecognized word: a bare
-// name would make `wake atach` a new agent instead of a typo, which is the one
-// failure this command line is built to avoid.
+// `wake new` is the verb that spawns, with a name on it if one is given, and it
+// opens the conversation too. It is a verb rather than a flag, and a verb rather
+// than a bare `wake <name>`, because the dispatch below refuses an unrecognized
+// word: a bare name would make `wake atach` a new agent instead of a typo, which
+// is the one failure this command line is built to avoid.
 package main
 
 import (

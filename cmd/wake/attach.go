@@ -121,10 +121,9 @@ func openSession(socket, sessionID string, request func(net.Conn) error, confirm
 	}
 	// Every verb that opens a *conversation* ends here, so this is where the
 	// room's default addressee is filled for each of them: `wake new`, `wake
-	// attach`, `wake fork`, `wake import`. Bare `wake` fills it in
-	// conversationOnly, both branches of it, since first run stopped coming
-	// through here. `wake manager` is in neither place - it opens nothing, and
-	// it is asking for this directly.
+	// attach`, `wake fork`, `wake import`. Bare `wake` fills it in openRoom.
+	// `wake manager` is in neither place - it opens nothing, and it is asking
+	// for this directly.
 	ensureManager(conn, fleet)
 	// The confirmation carried the whole fleet, not just the new session, so
 	// the room opens with a roster rather than with an empty one that fills in
@@ -193,7 +192,7 @@ func requestSpawn(conn net.Conn, sessionID, requested, role string, opts spawnOp
 // # Why the whole report and not only this session
 //
 // Because the daemon's confirmation is s.fleet() - every session it holds, not
-// only the one just started - so a bare `wake` already has the roster the room
+// only the one just started - so `wake new` already has the roster the room
 // needs and asking for it again would be a second round trip for an answer
 // already in hand. It would also cost this client the property that lets
 // ui.App read both status kinds without telling them apart: it never writes

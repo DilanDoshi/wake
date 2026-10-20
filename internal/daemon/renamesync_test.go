@@ -604,34 +604,19 @@ func TestARefusedMirrorRestoresWakesNameOverAVariant(t *testing.T) {
 	}
 }
 
-// A refused mirror arms nothing where claude's name is not Wake's to keep: the
-// manager, and an agent that is not live.
-func TestARefusedMirrorOfTheManagerOrAParkedAgentArmsNothing(t *testing.T) {
-	for _, tc := range []struct {
-		name  string
-		agent func() *agent
-	}{
-		{name: "manager", agent: func() *agent {
-			return newAgent(idAlpha, core.ManagerName, "", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
-		}},
-		{name: "parked", agent: func() *agent {
-			a := effortAgent(t)
-			a.beginPark()
-			a.finish(nil)
-			a.markParked()
-			return a
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			a := tc.agent()
-			if err := a.rename(newNameRegistry(), "bob", true); err == nil {
-				t.Fatal("the mirror was accepted")
-			}
-			a.mu.Lock()
-			defer a.mu.Unlock()
-			if a.renameHeld || a.probeWanted[renameProbe] {
-				t.Fatalf("a refused %s mirror armed the want: held %v, wanted %v", tc.name, a.renameHeld, a.probeWanted[renameProbe])
-			}
-		})
+// A refused mirror arms nothing for an agent that is not live: there is no
+// process whose claude name could be brought back.
+func TestARefusedMirrorOfAParkedAgentArmsNothing(t *testing.T) {
+	a := effortAgent(t)
+	a.beginPark()
+	a.finish(nil)
+	a.markParked()
+	if err := a.rename(newNameRegistry(), "bob", true); err == nil {
+		t.Fatal("the mirror was accepted")
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	if a.renameHeld || a.probeWanted[renameProbe] {
+		t.Fatalf("a refused parked mirror armed the want: held %v, wanted %v", a.renameHeld, a.probeWanted[renameProbe])
 	}
 }

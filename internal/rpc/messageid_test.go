@@ -35,7 +35,18 @@ func TestAMessageIDCarriesItsSendAndFlags(t *testing.T) {
 	if _, _, ok := MessageOf(uuid.NewString()); ok {
 		t.Error("a random uuid reads as Wake's")
 	}
-	if MessageDirect&MessageResumed != 0 {
+	if MessageDirect&MessageResumed|MessageDirect&MessageTeam|MessageResumed&MessageTeam != 0 {
 		t.Error("the flags share a bit")
+	}
+}
+
+// A team mark rides beside the other flags and survives the uuid.
+func TestATeamSendKeepsItsOtherFlags(t *testing.T) {
+	_, flags, ok := MessageOf(NewMessageSend(MessageDirect).ForTeam().ID())
+	if !ok || flags != MessageDirect|MessageTeam {
+		t.Errorf("a direct team send reads as flags %b, ok %v; want direct and team", flags, ok)
+	}
+	if _, flags, _ := MessageOf(NewMessageSend(0).ID()); flags&MessageTeam != 0 {
+		t.Error("a send that was not marked reads as a team's")
 	}
 }

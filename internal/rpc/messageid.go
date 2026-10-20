@@ -9,7 +9,7 @@ package rpc
 // The layout is Wake's own inside RFC 9562's version-8 shape:
 //
 //	bytes 0-3    "wake"           recognises it
-//	byte  4      flags            MessageDirect, MessageResumed
+//	byte  4      flags            MessageDirect, MessageResumed, MessageTeam
 //	bytes 5-10   send             shared by every target of one room send
 //	bytes 11-15  target           per target, so a broadcast's copies stay
 //	                              distinct records and only a fork shares one
@@ -36,6 +36,9 @@ const (
 	MessageDirect byte = 1 << iota
 	// MessageResumed is the daemon's "continue" to an agent a usage limit stopped.
 	MessageResumed
+	// MessageTeam is a room send to a team, so a restore can address it to the
+	// members whose transcripts hold it.
+	MessageTeam
 )
 
 // MessageSend is one send: its flags and send bytes, shared by the uuid of
@@ -48,6 +51,12 @@ func NewMessageSend(flags byte) MessageSend {
 	_, _ = rand.Read(s.head[5:]) // crypto/rand.Read never fails
 	copy(s.head[:4], messageMark[:])
 	s.head[4] = flags
+	return s
+}
+
+// ForTeam marks the send as a team's.
+func (s MessageSend) ForTeam() MessageSend {
+	s.head[4] |= MessageTeam
 	return s
 }
 

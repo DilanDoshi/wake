@@ -57,7 +57,7 @@ func fakeRenameSync(sid string, late bool) int {
 		switch name := argAskedIn(line, "/rename "); {
 		case name != "":
 			renames = append(renames, name)
-			if name == "clash" {
+			if name == "clash" || name == "manager-clash" {
 				name += "-2"
 			}
 			emitText(sid, "Session renamed to: "+name)

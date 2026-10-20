@@ -26,3 +26,9 @@ func roomSendOf(id string) (send [6]byte, direct, ok bool) {
 	}
 	return send, flags&rpc.MessageDirect != 0, true
 }
+
+// roomSendTeam is whether a uuid is a room send to a team.
+func roomSendTeam(id string) bool {
+	_, flags, ok := rpc.MessageOf(id)
+	return ok && flags&rpc.MessageTeam != 0
+}

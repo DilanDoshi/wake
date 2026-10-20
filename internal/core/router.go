@@ -72,12 +72,12 @@ const (
 	ManagerName = "manager"
 
 	// ManagerPrefix begins the name claude knows a fleet's manager by,
-	// manager-<fleet>, which the daemon refuses to every other agent.
+	// manager-<part>, which the daemon refuses to every other agent.
 	ManagerPrefix = ManagerName + "-"
 )
 
 // IsManager reports whether name is the manager's: Wake's own word for it, or
-// the manager-<fleet> a client draws it as. The prefix is unambiguous because
+// the manager-<part> a client draws it as. The prefix is unambiguous because
 // no other agent may take it.
 func IsManager(name string) bool {
 	return name == ManagerName || strings.HasPrefix(name, ManagerPrefix)
@@ -92,7 +92,7 @@ type Addressee struct {
 	ID   string
 	Name string
 	// Alias is a second word the service answers to: the manager is drawn as
-	// manager-<fleet>, the name Claude sessions know it by, and @manager still
+	// manager-<part>, the name Claude sessions know it by, and @manager still
 	// reaches it. Empty for every other addressee.
 	Alias string
 

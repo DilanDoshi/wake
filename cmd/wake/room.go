@@ -26,7 +26,7 @@ import (
 //
 // Because this client already holds it. The spawn's confirmation is a
 // FrameStatusReply carrying s.fleet() - *every* session, not just the new one -
-// so bare `wake` gets a full roster for free, and the reattach path fetched one
+// so `wake new` gets a full roster for free, and the reattach path fetched one
 // through liveSession on the way in to answer "is that session still there".
 // Asking again here would be a second round trip for an answer already in hand,
 // and it would put a reply in flight against a model that reads both status

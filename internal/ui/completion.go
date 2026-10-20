@@ -153,7 +153,7 @@ type completion struct {
 	tags map[string]offerTag
 
 	// routed is the offer Wake itself resolves the typed `@manager` to - the drawn
-	// `@manager-<fleet>` - where Wake reads the word, and "" anywhere else.
+	// `@manager-<part>` - where Wake reads the word, and "" anywhere else.
 	routed string
 
 	// paths is the `@` half, which is a directory read and so is not this

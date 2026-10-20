@@ -157,6 +157,20 @@ type roomRoute struct {
 	direct core.Route
 }
 
+// thread is the one thread a draft's lone @name or @team addresses, as a focus
+// key (see joinIDs), and "" for a draft that addresses none: open mode widens a
+// message past its mention, and @all, @manager and an unaddressed draft name no
+// thread. A team is never widened, so it is a thread in either mode.
+func (r roomRoute) thread() string {
+	switch {
+	case r.Team != "":
+		return joinIDs(r.Targets)
+	case r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0:
+		return r.Targets[0]
+	}
+	return ""
+}
+
 // configureRoute is where a knob goes: the direct reading when open mode widened
 // a message, and the route itself otherwise. A slash command's route is already
 // direct, so this returns it unchanged there.

@@ -75,6 +75,8 @@ missing feature.
 - **A fleet exists** → open the room on it, no target, nothing spawned.
 - **No fleet exists** → this is first run, and the current behaviour (start a daemon, spawn a
   session, open it) is right. Do not make a new user type two commands to get an agent.
+  *(Superseded 2026-10-16 by the owner: bare `wake` spawns no agent, and the room opens with the
+  manager alone — `docs/notes/decisions.md`.)*
 
 So bare `wake` branches on whether the fleet is empty, and both halves must be tested. The empty
 case is the one a new user hits exactly once and never forgives.
