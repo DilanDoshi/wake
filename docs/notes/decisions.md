@@ -4633,3 +4633,23 @@ machine, and ruled that it affect the group chat only — no agent and no conver
   `roomCommands` is held to a count, and a room test sends `/cleanup`, `/clear-cache` and their like
   to the default addressee unchanged. A session the cleared room held lines for stays marked asked, so
   a park and wake does not restore a turn whose live echo is still on screen.
+
+## 2026-10-20 — a fleet runs up to 50 sessions at once, and `--max-agents` sets fewer (the owner)
+
+The owner asked to raise the 30-session cap. Ruled: **50 by default and 50 the most**, set per fleet
+with a flag on `wake`.
+
+- **`--max-agents <n>`, 1 to 50**, legal anywhere like `--fleet` but only with a verb that opens the
+  room or a conversation (`wake`, `new`, `attach`, `manager`); on `status`, `stop`, `fleets`, `fork`
+  or `import` it is refused with a sentence, since it sets a fleet rather than describing one.
+- **Set on the running daemon** (`FrameSetMaxAgents`), so it works on a fleet already open, and lasts
+  until that daemon stops; a fresh fleet runs 50. It is sent from `connect`, on the verb's own
+  connection, because a daemon with no agents exits when its last client leaves
+  (`reconsiderEmptyExit`) - a cap sent on a connection of its own was lost to the fresh daemon the
+  verb then started. The room's reconnects carry it too.
+- **Lowering it stops nothing**; the next spawn is refused until the count is under it, and the refusal
+  says `--max-agents` raises it. A wake is still exempt, as before.
+- **The manager may not set it**: it is the bound FrameSpawn's verdict rests on.
+- `wake status` says `N of M sessions running`.
+- Memory, measured: about 475 MB per `claude` process on the owner's machine, so 50 agents is roughly
+  24 GB. The tighter limit in practice is the account's usage window, not RAM.

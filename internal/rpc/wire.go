@@ -297,6 +297,9 @@ type Frame struct {
 
 	Text string `json:"text,omitempty"`
 
+	// MaxAgents is FrameSetMaxAgents' cap.
+	MaxAgents int `json:"max_agents,omitempty"`
+
 	// Dropped is how many frames the daemon lost for this client before the one
 	// that follows - set on the FrameError that reports a queue overflow, zero
 	// otherwise. The typed half of that report: every consumer routes off this

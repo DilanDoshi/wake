@@ -30,6 +30,13 @@ the room opens with the manager alone, and `/new` or `wake new` starts one.
 the first few characters of the id `wake status` prints. If a prefix is ambiguous Wake lists the
 candidates rather than guessing.
 
+**`--max-agents <n>`** is how many sessions a fleet runs at once, the manager included: 50 unless you
+set fewer, never more. It goes with `wake`, `new`, `attach` or `manager` — `wake --fleet api
+--max-agents 20` — and sets the fleet's running daemon, so it works on a fleet that is already open
+and lasts until that fleet stops. Lowering it parks and stops nothing; it only refuses the next spawn
+until enough have finished or been parked (`⌃C`). A parked agent can always be woken. `wake status`
+says how many of the cap are running.
+
 **`--max-budget-usd <amount>`** stops the agent once it has spent that much, on `new` and on
 `manager`. `wake new alex --max-budget-usd 5` is an agent that cannot cost more than five dollars.
 The cap survives a park, so an agent you `⌃C` and bring back is still capped — there is no way to
