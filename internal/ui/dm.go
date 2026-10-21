@@ -68,6 +68,9 @@ type DM struct {
 	// message. Set for the draw; see WithWriting.
 	writing string
 
+	// page is where the pane scrolls while a card is up. See pagescroll.go.
+	page pageState
+
 	// compactingSince is when this session's compaction began, or the zero time
 	// when none is running. Set for the draw by App.dmPane off the App-owned map
 	// (compacting.go); it drives the compacting line the way Agent.startedAt

@@ -17,6 +17,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -174,11 +175,10 @@ func TestTypingAWordMadeOfCardKeysSettlesNothing(t *testing.T) {
 
 // A card whose keys are not on screen is not answerable.
 //
-// roomPane draws no card at all below the room's own floor, and clips the card
-// to what is left above it - and the key line is the last row, so it is the
-// first thing cut. An arm the operator cannot see, on a card they cannot see,
-// is a confirmation that is not one: the only account of what the first press
-// did is the row that was cut.
+// A pane one row shorter than the card itself shows the card with its key line
+// cut - the last row, so the first thing to go. An arm the operator cannot see,
+// on a card they cannot see, is a confirmation that is not one: the only account
+// of what the first press did is the row that was cut.
 //
 // So the rune is handed back instead, which is what it would be if there were
 // no card - and there is, as far as this pane is concerned, no card.
@@ -187,7 +187,9 @@ func TestACardWhoseKeysAreNotOnScreenIsNotAnswerable(t *testing.T) {
 	if !a.cardFullyDrawn() {
 		t.Fatal("the card is not drawn at the size this test starts from, so it proves nothing")
 	}
-	a = a.withSize(200, a.room.minHeight()+noticeHeight)
+	width, _, _ := a.focusedPane()
+	rows := lipgloss.Height(a.cardBlock(a.focus, width, false))
+	a = a.withSize(200, rows-1+noticeHeight)
 	if a.cardFullyDrawn() {
 		t.Fatalf("the card still fits at pane height %d, so this test asserts nothing", a.paneHeight())
 	}

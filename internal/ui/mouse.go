@@ -252,6 +252,9 @@ func (a App) scrollPane(id string, lines int) App {
 		a.room = a.room.ScrollUp(lines)
 		return a
 	}
+	if next, moved := a.scrollPage(id, lines); moved {
+		return next
+	}
 	return a.withDM(id, a.dms[id].ScrollUp(lines))
 }
 
@@ -303,6 +306,9 @@ func (a App) selectionIn(id string) marked {
 // The count is App.transcriptRows rather than the transcript's own height,
 // which a card or a completion menu shortens without resizing.
 func (a App) startSelection(id string, col, top, height, x, y int, r Regions, refocused bool) App {
+	if a.pageShifted(id) { // its rows are not where the transcript's anchors read them
+		return a.startScreenSelection(x, y)
+	}
 	rows := a.transcriptRows(id, r.Cols[col], height)
 	if y >= top+rows {
 		// Below the transcript is chrome and the query box. The box's own draft

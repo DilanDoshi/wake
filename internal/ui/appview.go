@@ -195,27 +195,11 @@ func (a App) pane(id string, width, height int) string {
 // reaches the screen, which is what makes its keys safe to read.
 //
 // Not "is there a card": the card is pinned in the menu block above the composer
-// (see menuBlock) and DM.menuRows clips that block from the bottom to what is
-// left above the transcript's floor. The card is first in the block, so it is
-// the last thing clipped - but its key line is the card's own last row, so a
-// card taller than the room draws with its keys cut, still blocking an agent and
-// still looking answerable. So the whole card has to fit, and paneFloor is
-// baseChrome plus a transcript row.
-//
-// The card is a menu, and a pinned menu drops the composerGap - it hugs the box
-// where an empty pane keeps a blank row above it - so the card gets that row
-// back. paneFloor measures the stored DM, which carries no menu, so it charges
-// the gap; without adding it back a card that fills the pane exactly is called
-// clipped, and its answer keys stay live with nothing on screen to account for
-// them while the agent stays blocked. The reverse of the stale-bar direction
-// below, and menuposition_test.go now sweeps both.
-//
-// paneFloor is asked at the pane width, which is not a nicety: menuRows runs
-// inside DM.View, after withBar has re-rendered the status bar from the live
-// agent, and a status push updates the fleet without re-sizing the stored DM -
-// so the cached bar can lag by a row. A floor measured against the stale bar
-// would call a card fully drawn whose key line the draw then clips, leaving the
-// answer keys live with nothing on screen to account for them.
+// (see menuBlock) and its key line is its own last row, so a card drawn with its
+// keys cut would still be blocking an agent and still look answerable. The page
+// the pane is scrolled to (pagescroll.go) decides what is on screen, so the whole
+// card has to be inside that window - and a card that fits only with the composer
+// scrolled out of the way is whole once it is.
 //
 // Measured against the focused pane rather than the room, which is the fix
 // itself: below dmTakeoverColumns the room has no width, so a room-only
@@ -226,9 +210,15 @@ func (a App) cardFullyDrawn() bool {
 	if !ok {
 		return false
 	}
-	card := a.cardBlock(a.focus, width)
-	room := height - a.paneFloor(a.focus, width) + composerGap
-	return card != "" && room > 0 && lipgloss.Height(card) <= room
+	card := a.cardBlock(a.focus, width, false)
+	return card != "" && a.cardHeld(a.focus, width, height, card, a.menuAround(card, a.focus, width, height))
+}
+
+// cardHeld reports whether every row of id's card is inside the window its page
+// is scrolled to, given the card and the menu block it heads.
+func (a App) cardHeld(id string, width, height int, card, menu string) bool {
+	c, ok := a.cardOf(id)
+	return ok && a.pagePlace(id, width, height, menu, c).holds(lipgloss.Height(card))
 }
 
 // focusedPane is the width and height of the pane holding the keys, and whether
@@ -252,24 +242,6 @@ func (a App) paneSize(id string) (width, height int, ok bool) {
 		return r.Cols[col], bottom, bottom > 0
 	}
 	return r.Cols[col], top, true
-}
-
-// paneFloor is the shortest this conversation draws, measured rather than
-// stated: both panes' chrome grows a row when a heartbeat or a status bar
-// arrives, and a floor one row out is a card drawn one row too tall.
-//
-// Asked of the same values the panes draw from, never of the stored ones - a
-// legend carrying a mode is what decides whether the composer's hint wraps, and
-// a floor measured without it is a floor for a pane nobody draws. The bar is the
-// one the draw will show: dmFor carries the live agent but leaves the bar
-// cached, and withBar re-renders it from that agent at the pane width - the same
-// refresh DM.View does before it clips the menu block. width is the room's for
-// the room, which has no bar of its own.
-func (a App) paneFloor(id string, width int) int {
-	if id == "" {
-		return a.roomFor().minHeight()
-	}
-	return a.dmFor(id).withBar(max(width, minComposerWidth)).minHeight()
 }
 
 // roomFor is the room as roomPane draws it. The legend names the mode of
@@ -325,8 +297,9 @@ func (a App) armsFor(id string) legendArms {
 	return legendArms{esc: focused && !rewind, rewind: rewind, detach: a.detachArmed, quit: a.quitArmed}
 }
 
-// cardBlock is the card this pane draws, or "" for a pane with no ask to put.
-func (a App) cardBlock(id string, width int) string {
+// cardBlock is the card this pane draws, or "" for a pane with no ask to put. cut
+// is a card the pane does not hold whole: its key line says when the keys return.
+func (a App) cardBlock(id string, width int, cut bool) string {
 	card, ok := a.cardOf(id)
 	if !ok {
 		return ""
@@ -335,7 +308,11 @@ func (a App) cardBlock(id string, width int) string {
 	// The pause is the focused pane's own: cardKey reads a.cardOf(a.focus), so
 	// a draft gates exactly that pane's card, and pausing another pane's on it
 	// would blame a draft that is not in that pane's composer.
-	return a.cards.View(card, width, agent, id == a.focus && !a.composerEmpty())
+	typing := id == a.focus && !a.composerEmpty()
+	if cut {
+		return a.cards.ViewCut(card, width, agent, typing)
+	}
+	return a.cards.View(card, width, agent, typing)
 }
 
 // cardOf is the ask a pane is putting: a conversation puts its own agent's, and
@@ -401,7 +378,7 @@ func (a App) drawnConversations() func(string) bool {
 func (a App) roomPane(width, height int) string {
 	// The selection is set for the draw and not held, the same way the mode is -
 	// App owns the one selection, and it changes what a row looks like rather
-	// than how many rows there are, so paneFloor does not ask for it.
+	// than how many rows there are, so the pane's floor does not ask for it.
 	room := a.roomFor().WithSelection(a.selectionIn("")).WithComposerSelection(a.composerSelectionIn(""))
 
 	// Handed over whole: the pane clips it, because only the pane knows what is
@@ -422,9 +399,10 @@ func (a App) roomPane(width, height int) string {
 // them rows away from where they are acted on, which is what "the /effort menu
 // appears at the top instead of the query bar" reported.
 //
-// The card is first, so it is the row the pane keeps when there is not room for
-// all of it - DM.menuRows clips from the bottom - and its keys are the last row
-// of it, which is what cardFullyDrawn holds. The completion menu is last,
+// The card is first, so it is the row the pane keeps at rest when there is not
+// room for all of it - DM.menuRows clips from the bottom, and the wheel scrolls
+// the page to the rest (pagescroll.go) - and its keys are the last row of it,
+// which is what cardFullyDrawn holds. The completion menu is last,
 // directly above the composer, where the word it completes is.
 //
 // One block, handed to the pane whole through WithMenu, because only the pane
@@ -432,12 +410,22 @@ func (a App) roomPane(width, height int) string {
 // the transcript any more, which is what keeps mouse.go's startSelection a plain
 // `top`: a screen row is a transcript line with nothing to offset it by.
 func (a App) menuBlock(id string, width, height int) (string, bool) {
-	card := a.cardBlock(id, width)
+	card := a.cardBlock(id, width, false)
+	menu := a.menuAround(card, id, width, height)
+	if card != "" && !a.cardHeld(id, width, height, card, menu) {
+		card = a.cardBlock(id, width, true)
+		menu = a.menuAround(card, id, width, height)
+	}
+	return menu, card != ""
+}
+
+// menuAround is the menu block with card at its head.
+func (a App) menuAround(card, id string, width, height int) string {
 	stack := above(above(card, a.pickerView(width, id)), a.rewindView(width, id))
 	stack = above(stack, a.resumeView(id, width, height, stack))
 	stack = above(stack, a.mcpView(id, width, height, stack))
 	stack = above(stack, a.statusView(id, width, height, stack))
-	return above(stack, a.completionView(width, id)), card != ""
+	return above(stack, a.completionView(width, id))
 }
 
 // resumeView is the resume picker if it belongs to this pane, and "" otherwise -
@@ -507,8 +495,22 @@ func above(top, bottom string) string {
 func (a App) dmPane(id string, width, height int) string {
 	// Handed over whole, for roomPane's reason. See DM.menuRows.
 	menu, ask := a.menuBlock(id, width, height)
-	return a.dmFor(id).WithSelection(a.selectionIn(id)).WithComposerSelection(a.composerSelectionIn(id)).
-		WithMenu(menu).WithAsk(ask).WithWriting(a.answerTitle(id)).WithCompacting(a.compactingSince(id)).View(width, height)
+	dm := a.dmFor(id).WithSelection(a.selectionIn(id)).WithComposerSelection(a.composerSelectionIn(id)).
+		WithMenu(menu).WithAsk(ask).WithWriting(a.answerTitle(id)).WithCompacting(a.compactingSince(id))
+	if !ask {
+		return dm.View(width, height)
+	}
+	card, _ := a.cardOf(id)
+	place := a.pagePlace(id, width, height, menu, card)
+	if place.win.render == height {
+		return dm.View(width, height)
+	}
+	// The page is the pane drawn taller; the window is the rows of it that show.
+	// The older lines the page took in came off the top of the transcript, whose
+	// reader the draw cannot assume is following.
+	tall := dm.SetSize(width, place.win.render)
+	tall.tr.scroll = max(place.top-max(place.up-place.clipped, 0), tall.tr.first())
+	return firstRows(skipRows(tall.View(width, place.win.render), place.win.skip), height)
 }
 
 // transcriptRows is how many of a pane's rows are conversation, measured the
@@ -532,7 +534,7 @@ func (a App) transcriptRows(id string, width, height int) int {
 	// draws its bar a row taller (hasBeat), so a measurement without it is a
 	// selRows two rows too tall, and pointIn would anchor above the pointer - the
 	// same class of bug the room's working line was. See dmPane.
-	return a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).SetSize(width, height).tr.height
+	return a.sizedDM(id, menu, width, height).tr.height
 }
 
 // dividerColumn is the one column between the panes, drawn its whole height so

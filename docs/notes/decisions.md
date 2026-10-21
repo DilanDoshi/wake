@@ -4633,3 +4633,42 @@ machine, and ruled that it affect the group chat only — no agent and no conver
   `roomCommands` is held to a count, and a room test sends `/cleanup`, `/clear-cache` and their like
   to the default addressee unchanged. A session the cleared room held lines for stays marked asked, so
   a park and wake does not restore a turn whose live echo is still on screen.
+
+## 2026-10-20 — a card scrolls with its pane, as one page (the owner)
+
+The owner asked for the human-in-the-loop question screen to scroll — "if I scroll up it should scroll
+everything" — for a window too small to show the whole card, and in general. Two choices were theirs.
+
+- **The pane is one page.** Offered a card-body viewport with its headline and key line pinned, they
+  chose the transcript, card and composer scrolling together. The wheel slides the card and composer
+  off the bottom and takes older lines in at the top. Without a card the wheel moves the transcript
+  alone, as it always did.
+- **The keys keep today's rule.** Offered "live while the key line is on screen", they kept *live only
+  while the whole card is on screen* (`cardFullyDrawn`; the 2026-08 ruling that a confirmation the
+  operator cannot see is not one). What changed is what puts a card on screen: the composer scrolls out
+  of the way before the card is clipped, so a card that fits a short pane alone is whole and answerable
+  at rest, and one taller than the pane is read by scrolling but not answered until the window grows.
+  The key line says so (`cardKeysCut`) rather than advertising keys that are not read — except while an
+  answer is being written, which is read whether or not the card is all on screen.
+
+How it is built, and the traps:
+
+- **The page is the pane drawn taller.** Up `b` rows from the bottom is the pane drawn `height+b` rows
+  tall with its top `height` rows shown, which slides `b` rows of chrome off the bottom and takes `b`
+  older lines in at the top with no layout of its own. A card the pane has no room for opens with its
+  clipped rows already behind the window (`windowPage`'s `clipped`), on the card's own top.
+- **Hitting the top ends the wheel there.** The first version handed the rest of the travel to the
+  transcript's own scroll, which shortened the page under it and snapped the card back to the bottom
+  row under a transcript scrolled to its top. Only a wheel *down* at rest falls through (a reader who
+  scrolled back before the card arrived is still brought forward).
+- **A press on a scrolled page is a screen selection.** Its rows are not where the transcript's anchors
+  read them, and re-deriving them was not worth it for a read-only gesture. At rest, including a pane
+  too short for its card, nothing has moved and a press anchors as ever.
+- **A key that reaches the composer snaps the page to it**, as does opening an answer — a draft nobody
+  can see is the failure the paused key line exists to prevent. A card key does not: it acts only on a
+  whole card, which the operator can see.
+- **State is per card** (`pageState.req`): another ask starts at rest. The offset is clamped at the
+  draw, so a resize under a scrolled page cannot leave rows the transcript has not got.
+- **One existing test was aimed at the old premise.** `TestACardWhoseKeysAreNotOnScreenIsNotAnswerable`
+  shrank the pane to the composer's floor and expected the card clipped; the composer now scrolls away
+  first, so it uses a pane one row shorter than the card.

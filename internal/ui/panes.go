@@ -581,6 +581,9 @@ func (a App) toggleRoster() App {
 // count.
 func (a App) scrollFocused(lines int) App {
 	if a.focus != "" {
+		if next, moved := a.scrollPage(a.focus, lines); moved {
+			return next
+		}
 		return a.withDM(a.focus, a.dm().ScrollUp(lines))
 	}
 	a.room = a.room.ScrollUp(lines)
