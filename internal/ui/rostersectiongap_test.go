@@ -4,6 +4,7 @@ package ui
 // it, so each team reads as its own chunk the way the board's bands do.
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 
@@ -78,19 +79,27 @@ func TestARosterThatOpensOnATeamDrawsNoBlankAboveIt(t *testing.T) {
 	}
 }
 
-// No team, no header and no gap: the flat roster it has always drawn.
+// No team, no header and no gap: the flat roster it has always drawn - scrolled,
+// too, where the window is engaged and a stray blank would cost a row of agents.
 func TestAFleetWithNoTeamsDrawsNoBlankRows(t *testing.T) {
-	agents := gapFleet(t,
-		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateIdle},
-		rpc.SessionStatus{ID: "s2", Name: "thea", State: rpc.StateIdle},
-	)
+	var sessions []rpc.SessionStatus
+	for _, name := range []string{"alex", "thea", "john", "mara", "omar", "lena"} {
+		sessions = append(sessions, rpc.SessionStatus{ID: "s-" + name, Name: name, State: rpc.StateIdle})
+	}
+	agents := gapFleet(t, sessions...)
 
-	lines := rosterLines(agents, "", noSubsOf, 30, 2)
+	lines := rosterLines(agents, "s-john", noSubsOf, 30, 4)
 
+	if len(lines) != 4 {
+		t.Fatalf("a 4-row column drew %d rows:\n%s", len(lines), strings.Join(lines, "\n"))
+	}
 	for i, l := range lines {
 		if strings.TrimSpace(l) == "" {
 			t.Errorf("row %d of a team-less roster is blank:\n%s", i, strings.Join(lines, "\n"))
 		}
+	}
+	if !strings.Contains(lines[3], "+3 more") {
+		t.Errorf("three agents fit and the other three are counted, but the last row is %q:\n%s", lines[3], strings.Join(lines, "\n"))
 	}
 }
 
@@ -155,5 +164,93 @@ func TestRowsForRowIsExactlyTheLinesRowLinesDraws(t *testing.T) {
 			t.Errorf("%s (header %q, gap %v): rowsForRow = %d but %d lines are drawn",
 				item.agent.Name, item.header, item.gap, got, want)
 		}
+	}
+}
+
+// teamedSubs puts a running subagent under thea, a team's first agent, so her block
+// is a gap, a divider, her own row and the subagent's.
+func teamedSubs(id string) []Task {
+	if id == "s2" {
+		return []Task{{ID: "t1", Dispatch: "d1", Kind: core.TaskAgent, Name: "check the harness", Status: core.TaskRunning}}
+	}
+	return nil
+}
+
+// The window is read off the lines each item draws, not off the number the window
+// itself counts by, so a running total that forgets the gap or the divider is
+// seen: the rows drawn fit under the count, the count is there and says how many
+// agents are hidden, and nothing more would have fitted.
+func TestTheWindowFitsTheColumnAndKeepsItsCountAtEveryHeight(t *testing.T) {
+	// Enough of a fleet that a block can be taken in backwards and another still
+	// refused behind it: two untagged agents, then two teams of two.
+	agents := gapFleet(t,
+		rpc.SessionStatus{ID: "s0", Name: "bea", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s3", Name: "john", Team: "backend", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s4", Name: "mara", Team: "frontend", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s5", Name: "omar", Team: "frontend", State: rpc.StateIdle},
+	)
+	rows := sectionRows(agents)
+	const width = 36
+	for height := 3; height <= 18; height++ {
+		for _, sel := range []string{"s0", "s1", "s2", "s3", "s4", "s5"} {
+			r := Roster{Selected: sel}
+			w := r.window(agents, teamedSubs, width, height)
+			if w.to == w.from {
+				continue // no whole block fits beside the count: the count alone is drawn
+			}
+			drawn := func(from, to int) (n int) {
+				for _, item := range rows[from:to] {
+					n += len(r.rowLines(item, teamedSubs, width))
+				}
+				return n
+			}
+			total, shown := drawn(0, len(rows)), drawn(w.from, w.to)
+			if total <= height {
+				if w.from != 0 || w.to != len(rows) {
+					t.Errorf("height %d, cursor %s: everything fits in %d rows but the window is [%d,%d)", height, sel, total, w.from, w.to)
+				}
+				continue
+			}
+			room := height - 1
+			if shown > room {
+				t.Errorf("height %d, cursor %s: the window draws %d rows with room for %d", height, sel, shown, room)
+			}
+			if cursor := rowIndexOfSelected(rows, sel); cursor < w.from || cursor >= w.to {
+				t.Errorf("height %d, cursor %s: the cursor's block is outside the window [%d,%d)", height, sel, w.from, w.to)
+			}
+			if w.to < len(rows) && shown+drawn(w.to, w.to+1) <= room {
+				t.Errorf("height %d, cursor %s: the next block would have fitted below the window", height, sel)
+			}
+			if w.from > 0 && shown+drawn(w.from-1, w.from) <= room {
+				t.Errorf("height %d, cursor %s: the previous block would have fitted above the window", height, sel)
+			}
+			view := rosterLines(agents, sel, teamedSubs, width, height)
+			hidden := len(agents) - (w.to - w.from)
+			if want := "+" + strconv.Itoa(hidden) + " more"; rowContaining(view, want) != shown {
+				t.Errorf("height %d, cursor %s: the %q count is not on the row (%d) just under the window:\n%s",
+					height, sel, want, shown, strings.Join(view, "\n"))
+			}
+		}
+	}
+}
+
+// A click on a subagent row opens that subagent, under an agent that leads a
+// section as under one that does not: the rows under the blank and the divider are
+// still the last of the item's lines.
+func TestAClickOnASubagentUnderATeamsFirstAgentOpensTheSubagent(t *testing.T) {
+	agents := gapSessionsAgents(t)
+	const width, height = 36, 20
+	lines := rosterLines(agents, "", teamedSubs, width, height)
+	sub := rowContaining(lines, "check the harness")
+	if sub < 0 {
+		t.Fatalf("the subagent row is not drawn:\n%s", strings.Join(lines, "\n"))
+	}
+
+	a, dispatch, ok := (Roster{}).At(agents, teamedSubs, width, height, sub)
+
+	if !ok || a.Name != "thea" || dispatch != "d1" {
+		t.Errorf("a click on the subagent row resolves to (%q, %q, %v), want thea's dispatch d1:\n%s", a.Name, dispatch, ok, strings.Join(lines, "\n"))
 	}
 }

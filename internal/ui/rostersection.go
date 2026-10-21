@@ -19,6 +19,10 @@ package ui
 // team differs from the one above it and never inside the header-less top block.
 // With every Team empty no header is drawn and the roster is the flat list it
 // always was - the property that keeps every existing test green.
+//
+// A blank row sets a header off from whatever is above it (rosterItem.gap), and it
+// rides on the same item for the same reason the header does: the window keeps or
+// drops header, gap and member together, and one count (rowsForRow) serves them.
 
 import "github.com/charmbracelet/x/ansi"
 

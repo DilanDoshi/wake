@@ -4651,4 +4651,7 @@ the untagged top block included. The board's rows and tile shelves already put a
   opens on its divider, not on a blank. With no team the roster is the flat list it always was.
 - **A scrolled column that starts on a team's first agent opens on its blank.** The owner took the simple rule over
   dropping it at the window's top (which would have made the window, the click and the draw each carry an exception).
+- **At a column too short for it, a team's first agent can go uncounted.** The blank makes that agent's block one row
+  taller, so a cursor on it at a pane height of about 3-5 rows can exceed the room and draw the count alone — the
+  existing "no whole block fits" fallback, which never understates the fleet. Noted by review; it follows the rule.
 - Roster only. The board is left as it was.
