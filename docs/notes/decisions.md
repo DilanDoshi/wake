@@ -4661,14 +4661,30 @@ How it is built, and the traps:
   transcript's own scroll, which shortened the page under it and snapped the card back to the bottom
   row under a transcript scrolled to its top. Only a wheel *down* at rest falls through (a reader who
   scrolled back before the card arrived is still brought forward).
-- **A press on a scrolled page is a screen selection.** Its rows are not where the transcript's anchors
-  read them, and re-deriving them was not worth it for a read-only gesture. At rest, including a pane
-  too short for its card, nothing has moved and a press anchors as ever.
-- **A key that reaches the composer snaps the page to it**, as does opening an answer — a draft nobody
-  can see is the failure the paused key line exists to prevent. A card key does not: it acts only on a
-  whole card, which the operator can see.
-- **State is per card** (`pageState.req`): another ask starts at rest. The offset is clamped at the
-  draw, so a resize under a scrolled page cannot leave rows the transcript has not got.
-- **One existing test was aimed at the old premise.** `TestACardWhoseKeysAreNotOnScreenIsNotAnswerable`
-  shrank the pane to the composer's floor and expected the card clipped; the composer now scrolls away
-  first, so it uses a pane one row shorter than the card.
+- **A press on a scrolled page is a screen selection.** Its rows are not where the transcript's anchors read them,
+  and re-deriving them was not worth it for a read-only gesture. At rest nothing has moved and a press anchors as ever
+  — except in a pane too short for its card, where the composer is *not* under the card: a press below the
+  transcript's one row takes the screen as drawn, never a draft nobody can see (reviewer). **An edge drag scrolls the
+  transcript it was taken in**, not the page (`scrollPane` is the transcript's alone; only the wheel tries the page).
+- **A draft that changes brings the page home, whichever key wrote it.** The first version hooked the keys that reach
+  the composer, and ↑ (prompt history), take-back, ⇥ and the image drop all edit it without reaching that hook: a
+  recalled prompt landed in a composer off screen and the next ↵ sent it (reviewer). The hook is now at the composer's
+  write (`withComposer`, `withComposerFor`) and compares against `pageState.draft`, because a `Composer` shares its
+  text area with the copy it was taken from, so the stored one already holds the new text. Opening an answer homes it
+  too. **↵ on an answer commits only from a page at its bottom**: one scrolled away brings the box back and the next ↵
+  sends (Codex), since an answer is irreversible.
+- **`cardFullyDrawn` is read off the layout actually drawn.** The page is drawn taller than the pane, and the rows it
+  adds let a draft or a streamed preview grow, so the first measure — at the pane's own height — could put the card
+  where it was not (Codex; the reviewer reproduced the safe-direction case: a 9-line draft, the whole card on screen
+  and its keys dead). `placeOf` lays out the drawn height and places the card by that, and a sweep holds the claim to
+  the rows over every height, draft, scroll and status bar.
+- **At the top of the page the draw is the transcript alone.** Drawn at its taller layout the pane would render every
+  retained line each frame (Codex: 3,000 events); once the chrome is past the window `transcriptPage` draws just the
+  window's lines, and a test holds a frame at the top of a long conversation to a short one's allocations.
+- **Cost.** A pane with no card is the same path as before (identical allocations); a fitting card is within noise of
+  `main`; a clipped pane is drawn at its taller layout and costs about 0.5 ms more per frame (`deferred.md`).
+- **State is per card** (`pageState.req`): another ask starts at rest. The offset is clamped at the draw, so a resize
+  under a scrolled page cannot leave rows the transcript has not got.
+- **One existing test was aimed at the old premise.** `TestACardWhoseKeysAreNotOnScreenIsNotAnswerable` shrank the pane
+  to the composer's floor and expected the card clipped; the composer now scrolls away first, so it uses a pane one
+  row shorter than the card.

@@ -18,11 +18,14 @@ import (
 )
 
 // pageState is where a conversation's page was scrolled to, and for which card:
-// another ask starts at rest. Unset is the default - the card's own top.
+// another ask starts at rest. Unset is the default - the card's own top. draft is
+// the draft as the page last saw it, because a Composer shares its text area with
+// the copy it was taken from, so a change cannot be read off the stored one.
 type pageState struct {
-	req string
-	up  int
-	set bool
+	req   string
+	up    int
+	set   bool
+	draft string
 }
 
 // pageWindow is the rows a pane is drawn at and how many of its top rows the
@@ -46,27 +49,43 @@ type pagePlace struct {
 	limit   int // the furthest up it goes: the clipped rows, then every older line
 	clipped int // menu rows the pane has no room for at rest
 	top     int // the transcript's top line at the pane's own height
+	drawn   int // menu rows the pane has room for at the height it is drawn at
 	cardTop int // the card's first row in the pane as drawn at win.render
+	tall    DM  // the pane laid out at win.render, for the draw to use - zero at rest
 }
 
 // pagePlace measures the pane id at width by height with menu pinned.
 func (a App) pagePlace(id string, width, height int, menu string, card Card) pagePlace {
-	dm := a.sizedDM(id, menu, width, height)
+	return a.placeOf(a.sizedDM(id, menu, width, height), id, width, menu, card)
+}
+
+// placeOf is pagePlace for a pane already laid out at its own height with menu
+// pinned, which is the one the draw lays out: the frame measures it once.
+func (a App) placeOf(dm DM, id string, width int, menu string, card Card) pagePlace {
 	menuRows := lipgloss.Height(menu)
-	clipped := menuRows - dm.menuRows()
+	box := dm.composerRows()
+	clipped := max(menuRows-max(dm.menuRoomAt(box), 0), 0)
 	top := min(max(dm.tr.scroll, dm.tr.first()), dm.tr.bottom())
 	limit := clipped + max(top-dm.tr.first(), 0)
 	up := min(dm.pageAt(card, clipped), limit)
-	win := windowPage(height, clipped, up)
-	return pagePlace{height: height, win: win, up: up, limit: limit, clipped: clipped, top: top,
-		cardTop: win.render - dm.belowMenu() - menuRows}
+	win := windowPage(dm.height, clipped, up)
+	// The card is placed by the layout it is drawn in: the rows a scrolled page
+	// adds let a draft or a streamed preview grow, and the card sits above them.
+	drawn, drawnBox, tall := dm, box, DM{}
+	if win.render != dm.height {
+		tall = a.sizedDM(id, menu, width, win.render)
+		drawn, drawnBox = tall, tall.composerRows()
+	}
+	rows := max(min(menuRows, drawn.menuRoomAt(drawnBox)), 0)
+	return pagePlace{height: dm.height, win: win, up: up, limit: limit, clipped: clipped, top: top, tall: tall,
+		drawn: rows, cardTop: win.render - drawnBox - barRows(drawn.bar) - rows}
 }
 
 // holds reports whether every one of a card's rows is inside the window: the
 // card's keys are live only then, for the rule they have always had - an
 // affordance on a surface that is not drawn is not live.
 func (p pagePlace) holds(cardRows int) bool {
-	return p.cardTop >= p.win.skip && p.cardTop+cardRows <= p.win.skip+p.height
+	return p.drawn >= cardRows && p.cardTop >= p.win.skip && p.cardTop+cardRows <= p.win.skip+p.height
 }
 
 // pageAt is where this conversation's page stands for card: where the operator
@@ -76,12 +95,6 @@ func (d DM) pageAt(card Card, clipped int) int {
 		return d.page.up
 	}
 	return clipped
-}
-
-// belowMenu is the rows under the menu block: the composer and the status bar
-// that rides inside it, as baseChrome counts them.
-func (d DM) belowMenu() int {
-	return lipgloss.Height(d.composer.View(max(d.width, minComposerWidth))) + barRows(d.bar)
 }
 
 // sizedDM is the conversation id laid out for a pane of width by height with menu
@@ -114,31 +127,61 @@ func (a App) scrollPage(id string, lines int) (App, bool) {
 	if up == place.up {
 		return a, lines > 0
 	}
-	dm := *a.dms[id]
-	dm.page = pageState{req: card.RequestID, up: up, set: true}
-	return a.withDM(id, dm), true
+	d := a.dms[id]
+	if d == nil {
+		return a, false
+	}
+	next := *d
+	next.page.req, next.page.up, next.page.set = card.RequestID, up, true
+	return a.withDM(id, next), true
 }
 
-// pageHome brings the focused page to its bottom, where the composer is: what a
-// key that reaches the composer, or opens an answer for it, needs on screen.
-func (a App) pageHome() App {
-	card, ok := a.cardOf(a.focus)
-	if !ok {
+// pageHome brings id's page to its bottom, where the composer is: what opening
+// an answer, or a draft that changed, needs on screen.
+func (a App) pageHome(id string) App {
+	card, ok := a.cardOf(id)
+	d := a.dms[id]
+	if !ok || d == nil || (d.page.set && d.page.req == card.RequestID && d.page.up == 0) {
 		return a
 	}
-	dm := a.dm()
-	if dm.page.set && dm.page.req == card.RequestID && dm.page.up == 0 {
-		return a
-	}
-	dm.page = pageState{req: card.RequestID, set: true}
-	return a.withDM(a.focus, dm)
+	next := *d
+	next.page.req, next.page.up, next.page.set = card.RequestID, 0, true
+	return a.withDM(id, next)
 }
 
-// pageShifted reports whether id's page is anywhere the transcript's own
-// geometry no longer describes. Its rows are not where a selection reads them.
-func (a App) pageShifted(id string) bool {
+// draftSeen brings id's page home when c changes what its draft holds, whichever
+// key wrote it: a draft nobody can see is one a later ↵ sends unread.
+func (a App) draftSeen(id string, c Composer) App {
+	d := a.dms[id]
+	if d == nil {
+		return a
+	}
+	now, attached := c.Value(), len(c.attachments) != len(d.Composer().attachments)
+	if d.page.draft == now && !attached {
+		return a
+	}
+	next := *d
+	next.page.draft = now
+	return a.withDM(id, next).pageHome(id)
+}
+
+// pageHides reports what the page has moved out from under a press: every row the
+// transcript's anchors read (rows), or only the composer's place (box). At rest
+// in a pane too short for its card the transcript's row is where it was and the
+// composer is not.
+func (a App) pageHides(id string) (rows, box bool) {
 	place, _, ok := a.pageOf(id)
-	return ok && place.up != place.clipped
+	return ok && place.up != place.clipped, ok && place.up != 0
+}
+
+// transcriptPage is the window when the chrome has scrolled out of it entirely:
+// height lines of the transcript, drawn without laying out the rest of the pane.
+func (d DM) transcriptPage(height int) string {
+	page := d.tr.sized(d.tr.width, height).view(d.sel)
+	if d.behindAsk {
+		page = quieted(page)
+	}
+	return page
 }
 
 // skipRows drops the first n rows of a block.

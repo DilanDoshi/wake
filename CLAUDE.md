@@ -368,8 +368,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   transcript alone. The pane is drawn taller and a window of its top rows shown, so nothing is laid
   out twice (`pagescroll.go`). **Its keys are live only while the whole card is on screen**
   (`App.cardFullyDrawn`, unchanged in rule) and the key line says when they return (`cardKeysCut`).
-  A key that reaches the composer, or opens an answer, brings the page back to the composer; a press
-  on a scrolled page takes a screen selection, not a transcript anchor. `decisions.md` (2026-10-20).
+  A draft that changes, or opening an answer, brings the page back to the composer (watched at the
+  composer's write, not per key); `↵` on an answer commits only from a page at its bottom. A press on a
+  scrolled page takes a screen selection, not a transcript anchor, and an edge drag scrolls the
+  transcript, not the page. `decisions.md` (2026-10-20).
 - Permissions/plans: rune then `↵`, read only on an empty composer; any other input disarms (key,
   composer, mouse, digit).
 - Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer

@@ -210,15 +210,13 @@ func (a App) cardFullyDrawn() bool {
 	if !ok {
 		return false
 	}
+	c, has := a.cardOf(a.focus)
 	card := a.cardBlock(a.focus, width, false)
-	return card != "" && a.cardHeld(a.focus, width, height, card, a.menuAround(card, a.focus, width, height))
-}
-
-// cardHeld reports whether every row of id's card is inside the window its page
-// is scrolled to, given the card and the menu block it heads.
-func (a App) cardHeld(id string, width, height int, card, menu string) bool {
-	c, ok := a.cardOf(id)
-	return ok && a.pagePlace(id, width, height, menu, c).holds(lipgloss.Height(card))
+	if !has || card == "" {
+		return false
+	}
+	menu := a.menuAround(card, a.focus, width, height)
+	return a.pagePlace(a.focus, width, height, menu, c).holds(lipgloss.Height(card))
 }
 
 // focusedPane is the width and height of the pane holding the keys, and whether
@@ -411,12 +409,7 @@ func (a App) roomPane(width, height int) string {
 // `top`: a screen row is a transcript line with nothing to offset it by.
 func (a App) menuBlock(id string, width, height int) (string, bool) {
 	card := a.cardBlock(id, width, false)
-	menu := a.menuAround(card, id, width, height)
-	if card != "" && !a.cardHeld(id, width, height, card, menu) {
-		card = a.cardBlock(id, width, true)
-		menu = a.menuAround(card, id, width, height)
-	}
-	return menu, card != ""
+	return a.menuAround(card, id, width, height), card != ""
 }
 
 // menuAround is the menu block with card at its head.
@@ -494,22 +487,33 @@ func above(top, bottom string) string {
 // on no surface at all, and the agent stayed blocked with nothing to answer.
 func (a App) dmPane(id string, width, height int) string {
 	// Handed over whole, for roomPane's reason. See DM.menuRows.
-	menu, ask := a.menuBlock(id, width, height)
-	dm := a.dmFor(id).WithSelection(a.selectionIn(id)).WithComposerSelection(a.composerSelectionIn(id)).
-		WithMenu(menu).WithAsk(ask).WithWriting(a.answerTitle(id)).WithCompacting(a.compactingSince(id))
-	if !ask {
-		return dm.View(width, height)
+	card := a.cardBlock(id, width, false)
+	menu, ask := a.menuAround(card, id, width, height), card != ""
+	paint := func(d DM) DM {
+		return d.WithSelection(a.selectionIn(id)).WithComposerSelection(a.composerSelectionIn(id)).
+			WithAsk(ask).WithWriting(a.answerTitle(id))
 	}
-	card, _ := a.cardOf(id)
-	place := a.pagePlace(id, width, height, menu, card)
+	c, has := a.cardOf(id)
+	if !ask || !has { // no card, no page: the pane View lays out for itself
+		return paint(a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id))).View(width, height)
+	}
+	laid := a.sizedDM(id, menu, width, height)
+	place := a.placeOf(laid, id, width, menu, c)
+	if !place.holds(lipgloss.Height(card)) {
+		// The same rows with the keys' line saying why they are off.
+		laid = laid.WithMenu(a.menuAround(a.cardBlock(id, width, true), id, width, height))
+	}
 	if place.win.render == height {
-		return dm.View(width, height)
+		return paint(laid).View(width, height)
 	}
 	// The page is the pane drawn taller; the window is the rows of it that show.
 	// The older lines the page took in came off the top of the transcript, whose
 	// reader the draw cannot assume is following.
-	tall := dm.SetSize(width, place.win.render)
+	tall := paint(place.tall.WithMenu(laid.menu))
 	tall.tr.scroll = max(place.top-max(place.up-place.clipped, 0), tall.tr.first())
+	if tall.tr.height > height { // the chrome is past the window: only lines of the transcript show
+		return tall.transcriptPage(height)
+	}
 	return firstRows(skipRows(tall.View(width, place.win.render), place.win.skip), height)
 }
 

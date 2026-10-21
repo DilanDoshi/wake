@@ -241,6 +241,9 @@ func (a App) scroll(lines, x, y int) App {
 		return a.workflowWheel(lines > 0)
 	}
 	if under {
+		if next, moved := a.scrollPage(id, lines); moved {
+			return next
+		}
 		return a.scrollPane(id, lines)
 	}
 	return a.scrollFocused(lines)
@@ -251,9 +254,6 @@ func (a App) scrollPane(id string, lines int) App {
 	if id == "" {
 		a.room = a.room.ScrollUp(lines)
 		return a
-	}
-	if next, moved := a.scrollPage(id, lines); moved {
-		return next
 	}
 	return a.withDM(id, a.dms[id].ScrollUp(lines))
 }
@@ -306,11 +306,15 @@ func (a App) selectionIn(id string) marked {
 // The count is App.transcriptRows rather than the transcript's own height,
 // which a card or a completion menu shortens without resizing.
 func (a App) startSelection(id string, col, top, height, x, y int, r Regions, refocused bool) App {
-	if a.pageShifted(id) { // its rows are not where the transcript's anchors read them
+	moved, boxAway := a.pageHides(id)
+	if moved { // its rows are not where the transcript's anchors read them
 		return a.startScreenSelection(x, y)
 	}
 	rows := a.transcriptRows(id, r.Cols[col], height)
 	if y >= top+rows {
+		if boxAway { // a card taller than its pane has no composer under it
+			return a.startScreenSelection(x, y)
+		}
 		// Below the transcript is chrome and the query box. The box's own draft
 		// rows are text you typed and select like the transcript; the menu, the
 		// preview, the working line and the borders around them are not.

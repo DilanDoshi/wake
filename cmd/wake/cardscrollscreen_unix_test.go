@@ -28,6 +28,7 @@ func TestTheWheelScrollsTheWholePaneWhenACardIsUp(t *testing.T) {
 	// Too short for the card and the composer together: the composer scrolls out
 	// of the way and the whole card, keys and all, is what is left on screen.
 	s.resize(100, 8)
+	s.settle() // the repaint after a resize is not the frame to read
 	s.await("[d]eny")
 
 	// Down brings the page to its foot: the composer, and the card's last row,
@@ -37,9 +38,10 @@ func TestTheWheelScrollsTheWholePaneWhenACardIsUp(t *testing.T) {
 	s.awaitGone("[d]eny")
 
 	// Up takes the card and the composer back down with the transcript coming in
-	// above them, as far as the oldest line.
-	for range 4 {
+	// above them: two notches, one at a time, reach the prompt the card answers.
+	for range 2 {
 		s.send(wheelUpReport)
+		s.settle()
 	}
 	s.await("write the file")
 	s.awaitGone(cardCutLine)

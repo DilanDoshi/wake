@@ -125,14 +125,14 @@ func (a App) answerTitle(id string) string {
 // themselves, and puts the option cursor on the row that says so.
 func (a App) beginAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 	a.cards = a.cards.With(c.atOption(otherIndex(c.Detail.Questions[c.Cursor]))).startWriting(c, question).disarm()
-	return a.pageHome(), nil, true
+	return a.pageHome(a.focus), nil, true
 }
 
 // beginDeny opens the composer for a refusal's reason. It is the arm: nothing
 // is written until ↵, and ⎋ takes it back.
 func (a App) beginDeny(c Card) (tea.Model, tea.Cmd, bool) {
 	a.cards = a.cards.startWriting(c, denyReasonStep).disarm()
-	return a.pageHome(), nil, true
+	return a.pageHome(a.focus), nil, true
 }
 
 // commitAnswer takes what was typed - as one question's answer, or as the

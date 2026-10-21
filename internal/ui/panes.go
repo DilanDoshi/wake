@@ -105,6 +105,7 @@ func (a App) composer() Composer {
 // the pane it was computed for.
 func (a App) withComposer(c Composer) App {
 	if a.focus != "" {
+		a = a.draftSeen(a.focus, c)
 		return a.withDM(a.focus, a.dm().WithComposer(c))
 	}
 	a.room = a.room.WithComposer(c)

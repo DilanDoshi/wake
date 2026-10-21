@@ -33,14 +33,37 @@ func askingPage(t *testing.T, height int) App {
 // scrolled that many notches back through it before the question arrived.
 func askingAfter(t *testing.T, height, history, readBack int) App {
 	t.Helper()
+	return askingWith(t, pageSetup{height: height, history: history, readBack: readBack})
+}
+
+// pageSetup is everything a conversation can hold before a question arrives.
+type pageSetup struct {
+	height, history, readBack int
+	sent, draft               string // a prompt already sent; words typed and not
+	bar                       bool   // a status bar under the composer
+}
+
+func askingWith(t *testing.T, s pageSetup) App {
+	t.Helper()
 	ev := questionAsk(t)
-	a := newRoomApp(t).withSize(narrowColumns, height).withAgents("john")
+	a := newRoomApp(t).withSize(narrowColumns, s.height).withAgents("john")
 	a = pick(a, "s1").openDMWith("s1", "john").applyGeometry()
-	for i := range history {
+	if s.bar {
+		st := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+			{ID: "s1", Name: "john", State: rpc.StateIdle, Cwd: "/repo/api", Model: "claude-opus-5"}}}
+		a = a.applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+	}
+	if s.sent != "" {
+		a, _ = pressKey(a.withDraft(s.sent), tea.KeyMsg{Type: tea.KeyEnter})
+	}
+	for i := range s.history {
 		a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1",
 			Event: &core.Event{Kind: core.KindAssistantText, Text: fmt.Sprintf("history line %02d", i)}})
 	}
-	a = wheeled(a, tea.MouseButtonWheelUp, readBack)
+	a = wheeled(a, tea.MouseButtonWheelUp, s.readBack)
+	if s.draft != "" { // words already in the box when the agent blocks
+		a = a.withDraft(s.draft)
+	}
 	return a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: ev})
 }
 
@@ -53,6 +76,11 @@ func oldestShown(rows []string) int {
 		}
 	}
 	return -1
+}
+
+// rpcEvent is an event frame for session id.
+func rpcEvent(id string, ev *core.Event) rpc.Frame {
+	return rpc.Frame{Kind: rpc.FrameEvent, SessionID: id, Event: ev}
 }
 
 // wheeled is n notches of the wheel over the pane.
@@ -403,8 +431,9 @@ func TestAPressAtRestStillAnchorsInTheTranscript(t *testing.T) {
 	}
 }
 
-// A window resized under a scrolled page is drawn at the new size, and the page
-// stays inside the rows it has.
+// A window resized under a scrolled page is drawn at the new size and its top is
+// the transcript's first line, and the wheel answers at once: the page holds no
+// rows past its own, so there are no dead notches to scroll back through.
 func TestAResizeUnderAScrolledPageStaysInsideThePane(t *testing.T) {
 	a := askingPage(t, 40)
 	a = wheeled(a, tea.MouseButtonWheelUp, 1000)
@@ -413,6 +442,13 @@ func TestAResizeUnderAScrolledPageStaysInsideThePane(t *testing.T) {
 		a = a.withSize(narrowColumns, height)
 		if got := len(strings.Split(stripANSI(a.View()), "\n")); got != height {
 			t.Errorf("at %d rows the frame is %d rows tall", height, got)
+		}
+		a = wheeled(a, tea.MouseButtonWheelUp, 100) // the offset from the bottom outlives a resize
+		if !hasRow(pageRows(a)[:1], "Wake") {
+			t.Errorf("at %d rows the top of the page is not the transcript's first line:\n%s", height, strings.Join(pageRows(a), "\n"))
+		}
+		if back := wheeled(a, tea.MouseButtonWheelDown, 1); stripANSI(back.View()) == stripANSI(a.View()) {
+			t.Errorf("at %d rows the first notch down from the top moved nothing: the page has rows past its own", height)
 		}
 	}
 }

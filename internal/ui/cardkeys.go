@@ -111,6 +111,11 @@ func (a App) cardKey(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if m.Type != tea.KeyEnter {
 			return a, nil, false
 		}
+		// An answer is sent from a box the operator can see: a page scrolled away
+		// from it brings it back, and the next ↵ is the one that sends.
+		if place, _, ok := a.pageOf(a.focus); ok && place.up != 0 {
+			return a.pageHome(a.focus), nil, true
+		}
 		return a.commitAnswer(top, q)
 	}
 
