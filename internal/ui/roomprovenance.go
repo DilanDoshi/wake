@@ -27,6 +27,12 @@ func roomSendOf(id string) (send [6]byte, direct, ok bool) {
 	return send, flags&rpc.MessageDirect != 0, true
 }
 
+// roomSendSolo is whether a uuid is a room send that reached exactly one session.
+func roomSendSolo(id string) bool {
+	_, flags, ok := rpc.MessageOf(id)
+	return ok && flags&rpc.MessageSolo != 0
+}
+
 // roomSendTeam is whether a uuid is a room send to a team.
 func roomSendTeam(id string) bool {
 	_, flags, ok := rpc.MessageOf(id)

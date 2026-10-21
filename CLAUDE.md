@@ -325,7 +325,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
   if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
   broadcast, or was stamped by a room send (`roomprovenance.go`: the uuid Wake stamps is the one on
-  disk; a direct `@name` comes back in that thread, a team send in its members'); agent prose is restored only inside a public
+  disk; a send marked as reaching one session - a direct `@name`, the manager's default turn - comes
+  back in that session's thread, a team send in its members'); agent prose is restored only inside a public
   turn. A record in two transcripts (same uuid, `Event.MessageID`) is a fork's copy, drawn once
   (`forkCopies`); the daemon also leaves a fork's inherited records out of its room history
   (`inheritedBy`), so forks are asked like any session.

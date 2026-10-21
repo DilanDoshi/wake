@@ -76,6 +76,18 @@ func TestTheRoomSeedIncludesTheOperatorsRoutedTurn(t *testing.T) {
 	}
 }
 
+// The manager is a session like any other for the seed: a turn the operator sent
+// it from the room (the default addressee) seeds its DM, headed from the room.
+func TestTheRoomSeedIncludesTheOperatorsTurnToTheManager(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withAgents(core.ManagerName).withDraft("who is stuck?")
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+
+	a = a.openDMWith("s1", core.ManagerName)
+	if out := stripANSI(a.dms["s1"].View(70, 40)); !strings.Contains(out, "who is stuck?") {
+		t.Errorf("the turn sent to the manager should seed its DM:\n%s", out)
+	}
+}
+
 // /clear blanks the pane, and the provisional seed is the conversation as it was
 // before the clear - so a session reset must drop it, not redraw the pre-clear
 // room turns beneath the fresh conversation.

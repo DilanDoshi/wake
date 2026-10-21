@@ -88,8 +88,8 @@ SHOTS = [
         "group chat › @omar",
         "One name narrows the room.",
         "A lone <code>@omar</code> in the composer narrows the group chat to omar's "
-        "thread — his lines, the manager's, every broadcast, and what you said to "
-        "him — for as long as it is the target. It is a view, not a mode: backspace "
+        "thread — his lines, every broadcast, what you said to him, and what was "
+        "sent to or from him — for as long as it is the target. It is a view, not a mode: backspace "
         "the name and the room widens again; <code>@omar hi</code> still routes to "
         "omar alone, and <code>@omar /model</code> still configures him. Nothing "
         "leaves the record, only the frame, and the header says so while it is "
