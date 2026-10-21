@@ -107,3 +107,45 @@ func TestTeamSectionsRenderInTheTiledBoard(t *testing.T) {
 	}
 	t.Logf("SCREENSHOT tiled board team shelves:\n%s", s.dump())
 }
+
+// A team is set off from whatever is above it by a blank row in the roster, on a
+// real screen: the top block's last agent, a blank, then `──── backend ────`, and
+// the same between backend's last row and `──── frontend ────`.
+func TestTeamSectionsAreSetOffByABlankRowInTheRoster(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWakeInAConversation(t, 100, 30)
+	teamedFleet(t, s)
+	s.settle()
+
+	// The sidebar is what follows the last "│" of a row: its divider, drawn on every
+	// row, and nothing the sidebar itself draws contains one.
+	sidebar := func(line string) string {
+		r := []rune(line)
+		for i := len(r) - 1; i >= 0; i-- {
+			if r[i] == '│' {
+				return strings.TrimSpace(string(r[i+1:]))
+			}
+		}
+		return ""
+	}
+	lines := s.lines()
+	for _, team := range []string{"backend", "frontend"} {
+		at := -1
+		for y, line := range lines {
+			if strings.Contains(sidebar(line), "─ "+team+" ─") {
+				at = y
+			}
+		}
+		if at < 2 {
+			t.Fatalf("no `%s` divider in the sidebar:\n%s", team, s.dump())
+		}
+		if got := sidebar(lines[at-1]); got != "" {
+			t.Errorf("the row above the %s divider is %q, want a blank row:\n%s", team, got, s.dump())
+		}
+		if got := sidebar(lines[at-2]); got == "" || strings.Contains(got, "─") {
+			t.Errorf("the row above the blank is %q, want an agent's row:\n%s", got, s.dump())
+		}
+	}
+}

@@ -4633,3 +4633,22 @@ machine, and ruled that it affect the group chat only — no agent and no conver
   `roomCommands` is held to a count, and a room test sends `/cleanup`, `/clear-cache` and their like
   to the default addressee unchanged. A session the cleared room held lines for stays marked asked, so
   a park and wake does not restore a turn whose live echo is still on screen.
+
+## 2026-10-21 — a blank row sets each roster team off from the rows above it (the owner)
+
+The owner, reading the right-hand roster: the team dividers (`──── orchestrator ────`) sat directly under the
+previous section's last row, and there should be a one-line gap from the end of one team to the start of the next,
+the untagged top block included. The board's rows and tile shelves already put a blank above each divider
+(`teamHeaderBand`); the roster never had.
+
+- **The gap rides on the item, with the header** (`rosterItem.gap`, `lead()`): header and gap are both rows that
+  belong to no agent, and they are counted by the one function the window, the click and the draw all use
+  (`rowsForRow`/`rowLines`/`At`). A gap that was its own item would be the dangling-header bug again, and one counted
+  somewhere else would land every click below it a row off. `TestRowsForRowIsExactlyTheLinesRowLinesDraws` pins the
+  count to the drawn lines, and a sweep over every column height and cursor holds each drawn row to what a click on it
+  resolves to.
+- **No gap above a header with nothing above it** — a roster that opens on a team (no manager, no untagged agent)
+  opens on its divider, not on a blank. With no team the roster is the flat list it always was.
+- **A scrolled column that starts on a team's first agent opens on its blank.** The owner took the simple rule over
+  dropping it at the window's top (which would have made the window, the click and the draw each carry an exception).
+- Roster only. The board is left as it was.
