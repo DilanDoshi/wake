@@ -130,6 +130,11 @@ func (a App) submit(now bool) (tea.Model, tea.Cmd) {
 	if strings.TrimSpace(text) == "" {
 		return a, nil
 	}
+	// Every send of a draft passes here, so a draft a card's page has scrolled out
+	// of view is brought back and not sent: the next ↵ is the one that sends.
+	if a.boxAway(a.focus) {
+		return a.pageHome(a.focus), nil
+	}
 	// A bang is a local command, not a message, and it is asked before
 	// anything else: `!ls` is addressed to nobody, and a session that has
 	// ended is still a session somebody wants to run `!git status` in.

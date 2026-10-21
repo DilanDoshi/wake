@@ -510,7 +510,9 @@ func (a App) dmPane(id string, width, height int) string {
 	// The older lines the page took in came off the top of the transcript, whose
 	// reader the draw cannot assume is following.
 	tall := paint(place.tall.WithMenu(laid.menu))
-	tall.tr.scroll = max(place.top-max(place.up-place.clipped, 0), tall.tr.first())
+	if !place.follow { // a follower is already on the newest line of the taller layout
+		tall.tr.scroll = max(place.top-max(place.up-place.clipped, 0), tall.tr.first())
+	}
 	if tall.tr.height > height { // the chrome is past the window: only lines of the transcript show
 		return tall.transcriptPage(height)
 	}

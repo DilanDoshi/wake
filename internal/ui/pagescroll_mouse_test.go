@@ -3,12 +3,7 @@ package ui
 // The page and the selection code each read the pane's rows, so a gesture has to
 // land on the rows the operator is looking at.
 
-import (
-	"strings"
-	"testing"
-
-	tea "github.com/charmbracelet/bubbletea"
-)
+import "testing"
 
 // Dragging a selection past the pane's edge scrolls the transcript it is taken
 // in, whatever the wheel would do: the page is not the thing being read.
@@ -29,9 +24,9 @@ func TestAnEdgeDragScrollsTheTranscriptNotThePage(t *testing.T) {
 
 // A card taller than its pane opens on its own top, and the composer is not
 // under it: a press where the composer would sit is on the card, and takes the
-// screen as drawn - not a draft the operator cannot see.
+// screen as drawn rather than moving a caret in a box nobody can see.
 func TestAPressOnTheCardOfAShortPaneDoesNotSelectTheHiddenComposer(t *testing.T) {
-	a := askingWith(t, pageSetup{height: 10, history: pageHistory, draft: "my secret draft"})
+	a := askingWith(t, pageSetup{height: 10, history: pageHistory})
 	if hasRow(pageRows(a), "@john") {
 		t.Fatal("the composer is on screen, so there is nothing hidden to select")
 	}
@@ -40,13 +35,9 @@ func TestAPressOnTheCardOfAShortPaneDoesNotSelectTheHiddenComposer(t *testing.T)
 	a, _ = a.extendSelection(pageWheelX+30, a.paneHeight()-2)
 
 	if a.sel.inComposer {
-		t.Errorf("a press on the card took a selection in the composer: %q", a.composerSelectedText())
+		t.Errorf("a press on the card took a selection in the composer: %+v", a.sel)
 	}
 	if !a.sel.onScreen {
 		t.Errorf("the press took no screen selection of what is drawn: %+v", a.sel)
 	}
-	if strings.Contains(a.screenSelectedText(), "secret") {
-		t.Error("the hidden draft is in what the selection would copy")
-	}
-	_ = tea.KeyMsg{}
 }

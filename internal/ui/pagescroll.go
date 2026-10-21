@@ -45,13 +45,14 @@ func windowPage(height, clipped, up int) pageWindow {
 type pagePlace struct {
 	height  int // the pane's own rows: what the window shows
 	win     pageWindow
-	up      int // where the page is, never past limit
-	limit   int // the furthest up it goes: the clipped rows, then every older line
-	clipped int // menu rows the pane has no room for at rest
-	top     int // the transcript's top line at the pane's own height
-	drawn   int // menu rows the pane has room for at the height it is drawn at
-	cardTop int // the card's first row in the pane as drawn at win.render
-	tall    DM  // the pane laid out at win.render, for the draw to use - zero at rest
+	up      int  // where the page is, never past limit
+	limit   int  // the furthest up it goes: the clipped rows, then every older line
+	clipped int  // menu rows the pane has no room for at rest
+	top     int  // the transcript's top line at the pane's own height
+	follow  bool // the reader is on the newest line, and the taller layout keeps them there
+	drawn   int  // menu rows the pane has room for at the height it is drawn at
+	cardTop int  // the card's first row in the pane as drawn at win.render
+	tall    DM   // the pane laid out at win.render, for the draw to use - zero at rest
 }
 
 // pagePlace measures the pane id at width by height with menu pinned.
@@ -77,7 +78,7 @@ func (a App) placeOf(dm DM, id string, width int, menu string, card Card) pagePl
 		drawn, drawnBox = tall, tall.composerRows()
 	}
 	rows := max(min(menuRows, drawn.menuRoomAt(drawnBox)), 0)
-	return pagePlace{height: dm.height, win: win, up: up, limit: limit, clipped: clipped, top: top, tall: tall,
+	return pagePlace{height: dm.height, win: win, up: up, limit: limit, clipped: clipped, top: top, follow: dm.tr.atBottom(), tall: tall,
 		drawn: rows, cardTop: win.render - drawnBox - barRows(drawn.bar) - rows}
 }
 
@@ -89,10 +90,14 @@ func (p pagePlace) holds(cardRows int) bool {
 }
 
 // pageAt is where this conversation's page stands for card: where the operator
-// left it, or the default, which is the clipped rows already behind the window.
+// left it, or the default - the clipped rows already behind the window, unless the
+// box holds a draft, which is the operator's to see and opens in view.
 func (d DM) pageAt(card Card, clipped int) int {
-	if d.page.set && d.page.req == card.RequestID {
+	switch {
+	case d.page.set && d.page.req == card.RequestID:
 		return d.page.up
+	case !blank(d.composer.Value()):
+		return 0
 	}
 	return clipped
 }
@@ -156,13 +161,20 @@ func (a App) draftSeen(id string, c Composer) App {
 	if d == nil {
 		return a
 	}
-	now, attached := c.Value(), len(c.attachments) != len(d.Composer().attachments)
-	if d.page.draft == now && !attached {
+	now := c.Value()
+	if d.page.draft == now {
 		return a
 	}
 	next := *d
 	next.page.draft = now
 	return a.withDM(id, next).pageHome(id)
+}
+
+// boxAway reports whether id's page has the composer out of view. What it holds is
+// sent, or answered, only from a box the operator can see.
+func (a App) boxAway(id string) bool {
+	place, _, ok := a.pageOf(id)
+	return ok && place.up != 0
 }
 
 // pageHides reports what the page has moved out from under a press: every row the

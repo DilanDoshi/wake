@@ -184,6 +184,11 @@ func TestThePageStopsAtTheOldestLine(t *testing.T) {
 	if hasRow(rows, "has a question") || hasRow(rows, "@john") {
 		t.Errorf("the card or the composer is still on screen at the top of the page:\n%s", strings.Join(rows, "\n"))
 	}
+	// What is stored is the page's own limit, not however far the wheel was turned:
+	// a later resize reads it back as an offset.
+	if place, _, _ := a.pageOf("s1"); a.dms["s1"].page.up != place.limit {
+		t.Errorf("the stored offset is %d after a long scroll, want the limit %d", a.dms["s1"].page.up, place.limit)
+	}
 	if again := wheeled(a, tea.MouseButtonWheelUp, 1); stripANSI(again.View()) != stripANSI(a.View()) {
 		t.Errorf("a notch past the top of the page moved something:\n%s", strings.Join(pageRows(again), "\n"))
 	}
@@ -438,12 +443,14 @@ func TestAResizeUnderAScrolledPageStaysInsideThePane(t *testing.T) {
 	a := askingPage(t, 40)
 	a = wheeled(a, tea.MouseButtonWheelUp, 1000)
 
-	for _, height := range []int{20, 60, 12} {
+	for i, height := range []int{12, 20, 60} {
 		a = a.withSize(narrowColumns, height)
 		if got := len(strings.Split(stripANSI(a.View()), "\n")); got != height {
 			t.Errorf("at %d rows the frame is %d rows tall", height, got)
 		}
-		a = wheeled(a, tea.MouseButtonWheelUp, 100) // the offset from the bottom outlives a resize
+		if i == 0 { // the offset from the bottom outlives a resize, and a shorter window has further to go
+			a = wheeled(a, tea.MouseButtonWheelUp, 100)
+		}
 		if !hasRow(pageRows(a)[:1], "Wake") {
 			t.Errorf("at %d rows the top of the page is not the transcript's first line:\n%s", height, strings.Join(pageRows(a), "\n"))
 		}
@@ -510,5 +517,45 @@ func TestAnExpandedDescriptionTooLongForThePaneIsReachedByTheWheel(t *testing.T)
 
 	if rows := pageRows(a); !hasRow(rows, lastWords) {
 		t.Errorf("the end of the description is out of reach:\n%s", strings.Join(rows, "\n"))
+	}
+}
+
+// One notch up is the whole page moving down by exactly the notch's rows, with
+// the older rows arriving above: for a reader on the newest line and for one who
+// had scrolled back, in a pane that fits its card and in one that does not.
+func TestOneNotchShiftsThePageByTheNotchesRows(t *testing.T) {
+	for _, height := range []int{10, 14, 40} {
+		for _, readBack := range []int{0, 4} {
+			a := askingAfter(t, height, pageHistory, readBack)
+			width, _, _ := a.focusedPane() // the roster beside the pane does not scroll
+			inPane := func(rows []string) []string {
+				out := make([]string, len(rows))
+				for i, r := range rows {
+					out[i] = string([]rune(r)[:width])
+				}
+				return out
+			}
+			before := inPane(pageRows(a))
+
+			a = wheeled(a, tea.MouseButtonWheelUp, 1)
+			after := inPane(pageRows(a))
+
+			// The rows that arrive are the transcript's own lines, the ones just above
+			// where the window began: they are read off the transcript, not off a frame.
+			place, _, _ := a.pageOf("s1")
+			first := place.top - (place.up - place.clipped)
+			for i, line := range a.dms["s1"].tr.lines.slice(first, first+wheelLines) {
+				if got, want := strings.TrimRight(after[i], " "), strings.TrimRight(stripANSI(line), " "); got != want {
+					t.Errorf("height %d, read back %d: row %d is %q, want the transcript's line %d, %q", height, readBack, i, got, first+i, want)
+				}
+			}
+
+			for i := range len(before) - wheelLines {
+				if before[i] != after[i+wheelLines] {
+					t.Fatalf("height %d, read back %d: row %d of the frame is not row %d of the frame before:\nbefore:\n%s\nafter:\n%s",
+						height, readBack, i+wheelLines, i, strings.Join(before, "\n"), strings.Join(after, "\n"))
+				}
+			}
+		}
 	}
 }

@@ -4673,6 +4673,15 @@ How it is built, and the traps:
   text area with the copy it was taken from, so the stored one already holds the new text. Opening an answer homes it
   too. **↵ on an answer commits only from a page at its bottom**: one scrolled away brings the box back and the next ↵
   sends (Codex), since an answer is irreversible.
+- **A draft is never sent from a box nobody can see.** Second-pass review (Codex, then the reviewer): a draft already
+  in the box when a card arrives in a pane too short for it left the composer hidden at the card's default, and the next
+  ↵ sent it. Two layers. A pane whose box holds a draft opens on the composer (`DM.pageAt`), and `submit` — the one
+  path that sends a draft, ↵ and ⌃] both — refuses a draft the page has scrolled away from: it brings the box back and
+  the next press sends (`App.boxAway`). The line over a cut card names the draft first when one is what pauses its keys.
+- **A following reader is not behind the newest line.** The taller layout gives the transcript more rows, and a draft
+  grown by those rows can make it more than the pane's own did; the draw had assumed it equal and left a follower one
+  row off the bottom, with the "new messages below" banner over the blank row (reviewer, 11 of 1,188 configs). A follower
+  now takes the taller layout's own bottom, and only a reader who had scrolled back has their top line carried.
 - **`cardFullyDrawn` is read off the layout actually drawn.** The page is drawn taller than the pane, and the rows it
   adds let a draft or a streamed preview grow, so the first measure — at the pane's own height — could put the card
   where it was not (Codex; the reviewer reproduced the safe-direction case: a 9-line draft, the whole card on screen

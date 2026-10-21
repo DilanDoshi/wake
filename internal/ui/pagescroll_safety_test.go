@@ -55,6 +55,12 @@ func TestCardFullyDrawnAgreesWithTheRowsDrawn(t *testing.T) {
 							t.Fatalf("status bar %v, history %d, height %d, %d blank lines, %d notches: cardFullyDrawn()=%v but the whole card is drawn=%v:\n%s",
 								bar, history, height, blank, notches, claim, drawn, strings.Join(rows, "\n"))
 						}
+						// Nobody scrolled back, so nobody is behind the newest line, whatever
+						// the draft does to the rows the taller layout is drawn with.
+						if hasRow(rows, followBannerText) {
+							t.Fatalf("status bar %v, history %d, height %d, %d blank lines, %d notches: a reader following the conversation is told there are new messages below:\n%s",
+								bar, history, height, blank, notches, strings.Join(rows, "\n"))
+						}
 						sawWhole, sawCut = sawWhole || drawn, sawCut || !drawn
 					}
 				}
@@ -177,5 +183,83 @@ func TestADraftWrittenBackToAPaneBringsItsComposerBack(t *testing.T) {
 
 	if rows := pageRows(a); !hasRow(rows[len(rows)-3:], "taken back") {
 		t.Errorf("the draft was written to a composer nobody can see:\n%s", strings.Join(rows, "\n"))
+	}
+}
+
+// A draft already in the box when the card arrives is the operator's to see: the
+// pane opens on the composer, however short it is for the card.
+func TestADraftTypedBeforeTheCardArrivesIsOnScreen(t *testing.T) {
+	a := askingWith(t, pageSetup{height: 10, history: pageHistory, draft: "my secret draft"})
+
+	rows := pageRows(a)
+
+	if !hasRow(rows[len(rows)-3:], "my secret draft") {
+		t.Errorf("the draft is in a composer the pane opened away from:\n%s", strings.Join(rows, "\n"))
+	}
+}
+
+// Whatever sends the draft first has to be sure the operator can see it: with the
+// composer scrolled out of view ↵ and ⌃] bring it back and send nothing, and the
+// next one sends.
+func TestSendingWithTheComposerScrolledAwayBringsItBackFirst(t *testing.T) {
+	for name, key := range map[string]tea.KeyMsg{
+		"enter":    {Type: tea.KeyEnter},
+		"send now": {Type: tea.KeyCtrlCloseBracket},
+	} {
+		a := askingPage(t, 40)
+		a = a.withDraft("hello there")
+		a = wheeled(a, tea.MouseButtonWheelUp, 5)
+		if hasRow(pageRows(a), "hello there") {
+			t.Fatalf("%s: the draft is on screen, so nothing is scrolled away", name)
+		}
+
+		a, cmd := pressKey(a, key)
+
+		if cmd != nil {
+			t.Fatalf("%s: sent a draft nobody could see", name)
+		}
+		if rows := pageRows(a); !hasRow(rows[len(rows)-3:], "hello there") {
+			t.Errorf("%s: did not bring the draft back:\n%s", name, strings.Join(rows, "\n"))
+		}
+		if _, cmd = pressKey(a, key); cmd == nil {
+			t.Errorf("%s: the second press, with the draft in view, sent nothing", name)
+		}
+	}
+}
+
+// A draft pauses the card's keys, and the line over a card the pane has cut off
+// says that rather than only that the card is cut.
+func TestACutCardWithADraftSaysTheDraftPausesItsKeys(t *testing.T) {
+	a := askingWith(t, pageSetup{height: 10, history: pageHistory, draft: "my secret draft"})
+
+	if rows := pageRows(a); !hasRow(rows, cardKeysPaused) || hasRow(rows, cardKeysCut) {
+		t.Errorf("a cut card with a draft does not name the draft:\n%s", strings.Join(rows, "\n"))
+	}
+}
+
+// Home is for the card in front of it, and opening an answer is the other way a
+// page is brought home: a second card in a pane that hides its composer opens the
+// answer box in view too, wherever the first card was left.
+func TestOpeningAnAnswerForASecondCardBringsItsComposerBackToo(t *testing.T) {
+	a := askingAfter(t, 14, 0, 0)
+	if hasRow(pageRows(a), "@john") || !a.cardFullyDrawn() {
+		t.Fatal("the card should be whole with its composer out of sight")
+	}
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{cardDenyKey}})
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc}) // out of the reason box, the card still up
+	first, _ := a.cards.For("s1")
+	a.cards = a.cards.Settle("s1", first.RequestID)
+
+	next := *questionAsk(t)
+	next.RequestID = first.RequestID + "-next"
+	a = a.applyFrame(rpcEvent("s1", &next))
+	if hasRow(pageRows(a), "@john") || !a.cardFullyDrawn() {
+		t.Fatal("the second card should open whole with its composer out of sight too")
+	}
+
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{cardDenyKey}})
+
+	if rows := pageRows(a); !hasRow(rows[len(rows)-3:], a.answerTitle("s1")) {
+		t.Errorf("the second card's reason box opened out of sight:\n%s", strings.Join(rows, "\n"))
 	}
 }
