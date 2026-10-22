@@ -2366,8 +2366,8 @@ added to `loadRoster`'s consumers, and a second file does turn a *parked* record
 
 **One half of the qualifier is now a decision rather than a gap.** After a `wake stop` a parked
 session still leaves no trace, because the quit verb clears the book — spec §2 makes stop the one
-ending there is no way back from. A daemon that is signalled, crashed or merely restarted hands the
-fleet on. `⌃Q` therefore has to arrive as its own kind rather than as a quit, and that is the task
+ending there is no way back from. A daemon that is signalled parks the fleet like `⌃Q`, and one that crashes
+hands it on through `parkready.json` (BUG-53, 2026-10-21). `⌃Q` therefore has to arrive as its own kind rather than as a quit, and that is the task
 that binds it.
 
 *Closed on the daemon side 2026-08-11 by Task 5:* `rpc.FrameParkAll` is that kind, `daemon.quitVerb`

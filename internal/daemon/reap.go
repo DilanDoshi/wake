@@ -68,23 +68,65 @@ const defaultProbeTimeout = 2 * time.Second
 // would not die, is retained for the next daemon - clearing it regardless is how
 // one transient ps failure turned 15-30 live trees permanently ownerless, with
 // nothing on disk left to find them by (docs/notes/bugs.md BUG-28).
+//
+// A finished record is not forgotten: its session goes to the park book, where
+// /resume all reaches it as after a ⌃Q (BUG-53). A record kept for a retry keeps
+// its park-ready record with it, and one with no roster row beside it is dropped.
 func (s *server) reapOrphans() {
 	recs := loadRoster(s.roster.path)
+	ready := loadParkReady(s.ready.path)
 	if len(recs) == 0 {
+		if err := s.ready.retain(nil); err != nil {
+			logf("wake: could not clear the park-ready file: %v", err)
+		}
 		return
 	}
 	logf("wake: %d sessions were recorded by a daemon that is no longer running", len(recs))
 
 	var unfinished []record
+	kept := make(map[string]parkedRecord)
 	for _, rec := range recs {
-		if s.reapRecord(rec) {
+		if s.reapRecord(rec) || s.handOver(rec.ID, ready) {
 			unfinished = append(unfinished, rec)
+			if row, ok := ready[rec.ID]; ok {
+				kept[rec.ID] = row
+			}
 		}
 	}
 
 	if err := s.roster.retain(unfinished); err != nil {
 		logf("wake: could not rewrite the session roster: %v", err)
 	}
+	if err := s.ready.retain(kept); err != nil {
+		logf("wake: could not rewrite the park-ready file: %v", err)
+	}
+}
+
+// handOver parks a reaped session: its park-ready record goes into the park
+// book, and unfinished reports whether the roster row must stay for a later
+// daemon because that could not be written. The reaper's proof that the
+// process is gone is completePark's own, and a wake re-proves it through
+// resumeSafe, so this starts nothing.
+func (s *server) handOver(session string, ready map[string]parkedRecord) (unfinished bool) {
+	rec, ok := ready[session]
+	switch {
+	case !ok:
+		logf("wake: session %s left no park-ready record, so it cannot be offered back", session)
+		return false
+	case !mintedByWake(rec.ID):
+		logf("wake: the park-ready record for session %s names %q, which is not an id Wake minted, so it is not offered back", session, rec.ID)
+		return false
+	}
+	if _, held := s.parked.record(rec.ID); held {
+		return false // a park already recorded is newer than a crashed daemon's last look
+	}
+	rec.Parked = time.Now()
+	if err := s.parked.add(rec); err != nil {
+		logf("wake: session %s could not be written to the park book, so it is kept for a later daemon to retry: %v", session, err)
+		return true
+	}
+	logf("wake: session %s (%s) was running when its daemon died, and is parked for /resume", session, rec.Name)
+	return false
 }
 
 // reapRecord signals one orphaned record's process group if it can still be

@@ -46,9 +46,10 @@ func rosterPath(socket string) string {
 // Neither is read back to decide *allocation*, and the reason is structural
 // rather than a matter of timing: **nothing turns a record back into an agent.**
 // loadRoster has exactly two consumers - reapOrphans, which signals what it can
-// verify and clears the records it finished (retaining what it could not, for a
-// later daemon), and FleetOnDisk, which assembles a report for a client - so a
-// starting daemon holds no live sessions whatever this file says,
+// verify and finishes the records it can (retaining what it could not, for a
+// later daemon, and parking the finished ones through the park-ready file's
+// record of the same session), and FleetOnDisk, which assembles a report for a
+// client - so a starting daemon holds no live sessions whatever this file says,
 // and no name can be required to survive a restart. (reapOrphans is itself
 // gated on the exclusive lock, so it does not always run; that changes which
 // processes are killed, never whether this daemon holds any.)

@@ -1174,9 +1174,9 @@ should keep them:
 - *`wake stop` is the one ending with no way back.*
 
 The ruling that met a case it did not anticipate is `quitVerb`'s *"neither may park a fleet nobody asked to
-park"*: an OS shutdown is a signal. Whether a signal parks, or leaves the roster behind as a crash does for
-the next daemon to convert, is the owner's call. `deferred.md`'s *"A daemon that is signalled, crashed or
-merely restarted hands the fleet on"* is false for the first two, and wants correcting in the same change.
+park"*: an OS shutdown is a signal. **The owner ruled 2026-10-21 that a signal parks** (`decisions.md`, same
+date), so a clean shutdown and a crash both end in the park book. `deferred.md`'s *"A daemon that is signalled,
+crashed or merely restarted hands the fleet on"* was false for the first two and is corrected.
 
 **Recovered by hand, which is the workaround until this is fixed.**
 - **Ids:** from the dead roster, or from the reaper's log once a daemon had cleared it.
@@ -1191,14 +1191,19 @@ one, then `wake --fleet <name>` and `/resume all`. Sessions another terminal had
 two processes on one id branch the transcript. Lost for good: teams the operator set with `/team`, the model,
 budget and fallback, and two managers that never had a turn, so had no transcript to resume.
 
-**Fix (not built).**
-- **A park-ready record per live agent**, on disk beside the roster and outside the reaper's reach. It is
-  rewritten whenever a wake's inputs change: a `/clear`'s conversation, a rename, team, colour, effort, model,
-  budget, fallback.
+**Fixed on `fix/crashed-fleet-reaches-park-book` (PR awaiting merge).** What was built:
+- **A park-ready record per live agent**, in `parkready.json` beside the roster (`parkready.go`). It is
+  rewritten when a wake's inputs change: at launch and on a rename, team or colour through `s.record`, and
+  on every status push for the rest (a `/clear`'s conversation, an `/effort`), writing only what differs.
+  A row leaves with its roster row, and the file goes with every orderly ending.
 - **The reaper hands records to the park book.** When `reapOrphans` finishes a record (gone, recycled pid, or
   group signalled), it moves that agent's park-ready record into the park book instead of forgetting it. The
   reaper's proof that the process is gone is `completePark`'s own precondition, and `unparkRecord` still
-  re-proves it through `resumeSafe` at wake. A record the reaper retains stays out of the book.
+  re-proves it through `resumeSafe` at wake. A record the reaper retains stays out of the book, a park-ready
+  record with no roster row beside it is dropped (the roster is the proof the session was running), and a book
+  record already under that conversation wins (`reap.go`'s `handOver`).
+- **A signal parks.** A cancelled `Serve` context begins `quitPark` (`stopAcceptingOnStop`), so SIGTERM and
+  SIGINT end as ⌃Q does; `quitNone` is now only the daemon becoming empty.
 - **A crashed manager comes back as the manager.** `ensureManager` already wakes a parked one, so it is not
   replaced by a fresh spawn.
 - **Tests first.** A daemon holding agents with teams, colours, an effort, a `/clear` and a renamed manager is

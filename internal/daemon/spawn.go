@@ -511,6 +511,8 @@ func spawnDir(f rpc.Frame) string {
 
 // record writes the agent down so a later daemon can find it. See rosterRecord.
 func (s *server) record(a *agent, pgid int) {
+	// First, so no roster row is ever without the record a crash would hand over.
+	s.noteReady(a)
 	if err := s.roster.add(a.rosterRecord(pgid)); err != nil {
 		// Not fatal to the session: an unrecorded agent still works, it is
 		// only unfindable if this daemon dies. Said out loud for the same
@@ -621,6 +623,7 @@ func (s *server) withdraw(a, replaces *agent, ending *rpc.SessionStatus) {
 	if rerr := s.roster.remove(a.id); rerr != nil {
 		logf("wake: could not undo the roster record for the failed start of %s: %v", a.id, rerr)
 	}
+	s.forgetReady(a.id)
 	delete(s.agents, a.id)
 	if replaces != nil {
 		// Under its own id, which a wake after /clear re-keyed away from - and
@@ -751,6 +754,7 @@ func (s *server) retire(a *agent) {
 	if rerr := s.roster.remove(a.id); rerr != nil {
 		logf("wake: session %s could not be removed from the roster: %v", a.id, rerr)
 	}
+	s.forgetReady(a.id)
 	if err != nil {
 		// Reported as an ending, never as a crash. A clean exit 0 becomes
 		// an error whenever something the agent spawned held stderr past

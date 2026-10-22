@@ -379,6 +379,10 @@ func (a *agent) conversation() string {
 func (a *agent) midClear() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return a.midClearLocked()
+}
+
+func (a *agent) midClearLocked() bool {
 	return a.claudeID == "" && len(a.endedIDs) > 0
 }
 

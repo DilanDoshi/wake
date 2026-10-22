@@ -4633,3 +4633,30 @@ machine, and ruled that it affect the group chat only — no agent and no conver
   `roomCommands` is held to a count, and a room test sends `/cleanup`, `/clear-cache` and their like
   to the default addressee unchanged. A session the cleared room held lines for stays marked asked, so
   a park and wake does not restore a turn whose live echo is still on screen.
+
+## 2026-10-21 — a signal parks the fleet, and a crash is handed to the park book (the owner)
+
+BUG-53: a machine going down took two fleets (a manager and 27 agents, a manager and 6) with it, because
+only `⌃Q` wrote the park book and nothing turned a dead daemon's roster rows back into anything. The spec
+says *"If Wake crashes, nothing is lost … Protect this property"*, so this was a bug, and two rulings
+came out of it.
+
+- **A SIGTERM or SIGINT parks** — reversing `quitVerb`'s *"neither may park a fleet nobody asked to
+  park"* and the 2026-08-11 reading that a signal is the no-verb exit. The owner chose it over leaving a
+  signalled shutdown to the crash path, because the OS sending SIGTERM at logout or shutdown is the
+  commonest way a machine "goes down" and nobody in that story chose to lose the fleet. `quitNone` is now
+  the daemon becoming empty, which has nothing to park. A daemon killed partway through the grace falls
+  to the crash path. `wake stop` is still the one ending with no way back.
+- **A crash is converted by the next daemon's reaper, not by a restore.** Each live agent has a row in
+  `parkready.json`, kept current as its team, colour, name, effort and conversation change; when
+  `reapOrphans` finishes a roster row (process gone, pid recycled, group signalled) the row's record goes
+  into the park book. A third file, because `sessions.json` is the reaper's to clear and `parked.json` is
+  for sessions with no process (2026-08-10); the record is a `parkedRecord`, so it carries no pid. The
+  roster stays the proof a session was running when the daemon died: a record with no roster row is
+  dropped, a row the reaper retains (BUG-28) keeps its record and stays out of the book, and a book
+  record already under that conversation wins. *A daemon restores nothing* still holds: the book is
+  offered through `/resume`, `unparkRecord` re-proves the process is gone through `resumeSafe`, and a
+  crashed manager returns as the manager because `ensureManager` already wakes a parked one.
+- **Not recorded, and not designed around:** what `--resume` loads from a transcript a SIGKILL cut
+  mid-turn. A ⌃Q refuses to book a session it had to kill for that reason; a crash cannot choose, and the
+  hand-recovery BUG-53 was found through resumed exactly such transcripts.

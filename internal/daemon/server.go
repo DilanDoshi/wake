@@ -56,6 +56,10 @@ type server struct {
 	// inside it - see parkbook.go's header for why they are two files.
 	parked *parkBook
 
+	// ready is the park book row of every live agent, for the reaper to hand a
+	// crashed fleet to the park book - see parkready.go.
+	ready *parkReady
+
 	// names is which display names the live fleet is using. It has its own
 	// lock rather than living under s.mu, because a name is reserved before
 	// the agent it belongs to exists: the name becomes the child's --name, so
@@ -138,6 +142,7 @@ func newServer(socket string) *server {
 		socket:     socket,
 		roster:     newRosterFile(rosterPath(socket)),
 		parked:     newParkBook(parkBookPath(socket)),
+		ready:      newParkReady(parkReadyPath(socket)),
 		names:      newNameRegistry(),
 		agents:     make(map[string]*agent),
 		clients:    make(map[*client]struct{}),
@@ -207,6 +212,10 @@ func (s *server) run(ctx context.Context, ln net.Listener) error {
 func (s *server) stopAcceptingOnStop(ctx context.Context, ln net.Listener) {
 	select {
 	case <-ctx.Done():
+		// A SIGTERM, a logout, a machine going down: nobody chose to lose the
+		// fleet (owner's 2026-10-21 ruling). Before the deadline below ends the
+		// accept loop, so shutdown always reads the verb.
+		s.beginQuit(quitPark)
 	case <-s.quit:
 	case <-s.done:
 	}
@@ -248,15 +257,15 @@ func (s *server) stopping(ctx context.Context) bool {
 // quitVerb is why this daemon is ending, which decides what happens to the
 // sessions it holds and to the ones it has already parked.
 //
-// Three values because only two endings are verbs. A signal and an empty
-// daemon are both no-verb exits: neither may park a fleet nobody asked to park
-// nor forget one somebody already did.
+// Three values because only two endings are verbs. An empty daemon is the
+// no-verb exit: it has nothing to park and must not forget what somebody
+// already did. A signal parks, as ⌃Q does - see stopAcceptingOnStop.
 type quitVerb int
 
 const (
-	// quitNone is context cancellation or the daemon becoming empty. Sessions
-	// are stopped, the park book is left exactly as it is. It is the zero value
-	// because nobody asked for either exit with a verb.
+	// quitNone is the daemon becoming empty. Sessions are stopped, the park
+	// book is left exactly as it is. It is the zero value because nobody asked
+	// for that exit with a verb.
 	quitNone quitVerb = iota
 
 	// quitStop is FrameQuit, which is `wake stop`. Every session ends and the
@@ -414,14 +423,14 @@ func (s *server) shutdown() error {
 	// roster entry left behind would send the next daemon hunting for
 	// process groups that no longer exist.
 	//
-	// The roster goes unconditionally and the park book does not, and the
-	// asymmetry is the whole ruling. A roster entry outliving its process is a
-	// pgid a later reaper would hunt for, so it is debris however the daemon
-	// died. The book's entries name transcripts that are still on disk and
+	// The roster and the park-ready file go unconditionally and the park book
+	// does not, and the asymmetry is the whole ruling. A roster entry outliving
+	// its process is a pgid a later reaper would hunt for, so it is debris
+	// however the daemon died, and a park-ready file is the reaper's alone. The book's entries name transcripts that are still on disk and
 	// processes that are already gone, so they cost nothing to keep and
 	// everything to lose - which is why the question above is "which verb"
 	// rather than "did this daemon exit".
-	return s.roster.clear()
+	return errors.Join(s.roster.clear(), s.ready.clear())
 }
 
 // waitFor waits on wg, reporting whether everything retired within d.
