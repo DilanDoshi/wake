@@ -294,6 +294,20 @@ func TestAClearReachesTheParkReadyFile(t *testing.T) {
 	awaitReady(t, d.socket, idAlpha, "the conversation after a /clear", func(r parkedRecord) bool { return r.ID == conversation })
 }
 
+// Nothing promises a status push after a /clear's successor speaks, and with
+// none the file is told by the event that names the new conversation.
+func TestAClearWithNoPushAfterItStillReachesTheParkReadyFile(t *testing.T) {
+	fakeClaudeOnPath(t, "clearquiet")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "done")
+
+	conversation := clearSession(c, idAlpha)
+
+	awaitReady(t, d.socket, idAlpha, "the conversation after a quiet /clear", func(r parkedRecord) bool { return r.ID == conversation })
+}
+
 // A session that ended or parked leaves nothing for a crash to hand over: its
 // roster row is gone, and a stale park-ready record outliving it is the
 // resurrection of something the operator ended.

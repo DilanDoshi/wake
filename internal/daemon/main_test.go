@@ -296,6 +296,8 @@ func runFakeClaude() int {
 		return fakeInterruptible(sid)
 	case "busy":
 		return fakeBusy(sid)
+	case "clearquiet":
+		return fakeClearQuietly(sid)
 	case "mode":
 		return fakeMode(sid)
 	case "rewind":
@@ -822,6 +824,35 @@ func fakeArgv(sid string) int {
 
 // clearCommand starts a new conversation, the way claude's own /clear does.
 const clearCommand = "/clear"
+
+// fakeClearQuietly answers /clear with clearMemory's reset and successor init
+// but no turn end, and only after a beat, so no status push follows the
+// successor: the only thing left to carry the new conversation to the
+// park-ready file is the event itself. The beat lets the push the send made
+// finish first, so it cannot carry it instead.
+func fakeClearQuietly(sid string) int {
+	emitText(sid, "ready")
+	emitResult(sid)
+	for line := range stdinLines() {
+		switch {
+		case strings.Contains(line, `"type":"control_request"`):
+		case strings.Contains(line, clearCommand):
+			time.Sleep(fakeClearBeat)
+			successor := uuid.NewString()
+			fmt.Printf(`{"type":"conversation_reset","session_id":%q,"new_conversation_id":%q}`+"\n", sid, uuid.NewString())
+			emitInit(successor)
+			sid = successor
+		default:
+			emitText(sid, "echo: "+line)
+			emitResult(sid)
+		}
+	}
+	return 0
+}
+
+// fakeClearBeat is how long fakeClearQuietly waits before it answers a /clear:
+// far longer than a status push takes to write the park-ready file.
+const fakeClearBeat = 200 * time.Millisecond
 
 // clearMemory is /clear in claude's recorded shape (slash-commands.jsonl): a
 // reset under the id that dies, whose new_conversation_id is NOT the successor,
