@@ -1236,6 +1236,10 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
   next `wake` parks a fleet the operator thought stopped. The owner's call (`deferred.md`).
 - `completePark` removes the roster row before the book write, so a crash in that gap loses the session. It
   was so before this change.
+- A session reads parked from the moment its process is gone, but a wake is accepted only once `completePark`
+  has written the park down, and one in between is refused as "not parked". The synced writes widen that
+  window from under a millisecond to tens of milliseconds, which a person typing `/resume` does not reach
+  and a test waking off a status reply did (`roomhistoryfork_test.go` now waits for the park's own push).
 
 ---
 
