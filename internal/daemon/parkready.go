@@ -159,12 +159,25 @@ func loadParkReady(path string) map[string]parkedRecord {
 	return out
 }
 
+// departedLocked reports that this agent's process is gone or being ended on
+// purpose, so its roster row is going or gone. A parking agent that has ended is
+// not departed: its roster row stays until completePark removes it.
+func (a *agent) departedLocked() bool {
+	return (a.ended && !a.parking) || a.parked || (a.stopped && !a.parking)
+}
+
+func (a *agent) departed() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.departedLocked()
+}
+
 // runningRecord is an agent's park book row while its process still runs, and
-// false once it has ended or parked, or between a /clear's reset and its
-// successor's first frame, when the conversation it writes is not yet known.
+// false once it has departed, or between a /clear's reset and its successor's
+// first frame, when the conversation it writes is not yet known.
 func (a *agent) runningRecord() (parkedRecord, bool) {
 	a.mu.Lock()
-	running := !a.ended && !a.parked && !a.midClearLocked()
+	running := !a.departedLocked() && !a.midClearLocked()
 	a.mu.Unlock()
 	if !running {
 		return parkedRecord{}, false
@@ -172,21 +185,39 @@ func (a *agent) runningRecord() (parkedRecord, bool) {
 	return recordFor(a), true
 }
 
-// noteReady writes one agent's row down. A failure is not fatal to the session:
+// keepReady writes one agent's row down. A failure is not fatal to the session:
 // it only means a crash would lose what the operator set on it.
-func (s *server) noteReady(a *agent) {
+func (s *server) keepReady(a *agent) error {
 	rec, running := a.runningRecord()
 	if !running {
-		return
+		return nil
 	}
-	if err := s.ready.set(a.id, rec); err != nil {
+	return s.writeReady(a, rec)
+}
+
+// noteReady is keepReady for a caller with nobody to tell: a failure only means
+// a crash would lose what the operator set on the session.
+func (s *server) noteReady(a *agent) {
+	if err := s.keepReady(a); err != nil {
 		logf("wake: session %s is not recorded for a crash, so its configuration would be lost with its daemon: %v", a.id, err)
 	}
 }
 
+// writeReady writes a row that was taken while its agent ran.
+func (s *server) writeReady(a *agent, rec parkedRecord) error {
+	if err := s.ready.set(a.id, rec); err != nil {
+		return err
+	}
+	// retire may have removed the row between taking it and this write.
+	if a.departed() {
+		s.forgetReady(a.id)
+	}
+	return nil
+}
+
 // syncReady offers every running agent's row to the file, which writes only
-// what changed. It never removes: a row leaves with its roster row, and an
-// agent absent from s.agents mid-shutdown is still running until it ends.
+// what changed. It never removes a running agent's row: that leaves with its
+// roster row, and an agent absent from s.agents mid-shutdown still runs.
 func (s *server) syncReady() {
 	s.mu.Lock()
 	agents := make([]*agent, 0, len(s.agents))
@@ -195,11 +226,9 @@ func (s *server) syncReady() {
 	}
 	s.mu.Unlock()
 	for _, a := range agents {
-		if rec, running := a.runningRecord(); running {
-			if err := s.ready.set(a.id, rec); err != nil {
-				logf("wake: the park-ready file could not be updated, so a crash would lose what was set since: %v", err)
-				return
-			}
+		if err := s.keepReady(a); err != nil {
+			logf("wake: the park-ready file could not be updated, so a crash would lose what was set since: %v", err)
+			return
 		}
 	}
 }
@@ -208,5 +237,12 @@ func (s *server) syncReady() {
 func (s *server) forgetReady(id string) {
 	if err := s.ready.remove(id); err != nil {
 		logf("wake: session %s could not be removed from the park-ready file: %v", id, err)
+	}
+}
+
+// dropReady removes the whole file, for a fleet somebody is stopping.
+func (s *server) dropReady() {
+	if err := s.ready.clear(); err != nil {
+		logf("wake: could not clear the park-ready file: %v", err)
 	}
 }

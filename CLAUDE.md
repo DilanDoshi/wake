@@ -149,7 +149,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   claude answers with is the name it takes (`decisions.md`, 2026-10-15).
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
   everything and clears the park book (`parked.json` beside the socket). **A SIGTERM or SIGINT parks the
-  fleet like `⌃Q`** (owner's 2026-10-21 ruling); **a crash** (SIGKILL, power loss) leaves
+  fleet like `⌃Q`** (owner's 2026-10-21 ruling); **a crash** (SIGKILL, a panic; a power cut only if the files reached the disk, which the atomic write does not fsync) leaves
   `parkready.json`, and the next daemon's reaper moves each finished roster row's record into the park
   book (BUG-53; `internal/daemon/parkready.go`, `reap.go`'s `handOver`). A row it retains stays out.
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)

@@ -42,6 +42,18 @@ type pending struct {
 // A full queue is an error rather than a wait: the queue filling means this
 // agent has stopped reading its stdin, and blocking here would park the
 // client's read goroutine on exactly the agent it can no longer control.
+// submit hands a stdin-bound frame to the agent that owns it. A stop drops the
+// agent's park-ready row first: an operator's stop is not a crash for the next
+// daemon to undo, and its turn may take a while to end.
+func (s *server) submit(c *client, f rpc.Frame) {
+	s.withAgent(c, f, func(a *agent) error {
+		if f.Kind == rpc.FrameStop {
+			s.forgetReady(a.id)
+		}
+		return a.submit(c, f)
+	})
+}
+
 func (a *agent) submit(from *client, f rpc.Frame) error {
 	select {
 	case <-a.gone:

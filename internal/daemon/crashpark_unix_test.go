@@ -258,9 +258,8 @@ func awaitReady(t *testing.T, sock, session, what string, ok func(parkedRecord) 
 func TestALiveAgentIsKeptParkReadyAsWhatAWakeNeedsChanges(t *testing.T) {
 	fakeClaudeOnPath(t, "")
 	sock := tempSocket(t)
-	s := newServer(sock)
-	startControlledServer(t, s)
-	c := attach(t, sock)
+	d := startDaemonOn(t, sock)
+	c := attach(t, d.socket)
 	c.send(rpc.Frame{Kind: rpc.FrameSpawn, SessionID: idAlpha, Text: "alex", Effort: core.EffortLow})
 	c.awaitState(idAlpha, rpc.StateIdle)
 
@@ -278,15 +277,21 @@ func TestALiveAgentIsKeptParkReadyAsWhatAWakeNeedsChanges(t *testing.T) {
 
 	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "/effort high"})
 	awaitReady(t, sock, idAlpha, "the effort", func(r parkedRecord) bool { return r.Effort == core.EffortHigh })
+}
 
-	// A /clear moves the agent onto a conversation claude mints; a wake resumes
-	// that one, so the file has to follow it.
-	s.mu.Lock()
-	a := s.agents[idAlpha]
-	s.mu.Unlock()
-	clearTo(a, idAlpha, idBeta)
-	s.pushStatus()
-	awaitReady(t, sock, idAlpha, "the conversation after a /clear", func(r parkedRecord) bool { return r.ID == idBeta })
+// A /clear moves the agent onto a conversation claude mints, and a wake resumes
+// that one, so the file has to follow it - through a real /clear, with nobody
+// pushing a status by hand.
+func TestAClearReachesTheParkReadyFile(t *testing.T) {
+	rememberingClaudeOnPath(t)
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	spawnFor(c, idAlpha, "alex", t.TempDir())
+	c.pollState(idAlpha, rpc.StateIdle)
+
+	conversation := clearSession(c, idAlpha)
+
+	awaitReady(t, d.socket, idAlpha, "the conversation after a /clear", func(r parkedRecord) bool { return r.ID == conversation })
 }
 
 // A session that ended or parked leaves nothing for a crash to hand over: its
@@ -305,7 +310,9 @@ func TestASessionThatEndedOrParkedLeavesNoParkReadyRecord(t *testing.T) {
 
 	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha})
 	c.awaitState(idAlpha, rpc.StateParked)
-	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idBeta})
+	// A kill, not a stop: a stop drops the row itself (TestAStopDrops...), and
+	// this is the ending that leaves it to retire.
+	c.send(rpc.Frame{Kind: rpc.FrameKill, SessionID: idBeta})
 	c.awaitState(idBeta, rpc.StateEnded)
 	c.status() // behind both retires' status pushes
 
@@ -416,5 +423,178 @@ func TestAFleetWhoseDaemonWasKilledComesBackParkedWithItsConfiguration(t *testin
 
 	if got := wakeOutcome(c2, idAlpha); !got.woke {
 		t.Fatalf("the crashed session could not be woken: %s", got.why)
+	}
+}
+
+// The roster is the proof, and the proof is per session: a park-ready record
+// beside a roster that names somebody else is one that ended before the crash.
+func TestAStaleParkReadyRecordBesideAnotherSessionsRosterRowIsDropped(t *testing.T) {
+	sock := tempSocket(t)
+	writeReady(t, sock, map[string]parkedRecord{
+		idAlpha: {ID: idAlpha, Name: "alex", Dir: "/tmp/repo"},
+		idBeta:  {ID: idBeta, Name: "robin", Dir: "/tmp/repo"},
+	})
+	writeRoster(t, rosterPath(sock), []record{{ID: idBeta, Name: "robin", PID: deadPID(t), Started: time.Now()}})
+
+	s := newServer(sock)
+	s.reapOrphans()
+
+	if _, held := s.parked.record(idAlpha); held {
+		t.Error("a session with no roster row was parked from its park-ready record: that offers back one the operator ended")
+	}
+	if _, held := s.parked.record(idBeta); !held {
+		t.Error("the session the roster names was not parked")
+	}
+	if !fileGone(parkReadyPath(sock)) {
+		t.Error("the stale record outlived the reaper")
+	}
+}
+
+// A park-ready file is a file somebody may have edited, and its conversation id
+// reaches --resume.
+func TestAParkReadyRecordNamingAnIdWakeDidNotMintIsNotParked(t *testing.T) {
+	sock := tempSocket(t)
+	writeReady(t, sock, map[string]parkedRecord{idAlpha: {ID: "not-an-id-wake-minted", Name: "alex", Dir: "/tmp/repo"}})
+	writeRoster(t, rosterPath(sock), []record{{ID: idAlpha, Name: "alex", PID: deadPID(t), Started: time.Now()}})
+
+	s := newServer(sock)
+	s.reapOrphans()
+
+	if recs := s.parked.records(); len(recs) != 0 {
+		t.Errorf("the park book holds %+v, which no wake could resume", recs)
+	}
+	if rosterNames(sock, idAlpha) {
+		t.Error("the row was retained with nothing that could ever be handed over")
+	}
+}
+
+// A wake whose book deletion failed leaves the old row behind, and a crash then
+// finds it beside a roster row and a newer record. The newer one is the truth.
+func TestAHandOverReplacesAParkBookRowOlderThanTheLastChange(t *testing.T) {
+	sock := tempSocket(t)
+	stale := parkedRecord{ID: idBeta, Name: "old", Dir: "/tmp/repo", Parked: time.Now().Add(-time.Hour)}
+	if err := newParkBook(parkBookPath(sock)).add(stale); err != nil {
+		t.Fatal(err)
+	}
+	writeReady(t, sock, map[string]parkedRecord{idAlpha: {ID: idBeta, Name: "alex", Team: "api", Dir: "/tmp/repo", Parked: time.Now()}})
+	writeRoster(t, rosterPath(sock), []record{{ID: idAlpha, Name: "alex", PID: deadPID(t), Started: time.Now()}})
+
+	s := newServer(sock)
+	s.reapOrphans()
+
+	if got, _ := s.parked.record(idBeta); got.Name != "alex" || got.Team != "api" {
+		t.Errorf("the book holds %+v: the stale row from before the wake beat what the session was set to since", got)
+	}
+}
+
+// A failed start takes its roster row back, and its park-ready record with it.
+func TestAFailedStartLeavesNoParkReadyRecord(t *testing.T) {
+	sock := tempSocket(t)
+	s := newServer(sock)
+	a := parkedRow(t, s, idAlpha, "alex")
+	if err := s.ready.set(idAlpha, recordFor(a)); err != nil {
+		t.Fatal(err)
+	}
+
+	s.withdraw(a, nil, nil)
+
+	if _, ok := loadParkReady(parkReadyPath(sock))[idAlpha]; ok {
+		t.Error("a start that never happened left a record a crash would park")
+	}
+}
+
+// A stop is the operator ending a session, and its turn may take a while to
+// finish: dying in that wait must not offer the session back. The deaf agent
+// outlives its closed stdin, so the session is still there when this looks.
+func TestAStopDropsTheParkReadyRecordBeforeTheSessionHasEnded(t *testing.T) {
+	fakeClaudeOnPath(t, "deaf")
+	shortQuitGrace(t, 2*time.Second)
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+	awaitReady(t, d.socket, idAlpha, "the spawn", func(parkedRecord) bool { return true })
+
+	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+
+	deadline := time.Now().Add(testTimeout)
+	for len(loadParkReady(parkReadyPath(d.socket))) != 0 {
+		if time.Now().After(deadline) {
+			t.Fatal("a stopped session kept its park-ready record: a crash during its last turn would park what the operator ended")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if state := stateOf(c.status(), idAlpha); state == rpc.StateEnded {
+		t.Fatal("the session had already ended, so this does not show the wait it is about")
+	}
+	// And a status push does not offer it again: a rename publishes one.
+	c.send(rpc.Frame{Kind: rpc.FrameRename, SessionID: idAlpha, Text: "alexis"})
+	c.status()
+	if rows := loadParkReady(parkReadyPath(d.socket)); len(rows) != 0 {
+		t.Errorf("a push wrote %+v back for a session that was asked to stop", rows)
+	}
+}
+
+// wake stop is irreversible, so a daemon dying in its grace must leave nothing
+// for the next one to hand over - while the agents are still ending.
+func TestAFleetBeingStoppedDropsTheParkReadyFileBeforeItsAgentsHaveEnded(t *testing.T) {
+	fakeClaudeOnPath(t, "deaf")
+	shortQuitGrace(t, 3*time.Second)
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+	awaitReady(t, d.socket, idAlpha, "the spawn", func(parkedRecord) bool { return true })
+
+	c.send(rpc.Frame{Kind: rpc.FrameQuit})
+
+	deadline := time.Now().Add(time.Second)
+	for !fileGone(parkReadyPath(d.socket)) {
+		if time.Now().After(deadline) {
+			t.Fatal("the park-ready file outlived the start of a wake stop: a crash in the grace would hand the stopped fleet to the next daemon")
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
+	if d.waitForExitWithin(t, 10*time.Millisecond) {
+		t.Fatal("the daemon had already exited, so this does not show the grace it is about")
+	}
+}
+
+// retire removes a row after finish, and a write that took its record before
+// finish must not put it back.
+func TestARowWrittenAfterItsAgentDepartedDoesNotStay(t *testing.T) {
+	s := newServer(tempSocket(t))
+	a := newAgent(idAlpha, "alex", "dev", "/tmp/repo", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
+	rec, running := a.runningRecord()
+	if !running {
+		t.Fatal("a fresh agent does not read as running")
+	}
+
+	a.finish(nil)
+	s.forgetReady(a.id)
+	if err := s.writeReady(a, rec); err != nil {
+		t.Fatal(err)
+	}
+
+	if rows := loadParkReady(parkReadyPath(s.socket)); len(rows) != 0 {
+		t.Errorf("the file holds %+v for a session that had already ended: a crash would park it", rows)
+	}
+}
+
+// A session being parked keeps its row until completePark takes it, whatever
+// state its process is in: a crash in a quit park's grace has to find it.
+func TestAParkingAgentDoesNotReadAsDeparted(t *testing.T) {
+	a := newAgent(idAlpha, "alex", "dev", "/tmp/repo", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
+	a.beginPark()
+	if err := a.stop(); err != nil {
+		t.Logf("stop: %v", err) // nothing was started, so there is nothing to close
+	}
+	a.finish(nil)
+
+	if a.departed() {
+		t.Error("an agent that is parking read as departed, so its record would be dropped while its roster row still stands")
+	}
+	if _, running := a.runningRecord(); !running {
+		t.Error("a parking agent offered no record")
 	}
 }

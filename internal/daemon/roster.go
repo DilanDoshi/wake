@@ -181,3 +181,15 @@ func loadRoster(path string) []record {
 	}
 	return recs
 }
+
+// record writes the agent down so a later daemon can find it. See rosterRecord.
+func (s *server) record(a *agent, pgid int) {
+	// First, so no roster row is ever without the record a crash would hand over.
+	s.noteReady(a)
+	if err := s.roster.add(a.rosterRecord(pgid)); err != nil {
+		// Not fatal to the session: an unrecorded agent still works, it is
+		// only unfindable if this daemon dies. Said out loud for the same
+		// reason.
+		logf("wake: session %s is not recorded on disk, so a crash would orphan it: %v", a.id, err)
+	}
+}

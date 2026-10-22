@@ -56,8 +56,7 @@ type server struct {
 	// inside it - see parkbook.go's header for why they are two files.
 	parked *parkBook
 
-	// ready is the park book row of every live agent, for the reaper to hand a
-	// crashed fleet to the park book - see parkready.go.
+	// ready is every live agent's park book row, for the reaper - see parkready.go.
 	ready *parkReady
 
 	// names is which display names the live fleet is using. It has its own
@@ -319,6 +318,9 @@ func (s *server) quitReason() quitVerb {
 func (s *server) shutdown() error {
 	verb := s.quitReason()
 	agents := s.takeAgents()
+	if verb == quitStop {
+		s.dropReady() // a fleet being stopped must not be handed on if the daemon dies in the grace
+	}
 	for _, a := range agents {
 		if verb == quitPark {
 			// Before the stop, never after: retire runs the moment the events
@@ -729,11 +731,6 @@ func (s *server) agent(id string) (*agent, bool) {
 	defer s.mu.Unlock()
 	a, ok := s.agents[id]
 	return a, ok
-}
-
-// submit hands a stdin-bound frame to the agent that owns it.
-func (s *server) submit(c *client, f rpc.Frame) {
-	s.withAgent(c, f, func(a *agent) error { return a.submit(c, f) })
 }
 
 // broadcast hands one frame to every attached client.

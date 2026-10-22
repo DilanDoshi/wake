@@ -1193,15 +1193,18 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
 
 **Fixed on `fix/crashed-fleet-reaches-park-book` (PR awaiting merge).** What was built:
 - **A park-ready record per live agent**, in `parkready.json` beside the roster (`parkready.go`). It is
-  rewritten when a wake's inputs change: at launch and on a rename, team or colour through `s.record`, and
-  on every status push for the rest (a `/clear`'s conversation, an `/effort`), writing only what differs.
-  A row leaves with its roster row, and the file goes with every orderly ending.
+  rewritten when a wake's inputs change: at launch and on a rename, team or colour through `s.record`; when a
+  `/clear`'s successor is learned (`fanOut`, since no status push follows a `/clear`); and on every status
+  push for the rest (an `/effort`, through its confirming probe's push), writing only what differs. A row
+  leaves with its roster row, a stop drops it at once (a stopped session's last turn can take a while), and
+  the file goes with every orderly ending, `wake stop` before its grace starts.
 - **The reaper hands records to the park book.** When `reapOrphans` finishes a record (gone, recycled pid, or
   group signalled), it moves that agent's park-ready record into the park book instead of forgetting it. The
   reaper's proof that the process is gone is `completePark`'s own precondition, and `unparkRecord` still
   re-proves it through `resumeSafe` at wake. A record the reaper retains stays out of the book, a park-ready
   record with no roster row beside it is dropped (the roster is the proof the session was running), and a book
-  record already under that conversation wins (`reap.go`'s `handOver`).
+  row already under that conversation wins unless the crashed daemon's record changed after it (`reap.go`'s
+  `handOver`; the record's time is its last change).
 - **A signal parks.** A cancelled `Serve` context begins `quitPark` (`stopAcceptingOnStop`), so SIGTERM and
   SIGINT end as ⌃Q does; `quitNone` is now only the daemon becoming empty.
 - **A crashed manager comes back as the manager.** `ensureManager` already wakes a parked one, so it is not
@@ -1211,6 +1214,21 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
   with all of those fields, and `/resume all` must wake them. The old manager must take the manager's seat. A
   record the reaper retains must stay out of the book. `wake stop` must still leave nothing. If the signal
   ruling changes, SIGTERM gets the same test.
+
+**Residuals, known and not fixed.**
+- A crash in the instant between a `/clear`'s reset and its successor's first frame offers the pre-clear
+  conversation: until the successor speaks there is no conversation to write.
+- A wake whose park-book deletion failed leaves the old row on disk under the old conversation id, and after
+  a `/clear` and a crash both conversations are offered. That is the park book's own double fault; the
+  same-conversation case is handled by the timestamp rule above.
+- A session still mid-turn when a signalled (or ⌃Q) shutdown's grace ends is killed and not parked, while
+  the same fleet SIGKILLed at that moment is recovered by the crash path. The owner's call (`deferred.md`).
+- `wake stop` with no daemon running says so and leaves a crashed fleet's roster and park-ready file, so the
+  next `wake` parks a fleet the operator thought stopped. The owner's call (`deferred.md`).
+- `writeFileAtomically` renames without an fsync, so a power cut can lose or empty the roster and the
+  park-ready file where a SIGKILL, a panic or a clean shutdown cannot.
+- `completePark` removes the roster row before the book write, so a crash in that gap loses the session. It
+  was so before this change.
 
 ---
 

@@ -104,9 +104,9 @@ func (s *server) reapOrphans() {
 
 // handOver parks a reaped session: its park-ready record goes into the park
 // book, and unfinished reports whether the roster row must stay for a later
-// daemon because that could not be written. The reaper's proof that the
-// process is gone is completePark's own, and a wake re-proves it through
-// resumeSafe, so this starts nothing.
+// daemon because that could not be written. The reaper has not proved the
+// process gone - a stray claude outliving its group leader reads as gone - so a
+// wake re-proves it through resumeSafe and this starts nothing.
 func (s *server) handOver(session string, ready map[string]parkedRecord) (unfinished bool) {
 	rec, ok := ready[session]
 	switch {
@@ -117,8 +117,11 @@ func (s *server) handOver(session string, ready map[string]parkedRecord) (unfini
 		logf("wake: the park-ready record for session %s names %q, which is not an id Wake minted, so it is not offered back", session, rec.ID)
 		return false
 	}
-	if _, held := s.parked.record(rec.ID); held {
-		return false // a park already recorded is newer than a crashed daemon's last look
+	// The record's time is its last change. A book row from after it - a quit
+	// park that was under way - is newer; one from before it, which a wake whose
+	// deletion failed leaves behind, is the stale one and is replaced.
+	if held, ok := s.parked.record(rec.ID); ok && !rec.Parked.After(held.Parked) {
+		return false
 	}
 	rec.Parked = time.Now()
 	if err := s.parked.add(rec); err != nil {
