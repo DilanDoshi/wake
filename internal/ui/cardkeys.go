@@ -97,7 +97,7 @@ func (a App) cardKey(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		return a, nil, false
 	}
 
-	// # Answer mode takes ↵ and nothing else
+	// # Answer mode takes ↵, and ↑↓ off the draft's edge
 	//
 	// The composer is holding an answer rather than a message, so ↵ takes it
 	// and ⎋ abandons it - and *every other key goes to the draft*, which is
@@ -108,10 +108,13 @@ func (a App) cardKey(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	// the ↵ after it denied the agent. Now the `1` is a character of the
 	// reason, visible in a box the card says is live. See cardanswer.go.
 	if q, writing := a.cards.writingFor(top); writing {
-		if m.Type != tea.KeyEnter {
-			return a, nil, false
+		if m.Type == tea.KeyEnter {
+			return a.commitAnswer(top, q)
 		}
-		return a.commitAnswer(top, q)
+		if by, ok := a.answerArrow(m); ok && q != denyReasonStep {
+			return a.leaveAnswer(top, q, by)
+		}
+		return a, nil, false
 	}
 
 	// Below here the card itself has to be on screen in full, which is what

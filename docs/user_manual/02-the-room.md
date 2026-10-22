@@ -114,7 +114,8 @@ Three kinds arrive through one mechanism:
 - **A plan** — it wants approval to proceed.
 - **A question** — it is asking you to choose between options. A question that takes several
   draws a box on each: `↵`, the option's digit or space ticks one without moving on, and the
-  Next or Submit row under them walks on.
+  Next or Submit row under them walks on. The `Other…` row takes your own words: type them and
+  press `↵`, or press `↑`/`↓` to go back to the options with the words kept in that row.
 
 The third is why these are not one thing: a bare "allow" answers the first two, but a question
 needs your *answer* carried with the approval. Approving a question without answering it tells the
