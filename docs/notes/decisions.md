@@ -4725,3 +4725,25 @@ filter spec (2026-08-27) had admitted the manager wholesale.
   replies). The turn it was sent and has not yet taken up shares a known flaw of a lone `@name`'s: see
   `deferred.md`.
 - **The unfocused room, `⌃A` and `/groupchat-filter off` are unchanged** — the manager still draws there.
+
+## 2026-10-21 — a blank row sets each roster team off from the rows above it (the owner)
+
+The owner, reading the right-hand roster: the team dividers (`──── orchestrator ────`) sat directly under the
+previous section's last row, and there should be a one-line gap from the end of one team to the start of the next,
+the untagged top block included. The board's rows and tile shelves already put a blank above each divider
+(`teamHeaderBand`); the roster never had.
+
+- **The gap rides on the item, with the header** (`rosterItem.gap`, `lead()`): header and gap are both rows that
+  belong to no agent, and they are counted by the one function the window, the click and the draw all use
+  (`rowsForRow`/`rowLines`/`At`). A gap that was its own item would be the dangling-header bug again, and one counted
+  somewhere else would land every click below it a row off. `TestRowsForRowIsExactlyTheLinesRowLinesDraws` pins the
+  count to the drawn lines, and a sweep over every column height and cursor holds each drawn row to what a click on it
+  resolves to.
+- **No gap above a header with nothing above it** — a roster that opens on a team (no manager, no untagged agent)
+  opens on its divider, not on a blank. With no team the roster is the flat list it always was.
+- **A scrolled column that starts on a team's first agent opens on its blank.** The owner took the simple rule over
+  dropping it at the window's top (which would have made the window, the click and the draw each carry an exception).
+- **At a column too short for it, a team's first agent can go uncounted.** The blank makes that agent's block one row
+  taller, so a cursor on it at a pane height of about 3-5 rows can exceed the room and draw the count alone — the
+  existing "no whole block fits" fallback, which never understates the fleet. Noted by review; it follows the rule.
+- Roster only. The board is left as it was.

@@ -278,13 +278,11 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (Agent, st
 			continue
 		}
 		within := y - line
-		// The header is the item's first line and belongs to no agent, so a click
-		// on it opens nothing - the discriminator fable named. The agent's own rows
-		// follow it, which is why the offset shifts past a header before resolving.
-		if item.hasHeader() {
-			if within == 0 {
-				return Agent{}, "", false
-			}
+		// The gap and the header lead the item and belong to no agent, so a click on
+		// either opens nothing - the discriminator fable named. The agent's own rows
+		// follow them, which is why a click is resolved only past item.lead().
+		if within < item.lead() {
+			return Agent{}, "", false
 		}
 		a := item.agent
 		mine := subsFor(subs, a.ID)
