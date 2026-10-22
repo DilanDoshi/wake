@@ -100,7 +100,7 @@ func TestBroadcastReachesEveryAgentAndEchoesOnce(t *testing.T) {
 	s.send("\x17") // ⌃W
 	s.await("group chat")
 	s.send("/new robin\r")
-	s.await("@robin")
+	s.await("> @robin") // the draft itself: an esc before it clears nothing
 
 	// /new opens no pane and drafts a mention instead - "@robin " - and esc
 	// clears the room's draft in one press, which the broadcast below needs:

@@ -34,7 +34,7 @@ func gridScreen(t *testing.T, cols, rows int) (*screen, []string) {
 	s.send("\x17") // ⌃W back to the room
 	s.await("group chat")
 	s.send("/new robin\r")
-	s.await("@robin")
+	s.await("> @robin") // the draft itself: an esc before it clears nothing
 	// /new drafts a mention instead of opening a pane (starts.go's
 	// draftMention), so the room is left holding "@robin " and narrowed to its
 	// thread. esc clears that in one press - settled before the next byte, or
