@@ -1209,6 +1209,21 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
 
 ---
 
+## BUG-54 — ↑ while typing a question's own answer put the last prompt in the box
+
+**Found 2026-10-21 by the owner.** With a question card up, they picked `Other…`, started typing an
+answer, and pressed ↑ to go back to the options. The box filled with the previous prompt instead, and the
+option cursor did not move.
+
+**Cause.** Answer mode (`cardanswer.go`) gave every key but ↵ to the composer, so on a one-line draft ↑
+reached `App.key`'s prompt history (`prompts.go`) and replaced the answer. The refusal's reason box (`d`)
+had the same hole, and that reason reaches the model verbatim.
+
+**Fix:** branch `fix/answer-mode-arrows-move-options`. A bare ↑↓ that would walk the history leaves `Other…`
+for the option above or below, with the words kept in that row, as Claude Code keeps them. Choosing the row
+again puts them back in the box. In the refusal's box the arrow does nothing. A multi-line draft keeps its
+line keys, an open completion menu its walk, and ⌥↑↓ stay the history's.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
