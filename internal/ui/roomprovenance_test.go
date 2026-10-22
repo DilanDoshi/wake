@@ -122,13 +122,43 @@ func TestARoomMessageToOneAgentComesBack(t *testing.T) {
 	}
 }
 
-// An undirected room send that reached one agent - the manager, as the default
-// addressee - comes back as the room drew it: unaddressed.
-func TestAnUndirectedRoomSendToOneAgentComesBackUnaddressed(t *testing.T) {
+// A room send that reached one session - the manager, as the default addressee -
+// comes back as the room drew it: addressed to that one session, so no other
+// agent's thread holds it.
+func TestASoloRoomSendComesBackAddressedToItsSession(t *testing.T) {
+	r := restored([]core.Event{roomTyped("s1", "status please", base, newRoomSend(false).ForSolo())})
+	got := r.said.slice(0, r.said.len())
+	if len(got) != 1 || got[0].ev.Text != "status please" || got[0].to != "s1" {
+		t.Errorf("a solo room send came back as %+v, want the text addressed to s1", got)
+	}
+}
+
+// One record of a send that was not marked solo is not proof it reached one
+// session: its other transcripts may be dropped, cut or from before the mark, so
+// it comes back as the broadcast it may be.
+func TestAnUnmarkedRoomSendInOneTranscriptComesBackUnaddressed(t *testing.T) {
 	r := restored([]core.Event{roomTyped("s1", "status please", base, newRoomSend(false))})
 	got := r.said.slice(0, r.said.len())
 	if len(got) != 1 || got[0].ev.Text != "status please" || got[0].to != "" {
-		t.Errorf("an undirected room send came back as %+v, want the text unaddressed", got)
+		t.Errorf("an unmarked room send came back as %+v, want the text unaddressed", got)
+	}
+}
+
+// What a room send reached is marked in the uuid it stamps, for the restore: one
+// session is solo, several are a broadcast.
+func TestARoomSendToOneSessionIsMarkedSolo(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withAgents("sydney", "alex", core.ManagerName)
+	for draft, want := range map[string]bool{"who is free": true, "@" + core.ManagerName + " hi": true, "@sydney hi": true, "@all hi": false} {
+		m, cmd := typeAndSubmit(a, draft)
+		frames := sentFrames(t, m.(App), cmd)
+		if len(frames) == 0 {
+			t.Fatalf("%q reached nobody", draft)
+		}
+		for _, f := range frames {
+			if got := roomSendSolo(f.MessageID); got != want {
+				t.Errorf("%q: a target's uuid is marked solo = %v, want %v", draft, got, want)
+			}
+		}
 	}
 }
 

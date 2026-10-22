@@ -292,10 +292,15 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	// their markers.
 	//
 	// The echo is stamped with the thread a lone direct @name or @team
-	// addressed, so the view filter can tell it from a broadcast and from a turn
-	// aimed elsewhere. Open mode, @all, @manager and an unaddressed draft are all
+	// addressed, or else the one session it reached (the manager, by @manager or
+	// as the default addressee), so the view filter can tell it from a broadcast
+	// and from a turn aimed elsewhere. Open mode and @all to several agents are
 	// broadcasts (to == "") - open mode widens the message, not the view.
-	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, r.thread()))
+	to := r.thread()
+	if to == "" && len(r.Targets) == 1 {
+		to = r.Targets[0]
+	}
+	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
 	return a, tea.Sequence(mirror, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
 }
 
@@ -336,10 +341,14 @@ func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock, now b
 	var frames []rpc.Frame
 	var mirrorNow tea.Cmd
 	// One send for every target, so the restore can draw it once; marked direct
-	// (a lone @name) or a team's, which is what a restore addresses a turn by.
+	// (a lone @name), a team's or solo (one session), which is what a restore
+	// addresses a turn by.
 	send := newRoomSend(r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0)
 	if r.Team != "" {
 		send = send.ForTeam()
+	}
+	if len(r.Targets) == 1 {
+		send = send.ForSolo()
 	}
 	for _, id := range r.Targets {
 		msg := newQueued(send.ID(), r.Text, text, images, true)
@@ -392,12 +401,8 @@ func (a App) clearDraft() App {
 func (a App) retarget() App {
 	draft := a.room.Composer().Value()
 	prev := a.room.effectiveFocus()
-	managerID := ""
-	if m, ok := a.fleet.manager(); ok {
-		managerID = m.ID
-	}
 	if strings.TrimSpace(draft) == "" {
-		a.room = a.room.WithComposer(a.room.Composer().WithTarget(roomRoute{}, 0)).WithFocus("", "", managerID)
+		a.room = a.room.WithComposer(a.room.Composer().WithTarget(roomRoute{}, 0)).WithFocus("", "")
 		return a.withRoomBar().clearedSelOnFocusChange(prev)
 	}
 	// Routed on the chip-stripped text so the preview matches sendRoom: a leading
@@ -417,7 +422,7 @@ func (a App) retarget() App {
 		}
 		focusName = ag.Name
 	}
-	a.room = a.room.WithFocus(focusID, focusName, managerID)
+	a.room = a.room.WithFocus(focusID, focusName)
 	return a.withRoomBar().clearedSelOnFocusChange(prev)
 }
 

@@ -4518,8 +4518,8 @@ multi-room door. It is not a second room: `deferred.md` already named it as the 
 
 - **A team's thread is the union of its members' threads.** `focusAdmits` asks each member's own question
   (`admitsThread`, the old body), so every rule an agent's narrowing keeps holds per member: its prose, the
-  manager's, broadcasts, the operator's turns aimed at it, the peer messages it sent or received. No second
-  predicate.
+  manager's (until 2026-10-21, below), broadcasts, the operator's turns aimed at it, the peer messages it
+  sent or received. No second predicate.
 - **The room's focus stays one comparable string**: an agent's own id for one agent, the sorted ids for a team
   (`joinIDs`). A lone `@name` therefore compares, filters and resets `⌃A` exactly as before. **Sorted**
   because `Fleet.Agents()` is attention-ranked, so a member starting work reorders a team's route; an
@@ -4697,3 +4697,31 @@ How it is built, and the traps:
 - **One existing test was aimed at the old premise.** `TestACardWhoseKeysAreNotOnScreenIsNotAnswerable` shrank the pane
   to the composer's floor and expected the card clipped; the composer now scrolls away first, so it uses a pane one
   row shorter than the card.
+
+## 2026-10-21 — a narrowed room hides the manager's own lines (the owner)
+
+With the room narrowed to a lone `@name` or `@team`, the manager's prose and turn-ends no longer draw.
+The owner asked for the thread to be that agent's messages and those sent to and from it. The room-view
+filter spec (2026-08-27) had admitted the manager wholesale.
+
+- **What stays:** the agent's own lines, broadcasts (they reached it and explain its replies), the
+  operator's turns aimed at it, and every peer message it sent or received — the manager's `SendMessage`
+  to it included, since that line belongs to the receiver's thread (`l.ev.SessionID`). A manager's send
+  to anyone else is not in it.
+- **What goes:** an agent-produced line whose session is the manager's. `focusAdmits` lost its
+  `managerID` argument, and with it `Room.managerID`, `WithFocus`'s third parameter and `retarget`'s
+  lookup: nothing else read them.
+- **Your turns to the manager go with its replies.** A turn only the manager received is no agent's thread,
+  so the echo is stamped with the one session it reached (`sendRoom`: `@manager`, or the default
+  addressee) instead of `""`. A broadcast that reached several sessions stays `""`. The owner chose this
+  over leaving them as broadcasts; it reverses the room-view-filter spec's "`@manager` is a broadcast".
+- **A restore needs the send to say it was solo** (`rpc.MessageSolo`, minted when a send has one target).
+  `members` is only the records that came back, and the history read is dropped whole for a session that
+  spoke since the ask - the ordinary case for an active agent - so one record of an unmarked send may be a
+  broadcast's last survivor (Codex). An unmarked send stays unaddressed, which is also what a turn from
+  before the mark does. A broadcast that reached one lone agent is marked and addressed to it, live and
+  restored, so an agent spawned after it does not show a turn it never received.
+- **A DM opened on the manager seeds the turns it was sent** (`turnsFor`, as it already seeded its
+  replies). The turn it was sent and has not yet taken up shares a known flaw of a lone `@name`'s: see
+  `deferred.md`.
+- **The unfocused room, `⌃A` and `/groupchat-filter off` are unchanged** — the manager still draws there.

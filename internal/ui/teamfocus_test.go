@@ -2,9 +2,9 @@ package ui
 
 // A lone `@team` narrows the group chat the way a lone `@name` does: to the
 // thread of the agents it names. A team's thread is the union of its members'
-// threads, so every rule an agent's narrowing keeps (its prose, the manager's,
-// the operator's broadcasts and turns aimed at it, the peer messages it sent or
-// received) holds for each member.
+// threads, so every rule an agent's narrowing keeps (its prose, the operator's
+// broadcasts and turns aimed at it, the peer messages it sent or received)
+// holds for each member.
 
 import (
 	"fmt"
@@ -35,7 +35,8 @@ func TestFocusAdmitsATeamsThread(t *testing.T) {
 	}{
 		{"the first member's prose", agent(a), true},
 		{"the second member's prose", agent(b), true},
-		{"the manager's prose", agent(mgr), true},
+		{"the manager's prose", agent(mgr), false},
+		{"a message the manager sent a member", peer(mgr, b), true},
 		{"an outsider's prose", agent(out), false},
 		{"a broadcast", user(""), true},
 		{"a turn to the first member", user(a), true},
@@ -49,7 +50,7 @@ func TestFocusAdmitsATeamsThread(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := focusAdmits(c.line, team, mgr); got != c.want {
+			if got := focusAdmits(c.line, team); got != c.want {
 				t.Fatalf("focusAdmits(%s) = %v, want %v", c.name, got, c.want)
 			}
 		})
@@ -121,8 +122,8 @@ func TestTypingAtTeamNarrowsTheRoomToItsMembers(t *testing.T) {
 		t.Fatalf("@backend focused %q, want its members %q", a.room.focus, want)
 	}
 	assertRoomShows(t, a,
-		[]string{"sydney migrations green", "thea api rebased", "manager coordinating", "› @backend"},
-		[]string{"delta bundle building", "iris reading docs"})
+		[]string{"sydney migrations green", "thea api rebased", "› @backend"},
+		[]string{"delta bundle building", "iris reading docs", "manager coordinating"})
 
 	// Typed as the operator may: another case, and the room's own default.
 	if got := teamRoom(t).withDraft("@Backend ").room.focus; got != a.room.focus {
@@ -180,8 +181,8 @@ func TestATeamsThreadFollowsItsMembership(t *testing.T) {
 		{ID: "s5", Name: core.ManagerName, State: rpc.StateIdle},
 	}})
 	assertRoomShows(t, a,
-		[]string{"thea api rebased", "delta bundle building", "manager coordinating"},
-		[]string{"sydney migrations green", "iris reading docs"})
+		[]string{"thea api rebased", "delta bundle building"},
+		[]string{"sydney migrations green", "iris reading docs", "manager coordinating"})
 }
 
 // The fleet lists members by attention, so a member starting work moves ahead
@@ -336,12 +337,12 @@ func TestAMemberLeavingUnderTheReaderSendsThemToTheNewestLine(t *testing.T) {
 // a draft can move from one to the other under its own name when that agent
 // parks. That is a different target - the override does not carry over to it.
 func TestAnAgentAndATeamOfTheSameNameAreNotOneTarget(t *testing.T) {
-	r := NewRoom().SetSize(80, 24).WithFocus("a1", "backend", "mgr")
+	r := NewRoom().SetSize(80, 24).WithFocus("a1", "backend")
 	r = r.ToggleNarrow()
 	if r.effectiveFocus() != "" {
 		t.Fatal("precondition: ⌃A did not widen")
 	}
-	r = r.WithFocus(joinIDs([]string{"s1", "s2"}), "backend", "mgr")
+	r = r.WithFocus(joinIDs([]string{"s1", "s2"}), "backend")
 	if r.effectiveFocus() != joinIDs([]string{"s1", "s2"}) {
 		t.Errorf("the team took the agent's override: effectiveFocus=%q", r.effectiveFocus())
 	}

@@ -14,8 +14,8 @@ package ui
 // What makes it safe is that answer mode is entered deliberately - by picking
 // the Other row, or by pressing the refusal key - and says so on the card while
 // it lasts. Outside it nothing about the composer changed. Inside it, ↵ takes
-// the draft as an answer and ⎋ abandons it, and neither reaches the agent's
-// turn.
+// the draft as an answer, ⎋ abandons it, and ↑↓ off the draft's edge go back to
+// the options with the words kept - none of them reaches the agent's turn.
 //
 // # Why the refusal opens the same box
 //
@@ -122,10 +122,43 @@ func (a App) answerTitle(id string) string {
 }
 
 // beginAnswer opens the composer for a question the operator wants to answer
-// themselves, and puts the option cursor on the row that says so.
+// themselves, and puts the option cursor on the row that says so. Words already
+// in that row are put back in the box to edit.
 func (a App) beginAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 	a.cards = a.cards.With(c.atOption(otherIndex(c.Detail.Questions[c.Cursor]))).startWriting(c, question).disarm()
+	if typed := c.typed(question); typed != "" {
+		a = a.withComposer(a.composer().WithDraft(typed))
+	}
 	return a.pageHome(a.focus), nil, true
+}
+
+// answerArrow is the option step of a bare ↑ or ↓ in answer mode that the
+// draft's lines and a completion menu leave to the prompt history.
+func (a App) answerArrow(m tea.KeyMsg) (int, bool) {
+	switch {
+	case m.Alt || a.completionUp():
+		return 0, false
+	case m.Type == tea.KeyUp && !a.composer().CanCursorUp():
+		return -1, true
+	case m.Type == tea.KeyDown && !a.composer().CanCursorDown():
+		return 1, true
+	}
+	return 0, false
+}
+
+// leaveAnswer goes one option over, keeping the box's words as the Other row's,
+// as Claude Code does. A refusal's reason and the list's end stay where they are.
+func (a App) leaveAnswer(c Card, question, by int) (tea.Model, tea.Cmd, bool) {
+	moved := c.Move(0, by)
+	if question == denyReasonStep || moved.Option == c.Option {
+		return a, nil, true
+	}
+	text := strings.TrimSpace(a.composer().Value())
+	if text != "" || c.typed(question) != "" {
+		moved = moved.answer(question, text)
+	}
+	a.cards = a.cards.With(moved).stopWriting().disarm()
+	return a.clearDraft(), nil, true
 }
 
 // beginDeny opens the composer for a refusal's reason. It is the arm: nothing
