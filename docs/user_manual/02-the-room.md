@@ -36,9 +36,9 @@ Live names win, and Wake shows you what it resolved to.
 
 ### Narrowing the room to one agent
 
-Type a lone `@name` and the room **narrows to that agent's thread** — their lines, the manager's,
-every broadcast, and your own messages to them — for as long as it is what the composer is
-addressing. It is a view filter, not a mode: `@sydney hi` still routes to sydney, and the room widens
+Type a lone `@name` and the room **narrows to that agent's thread** — their lines, every broadcast,
+your own messages to them, and the messages sent to or from them — for as long as it is what the
+composer is addressing. The manager's own lines, and what you said to the manager, are not in it. It is a view filter, not a mode: `@sydney hi` still routes to sydney, and the room widens
 again when you change or clear the target. `⌃A` **shows all** — it widens a narrowed room back to
 every agent while still addressing `@sydney`, and a second `⌃A` re-narrows. `/groupchat-filter off`
 flips the default so a lone `@name` no longer narrows (`⌃A` then narrows on demand); `on` restores

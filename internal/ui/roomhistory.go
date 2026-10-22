@@ -632,13 +632,18 @@ func broadcastRuns(lines []roomLine, copied map[int]int) [][]int {
 }
 
 // addressedAsSent gives a restored room turn the address the live echo had: a
-// lone direct @name that reached one transcript is drawn `@name ...` in that
-// agent's thread (claude received it with the mention stripped), and a team send
-// is addressed to the members whose transcripts hold it. A broadcast, an
-// undirected send and a turn proved by multiplicity stay unaddressed.
+// send marked as reaching one session is addressed to the transcript that holds
+// it - a lone direct @name drawn `@name ...` (claude received it with the
+// mention stripped), or the manager's default turn - and a team send is
+// addressed to the members whose transcripts hold it. A broadcast, a turn proved
+// by multiplicity and a send that is not marked solo stay unaddressed: one
+// retained record of an unmarked send may be all that came back of a broadcast.
 func addressedAsSent(l roomLine, lines []roomLine, members []int) roomLine {
 	_, direct, room := roomSendOf(l.ev.MessageID)
-	if room && roomSendTeam(l.ev.MessageID) {
+	if !room {
+		return l
+	}
+	if roomSendTeam(l.ev.MessageID) {
 		held := make([]string, 0, len(members))
 		for _, k := range members {
 			held = append(held, lines[k].ev.SessionID)
@@ -646,7 +651,7 @@ func addressedAsSent(l roomLine, lines []roomLine, members []int) roomLine {
 		l.to = joinIDs(held)
 		return l
 	}
-	if !room || !direct {
+	if !direct && !roomSendSolo(l.ev.MessageID) {
 		return l
 	}
 	for _, k := range members {
@@ -655,7 +660,7 @@ func addressedAsSent(l roomLine, lines []roomLine, members []int) roomLine {
 		}
 	}
 	l.to = l.ev.SessionID
-	if name := l.by.Name; name != "" {
+	if name := l.by.Name; direct && name != "" {
 		l.ev.Text = agentPrefix + name + " " + l.ev.Text
 	}
 	return l

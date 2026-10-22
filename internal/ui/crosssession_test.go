@@ -208,13 +208,13 @@ func TestTheDMShowsACrossSessionMessage(t *testing.T) {
 // sender's (l.by) and the receiver's (l.ev.SessionID) - and out of any other.
 func TestNarrowingAdmitsACrossSessionLineForSenderAndReceiver(t *testing.T) {
 	l := roomLine{ev: core.Event{Kind: core.KindCrossSession, SessionID: "receiver"}, by: Agent{ID: "sender"}}
-	if !focusAdmits(l, "sender", "mgr") {
+	if !focusAdmits(l, "sender") {
 		t.Error("narrowing to the sender hid a cross-session line it sent")
 	}
-	if !focusAdmits(l, "receiver", "mgr") {
+	if !focusAdmits(l, "receiver") {
 		t.Error("narrowing to the receiver hid a cross-session line it got")
 	}
-	if focusAdmits(l, "other", "mgr") {
+	if focusAdmits(l, "other") {
 		t.Error("narrowing to an unrelated agent showed a cross-session line")
 	}
 }
