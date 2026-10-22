@@ -703,7 +703,8 @@ first, and read it.
     ```
 - Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`, `ci:`);
   branches are `<type>/<kebab-description>` (`fix/`, never `bugfix/`).
-- **Dev worktrees live in `.worktrees/<name>`** inside the repo (gitignored) — never `$HOME`,
+- **Every new worktree is created inside the repo, at `.worktrees/<name>`** (gitignored) — by you or
+  any agent that runs `git worktree add`. Never outside the repo directory: not `$HOME`,
   `~/Documents`, `/tmp` or beside the repo. Remove with `git worktree remove` after merge.
 - **Never add Claude attribution** in commits, PR titles or bodies.
 - **Docs-only commits go straight to `main` and are pushed immediately** so other worktrees see them.
