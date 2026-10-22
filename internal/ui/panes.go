@@ -105,6 +105,7 @@ func (a App) composer() Composer {
 // the pane it was computed for.
 func (a App) withComposer(c Composer) App {
 	if a.focus != "" {
+		a = a.draftSeen(a.focus, c)
 		return a.withDM(a.focus, a.dm().WithComposer(c))
 	}
 	a.room = a.room.WithComposer(c)
@@ -581,6 +582,9 @@ func (a App) toggleRoster() App {
 // count.
 func (a App) scrollFocused(lines int) App {
 	if a.focus != "" {
+		if next, moved := a.scrollPage(a.focus, lines); moved {
+			return next
+		}
 		return a.withDM(a.focus, a.dm().ScrollUp(lines))
 	}
 	a.room = a.room.ScrollUp(lines)

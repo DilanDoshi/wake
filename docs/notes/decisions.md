@@ -4518,8 +4518,8 @@ multi-room door. It is not a second room: `deferred.md` already named it as the 
 
 - **A team's thread is the union of its members' threads.** `focusAdmits` asks each member's own question
   (`admitsThread`, the old body), so every rule an agent's narrowing keeps holds per member: its prose, the
-  manager's, broadcasts, the operator's turns aimed at it, the peer messages it sent or received. No second
-  predicate.
+  manager's (until 2026-10-21, below), broadcasts, the operator's turns aimed at it, the peer messages it
+  sent or received. No second predicate.
 - **The room's focus stays one comparable string**: an agent's own id for one agent, the sorted ids for a team
   (`joinIDs`). A lone `@name` therefore compares, filters and resets `⌃A` exactly as before. **Sorted**
   because `Fleet.Agents()` is attention-ranked, so a member starting work reorders a team's route; an
@@ -4633,6 +4633,98 @@ machine, and ruled that it affect the group chat only — no agent and no conver
   `roomCommands` is held to a count, and a room test sends `/cleanup`, `/clear-cache` and their like
   to the default addressee unchanged. A session the cleared room held lines for stays marked asked, so
   a park and wake does not restore a turn whose live echo is still on screen.
+
+## 2026-10-20 — a card scrolls with its pane, as one page (the owner)
+
+The owner asked for the human-in-the-loop question screen to scroll — "if I scroll up it should scroll
+everything" — for a window too small to show the whole card, and in general. Two choices were theirs.
+
+- **The pane is one page.** Offered a card-body viewport with its headline and key line pinned, they
+  chose the transcript, card and composer scrolling together. The wheel slides the card and composer
+  off the bottom and takes older lines in at the top. Without a card the wheel moves the transcript
+  alone, as it always did.
+- **The keys keep today's rule.** Offered "live while the key line is on screen", they kept *live only
+  while the whole card is on screen* (`cardFullyDrawn`; the 2026-08 ruling that a confirmation the
+  operator cannot see is not one). What changed is what puts a card on screen: the composer scrolls out
+  of the way before the card is clipped, so a card that fits a short pane alone is whole and answerable
+  at rest, and one taller than the pane is read by scrolling but not answered until the window grows.
+  The key line says so (`cardKeysCut`) rather than advertising keys that are not read — except while an
+  answer is being written, which is read whether or not the card is all on screen.
+
+How it is built, and the traps:
+
+- **The page is the pane drawn taller.** Up `b` rows from the bottom is the pane drawn `height+b` rows
+  tall with its top `height` rows shown, which slides `b` rows of chrome off the bottom and takes `b`
+  older lines in at the top with no layout of its own. A card the pane has no room for opens with its
+  clipped rows already behind the window (`windowPage`'s `clipped`), on the card's own top.
+- **Hitting the top ends the wheel there.** The first version handed the rest of the travel to the
+  transcript's own scroll, which shortened the page under it and snapped the card back to the bottom
+  row under a transcript scrolled to its top. Only a wheel *down* at rest falls through (a reader who
+  scrolled back before the card arrived is still brought forward).
+- **A press on a scrolled page is a screen selection.** Its rows are not where the transcript's anchors read them,
+  and re-deriving them was not worth it for a read-only gesture. At rest nothing has moved and a press anchors as ever
+  — except in a pane too short for its card, where the composer is *not* under the card: a press below the
+  transcript's one row takes the screen as drawn, never a draft nobody can see (reviewer). **An edge drag scrolls the
+  transcript it was taken in**, not the page (`scrollPane` is the transcript's alone; only the wheel tries the page).
+- **A draft that changes brings the page home, whichever key wrote it.** The first version hooked the keys that reach
+  the composer, and ↑ (prompt history), take-back, ⇥ and the image drop all edit it without reaching that hook: a
+  recalled prompt landed in a composer off screen and the next ↵ sent it (reviewer). The hook is now at the composer's
+  write (`withComposer`, `withComposerFor`) and compares against `pageState.draft`, because a `Composer` shares its
+  text area with the copy it was taken from, so the stored one already holds the new text. Opening an answer homes it
+  too. **↵ on an answer commits only from a page at its bottom**: one scrolled away brings the box back and the next ↵
+  sends (Codex), since an answer is irreversible.
+- **A draft is never sent from a box nobody can see.** Second-pass review (Codex, then the reviewer): a draft already
+  in the box when a card arrives in a pane too short for it left the composer hidden at the card's default, and the next
+  ↵ sent it. Two layers. A pane whose box holds a draft opens on the composer (`DM.pageAt`), and `submit` — the one
+  path that sends a draft, ↵ and ⌃] both — refuses a draft the page has scrolled away from: it brings the box back and
+  the next press sends (`App.boxAway`). The line over a cut card names the draft first when one is what pauses its keys.
+- **A following reader is not behind the newest line.** The taller layout gives the transcript more rows, and a draft
+  grown by those rows can make it more than the pane's own did; the draw had assumed it equal and left a follower one
+  row off the bottom, with the "new messages below" banner over the blank row (reviewer, 11 of 1,188 configs). A follower
+  now takes the taller layout's own bottom, and only a reader who had scrolled back has their top line carried.
+- **`cardFullyDrawn` is read off the layout actually drawn.** The page is drawn taller than the pane, and the rows it
+  adds let a draft or a streamed preview grow, so the first measure — at the pane's own height — could put the card
+  where it was not (Codex; the reviewer reproduced the safe-direction case: a 9-line draft, the whole card on screen
+  and its keys dead). `placeOf` lays out the drawn height and places the card by that, and a sweep holds the claim to
+  the rows over every height, draft, scroll and status bar.
+- **At the top of the page the draw is the transcript alone.** Drawn at its taller layout the pane would render every
+  retained line each frame (Codex: 3,000 events); once the chrome is past the window `transcriptPage` draws just the
+  window's lines, and a test holds a frame at the top of a long conversation to a short one's allocations.
+- **Cost.** A pane with no card is the same path as before (identical allocations); a fitting card is within noise of
+  `main`; a clipped pane is drawn at its taller layout and costs about 0.5 ms more per frame (`deferred.md`).
+- **State is per card** (`pageState.req`): another ask starts at rest. The offset is clamped at the draw, so a resize
+  under a scrolled page cannot leave rows the transcript has not got.
+- **One existing test was aimed at the old premise.** `TestACardWhoseKeysAreNotOnScreenIsNotAnswerable` shrank the pane
+  to the composer's floor and expected the card clipped; the composer now scrolls away first, so it uses a pane one
+  row shorter than the card.
+
+## 2026-10-21 — a narrowed room hides the manager's own lines (the owner)
+
+With the room narrowed to a lone `@name` or `@team`, the manager's prose and turn-ends no longer draw.
+The owner asked for the thread to be that agent's messages and those sent to and from it. The room-view
+filter spec (2026-08-27) had admitted the manager wholesale.
+
+- **What stays:** the agent's own lines, broadcasts (they reached it and explain its replies), the
+  operator's turns aimed at it, and every peer message it sent or received — the manager's `SendMessage`
+  to it included, since that line belongs to the receiver's thread (`l.ev.SessionID`). A manager's send
+  to anyone else is not in it.
+- **What goes:** an agent-produced line whose session is the manager's. `focusAdmits` lost its
+  `managerID` argument, and with it `Room.managerID`, `WithFocus`'s third parameter and `retarget`'s
+  lookup: nothing else read them.
+- **Your turns to the manager go with its replies.** A turn only the manager received is no agent's thread,
+  so the echo is stamped with the one session it reached (`sendRoom`: `@manager`, or the default
+  addressee) instead of `""`. A broadcast that reached several sessions stays `""`. The owner chose this
+  over leaving them as broadcasts; it reverses the room-view-filter spec's "`@manager` is a broadcast".
+- **A restore needs the send to say it was solo** (`rpc.MessageSolo`, minted when a send has one target).
+  `members` is only the records that came back, and the history read is dropped whole for a session that
+  spoke since the ask - the ordinary case for an active agent - so one record of an unmarked send may be a
+  broadcast's last survivor (Codex). An unmarked send stays unaddressed, which is also what a turn from
+  before the mark does. A broadcast that reached one lone agent is marked and addressed to it, live and
+  restored, so an agent spawned after it does not show a turn it never received.
+- **A DM opened on the manager seeds the turns it was sent** (`turnsFor`, as it already seeded its
+  replies). The turn it was sent and has not yet taken up shares a known flaw of a lone `@name`'s: see
+  `deferred.md`.
+- **The unfocused room, `⌃A` and `/groupchat-filter off` are unchanged** — the manager still draws there.
 
 ## 2026-10-21 — a blank row sets each roster team off from the rows above it (the owner)
 

@@ -325,7 +325,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
   if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
   broadcast, or was stamped by a room send (`roomprovenance.go`: the uuid Wake stamps is the one on
-  disk; a direct `@name` comes back in that thread, a team send in its members'); agent prose is restored only inside a public
+  disk; a send marked as reaching one session - a direct `@name`, the manager's default turn - comes
+  back in that session's thread, a team send in its members'); agent prose is restored only inside a public
   turn. A record in two transcripts (same uuid, `Event.MessageID`) is a fork's copy, drawn once
   (`forkCopies`); the daemon also leaves a fork's inherited records out of its room history
   (`inheritedBy`), so forks are asked like any session.
@@ -362,10 +363,22 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 **Cards and asks**
 - **An ask belongs to its agent's conversation; the room draws none** (`Cards.For`, `App.cardOf`).
   The roster row, the strip's `N need you` and `⌃X` announce it. Nothing on that wire times out.
+- **A pane drawing a card scrolls as one page** (owner's 2026-10-20 ask): the wheel slides the card and
+  composer off the bottom and pulls the older transcript in at the top, and a card taller than its
+  pane opens on its own top with the rest a wheel notch away. Without a card the wheel moves the
+  transcript alone. The pane is drawn taller and a window of its top rows shown, so nothing is laid
+  out twice (`pagescroll.go`). **Its keys are live only while the whole card is on screen**
+  (`App.cardFullyDrawn`, unchanged in rule) and the key line says when they return (`cardKeysCut`).
+  A draft that changes, or opening an answer, brings the page back to the composer (watched at the
+  composer's write, not per key); a pane whose box holds a draft opens on it, and `submit` and an
+  answer's `↵` act only from a page at its bottom, so a draft nobody can see is never sent. A press on a
+  scrolled page takes a screen selection, not a transcript anchor, and an edge drag scrolls the
+  transcript, not the page. `decisions.md` (2026-10-20).
 - Permissions/plans: rune then `↵`, read only on an empty composer; any other input disarms (key,
   composer, mouse, digit).
 - Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer
-  mode, where the card takes only `↵` (`cardanswer.go`). Arrows reach the card with or without a
+  mode, where the card takes `↵`; a bare `↑↓` with no draft line to move to never walks prompt history -
+  from `Other…` it goes back to the options with the words kept in that row (`cardanswer.go`). Arrows reach the card with or without a
   draft; `←→` only on an empty composer. **A multi-select question** (`core.Question.Multi`) draws
   `[ ]`/`[✔]` boxes, ticks in place on `↵`, a digit or space, walks on by its Next/Submit row, and sends
   the ticks in the order ticked with typed words last, joined by `core.JoinChoices` as Claude Code
@@ -446,7 +459,7 @@ yet says so in bold.**
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
 | Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
-| Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` |
+| Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |

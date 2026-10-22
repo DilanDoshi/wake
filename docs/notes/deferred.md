@@ -5733,7 +5733,38 @@ this branch's to fix, and each is worth its own small PR.
   Enter still routes to sydney. One call (`retarget`) after the recall closes it; it wants a test per pane.
 - **A queued message to a busy agent can draw twice in a DM opened while it waits.** The room seed holds
   the echo of a `@name` turn the agent has not taken up, and the live echo lands when it starts (Codex, pass
-  2). A team turn is left out of the seed for this reason; a lone `@name`'s is not.
+  2). A team turn is left out of the seed for this reason; a lone `@name`'s is not, and since 2026-10-21 nor
+  is a turn to the manager (the default addressee) or to a lone agent in the fleet, so the manager's DM can
+  show a queued prompt twice (Codex, second pass). *Closes with:* a seed that leaves out what the queue pins.
 - **A wake that re-keys an agent strands its retained room lines.** After a `/clear` then a park and wake,
   `rekeyed` moves the agent's id to the new conversation and the room does not rewrite its retained lines'
   `SessionID`, so a narrowing on that agent (or its team) hides the lines from before the wake.
+
+## FROM `feat/card-page-scroll`, 2026-10-20
+
+Found in review of the card's page scroll; neither blocks it, and each is its own small change.
+
+- **The page drifts as lines arrive while it is scrolled.** The page's `up` is measured from the bottom, so a line
+  appended under a scrolled page moves what the top of the window shows (two assistant messages while the page was
+  15 rows up moved the oldest visible line from 21 to 23), where a scrolled transcript holds its place. A blocked
+  agent sends little, and a subagent's or a workflow's frames are the usual cause. Anchoring the page to a
+  transcript line instead of a row count would hold it; it wants its own test and a ruling on a reader who is
+  following when the line arrives.
+- **`cardKeysCut` is accurate but incomplete for a card taller than any window.** A ⌃E-expanded description can
+  make the card taller than the whole pane, where "keys return when the whole card is on screen" is true only after
+  ⌃E collapses it or the window grows. The line could name ⌃E in that one case.
+- **A clipped pane costs about 0.5 ms more per frame than on `main`.** It is drawn at its taller layout and a window
+  of that shown; a fitting card is within noise of `main` and a pane with no card is identical. Cards are rare and a
+  clipped pane rarer, so it is left, but the second `SetSize` it takes could be shared with the first.
+
+## FROM `fix/focus-hides-manager-lines`, 2026-10-21
+
+- **A restored member→manager peer message is hidden in the member's narrowed room, while live it shows**
+  (Codex and code review; true on `main` before this branch). `roomHistoryLines` heads a restored peer line
+  with the sender's name alone (`by.ID` empty), and the line's session is the receiver's, so a message
+  john sent the manager matches neither end under `@john`. The reverse direction survives (john is the
+  receiver). *Closes with:* resolving the from-name to the live fleet agent when the history folds in
+  (`roomHistoryArrived`), keeping `focusAdmits` pure, and a restored manager↔member and team test.
+- **The manager's `send_to_agent` leaves no trace in a narrowed thread** (code review, unverified live).
+  It goes out as `FrameSend` and probably returns as an `Echoed` user frame the room drops; only the
+  built-in `SendMessage` draws as a line to the agent. True of the room unfocused too.

@@ -495,7 +495,7 @@ func TestADragOnAPinnedQuestionCardTakesNothing(t *testing.T) {
 	// Where the card's own first row landed, rather than a phrase from it: the
 	// question wraps, and the tool call that asked it is in the transcript above
 	// under the same words.
-	head := ansi.Strip(strings.Split(a.cardBlock("s1", w), "\n")[0])
+	head := ansi.Strip(strings.Split(a.cardBlock("s1", w, false), "\n")[0])
 	first := -1
 	for y := len(rows) - 1; y >= 0; y-- {
 		if strings.TrimSpace(head) != "" && strings.Contains(ansi.Strip(rows[y]), strings.TrimSpace(head)) {

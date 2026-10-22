@@ -77,7 +77,7 @@ func TestClearEmptiesTheGroupChatAndWritesNothing(t *testing.T) {
 // to that agent and wiped its conversation.
 func TestClearInANarrowedRoomStillClearsOnlyTheRoom(t *testing.T) {
 	a := roomSaying(t, "alpha")
-	a.room = a.room.WithFocus("s1", "sydney", "")
+	a.room = a.room.WithFocus("s1", "sydney")
 	recorderOf(t, a).taken(t)
 
 	a = submitRoom(t, a, "/clear")
