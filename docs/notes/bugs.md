@@ -1207,11 +1207,11 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
   row already under that conversation wins unless the crashed daemon's record changed after it (`reap.go`'s
   `handOver`; the record's time is its last change).
 - **A signal parks.** A cancelled `Serve` context begins `quitSignal` (`stopAcceptingOnStop`), which parks as
-  ⌃Q does and first interrupts every busy agent, as Esc would, so a turn in flight ends at once and parks
-  inside the grace rather than being killed at its end (`shutdownstop.go`; owner's 2026-10-22 ruling). An idle
-  agent is sent nothing; `quitNone` is now only the daemon becoming empty.
-- **Every write is synced** (`atomicfile.go`): the file before its rename and the directory after, so a force
-  restart or a power cut finds the last change rather than a cache's.
+  ⌃Q does and first interrupts every agent whose stdin is open, as Esc would, cancelling what is queued
+  behind its turn, so a turn in flight ends at once and parks inside the grace rather than being killed at
+  its end (`shutdownstop.go`; owner's 2026-10-22 ruling). `quitNone` is now only the daemon becoming empty.
+- **The state files are synced** (`atomicfile.go`): a write's file before its rename and its directory after,
+  and a removal's directory, so a force restart or a power cut finds the last change rather than a cache's.
 - **A crashed manager comes back as the manager.** `ensureManager` already wakes a parked one, so it is not
   replaced by a fresh spawn.
 - **Tests first.** A daemon holding agents with teams, colours, an effort, a `/clear` and a renamed manager is
@@ -1228,6 +1228,10 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
   same-conversation case is handled by the timestamp rule above.
 - Under `⌃Q` (not a signal) a session still mid-turn when the grace ends is killed and not parked, as
   before. A signal interrupts it instead; whether `⌃Q` should too is the owner's call (`deferred.md`).
+- Under a signal: a message typed ahead of a turn is dropped with it; a frame already in the daemon's input
+  queue when the signal lands can be written after the interrupt and start a turn of its own; an agent
+  already stopped (a `⌃C` or a `/quit` finishing its turn) cannot be interrupted; and an agent whose stdin
+  write never returns is still killed at the grace's end. A ⌃Q pressed before the signal is not escalated.
 - `wake stop` with no daemon running says so and leaves a crashed fleet's roster and park-ready file, so the
   next `wake` parks a fleet the operator thought stopped. The owner's call (`deferred.md`).
 - `completePark` removes the roster row before the book write, so a crash in that gap loses the session. It

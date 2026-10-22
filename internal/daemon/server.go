@@ -309,7 +309,7 @@ func (s *server) quitReason() quitVerb {
 //
 // The order is the contract. Sessions are stopped the gentle way first -
 // stdin closed, in-flight turn allowed to finish or, under a signal, ended as
-// Esc ends it - because a daemon exit is not permission to corrupt a repo. Only what is still alive after the grace
+// Esc ends it, by claude itself - because a daemon exit is not leave to kill. Only what is still alive after the grace
 // is killed, and it is killed by process group, because an agent is a tree.
 //
 // The quit verb decides two things here and nothing else does: whether each

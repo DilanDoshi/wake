@@ -126,10 +126,7 @@ func (r *rosterFile) clear() error {
 
 func (r *rosterFile) clearLocked() error {
 	r.live = make(map[string]record)
-	if err := os.Remove(r.path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove roster %s: %w", r.path, err)
-	}
-	return nil
+	return removeFile(r.path, "roster")
 }
 
 // retain rewrites the roster to exactly recs - the records a reaper could not

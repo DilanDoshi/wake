@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -166,5 +167,60 @@ func TestAnAtomicWriteLeavesTheFileOrNothing(t *testing.T) {
 	// a refused launch, so it has to be an error rather than a silent skip.
 	if err := writeFileAtomically(filepath.Join(dir, "nope", "thing.json"), "thing", nil, 0o600); err == nil {
 		t.Error("writing into a directory that does not exist succeeded")
+	}
+}
+
+// A sync cannot be seen by any test short of a power cut, so its place is held
+// by reading the source: in writeFileAtomically the file is synced before it is
+// closed and renamed, and the directory after the rename; removeFile syncs the
+// directory after the removal; and syncDir really syncs.
+func TestTheAtomicWriteSyncsTheFileBeforeTheRenameAndTheDirectoryAfter(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), atomicFile, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", atomicFile, err)
+	}
+	order := map[string][]string{}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			switch f := call.Fun.(type) {
+			case *ast.SelectorExpr:
+				if x, ok := f.X.(*ast.Ident); ok {
+					order[fn.Name.Name] = append(order[fn.Name.Name], x.Name+"."+f.Sel.Name)
+				}
+			case *ast.Ident:
+				order[fn.Name.Name] = append(order[fn.Name.Name], f.Name)
+			}
+			return true
+		})
+	}
+	// The first call of earlier against the last of later: the error paths close
+	// the temp file too, and only the one on the path that renames counts.
+	before := func(fn, earlier, later string) {
+		calls := order[fn]
+		e, l := slices.Index(calls, earlier), -1
+		for i, call := range calls {
+			if call == later {
+				l = i
+			}
+		}
+		if e < 0 || l < 0 || e > l {
+			t.Errorf("%s calls %v: want %s before %s, or a power cut can leave a name over bytes that never reached the disk",
+				fn, calls, earlier, later)
+		}
+	}
+	before("writeFileAtomically", "tmp.Sync", "tmp.Close")
+	before("writeFileAtomically", "tmp.Sync", "os.Rename")
+	before("writeFileAtomically", "os.Rename", "syncDir")
+	before("removeFile", "os.Remove", "syncDir")
+	if !slices.Contains(order["syncDir"], "d.Sync") {
+		t.Errorf("syncDir calls %v and syncs nothing", order["syncDir"])
 	}
 }

@@ -1,28 +1,25 @@
 package daemon
 
-import (
-	"time"
-
-	"github.com/DilanDoshi/wake/internal/rpc"
-)
-
 // stopForShutdown is shutdown's stop of one agent.
 //
-// Under a signal a busy agent is interrupted first, as Esc would, so its turn
-// ends at once and it parks inside the grace rather than being killed at the
-// grace's end and lost (owner's 2026-10-22 ruling). An idle one is sent
-// nothing: what claude does with an interrupt between turns is unrecorded.
+// Under a signal every agent whose stdin still takes a line is first sent the
+// interrupt Esc sends, cancelling what is queued behind its turn too, so a turn
+// in flight ends at once and the session parks inside the grace rather than
+// being killed at its end and lost (owner's 2026-10-22 ruling). An interrupt
+// between turns is a no-op claude answers (interrupt-idle.jsonl), so nothing
+// judges which agents are busy. A message already queued is dropped: run after
+// the interrupt, it would start a turn the grace then kills.
 //
 // The interrupt is written on its own goroutine because a write can block where
 // a stop cannot, and the stop follows it there, so stdin closes behind the
 // interrupt. A write that never returns leaves the agent to the grace's kill.
 func (s *server) stopForShutdown(a *agent, interrupt bool) {
-	if !interrupt || !a.busy() {
+	if !interrupt || !a.inputOpen() {
 		stopLogged(a)
 		return
 	}
 	s.start(func() {
-		if _, err := a.sess.Interrupt(); err != nil {
+		if _, err := a.sess.InterruptAll(); err != nil {
 			logf("wake: could not interrupt session %s on the way out: %v", a.id, err)
 		}
 		stopLogged(a)
@@ -35,13 +32,10 @@ func stopLogged(a *agent) {
 	}
 }
 
-// busy reports a turn in flight: working, blocked on an ask, or quiet mid-turn.
-func (a *agent) busy() bool {
+// inputOpen reports whether this agent's stdin still takes a line: not stopped,
+// ended or parked. An interrupt to one that is would only fail and be logged.
+func (a *agent) inputOpen() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	switch a.stateLocked(time.Now()) {
-	case rpc.StateWorking, rpc.StateBlocked, rpc.StateSilent:
-		return true
-	}
-	return false
+	return !a.stopped && !a.ended && !a.parked
 }

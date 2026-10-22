@@ -149,10 +149,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   claude answers with is the name it takes (`decisions.md`, 2026-10-15).
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
   everything and clears the park book (`parked.json` beside the socket). **A SIGTERM or SIGINT parks the
-  fleet like `⌃Q`**, interrupting busy agents first as Esc does so none is killed at the grace's end
-  (owner's 2026-10-21 and -22 rulings; `⌃Q` still lets a turn run); **a crash** (SIGKILL, a panic, a force
-  restart - every write is fsynced) leaves `parkready.json`, and the next daemon's reaper moves each finished roster row's record into the park
-  book (BUG-53; `internal/daemon/parkready.go`, `reap.go`'s `handOver`). A row it retains stays out.
+  fleet like `⌃Q`**, first interrupting every agent as Esc does and cancelling what is queued behind its
+  turn, so a turn in flight ends inside the grace (owner's 2026-10-21 and -22 rulings; `⌃Q` still lets a
+  turn run); **a crash** (SIGKILL, a panic, a force restart - the state files' writes and removals are
+  fsynced) leaves `parkready.json`, and the next daemon's reaper moves each finished roster row's record
+  into the park book (BUG-53; `internal/daemon/parkready.go`, `reap.go`'s `handOver`). A row it retains stays out.
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
   before closing — `internal/ui/park.go`.
 - **A daemon restores nothing.** ⌃Q then `wake` is a fresh room; parked sessions are addressable only

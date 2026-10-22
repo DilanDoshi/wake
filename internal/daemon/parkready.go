@@ -110,10 +110,7 @@ func (p *parkReady) drop() error {
 
 func (p *parkReady) clearLocked() error {
 	p.held, p.dirty = make(map[string]parkedRecord), false
-	if err := os.Remove(p.path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove park-ready file %s: %w", p.path, err)
-	}
-	return nil
+	return removeFile(p.path, "park-ready file")
 }
 
 // retain rewrites the file to exactly kept - the rows the reaper could not

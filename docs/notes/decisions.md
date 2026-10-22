@@ -4662,9 +4662,13 @@ came out of it.
   hand-recovery BUG-53 was found through resumed exactly such transcripts.
 - **2026-10-22, the owner: a signal interrupts busy agents first.** Waiting out the grace and then killing a
   busy agent lost it, where the same fleet SIGKILLed was recovered - a polite shutdown doing worse than a
-  crash. So `quitSignal` (a fourth verb, parking as `quitPark` does) sends each working, blocked or silent
-  agent the interrupt Esc sends, then stops it; the turn ends as an interrupted one, which is a recorded
-  shape, and the session parks inside the grace. An idle agent is sent nothing, since an interrupt between
-  turns is unrecorded. `⌃Q` keeps letting a turn run. Every write in `writeFileAtomically` is now synced
-  (file before the rename, directory after), so a force restart keeps the last change; about 4 ms a file
-  on this machine, on writes made when a session changes.
+  crash. So `quitSignal` (a fourth verb, parking as `quitPark` does) sends every agent whose stdin is open
+  the interrupt Esc sends, then stops it; the turn ends as an interrupted one, a recorded shape, and the
+  session parks inside the grace. Between turns an interrupt is a no-op claude answers
+  (`interrupt-idle.jsonl`), so nothing judges which agents are busy. **It cancels what is queued** behind
+  the turn (`cancel_queued`, `interrupt-cancel-queued.jsonl`), unlike Esc: a message typed ahead would
+  otherwise run as the next turn after stdin closed and be killed at the grace's end, so such a message is
+  dropped at a signalled shutdown. `⌃Q` keeps letting a turn run. `writeFileAtomically` now syncs the file
+  before its rename and the directory after, and `removeFile` the directory after a removal, so a force
+  restart keeps the last change to the state files; about 4 ms a file on this machine, on writes made
+  when a session changes, held by `TestTheAtomicWriteSyncsTheFileBeforeTheRenameAndTheDirectoryAfter`.

@@ -87,23 +87,48 @@ func TestAQuitParkStillLetsABusyTurnRunRatherThanInterruptingIt(t *testing.T) {
 	}
 }
 
-// What claude does with an interrupt between turns is unrecorded, so an idle
-// agent is sent none: it stops and parks as it always has.
-func TestASignalSendsNoInterruptToAnIdleAgent(t *testing.T) {
+// An interrupt between turns is a no-op claude answers (interrupt-idle.jsonl),
+// so an idle agent is sent one like any other and parks as it always has.
+func TestAnIdleAgentIsInterruptedHarmlesslyAndParks(t *testing.T) {
 	log := interruptLog(t)
 	fakeClaudeOnPath(t, "busy")
 	d := startDaemon(t)
 	c := attach(t, d.socket)
 	c.spawn(idAlpha, "alex")
-	c.awaitState(idAlpha, rpc.StateIdle)
+	c.awaitEvent(idAlpha, "done")
 	c.close()
 
 	d.stop(t)
 
-	if n := interruptsIn(log); n != 0 {
-		t.Errorf("an idle agent was sent %d interrupts on the way out", n)
+	if n := interruptsIn(log); n != 1 {
+		t.Errorf("the idle agent was sent %d interrupts on the way out, want 1", n)
 	}
 	if recs := loadParkBook(parkBookPath(d.socket)); len(recs) != 1 {
 		t.Errorf("the park book holds %+v, want the idle agent parked", recs)
+	}
+}
+
+// A message typed ahead of a busy turn sits in claude's queue and runs as the
+// next turn once the interrupt ends this one - after stdin has closed, for as
+// long as it takes. The shutdown's interrupt cancels it, so the session parks.
+func TestASignalCancelsAMessageQueuedBehindABusyTurn(t *testing.T) {
+	fakeClaudeOnPath(t, "busy")
+	grace := 4 * time.Second
+	shortQuitGrace(t, grace)
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	busyAgent(t, c, idAlpha, "alex")
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "and then the docs"})
+	c.awaitEvent(idAlpha, "queued")
+	c.close()
+
+	start := time.Now()
+	d.stop(t)
+
+	if took := time.Since(start); took >= grace {
+		t.Errorf("the signalled shutdown took %v, the whole grace: the queued message ran as a turn of its own", took)
+	}
+	if recs := loadParkBook(parkBookPath(d.socket)); len(recs) != 1 {
+		t.Fatalf("the park book holds %+v, want alex: the message queued behind its turn kept it running until the kill", recs)
 	}
 }

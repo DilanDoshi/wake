@@ -582,17 +582,23 @@ const fakeBusyPrompt = "run the long suite"
 // fakeBusy holds a turn open until it is interrupted, the way a long tool call
 // does: the end of its stdin does not end a turn in flight, so a stop alone
 // leaves it running until something kills it. Idle, it ends on EOF like any
-// agent. An interrupt is answered in fakeInterruptible's recorded shape.
+// agent. An interrupt is answered in fakeInterruptible's recorded shape, and as
+// claude does (interrupt-queued-survives.jsonl) a line queued behind the turn
+// runs next unless the interrupt cancelled it - here as another long turn. An
+// interrupted one exits 1, as claude does.
 func fakeBusy(sid string) int {
 	emitText(sid, "ready")
 	emitResult(sid)
-	busy := false
+	busy, interrupted := false, false
+	var queued []string
 	for line := range stdinLines() {
 		if !strings.Contains(line, `"subtype":"interrupt"`) {
 			switch {
-			case busy, strings.Contains(line, `"type":"control_request"`):
-				// Queued behind the turn in flight, as claude queues it - and a
-				// control request is not a turn, so its answer is no turn end.
+			case strings.Contains(line, `"type":"control_request"`):
+				// Not a turn, so its answer is no turn end.
+			case busy:
+				queued = append(queued, line)
+				emitText(sid, "queued")
 			case strings.Contains(line, fakeBusyPrompt):
 				busy = true
 				emitText(sid, "working")
@@ -610,14 +616,22 @@ func fakeBusy(sid string) int {
 		}
 		fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"still_queued":[]}}}`+"\n",
 			controlRequestID(line))
+		interrupted = true
 		if busy {
 			busy = false
 			emitText(sid, "interrupted")
 			emitResult(sid)
 		}
+		if len(queued) > 0 && !strings.Contains(line, `"cancel_queued":true`) {
+			queued, busy = queued[1:], true
+			emitText(sid, "working")
+		}
 	}
 	if busy {
 		time.Sleep(lingerFor)
+	}
+	if interrupted {
+		return 1
 	}
 	return 0
 }

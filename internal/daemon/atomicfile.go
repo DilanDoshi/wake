@@ -77,10 +77,24 @@ func writeFileAtomically(path, what string, body []byte, perm os.FileMode) error
 	return nil
 }
 
-// syncDir makes a rename in dir durable. A failure is said rather than returned:
-// the new content is in place and readable, and only whether a power cut keeps
-// it is in doubt - a caller told the write failed would retry or warn for
-// nothing.
+// removeFile deletes path durably: a removal a power cut undid would bring back
+// a file the next daemon reads. A missing file is the ordinary case, not an
+// error.
+func removeFile(path, what string) error {
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("remove %s %s: %w", what, path, err)
+	}
+	syncDir(filepath.Dir(path), what)
+	return nil
+}
+
+// syncDir makes a rename or a removal in dir durable. A failure is said rather
+// than returned: the change is in place and readable, and only whether a power
+// cut keeps it is in doubt - a caller told the write failed would retry or warn
+// for nothing.
 func syncDir(dir, what string) {
 	d, err := os.Open(dir)
 	if err == nil {
