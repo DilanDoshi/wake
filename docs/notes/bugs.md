@@ -1196,8 +1196,9 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
   rewritten when a wake's inputs change: at launch and on a rename, team or colour through `s.record`; when a
   `/clear`'s successor is learned (`fanOut`, since no status push follows a `/clear`); and on every status
   push for the rest (an `/effort`, through its confirming probe's push), writing only what differs. A row
-  leaves with its roster row, a stop drops it at once (a stopped session's last turn can take a while), and
-  the file goes with every orderly ending, `wake stop` before its grace starts.
+  leaves with its roster row, a stop fences it out the moment it is queued (a stopped session's last turn can
+  take a while) and is taken back if the queue refuses it, and the file goes with every orderly ending,
+  `wake stop` before its grace starts and for good, so a writer already in flight cannot bring it back.
 - **The reaper hands records to the park book.** When `reapOrphans` finishes a record (gone, recycled pid, or
   group signalled), it moves that agent's park-ready record into the park book instead of forgetting it. The
   reaper's proof that the process is gone is `completePark`'s own precondition, and `unparkRecord` still

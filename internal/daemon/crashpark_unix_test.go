@@ -598,3 +598,120 @@ func TestAParkingAgentDoesNotReadAsDeparted(t *testing.T) {
 		t.Error("a parking agent offered no record")
 	}
 }
+
+func bareAgent() *agent {
+	return newAgent(idAlpha, "alex", "dev", "/tmp/repo", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
+}
+
+// A stop the agent's queue refused did not happen, and the agent goes on
+// running: taking its only crash record with it would lose it to a crash.
+func TestARejectedStopKeepsTheParkReadyRecord(t *testing.T) {
+	sock := tempSocket(t)
+	s := newServer(sock)
+	a := bareAgent()
+	if !s.register(a) {
+		t.Fatal("the agent could not be put in the fleet")
+	}
+	s.noteReady(a)
+	for len(a.in) < cap(a.in) {
+		a.in <- pending{}
+	}
+	conn, peer := net.Pipe()
+	t.Cleanup(func() { _ = conn.Close(); _ = peer.Close() })
+
+	s.submit(newClient(conn), rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+
+	if _, ok := loadParkReady(parkReadyPath(sock))[idAlpha]; !ok {
+		t.Error("a stop that was refused removed the record of an agent that is still running")
+	}
+	if a.departed() {
+		t.Error("a stop that was refused left the agent fenced out of the park-ready file")
+	}
+}
+
+// The fence goes up when the operator asks, not when the stop is carried out
+// behind whatever is queued first, and a row taken before it cannot land after.
+func TestAQueuedStopFencesTheParkReadyWriters(t *testing.T) {
+	s := newServer(tempSocket(t))
+	a := bareAgent()
+	before, _ := a.runningRecord()
+
+	a.markStopQueued(true)
+	s.forgetReady(a.id)
+
+	if err := s.keepReady(a); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.writeReady(a, before); err != nil {
+		t.Fatal(err)
+	}
+	if rows := loadParkReady(parkReadyPath(s.socket)); len(rows) != 0 {
+		t.Errorf("the file holds %+v for a session whose stop was already asked for", rows)
+	}
+}
+
+// A wake stop that has begun leaves nothing, whichever writer is still in
+// flight: the file is not written again, so the grace cannot recreate it.
+func TestAStoppedFleetsParkReadyFileStaysGoneUnderALateWriter(t *testing.T) {
+	s := newServer(tempSocket(t))
+	a := bareAgent()
+	rec, _ := a.runningRecord()
+
+	s.dropReady()
+	if err := s.ready.set(a.id, rec); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.keepReady(a); err != nil {
+		t.Fatal(err)
+	}
+
+	if !fileGone(parkReadyPath(s.socket)) {
+		t.Error("a writer in flight brought the park-ready file back after a wake stop began")
+	}
+}
+
+// Taking a row and writing it are two steps, so an older row can land after a
+// newer one - a /clear's successor, a team - and must not be what a crash finds.
+func TestAnOlderRowLandingLateDoesNotUndoANewerOne(t *testing.T) {
+	s := newServer(tempSocket(t))
+	a := bareAgent()
+	old, _ := a.runningRecord()
+	if err := a.setTeam("api"); err != nil {
+		t.Fatal(err)
+	}
+	if err := s.keepReady(a); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.writeReady(a, old); err != nil {
+		t.Fatal(err)
+	}
+
+	if got := loadParkReady(parkReadyPath(s.socket))[idAlpha]; got.Team != "api" {
+		t.Errorf("the file holds %+v: an older snapshot overwrote what the operator set since", got)
+	}
+}
+
+// The stop is queued behind whatever the agent was sent first and may sit there
+// a while; the fence is up from the moment it was accepted, not when it is
+// carried out. No input goroutine runs here, so the stop is never carried out.
+func TestAQueuedStopIsFencedFromTheMomentItIsAccepted(t *testing.T) {
+	s := newServer(tempSocket(t))
+	a := bareAgent()
+	if !s.register(a) {
+		t.Fatal("the agent could not be put in the fleet")
+	}
+	s.noteReady(a)
+	conn, peer := net.Pipe()
+	t.Cleanup(func() { _ = conn.Close(); _ = peer.Close() })
+
+	s.submit(newClient(conn), rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+
+	if !a.departed() {
+		t.Fatal("an accepted stop left the agent offering its record to every status push until it is carried out")
+	}
+	s.syncReady()
+	if rows := loadParkReady(parkReadyPath(s.socket)); len(rows) != 0 {
+		t.Errorf("the file holds %+v for a session whose stop was accepted", rows)
+	}
+}

@@ -55,9 +55,10 @@ func sameWakeInputs(a, b parkedRecord) bool {
 type parkReady struct {
 	path string
 
-	mu    sync.Mutex
-	held  map[string]parkedRecord
-	dirty bool // the last write failed, so an unchanged record still owes the disk
+	mu     sync.Mutex
+	held   map[string]parkedRecord
+	dirty  bool // the last write failed, so an unchanged record still owes the disk
+	closed bool // a fleet is being stopped, so a writer already in flight writes nothing
 }
 
 // newParkReady starts empty whatever is on disk: a starting daemon holds no live
@@ -70,6 +71,9 @@ func newParkReady(path string) *parkReady {
 func (p *parkReady) set(session string, rec parkedRecord) error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	if p.closed {
+		return nil
+	}
 	if old, held := p.held[session]; held && !p.dirty && sameWakeInputs(old, rec) {
 		return nil
 	}
@@ -92,6 +96,15 @@ func (p *parkReady) remove(session string) error {
 func (p *parkReady) clear() error {
 	p.mu.Lock()
 	defer p.mu.Unlock()
+	return p.clearLocked()
+}
+
+// drop is clear for a fleet that is being stopped: nothing is written again,
+// so an update already in flight cannot bring the file back.
+func (p *parkReady) drop() error {
+	p.mu.Lock()
+	defer p.mu.Unlock()
+	p.closed = true
 	return p.clearLocked()
 }
 
@@ -163,7 +176,13 @@ func loadParkReady(path string) map[string]parkedRecord {
 // purpose, so its roster row is going or gone. A parking agent that has ended is
 // not departed: its roster row stays until completePark removes it.
 func (a *agent) departedLocked() bool {
-	return (a.ended && !a.parking) || a.parked || (a.stopped && !a.parking)
+	return (a.ended && !a.parking) || a.parked || ((a.stopped || a.stopQueued) && !a.parking)
+}
+
+func (a *agent) markStopQueued(queued bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	a.stopQueued = queued
 }
 
 func (a *agent) departed() bool {
@@ -203,14 +222,25 @@ func (s *server) noteReady(a *agent) {
 	}
 }
 
-// writeReady writes a row that was taken while its agent ran.
+// writeReady writes a row that was taken while its agent ran. Taking a row and
+// writing it are two steps, so it checks after the write that the agent has not
+// departed (retire or a stop may have removed the row in between) and that no
+// newer row was taken meanwhile (an older one can land after a /clear's), and
+// writes again until both hold.
 func (s *server) writeReady(a *agent, rec parkedRecord) error {
-	if err := s.ready.set(a.id, rec); err != nil {
-		return err
-	}
-	// retire may have removed the row between taking it and this write.
-	if a.departed() {
-		s.forgetReady(a.id)
+	for range 3 {
+		if err := s.ready.set(a.id, rec); err != nil {
+			return err
+		}
+		if a.departed() {
+			s.forgetReady(a.id)
+			return nil
+		}
+		next, running := a.runningRecord()
+		if !running || sameWakeInputs(next, rec) {
+			return nil
+		}
+		rec = next
 	}
 	return nil
 }
@@ -240,9 +270,9 @@ func (s *server) forgetReady(id string) {
 	}
 }
 
-// dropReady removes the whole file, for a fleet somebody is stopping.
+// dropReady removes the whole file for good, for a fleet somebody is stopping.
 func (s *server) dropReady() {
-	if err := s.ready.clear(); err != nil {
+	if err := s.ready.drop(); err != nil {
 		logf("wake: could not clear the park-ready file: %v", err)
 	}
 }

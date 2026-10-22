@@ -284,6 +284,11 @@ type agent struct {
 	stopped bool
 	ended   bool
 
+	// stopQueued is a stop on its way to this agent's stdin, behind whatever is
+	// queued before it. It fences the park-ready file the moment the operator
+	// asks, which stopped cannot: that is set when the stop is carried out.
+	stopQueued bool
+
 	// parking records that this session's process is being stopped in order to
 	// park it, which is the only thing that tells retire a park from an
 	// ending: both arrive as the events channel closing. It is cleared by
