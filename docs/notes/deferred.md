@@ -2366,8 +2366,8 @@ added to `loadRoster`'s consumers, and a second file does turn a *parked* record
 
 **One half of the qualifier is now a decision rather than a gap.** After a `wake stop` a parked
 session still leaves no trace, because the quit verb clears the book — spec §2 makes stop the one
-ending there is no way back from. A daemon that is signalled, crashed or merely restarted hands the
-fleet on. `⌃Q` therefore has to arrive as its own kind rather than as a quit, and that is the task
+ending there is no way back from. A daemon that is signalled parks the fleet like `⌃Q`, and one that crashes
+hands it on through `parkready.json` (BUG-53, 2026-10-21). `⌃Q` therefore has to arrive as its own kind rather than as a quit, and that is the task
 that binds it.
 
 *Closed on the daemon side 2026-08-11 by Task 5:* `rpc.FrameParkAll` is that kind, `daemon.quitVerb`
@@ -5737,3 +5737,16 @@ this branch's to fix, and each is worth its own small PR.
 - **A wake that re-keys an agent strands its retained room lines.** After a `/clear` then a park and wake,
   `rekeyed` moves the agent's id to the new conversation and the room does not rewrite its retained lines'
   `SessionID`, so a narrowing on that agent (or its team) hides the lines from before the wake.
+
+## FROM `fix/crashed-fleet-reaches-park-book`, 2026-10-21
+
+Two calls BUG-53's fix left to the owner; both are true of the rulings it kept, not defects it added.
+
+- **A busy agent is lost when a signalled shutdown's grace ends.** A SIGTERM parks the fleet as `⌃Q` does,
+  and `⌃Q` refuses to book a session it had to kill (what `--resume` loads from a transcript a SIGKILL cut
+  mid-turn is unrecorded). So `kill <daemon>` on a fleet of busy agents loses each one still mid-turn after
+  `quitGrace`, where the same fleet SIGKILLed would be recovered by the crash path. *Closes with:* handing a
+  killed session's park-ready record to the book as the reaper does, which reverses `⌃Q`'s ruling.
+- **`wake stop` with no daemon leaves a crashed fleet behind.** It reports that no daemon is running and
+  clears nothing, so the next `wake` hands the fleet to the park book. *Closes with:* `wake stop` removing
+  the roster and park-ready file itself (a `cmd/wake` write to files the daemon owns), or saying so.

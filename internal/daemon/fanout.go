@@ -39,7 +39,11 @@ func (s *server) fanOut(a *agent) {
 			s.pushStatus()
 			continue
 		}
-		a.observe(ev)
+		// A /clear's successor is learned here and no status push follows it, so
+		// the park-ready file is told now rather than at the next state change.
+		if a.observe(ev) {
+			s.noteReady(a)
+		}
 		// Before the broadcast, so the resume is armed by the time a client
 		// draws the limit; a turn end on a stopped agent may free it to resume.
 		if a.noteLimit(ev, time.Now()) || (ev.Kind == core.KindTurnEnd && a.usageStopped()) {

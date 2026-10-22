@@ -129,7 +129,7 @@ Violating one is a design regression, not a style nit.
 | **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Use `core.SessionArgvMarkers`. | Enforced by `argv_test.go` tree-wide. |
 | **`attention.go` stays a pure function.** | Hardest logic; testable without spawning. |
 | **The UI never touches an agent's process.** | Keeps the daemon boundary real. |
-| **Wake owns almost no state.** Transcripts are Claude's (`~/.claude/projects/…`); Wake reads them back (`internal/daemon/history.go`). Wake stores roster, park book, groups, layout. The park book holds id, directory, name, label, parked-at — never a PID or ParentID. | Wake can crash and lose nothing. |
+| **Wake owns almost no state.** Transcripts are Claude's (`~/.claude/projects/…`); Wake reads them back (`internal/daemon/history.go`). Wake stores roster, park book, park-ready file, groups, layout. The park book holds id, directory, name, label, parked-at — never a PID or ParentID; the park-ready file is its rows for live agents, so a crash hands them to it. | Wake can crash and lose nothing. |
 | **Never copy cmux source.** CLI only. | cmux is GPL-3.0-or-later. |
 | **No parallel implementations.** Extend in place, or delete and replace. | Grep first; name what you extend or remove. |
 
@@ -148,12 +148,15 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `ManagerClaude` and kept in the park record; a bare `manager` puts the fleet's back, and a variant
   claude answers with is the name it takes (`decisions.md`, 2026-10-15).
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
-  everything and clears the park book (`parked.json` beside the socket).
+  everything and clears the park book (`parked.json` beside the socket). **A SIGTERM or SIGINT parks the
+  fleet like `⌃Q`** (owner's 2026-10-21 ruling); **a crash** (SIGKILL, a panic; a power cut only if the files reached the disk, which the atomic write does not fsync) leaves
+  `parkready.json`, and the next daemon's reaper moves each finished roster row's record into the park
+  book (BUG-53; `internal/daemon/parkready.go`, `reap.go`'s `handOver`). A row it retains stays out.
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
   before closing — `internal/ui/park.go`.
 - **A daemon restores nothing.** ⌃Q then `wake` is a fresh room; parked sessions are addressable only
-  via `/resume` (`rpc.Status.Parked`, disjoint from `Sessions`). `admit` still refuses a spawn under a
-  parked id. `⌃C` refuses a blocked agent (closing stdin reads as an operator deny).
+  via `/resume` (`rpc.Status.Parked`, disjoint from `Sessions`) — a crashed fleet too: the reaper parks
+  it and never wakes it. `admit` still refuses a spawn under a parked id. `⌃C` refuses a blocked agent (closing stdin reads as an operator deny).
 - **Two live processes on one session id branch silently.** Every check happens before the second
   process exists: `resumeSafe` asks the OS; `launch` takes the row before starting anything.
 - **Forks and imports are snapshots** (`--resume <parent> --fork-session --session-id <new>`).
@@ -436,7 +439,7 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
