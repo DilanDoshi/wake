@@ -4660,3 +4660,11 @@ came out of it.
 - **Not recorded, and not designed around:** what `--resume` loads from a transcript a SIGKILL cut
   mid-turn. A ⌃Q refuses to book a session it had to kill for that reason; a crash cannot choose, and the
   hand-recovery BUG-53 was found through resumed exactly such transcripts.
+- **2026-10-22, the owner: a signal interrupts busy agents first.** Waiting out the grace and then killing a
+  busy agent lost it, where the same fleet SIGKILLed was recovered - a polite shutdown doing worse than a
+  crash. So `quitSignal` (a fourth verb, parking as `quitPark` does) sends each working, blocked or silent
+  agent the interrupt Esc sends, then stops it; the turn ends as an interrupted one, which is a recorded
+  shape, and the session parks inside the grace. An idle agent is sent nothing, since an interrupt between
+  turns is unrecorded. `⌃Q` keeps letting a turn run. Every write in `writeFileAtomically` is now synced
+  (file before the rename, directory after), so a force restart keeps the last change; about 4 ms a file
+  on this machine, on writes made when a session changes.

@@ -374,6 +374,61 @@ func TestADaemonThatWasSignalledParksItsFleet(t *testing.T) {
 	}
 }
 
+// A force restart or a power cut takes the daemon and every agent in the same
+// instant, so the next daemon finds nothing alive at all: every row is a gone
+// pid rather than a group to signal, and every session still comes back.
+func TestAFleetWhoseDaemonAndAgentsAllDiedAtOnceComesBackParked(t *testing.T) {
+	fakeClaudeOnPath(t, "deaf")
+	plantTranscript(t, idAlpha)
+	plantTranscript(t, idBeta)
+	sock := tempSocket(t)
+	t.Setenv(SocketEnv, sock)
+	t.Setenv(fakeDaemonEnv, "1")
+
+	conn, err := EnsureRunning(t.Context(), sock)
+	if err != nil {
+		t.Fatalf("EnsureRunning: %v", err)
+	}
+	c := attachConn(t, conn)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+	c.spawn(idBeta, "robin")
+	c.awaitEvent(idBeta, "ready")
+	c.send(rpc.Frame{Kind: rpc.FrameTeam, SessionID: idAlpha, Text: "api"})
+	awaitReady(t, sock, idAlpha, "the team", func(r parkedRecord) bool { return r.Team == "api" })
+	awaitReady(t, sock, idBeta, "the spawn", func(parkedRecord) bool { return true })
+
+	daemon := c.status().PID
+	groups := loadRoster(rosterPath(sock))
+	if len(groups) != 2 {
+		t.Fatalf("the roster holds %+v, want both agents' groups", groups)
+	}
+	if err := syscall.Kill(daemon, syscall.SIGKILL); err != nil {
+		t.Fatalf("kill the daemon: %v", err)
+	}
+	for _, r := range groups {
+		if err := syscall.Kill(-r.PID, syscall.SIGKILL); err != nil {
+			t.Fatalf("kill session %s's group %d: %v", r.ID, r.PID, err)
+		}
+	}
+	waitForDaemonGone(t, sock)
+	for _, r := range groups {
+		waitForProcessGone(t, r.PID)
+	}
+
+	startDaemonOn(t, sock)
+	byID := map[string]rpc.SessionStatus{}
+	for _, p := range attachConn(t, dialWhenUp(t, sock)).status().Parked {
+		byID[p.ID] = p
+	}
+	if alex := byID[idAlpha]; alex.Name != "alex" || alex.Team != "api" {
+		t.Errorf("alex comes back as %+v, want its name and team", alex)
+	}
+	if robin := byID[idBeta]; robin.Name != "robin" {
+		t.Errorf("robin comes back as %+v", robin)
+	}
+}
+
 // The scenario from the bug, with a real daemon process: a fleet with teams, a
 // colour, an effort and a name is SIGKILLed with its roster left behind. The
 // next daemon on that socket reports every session parked with those fields,

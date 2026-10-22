@@ -211,10 +211,9 @@ func (s *server) run(ctx context.Context, ln net.Listener) error {
 func (s *server) stopAcceptingOnStop(ctx context.Context, ln net.Listener) {
 	select {
 	case <-ctx.Done():
-		// A SIGTERM, a logout, a machine going down: nobody chose to lose the
-		// fleet (owner's 2026-10-21 ruling). Before the deadline below ends the
-		// accept loop, so shutdown always reads the verb.
-		s.beginQuit(quitPark)
+		// Before the deadline below ends the accept loop, so shutdown always
+		// reads the verb. See quitSignal.
+		s.beginQuit(quitSignal)
 	case <-s.quit:
 	case <-s.done:
 	}
@@ -256,9 +255,8 @@ func (s *server) stopping(ctx context.Context) bool {
 // quitVerb is why this daemon is ending, which decides what happens to the
 // sessions it holds and to the ones it has already parked.
 //
-// Three values because only two endings are verbs. An empty daemon is the
-// no-verb exit: it has nothing to park and must not forget what somebody
-// already did. A signal parks, as ⌃Q does - see stopAcceptingOnStop.
+// Two endings are verbs and a signal is a third way out; an empty daemon is the
+// no-verb exit, with nothing to park and nothing somebody parked to forget.
 type quitVerb int
 
 const (
@@ -275,6 +273,10 @@ const (
 	// quitPark is FrameParkAll, which is ⌃Q. Every session is parked on the
 	// way out and written down, so the next start can offer them back.
 	quitPark
+
+	// quitSignal is a SIGTERM, a logout, a machine going down: nobody chose to
+	// lose the fleet, so it parks as ⌃Q does, interrupting busy agents first.
+	quitSignal
 )
 
 // beginQuit is the quit verb: end the accept loop, and record why. The
@@ -306,8 +308,8 @@ func (s *server) quitReason() quitVerb {
 // this server started.
 //
 // The order is the contract. Sessions are stopped the gentle way first -
-// stdin closed, in-flight turn allowed to finish - because a daemon exit is
-// not permission to corrupt a repo. Only what is still alive after the grace
+// stdin closed, in-flight turn allowed to finish or, under a signal, ended as
+// Esc ends it - because a daemon exit is not permission to corrupt a repo. Only what is still alive after the grace
 // is killed, and it is killed by process group, because an agent is a tree.
 //
 // The quit verb decides two things here and nothing else does: whether each
@@ -321,8 +323,9 @@ func (s *server) shutdown() error {
 	if verb == quitStop {
 		s.dropReady() // a fleet being stopped must not be handed on if the daemon dies in the grace
 	}
+	parking := verb == quitPark || verb == quitSignal
 	for _, a := range agents {
-		if verb == quitPark {
+		if parking {
 			// Before the stop, never after: retire runs the moment the events
 			// channel closes, which can be before this loop's next iteration.
 			// It is set on unreachable ones too: OS-confirmed reclaim preserves
@@ -338,21 +341,19 @@ func (s *server) shutdown() error {
 			// ParkAll must preserve the label beginPark just installed: kill
 			// clears it on a not-yet-retired agent. Reclaim's endProcess is
 			// idempotent and lets retire/completePark decide the parked ending.
-			if a.endForShutdown(verb == quitPark) {
+			if a.endForShutdown(parking) {
 				logf("wake: session %s has already lost its process; completing its reclaim as a park", a.id)
 			} else {
 				logf("wake: session %s has already lost its process; killing its group rather than waiting", a.id)
 			}
 			continue
 		}
-		if err := a.stop(); err != nil {
-			logf("wake: stopping session %s: %v", a.id, err)
-		}
+		s.stopForShutdown(a, verb == quitSignal)
 	}
 	remaining := waitForAgents(agents, quitGrace)
 	for _, a := range remaining {
 		logf("wake: session %s did not end within %v of being stopped; ending its process group", a.id, quitGrace)
-		a.endForShutdown(verb == quitPark)
+		a.endForShutdown(parking)
 	}
 
 	// The park book's two arms are in different places, and the asymmetry is
@@ -372,7 +373,7 @@ func (s *server) shutdown() error {
 	// statically, because a test that reads the book at an edge proves the end
 	// state and not the order two statements ran in.
 	switch verb {
-	case quitPark:
+	case quitPark, quitSignal:
 		s.bookParked(agents)
 	case quitStop, quitNone:
 		// The forget is below, after the wait; a no-verb exit decides nothing.
@@ -410,7 +411,7 @@ func (s *server) shutdown() error {
 		if err := s.parked.clear(); err != nil {
 			logf("wake: could not clear the park book: %v", err)
 		}
-	case quitPark, quitNone:
+	case quitPark, quitSignal, quitNone:
 		// ⌃Q wrote the book above and a no-verb exit preserves it, but both
 		// must finish any add/deletion update still dirty in memory. This
 		// is after the tracked finalizer wait so retry writes the last held

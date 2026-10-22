@@ -1206,8 +1206,12 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
   record with no roster row beside it is dropped (the roster is the proof the session was running), and a book
   row already under that conversation wins unless the crashed daemon's record changed after it (`reap.go`'s
   `handOver`; the record's time is its last change).
-- **A signal parks.** A cancelled `Serve` context begins `quitPark` (`stopAcceptingOnStop`), so SIGTERM and
-  SIGINT end as ⌃Q does; `quitNone` is now only the daemon becoming empty.
+- **A signal parks.** A cancelled `Serve` context begins `quitSignal` (`stopAcceptingOnStop`), which parks as
+  ⌃Q does and first interrupts every busy agent, as Esc would, so a turn in flight ends at once and parks
+  inside the grace rather than being killed at its end (`shutdownstop.go`; owner's 2026-10-22 ruling). An idle
+  agent is sent nothing; `quitNone` is now only the daemon becoming empty.
+- **Every write is synced** (`atomicfile.go`): the file before its rename and the directory after, so a force
+  restart or a power cut finds the last change rather than a cache's.
 - **A crashed manager comes back as the manager.** `ensureManager` already wakes a parked one, so it is not
   replaced by a fresh spawn.
 - **Tests first.** A daemon holding agents with teams, colours, an effort, a `/clear` and a renamed manager is
@@ -1222,12 +1226,10 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
 - A wake whose park-book deletion failed leaves the old row on disk under the old conversation id, and after
   a `/clear` and a crash both conversations are offered. That is the park book's own double fault; the
   same-conversation case is handled by the timestamp rule above.
-- A session still mid-turn when a signalled (or ⌃Q) shutdown's grace ends is killed and not parked, while
-  the same fleet SIGKILLed at that moment is recovered by the crash path. The owner's call (`deferred.md`).
+- Under `⌃Q` (not a signal) a session still mid-turn when the grace ends is killed and not parked, as
+  before. A signal interrupts it instead; whether `⌃Q` should too is the owner's call (`deferred.md`).
 - `wake stop` with no daemon running says so and leaves a crashed fleet's roster and park-ready file, so the
   next `wake` parks a fleet the operator thought stopped. The owner's call (`deferred.md`).
-- `writeFileAtomically` renames without an fsync, so a power cut can lose or empty the roster and the
-  park-ready file where a SIGKILL, a panic or a clean shutdown cannot.
 - `completePark` removes the roster row before the book write, so a crash in that gap loses the session. It
   was so before this change.
 

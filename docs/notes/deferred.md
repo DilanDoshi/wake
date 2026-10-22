@@ -5742,11 +5742,11 @@ this branch's to fix, and each is worth its own small PR.
 
 Two calls BUG-53's fix left to the owner; both are true of the rulings it kept, not defects it added.
 
-- **A busy agent is lost when a signalled shutdown's grace ends.** A SIGTERM parks the fleet as `⌃Q` does,
-  and `⌃Q` refuses to book a session it had to kill (what `--resume` loads from a transcript a SIGKILL cut
-  mid-turn is unrecorded). So `kill <daemon>` on a fleet of busy agents loses each one still mid-turn after
-  `quitGrace`, where the same fleet SIGKILLed would be recovered by the crash path. *Closes with:* handing a
-  killed session's park-ready record to the book as the reaper does, which reverses `⌃Q`'s ruling.
+- **A busy agent is lost when `⌃Q`'s grace ends.** `⌃Q` lets a turn in flight run for `quitGrace` and refuses
+  to book a session it then had to kill (what `--resume` loads from a transcript a SIGKILL cut mid-turn is
+  unrecorded). *Closed for a signal 2026-10-22:* a SIGTERM interrupts busy agents first, as Esc does, so they
+  end at once and park. `⌃Q` was left letting turns run because the operator chose that moment. *Closes
+  with:* the same interrupt for `⌃Q`, if the owner wants a quit that never waits.
 - **`wake stop` with no daemon leaves a crashed fleet behind.** It reports that no daemon is running and
   clears nothing, so the next `wake` hands the fleet to the park book. *Closes with:* `wake stop` removing
   the roster and park-ready file itself (a `cmd/wake` write to files the daemon owns), or saying so.

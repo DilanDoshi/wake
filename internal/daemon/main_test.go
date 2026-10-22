@@ -294,6 +294,8 @@ func runFakeClaude() int {
 		return fakeSupervised(sid)
 	case "interruptible":
 		return fakeInterruptible(sid)
+	case "busy":
+		return fakeBusy(sid)
 	case "mode":
 		return fakeMode(sid)
 	case "rewind":
@@ -565,6 +567,57 @@ func fakeInterruptible(sid string) int {
 			controlRequestID(line))
 		emitText(sid, "interrupted")
 		emitResult(sid)
+	}
+	return 0
+}
+
+// fakeInterruptLogEnv names a file fakeBusy appends a line to for every
+// interrupt it is sent, so a test can tell whether one reached an idle agent.
+const fakeInterruptLogEnv = "WAKE_FAKE_INTERRUPT_LOG"
+
+// fakeBusyPrompt is the message that starts fakeBusy's long turn. Anything else
+// - the daemon's own handshake and probes included - is answered at once.
+const fakeBusyPrompt = "run the long suite"
+
+// fakeBusy holds a turn open until it is interrupted, the way a long tool call
+// does: the end of its stdin does not end a turn in flight, so a stop alone
+// leaves it running until something kills it. Idle, it ends on EOF like any
+// agent. An interrupt is answered in fakeInterruptible's recorded shape.
+func fakeBusy(sid string) int {
+	emitText(sid, "ready")
+	emitResult(sid)
+	busy := false
+	for line := range stdinLines() {
+		if !strings.Contains(line, `"subtype":"interrupt"`) {
+			switch {
+			case busy, strings.Contains(line, `"type":"control_request"`):
+				// Queued behind the turn in flight, as claude queues it - and a
+				// control request is not a turn, so its answer is no turn end.
+			case strings.Contains(line, fakeBusyPrompt):
+				busy = true
+				emitText(sid, "working")
+			default:
+				emitText(sid, "echo: "+line)
+				emitResult(sid)
+			}
+			continue
+		}
+		if path := os.Getenv(fakeInterruptLogEnv); path != "" {
+			if f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+				_, _ = f.WriteString("interrupt\n")
+				_ = f.Close()
+			}
+		}
+		fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"still_queued":[]}}}`+"\n",
+			controlRequestID(line))
+		if busy {
+			busy = false
+			emitText(sid, "interrupted")
+			emitResult(sid)
+		}
+	}
+	if busy {
+		time.Sleep(lingerFor)
 	}
 	return 0
 }
