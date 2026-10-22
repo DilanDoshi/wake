@@ -5740,6 +5740,23 @@ this branch's to fix, and each is worth its own small PR.
   `rekeyed` moves the agent's id to the new conversation and the room does not rewrite its retained lines'
   `SessionID`, so a narrowing on that agent (or its team) hides the lines from before the wake.
 
+## FROM `feat/card-page-scroll`, 2026-10-20
+
+Found in review of the card's page scroll; neither blocks it, and each is its own small change.
+
+- **The page drifts as lines arrive while it is scrolled.** The page's `up` is measured from the bottom, so a line
+  appended under a scrolled page moves what the top of the window shows (two assistant messages while the page was
+  15 rows up moved the oldest visible line from 21 to 23), where a scrolled transcript holds its place. A blocked
+  agent sends little, and a subagent's or a workflow's frames are the usual cause. Anchoring the page to a
+  transcript line instead of a row count would hold it; it wants its own test and a ruling on a reader who is
+  following when the line arrives.
+- **`cardKeysCut` is accurate but incomplete for a card taller than any window.** A ⌃E-expanded description can
+  make the card taller than the whole pane, where "keys return when the whole card is on screen" is true only after
+  ⌃E collapses it or the window grows. The line could name ⌃E in that one case.
+- **A clipped pane costs about 0.5 ms more per frame than on `main`.** It is drawn at its taller layout and a window
+  of that shown; a fitting card is within noise of `main` and a pane with no card is identical. Cards are rare and a
+  clipped pane rarer, so it is left, but the second `SetSize` it takes could be shared with the first.
+
 ## FROM `fix/focus-hides-manager-lines`, 2026-10-21
 
 - **A restored member→manager peer message is hidden in the member's narrowed room, while live it shows**

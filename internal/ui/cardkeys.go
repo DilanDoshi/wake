@@ -111,6 +111,11 @@ func (a App) cardKey(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	// on the prompt history, over the answer. See cardanswer.go.
 	if q, writing := a.cards.writingFor(top); writing {
 		if m.Type == tea.KeyEnter {
+			// An answer is sent from a box the operator can see: a page scrolled away
+			// from it brings it back, and the next ↵ is the one that sends.
+			if a.boxAway(a.focus) {
+				return a.pageHome(a.focus), nil, true
+			}
 			return a.commitAnswer(top, q)
 		}
 		if by, arrow := a.answerArrow(m); arrow {

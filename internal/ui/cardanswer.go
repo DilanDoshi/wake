@@ -129,7 +129,7 @@ func (a App) beginAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 	if typed := c.typed(question); typed != "" {
 		a = a.withComposer(a.composer().WithDraft(typed))
 	}
-	return a, nil, true
+	return a.pageHome(a.focus), nil, true
 }
 
 // answerArrow is the option step of a bare ↑ or ↓ in answer mode that the
@@ -165,7 +165,7 @@ func (a App) leaveAnswer(c Card, question, by int) (tea.Model, tea.Cmd, bool) {
 // is written until ↵, and ⎋ takes it back.
 func (a App) beginDeny(c Card) (tea.Model, tea.Cmd, bool) {
 	a.cards = a.cards.startWriting(c, denyReasonStep).disarm()
-	return a, nil, true
+	return a.pageHome(a.focus), nil, true
 }
 
 // commitAnswer takes what was typed - as one question's answer, or as the
