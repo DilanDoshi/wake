@@ -132,10 +132,8 @@ func (a App) beginAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 	return a, nil, true
 }
 
-// answerArrow is the option step a bare ↑ or ↓ takes in answer mode, when the
-// draft has no line for it to move to and no completion menu to walk. Those
-// stay the composer's; prompt history and the queue's take-back would put a
-// message in a box that holds an answer.
+// answerArrow is the option step of a bare ↑ or ↓ in answer mode that the
+// draft's lines and a completion menu leave to the prompt history.
 func (a App) answerArrow(m tea.KeyMsg) (int, bool) {
 	switch {
 	case m.Alt || a.completionUp():
@@ -148,12 +146,11 @@ func (a App) answerArrow(m tea.KeyMsg) (int, bool) {
 	return 0, false
 }
 
-// leaveAnswer goes back to the options one row over, keeping what the box holds
-// as the Other row's words, as Claude Code keeps them in its own. At the end of
-// the list there is nowhere to go, so the answer stays being written.
+// leaveAnswer goes one option over, keeping the box's words as the Other row's,
+// as Claude Code does. A refusal's reason and the list's end stay where they are.
 func (a App) leaveAnswer(c Card, question, by int) (tea.Model, tea.Cmd, bool) {
 	moved := c.Move(0, by)
-	if moved.Option == c.Option {
+	if question == denyReasonStep || moved.Option == c.Option {
 		return a, nil, true
 	}
 	text := strings.TrimSpace(a.composer().Value())

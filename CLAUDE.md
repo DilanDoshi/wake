@@ -365,8 +365,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - Permissions/plans: rune then `↵`, read only on an empty composer; any other input disarms (key,
   composer, mouse, digit).
 - Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer
-  mode, where the card takes `↵`, and `↑↓` off the draft's edge go back to the options with the words
-  kept in the `Other…` row, never prompt history (`cardanswer.go`). Arrows reach the card with or without a
+  mode, where the card takes `↵`; a bare `↑↓` with no draft line to move to never walks prompt history -
+  from `Other…` it goes back to the options with the words kept in that row (`cardanswer.go`). Arrows reach the card with or without a
   draft; `←→` only on an empty composer. **A multi-select question** (`core.Question.Multi`) draws
   `[ ]`/`[✔]` boxes, ticks in place on `↵`, a digit or space, walks on by its Next/Submit row, and sends
   the ticks in the order ticked with typed words last, joined by `core.JoinChoices` as Claude Code

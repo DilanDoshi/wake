@@ -100,18 +100,20 @@ func (a App) cardKey(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	// # Answer mode takes ↵, and ↑↓ off the draft's edge
 	//
 	// The composer is holding an answer rather than a message, so ↵ takes it
-	// and ⎋ abandons it - and *every other key goes to the draft*, which is
+	// and ⎋ abandons it - and every other key goes to the draft, which is
 	// what "the draft is the answer" has to mean. A digit that still reached
 	// the options while a refusal's reason was being written was the accident
 	// the disarm rule exists to stop, arriving through the box that replaced
 	// the arm: press `d`, think better of it, press `1` to choose instead, and
 	// the ↵ after it denied the agent. Now the `1` is a character of the
-	// reason, visible in a box the card says is live. See cardanswer.go.
+	// reason, visible in a box the card says is live. The one exception is a
+	// bare ↑↓ with no line of the draft to move to: the composer would spend it
+	// on the prompt history, over the answer. See cardanswer.go.
 	if q, writing := a.cards.writingFor(top); writing {
 		if m.Type == tea.KeyEnter {
 			return a.commitAnswer(top, q)
 		}
-		if by, ok := a.answerArrow(m); ok && q != denyReasonStep {
+		if by, arrow := a.answerArrow(m); arrow {
 			return a.leaveAnswer(top, q, by)
 		}
 		return a, nil, false

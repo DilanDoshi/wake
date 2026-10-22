@@ -392,17 +392,35 @@ func TestAltUpWhileAnsweringIsStillThePromptHistory(t *testing.T) {
 	}
 }
 
-// The refusal's box is not an answer to one question, so an arrow does not
-// drop the reason being written on its way to the options.
+// The refusal's box is not an answer to one question, so an arrow neither
+// leaves it nor puts an earlier prompt where the reason was being written.
 func TestAnArrowInTheRefusalsBoxKeepsTheReason(t *testing.T) {
 	a := paneAsking(t)
+	a = a.applyFrame(kindFrame("s1", core.KindUserText, "something typed earlier"))
 	a, _ = press(a, cardDenyKey)
 	a = typeDraft(a, "not now")
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
-	if q, writing := a.cards.writingFor(topCard(t, a)); !writing || q != denyReasonStep {
-		t.Error("↓ while writing a refusal's reason left the refusal")
+	for _, k := range []tea.KeyType{tea.KeyDown, tea.KeyUp} {
+		a, _ = pressKey(a, tea.KeyMsg{Type: k})
+		if q, writing := a.cards.writingFor(topCard(t, a)); !writing || q != denyReasonStep {
+			t.Errorf("%v while writing a refusal's reason left the refusal", k)
+		}
+		if v := a.composer().Value(); v != "not now" {
+			t.Errorf("%v while writing a refusal's reason changed the box to %q", k, v)
+		}
 	}
-	if v := a.composer().Value(); v != "not now" {
-		t.Errorf("↓ while writing a refusal's reason changed the box to %q", v)
+}
+
+// Answer mode is read before the card has to fit, since the box growing with
+// the answer is what pushes the card off: ↑ there still leaves the box rather
+// than walking the prompt history over the answer.
+func TestUpWhileAnsweringInAPaneTooShortForTheCard(t *testing.T) {
+	a := answeringOther(t, paneAsking(t), "half a thought")
+	short := a.withSize(220, 12).applyGeometry()
+	if short.cardFullyDrawn() {
+		t.Fatal("the card still fits at this height, so this test cannot see the gate")
+	}
+	short, _ = pressKey(short, tea.KeyMsg{Type: tea.KeyUp})
+	if got := topCard(t, short).typed(0); got != "half a thought" {
+		t.Errorf("↑ in a short pane left %q as the answer and %q in the box", got, short.composer().Value())
 	}
 }
