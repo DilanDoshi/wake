@@ -4747,3 +4747,39 @@ the untagged top block included. The board's rows and tile shelves already put a
   taller, so a cursor on it at a pane height of about 3-5 rows can exceed the room and draw the count alone — the
   existing "no whole block fits" fallback, which never understates the fleet. Noted by review; it follows the rule.
 - Roster only. The board is left as it was.
+
+## 2026-10-23 — the daemon resumes the agents an unreachable API stopped (the owner)
+
+BUG-55. A turn claude could not get answered - DNS, a refused or reset connection, a timeout, the machine
+asleep mid-response, an overload - ends after claude's own retries (ten, about three minutes) with
+`error:"server_error"` and no HTTP status on the stream. It was a timed notice and nothing more, so a dropped
+network stopped the fleet until the owner typed `continue` into each agent. The owner chose the event-driven
+triggers and every `server_error` over the two alternatives put to them: a backoff timer as a fallback, and
+connection failures only (which, with no status on the stream, would have meant matching claude's English).
+
+- **One stop, extended in place.** `core.NoticeAPIUnreachable` is a stop on the usage limit's `usageStop`
+  (`unreachable`), resumed by the same goroutine, queue and one-shot rules (`usagelimit.go`), never by a
+  login or a reset. It is resumed when **another agent's turn goes through after the stop** - any model
+  output, a subagent's too, recorded by `fanOut` (`apiAnswered`) - or when **the OS reports a network change
+  after it** (`netwatch_darwin.go`: the routing socket, an interface up with a link, an address gained, or a
+  gateway route added or changed, in kqueue; `netwatch_linux.go`: netlink, a link up, an address, or a
+  main-table default route; `_other.go`: none). A link counts because a wake from sleep can keep its address
+  and routes (Codex). Both are times - an event's as `fanOut` took it, a change's as the watch read it - set
+  against the stop's, so a trigger that lands while the agent is still finishing its turn is kept, and one
+  from before the stop never resumes it. An answer that lands while a pass runs wakes the goroutine again
+  (`armAnswers`). The watch is open only while the goroutine runs.
+- **The fail-again bound.** An agent stopped again by Wake's own resume, with no output of its own between
+  (`agent.unproven`), waits for a network change alone (`netOnly`); otherwise every turn another agent took
+  would resume it again, a "continue" every three minutes for as long as its own requests fail.
+- **Drawn as Wake's, saying why.** The resume carries `rpc.MessageReconnected` beside `MessageResumed`, so
+  provenance and restore are the usage limit's, and the UI draws `↻ … resumed after the connection came
+  back`. The failure is pinned (`stuckPin.format`) until a turn goes through, never marks for `/reauth`, and
+  never clears an earlier 401's mark: an API that did not answer proves nothing about the login.
+- **Measured on the owner's machine:** a connected Mac's routing socket carried only host routes and lookup
+  misses over five minutes, none of which the filter counts; a real kernel's netlink reported an address
+  added, a default route restored and a link brought back up (with addresses and routes ignored), and stayed
+  silent for a network route and a link going down (throwaway runs in a container with `NET_ADMIN`). Findings: `docs/superpowers/notes/2026-10-23-unreachable-api-findings.md`.
+- **Held by** the core decode test against the recording, the daemon units and the three e2e tests in
+  `unreachable_e2e_test.go`, both platforms' parser tables (Linux run in a container), the UI's
+  `apiunreachable_test.go`, and the pty `TestAnAgentTheAPIStoppedResumesWhenAnotherTurnGoesThrough`, each
+  mutation-checked.

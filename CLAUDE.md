@@ -192,8 +192,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   inotify wait, armed only while an agent is stopped) or the reset the limit named has passed (one
   timer; a stale reset arms none). The agent's own turn going through, a `/clear` or an interrupt ends the stop;
   a resume never lands on a turn in flight, and never answers a newer stop. `internal/daemon/usagelimit.go`.
-  Any other named failure (`core.NoticeTurnFailed`: an overload, a rejected request) is a timed
-  notice only. `internal/ui/apirecover.go`.
+  **An unreachable API (`core.NoticeAPIUnreachable`, claude's `server_error`: the connection lost, the
+  machine asleep mid-response, an overload) is pinned and resumed the same way** (owner's 2026-10-23
+  ruling), never marking or clearing a mark: one `continue` stamped `rpc.MessageReconnected` too, drawn
+  `↻ … resumed after the connection came back`, once another agent's turn goes through after the stop or
+  the OS reports a network change after it (a routing-socket or netlink wait, open only while an agent is
+  stopped); one stopped again by Wake's own resume waits for a network change alone.
+  `internal/daemon/unreachable.go`. Any other named failure (`core.NoticeTurnFailed`: a rejected
+  request) is a timed notice only. `internal/ui/apirecover.go`.
 
 **Keys and the legend**
 - **The legend is drawn only while an arm is live, and then it is only the armed cue:**
@@ -449,7 +455,7 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -539,7 +545,7 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.302. A
+**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.308. A
 fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 
 | Need | Flag |
@@ -579,6 +585,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - One `can_use_tool` carries three shapes; `AskUserQuestion` answers ride in
   `updatedInput.answers` (`core.askKind`, decided by payload shape, never tool name).
 - A question killed by closing stdin is indistinguishable from an operator deny.
+- **An API claude cannot reach fails the turn as `error:"server_error"`** after ten `api_retry` frames
+  (about three minutes, `error_status` null), with no HTTP status on the stream: DNS, a refused or reset
+  connection, a timeout, sleep mid-response, an overload alike. The process stays up and idle.
+  `api-error-unreachable.jsonl`, `docs/superpowers/notes/2026-10-23-unreachable-api-findings.md`.
 - **2.1.302 replays the permission answer Wake wrote** (`control_response`) on stdout; it decodes as a
   receipt nothing acts on (`question-multiselect.jsonl`).
 - Images: first in the content array, text last. An undecodable image silently degrades to text.

@@ -336,6 +336,8 @@ func runFakeClaude() int {
 		return fakeSubagentDispatch()
 	case "usagelimit":
 		return fakeUsageLimit(sid) // see usagelimit_e2e_test.go
+	case "unreachable":
+		return fakeUnreachable(sid) // see unreachable_e2e_test.go
 	case "stoprun":
 		// Starts a running workflow, a running subagent and a workflow that
 		// immediately ends, then behaves like fakeTurns - see

@@ -48,6 +48,10 @@ const (
 	// stopped (internal/daemon/usagelimit.go): Wake's words, so drawn as Wake's.
 	autoResumedLabel = "↻ resumed after the usage limit"
 
+	// autoReconnectedLabel is that "continue" to an agent an unreachable API
+	// stopped (internal/daemon/unreachable.go), told by its uuid's mark.
+	autoReconnectedLabel = "↻ resumed after the connection came back"
+
 	// withdrawnLabel retires the ⚠ above it: the request is dead and the
 	// answer this view was inviting would go nowhere. Muted for the same
 	// reason interruptedLabel is - in every recording this is the operator's
@@ -674,6 +678,9 @@ func noticeBlock(ev core.Event, width int) string {
 	label, ok := noticeLabel[ev.Notice]
 	if !ok {
 		return ""
+	}
+	if ev.Notice == core.NoticeAutoResumed && reconnected(ev.MessageID) {
+		label = autoReconnectedLabel
 	}
 	return mutedLine(label, width)
 }

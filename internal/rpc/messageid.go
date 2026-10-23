@@ -4,12 +4,14 @@ package rpc
 // never reads. Claude records the uuid Wake stamps as that turn's own on disk
 // (docs/superpowers/notes/2026-09-29-transcript-uuid-findings.md), so a restore
 // can tell what Wake wrote - a room turn, or the daemon resuming an agent a
-// usage limit stopped - from bytes that otherwise read as the operator's.
+// usage limit or an unreachable API stopped - from bytes that otherwise read as
+// the operator's.
 //
 // The layout is Wake's own inside RFC 9562's version-8 shape:
 //
 //	bytes 0-3    "wake"           recognises it
-//	byte  4      flags            MessageDirect, MessageResumed, MessageTeam, MessageSolo
+//	byte  4      flags            MessageDirect, MessageResumed, MessageTeam, MessageSolo,
+//	                              MessageReconnected
 //	bytes 5-10   send             shared by every target of one room send
 //	bytes 11-15  target           per target, so a broadcast's copies stay
 //	                              distinct records and only a fork shares one
@@ -34,7 +36,8 @@ var messageMark = [4]byte{'w', 'a', 'k', 'e'}
 const (
 	// MessageDirect is a room send a lone direct @name addressed (the echo's `to`).
 	MessageDirect byte = 1 << iota
-	// MessageResumed is the daemon's "continue" to an agent a usage limit stopped.
+	// MessageResumed is the daemon's "continue" to an agent a usage limit or an
+	// unreachable API stopped.
 	MessageResumed
 	// MessageTeam is a room send to a team, so a restore can address it to the
 	// members whose transcripts hold it.
@@ -43,6 +46,9 @@ const (
 	// only the transcripts that came back, so one record cannot say a send was
 	// not a broadcast; this can.
 	MessageSolo
+	// MessageReconnected rides MessageResumed on a "continue" to an agent an
+	// unreachable API stopped, so a restore can say why it came.
+	MessageReconnected
 )
 
 // MessageSend is one send: its flags and send bytes, shared by the uuid of

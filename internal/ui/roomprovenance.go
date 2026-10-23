@@ -27,6 +27,13 @@ func roomSendOf(id string) (send [6]byte, direct, ok bool) {
 	return send, flags&rpc.MessageDirect != 0, true
 }
 
+// reconnected is whether a uuid is the daemon's resume of an agent an
+// unreachable API stopped, rather than one a usage limit stopped.
+func reconnected(id string) bool {
+	_, flags, ok := rpc.MessageOf(id)
+	return ok && flags&rpc.MessageResumed != 0 && flags&rpc.MessageReconnected != 0
+}
+
 // roomSendSolo is whether a uuid is a room send that reached exactly one session.
 func roomSendSolo(id string) bool {
 	_, flags, ok := rpc.MessageOf(id)
