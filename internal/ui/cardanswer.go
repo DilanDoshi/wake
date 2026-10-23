@@ -14,8 +14,9 @@ package ui
 // What makes it safe is that answer mode is entered deliberately - by picking
 // the Other row, or by pressing the refusal key - and says so on the card while
 // it lasts. Outside it nothing about the composer changed. Inside it, ↵ takes
-// the draft as an answer, ⎋ abandons it, and ↑↓ off the draft's edge go back to
-// the options with the words kept - none of them reaches the agent's turn.
+// the draft as an answer (or completes the word a menu is offering), and ⎋ and
+// ↑↓ off the draft's edge go back to the options with the words kept - none of
+// them reaches the agent's turn.
 //
 // # Why the refusal opens the same box
 //
@@ -153,12 +154,18 @@ func (a App) leaveAnswer(c Card, question, by int) (tea.Model, tea.Cmd, bool) {
 	if question == denyReasonStep || moved.Option == c.Option {
 		return a, nil, true
 	}
+	a.cards = a.cards.With(a.keepWords(moved, question)).stopWriting().disarm()
+	return a.clearDraft(), nil, true
+}
+
+// keepWords records the box's words as question's Other answer, and takes a kept
+// answer away when the box was emptied.
+func (a App) keepWords(c Card, question int) Card {
 	text := strings.TrimSpace(a.composer().Value())
 	if text != "" || c.typed(question) != "" {
-		moved = moved.answer(question, text)
+		return c.answer(question, text)
 	}
-	a.cards = a.cards.With(moved).stopWriting().disarm()
-	return a.clearDraft(), nil, true
+	return c
 }
 
 // beginDeny opens the composer for a refusal's reason. It is the arm: nothing
@@ -206,9 +213,16 @@ func (a App) commitAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 	return a.clearDraft(), nil, true
 }
 
-// cancelAnswer abandons what was being written, without touching the agent.
-func (a App) cancelAnswer() App {
-	a.cards = a.cards.stopWriting()
+// cancelAnswer goes back to the options without touching the agent, keeping the
+// words as the Other row's as leaveAnswer does. A refusal's reason belongs to no
+// question: keepWords leaves the card alone and the reason goes.
+func (a App) cancelAnswer(c Card, question int) App {
+	kept := a.keepWords(c, question)
+	if kept.multi(question) && kept.typed(question) != "" {
+		// Off the filled Other row, which a second ↵ would untick (commitAnswer's reason).
+		kept = kept.atOption(nextIndex(kept.Detail.Questions[question]))
+	}
+	a.cards = a.cards.With(kept).stopWriting()
 	return a.clearDraft()
 }
 

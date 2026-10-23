@@ -113,8 +113,8 @@ Three kinds arrive through one mechanism:
 - **A permission request** — it wants to run a tool.
 - **A plan** — it wants approval to proceed.
 - **A question** — it is asking you to choose between options. Its `Other…` row takes your own
-  words: type them and press `↵`, or press `↑` to go back to the options with the words kept in that
-  row, and choose it again to edit them. A question that takes several draws a box on each: `↵`, the
+  words: type them and press `↵` (over an open `@` or `/` menu it completes the word first), or press
+  `↑` or `esc` to go back to the options with the words kept in that row, and choose it again to edit them. A question that takes several draws a box on each: `↵`, the
   option's digit or space ticks one without moving on (a filled `Other…` row unticks the same way), and
   the Next or Submit row under them walks on.
 
