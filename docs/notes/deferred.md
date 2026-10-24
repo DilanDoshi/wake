@@ -38,6 +38,19 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## KNOWN GAP, 2026-10-24 — a table inside a list item or a quote never draws as records
+
+`feat/narrow-tables` draws a table too narrow for its pane as records
+(`internal/render/tables.go`), but only one at the document's top level, the
+place agents put tables. A table nested in a list item or a block quote keeps
+glamour's grid at every width, and below its natural width that grid can still
+cut a header (`What it do…`) or a cell. Records there would need the
+placeholder row's indent or the quote's `│ ` laid on every record row, and each
+record rendered at the width that container leaves.
+`TestATableInAFenceAListOrAQuoteIsLeftToGlamour` pins the current behaviour.
+
+*Closes with:* that splice, once a nested table is seen in a real reply.
+
 ## KNOWN GAP, 2026-10-10 — `/status` does not name claude's own version
 
 Wake's `/status` (`internal/ui/statuscmd.go`) shows Wake's build and a differing daemon's, but not

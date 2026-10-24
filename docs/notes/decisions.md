@@ -8,6 +8,69 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-24 — a table too narrow for its pane draws as records, as soon as glamour's grid would drop text
+
+On a narrow terminal Claude Code draws a markdown table as **records**. Each body
+row becomes one record, with each column on its own line as a bold `Header:`
+followed by the cell. A `─` rule of at most 40 cells separates the records.
+Before that, Claude Code shrinks its own bordered grid, wrapping and even
+breaking words, and switches only once a row would need more than four lines or
+a column would get fewer than three cells
+(`docs/superpowers/notes/2026-10-24-narrow-table-findings.md`).
+
+**Wake keeps glamour's grid only while that grid shows the table whole.** That
+means the header is uncut, every cell's words are whole and in order, every
+link's address is uncut in the list under the grid, and no row runs past four
+lines, which is Claude Code's own limit. Otherwise the table draws as records,
+laid out as Claude Code lays them out. The rule lives in
+`internal/render/tables.go`'s `whole`.
+
+- **Earlier than Claude Code, deliberately** (approved with the plan). Claude
+  Code breaks words inside a grid that has a rule between every row. glamour's
+  grid has no rules between rows, and its lipgloss resizer **cuts** text: a
+  header becomes `What it do…`, and at 30 columns the Name/Role/Status table
+  drew `workin` and `blocke`. A grid that drops text is worse than records.
+  - For tables with one long column, Wake switches where Claude Code does: the
+    Key/Value table at 34/33, the Flag table at 50/49 (Claude Code: a grid at 50
+    and records at 48; 49 was not swept).
+  - For the one-word Name/Role/Status table, Wake switches at 31/30 where Claude
+    Code holds its grid down to 24.
+- **Judged by reading glamour's own drawing back, not by predicting it.**
+  lipgloss shrinks the biggest column first, then the one furthest above its
+  median, with no notion of a word, so a predictor would be a second copy of it.
+  Instead, the grid drawn at the pane's width is read back against the same
+  table drawn where nothing wraps.
+  - That second render doubles its width until no row wraps, through renderers
+    built for the purpose. A cached renderer per width would evict the ones a
+    frame draws with (`CachedWidths`).
+  - A grid that cannot be read back (a cell holding `│`, say) is left to glamour,
+    exactly as before.
+- **The switch is not monotonic at one width.** glamour cuts a right-aligned
+  column's last character when the table is exactly one cell narrower than its
+  natural width: the Flag table at 105 drew `ma` for `max`. The table draws as
+  records at that width and as a grid on either side of it. That follows from
+  the rule, which is about text, not width.
+- **Top-level tables only.** A table in a list item or a quote keeps glamour's
+  grid (`deferred.md`).
+- **How it is spliced in.** Each table's lines are replaced by a placeholder
+  paragraph with a blank line on each side, the document renders once, and each
+  placeholder row becomes that table's rows.
+  - A table that fits draws byte for byte as before. A table rendered alone is
+    the table rendered in place (`TestATableThatFitsDrawsAsItAlwaysHas`).
+  - A source holding the placeholder's private-use mark is left wholly to
+    glamour.
+- **A copy matches records back to records.** `unwrappedRows` draws every table
+  as records, so a value the pane wrapped rejoins, and the rule and each field
+  keep their own lines. A grid's rows never matched before and still copy as
+  drawn.
+- **Cost.** Only a block holding a table pays it: one goldmark parse, the table's
+  grid, the read-back render, and the records render when a table is drawn as
+  records. That is about 0.2 ms per render at 80 columns, measured. It happens
+  on an event or a re-wrap, never per frame. goldmark (MIT) became a direct
+  dependency, parsed under `mu`, since it promises nothing about concurrent use.
+
+---
+
 ## 2026-10-10 — Wake answers `/status`, for every session, the manager's included
 
 The owner's ask ("the manager is just another session"). Headless claude refuses `/status` with no

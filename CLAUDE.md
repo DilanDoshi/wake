@@ -301,6 +301,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A local command's reply is drawn as its lines** (`/list-agents`, `/cost`, `/config`), as Claude
   Code draws it; one opening with a markdown heading (`/context`'s) stays markdown.
   `internal/ui/dm_blocks.go`'s `drawnAsLines`.
+- **A table too narrow for its pane draws as records**, as Claude Code draws one on a narrow
+  terminal: a bold `Header:` and the cell on one line per column, a `─` rule of at most 40
+  between records. Wake keeps glamour's grid only while it shows the table whole (header and
+  words uncut, links' addresses uncut, no row past four lines), judged by reading the grid back;
+  that is earlier than Claude Code, whose own grid breaks words. Top-level tables only; a resize
+  flips it; a copy rejoins a wrapped value. `internal/render/tables.go`, `decisions.md`
+  (2026-10-24).
 - The composer grows with the draft; the pane bounds it (`composerRowsIn`), never itself. A pane's
   chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
   screen.
@@ -478,7 +485,7 @@ yet says so in bold.**
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
-| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) |
+| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) · `tables.go` draws a table too narrow for its pane as records · findings `docs/superpowers/notes/2026-10-24-narrow-table-findings.md` |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · the update check `updatecheck.go`, asked by the room on its first frame and on a keystroke an hour on, and named on the strip as `↑ wake X` (`internal/ui/updatecue.go`) · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
@@ -488,7 +495,8 @@ yet says so in bold.**
 
 ## Toolchain
 
-Go 1.26+. Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, Charm).
+Go 1.26+. Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, Charm), and `goldmark`
+(MIT, glamour's own parser; `internal/render/tables.go` reads a reply's tables with it).
 
 ```bash
 make build     # go build ./cmd/wake

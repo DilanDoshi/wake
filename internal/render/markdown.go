@@ -78,13 +78,22 @@ func Prime() { _ = resolvedStyle() }
 // A renderer failure is deliberately absorbed rather than propagated: the
 // caller is a draw loop with nowhere to report to, and showing the raw source
 // beats showing nothing. It is not, however, silent - see degraded.
-func Markdown(src string, width int) string {
+//
+// A table too narrow for width draws as records (tables.go).
+func Markdown(src string, width int) string { return markdown(src, width, false) }
+
+// markdown is Markdown, with every table drawn as records when records is set:
+// the render a copy is matched back to (rejoin.go).
+func markdown(src string, width int, records bool) string {
 	if strings.TrimSpace(src) == "" {
 		return ""
 	}
 	src = expandSource(src) // measured as no cell, drawn as up to eight: see tabs.go
-	width = boundedWidth(width)
+	return withTables(src, boundedWidth(width), records)
+}
 
+// rendered is one glamour render of src at width, through every pass below.
+func rendered(src string, width int) string {
 	r, err := rendererFor(width)
 	if err != nil {
 		// Degrade to plain text rather than lose the message — but still
