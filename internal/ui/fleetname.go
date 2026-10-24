@@ -17,7 +17,7 @@ const (
 	fleetIsCalled = "this fleet is %s · " + wakeNameUsage
 
 	// wakeNameUsage is a bare /wake-name on a report naming no fleet - a socket
-	// set by hand - and the second half of fleetIsCalled.
+	// set by hand outside ~/.wake - and the second half of fleetIsCalled.
 	wakeNameUsage = wakeNameVerb + " <name> renames it"
 
 	// fleetRenamed is said in every window, with the way back to the fleet.

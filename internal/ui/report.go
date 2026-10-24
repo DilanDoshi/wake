@@ -60,8 +60,6 @@ func (a App) applyStatus(st *rpc.Status) App {
 	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
 }
 
-// buildOf is the daemon's build a seed or a report names; a nil seed - wait
-// for the first push - names none.
 // daemonFacts is what the last report said about the daemon itself rather than
 // its sessions.
 type daemonFacts struct {
@@ -69,6 +67,8 @@ type daemonFacts struct {
 	fleet string // the fleet it serves; see fleetname.go
 }
 
+// buildOf is the daemon's build a seed or a report names; a nil seed - wait
+// for the first push - names none.
 func buildOf(st *rpc.Status) string {
 	if st == nil {
 		return ""

@@ -10,9 +10,10 @@ package daemon
 // answers to moves (fleetHome): the report's socket and name, and the manager's
 // claude name while it is still the fleet's own.
 //
-// The link lasts as long as this daemon, which outlives everything that holds the
-// old path; Serve drops it after the lock (dropForwards). A crash leaves it until
-// the fleet's next clean exit, forwarding meanwhile. decisions.md, 2026-10-24.
+// The link lasts as long as this daemon, which outlives everything it started that
+// holds the old path; Serve drops it at exit while it still holds the lock
+// (dropForwards). A crash leaves it until the fleet's next clean exit, forwarding
+// meanwhile. decisions.md, 2026-10-24.
 
 import (
 	"errors"
@@ -34,7 +35,8 @@ const (
 	unnamedFleetKept = "this is the unnamed fleet, whose files are ~/" + stateDirName + " itself rather than a " +
 		"directory of their own, so it has no name to change. `wake --fleet <name>` starts a named one"
 
-	// handSetFleetKept refuses a socket named by hand: it is no fleet's directory.
+	// handSetFleetKept refuses a socket set by hand outside ~/.wake's layout: it is
+	// no fleet's directory.
 	handSetFleetKept = "this fleet's socket was set by hand with " + SocketEnv + " (%s), so it names no fleet to rename"
 )
 
@@ -55,7 +57,8 @@ func (s *server) fleetSocket() string {
 }
 
 // fleetNameOf is what the fleet on socket is called: a named fleet's name,
-// LegacyFleet for the one at root, and "" for a socket set by hand.
+// LegacyFleet for the one at root, and "" for a socket outside that layout,
+// which names no fleet.
 func fleetNameOf(root, socket string) string {
 	dir, err := filepath.Abs(filepath.Dir(socket))
 	if err != nil {
@@ -101,6 +104,10 @@ func (s *server) moveFleetTo(to string) error {
 	case "":
 		return fmt.Errorf(handSetFleetKept, cur)
 	}
+	// A daemon started under an old name moves the directory, not that link.
+	if from, err = forwardedName(root, from); err != nil {
+		return err
+	}
 	if err := moveFleet(root, from, to); err != nil {
 		return err
 	}
@@ -114,9 +121,13 @@ func (s *server) moveFleetTo(to string) error {
 
 func fleetPath(root, name string) string { return filepath.Join(root, fleetsDirName, name) }
 
+// linkFleet makes an old name's link. A var only so a test can make it fail;
+// nothing outside a test assigns it.
+var linkFleet = os.Symlink
+
 // moveFleet renames fleet from to `to` under root and leaves a link at from. A
-// link that cannot be made undoes the move: without it every process holding
-// the old path would lose the fleet.
+// link that cannot be made undoes the move, and an old name of this fleet's
+// own taken back is linked again: every process holding either path keeps it.
 func moveFleet(root, from, to string) error {
 	if err := checkFleetName(to); err != nil {
 		return err
@@ -125,54 +136,69 @@ func moveFleet(root, from, to string) error {
 	if err := checkSocketPath(filepath.Join(dst, socketFileName)); err != nil {
 		return err
 	}
-	if err := clearFor(src, dst, to); err != nil {
+	tookBack, err := clearFor(src, dst, to)
+	if err != nil {
 		return err
 	}
-	if err := os.Rename(src, dst); err != nil {
-		return fmt.Errorf("rename the fleet's directory: %w", err)
-	}
-	if err := os.Symlink(to, src); err != nil {
-		if undo := os.Rename(dst, src); undo != nil {
-			return fmt.Errorf("leave a link at %s: %w; and moving the fleet back failed: %v", src, err, undo)
+	putBack := func() error {
+		if !tookBack {
+			return nil
 		}
-		return fmt.Errorf("leave a link at %s, so the fleet stays %s: %w", src, from, err)
+		return linkFleet(from, dst)
+	}
+	if err := os.Rename(src, dst); err != nil {
+		return fmt.Errorf("rename the fleet's directory: %w", errors.Join(err, putBack()))
+	}
+	if err := linkFleet(to, src); err != nil {
+		undo := os.Rename(dst, src)
+		if undo == nil {
+			undo = putBack()
+		}
+		return fmt.Errorf("leave a link at %s, so the fleet stays %s: %w", src, from, errors.Join(err, undo))
 	}
 	return nil
 }
 
 // clearFor makes dst free for the fleet at src, or says why it is not: another
 // fleet's directory or old name is never taken, and one of this fleet's own old
-// names is taken back - an undo - by removing its link.
-func clearFor(src, dst, to string) error {
+// names is taken back - an undo - by removing its link, which it reports.
+func clearFor(src, dst, to string) (tookBack bool, err error) {
 	at, err := os.Lstat(dst)
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil
+		return false, nil
 	}
 	if err != nil {
-		return err
+		return false, err
 	}
 	link := at.Mode()&fs.ModeSymlink != 0
 	here, err := os.Stat(src)
 	if err != nil {
-		return err
+		return false, err
 	}
 	there, err := os.Stat(dst)
 	switch {
 	case err == nil && os.SameFile(here, there) && link:
-		return os.Remove(dst)
+		return true, os.Remove(dst)
 	case err == nil && os.SameFile(here, there):
-		return fmt.Errorf("this fleet is already called %s", to)
+		return false, fmt.Errorf("this fleet is already called %s", to)
 	case link && errors.Is(err, fs.ErrNotExist):
-		return os.Remove(dst) // forwards to nothing
+		return false, forwardsNowhere(to, dst)
 	case link:
-		return fmt.Errorf("%s forwards to another fleet until that fleet's daemon stops", to)
+		return false, fmt.Errorf("%s forwards to another fleet until that fleet's daemon stops", to)
 	}
-	return fmt.Errorf("a fleet called %s already exists; `wake fleets` lists them", to)
+	return false, fmt.Errorf("a fleet called %s already exists; `wake fleets` lists them", to)
+}
+
+// forwardsNowhere refuses a link to nothing rather than removing it: it is
+// another rename's link for the width of its move, or one whose fleet was
+// removed by hand, and only the second is the operator's to clear.
+func forwardsNowhere(name, path string) error {
+	return fmt.Errorf("fleet %s forwards to a fleet that is not there; if nothing is renaming it, remove %s", name, path)
 }
 
 // forwardedName is the fleet an old name forwards to, through every link a rename
 // left, so `wake --fleet <old>` - and any daemon it starts - lands on the fleet's
-// real name. A link to nothing forwards nothing and is removed.
+// real name. A link to nothing is refused, never removed (forwardsNowhere).
 func forwardedName(root, name string) (string, error) {
 	dir := fleetPath(root, name)
 	if at, err := os.Lstat(dir); err != nil || at.Mode()&fs.ModeSymlink == 0 {
@@ -180,10 +206,7 @@ func forwardedName(root, name string) (string, error) {
 	}
 	real, err := filepath.EvalSymlinks(dir)
 	if errors.Is(err, fs.ErrNotExist) {
-		if err := os.Remove(dir); err != nil {
-			return "", fmt.Errorf("remove %s, which forwards to no fleet: %w", dir, err)
-		}
-		return name, nil
+		return "", forwardsNowhere(name, dir)
 	}
 	if err != nil {
 		return "", fmt.Errorf("follow fleet %s: %w", name, err)

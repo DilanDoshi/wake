@@ -89,11 +89,12 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **`/wake-name <name>`** renames a running named fleet (the owner's 2026-10-24 ask): the daemon moves
   `~/.wake/fleets/<old>` to `<new>` and leaves a link at `<old>`, through which everything started before
   the rename still reaches the fleet - agents' `WAKE_SOCKET`, the manager's tools, the daemon's own files.
-  The daemon drops its old names after its lock at exit; until then `--fleet <old>` lands on `<new>`
-  (`forwardedName`) and a bare `wake` never draws one. The report's `rpc.Status.Fleet` moves, so every
-  window says so; bare `/wake-name` says the name. The unnamed fleet and a hand-set socket refuse; the
-  manager gets no tool for it. No CLI verb (deferred). `internal/daemon/fleetrename.go`,
-  `internal/ui/fleetname.go`, `decisions.md` (2026-10-24).
+  The daemon drops its old names at exit, still holding its lock; until then `--fleet <old>` lands on
+  `<new>` (`forwardedName`) and a bare `wake` never draws one. A link to nothing is refused, never
+  removed. The report's `rpc.Status.Fleet` moves, so every window says so; bare `/wake-name` says the
+  name. The unnamed fleet and a socket set by hand outside `~/.wake/fleets` refuse; the manager gets no
+  tool for it. No CLI verb (deferred). `internal/daemon/fleetrename.go`, `internal/ui/fleetname.go`,
+  `decisions.md` (2026-10-24).
 - **`/status`** is Wake's, since headless claude refuses it: one session's facts (name and state, id,
   a `/clear`'s conversation, directory and branch read at open, model,
   effort, context, this window's mode, MCP, team, label, both builds when the daemon's differs) in a

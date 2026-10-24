@@ -133,15 +133,50 @@ func TestARenameMayTakeBackANameThatForwardsHere(t *testing.T) {
 	}
 }
 
-// A name that forwards to nothing - its fleet gone by hand - is stale, and taken.
-func TestARenameTakesANameThatForwardsToNothing(t *testing.T) {
+// A name that forwards to nothing is refused and left alone: for the width of
+// another rename's move it is that fleet's live link.
+func TestARenameRefusesANameThatForwardsToNothing(t *testing.T) {
 	root := aFleetRoot(t, "atlas")
 	if err := os.Symlink("gone", fleetPath(root, "dev")); err != nil {
 		t.Fatal(err)
 	}
+	if err := moveFleet(root, "atlas", "dev"); err == nil || !strings.Contains(err.Error(), "remove") {
+		t.Errorf("a rename onto a link to nothing answered %v, want a refusal naming what to remove", err)
+	}
+	if to, err := forwardsTo(root, "dev"); err != nil || to != "gone" {
+		t.Errorf("the link to nothing became %q (%v), want it left alone", to, err)
+	}
+}
+
+// A link that cannot be made leaves the fleet where it was, and an old name of
+// its own that the rename took back forwards to it again.
+func TestAFailedLinkLeavesTheFleetWhereItWas(t *testing.T) {
+	root := aFleetRoot(t, "atlas")
 	mustMoveFleet(t, root, "atlas", "dev")
+	// The link at the name being left fails, as when a `wake --fleet dev` made it
+	// a directory in the move's window; every other link is made.
+	linkFleet = func(to, at string) error {
+		if at == fleetPath(root, "dev") {
+			return fs.ErrExist
+		}
+		return os.Symlink(to, at)
+	}
+	t.Cleanup(func() { linkFleet = os.Symlink })
+
+	if err := moveFleet(root, "dev", "prod"); err == nil {
+		t.Fatal("a rename whose link failed was reported as done")
+	}
+	if err := moveFleet(root, "dev", "atlas"); err == nil {
+		t.Fatal("taking back atlas with no link to leave was reported as done")
+	}
 	if fi, err := os.Lstat(fleetPath(root, "dev")); err != nil || !fi.IsDir() {
-		t.Errorf("dev is not the fleet's directory: %v", err)
+		t.Errorf("the fleet left dev: %v", err)
+	}
+	if _, err := os.Lstat(fleetPath(root, "prod")); !errors.Is(err, fs.ErrNotExist) {
+		t.Errorf("a failed rename left prod behind: %v", err)
+	}
+	if to, err := forwardsTo(root, "atlas"); err != nil || to != "dev" {
+		t.Errorf("atlas is %q (%v) after a failed take-back, want its link to dev again", to, err)
 	}
 }
 
@@ -160,11 +195,37 @@ func TestAnOldNameReachesTheFleetItForwardsTo(t *testing.T) {
 	if err := os.Symlink("gone", fleetPath(root, "stale")); err != nil {
 		t.Fatal(err)
 	}
-	if got, err := fleetDirIn(root, "stale"); err != nil || got != fleetPath(root, "stale") {
-		t.Errorf("--fleet stale resolved to %q (%v), want the name as its own", got, err)
+	if got, err := fleetDirIn(root, "stale"); err == nil || !strings.Contains(err.Error(), "remove") {
+		t.Errorf("--fleet stale resolved to %q (%v), want a refusal naming what to remove", got, err)
 	}
-	if _, err := os.Lstat(fleetPath(root, "stale")); !errors.Is(err, fs.ErrNotExist) {
-		t.Errorf("a link to nothing was left in place: %v", err)
+	if _, err := os.Lstat(fleetPath(root, "stale")); err != nil {
+		t.Errorf("a link to nothing was removed on a read: %v", err)
+	}
+}
+
+// A daemon started under an old name - a WAKE_SOCKET naming it - moves the
+// directory that name forwards to, never the link.
+func TestADaemonStartedUnderAnOldNameMovesItsDirectory(t *testing.T) {
+	t.Setenv("HOME", tempHome(t))
+	root, err := StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fleetsUnder(t, root, "atlas")
+	mustMoveFleet(t, root, "atlas", "dev")
+	s := newServer(filepath.Join(fleetPath(root, "atlas"), socketFileName))
+
+	if err := s.moveFleetTo("prod"); err != nil {
+		t.Fatalf("rename: %v", err)
+	}
+	if fi, err := os.Lstat(fleetPath(root, "prod")); err != nil || !fi.IsDir() {
+		t.Errorf("prod is not the fleet's directory: %v", err)
+	}
+	if to, err := forwardsTo(root, "dev"); err != nil || to != "prod" {
+		t.Errorf("dev is %q (%v), want a link to prod", to, err)
+	}
+	if _, err := os.Stat(filepath.Join(fleetPath(root, "atlas"), parkBookName)); err != nil {
+		t.Errorf("the daemon's own start path no longer reaches its files: %v", err)
 	}
 }
 

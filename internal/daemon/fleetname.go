@@ -4,11 +4,10 @@ package daemon
 // reserved word that reaches the fleet that has no name.
 
 import (
-	"errors"
 	"fmt"
-	"io/fs"
 	"os"
 	"path/filepath"
+	"slices"
 )
 
 // LegacyFleet is the word that reaches the unnamed fleet at ~/.wake.
@@ -51,14 +50,14 @@ var fleetPool = []string{
 // Past the pool it numbers - `harbor-2` - rather than failing. Running out of
 // fleet names is not a thing that should stop somebody starting one.
 func nextFleetName(root string) (string, error) {
-	if _, err := fleetsIn(root); err != nil {
-		return "", err
-	}
-	// Any entry is taken, not only a fleet's directory: a link is an old name a
+	// Every entry is taken, not only a fleet's directory: a link is an old name a
 	// /wake-name left (fleetrename.go), and drawn it would open the renamed fleet.
+	entries, err := os.ReadDir(filepath.Join(root, fleetsDirName))
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("read fleets: %w", err)
+	}
 	taken := func(name string) bool {
-		_, err := os.Lstat(fleetPath(root, name))
-		return !errors.Is(err, fs.ErrNotExist)
+		return slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.Name() == name })
 	}
 
 	for _, name := range fleetPool {

@@ -239,7 +239,8 @@ type Status struct {
 
 	// Fleet is what this fleet is called - the name `wake --fleet` takes, the
 	// unnamed one's word for ~/.wake - and empty for a socket $WAKE_SOCKET set
-	// by hand, which names no fleet. A client says so when it changes.
+	// by hand outside that layout, which names no fleet. A client says so when it
+	// changes.
 	Fleet string `json:"fleet,omitempty"`
 
 	// MaxAgents is how many sessions this fleet runs at once, the manager

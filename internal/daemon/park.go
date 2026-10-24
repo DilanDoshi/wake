@@ -241,7 +241,8 @@ func (s *server) completePark(a *agent, err error) {
 // recordFor is one agent's park book row.
 //
 // One constructor because there are two callers - completePark, and bookParked's
-// loop over a fleet - and a record built twice is a record that drifts. It did
+// loop over a fleet, both through recordOf (fleetrename.go), which books the
+// manager's name against the fleet's - and a record built twice is a record that drifts. It did
 // not before only because the two literals were kept identical by hand, which is
 // the arrangement that stops working the first time a field is added to one.
 //
