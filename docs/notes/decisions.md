@@ -4851,7 +4851,8 @@ a new name if the directory has it. The ruling, on four choices put to the orche
   it wakes under. A park now books a manager still under the fleet's own name under none (`recordOf`), so
   it wakes under whatever the fleet is called then; the park book is never rewritten, because a record's
   value is the generation `reserveExact`, `commit` and `isDurable` compare. The booking holds the rename's
-  lock, so the name and the fleet's default are read on one side of a rename (Codex's finding).
+  lock, so the name and the fleet's default are read on one side of a rename, and `takeAgents` takes it too,
+  so a ⌃Q either waits for a rename and its follow or is seen by it and refused (Codex's findings).
 - **Seen in every window**: each report names the fleet (`rpc.Status.Fleet`), and a window whose report
   names another fleet than the last says `fleet <old> is now <new> · wake --fleet <new> comes back to it`
   (`ui/fleetname.go`), the asker included, and a window away at the time on its next report. Bare
@@ -4869,6 +4870,10 @@ a new name if the directory has it. The ruling, on four choices put to the orche
   the old one after a rename, as does a manager whose launch was in flight at the moment of it.
 - A link deleted by hand while the daemon runs breaks its file writes and its agents' `wake status`, as
   deleting the directory would.
+- A `wake --fleet <old>` that lands in the move's window makes a fresh directory at the old name. Empty, the
+  undo replaces it and the fleet stays where it was; filled before the link is made (a daemon forked there),
+  the undo fails, the fleet stays at the new name, the daemon answers to it and says so, and processes
+  holding the old path reach that other directory.
 - A process an agent started in the background can outlive the daemon with the old `WAKE_SOCKET`; its
   `wake status` after the exit makes an empty `fleets/<old>` (`FleetSocketPath` creates a socket's
   directory, BUG-21's shape), which `wake fleets` then lists as a stopped fleet.

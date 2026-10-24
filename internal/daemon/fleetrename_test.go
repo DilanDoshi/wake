@@ -43,7 +43,7 @@ func aFleetRoot(t *testing.T, names ...string) string {
 
 func mustMoveFleet(t *testing.T, root, from, to string) {
 	t.Helper()
-	if err := moveFleet(root, from, to); err != nil {
+	if _, err := moveFleet(root, from, to); err != nil {
 		t.Fatalf("rename fleet %s to %s: %v", from, to, err)
 	}
 }
@@ -88,7 +88,7 @@ func TestAFleetRenameRefusesWhatIsNotAFreeName(t *testing.T) {
 			if err := os.Symlink("mesa", fleetPath(root, "cove")); err != nil {
 				t.Fatal(err)
 			}
-			err := moveFleet(root, "atlas", tc.to)
+			_, err := moveFleet(root, "atlas", tc.to)
 			if err == nil || !strings.Contains(err.Error(), tc.says) {
 				t.Fatalf("renaming atlas to %q answered %v, want a refusal saying %q", tc.to, err, tc.says)
 			}
@@ -110,7 +110,7 @@ func TestAFleetRenameRefusesANameNoSocketCouldBeBoundUnder(t *testing.T) {
 	if len(filepath.Join(fleetPath(root, long), socketFileName)) <= maxSocketPath {
 		t.Skip("this machine's temporary directory is too short to build an unbindable path")
 	}
-	if err := moveFleet(root, "atlas", long); err == nil || !strings.Contains(err.Error(), "socket path") {
+	if _, err := moveFleet(root, "atlas", long); err == nil || !strings.Contains(err.Error(), "socket path") {
 		t.Errorf("a rename past sun_path answered %v, want the socket path's refusal", err)
 	}
 }
@@ -140,7 +140,7 @@ func TestARenameRefusesANameThatForwardsToNothing(t *testing.T) {
 	if err := os.Symlink("gone", fleetPath(root, "dev")); err != nil {
 		t.Fatal(err)
 	}
-	if err := moveFleet(root, "atlas", "dev"); err == nil || !strings.Contains(err.Error(), "remove") {
+	if _, err := moveFleet(root, "atlas", "dev"); err == nil || !strings.Contains(err.Error(), "remove") {
 		t.Errorf("a rename onto a link to nothing answered %v, want a refusal naming what to remove", err)
 	}
 	if to, err := forwardsTo(root, "dev"); err != nil || to != "gone" {
@@ -163,10 +163,10 @@ func TestAFailedLinkLeavesTheFleetWhereItWas(t *testing.T) {
 	}
 	t.Cleanup(func() { linkFleet = os.Symlink })
 
-	if err := moveFleet(root, "dev", "prod"); err == nil {
+	if _, err := moveFleet(root, "dev", "prod"); err == nil {
 		t.Fatal("a rename whose link failed was reported as done")
 	}
-	if err := moveFleet(root, "dev", "atlas"); err == nil {
+	if _, err := moveFleet(root, "dev", "atlas"); err == nil {
 		t.Fatal("taking back atlas with no link to leave was reported as done")
 	}
 	if fi, err := os.Lstat(fleetPath(root, "dev")); err != nil || !fi.IsDir() {
@@ -501,5 +501,84 @@ func TestAParkIsBookedOnOneSideOfARename(t *testing.T) {
 	s.home.moving.Unlock()
 	if rec := <-booked; rec.ClaudeName != "" {
 		t.Errorf("a manager under the fleet's name was booked as %q across a rename, want none", rec.ClaudeName)
+	}
+}
+
+// namedServer is a daemon's server on a named fleet under a fresh HOME.
+func namedServer(t *testing.T, name string) (*server, string) {
+	t.Helper()
+	t.Setenv("HOME", tempHome(t))
+	root, err := StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fleetsUnder(t, root, name)
+	return newServer(filepath.Join(fleetPath(root, name), socketFileName)), root
+}
+
+// A move whose undo fails - a directory made and filled at the old name in its
+// window - leaves the fleet at the new one, and the daemon answers to it.
+func TestAMoveThatCannotGoBackAnswersToWhereTheFleetIs(t *testing.T) {
+	s, root := namedServer(t, "atlas")
+	linkFleet = func(to, at string) error {
+		if at != fleetPath(root, "atlas") {
+			return os.Symlink(to, at)
+		}
+		if err := os.MkdirAll(at, stateDirPerm); err != nil {
+			return err
+		}
+		if err := os.WriteFile(filepath.Join(at, lockFileName), nil, 0o600); err != nil {
+			return err
+		}
+		return fs.ErrExist
+	}
+	t.Cleanup(func() { linkFleet = os.Symlink })
+
+	if err := s.moveFleetTo("dev"); err == nil {
+		t.Fatal("a move with no link at its old name was reported as clean")
+	}
+	if got, want := s.fleetSocket(), filepath.Join(fleetPath(root, "dev"), socketFileName); got != want {
+		t.Errorf("the daemon answers to %s, where its fleet is not; want %s", got, want)
+	}
+	if _, err := os.Stat(filepath.Join(fleetPath(root, "dev"), parkBookName)); err != nil {
+		t.Errorf("the fleet is not at dev: %v", err)
+	}
+}
+
+// A shutdown takes the fleet after any rename in flight, so the manager the
+// rename follows is still there to follow.
+func TestAShutdownWaitsForARenameInFlight(t *testing.T) {
+	s := newServer(tempSocket(t))
+	s.home.moving.Lock()
+	taken := make(chan struct{})
+	go func() { s.takeAgents(); close(taken) }()
+	select {
+	case <-taken:
+		s.home.moving.Unlock()
+		t.Fatal("the fleet was taken while a rename held it")
+	case <-time.After(50 * time.Millisecond):
+	}
+	s.home.moving.Unlock()
+	<-taken
+}
+
+// A rename that waited behind a shutdown asks again once it holds the lock, and
+// refuses rather than moving a fleet whose agents are already taken.
+func TestARenameBehindAShutdownIsRefused(t *testing.T) {
+	s, root := namedServer(t, "atlas")
+	s.home.moving.Lock()
+	refused := make(chan error, 1)
+	go func() { refused <- s.moveFleetTo("dev") }()
+	time.Sleep(50 * time.Millisecond)
+	s.mu.Lock()
+	s.taken = true
+	s.mu.Unlock()
+	s.home.moving.Unlock()
+
+	if err := <-refused; err == nil || !strings.Contains(err.Error(), "shutting down") {
+		t.Errorf("a rename behind a shutdown answered %v, want a refusal", err)
+	}
+	if fi, err := os.Lstat(fleetPath(root, "atlas")); err != nil || !fi.IsDir() {
+		t.Errorf("a refused rename moved atlas: %v", err)
 	}
 }

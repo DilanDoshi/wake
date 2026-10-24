@@ -448,6 +448,9 @@ func waitFor(wg *sync.WaitGroup, d time.Duration) bool {
 // takeAgents empties the map and returns what was in it, so shutdown works on
 // a stable set with no lock held.
 func (s *server) takeAgents() []*agent {
+	// After a rename in flight, and before s.mu: moveFleetTo's order (fleetrename.go).
+	s.home.moving.Lock()
+	defer s.home.moving.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// In the same locked step as the snapshot: a register that runs after this

@@ -77,25 +77,31 @@ func fleetNameOf(root, socket string) string {
 // renameFleet is FrameRenameFleet. The asker hears a refusal; every window hears
 // the rename on the report that follows it.
 func (s *server) renameFleet(c *client, f rpc.Frame) {
+	was := s.fleetSocket()
 	if err := s.moveFleetTo(strings.TrimSpace(f.Text)); err != nil {
 		c.enqueue(errorFrame("", err.Error()))
-		return
 	}
-	s.pushStatus()
+	if s.fleetSocket() != was {
+		s.pushStatus()
+	}
 }
 
 // moveFleetTo renames this fleet to `to`, and the manager with it while it is
-// still called for the fleet.
+// still called for the fleet. A move that lands but cannot leave its link is
+// still where the fleet is, so the daemon answers to it and says what failed.
+//
+// Shutdown is asked under the lock: takeAgents takes it too, so a ⌃Q either
+// waits for this rename and its manager's follow, or is seen here and refused.
 func (s *server) moveFleetTo(to string) error {
-	if s.refusesAdmission() {
-		return errors.New("the fleet is shutting down")
-	}
 	root, err := StateRoot()
 	if err != nil {
 		return err
 	}
 	s.home.moving.Lock()
 	defer s.home.moving.Unlock()
+	if s.refusesAdmission() {
+		return errors.New("the fleet is shutting down")
+	}
 	cur := s.fleetSocket()
 	from := fleetNameOf(root, cur)
 	switch from {
@@ -108,7 +114,8 @@ func (s *server) moveFleetTo(to string) error {
 	if from, err = forwardedName(root, from); err != nil {
 		return err
 	}
-	if err := moveFleet(root, from, to); err != nil {
+	landed, err := moveFleet(root, from, to)
+	if !landed {
 		return err
 	}
 	moved := filepath.Join(fleetPath(root, to), socketFileName)
@@ -116,7 +123,7 @@ func (s *server) moveFleetTo(to string) error {
 	if mgr, ok := s.managerAgent(); ok {
 		mgr.followFleet(core.ManagerPrefix+nameShaped(from), core.ManagerPrefix+nameShaped(to))
 	}
-	return nil
+	return err
 }
 
 func fleetPath(root, name string) string { return filepath.Join(root, fleetsDirName, name) }
@@ -125,20 +132,22 @@ func fleetPath(root, name string) string { return filepath.Join(root, fleetsDirN
 // nothing outside a test assigns it.
 var linkFleet = os.Symlink
 
-// moveFleet renames fleet from to `to` under root and leaves a link at from. A
-// link that cannot be made undoes the move, and an old name of this fleet's
-// own taken back is linked again: every process holding either path keeps it.
-func moveFleet(root, from, to string) error {
+// moveFleet renames fleet from to `to` under root and leaves a link at from,
+// reporting whether the directory landed at `to`. A link that cannot be made
+// undoes the move, and an old name of this fleet's own taken back is linked
+// again: every process holding either path keeps it. An undo that fails - a
+// directory made at from in the move's window - leaves the fleet at `to`.
+func moveFleet(root, from, to string) (landed bool, err error) {
 	if err := checkFleetName(to); err != nil {
-		return err
+		return false, err
 	}
 	src, dst := fleetPath(root, from), fleetPath(root, to)
 	if err := checkSocketPath(filepath.Join(dst, socketFileName)); err != nil {
-		return err
+		return false, err
 	}
 	tookBack, err := clearFor(src, dst, to)
 	if err != nil {
-		return err
+		return false, err
 	}
 	putBack := func() error {
 		if !tookBack {
@@ -147,16 +156,16 @@ func moveFleet(root, from, to string) error {
 		return linkFleet(from, dst)
 	}
 	if err := os.Rename(src, dst); err != nil {
-		return fmt.Errorf("rename the fleet's directory: %w", errors.Join(err, putBack()))
+		return false, fmt.Errorf("rename the fleet's directory: %w", errors.Join(err, putBack()))
 	}
 	if err := linkFleet(to, src); err != nil {
-		undo := os.Rename(dst, src)
-		if undo == nil {
-			undo = putBack()
+		if undo := os.Rename(dst, src); undo != nil {
+			return true, fmt.Errorf("the fleet is %s now, but its old name %s reaches something else: %w",
+				to, from, errors.Join(err, undo))
 		}
-		return fmt.Errorf("leave a link at %s, so the fleet stays %s: %w", src, from, errors.Join(err, undo))
+		return false, fmt.Errorf("leave a link at %s, so the fleet stays %s: %w", src, from, errors.Join(err, putBack()))
 	}
-	return nil
+	return true, nil
 }
 
 // clearFor makes dst free for the fleet at src, or says why it is not: another
