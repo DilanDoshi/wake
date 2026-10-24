@@ -23,7 +23,6 @@ import (
 	"strings"
 	"sync"
 	"sync/atomic"
-	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -244,7 +243,8 @@ func (s *server) dropForwards() {
 // followFleet moves the manager's claude name from the fleet's old one to its new
 // one, and only from it: any other is the operator's part, which wins. A live
 // manager is told at idle with the one /rename any rename sends; a parked one has
-// no claude to tell, so only the name it wakes under moves.
+// no process for the probe to reach (queueProbeLocked), so only the name it wakes
+// under moves.
 func (a *agent) followFleet(from, to string) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
@@ -252,10 +252,8 @@ func (a *agent) followFleet(from, to string) {
 		return
 	}
 	a.claudeWant = to
-	if renameableStates[a.stateLocked(time.Now())] == "" {
-		a.probeWanted[renameProbe] = true
-		a.tryProbeLocked(renameProbe)
-	}
+	a.probeWanted[renameProbe] = true
+	a.tryProbeLocked(renameProbe)
 }
 
 // recordOf is recordFor as this fleet books it: a manager still under the
