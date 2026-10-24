@@ -121,14 +121,18 @@ type wireUsageWindow struct {
 }
 
 // sessionUsage is the five-hour window a rate_limit_info reports, nil when it
-// names no figure for it. Claude's verdict is the top-level status, and only
-// while Type names this window: a weekly warning says nothing about it.
+// names no figure for it - or one of a shape Wake does not know, which costs
+// the reading and not the frame. Claude's verdict is the top-level status, and
+// only while Type names this window: a weekly warning says nothing about it.
 func sessionUsage(r *wireRateLimit) *SessionUsage {
-	if r == nil {
+	var windows struct {
+		FiveHour *wireUsageWindow `json:"five_hour"`
+	}
+	if r == nil || json.Unmarshal(r.Windows, &windows) != nil {
 		return nil
 	}
-	w, ok := r.Windows[rateLimitFiveHour]
-	if !ok || w.Used == nil || w.Resets == 0 {
+	w := windows.FiveHour
+	if w == nil || w.Used == nil || w.Resets == 0 {
 		return nil
 	}
 	u := &SessionUsage{Used: *w.Used, Resets: time.Unix(w.Resets, 0)}

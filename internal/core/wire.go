@@ -337,15 +337,16 @@ const (
 )
 
 // wireRateLimit is rate_limit_info. Status is Claude's verdict on the window
-// Type names; Windows carries each window's figure from 2.1.246 on. The frame
-// also carries resetsAt and the overage fields, which Wake leaves.
+// Type names; Windows carries each window's figure from 2.1.246 on, raw so no
+// window's shape loses the frame (account.go). The rest - the named window's
+// own reset and figure, a warning's threshold, the overage fields - Wake leaves.
 //
 // Cadence: once on a process's first API response, then again whenever a
 // figure changes - a whole percent, or a window resetting - never per turn.
 type wireRateLimit struct {
-	Status  string                     `json:"status"`
-	Type    string                     `json:"rateLimitType"`
-	Windows map[string]wireUsageWindow `json:"unifiedWindows"`
+	Status  string          `json:"status"`
+	Type    string          `json:"rateLimitType"`
+	Windows json.RawMessage `json:"unifiedWindows"`
 }
 
 // wireUsage is the token accounting on a result frame.

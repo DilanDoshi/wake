@@ -4,7 +4,7 @@ package daemon
 // signed-in account's, so one per daemon whichever agent's API response
 // reported it. Held here so a window that attaches later is told it at once
 // (rpc.Status.SessionUsage), and never cleared, so the bar under the roster
-// stays once it has drawn (owner's 2026-10-24 picks).
+// stays once it has drawn (decisions.md, 2026-10-24).
 
 import (
 	"math"
@@ -23,17 +23,18 @@ type usageBook struct {
 	held    bool
 }
 
-// note takes the reading an event carries, the newest arrival winning, and
-// reports whether what a status report says changed.
-func (b *usageBook) note(ev core.Event) bool {
+// note takes the reading an event carries, arriving at now, and reports whether
+// what a status report says changed.
+func (b *usageBook) note(ev core.Event, now time.Time) bool {
 	u := ev.SessionUsage
 	if u == nil {
 		return false
 	}
-	next := rpc.SessionUsage{Percent: int(math.Round(u.Used * 100)), Resets: u.Resets, Warned: u.Warned, Limited: u.Limited}
+	// The reset in UTC and off a Unix time, so == compares the instant.
+	next := rpc.SessionUsage{Percent: int(math.Round(u.Used * 100)), Resets: u.Resets.UTC(), Warned: u.Warned, Limited: u.Limited}
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.held && sameUsage(b.reading, next) {
+	if b.held && (b.reading == next || older(next, b.reading, now)) {
 		return false
 	}
 	b.reading, b.held = next, true
@@ -66,8 +67,14 @@ func (b *usageBook) report() *rpc.SessionUsage {
 	return &u
 }
 
-// sameUsage compares two readings, the reset by instant rather than by ==.
-func sameUsage(a, b rpc.SessionUsage) bool {
-	return a.Percent == b.Percent && a.Resets.Equal(b.Resets) && a.Warned == b.Warned &&
-		a.Limited == b.Limited && a.Lapsed == b.Lapsed
+// older reports a reading that left the API before the held one: each agent's
+// events arrive on its own goroutine, so two a moment apart can land out of
+// order. A window's use only grows, so a lower figure for the same reset is
+// older, and so is a window whose reset has passed beside one still running.
+// Another account's live window, resetting sooner, is not.
+func older(next, held rpc.SessionUsage, now time.Time) bool {
+	if next.Resets.Equal(held.Resets) {
+		return next.Percent < held.Percent
+	}
+	return next.Resets.Before(held.Resets) && !now.Before(next.Resets)
 }

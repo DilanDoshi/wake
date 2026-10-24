@@ -68,7 +68,7 @@ func (s *server) fanOut(a *agent) {
 
 		// The account's session window, off any agent's API response: one push
 		// when what the report says moves, so a fleet at 47% pushes once.
-		if s.usage.note(ev) {
+		if s.usage.note(ev, now) {
 			s.pushStatus()
 		}
 

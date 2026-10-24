@@ -55,6 +55,9 @@ off `rate_limit_event`. Consciously left out:
 - **Usage outside Wake.** The figure is as of the fleet's last API response; the operator's own `claude`, or
   another machine on the account, moves it with no event, and an idle fleet hears nothing.
 - **The status at the limit itself** is unrecorded; anything past `allowed_warning` draws as the limit.
+- **A switch to an account whose window resets at the same instant** with less used keeps the higher figure
+  until the new one passes it or the window resets: a lower figure for the same reset is read as a reading
+  that arrived late (`daemon/usage.go`'s `older`).
 
 *Closes with:* each item on its own; none blocks the bar.
 

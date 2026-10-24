@@ -80,7 +80,11 @@ func (a App) assembleFrame() string {
 		}
 	}
 	if r.Roster > 0 {
-		panels = append(panels, a.withUsage(a.roster.View(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight())))
+		side := a.roster.View(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight())
+		if rows := a.usageDrawn(); len(rows) > 0 {
+			side += "\n" + strings.Join(rows, "\n") // the session bar under it; see usagebar.go
+		}
+		panels = append(panels, side)
 	}
 
 	cols := make([]string, 0, 2*len(panels))

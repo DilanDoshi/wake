@@ -102,3 +102,18 @@ func TestAStatusPastAWarningIsTheLimit(t *testing.T) {
 		t.Errorf("reading = %+v, want 100%% and limited", got)
 	}
 }
+
+// A window of an unexpected shape costs the reading, never the frame: the
+// status and its notice still arrive, and the five-hour figure survives a
+// sibling window nobody reads.
+func TestAnUnexpectedWindowShapeKeepsTheFrame(t *testing.T) {
+	bad := `{"type":"rate_limit_event","session_id":"s1","rate_limit_info":{"status":"allowed_warning","rateLimitType":"five_hour","unifiedWindows":{"five_hour":{"utilization":"n/a","resetsAt":1792883400}}}}`
+	ev := onlyEvent(t, bad, 0)
+	if ev.Kind != KindRateLimit || ev.Notice != NoticeRateLimited || ev.SessionUsage != nil {
+		t.Errorf("a five-hour window of the wrong shape decoded as %q/%q with %+v, want the frame and its notice, no reading", ev.Kind, ev.Notice, ev.SessionUsage)
+	}
+	sibling := `{"type":"rate_limit_event","session_id":"s1","rate_limit_info":{"status":"allowed","rateLimitType":"five_hour","unifiedWindows":{"five_hour":{"utilization":0.4,"resetsAt":1792883400},"seven_day":{"utilization":"n/a"}}}}`
+	if got := onlyEvent(t, sibling, 0).SessionUsage; got == nil || got.Used != 0.4 {
+		t.Errorf("a sibling window of the wrong shape cost the five-hour reading: %+v", got)
+	}
+}

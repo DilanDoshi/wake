@@ -4824,11 +4824,13 @@ weekly line**. "Session" is the claude.ai plan's five-hour window, which Claude 
   own verdict: the top-level status, read only while `rateLimitType` names the five-hour window
   (`allowed_warning` warns, anything past it is the limit), since a weekly warning says nothing about it.
 - **The daemon holds it** (`daemon/usage.go`, `rpc.Status.SessionUsage`): one reading per fleet, because a
-  fleet runs on one signed-in account; the newest arrival from any agent wins, a report is pushed only when
-  what it says moves, and a window that attaches later is told it at once. On `Status`, not `SessionStatus`,
-  so no per-session guard is involved. The reading is never cleared, so once the bar has drawn it stays
-  (the orchestrator's ruling on the owner's "hidden": rows that come and go would move the roster for
-  nothing); a new daemon starts hidden again.
+  fleet runs on one signed-in account; a report is pushed only when what it says moves, and a window that
+  attaches later is told it at once. Each agent's events arrive on its own goroutine, so a reading can land
+  behind a newer one (Codex): a lower figure for the same reset, or a window whose reset has passed beside
+  one still running, is kept out; another account's live window, resetting sooner, is taken. On `Status`, not `SessionStatus`,
+  so no per-session guard is involved. The reading is never cleared, so once the bar has drawn it stays:
+  "hidden" is read as hidden until the first reading, since rows that come and go would move the roster
+  for nothing; a new daemon starts hidden again.
 - **No timer.** A reset that passes makes the figure stale; the liveness tick the daemon already runs notices
   it on the wall clock (`limitClock`, so a reset slept through is caught on waking) and pushes the reading
   `Lapsed`, drawn as an empty bar and `session · reset 4:09pm`. The reset is a clock time, not a countdown,
@@ -4839,7 +4841,9 @@ weekly line**. "Session" is the claude.ai plan's five-hour window, which Claude 
 - **Left out** (`deferred.md`): the weekly line, a reading before the first API response, and the per-window
   status 2.1.310 added.
 - **Held by** core's decode tests against `question-multiselect.jsonl`, `midturn-two.jsonl`,
-  `rewind-conversation.jsonl` and `basic-turn.jsonl`; the daemon units and two e2e tests in `usage_test.go`
-  (the push, a late window, the tick's lapse); the UI's `usagebar_test.go` (hidden, drawn, colours, widths, a
-  resize with no report, the seed, a short pane, and clicks on a scrolled roster before and after the first
-  reading); and the pty `TestTheSessionUsageBarDrawsUnderTheRosterOnceAReadingArrives`, each mutation-checked.
+  `rewind-conversation.jsonl` and `basic-turn.jsonl`, and a window of an unexpected shape costing the reading
+  and not the frame; the daemon's units (readings out of order among them) and two e2e tests in
+  `usage_test.go` (the push and a late window, the tick's lapse); the UI's `usagebar_test.go` (hidden, drawn,
+  colours, the rows' widths and the strip's row, a resize with no report, the seed, a short pane, and clicks
+  on a scrolled roster before and after the first reading); and the pty
+  `TestTheSessionUsageBarDrawsUnderTheRosterOnceAReadingArrives`, each mutation-checked.

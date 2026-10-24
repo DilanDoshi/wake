@@ -140,18 +140,29 @@ func TestTheUsageBarWearsClaudesVerdictAndEmptiesAtTheReset(t *testing.T) {
 	}
 }
 
-// A row narrower or wider than the sidebar shifts every pane beside it, and a
-// frame taller than the terminal scrolls it.
-func TestEveryUsageRowIsTheSidebarWideAndTheFrameKeepsItsHeight(t *testing.T) {
+// A row wider than the sidebar widens the frame past the terminal, a narrower
+// one lets the pane beside it join early, and a column taller than the pane
+// pushes the strip off its row.
+func TestEveryUsageRowIsTheSidebarWideAndTheStripKeepsItsRow(t *testing.T) {
 	trueColor(t)
 	a := newRoomApp(t).withSize(100, 24).withUsageReport(&rpc.SessionUsage{Percent: 100, Resets: time.Date(2026, 10, 24, 12, 30, 0, 0, time.Local), Limited: true, Lapsed: true}, "sydney")
-	for _, row := range sidebarRows(a) {
+	if len(a.daemon.rows) != 3 {
+		t.Fatalf("rendered %d usage rows, want 3", len(a.daemon.rows))
+	}
+	for _, row := range a.daemon.rows {
 		if got := ansi.StringWidth(row); got != 23 {
-			t.Errorf("a sidebar row is %d cells, want 23: %q", got, ansi.Strip(row))
+			t.Errorf("a usage row is %d cells, want the sidebar's 23: %q", got, ansi.Strip(row))
 		}
 	}
-	if got := len(strings.Split(a.View(), "\n")); got != a.layout.Height {
-		t.Errorf("the frame is %d rows, want %d", got, a.layout.Height)
+	rows := strings.Split(a.View(), "\n")
+	for y, row := range rows {
+		if got := ansi.StringWidth(row); got > a.layout.Width {
+			t.Errorf("frame row %d is %d cells, wider than the %d-column terminal", y, got, a.layout.Width)
+		}
+	}
+	want := strings.TrimRight(ansi.Strip(a.strip(a.fleet.OnRoster())), " ")
+	if got := strings.TrimRight(ansi.Strip(rows[a.paneHeight()]), " "); got != want {
+		t.Errorf("row %d is %q, want the strip %q under the panes", a.paneHeight(), got, want)
 	}
 }
 
@@ -163,12 +174,12 @@ func TestAResizeWithNoReportRedrawsTheRowsAtTheNewSidebarWidth(t *testing.T) {
 		t.Fatalf("a 90-column window draws a sidebar of %d", a.regions().Roster)
 	}
 	a = a.withSize(140, 30).applyGeometry() // the settle, as Bubble Tea delivers it
-	rows := sidebarRows(a)
-	for _, row := range rows {
-		if got := ansi.StringWidth(row); got != 23 {
-			t.Errorf("after the resize a sidebar row is %d cells, want 23: %q", got, ansi.Strip(row))
+	for _, row := range a.daemon.rows {
+		if got := ansi.StringWidth(row); got != a.regions().Roster-dividerWidth {
+			t.Errorf("after the resize a usage row is %d cells, want the sidebar's %d: %q", got, a.regions().Roster-dividerWidth, ansi.Strip(row))
 		}
 	}
+	rows := sidebarRows(a)
 	if got := strings.TrimRight(ansi.Strip(rows[len(rows)-1]), " "); got != "session · ↻ 4:09pm" {
 		t.Errorf("after the resize the caption is %q", got)
 	}
