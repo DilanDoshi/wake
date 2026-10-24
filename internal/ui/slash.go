@@ -308,6 +308,11 @@ const managerStopCommand = "manager-stop"
 // reason.
 const managerStopVerb = SlashPrefix + managerStopCommand
 
+// wakeNameCommand renames the fleet itself rather than a session in it
+// (fleetname.go). No recorded slash_commands carries the word.
+const wakeNameCommand = "wake-name"
+const wakeNameVerb = SlashPrefix + wakeNameCommand // for resumeVerb's reason
+
 // quitCommand ends one agent and removes it from this window - `/manager-stop`
 // for an ordinary session. It writes `rpc.FrameStop`, the ending nothing brings
 // back, and unlike ⌃C park it is not recoverable.
@@ -384,6 +389,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	reauthCommand:          App.reauth,
 	workflowsCommand:       App.openWorkflows,
 	statusCommand:          App.status,
+	wakeNameCommand:        App.renameFleet,
 }
 
 // clearCommand is the room's own /clear (roomclear.go). The word is claude's, so

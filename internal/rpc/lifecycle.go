@@ -121,6 +121,11 @@ const (
 	// lasts the daemon's life and stops nothing already running.
 	FrameSetMaxAgents = "set_max_agents"
 
+	// FrameRenameFleet renames this fleet to Frame.Text - `/wake-name`. A
+	// refusal comes back as a FrameError to the asker; the rename itself arrives
+	// as every window's next report naming the new Status.Fleet.
+	FrameRenameFleet = "rename_fleet"
+
 	// FrameStatus asks what is running and FrameStatusReply answers it. A
 	// reply is only ever an answer to a request on that same connection.
 	FrameStatus      = "status"
@@ -231,6 +236,11 @@ type Status struct {
 	// agent, or its park record) and reads a client's rename into it only through
 	// managerClaudeNameOf's fence.
 	ManagerClaude string `json:"manager_claude,omitempty"`
+
+	// Fleet is what this fleet is called - the name `wake --fleet` takes, the
+	// unnamed one's word for ~/.wake - and empty for a socket $WAKE_SOCKET set
+	// by hand, which names no fleet. A client says so when it changes.
+	Fleet string `json:"fleet,omitempty"`
 
 	// MaxAgents is how many sessions this fleet runs at once, the manager
 	// included; zero is a daemon from before it was reported.

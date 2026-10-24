@@ -55,6 +55,7 @@ var frameKinds = map[string]string{
 	"FrameQuit":               FrameQuit,
 	"FrameParkAll":            FrameParkAll,
 	"FrameSetMaxAgents":       FrameSetMaxAgents,
+	"FrameRenameFleet":        FrameRenameFleet,
 	"FrameStatus":             FrameStatus,
 	"FrameStatusReply":        FrameStatusReply,
 	"FrameStatusPush":         FrameStatusPush,

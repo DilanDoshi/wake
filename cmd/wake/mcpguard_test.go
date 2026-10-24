@@ -174,6 +174,8 @@ var managerVerbs = map[string]verdict{
 
 	rpc.FrameSetMaxAgents: {why: "the operator's cap on how many sessions the fleet runs at once (`--max-agents`, owner's 2026-10-20 ruling). It is the bound FrameSpawn's verdict rests on, so a manager that could raise it would be choosing its own ceiling - and lowering it would refuse the operator's next spawn for a reason they did not set"},
 
+	rpc.FrameRenameFleet: {why: "renames the fleet itself (`/wake-name`), and the fleet's name is the operator's way back to it: `wake --fleet <name>` is what reopens it, and a bare `wake` makes a new fleet instead. A manager that renamed it would leave the operator typing a name that forwards only until the daemon stops, and then opens a new, empty fleet. It renames no session and routes nothing, so it is refused for whose decision it is - FrameSetMaxAgents' reason: the operator's own handle on the fleet"},
+
 	rpc.FrameParkAll: {why: "ends the daemon too. Recoverable in principle, and the manager cannot recover it: the fleet comes back only when a human types `wake`, and until they do the manager has stopped the thing it was asked to manage"},
 
 	rpc.FramePark: {why: "recoverable only by a *human*. `/resume` is a TUI command and there is no wake tool here, so a parked session is one the manager can no longer see - list_agents does not offer it - and cannot bring back. Worse in one state: parking an agent that is blocked on a permission ask writes a denial the operator never made, and it survives the wake",

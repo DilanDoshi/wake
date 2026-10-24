@@ -165,6 +165,12 @@ func Serve(ctx context.Context, socket string) error {
 	// Refusing here rather than after binding also means a daemon started by
 	// mistake removes nothing and writes nothing: every destructive step is
 	// downstream of holding this.
+	//
+	// The old names a /wake-name left go after the lock, last of all: until then
+	// this daemon's files are reached through them (fleetrename.go). srv stays nil
+	// for a daemon that never held the lock, so another fleet's are never touched.
+	var srv *server
+	defer func() { srv.dropForwards() }()
 	lock, err := takeLock(lockPath(socket))
 	switch {
 	case errors.Is(err, errLockHeld):
@@ -211,6 +217,7 @@ func Serve(ctx context.Context, socket string) error {
 	defer guardLog()()
 
 	s := newServer(socket)
+	srv = s
 	// The liveness tick re-verifies this claim's inode (see watchLiveness), so
 	// the daemon that holds the lock re-establishes it if the file is swept out
 	// from under it - which is what stops a successor locking a fresh inode.

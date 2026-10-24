@@ -38,6 +38,18 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FOLLOW-UP, 2026-10-24 — `wake rename`, a CLI verb for `/wake-name`
+
+`/wake-name` renames a running fleet from inside Wake (`internal/daemon/fleetrename.go`); there is no shell
+verb for it. The orchestrator's ruling on the PR: not in the first cut, because the ask was "from inside
+wake" and every agent carries `WAKE_SOCKET`, so `wake rename <name>` would hand any agent a one-word way to
+rename the operator's fleet out from under them. A stopped fleet cannot be renamed at all today - nothing
+holds its paths, so it would be a plain directory rename under its lock, with no link.
+
+*Closes with:* an owner ruling on whether an agent may do it, then about 40 lines on `socketFleet.act`'s
+pattern for a running fleet (refusing when none is listening rather than forking a daemon), and the
+stopped-fleet case if wanted. See `decisions.md`, 2026-10-24.
+
 ## KNOWN GAP, 2026-10-10 — `/status` does not name claude's own version
 
 Wake's `/status` (`internal/ui/statuscmd.go`) shows Wake's build and a differing daemon's, but not

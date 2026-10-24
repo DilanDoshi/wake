@@ -4809,3 +4809,62 @@ connection failures only (which, with no status on the stream, would have meant 
   `unreachable_e2e_test.go`, both platforms' parser tables (Linux run in a container), the UI's
   `apiunreachable_test.go`, and the pty `TestAnAgentTheAPIStoppedResumesWhenAnotherTurnGoesThrough`, each
   mutation-checked.
+
+## 2026-10-24 — `/wake-name` moves a running fleet's directory and leaves its old name as a link (the owner)
+
+The owner's ask: rename a running fleet from inside Wake. A fleet is its directory under
+`~/.wake/fleets` (fleet.go), so `wake --fleet <new>`, `wake fleets` and `wake status` can only know it by
+a new name if the directory has it. The ruling, on four choices put to the orchestrator:
+
+- **Move, and leave a link (A).** The daemon renames `fleets/<old>` to `fleets/<new>` and makes
+  `fleets/<old>` a relative link to `<new>`; a link that cannot be made undoes the move. Every process the
+  daemon started holds a path under the old name - each agent's `WAKE_SOCKET` (its `wake status`), the
+  manager's tools in `mcp.json`, claude's `--debug-file` - and through the link they all keep reaching the
+  same files: `connect()` follows a link, and a bound socket survives its directory's rename (darwin and
+  Linux, `fleetrename_test.go`). The other model - the directory never moves and the new name is a
+  permanent alias - keeps every old name reserved and aliased forever and makes `fleetsIn` learn which
+  entry is "the name".
+- **The daemon's own files stay on the path it started on.** Roster, park book, lock, log, `mcp.json` and
+  debug files are reached through the link; only what the fleet *answers to* moves (`fleetHome`): the
+  report's `Socket` and `Fleet`, and the manager's default claude name. Re-pointing every holder means
+  about ten readers of `s.socket` plus the listener's unlink-on-close, and still needs the link, since
+  agents hold the old path: the same lifetime for much more code.
+- **The link lives as long as that daemon (B).** Serve drops every old name that resolves to its directory
+  after its lock is released (`dropForwards`), when nothing it started is left. Until then
+  `wake --fleet <old>` lands on the real name (`forwardedName`, so no daemon ever starts under an alias), a
+  bare `wake` never draws an old name (`nextFleetName` counts any entry), and `wake fleets` lists only
+  directories. A name that forwards to *this* fleet may be taken back (an undo); one forwarding to another
+  fleet is refused, and one forwarding to nothing is removed as stale.
+- **The unnamed fleet refuses (C).** Its files are `~/.wake` itself, beside `fleets/`, so there is no
+  directory of its own to move or link, and `default` is the word that reaches it. A hand-set
+  `$WAKE_SOCKET` names no fleet and refuses too.
+- **No CLI verb (D).** The ask is from inside Wake, and every agent carries `WAKE_SOCKET`, so `wake rename`
+  would hand any agent a one-word way to rename the operator's fleet. `deferred.md` carries it. The
+  manager gets no tool either (`mcpguard_test.go`).
+- **The manager follows while it is the fleet's own.** `agent.followFleet` moves `claudeWant` from
+  `manager-<old>` to `manager-<new>` and nothing else: any other part is the operator's (2026-10-15) and
+  wins. A live manager is told with the one `/rename` any rename sends; a parked one only changes the name
+  it wakes under. A park now books a manager still under the fleet's own name under none (`recordOf`), so
+  it wakes under whatever the fleet is called then; the park book is never rewritten, because a record's
+  value is the generation `reserveExact`, `commit` and `isDurable` compare.
+- **Seen in every window**: each report names the fleet (`rpc.Status.Fleet`), and a window whose report
+  names another fleet than the last says `fleet <old> is now <new> · wake --fleet <new> comes back to it`
+  (`ui/fleetname.go`), the asker included, and a window away at the time on its next report. Bare
+  `/wake-name` says the name.
+
+**Residuals, accepted:**
+- Between the move and the link there is a window of a few microseconds where the old path resolves to
+  nothing; a `wake status` from an agent inside it fails once. Taking back an old name has the same window
+  between removing its link and the move.
+- A crash leaves the link: the old name stays reserved and forwarding until the fleet's next clean exit.
+- A manager on a variant claude chose for its name (`manager-atlas-2` while another session held
+  `manager-atlas`) reads as an operator's part and does not follow; `/name manager` puts the fleet's back.
+- A manager parked by a build before this one is booked under the fleet's name explicitly, and wakes under
+  the old one after a rename, as does a manager whose launch was in flight at the moment of it.
+- A link deleted by hand while the daemon runs breaks its file writes and its agents' `wake status`, as
+  deleting the directory would.
+- On a case-insensitive disk a rename that only changes case is refused as the fleet's own name.
+
+**Held by** `internal/daemon/fleetrename_test.go` (the move, refusals, undo, forwarding, the bare-`wake`
+draw, the exit, the report's name, the manager, over a real socket, and with a scripted claude process),
+`internal/ui/fleetname_test.go`, and the pty `TestWakeNameRenamesTheFleetOnARealScreen`.
