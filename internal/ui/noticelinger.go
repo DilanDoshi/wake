@@ -45,12 +45,13 @@ type noticeState struct {
 }
 
 // stuckPin is one pinned failure: the API's message, the timed notice that
-// announced it, whether it is a usage limit, and whether its session has been
-// parked since - so its next live report is the resume.
+// announced it, the sentence of one Wake lifts itself - a usage limit's, an
+// unreachable API's; empty for a login - and whether its session has been parked
+// since - so its next live report is the resume.
 type stuckPin struct {
 	msg    string
 	said   string
-	usage  bool
+	format string
 	parked bool
 }
 

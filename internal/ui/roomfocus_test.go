@@ -20,6 +20,9 @@ func TestFocusAdmits(t *testing.T) {
 	user := func(to string) roomLine {
 		return roomLine{ev: core.Event{Kind: core.KindUserText}, to: to}
 	}
+	peer := func(from, to string) roomLine {
+		return roomLine{ev: core.Event{Kind: core.KindCrossSession, SessionID: to}, by: Agent{ID: from}}
+	}
 	cases := []struct {
 		name  string
 		line  roomLine
@@ -28,9 +31,14 @@ func TestFocusAdmits(t *testing.T) {
 	}{
 		{"unfocused admits agent prose", agent(iris), "", true},
 		{"unfocused admits any user line", user(iris), "", true},
+		{"unfocused admits the manager", agent(mgr), "", true},
 		{"focused admits john's prose", agent(john), john, true},
 		{"focused hides iris's prose", agent(iris), john, false},
-		{"focused admits the manager", agent(mgr), john, true},
+		{"focused hides the manager's prose", agent(mgr), john, false},
+		{"focused hides the manager's turn end", roomLine{ev: core.Event{Kind: core.KindTurnEnd, SessionID: mgr}}, john, false},
+		{"focused admits a message the manager sent john", peer(mgr, john), john, true},
+		{"focused admits a message john sent the manager", peer(john, mgr), john, true},
+		{"focused hides a message the manager sent iris", peer(mgr, iris), john, false},
 		{"focused admits a broadcast", user(""), john, true},
 		{"focused admits your message to john", user(john), john, true},
 		{"focused hides your message to iris", user(iris), john, false},
@@ -39,7 +47,7 @@ func TestFocusAdmits(t *testing.T) {
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
-			if got := focusAdmits(c.line, c.focus, mgr); got != c.want {
+			if got := focusAdmits(c.line, c.focus); got != c.want {
 				t.Fatalf("focusAdmits(%s) = %v, want %v", c.name, got, c.want)
 			}
 		})
@@ -78,14 +86,14 @@ func TestRoomViewNarrowsToFocus(t *testing.T) {
 		}
 	}
 
-	r = r.WithFocus(john, "john", mgr)
+	r = r.WithFocus(john, "john")
 	got := r.View(80, 24)
-	for _, want := range []string{"status?", "all green", "manager coordinating"} {
+	for _, want := range []string{"status?", "all green"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("focused room missing %q, want it kept", want)
 		}
 	}
-	for _, gone := range []string{"still building", "hurry"} {
+	for _, gone := range []string{"still building", "hurry", "manager coordinating"} {
 		if strings.Contains(got, gone) {
 			t.Fatalf("focused room still shows %q, want it hidden", gone)
 		}
@@ -94,15 +102,15 @@ func TestRoomViewNarrowsToFocus(t *testing.T) {
 		t.Fatalf("focused room header missing the affordance:\n%s", got)
 	}
 
-	r = r.WithFocus("", "", mgr)
+	r = r.WithFocus("", "")
 	back := r.View(80, 24)
-	if !strings.Contains(back, "still building") || !strings.Contains(back, "hurry") {
+	if !strings.Contains(back, "still building") || !strings.Contains(back, "hurry") || !strings.Contains(back, "manager coordinating") {
 		t.Fatalf("unfocus did not restore hidden lines")
 	}
 }
 
 // The reported bug: with the room narrowed to @john, the operator sees their
-// own messages and the manager's but not john's own replies - "sometimes". The
+// own messages but not john's own replies - "sometimes". The
 // "sometimes" is a /clear: the room line is attributed by the event's own
 // session_id, which claude mints anew mid-process on a /clear (fanout.go), while
 // focus is the id Wake spawned under. When they diverge, the focused agent's own
@@ -137,11 +145,106 @@ func TestFocusStillShowsTheAgentsOwnReplyAfterItsSessionIdDrifts(t *testing.T) {
 	if !strings.Contains(out, "tests are green") {
 		t.Errorf("the room narrowed to @john hid john's own reply:\n%s", out)
 	}
-	if !strings.Contains(out, "manager coordinating") {
-		t.Errorf("the room narrowed to @john hid the manager's reply:\n%s", out)
+	if strings.Contains(out, "manager coordinating") {
+		t.Errorf("the room narrowed to @john leaked the manager's reply:\n%s", out)
 	}
 	if strings.Contains(out, "iris still building") {
 		t.Errorf("the room narrowed to @john leaked iris's reply:\n%s", out)
+	}
+}
+
+// The manager's own words are not john's thread, but a message it sends john is
+// a message to him, and one it sends iris is not. Driven through the live path,
+// where the receiver's stream carries the peer message.
+func TestFocusHidesTheManagersWordsButKeepsAMessageItSentTheAgent(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withAgents("john", "iris", "manager")
+	john := idOfAgentNamed(t, a, "john")
+	iris := idOfAgentNamed(t, a, "iris")
+	mgr := idOfAgentNamed(t, a, "manager")
+	a = a.withDraft("@john ")
+
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: mgr, Event: &core.Event{
+		Kind: core.KindAssistantText, SessionID: mgr, Text: "manager coordinating",
+	}})
+	a = a.observe(john, core.Event{Kind: core.KindCrossSession, SessionID: john, FromName: "manager", Text: "rebase onto main"})
+	a = a.observe(iris, core.Event{Kind: core.KindCrossSession, SessionID: iris, FromName: "manager", Text: "rerun the suite"})
+
+	out := shown(a)
+	if !strings.Contains(out, "rebase onto main") {
+		t.Errorf("the room narrowed to @john hid what the manager sent john:\n%s", out)
+	}
+	for _, gone := range []string{"manager coordinating", "rerun the suite"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("the room narrowed to @john still shows %q:\n%s", gone, out)
+		}
+	}
+
+	// The same lines draw once the draft is cleared, so the absence above is the filter's.
+	wide, _ := pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+	for _, want := range []string{"manager coordinating", "rerun the suite"} {
+		if !strings.Contains(shown(wide), want) {
+			t.Errorf("the unfocused room is missing %q, so the narrowed room hiding it proves nothing", want)
+		}
+	}
+}
+
+// Your turn to the manager reached only the manager, so it is no agent's thread:
+// a narrowed @john room hides it with the replies it earned, and keeps a turn to
+// john and a broadcast that reached him.
+func TestFocusHidesYourTurnsToTheManager(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withAgents("john", "iris", core.ManagerName)
+	sent := []string{"who is stuck?", "@" + core.ManagerName + " spin up two more", "@all ship it", "@john rebase"}
+	for _, text := range sent {
+		a, _ = pressKey(a.withDraft(text), tea.KeyMsg{Type: tea.KeyEnter})
+	}
+
+	wide, _ := pressKey(a.withDraft("@john "), tea.KeyMsg{Type: tea.KeyEsc})
+	if out := shown(wide); !strings.Contains(out, "who is stuck?") {
+		t.Fatalf("precondition: the unfocused room is missing the manager-bound turn:\n%s", out)
+	}
+	out := shown(a.withDraft("@john "))
+	for _, want := range []string{"ship it", "rebase"} {
+		if !strings.Contains(out, want) {
+			t.Errorf("the room narrowed to @john hid %q, a turn that reached him:\n%s", want, out)
+		}
+	}
+	for _, gone := range []string{"who is stuck?", "spin up two more"} {
+		if strings.Contains(out, gone) {
+			t.Errorf("the room narrowed to @john still shows %q, a turn only the manager received:\n%s", gone, out)
+		}
+	}
+	// A broadcast is every agent's, not the first one's.
+	if irisOut := shown(a.withDraft("@iris ")); !strings.Contains(irisOut, "ship it") {
+		t.Errorf("the room narrowed to @iris hid the broadcast:\n%s", irisOut)
+	}
+}
+
+// A restored turn is addressed as the live echo was: the one session whose
+// transcript holds it, so a manager-bound turn stays out of john's thread while a
+// broadcast in two transcripts stays in.
+func TestFocusHidesARestoredTurnOnlyTheManagerReceived(t *testing.T) {
+	broadcast := newRoomSend(false)
+	r := restored(
+		[]core.Event{roomTyped("john", "ship it", base, broadcast)},
+		[]core.Event{roomTyped("iris", "ship it", base.Add(80*time.Millisecond), broadcast)},
+		[]core.Event{roomTyped("mgr", "who is stuck?", base.Add(time.Second), newRoomSend(false).ForSolo())},
+	)
+	got := r.WithFocus("john", "john").View(80, 24)
+	if !strings.Contains(got, "ship it") {
+		t.Errorf("the restored broadcast is hidden under @john:\n%s", got)
+	}
+	if strings.Contains(got, "who is stuck?") {
+		t.Errorf("the restored manager-bound turn is drawn under @john:\n%s", got)
+	}
+}
+
+// A broadcast whose other transcripts did not come back (a dropped batch, a
+// cut, a parked agent) leaves one record, and it must not read as a turn to that
+// session alone: it still draws under the agents that did receive it.
+func TestFocusKeepsARestoredBroadcastWhoseOtherCopiesAreMissing(t *testing.T) {
+	r := restored([]core.Event{roomTyped("iris", "ship it", base, newRoomSend(false))})
+	if got := r.WithFocus("john", "john").View(80, 24); !strings.Contains(got, "ship it") {
+		t.Errorf("a broadcast with one restored copy is hidden under @john:\n%s", got)
 	}
 }
 
@@ -190,22 +293,23 @@ func TestFocusNarrowsRestoredHistory(t *testing.T) {
 		[]core.Event{typed(iris, "@all status?", base.Add(80*time.Millisecond)), heard(iris, "iris building", base.Add(time.Second+80*time.Millisecond))},
 		[]core.Event{typed(mgr, "@all status?", base.Add(120*time.Millisecond)), heard(mgr, "mgr coordinating", base.Add(time.Second+120*time.Millisecond))},
 	)
-	r = r.WithFocus(john, "john", mgr)
+	r = r.WithFocus(john, "john")
 	got := r.View(80, 24)
-	for _, want := range []string{"status?", "john green", "mgr coordinating"} {
+	for _, want := range []string{"status?", "john green"} {
 		if !strings.Contains(got, want) {
 			t.Fatalf("focused history missing %q:\n%s", want, got)
 		}
 	}
-	if strings.Contains(got, "iris building") {
-		t.Fatalf("focused history still shows iris's restored prose:\n%s", got)
+	for _, gone := range []string{"iris building", "mgr coordinating"} {
+		if strings.Contains(got, gone) {
+			t.Fatalf("focused history still shows %q:\n%s", gone, got)
+		}
 	}
 }
 
-// A fleet report starts the manager (managerID "" -> id) while the room is
-// unfocused; that must not re-render and yank a scrolled reader - not even by a
-// row - because an unfocused view admits everything regardless of the manager.
-func TestManagerStartWhileUnfocusedDoesNotYankTheReader(t *testing.T) {
+// Every keystroke and fleet report retargets the room; one that leaves it
+// unfocused must not re-render and yank a scrolled reader - not even by a row.
+func TestRetargetingAnUnfocusedRoomDoesNotYankTheReader(t *testing.T) {
 	r := NewRoom().SetSize(80, 8)
 	for i := 0; i < 40; i++ {
 		r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: fmt.Sprintf("line %d body", i)}, Agent{ID: "s1", Name: "a"})
@@ -215,23 +319,23 @@ func TestManagerStartWhileUnfocusedDoesNotYankTheReader(t *testing.T) {
 		t.Fatal("precondition: expected the reader to be scrolled back")
 	}
 	scrollBefore := r.tr.scroll
-	r = r.WithFocus("", "", "mgr-id")
+	r = r.WithFocus("", "")
 	if r.tr.atBottom() {
-		t.Fatal("a manager start while unfocused yanked the reader to the bottom")
+		t.Fatal("retargeting an unfocused room yanked the reader to the bottom")
 	}
 	if r.tr.scroll != scrollBefore {
-		t.Fatalf("a manager start while unfocused moved the scroll %d -> %d", scrollBefore, r.tr.scroll)
+		t.Fatalf("retargeting an unfocused room moved the scroll %d -> %d", scrollBefore, r.tr.scroll)
 	}
 }
 
 // A width change re-wraps through renderAll and must re-apply the filter, not
 // re-admit hidden lines - the one real risk of the subset render (spec §5).
 func TestReWrapUnderFocusKeepsHiddenLinesHidden(t *testing.T) {
-	const john, iris, mgr = "john-id", "iris-id", "mgr-id"
+	const john, iris = "john-id", "iris-id"
 	r := NewRoom().SetSize(80, 24)
 	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: john, Text: "john green"}, Agent{ID: john, Name: "john"})
 	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: iris, Text: "iris building"}, Agent{ID: iris, Name: "iris"})
-	r = r.WithFocus(john, "john", mgr)
+	r = r.WithFocus(john, "john")
 	r = r.SetSize(60, 24)
 	got := r.View(60, 24)
 	if !strings.Contains(got, "john green") {

@@ -23,16 +23,18 @@ func splitIDs(key string) iter.Seq[string] { return strings.SplitSeq(key, focusS
 
 // focusAdmits reports whether a room line is drawn while the room is focused on
 // one thread: an agent's, or a team's, which is the union of its members'. It is
-// a pure id comparison - the room holds focus, managerID and the line's own ids,
-// and never resolves a name - so it stays testable without a fleet, the way
-// attention.go does.
+// a pure id comparison - the room holds focus and the line's own ids, and never
+// resolves a name - so it stays testable without a fleet, the way attention.go
+// does.
 //
 // focus == "" is the unfocused room and admits everything, so the filter is the
 // identity until a target resolves. A user line (the operator's own turn) is
 // admitted when it is a broadcast (to == "") or addressed to a member; an
-// agent-produced line (prose, turn-end, permission ask) when it is a member's or
-// the manager's. Everything else is hidden.
-func focusAdmits(l roomLine, focus, managerID string) bool {
+// agent-produced line (prose, turn-end, permission ask) when it is a member's.
+// The manager's own lines are hidden like any other agent's; a message it sends
+// a member is a peer message, which belongs to the member's thread. Everything
+// else is hidden.
+func focusAdmits(l roomLine, focus string) bool {
 	if focus == "" {
 		return true
 	}
@@ -49,7 +51,7 @@ func focusAdmits(l roomLine, focus, managerID string) bool {
 			// id comparison.
 			admit = l.by.ID == id || l.ev.SessionID == id
 		default:
-			admit = l.ev.SessionID == id || l.ev.SessionID == managerID
+			admit = l.ev.SessionID == id
 		}
 		if admit {
 			return true

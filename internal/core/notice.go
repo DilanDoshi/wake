@@ -48,15 +48,21 @@ const (
 	// new process. Text is the API message.
 	NoticeAPIError Notice = "api_error"
 
-	// NoticeTurnFailed rides a KindAPIError of any other named kind - an
-	// overload, a rejected request. It fails one turn and the next send retries,
-	// so the UI tells it and neither marks nor parks.
+	// NoticeTurnFailed rides a KindAPIError of any other named kind - a rejected
+	// request, a model that does not exist. It fails one turn and the next send
+	// retries, so the UI tells it and neither marks nor parks.
 	NoticeTurnFailed Notice = "turn_failed"
 
 	// NoticeUsageLimit rides a KindAPIError that is a session or weekly usage
 	// limit. Unlike every other failed turn it recovers on its own when the quota
 	// resets, so it neither parks the agent nor asks for /reauth.
 	NoticeUsageLimit Notice = "usage_limit"
+
+	// NoticeAPIUnreachable rides a KindAPIError for a turn the API never answered
+	// - the connection lost, the machine asleep, an overload - after claude's own
+	// retries. It recovers once the API answers again, so like a usage limit it
+	// neither parks the agent nor asks for /reauth; the daemon resumes it.
+	NoticeAPIUnreachable Notice = "api_unreachable"
 
 	// NoticeTurnInterrupted is Claude's own account of a turn Wake aborted.
 	//
@@ -82,8 +88,10 @@ const (
 	NoticeQuestionCancelled Notice = "question_cancelled"
 
 	// NoticeAutoResumed rides the "continue" the daemon writes to an agent a
-	// usage limit stopped, once a login elsewhere or the reset lifts it - Wake's
-	// words, not the operator's. Authored above the airlock like the two above,
-	// live by the daemon and on restore from the uuid it stamped (rpc.MessageResumed).
+	// usage limit stopped, once a login elsewhere or the reset lifts it, or an
+	// unreachable API stopped, once the connection is back - Wake's words, not the
+	// operator's. Authored above the airlock like the two above, live by the
+	// daemon and on restore from the uuid it stamped (rpc.MessageResumed, beside
+	// rpc.MessageReconnected for the second).
 	NoticeAutoResumed Notice = "auto_resumed"
 )

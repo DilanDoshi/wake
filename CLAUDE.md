@@ -195,8 +195,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   inotify wait, armed only while an agent is stopped) or the reset the limit named has passed (one
   timer; a stale reset arms none). The agent's own turn going through, a `/clear` or an interrupt ends the stop;
   a resume never lands on a turn in flight, and never answers a newer stop. `internal/daemon/usagelimit.go`.
-  Any other named failure (`core.NoticeTurnFailed`: an overload, a rejected request) is a timed
-  notice only. `internal/ui/apirecover.go`.
+  **An unreachable API (`core.NoticeAPIUnreachable`, claude's `server_error`: the connection lost, the
+  machine asleep mid-response, an overload) is pinned and resumed the same way** (owner's 2026-10-23
+  ruling), never marking or clearing a mark: one `continue` stamped `rpc.MessageReconnected` too, drawn
+  `↻ … resumed after the connection came back`, once another agent's turn goes through after the stop or
+  the OS reports a network change after it (a routing-socket or netlink wait, open only while an agent is
+  stopped); one stopped again by Wake's own resume waits for a network change alone.
+  `internal/daemon/unreachable.go`. Any other named failure (`core.NoticeTurnFailed`: a rejected
+  request) is a timed notice only. `internal/ui/apirecover.go`.
 
 **Keys and the legend**
 - **The legend is drawn only while an arm is live, and then it is only the armed cue:**
@@ -328,7 +334,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `roomhistory.go`). `core.Event.At` is set only by `DecodeTranscriptLine`; a batch is dropped whole
   if its session spoke since the ask; a typed turn returns only when two transcripts prove it was a
   broadcast, or was stamped by a room send (`roomprovenance.go`: the uuid Wake stamps is the one on
-  disk; a direct `@name` comes back in that thread, a team send in its members'); agent prose is restored only inside a public
+  disk; a send marked as reaching one session - a direct `@name`, the manager's default turn - comes
+  back in that session's thread, a team send in its members'); agent prose is restored only inside a public
   turn. A record in two transcripts (same uuid, `Event.MessageID`) is a fork's copy, drawn once
   (`forkCopies`); the daemon also leaves a fork's inherited records out of its room history
   (`inheritedBy`), so forks are asked like any session.
@@ -365,10 +372,22 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 **Cards and asks**
 - **An ask belongs to its agent's conversation; the room draws none** (`Cards.For`, `App.cardOf`).
   The roster row, the strip's `N need you` and `⌃X` announce it. Nothing on that wire times out.
+- **A pane drawing a card scrolls as one page** (owner's 2026-10-20 ask): the wheel slides the card and
+  composer off the bottom and pulls the older transcript in at the top, and a card taller than its
+  pane opens on its own top with the rest a wheel notch away. Without a card the wheel moves the
+  transcript alone. The pane is drawn taller and a window of its top rows shown, so nothing is laid
+  out twice (`pagescroll.go`). **Its keys are live only while the whole card is on screen**
+  (`App.cardFullyDrawn`, unchanged in rule) and the key line says when they return (`cardKeysCut`).
+  A draft that changes, or opening an answer, brings the page back to the composer (watched at the
+  composer's write, not per key); a pane whose box holds a draft opens on it, and `submit` and an
+  answer's `↵` act only from a page at its bottom, so a draft nobody can see is never sent. A press on a
+  scrolled page takes a screen selection, not a transcript anchor, and an edge drag scrolls the
+  transcript, not the page. `decisions.md` (2026-10-20).
 - Permissions/plans: rune then `↵`, read only on an empty composer; any other input disarms (key,
   composer, mouse, digit).
 - Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer
-  mode, where the card takes only `↵` (`cardanswer.go`). Arrows reach the card with or without a
+  mode, where the card takes `↵`; a bare `↑↓` with no draft line to move to never walks prompt history -
+  from `Other…` it goes back to the options with the words kept in that row (`cardanswer.go`). Arrows reach the card with or without a
   draft; `←→` only on an empty composer. **A multi-select question** (`core.Question.Multi`) draws
   `[ ]`/`[✔]` boxes, ticks in place on `↵`, a digit or space, walks on by its Next/Submit row, and sends
   the ticks in the order ticked with typed words last, joined by `core.JoinChoices` as Claude Code
@@ -439,7 +458,7 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -449,7 +468,7 @@ yet says so in bold.**
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
 | Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
-| Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` |
+| Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
@@ -529,7 +548,7 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.302. A
+**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.308. A
 fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 
 | Need | Flag |
@@ -569,6 +588,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - One `can_use_tool` carries three shapes; `AskUserQuestion` answers ride in
   `updatedInput.answers` (`core.askKind`, decided by payload shape, never tool name).
 - A question killed by closing stdin is indistinguishable from an operator deny.
+- **An API claude cannot reach fails the turn as `error:"server_error"`** after ten `api_retry` frames
+  (about three minutes, `error_status` null), with no HTTP status on the stream: DNS, a refused or reset
+  connection, a timeout, sleep mid-response, an overload alike. The process stays up and idle.
+  `api-error-unreachable.jsonl`, `docs/superpowers/notes/2026-10-23-unreachable-api-findings.md`.
 - **2.1.302 replays the permission answer Wake wrote** (`control_response`) on stdout; it decodes as a
   receipt nothing acts on (`question-multiselect.jsonl`).
 - Images: first in the content array, text last. An undecodable image silently degrades to text.
@@ -693,7 +716,8 @@ first, and read it.
     ```
 - Conventional commits (`feat:`, `fix:`, `refactor:`, `docs:`, `test:`, `chore:`, `perf:`, `ci:`);
   branches are `<type>/<kebab-description>` (`fix/`, never `bugfix/`).
-- **Dev worktrees live in `.worktrees/<name>`** inside the repo (gitignored) — never `$HOME`,
+- **Every new worktree is created inside the repo, at `.worktrees/<name>`** (gitignored) — by you or
+  any agent that runs `git worktree add`. Never outside the repo directory: not `$HOME`,
   `~/Documents`, `/tmp` or beside the repo. Remove with `git worktree remove` after merge.
 - **Never add Claude attribution** in commits, PR titles or bodies.
 - **Docs-only commits go straight to `main` and are pushed immediately** so other worktrees see them.

@@ -36,9 +36,9 @@ Live names win, and Wake shows you what it resolved to.
 
 ### Narrowing the room to one agent
 
-Type a lone `@name` and the room **narrows to that agent's thread** — their lines, the manager's,
-every broadcast, and your own messages to them — for as long as it is what the composer is
-addressing. It is a view filter, not a mode: `@sydney hi` still routes to sydney, and the room widens
+Type a lone `@name` and the room **narrows to that agent's thread** — their lines, every broadcast,
+your own messages to them, and the messages sent to or from them — for as long as it is what the
+composer is addressing. The manager's own lines, and what you said to the manager, are not in it. It is a view filter, not a mode: `@sydney hi` still routes to sydney, and the room widens
 again when you change or clear the target. `⌃A` **shows all** — it widens a narrowed room back to
 every agent while still addressing `@sydney`, and a second `⌃A` re-narrows. `/groupchat-filter off`
 flips the default so a lone `@name` no longer narrows (`⌃A` then narrows on demand); `on` restores
@@ -112,9 +112,11 @@ Three kinds arrive through one mechanism:
 
 - **A permission request** — it wants to run a tool.
 - **A plan** — it wants approval to proceed.
-- **A question** — it is asking you to choose between options. A question that takes several
-  draws a box on each: `↵`, the option's digit or space ticks one without moving on, and the
-  Next or Submit row under them walks on.
+- **A question** — it is asking you to choose between options. Its `Other…` row takes your own
+  words: type them and press `↵`, or press `↑` to go back to the options with the words kept in that
+  row, and choose it again to edit them. A question that takes several draws a box on each: `↵`, the
+  option's digit or space ticks one without moving on (a filled `Other…` row unticks the same way), and
+  the Next or Submit row under them walks on.
 
 The third is why these are not one thing: a bare "allow" answers the first two, but a question
 needs your *answer* carried with the approval. Approving a question without answering it tells the

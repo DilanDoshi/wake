@@ -42,15 +42,18 @@ func TestRosterDrawsTeamHeadersAndAHeaderClickSelectsNothing(t *testing.T) {
 		t.Errorf("the roster drew no `backend` team header:\n%s", out)
 	}
 
-	// Layout: row 0 alex (top block), row 1 the `backend` header, rows 2-3 thea, john.
-	if _, _, ok := r.At(agents, noSubs, width, height, 1); ok {
-		t.Error("a click on the team header row selected an agent; a header belongs to no agent")
+	// Layout: row 0 alex (top block), row 1 a blank, row 2 the `backend` header,
+	// rows 3-4 thea, john.
+	for _, y := range []int{1, 2} {
+		if _, _, ok := r.At(agents, noSubs, width, height, y); ok {
+			t.Errorf("a click on row %d, the blank or the team header, selected an agent; neither belongs to one", y)
+		}
 	}
 	if a, _, ok := r.At(agents, noSubs, width, height, 0); !ok || a.ID != "s1" {
 		t.Errorf("row 0 = (%q, %v), want alex (s1) in the top block", a.ID, ok)
 	}
-	if a, _, ok := r.At(agents, noSubs, width, height, 2); !ok || a.ID != "s2" {
-		t.Errorf("row 2 = (%q, %v), want thea (s2) under the backend header", a.ID, ok)
+	if a, _, ok := r.At(agents, noSubs, width, height, 3); !ok || a.ID != "s2" {
+		t.Errorf("row 3 = (%q, %v), want thea (s2) under the backend header", a.ID, ok)
 	}
 }
 

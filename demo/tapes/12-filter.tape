@@ -1,6 +1,6 @@
 # BEAT 12 — the filter. A lone `@name` in the room narrows the group chat to
 # that agent's thread for as long as it is the composer's target: their lines,
-# the manager's, every broadcast, and what you said to them. It is a view, not
+# every broadcast, what you said to them, and what was sent to or from them. It is a view, not
 # a mode — backspacing the name widens the room again, and sending clears the
 # draft and widens it too. The header reads `group chat › @name` while narrowed.
 Output .work/out/12-filter.mp4

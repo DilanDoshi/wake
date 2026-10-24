@@ -24,7 +24,6 @@ func TestARoomSendToATeamIsMarkedAsOne(t *testing.T) {
 }
 
 func TestARestoredTeamSendIsAddressedToTheMembersThatHoldIt(t *testing.T) {
-	const mgr = "mgr"
 	send := newRoomSend(false).ForTeam()
 	r := restored(
 		[]core.Event{roomTyped("s1", "run the migrations", base, send), heard("s1", "sydney migrated", base.Add(time.Second))},
@@ -48,7 +47,7 @@ func TestARestoredTeamSendIsAddressedToTheMembersThatHoldIt(t *testing.T) {
 		{"s3", "agent-s3", false},
 		{joinIDs([]string{"s3", "s4"}), "frontend", false},
 	} {
-		got := stripANSI(r.WithFocus(c.focus, c.name, mgr).View(80, 24))
+		got := stripANSI(r.WithFocus(c.focus, c.name).View(80, 24))
 		if seen := strings.Contains(got, "run the migrations"); seen != c.seen {
 			t.Errorf("under @%s the restored team send is drawn = %v, want %v:\n%s", c.name, seen, c.seen, got)
 		}

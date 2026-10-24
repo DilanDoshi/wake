@@ -29,8 +29,8 @@ func assertSaidMatchesTr(t *testing.T, r Room, where string) {
 // oldest line (rows > 0, the cut advances) and a hidden oldest line (rows == 0,
 // the cut does not). The hidden branch skips rendering, so the flood is cheap.
 func TestReclaimUnderFocusKeepsSaidAndTranscriptInSync(t *testing.T) {
-	const john, iris, mgr = "john-id", "iris-id", "mgr-id"
-	r := NewRoom().SetSize(80, 12).WithFocus(john, "john", mgr)
+	const john, iris = "john-id", "iris-id"
+	r := NewRoom().SetSize(80, 12).WithFocus(john, "john")
 
 	shown := func(i int) {
 		r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: john, Text: fmt.Sprintf("john %d", i)}, Agent{ID: john, Name: "john"})
@@ -70,7 +70,7 @@ func TestReclaimUnderFocusKeepsSaidAndTranscriptInSync(t *testing.T) {
 
 	// Unfocus re-renders every canonical line; nothing was lost to reclaim's
 	// interaction with the hidden entries.
-	r2 := r.WithFocus("", "", mgr)
+	r2 := r.WithFocus("", "")
 	assertSaidMatchesTr(t, r2, "after unfocus")
 	if r2.said.count() != r.said.count() {
 		t.Fatalf("unfocus changed the canonical line count: %d -> %d", r.said.count(), r2.said.count())

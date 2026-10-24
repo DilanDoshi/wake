@@ -1140,6 +1140,105 @@ daemons that carry the cmux environment of an older cmux launch - both in `defer
 
 ---
 
+## BUG-53 — a machine that went down took every running fleet with it: nothing was parked, and the next daemon forgot the rest
+
+**Found 2026-10-21, the owner's machine going down with fleets running.** `last` shows a reboot with no shutdown
+record before it. The two largest fleets held a manager and 27 agents, and a manager and 6. After the reboot,
+`wake --fleet <name>` opened a room holding only a freshly spawned manager, and `/resume all` found nothing
+parked. The new daemon's `reapOrphans` logged *"28 sessions were recorded by a daemon that is no longer
+running"*, then one *"could not be shown to be still running, so it is not signalled"* line per session, and
+cleared `sessions.json`. The ⌃Q that followed parked only the new, empty manager. What survived was every
+transcript, the dead daemon's `sessions.json` (until the fleet's next daemon started), and after that only the
+reaper's log lines: ids, no names.
+
+**Causes, read off the tree.**
+
+1. **Only ⌃Q writes the park book.** `quitPark` is the one ending that parks (`server.go`'s `quitVerb`). A crash,
+   a power loss or a SIGKILL runs nothing. SIGINT and SIGTERM cancel `serveDaemon`'s context, which is
+   `quitNone`: *"Sessions are stopped, the park book is left exactly as it is."* So a clean OS shutdown or
+   logout, which sends SIGTERM to every process, loses the fleet too. Its roster empties as each session ends,
+   so not even the ids reach a log. That half is reasoned from the code, not watched.
+2. **Nothing turns a roster record back into an agent**, by design (`roster.go`'s header). And the record
+   could not be turned back if something tried: it carries id, name, label, pid and start time. A wake also
+   needs the start directory, the conversation after a `/clear`, effort, model, budget, fallback, colour, team,
+   and the manager's claude name.
+3. **The reaper clears a record whose process is gone**, which was the last trace Wake held.
+
+**Which part is a decision.** The spec is not ambiguous: *"If Wake crashes, nothing is lost — relaunch and 20
+sessions resume by UUID. **Protect this property.**"* Its failure-mode table agrees: *"Wake crashes | roster on
+disk; sessions resume by UUID; nothing lost"*. The spec wins, so this is a bug. Three rulings stand and the fix
+should keep them:
+- *A daemon restores nothing.* Crashed sessions should land in the park book, where `/resume all` reaches them
+  as it does after ⌃Q, not wake on their own.
+- *The park book is a second file, not a wider roster* (`decisions.md`, 2026-08-10).
+- *`wake stop` is the one ending with no way back.*
+
+The ruling that met a case it did not anticipate is `quitVerb`'s *"neither may park a fleet nobody asked to
+park"*: an OS shutdown is a signal. Whether a signal parks, or leaves the roster behind as a crash does for
+the next daemon to convert, is the owner's call. `deferred.md`'s *"A daemon that is signalled, crashed or
+merely restarted hands the fleet on"* is false for the first two, and wants correcting in the same change.
+
+**Recovered by hand, which is the workaround until this is fixed.**
+- **Ids:** from the dead roster, or from the reaper's log once a daemon had cleared it.
+- **Directory:** the transcript `cwd` whose slug equals its project folder. Two had moved into worktree
+  folders, so the first `cwd` was wrong for them.
+- **Name:** the newest `customTitle`.
+- **Effort:** the newest `/model` probe reply recorded in the transcript.
+- **Team and colour:** the old manager's own `set_team`/`set_color` calls, the last one winning.
+
+Those were written into `parked.json` while no daemon held the fleet, with the old manager replacing the empty
+one, then `wake --fleet <name>` and `/resume all`. Sessions another terminal had already resumed were left out:
+two processes on one id branch the transcript. Lost for good: teams the operator set with `/team`, the model,
+budget and fallback, and two managers that never had a turn, so had no transcript to resume.
+
+**Fix (not built).**
+- **A park-ready record per live agent**, on disk beside the roster and outside the reaper's reach. It is
+  rewritten whenever a wake's inputs change: a `/clear`'s conversation, a rename, team, colour, effort, model,
+  budget, fallback.
+- **The reaper hands records to the park book.** When `reapOrphans` finishes a record (gone, recycled pid, or
+  group signalled), it moves that agent's park-ready record into the park book instead of forgetting it. The
+  reaper's proof that the process is gone is `completePark`'s own precondition, and `unparkRecord` still
+  re-proves it through `resumeSafe` at wake. A record the reaper retains stays out of the book.
+- **A crashed manager comes back as the manager.** `ensureManager` already wakes a parked one, so it is not
+  replaced by a fresh spawn.
+- **Tests first.** A daemon holding agents with teams, colours, an effort, a `/clear` and a renamed manager is
+  SIGKILLed with its roster left behind. A new daemon on that socket must report every one in `Status.Parked`
+  with all of those fields, and `/resume all` must wake them. The old manager must take the manager's seat. A
+  record the reaper retains must stay out of the book. `wake stop` must still leave nothing. If the signal
+  ruling changes, SIGTERM gets the same test.
+
+---
+
+## BUG-54 — ↑ while typing a question's own answer put the last prompt in the box
+
+**Found 2026-10-21 by the owner.** With a question card up, they picked `Other…`, started typing an
+answer, and pressed ↑ to go back to the options. The box filled with the previous prompt instead, and the
+option cursor did not move.
+
+**Cause.** Answer mode (`cardanswer.go`) gave every key but ↵ to the composer, so on a one-line draft ↑
+reached `App.key`'s prompt history (`prompts.go`) and replaced the answer. The refusal's reason box (`d`)
+had the same hole, and that reason reaches the model verbatim.
+
+**Fix:** branch `fix/answer-mode-arrows-move-options`. A bare ↑↓ that would walk the history leaves `Other…`
+for the option above or below, with the words kept in that row, as Claude Code keeps them. Choosing the row
+again puts them back in the box. In the refusal's box the arrow does nothing. A multi-line draft keeps its
+line keys, an open completion menu its walk, and ⌥↑↓ stay the history's.
+
+## BUG-55 — an agent the network dropped mid-turn stayed stopped after the network came back
+
+**Found 2026-10-22 by the owner**: disconnecting the network stopped every working agent, and none carried
+on when it came back. Their transcripts showed it was routine: 89 failed turns in 54 sessions over 30
+days, each followed by nothing until the owner typed `continue` by hand (one batch sat 1 h 36 min).
+
+**Cause.** claude retries a request it cannot get answered for about three minutes, then ends the turn
+with a synthetic frame whose `error` is `server_error` (`testdata/stream/api-error-unreachable.jsonl`).
+`apiNotice` read that as `core.NoticeTurnFailed`, the "next send retries it" kind, so the UI showed a
+timed notice and nothing ever sent the next message. The process stayed alive and idle.
+
+**Fix:** branch `fix/network-loss-resume`. `server_error` is `core.NoticeAPIUnreachable`, and the
+daemon's usage-limit resume carries it (owner's ruling, `decisions.md` 2026-10-23): one `continue` once
+another agent's turn goes through after the stop, or the OS reports a network change after it.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
