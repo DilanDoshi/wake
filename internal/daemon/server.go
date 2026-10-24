@@ -13,6 +13,7 @@ import (
 	"os"
 	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -102,6 +103,9 @@ type server struct {
 	// takes admitMu, so the order cannot reverse.
 	admitMu sync.Mutex
 
+	// maxAgents is this fleet's cap: liveCap until the operator sets one.
+	maxAgents atomic.Int64
+
 	// reportMu holds a status report's build and its enqueue together, so every
 	// client's queue carries reports in the order they were built. Apart, two
 	// pushes could queue a stale snapshot behind a newer one, and a client read a
@@ -134,7 +138,7 @@ type server struct {
 }
 
 func newServer(socket string) *server {
-	return &server{
+	s := &server{
 		socket:     socket,
 		roster:     newRosterFile(rosterPath(socket)),
 		parked:     newParkBook(parkBookPath(socket)),
@@ -146,6 +150,8 @@ func newServer(socket string) *server {
 		done:       make(chan struct{}),
 		limits:     limitWatch{nudge: make(chan struct{}, 1)},
 	}
+	s.maxAgents.Store(int64(liveCap))
+	return s
 }
 
 // start runs f on a tracked goroutine. Everything this package spawns goes
@@ -652,6 +658,8 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		s.beginQuit(quitStop)
 	case rpc.FrameParkAll:
 		s.beginQuit(quitPark)
+	case rpc.FrameSetMaxAgents:
+		s.setMaxAgents(c, f)
 	case rpc.FrameStatus:
 		s.replyStatus(c)
 	case rpc.FramePeers:

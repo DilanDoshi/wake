@@ -53,7 +53,10 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   checks `claude` is on this `PATH` first (its daemon inherits it); a spawn from any daemon without
   one says how to install it (`core.claudeMissing`). `$WAKE_SOCKET` wins;
   naming a fleet beside it is refused. Each fleet is a directory under `~/.wake/fleets/`; per-fleet
-  files are `filepath.Dir(socket)` plus a name.
+  files are `filepath.Dir(socket)` plus a name. **`--max-agents <n>`** (anywhere, with `wake`, `new`,
+  `attach` or `manager`) sets how many sessions the fleet runs at once, 1 to 50, 50 unless set (owner's
+  2026-10-20 ruling): `connect` sends `FrameSetMaxAgents` on the verb's own connection, so it reaches a
+  running fleet and lasts until the daemon stops; it stops nothing already running. `cmd/wake/maxagents.go`.
 - **Spawn flags** (`new`, `manager`, `/new`): `--effort`, `--model`, `--max-budget-usd`,
   `--fallback-model` (all four survive a park), `--worktree <name>` (Wake runs `git worktree add`; never
   passes claude's `--worktree`), `--add-dir` (repeatable), `--debug-file <name>` / `--debug`
@@ -393,7 +396,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - A `Picker` is not a `Card` — `Cards.Reconcile` would delete it on the next report.
 
 **Manager**
-- **May send, interrupt, spawn (optionally named, under `daemon.liveCap`, into a directory the fleet
+- **May send, interrupt, spawn (optionally named, under the fleet's cap - `daemon.liveCap` until `--max-agents` set it - into a directory the fleet
   already occupies; at an effort and model when the operator asks, a prompt rule), and group
   (`set_team`, `set_color`)** — nothing else on the fleet. Rename, label, park, wake, fork, import,
   stop, allow/deny, mode and the four MCP frames are refused, each argued in
@@ -448,7 +451,7 @@ yet says so in bold.**
 
 | What | Where |
 |---|---|
-| Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
+| Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · `--max-agents`: `maxagents.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
 | Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |

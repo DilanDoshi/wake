@@ -116,6 +116,11 @@ const (
 	// daemon's own memory, exactly as it is for FramePark.
 	FrameParkAll = "park_all"
 
+	// FrameSetMaxAgents sets how many sessions this fleet runs at once - the
+	// operator's `--max-agents` - to Frame.MaxAgents, 1 to MaxAgentsCeiling. It
+	// lasts the daemon's life and stops nothing already running.
+	FrameSetMaxAgents = "set_max_agents"
+
 	// FrameStatus asks what is running and FrameStatusReply answers it. A
 	// reply is only ever an answer to a request on that same connection.
 	FrameStatus      = "status"
@@ -226,6 +231,10 @@ type Status struct {
 	// agent, or its park record) and reads a client's rename into it only through
 	// managerClaudeNameOf's fence.
 	ManagerClaude string `json:"manager_claude,omitempty"`
+
+	// MaxAgents is how many sessions this fleet runs at once, the manager
+	// included; zero is a daemon from before it was reported.
+	MaxAgents int `json:"max_agents,omitempty"`
 
 	// Sessions is every session the daemon holds, or - when Running is
 	// false - every one the last daemon recorded before it died, each
@@ -564,3 +573,8 @@ type SessionStatus struct {
 	// no process groups.
 	PID int `json:"pid,omitempty"`
 }
+
+// MaxAgentsCeiling is the highest cap a fleet may be set to, and the cap it runs
+// at when nobody set one (owner's 2026-10-20 ruling). It bounds new sessions;
+// waking a parked one is exempt from any cap, as it always was.
+const MaxAgentsCeiling = 50

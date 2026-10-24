@@ -149,6 +149,8 @@ var usage = `usage:
 
 flags, anywhere:
   --fleet <name>          which fleet to talk to; several can run in one directory
+  --max-agents <n>        how many sessions the fleet runs at once, 1 to 50 (50 unless set);
+                          with wake, new, attach or manager, until the fleet stops
 
 flags, on the verbs that start a session (` + list(spawningVerbs) + `):
   --effort <level>        ` + list(core.EffortLevels) + `
@@ -209,6 +211,15 @@ func run(args []string, out io.Writer) error {
 	args, fleet, err := fleetFlag(args)
 	if err != nil {
 		return err
+	}
+	// The cap, fleetFlag's way: it is about the fleet rather than a session.
+	if args, fleetMaxAgents, err = maxAgentsFlag(args); err != nil {
+		return err
+	}
+	if fleetMaxAgents > 0 {
+		if err := maxAgentsGoesWith(args); err != nil {
+			return err
+		}
 	}
 	// A bare `wake` with no fleet named starts a **new** one, which is the whole
 	// of the difference between this and every verb below it.

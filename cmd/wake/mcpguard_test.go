@@ -172,6 +172,8 @@ var managerVerbs = map[string]verdict{
 
 	rpc.FrameQuit: {why: "ends every session and the daemon, so it is `wake stop` for the whole machine - and it would take down the room the operator is watching and the socket this server's own next call needs"},
 
+	rpc.FrameSetMaxAgents: {why: "the operator's cap on how many sessions the fleet runs at once (`--max-agents`, owner's 2026-10-20 ruling). It is the bound FrameSpawn's verdict rests on, so a manager that could raise it would be choosing its own ceiling - and lowering it would refuse the operator's next spawn for a reason they did not set"},
+
 	rpc.FrameParkAll: {why: "ends the daemon too. Recoverable in principle, and the manager cannot recover it: the fleet comes back only when a human types `wake`, and until they do the manager has stopped the thing it was asked to manage"},
 
 	rpc.FramePark: {why: "recoverable only by a *human*. `/resume` is a TUI command and there is no wake tool here, so a parked session is one the manager can no longer see - list_agents does not offer it - and cannot bring back. Worse in one state: parking an agent that is blocked on a permission ask writes a denial the operator never made, and it survives the wake",
