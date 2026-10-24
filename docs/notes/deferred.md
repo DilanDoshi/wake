@@ -5799,3 +5799,7 @@ Left out of the channels build on purpose; each is its own small change if someb
   badges the roster already draws. A sum on each header would be the tell for a channel you are not in.
 - **`⌃D`/`⌃Y`/`⌃B` with the cursor on a header open the top-ranked agent**, the no-pick fallback (`dmTarget`), not
   the team's first member or nothing.
+- **A cursored header whose block cannot fit is not drawn** (Codex). At a short column a team's first block -
+  the gap, the header, its first member and that member's subagent rows - can be taller than the room left under
+  `all` and the count; the window then draws the count alone, as it does for any agent block that cannot fit
+  (decisions.md, 2026-10-21), and `↵` still picks the header the cursor is on, as it opens an undrawn agent.

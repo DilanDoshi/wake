@@ -208,6 +208,15 @@ func TestEnterOnAHeaderPicksItsChannel(t *testing.T) {
 	if a.room.channel != "frontend" || a.focus != "" {
 		t.Errorf("↵ on frontend from sydney's conversation: channel %q, focus %q", a.room.channel, a.focus)
 	}
+	// The keys left sydney's conversation, so what sydney says next is unread
+	// again - the more so in a channel that keeps sydney's lines out of the room.
+	if f := a.fleet.Focused(); f != "" {
+		t.Errorf("after the pick the fleet still reads %q as the open conversation", f)
+	}
+	was := a.fleet.agents["s1"].Unread
+	if a = a.applyFrame(frameText("s1", "sydney late note")); a.fleet.agents["s1"].Unread != was+1 {
+		t.Errorf("sydney's unread stayed %d after a line the frontend channel hides", a.fleet.agents["s1"].Unread)
+	}
 
 	// With the sidebar closed the cursor is on nothing anyone can see.
 	a = cursorTo(t, channelRoom(t), Roster{Header: "backend"})
@@ -264,6 +273,21 @@ func TestClickingAHeaderPicksItsChannel(t *testing.T) {
 		t.Errorf("the pressed frontend header picked %q on release", a.room.channel)
 	}
 
+	// A report that changes the picked channel's members between press and
+	// release re-renders the room, and the click still lands.
+	y = channelHeaderRow(t, a, "backend")
+	a, _ = a.mouse(pressAt(x, y))
+	sessions := channelSessions()
+	sessions = append(sessions, rpc.SessionStatus{ID: "s7", Name: "rook", Team: "frontend", State: rpc.StateIdle})
+	a = a.applyStatus(channelReport(sessions...))
+	if !addressedTo(a.room.channelKey, "s7") {
+		t.Fatalf("precondition: rook did not join the frontend channel's key %q", a.room.channelKey)
+	}
+	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: x, Y: y})
+	if a.room.channel != "backend" {
+		t.Errorf("a click pressed before the channel's members changed picked %q on release, want backend", a.room.channel)
+	}
+
 	a, _ = click(a, x, channelHeaderRow(t, a, core.BroadcastName))
 	if a.room.channel != "" {
 		t.Errorf("a click on all left the channel %q", a.room.channel)
@@ -272,7 +296,7 @@ func TestClickingAHeaderPicksItsChannel(t *testing.T) {
 	// A team gone from the roster between press and release has no channel.
 	y = channelHeaderRow(t, a, "frontend")
 	a, _ = a.mouse(pressAt(x, y))
-	sessions := channelSessions()
+	sessions = channelSessions()
 	sessions[2].Team = "backend"
 	a = a.applyStatus(&rpc.Status{Running: true, Teams: []string{"backend"}, Sessions: sessions})
 	a, _ = a.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: x, Y: y})

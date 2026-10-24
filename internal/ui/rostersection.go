@@ -47,7 +47,8 @@ type rosterItem struct {
 func (item rosterItem) hasHeader() bool { return item.header != "" }
 
 // lead is the rows an item draws above its agent's own: the gap, then the header.
-// They belong to no agent, so a click on them opens nothing.
+// They belong to no agent: a click on the header picks its channel, and one on
+// the gap nothing.
 func (item rosterItem) lead() int {
 	n := 0
 	if item.gap {

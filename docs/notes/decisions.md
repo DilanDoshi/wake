@@ -4825,8 +4825,10 @@ filter, picked from the sidebar instead of typed.
 - **Its members are what the roster draws under the header**, parked ones included and ended ones out, and the key
   follows them on every report (`rechanneled`, in the report chain before `retarget`). A lone `@team` keys its
   live members only, because it is also a route; a channel whose members were all parked would otherwise key ""
-  and show everything under a lit header. The same channel with changed members keeps the reader's place
-  (`refiltered`); a team left with no header returns the window to all, with a timed notice.
+  and show everything under a lit header. A report that changes no member renders nothing; the same channel
+  with changed members keeps the reader's place (`refiltered`); a team left with no header returns the window
+  to all, with a timed notice. The re-render clears a room transcript selection, never a selection over the
+  frame - a roster click waiting on its release is one (Codex).
 - **The manager has a seat in every channel** (the owner, 2026-10-24; spec §12's seat in every group). Routing
   does not change in a channel, so an unaddressed draft still goes to the manager, and under 2026-10-21's rule
   your turn and its reply are the manager's thread: without the seat both vanished from the channel they were sent
@@ -4838,8 +4840,9 @@ filter, picked from the sidebar instead of typed.
 - **Picked the way a row is**: `⇧↑↓` stop on the headers (`channelStops`, `all` first; a cursor on nothing still
   lands on the first agent, and the board walks `walkable` alone), `↵` with an empty composer picks the cursored
   one (`pickedHeader`, gated on the sidebar as `pickedAgent` is), and a click picks the one resolved at its press.
-  Picking moves the keys to the room, as picking an agent opens its conversation; conversations open as before and
-  the channel stays. The header cursor is `Roster.Header`, never set beside `Selected`, so `⌃C` on one parks no
+  Picking moves the keys to the room, as picking an agent opens its conversation, and the fleet's focus with
+  them, as `⇥` does, so the conversation left behind counts unread again (Codex, code review); conversations
+  open as before and the channel stays. The header cursor is `Roster.Header`, never set beside `Selected`, so `⌃C` on one parks no
   one and `⌃D`/`⌃Y`/`⌃B` keep the no-pick fallback (the top-ranked agent). No key is new.
 - **`⌃A` and `/groupchat-filter` are the mention's only**: `⌃A` widens a mention to the channel, never past it, and
   is refused with no target; with the filter off a lone `@name` leaves the room at its channel.

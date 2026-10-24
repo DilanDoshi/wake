@@ -230,6 +230,32 @@ func TestAChannelKeepsAScrolledReadersPlaceAsItsMembersChange(t *testing.T) {
 	}
 }
 
+// A report that changes who is on the channel re-renders the room, so a selection
+// anchored to its lines goes; one that changes nothing renders nothing - a report
+// arrives on every state change, and the room is up to 20,000 lines.
+func TestAReportReRendersAChannelOnlyWhenItsMembersChange(t *testing.T) {
+	a := channelRoom(t).selectChannel("backend")
+	renders := 0
+	original := renderRoom
+	renderRoom = func(r Room, lines []roomLine) []block { renders++; return original(r, lines) }
+	t.Cleanup(func() { renderRoom = original })
+
+	a = a.applyStatus(channelReport(channelSessions()...))
+	if renders != 0 {
+		t.Errorf("a report that changed nobody's team re-rendered the channel %d times", renders)
+	}
+
+	a.sel, a.selecting = selection{anchor: point{line: 3}, head: point{line: 5}}, true
+	a = a.applyStatus(channelReport(append(channelSessions(),
+		rpc.SessionStatus{ID: "s6", Name: "kit", Team: "backend", State: rpc.StateIdle})...))
+	if renders == 0 {
+		t.Fatal("precondition: kit joining backend did not re-render the channel")
+	}
+	if !a.sel.empty() || a.selecting {
+		t.Errorf("a re-render under a changed membership kept the room selection %+v", a.sel)
+	}
+}
+
 // A line the channel hides is still the room's: picking all shows it, and a
 // width change under the channel does not let it in.
 func TestALineAChannelHidesIsKeptForAll(t *testing.T) {

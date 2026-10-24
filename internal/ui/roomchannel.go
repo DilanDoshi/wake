@@ -70,7 +70,9 @@ func (f Fleet) channelKey(team string) string {
 
 // selectChannel shows a header's channel in the room - a team's, or every
 // agent's for all - and gives the room the keys, as picking an agent gives them
-// to its conversation. A team that has left the roster picks nothing.
+// to its conversation, and as ⇥ does: the fleet's focus with them, so the
+// conversation they left counts unread again. A team that has left the roster
+// picks nothing.
 func (a App) selectChannel(header string) App {
 	team := header
 	if header == core.BroadcastName {
@@ -83,6 +85,7 @@ func (a App) selectChannel(header string) App {
 	prev := a.room.filter()
 	a.room = a.room.WithChannel(team, key)
 	a.roster = Roster{Header: header}
+	a.fleet = a.fleet.Focus("")
 	return a.clearedSelOnFocusChange(prev).refocus("")
 }
 

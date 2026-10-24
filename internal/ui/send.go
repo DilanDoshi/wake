@@ -451,9 +451,10 @@ func (a App) withRoomBar() App {
 // without changing the target) clears it too, and a target that resolves under a
 // filter that is off (no re-render) does not. Scoped to the room's own selection
 // (pane == ""): a focus change re-renders only the room, so a selection held in a
-// DM pane is untouched, unlike a width change which re-wraps every pane.
+// DM pane is untouched, unlike a width change which re-wraps every pane - and so
+// is one over the frame, a roster click waiting on its release among them.
 func (a App) clearedSelOnFocusChange(prev roomFilter) App {
-	if a.room.filter() != prev && a.sel.pane == "" {
+	if a.room.filter() != prev && a.sel.pane == "" && !a.sel.onScreen {
 		a.sel, a.selecting = selection{}, false
 	}
 	return a
