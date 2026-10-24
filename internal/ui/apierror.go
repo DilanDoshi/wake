@@ -32,8 +32,10 @@ import (
 // A usage limit is only pinned: the quota resets on its own and the same process
 // answers again, so a mark for /reauth or a park would cost a restart for nothing.
 // The API only says it to a login it knows, so it is also proof the login works.
-// Any other failed turn - an overload, a rejected request - is only told: the
-// next send retries it, and a pin is for a condition that stands.
+// An unreachable API is only pinned too, and proves nothing: the daemon resumes
+// the agent once the connection is back. Any other failed turn - a rejected
+// request - is only told: the next send retries it, and a pin is for a
+// condition that stands.
 func (a App) apiErrored(sessionID string, ev core.Event) App {
 	msg := apiErrorFallback
 	if ev.Text != "" {
@@ -49,7 +51,11 @@ func (a App) apiErrored(sessionID string, ev core.Event) App {
 	case core.NoticeUsageLimit:
 		said := fmt.Sprintf(usageLimitFormat, who, msg)
 		notice.Report("%s", said)
-		return a.clearAuthFailed(sessionID).apiAnswered(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, said: said, usage: true})
+		return a.clearAuthFailed(sessionID).apiAnswered(sessionID).pinAPIError(sessionID, stuckPin{msg: msg, said: said, format: usageLimitFormat})
+	case core.NoticeAPIUnreachable:
+		said := fmt.Sprintf(unreachableFormat, who, msg)
+		notice.Report("%s", said)
+		return a.pinAPIError(sessionID, stuckPin{msg: msg, said: said, format: unreachableFormat})
 	case core.NoticeAPIError:
 		said := fmt.Sprintf(apiErrorFormat, who, msg, reauthVerb)
 		notice.Report("%s", said)
@@ -74,6 +80,10 @@ const (
 	// usageLimitFormat is a usage limit: nothing to run - the daemon resumes the
 	// agent itself (internal/daemon/usagelimit.go).
 	usageLimitFormat = "%s: %s — Wake resumes it at the reset, or when you sign in to another account"
+
+	// unreachableFormat is an API that never answered: nothing to run - the
+	// daemon resumes the agent itself (internal/daemon/unreachable.go).
+	unreachableFormat = "%s: %s — Wake resumes it when the connection is back"
 
 	// turnFailedFormat is any other failed turn: who, and what the API said.
 	turnFailedFormat = "%s: %s"
@@ -117,7 +127,8 @@ func (a App) unpinAPIError(id string) App {
 // resumed, by this window or any other, onto a fresh process - so its mark goes
 // with its pin and notice, or this window's /reauth would park the new process.
 // /reauth's park alone does not unpin - it is the step before a resume. A usage
-// limit is not lifted by a new process, so only a turn that goes through unpins it.
+// limit or an unreachable API is not lifted by a new process, so only a turn that
+// goes through unpins it.
 func (a App) reconciledPins() App {
 	if len(a.notices.stuck) == 0 {
 		return a
@@ -133,7 +144,7 @@ func (a App) reconciledPins() App {
 		switch {
 		case inBook[id] || (ok && agent.State == rpc.StateParked):
 			p.parked = true
-		case ok && agent.State != rpc.StateEnded && p.parked && !p.usage:
+		case ok && agent.State != rpc.StateEnded && p.parked && p.format == "":
 			resumed = append(resumed, id)
 		}
 		next[id] = p
@@ -168,8 +179,8 @@ func (a App) pinnedNotice() string {
 		text = fmt.Sprintf(apiAwaitFormat, who, pin.msg, tail)
 	case first.State == rpc.StateParked:
 		text = fmt.Sprintf(apiErrorFormat, who, pin.msg, resumeVerb)
-	case pin.usage:
-		text = fmt.Sprintf(usageLimitFormat, who, pin.msg)
+	case pin.format != "":
+		text = fmt.Sprintf(pin.format, who, pin.msg)
 	default:
 		text = fmt.Sprintf(apiErrorFormat, who, pin.msg, reauthVerb)
 	}

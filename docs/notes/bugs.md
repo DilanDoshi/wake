@@ -1224,6 +1224,21 @@ for the option above or below, with the words kept in that row, as Claude Code k
 again puts them back in the box. In the refusal's box the arrow does nothing. A multi-line draft keeps its
 line keys, an open completion menu its walk, and ⌥↑↓ stay the history's.
 
+## BUG-55 — an agent the network dropped mid-turn stayed stopped after the network came back
+
+**Found 2026-10-22 by the owner**: disconnecting the network stopped every working agent, and none carried
+on when it came back. Their transcripts showed it was routine: 89 failed turns in 54 sessions over 30
+days, each followed by nothing until the owner typed `continue` by hand (one batch sat 1 h 36 min).
+
+**Cause.** claude retries a request it cannot get answered for about three minutes, then ends the turn
+with a synthetic frame whose `error` is `server_error` (`testdata/stream/api-error-unreachable.jsonl`).
+`apiNotice` read that as `core.NoticeTurnFailed`, the "next send retries it" kind, so the UI showed a
+timed notice and nothing ever sent the next message. The process stayed alive and idle.
+
+**Fix:** branch `fix/network-loss-resume`. `server_error` is `core.NoticeAPIUnreachable`, and the
+daemon's usage-limit resume carries it (owner's ruling, `decisions.md` 2026-10-23): one `continue` once
+another agent's turn goes through after the stop, or the OS reports a network change after it.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

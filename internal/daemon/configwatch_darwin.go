@@ -53,10 +53,24 @@ type kqueueWatch struct {
 }
 
 func (w *kqueueWatch) register(ident int, filter int16, fflags uint32) error {
+	return kqueueAdd(w.kq, ident, filter, fflags)
+}
+
+// kqueueAdd registers one event with a kqueue, cleared as it is read.
+func kqueueAdd(kq, ident int, filter int16, fflags uint32) error {
 	var ev unix.Kevent_t
 	unix.SetKevent(&ev, ident, int(filter), unix.EV_ADD|unix.EV_CLEAR)
 	ev.Fflags = fflags
-	_, err := unix.Kevent(w.kq, []unix.Kevent_t{ev}, nil, nil)
+	_, err := unix.Kevent(kq, []unix.Kevent_t{ev}, nil, nil)
+	return err
+}
+
+// kqueueTrigger fires the user event a watch's run loop returns on.
+func kqueueTrigger(kq int) error {
+	var ev unix.Kevent_t
+	unix.SetKevent(&ev, 0, unix.EVFILT_USER, 0)
+	ev.Fflags = unix.NOTE_TRIGGER
+	_, err := unix.Kevent(kq, []unix.Kevent_t{ev}, nil, nil)
 	return err
 }
 
@@ -105,10 +119,7 @@ func (w *kqueueWatch) run() {
 }
 
 func (w *kqueueWatch) stop() {
-	var ev unix.Kevent_t
-	unix.SetKevent(&ev, 0, unix.EVFILT_USER, 0)
-	ev.Fflags = unix.NOTE_TRIGGER
-	if _, err := unix.Kevent(w.kq, []unix.Kevent_t{ev}, nil, nil); err != nil {
+	if err := kqueueTrigger(w.kq); err != nil {
 		logf("wake: stop watching %s: %v", w.path, err)
 	}
 	<-w.done

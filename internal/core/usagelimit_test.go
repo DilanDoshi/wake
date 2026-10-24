@@ -12,7 +12,8 @@ import (
 // its own when the quota resets, so it raises a notice of its own. The frame's
 // top-level "error" names the kind: "authentication_failed" is recorded live in
 // testdata/stream/api-error-auth.jsonl, and "rate_limit" is the value the same
-// synthetic frame carries on disk for a session or weekly limit. Any other named
+// synthetic frame carries on disk for a session or weekly limit. "server_error"
+// is an API that never answered (api-error-unreachable.jsonl). Any other named
 // kind fails one turn only; a frame naming none is read as a login's, as every
 // failed turn was before the kinds were told apart.
 func TestAUsageLimitIsToldApartFromAnExpiredLogin(t *testing.T) {
@@ -23,7 +24,7 @@ func TestAUsageLimitIsToldApartFromAnExpiredLogin(t *testing.T) {
 		{"rate_limit", NoticeUsageLimit},
 		{"authentication_failed", NoticeAPIError},
 		{"", NoticeAPIError},
-		{"server_error", NoticeTurnFailed},
+		{"server_error", NoticeAPIUnreachable},
 		{"overloaded", NoticeTurnFailed},
 		{"invalid_request", NoticeTurnFailed},
 	} {
@@ -79,6 +80,37 @@ func TestAClaudeLocalReplyIsMarkedAsNoInference(t *testing.T) {
 	}
 	if synthetic == 0 || real == 0 {
 		t.Fatalf("the corpus no longer holds both shapes: %d synthetic, %d real", synthetic, real)
+	}
+}
+
+// A turn the API never answered - recorded against an unresolvable host - is
+// retried by claude ten times as plain system frames, then fails once as an
+// unreachable API, which Wake resumes when the connection is back.
+func TestAnUnreachableAPIFailsTheTurnOnceAfterClaudesRetries(t *testing.T) {
+	var failed []Event
+	retries := 0
+	for _, line := range fixtureLines(t, filepath.Join("..", "..", "testdata", "stream", "api-error-unreachable.jsonl")) {
+		evs, err := DecodeLine([]byte(line))
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		for _, ev := range evs {
+			switch {
+			case ev.Kind == KindAPIError:
+				failed = append(failed, ev)
+			case ev.Kind == KindSystem && ev.Text == subtypeAPIRetry:
+				retries++
+			}
+		}
+	}
+	if retries == 0 {
+		t.Error("the recording's retries no longer decode as system frames")
+	}
+	if len(failed) != 1 {
+		t.Fatalf("%d failed turns decoded, want one", len(failed))
+	}
+	if failed[0].Notice != NoticeAPIUnreachable || !strings.Contains(failed[0].Text, "ENOTFOUND") {
+		t.Errorf("the failed turn decoded as %q %q, want %q carrying the API's message", failed[0].Notice, failed[0].Text, NoticeAPIUnreachable)
 	}
 }
 

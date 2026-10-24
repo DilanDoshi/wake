@@ -342,8 +342,9 @@ func TestOnlyALiveAgentCountsAsStopped(t *testing.T) {
 }
 
 // The daemon's "continue" comes back off disk under the uuid it stamped, so a
-// reopened conversation or room draws it as Wake's - and an operator who typed
-// "continue" themselves still reads as the operator. The line is the recorded
+// reopened conversation or room draws it as Wake's, a reconnect's still saying
+// why it came - and an operator who typed "continue" themselves still reads as
+// the operator. The line is the recorded
 // room-stamped one (testdata/transcript/room-stamped-uuid.jsonl), re-stamped.
 func TestARestoredResumeIsMarkedAsWakes(t *testing.T) {
 	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "transcript", "room-stamped-uuid.jsonl"))
@@ -362,18 +363,23 @@ func TestARestoredResumeIsMarkedAsWakes(t *testing.T) {
 		return string(out)
 	}
 	resumed := rpc.NewMessageSend(rpc.MessageResumed).ID()
-	plantTranscript(t, histID, stamped(resumed, nil), stamped(uuid.NewString(), resumed))
+	reconnect := rpc.NewMessageSend(rpc.MessageResumed | rpc.MessageReconnected).ID()
+	plantTranscript(t, histID, stamped(resumed, nil), stamped(reconnect, resumed), stamped(uuid.NewString(), reconnect))
 	events, err := History(histID)
 	if err != nil {
 		t.Fatalf("History: %v", err)
 	}
 	var notices []core.Notice
+	var ids []string
 	for _, ev := range events {
 		if ev.Kind == core.KindUserText {
-			notices = append(notices, ev.Notice)
+			notices, ids = append(notices, ev.Notice), append(ids, ev.MessageID)
 		}
 	}
-	if want := []core.Notice{core.NoticeAutoResumed, ""}; !slices.Equal(notices, want) {
-		t.Errorf("restored the two \"continue\"s with notices %q, want %q", notices, want)
+	if want := []core.Notice{core.NoticeAutoResumed, core.NoticeAutoResumed, ""}; !slices.Equal(notices, want) {
+		t.Fatalf("restored the three \"continue\"s with notices %q, want %q", notices, want)
+	}
+	if ids[1] != reconnect {
+		t.Errorf("the reconnect resume came back as %q, losing the mark that says why it came", ids[1])
 	}
 }
