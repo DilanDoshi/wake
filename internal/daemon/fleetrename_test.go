@@ -132,6 +132,18 @@ func TestARenameMayTakeBackANameThatForwardsHere(t *testing.T) {
 	}
 }
 
+// A name that forwards to nothing - its fleet gone by hand - is stale, and taken.
+func TestARenameTakesANameThatForwardsToNothing(t *testing.T) {
+	root := aFleetRoot(t, "atlas")
+	if err := os.Symlink("gone", fleetPath(root, "dev")); err != nil {
+		t.Fatal(err)
+	}
+	mustMoveFleet(t, root, "atlas", "dev")
+	if fi, err := os.Lstat(fleetPath(root, "dev")); err != nil || !fi.IsDir() {
+		t.Errorf("dev is not the fleet's directory: %v", err)
+	}
+}
+
 // `wake --fleet <old>` lands on the fleet's real name, so neither a window nor a
 // daemon it starts ever runs under an alias; a link to nothing forwards nothing.
 func TestAnOldNameReachesTheFleetItForwardsTo(t *testing.T) {
@@ -251,6 +263,10 @@ func TestRenamingARunningFleetKeepsEveryPathToIt(t *testing.T) {
 	}).Status
 	if st.Socket != renamed {
 		t.Errorf("the report puts the fleet on %s, want %s", st.Socket, renamed)
+	}
+	// With no manager yet, the one the fleet would start is the new name's.
+	if st.ManagerClaude != "manager-dev" {
+		t.Errorf("the report names the fleet's manager %q, want manager-dev", st.ManagerClaude)
 	}
 	// An agent's WAKE_SOCKET, and every window's, still names the old path.
 	if got := attach(t, old).status(); got.Fleet != "dev" {
