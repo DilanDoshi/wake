@@ -58,6 +58,9 @@ off `rate_limit_event`. Consciously left out:
 - **A switch to an account whose window resets at the same instant** with less used keeps the higher figure
   until the new one passes it or the window resets: a lower figure for the same reset is read as a reading
   that arrived late (`daemon/usage.go`'s `older`).
+- **Out-of-order readings across a reset are told apart by this machine's clock.** Two agents' responses
+  straddling the reset by less than the clock's skew, landing out of order, let the old window back in; it
+  has passed, so it arrives lapsed and draws as the reset. The stream names no account to do better (Codex).
 
 *Closes with:* each item on its own; none blocks the bar.
 

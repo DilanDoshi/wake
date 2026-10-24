@@ -30,8 +30,11 @@ func (b *usageBook) note(ev core.Event, now time.Time) bool {
 	if u == nil {
 		return false
 	}
-	// The reset in UTC and off a Unix time, so == compares the instant.
-	next := rpc.SessionUsage{Percent: int(math.Round(u.Used * 100)), Resets: u.Resets.UTC(), Warned: u.Warned, Limited: u.Limited}
+	// The reset in UTC and off a Unix time, so == compares the instant; and a
+	// reading whose reset has passed arrives lapsed, so a late copy of one the
+	// tick already lapsed changes nothing.
+	next := rpc.SessionUsage{Percent: int(math.Round(u.Used * 100)), Resets: u.Resets.UTC(), Warned: u.Warned, Limited: u.Limited,
+		Lapsed: !now.Before(u.Resets)}
 	b.mu.Lock()
 	defer b.mu.Unlock()
 	if b.held && (b.reading == next || older(next, b.reading, now)) {
@@ -71,7 +74,8 @@ func (b *usageBook) report() *rpc.SessionUsage {
 // events arrive on its own goroutine, so two a moment apart can land out of
 // order. A window's use only grows, so a lower figure for the same reset is
 // older, and so is a window whose reset has passed beside one still running.
-// Another account's live window, resetting sooner, is not.
+// Another account's live window, resetting sooner, is not. "Passed" is this
+// machine's clock, which the stream gives nothing better than (deferred.md).
 func older(next, held rpc.SessionUsage, now time.Time) bool {
 	if next.Resets.Equal(held.Resets) {
 		return next.Percent < held.Percent

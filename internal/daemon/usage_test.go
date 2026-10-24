@@ -128,6 +128,9 @@ func TestTheResetLapsesTheReadingOnceUntilTheNext(t *testing.T) {
 	if b.lapse(resets.Add(time.Minute)) {
 		t.Error("the lapse was reported twice")
 	}
+	if b.note(reading(0.47, resets, false), resets.Add(time.Minute)) || !b.report().Lapsed {
+		t.Errorf("a late copy of the lapsed reading took the lapse back: %+v", b.report())
+	}
 	if !b.note(reading(0.02, resets.Add(5*time.Hour), false), resets.Add(time.Minute)) || b.report().Lapsed {
 		t.Errorf("a new reading left the lapse standing: %+v", b.report())
 	}
@@ -164,7 +167,7 @@ func TestAReadingIsPushedAndAWindowThatAttachesLaterIsToldIt(t *testing.T) {
 }
 
 // The liveness tick the daemon already runs is what notices a reset passing:
-// a reading whose reset is behind it is pushed lapsed, with no timer of its own.
+// a reading whose reset falls due is pushed lapsed, with no timer of its own.
 func TestTheLivenessTickLapsesAReadingWhoseResetHasPassed(t *testing.T) {
 	shortSilence(t, time.Second)
 	fakeClaudeOnPath(t, "usage")
@@ -173,7 +176,8 @@ func TestTheLivenessTickLapsesAReadingWhoseResetHasPassed(t *testing.T) {
 	id := testSessionID("f6f6")
 	c.spawn(id, "sydney")
 
-	past := time.Now().Add(-time.Minute).Unix()
-	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: id, Text: "usage 0.62 " + strconv.FormatInt(past, 10)})
+	soon := time.Now().Add(3 * time.Second).Unix()
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: id, Text: "usage 0.62 " + strconv.FormatInt(soon, 10)})
+	c.awaitUsage("the reading, before its reset", func(u rpc.SessionUsage) bool { return u.Percent == 62 && !u.Lapsed })
 	c.awaitUsage("the reading lapsed by the tick", func(u rpc.SessionUsage) bool { return u.Percent == 62 && u.Lapsed })
 }
