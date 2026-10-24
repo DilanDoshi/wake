@@ -180,8 +180,8 @@ func (a App) press(x, y int) App {
 		// and release would otherwise open whatever agent slid onto this row. See
 		// screenClick.
 		a = a.startScreenSelection(x, y)
-		if agent, dispatch, ok := a.clickedAgent(y); ok {
-			a.rosterHit = rosterHit{id: agent.ID, name: agent.Name, dispatch: dispatch, ok: true}
+		if spot, ok := a.clickedRow(y); ok {
+			a.rosterHit = rosterHit{id: spot.agent.ID, name: spot.agent.Name, dispatch: spot.dispatch, header: spot.header, ok: true}
 		}
 	case RegionGroups:
 		a = a.startScreenSelection(x, y)

@@ -301,8 +301,7 @@ func (a App) boardMouse(m tea.MouseMsg) (App, tea.Cmd) {
 // by setting the cursor it reads. Both the placement keys and a click use it, so
 // the board opens a dispatch exactly one way - screensel.go's own pattern.
 func (a App) viewBoardDispatch(id, dispatch string) App {
-	a.roster.Selected = id
-	a.roster.SelectedTask = dispatch
+	a.roster = Roster{Selected: id, SelectedTask: dispatch}
 	return a.viewingPicked(id)
 }
 
@@ -436,7 +435,7 @@ func teamHeaderAt(agents []Agent, i int) string {
 // separator above the `──── team ────` divider, so each team reads as its own
 // chunk. teamHeaderRows tall, the one height both board views count a header by.
 func teamHeaderBand(team string, width int) []string {
-	return []string{"", teamHeaderLine(team, width)}
+	return []string{"", teamHeaderLine(team, width, HintStyle, HintStyle)}
 }
 
 // sectionHeader is the header band the window draws before a section, or blank

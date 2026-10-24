@@ -217,14 +217,15 @@ func (a App) pickedAgent() (Agent, bool) {
 	return a.fleet.Agent(a.roster.Selected)
 }
 
-// clickedAgent is the roster row under a click, if the click was on one, and
-// the dispatch under that agent if the click landed on one of its subagent rows.
-func (a App) clickedAgent(y int) (Agent, string, bool) {
+// clickedRow is the roster row under a click, if the click was on one: an agent
+// (and the dispatch under it if the click landed on one of its subagent rows), or
+// a channel header.
+func (a App) clickedRow(y int) (rosterSpot, bool) {
 	r := a.regions()
 	if r.Roster <= 0 {
-		return Agent{}, "", false
+		return rosterSpot{}, false
 	}
-	return a.roster.At(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.paneHeight(), y)
+	return a.roster.Hit(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.paneHeight(), y)
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the
@@ -323,11 +324,13 @@ func (a App) show(sessionID, name string, place func(Grid) Grid) App {
 	// A subagent the cursor named belongs to the agent it was under, so opening a
 	// different one drops it: the pair Move and walkable cannot produce, and the
 	// invariant the mouse path pairs by hand (mouse.go). Opening the *same* agent
-	// keeps it, which is ⌃D toggling into the subagent the cursor is on.
+	// keeps it, which is ⌃D toggling into the subagent the cursor is on. A fresh
+	// Roster, so a cursor on a channel header comes off it.
+	task := a.roster.SelectedTask
 	if a.roster.Selected != sessionID {
-		a.roster.SelectedTask = ""
+		task = ""
 	}
-	a.roster.Selected = sessionID
+	a.roster = Roster{Selected: sessionID, SelectedTask: task}
 	// A conversation this client has not seen before comes back with what it
 	// already said; Update writes the ask. See history.go.
 	a = a.askHistory(sessionID)

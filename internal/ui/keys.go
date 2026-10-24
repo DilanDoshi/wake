@@ -215,6 +215,9 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// key that was doing nothing rather than taking one from the composer.
 		// A card takes ↵ before this; see cardKey.
 		if a.composerEmpty() {
+			if header, ok := a.pickedHeader(); ok {
+				return a.selectChannel(header), nil, true
+			}
 			if agent, ok := a.pickedAgent(); ok {
 				return a.openDMWith(agent.ID, agent.Name).viewingWorkflow(agent.ID), nil, true
 			}

@@ -80,7 +80,7 @@ func (a App) assembleFrame() string {
 		}
 	}
 	if r.Roster > 0 {
-		panels = append(panels, a.roster.View(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, h))
+		panels = append(panels, a.roster.Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, h, a.room.channel))
 	}
 
 	cols := make([]string, 0, 2*len(panels))
@@ -251,7 +251,7 @@ func (a App) roomFor() Room {
 	// so it is set for the draw for the mode's reason and cannot go stale.
 	return a.room.WithComposer(a.room.Composer().
 		WithMode(a.hintMode()).
-		WithArms(a.armsFor(""))).WithWorking(a.fleet.OnRoster()).WithWriting(a.answerTitle(""))
+		WithArms(a.armsFor(""))).WithWorking(a.working()).WithWriting(a.answerTitle(""))
 }
 
 // dmFor is one conversation as dmPane draws it: its agent's own facts, and a

@@ -480,9 +480,10 @@ func (a App) rekeyPane(from, conv, name string) App {
 		}
 		return id
 	}
-	focus, sel, task, focused := follow(a.focus), follow(a.roster.Selected), a.roster.SelectedTask, follow(a.fleet.Focused())
+	focus, cursor, focused := follow(a.focus), a.roster, follow(a.fleet.Focused())
+	cursor.Selected = follow(cursor.Selected)
 	a = a.show(conv, name, func(g Grid) Grid { return g.Replace(from, conv) })
-	a.roster.Selected, a.roster.SelectedTask = sel, task
+	a.roster = cursor
 	a.fleet = a.fleet.Focus(focused)
 	return a.refocus(focus)
 }

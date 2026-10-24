@@ -104,7 +104,8 @@ func TestTheCursorAndAClickPassOverAShellRow(t *testing.T) {
 		if !strings.Contains(line, shellLabel) {
 			continue
 		}
-		a, dispatch, ok := Roster{}.At(agents, f.RunningTasks, rosterWidth, 10, y)
+		spot, ok := Roster{}.At(agents, f.RunningTasks, rosterWidth, 10, y)
+		a, dispatch := spot.agent, spot.dispatch
 		if !ok || a.ID != "s1" || dispatch != "" {
 			t.Errorf("a click on the shell row = (%q, %q, %v), want its agent and no dispatch", a.ID, dispatch, ok)
 		}

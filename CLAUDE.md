@@ -63,7 +63,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   (the daemon owns the directory; `--debug` without a file is refused).
 - **Room keys:** `↵` send/open/confirm · `⌃]` send now · `esc` interrupt · `esc esc` clear draft, or
   idle+empty → rewind picker · `↑↓` prompt history (or cursor on a multi-line draft; `↑` with messages
-  queued takes them back) · `⇧↑↓` pick agent · `⌃O`
+  queued takes them back) · `⇧↑↓` pick agent or channel · `⌃O`
   arm detach (`↵` confirms, `⌃O` cancels) · `⌃C` park focused · `⌃Q` arm park-all & quit (second
   `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus (completes
   over a `/` or `@` word) · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
@@ -344,6 +344,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A lone `@name` narrows the room** to that thread, a lone `@team` to its live members' (a union of their
   threads, keyed by `joinIDs`; open mode never widens a team, so it narrows there too) (`roomfocus.go`);
   `⌃A` overrides per target; `/groupchat-filter off` flips the default per window (`roomfilter.go`).
+- **A roster team header is a channel** (owner, 2026-10-24): `↵` on it or a click makes that team's thread the
+  room's base, titled with the team, until `── all ──` (pinned at the sidebar's top, the default) or another
+  team is picked; per window, never persisted (`roomchannel.go`). It is the same predicate, keyed on the
+  members the roster draws under the header (parked ones too) plus the manager's seat; a lone `@name`/`@team`
+  narrows within it (`orchs › @who`), and `⌃A`, `/groupchat-filter` and routing are unchanged. The working
+  line is the channel's; a team left with no header returns the window to all.
 - **Peer cross-session messages** show in the room as `↪ sender → recipient`
   (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*
   content, so pasted text can't forge one. DM replays of Wake's own sends are dropped. A message
@@ -469,7 +475,7 @@ yet says so in bold.**
 | Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
-| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |

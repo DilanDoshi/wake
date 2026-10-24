@@ -26,7 +26,8 @@ of the room's existing fleet-wide filter, never a replacement.
   transcript too, so opening the room on an hour-old fleet shows a real thread rather than an empty
   pane. This costs no reconstruction — see §3.
 
-**Not in scope (v1):** no keybinding; the working line (`roomWorkingLine`) stays fleet-wide; cards
+**Not in scope (v1):** no keybinding; the working line (`roomWorkingLine`) stays fleet-wide (a channel picked in
+the roster scopes it to the channel since 2026-10-24, a mention still does not); cards
 and permission asks are untouched (the room draws none — `CLAUDE.md`); no wire or airlock change.
 
 ## 1. What is already free, and the one thing that is not
