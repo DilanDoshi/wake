@@ -165,12 +165,6 @@ func Serve(ctx context.Context, socket string) error {
 	// Refusing here rather than after binding also means a daemon started by
 	// mistake removes nothing and writes nothing: every destructive step is
 	// downstream of holding this.
-	//
-	// The old names a /wake-name left go after the lock, last of all: until then
-	// this daemon's files are reached through them (fleetrename.go). srv stays nil
-	// for a daemon that never held the lock, so another fleet's are never touched.
-	var srv *server
-	defer func() { srv.dropForwards() }()
 	lock, err := takeLock(lockPath(socket))
 	switch {
 	case errors.Is(err, errLockHeld):
@@ -191,6 +185,12 @@ func Serve(ctx context.Context, socket string) error {
 			logf("wake: %v", err)
 		}
 	}()
+	// The old names a /wake-name left go after the listener's close, which unlinks
+	// the socket through them, and before the lock's release: no successor exists
+	// yet whose own old names could resolve here (fleetrename.go). srv stays nil
+	// until there is a server, so a daemon that never served drops nothing.
+	var srv *server
+	defer func() { srv.dropForwards() }()
 
 	ln, err := listen(socket)
 	if err != nil {
@@ -202,7 +202,8 @@ func Serve(ctx context.Context, socket string) error {
 	// refuses, and clients keep finding a daemon on the path for the whole
 	// grace. See stopAcceptingOnStop.
 	//
-	// Nothing runs between this and the lock's release, deliberately. There
+	// Nothing but the old names' drop (above) runs between this and the lock's
+	// release, deliberately. There
 	// used to be a belt-and-braces os.Remove(socket) here for a listener that
 	// does not unlink; net.Listen's always does, listen() copes with a stale
 	// file if one ever survived, and the only thing that Remove could still

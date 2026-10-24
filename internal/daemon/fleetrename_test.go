@@ -6,6 +6,7 @@ package daemon
 
 import (
 	"errors"
+	"go/ast"
 	"io/fs"
 	"os"
 	"path/filepath"
@@ -387,5 +388,57 @@ func TestTheNewestManagerRecordUnderNoNameIsTheFleets(t *testing.T) {
 	}
 	if got, want := s.managerClaude(), s.managerClaudeDefault(); got != want {
 		t.Errorf("the report names the parked manager %q, want the fleet's %q", got, want)
+	}
+}
+
+// Serve's defers run last-registered first: the old names' drop, registered
+// between the lock's release and the listener's close, runs after the socket is
+// unlinked through them and while no successor can exist to own one of them.
+func TestADaemonDropsItsOldNamesWhileItStillHoldsTheLock(t *testing.T) {
+	body := functionBody(t, "daemon.go", "Serve")
+	marks := []string{"lock.release", "dropForwards", "ln.Close"}
+	at := map[string]int{}
+	for i, stmt := range body.List {
+		if _, deferred := stmt.(*ast.DeferStmt); !deferred {
+			continue
+		}
+		for _, mark := range marks {
+			if strings.Contains(stmtText(t, stmt), mark) {
+				at[mark] = i
+			}
+		}
+	}
+	if len(at) != len(marks) {
+		t.Fatalf("Serve defers only %v of %v at its top level, so this orders nothing", at, marks)
+	}
+	if at[marks[0]] > at[marks[1]] || at[marks[1]] > at[marks[2]] {
+		t.Errorf("Serve registers its defers at %v: the drop must be registered after the lock's release "+
+			"and before the listener's close, or it runs once a successor may hold the lock", at)
+	}
+}
+
+// A park is booked against one side of a rename: the manager's name and the
+// fleet's default are never read across it.
+func TestAParkIsBookedOnOneSideOfARename(t *testing.T) {
+	s := newServer(tempSocket(t))
+	a, _ := aManager(t)
+	a.claudeWant = s.managerClaudeDefault()
+	s.home.moving.Lock()
+	booked := make(chan parkedRecord, 1)
+	go func() { booked <- s.recordOf(a) }()
+	select {
+	case rec := <-booked:
+		s.home.moving.Unlock()
+		t.Fatalf("a park was booked as %q while a rename held the fleet's name", rec.ClaudeName)
+	case <-time.After(50 * time.Millisecond):
+	}
+	// The rename lands: the fleet's default and the manager move together.
+	moved := filepath.Join(t.TempDir(), "dev", socketFileName)
+	old := s.managerClaudeDefault()
+	s.home.moved.Store(&moved)
+	a.followFleet(old, s.managerClaudeDefault())
+	s.home.moving.Unlock()
+	if rec := <-booked; rec.ClaudeName != "" {
+		t.Errorf("a manager under the fleet's name was booked as %q across a rename, want none", rec.ClaudeName)
 	}
 }

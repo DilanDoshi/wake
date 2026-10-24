@@ -258,8 +258,11 @@ func (a *agent) followFleet(from, to string) {
 
 // recordOf is recordFor as this fleet books it: a manager still under the
 // fleet's own name is booked under none, so it wakes under whatever the fleet is
-// called by then.
+// called by then. Under the rename's lock (home, then agent: moveFleetTo's
+// order), so the name and the fleet's default are read from one side of it.
 func (s *server) recordOf(a *agent) parkedRecord {
+	s.home.moving.Lock()
+	defer s.home.moving.Unlock()
 	rec := recordFor(a)
 	if rec.ClaudeName == s.managerClaudeDefault() {
 		rec.ClaudeName = ""
