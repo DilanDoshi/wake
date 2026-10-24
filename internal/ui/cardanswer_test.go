@@ -109,7 +109,7 @@ func TestEscapeLeavesAnswerModeWithoutInterrupting(t *testing.T) {
 	if cmd != nil {
 		for _, f := range sentFrames(t, a, cmd) {
 			if f.Kind == rpc.FrameInterrupt {
-				t.Error("esc out of answer mode interrupted the agent's turn as well as dropping the draft")
+				t.Error("esc out of answer mode interrupted the agent's turn as well as leaving the box")
 			}
 		}
 	}
@@ -117,7 +117,7 @@ func TestEscapeLeavesAnswerModeWithoutInterrupting(t *testing.T) {
 		t.Error("esc left the composer in answer mode")
 	}
 	if !a.composerEmpty() {
-		t.Errorf("esc left the abandoned answer in the draft: %q", a.composer().Value())
+		t.Errorf("esc left %q in the box, want it empty with the words kept as the answer", a.composer().Value())
 	}
 }
 
@@ -422,5 +422,164 @@ func TestUpWhileAnsweringInAPaneTooShortForTheCard(t *testing.T) {
 	short, _ = pressKey(short, tea.KeyMsg{Type: tea.KeyUp})
 	if got := topCard(t, short).typed(0); got != "half a thought" {
 		t.Errorf("↑ in a short pane left %q as the answer and %q in the box", got, short.composer().Value())
+	}
+}
+
+// --- a menu over the answer, and ⎋ keeping the words -----------------------
+
+// The menu says ↵ completes, and over an answer it sent the half-typed word as
+// the answer instead: the card took ↵ before the menu was asked.
+func TestEnterOverAMenuInTheAnswerBoxCompletesTheWord(t *testing.T) {
+	a := answeringOther(t, paneAsking(t), "/res")
+	if !a.completionUp() {
+		t.Fatal("no menu came up over a /res in the box, so this test cannot see the rule")
+	}
+	want := a.completion.head + a.completion.offers[a.completion.cursor]
+
+	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Errorf("↵ over a menu wrote frames %v, want it to complete the word and nothing else", sentFrames(t, a, cmd))
+	}
+	if _, writing := a.cards.writingFor(topCard(t, a)); !writing {
+		t.Error("↵ over a menu ended answer mode instead of completing the word")
+	}
+	if got := topCard(t, a).typed(0); got != "" {
+		t.Errorf("↵ over a menu took %q as the answer", got)
+	}
+	if v := strings.TrimSpace(a.composer().Value()); v != want {
+		t.Errorf("↵ over a menu left %q in the box, want the cursored offer %q", v, want)
+	}
+}
+
+// The refusal's reason is the same box, and its ↵ is the one that refuses.
+func TestEnterOverAMenuInTheRefusalsBoxCompletesTheWord(t *testing.T) {
+	a := paneAsking(t)
+	a, _ = press(a, cardDenyKey)
+	a = typeDraft(a, "/res")
+	if !a.completionUp() {
+		t.Fatal("no menu came up over a /res in the box, so this test cannot see the rule")
+	}
+
+	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Errorf("↵ over a menu wrote frames %v, want it to complete the word and nothing else", sentFrames(t, a, cmd))
+	}
+	if q, writing := a.cards.writingFor(topCard(t, a)); !writing || q != denyReasonStep {
+		t.Error("↵ over a menu left the refusal's box instead of completing the word")
+	}
+}
+
+// A word typed in full is not a completion: ↵ sends it, as it does in any box.
+func TestEnterOverAWordTypedInFullStillSendsTheAnswer(t *testing.T) {
+	a := answeringOther(t, paneAsking(t), "/resume")
+	if !a.completionUp() || !a.completion.typedAs(a.completion.offers[a.completion.cursor]) {
+		t.Fatal("the menu does not offer the word as typed, so this test cannot see the rule")
+	}
+	a = enter(a)
+	if got := topCard(t, a).typed(0); got != "/resume" {
+		t.Errorf("↵ over a word typed in full took %q as the answer, want %q", got, "/resume")
+	}
+}
+
+// ⎋ is "back to the options", and it kept nothing: the words were dropped, so
+// the way back to the Other row opened an empty box.
+func TestEscapeKeepsTheWordsAsTheOtherAnswer(t *testing.T) {
+	const mine = "half a thought"
+	a := answeringOther(t, paneAsking(t), mine)
+
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+	got := topCard(t, a)
+	if _, writing := a.cards.writingFor(got); writing {
+		t.Error("⎋ left the composer in answer mode")
+	}
+	if !a.composerEmpty() {
+		t.Errorf("⎋ left %q in the box", a.composer().Value())
+	}
+	if got.typed(0) != mine {
+		t.Fatalf("⎋ turned the words into %q, want them kept as the Other answer %q", got.typed(0), mine)
+	}
+
+	// Away to another step and back, the Other row opens on the words.
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyRight})
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyLeft})
+	q, _ := topCard(t, a).question()
+	a, _ = press(a, rune(cardFirstOption+otherIndex(q)))
+	if v := a.composer().Value(); v != mine {
+		t.Errorf("the Other row reopened holding %q after another step, want the kept words %q", v, mine)
+	}
+}
+
+// An emptied box takes the kept words away, whichever way it is left.
+func TestEscapeFromAnEmptiedBoxClearsTheKeptWords(t *testing.T) {
+	const mine = "half a thought"
+	a := answeringOther(t, paneAsking(t), mine)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+	a = enter(a)
+	for range mine {
+		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyBackspace})
+	}
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+	if got := topCard(t, a).typed(0); got != "" {
+		t.Errorf("⎋ from an emptied box left %q as the answer", got)
+	}
+}
+
+// On a multi-select question the kept words are one more tick, as ↓ makes them.
+func TestEscapeKeepsTheWordsAsATickOnAManyQuestion(t *testing.T) {
+	const mine = "a reason of my own"
+	a := answeringOther(t, paneAskingMany(t), mine)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+	if got := topCard(t, a).typed(0); got != mine {
+		t.Errorf("⎋ turned the words into %q, want %q ticked", got, mine)
+	}
+}
+
+// The kept words are a ticked box, and a reflexive ↵ after ⎋ must walk on rather
+// than untick them: the cursor is off the Other row, as commitAnswer leaves it.
+func TestEnterAfterEscapeOnAManyQuestionKeepsTheTickedWords(t *testing.T) {
+	const mine = "a reason of my own"
+	a := answeringOther(t, paneAskingMany(t), mine)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+	a = enter(a)
+	if got := topCard(t, a).typed(0); got != mine {
+		t.Errorf("↵ after ⎋ left %q as the answer, want %q still ticked", got, mine)
+	}
+}
+
+// ↵ over a menu that is on a page scrolled away from the box brings the box back
+// first: the word it would complete is one nobody could see.
+func TestEnterOverAMenuScrolledOutOfSightBringsTheBoxBackFirst(t *testing.T) {
+	a := askingPage(t, 40)
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{cardDenyKey}})
+	a = typeDraft(a, "/res")
+	a = wheeled(a, tea.MouseButtonWheelUp, 5)
+	if !a.completionUp() || hasRow(pageRows(a), "/res") {
+		t.Fatal("the menu is down or the box is on screen, so this test is not exercising a scrolled-away box")
+	}
+
+	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Fatal("↵ wrote a frame with the box out of sight")
+	}
+	if v := a.composer().Value(); v != "/res" {
+		t.Errorf("↵ completed the word to %q in a box nobody could see, want it brought back first", v)
+	}
+	if !hasRow(pageRows(a), "/res") {
+		t.Errorf("↵ did not bring the box back:\n%s", strings.Join(pageRows(a), "\n"))
+	}
+}
+
+// A refusal's reason belongs to no question: ⎋ takes the refusal back and the
+// reason with it.
+func TestEscapeFromTheRefusalsBoxKeepsNoAnswer(t *testing.T) {
+	a := paneAsking(t)
+	a, _ = press(a, cardDenyKey)
+	a = typeDraft(a, "not now")
+	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEsc})
+	if _, writing := a.cards.writingFor(topCard(t, a)); writing {
+		t.Error("⎋ left the refusal's box open")
+	}
+	if got, answered := topCard(t, a).answerOf(0); answered {
+		t.Errorf("⎋ out of a refusal's reason answered the first question with %q", got)
 	}
 }
