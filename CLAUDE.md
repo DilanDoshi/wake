@@ -128,7 +128,7 @@ Violating one is a design regression, not a style nit.
 |---|---|
 | **Not a terminal emulator or multiplexer.** No PTY, no VT100, no browser panes, no arbitrary shells. | Chasing it is how this project dies at 40%. |
 | **Cheap to leave open.** No per-frame work that could be per-change, no poll where a wait will do, no process on a timer. | A per-agent cost multiplies by 30. |
-| **Only `internal/core`'s eight airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`, `localreply.go` for the text replies of local commands (owner's 2026-09-27 ruling), `control.go` for the control requests Wake writes and their receipts (2026-10-02), `ask.go` for an interactive ask's kind and payload (2026-10-07), and `account.go` for the signed-in account in Claude's config file and a usage limit's reset (2026-10-17). | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
+| **Only `internal/core`'s eight airlock files know Claude's JSON** — `protocol.go`, `wire.go`, `vocabulary.go`, `encode.go`, `localreply.go` for the text replies of local commands (owner's 2026-09-27 ruling), `control.go` for the control requests Wake writes and their receipts (2026-10-02), `ask.go` for an interactive ask's kind and payload (2026-10-07), and `account.go` for the signed-in account in Claude's config file, a usage limit's reset (2026-10-17) and the session window (2026-10-24). | Stays Codex-ready. Enforced by `airlock_test.go`, which also pins the file set. |
 | **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Use `core.SessionArgvMarkers`. | Enforced by `argv_test.go` tree-wide. |
 | **`attention.go` stays a pure function.** | Hardest logic; testable without spawning. |
 | **The UI never touches an agent's process.** | Keeps the daemon boundary real. |
@@ -314,6 +314,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **Every notice times out**: `max(10s, drawn cells × 100ms)`, one tick per `notice.Seq`, armed in
   `App.Update`. An API failure stays pinned under them until a healthy turn or a resume
   (`noticelinger.go`, `apierror.go`'s `pinnedNotice`).
+- **The session-usage bar** (owner's 2026-10-24 picks): the account's five-hour window, three rows under
+  the roster - a rule, the bar in Claude's `rate_limit_fill`/`rate_limit_empty` (warn or error on Claude's
+  own verdict) with its percent, and `session · ↻ 4:09pm`. Off any agent's `rate_limit_event`, held by the
+  daemon (`daemon/usage.go`, `rpc.Status.SessionUsage`). Hidden until the first reading and kept after it; a
+  reset that passes draws `session · reset …` on an empty bar, noticed by the liveness tick, not a timer.
+  Rendered per report and in `resizePanes`, never per frame; the roster is drawn in, and clicked against, the
+  same `App.rosterHeight`. `internal/ui/usagebar.go`.
 - **Compacting line** (`compacting.go`): indeterminate bar (the wire has no progress figure); end
   keys on `compact_result`, not the boundary. The `compact_boundary` metadata draws
   `✻ Compacted · A → B tokens · …`, live-only.
@@ -453,12 +460,12 @@ yet says so in bold.**
 |---|---|
 | Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · `--max-agents`: `maxagents.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
-| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset) |
+| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset, the session window) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
-| Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) |
+| Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · `usage.go` (the account's session window) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -472,7 +479,7 @@ yet says so in bold.**
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
-| Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
+| Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
@@ -592,6 +599,9 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   (about three minutes, `error_status` null), with no HTTP status on the stream: DNS, a refused or reset
   connection, a timeout, sleep mid-response, an overload alike. The process stays up and idle.
   `api-error-unreachable.jsonl`, `docs/superpowers/notes/2026-10-23-unreachable-api-findings.md`.
+- **`rate_limit_event` is not per turn**: one on a process's first API response, then one whenever a figure
+  moves (a whole percent, a window resetting). `unifiedWindows.five_hour` (2.1.246+) is `/usage`'s "Current
+  session"; `seven_day` comes and goes by version. `midturn-two.jsonl`, `question-multiselect.jsonl`.
 - **2.1.302 replays the permission answer Wake wrote** (`control_response`) on stdout; it decodes as a
   receipt nothing acts on (`question-multiselect.jsonl`).
 - Images: first in the content array, text last. An undecodable image silently degrades to text.

@@ -4809,3 +4809,37 @@ connection failures only (which, with no status on the stream, would have meant 
   `unreachable_e2e_test.go`, both platforms' parser tables (Linux run in a container), the UI's
   `apiunreachable_test.go`, and the pty `TestAnAgentTheAPIStoppedResumesWhenAnotherTurnGoesThrough`, each
   mutation-checked.
+
+## 2026-10-24 — the session-usage bar sits under the roster, and appears with the first reading (the owner)
+
+The owner asked for a session usage bar at the bottom of the right sidebar and picked from three mockups:
+**layout B** (a rule, the bar with its percent, a caption), **hidden until the first reading**, and **no
+weekly line**. "Session" is the claude.ai plan's five-hour window, which Claude Code's `/usage` calls
+"Current session": the account's, not one agent's context.
+
+- **The signal.** `rate_limit_event`'s `rate_limit_info.unifiedWindows.five_hour.{utilization,resetsAt}`,
+  recorded from 2.1.246 on and matching `/usage` on a live 2.1.310 probe. It is not per turn: one on a
+  process's first API response, then one whenever a figure moves (a whole percent, or the window resetting
+  mid-session, `midturn-two.jsonl`). Older claude names no figure, so it shows no bar. The colour is Claude's
+  own verdict: the top-level status, read only while `rateLimitType` names the five-hour window
+  (`allowed_warning` warns, anything past it is the limit), since a weekly warning says nothing about it.
+- **The daemon holds it** (`daemon/usage.go`, `rpc.Status.SessionUsage`): one reading per fleet, because a
+  fleet runs on one signed-in account; the newest arrival from any agent wins, a report is pushed only when
+  what it says moves, and a window that attaches later is told it at once. On `Status`, not `SessionStatus`,
+  so no per-session guard is involved. The reading is never cleared, so once the bar has drawn it stays
+  (the orchestrator's ruling on the owner's "hidden": rows that come and go would move the roster for
+  nothing); a new daemon starts hidden again.
+- **No timer.** A reset that passes makes the figure stale; the liveness tick the daemon already runs notices
+  it on the wall clock (`limitClock`, so a reset slept through is caught on waking) and pushes the reading
+  `Lapsed`, drawn as an empty bar and `session · reset 4:09pm`. The reset is a clock time, not a countdown,
+  so nothing ticks to redraw it.
+- **Drawn per change, never per frame.** The rows are rendered on a report and in `resizePanes`, which every
+  change to the sidebar's width goes through; the roster is drawn in, and its clicks resolved against, the
+  same `App.rosterHeight`, so the first reading shortening the roster cannot put a click on the wrong agent.
+- **Left out** (`deferred.md`): the weekly line, a reading before the first API response, and the per-window
+  status 2.1.310 added.
+- **Held by** core's decode tests against `question-multiselect.jsonl`, `midturn-two.jsonl`,
+  `rewind-conversation.jsonl` and `basic-turn.jsonl`; the daemon units and two e2e tests in `usage_test.go`
+  (the push, a late window, the tick's lapse); the UI's `usagebar_test.go` (hidden, drawn, colours, widths, a
+  resize with no report, the seed, a short pane, and clicks on a scrolled roster before and after the first
+  reading); and the pty `TestTheSessionUsageBarDrawsUnderTheRosterOnceAReadingArrives`, each mutation-checked.

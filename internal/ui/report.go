@@ -39,7 +39,8 @@ func (a App) applyStatus(st *rpc.Status) App {
 	}
 	prev := a.fleet
 	a.fleet = a.fleet.WithStatus(st)
-	a.daemonBuild = buildOf(st)
+	a.daemon = factsOf(st)
+	a = a.withUsageRows()
 	// The State backstop for the queue: a working→idle edge on this report frees an
 	// agent whose in-flight message's completed lifecycle was lost to a gap. Per
 	// report, so an edge inside one batch is not collapsed. See queue.go.
@@ -59,13 +60,22 @@ func (a App) applyStatus(st *rpc.Status) App {
 	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
 }
 
-// buildOf is the daemon's build a seed or a report names; a nil seed - wait
-// for the first push - names none.
-func buildOf(st *rpc.Status) string {
+// daemonFacts is what a report says about the daemon and the account rather
+// than any agent: the daemon's build, and the session-usage reading with the
+// rows the sidebar draws it as (usagebar.go).
+type daemonFacts struct {
+	build string
+	usage *rpc.SessionUsage
+	rows  []string
+}
+
+// factsOf is what a seed or a report names; a nil seed - wait for the first
+// push - names nothing.
+func factsOf(st *rpc.Status) daemonFacts {
 	if st == nil {
-		return ""
+		return daemonFacts{}
 	}
-	return st.Build
+	return daemonFacts{build: st.Build, usage: st.SessionUsage}
 }
 
 // refreshedAgents folds each live agent into the conversation this client holds

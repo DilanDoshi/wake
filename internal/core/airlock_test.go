@@ -347,6 +347,11 @@ var claudeWireVocabulary = wordSet([]string{
 	"non_execution_kind", "permission_denials", "terminal_reason",
 	"modelUsage", "total_cost_usd", "num_turns",
 
+	// The plan's usage windows on rate_limit_info, which the session bar reads
+	// (account.go's sessionUsage).
+	"rateLimitType", "unifiedWindows", "five_hour", "utilization", "resetsAt",
+	"allowed_warning",
+
 	// How full the window is. Every one of these is unmistakably Claude's
 	// accounting: nothing above the airlock computes a context percentage from
 	// raw token fields, it reads the two numbers Wake resolved.
@@ -783,7 +788,10 @@ var notNamedByTheAirlock = map[string]string{
 // requires so no other JSON result is cut to its message. manager-relay.jsonl.
 // 234 → 235: "server_error", the failed turn's error kind for an API that never
 // answered, which the daemon resumes once it does. api-error-unreachable.jsonl.
-const policedWordCount = 235
+// 235 → 241: the five-hour window the session bar draws ("rateLimitType",
+// "unifiedWindows", "five_hour", "utilization", "resetsAt") and its warning
+// ("allowed_warning"). question-multiselect.jsonl, midturn-two.jsonl.
+const policedWordCount = 241
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

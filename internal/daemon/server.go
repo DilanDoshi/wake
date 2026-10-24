@@ -11,7 +11,6 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"slices"
 	"sync"
 	"sync/atomic"
 	"time"
@@ -87,6 +86,7 @@ type server struct {
 	teamOrder []string
 	peers     peerBook   // the /list-agents run in flight and its askers; its own lock
 	limits    limitWatch // resuming agents a usage limit stopped; its own lock
+	usage     usageBook  // the account's newest session-usage reading; its own lock
 
 	// taken is set by takeAgents when shutdown snapshots the fleet. An agent
 	// admitted after that snapshot enters a map nothing reads again - its
@@ -749,46 +749,4 @@ func (s *server) broadcast(f rpc.Frame) {
 
 func errorFrame(sessionID, text string) rpc.Frame {
 	return rpc.Frame{Kind: rpc.FrameError, SessionID: sessionID, Text: text}
-}
-
-// recentEndings is how many endings a status report carries after the fact.
-// Enough that a client which blinked during a fleet-wide stop can still
-// account for every session, small enough to be a courtesy rather than a log.
-const recentEndings = 32
-
-// rememberLocked records an ending. The caller holds s.mu, and that is the
-// contract for the same reason forgetLocked's is: leaving s.agents and
-// entering s.recent have to be one step, or the two are briefly both false and
-// a status reply reports a session that is neither running nor ended. See
-// retire.
-func (s *server) rememberLocked(ended rpc.SessionStatus) {
-	s.recent = appendRecent(s.recent, ended)
-}
-
-// forgetLocked drops any ending for an id, so a respawned session is not
-// reported twice - once alive and once dead - in the same status.
-//
-// The caller holds s.mu, and that is the contract rather than a convenience:
-// forgetting the ending and taking the id have to be one step, or a retire
-// landing between them reinstates the ending the spawn just cleared. See
-// register.
-func (s *server) forgetLocked(id string) {
-	s.recent = slices.DeleteFunc(s.recent, func(r rpc.SessionStatus) bool { return r.ID == id })
-}
-
-// appendRecent adds an ending, replacing any earlier one for the same session
-// and dropping the oldest once the bound is reached. It returns a new slice
-// rather than editing in place.
-func appendRecent(recent []rpc.SessionStatus, ended rpc.SessionStatus) []rpc.SessionStatus {
-	out := make([]rpc.SessionStatus, 0, len(recent)+1)
-	for _, r := range recent {
-		if r.ID != ended.ID {
-			out = append(out, r)
-		}
-	}
-	out = append(out, ended)
-	if len(out) > recentEndings {
-		out = out[len(out)-recentEndings:]
-	}
-	return out
 }

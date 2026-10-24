@@ -224,7 +224,7 @@ func (a App) clickedAgent(y int) (Agent, string, bool) {
 	if r.Roster <= 0 {
 		return Agent{}, "", false
 	}
-	return a.roster.At(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.paneHeight(), y)
+	return a.roster.At(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), y)
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the

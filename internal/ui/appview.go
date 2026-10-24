@@ -80,7 +80,7 @@ func (a App) assembleFrame() string {
 		}
 	}
 	if r.Roster > 0 {
-		panels = append(panels, a.roster.View(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, h))
+		panels = append(panels, a.withUsage(a.roster.View(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight())))
 	}
 
 	cols := make([]string, 0, 2*len(panels))

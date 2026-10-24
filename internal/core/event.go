@@ -709,6 +709,20 @@ type Event struct {
 	// Nil on the conversation frames, which is nearly all of them - only
 	// system/init, result and the initialize receipt (its commands) carry any of it.
 	Session *SessionFacts `json:"session,omitempty"`
+
+	// SessionUsage is a KindRateLimit's five-hour window, nil when the frame
+	// names no figure for it (claude before 2.1.246). See account.go.
+	SessionUsage *SessionUsage `json:"session_usage,omitempty"`
+}
+
+// SessionUsage is the signed-in account's five-hour session window as one API
+// response reported it: the share used, 0 to 1, and when the window resets.
+// Warned and Limited are Claude's own verdict on that window.
+type SessionUsage struct {
+	Used    float64   `json:"used"`
+	Resets  time.Time `json:"resets"`
+	Warned  bool      `json:"warned,omitempty"`
+	Limited bool      `json:"limited,omitempty"`
 }
 
 // apiNotice tells a failed turn by what recovers it: a usage limit its reset, an

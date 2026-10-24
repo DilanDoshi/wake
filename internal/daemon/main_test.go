@@ -336,6 +336,8 @@ func runFakeClaude() int {
 		return fakeSubagentDispatch()
 	case "usagelimit":
 		return fakeUsageLimit(sid) // see usagelimit_e2e_test.go
+	case "usage":
+		return fakeUsage(sid) // see usage_test.go
 	case "unreachable":
 		return fakeUnreachable(sid) // see unreachable_e2e_test.go
 	case "stoprun":

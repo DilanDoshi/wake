@@ -33,6 +33,11 @@ var (
 	// and separators, things present but not read.
 	Subtle = lipgloss.AdaptiveColor{Light: "#afafaf", Dark: "#505050"} // subtle
 
+	// UsageFill and UsageTrack are the session bar's used and unused cells
+	// (usagebar.go): Claude Code's own usage-bar colours.
+	UsageFill  = lipgloss.AdaptiveColor{Light: "#5769f7", Dark: "#b1b9f9"} // rate_limit_fill
+	UsageTrack = lipgloss.AdaptiveColor{Light: "#272f6f", Dark: "#505370"} // rate_limit_empty
+
 	// Mention is the periwinkle Claude uses for a handle - its `suggestion`,
 	// which is also the colour of inline code. An address is not the message.
 	Mention = lipgloss.AdaptiveColor{Light: "#5769f7", Dark: "#b1b9f9"} // suggestion

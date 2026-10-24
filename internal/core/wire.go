@@ -336,16 +336,16 @@ const (
 	dispatchLaunched  = "async_launched"
 )
 
-// wireRateLimit is rate_limit_info. The frame also carries resetsAt (Unix
-// seconds), rateLimitType, overageStatus, overageDisabledReason and
-// isUsingOverage; Phase 1 surfaces only Status.
+// wireRateLimit is rate_limit_info. Status is Claude's verdict on the window
+// Type names; Windows carries each window's figure from 2.1.246 on. The frame
+// also carries resetsAt and the overage fields, which Wake leaves.
 //
-// Cadence is once per process, on the first turn that hits the API - not
-// once per turn. Nine recorded processes, nine events, even though one of
-// them ran seven turns. And every recorded sample says "allowed", so
-// anything built on this is designing against a single observed value.
+// Cadence: once on a process's first API response, then again whenever a
+// figure changes - a whole percent, or a window resetting - never per turn.
 type wireRateLimit struct {
-	Status string `json:"status"`
+	Status  string                     `json:"status"`
+	Type    string                     `json:"rateLimitType"`
+	Windows map[string]wireUsageWindow `json:"unifiedWindows"`
 }
 
 // wireUsage is the token accounting on a result frame.

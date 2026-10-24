@@ -127,7 +127,7 @@ func (a App) statusMCP(agent Agent) string {
 // differs - the one version fact an operator acts on. Empty is a daemon from
 // before builds were reported, which staledaemon.go also reads as older.
 func (a App) wakeBuilds() string {
-	if b := a.daemonBuild; b != version.Build() {
+	if b := a.daemon.build; b != version.Build() {
 		return fmt.Sprintf("%s · daemon %s", version.Build(), cmp.Or(b, "on an older build"))
 	}
 	return "v" + version.Version

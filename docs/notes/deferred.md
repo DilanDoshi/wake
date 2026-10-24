@@ -38,6 +38,26 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## KNOWN GAP, 2026-10-24 — what the session-usage bar does not show
+
+The bar under the roster (`internal/ui/usagebar.go`, `decisions.md` 2026-10-24) draws the five-hour window
+off `rate_limit_event`. Consciously left out:
+
+- **The weekly window.** The owner's pick. `unifiedWindows.seven_day` is also unreliable: carried by 2.1.246,
+  2.1.281 and 2.1.288, absent from 2.1.282, 2.1.302 and a live 2.1.310.
+- **A reading before any agent's first API response.** A fresh room has none, so it draws no bar. Headless
+  claude answers a bare `/usage` with no model turn ($0, about six seconds on 2.1.310): a one-shot like the
+  `/list-agents` one could seed it. Not taken: it needs the credential, so it cannot be `--bare`, and a full
+  claude runs the operator's SessionStart hooks; it scans local session history; and its reply is English to parse.
+- **The per-window `status`** 2.1.310 puts in each `unifiedWindows` entry. Unrecorded; the verdict comes from
+  the top-level status while `rateLimitType` names the window, so a five-hour warning arriving while the
+  week's is the top-level one draws uncoloured.
+- **Usage outside Wake.** The figure is as of the fleet's last API response; the operator's own `claude`, or
+  another machine on the account, moves it with no event, and an idle fleet hears nothing.
+- **The status at the limit itself** is unrecorded; anything past `allowed_warning` draws as the limit.
+
+*Closes with:* each item on its own; none blocks the bar.
+
 ## KNOWN GAP, 2026-10-10 — `/status` does not name claude's own version
 
 Wake's `/status` (`internal/ui/statuscmd.go`) shows Wake's build and a differing daemon's, but not
