@@ -177,8 +177,20 @@ const interruptCancelQueued = false
 // later, on the events channel, as a KindControlReceipt. A caller with nothing
 // to correlate may discard it, which is what the daemon does today.
 func (s *Session) Interrupt() (string, error) {
+	return s.interrupt(interruptCancelQueued)
+}
+
+// InterruptAll is Interrupt for a session that is being shut down: it also
+// cancels what is queued behind the turn (interrupt-cancel-queued.jsonl), since
+// a typed-ahead message would otherwise start a turn of its own as this one
+// ends, and run on after stdin closes.
+func (s *Session) InterruptAll() (string, error) {
+	return s.interrupt(true)
+}
+
+func (s *Session) interrupt(cancelQueued bool) (string, error) {
 	requestID := uuid.NewString()
-	line, err := EncodeInterrupt(requestID, interruptCancelQueued)
+	line, err := EncodeInterrupt(requestID, cancelQueued)
 	if err != nil {
 		return "", err
 	}

@@ -78,13 +78,25 @@ func Prime() { _ = resolvedStyle() }
 // A renderer failure is deliberately absorbed rather than propagated: the
 // caller is a draw loop with nowhere to report to, and showing the raw source
 // beats showing nothing. It is not, however, silent - see degraded.
-func Markdown(src string, width int) string {
+//
+// A table too narrow for width draws as records (tables.go).
+func Markdown(src string, width int) string { return markdown(src, width, false) }
+
+// markdown is Markdown, with every table drawn as records when records is set:
+// the render a copy is matched back to (rejoin.go).
+func markdown(src string, width int, records bool) string {
 	if strings.TrimSpace(src) == "" {
 		return ""
 	}
 	src = expandSource(src) // measured as no cell, drawn as up to eight: see tabs.go
-	width = boundedWidth(width)
+	return withTables(src, boundedWidth(width), records)
+}
 
+// rendered is one glamour render of src at width, through every pass below.
+func rendered(src string, width int) string { return renderedWith(src, width, reflowProse) }
+
+// renderedWith is rendered with reflow as its prose pass.
+func renderedWith(src string, width int, reflow func(string, int) string) string {
 	r, err := rendererFor(width)
 	if err != nil {
 		// Degrade to plain text rather than lose the message — but still
@@ -101,7 +113,7 @@ func Markdown(src string, width int) string {
 	// with a list back on its bullet's row, and fitToWidth is the hard width net
 	// last of all, for the rows glamour could not wrap and reflowProse leaves alone;
 	// sealRows closes a style either wrap broke a row inside.
-	return strings.TrimRight(trimOpeningScaffold(sealRows(fitToWidth(joinLoneBullets(reflowProse(stylingOnly(out), width)), width))), "\n")
+	return strings.TrimRight(trimOpeningScaffold(sealRows(fitToWidth(joinLoneBullets(reflow(stylingOnly(out), width)), width))), "\n")
 }
 
 // boxDrawing marks a rendered line as glamour's own table or block-quote layout,

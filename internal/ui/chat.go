@@ -142,6 +142,10 @@ type Room struct {
 	narrowed      bool
 	narrowDefault bool
 
+	// channel is the team picked in the roster, "" for all, and channelKey its
+	// thread: the room's base, which a focus narrows within. See roomchannel.go.
+	channel, channelKey string
+
 	// menu is everything pinned between the transcript and the composer - the
 	// picker and the completion menu (App.menuBlock; a DM's carries its card too,
 	// the room's never does) - handed over
@@ -315,7 +319,7 @@ func (r Room) WithFocus(focus, focusName string) Room {
 	if sameTarget && r.effectiveFocus() != old.effectiveFocus() {
 		return r.refiltered(old)
 	}
-	return r.rerenderOnFocusChange(old.effectiveFocus())
+	return r.rerenderOnFocusChange(old.filter())
 }
 
 // Append draws one event, attributed to the agent that produced it.
@@ -348,8 +352,7 @@ func (r Room) appendLine(line roomLine) Room {
 	// is skipped, not done and dropped. A shown line renders as before; the
 	// empty-block guard stays on that path (fold pre-drops blanks, so it is
 	// defensive) and runs before an id is spent.
-	eff := r.effectiveFocus()
-	hidden := eff != "" && !focusAdmits(line, eff)
+	hidden := !r.admits(line)
 	var b block
 	if !hidden {
 		// A new event carries no per-line open of its own, but expandAll is a
@@ -626,11 +629,11 @@ func (r Room) View(width, height int) string {
 	if menu := firstRows(r.menu, r.menuRows()); menu != "" {
 		rows = append(rows, menu)
 	}
-	// The pane names the focused agent so the narrowing is discoverable; the
-	// composer's own target line is the secondary tell.
-	title := roomTitle
+	// The pane names its channel and the focused agent so the narrowing is
+	// discoverable; the composer's own target line is the secondary tell.
+	title := cmp.Or(r.channel, roomTitle)
 	if r.effectiveFocus() != "" && r.focusName != "" {
-		title = roomTitle + " › @" + r.focusName
+		title += " › @" + r.focusName
 	}
 	comp := r.composer.WithBar(r.bar).WithTitle(cmp.Or(r.writing, title)).View(w)
 	comp = highlightComposerBlock(comp, r.csel, composerTextLeft, w-composerRightInset)
@@ -768,13 +771,12 @@ func (r Room) renderAll(lines []roomLine) []block {
 		banner.laidOut = blockLines(banner, true)
 		blocks = append(blocks, banner)
 	}
-	eff := r.effectiveFocus()
 	for i := range lines {
 		lines[i].rows = 0
 		// A line the current focus hides keeps rows == 0 and contributes no
 		// block, so the geometry (which sums rows) needs no notion of "shown vs
 		// exists" - and its glamour render is skipped, not rendered then dropped.
-		if eff != "" && !focusAdmits(lines[i], eff) {
+		if !r.admits(lines[i]) {
 			continue
 		}
 		b := renderRoomBlock(lines[i].ev, lines[i].by, lines[i].recipient, r.blockWidth(), r.expandAll || r.expanded[lines[i].id])

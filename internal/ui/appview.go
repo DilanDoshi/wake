@@ -80,7 +80,7 @@ func (a App) assembleFrame() string {
 		}
 	}
 	if r.Roster > 0 {
-		side := a.roster.View(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight())
+		side := a.roster.Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
 		if rows := a.usageDrawn(); len(rows) > 0 {
 			side += "\n" + strings.Join(rows, "\n") // the session bar under it; see usagebar.go
 		}
@@ -255,7 +255,7 @@ func (a App) roomFor() Room {
 	// so it is set for the draw for the mode's reason and cannot go stale.
 	return a.room.WithComposer(a.room.Composer().
 		WithMode(a.hintMode()).
-		WithArms(a.armsFor(""))).WithWorking(a.fleet.OnRoster()).WithWriting(a.answerTitle(""))
+		WithArms(a.armsFor(""))).WithWorking(a.working()).WithWriting(a.answerTitle(""))
 }
 
 // dmFor is one conversation as dmPane draws it: its agent's own facts, and a

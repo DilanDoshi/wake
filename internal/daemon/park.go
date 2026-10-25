@@ -204,12 +204,13 @@ func (s *server) completePark(a *agent, err error) {
 	if rerr := s.roster.remove(a.id); rerr != nil {
 		logf("wake: session %s could not be removed from the roster: %v", a.id, rerr)
 	}
+	s.forgetReady(a.id)
 	// And into the book the *next* daemon reads. Written here rather than when
 	// the park was asked for, which is what makes the entry mean something: this
 	// runs in retire, after core's Wait has returned, so the process Wake
 	// started is provably gone by the time anything is recorded. A park that
 	// never completed - a kill arriving first - writes nothing.
-	rec := recordFor(a)
+	rec := s.recordOf(a)
 	perr := s.parked.add(rec)
 	if perr != nil {
 		// Not fatal to the park: the session is parked in this daemon's fleet
@@ -241,7 +242,8 @@ func (s *server) completePark(a *agent, err error) {
 // recordFor is one agent's park book row.
 //
 // One constructor because there are two callers - completePark, and bookParked's
-// loop over a fleet - and a record built twice is a record that drifts. It did
+// loop over a fleet, both through recordOf (fleetrename.go), which books the
+// manager's name against the fleet's - and a record built twice is a record that drifts. It did
 // not before only because the two literals were kept identical by hand, which is
 // the arrangement that stops working the first time a field is added to one.
 //
@@ -326,7 +328,7 @@ func (s *server) bookParked(agents []*agent) {
 		case held[a.conversation()]:
 			booked++
 		default:
-			if err := s.parked.add(recordFor(a)); err != nil {
+			if err := s.parked.add(s.recordOf(a)); err != nil {
 				logf("wake: session %s is parked but is not written down, so the next start will not offer it back: %v", a.id, err)
 				s.warnUnbooked(a.id)
 				lost++
@@ -469,7 +471,7 @@ func (s *server) unpark(ctx context.Context, c *client, f rpc.Frame) {
 		Team:  a.team,
 		// What the park would have booked, so a rename survives a wake whether or
 		// not the book could be written.
-		ClaudeName: restoredClaudeName(recordFor(a)),
+		ClaudeName: restoredClaudeName(s.recordOf(a)),
 	}, a.parent, a, s.parkLaunchOutcome(rec, reserved))
 }
 

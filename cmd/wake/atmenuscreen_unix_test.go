@@ -76,8 +76,8 @@ func TestAtMenuOffersPeersSessionsAgentsAndFiles(t *testing.T) {
 	s.send("\x17") // ⌃W to the room
 	s.await("group chat")
 	s.send("/new " + atMenuPeer + "\r")
-	s.await("@" + atMenuPeer)
-	s.send("\x1b") // clears the mention /new drafted
+	s.await("> @" + atMenuPeer) // the draft itself: an esc before it clears nothing
+	s.send("\x1b")              // clears the mention /new drafted
 	s.settle()
 	s.openAgent(atMenuAgent)
 	s.settle()

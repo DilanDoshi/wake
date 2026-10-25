@@ -50,11 +50,15 @@ var fleetPool = []string{
 // Past the pool it numbers - `harbor-2` - rather than failing. Running out of
 // fleet names is not a thing that should stop somebody starting one.
 func nextFleetName(root string) (string, error) {
-	used, err := fleetsIn(root)
-	if err != nil {
-		return "", err
+	// Every entry is taken, not only a fleet's directory: a link is an old name a
+	// /wake-name left (fleetrename.go), and drawn it would open the renamed fleet.
+	entries, err := os.ReadDir(filepath.Join(root, fleetsDirName))
+	if err != nil && !os.IsNotExist(err) {
+		return "", fmt.Errorf("read fleets: %w", err)
 	}
-	taken := func(name string) bool { return slices.Contains(used, name) }
+	taken := func(name string) bool {
+		return slices.ContainsFunc(entries, func(e os.DirEntry) bool { return e.Name() == name })
+	}
 
 	for _, name := range fleetPool {
 		if !taken(name) {

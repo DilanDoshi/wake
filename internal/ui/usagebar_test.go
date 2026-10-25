@@ -81,7 +81,8 @@ func TestTheUsageBarIsHiddenUntilAReportNamesAReading(t *testing.T) {
 		t.Errorf("the roster has %d rows with no reading, want all %d", got, a.paneHeight())
 	}
 	for _, row := range sidebarRows(a) {
-		if s := ansi.Strip(row); strings.Contains(s, "session") || strings.Contains(s, sectionRule+sectionRule+sectionRule) {
+		// The bar's rule is a row of nothing else; the channel header has its name in it.
+		if s := ansi.Strip(row); strings.Contains(s, "session") || strings.Contains(s, sectionRule) && strings.Trim(s, sectionRule+" ") == "" {
 			t.Errorf("the sidebar drew a usage row with no reading: %q", s)
 		}
 	}
@@ -227,7 +228,8 @@ func everyClickLandsOnTheRowDrawnThere(t *testing.T, a App) {
 	block := len(a.usageDrawn())
 	for y, row := range rows {
 		text := strings.TrimSpace(ansi.Strip(row))
-		got, _, ok := a.clickedAgent(y)
+		spot, ok := a.clickedRow(y)
+		got := spot.agent
 		switch {
 		case y >= len(rows)-block:
 			if ok {
@@ -262,14 +264,14 @@ func TestTheFirstReadingShortensTheRosterAndClicksFollow(t *testing.T) {
 	if bottom < a.paneHeight()-3 {
 		t.Fatalf("the lowest agent row is %d of %d, above where the bar will go", bottom, a.paneHeight())
 	}
-	if _, _, ok := a.clickedAgent(bottom); !ok {
+	if spot, ok := a.clickedRow(bottom); !ok || spot.agent.ID == "" {
 		t.Fatalf("before any reading row %d opened nobody", bottom)
 	}
 	everyClickLandsOnTheRowDrawnThere(t, a)
 
 	a = a.withUsageReport(&rpc.SessionUsage{Percent: 47, Resets: usageResets}, names...)
-	if got, _, ok := a.clickedAgent(bottom); ok {
-		t.Errorf("after the first reading row %d is the bar, and opened %s", bottom, got.Name)
+	if spot, ok := a.clickedRow(bottom); ok {
+		t.Errorf("after the first reading row %d is the bar, and opened %s", bottom, spot.agent.Name)
 	}
 	everyClickLandsOnTheRowDrawnThere(t, a)
 }

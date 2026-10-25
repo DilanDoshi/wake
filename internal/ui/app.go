@@ -461,7 +461,7 @@ func NewRoomApp(conn net.Conn, stream Stream, seed *rpc.Status) App {
 	// the next push: the report carries a request id for exactly the client
 	// that was not there when the ask went past.
 	a.cards = a.cards.Reconcile(seed)
-	a.daemon = factsOf(seed)
+	a.daemon = a.daemon.with(seed)
 	// The room over a fleet that has been talking since before this window
 	// existed opens with nothing in it. This is where it asks; see
 	// roomhistory.go for the other moment and for why there are only two.
@@ -470,7 +470,7 @@ func NewRoomApp(conn net.Conn, stream Stream, seed *rpc.Status) App {
 		a.in = newInbox()
 		go a.in.pump(stream)
 	}
-	return a.retarget()
+	return a.withFleetName(seed).retarget()
 }
 
 // WithOpenDM opens a conversation with one agent beside the room and makes it

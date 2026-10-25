@@ -20,6 +20,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -311,6 +312,7 @@ func TestJumpingFromAnAgentThatNoLongerNeedsYouLandsOnTheFirstThatDoes(t *testin
 // below -len, and a negative index is a panic in the draw loop rather than a
 // wrong row.
 func TestMovingWrapsInBothDirectionsForAnyDistance(t *testing.T) {
+	// The walk is all, a, b, c: the pinned all header is a row the cursor wraps through.
 	agents := []Agent{{ID: "a"}, {ID: "b"}, {ID: "c"}}
 	for _, tc := range []struct {
 		from  string
@@ -318,15 +320,21 @@ func TestMovingWrapsInBothDirectionsForAnyDistance(t *testing.T) {
 		want  string
 	}{
 		{"a", 1, "b"},
-		{"c", 1, "a"},
-		{"a", -1, "c"},
-		{"a", -4, "c"},
-		{"a", -301, "c"},
-		{"b", 7, "c"},
+		{"c", 2, "a"},
+		{"a", -2, "c"},
+		{"a", -6, "c"},
+		{"a", -402, "c"},
+		{"b", 9, "c"},
 		{"a", 0, "a"},
 	} {
 		if got := (Roster{Selected: tc.from}).Move(agents, nil, tc.delta).Selected; got != tc.want {
 			t.Errorf("Move(%q, %d) selected %q, want %q", tc.from, tc.delta, got, tc.want)
+		}
+	}
+	for _, from := range []string{"a", "c"} {
+		delta := map[string]int{"a": -1, "c": 1}[from]
+		if got := (Roster{Selected: from}).Move(agents, nil, delta); got.Header != core.BroadcastName {
+			t.Errorf("Move(%q, %d) = %+v, want the all header between the ends", from, delta, got)
 		}
 	}
 }

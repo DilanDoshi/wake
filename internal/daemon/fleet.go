@@ -26,6 +26,7 @@ package daemon
 // A named one goes under `~/.wake/fleets/<name>/`.
 
 import (
+	"cmp"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -139,7 +140,12 @@ func fleetDirIn(root, name string) (string, error) {
 	if err := checkFleetName(name); err != nil {
 		return "", err
 	}
-	return filepath.Join(root, fleetsDirName, name), nil
+	// An old name a /wake-name left forwards to the fleet's own (fleetrename.go).
+	name, err := forwardedName(root, name)
+	if err != nil {
+		return "", err
+	}
+	return fleetPath(root, name), nil
 }
 
 // managerClaudeName is what claude calls the manager of the fleet at socket
@@ -155,13 +161,13 @@ func fleetDirIn(root, name string) (string, error) {
 // or every one of them would be `manager--`; Abs fails only without a working
 // directory, and then the unresolved one is all there is.
 func managerClaudeName(root, socket string) string {
-	dir, err := filepath.Abs(filepath.Dir(socket))
-	if err != nil {
-		dir = filepath.Dir(socket)
-	}
-	fleet := filepath.Base(dir)
-	if dir == root {
-		fleet = LegacyFleet
+	fleet := fleetNameOf(root, socket)
+	if fleet == "" {
+		dir, err := filepath.Abs(filepath.Dir(socket))
+		if err != nil {
+			dir = filepath.Dir(socket)
+		}
+		fleet = filepath.Base(dir)
 	}
 	return core.ManagerPrefix + nameShaped(fleet)
 }
@@ -185,7 +191,7 @@ func nameShaped(s string) string {
 // right answer rather than a lost error.
 func (s *server) managerClaudeDefault() string {
 	root, _ := StateRoot()
-	return managerClaudeName(root, s.socket)
+	return managerClaudeName(root, s.fleetSocket())
 }
 
 // managerClaude is what claude calls the manager now, for a caller with no
@@ -204,18 +210,16 @@ func (s *server) managerClaudeOf(mgr *agent) string {
 		return mgr.wantedClaude()
 	}
 	// The newest manager record, since two can sit in one book (a manager spawned
-	// while another was parked) and the map they come from has no order.
+	// while another was parked) and the map they come from has no order. One
+	// booked under no name is the fleet's (recordOf).
 	var best parkedRecord
 	found := false
 	for _, rec := range s.parked.records() {
-		if restoredClaudeName(rec) != "" && (!found || rec.Parked.After(best.Parked)) {
+		if rec.Name == core.ManagerName && (!found || rec.Parked.After(best.Parked)) {
 			best, found = rec, true
 		}
 	}
-	if found {
-		return restoredClaudeName(best)
-	}
-	return s.managerClaudeDefault()
+	return cmp.Or(restoredClaudeName(best), s.managerClaudeDefault())
 }
 
 // checkFleetName refuses a name that is not one, saying which rule it broke.

@@ -316,10 +316,7 @@ func (p *parkBook) clear() error {
 	p.held = make(map[string]parkedRecord)
 	p.reserved = make(map[string]parkedRecord)
 	p.pending = make(map[string]parkedRecord)
-	if err := os.Remove(p.path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove park book %s: %w", p.path, err)
-	}
-	return nil
+	return removeFile(p.path, "park book")
 }
 
 func (p *parkBook) records() []parkedRecord {

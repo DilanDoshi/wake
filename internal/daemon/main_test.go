@@ -294,6 +294,10 @@ func runFakeClaude() int {
 		return fakeSupervised(sid)
 	case "interruptible":
 		return fakeInterruptible(sid)
+	case "busy":
+		return fakeBusy(sid)
+	case "clearquiet":
+		return fakeClearQuietly(sid)
 	case "mode":
 		return fakeMode(sid)
 	case "rewind":
@@ -573,6 +577,71 @@ func fakeInterruptible(sid string) int {
 	return 0
 }
 
+// fakeInterruptLogEnv names a file fakeBusy appends a line to for every
+// interrupt it is sent, so a test can tell whether one reached an idle agent.
+const fakeInterruptLogEnv = "WAKE_FAKE_INTERRUPT_LOG"
+
+// fakeBusyPrompt is the message that starts fakeBusy's long turn. Anything else
+// - the daemon's own handshake and probes included - is answered at once.
+const fakeBusyPrompt = "run the long suite"
+
+// fakeBusy holds a turn open until it is interrupted, the way a long tool call
+// does: the end of its stdin does not end a turn in flight, so a stop alone
+// leaves it running until something kills it. Idle, it ends on EOF like any
+// agent. An interrupt is answered in fakeInterruptible's recorded shape, and as
+// claude does (interrupt-queued-survives.jsonl) a line queued behind the turn
+// runs next unless the interrupt cancelled it - here as another long turn. An
+// interrupted one exits 1, as claude does.
+func fakeBusy(sid string) int {
+	emitText(sid, "ready")
+	emitResult(sid)
+	busy, interrupted := false, false
+	var queued []string
+	for line := range stdinLines() {
+		if !strings.Contains(line, `"subtype":"interrupt"`) {
+			switch {
+			case strings.Contains(line, `"type":"control_request"`):
+				// Not a turn, so its answer is no turn end.
+			case busy:
+				queued = append(queued, line)
+				emitText(sid, "queued")
+			case strings.Contains(line, fakeBusyPrompt):
+				busy = true
+				emitText(sid, "working")
+			default:
+				emitText(sid, "echo: "+line)
+				emitResult(sid)
+			}
+			continue
+		}
+		if path := os.Getenv(fakeInterruptLogEnv); path != "" {
+			if f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+				_, _ = f.WriteString("interrupt\n")
+				_ = f.Close()
+			}
+		}
+		fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"still_queued":[]}}}`+"\n",
+			controlRequestID(line))
+		interrupted = true
+		if busy {
+			busy = false
+			emitText(sid, "interrupted")
+			emitResult(sid)
+		}
+		if len(queued) > 0 && !strings.Contains(line, `"cancel_queued":true`) {
+			queued, busy = queued[1:], true
+			emitText(sid, "working")
+		}
+	}
+	if busy {
+		time.Sleep(lingerFor)
+	}
+	if interrupted {
+		return 1
+	}
+	return 0
+}
+
 // controlRequestID reads the correlator off the envelope, where a
 // control_request carries it - a control_response nests its own one level
 // further, which is the trap on the other side of this exchange. Shared by both
@@ -759,6 +828,35 @@ func fakeArgv(sid string) int {
 
 // clearCommand starts a new conversation, the way claude's own /clear does.
 const clearCommand = "/clear"
+
+// fakeClearQuietly answers /clear with clearMemory's reset and successor init
+// but no turn end, and only after a beat, so no status push follows the
+// successor: the only thing left to carry the new conversation to the
+// park-ready file is the event itself. The beat lets the push the send made
+// finish first, so it cannot carry it instead.
+func fakeClearQuietly(sid string) int {
+	emitText(sid, "ready")
+	emitResult(sid)
+	for line := range stdinLines() {
+		switch {
+		case strings.Contains(line, `"type":"control_request"`):
+		case strings.Contains(line, clearCommand):
+			time.Sleep(fakeClearBeat)
+			successor := uuid.NewString()
+			fmt.Printf(`{"type":"conversation_reset","session_id":%q,"new_conversation_id":%q}`+"\n", sid, uuid.NewString())
+			emitInit(successor)
+			sid = successor
+		default:
+			emitText(sid, "echo: "+line)
+			emitResult(sid)
+		}
+	}
+	return 0
+}
+
+// fakeClearBeat is how long fakeClearQuietly waits before it answers a /clear:
+// far longer than a status push takes to write the park-ready file.
+const fakeClearBeat = 200 * time.Millisecond
 
 // clearMemory is /clear in claude's recorded shape (slash-commands.jsonl): a
 // reset under the id that dies, whose new_conversation_id is NOT the successor,

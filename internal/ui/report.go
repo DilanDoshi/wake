@@ -39,8 +39,8 @@ func (a App) applyStatus(st *rpc.Status) App {
 	}
 	prev := a.fleet
 	a.fleet = a.fleet.WithStatus(st)
-	a.daemon = factsOf(st)
-	a = a.withUsageRows()
+	a.daemon = a.daemon.with(st)
+	a = a.withFleetName(st).withUsageRows()
 	// The State backstop for the queue: a working→idle edge on this report frees an
 	// agent whose in-flight message's completed lifecycle was lost to a gap. Per
 	// report, so an edge inside one batch is not collapsed. See queue.go.
@@ -57,25 +57,27 @@ func (a App) applyStatus(st *rpc.Status) App {
 	// picker over. See rewind.go's reconcileRewind, and the adversarial
 	// review CRITICAL finding it closes, 2026-08-26.
 	a = a.reconcileRewind().reconciledMCP()
-	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
+	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().rechanneled().retarget().recompleted()
 }
 
 // daemonFacts is what a report says about the daemon and the account rather
-// than any agent: the daemon's build, and the session-usage reading with the
-// rows the sidebar draws it as (usagebar.go).
+// than any agent: the daemon's build, the fleet it serves (fleetname.go), and
+// the session-usage reading with the rows the sidebar draws it as (usagebar.go).
 type daemonFacts struct {
 	build string
+	fleet string
 	usage *rpc.SessionUsage
 	rows  []string
 }
 
-// factsOf is what a seed or a report names; a nil seed - wait for the first
-// push - names nothing.
-func factsOf(st *rpc.Status) daemonFacts {
+// with takes what a seed or a report names; a nil seed - wait for the first
+// push - names nothing. The fleet is withFleetName's, which compares it first.
+func (d daemonFacts) with(st *rpc.Status) daemonFacts {
 	if st == nil {
-		return daemonFacts{}
+		return d
 	}
-	return daemonFacts{build: st.Build, usage: st.SessionUsage}
+	d.build, d.usage = st.Build, st.SessionUsage
+	return d
 }
 
 // refreshedAgents folds each live agent into the conversation this client holds

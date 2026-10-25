@@ -56,6 +56,9 @@ type server struct {
 	// inside it - see parkbook.go's header for why they are two files.
 	parked *parkBook
 
+	// ready is every live agent's park book row, for the reaper - see parkready.go.
+	ready *parkReady
+
 	// names is which display names the live fleet is using. It has its own
 	// lock rather than living under s.mu, because a name is reserved before
 	// the agent it belongs to exists: the name becomes the child's --name, so
@@ -87,6 +90,7 @@ type server struct {
 	peers     peerBook   // the /list-agents run in flight and its askers; its own lock
 	limits    limitWatch // resuming agents a usage limit stopped; its own lock
 	usage     usageBook  // the account's newest session-usage reading; its own lock
+	home      fleetHome  // what the fleet answers to after a /wake-name: fleetrename.go
 
 	// taken is set by takeAgents when shutdown snapshots the fleet. An agent
 	// admitted after that snapshot enters a map nothing reads again - its
@@ -142,6 +146,7 @@ func newServer(socket string) *server {
 		socket:     socket,
 		roster:     newRosterFile(rosterPath(socket)),
 		parked:     newParkBook(parkBookPath(socket)),
+		ready:      newParkReady(parkReadyPath(socket)),
 		names:      newNameRegistry(),
 		agents:     make(map[string]*agent),
 		clients:    make(map[*client]struct{}),
@@ -213,6 +218,9 @@ func (s *server) run(ctx context.Context, ln net.Listener) error {
 func (s *server) stopAcceptingOnStop(ctx context.Context, ln net.Listener) {
 	select {
 	case <-ctx.Done():
+		// Before the deadline below ends the accept loop, so shutdown always
+		// reads the verb. See quitSignal.
+		s.beginQuit(quitSignal)
 	case <-s.quit:
 	case <-s.done:
 	}
@@ -254,15 +262,14 @@ func (s *server) stopping(ctx context.Context) bool {
 // quitVerb is why this daemon is ending, which decides what happens to the
 // sessions it holds and to the ones it has already parked.
 //
-// Three values because only two endings are verbs. A signal and an empty
-// daemon are both no-verb exits: neither may park a fleet nobody asked to park
-// nor forget one somebody already did.
+// Two endings are verbs and a signal is a third way out; an empty daemon is the
+// no-verb exit, with nothing to park and nothing somebody parked to forget.
 type quitVerb int
 
 const (
-	// quitNone is context cancellation or the daemon becoming empty. Sessions
-	// are stopped, the park book is left exactly as it is. It is the zero value
-	// because nobody asked for either exit with a verb.
+	// quitNone is the daemon becoming empty. Sessions are stopped, the park
+	// book is left exactly as it is. It is the zero value because nobody asked
+	// for that exit with a verb.
 	quitNone quitVerb = iota
 
 	// quitStop is FrameQuit, which is `wake stop`. Every session ends and the
@@ -273,6 +280,10 @@ const (
 	// quitPark is FrameParkAll, which is ⌃Q. Every session is parked on the
 	// way out and written down, so the next start can offer them back.
 	quitPark
+
+	// quitSignal is a SIGTERM, a logout, a machine going down: nobody chose to
+	// lose the fleet, so it parks as ⌃Q does, interrupting busy agents first.
+	quitSignal
 )
 
 // beginQuit is the quit verb: end the accept loop, and record why. The
@@ -304,8 +315,8 @@ func (s *server) quitReason() quitVerb {
 // this server started.
 //
 // The order is the contract. Sessions are stopped the gentle way first -
-// stdin closed, in-flight turn allowed to finish - because a daemon exit is
-// not permission to corrupt a repo. Only what is still alive after the grace
+// stdin closed, in-flight turn allowed to finish or, under a signal, ended as
+// Esc ends it, by claude itself - because a daemon exit is not leave to kill. Only what is still alive after the grace
 // is killed, and it is killed by process group, because an agent is a tree.
 //
 // The quit verb decides two things here and nothing else does: whether each
@@ -316,8 +327,12 @@ func (s *server) quitReason() quitVerb {
 func (s *server) shutdown() error {
 	verb := s.quitReason()
 	agents := s.takeAgents()
+	if verb == quitStop {
+		s.dropReady() // a fleet being stopped must not be handed on if the daemon dies in the grace
+	}
+	parking := verb == quitPark || verb == quitSignal
 	for _, a := range agents {
-		if verb == quitPark {
+		if parking {
 			// Before the stop, never after: retire runs the moment the events
 			// channel closes, which can be before this loop's next iteration.
 			// It is set on unreachable ones too: OS-confirmed reclaim preserves
@@ -333,21 +348,19 @@ func (s *server) shutdown() error {
 			// ParkAll must preserve the label beginPark just installed: kill
 			// clears it on a not-yet-retired agent. Reclaim's endProcess is
 			// idempotent and lets retire/completePark decide the parked ending.
-			if a.endForShutdown(verb == quitPark) {
+			if a.endForShutdown(parking) {
 				logf("wake: session %s has already lost its process; completing its reclaim as a park", a.id)
 			} else {
 				logf("wake: session %s has already lost its process; killing its group rather than waiting", a.id)
 			}
 			continue
 		}
-		if err := a.stop(); err != nil {
-			logf("wake: stopping session %s: %v", a.id, err)
-		}
+		s.stopForShutdown(a, verb == quitSignal)
 	}
 	remaining := waitForAgents(agents, quitGrace)
 	for _, a := range remaining {
 		logf("wake: session %s did not end within %v of being stopped; ending its process group", a.id, quitGrace)
-		a.endForShutdown(verb == quitPark)
+		a.endForShutdown(parking)
 	}
 
 	// The park book's two arms are in different places, and the asymmetry is
@@ -367,7 +380,7 @@ func (s *server) shutdown() error {
 	// statically, because a test that reads the book at an edge proves the end
 	// state and not the order two statements ran in.
 	switch verb {
-	case quitPark:
+	case quitPark, quitSignal:
 		s.bookParked(agents)
 	case quitStop, quitNone:
 		// The forget is below, after the wait; a no-verb exit decides nothing.
@@ -405,7 +418,7 @@ func (s *server) shutdown() error {
 		if err := s.parked.clear(); err != nil {
 			logf("wake: could not clear the park book: %v", err)
 		}
-	case quitPark, quitNone:
+	case quitPark, quitSignal, quitNone:
 		// ⌃Q wrote the book above and a no-verb exit preserves it, but both
 		// must finish any add/deletion update still dirty in memory. This
 		// is after the tracked finalizer wait so retry writes the last held
@@ -420,14 +433,14 @@ func (s *server) shutdown() error {
 	// roster entry left behind would send the next daemon hunting for
 	// process groups that no longer exist.
 	//
-	// The roster goes unconditionally and the park book does not, and the
-	// asymmetry is the whole ruling. A roster entry outliving its process is a
-	// pgid a later reaper would hunt for, so it is debris however the daemon
-	// died. The book's entries name transcripts that are still on disk and
+	// The roster and the park-ready file go unconditionally and the park book
+	// does not, and the asymmetry is the whole ruling. A roster entry outliving
+	// its process is a pgid a later reaper would hunt for, so it is debris
+	// however the daemon died, and a park-ready file is the reaper's alone. The book's entries name transcripts that are still on disk and
 	// processes that are already gone, so they cost nothing to keep and
 	// everything to lose - which is why the question above is "which verb"
 	// rather than "did this daemon exit".
-	return s.roster.clear()
+	return errors.Join(s.roster.clear(), s.ready.clear())
 }
 
 // waitFor waits on wg, reporting whether everything retired within d.
@@ -448,6 +461,9 @@ func waitFor(wg *sync.WaitGroup, d time.Duration) bool {
 // takeAgents empties the map and returns what was in it, so shutdown works on
 // a stable set with no lock held.
 func (s *server) takeAgents() []*agent {
+	// After a rename in flight, and before s.mu: moveFleetTo's order (fleetrename.go).
+	s.home.moving.Lock()
+	defer s.home.moving.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// In the same locked step as the snapshot: a register that runs after this
@@ -660,6 +676,8 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		s.beginQuit(quitPark)
 	case rpc.FrameSetMaxAgents:
 		s.setMaxAgents(c, f)
+	case rpc.FrameRenameFleet:
+		s.renameFleet(c, f)
 	case rpc.FrameStatus:
 		s.replyStatus(c)
 	case rpc.FramePeers:
@@ -728,11 +746,6 @@ func (s *server) agent(id string) (*agent, bool) {
 	defer s.mu.Unlock()
 	a, ok := s.agents[id]
 	return a, ok
-}
-
-// submit hands a stdin-bound frame to the agent that owns it.
-func (s *server) submit(c *client, f rpc.Frame) {
-	s.withAgent(c, f, func(a *agent) error { return a.submit(c, f) })
 }
 
 // broadcast hands one frame to every attached client.

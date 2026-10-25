@@ -2,9 +2,9 @@ package daemon
 
 // The fleet report: the whole fleet as one rpc.Status, assembled for every
 // status reply and push. Split from server.go, which owns the accept loop and
-// the dispatch - this owns what a report *is*, and it is where the team order is
-// maintained and shipped (orderTeams, team.go), and where the endings it still
-// accounts for are kept.
+// the dispatch - this owns what a report *is*, the endings it carries after the
+// fact (s.recent), and it is where the team order is maintained and shipped
+// (orderTeams, team.go).
 
 import (
 	"os"
@@ -27,9 +27,12 @@ func (s *server) replyStatus(c *client) {
 // pushStatus is the same report sent unasked. It is never a reply.
 func (s *server) pushStatus() {
 	s.reportMu.Lock()
-	defer s.reportMu.Unlock()
 	st := s.fleet()
 	s.broadcast(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+	s.reportMu.Unlock()
+	// Every change a wake reads - a /clear's conversation, an /effort - ends in
+	// a push, so this is where the park-ready file catches up with them all.
+	s.syncReady()
 }
 
 // fleet is the whole fleet as one Status, and the sessions that recently left
@@ -41,7 +44,9 @@ func (s *server) pushStatus() {
 // each move an id between them in a single locked step, so no id is ever in
 // both and none is ever in neither.
 func (s *server) fleet() rpc.Status {
-	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: s.socket, Build: version.Build(), MaxAgents: s.agentCap()}
+	root, _ := StateRoot()
+	at := s.fleetSocket()
+	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: at, Fleet: fleetNameOf(root, at), Build: version.Build(), MaxAgents: s.agentCap()}
 	st.SessionUsage = s.usage.report()
 
 	s.mu.Lock()

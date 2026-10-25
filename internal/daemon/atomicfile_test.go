@@ -8,6 +8,7 @@ import (
 	"go/token"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 )
@@ -36,6 +37,17 @@ var replaceSteps = []string{"os.CreateTemp", "os.Rename"}
 // that makes it static, the same way the identity block's "appended whole" is.
 const pathChmod = "os.Chmod"
 
+// directoryMoves are the files that rename a directory rather than replace a
+// file, with how many os.Rename calls that takes and why. Counted, so a
+// replace-a-file sequence cannot hide beside them; os.CreateTemp stays refused.
+var directoryMoves = map[string]struct {
+	renames int
+	why     string
+}{
+	"fleetrename.go": {renames: 2, why: "/wake-name moves a fleet's directory, and moves it back when the " +
+		"link it leaves cannot be made: no file is replaced under a reader"},
+}
+
 // The replace-a-file sequence is spelled once.
 //
 // It was spelled three times - roster.go, parkbook.go and manager.go - and by
@@ -54,6 +66,7 @@ func TestTheAtomicWriteIsSpelledOnceInThisPackage(t *testing.T) {
 		t.Fatalf("read package directory: %v", err)
 	}
 	scanned, inHome, fdChmods := 0, 0, 0
+	moves := map[string]int{}
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -97,6 +110,10 @@ func TestTheAtomicWriteIsSpelledOnceInThisPackage(t *testing.T) {
 					inHome++
 					continue
 				}
+				if _, moving := directoryMoves[name]; moving && spelled == "os.Rename" {
+					moves[name]++
+					continue
+				}
 				t.Errorf("%s calls %s. Replacing a file under a reader is one sequence - temp in the "+
 					"destination's own directory, write, chmod the fd, close, rename - and it was "+
 					"copied three times before it drifted. It lives in %s; call writeFileAtomically, "+
@@ -107,6 +124,12 @@ func TestTheAtomicWriteIsSpelledOnceInThisPackage(t *testing.T) {
 	}
 	if scanned == 0 {
 		t.Fatal("the walk found no non-test files: the scan is broken and this check approves everything")
+	}
+	for name, move := range directoryMoves {
+		if moves[name] != move.renames {
+			t.Errorf("%s calls os.Rename %d times and is excused for %d (%s): a rename it does not account "+
+				"for may be a file replaced under a reader", name, moves[name], move.renames, move.why)
+		}
 	}
 	if fdChmods == 0 {
 		t.Fatalf("%s never chmods the descriptor it created: either the mode is no longer being set at all, "+
@@ -166,5 +189,60 @@ func TestAnAtomicWriteLeavesTheFileOrNothing(t *testing.T) {
 	// a refused launch, so it has to be an error rather than a silent skip.
 	if err := writeFileAtomically(filepath.Join(dir, "nope", "thing.json"), "thing", nil, 0o600); err == nil {
 		t.Error("writing into a directory that does not exist succeeded")
+	}
+}
+
+// A sync cannot be seen by any test short of a power cut, so its place is held
+// by reading the source: in writeFileAtomically the file is synced before it is
+// closed and renamed, and the directory after the rename; removeFile syncs the
+// directory after the removal; and syncDir really syncs.
+func TestTheAtomicWriteSyncsTheFileBeforeTheRenameAndTheDirectoryAfter(t *testing.T) {
+	file, err := parser.ParseFile(token.NewFileSet(), atomicFile, nil, 0)
+	if err != nil {
+		t.Fatalf("parse %s: %v", atomicFile, err)
+	}
+	order := map[string][]string{}
+	for _, decl := range file.Decls {
+		fn, ok := decl.(*ast.FuncDecl)
+		if !ok {
+			continue
+		}
+		ast.Inspect(fn.Body, func(n ast.Node) bool {
+			call, ok := n.(*ast.CallExpr)
+			if !ok {
+				return true
+			}
+			switch f := call.Fun.(type) {
+			case *ast.SelectorExpr:
+				if x, ok := f.X.(*ast.Ident); ok {
+					order[fn.Name.Name] = append(order[fn.Name.Name], x.Name+"."+f.Sel.Name)
+				}
+			case *ast.Ident:
+				order[fn.Name.Name] = append(order[fn.Name.Name], f.Name)
+			}
+			return true
+		})
+	}
+	// The first call of earlier against the last of later: the error paths close
+	// the temp file too, and only the one on the path that renames counts.
+	before := func(fn, earlier, later string) {
+		calls := order[fn]
+		e, l := slices.Index(calls, earlier), -1
+		for i, call := range calls {
+			if call == later {
+				l = i
+			}
+		}
+		if e < 0 || l < 0 || e > l {
+			t.Errorf("%s calls %v: want %s before %s, or a power cut can leave a name over bytes that never reached the disk",
+				fn, calls, earlier, later)
+		}
+	}
+	before("writeFileAtomically", "tmp.Sync", "tmp.Close")
+	before("writeFileAtomically", "tmp.Sync", "os.Rename")
+	before("writeFileAtomically", "os.Rename", "syncDir")
+	before("removeFile", "os.Remove", "syncDir")
+	if !slices.Contains(order["syncDir"], "d.Sync") {
+		t.Errorf("syncDir calls %v and syncs nothing", order["syncDir"])
 	}
 }

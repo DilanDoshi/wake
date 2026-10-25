@@ -15,7 +15,7 @@ import (
 func clickRosterAgent(t *testing.T, a App, id string) App {
 	t.Helper()
 	for y := range a.paneHeight() {
-		if ag, dispatch, ok := a.clickedAgent(y); ok && ag.ID == id && dispatch == "" {
+		if spot, ok := a.clickedRow(y); ok && spot.agent.ID == id && spot.dispatch == "" && spot.header == "" {
 			a, _ = click(a, a.layout.Width-2, y)
 			return a
 		}

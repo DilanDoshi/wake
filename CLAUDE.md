@@ -63,7 +63,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   (the daemon owns the directory; `--debug` without a file is refused).
 - **Room keys:** `↵` send/open/confirm · `⌃]` send now · `esc` interrupt · `esc esc` clear draft, or
   idle+empty → rewind picker · `↑↓` prompt history (or cursor on a multi-line draft; `↑` with messages
-  queued takes them back) · `⇧↑↓` pick agent · `⌃O`
+  queued takes them back) · `⇧↑↓` pick agent or channel · `⌃O`
   arm detach (`↵` confirms, `⌃O` cancels) · `⌃C` park focused · `⌃Q` arm park-all & quit (second
   `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus (completes
   over a `/` or `@` word) · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
@@ -71,7 +71,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   lone-`@name`/`@team` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
   `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
-  `/workflows`, `/groupchat-filter`, `/status`, plus bare `/effort`/`/model` menus, and in the room alone a
+  `/workflows`, `/groupchat-filter`, `/status`, `/wake-name`, plus bare `/effort`/`/model` menus, and in the room alone a
   bare `/clear` (`roomCommands`, `roomclear.go`): it empties this window's group chat and reaches no agent,
   keeps ↑'s prompts, keeps restored history older than it out, and the room notes every 1,000 messages it
   holds in an ordinary timed notice. Everything else passes to the agent byte
@@ -86,6 +86,15 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   The reply also names the agent's slash commands, which feed the `/` menu before its first turn.
   A connector not signed in points at claude.ai, and the banner's count leaves connectors out.
   `internal/ui/mcpmenu.go`, `mcpauth.go`.
+- **`/wake-name <name>`** renames a running named fleet (the owner's 2026-10-24 ask): the daemon moves
+  `~/.wake/fleets/<old>` to `<new>` and leaves a link at `<old>`, through which everything started before
+  the rename still reaches the fleet - agents' `WAKE_SOCKET`, the manager's tools, the daemon's own files.
+  The daemon drops its old names at exit, still holding its lock; until then `--fleet <old>` lands on
+  `<new>` (`forwardedName`) and a bare `wake` never draws one. A link to nothing is refused, never
+  removed. The report's `rpc.Status.Fleet` moves, so every window says so; bare `/wake-name` says the
+  name. The unnamed fleet and a socket set by hand outside `~/.wake/fleets` refuse; the manager gets no
+  tool for it. No CLI verb (deferred). `internal/daemon/fleetrename.go`, `internal/ui/fleetname.go`,
+  `decisions.md` (2026-10-24).
 - **`/status`** is Wake's, since headless claude refuses it: one session's facts (name and state, id,
   a `/clear`'s conversation, directory and branch read at open, model,
   effort, context, this window's mode, MCP, team, label, both builds when the daemon's differs) in a
@@ -132,7 +141,7 @@ Violating one is a design regression, not a style nit.
 | **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Use `core.SessionArgvMarkers`. | Enforced by `argv_test.go` tree-wide. |
 | **`attention.go` stays a pure function.** | Hardest logic; testable without spawning. |
 | **The UI never touches an agent's process.** | Keeps the daemon boundary real. |
-| **Wake owns almost no state.** Transcripts are Claude's (`~/.claude/projects/…`); Wake reads them back (`internal/daemon/history.go`). Wake stores roster, park book, groups, layout. The park book holds id, directory, name, label, parked-at — never a PID or ParentID. | Wake can crash and lose nothing. |
+| **Wake owns almost no state.** Transcripts are Claude's (`~/.claude/projects/…`); Wake reads them back (`internal/daemon/history.go`). Wake stores roster, park book, park-ready file, groups, layout. The park book holds id, directory, name, label, parked-at — never a PID or ParentID; the park-ready file is its rows for live agents, so a crash hands them to it. | Wake can crash and lose nothing. |
 | **Never copy cmux source.** CLI only. | cmux is GPL-3.0-or-later. |
 | **No parallel implementations.** Extend in place, or delete and replace. | Grep first; name what you extend or remove. |
 
@@ -149,14 +158,20 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   may take the `manager-` prefix. **Its end part is the operator's** (`@manager /rename ops`,
   `/name ops`): `manager-ops` is held on the agent (`claudeWant`), synced to claude, served as
   `ManagerClaude` and kept in the park record; a bare `manager` puts the fleet's back, and a variant
-  claude answers with is the name it takes (`decisions.md`, 2026-10-15).
+  claude answers with is the name it takes (`decisions.md`, 2026-10-15). While it is the fleet's own it
+  follows a `/wake-name`, and a park books it under none (`recordOf`), so it wakes under the fleet's name then.
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
-  everything and clears the park book (`parked.json` beside the socket).
+  everything and clears the park book (`parked.json` beside the socket). **A SIGTERM or SIGINT parks the
+  fleet like `⌃Q`**, first interrupting every agent as Esc does and cancelling what is queued behind its
+  turn, so a turn in flight ends inside the grace (owner's 2026-10-21 and -22 rulings; `⌃Q` still lets a
+  turn run); **a crash** (SIGKILL, a panic, a force restart - the state files' writes and removals are
+  fsynced) leaves `parkready.json`, and the next daemon's reaper moves each finished roster row's record
+  into the park book (BUG-53; `internal/daemon/parkready.go`, `reap.go`'s `handOver`). A row it retains stays out.
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
   before closing — `internal/ui/park.go`.
 - **A daemon restores nothing.** ⌃Q then `wake` is a fresh room; parked sessions are addressable only
-  via `/resume` (`rpc.Status.Parked`, disjoint from `Sessions`). `admit` still refuses a spawn under a
-  parked id. `⌃C` refuses a blocked agent (closing stdin reads as an operator deny).
+  via `/resume` (`rpc.Status.Parked`, disjoint from `Sessions`) — a crashed fleet too: the reaper parks
+  it and never wakes it. `admit` still refuses a spawn under a parked id. `⌃C` refuses a blocked agent (closing stdin reads as an operator deny).
 - **Two live processes on one session id branch silently.** Every check happens before the second
   process exists: `resumeSafe` asks the OS; `launch` takes the row before starting anything.
 - **Forks and imports are snapshots** (`--resume <parent> --fork-session --session-id <new>`).
@@ -301,6 +316,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A local command's reply is drawn as its lines** (`/list-agents`, `/cost`, `/config`), as Claude
   Code draws it; one opening with a markdown heading (`/context`'s) stays markdown.
   `internal/ui/dm_blocks.go`'s `drawnAsLines`.
+- **A table too narrow for its pane draws as records**, as Claude Code draws one on a narrow
+  terminal: a bold `Header:` and the cell on one line per column, a `─` rule of at most 40
+  between records. Wake keeps glamour's grid only while it shows the table whole (header and
+  words uncut, links' addresses uncut, no row past four lines), judged by reading the grid back;
+  that is earlier than Claude Code, whose own grid breaks words. Top-level tables only; a resize
+  flips it; a copy rejoins a wrapped value. `internal/render/tables.go`, `decisions.md`
+  (2026-10-24).
 - The composer grows with the draft; the pane bounds it (`composerRowsIn`), never itself. A pane's
   chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
   screen.
@@ -351,6 +373,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A lone `@name` narrows the room** to that thread, a lone `@team` to its live members' (a union of their
   threads, keyed by `joinIDs`; open mode never widens a team, so it narrows there too) (`roomfocus.go`);
   `⌃A` overrides per target; `/groupchat-filter off` flips the default per window (`roomfilter.go`).
+- **A roster team header is a channel** (owner, 2026-10-24): `↵` on it or a click makes that team's thread the
+  room's base, titled with the team, until `── all ──` (pinned at the sidebar's top, the default) or another
+  team is picked; per window, never persisted (`roomchannel.go`). It is the same predicate, keyed on the
+  members the roster draws under the header (parked ones too) plus the manager's seat; a lone `@name`/`@team`
+  narrows within it (`orchs › @who`), and `⌃A`, `/groupchat-filter` and routing are unchanged. The working
+  line is the channel's; a team left with no header returns the window to all.
 - **Peer cross-session messages** show in the room as `↪ sender → recipient`
   (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*
   content, so pasted text can't forge one. DM replays of Wake's own sends are dropped. A message
@@ -394,7 +422,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   composer, mouse, digit).
 - Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer
   mode, where the card takes `↵`; a bare `↑↓` with no draft line to move to never walks prompt history -
-  from `Other…` it goes back to the options with the words kept in that row (`cardanswer.go`). Arrows reach the card with or without a
+  from `Other…` it goes back to the options with the words kept in that row, as `esc` does, and `↵` over an
+  open menu completes its word before it sends (`cardanswer.go`). Arrows reach the card with or without a
   draft; `←→` only on an empty composer. **A multi-select question** (`core.Question.Multi`) draws
   `[ ]`/`[✔]` boxes, ticks in place on `↵`, a digit or space, walks on by its Next/Submit row, and sends
   the ticks in the order ticked with typed words last, joined by `core.JoinChoices` as Claude Code
@@ -465,7 +494,7 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · `usage.go` (the account's session window) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (a signal interrupts, then stops) · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -473,10 +502,10 @@ yet says so in bold.**
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
-| Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
+| Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
-| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
@@ -485,7 +514,7 @@ yet says so in bold.**
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
-| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) |
+| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) · `tables.go` draws a table too narrow for its pane as records · findings `docs/superpowers/notes/2026-10-24-narrow-table-findings.md` |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · the update check `updatecheck.go`, asked by the room on its first frame and on a keystroke an hour on, and named on the strip as `↑ wake X` (`internal/ui/updatecue.go`) · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
@@ -495,7 +524,8 @@ yet says so in bold.**
 
 ## Toolchain
 
-Go 1.26+. Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, Charm).
+Go 1.26+. Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, Charm), and `goldmark`
+(MIT, glamour's own parser; `internal/render/tables.go` reads a reply's tables with it).
 
 ```bash
 make build     # go build ./cmd/wake
