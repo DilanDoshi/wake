@@ -82,13 +82,14 @@ import (
 // second press then falls through to a genuine interrupt instead of opening a
 // picker on stale idleness. See rewind.go.
 func (a App) escape(armed, collapsed bool) (tea.Model, tea.Cmd, bool) {
-	// A draft being written as an answer is abandoned, and the agent's turn is
-	// left alone: the operator is dropping a sentence, not the work. Checked
-	// first because answer mode is the one state in which the draft is not a
-	// message, so neither of the rules below is about it. See cardanswer.go.
+	// A draft being written as an answer goes back to the options, and the
+	// agent's turn is left alone: the operator is stepping out of a sentence, not
+	// the work. Checked first because answer mode is the one state in which the
+	// draft is not a message, so neither of the rules below is about it. See
+	// cardanswer.go.
 	if card, ok := a.cardOf(a.focus); ok {
-		if _, writing := a.cards.writingFor(card); writing {
-			return a.cancelAnswer(), nil, true
+		if q, writing := a.cards.writingFor(card); writing {
+			return a.cancelAnswer(card, q), nil, true
 		}
 	}
 	clears := a.clearsOnEscape()

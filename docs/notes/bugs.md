@@ -1239,6 +1239,25 @@ timed notice and nothing ever sent the next message. The process stayed alive an
 daemon's usage-limit resume carries it (owner's ruling, `decisions.md` 2026-10-23): one `continue` once
 another agent's turn goes through after the stop, or the OS reports a network change after it.
 
+---
+
+## BUG-56 — `↵` over the menu sent a question's own answer, and `esc` threw its words away
+
+**Found 2026-10-23 by the owner**, on one question card, two ways. Typing an answer in `Other…`, an `@` menu
+came up with `↵ complete` on its key line, and `↵` sent the half-typed answer instead of taking the offer. And
+after typing an answer, stepping to another question and coming back, `Other…` opened an empty box.
+
+**Cause.** Answer mode (`cardkeys.go`) took every `↵` for `commitAnswer` before `enterCompletes` was asked, so
+the menu offered a key the box would not honour; the refusal's reason box (`d`) had the same hole, and that
+reason reaches the model verbatim. And `esc`, which the card names "back to the options", dropped the words
+(`cancelAnswer`), where ↑↓ kept them since BUG-54. `←→` are the box's own cursor while it holds a draft, so `esc`
+is the key a typed answer is left by on the way to another question.
+
+**Fix:** branch `fix/answer-mode-completion-enter-and-kept-draft`. `↵` over an open menu completes the word
+(a word typed in full still sends). `esc` keeps the words as the `Other…` answer, as ↑↓ do, and an emptied box
+takes a kept answer away; on a multi-select question the cursor lands on the walk-on row, so a second `↵` walks
+on rather than unticking the words. The refusal's reason belongs to no question, so `esc` there still drops it.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
