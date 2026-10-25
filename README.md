@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.11 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.12 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -87,6 +87,7 @@ Full reference: [Keyboard shortcuts](docs/user_manual/03-keyboard.md).
 ```
 wake                    start a new fleet, name it, and open it
 wake --fleet <name>     open one that already exists (a bare `wake` always makes a new one)
+wake --max-agents <n>   run at most n sessions at once, 1 to 50 (50 unless set); also with new, attach, manager
 wake fleets             every fleet on this machine
 wake new [name]         open a conversation with a new agent, with a name you choose
 wake attach <who>       open a conversation with one already running, by name or id
@@ -138,7 +139,13 @@ recipient`) folds at three rows in the room and in a conversation; `⌃E` or a c
 draws its own agent's sends the same way. A question that takes several answers draws `[ ]` boxes you
 tick with `↵`, the option's digit or space, and Next or Submit walks on. When a usage limit stops agents,
 Wake resumes each once — when you sign in to another account anywhere, or at the reset the limit named —
-and draws it as `↻ resumed after the usage limit`, never as your words.
+and draws it as `↻ resumed after the usage limit`, never as your words. A turn an unreachable API stopped (a
+lost connection, a machine asleep mid-reply) is resumed the same way once another agent's turn goes through or
+the network changes, drawn `↻ resumed after the connection came back`. Once an agent reports it, the account's
+five-hour session usage is a bar under the roster (`session · ↻ 4:09pm`). A table too narrow for its pane is
+drawn as records, `Header: value` a line, as Claude Code draws one. A conversation showing a question card
+scrolls as one page under the wheel. A SIGTERM or SIGINT to the daemon parks the fleet as `⌃Q⌃Q` does, and a
+fleet whose daemon crashed is parked by the next one, so `/resume` brings its agents back.
 
 ## Development
 
