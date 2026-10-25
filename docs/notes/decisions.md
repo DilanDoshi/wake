@@ -55,8 +55,13 @@ laid out as Claude Code lays them out. The rule lives in
   grid, and so does every table of a reply that defines a reference link
   (`deferred.md`).
 - **A one-column grid keeps its rows.** On `main`, `reflowProse` ran a
-  one-column grid's body rows together as prose, since no `│` marked them.
-  `gridRows` now marks a grid's header, rule and body.
+  one-column grid's body rows together as prose, since no `│` marked them. A
+  table rendered alone now keeps `reflowProse` off its grid
+  (`reflowedBelowGrid`). That is provenance, not a guess from the rows: a guess
+  from a row of `─` froze prose that only wrapped a run of box drawing onto a
+  row of its own (Codex, second pass). A one-column table glamour still draws
+  inside a document (nested, or in a reply that defines a reference link) is
+  run together as before.
 - **How it is spliced in.** Each table's lines are replaced by a placeholder
   paragraph with a blank line on each side, the document renders once, and each
   placeholder row becomes that table's rows.

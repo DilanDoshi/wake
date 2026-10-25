@@ -93,7 +93,10 @@ func markdown(src string, width int, records bool) string {
 }
 
 // rendered is one glamour render of src at width, through every pass below.
-func rendered(src string, width int) string {
+func rendered(src string, width int) string { return renderedWith(src, width, reflowProse) }
+
+// renderedWith is rendered with reflow as its prose pass.
+func renderedWith(src string, width int, reflow func(string, int) string) string {
 	r, err := rendererFor(width)
 	if err != nil {
 		// Degrade to plain text rather than lose the message — but still
@@ -110,7 +113,7 @@ func rendered(src string, width int) string {
 	// with a list back on its bullet's row, and fitToWidth is the hard width net
 	// last of all, for the rows glamour could not wrap and reflowProse leaves alone;
 	// sealRows closes a style either wrap broke a row inside.
-	return strings.TrimRight(trimOpeningScaffold(sealRows(fitToWidth(joinLoneBullets(reflowProse(stylingOnly(out), width)), width))), "\n")
+	return strings.TrimRight(trimOpeningScaffold(sealRows(fitToWidth(joinLoneBullets(reflow(stylingOnly(out), width)), width))), "\n")
 }
 
 // boxDrawing marks a rendered line as glamour's own table or block-quote layout,
@@ -144,10 +147,9 @@ const boxDrawing = "│─┼┌┐└┘├┤┬┴╭╮╰╯"
 // block is a blank row away.
 func reflowProse(s string, width int) string {
 	lines := strings.Split(s, "\n")
-	grid := gridRows(lines)
 	out := make([]string, 0, len(lines))
 	for i := 0; i < len(lines); {
-		if grid[i] || !reflowable(lines[i]) {
+		if !reflowable(lines[i]) {
 			out = append(out, lines[i])
 			i++
 			continue
@@ -161,7 +163,7 @@ func reflowProse(s string, width int) string {
 			if mark != "" {
 				row = unstyledLead(row)
 			}
-			if grid[i] || !reflowable(row) || leadSpaces(row) != lead || startsItem(group[0], row, itemTag) {
+			if !reflowable(row) || leadSpaces(row) != lead || startsItem(group[0], row, itemTag) {
 				break
 			}
 			group = append(group, row)

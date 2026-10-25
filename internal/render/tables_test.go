@@ -228,8 +228,8 @@ func TestARecordsLabelIsItsHeadersText(t *testing.T) {
 // A one-column grid keeps a row per body row: reflowProse used to run them
 // together, `a.go b.go c.go`, since no `│` marks them as a grid's.
 //
-// Mutation check: without gridRows the rows run together, the grid no longer
-// reads back as the table, and it draws as records.
+// Mutation check: rendering the lone table through reflowProse runs the rows
+// together, the grid no longer reads back as the table, and it draws as records.
 func TestAOneColumnGridKeepsItsRows(t *testing.T) {
 	src := "| Files |\n|---|\n| a.go |\n| b.go |\n| c.go |"
 	got := plainRows(Markdown(src, 80))
@@ -303,5 +303,28 @@ func TestASourceHoldingThePlaceholderMarkIsLeftToGlamour(t *testing.T) {
 func TestATableFlipsBackToItsGridWhenThePaneWidens(t *testing.T) {
 	if !isGrid(Markdown(flagTable, 120)) || isGrid(Markdown(flagTable, 40)) || !isGrid(Markdown(flagTable, 120)) {
 		t.Fatal("the table did not follow the width")
+	}
+}
+
+// Prose with a run of box drawing wrapped onto a row of its own is still prose:
+// only a table rendered alone keeps reflowProse off its rows, so the prose under
+// that row keeps its greedy wrap (Codex, second pass).
+func TestARuleShapedRowInProseKeepsTheProseWrap(t *testing.T) {
+	src := "xxxxxxxxxxxxxxxx\n────────────\nI'll work ticket DEV-3035 end-to-end following the /lima-report-sync skill. " +
+		"First, let me load the Linear tools and fetch the ticket."
+	const width = 20
+	rows := plainRows(Markdown(src, width))
+	for i := 0; i+1 < len(rows); i++ {
+		here, next := strings.TrimSpace(rows[i]), strings.TrimSpace(rows[i+1])
+		if here == "" || next == "" || strings.ContainsAny(here+next, boxDrawing) {
+			continue
+		}
+		join := 1
+		if strings.HasSuffix(here, "-") {
+			join = 0
+		}
+		if word := strings.Fields(next)[0]; ansi.StringWidth(here)+join+ansi.StringWidth(word) <= width-2*int(defaultMargin) {
+			t.Errorf("%q fits after %q:\n%s", word, here, strings.Join(rows, "\n"))
+		}
 	}
 }

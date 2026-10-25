@@ -88,7 +88,7 @@ func withTables(src string, width int, records bool) string {
 // drawn is the table's rows at width.
 func (t table) drawn(width int, records bool) []string {
 	if !records {
-		if grid := rendered(t.text, width); t.whole(grid) {
+		if grid := renderedWith(t.text, width, reflowedBelowGrid); t.whole(grid) {
 			return strings.Split(grid, "\n")
 		}
 	}
@@ -463,28 +463,22 @@ func done(rest [][]string) bool {
 	return true
 }
 
-// gridRows marks the rows of glamour's grids: a header, the rule under it, and
-// the body down to the next blank row. A one-column grid has no `│` to keep
-// reflowProse off its rows, which would otherwise run together as prose.
-func gridRows(lines []string) []bool {
-	in := make([]bool, len(lines))
-	for i := 1; i < len(lines); i++ {
-		if !gridRule(lines[i]) || blankRow(lines[i-1]) {
-			continue // a thematic break has a blank row above it; a header rule never does
-		}
-		in[i-1] = true
-		for j := i; j < len(lines) && !blankRow(lines[j]); j++ {
-			in[j] = true
-		}
+// reflowedBelowGrid is reflowProse for a table rendered alone: its grid - the
+// rows from the first down to the next blank one - stays as glamour drew it, and
+// what follows (glamour's list of the table's links) is prose as ever. A
+// one-column grid has no `│` to keep reflowProse off its rows, which would
+// otherwise run together.
+func reflowedBelowGrid(s string, width int) string {
+	lines := strings.Split(s, "\n")
+	i := 0
+	for i < len(lines) && blankRow(lines[i]) {
+		i++
 	}
-	return in
-}
-
-// gridRule reports a row of only `─` and `┼`: the rule under a grid's header.
-func gridRule(line string) bool {
-	if !strings.Contains(line, "─") {
-		return false
+	for i < len(lines) && !blankRow(lines[i]) {
+		i++
 	}
-	t := strings.TrimSpace(ansi.Strip(line))
-	return strings.Trim(t, "─┼") == ""
+	if i == len(lines) {
+		return s
+	}
+	return strings.Join(lines[:i], "\n") + "\n" + reflowProse(strings.Join(lines[i:], "\n"), width)
 }
