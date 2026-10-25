@@ -115,8 +115,11 @@ Flags on the verbs that start a session (`new`, `manager`):
 
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
 slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
-`/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status` and `/groupchat-filter`; `/effort`
-and `/model` configure the session they are addressed to. `/status [@who]` shows an agent's own facts —
+`/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status`, `/groupchat-filter` and
+`/wake-name`; `/effort` and `/model` configure the session they are addressed to. `/wake-name <name>`
+renames the fleet you are in, so `wake --fleet <name>` and `wake fleets` know it by the new name; the
+agents already running keep reaching it, and every open window says so. A bare `/wake-name` says what
+the fleet is called. The unnamed fleet keeps its name. `/status [@who]` shows an agent's own facts —
 state, ids, model, context, effort, permission mode, team, builds — without sending it anything, the
 manager's included. A bare `/clear` typed in the room is Wake's own: it empties this window's group chat
 and reaches no agent (conversations and `↑` history are kept), and the room notes every 1,000 messages it

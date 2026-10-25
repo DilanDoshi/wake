@@ -155,9 +155,9 @@ type App struct {
 
 	// fleet is every agent this client knows about, and the only thing that
 	// inspects an event. See fleet.go.
-	fleet       Fleet
-	daemonBuild string     // the daemon's build off the last report; see wakeBuilds
-	statusUI    StatusView // /status's view; see statuscmd.go
+	fleet    Fleet
+	daemon   daemonFacts // what the last report said about the daemon itself; see report.go
+	statusUI StatusView  // /status's view; see statuscmd.go
 
 	room   Room
 	cards  Cards
@@ -461,7 +461,7 @@ func NewRoomApp(conn net.Conn, stream Stream, seed *rpc.Status) App {
 	// the next push: the report carries a request id for exactly the client
 	// that was not there when the ask went past.
 	a.cards = a.cards.Reconcile(seed)
-	a.daemonBuild = buildOf(seed)
+	a.daemon.build = buildOf(seed)
 	// The room over a fleet that has been talking since before this window
 	// existed opens with nothing in it. This is where it asks; see
 	// roomhistory.go for the other moment and for why there are only two.
@@ -470,7 +470,7 @@ func NewRoomApp(conn net.Conn, stream Stream, seed *rpc.Status) App {
 		a.in = newInbox()
 		go a.in.pump(stream)
 	}
-	return a.retarget()
+	return a.withFleetName(seed).retarget()
 }
 
 // WithOpenDM opens a conversation with one agent beside the room and makes it
