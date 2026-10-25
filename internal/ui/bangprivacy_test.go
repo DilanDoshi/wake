@@ -30,6 +30,68 @@ func TestTheAnswerToADMBangStaysOutOfTheRoom(t *testing.T) {
 	}
 }
 
+// A message typed right after a bang waits behind it, as behind a typed send:
+// so it is placed when claude takes it up, and its answer stays the DM's even
+// though the bang's own turn ended in between.
+func TestADMMessageTypedRightAfterABangKeepsItsAnswerPrivate(t *testing.T) {
+	a := newRoomApp(t).withSize(narrowColumns, 40).withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "john", State: rpc.StateIdle},
+	).openDMWith("s2", "john").applyGeometry().opened(t)
+	a = loopEnter(a.withDraft("!echo hi"))
+	bang := shellFrameID(t, a)
+	a = loopEnter(a.withDraft("and what does that mean?"))
+	var follow string
+	for _, f := range recorderOf(t, a).taken(t) {
+		if f.Kind == rpc.FrameSend && f.Shell == nil {
+			follow = f.MessageID
+		}
+	}
+	if follow == "" || len(a.queued["s2"]) != 1 {
+		t.Fatalf("the follow-up was not written and waiting behind the bang (queued %d)", len(a.queued["s2"]))
+	}
+
+	a = a.applyFrame(messageState("s2", bang, "started"))
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{Kind: core.KindTurnEnd}})
+	a = a.applyFrame(messageState("s2", follow, "started"))
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
+		Kind: core.KindAssistantText, Text: "the private follow-up answer",
+	}})
+	if out := roomShown(a.room, 200, 40); strings.Contains(out, "private follow-up answer") {
+		t.Errorf("the answer to a DM message sent behind a bang reached the room:\n%s", out)
+	}
+}
+
+// Sent to an idle agent, a bang's turn is placed as it is written, as a typed
+// message's is: a lost started frame does not make its answer public.
+func TestADMBangsAnswerStaysPrivateWithoutItsStarted(t *testing.T) {
+	a := newRoomApp(t).withSize(narrowColumns, 40).withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "john", State: rpc.StateIdle},
+	).openDMWith("s2", "john").applyGeometry().opened(t)
+	a = loopEnter(a.withDraft("!echo hi"))
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
+		Kind: core.KindAssistantText, Text: "the private bang answer",
+	}})
+	if out := roomShown(a.room, 200, 40); strings.Contains(out, "private bang answer") {
+		t.Errorf("a DM bang's answer reached the room with its started lost:\n%s", out)
+	}
+}
+
+// Sent to a busy agent, a bang does not take over the turn already running: the
+// prose before claude takes it up is that turn's - here the room's.
+func TestABangToABusyAgentLeavesTheRunningTurnItsOwn(t *testing.T) {
+	a := newRoomApp(t).withSize(narrowColumns, 40).withRoster(
+		rpc.SessionStatus{ID: "s2", Name: "john", State: rpc.StateWorking},
+	).openDMWith("s2", "john").applyGeometry().opened(t)
+	a.fleet = a.fleet.sending("s2", false)
+	a = loopEnter(a.withDraft("!echo hi"))
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s2", Event: &core.Event{
+		Kind: core.KindAssistantText, Text: "the room turn's own prose",
+	}})
+	if out := roomShown(a.room, 200, 40); !strings.Contains(out, "room turn's own prose") {
+		t.Errorf("a bang to a busy agent took the room's running turn private:\n%s", out)
+	}
+}
+
 // Aimed from the room, the bang's turn is the room's, even when the agent's
 // last turn was a DM's.
 func TestTheAnswerToARoomBangIsTheRooms(t *testing.T) {

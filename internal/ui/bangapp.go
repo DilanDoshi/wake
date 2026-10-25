@@ -162,15 +162,20 @@ func (a App) bangResult(m bangResultMsg) (App, tea.Cmd) {
 	if dm, ok := a.dms[ev.SessionID]; ok && ev.SessionID != "" {
 		a = a.withDM(ev.SessionID, dm.Append(ev))
 	}
-	return a, a.deliverBang(m)
+	return a.deliverBang(m)
 }
 
 // deliverBang sends a finished bang to its agent, or says in plain words why it
 // did not. Asked when the command returns, so an agent that ended or was parked
 // while it ran is not written to.
-func (a App) deliverBang(m bangResultMsg) tea.Cmd {
+//
+// In flight once written, as markSent puts a typed message, so what is typed
+// next waits behind it and is placed when claude takes it up. Its own turn is
+// placed now when the agent is free, as a typed message's is, and otherwise when
+// claude takes it up (shellStarted).
+func (a App) deliverBang(m bangResultMsg) (App, tea.Cmd) {
 	if m.To == "" {
-		return nil
+		return a, nil
 	}
 	state := rpc.StateEnded
 	if !a.endedAgent(m.To) {
@@ -179,14 +184,15 @@ func (a App) deliverBang(m bangResultMsg) tea.Cmd {
 	}
 	if gone, ok := bangGone[state]; ok {
 		notice.Report(bangNotSent, agentPrefix+a.agentName(m.To), gone)
-		return nil
+		return a, nil
 	}
-	return a.write(sendFailed, rpc.Frame{
-		Kind:      rpc.FrameSend,
-		SessionID: m.To,
-		MessageID: newShellSend(m.ID == ""), // so its turn is owed, and placed
-		Shell:     &rpc.ShellRun{Command: m.Cmd, Output: m.Text},
-	})
+	id := newShellSend(m.ID == "")
+	if !a.shouldQueue(m.To) {
+		a.fleet = a.fleet.sending(m.To, m.ID != "")
+	}
+	a = a.withInflight(m.To, id)
+	return a, a.write(sendFailed, rpc.Frame{Kind: rpc.FrameSend, SessionID: m.To, MessageID: id,
+		Shell: &rpc.ShellRun{Command: m.Cmd, Output: m.Text}})
 }
 
 // bangDir is the directory a bang runs in: the one its agent runs in.

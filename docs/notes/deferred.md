@@ -5884,6 +5884,12 @@ a bang typed while that agent is busy - and none sends anything twice.
   tracking, so send-now takes it back first.
 - **An `esc` leaves a queued bang for claude to run after the interrupt** - as a turn, so the agent answers it.
   *Closes with:* the same tracking, so the interrupt cancels it with what else is queued.
+- **A command holding `</bash-input><bash-stdout>` reads back split at it** on a reopen: Wake's one-line
+  record splits command from output at the first such pair, since an output (`!cat` of a transcript) holds it
+  far more often than a typed command. The agent was sent exactly what the pane drew; only the reopened block
+  differs. *Closes with:* two records, the command's held by `shouldQuery:false`, as Claude Code's own `!`
+  writes two - at the cost of a zero-turn result between them that the room and the done line would have to
+  learn to ignore.
 - **The room's own bang line is still gone after a room restore.** It is echoed, and the room restores only
   typed turns; that was true before this change. *Closes with:* room provenance for a bang aimed from the room.
 - **The held form, `shouldQuery:false`, was considered and not chosen** (the owner picked a turn, 2026-10-25):

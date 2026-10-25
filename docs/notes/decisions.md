@@ -5106,7 +5106,10 @@ still runs in the UI, where the operator is, and only its result now travels.
   the room aimed it). Its answer belongs where a typed message's would (the code review): claude's `started`
   for it sets `Fleet.sending` - a conversation's bang a DM turn, so the room draws none of it while the pane is
   read; a room bang the room's - which `echoSent` does for a queued message and a bang, in no queue, could not.
-  Read off the stamp, so a bang that opens its own turn after a busy one is placed too. A room restore reads it
+  Read off the stamp, so a bang that opens its own turn after a busy one is placed too. And as `markSent` does
+  for a typed message (Codex's second pass): a bang is in flight once written, so a message typed right after
+  it waits behind it and is placed when claude takes it up, and a bang to a free agent places its turn as it is
+  written, so a lost `started` costs nothing. A room restore reads it
   the same way: a bang's record (`Event.Shell`) opens the turn claude answers it with, the room's only when the
   stamp is a room send - never by text, since two conversations running one command print one block at one
   moment - and is never drawn. Without it, a DM bang after a broadcast left the broadcast's turn open and
@@ -5122,7 +5125,8 @@ still runs in the UI, where the operator is, and only its result now travels.
   decodes it to the echoed `KindUserText` whose text is `core.ShellBlock`, the block `bangEvent` draws. A
   reopen draws it, and `↑` and the rewind targets skip it as they skip every echoed turn. An imported
   interactive session's `!` history draws as blocks too. Either half may quote the tags (`!cat` of a
-  transcript): the command closes at the first close that opens the output, the output at the last. The fence moved from `ui/bang.go` to `core/fence.go`
+  transcript): the command closes at the first close that opens the output, the output at the last - so only a
+  command holding that exact pair reads back split at it (Codex), the side of the two a `!cat` never lands on. The fence moved from `ui/bang.go` to `core/fence.go`
   (a non-airlock file: it knows no Claude word) so both sides share it.
 - **Addressed at dispatch.** `bangResultMsg.To` is fixed when the command starts, so a result that lands after
   the focus moved still goes to, and is drawn in, the conversation it was typed in. An agent that ended or was

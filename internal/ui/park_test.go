@@ -469,7 +469,11 @@ const loopQuiet = 250 * time.Millisecond
 // It may only be pointed at commands whose writes do not block - a recorder
 // rather than a net.Pipe with nobody reading - because a leaf that never
 // returns leaves its goroutine behind.
-func loopMessages(cmd tea.Cmd) []tea.Msg {
+func loopMessages(cmd tea.Cmd) []tea.Msg { return loopMessagesWithin(cmd, loopQuiet) }
+
+// loopMessagesWithin is loopMessages with the wait each leaf gets, for a tree
+// holding a command that does real work - a bang spawns a shell.
+func loopMessagesWithin(cmd tea.Cmd, wait time.Duration) []tea.Msg {
 	if cmd == nil {
 		return nil
 	}
@@ -479,7 +483,7 @@ func loopMessages(cmd tea.Cmd) []tea.Msg {
 	var msg tea.Msg
 	select {
 	case msg = <-produced:
-	case <-time.After(loopQuiet):
+	case <-time.After(wait):
 		return nil
 	}
 	// tea.sequenceMsg is unexported and tea.BatchMsg is a slice of the same
@@ -494,7 +498,7 @@ func loopMessages(cmd tea.Cmd) []tea.Msg {
 		if !ok {
 			continue
 		}
-		out = append(out, loopMessages(inner)...)
+		out = append(out, loopMessagesWithin(inner, wait)...)
 	}
 	return out
 }

@@ -50,7 +50,7 @@ func TestABangsOutputGoesWhereItWasTypedNotWhereFocusIs(t *testing.T) {
 	a = a.withDraft("!echo typed-in-alex")
 	m, cmd := a.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	a = m.(App).refocus("")
-	a = loopMsgs(a, loopMessages(cmd))
+	a = loopMsgs(a, loopMessagesWithin(cmd, bangTestLimit))
 
 	frames := recorderOf(t, a).taken(t)
 	if len(frames) != 1 || frames[0].SessionID != "s1" || frames[0].Shell == nil {
@@ -320,10 +320,12 @@ func TestABangReadsBackAsTheBlockThePaneDrew(t *testing.T) {
 // dmText is one conversation as drawn, wherever the focus is.
 func dmText(a App, id string) string { return stripANSI(a.dms[id].View(120, 40)) }
 
-// loopEnter presses ↵ and runs what it hands back the way Bubble Tea's loop does.
+// loopEnter presses ↵ and runs what it hands back the way Bubble Tea's loop
+// does: the keystroke's own commands for as long as a bang's shell may take, and
+// what they hand back for loopQuiet, which drops a notice's tick.
 func loopEnter(a App) App {
 	m, cmd := a.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	return loopMsgs(m.(App), loopMessages(cmd))
+	return loopMsgs(m.(App), loopMessagesWithin(cmd, bangTestLimit))
 }
 
 // loopMsgs folds messages and runs the commands they hand back, a bounded number
