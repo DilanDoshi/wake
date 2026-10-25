@@ -5102,6 +5102,15 @@ still runs in the UI, where the operator is, and only its result now travels.
   re-owes on the line's `started` lifecycle - so the agent read idle while it answered and a fork or file
   rewind could land mid-turn. The window's queue ignores a lifecycle it did not queue, so nothing is pinned:
   the pane drew it already.
+- **The stamp says where it was typed** (`rpc.MessageShell`; with `MessageDirect`/`MessageSolo` beside it when
+  the room aimed it). Its answer belongs where a typed message's would (the code review): claude's `started`
+  for it sets `Fleet.sending` - a conversation's bang a DM turn, so the room draws none of it while the pane is
+  read; a room bang the room's - which `echoSent` does for a queued message and a bang, in no queue, could not.
+  Read off the stamp, so a bang that opens its own turn after a busy one is placed too. A room restore reads it
+  the same way: a bang's record (`Event.Shell`) opens the turn claude answers it with, the room's only when the
+  stamp is a room send - never by text, since two conversations running one command print one block at one
+  moment - and is never drawn. Without it, a DM bang after a broadcast left the broadcast's turn open and
+  restored the private answer into the room.
 - **A turn, as Claude Code's is - the owner's pick (2026-10-25) of two.** 2.1.310's interactive `!` starts a
   model turn every time, in auto and default mode alike, which older builds did not. The alternative
   considered is claude's documented `shouldQuery:false`: the line is put on the transcript with no turn ($0, a
@@ -5119,10 +5128,11 @@ still runs in the UI, where the operator is, and only its result now travels.
   the focus moved still goes to, and is drawn in, the conversation it was typed in. An agent that ended or was
   parked by then still has its command run and drawn; nothing is written, and a notice says
   `!command ran here but did not reach @alex: it has ended` (or `is parked`) - never a send that did not happen.
-- **In the room, a bang goes to exactly one agent** (`roomBang`). `@who !cmd` and `@manager !cmd` aim at the
-  agent the router resolved; a fleet agent it skips, parked, still has a directory, so the bang runs there and
-  says it was not sent rather than reaching the manager as text (Codex) - the completion menu offers parked
-  names. They run in that agent's `Cwd`, are drawn in the room - headed `@who`, in its thread - and in its held
+- **In the room, a bang goes to exactly one agent** (`roomBang`, on `App.route`'s answer). `@who !cmd` and
+  `@manager !cmd` aim at the agent the router resolved; a parked fleet agent, which the live router skips, still
+  has a directory, so `route` answers it for a bang (`bangRoute`) - the bang runs there and says it was not sent
+  rather than reaching the manager as text (Codex), and the target line reads `→ @who · direct` (the code
+  review: it read `→ @manager` while ↵ did otherwise). The completion menu offers parked names. They run in that agent's `Cwd`, are drawn in the room - headed `@who`, in its thread - and in its held
   conversation, and reach it. `@team` and `@all` are refused with the draft kept, before anything runs, since a
   bang has one directory - a team with no live member too. A bare room `!cmd` is unchanged: addressed to
   nobody, it runs where `wake` started. Any other name (a path, a session outside the fleet) is no bang and
@@ -5132,6 +5142,9 @@ still runs in the UI, where the operator is, and only its result now travels.
   the operator's own line. The room draws that line through `youSaid`, whose lines it keeps, so the fence a
   conversation needs showed there as backticks (on main too). Drawing echoed lines as markdown in the room
   instead was tried and dropped: `/login`'s panel is pre-styled lines, which markdown joins into one.
+- **A rewind after a bang works either way**: on 2.1.310 a `rewind_conversation` to the prompt before a bang
+  succeeds whether `last_seen_user_message_uuid` names that prompt (what Wake sends, since its targets skip
+  echoed records) or the bang. A live probe, not a fixture; the findings note §4.
 - **`rpc.Frame` grew a word, measured.** The Frame is copied by value on every event and a bool once cost a
   fleet's second 8%, so `Shell` (a pointer) was benchmarked first: `BenchmarkStreamingFleetSecond`, 6×200
   each way, open=1 22.2→21.5ms, open=30 24.9→24.1ms, glamour 72.7→73.2ms - noise.

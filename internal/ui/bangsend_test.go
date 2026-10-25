@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
-	"reflect"
 	"strings"
 	"testing"
 
@@ -51,13 +50,13 @@ func TestABangsOutputGoesWhereItWasTypedNotWhereFocusIs(t *testing.T) {
 	a = a.withDraft("!echo typed-in-alex")
 	m, cmd := a.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	a = m.(App).refocus("")
-	a = loopMsgs(a, reproFlatten(cmd))
+	a = loopMsgs(a, loopMessages(cmd))
 
 	frames := recorderOf(t, a).taken(t)
 	if len(frames) != 1 || frames[0].SessionID != "s1" || frames[0].Shell == nil {
 		t.Fatalf("frames = %+v, want one shell run to s1", frames)
 	}
-	if !strings.Contains(dmText(a, "s1"), "typed-in-alex") || strings.Contains(roomText(a), "typed-in-alex") {
+	if !strings.Contains(dmText(a, "s1"), "typed-in-alex") || strings.Contains(roomShown(a.room, 120, 40), "typed-in-alex") {
 		t.Errorf("the output was not drawn in alex's conversation alone")
 	}
 }
@@ -123,7 +122,7 @@ func TestARoomMentionBangRunsInThatAgentsDirectoryAndReachesIt(t *testing.T) {
 		if f.SessionID != "s1" || f.Text != "" || f.Shell == nil || !strings.Contains(f.Shell.Output, "alex's own file") {
 			t.Errorf("%s: wrote %q text %q shell %+v, want alex's file sent to alex as a shell run", mode, f.SessionID, f.Text, f.Shell)
 		}
-		if !strings.Contains(roomText(a), "alex's own file") || !strings.Contains(dmText(a, "s1"), "alex's own file") {
+		if !strings.Contains(roomShown(a.room, 120, 40), "alex's own file") || !strings.Contains(dmText(a, "s1"), "alex's own file") {
 			t.Errorf("%s: the output was not drawn in both the room and alex's conversation", mode)
 		}
 	}
@@ -137,11 +136,11 @@ func TestARoomMentionBangIsInThatAgentsThread(t *testing.T) {
 
 	alex, john := idOfAgentNamed(t, a, "alex"), idOfAgentNamed(t, a, "john")
 	a.room = a.room.WithFocus(alex, "alex")
-	if !strings.Contains(roomText(a), "alex-thread") {
+	if !strings.Contains(roomShown(a.room, 120, 40), "alex-thread") {
 		t.Error("a room narrowed to alex does not show the bang aimed at alex")
 	}
 	a.room = a.room.WithFocus(john, "john")
-	if strings.Contains(roomText(a), "alex-thread") {
+	if strings.Contains(roomShown(a.room, 120, 40), "alex-thread") {
 		t.Error("a room narrowed to john shows the bang aimed at alex")
 	}
 }
@@ -163,7 +162,7 @@ func TestARoomBangAtAParkedAgentRunsAndSaysItWasNotSent(t *testing.T) {
 	if frames := recorderOf(t, a).taken(t); len(frames) != 0 {
 		t.Errorf("a bang at parked alex wrote %+v: the manager must not be sent the literal text", frames)
 	}
-	if !strings.Contains(roomText(a), "parked alex's file") {
+	if !strings.Contains(roomShown(a.room, 120, 40), "parked alex's file") {
 		t.Error("the command did not run in alex's directory, or was not drawn")
 	}
 	if n := notice.Count(fmt.Sprintf(bangNotSent, "@alex", bangGone[rpc.StateParked])); n != 1 {
@@ -194,7 +193,7 @@ func TestARoomBangAtATeamWithNoLiveMemberIsRefused(t *testing.T) {
 	).withDraft("@backend !ls")
 	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil {
-		t.Errorf("@backend !ls with no live member ran or sent something: %+v", reproFlatten(cmd))
+		t.Errorf("@backend !ls with no live member ran or sent something: %+v", loopMessages(cmd))
 	}
 	if n := notice.Count(fmt.Sprintf(bangOneAgent, "@backend")); n != 1 {
 		t.Errorf("the refusal was reported %d times, want 1", n)
@@ -208,7 +207,7 @@ func TestTheRoomDrawsABangAsABlockHeadedByItsAgent(t *testing.T) {
 	a = loopEnter(a.withDraft("@alex !echo aimed-output"))
 	a = loopEnter(a.withDraft("!echo bare-output"))
 
-	room := roomText(a)
+	room := roomShown(a.room, 120, 40)
 	if strings.Contains(room, "```") {
 		t.Errorf("the room drew a bang's fence as text:\n%s", room)
 	}
@@ -244,7 +243,7 @@ func TestABangAimedAtATeamOrEveryoneIsRefused(t *testing.T) {
 		).withDraft(draft)
 		a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
 		if cmd != nil {
-			t.Errorf("%s ran or sent something: %+v", draft, reproFlatten(cmd))
+			t.Errorf("%s ran or sent something: %+v", draft, loopMessages(cmd))
 		}
 		if n := notice.Count(fmt.Sprintf(bangOneAgent, strings.Fields(draft)[0])); n != 1 {
 			t.Errorf("%s: the refusal was reported %d times, want 1", draft, n)
@@ -252,6 +251,20 @@ func TestABangAimedAtATeamOrEveryoneIsRefused(t *testing.T) {
 		if a.room.Composer().Value() != draft {
 			t.Errorf("%s: the draft was not kept: %q", draft, a.room.Composer().Value())
 		}
+	}
+}
+
+// A draft is a bang only when it leads with one: an image chip ahead of `!cmd`
+// leaves an ordinary message, which reaches the default addressee with its image.
+func TestAChipLedBangIsAMessage(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 30).withAgents("alex", core.ManagerName)
+	manager := idOfAgentNamed(t, a, core.ManagerName)
+	a = dropImage(t, a, writeBigJPEG(t, "shot.jpg", 64)).withDraft(" !echo x")
+	recorderOf(t, a).taken(t)
+	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	frames := sentFrames(t, a, cmd)
+	if len(frames) != 1 || frames[0].SessionID != manager || frames[0].Shell != nil || len(frames[0].Images) != 1 {
+		t.Errorf("a chip-led bang wrote %+v, want one message with its image to the manager", frames)
 	}
 }
 
@@ -264,7 +277,7 @@ func TestABareRoomBangStillReachesNobody(t *testing.T) {
 	if frames := recorderOf(t, a).taken(t); len(frames) != 0 {
 		t.Errorf("a bare room bang wrote %+v", frames)
 	}
-	if !strings.Contains(roomText(a), "for-the-room") {
+	if !strings.Contains(roomShown(a.room, 120, 40), "for-the-room") {
 		t.Error("a bare room bang was not drawn in the room")
 	}
 }
@@ -307,13 +320,10 @@ func TestABangReadsBackAsTheBlockThePaneDrew(t *testing.T) {
 // dmText is one conversation as drawn, wherever the focus is.
 func dmText(a App, id string) string { return stripANSI(a.dms[id].View(120, 40)) }
 
-// roomText is the room as drawn.
-func roomText(a App) string { return stripANSI(a.room.View(120, 40)) }
-
 // loopEnter presses ↵ and runs what it hands back the way Bubble Tea's loop does.
 func loopEnter(a App) App {
 	m, cmd := a.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	return loopMsgs(m.(App), reproFlatten(cmd))
+	return loopMsgs(m.(App), loopMessages(cmd))
 }
 
 // loopMsgs folds messages and runs the commands they hand back, a bounded number
@@ -325,35 +335,9 @@ func loopMsgs(a App, msgs []tea.Msg) App {
 		for _, msg := range msgs {
 			var cmd tea.Cmd
 			m, cmd = m.Update(msg)
-			next = append(next, reproFlatten(cmd)...)
+			next = append(next, loopMessages(cmd)...)
 		}
 		msgs = next
 	}
 	return m.(App)
-}
-
-// reproFlatten runs a command, opening batches and sequences.
-func reproFlatten(cmd tea.Cmd) []tea.Msg {
-	if cmd == nil {
-		return nil
-	}
-	msg := cmd()
-	if batch, ok := msg.(tea.BatchMsg); ok {
-		var out []tea.Msg
-		for _, c := range batch {
-			out = append(out, reproFlatten(c)...)
-		}
-		return out
-	}
-	if v := reflect.ValueOf(msg); v.IsValid() && v.Kind() == reflect.Slice && v.Type().Elem() == reflect.TypeOf(tea.Cmd(nil)) {
-		var out []tea.Msg
-		for i := range v.Len() {
-			out = append(out, reproFlatten(v.Index(i).Interface().(tea.Cmd))...)
-		}
-		return out
-	}
-	if msg == nil {
-		return nil
-	}
-	return []tea.Msg{msg}
 }

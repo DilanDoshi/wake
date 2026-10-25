@@ -606,6 +606,11 @@ type Event struct {
 	// (testdata/transcript/midturn-absorbed.jsonl), so it is no rewind target.
 	Absorbed bool `json:"absorbed,omitempty"`
 
+	// Shell marks an echoed KindUserText that is a `!cmd` record - the command
+	// the operator ran and its output - rather than claude's own note: claude
+	// answers it, so a room restore reads it as the turn it opens.
+	Shell bool `json:"shell,omitempty"`
+
 	// FromName attributes a KindCrossSession event: the peer's display name (its
 	// own --name). It is what the room heads the line with, matched to a fleet
 	// agent for its colour; set by the decoder off the <cross-session-message>

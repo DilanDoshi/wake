@@ -62,3 +62,10 @@ ran out of band". On 2.1.310, with Wake's argv:
 
 A `num_turns: 0` result decodes as `LocalCommand` (`protocol.go`), so it is not taken for an accepted API turn.
 Writing it would need the daemon not to mark a turn owed, or the agent reads working for a moment.
+
+## 4. A rewind after a bang is not refused
+
+A probe (not committed): a prompt, then a stamped bang line answered as its own turn, then `rewind_conversation`
+to the prompt. claude answered `rewound: true` both when `last_seen_user_message_uuid` named the prompt - what
+Wake sends, since its rewind targets skip echoed records - and when it named the bang. So a bang as the newest
+user turn does not make `esc esc` stale.

@@ -58,8 +58,8 @@ func TestABashModeRecordReadsAsTheShellBlock(t *testing.T) {
 			t.Fatalf("record %d decoded to %d events (err %v), want 1", i+1, len(evs), err)
 		}
 		ev := evs[0]
-		if ev.Kind != KindUserText || !ev.Echoed || ev.Text != want[i] {
-			t.Errorf("record %d = %v echoed=%v %q, want an echoed %q", i+1, ev.Kind, ev.Echoed, ev.Text, want[i])
+		if ev.Kind != KindUserText || !ev.Echoed || !ev.Shell || ev.Text != want[i] {
+			t.Errorf("record %d = %v echoed=%v shell=%v %q, want an echoed shell record %q", i+1, ev.Kind, ev.Echoed, ev.Shell, ev.Text, want[i])
 		}
 	}
 }

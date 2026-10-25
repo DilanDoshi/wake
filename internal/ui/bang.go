@@ -293,6 +293,7 @@ func bangEvent(m bangResultMsg) core.Event {
 		Kind:      core.KindUserText,
 		SessionID: cmp.Or(m.ID, m.To),
 		Echoed:    true,
+		Shell:     true,
 		Text:      core.ShellBlock(m.Cmd, m.Text),
 	}
 }

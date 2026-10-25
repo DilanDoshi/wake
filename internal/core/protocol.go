@@ -650,7 +650,7 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		}
 		// A `!cmd` record: claude's bash mode, or Wake's own bang. Not a typed turn.
 		if block, ok := shellRecord(text); ok && f.Type == "user" {
-			base.Kind, base.Text, base.Echoed = KindUserText, block, true
+			base.Kind, base.Text, base.Echoed, base.Shell = KindUserText, block, true, true
 			return one(base)
 		}
 		if f.Type == "user" && (isLocalCommandPlumbing(text) || (f.IsSynthetic && isAgentMessage(text))) {

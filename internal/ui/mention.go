@@ -193,6 +193,9 @@ func (a App) route(text string) roomRoute {
 	live := a.live()
 	r := core.Resolve(text, live, a.service())
 	if !fleetMention(r, live) {
+		if br, ok := a.bangRoute(r, text); ok {
+			return br
+		}
 		return roomRoute{Route: r, mode: a.mention}
 	}
 	// **Open mode widens a message; it does not widen a knob.** `@john hello` in
