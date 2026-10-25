@@ -71,19 +71,23 @@ func (a App) screenSelectedText() string {
 // resolving on release would open whatever agent slid onto that row in the
 // window between the two.
 type rosterHit struct {
-	id, name, dispatch string
-	ok                 bool
+	id, name, dispatch, header string
+	ok                         bool
 }
 
 // screenClick does what a click - a press and release on one cell - means for
 // the chrome it landed on. Only the roster has one: it opens the row's
-// conversation, the same as a click there has always done. Every other surface
-// has no click action, so a click on it does nothing and leaves no highlight,
-// exactly as a click in the transcript that hits no folded tool does.
+// conversation, the same as a click there has always done, or picks the channel
+// a header row names. Every other surface has no click action, so a click on it
+// does nothing and leaves no highlight, exactly as a click in the transcript
+// that hits no folded tool does.
 func (a App) screenClick() App {
 	h := a.rosterHit
 	if !h.ok {
 		return a
+	}
+	if h.header != "" {
+		return a.selectChannel(h.header)
 	}
 	// It may have ended between press and release; opening a name the fleet no
 	// longer has would focus nothing.

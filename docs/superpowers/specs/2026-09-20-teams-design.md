@@ -149,7 +149,9 @@ Rulings (each gets a test):
   team name, are refused; `all`/`manager`/`none` are reserved.
 - Room narrowing: a lone `@team` did not narrow the room in v1. **Since 2026-10-17 it does**, as the union of
   its live members' threads (`decisions.md`, 2026-10-17), and the team echo's `to` stamp is the members' key
-  so a team send shows only in its own and its members' threads.
+  so a team send shows only in its own and its members' threads. **Since 2026-10-24 a roster header is a
+  channel**: picked, its team's thread is the room's base until `all` or another team is (`decisions.md`,
+  2026-10-24).
 - The manager is refused a team of its own — spec §12 gives it a seat in every group.
 
 ## Phases 3–6 — ordering and rendering

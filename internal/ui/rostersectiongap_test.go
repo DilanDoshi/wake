@@ -123,7 +123,8 @@ func TestEveryRosterRowResolvesToWhatIsDrawnThereAtEveryHeight(t *testing.T) {
 				t.Fatalf("height %d, cursor %s: %d rows drawn", height, sel, len(lines))
 			}
 			for y, line := range lines {
-				a, _, ok := r.At(agents, subs, width, height, y)
+				spot, ok := r.At(agents, subs, width, height, y)
+				a := spot.agent
 				for _, name := range []string{"alex", "thea", "john", "mara"} {
 					if strings.Contains(line, name) && (!ok || a.Name != name) {
 						t.Errorf("height %d, cursor %s, row %d draws %q but a click resolves to (%q, %v):\n%s",
@@ -133,8 +134,8 @@ func TestEveryRosterRowResolvesToWhatIsDrawnThereAtEveryHeight(t *testing.T) {
 				if strings.TrimSpace(line) == "" && ok {
 					t.Errorf("height %d, cursor %s: the blank row %d selects %q", height, sel, y, a.Name)
 				}
-				if strings.Contains(line, "─") && ok {
-					t.Errorf("height %d, cursor %s: the header on row %d selects %q", height, sel, y, a.Name)
+				if strings.Contains(line, "─") && (!ok || spot.header == "" || a.ID != "") {
+					t.Errorf("height %d, cursor %s: the header on row %d resolves to (%+v, %v), want its channel and no agent", height, sel, y, spot, ok)
 				}
 				// A gap or a header is never left over the count: whatever the window
 				// keeps of a section, it keeps with a member under what leads it.
@@ -217,7 +218,7 @@ func TestTheWindowFitsTheColumnAndKeepsItsCountAtEveryHeight(t *testing.T) {
 			if shown > room {
 				t.Errorf("height %d, cursor %s: the window draws %d rows with room for %d", height, sel, shown, room)
 			}
-			if cursor := rowIndexOfSelected(rows, sel); cursor < w.from || cursor >= w.to {
+			if cursor := (Roster{Selected: sel}).cursorRow(rows); cursor < w.from || cursor >= w.to {
 				t.Errorf("height %d, cursor %s: the cursor's block is outside the window [%d,%d)", height, sel, w.from, w.to)
 			}
 			if w.to < len(rows) && shown+drawn(w.to, w.to+1) <= room {
@@ -248,7 +249,8 @@ func TestAClickOnASubagentUnderATeamsFirstAgentOpensTheSubagent(t *testing.T) {
 		t.Fatalf("the subagent row is not drawn:\n%s", strings.Join(lines, "\n"))
 	}
 
-	a, dispatch, ok := (Roster{}).At(agents, teamedSubs, width, height, sub)
+	spot, ok := (Roster{}).At(agents, teamedSubs, width, height, sub)
+	a, dispatch := spot.agent, spot.dispatch
 
 	if !ok || a.Name != "thea" || dispatch != "d1" {
 		t.Errorf("a click on the subagent row resolves to (%q, %q, %v), want thea's dispatch d1:\n%s", a.Name, dispatch, ok, strings.Join(lines, "\n"))

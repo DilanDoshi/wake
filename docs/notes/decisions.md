@@ -4882,3 +4882,51 @@ connection failures only (which, with no status on the stream, would have meant 
   `unreachable_e2e_test.go`, both platforms' parser tables (Linux run in a container), the UI's
   `apiunreachable_test.go`, and the pty `TestAnAgentTheAPIStoppedResumesWhenAnotherTurnGoesThrough`, each
   mutation-checked.
+
+## 2026-10-24 — a roster team header picks a channel, the room's base (the owner)
+
+The owner's ask: the roster's team headers become selectable channels. Picking one titles the room with the team
+(`orchs` for `group chat`) and limits the room's base filter to the team's members until `all` or another team
+is picked; inside a channel the room works as it does today, a lone `@name` narrowing further (`orchs › @who`).
+It is not a second room: the filtered-view reading `deferred.md` (2026-08-27) reduced to teams plus the `@john`
+filter, picked from the sidebar instead of typed.
+
+- **One predicate, two keys.** `Room.admits` is `focusAdmits` over the channel's key and then over the effective
+  focus, so a channel is exactly a team's thread under PR #178's and #185's rules, a mention inside it is the
+  intersection, and `all` (an empty key) is the room as it always was. `roomFilter` is the comparable pair the
+  re-render and the selection clear key on.
+- **Its members are what the roster draws under the header**, parked ones included and ended ones out, and the key
+  follows them on every report (`rechanneled`, in the report chain before `retarget`). A lone `@team` keys its
+  live members only, because it is also a route; a channel whose members were all parked would otherwise key ""
+  and show everything under a lit header. A report that changes no member renders nothing; the same channel
+  with changed members keeps the reader's place (`refiltered`); a team left with no header returns the window
+  to all, with a timed notice. The re-render clears a room transcript selection, never a selection over the
+  frame - a roster click waiting on its release is one (Codex).
+- **The manager has a seat in every channel** (the owner, 2026-10-24; spec §12's seat in every group). Routing
+  does not change in a channel, so an unaddressed draft still goes to the manager, and under 2026-10-21's rule
+  your turn and its reply are the manager's thread: without the seat both vanished from the channel they were sent
+  from. The key carries the manager's id, so its prose draws in every channel too.
+- **`── all ──` is pinned at the sidebar's top**, above every agent, the manager included, and lit while it is the
+  channel - the default ("always … at the top … before any of the agents"). `Roster.Column` draws it over the
+  unchanged `Roster.View`, and `Roster.Hit` resolves its row and hands the rest to `At`, so the list keeps its one
+  count. The picked header is lit (accent rule and name); the cursor's is a bright bold name.
+- **Picked the way a row is**: `⇧↑↓` stop on the headers (`channelStops`, `all` first; a cursor on nothing still
+  lands on the first agent, and the board walks `walkable` alone), `↵` with an empty composer picks the cursored
+  one (`pickedHeader`, gated on the sidebar as `pickedAgent` is), and a click picks the one resolved at its press.
+  Picking moves the keys to the room, as picking an agent opens its conversation, and the fleet's focus with
+  them, as `⇥` does, so the conversation left behind counts unread again (Codex, code review); conversations
+  open as before and the channel stays. The header cursor is `Roster.Header`, never set beside `Selected`, so `⌃C` on one parks no
+  one and `⌃D`/`⌃Y`/`⌃B` keep the no-pick fallback (the top-ranked agent). No key is new.
+- **`⌃A` and `/groupchat-filter` are the mention's only**: `⌃A` widens a mention to the channel, never past it, and
+  is refused with no target; with the filter off a lone `@name` leaves the room at its channel.
+- **The working line is the channel's** (members and the manager's seat); a mention inside it still does not
+  narrow it, and under `all` it is the fleet's. **Unread is unchanged**: the badges are per agent, the roster shows
+  every agent, so a line a channel hides still badges its agent - the tell for activity outside it.
+- **Restore needs no path of its own**: `Before` renders through `admits`, so history lands already filtered, and
+  the gaps `deferred.md` names for a narrowed room (a re-keyed agent's stranded lines, a restored peer line keyed
+  to its receiver) hold in a channel as they do under `@team`.
+- **Per window and in memory**, as the composer's target is: a reattach opens on `all`.
+- **Held by** `roomchannel_test.go` (every kind of line against `focusAdmits`, the intersection, titles, the report
+  paths, the seat, restore), `rosterchannel_test.go` (the pinned row, the walk, a hit sweep against the drawn
+  column, the marks, `↵`, clicks, the cursor writers) and the pty `TestAChannelPickedInTheRosterFiltersTheRoom`,
+  each mutation-checked.

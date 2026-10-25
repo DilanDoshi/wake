@@ -22,7 +22,7 @@ func rosterApp(t *testing.T) App {
 // rosterRow is the first screen row a roster agent is drawn on.
 func rosterRow(a App) (int, bool) {
 	for y := 0; y < a.paneHeight(); y++ {
-		if _, _, ok := a.clickedAgent(y); ok {
+		if spot, ok := a.clickedRow(y); ok && spot.agent.ID != "" {
 			return y, true
 		}
 	}
@@ -69,7 +69,8 @@ func TestAClickOnTheRosterStillOpensTheConversation(t *testing.T) {
 	if !ok {
 		t.Fatal("no roster row on screen to click")
 	}
-	agent, _, _ := a.clickedAgent(y)
+	spot, _ := a.clickedRow(y)
+	agent := spot.agent
 	x := a.layout.Width - 2
 	got, _ := a.mouse(pressAt(x, y))
 	got, cmd := got.mouse(tea.MouseMsg{Action: tea.MouseActionRelease, X: x, Y: y})
@@ -110,7 +111,8 @@ func TestARosterClickOpensThePressTimeAgentNotAReorderedOne(t *testing.T) {
 	if !ok {
 		t.Fatal("no roster row on screen to press")
 	}
-	pressed, _, _ := a.clickedAgent(y)
+	spot, _ := a.clickedRow(y)
+	pressed := spot.agent
 	other := map[string]string{"s1": "s2", "s2": "s1"}[pressed.ID]
 
 	// Press resolves the target at press time.
@@ -129,7 +131,7 @@ func TestARosterClickOpensThePressTimeAgentNotAReorderedOne(t *testing.T) {
 		{ID: pressed.ID, Name: pressed.Name, State: rpc.StateIdle},
 		{ID: other, Name: oname, State: rpc.StateBlocked},
 	}}})
-	if now, _, ok := a.clickedAgent(y); !ok || now.ID == pressed.ID {
+	if now, ok := a.clickedRow(y); !ok || now.agent.ID == pressed.ID {
 		t.Fatalf("the reorder did not move a different agent onto row %d (still %q): the test proves nothing", y, pressed.ID)
 	}
 

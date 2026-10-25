@@ -56,13 +56,13 @@ typed into the room, mention and all.
 | `⇥` | Move the keys between the room and the conversations open beside it — except while you are typing a `/` or `@` word, where it completes it (see below) |
 | `⇧⇥` | Cycle the permission mode of the agent the roster has selected: `default` → `acceptEdits` → `plan` → `auto`, the same four Claude Code walks |
 | `⌃X` | Jump to the next blocked agent |
-| `⇧↑` `⇧↓` | Move the roster cursor — which is what the open keys below read. (Plain `↑↓` are prompt history; the roster took `⇧` when they did) |
+| `⇧↑` `⇧↓` | Move the roster cursor — which is what the open keys below read. It stops on the channel headers too, `── all ──` and each team's, where `↵` picks that channel for the room. (Plain `↑↓` are prompt history; the roster took `⇧` when they did) |
 | `⌃D` | Open the selected agent **into the focused pane** |
 | `⌃Y` | Open the selected agent in a **new column** |
 | `⌃B` | Open the selected agent **below** the focused pane |
 | `⌃W` | Close the open conversation |
 | `⌃R` | Toggle the activity sidebar |
-| `⌃A` | **Show all** — widen a room a lone `@name` or `@team` has narrowed back to every agent's lines, while still addressing them; a second `⌃A` re-narrows |
+| `⌃A` | **Show all** — widen a room a lone `@name` or `@team` has narrowed back to every agent's lines (inside a channel, back to the channel's), while still addressing them; a second `⌃A` re-narrows |
 | `⇧←` `⇧→` | Move the keys to the pane that way. It moves among panes **already drawn** and opens nothing — that is the whole difference from `⇥`, and why a direction with no pane in it names `⇥` instead of wrapping. There is no vertical version: the lower pane of a split column is reached by `⇥` or a click |
 | `⌃N` `⌃P` | Walk the **dispatch list** — the subagents the focused conversation has spawned. While a completion menu is open they walk that instead |
 

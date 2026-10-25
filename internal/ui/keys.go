@@ -206,8 +206,9 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		if next, cmd, ok := a.enterCompletes(); ok {
 			return next, cmd, true
 		}
-		// With nothing to send, ↵ opens the conversation the cursor is on -
-		// which is what every list does, and what ↑↓ leads somebody to try.
+		// With nothing to send, ↵ opens the conversation the cursor is on, or
+		// picks the channel of the header it is on - which is what every list
+		// does, and what ↑↓ leads somebody to try.
 		// From inside a conversation as well as from the room: the cursor only
 		// counts while the sidebar holding it is drawn, so this fires exactly
 		// when somebody is looking at the list they are moving through.
@@ -215,6 +216,9 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 		// key that was doing nothing rather than taking one from the composer.
 		// A card takes ↵ before this; see cardKey.
 		if a.composerEmpty() {
+			if header, ok := a.pickedHeader(); ok {
+				return a.selectChannel(header), nil, true
+			}
 			if agent, ok := a.pickedAgent(); ok {
 				return a.openDMWith(agent.ID, agent.Name).viewingWorkflow(agent.ID), nil, true
 			}

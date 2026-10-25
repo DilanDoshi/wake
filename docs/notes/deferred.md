@@ -5806,3 +5806,16 @@ Found in review of the card's page scroll; neither blocks it, and each is its ow
   second row. This branch was renamed around it; the test could count the composer's row alone.
 - **The pin can outlive the stop** (code review). A hand park and wake gives the agent a new process with no
   stop, while the pin still says Wake will resume it, until a turn goes through - as a usage limit's does.
+
+## FROM `feat/team-channels`, 2026-10-24
+
+Left out of the channels build on purpose; each is its own small change if somebody wants it.
+
+- **A channel header carries no unread count.** Activity outside the picked channel shows only as the per-agent
+  badges the roster already draws. A sum on each header would be the tell for a channel you are not in.
+- **`⌃D`/`⌃Y`/`⌃B` with the cursor on a header open the top-ranked agent**, the no-pick fallback (`dmTarget`), not
+  the team's first member or nothing.
+- **A cursored header whose block cannot fit is not drawn** (Codex). At a short column a team's first block -
+  the gap, the header, its first member and that member's subagent rows - can be taller than the room left under
+  `all` and the count; the window then draws the count alone, as it does for any agent block that cannot fit
+  (decisions.md, 2026-10-21), and `↵` still picks the header the cursor is on, as it opens an undrawn agent.
