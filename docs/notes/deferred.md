@@ -38,6 +38,22 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## KNOWN GAP, 2026-10-24 — a table inside a list item or a quote never draws as records
+
+`feat/narrow-tables` draws a table too narrow for its pane as records
+(`internal/render/tables.go`), but only one at the document's top level, the
+place agents put tables. A table nested in a list item or a block quote keeps
+glamour's grid at every width, and below its natural width that grid can still
+cut a header (`What it do…`) or a cell. So does every table of a reply that
+defines a reference link (`[r]: https://…`): a table drawn alone would lose the
+definition, so the whole reply is left to glamour, as before. Records there would need the
+placeholder row's indent or the quote's `│ ` laid on every record row, and each
+record rendered at the width that container leaves.
+`TestATableInAFenceAListOrAQuoteIsLeftToGlamour` pins the current behaviour.
+
+*Closes with:* that splice, once a nested table is seen in a real reply; for
+references, the reply's definitions carried into each table's renders.
+
 ## FOLLOW-UP, 2026-10-24 — `wake rename`, a CLI verb for `/wake-name`
 
 `/wake-name` renames a running fleet from inside Wake (`internal/daemon/fleetrename.go`); there is no shell
@@ -5802,3 +5818,16 @@ Found in review of the card's page scroll; neither blocks it, and each is its ow
   second row. This branch was renamed around it; the test could count the composer's row alone.
 - **The pin can outlive the stop** (code review). A hand park and wake gives the agent a new process with no
   stop, while the pin still says Wake will resume it, until a turn goes through - as a usage limit's does.
+
+## FROM `feat/team-channels`, 2026-10-24
+
+Left out of the channels build on purpose; each is its own small change if somebody wants it.
+
+- **A channel header carries no unread count.** Activity outside the picked channel shows only as the per-agent
+  badges the roster already draws. A sum on each header would be the tell for a channel you are not in.
+- **`⌃D`/`⌃Y`/`⌃B` with the cursor on a header open the top-ranked agent**, the no-pick fallback (`dmTarget`), not
+  the team's first member or nothing.
+- **A cursored header whose block cannot fit is not drawn** (Codex). At a short column a team's first block -
+  the gap, the header, its first member and that member's subagent rows - can be taller than the room left under
+  `all` and the count; the window then draws the count alone, as it does for any agent block that cannot fit
+  (decisions.md, 2026-10-21), and `↵` still picks the header the cursor is on, as it opens an undrawn agent.

@@ -285,7 +285,7 @@ func TestCtrlBOnAWorkflowRowOpensItsRunLevel(t *testing.T) {
 func TestAClickOnAWorkflowRowOpensItsRunLevel(t *testing.T) {
 	a := workflowFleet(t)
 	for y := range a.paneHeight() {
-		if _, dispatch, ok := a.clickedAgent(y); ok && dispatch == wfDispatch {
+		if spot, ok := a.clickedRow(y); ok && spot.dispatch == wfDispatch {
 			a, _ = click(a, a.layout.Width-2, y)
 			requireRunOpen(t, a, "a click")
 			return
@@ -318,7 +318,7 @@ func TestOpeningFromTheSidebarAsksForTheAgentsRuns(t *testing.T) {
 		"⌃Y": byKey(tea.KeyCtrlY, false), "⌃B": byKey(tea.KeyCtrlB, true),
 		"a click": func(t *testing.T, a App) App {
 			for y := range a.paneHeight() {
-				if _, dispatch, ok := a.clickedAgent(y); ok && dispatch == wfDispatch {
+				if spot, ok := a.clickedRow(y); ok && spot.dispatch == wfDispatch {
 					a, _ = click(a, a.layout.Width-2, y)
 					return a
 				}

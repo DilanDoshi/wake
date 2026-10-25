@@ -130,13 +130,15 @@ const (
 // paragraph, item or line of code, the blank rows between them gone - and the
 // width that took. A wrap at width w leaves the row it ended, or the one the
 // moved word opens, at least half of w, so the render doubles until every row
-// is narrower than that. A table or quote is laid out to the width it gets and
-// never rejoins, so its rows do not count.
+// is narrower than that. A quote, or a table left as a grid, is laid out to the
+// width it gets and never rejoins, so its rows do not count. Every other table
+// is drawn as records, so a record the pane wrapped rejoins; a grid the pane
+// drew matches none of them and copies as drawn.
 func unwrappedRows(src string) ([]string, int) {
 	for w := unwrappedWidth; ; w *= 2 {
 		var rows []string
 		widest := 0
-		for _, row := range strings.Split(Markdown(src, w), "\n") {
+		for _, row := range strings.Split(markdown(src, w, true), "\n") {
 			plain := strings.TrimRight(ansi.Strip(row), " ")
 			if text := strings.TrimLeft(plain, " "); text != "" {
 				rows = append(rows, text)

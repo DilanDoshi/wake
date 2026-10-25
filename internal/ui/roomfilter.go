@@ -34,9 +34,9 @@ func (r Room) effectiveFocus() string {
 // "" either way); App.toggleRoomFilter refuses that case with a notice rather
 // than flipping a bit nothing reads.
 func (r Room) ToggleNarrow() Room {
-	prevEff := r.effectiveFocus()
+	prev := r.filter()
 	r.narrowed = !r.narrowed
-	return r.rerenderOnFocusChange(prevEff)
+	return r.rerenderOnFocusChange(prev)
 }
 
 // WithNarrowDefault sets whether a freshly resolved @name narrows by default.
@@ -49,13 +49,14 @@ func (r Room) WithNarrowDefault(on bool) Room {
 }
 
 // rerenderOnFocusChange re-derives the filtered subset and jumps to bottom when
-// the effective focus moved, and returns the receiver untouched otherwise. A
+// the filter moved - the channel or the effective focus - and returns the
+// receiver untouched otherwise. A
 // focus change is treated exactly like a width change (SetSize sets
 // following=true): the read on entering or leaving a thread is its latest line.
 // The caller clears any text selection, because the re-render renumbers the
 // lines a selection is anchored to - a width change's own rule.
-func (r Room) rerenderOnFocusChange(prevEff string) Room {
-	if r.effectiveFocus() == prevEff {
+func (r Room) rerenderOnFocusChange(prev roomFilter) Room {
+	if r.filter() == prev {
 		return r
 	}
 	lines := r.said.slice(r.said.first(), r.said.len())
@@ -108,9 +109,9 @@ func (a App) toggleRoomFilter() (tea.Model, tea.Cmd, bool) {
 		notice.Report("%s", roomFilterNoTarget)
 		return a, nil, true
 	}
-	prevEff := a.room.effectiveFocus()
+	prev := a.room.filter()
 	a.room = a.room.ToggleNarrow()
-	return a.clearedSelOnFocusChange(prevEff), nil, true
+	return a.clearedSelOnFocusChange(prev), nil, true
 }
 
 // groupchatFilter is /groupchat-filter on|off: the default a lone @name or

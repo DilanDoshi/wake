@@ -44,6 +44,19 @@ every agent while still addressing `@sydney`, and a second `⌃A` re-narrows. `/
 flips the default so a lone `@name` no longer narrows (`⌃A` then narrows on demand); `on` restores
 it, and a bare `/groupchat-filter` reports which is set.
 
+### Channels: one team's room
+
+The roster's team headers are **channels**. Put the cursor on one with `⇧↑↓` and press `↵`, or click
+it, and the room shows only that team's thread — its members' lines, the turns you sent them, the
+messages sent to or from them, every broadcast, and the manager, which has a seat in every channel —
+titled with the team's name instead of `group chat`. It lasts until you pick another team or
+`── all ──`, the header pinned at the top of the sidebar, which is where every window starts.
+
+Inside a channel the room works as it always does. A lone `@name` narrows further (`backend › @kit`),
+`⌃A` widens back to the channel, and where a message goes does not change: a draft with no `@` still
+goes to the manager. Conversations open as usual and the channel stays. A team that leaves the roster
+takes its channel with it, and the room goes back to everyone.
+
 ### What you said from the room shows up in their conversation
 
 A message you route from the room lands in the room *and* in the conversation of everyone it
@@ -113,8 +126,8 @@ Three kinds arrive through one mechanism:
 - **A permission request** — it wants to run a tool.
 - **A plan** — it wants approval to proceed.
 - **A question** — it is asking you to choose between options. Its `Other…` row takes your own
-  words: type them and press `↵`, or press `↑` to go back to the options with the words kept in that
-  row, and choose it again to edit them. A question that takes several draws a box on each: `↵`, the
+  words: type them and press `↵` (over an open `@` or `/` menu it completes the word first), or press
+  `↑` or `esc` to go back to the options with the words kept in that row, and choose it again to edit them. A question that takes several draws a box on each: `↵`, the
   option's digit or space ticks one without moving on (a filled `Other…` row unticks the same way), and
   the Next or Submit row under them walks on.
 

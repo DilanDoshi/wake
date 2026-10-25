@@ -65,14 +65,15 @@ come back.
 |---|---|---|---|
 | `↵` send | `⎋` interrupt | `⎋⎋` clear draft | `⌃O` detach |
 | `⌃C` park | `⌃Q⌃Q` quit & park all | `⇥` next chat | `⇧⇥` permissions |
-| `↑↓` prompt history | `⇧↑↓` pick agent | `⇧←→` move focus | `⌃X` next blocked |
+| `↑↓` prompt history | `⇧↑↓` pick agent or channel | `⇧←→` move focus | `⌃X` next blocked |
 | `⌃D` open DM | `⌃Y` open right | `⌃B` open below | `⌃W` close pane |
 | `⌃R` activity | `⇞⇟` scroll | `⌃E` expand | `⌃F` fork |
 | `⌃T` mention mode | `⌃A` show all | `⌥↵`/`⌃J` newline | `⌃]` send now |
 
 `↑↓` recall your previous prompts into the query bar (Claude Code's own history keys); `⇧↑↓` walk the
 roster instead — including a conversation's running subagents in the right sidebar — and `↵` or `⌃D`
-opens the one the cursor is on. `⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels.
+opens the one the cursor is on. The roster's team headers are channels: `↵` or a click on one shows
+only that team's thread in the room, and `── all ──` at the top shows everyone again. `⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels.
 While a completion menu is up, `⌃N`/`⌃P` walk it and `⇥` or `↵` completes.
 
 A message to a working agent is read at its next tool boundary and pinned `⧗` until then; `↑` takes

@@ -55,7 +55,7 @@ var legendEntries = []legendEntry{
 	// same two keys under a modifier, and a legend that separated them would make
 	// a reader hunt for the difference. The roster used to be the bare ↑↓; it
 	// moved here when those took Claude Code's prompt-history recall.
-	{"⇧↑↓", "pick agent"},
+	{"⇧↑↓", "pick agent or channel"},
 	// After the arrows rather than beside ⇥: it is a movement key, but it moves
 	// among panes already drawn, so it is worth less than the permission mode to
 	// somebody in an 80-column pane. Placing it higher would push ⇧⇥ out of that

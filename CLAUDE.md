@@ -63,7 +63,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   (the daemon owns the directory; `--debug` without a file is refused).
 - **Room keys:** `↵` send/open/confirm · `⌃]` send now · `esc` interrupt · `esc esc` clear draft, or
   idle+empty → rewind picker · `↑↓` prompt history (or cursor on a multi-line draft; `↑` with messages
-  queued takes them back) · `⇧↑↓` pick agent · `⌃O`
+  queued takes them back) · `⇧↑↓` pick agent or channel · `⌃O`
   arm detach (`↵` confirms, `⌃O` cancels) · `⌃C` park focused · `⌃Q` arm park-all & quit (second
   `⌃Q` confirms) · **`⌃C⌃C` emergency quit** (read off the tty before Bubble Tea) · `⇥` focus (completes
   over a `/` or `@` word) · `⇧⇥` permission mode · `⌃X` next blocked · `⇧←→` move between drawn panes · `⌥↵`/`⌃J` newline ·
@@ -311,6 +311,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A local command's reply is drawn as its lines** (`/list-agents`, `/cost`, `/config`), as Claude
   Code draws it; one opening with a markdown heading (`/context`'s) stays markdown.
   `internal/ui/dm_blocks.go`'s `drawnAsLines`.
+- **A table too narrow for its pane draws as records**, as Claude Code draws one on a narrow
+  terminal: a bold `Header:` and the cell on one line per column, a `─` rule of at most 40
+  between records. Wake keeps glamour's grid only while it shows the table whole (header and
+  words uncut, links' addresses uncut, no row past four lines), judged by reading the grid back;
+  that is earlier than Claude Code, whose own grid breaks words. Top-level tables only; a resize
+  flips it; a copy rejoins a wrapped value. `internal/render/tables.go`, `decisions.md`
+  (2026-10-24).
 - The composer grows with the draft; the pane bounds it (`composerRowsIn`), never itself. A pane's
   chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
   screen.
@@ -354,6 +361,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A lone `@name` narrows the room** to that thread, a lone `@team` to its live members' (a union of their
   threads, keyed by `joinIDs`; open mode never widens a team, so it narrows there too) (`roomfocus.go`);
   `⌃A` overrides per target; `/groupchat-filter off` flips the default per window (`roomfilter.go`).
+- **A roster team header is a channel** (owner, 2026-10-24): `↵` on it or a click makes that team's thread the
+  room's base, titled with the team, until `── all ──` (pinned at the sidebar's top, the default) or another
+  team is picked; per window, never persisted (`roomchannel.go`). It is the same predicate, keyed on the
+  members the roster draws under the header (parked ones too) plus the manager's seat; a lone `@name`/`@team`
+  narrows within it (`orchs › @who`), and `⌃A`, `/groupchat-filter` and routing are unchanged. The working
+  line is the channel's; a team left with no header returns the window to all.
 - **Peer cross-session messages** show in the room as `↪ sender → recipient`
   (`--replay-user-messages`; `core.KindCrossSession`). The envelope is recognised only on *string*
   content, so pasted text can't forge one. DM replays of Wake's own sends are dropped. A message
@@ -397,7 +410,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   composer, mouse, digit).
 - Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer
   mode, where the card takes `↵`; a bare `↑↓` with no draft line to move to never walks prompt history -
-  from `Other…` it goes back to the options with the words kept in that row (`cardanswer.go`). Arrows reach the card with or without a
+  from `Other…` it goes back to the options with the words kept in that row, as `esc` does, and `↵` over an
+  open menu completes its word before it sends (`cardanswer.go`). Arrows reach the card with or without a
   draft; `←→` only on an empty composer. **A multi-select question** (`core.Question.Multi`) draws
   `[ ]`/`[✔]` boxes, ticks in place on `↵`, a digit or space, walks on by its Next/Submit row, and sends
   the ticks in the order ticked with typed words last, joined by `core.JoinChoices` as Claude Code
@@ -479,7 +493,7 @@ yet says so in bold.**
 | Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
-| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
+| Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
@@ -488,7 +502,7 @@ yet says so in bold.**
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
 | `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
-| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) |
+| Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) · `tables.go` draws a table too narrow for its pane as records · findings `docs/superpowers/notes/2026-10-24-narrow-table-findings.md` |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · the update check `updatecheck.go`, asked by the room on its first frame and on a keystroke an hour on, and named on the strip as `↑ wake X` (`internal/ui/updatecue.go`) · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
@@ -498,7 +512,8 @@ yet says so in bold.**
 
 ## Toolchain
 
-Go 1.26+. Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, Charm).
+Go 1.26+. Dependencies: `bubbletea`, `lipgloss`, `bubbles`, `glamour` (all MIT, Charm), and `goldmark`
+(MIT, glamour's own parser; `internal/render/tables.go` reads a reply's tables with it).
 
 ```bash
 make build     # go build ./cmd/wake

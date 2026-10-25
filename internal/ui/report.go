@@ -57,7 +57,7 @@ func (a App) applyStatus(st *rpc.Status) App {
 	// picker over. See rewind.go's reconcileRewind, and the adversarial
 	// review CRITICAL finding it closes, 2026-08-26.
 	a = a.reconcileRewind().reconciledMCP()
-	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
+	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().rechanneled().retarget().recompleted()
 }
 
 // daemonFacts is what the last report said about the daemon itself rather than

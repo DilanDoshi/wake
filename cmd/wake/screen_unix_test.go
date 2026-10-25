@@ -371,6 +371,24 @@ func (s *screen) rosterNames() []string {
 // the divider - so requiring that adjacency is exact rather than heuristic.
 var rosterRow = regexp.MustCompile(`(?:^|│)[●◐○▪·] ([a-z][a-z0-9-]*)`)
 
+// rosterHeader is a channel header row in the sidebar, `── all ──` or a team's,
+// anchored on the divider for rosterRow's reason.
+var rosterHeader = regexp.MustCompile(`(?:^|│)─+ ([a-z][a-z0-9_-]*) ─`)
+
+// rosterStops is every sidebar row ⇧↑↓ stops on, in the order it walks them:
+// agents by name and channel headers as "── <name>".
+func (s *screen) rosterStops() []string {
+	var out []string
+	for _, line := range s.lines() {
+		if m := rosterRow.FindStringSubmatch(line); m != nil {
+			out = append(out, m[1])
+		} else if m := rosterHeader.FindStringSubmatch(line); m != nil {
+			out = append(out, "── "+m[1])
+		}
+	}
+	return out
+}
+
 // agentsOnRoster is every roster row that is not the manager, in screen order.
 //
 // Every room starts a manager now, so a test that made two agents sees three
@@ -390,14 +408,15 @@ func agentsOnRoster(s *screen) []string {
 // pickRoster walks the roster cursor from one named row onto another with ⇧↓ -
 // the roster's key since plain ↑↓ took Claude Code's prompt-history recall.
 //
-// The count is read off the screen rather than assumed to be one. Two things
+// The count is read off the screen rather than assumed to be one. Three things
 // made "⇧↓ to the other agent" stop naming a row a test can predict: every room
 // holds a manager as well as the agents a test made, and it sits among them in
-// arrival order - and Roster.Move **wraps**, so ⇧↑ from the top row, a no-op
-// while a roster had a single row, now lands on the service instead.
+// arrival order - Roster.Move **wraps**, so ⇧↑ from the top row, a no-op while a
+// roster had a single row, now lands on the service instead - and the channel
+// headers are rows the cursor stops on too.
 func (s *screen) pickRoster(from, to string) {
 	s.t.Helper()
-	rows := s.rosterNames()
+	rows := s.rosterStops()
 	at, want := slices.Index(rows, from), slices.Index(rows, to)
 	if at < 0 || want < 0 {
 		s.t.Fatalf("the roster is %v and has no row for %q or %q.\n%s", rows, from, to, s.dump())
