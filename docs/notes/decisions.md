@@ -5003,3 +5003,42 @@ a new name if the directory has it. The ruling, on four choices put to the orche
 **Held by** `internal/daemon/fleetrename_test.go` (the move, refusals, undo, forwarding, the bare-`wake`
 draw, the exit, the report's name, the manager, over a real socket, and with a scripted claude process),
 `internal/ui/fleetname_test.go`, and the pty `TestWakeNameRenamesTheFleetOnARealScreen`.
+
+## 2026-10-21 — a signal parks the fleet, and a crash is handed to the park book (the owner)
+
+BUG-53: a machine going down took two fleets (a manager and 27 agents, a manager and 6) with it, because
+only `⌃Q` wrote the park book and nothing turned a dead daemon's roster rows back into anything. The spec
+says *"If Wake crashes, nothing is lost … Protect this property"*, so this was a bug, and two rulings
+came out of it.
+
+- **A SIGTERM or SIGINT parks** — reversing `quitVerb`'s *"neither may park a fleet nobody asked to
+  park"* and the 2026-08-11 reading that a signal is the no-verb exit. The owner chose it over leaving a
+  signalled shutdown to the crash path, because the OS sending SIGTERM at logout or shutdown is the
+  commonest way a machine "goes down" and nobody in that story chose to lose the fleet. `quitNone` is now
+  the daemon becoming empty, which has nothing to park. A daemon killed partway through the grace falls
+  to the crash path. `wake stop` is still the one ending with no way back.
+- **A crash is converted by the next daemon's reaper, not by a restore.** Each live agent has a row in
+  `parkready.json`, kept current as its team, colour, name, effort and conversation change; when
+  `reapOrphans` finishes a roster row (process gone, pid recycled, group signalled) the row's record goes
+  into the park book. A third file, because `sessions.json` is the reaper's to clear and `parked.json` is
+  for sessions with no process (2026-08-10); the record is a `parkedRecord`, so it carries no pid. The
+  roster stays the proof a session was running when the daemon died: a record with no roster row is
+  dropped, a row the reaper retains (BUG-28) keeps its record and stays out of the book, and a book
+  record already under that conversation wins. *A daemon restores nothing* still holds: the book is
+  offered through `/resume`, `unparkRecord` re-proves the process is gone through `resumeSafe`, and a
+  crashed manager returns as the manager because `ensureManager` already wakes a parked one.
+- **Not recorded, and not designed around:** what `--resume` loads from a transcript a SIGKILL cut
+  mid-turn. A ⌃Q refuses to book a session it had to kill for that reason; a crash cannot choose, and the
+  hand-recovery BUG-53 was found through resumed exactly such transcripts.
+- **2026-10-22, the owner: a signal interrupts busy agents first.** Waiting out the grace and then killing a
+  busy agent lost it, where the same fleet SIGKILLed was recovered - a polite shutdown doing worse than a
+  crash. So `quitSignal` (a fourth verb, parking as `quitPark` does) sends every agent whose stdin is open
+  the interrupt Esc sends, then stops it; the turn ends as an interrupted one, a recorded shape, and the
+  session parks inside the grace. Between turns an interrupt is a no-op claude answers
+  (`interrupt-idle.jsonl`), so nothing judges which agents are busy. **It cancels what is queued** behind
+  the turn (`cancel_queued`, `interrupt-cancel-queued.jsonl`), unlike Esc: a message typed ahead would
+  otherwise run as the next turn after stdin closed and be killed at the grace's end, so such a message is
+  dropped at a signalled shutdown. `⌃Q` keeps letting a turn run. `writeFileAtomically` now syncs the file
+  before its rename and the directory after, and `removeFile` the directory after a removal, so a force
+  restart keeps the last change to the state files; about 4 ms a file on this machine, on writes made
+  when a session changes, held by `TestTheAtomicWriteSyncsTheFileBeforeTheRenameAndTheDirectoryAfter`.

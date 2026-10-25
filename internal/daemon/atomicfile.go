@@ -26,6 +26,13 @@
 // so it cannot be redirected by anything that appears at that path in between.
 // And the **Close before the Rename** is not tidiness: a reader that sees the
 // new name must see all of the bytes.
+//
+// The two **syncs** are for a reader after a power cut or a force restart,
+// which is what reads these files back (docs/notes/bugs.md BUG-53): the file's
+// before the rename, so the name never points at bytes still in a cache, and
+// the directory's after it, so the rename itself survives. On macOS File.Sync
+// is F_FULLFSYNC, a few milliseconds a write (measured 2026-10-22) on files
+// written when a session changes, never per frame.
 
 package daemon
 
@@ -56,11 +63,45 @@ func writeFileAtomically(path, what string, body []byte, perm os.FileMode) error
 		_ = tmp.Close()
 		return fmt.Errorf("chmod %s: %w", what, err)
 	}
+	if err := tmp.Sync(); err != nil {
+		_ = tmp.Close()
+		return fmt.Errorf("sync %s: %w", what, err)
+	}
 	if err := tmp.Close(); err != nil {
 		return fmt.Errorf("close %s: %w", what, err)
 	}
 	if err := os.Rename(name, path); err != nil {
 		return fmt.Errorf("replace %s %s: %w", what, path, err)
 	}
+	syncDir(filepath.Dir(path), what)
 	return nil
+}
+
+// removeFile deletes path durably: a removal a power cut undid would bring back
+// a file the next daemon reads. A missing file is the ordinary case, not an
+// error.
+func removeFile(path, what string) error {
+	if err := os.Remove(path); err != nil {
+		if os.IsNotExist(err) {
+			return nil
+		}
+		return fmt.Errorf("remove %s %s: %w", what, path, err)
+	}
+	syncDir(filepath.Dir(path), what)
+	return nil
+}
+
+// syncDir makes a rename or a removal in dir durable. A failure is said rather
+// than returned: the change is in place and readable, and only whether a power
+// cut keeps it is in doubt - a caller told the write failed would retry or warn
+// for nothing.
+func syncDir(dir, what string) {
+	d, err := os.Open(dir)
+	if err == nil {
+		err = d.Sync()
+		_ = d.Close()
+	}
+	if err != nil {
+		logf("wake: the %s was replaced but its directory could not be synced, so a power cut may undo it: %v", what, err)
+	}
 }

@@ -287,6 +287,11 @@ type agent struct {
 	stopped bool
 	ended   bool
 
+	// stopQueued is a stop on its way to this agent's stdin, behind whatever is
+	// queued before it. It fences the park-ready file the moment the operator
+	// asks, which stopped cannot: that is set when the stop is carried out.
+	stopQueued bool
+
 	// parking records that this session's process is being stopped in order to
 	// park it, which is the only thing that tells retire a park from an
 	// ending: both arrive as the events channel closing. It is cleared by
@@ -382,6 +387,10 @@ func (a *agent) conversation() string {
 func (a *agent) midClear() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
+	return a.midClearLocked()
+}
+
+func (a *agent) midClearLocked() bool {
 	return a.claudeID == "" && len(a.endedIDs) > 0
 }
 
@@ -392,8 +401,10 @@ func (a *agent) conversationLocked() string {
 	return a.id
 }
 
-// observe records what one event says about this session's liveness.
-func (a *agent) observe(ev core.Event) {
+// observe records what one event says about this session's liveness, and
+// reports whether it taught the agent a conversation id: the first event of a
+// session, and the one after a /clear.
+func (a *agent) observe(ev core.Event) (learned bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.lastEvent = time.Now()
@@ -413,6 +424,7 @@ func (a *agent) observe(ev core.Event) {
 		// frames before the init that also carries it, so keying on init
 		// misattributes everything between.
 		a.claudeID = ev.SessionID
+		learned = true
 	}
 
 	// Where the session is now - never where it started, which is a.dir and does
@@ -599,6 +611,7 @@ func (a *agent) observe(ev core.Event) {
 		// flicker at the rate a busy agent works.
 		a.tool, a.toolArg = "", ""
 	}
+	return learned
 }
 
 // noteSent records that Wake asked for a turn, which is what makes a later

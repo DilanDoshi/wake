@@ -46,9 +46,10 @@ func rosterPath(socket string) string {
 // Neither is read back to decide *allocation*, and the reason is structural
 // rather than a matter of timing: **nothing turns a record back into an agent.**
 // loadRoster has exactly two consumers - reapOrphans, which signals what it can
-// verify and clears the records it finished (retaining what it could not, for a
-// later daemon), and FleetOnDisk, which assembles a report for a client - so a
-// starting daemon holds no live sessions whatever this file says,
+// verify and finishes the records it can (retaining what it could not, for a
+// later daemon, and parking the finished ones through the park-ready file's
+// record of the same session), and FleetOnDisk, which assembles a report for a
+// client - so a starting daemon holds no live sessions whatever this file says,
 // and no name can be required to survive a restart. (reapOrphans is itself
 // gated on the exclusive lock, so it does not always run; that changes which
 // processes are killed, never whether this daemon holds any.)
@@ -125,10 +126,7 @@ func (r *rosterFile) clear() error {
 
 func (r *rosterFile) clearLocked() error {
 	r.live = make(map[string]record)
-	if err := os.Remove(r.path); err != nil && !os.IsNotExist(err) {
-		return fmt.Errorf("remove roster %s: %w", r.path, err)
-	}
-	return nil
+	return removeFile(r.path, "roster")
 }
 
 // retain rewrites the roster to exactly recs - the records a reaper could not
@@ -179,4 +177,16 @@ func loadRoster(path string) []record {
 		return nil
 	}
 	return recs
+}
+
+// record writes the agent down so a later daemon can find it. See rosterRecord.
+func (s *server) record(a *agent, pgid int) {
+	// First, so no roster row is ever without the record a crash would hand over.
+	s.noteReady(a)
+	if err := s.roster.add(a.rosterRecord(pgid)); err != nil {
+		// Not fatal to the session: an unrecorded agent still works, it is
+		// only unfindable if this daemon dies. Said out loud for the same
+		// reason.
+		logf("wake: session %s is not recorded on disk, so a crash would orphan it: %v", a.id, err)
+	}
 }

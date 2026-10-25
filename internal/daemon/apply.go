@@ -37,6 +37,26 @@ type pending struct {
 	resume *resumeAsk
 }
 
+// submit hands a stdin-bound frame to the agent that owns it. A stop is fenced
+// out of the park-ready file before its row goes - an operator's stop is not a
+// crash for the next daemon to undo, and its turn may take a while to end - and
+// is taken back if the stop was not queued.
+func (s *server) submit(c *client, f rpc.Frame) {
+	s.withAgent(c, f, func(a *agent) error {
+		if f.Kind != rpc.FrameStop {
+			return a.submit(c, f)
+		}
+		a.markStopQueued(true)
+		s.forgetReady(a.id)
+		err := a.submit(c, f)
+		if err != nil {
+			a.markStopQueued(false)
+			s.noteReady(a)
+		}
+		return err
+	})
+}
+
 // submit queues one stdin-bound frame for this agent.
 //
 // A full queue is an error rather than a wait: the queue filling means this

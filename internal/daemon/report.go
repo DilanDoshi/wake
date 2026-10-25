@@ -27,9 +27,12 @@ func (s *server) replyStatus(c *client) {
 // pushStatus is the same report sent unasked. It is never a reply.
 func (s *server) pushStatus() {
 	s.reportMu.Lock()
-	defer s.reportMu.Unlock()
 	st := s.fleet()
 	s.broadcast(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+	s.reportMu.Unlock()
+	// Every change a wake reads - a /clear's conversation, an /effort - ends in
+	// a push, so this is where the park-ready file catches up with them all.
+	s.syncReady()
 }
 
 // fleet is the whole fleet as one Status, and the sessions that recently left

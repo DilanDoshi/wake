@@ -24,7 +24,8 @@ func teamedFleet(t *testing.T, s *screen) {
 	for _, n := range []string{"w1", "w2", "w3"} {
 		s.send("/new " + n + "\r")
 		s.await("@" + n + " started")
-		s.send("\x1b") // clear the drafted @n mention before the next keystrokes
+		s.await("> @" + n) // the draft itself: an esc before it clears nothing
+		s.send("\x1b")     // clear the drafted @n mention before the next keystrokes
 		s.settle()
 	}
 

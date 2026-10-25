@@ -204,6 +204,7 @@ func (s *server) completePark(a *agent, err error) {
 	if rerr := s.roster.remove(a.id); rerr != nil {
 		logf("wake: session %s could not be removed from the roster: %v", a.id, rerr)
 	}
+	s.forgetReady(a.id)
 	// And into the book the *next* daemon reads. Written here rather than when
 	// the park was asked for, which is what makes the entry mean something: this
 	// runs in retire, after core's Wait has returned, so the process Wake

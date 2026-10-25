@@ -81,7 +81,10 @@ func TestAForksRoomHistoryIsItsOwnTurnsOnly(t *testing.T) {
 	// And a wake inside this daemon keeps the lineage: the woken fork is still
 	// told apart from the conversation it copied.
 	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idGamma})
-	c.pollState(idGamma, rpc.StateParked)
+	// The push completePark sends once the park is written down, not the first
+	// reply saying parked: a wake in between is refused as "not parked", and the
+	// synced writes make that window tens of milliseconds.
+	c.awaitState(idGamma, rpc.StateParked)
 	c.send(rpc.Frame{Kind: rpc.FrameWake, SessionID: idGamma})
 	c.pollState(idGamma, rpc.StateIdle)
 	if got := strings.Join(historyTexts(c, rpc.FrameRoomHistory, rpc.FrameRoomHistoryReply, idGamma), "|"); got != want {

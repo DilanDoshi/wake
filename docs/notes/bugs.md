@@ -1174,9 +1174,9 @@ should keep them:
 - *`wake stop` is the one ending with no way back.*
 
 The ruling that met a case it did not anticipate is `quitVerb`'s *"neither may park a fleet nobody asked to
-park"*: an OS shutdown is a signal. Whether a signal parks, or leaves the roster behind as a crash does for
-the next daemon to convert, is the owner's call. `deferred.md`'s *"A daemon that is signalled, crashed or
-merely restarted hands the fleet on"* is false for the first two, and wants correcting in the same change.
+park"*: an OS shutdown is a signal. **The owner ruled 2026-10-21 that a signal parks** (`decisions.md`, same
+date), so a clean shutdown and a crash both end in the park book. `deferred.md`'s *"A daemon that is signalled,
+crashed or merely restarted hands the fleet on"* was false for the first two and is corrected.
 
 **Recovered by hand, which is the workaround until this is fixed.**
 - **Ids:** from the dead roster, or from the reaper's log once a daemon had cleared it.
@@ -1191,14 +1191,27 @@ one, then `wake --fleet <name>` and `/resume all`. Sessions another terminal had
 two processes on one id branch the transcript. Lost for good: teams the operator set with `/team`, the model,
 budget and fallback, and two managers that never had a turn, so had no transcript to resume.
 
-**Fix (not built).**
-- **A park-ready record per live agent**, on disk beside the roster and outside the reaper's reach. It is
-  rewritten whenever a wake's inputs change: a `/clear`'s conversation, a rename, team, colour, effort, model,
-  budget, fallback.
+**Fixed on `fix/crashed-fleet-reaches-park-book` (PR awaiting merge).** What was built:
+- **A park-ready record per live agent**, in `parkready.json` beside the roster (`parkready.go`). It is
+  rewritten when a wake's inputs change: at launch and on a rename, team or colour through `s.record`; when a
+  `/clear`'s successor is learned (`fanOut`, since no status push follows a `/clear`); and on every status
+  push for the rest (an `/effort`, through its confirming probe's push), writing only what differs. A row
+  leaves with its roster row, a stop fences it out the moment it is queued (a stopped session's last turn can
+  take a while) and is taken back if the queue refuses it, and the file goes with every orderly ending,
+  `wake stop` before its grace starts and for good, so a writer already in flight cannot bring it back.
 - **The reaper hands records to the park book.** When `reapOrphans` finishes a record (gone, recycled pid, or
   group signalled), it moves that agent's park-ready record into the park book instead of forgetting it. The
   reaper's proof that the process is gone is `completePark`'s own precondition, and `unparkRecord` still
-  re-proves it through `resumeSafe` at wake. A record the reaper retains stays out of the book.
+  re-proves it through `resumeSafe` at wake. A record the reaper retains stays out of the book, a park-ready
+  record with no roster row beside it is dropped (the roster is the proof the session was running), and a book
+  row already under that conversation wins unless the crashed daemon's record changed after it (`reap.go`'s
+  `handOver`; the record's time is its last change).
+- **A signal parks.** A cancelled `Serve` context begins `quitSignal` (`stopAcceptingOnStop`), which parks as
+  ⌃Q does and first interrupts every agent whose stdin is open, as Esc would, cancelling what is queued
+  behind its turn, so a turn in flight ends at once and parks inside the grace rather than being killed at
+  its end (`shutdownstop.go`; owner's 2026-10-22 ruling). `quitNone` is now only the daemon becoming empty.
+- **The state files are synced** (`atomicfile.go`): a write's file before its rename and its directory after,
+  and a removal's directory, so a force restart or a power cut finds the last change rather than a cache's.
 - **A crashed manager comes back as the manager.** `ensureManager` already wakes a parked one, so it is not
   replaced by a fresh spawn.
 - **Tests first.** A daemon holding agents with teams, colours, an effort, a `/clear` and a renamed manager is
@@ -1206,6 +1219,27 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
   with all of those fields, and `/resume all` must wake them. The old manager must take the manager's seat. A
   record the reaper retains must stay out of the book. `wake stop` must still leave nothing. If the signal
   ruling changes, SIGTERM gets the same test.
+
+**Residuals, known and not fixed.**
+- A crash in the instant between a `/clear`'s reset and its successor's first frame offers the pre-clear
+  conversation: until the successor speaks there is no conversation to write.
+- A wake whose park-book deletion failed leaves the old row on disk under the old conversation id, and after
+  a `/clear` and a crash both conversations are offered. That is the park book's own double fault; the
+  same-conversation case is handled by the timestamp rule above.
+- Under `⌃Q` (not a signal) a session still mid-turn when the grace ends is killed and not parked, as
+  before. A signal interrupts it instead; whether `⌃Q` should too is the owner's call (`deferred.md`).
+- Under a signal: a message typed ahead of a turn is dropped with it; a frame already in the daemon's input
+  queue when the signal lands can be written after the interrupt and start a turn of its own; an agent
+  already stopped (a `⌃C` or a `/quit` finishing its turn) cannot be interrupted; and an agent whose stdin
+  write never returns is still killed at the grace's end. A ⌃Q pressed before the signal is not escalated.
+- `wake stop` with no daemon running says so and leaves a crashed fleet's roster and park-ready file, so the
+  next `wake` parks a fleet the operator thought stopped. The owner's call (`deferred.md`).
+- `completePark` removes the roster row before the book write, so a crash in that gap loses the session. It
+  was so before this change.
+- A session reads parked from the moment its process is gone, but a wake is accepted only once `completePark`
+  has written the park down, and one in between is refused as "not parked". The synced writes widen that
+  window from under a millisecond to tens of milliseconds, which a person typing `/resume` does not reach
+  and a test waking off a status reply did (`roomhistoryfork_test.go` now waits for the park's own push).
 
 ---
 

@@ -214,38 +214,6 @@ func TestASessionThatHadToBeKilledIsNotParked(t *testing.T) {
 	}
 }
 
-// A signalled daemon parks nothing, because a signal is not a verb.
-//
-// The third value of quitVerb, and the one no client can send. A SIGTERM, a
-// laptop lid or the process group going reaches Serve as a cancelled context,
-// and nobody in that story asked for a fleet to be parked - so a book that
-// filled up on the way out would offer back twenty sessions the next `wake`
-// would resume without anyone ever having decided to keep them.
-//
-// It is the mirror of TestADaemonThatWasSignalledRatherThanStoppedKeepsTheParkedFleet,
-// which holds the other half: that one starts with a parked session and
-// requires it to survive, this one starts with a live one and requires it not
-// to be added. Neither implies the other, and the mutation that makes
-// `a.beginPark()` unconditional is invisible to the first.
-func TestADaemonThatWasSignalledParksNothing(t *testing.T) {
-	fakeClaudeOnPath(t, "")
-	d := startDaemon(t)
-	c := attach(t, d.socket)
-	c.spawn(idAlpha, "alex")
-	c.awaitState(idAlpha, rpc.StateIdle)
-	c.close()
-
-	// The context cancellation Serve is given, which is what signal.NotifyContext
-	// delivers on SIGINT and SIGTERM in cmd/wake's serveDaemon.
-	d.stop(t)
-
-	if recs := loadParkBook(parkBookPath(d.socket)); len(recs) != 0 {
-		t.Errorf("a daemon that was signalled left %+v in the park book. Nobody asked for that fleet to "+
-			"be parked, and the next `wake` reads this file to decide what to offer back - so a signal "+
-			"would silently become the recoverable ending that ⌃Q is the verb for", recs)
-	}
-}
-
 // The first quit verb wins, so a park is never turned into a stop.
 //
 // Two clients ending the daemon at once is a race nobody can resolve into a
@@ -265,8 +233,8 @@ func TestADaemonThatWasSignalledParksNothing(t *testing.T) {
 // before anyone has - and the zero case below is what asserts that.
 func TestTheFirstQuitVerbWinsSoAParkIsNeverTurnedIntoAStop(t *testing.T) {
 	if got := newServer(tempSocket(t)).quitReason(); got != quitNone {
-		t.Errorf("a daemon nobody has ended reports verb %d, want quitNone (%d): a signal is not a verb, "+
-			"and a daemon that thinks it was asked for something acts on it in shutdown", got, quitNone)
+		t.Errorf("a daemon nobody has ended reports verb %d, want quitNone (%d): "+
+			"a daemon that thinks it was asked for something acts on it in shutdown", got, quitNone)
 	}
 
 	for _, tc := range []struct {
