@@ -936,6 +936,17 @@ The tests replay recorded receipts and a scripted agent. In a scratch git reposi
       running processes take the new account on that very turn.
 - [ ] **Or wait the limit out:** a minute after the reset the pin names, each stopped agent resumes.
 
+## A lost connection — what only a real network shows
+
+- [ ] **Turn Wi-Fi off with a few agents mid-turn, wait past claude's own retries (about three
+      minutes), then turn it back on.** Each stopped agent should show `… — Wake resumes it when the
+      connection is back` while it is off, and `↻ resumed after the connection came back` within
+      seconds of the network returning. The suite drives the resume against a fake network change and
+      the route parser against built messages (`netwatch_darwin_test.go`); what it cannot say is that
+      this machine's Wi-Fi rejoining reaches the routing socket as an address or a gateway route.
+- [ ] **Close the lid mid-turn and open it later.** The `went to sleep mid-response` failure should
+      resume the same way once the network is back.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:

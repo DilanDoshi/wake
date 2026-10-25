@@ -281,3 +281,18 @@ func TestABulletChainRejoinsItsHang(t *testing.T) {
 		t.Errorf("copy is\n%q\nwant\n%q", got, want)
 	}
 }
+
+// A table drawn as records copies as its records: a value the pane wrapped
+// rejoins with the space the wrap took, and every field and rule keeps its own
+// line - matched back to the records the source draws unwrapped.
+//
+// Mutation check: matching back to the unwrapped grid instead copies each
+// wrapped row of a value on a line of its own.
+func TestACopiedRecordRejoinsItsWrappedValue(t *testing.T) {
+	want := "Flag: --effort\nDefault: medium\n" +
+		"What it does: Sets how hard the model thinks before it answers, from low all the way up to max\n" +
+		strings.Repeat("─", 36) + "\nFlag: --model\nDefault: sonnet\nWhat it does: Picks the model the session runs on"
+	if got := copiedAt(flagTable, 40); got != want {
+		t.Fatalf("copied\n%s\nwant\n%s", got, want)
+	}
+}

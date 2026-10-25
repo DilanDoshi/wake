@@ -66,6 +66,9 @@ func formatStatus(st rpc.Status, team string) string {
 		if text, stale := staleDaemonNotice(&st, version.Build()); stale {
 			b.WriteString(text + "\n")
 		}
+		if st.MaxAgents > 0 {
+			fmt.Fprintf(&b, "%d of %d sessions running (%s sets how many).\n", runningCount(st), st.MaxAgents, maxAgentsFlagName)
+		}
 
 	case len(st.Sessions) > 0:
 		// Not "nothing is running". This is a fleet whose daemon died, read

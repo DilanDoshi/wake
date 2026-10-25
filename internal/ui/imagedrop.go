@@ -248,5 +248,6 @@ func (a App) withComposerFor(conv string, c Composer) App {
 	if _, ok := a.dms[conv]; !ok {
 		return a
 	}
+	a = a.draftSeen(conv, c)
 	return a.withDM(conv, a.dms[conv].WithComposer(c))
 }

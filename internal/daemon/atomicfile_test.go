@@ -37,6 +37,17 @@ var replaceSteps = []string{"os.CreateTemp", "os.Rename"}
 // that makes it static, the same way the identity block's "appended whole" is.
 const pathChmod = "os.Chmod"
 
+// directoryMoves are the files that rename a directory rather than replace a
+// file, with how many os.Rename calls that takes and why. Counted, so a
+// replace-a-file sequence cannot hide beside them; os.CreateTemp stays refused.
+var directoryMoves = map[string]struct {
+	renames int
+	why     string
+}{
+	"fleetrename.go": {renames: 2, why: "/wake-name moves a fleet's directory, and moves it back when the " +
+		"link it leaves cannot be made: no file is replaced under a reader"},
+}
+
 // The replace-a-file sequence is spelled once.
 //
 // It was spelled three times - roster.go, parkbook.go and manager.go - and by
@@ -55,6 +66,7 @@ func TestTheAtomicWriteIsSpelledOnceInThisPackage(t *testing.T) {
 		t.Fatalf("read package directory: %v", err)
 	}
 	scanned, inHome, fdChmods := 0, 0, 0
+	moves := map[string]int{}
 	for _, e := range entries {
 		name := e.Name()
 		if e.IsDir() || !strings.HasSuffix(name, ".go") || strings.HasSuffix(name, "_test.go") {
@@ -98,6 +110,10 @@ func TestTheAtomicWriteIsSpelledOnceInThisPackage(t *testing.T) {
 					inHome++
 					continue
 				}
+				if _, moving := directoryMoves[name]; moving && spelled == "os.Rename" {
+					moves[name]++
+					continue
+				}
 				t.Errorf("%s calls %s. Replacing a file under a reader is one sequence - temp in the "+
 					"destination's own directory, write, chmod the fd, close, rename - and it was "+
 					"copied three times before it drifted. It lives in %s; call writeFileAtomically, "+
@@ -108,6 +124,12 @@ func TestTheAtomicWriteIsSpelledOnceInThisPackage(t *testing.T) {
 	}
 	if scanned == 0 {
 		t.Fatal("the walk found no non-test files: the scan is broken and this check approves everything")
+	}
+	for name, move := range directoryMoves {
+		if moves[name] != move.renames {
+			t.Errorf("%s calls os.Rename %d times and is excused for %d (%s): a rename it does not account "+
+				"for may be a file replaced under a reader", name, moves[name], move.renames, move.why)
+		}
 	}
 	if fdChmods == 0 {
 		t.Fatalf("%s never chmods the descriptor it created: either the mode is no longer being set at all, "+

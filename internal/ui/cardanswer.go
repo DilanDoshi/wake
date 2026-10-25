@@ -14,8 +14,9 @@ package ui
 // What makes it safe is that answer mode is entered deliberately - by picking
 // the Other row, or by pressing the refusal key - and says so on the card while
 // it lasts. Outside it nothing about the composer changed. Inside it, ↵ takes
-// the draft as an answer and ⎋ abandons it, and neither reaches the agent's
-// turn.
+// the draft as an answer (or completes the word a menu is offering), and ⎋ and
+// ↑↓ off the draft's edge go back to the options with the words kept - none of
+// them reaches the agent's turn.
 //
 // # Why the refusal opens the same box
 //
@@ -122,17 +123,56 @@ func (a App) answerTitle(id string) string {
 }
 
 // beginAnswer opens the composer for a question the operator wants to answer
-// themselves, and puts the option cursor on the row that says so.
+// themselves, and puts the option cursor on the row that says so. Words already
+// in that row are put back in the box to edit.
 func (a App) beginAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 	a.cards = a.cards.With(c.atOption(otherIndex(c.Detail.Questions[c.Cursor]))).startWriting(c, question).disarm()
-	return a, nil, true
+	if typed := c.typed(question); typed != "" {
+		a = a.withComposer(a.composer().WithDraft(typed))
+	}
+	return a.pageHome(a.focus), nil, true
+}
+
+// answerArrow is the option step of a bare ↑ or ↓ in answer mode that the
+// draft's lines and a completion menu leave to the prompt history.
+func (a App) answerArrow(m tea.KeyMsg) (int, bool) {
+	switch {
+	case m.Alt || a.completionUp():
+		return 0, false
+	case m.Type == tea.KeyUp && !a.composer().CanCursorUp():
+		return -1, true
+	case m.Type == tea.KeyDown && !a.composer().CanCursorDown():
+		return 1, true
+	}
+	return 0, false
+}
+
+// leaveAnswer goes one option over, keeping the box's words as the Other row's,
+// as Claude Code does. A refusal's reason and the list's end stay where they are.
+func (a App) leaveAnswer(c Card, question, by int) (tea.Model, tea.Cmd, bool) {
+	moved := c.Move(0, by)
+	if question == denyReasonStep || moved.Option == c.Option {
+		return a, nil, true
+	}
+	a.cards = a.cards.With(a.keepWords(moved, question)).stopWriting().disarm()
+	return a.clearDraft(), nil, true
+}
+
+// keepWords records the box's words as question's Other answer, and takes a kept
+// answer away when the box was emptied.
+func (a App) keepWords(c Card, question int) Card {
+	text := strings.TrimSpace(a.composer().Value())
+	if text != "" || c.typed(question) != "" {
+		return c.answer(question, text)
+	}
+	return c
 }
 
 // beginDeny opens the composer for a refusal's reason. It is the arm: nothing
 // is written until ↵, and ⎋ takes it back.
 func (a App) beginDeny(c Card) (tea.Model, tea.Cmd, bool) {
 	a.cards = a.cards.startWriting(c, denyReasonStep).disarm()
-	return a, nil, true
+	return a.pageHome(a.focus), nil, true
 }
 
 // commitAnswer takes what was typed - as one question's answer, or as the
@@ -173,9 +213,16 @@ func (a App) commitAnswer(c Card, question int) (tea.Model, tea.Cmd, bool) {
 	return a.clearDraft(), nil, true
 }
 
-// cancelAnswer abandons what was being written, without touching the agent.
-func (a App) cancelAnswer() App {
-	a.cards = a.cards.stopWriting()
+// cancelAnswer goes back to the options without touching the agent, keeping the
+// words as the Other row's as leaveAnswer does. A refusal's reason belongs to no
+// question: keepWords leaves the card alone and the reason goes.
+func (a App) cancelAnswer(c Card, question int) App {
+	kept := a.keepWords(c, question)
+	if kept.multi(question) && kept.typed(question) != "" {
+		// Off the filled Other row, which a second ↵ would untick (commitAnswer's reason).
+		kept = kept.atOption(nextIndex(kept.Detail.Questions[question]))
+	}
+	a.cards = a.cards.With(kept).stopWriting()
 	return a.clearDraft()
 }
 

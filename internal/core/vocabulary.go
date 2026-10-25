@@ -144,10 +144,13 @@ const rateLimitAllowed = "allowed"
 
 // A failed turn's top-level error kinds that change what recovers it: a dead
 // login needs a new process (api-error-auth.jsonl), a usage limit waits for its
-// reset. Every other named kind is one turn failing; see apiNotice.
+// reset, an API that never answered waits for the connection
+// (api-error-unreachable.jsonl). Every other named kind is one turn failing; see
+// apiNotice.
 const (
-	errorKindAuth       = "authentication_failed"
-	errorKindUsageLimit = "rate_limit"
+	errorKindAuth        = "authentication_failed"
+	errorKindUsageLimit  = "rate_limit"
+	errorKindUnreachable = "server_error"
 )
 
 // rateLimitNotice resolves a quota status. Only a status that is *not* the

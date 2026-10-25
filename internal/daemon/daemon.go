@@ -185,6 +185,12 @@ func Serve(ctx context.Context, socket string) error {
 			logf("wake: %v", err)
 		}
 	}()
+	// The old names a /wake-name left go after the listener's close, which unlinks
+	// the socket through them, and before the lock's release: no successor exists
+	// yet whose own old names could resolve here (fleetrename.go). srv stays nil
+	// until there is a server, so a daemon that never served drops nothing.
+	var srv *server
+	defer func() { srv.dropForwards() }()
 
 	ln, err := listen(socket)
 	if err != nil {
@@ -196,7 +202,8 @@ func Serve(ctx context.Context, socket string) error {
 	// refuses, and clients keep finding a daemon on the path for the whole
 	// grace. See stopAcceptingOnStop.
 	//
-	// Nothing runs between this and the lock's release, deliberately. There
+	// Nothing but the old names' drop (above) runs between this and the lock's
+	// release, deliberately. There
 	// used to be a belt-and-braces os.Remove(socket) here for a listener that
 	// does not unlink; net.Listen's always does, listen() copes with a stale
 	// file if one ever survived, and the only thing that Remove could still
@@ -211,6 +218,7 @@ func Serve(ctx context.Context, socket string) error {
 	defer guardLog()()
 
 	s := newServer(socket)
+	srv = s
 	// The liveness tick re-verifies this claim's inode (see watchLiveness), so
 	// the daemon that holds the lock re-establishes it if the file is swept out
 	// from under it - which is what stops a successor locking a fresh inode.

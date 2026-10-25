@@ -63,20 +63,18 @@ func (s *server) maySpawn(ctx context.Context, c *client, f rpc.Frame) bool {
 		c.enqueue(errorFrame(f.SessionID, "a session directory must be absolute, got "+f.Dir))
 		return false
 	}
-	if n := s.liveCount(); n >= liveCap {
-		c.enqueue(errorFrame(f.SessionID, capRefusal(n)))
+	if n, limit := s.liveCount(), s.agentCap(); n >= limit {
+		c.enqueue(errorFrame(f.SessionID, capRefusal(n, limit)))
 		return false
 	}
 	return true
 }
 
-// defaultLiveCap is how many sessions may run at once.
-//
-// The number is the product's own ceiling - spec §1 is "15-30 agents" - rather
-// than a measurement, because what it bounds is money and machine rather than
-// anything Wake can measure from here. A human at 30 agents has typed thirty
-// commands and knows; the case this exists for is a loop nobody is watching.
-const defaultLiveCap = 30
+// defaultLiveCap is how many sessions a fleet runs at once until the operator
+// sets fewer with `--max-agents`: the ceiling itself (owner's 2026-10-20 ruling,
+// raising the spec's 15-30). What it bounds is money and machine, so its case is
+// a loop nobody is watching rather than a human who typed fifty commands.
+const defaultLiveCap = rpc.MaxAgentsCeiling
 
 // liveCap is that number, as a var so a test can reach the boundary without
 // starting thirty processes. Written only before a daemon runs - see
@@ -85,8 +83,30 @@ var liveCap = defaultLiveCap
 
 // capRefusal is what a spawn past the cap is told, and it names the two things
 // that make room rather than only saying no.
-func capRefusal(n int) string {
-	return fmt.Sprintf("%d sessions are already running, which is the cap. ⌃C parks one and /resume brings it back, or `wake stop` ends the fleet", n)
+func capRefusal(n, limit int) string {
+	raise := ""
+	if limit < rpc.MaxAgentsCeiling {
+		// First, so a one-row notice that cuts the sentence still shows it.
+		raise = fmt.Sprintf(" (--max-agents raises it, up to %d)", rpc.MaxAgentsCeiling)
+	}
+	return fmt.Sprintf("%d sessions are already running, which is this fleet's cap%s. ⌃C parks one and /resume brings it back, or `wake stop` ends the fleet", n, raise)
+}
+
+// agentCap is this fleet's cap now.
+func (s *server) agentCap() int { return int(s.maxAgents.Load()) }
+
+// setMaxAgents is FrameSetMaxAgents: the operator's cap for this fleet from now
+// on. It stops nothing already running - the next spawn is measured against it.
+// Under admitMu, so a spawn being admitted reads one cap or the other.
+func (s *server) setMaxAgents(c *client, f rpc.Frame) {
+	if f.MaxAgents < 1 || f.MaxAgents > rpc.MaxAgentsCeiling {
+		c.enqueue(errorFrame("", fmt.Sprintf("--max-agents takes 1 to %d, not %d", rpc.MaxAgentsCeiling, f.MaxAgents)))
+		return
+	}
+	s.admitMu.Lock()
+	s.maxAgents.Store(int64(f.MaxAgents))
+	s.admitMu.Unlock()
+	s.pushStatus()
 }
 
 // admitLive is the cap and the row as one step. maySpawn counts at the
@@ -110,8 +130,8 @@ func (s *server) admitLive(a, replaces *agent, wake bool) string {
 		return "the daemon is shutting down"
 	}
 	if !wake {
-		if n := s.liveCount(); n >= liveCap {
-			return capRefusal(n)
+		if n, limit := s.liveCount(), s.agentCap(); n >= limit {
+			return capRefusal(n, limit)
 		}
 	}
 	if !s.admit(a, replaces, wake) {

@@ -8,6 +8,79 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-24 — a table too narrow for its pane draws as records, as soon as glamour's grid would drop text
+
+On a narrow terminal Claude Code draws a markdown table as **records**. Each body
+row becomes one record, with each column on its own line as a bold `Header:`
+followed by the cell. A `─` rule of at most 40 cells separates the records.
+Before that, Claude Code shrinks its own bordered grid, wrapping and even
+breaking words, and switches only once a row would need more than four lines or
+a column would get fewer than three cells
+(`docs/superpowers/notes/2026-10-24-narrow-table-findings.md`).
+
+**Wake keeps glamour's grid only while that grid shows the table whole.** That
+means the header is uncut, every cell's words are whole and in order, every
+link's address is uncut in the list under the grid, and no row runs past four
+lines, which is Claude Code's own limit. Otherwise the table draws as records,
+laid out as Claude Code lays them out. The rule lives in
+`internal/render/tables.go`'s `whole`.
+
+- **Earlier than Claude Code, deliberately** (approved with the plan). Claude
+  Code breaks words inside a grid that has a rule between every row. glamour's
+  grid has no rules between rows, and its lipgloss resizer **cuts** text: a
+  header becomes `What it do…`, and at 30 columns the Name/Role/Status table
+  drew `workin` and `blocke`. A grid that drops text is worse than records.
+  - For tables with one long column, Wake switches where Claude Code does: the
+    Key/Value table at 34/33, the Flag table at 50/49 (Claude Code: a grid at 50
+    and records at 48; 49 was not swept).
+  - For the one-word Name/Role/Status table, Wake switches at 31/30 where Claude
+    Code holds its grid down to 24.
+- **Judged by reading glamour's own drawing back, not by predicting it.**
+  lipgloss shrinks the biggest column first, then the one furthest above its
+  median, with no notion of a word, so a predictor would be a second copy of it.
+  Instead, the grid drawn at the pane's width is read back against the same
+  table drawn where nothing wraps.
+  - That second render doubles its width until no row wraps, through renderers
+    built for the purpose. A cached renderer per width would evict the ones a
+    frame draws with (`CachedWidths`).
+  - A grid that cannot be read back (a cell holding `│`, say) is left to glamour,
+    exactly as before. A table with a cell wider than `maxUnwrappedWidth` is
+    records, since no pane holds it.
+- **The switch is not monotonic at one width.** glamour cuts a right-aligned
+  column's last character when the table is exactly one cell narrower than its
+  natural width: the Flag table at 105 drew `ma` for `max`. The table draws as
+  records at that width and as a grid on either side of it. That follows from
+  the rule, which is about text, not width.
+- **Top-level tables only.** A table in a list item or a quote keeps glamour's
+  grid, and so does every table of a reply that defines a reference link
+  (`deferred.md`).
+- **A one-column grid keeps its rows.** On `main`, `reflowProse` ran a
+  one-column grid's body rows together as prose, since no `│` marked them. A
+  table rendered alone now keeps `reflowProse` off its grid
+  (`reflowedBelowGrid`). That is provenance, not a guess from the rows: a guess
+  from a row of `─` froze prose that only wrapped a run of box drawing onto a
+  row of its own (Codex, second pass). A one-column table glamour still draws
+  inside a document (nested, or in a reply that defines a reference link) is
+  run together as before.
+- **How it is spliced in.** Each table's lines are replaced by a placeholder
+  paragraph with a blank line on each side, the document renders once, and each
+  placeholder row becomes that table's rows.
+  - A table that fits draws byte for byte as before. A table rendered alone is
+    the table rendered in place (`TestATableThatFitsDrawsAsItAlwaysHas`).
+  - A source holding the placeholder's private-use mark is left wholly to
+    glamour.
+- **A copy matches records back to records.** `unwrappedRows` draws every table
+  as records, so a value the pane wrapped rejoins, and the rule and each field
+  keep their own lines. A grid's rows never matched before and still copy as
+  drawn.
+- **Cost.** Only a block holding a table pays it: one goldmark parse, the table's
+  grid, the read-back render, and the records render when a table is drawn as
+  records. That is about 0.2 ms per render at 80 columns, measured. It happens
+  on an event or a re-wrap, never per frame. goldmark (MIT) became a direct
+  dependency, parsed under `mu`, since it promises nothing about concurrent use.
+
+---
+
 ## 2026-10-10 — Wake answers `/status`, for every session, the manager's included
 
 The owner's ask ("the manager is just another session"). Headless claude refuses `/status` with no
@@ -4518,8 +4591,8 @@ multi-room door. It is not a second room: `deferred.md` already named it as the 
 
 - **A team's thread is the union of its members' threads.** `focusAdmits` asks each member's own question
   (`admitsThread`, the old body), so every rule an agent's narrowing keeps holds per member: its prose, the
-  manager's, broadcasts, the operator's turns aimed at it, the peer messages it sent or received. No second
-  predicate.
+  manager's (until 2026-10-21, below), broadcasts, the operator's turns aimed at it, the peer messages it
+  sent or received. No second predicate.
 - **The room's focus stays one comparable string**: an agent's own id for one agent, the sorted ids for a team
   (`joinIDs`). A lone `@name` therefore compares, filters and resets `⌃A` exactly as before. **Sorted**
   because `Fleet.Agents()` is attention-ranked, so a member starting work reorders a team's route; an
@@ -4633,6 +4706,303 @@ machine, and ruled that it affect the group chat only — no agent and no conver
   `roomCommands` is held to a count, and a room test sends `/cleanup`, `/clear-cache` and their like
   to the default addressee unchanged. A session the cleared room held lines for stays marked asked, so
   a park and wake does not restore a turn whose live echo is still on screen.
+
+## 2026-10-20 — a card scrolls with its pane, as one page (the owner)
+
+The owner asked for the human-in-the-loop question screen to scroll — "if I scroll up it should scroll
+everything" — for a window too small to show the whole card, and in general. Two choices were theirs.
+
+- **The pane is one page.** Offered a card-body viewport with its headline and key line pinned, they
+  chose the transcript, card and composer scrolling together. The wheel slides the card and composer
+  off the bottom and takes older lines in at the top. Without a card the wheel moves the transcript
+  alone, as it always did.
+- **The keys keep today's rule.** Offered "live while the key line is on screen", they kept *live only
+  while the whole card is on screen* (`cardFullyDrawn`; the 2026-08 ruling that a confirmation the
+  operator cannot see is not one). What changed is what puts a card on screen: the composer scrolls out
+  of the way before the card is clipped, so a card that fits a short pane alone is whole and answerable
+  at rest, and one taller than the pane is read by scrolling but not answered until the window grows.
+  The key line says so (`cardKeysCut`) rather than advertising keys that are not read — except while an
+  answer is being written, which is read whether or not the card is all on screen.
+
+How it is built, and the traps:
+
+- **The page is the pane drawn taller.** Up `b` rows from the bottom is the pane drawn `height+b` rows
+  tall with its top `height` rows shown, which slides `b` rows of chrome off the bottom and takes `b`
+  older lines in at the top with no layout of its own. A card the pane has no room for opens with its
+  clipped rows already behind the window (`windowPage`'s `clipped`), on the card's own top.
+- **Hitting the top ends the wheel there.** The first version handed the rest of the travel to the
+  transcript's own scroll, which shortened the page under it and snapped the card back to the bottom
+  row under a transcript scrolled to its top. Only a wheel *down* at rest falls through (a reader who
+  scrolled back before the card arrived is still brought forward).
+- **A press on a scrolled page is a screen selection.** Its rows are not where the transcript's anchors read them,
+  and re-deriving them was not worth it for a read-only gesture. At rest nothing has moved and a press anchors as ever
+  — except in a pane too short for its card, where the composer is *not* under the card: a press below the
+  transcript's one row takes the screen as drawn, never a draft nobody can see (reviewer). **An edge drag scrolls the
+  transcript it was taken in**, not the page (`scrollPane` is the transcript's alone; only the wheel tries the page).
+- **A draft that changes brings the page home, whichever key wrote it.** The first version hooked the keys that reach
+  the composer, and ↑ (prompt history), take-back, ⇥ and the image drop all edit it without reaching that hook: a
+  recalled prompt landed in a composer off screen and the next ↵ sent it (reviewer). The hook is now at the composer's
+  write (`withComposer`, `withComposerFor`) and compares against `pageState.draft`, because a `Composer` shares its
+  text area with the copy it was taken from, so the stored one already holds the new text. Opening an answer homes it
+  too. **↵ on an answer commits only from a page at its bottom**: one scrolled away brings the box back and the next ↵
+  sends (Codex), since an answer is irreversible.
+- **A draft is never sent from a box nobody can see.** Second-pass review (Codex, then the reviewer): a draft already
+  in the box when a card arrives in a pane too short for it left the composer hidden at the card's default, and the next
+  ↵ sent it. Two layers. A pane whose box holds a draft opens on the composer (`DM.pageAt`), and `submit` — the one
+  path that sends a draft, ↵ and ⌃] both — refuses a draft the page has scrolled away from: it brings the box back and
+  the next press sends (`App.boxAway`). The line over a cut card names the draft first when one is what pauses its keys.
+- **A following reader is not behind the newest line.** The taller layout gives the transcript more rows, and a draft
+  grown by those rows can make it more than the pane's own did; the draw had assumed it equal and left a follower one
+  row off the bottom, with the "new messages below" banner over the blank row (reviewer, 11 of 1,188 configs). A follower
+  now takes the taller layout's own bottom, and only a reader who had scrolled back has their top line carried.
+- **`cardFullyDrawn` is read off the layout actually drawn.** The page is drawn taller than the pane, and the rows it
+  adds let a draft or a streamed preview grow, so the first measure — at the pane's own height — could put the card
+  where it was not (Codex; the reviewer reproduced the safe-direction case: a 9-line draft, the whole card on screen
+  and its keys dead). `placeOf` lays out the drawn height and places the card by that, and a sweep holds the claim to
+  the rows over every height, draft, scroll and status bar.
+- **At the top of the page the draw is the transcript alone.** Drawn at its taller layout the pane would render every
+  retained line each frame (Codex: 3,000 events); once the chrome is past the window `transcriptPage` draws just the
+  window's lines, and a test holds a frame at the top of a long conversation to a short one's allocations.
+- **Cost.** A pane with no card is the same path as before (identical allocations); a fitting card is within noise of
+  `main`; a clipped pane is drawn at its taller layout and costs about 0.5 ms more per frame (`deferred.md`).
+- **State is per card** (`pageState.req`): another ask starts at rest. The offset is clamped at the draw, so a resize
+  under a scrolled page cannot leave rows the transcript has not got.
+- **One existing test was aimed at the old premise.** `TestACardWhoseKeysAreNotOnScreenIsNotAnswerable` shrank the pane
+  to the composer's floor and expected the card clipped; the composer now scrolls away first, so it uses a pane one
+  row shorter than the card.
+
+## 2026-10-20 — a fleet runs up to 50 sessions at once, and `--max-agents` sets fewer (the owner)
+
+The owner asked to raise the 30-session cap. Ruled: **50 by default and 50 the highest cap**, set per
+fleet with a flag on `wake`. The cap bounds new sessions; a wake of a parked one stays exempt, as it
+always was, so a fleet can read more than its cap after waking some.
+
+- **`--max-agents <n>`, 1 to 50**, legal anywhere like `--fleet` but only with a verb that opens the
+  room or a conversation (`wake`, `new`, `attach`, `manager`); on `status`, `stop`, `fleets`, `fork`
+  or `import` it is refused with a sentence, since it sets a fleet rather than describing one.
+- **Set on the running daemon** (`FrameSetMaxAgents`), so it works on a fleet already open, and lasts
+  until that daemon stops; a fresh fleet runs 50. It is sent from `connect`, on the verb's own
+  connection, because a daemon with no agents exits when its last client leaves
+  (`reconsiderEmptyExit`) - a cap sent on a connection of its own was lost to the fresh daemon the
+  verb then started. It is sent once per command: a reconnect does not re-send it, so it cannot put
+  back a cap another window changed since.
+- **Lowering it stops nothing**; the next spawn is refused until the count is under it, and the refusal
+  says `--max-agents` raises it. A wake is still exempt, as before.
+- **The manager may not set it**: it is the bound FrameSpawn's verdict rests on.
+- `wake status` says `N of M sessions running`.
+- **The manager's digest is sized for the ceiling**: `internal/mcp/rollup.go`'s `designFleet` is
+  `rpc.MaxAgentsCeiling` and its backstop 25 KiB, the worst arrangement of 50 agents (code review).
+- A `/resume` of an on-disk session is capped at `maySpawn` only; `admitLive` treats it like a wake,
+  so two resumes racing a full fleet can land one over. That predates this ruling and is unchanged.
+- Memory, measured: about 475 MB per `claude` process on the owner's machine, so 50 agents is roughly
+  24 GB. The tighter limit in practice is the account's usage window, not RAM.
+
+## 2026-10-21 — a narrowed room hides the manager's own lines (the owner)
+
+With the room narrowed to a lone `@name` or `@team`, the manager's prose and turn-ends no longer draw.
+The owner asked for the thread to be that agent's messages and those sent to and from it. The room-view
+filter spec (2026-08-27) had admitted the manager wholesale.
+
+- **What stays:** the agent's own lines, broadcasts (they reached it and explain its replies), the
+  operator's turns aimed at it, and every peer message it sent or received — the manager's `SendMessage`
+  to it included, since that line belongs to the receiver's thread (`l.ev.SessionID`). A manager's send
+  to anyone else is not in it.
+- **What goes:** an agent-produced line whose session is the manager's. `focusAdmits` lost its
+  `managerID` argument, and with it `Room.managerID`, `WithFocus`'s third parameter and `retarget`'s
+  lookup: nothing else read them.
+- **Your turns to the manager go with its replies.** A turn only the manager received is no agent's thread,
+  so the echo is stamped with the one session it reached (`sendRoom`: `@manager`, or the default
+  addressee) instead of `""`. A broadcast that reached several sessions stays `""`. The owner chose this
+  over leaving them as broadcasts; it reverses the room-view-filter spec's "`@manager` is a broadcast".
+- **A restore needs the send to say it was solo** (`rpc.MessageSolo`, minted when a send has one target).
+  `members` is only the records that came back, and the history read is dropped whole for a session that
+  spoke since the ask - the ordinary case for an active agent - so one record of an unmarked send may be a
+  broadcast's last survivor (Codex). An unmarked send stays unaddressed, which is also what a turn from
+  before the mark does. A broadcast that reached one lone agent is marked and addressed to it, live and
+  restored, so an agent spawned after it does not show a turn it never received.
+- **A DM opened on the manager seeds the turns it was sent** (`turnsFor`, as it already seeded its
+  replies). The turn it was sent and has not yet taken up shares a known flaw of a lone `@name`'s: see
+  `deferred.md`.
+- **The unfocused room, `⌃A` and `/groupchat-filter off` are unchanged** — the manager still draws there.
+
+## 2026-10-21 — a blank row sets each roster team off from the rows above it (the owner)
+
+The owner, reading the right-hand roster: the team dividers (`──── orchestrator ────`) sat directly under the
+previous section's last row, and there should be a one-line gap from the end of one team to the start of the next,
+the untagged top block included. The board's rows and tile shelves already put a blank above each divider
+(`teamHeaderBand`); the roster never had.
+
+- **The gap rides on the item, with the header** (`rosterItem.gap`, `lead()`): header and gap are both rows that
+  belong to no agent, and they are counted by the one function the window, the click and the draw all use
+  (`rowsForRow`/`rowLines`/`At`). A gap that was its own item would be the dangling-header bug again, and one counted
+  somewhere else would land every click below it a row off. `TestRowsForRowIsExactlyTheLinesRowLinesDraws` pins the
+  count to the drawn lines, and a sweep over every column height and cursor holds each drawn row to what a click on it
+  resolves to.
+- **No gap above a header with nothing above it** — a roster that opens on a team (no manager, no untagged agent)
+  opens on its divider, not on a blank. With no team the roster is the flat list it always was.
+- **A scrolled column that starts on a team's first agent opens on its blank.** The owner took the simple rule over
+  dropping it at the window's top (which would have made the window, the click and the draw each carry an exception).
+- **At a column too short for it, a team's first agent can go uncounted.** The blank makes that agent's block one row
+  taller, so a cursor on it at a pane height of about 3-5 rows can exceed the room and draw the count alone — the
+  existing "no whole block fits" fallback, which never understates the fleet. Noted by review; it follows the rule.
+- Roster only. The board is left as it was.
+
+## 2026-10-23 — the daemon resumes the agents an unreachable API stopped (the owner)
+
+BUG-55. A turn claude could not get answered - DNS, a refused or reset connection, a timeout, the machine
+asleep mid-response, an overload - ends after claude's own retries (ten, about three minutes) with
+`error:"server_error"` and no HTTP status on the stream. It was a timed notice and nothing more, so a dropped
+network stopped the fleet until the owner typed `continue` into each agent. The owner chose the event-driven
+triggers and every `server_error` over the two alternatives put to them: a backoff timer as a fallback, and
+connection failures only (which, with no status on the stream, would have meant matching claude's English).
+
+- **One stop, extended in place.** `core.NoticeAPIUnreachable` is a stop on the usage limit's `usageStop`
+  (`unreachable`), resumed by the same goroutine, queue and one-shot rules (`usagelimit.go`), never by a
+  login or a reset. It is resumed when **another agent's turn goes through after the stop** - any model
+  output, a subagent's too, recorded by `fanOut` (`apiAnswered`) - or when **the OS reports a network change
+  after it** (`netwatch_darwin.go`: the routing socket, an interface up with a link, an address gained, or a
+  gateway route added or changed, in kqueue; `netwatch_linux.go`: netlink, a link up, an address, or a
+  main-table default route; `_other.go`: none). A link counts because a wake from sleep can keep its address
+  and routes (Codex). Both are times - an event's as `fanOut` took it, a change's as the watch read it - set
+  against the stop's, so a trigger that lands while the agent is still finishing its turn is kept, and one
+  from before the stop never resumes it. An answer that lands while a pass runs wakes the goroutine again
+  (`armAnswers`). The watch is open only while the goroutine runs.
+- **The fail-again bound.** An agent stopped again by Wake's own resume, with no output of its own between
+  (`agent.unproven`), waits for a network change alone (`netOnly`); otherwise every turn another agent took
+  would resume it again, a "continue" every three minutes for as long as its own requests fail.
+- **Drawn as Wake's, saying why.** The resume carries `rpc.MessageReconnected` beside `MessageResumed`, so
+  provenance and restore are the usage limit's, and the UI draws `↻ … resumed after the connection came
+  back`. The failure is pinned (`stuckPin.format`) until a turn goes through, never marks for `/reauth`, and
+  never clears an earlier 401's mark: an API that did not answer proves nothing about the login.
+- **Measured on the owner's machine:** a connected Mac's routing socket carried only host routes and lookup
+  misses over five minutes, none of which the filter counts; a real kernel's netlink reported an address
+  added, a default route restored and a link brought back up (with addresses and routes ignored), and stayed
+  silent for a network route and a link going down (throwaway runs in a container with `NET_ADMIN`). Findings: `docs/superpowers/notes/2026-10-23-unreachable-api-findings.md`.
+- **Held by** the core decode test against the recording, the daemon units and the three e2e tests in
+  `unreachable_e2e_test.go`, both platforms' parser tables (Linux run in a container), the UI's
+  `apiunreachable_test.go`, and the pty `TestAnAgentTheAPIStoppedResumesWhenAnotherTurnGoesThrough`, each
+  mutation-checked.
+
+## 2026-10-24 — a roster team header picks a channel, the room's base (the owner)
+
+The owner's ask: the roster's team headers become selectable channels. Picking one titles the room with the team
+(`orchs` for `group chat`) and limits the room's base filter to the team's members until `all` or another team
+is picked; inside a channel the room works as it does today, a lone `@name` narrowing further (`orchs › @who`).
+It is not a second room: the filtered-view reading `deferred.md` (2026-08-27) reduced to teams plus the `@john`
+filter, picked from the sidebar instead of typed.
+
+- **One predicate, two keys.** `Room.admits` is `focusAdmits` over the channel's key and then over the effective
+  focus, so a channel is exactly a team's thread under PR #178's and #185's rules, a mention inside it is the
+  intersection, and `all` (an empty key) is the room as it always was. `roomFilter` is the comparable pair the
+  re-render and the selection clear key on.
+- **Its members are what the roster draws under the header**, parked ones included and ended ones out, and the key
+  follows them on every report (`rechanneled`, in the report chain before `retarget`). A lone `@team` keys its
+  live members only, because it is also a route; a channel whose members were all parked would otherwise key ""
+  and show everything under a lit header. A report that changes no member renders nothing; the same channel
+  with changed members keeps the reader's place (`refiltered`); a team left with no header returns the window
+  to all, with a timed notice. The re-render clears a room transcript selection, never a selection over the
+  frame - a roster click waiting on its release is one (Codex).
+- **The manager has a seat in every channel** (the owner, 2026-10-24; spec §12's seat in every group). Routing
+  does not change in a channel, so an unaddressed draft still goes to the manager, and under 2026-10-21's rule
+  your turn and its reply are the manager's thread: without the seat both vanished from the channel they were sent
+  from. The key carries the manager's id, so its prose draws in every channel too.
+- **`── all ──` is pinned at the sidebar's top**, above every agent, the manager included, and lit while it is the
+  channel - the default ("always … at the top … before any of the agents"). `Roster.Column` draws it over the
+  unchanged `Roster.View`, and `Roster.Hit` resolves its row and hands the rest to `At`, so the list keeps its one
+  count. The picked header is lit (accent rule and name); the cursor's is a bright bold name.
+- **Picked the way a row is**: `⇧↑↓` stop on the headers (`channelStops`, `all` first; a cursor on nothing still
+  lands on the first agent, and the board walks `walkable` alone), `↵` with an empty composer picks the cursored
+  one (`pickedHeader`, gated on the sidebar as `pickedAgent` is), and a click picks the one resolved at its press.
+  Picking moves the keys to the room, as picking an agent opens its conversation, and the fleet's focus with
+  them, as `⇥` does, so the conversation left behind counts unread again (Codex, code review); conversations
+  open as before and the channel stays. The header cursor is `Roster.Header`, never set beside `Selected`, so `⌃C` on one parks no
+  one and `⌃D`/`⌃Y`/`⌃B` keep the no-pick fallback (the top-ranked agent). No key is new.
+- **`⌃A` and `/groupchat-filter` are the mention's only**: `⌃A` widens a mention to the channel, never past it, and
+  is refused with no target; with the filter off a lone `@name` leaves the room at its channel.
+- **The working line is the channel's** (members and the manager's seat); a mention inside it still does not
+  narrow it, and under `all` it is the fleet's. **Unread is unchanged**: the badges are per agent, the roster shows
+  every agent, so a line a channel hides still badges its agent - the tell for activity outside it.
+- **Restore needs no path of its own**: `Before` renders through `admits`, so history lands already filtered, and
+  the gaps `deferred.md` names for a narrowed room (a re-keyed agent's stranded lines, a restored peer line keyed
+  to its receiver) hold in a channel as they do under `@team`.
+- **Per window and in memory**, as the composer's target is: a reattach opens on `all`.
+- **Held by** `roomchannel_test.go` (every kind of line against `focusAdmits`, the intersection, titles, the report
+  paths, the seat, restore), `rosterchannel_test.go` (the pinned row, the walk, a hit sweep against the drawn
+  column, the marks, `↵`, clicks, the cursor writers) and the pty `TestAChannelPickedInTheRosterFiltersTheRoom`,
+  each mutation-checked.
+
+## 2026-10-24 — `/wake-name` moves a running fleet's directory and leaves its old name as a link (the owner)
+
+The owner's ask: rename a running fleet from inside Wake. A fleet is its directory under
+`~/.wake/fleets` (fleet.go), so `wake --fleet <new>`, `wake fleets` and `wake status` can only know it by
+a new name if the directory has it. The ruling, on four choices put to the orchestrator:
+
+- **Move, and leave a link (A).** The daemon renames `fleets/<old>` to `fleets/<new>` and makes
+  `fleets/<old>` a relative link to `<new>`; a link that cannot be made undoes the move. Every process the
+  daemon started holds a path under the old name - each agent's `WAKE_SOCKET` (its `wake status`), the
+  manager's tools in `mcp.json`, claude's `--debug-file` - and through the link they all keep reaching the
+  same files: `connect()` follows a link, and a bound socket survives its directory's rename (darwin and
+  Linux, `fleetrename_test.go`). The other model - the directory never moves and the new name is a
+  permanent alias - keeps every old name reserved and aliased forever and makes `fleetsIn` learn which
+  entry is "the name".
+- **The daemon's own files stay on the path it started on.** Roster, park book, lock, log, `mcp.json` and
+  debug files are reached through the link; only what the fleet *answers to* moves (`fleetHome`): the
+  report's `Socket` and `Fleet`, and the manager's default claude name. Re-pointing every holder means
+  about ten readers of `s.socket` plus the listener's unlink-on-close, and still needs the link, since
+  agents hold the old path: the same lifetime for much more code.
+- **The link lives as long as that daemon (B).** Serve drops every old name that resolves to its directory
+  at exit, after the listener's close unlinks the socket through it and before the lock's release, so no
+  successor can yet own a name that resolves there (`dropForwards`; Codex's finding). Until then
+  `wake --fleet <old>` lands on the real name (`forwardedName`, so no daemon ever starts under an alias), a
+  bare `wake` never draws an old name (`nextFleetName` counts any entry), and `wake fleets` lists only
+  directories. A name that forwards to *this* fleet may be taken back (an undo), and a move that fails
+  after that puts its link back; one forwarding to another fleet is refused. One forwarding to nothing is
+  refused too and never removed by Wake - for the width of another rename's move it is that fleet's live
+  link - and the refusal names the path for the operator to clear.
+- **The unnamed fleet refuses (C).** Its files are `~/.wake` itself, beside `fleets/`, so there is no
+  directory of its own to move or link, and `default` is the word that reaches it. A `$WAKE_SOCKET` set by
+  hand outside `~/.wake/fleets` names no fleet and refuses too; one inside that layout is that fleet. A
+  daemon started under an old name moves the directory its link resolves to, never the link.
+- **No CLI verb (D).** The ask is from inside Wake, and every agent carries `WAKE_SOCKET`, so `wake rename`
+  would hand any agent a one-word way to rename the operator's fleet. `deferred.md` carries it. The
+  manager gets no tool either (`mcpguard_test.go`).
+- **The manager follows while it is the fleet's own.** `agent.followFleet` moves `claudeWant` from
+  `manager-<old>` to `manager-<new>` and nothing else: any other part is the operator's (2026-10-15) and
+  wins. A live manager is told with the one `/rename` any rename sends; a parked one only changes the name
+  it wakes under. A park now books a manager still under the fleet's own name under none (`recordOf`), so
+  it wakes under whatever the fleet is called then; the park book is never rewritten, because a record's
+  value is the generation `reserveExact`, `commit` and `isDurable` compare. The booking holds the rename's
+  lock, so the name and the fleet's default are read on one side of a rename, and `takeAgents` takes it too,
+  so a ⌃Q either waits for a rename and its follow or is seen by it and refused (Codex's findings).
+- **Seen in every window**: each report names the fleet (`rpc.Status.Fleet`), and a window whose report
+  names another fleet than the last says `fleet <old> is now <new> · wake --fleet <new> comes back to it`
+  (`ui/fleetname.go`), the asker included, and a window away at the time on its next report. Bare
+  `/wake-name` says the name.
+
+**Residuals, accepted:**
+- Between the move and the link there is a window of a few microseconds where the old path resolves to
+  nothing: a `wake status` from an agent inside it fails once, a `wake --fleet <old>` is refused, and a
+  write of the daemon's own (a park's booking) fails and is reported as unbooked. Taking back an old name
+  has the same window between removing its link and the move.
+- A crash leaves the link: the old name stays reserved and forwarding until the fleet's next clean exit.
+- A manager on a variant claude chose for its name (`manager-atlas-2` while another session held
+  `manager-atlas`) reads as an operator's part and does not follow; `/name manager` puts the fleet's back.
+- A manager parked by a build before this one is booked under the fleet's name explicitly, and wakes under
+  the old one after a rename, as does a manager whose launch was in flight at the moment of it.
+- A link deleted by hand while the daemon runs breaks its file writes and its agents' `wake status`, as
+  deleting the directory would.
+- A `wake --fleet <old>` that lands in the move's window makes a fresh directory at the old name. Empty, the
+  undo replaces it and the fleet stays where it was; filled before the link is made (a daemon forked there),
+  the undo fails, the fleet stays at the new name, the daemon answers to it and says so, and processes
+  holding the old path reach that other directory.
+- A process an agent started in the background can outlive the daemon with the old `WAKE_SOCKET`; its
+  `wake status` after the exit makes an empty `fleets/<old>` (`FleetSocketPath` creates a socket's
+  directory, BUG-21's shape), which `wake fleets` then lists as a stopped fleet.
+- On a case-insensitive disk a rename that only changes case is refused as the fleet's own name.
+
+**Held by** `internal/daemon/fleetrename_test.go` (the move, refusals, undo, forwarding, the bare-`wake`
+draw, the exit, the report's name, the manager, over a real socket, and with a scripted claude process),
+`internal/ui/fleetname_test.go`, and the pty `TestWakeNameRenamesTheFleetOnARealScreen`.
 
 ## 2026-10-21 — a signal parks the fleet, and a crash is handed to the park book (the owner)
 

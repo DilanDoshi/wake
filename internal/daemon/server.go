@@ -11,8 +11,8 @@ import (
 	"fmt"
 	"net"
 	"os"
-	"slices"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -89,6 +89,7 @@ type server struct {
 	teamOrder []string
 	peers     peerBook   // the /list-agents run in flight and its askers; its own lock
 	limits    limitWatch // resuming agents a usage limit stopped; its own lock
+	home      fleetHome  // what the fleet answers to after a /wake-name: fleetrename.go
 
 	// taken is set by takeAgents when shutdown snapshots the fleet. An agent
 	// admitted after that snapshot enters a map nothing reads again - its
@@ -104,6 +105,9 @@ type server struct {
 	// and admitRefusal read the book); nothing that holds any of those ever
 	// takes admitMu, so the order cannot reverse.
 	admitMu sync.Mutex
+
+	// maxAgents is this fleet's cap: liveCap until the operator sets one.
+	maxAgents atomic.Int64
 
 	// reportMu holds a status report's build and its enqueue together, so every
 	// client's queue carries reports in the order they were built. Apart, two
@@ -137,7 +141,7 @@ type server struct {
 }
 
 func newServer(socket string) *server {
-	return &server{
+	s := &server{
 		socket:     socket,
 		roster:     newRosterFile(rosterPath(socket)),
 		parked:     newParkBook(parkBookPath(socket)),
@@ -150,6 +154,8 @@ func newServer(socket string) *server {
 		done:       make(chan struct{}),
 		limits:     limitWatch{nudge: make(chan struct{}, 1)},
 	}
+	s.maxAgents.Store(int64(liveCap))
+	return s
 }
 
 // start runs f on a tracked goroutine. Everything this package spawns goes
@@ -454,6 +460,9 @@ func waitFor(wg *sync.WaitGroup, d time.Duration) bool {
 // takeAgents empties the map and returns what was in it, so shutdown works on
 // a stable set with no lock held.
 func (s *server) takeAgents() []*agent {
+	// After a rename in flight, and before s.mu: moveFleetTo's order (fleetrename.go).
+	s.home.moving.Lock()
+	defer s.home.moving.Unlock()
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	// In the same locked step as the snapshot: a register that runs after this
@@ -664,6 +673,10 @@ func (s *server) dispatch(ctx context.Context, c *client, f rpc.Frame) {
 		s.beginQuit(quitStop)
 	case rpc.FrameParkAll:
 		s.beginQuit(quitPark)
+	case rpc.FrameSetMaxAgents:
+		s.setMaxAgents(c, f)
+	case rpc.FrameRenameFleet:
+		s.renameFleet(c, f)
 	case rpc.FrameStatus:
 		s.replyStatus(c)
 	case rpc.FramePeers:
@@ -748,46 +761,4 @@ func (s *server) broadcast(f rpc.Frame) {
 
 func errorFrame(sessionID, text string) rpc.Frame {
 	return rpc.Frame{Kind: rpc.FrameError, SessionID: sessionID, Text: text}
-}
-
-// recentEndings is how many endings a status report carries after the fact.
-// Enough that a client which blinked during a fleet-wide stop can still
-// account for every session, small enough to be a courtesy rather than a log.
-const recentEndings = 32
-
-// rememberLocked records an ending. The caller holds s.mu, and that is the
-// contract for the same reason forgetLocked's is: leaving s.agents and
-// entering s.recent have to be one step, or the two are briefly both false and
-// a status reply reports a session that is neither running nor ended. See
-// retire.
-func (s *server) rememberLocked(ended rpc.SessionStatus) {
-	s.recent = appendRecent(s.recent, ended)
-}
-
-// forgetLocked drops any ending for an id, so a respawned session is not
-// reported twice - once alive and once dead - in the same status.
-//
-// The caller holds s.mu, and that is the contract rather than a convenience:
-// forgetting the ending and taking the id have to be one step, or a retire
-// landing between them reinstates the ending the spawn just cleared. See
-// register.
-func (s *server) forgetLocked(id string) {
-	s.recent = slices.DeleteFunc(s.recent, func(r rpc.SessionStatus) bool { return r.ID == id })
-}
-
-// appendRecent adds an ending, replacing any earlier one for the same session
-// and dropping the oldest once the bound is reached. It returns a new slice
-// rather than editing in place.
-func appendRecent(recent []rpc.SessionStatus, ended rpc.SessionStatus) []rpc.SessionStatus {
-	out := make([]rpc.SessionStatus, 0, len(recent)+1)
-	for _, r := range recent {
-		if r.ID != ended.ID {
-			out = append(out, r)
-		}
-	}
-	out = append(out, ended)
-	if len(out) > recentEndings {
-		out = out[len(out)-recentEndings:]
-	}
-	return out
 }

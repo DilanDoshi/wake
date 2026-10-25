@@ -1243,6 +1243,55 @@ budget and fallback, and two managers that never had a turn, so had no transcrip
 
 ---
 
+## BUG-54 — ↑ while typing a question's own answer put the last prompt in the box
+
+**Found 2026-10-21 by the owner.** With a question card up, they picked `Other…`, started typing an
+answer, and pressed ↑ to go back to the options. The box filled with the previous prompt instead, and the
+option cursor did not move.
+
+**Cause.** Answer mode (`cardanswer.go`) gave every key but ↵ to the composer, so on a one-line draft ↑
+reached `App.key`'s prompt history (`prompts.go`) and replaced the answer. The refusal's reason box (`d`)
+had the same hole, and that reason reaches the model verbatim.
+
+**Fix:** branch `fix/answer-mode-arrows-move-options`. A bare ↑↓ that would walk the history leaves `Other…`
+for the option above or below, with the words kept in that row, as Claude Code keeps them. Choosing the row
+again puts them back in the box. In the refusal's box the arrow does nothing. A multi-line draft keeps its
+line keys, an open completion menu its walk, and ⌥↑↓ stay the history's.
+
+## BUG-55 — an agent the network dropped mid-turn stayed stopped after the network came back
+
+**Found 2026-10-22 by the owner**: disconnecting the network stopped every working agent, and none carried
+on when it came back. Their transcripts showed it was routine: 89 failed turns in 54 sessions over 30
+days, each followed by nothing until the owner typed `continue` by hand (one batch sat 1 h 36 min).
+
+**Cause.** claude retries a request it cannot get answered for about three minutes, then ends the turn
+with a synthetic frame whose `error` is `server_error` (`testdata/stream/api-error-unreachable.jsonl`).
+`apiNotice` read that as `core.NoticeTurnFailed`, the "next send retries it" kind, so the UI showed a
+timed notice and nothing ever sent the next message. The process stayed alive and idle.
+
+**Fix:** branch `fix/network-loss-resume`. `server_error` is `core.NoticeAPIUnreachable`, and the
+daemon's usage-limit resume carries it (owner's ruling, `decisions.md` 2026-10-23): one `continue` once
+another agent's turn goes through after the stop, or the OS reports a network change after it.
+
+---
+
+## BUG-56 — `↵` over the menu sent a question's own answer, and `esc` threw its words away
+
+**Found 2026-10-23 by the owner**, on one question card, two ways. Typing an answer in `Other…`, an `@` menu
+came up with `↵ complete` on its key line, and `↵` sent the half-typed answer instead of taking the offer. And
+after typing an answer, stepping to another question and coming back, `Other…` opened an empty box.
+
+**Cause.** Answer mode (`cardkeys.go`) took every `↵` for `commitAnswer` before `enterCompletes` was asked, so
+the menu offered a key the box would not honour; the refusal's reason box (`d`) had the same hole, and that
+reason reaches the model verbatim. And `esc`, which the card names "back to the options", dropped the words
+(`cancelAnswer`), where ↑↓ kept them since BUG-54. `←→` are the box's own cursor while it holds a draft, so `esc`
+is the key a typed answer is left by on the way to another question.
+
+**Fix:** branch `fix/answer-mode-completion-enter-and-kept-draft`. `↵` over an open menu completes the word
+(a word typed in full still sends). `esc` keeps the words as the `Other…` answer, as ↑↓ do, and an emptied box
+takes a kept answer away; on a multi-select question the cursor lands on the walk-on row, so a second `↵` walks
+on rather than unticking the words. The refusal's reason belongs to no question, so `esc` there still drops it.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

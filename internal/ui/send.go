@@ -130,6 +130,11 @@ func (a App) submit(now bool) (tea.Model, tea.Cmd) {
 	if strings.TrimSpace(text) == "" {
 		return a, nil
 	}
+	// Every send of a draft passes here, so a draft a card's page has scrolled out
+	// of view is brought back and not sent: the next ↵ is the one that sends.
+	if a.boxAway(a.focus) {
+		return a.pageHome(a.focus), nil
+	}
 	// A bang is a local command, not a message, and it is asked before
 	// anything else: `!ls` is addressed to nobody, and a session that has
 	// ended is still a session somebody wants to run `!git status` in.
@@ -287,10 +292,15 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	// their markers.
 	//
 	// The echo is stamped with the thread a lone direct @name or @team
-	// addressed, so the view filter can tell it from a broadcast and from a turn
-	// aimed elsewhere. Open mode, @all, @manager and an unaddressed draft are all
+	// addressed, or else the one session it reached (the manager, by @manager or
+	// as the default addressee), so the view filter can tell it from a broadcast
+	// and from a turn aimed elsewhere. Open mode and @all to several agents are
 	// broadcasts (to == "") - open mode widens the message, not the view.
-	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, r.thread()))
+	to := r.thread()
+	if to == "" && len(r.Targets) == 1 {
+		to = r.Targets[0]
+	}
+	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
 	return a, tea.Sequence(mirror, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
 }
 
@@ -331,10 +341,14 @@ func (a App) roomSends(r roomRoute, text string, images []core.ImageBlock, now b
 	var frames []rpc.Frame
 	var mirrorNow tea.Cmd
 	// One send for every target, so the restore can draw it once; marked direct
-	// (a lone @name) or a team's, which is what a restore addresses a turn by.
+	// (a lone @name), a team's or solo (one session), which is what a restore
+	// addresses a turn by.
 	send := newRoomSend(r.mentioned && r.mode == MentionDirect && len(r.Targets) > 0)
 	if r.Team != "" {
 		send = send.ForTeam()
+	}
+	if len(r.Targets) == 1 {
+		send = send.ForSolo()
 	}
 	for _, id := range r.Targets {
 		msg := newQueued(send.ID(), r.Text, text, images, true)
@@ -386,13 +400,9 @@ func (a App) clearDraft() App {
 // Only the room's. A DM has one recipient and its header names them.
 func (a App) retarget() App {
 	draft := a.room.Composer().Value()
-	prev := a.room.effectiveFocus()
-	managerID := ""
-	if m, ok := a.fleet.manager(); ok {
-		managerID = m.ID
-	}
+	prev := a.room.filter()
 	if strings.TrimSpace(draft) == "" {
-		a.room = a.room.WithComposer(a.room.Composer().WithTarget(roomRoute{}, 0)).WithFocus("", "", managerID)
+		a.room = a.room.WithComposer(a.room.Composer().WithTarget(roomRoute{}, 0)).WithFocus("", "")
 		return a.withRoomBar().clearedSelOnFocusChange(prev)
 	}
 	// Routed on the chip-stripped text so the preview matches sendRoom: a leading
@@ -412,7 +422,7 @@ func (a App) retarget() App {
 		}
 		focusName = ag.Name
 	}
-	a.room = a.room.WithFocus(focusID, focusName, managerID)
+	a.room = a.room.WithFocus(focusID, focusName)
 	return a.withRoomBar().clearedSelOnFocusChange(prev)
 }
 
@@ -434,16 +444,17 @@ func (a App) withRoomBar() App {
 	return a
 }
 
-// clearedSelOnFocusChange drops the room's text selection when the effective
-// focus changed, because the re-render renumbered the lines it is anchored to -
-// a width change's own rule (CLAUDE.md). It keys on effectiveFocus rather than
-// the raw target so a ⌃A override (which re-renders without changing the target)
-// clears it too, and a target that resolves under a filter that is off (no
-// re-render) does not. Scoped to the room's own selection (pane == ""): a focus
-// change re-renders only the room, so a selection held in a DM pane is untouched,
-// unlike a width change which re-wraps every pane.
-func (a App) clearedSelOnFocusChange(prevEff string) App {
-	if a.room.effectiveFocus() != prevEff && a.sel.pane == "" {
+// clearedSelOnFocusChange drops the room's text selection when the room's
+// filter changed, because the re-render renumbered the lines it is anchored to -
+// a width change's own rule (CLAUDE.md). It keys on the filter (the channel and
+// effectiveFocus) rather than the raw target so a ⌃A override (which re-renders
+// without changing the target) clears it too, and a target that resolves under a
+// filter that is off (no re-render) does not. Scoped to the room's own selection
+// (pane == ""): a focus change re-renders only the room, so a selection held in a
+// DM pane is untouched, unlike a width change which re-wraps every pane - and so
+// is one over the frame, a roster click waiting on its release among them.
+func (a App) clearedSelOnFocusChange(prev roomFilter) App {
+	if a.room.filter() != prev && a.sel.pane == "" && !a.sel.onScreen {
 		a.sel, a.selecting = selection{}, false
 	}
 	return a

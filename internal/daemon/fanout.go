@@ -23,6 +23,7 @@ import (
 func (s *server) fanOut(a *agent) {
 	defer s.retire(a)
 	for ev := range a.sess.Events() {
+		now := time.Now() // as the event arrived: a stop's time, or an answer's
 		// Claude's own name, off every /rename reply - the operator's or a
 		// probe's - before a probe's is swallowed below.
 		a.noteRenamed(ev)
@@ -46,8 +47,11 @@ func (s *server) fanOut(a *agent) {
 		}
 		// Before the broadcast, so the resume is armed by the time a client
 		// draws the limit; a turn end on a stopped agent may free it to resume.
-		if a.noteLimit(ev, time.Now()) || (ev.Kind == core.KindTurnEnd && a.usageStopped()) {
+		if a.noteLimit(ev, now) || (ev.Kind == core.KindTurnEnd && a.usageStopped()) {
 			s.limitHit()
+		}
+		if ev.ModelOutput() {
+			s.apiAnswered(now) // any agent's, a subagent's too: the API answers
 		}
 		// One Event, one pointer, shared by every client's copy of the
 		// frame. Nothing mutates an Event after the airlock decodes it, and

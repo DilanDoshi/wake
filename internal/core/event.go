@@ -711,16 +711,18 @@ type Event struct {
 	Session *SessionFacts `json:"session,omitempty"`
 }
 
-// apiNotice tells a failed turn by what recovers it: a usage limit its reset, a
-// dead login a new process, any other named kind the next send. A kind missing
-// or not a string names nothing, and reads as a login's - as every failed turn
-// did before kinds were told apart.
+// apiNotice tells a failed turn by what recovers it: a usage limit its reset, an
+// unreachable API the connection, a dead login a new process, any other named
+// kind the next send. A kind missing or not a string names nothing, and reads as
+// a login's - as every failed turn did before kinds were told apart.
 func (f wireFrame) apiNotice() Notice {
 	kind := jsonString(f.APIErrorKind)
 	named := firstJSONByte(f.APIErrorKind) == '"' && kind != ""
 	switch {
 	case kind == errorKindUsageLimit:
 		return NoticeUsageLimit
+	case kind == errorKindUnreachable:
+		return NoticeAPIUnreachable
 	case named && kind != errorKindAuth:
 		return NoticeTurnFailed
 	}

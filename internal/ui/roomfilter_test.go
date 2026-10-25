@@ -22,11 +22,11 @@ func frameText(id, text string) rpc.Frame {
 // keeping the resolved target either way - the override is a view choice, not a
 // change of who the composer is addressing.
 func TestToggleNarrowWidensAndReNarrows(t *testing.T) {
-	const john, iris, mgr = "john-id", "iris-id", "mgr-id"
+	const john, iris = "john-id", "iris-id"
 	r := NewRoom().SetSize(80, 24)
 	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: john, Text: "john green"}, Agent{ID: john, Name: "john"})
 	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: iris, Text: "iris building"}, Agent{ID: iris, Name: "iris"})
-	r = r.WithFocus(john, "john", mgr)
+	r = r.WithFocus(john, "john")
 
 	if got := r.effectiveFocus(); got != john {
 		t.Fatalf("default-on WithFocus did not narrow: effectiveFocus = %q, want %q", got, john)
@@ -58,12 +58,12 @@ func TestToggleNarrowWidensAndReNarrows(t *testing.T) {
 // With the default off, resolving a lone @name records the target but does not
 // narrow; ⌃A narrows on demand. The key is symmetric under both defaults.
 func TestNarrowDefaultOffDoesNotNarrowUntilToggled(t *testing.T) {
-	const john, iris, mgr = "john-id", "iris-id", "mgr-id"
+	const john, iris = "john-id", "iris-id"
 	r := NewRoom().SetSize(80, 24).WithNarrowDefault(false)
 	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: john, Text: "john green"}, Agent{ID: john, Name: "john"})
 	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: iris, Text: "iris building"}, Agent{ID: iris, Name: "iris"})
 
-	r = r.WithFocus(john, "john", mgr)
+	r = r.WithFocus(john, "john")
 	if got := r.effectiveFocus(); got != "" {
 		t.Fatalf("default-off WithFocus narrowed anyway: effectiveFocus = %q, want empty", got)
 	}
@@ -150,17 +150,17 @@ func TestCtrlAOverrideSurvivesTypingAndClears(t *testing.T) {
 // where WithFocus is driven directly rather than through the composer's
 // append-only draft.
 func TestOverrideResetsOnNewTarget(t *testing.T) {
-	const john, iris, mgr = "john-id", "iris-id", "mgr-id"
-	r := NewRoom().SetSize(80, 24).WithFocus(john, "john", mgr) // narrowed (default on)
-	r = r.ToggleNarrow()                                        // ⌃A widened; override live
+	const john, iris = "john-id", "iris-id"
+	r := NewRoom().SetSize(80, 24).WithFocus(john, "john") // narrowed (default on)
+	r = r.ToggleNarrow()                                   // ⌃A widened; override live
 	if r.effectiveFocus() != "" {
 		t.Fatalf("precondition: ToggleNarrow did not widen (effectiveFocus=%q)", r.effectiveFocus())
 	}
-	r = r.WithFocus(john, "john", mgr) // same target: override survives
+	r = r.WithFocus(john, "john") // same target: override survives
 	if r.effectiveFocus() != "" {
 		t.Fatalf("override did not survive the same target: effectiveFocus=%q", r.effectiveFocus())
 	}
-	r = r.WithFocus(iris, "iris", mgr) // new target: reset to the default (on)
+	r = r.WithFocus(iris, "iris") // new target: reset to the default (on)
 	if r.effectiveFocus() != iris {
 		t.Fatalf("a new target did not reset the override: effectiveFocus=%q, want %q", r.effectiveFocus(), iris)
 	}

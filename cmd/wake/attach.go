@@ -581,6 +581,10 @@ func connect(socket string, out io.Writer) (net.Conn, ui.Stream, error) {
 			_ = conn.Close()
 			return nil, ui.Stream{}, err
 		case attached:
+			if err := sendMaxAgents(conn); err != nil {
+				_ = conn.Close()
+				return nil, ui.Stream{}, err
+			}
 			return conn, ui.Stream{Frames: frames, Errs: errs}, nil
 		}
 

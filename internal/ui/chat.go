@@ -125,14 +125,12 @@ type Room struct {
 	beat string
 
 	// focus narrows the transcript to one thread, an agent's or a team's (the
-	// key joinIDs makes of its members); "" is the unfocused room. managerID and
-	// focusName ride with it - the predicate needs the manager's id, the header
-	// needs the focused agent's or team's name. Persistent, not draw-only: every
-	// render path (a width re-wrap, a history merge) must apply the same filter,
-	// and a hidden line stays in said at rows == 0. See roomfocus.go and
-	// WithFocus.
+	// key joinIDs makes of its members); "" is the unfocused room. focusName
+	// rides with it - the header needs the focused agent's or team's name.
+	// Persistent, not draw-only: every render path (a width re-wrap, a history
+	// merge) must apply the same filter, and a hidden line stays in said at
+	// rows == 0. See roomfocus.go and WithFocus.
 	focus     string
-	managerID string
 	focusName string
 
 	// narrowed is whether the room is currently narrowing to focus, and
@@ -143,6 +141,10 @@ type Room struct {
 	// flips it. See roomfilter.go.
 	narrowed      bool
 	narrowDefault bool
+
+	// channel is the team picked in the roster, "" for all, and channelKey its
+	// thread: the room's base, which a focus narrows within. See roomchannel.go.
+	channel, channelKey string
 
 	// menu is everything pinned between the transcript and the composer - the
 	// picker and the completion menu (App.menuBlock; a DM's carries its card too,
@@ -291,12 +293,7 @@ func (r Room) SetSize(w, h int) Room {
 // is joinIDs of its members - or widens it when focus is "". A focus change
 // re-renders the filtered subset and jumps to bottom - a width change's own
 // semantics (SetSize sets following=true), and the natural read when you enter
-// a focus. managerID and focusName ride on the struct for the predicate and the
-// header to read, but a change in managerID *alone* does not re-render: while
-// unfocused it changes nothing on screen, and at a manager start there are no
-// past manager lines to reveal - the manager's own lines arrive later through
-// Append with the id already updated here. So a fleet report that starts the
-// manager never yanks a scrolled reader to the bottom.
+// a focus. focusName rides on the struct for the header to read.
 //
 // The target is who the draft names (focusName) over a thread that still shares
 // an agent with the last one, not who is on the thread: a team gaining or losing
@@ -306,10 +303,9 @@ func (r Room) SetSize(w, h int) Room {
 // The caller clears any text selection on a focus change (App.retarget), because
 // the re-render renumbers the lines a selection is anchored to - the reason a
 // width change clears it too.
-func (r Room) WithFocus(focus, focusName, managerID string) Room {
+func (r Room) WithFocus(focus, focusName string) Room {
 	old := r
 	r.focusName = focusName
-	r.managerID = managerID
 	sameTarget := focusName == old.focusName && sharesAgent(focus, old.focus)
 	if r.focus != focus {
 		// A new target resets the ⌃A override: narrowing starts at the default
@@ -323,7 +319,7 @@ func (r Room) WithFocus(focus, focusName, managerID string) Room {
 	if sameTarget && r.effectiveFocus() != old.effectiveFocus() {
 		return r.refiltered(old)
 	}
-	return r.rerenderOnFocusChange(old.effectiveFocus())
+	return r.rerenderOnFocusChange(old.filter())
 }
 
 // Append draws one event, attributed to the agent that produced it.
@@ -356,8 +352,7 @@ func (r Room) appendLine(line roomLine) Room {
 	// is skipped, not done and dropped. A shown line renders as before; the
 	// empty-block guard stays on that path (fold pre-drops blanks, so it is
 	// defensive) and runs before an id is spent.
-	eff := r.effectiveFocus()
-	hidden := eff != "" && !focusAdmits(line, eff, r.managerID)
+	hidden := !r.admits(line)
 	var b block
 	if !hidden {
 		// A new event carries no per-line open of its own, but expandAll is a
@@ -634,11 +629,11 @@ func (r Room) View(width, height int) string {
 	if menu := firstRows(r.menu, r.menuRows()); menu != "" {
 		rows = append(rows, menu)
 	}
-	// The pane names the focused agent so the narrowing is discoverable; the
-	// composer's own target line is the secondary tell.
-	title := roomTitle
+	// The pane names its channel and the focused agent so the narrowing is
+	// discoverable; the composer's own target line is the secondary tell.
+	title := cmp.Or(r.channel, roomTitle)
 	if r.effectiveFocus() != "" && r.focusName != "" {
-		title = roomTitle + " › @" + r.focusName
+		title += " › @" + r.focusName
 	}
 	comp := r.composer.WithBar(r.bar).WithTitle(cmp.Or(r.writing, title)).View(w)
 	comp = highlightComposerBlock(comp, r.csel, composerTextLeft, w-composerRightInset)
@@ -776,13 +771,12 @@ func (r Room) renderAll(lines []roomLine) []block {
 		banner.laidOut = blockLines(banner, true)
 		blocks = append(blocks, banner)
 	}
-	eff := r.effectiveFocus()
 	for i := range lines {
 		lines[i].rows = 0
 		// A line the current focus hides keeps rows == 0 and contributes no
 		// block, so the geometry (which sums rows) needs no notion of "shown vs
 		// exists" - and its glamour render is skipped, not rendered then dropped.
-		if eff != "" && !focusAdmits(lines[i], eff, r.managerID) {
+		if !r.admits(lines[i]) {
 			continue
 		}
 		b := renderRoomBlock(lines[i].ev, lines[i].by, lines[i].recipient, r.blockWidth(), r.expandAll || r.expanded[lines[i].id])

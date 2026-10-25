@@ -149,6 +149,11 @@ const (
 	// cannot see.
 	cardKeysPaused = "keys return when the draft is sent or cleared"
 
+	// cardKeysCut replaces it while part of the card is off screen, for the
+	// same reason: the pane's page scrolls, and a key line advertising keys that
+	// are not read would be the legend rule broken again.
+	cardKeysCut = "keys return when the whole card is on screen"
+
 	// cardDot separates the clauses of a key line. The composer spells a route
 	// and its price the same way.
 	cardDot = "  ·  "
@@ -219,6 +224,23 @@ var planBody = func(plan string, width int) string {
 // because there is nothing behind it - one agent is blocked on one ask at a
 // time on this surface, and the fleet's others are on their own panes.
 func (cs Cards) View(card Card, width int, by Agent, typing bool) string {
+	return cs.draw(card, width, by, func(inner int) string { return cs.keyLine(card, inner, typing) })
+}
+
+// ViewCut is View for a card the pane does not hold whole: its keys are not read,
+// so the key line says when they return - unless an answer is being written,
+// which is read whether or not the card is all on screen, or a draft is what
+// pauses them, which is the reason to give first.
+func (cs Cards) ViewCut(card Card, width int, by Agent, typing bool) string {
+	if _, writing := cs.writingFor(card); writing || typing {
+		return cs.View(card, width, by, typing)
+	}
+	return cs.draw(card, width, by, func(int) string { return cardKeysCut })
+}
+
+// draw frames the card's body under its headline, with the key line keys makes for
+// the room inside the frame.
+func (cs Cards) draw(card Card, width int, by Agent, keys func(inner int) string) string {
 	w := max(width, minBlockWidth)
 	// The body is laid out for the room *inside* the frame, which is narrower
 	// than the pane by the border and its padding. Sized here rather than
@@ -229,7 +251,7 @@ func (cs Cards) View(card Card, width int, by Agent, typing bool) string {
 	parts := []string{cs.body(card, inner)}
 	return titledBox(joinBlock(parts...), w, cardBoxStyle,
 		cardLead+speaker(by)+markerSep+card.headline(),
-		cs.keyLine(card, inner, typing),
+		keys(inner),
 		warnStyle, HintStyle)
 }
 
@@ -667,9 +689,9 @@ func (c Card) canExpandDetail() bool {
 // truncated line, or - once ⌃E has expanded it - the whole thing wrapped. The
 // slot sits below every option, so opening it grows the card downward without
 // moving the choices above it. Expanded is unbounded on purpose: ⌃E is the
-// operator asking to read all of it, and the card does not scroll, so a
-// description too long for the pane is clipped from the bottom like any menu
-// (DM.menuRows) and a second ⌃E collapses it back to answer.
+// operator asking to read all of it, and a description too long for the pane
+// is reached by scrolling the page (pagescroll.go); a second ⌃E collapses it
+// back to answer.
 func (c Card) detailSlot(q core.Question, width int) string {
 	if !c.DetailExpanded {
 		return detailRow(c.optionDetail(q), width)

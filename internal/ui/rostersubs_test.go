@@ -217,7 +217,8 @@ func TestTheCursorWalksIntoASubagentRowAndBackOut(t *testing.T) {
 func TestAClickLandsOnTheSubagentRowUnderThePointer(t *testing.T) {
 	agents, subs := alexWith(running("toolu_1", "code-reviewer", 0))
 
-	agent, dispatch, ok := Roster{}.At(agents, subs, rosterWidth, 10, 1)
+	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 1)
+	agent, dispatch := spot.agent, spot.dispatch
 	if !ok {
 		t.Fatal("the row under the pointer resolved to nothing")
 	}
@@ -234,7 +235,8 @@ func TestAClickLandsOnTheSubagentRowUnderThePointer(t *testing.T) {
 func TestAClickOnTheAgentsOwnRowNamesNoDispatch(t *testing.T) {
 	agents, subs := alexWith(running("toolu_1", "code-reviewer", 0))
 
-	agent, dispatch, ok := Roster{}.At(agents, subs, rosterWidth, 10, 0)
+	spot, ok := Roster{}.At(agents, subs, rosterWidth, 10, 0)
+	agent, dispatch := spot.agent, spot.dispatch
 	if !ok || agent.ID != "s1" {
 		t.Fatalf("the agent's row resolved to %+v, %v", agent, ok)
 	}
@@ -496,14 +498,15 @@ func TestADispatchFinishingUnderTheCursorLeavesItOnItsAgent(t *testing.T) {
 	gone := subsFrom(map[string][]Task{"s1": nil})
 	stale := Roster{Selected: "s1", SelectedTask: "toolu_1"}
 
-	if got := stale.Move(agents, gone, 1); got.Selected != "s1" && got.Selected != "s0" {
-		t.Fatalf("the cursor went to %+v, which is neither its agent nor a neighbour", got)
-	}
 	if got := stale.Move(agents, gone, 0); got.Selected != "s1" || got.SelectedTask != "" {
 		t.Errorf("standing still landed on %+v, want alex's own row", got)
 	}
-	if got := stale.Move(agents, gone, 1); got.Selected != "s0" {
-		t.Errorf("one step down landed on %+v, want the row after alex's - not a reset to the top", got)
+	if got := stale.Move(agents, gone, -1); got.Selected != "s0" {
+		t.Errorf("one step up landed on %+v, want the row above alex's - not a reset to the top", got)
+	}
+	// alex is the last row, so the row after it is the pinned all the walk wraps to.
+	if got := stale.Move(agents, gone, 1); got != (Roster{Header: core.BroadcastName}) {
+		t.Errorf("one step down landed on %+v, want all", got)
 	}
 }
 

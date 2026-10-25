@@ -159,7 +159,7 @@ func TestTheResumePickerFitsUnderACard(t *testing.T) {
 			got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyDown})
 		}
 		w, h, _ := got.focusedPane()
-		if got.menuRoom("s2", w, h)-lipgloss.Height(got.cardBlock("s2", w)) < 1 {
+		if got.menuRoom("s2", w, h)-lipgloss.Height(got.cardBlock("s2", w, false)) < 1 {
 			continue
 		}
 		checked++
@@ -167,7 +167,7 @@ func TestTheResumePickerFitsUnderACard(t *testing.T) {
 		if !strings.Contains(frame, "› session 5") {
 			t.Errorf("at %d rows under a card the cursored session is not drawn:\n%s", height, frame)
 		}
-		if got.menuRoom("s2", w, h)-lipgloss.Height(got.cardBlock("s2", w)) >= resumeFrameRows+2 && !strings.Contains(frame, "╰─ ↑↓ move") {
+		if got.menuRoom("s2", w, h)-lipgloss.Height(got.cardBlock("s2", w, false)) >= resumeFrameRows+2 && !strings.Contains(frame, "╰─ ↑↓ move") {
 			t.Errorf("at %d rows under a card the picker was clipped:\n%s", height, frame)
 		}
 	}

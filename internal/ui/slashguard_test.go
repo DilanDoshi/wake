@@ -107,7 +107,7 @@ func TestWakeOwnsNoCommandClaudeAlsoHas(t *testing.T) {
 	// decisions.md's rule for one of those is that it carries a count, so a
 	// command cannot be added without the passthrough guard being looked at. Named
 	// for its half of the overload: commandCount is how many goroutines a Cmd costs.
-	const wakeCommandCount = 17
+	const wakeCommandCount = 18
 	if len(commands) != wakeCommandCount {
 		t.Fatalf("Wake owns %d slash commands and wakeCommandCount says %d: a command added without "+
 			"looking at the passthrough list is one that may already work for the agent", len(commands), wakeCommandCount)

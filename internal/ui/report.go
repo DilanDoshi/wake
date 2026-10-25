@@ -39,7 +39,8 @@ func (a App) applyStatus(st *rpc.Status) App {
 	}
 	prev := a.fleet
 	a.fleet = a.fleet.WithStatus(st)
-	a.daemonBuild = buildOf(st)
+	a.daemon.build = buildOf(st)
+	a = a.withFleetName(st)
 	// The State backstop for the queue: a working→idle edge on this report frees an
 	// agent whose in-flight message's completed lifecycle was lost to a gap. Per
 	// report, so an edge inside one batch is not collapsed. See queue.go.
@@ -56,7 +57,14 @@ func (a App) applyStatus(st *rpc.Status) App {
 	// picker over. See rewind.go's reconcileRewind, and the adversarial
 	// review CRITICAL finding it closes, 2026-08-26.
 	a = a.reconcileRewind().reconciledMCP()
-	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().retarget().recompleted()
+	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().rechanneled().retarget().recompleted()
+}
+
+// daemonFacts is what the last report said about the daemon itself rather than
+// its sessions.
+type daemonFacts struct {
+	build string // its build; see wakeBuilds
+	fleet string // the fleet it serves; see fleetname.go
 }
 
 // buildOf is the daemon's build a seed or a report names; a nil seed - wait

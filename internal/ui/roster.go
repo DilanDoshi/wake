@@ -31,6 +31,7 @@ package ui
 // three of the column's rows and the agents below it fall off the bottom.
 
 import (
+	"slices"
 	"strconv"
 	"strings"
 
@@ -99,6 +100,14 @@ type Roster struct {
 	// would have made all three of those keys ask a question with no answer, on
 	// the surface an operator stops a runaway agent from.
 	SelectedTask string
+
+	// Header is the channel header the cursor is on - core.BroadcastName for the
+	// pinned all, else a team - and "" on an agent. Never set beside Selected, so
+	// every key that reads Selected finds no agent on a header.
+	Header string
+
+	// channel is the picked channel ("" for all), set by Column for the draw.
+	channel string
 }
 
 // View draws one row per agent, in the order it was given them, scrolled so the
@@ -217,7 +226,7 @@ func (r Roster) window(agents []Agent, subs subsOf, width, height int) span {
 	}
 	room := height - 1
 
-	cursor := rowIndexOfSelected(rows, r.Selected)
+	cursor := r.cursorRow(rows)
 	if cursor < 0 {
 		cursor = 0
 	}
@@ -258,15 +267,16 @@ func rowsFor(a Agent, subs []Task) int {
 // owns that one activity line while it lasts.
 func idleActivityShown(a Agent) bool { return a.Tool == "" && (a.goal.Active || a.loop.Active) }
 
-// At is the agent whose rows include line y, counted the way View lays them.
+// At is the agent whose rows include line y, counted the way View lays them, or
+// the team header drawn on it.
 //
 // It starts from the same window View draws, so a click on a scrolled column
 // lands on the agent under the pointer rather than on the one that would have
 // been there unscrolled - and it walks rows() rather than restating how tall an
 // agent is, so a row that grows a line stays clickable without this changing.
-func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (Agent, string, bool) {
+func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (rosterSpot, bool) {
 	if width <= 0 || y < 0 {
-		return Agent{}, "", false
+		return rosterSpot{}, false
 	}
 	rows := sectionRows(agents)
 	w := r.window(agents, subs, width, height)
@@ -278,13 +288,15 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (Agent, st
 			continue
 		}
 		within := y - line
-		// The header is the item's first line and belongs to no agent, so a click
-		// on it opens nothing - the discriminator fable named. The agent's own rows
-		// follow it, which is why the offset shifts past a header before resolving.
-		if item.hasHeader() {
-			if within == 0 {
-				return Agent{}, "", false
+		// The gap and the header lead the item and belong to no agent: a click on
+		// the header picks its channel and one on the gap nothing - the
+		// discriminator fable named. The agent's own rows follow them, which is why
+		// an agent is resolved only past item.lead().
+		if within < item.lead() {
+			if item.hasHeader() && within == item.lead()-1 {
+				return rosterSpot{header: item.header}, true
 			}
+			return rosterSpot{}, false
 		}
 		a := item.agent
 		mine := subsFor(subs, a.ID)
@@ -293,12 +305,12 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (Agent, st
 		// would have to restate whether this agent drew a header or a tool call.
 		if subFrom := len(rl) - len(mine); within >= subFrom {
 			if t := mine[within-subFrom]; t.Selectable() {
-				return a, t.Dispatch, true
+				return rosterSpot{agent: a, dispatch: t.Dispatch}, true
 			}
 		}
-		return a, "", true
+		return rosterSpot{agent: a}, true
 	}
-	return Agent{}, "", false
+	return rosterSpot{}, false
 }
 
 // rows is one agent: its liveness and name, and under it what it is inside.
@@ -587,7 +599,7 @@ func (r Roster) Move(agents []Agent, subs subsOf, delta int) Roster {
 	if len(agents) == 0 {
 		return Roster{}
 	}
-	stops := walkable(agents, subs)
+	stops := channelStops(agents, subs)
 	at := stopIndex(stops, r)
 	if at < 0 && r.SelectedTask != "" {
 		// The dispatch the cursor named has finished, so its row is simply gone
@@ -597,17 +609,19 @@ func (r Roster) Move(agents []Agent, subs subsOf, delta int) Roster {
 		at = stopIndex(stops, Roster{Selected: r.Selected})
 	}
 	if at < 0 {
-		// The cursor is on nobody, or on an agent that has left the roster. The
-		// first move lands on the first row rather than counting from a
-		// position that no longer exists.
-		at, delta = 0, 0
+		// The cursor is on nobody, or on an agent or header that has left the
+		// roster. The first move lands on the first agent rather than counting
+		// from a position that no longer exists.
+		at = slices.IndexFunc(stops, func(s Roster) bool { return s.Selected != "" })
+		delta = 0
 	}
 	n := len(stops)
 	return stops[((at+delta)%n+n)%n]
 }
 
-// walkable is every row the cursor can land on, in the order they are drawn:
-// each agent, then the dispatches running under it.
+// walkable is every agent row the cursor can land on, in the order they are
+// drawn: each agent, then the dispatches running under it. The sidebar adds its
+// channel headers (channelStops); the board walks these alone.
 //
 // Built rather than indexed into, because the two are different shapes - an
 // agent is a row and a dispatch is a row under one - and the arithmetic for
@@ -628,11 +642,11 @@ func walkable(agents []Agent, subs subsOf) []Roster {
 
 // stopIndex is where the cursor sits among the walkable rows, or -1.
 //
-// An empty Selected is nobody rather than the first row, for indexOf's reason:
-// "" is how "no selection" is spelled, and an agent seen through an event
-// before any report described it has an empty id too.
+// An empty Selected off a header is nobody rather than the first row, for
+// indexOf's reason: "" is how "no selection" is spelled, and an agent seen
+// through an event before any report described it has an empty id too.
 func stopIndex(stops []Roster, at Roster) int {
-	if at.Selected == "" {
+	if at.Selected == "" && at.Header == "" {
 		return -1
 	}
 	for i, s := range stops {

@@ -68,6 +68,9 @@ type DM struct {
 	// message. Set for the draw; see WithWriting.
 	writing string
 
+	// page is where the pane scrolls while a card is up. See pagescroll.go.
+	page pageState
+
 	// compactingSince is when this session's compaction began, or the zero time
 	// when none is running. Set for the draw by App.dmPane off the App-owned map
 	// (compacting.go); it drives the compacting line the way Agent.startedAt
@@ -753,10 +756,7 @@ func (d DM) menuRows() int {
 // baseChrome is the chrome that is not the menu, which is what the menu's own
 // allowance is measured against. The task board is counted rather than drawn -
 // rendering it costs a truncation per row and this runs on every re-lay.
-func (d DM) baseChrome() int {
-	composer := lipgloss.Height(d.composer.View(max(d.width, minComposerWidth)))
-	return composer + d.aboveComposerExtra() + d.checklistRows() + d.queuedRows()
-}
+func (d DM) baseChrome() int { return d.baseChromeWith(d.composerRows()) }
 
 // aboveComposerExtra is the rows above the composer that are neither transcript
 // nor the board: the streamed preview, the working/done line with its beatGap,

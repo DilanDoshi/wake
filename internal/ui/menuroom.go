@@ -1,5 +1,7 @@
 package ui
 
+import "github.com/charmbracelet/lipgloss"
+
 // How many rows a pane can give the menu block pinned over its composer. The
 // pane clips a menu to this from the bottom (DM.menuRows, Room.menuRows); the
 // resume picker asks it first so it can draw only what fits and keep the
@@ -13,7 +15,22 @@ const menuUp = " "
 
 // menuRoom is the most rows this pane can give a menu block: what is left after
 // the rest of the chrome and one row of transcript.
-func (d DM) menuRoom() int { return d.height - d.baseChrome() - minTranscriptHeight }
+func (d DM) menuRoom() int { return d.menuRoomAt(d.composerRows()) }
+
+// menuRoomAt is menuRoom for a composer already measured at box rows: the box is
+// what costs, so a caller that needs more than one answer from it measures once.
+func (d DM) menuRoomAt(box int) int { return d.height - d.baseChromeWith(box) - minTranscriptHeight }
+
+// composerRows is the box as the chrome counts it: the draft's rows, without the
+// bar that rides inside it.
+func (d DM) composerRows() int {
+	return lipgloss.Height(d.composer.View(max(d.width, minComposerWidth)))
+}
+
+// baseChromeWith is baseChrome for a composer measured at box rows.
+func (d DM) baseChromeWith(box int) int {
+	return box + d.aboveComposerExtra() + d.checklistRows() + d.queuedRows()
+}
 
 // menuRoom is the room's, DM.menuRoom's rule.
 func (r Room) menuRoom() int { return r.height - r.baseChrome() - minTranscriptHeight }

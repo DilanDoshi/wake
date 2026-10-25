@@ -220,7 +220,8 @@ func TestAClickOnAScrolledColumnLandsOnTheAgentUnderIt(t *testing.T) {
 	lines := strings.Split(stripANSI(r.View(agents, nil, rosterWidth, height)), "\n")
 	for y, line := range lines {
 		name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "○"))
-		got, _, ok := r.At(agents, nil, rosterWidth, height, y)
+		spot, ok := r.At(agents, nil, rosterWidth, height, y)
+		got := spot.agent
 		if name == "" || strings.Contains(line, "more") {
 			continue
 		}
@@ -310,7 +311,8 @@ func TestAtAnswersForTheRowsTheColumnDrewAndNoOthers(t *testing.T) {
 
 					owner := ownerPerRow(drawn)
 					for y := -1; y <= height+2; y++ {
-						got, _, ok := r.At(agents, subs, rosterWidth, height, y)
+						spot, ok := r.At(agents, subs, rosterWidth, height, y)
+						got := spot.agent
 						want := ""
 						if y >= 0 && y < len(owner) {
 							want = owner[y]

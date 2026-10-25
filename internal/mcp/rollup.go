@@ -62,14 +62,13 @@ import (
 // digestLineMax bounds one line so that arithmetic exists at all. Without it a
 // single Bash command decides how much of the fleet a manager gets to see.
 const (
-	rollUpMaxBytes = 16 * 1024
+	rollUpMaxBytes = 25 * 1024
 	digestLineMax  = agentLineMax + len(rowIndent)
 
-	// designFleet is the 15-30 sessions Wake is built for, at the top of that
-	// range. Named here because it is load-bearing arithmetic and not a
-	// comment: spec §1 and CLAUDE.md's opening line are where the number comes
-	// from.
-	designFleet = 30
+	// designFleet is the most sessions a fleet can be set to run (owner's
+	// 2026-10-20 ruling). Named here because it is load-bearing arithmetic and
+	// not a comment.
+	designFleet = rpc.MaxAgentsCeiling
 )
 
 // rowIndent puts an agent under its workspace.
