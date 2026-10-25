@@ -73,7 +73,7 @@ package ui
 // with claude. The sessions it names arrive in the room when they are adopted;
 // the listing belongs where they will.
 //
-// It is fenced through bangBlock for bangBlock's reason, which is load-bearing
+// It is fenced through core.Fenced for the bang block's reason, which is load-bearing
 // rather than cosmetic: a transcript renders an echoed user turn as markdown
 // and markdown joins consecutive lines into a paragraph, so an unfenced columnar
 // listing arrives as one run-on line.
@@ -265,7 +265,7 @@ func (a App) showPicker(listing string) App {
 	a = a.withRoom(a.room.Append(core.Event{
 		Kind:   core.KindUserText,
 		Echoed: true,
-		Text:   bangBlock(listing),
+		Text:   core.Fenced(listing),
 	}, Agent{}))
 	return a
 }

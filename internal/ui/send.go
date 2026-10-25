@@ -236,7 +236,8 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	// silently sending a drop-then-mention to the manager instead of the named
 	// agent. WireText also produces the wire body, so what routes and what sends
 	// are one string - r.Text below is already chip-free.
-	r := a.route(a.room.Composer().WireText(text))
+	wire := a.room.Composer().WireText(text)
+	r := a.route(wire)
 	if len(r.Targets) == 0 {
 		switch {
 		case r.Broadcast:
@@ -249,6 +250,10 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 			notice.Report("%s", NoAddressee)
 		}
 		return a, nil
+	}
+	// `@who !cmd` is a bang aimed at who (bangapp.go), never the literal text.
+	if cmdline, ok := bangTarget(r, wire); ok {
+		return a.aimBang(r, cmdline)
 	}
 	// After the no-targets refusals above, so a picker is only ever opened over
 	// something it can be confirmed against. It reads the *knob* route: a slash

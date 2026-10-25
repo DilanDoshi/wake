@@ -58,6 +58,21 @@ func (s *Session) Send(text string, images []ImageBlock, messageID string, now b
 	if err != nil {
 		return err
 	}
+	return s.sendTurn(line)
+}
+
+// SendShell writes a `!cmd` the operator ran, and its output, as a turn - see
+// EncodeShellRun.
+func (s *Session) SendShell(command, output string) error {
+	line, err := EncodeShellRun(command, output)
+	if err != nil {
+		return err
+	}
+	return s.sendTurn(line)
+}
+
+// sendTurn writes one line that starts a turn.
+func (s *Session) sendTurn(line []byte) error {
 	if err := s.writeLine(line); err != nil {
 		return err
 	}

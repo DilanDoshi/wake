@@ -280,3 +280,49 @@ func firstLine(text string) string {
 	}
 	return strings.TrimSpace(text)
 }
+
+// Claude Code's bash mode records `!cmd` as string-content user lines: the
+// command in one, what it printed in the next, merged into stdout - or into
+// stderr when it failed (bash-mode.jsonl). Wake writes its own bang in the same
+// tags, both in one line, so the agent reads it as it reads Claude Code's.
+const (
+	bashInputOpen   = "<bash-input>"
+	bashInputClose  = "</bash-input>"
+	bashStdoutOpen  = "<bash-stdout>"
+	bashStdoutClose = "</bash-stdout>"
+	bashStderrOpen  = "<bash-stderr>"
+	bashStderrClose = "</bash-stderr>"
+)
+
+// shellRecordText is one command and its merged output in bash mode's tags.
+func shellRecordText(command, output string) string {
+	return bashInputOpen + command + bashInputClose +
+		bashStdoutOpen + output + bashStdoutClose + bashStderrOpen + bashStderrClose
+}
+
+// shellRecord reads a bash-mode line back as the block a live bang draws: a
+// whole command record, a whole output record, or Wake's one-line pair. The
+// output's close is the last one, so output quoting the tags survives.
+func shellRecord(s string) (string, bool) {
+	command, rest, hasCommand := "", s, false
+	if body, ok := strings.CutPrefix(s, bashInputOpen); ok {
+		if command, rest, hasCommand = strings.Cut(body, bashInputClose); !hasCommand {
+			return "", false
+		}
+	}
+	if rest == "" {
+		return ShellBlock(command, ""), hasCommand
+	}
+	streams, opened := strings.CutPrefix(rest, bashStdoutOpen)
+	streams, closed := strings.CutSuffix(streams, bashStderrClose)
+	i := strings.LastIndex(streams, bashStdoutClose+bashStderrOpen)
+	if !opened || !closed || i < 0 {
+		return "", false
+	}
+	out := strings.TrimRight(streams[:i], "\n")
+	errs := strings.TrimRight(streams[i+len(bashStdoutClose+bashStderrOpen):], "\n")
+	if out != "" && errs != "" {
+		out += "\n"
+	}
+	return ShellBlock(command, out+errs), true
+}

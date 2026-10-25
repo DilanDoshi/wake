@@ -602,4 +602,15 @@ type Frame struct {
 	// /rename - the UI's mirror - so the daemon waits for the agent's own reply
 	// before deciding whether to send one.
 	SelfRenames bool `json:"self_renames,omitempty"`
+
+	// Shell is a FrameSend's `!cmd` the operator ran and what it printed, sent in
+	// place of Text: the daemon writes it as claude's own bash-mode record. See
+	// core.EncodeShellRun.
+	Shell *ShellRun `json:"shell,omitempty"`
+}
+
+// ShellRun is one shell command and its output, already bounded and labelled.
+type ShellRun struct {
+	Command string `json:"cmdline"`
+	Output  string `json:"output"`
 }

@@ -1,0 +1,1 @@
+{"type":"user","message":{"role":"user","content":"\u003cbash-input\u003ecat note.txt missing.txt\u003c/bash-input\u003e\u003cbash-stdout\u003ehello from a note\ncat: missing.txt: No such file or directory\n… exited 1\u003c/bash-stdout\u003e\u003cbash-stderr\u003e\u003c/bash-stderr\u003e"}}

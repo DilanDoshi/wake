@@ -570,7 +570,7 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return a.stream(m)
 
 	case bangResultMsg:
-		return a.bangResult(m), nil
+		return a.bangResult(m)
 
 	case adoptedMsg:
 		return a.adoptArrived(m)

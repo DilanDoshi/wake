@@ -74,8 +74,9 @@ type outUserMessage struct {
 	// Content is a polymorphic block array: image blocks then a text block,
 	// never a mix in the other order. []any rather than a typed slice because
 	// the two element types are disjoint and JSON marshals each by its own
-	// shape - the delta the image findings note said the write path needed.
-	Content []any `json:"content"`
+	// shape - the delta the image findings note said the write path needed. A
+	// shell run's is the one string, as claude's bash mode writes it.
+	Content any `json:"content"`
 }
 
 type outTextBlock struct {
@@ -131,6 +132,21 @@ func EncodeUserMessage(text string, images []ImageBlock, uuid string, now bool) 
 		frame.Priority, frame.Origin = "now", &outOrigin{Kind: "human"}
 	}
 	return marshalLine(frame, "encode user message")
+}
+
+// EncodeShellRun renders a `!cmd` the operator ran, and its merged output, as
+// the string-content line claude's own bash mode records (bash-mode.jsonl).
+// Unstamped, and a turn: the agent answers it, as it answers Claude Code's `!`
+// (shell-run.jsonl). The output arrives already bounded and labelled.
+func EncodeShellRun(command, output string) ([]byte, error) {
+	if strings.TrimSpace(command) == "" {
+		return nil, fmt.Errorf("%w: encode shell run: no command", ErrNotWritten)
+	}
+	frame := outUserFrame{
+		Type:    "user",
+		Message: outUserMessage{Role: "user", Content: shellRecordText(command, output)},
+	}
+	return marshalLine(frame, "encode shell run")
 }
 
 // Permission decisions. "allow" and "deny" are the two behaviors

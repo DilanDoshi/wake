@@ -3,7 +3,6 @@ package ui
 import (
 	"strings"
 	"testing"
-	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -15,28 +14,31 @@ import (
 // submit is exactly what "typing !ls sends it to the model" would look like
 // again if someone removed it.
 
-func TestABangIsNotSentToTheAgentOnEnter(t *testing.T) {
+// Dilan's 2026-10-25 ruling: the bang reaches the agent, as a shell run - never
+// as the text of a message, which is what Enter sent before the interception.
+func TestABangReachesTheAgentAsAShellRunOnEnter(t *testing.T) {
 	fresh(t)
 	conn, sent := pipeClient(t)
 	var m tea.Model = dmApp(conn, Stream{}, "s1", "alex")
 	m, _ = m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
-	m = typeText(m, "!echo not for the agent")
+	m = typeText(m, "!echo for the agent")
 
 	m, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd == nil {
 		t.Fatal("Enter on a bang produced no command: nothing ran it")
 	}
-	m, _ = m.Update(cmd())
-
-	select {
-	case f := <-sent:
-		if f.Kind == rpc.FrameSend {
-			t.Errorf("a bang was sent to the agent as text: %q. That is what happens without an interception, and the model answers as if it had been asked about the command", f.Text)
-		}
-	case <-time.After(250 * time.Millisecond):
+	m, deliver := m.Update(cmd())
+	if deliver == nil {
+		t.Fatal("the bang ran and nothing was sent to the agent")
 	}
-	if !strings.Contains(shown(m), "not for the agent") {
-		t.Errorf("the output reached neither the agent nor the conversation:\n%s", shown(m))
+	go deliver()
+
+	f := awaitFrame(t, sent)
+	if f.Kind != rpc.FrameSend || f.Text != "" || f.Shell == nil {
+		t.Errorf("the agent received %v %q shell %+v, want a shell run: as text, the model answers it as a question", f.Kind, f.Text, f.Shell)
+	}
+	if !strings.Contains(shown(m), "for the agent") {
+		t.Errorf("the output was not drawn in the conversation:\n%s", shown(m))
 	}
 }
 
