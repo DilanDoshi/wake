@@ -75,7 +75,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   bare `/clear` (`roomCommands`, `roomclear.go`): it empties this window's group chat and reaches no agent,
   keeps ↑'s prompts, keeps restored history older than it out, and the room notes every 1,000 messages it
   holds in an ordinary timed notice. Everything else passes to the agent byte
-  for byte. `@who /cmd` in the room aims a target-command at that agent. A spaced `/team` or
+  for byte. `@who /cmd` in the room aims a target-command at that agent, and `@who !cmd` a bang. A spaced `/team` or
   `/name` argument is hyphenated.
 - **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
   (`mcp_status`/`mcp_reconnect`/`mcp_toggle`, replies sent only to the asking window). Authenticate
@@ -391,8 +391,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   advertises may be claimed only in a form claude is recorded doing nothing with
   (`bareOnlyCommands` names the fixture). `/color` and the room's bare `/clear` are the owner-claimed
   exceptions (`ownerClaimedCommands`). Only `slash.go` decides what a leading slash means.
-- **Open mention mode widens a message, never a command**: `@john /anything` always goes to john
-  alone (`mention.go`, `leadingCommand`).
+- **Open mention mode widens a message, never a command**: `@john /anything` and `@john !cmd` always go to
+  john alone (`mention.go`, `leadingCommand`).
+- **A `!cmd`'s output reaches the agent it was typed to** (owner's 2026-10-25 ruling, reversing "a bang never
+  reaches the agent"): it runs in the UI as before, is drawn as before, then goes to that agent as claude's own
+  bash-mode record, a turn it answers as Claude Code's `!` is (`rpc.Frame.Shell`). Addressed at dispatch; an
+  ended or parked agent gets nothing and a notice says so. In the room `@who !cmd` and `@manager !cmd` run in
+  that agent's `Cwd` and reach it, `@team`/`@all` are refused, a bare `!cmd` reaches nobody. The record reads
+  back off disk as the same echoed block. `bangapp.go`, `decisions.md` (2026-10-25).
 - **Completion offers and never routes; `⇥` and `↵` accept the cursored offer** (owner, 2026-10-12,
   reversing 2026-09-27's "never takes `↵`"). `↵` accepts only while that changes the draft, so a word
   typed in full (`/clear`; `@manager` where Wake reads it - the room's leading mention, an `@who`
@@ -489,7 +495,7 @@ yet says so in bold.**
 |---|---|
 | Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · `--max-agents`: `maxagents.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
-| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset, the session window) |
+| Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies, bash mode's `!cmd` records; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset, the session window) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
@@ -512,7 +518,7 @@ yet says so in bold.**
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
-| `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` · `bangproc_unix.go` |
+| `!cmd` shell lines | `internal/ui/bang.go` · `bangout.go` · `bangapp.go` (dispatch, `@who !cmd`, delivery) · `bangproc_unix.go` · the record `core.EncodeShellRun`/`Session.SendShell`, read back by `localreply.go`'s `shellRecord` · the block `internal/core/fence.go` · findings `docs/superpowers/notes/2026-10-25-bang-to-agent-findings.md` |
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
 | Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) · `tables.go` draws a table too narrow for its pane as records · findings `docs/superpowers/notes/2026-10-24-narrow-table-findings.md` |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
@@ -663,6 +669,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   user line in place of the `<task-notification>`, replayed live and `isMeta` on disk. Core drops it on
   both wires, and **an `isMeta` line no decoder claims is never the operator's turn**.
   `docs/superpowers/notes/2026-10-03-subagent-handback-findings.md`.
+- **Interactive `!` (2.1.310) writes string-content `<bash-input>` and `<bash-stdout>`/`<bash-stderr>` records**
+  (merged output; stderr when it failed) **and starts a turn every time**. Wake writes the same tags in one line;
+  `shouldQuery:false` on a user line would hold it with no turn (`num_turns: 0`), unused.
+  `bash-mode.jsonl`, `shell-run.jsonl`, `docs/superpowers/notes/2026-10-25-bang-to-agent-findings.md`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only
