@@ -34,6 +34,10 @@ func TestABangsOutputReachesTheAgentItWasTypedTo(t *testing.T) {
 	if f.Shell.Command != "echo bang-marker-7" || strings.TrimSpace(f.Shell.Output) != "bang-marker-7" {
 		t.Errorf("the shell run carried %+v, want the command and what it printed", *f.Shell)
 	}
+	// Stamped, so a turn it opens behind a busy one is owed like any send's.
+	if f.MessageID == "" {
+		t.Error("the shell run is unstamped: a turn it opens behind another would read idle")
+	}
 	if !strings.Contains(shown(a), "bang-marker-7") {
 		t.Errorf("the pane no longer draws the output:\n%s", shown(a))
 	}
@@ -142,6 +146,81 @@ func TestARoomMentionBangIsInThatAgentsThread(t *testing.T) {
 	}
 }
 
+// The router routes only live agents, so a parked one's name used to fall
+// through to the manager as the literal text. It is still one agent with a
+// directory: the command runs there and the operator is told it was not sent.
+func TestARoomBangAtAParkedAgentRunsAndSaysItWasNotSent(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "note.txt"), []byte("parked alex's file\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	a := newRoomApp(t).withSize(200, 40).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked, Cwd: dir},
+		rpc.SessionStatus{ID: "m1", Name: core.ManagerName, State: rpc.StateIdle},
+	)
+	a = loopEnter(a.withDraft("@alex !cat note.txt"))
+
+	if frames := recorderOf(t, a).taken(t); len(frames) != 0 {
+		t.Errorf("a bang at parked alex wrote %+v: the manager must not be sent the literal text", frames)
+	}
+	if !strings.Contains(roomText(a), "parked alex's file") {
+		t.Error("the command did not run in alex's directory, or was not drawn")
+	}
+	if n := notice.Count(fmt.Sprintf(bangNotSent, "@alex", bangGone[rpc.StateParked])); n != 1 {
+		t.Errorf("the not-sent notice was reported %d times, want 1", n)
+	}
+}
+
+// A parked agent's name can be reissued to a live one; the router's answer - the
+// live agent - is the one a bang is aimed at, whatever order the roster holds.
+func TestARoomBangAtAReissuedNameReachesTheLiveAgent(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked},
+		rpc.SessionStatus{ID: "s2", Name: "alex", State: rpc.StateIdle},
+	)
+	a = loopEnter(a.withDraft("@alex !echo for-the-live-alex"))
+
+	frames := recorderOf(t, a).taken(t)
+	if len(frames) != 1 || frames[0].SessionID != "s2" || frames[0].Shell == nil {
+		t.Errorf("frames = %+v, want one shell run to the live alex (s2)", frames)
+	}
+}
+
+// A team whose members are all parked is still a team: refused, not relayed.
+func TestARoomBangAtATeamWithNoLiveMemberIsRefused(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "alex", State: rpc.StateParked, Team: "backend"},
+		rpc.SessionStatus{ID: "m1", Name: core.ManagerName, State: rpc.StateIdle},
+	).withDraft("@backend !ls")
+	a, cmd := pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+	if cmd != nil {
+		t.Errorf("@backend !ls with no live member ran or sent something: %+v", reproFlatten(cmd))
+	}
+	if n := notice.Count(fmt.Sprintf(bangOneAgent, "@backend")); n != 1 {
+		t.Errorf("the refusal was reported %d times, want 1", n)
+	}
+}
+
+// The room draws a bang as what was said - `@alex !cmd`, then what it printed -
+// on the operator's own line, never with a fence's backticks.
+func TestTheRoomDrawsABangAsABlockHeadedByItsAgent(t *testing.T) {
+	a := newRoomApp(t).withSize(200, 40).withAgents("alex", "john")
+	a = loopEnter(a.withDraft("@alex !echo aimed-output"))
+	a = loopEnter(a.withDraft("!echo bare-output"))
+
+	room := roomText(a)
+	if strings.Contains(room, "```") {
+		t.Errorf("the room drew a bang's fence as text:\n%s", room)
+	}
+	head := strings.Index(room, "@alex")
+	if head < 0 || head > strings.Index(room, "!echo aimed-output") {
+		t.Errorf("the aimed bang is not headed by @alex:\n%s", room)
+	}
+	if !strings.Contains(room, "bare-output") {
+		t.Errorf("the bare bang was not drawn:\n%s", room)
+	}
+}
+
 // The manager is one agent with a directory, so `@manager !cmd` is aimed at it
 // rather than sent as the literal text.
 func TestAManagerMentionBangReachesTheManager(t *testing.T) {
@@ -208,7 +287,7 @@ func TestABangStaysDirectInOpenMode(t *testing.T) {
 // pane drew live, and neither ↑ nor a rewind takes it for something typed.
 func TestABangReadsBackAsTheBlockThePaneDrew(t *testing.T) {
 	m := bangResultMsg{ID: "s1", To: "s1", Cmd: "cat note.txt", Text: "hello\n… exited 1"}
-	line, err := core.EncodeShellRun(m.Cmd, m.Text)
+	line, err := core.EncodeShellRun(m.Cmd, m.Text, "")
 	if err != nil {
 		t.Fatal(err)
 	}

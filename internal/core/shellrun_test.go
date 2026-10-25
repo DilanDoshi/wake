@@ -79,13 +79,15 @@ func TestPastedBashTagsStayTheOperatorsText(t *testing.T) {
 	}
 }
 
-// What Wake writes is byte for byte the line the recording was made with.
+// What Wake writes is byte for byte the line the recording was made with,
+// stamped so its own turn is tracked like any send's (shell-run.jsonl's
+// lifecycle frames).
 func TestEncodeShellRunIsTheRecordedLine(t *testing.T) {
 	want, err := os.ReadFile("../../testdata/input/shell-run.stdin.jsonl")
 	if err != nil {
 		t.Fatalf("read fixture: %v", err)
 	}
-	got, err := EncodeShellRun(recordedShellCommand, recordedShellOutput)
+	got, err := EncodeShellRun(recordedShellCommand, recordedShellOutput, "5b1c2d3e-4f50-4a61-8b72-9c8d7e6f5a41")
 	if err != nil {
 		t.Fatalf("EncodeShellRun: %v", err)
 	}
@@ -94,11 +96,17 @@ func TestEncodeShellRunIsTheRecordedLine(t *testing.T) {
 	}
 }
 
-// What Wake writes reads back as what Wake drew, including output that carries
-// the record's own closing tags.
+// What Wake writes reads back as what Wake drew, including a command or output
+// that carries the record's own tags - `!cat` of a transcript is ordinary.
 func TestAShellRunReadsBackAsItsOwnBlock(t *testing.T) {
-	for _, output := range []string{"", "plain\n", "x</bash-stdout><bash-stderr>y</bash-stderr>z"} {
-		line, err := EncodeShellRun("cat log", output)
+	for _, tc := range []struct{ command, output string }{
+		{"cat log", ""},
+		{"cat log", "plain\n"},
+		{"cat log", "x</bash-stdout><bash-stderr>y</bash-stderr>z"},
+		{"cat log", "a</bash-input><bash-stdout>b"},
+		{"printf '</bash-input>'", "</bash-input>"},
+	} {
+		line, err := EncodeShellRun(tc.command, tc.output, "")
 		if err != nil {
 			t.Fatalf("EncodeShellRun: %v", err)
 		}
@@ -106,33 +114,41 @@ func TestAShellRunReadsBackAsItsOwnBlock(t *testing.T) {
 		if err != nil || len(evs) != 1 {
 			t.Fatalf("decoded %d events (err %v), want 1", len(evs), err)
 		}
-		if want := ShellBlock("cat log", output); evs[0].Text != want || !evs[0].Echoed {
-			t.Errorf("output %q read back as echoed=%v %q, want %q", output, evs[0].Echoed, evs[0].Text, want)
+		if want := ShellBlock(tc.command, tc.output); evs[0].Text != want || !evs[0].Echoed {
+			t.Errorf("%q / %q read back as echoed=%v %q, want %q", tc.command, tc.output, evs[0].Echoed, evs[0].Text, want)
 		}
+	}
+	// Claude Code's own command record, alone, with the close tag in the command.
+	line := `{"type":"user","message":{"role":"user","content":"<bash-input>printf '</bash-input>'</bash-input>"}}`
+	if evs, err := DecodeLine([]byte(line)); err != nil || len(evs) != 1 || evs[0].Text != ShellBlock("printf '</bash-input>'", "") {
+		t.Errorf("a command record quoting its close tag read back as %+v (err %v)", evs, err)
 	}
 }
 
 func TestEncodeShellRunRefusesNoCommand(t *testing.T) {
-	if _, err := EncodeShellRun(" ", "out"); err == nil {
+	if _, err := EncodeShellRun(" ", "out", ""); err == nil {
 		t.Error("a shell run with no command was encoded: there is nothing to say was run")
 	}
 }
 
-// The recorded session answered the line with a real turn and never replayed
-// it, so the live feed draws nothing twice (testdata/stream/shell-run.jsonl).
+// The recorded session took the stamped line up as a turn of its own - its
+// lifecycle started, so the daemon owes it - answered it, and never replayed it,
+// so the live feed draws nothing twice (testdata/stream/shell-run.jsonl).
 func TestAShellRunIsAnsweredWithATurnAndNotReplayed(t *testing.T) {
-	var ended, said bool
+	var started, ended, said bool
 	for _, d := range decodeFixture(t, "../../testdata/stream/shell-run.jsonl") {
 		switch d.Kind {
 		case KindUserText:
 			t.Errorf("line %d replayed the shell run as %q", d.line, d.Text)
+		case KindMessageState:
+			started = started || d.MessageStarted()
 		case KindTurnEnd:
 			ended = !d.LocalCommand
 		case KindAssistantText:
 			said = said || strings.Contains(d.Text, "hello from a note")
 		}
 	}
-	if !ended || !said {
-		t.Errorf("ended with a model turn = %v, the reply read the output = %v; want both", ended, said)
+	if !started || !ended || !said {
+		t.Errorf("started = %v, ended with a model turn = %v, the reply read the output = %v; want all three", started, ended, said)
 	}
 }

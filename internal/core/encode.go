@@ -135,16 +135,18 @@ func EncodeUserMessage(text string, images []ImageBlock, uuid string, now bool) 
 }
 
 // EncodeShellRun renders a `!cmd` the operator ran, and its merged output, as
-// the string-content line claude's own bash mode records (bash-mode.jsonl).
-// Unstamped, and a turn: the agent answers it, as it answers Claude Code's `!`
-// (shell-run.jsonl). The output arrives already bounded and labelled.
-func EncodeShellRun(command, output string) ([]byte, error) {
+// the string-content line claude's own bash mode records (bash-mode.jsonl). A
+// turn the agent answers, as it answers Claude Code's `!`, stamped like any send
+// so a turn it opens behind another is owed too (shell-run.jsonl). The output
+// arrives already bounded and labelled.
+func EncodeShellRun(command, output, uuid string) ([]byte, error) {
 	if strings.TrimSpace(command) == "" {
 		return nil, fmt.Errorf("%w: encode shell run: no command", ErrNotWritten)
 	}
 	frame := outUserFrame{
 		Type:    "user",
 		Message: outUserMessage{Role: "user", Content: shellRecordText(command, output)},
+		UUID:    uuid,
 	}
 	return marshalLine(frame, "encode shell run")
 }

@@ -5094,40 +5094,53 @@ still runs in the UI, where the operator is, and only its result now travels.
   (`core.EncodeShellRun`, the tags in `localreply.go`). The output is `bangText`'s - capped at `bangMaxBytes`
   and labelled (`… truncated at`, `… exited N`, `… timed out`) - merged into `<bash-stdout>` as `bangRun`
   merges the streams. Claude Code moves a failing command's merged output into `<bash-stderr>`; Wake keeps it
-  in stdout under its own `… exited N` line, which says more. It travels as `rpc.Frame.Shell` on a
-  `FrameSend` and the daemon writes it with `Session.SendShell`, so none of the text-reading notes (rename,
-  effort, model) look at it. Unstamped: no lifecycle, no `⧗` pin - the pane drew it already.
-- **A turn, as Claude Code's is** (choice A of two, the orchestrator's pick pending the owner's): 2.1.310's
-  interactive `!` starts a model turn every time, in auto and default mode alike, which older builds did not.
-  The alternative, recorded and kept to hand, is claude's documented `shouldQuery:false`: the line is put on
-  the transcript with no turn ($0, a `num_turns:0` result), read with the next prompt or at a running turn's
-  next tool boundary, and survives a park. Switching is the one field and the daemon not marking a turn owed.
+  in stdout under its own `… exited N` line, which says more. The output is capped again after
+  `core.Contained`, which turns each invalid byte into a three-byte rune (Codex), so what is drawn and sent
+  stays within the bound. It travels as `rpc.Frame.Shell` on a `FrameSend` and the daemon writes it with
+  `Session.SendShell`, so none of the text-reading notes (rename, effort, model) look at it. **Stamped like any
+  send** (Codex): unstamped, a bang queued behind a text-only reply opened a turn the daemon never owed - it
+  re-owes on the line's `started` lifecycle - so the agent read idle while it answered and a fork or file
+  rewind could land mid-turn. The window's queue ignores a lifecycle it did not queue, so nothing is pinned:
+  the pane drew it already.
+- **A turn, as Claude Code's is - the owner's pick (2026-10-25) of two.** 2.1.310's interactive `!` starts a
+  model turn every time, in auto and default mode alike, which older builds did not. The alternative
+  considered is claude's documented `shouldQuery:false`: the line is put on the transcript with no turn ($0, a
+  `num_turns:0` result), read with the next prompt or at a running turn's next tool boundary, and survives a
+  park. It is one field away, plus the daemon not marking a turn owed.
   `docs/superpowers/notes/2026-10-25-bang-to-agent-findings.md`.
 - **It reads back as what the pane drew.** The record is on disk now, so `messageEvents` recognises the shape -
   on string content only, which a typed draft never is, so pasted tags stay the operator's words - and
   decodes it to the echoed `KindUserText` whose text is `core.ShellBlock`, the block `bangEvent` draws. A
   reopen draws it, and `↑` and the rewind targets skip it as they skip every echoed turn. An imported
-  interactive session's `!` history draws as blocks too. The fence moved from `ui/bang.go` to `core/fence.go`
+  interactive session's `!` history draws as blocks too. Either half may quote the tags (`!cat` of a
+  transcript): the command closes at the first close that opens the output, the output at the last. The fence moved from `ui/bang.go` to `core/fence.go`
   (a non-airlock file: it knows no Claude word) so both sides share it.
 - **Addressed at dispatch.** `bangResultMsg.To` is fixed when the command starts, so a result that lands after
   the focus moved still goes to, and is drawn in, the conversation it was typed in. An agent that ended or was
   parked by then still has its command run and drawn; nothing is written, and a notice says
   `!command ran here but did not reach @alex: it has ended` (or `is parked`) - never a send that did not happen.
-- **In the room, a bang goes to exactly one agent.** `@who !cmd` (a fleet mention) and `@manager !cmd` run in
-  that agent's `Cwd`, are drawn in the room in its thread and in its held conversation, and reach it. `@team`
-  and `@all` are refused with the draft kept, before anything runs, since a bang has one directory. A bare
-  room `!cmd` is unchanged: addressed to nobody, it runs where `wake` started. A bang is a command for mention
-  mode, so open mode never widens it (`App.route`), and the target line and the completion menu read that same
-  route. A `@name` that resolves to no live agent passes through to the manager as text, as every message to
-  one does; `bangTarget` aims only a body core stripped a mention off.
+- **In the room, a bang goes to exactly one agent** (`roomBang`). `@who !cmd` and `@manager !cmd` aim at the
+  agent the router resolved; a fleet agent it skips, parked, still has a directory, so the bang runs there and
+  says it was not sent rather than reaching the manager as text (Codex) - the completion menu offers parked
+  names. They run in that agent's `Cwd`, are drawn in the room - headed `@who`, in its thread - and in its held
+  conversation, and reach it. `@team` and `@all` are refused with the draft kept, before anything runs, since a
+  bang has one directory - a team with no live member too. A bare room `!cmd` is unchanged: addressed to
+  nobody, it runs where `wake` started. Any other name (a path, a session outside the fleet) is no bang and
+  passes through as typed. A bang is a command for mention mode, so open mode never widens it (`App.route`),
+  and the target line and the completion menu read that same route.
+- **The room draws a bang as what was said**: `@who !cmd` (bare, `!cmd`) and what it printed, unfenced, on
+  the operator's own line. The room draws that line through `youSaid`, whose lines it keeps, so the fence a
+  conversation needs showed there as backticks (on main too). Drawing echoed lines as markdown in the room
+  instead was tried and dropped: `/login`'s panel is pre-styled lines, which markdown joins into one.
 - **`rpc.Frame` grew a word, measured.** The Frame is copied by value on every event and a bool once cost a
   fleet's second 8%, so `Shell` (a pointer) was benchmarked first: `BenchmarkStreamingFleetSecond`, 6×200
   each way, open=1 22.2→21.5ms, open=30 24.9→24.1ms, glamour 72.7→73.2ms - noise.
-- **Left out** (`deferred.md`): an unstamped bang behind a busy turn cannot be taken back by `↑`, a `⌃]`
-  behind one ends the turn instead of backgrounding its work, an `esc` leaves it for claude to run after, and
-  the room's own bang line is still not restored after a room restore.
-- **Held by** core's `shellrun_test.go` (the recorded records, Wake's line against
-  `testdata/input/shell-run.stdin.jsonl`, the round trip, pasted tags, and `shell-run.jsonl` answering with a
-  turn and no replay), the daemon's `shellrun_test.go` (the line written and the turn owed), and the UI's
-  `bangsend_test.go`, `bang_test.go` and `bangkey_test.go`, each mutation-checked;
+- **Left out** (`deferred.md`): a bang behind a busy turn is not in the window's queue, so `↑` cannot take it
+  back, a `⌃]` behind one ends the turn instead of backgrounding its work, and an `esc` leaves it for claude to
+  run after; the room's own bang line is still not restored after a room restore.
+- **Held by** core's `shellrun_test.go` (the recorded records, Wake's stamped line against
+  `testdata/input/shell-run.stdin.jsonl`, the round trip with the tags quoted in either half, pasted tags, and
+  `shell-run.jsonl` started, answered with a turn and not replayed), the daemon's `shellrun_test.go` (the line
+  and its stamp written, the turn owed), and the UI's `bangsend_test.go`, `bang_test.go` and `bangkey_test.go`
+  (an invalid-UTF-8 flood among them), each mutation-checked;
   `TestABangIsNotSentToTheAgent(OnEnter)` asserted the old ruling and now assert the shell run.

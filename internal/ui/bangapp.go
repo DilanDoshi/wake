@@ -8,11 +8,16 @@ package ui
 // to find the one it was typed into.
 //
 // Three call sites in App: App.submit, which asks before it treats a draft as a
-// message; sendRoom, which aims `@who !cmd` at one agent; and App.Update, which
+// message; sendRoom, which aims `@who !cmd` at one agent (roomBang); and App.Update, which
 // folds bangResultMsg rather than letting it fall through to the composer.
 
 import (
+	"slices"
+	"strings"
+	"unicode"
+
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/google/uuid"
 
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -56,17 +61,54 @@ func (a App) bang(text string) (App, tea.Cmd, bool) {
 	return a, runBang(id, id, a.bangDir(id), cmdline, bangTimeout), true
 }
 
-// aimBang runs a bang a room mention aimed: in that one agent's directory, with
-// its output drawn in the room and sent to that agent. A team or @all is
-// refused, draft kept, before anything runs.
-func (a App) aimBang(r roomRoute, cmdline string) (tea.Model, tea.Cmd) {
-	if r.Team != "" || r.Broadcast || len(r.Targets) != 1 {
-		notice.Report(bangOneAgent, agentPrefix+r.Resolved)
-		return a, nil
+// roomBang takes a room draft that aims a bang with a leading mention: at the
+// live agent or manager the router resolved, or at a fleet agent it skipped -
+// parked, which still has a directory, and is then told it was not sent. A team
+// or @all is refused before anything runs, live members or none. Any other name
+// - a path, a session outside the fleet - is no bang: it passes through as typed.
+func (a App) roomBang(r roomRoute, wire string) (tea.Model, tea.Cmd, bool) {
+	name, cmdline, ok := mentionBang(wire)
+	if !ok {
+		return a, nil, false
 	}
-	to := r.Targets[0]
+	resolved := r.Text != wire // core stripped the mention it matched
+	to := ""
+	switch {
+	case resolved && !r.Broadcast && r.Team == "" && len(r.Targets) == 1:
+		to = r.Targets[0]
+	case resolved:
+		notice.Report(bangOneAgent, agentPrefix+r.Resolved)
+		return a, nil, true
+	case a.knownTeam(name):
+		notice.Report(bangOneAgent, agentPrefix+strings.ToLower(name))
+		return a, nil, true
+	default:
+		agent, known := a.fleet.ByName(name)
+		if !known {
+			return a, nil, false
+		}
+		to = agent.ID
+	}
 	a = a.clearDraft()
-	return a, runBang("", to, a.bangDir(to), cmdline, bangTimeout)
+	return a, runBang("", to, a.bangDir(to), cmdline, bangTimeout), true
+}
+
+// mentionBang splits a draft `@name !cmd` into the name and the command, as
+// core.Resolve splits a leading mention: at the first space of any kind.
+func mentionBang(wire string) (string, string, bool) {
+	body, ok := strings.CutPrefix(strings.TrimLeftFunc(wire, unicode.IsSpace), agentPrefix)
+	i := strings.IndexFunc(body, unicode.IsSpace)
+	if !ok || i <= 0 {
+		return "", "", false
+	}
+	cmdline, ok := isBang(strings.TrimLeftFunc(body[i:], unicode.IsSpace))
+	return body[:i], cmdline, ok
+}
+
+// knownTeam is whether any agent the fleet holds, live or parked, is in team name.
+func (a App) knownTeam(name string) bool {
+	team := strings.ToLower(name)
+	return slices.ContainsFunc(a.fleet.Agents(), func(agent Agent) bool { return agent.Team == team })
 }
 
 // bangResult puts a finished command into the conversation it was typed into,
@@ -84,9 +126,16 @@ func (a App) aimBang(r roomRoute, cmdline string) (tea.Model, tea.Cmd) {
 func (a App) bangResult(m bangResultMsg) (App, tea.Cmd) {
 	ev := bangEvent(m)
 	if m.ID == "" {
-		// Typed into the room: back there, in the thread of the agent it was
-		// aimed at, or unattributed when it was aimed at nobody.
-		a = a.withRoom(a.room.appendUser(ev, m.To))
+		// Typed into the room: back there as what was said - `@who !cmd`, in
+		// who's thread, then what it printed - drawn as the operator's own line,
+		// whose lines the room keeps as they are. Unfenced: the room draws no
+		// markdown there, so a fence would show as backticks.
+		line := ev
+		line.Text = strings.TrimRight(bangPrefix+m.Cmd+"\n"+m.Text, "\n")
+		if m.To != "" {
+			line.Text = agentPrefix + a.agentName(m.To) + " " + line.Text
+		}
+		a = a.withRoom(a.room.appendUser(line, m.To))
 	}
 	// The conversation it was typed in, or the one a room mention aimed at.
 	if dm, ok := a.dms[ev.SessionID]; ok && ev.SessionID != "" {
@@ -114,6 +163,7 @@ func (a App) deliverBang(m bangResultMsg) tea.Cmd {
 	return a.write(sendFailed, rpc.Frame{
 		Kind:      rpc.FrameSend,
 		SessionID: m.To,
+		MessageID: uuid.NewString(), // so a turn it opens behind a busy one is owed
 		Shell:     &rpc.ShellRun{Command: m.Cmd, Output: m.Text},
 	})
 }
@@ -132,12 +182,4 @@ func (a App) bangDir(id string) string {
 		return ""
 	}
 	return agent.Cwd
-}
-
-// bangTarget is the room route's bang, when a leading mention aimed one: core
-// stripped the mention, so the body is the command. A draft that is itself a
-// bang already ran in submit, so a bang body behind no mention is not aimed.
-func bangTarget(r roomRoute, wire string) (string, bool) {
-	cmdline, ok := isBang(r.Text)
-	return cmdline, ok && r.Text != wire
 }

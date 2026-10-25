@@ -63,8 +63,8 @@ func (s *Session) Send(text string, images []ImageBlock, messageID string, now b
 
 // SendShell writes a `!cmd` the operator ran, and its output, as a turn - see
 // EncodeShellRun.
-func (s *Session) SendShell(command, output string) error {
-	line, err := EncodeShellRun(command, output)
+func (s *Session) SendShell(command, output, messageID string) error {
+	line, err := EncodeShellRun(command, output, messageID)
 	if err != nil {
 		return err
 	}

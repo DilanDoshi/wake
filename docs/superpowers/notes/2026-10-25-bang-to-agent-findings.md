@@ -35,13 +35,16 @@ alike, two bangs in one session each answered. Older builds added the record and
 ## 2. Wake can write that record, and it is answered as a turn
 
 `shell-run.stdin.jsonl` is one line holding both halves: `<bash-input>` with the command, `<bash-stdout>` with
-Wake's merged, bounded output (and its `… exited 1` line), an empty `<bash-stderr>`. Unstamped. Claude takes it
-as a turn: `shell-run.jsonl:31` is the model's reply naming what the output said, `:36` a `success` result with
-`num_turns: 1`. **The line is never replayed**, though the session runs with `--replay-user-messages`: no user
-frame appears on stdout (`TestAShellRunIsAnsweredWithATurnAndNotReplayed`). On disk it is one ordinary `user`
-record holding the string exactly as written (`bash-mode.jsonl:3`).
+Wake's merged, bounded output (and its `… exited 1` line), an empty `<bash-stderr>`, stamped with a top-level
+`uuid` like any send. Claude takes it as a turn of its own: `shell-run.jsonl:1-2` are its `queued` and `started`
+lifecycle, `:31` the model's reply naming what the output said, `:36` a `success` result with `num_turns: 1`
+naming the uuid, `:37` `completed`. The stamp is what lets the daemon owe a turn the line opens behind a busy one
+(it re-owes on `started`). **The line is never replayed**, though the session runs with
+`--replay-user-messages`: no user frame appears on stdout (`TestAShellRunIsAnsweredWithATurnAndNotReplayed`), and
+an unstamped probe of the same line was not replayed either. On disk it is one ordinary `user` record holding the
+string exactly as written (`bash-mode.jsonl:3`, taken from the unstamped probe; the content is the same).
 
-## 3. `shouldQuery:false` holds a line with no turn (not used; kept for the owner's choice)
+## 3. `shouldQuery:false` holds a line with no turn (considered, not chosen)
 
 The Agent SDK documents `shouldQuery` on a user message: `false` appends it to the transcript without triggering
 an assistant turn, merged into the next message that does trigger one - named for "the output of a command you

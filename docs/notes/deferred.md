@@ -5873,19 +5873,19 @@ Two calls BUG-53's fix left to the owner; both are true of the rulings it kept, 
 
 ## FROM `fix/bang-reaches-the-agent`, 2026-10-25
 
-A bang's output now reaches its agent unstamped (decisions.md, 2026-10-25), so it is outside what Wake tracks
-of a queued message. Each edge is narrow - a bang typed while that agent is busy - and none sends anything twice.
+A bang's output now reaches its agent stamped, so the daemon owes its turn, but outside the window's queue
+(decisions.md, 2026-10-25): the pane drew it at once, so a `⧗` pin would be a second copy. Each edge is narrow -
+a bang typed while that agent is busy - and none sends anything twice.
 
-- **`↑` cannot take back a bang queued behind a busy turn.** The take-back (`FrameRecall`) names a stamped
-  message, and a bang carries no stamp: the pane drew it at once, so a `⧗` pin would be a second copy.
-  *Closes with:* stamping it and tracking it as `queue.go` tracks a send, pinned with no echo.
+- **`↑` cannot take back a bang queued behind a busy turn.** The take-back (`FrameRecall`) reaches what
+  `queue.go` holds. *Closes with:* tracking a bang there, pinned with no echo.
 - **A `⌃]` behind a queued bang ends the turn instead of backgrounding its work.** A `now` only backgrounds
   running work with nothing queued ahead of it, and the bang is ahead of it unseen. *Closes with:* the same
-  stamp, so send-now takes it back first.
+  tracking, so send-now takes it back first.
 - **An `esc` leaves a queued bang for claude to run after the interrupt** - as a turn, so the agent answers it.
-  *Closes with:* the same stamp, so the interrupt cancels it with what else is queued.
+  *Closes with:* the same tracking, so the interrupt cancels it with what else is queued.
 - **The room's own bang line is still gone after a room restore.** It is echoed, and the room restores only
   typed turns; that was true before this change. *Closes with:* room provenance for a bang aimed from the room.
-- **The held form, `shouldQuery:false`, is recorded but unwired.** It is the owner's other choice (no turn, $0,
-  read with the next prompt): one field in `EncodeShellRun` and the daemon not marking a turn owed. Its live
-  facts are in the findings note and want fixtures before it is ever written.
+- **The held form, `shouldQuery:false`, was considered and not chosen** (the owner picked a turn, 2026-10-25):
+  no turn, $0, read with the next prompt - one field in `EncodeShellRun` and the daemon not marking a turn
+  owed. Its live facts are in the findings note and want fixtures before it is ever written.

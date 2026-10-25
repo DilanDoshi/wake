@@ -49,6 +49,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -212,7 +213,10 @@ func bangRun(dir, cmdline string, timeout, waitDelay time.Duration) string {
 	// and the /mcp panel, which is this same run with a different renderer.
 	// Everything bangText adds under it is Wake's own words. docs/notes/bugs.md
 	// BUG-9.
-	text := bangText(core.Contained(out.String()), out.truncated, err, ctx.Err() != nil, timeout, waitDelay)
+	// Contained after the cap can grow what it kept - an invalid byte becomes a
+	// three-byte rune - so the cap is taken again on what is drawn and sent.
+	kept, cut := capped(core.Contained(out.String()), bangMaxBytes)
+	text := bangText(kept, out.truncated || cut, err, ctx.Err() != nil, timeout, waitDelay)
 	switch {
 	// KillGroup answers nil only when the group still had a member to signal,
 	// and Run has already reaped the shell - so whatever was killed is
@@ -223,6 +227,17 @@ func bangRun(dir, cmdline string, timeout, waitDelay time.Duration) string {
 		return bangNote(text, fmt.Sprintf(bangCleanupFailed, cleanupErr))
 	}
 	return text
+}
+
+// capped is s cut to at most limit bytes on a rune boundary, and whether it was.
+func capped(s string, limit int) (string, bool) {
+	if len(s) <= limit {
+		return s, false
+	}
+	for limit > 0 && !utf8.RuneStart(s[limit]) {
+		limit--
+	}
+	return s[:limit], true
 }
 
 // bangText assembles what the conversation is told, output first and the reason

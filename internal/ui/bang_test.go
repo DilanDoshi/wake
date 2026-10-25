@@ -521,6 +521,19 @@ func TestOutputPastTheCapIsDroppedRatherThanRefused(t *testing.T) {
 	}
 }
 
+// Containment turns each invalid byte into a three-byte replacement rune, so a
+// cap taken before it could let three times the bound through - to the pane and
+// to the agent. The cap is on what is drawn and sent.
+func TestAnInvalidUTF8FloodStaysWithinTheCap(t *testing.T) {
+	text := bangRunWithin(t, bangTestLimit, t.TempDir(), "head -c 200000 /dev/zero | LC_ALL=C tr '\\0' '\\377'", bangTimeout, bangWaitDelay)
+	if limit := bangMaxBytes + len(bangTruncated) + 16; len(text) > limit {
+		t.Errorf("an invalid UTF-8 flood came out at %d bytes, want at most %d", len(text), limit)
+	}
+	if !strings.Contains(text, "truncated at") {
+		t.Errorf("the cut is not said: %q", text[max(0, len(text)-80):])
+	}
+}
+
 // --- helpers -------------------------------------------------------------
 
 // bangApp is a sized App with one conversation and no daemon behind it.

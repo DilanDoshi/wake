@@ -238,6 +238,10 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	// are one string - r.Text below is already chip-free.
 	wire := a.room.Composer().WireText(text)
 	r := a.route(wire)
+	// `@who !cmd` is a bang aimed at who (bangapp.go), never the literal text.
+	if next, cmd, ok := a.roomBang(r, wire); ok {
+		return next, cmd
+	}
 	if len(r.Targets) == 0 {
 		switch {
 		case r.Broadcast:
@@ -250,10 +254,6 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 			notice.Report("%s", NoAddressee)
 		}
 		return a, nil
-	}
-	// `@who !cmd` is a bang aimed at who (bangapp.go), never the literal text.
-	if cmdline, ok := bangTarget(r, wire); ok {
-		return a.aimBang(r, cmdline)
 	}
 	// After the no-targets refusals above, so a picker is only ever opened over
 	// something it can be confirmed against. It reads the *knob* route: a slash

@@ -395,10 +395,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   john alone (`mention.go`, `leadingCommand`).
 - **A `!cmd`'s output reaches the agent it was typed to** (owner's 2026-10-25 ruling, reversing "a bang never
   reaches the agent"): it runs in the UI as before, is drawn as before, then goes to that agent as claude's own
-  bash-mode record, a turn it answers as Claude Code's `!` is (`rpc.Frame.Shell`). Addressed at dispatch; an
-  ended or parked agent gets nothing and a notice says so. In the room `@who !cmd` and `@manager !cmd` run in
-  that agent's `Cwd` and reach it, `@team`/`@all` are refused, a bare `!cmd` reaches nobody. The record reads
-  back off disk as the same echoed block. `bangapp.go`, `decisions.md` (2026-10-25).
+  bash-mode record, stamped, a turn it answers as Claude Code's `!` is (`rpc.Frame.Shell`). Addressed at
+  dispatch; an ended or parked agent gets nothing and a notice says so. In the room `@who !cmd` and `@manager
+  !cmd` run in that agent's `Cwd` and reach it (a parked one runs and says so), `@team`/`@all` are refused, a
+  bare `!cmd` reaches nobody; the room draws it as what was said, `@who !cmd` and its output. The record reads back off
+  disk as the same echoed block. `bangapp.go`, `decisions.md` (2026-10-25).
 - **Completion offers and never routes; `⇥` and `↵` accept the cursored offer** (owner, 2026-10-12,
   reversing 2026-09-27's "never takes `↵`"). `↵` accepts only while that changes the draft, so a word
   typed in full (`/clear`; `@manager` where Wake reads it - the room's leading mention, an `@who`

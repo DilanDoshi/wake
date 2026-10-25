@@ -301,28 +301,41 @@ func shellRecordText(command, output string) string {
 }
 
 // shellRecord reads a bash-mode line back as the block a live bang draws: a
-// whole command record, a whole output record, or Wake's one-line pair. The
-// output's close is the last one, so output quoting the tags survives.
+// whole command record, a whole output record, or Wake's one-line pair. Either
+// half may quote the tags (`!cat` of a transcript): the command closes at the
+// first close that opens the output, the output at the last.
 func shellRecord(s string) (string, bool) {
-	command, rest, hasCommand := "", s, false
 	if body, ok := strings.CutPrefix(s, bashInputOpen); ok {
-		if command, rest, hasCommand = strings.Cut(body, bashInputClose); !hasCommand {
+		if command, ok := strings.CutSuffix(body, bashInputClose); ok {
+			return ShellBlock(command, ""), true
+		}
+		command, streams, ok := strings.Cut(body, bashInputClose+bashStdoutOpen)
+		if !ok {
 			return "", false
 		}
+		output, ok := shellStreams(streams)
+		return ShellBlock(command, output), ok
 	}
-	if rest == "" {
-		return ShellBlock(command, ""), hasCommand
-	}
-	streams, opened := strings.CutPrefix(rest, bashStdoutOpen)
-	streams, closed := strings.CutSuffix(streams, bashStderrClose)
-	i := strings.LastIndex(streams, bashStdoutClose+bashStderrOpen)
-	if !opened || !closed || i < 0 {
+	streams, ok := strings.CutPrefix(s, bashStdoutOpen)
+	if !ok {
 		return "", false
 	}
-	out := strings.TrimRight(streams[:i], "\n")
-	errs := strings.TrimRight(streams[i+len(bashStdoutClose+bashStderrOpen):], "\n")
+	output, ok := shellStreams(streams)
+	return ShellBlock("", output), ok
+}
+
+// shellStreams is a record's stdout and stderr, merged, from what follows its
+// stdout's open tag.
+func shellStreams(s string) (string, bool) {
+	s, closed := strings.CutSuffix(s, bashStderrClose)
+	i := strings.LastIndex(s, bashStdoutClose+bashStderrOpen)
+	if !closed || i < 0 {
+		return "", false
+	}
+	out := strings.TrimRight(s[:i], "\n")
+	errs := strings.TrimRight(s[i+len(bashStdoutClose+bashStderrOpen):], "\n")
 	if out != "" && errs != "" {
 		out += "\n"
 	}
-	return ShellBlock(command, out+errs), true
+	return out + errs, true
 }

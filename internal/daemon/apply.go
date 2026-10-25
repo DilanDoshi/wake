@@ -109,7 +109,7 @@ func (a *agent) apply(p pending) {
 			return
 		}
 		if p.frame.Shell != nil {
-			err = a.sendShell(*p.frame.Shell)
+			err = a.sendShell(*p.frame.Shell, p.frame.MessageID)
 			break
 		}
 		// Both marked before the write: its reply can reach fanOut before this
@@ -316,9 +316,9 @@ func (a *agent) allow(p pending) error {
 
 // sendShell writes a `!cmd` the operator ran as a turn, owed like any send. It
 // carries no typed text, so the rename, effort and model notes have none to read.
-func (a *agent) sendShell(run rpc.ShellRun) error {
+func (a *agent) sendShell(run rpc.ShellRun, messageID string) error {
 	owed := a.noteSent()
-	err := a.sess.SendShell(run.Command, run.Output)
+	err := a.sess.SendShell(run.Command, run.Output, messageID)
 	if err != nil {
 		a.unsent(owed)
 	}
