@@ -198,6 +198,9 @@ func TestARoomBangAtATeamWithNoLiveMemberIsRefused(t *testing.T) {
 	if n := notice.Count(fmt.Sprintf(bangOneAgent, "@backend")); n != 1 {
 		t.Errorf("the refusal was reported %d times, want 1", n)
 	}
+	if a.room.Composer().Value() != "@backend !ls" {
+		t.Errorf("the draft was not kept: %q", a.room.Composer().Value())
+	}
 }
 
 // The room draws a bang as what was said - `@alex !cmd`, then what it printed -
