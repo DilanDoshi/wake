@@ -66,6 +66,32 @@ holds its paths, so it would be a plain directory rename under its lock, with no
 pattern for a running fleet (refusing when none is listening rather than forking a daemon), and the
 stopped-fleet case if wanted. See `decisions.md`, 2026-10-24.
 
+## KNOWN GAP, 2026-10-24 — what the session-usage bar does not show
+
+The bar under the roster (`internal/ui/usagebar.go`, `decisions.md` 2026-10-24) draws the five-hour window
+off `rate_limit_event`. Consciously left out:
+
+- **The weekly window.** The owner's pick. `unifiedWindows.seven_day` is also unreliable: carried by 2.1.246,
+  2.1.281 and 2.1.288, absent from 2.1.282, 2.1.302 and a live 2.1.310.
+- **A reading before any agent's first API response.** A fresh room has none, so it draws no bar. Headless
+  claude answers a bare `/usage` with no model turn ($0, about six seconds on 2.1.310): a one-shot like the
+  `/list-agents` one could seed it. Not taken: it needs the credential, so it cannot be `--bare`, and a full
+  claude runs the operator's SessionStart hooks; it scans local session history; and its reply is English to parse.
+- **The per-window `status`** 2.1.310 puts in each `unifiedWindows` entry. Unrecorded; the verdict comes from
+  the top-level status while `rateLimitType` names the window, so a five-hour warning arriving while the
+  week's is the top-level one draws uncoloured.
+- **Usage outside Wake.** The figure is as of the fleet's last API response; the operator's own `claude`, or
+  another machine on the account, moves it with no event, and an idle fleet hears nothing.
+- **The status at the limit itself** is unrecorded; anything past `allowed_warning` draws as the limit.
+- **A switch to an account whose window resets at the same instant** with less used keeps the higher figure
+  until the new one passes it or the window resets: a lower figure for the same reset is read as a reading
+  that arrived late (`daemon/usage.go`'s `older`).
+- **Out-of-order readings across a reset are told apart by this machine's clock.** Two agents' responses
+  straddling the reset by less than the clock's skew, landing out of order, let the old window back in; it
+  has passed, so it arrives lapsed and draws as the reset. The stream names no account to do better (Codex).
+
+*Closes with:* each item on its own; none blocks the bar.
+
 ## KNOWN GAP, 2026-10-10 — `/status` does not name claude's own version
 
 Wake's `/status` (`internal/ui/statuscmd.go`) shows Wake's build and a differing daemon's, but not

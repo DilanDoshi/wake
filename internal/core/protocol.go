@@ -568,11 +568,12 @@ func rateLimitEvent(f wireFrame, raw json.RawMessage) Event {
 		status = f.RateLimit.Status
 	}
 	return Event{
-		Kind:      KindRateLimit,
-		SessionID: f.SessionID,
-		Text:      status,
-		Notice:    rateLimitNotice(status),
-		Raw:       raw,
+		Kind:         KindRateLimit,
+		SessionID:    f.SessionID,
+		Text:         status,
+		Notice:       rateLimitNotice(status),
+		SessionUsage: sessionUsage(f.RateLimit),
+		Raw:          raw,
 	}
 }
 

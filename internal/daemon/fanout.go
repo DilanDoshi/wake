@@ -70,6 +70,12 @@ func (s *server) fanOut(a *agent) {
 		}
 		a.continueRewind(ev)
 
+		// The account's session window, off any agent's API response: one push
+		// when what the report says moves, so a fleet at 47% pushes once.
+		if s.usage.note(ev, now) {
+			s.pushStatus()
+		}
+
 		// An ask, an answer and a turn end each change what the roster draws
 		// and what ⇧⇥ can find. Left to watchLiveness, that took up to one
 		// 30-second tick, so an agent blocked on a permission request read as

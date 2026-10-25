@@ -47,6 +47,7 @@ func (s *server) fleet() rpc.Status {
 	root, _ := StateRoot()
 	at := s.fleetSocket()
 	st := rpc.Status{Running: true, PID: os.Getpid(), Socket: at, Fleet: fleetNameOf(root, at), Build: version.Build(), MaxAgents: s.agentCap()}
+	st.SessionUsage = s.usage.report()
 
 	s.mu.Lock()
 	agents := make([]*agent, 0, len(s.agents))

@@ -180,8 +180,9 @@ func (a App) resizePanes() App {
 		}
 		a = a.sizePane(c.Top, w, top).sizePane(c.Bottom, w, bottom)
 	}
-	// The workflow view's agent level is laid out per width too.
-	return a.relaidAgent()
+	// The workflow view's agent level is laid out per width too, and so is the
+	// session bar under the roster.
+	return a.relaidAgent().withUsageRows()
 }
 
 // sizePane re-lays one conversation. "" is the room, the same convention the

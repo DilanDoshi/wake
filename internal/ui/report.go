@@ -39,8 +39,8 @@ func (a App) applyStatus(st *rpc.Status) App {
 	}
 	prev := a.fleet
 	a.fleet = a.fleet.WithStatus(st)
-	a.daemon.build = buildOf(st)
-	a = a.withFleetName(st)
+	a.daemon = a.daemon.with(st)
+	a = a.withFleetName(st).withUsageRows()
 	// The State backstop for the queue: a working→idle edge on this report frees an
 	// agent whose in-flight message's completed lifecycle was lost to a gap. Per
 	// report, so an edge inside one batch is not collapsed. See queue.go.
@@ -60,20 +60,24 @@ func (a App) applyStatus(st *rpc.Status) App {
 	return a.renamed(st).startArrived(st).parkArrived(st).rekeyed(st).wakeArrived(st).reconciledRecovery().reconciledPins().noteEnding(st).refreshedAgents().departedQuit().pruneCompacting().rechanneled().retarget().recompleted()
 }
 
-// daemonFacts is what the last report said about the daemon itself rather than
-// its sessions.
+// daemonFacts is what a report says about the daemon and the account rather
+// than any agent: the daemon's build, the fleet it serves (fleetname.go), and
+// the session-usage reading with the rows the sidebar draws it as (usagebar.go).
 type daemonFacts struct {
-	build string // its build; see wakeBuilds
-	fleet string // the fleet it serves; see fleetname.go
+	build string
+	fleet string
+	usage *rpc.SessionUsage
+	rows  []string
 }
 
-// buildOf is the daemon's build a seed or a report names; a nil seed - wait
-// for the first push - names none.
-func buildOf(st *rpc.Status) string {
+// with takes what a seed or a report names; a nil seed - wait for the first
+// push - names nothing. The fleet is withFleetName's, which compares it first.
+func (d daemonFacts) with(st *rpc.Status) daemonFacts {
 	if st == nil {
-		return ""
+		return d
 	}
-	return st.Build
+	d.build, d.usage = st.Build, st.SessionUsage
+	return d
 }
 
 // refreshedAgents folds each live agent into the conversation this client holds

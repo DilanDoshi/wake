@@ -89,6 +89,7 @@ type server struct {
 	teamOrder []string
 	peers     peerBook   // the /list-agents run in flight and its askers; its own lock
 	limits    limitWatch // resuming agents a usage limit stopped; its own lock
+	usage     usageBook  // the account's newest session-usage reading; its own lock
 	home      fleetHome  // what the fleet answers to after a /wake-name: fleetrename.go
 
 	// taken is set by takeAgents when shutdown snapshots the fleet. An agent

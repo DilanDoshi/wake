@@ -225,7 +225,7 @@ func (a App) clickedRow(y int) (rosterSpot, bool) {
 	if r.Roster <= 0 {
 		return rosterSpot{}, false
 	}
-	return a.roster.Hit(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.paneHeight(), y)
+	return a.roster.Hit(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), y)
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the

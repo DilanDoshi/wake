@@ -244,6 +244,8 @@ func runFakeAgent() int {
 		return fakeAgentHandshakes(sid)
 	case scriptUsageLimits:
 		return fakeAgentUsageLimits(sid)
+	case scriptUsageReadings:
+		return fakeAgentUsageReadings(sid)
 	case scriptUnreachable:
 		return fakeAgentUnreachable(sid)
 	case scriptSteers:

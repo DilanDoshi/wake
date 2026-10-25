@@ -61,6 +61,10 @@ func paletteBinding() map[string]struct {
 		// marker, so the colour is chosen rather than mirrored - but it is still
 		// one of Claude's, and this is what stops it drifting to an invented hue.
 		"LastRead": {LastRead, "effortUltra"},
+
+		// The session bar's used and unused cells are Claude Code's own usage bar.
+		"UsageFill":  {UsageFill, "rate_limit_fill"},
+		"UsageTrack": {UsageTrack, "rate_limit_empty"},
 	}
 }
 

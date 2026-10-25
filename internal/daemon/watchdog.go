@@ -170,7 +170,8 @@ func (s *server) watchLiveness(ctx context.Context) {
 			s.lock.verify()
 			s.probeQuietAgents(ctx)
 			s.nudgeLimitsDue(limitClock())
-			if s.statesChanged() {
+			lapsed := s.usage.lapse(limitClock()) // a session reset passing, on this tick rather than a timer
+			if s.statesChanged() || lapsed {
 				s.pushStatus()
 			}
 		}

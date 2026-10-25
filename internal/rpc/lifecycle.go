@@ -247,6 +247,10 @@ type Status struct {
 	// included; zero is a daemon from before it was reported.
 	MaxAgents int `json:"max_agents,omitempty"`
 
+	// SessionUsage is the account's five-hour window off the newest reading any
+	// agent's API response carried, nil until one has. See usage.go.
+	SessionUsage *SessionUsage `json:"session_usage,omitempty"`
+
 	// Sessions is every session the daemon holds, or - when Running is
 	// false - every one the last daemon recorded before it died, each
 	// StateOrphaned.

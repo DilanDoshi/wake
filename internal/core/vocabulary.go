@@ -136,11 +136,18 @@ const statusCompacting = "compacting"
 
 // rateLimitAllowed means nothing is wrong, and was the only
 // rate_limit_info.status recorded until partial-turn.jsonl (2026-08-21)
-// carried the corpus's one "allowed_warning" — which the switch below draws
+// carried the corpus's first rateLimitWarning — which the switch below draws
 // as rate-limited, a ruling made before any such status existed. Whether a
 // warning deserves a softer sentence is an open product call; see the
-// fixture's findings note.
-const rateLimitAllowed = "allowed"
+// fixture's findings note. The session bar tells the two apart (account.go).
+const (
+	rateLimitAllowed = "allowed"
+	rateLimitWarning = "allowed_warning"
+)
+
+// rateLimitFiveHour names the plan's five-hour session window, both as a
+// rateLimitType and as a key of unifiedWindows.
+const rateLimitFiveHour = "five_hour"
 
 // A failed turn's top-level error kinds that change what recovers it: a dead
 // login needs a new process (api-error-auth.jsonl), a usage limit waits for its
