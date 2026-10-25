@@ -27,12 +27,18 @@ func isGrid(s string) bool { return !boldLabel.MatchString(s) }
 
 // A table that fits draws exactly as it always has, wherever it sits: the table
 // drawn alone in its place is byte for byte the document glamour drew whole.
+// So does every table glamour keeps: one whose reference link is defined outside
+// it, and one whose rows hold no text at all, or end in a bare `|`.
 //
-// Mutation check: dropping the blank line written before the placeholder fails
-// the case with a paragraph directly above the table, which the placeholder
-// would otherwise continue.
+// Mutation check: without the reference fence the reference-link table draws as
+// records; a span one line short leaves the bare `|` row behind as a paragraph;
+// without the guard for a table no cell anchors, `||` panics.
 func TestATableThatFitsDrawsAsItAlwaysHas(t *testing.T) {
 	for _, src := range []string{
+		"| a | b |\n|---|---|\n| [x][r] | y |\n\n[r]: https://example.com/ref",
+		"||\n|---|---|\n||",
+		"| a | b |\n|---|---|\n| x | y |\n|",
+		"| a | b |\n|---|---|\n| x | y |\n||\n\nAfter.",
 		flagTable,
 		"Before.\n\n" + flagTable + "\n\nAfter.",
 		"Before, with no blank line.\n" + flagTable + "\n\nAfter.",
@@ -151,7 +157,8 @@ func TestAGridIsKeptOnlyWhileEveryWordIsWhole(t *testing.T) {
 	for _, src := range []string{flagTable, crewTable, keyTable,
 		"| Page |\n|---|\n| [docs](https://example.com/a/rather/long/path/to/the/page/about/debugging) |",
 		"| `Flag` | **Kind** | Link |\n|---|---|---|\n| `--debug` |  | [docs](https://example.com/debug) |\n" +
-			"| `--worktree` | path & name | none |"} {
+			"| `--worktree` | path & name | none |",
+		"| Supercalifragilisticexpialidocious | b |\n|---|---|\n| x | y |"} {
 		var words []string
 		for _, row := range plainRows(rendered(src, 200)) {
 			if !strings.Contains(row, "─") {
@@ -196,6 +203,73 @@ func TestARecordKeepsItsCellsMarkdown(t *testing.T) {
 	for _, styled := range []string{"\x1b[1mFlag:", "\x1b[1mKind:", "\x1b[1mc\x1b[0m"} {
 		if !strings.Contains(out, styled) {
 			t.Errorf("no %q in\n%q", styled, out)
+		}
+	}
+}
+
+// A label is the header's text as the grid shows it, whatever punctuation it
+// holds, and a pipe escaped inside a cell's code is a pipe.
+//
+// Mutation check: escaping every punctuation mark leaves a backslash before `/`,
+// `'`, `?`, `%` and `:`; dropping the pipe's unescape draws `a \| b`.
+func TestARecordsLabelIsItsHeadersText(t *testing.T) {
+	heads := []string{"Pass/Fail", "Owner's", "Done?", "Coverage %", "Q&A", "a~b", "R&amp;D", "*x*", "C:\\\\"}
+	src := "| " + strings.Join(heads, " | ") + " |\n|" + strings.Repeat("---|", len(heads)) + "\n| `a \\| b` |" +
+		strings.Repeat(" "+strings.Repeat("z", 40)+" |", len(heads)-1)
+	want := []string{"Pass/Fail: a | b", "Owner's:", "Done?:", "Coverage %:", "Q&A:", "a~b:", "R&D:", "x:", "C:\\:"}
+	rows := strings.Join(plainRows(Markdown(src, 60)), "\n")
+	for _, w := range want {
+		if !strings.Contains(rows, "\n  "+w) && !strings.HasPrefix(rows, "  "+w) {
+			t.Errorf("no row %q in\n%s", w, rows)
+		}
+	}
+}
+
+// A one-column grid keeps a row per body row: reflowProse used to run them
+// together, `a.go b.go c.go`, since no `│` marks them as a grid's.
+//
+// Mutation check: without gridRows the rows run together, the grid no longer
+// reads back as the table, and it draws as records.
+func TestAOneColumnGridKeepsItsRows(t *testing.T) {
+	src := "| Files |\n|---|\n| a.go |\n| b.go |\n| c.go |"
+	got := plainRows(Markdown(src, 80))
+	if !isGrid(Markdown(src, 80)) || len(got) != 5 || strings.TrimSpace(got[3]) != "b.go" {
+		t.Fatalf("drew\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// A grid Wake cannot read back is glamour's to draw, as before; one holding a
+// cell no pane can hold is records.
+func TestAGridWakeCannotReadIsGlamoursAndAnUnholdableCellIsRecords(t *testing.T) {
+	unread := "| a | b |\n|---|---|\n| x │ y | z |"
+	for _, width := range []int{30, 120} {
+		if got, want := Markdown(unread, width), rendered(unread, width); got != want {
+			t.Errorf("at %d drew\n%s\nwant\n%s", width, got, want)
+		}
+	}
+	if huge := "| a | b |\n|---|---|\n| x | " + strings.Repeat("x", maxUnwrappedWidth+1) + " |"; isGrid(Markdown(huge, 120)) {
+		t.Error("a cell wider than any pane kept its grid")
+	}
+}
+
+// keepsText holds a grid to the cells it was drawn from: the header whole, every
+// row's words whole and in order, every row drawn, and none past four lines.
+func TestKeepsTextHoldsAGridToItsCells(t *testing.T) {
+	want := [][]string{{"Key", "Value"}, {"a", "one two"}, {"b", "three"}}
+	for _, c := range []struct {
+		name  string
+		lines [][]string
+		keeps bool
+	}{
+		{"whole", [][]string{{"Key", "Value"}, {"a", "one two"}, {"b", "three"}}, true},
+		{"wrapped", [][]string{{"Key", "Value"}, {"a", "one"}, {"", "two"}, {"b", "three"}}, true},
+		{"a cut header", [][]string{{"Key", "Val…"}, {"a", "one two"}, {"b", "three"}}, false},
+		{"a cut word", [][]string{{"Key", "Value"}, {"a", "one tw"}, {"b", "three"}}, false},
+		{"a row missing", [][]string{{"Key", "Value"}, {"a", "one two"}}, false},
+		{"five lines", [][]string{{"Key", "Value"}, {"a", "one"}, {"", ""}, {"", ""}, {"", ""}, {"", "two"}, {"b", "three"}}, false},
+	} {
+		if got := keepsText(c.lines, want); got != c.keeps {
+			t.Errorf("%s: keeps %v, want %v", c.name, got, c.keeps)
 		}
 	}
 }

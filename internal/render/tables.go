@@ -82,9 +82,6 @@ func withTables(src string, width int, records bool) string {
 		}
 		out = append(out, row)
 	}
-	if next < len(tables) {
-		return rendered(src, width)
-	}
 	return strings.Join(out, "\n")
 }
 
@@ -99,70 +96,119 @@ func (t table) drawn(width int, records bool) []string {
 }
 
 // tablesIn is src's top-level tables with a body. A table inside a list item or
-// a quote is left to glamour (deferred.md).
+// a quote, and every table of a source that defines a link reference (one drawn
+// alone would lose it), are left to glamour (deferred.md).
 func tablesIn(src string) []table {
 	if !hasDelimiterRow(src) {
 		return nil
 	}
 	source := []byte(src)
-	mu.Lock() // goldmark promises nothing about concurrent use; mu serializes it with every render
-	doc := tableParser().Parse(text.NewReader(source))
-	mu.Unlock()
+	doc, refs := parsed(source)
+	if refs {
+		return nil
+	}
 	var out []table
 	for n := doc.FirstChild(); n != nil; n = n.NextSibling() {
 		if tn, ok := n.(*east.Table); ok && tn.ChildCount() > 1 {
-			out = append(out, tableOf(tn, source))
+			if t, ok := tableOf(tn, source); ok {
+				out = append(out, t)
+			}
 		}
 	}
 	return out
 }
 
-// hasDelimiterRow is the cheap test before a parse: a line of only pipes,
-// dashes, colons and blanks, holding a pipe and a dash, as a table's second
-// line is.
+// parsed is source's tree and whether it defines a link reference. goldmark
+// promises nothing about concurrent use, so mu serializes it with every render.
+func parsed(source []byte) (ast.Node, bool) {
+	mu.Lock()
+	defer mu.Unlock()
+	ctx := parser.NewContext()
+	doc := tableParser().Parse(text.NewReader(source), parser.WithContext(ctx))
+	return doc, len(ctx.References()) > 0
+}
+
+// hasDelimiterRow is the cheap test before a parse: a table's second line.
 func hasDelimiterRow(src string) bool {
 	for line := range strings.Lines(src) {
-		t := strings.TrimSpace(line)
-		if strings.Contains(t, "|") && strings.Contains(t, "-") && strings.Trim(t, "|-: \t") == "" {
+		if delimiterRow(line) {
 			return true
 		}
 	}
 	return false
 }
 
-// tableOf reads one table node: its header's text, its cells' markdown with an
-// escaped pipe made plain (outside a table it is just a pipe), and the span of
-// whole lines its cells sit on.
-func tableOf(tn *east.Table, source []byte) table {
-	t := table{start: len(source)}
-	for row := tn.FirstChild(); row != nil; row = row.NextSibling() {
-		var cells []string
-		for c := row.FirstChild(); c != nil; c = c.NextSibling() {
-			cell := ""
-			if lines := c.Lines(); lines.Len() > 0 {
-				seg := lines.At(0)
-				t.start, t.end = min(t.start, seg.Start), max(t.end, seg.Stop)
-				cell = strings.ReplaceAll(string(seg.Value(source)), `\|`, "|")
+// delimiterRow reports a line of only pipes, dashes, colons and blanks that
+// holds a pipe and a dash.
+func delimiterRow(line string) bool {
+	t := strings.TrimSpace(line)
+	return strings.Contains(t, "|") && strings.Contains(t, "-") && strings.Trim(t, "|-: \t") == ""
+}
+
+// tableOf reads one table node: its header's text, its body cells' markdown,
+// and its lines. goldmark reads a table one line per row - the header, the
+// delimiter row under it, then each body row - so the lines are counted from the
+// first cell holding a segment, and the second must be the delimiter row. A
+// table with no such cell is glamour's.
+func tableOf(tn *east.Table, source []byte) (table, bool) {
+	t := table{links: linksIn(tn, source)}
+	anchor, line := -1, 0
+	for row, i := tn.FirstChild(), 0; row != nil; row, i = row.NextSibling(), i+1 {
+		cells, at := cellsOf(row, source)
+		if anchor < 0 && at >= 0 {
+			anchor, line = at, i
+			if i > 0 {
+				line++ // the delimiter row sits between the header and the body
 			}
-			if row == tn.FirstChild() {
+		}
+		if i == 0 {
+			for c := row.FirstChild(); c != nil; c = c.NextSibling() {
 				t.labels = append(t.labels, plainText(c, source))
 			}
-			cells = append(cells, cell)
+			continue
 		}
-		if row != tn.FirstChild() {
-			t.rows = append(t.rows, cells)
-		}
+		t.rows = append(t.rows, cells)
 	}
-	t.links = linksIn(tn, source)
+	if anchor < 0 {
+		return table{}, false
+	}
 	src := string(source)
-	t.start = strings.LastIndexByte(src[:t.start], '\n') + 1
-	if nl := strings.IndexByte(src[t.end:], '\n'); nl >= 0 {
+	t.start = strings.LastIndexByte(src[:anchor], '\n') + 1
+	for range line {
+		t.start = strings.LastIndexByte(src[:max(t.start-1, 0)], '\n') + 1
+	}
+	t.end = t.start
+	for range 2 + len(t.rows) {
+		nl := strings.IndexByte(src[t.end:], '\n')
+		if nl < 0 {
+			t.end = len(src)
+			break
+		}
 		t.end += nl + 1
-	} else {
-		t.end = len(src)
 	}
 	t.text = src[t.start:t.end]
-	return t
+	lines := strings.SplitN(t.text, "\n", 3)
+	return t, len(lines) > 1 && delimiterRow(lines[1])
+}
+
+// cellsOf is a row's cells as markdown, an escaped pipe made plain (outside a
+// table it is just a pipe), and where its first cell holding a segment starts,
+// or -1. A cell goldmark padded the row with holds none.
+func cellsOf(row ast.Node, source []byte) ([]string, int) {
+	at := -1
+	var cells []string
+	for c := row.FirstChild(); c != nil; c = c.NextSibling() {
+		cell := ""
+		if lines := c.Lines(); lines.Len() > 0 {
+			seg := lines.At(0)
+			cell = strings.ReplaceAll(string(seg.Value(source)), `\|`, "|")
+			if at < 0 {
+				at = seg.Start
+			}
+		}
+		cells = append(cells, cell)
+	}
+	return cells, at
 }
 
 // plainText is the text a cell shows, its markup gone: escapes and entities
@@ -245,18 +291,15 @@ func (t table) records(width int) []string {
 	return out
 }
 
-// escaped is text that markdown draws as itself: every ASCII punctuation mark
-// behind a backslash, which CommonMark allows before any of them.
-func escaped(s string) string {
-	var b strings.Builder
-	for _, r := range s {
-		if r < 0x80 && strings.ContainsRune("!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~", r) {
-			b.WriteByte('\\')
-		}
-		b.WriteRune(r)
-	}
-	return b.String()
-}
+// escaped is text that glamour draws as itself: a backslash before each mark
+// glamour unescapes (any other keeps its backslash on screen), and `&` and `~`
+// as the entities it decodes, so no entity or strikethrough forms.
+var escaped = strings.NewReplacer(
+	"\\", "\\\\", "`", "\\`", "*", "\\*", "_", "\\_", "{", "\\{", "}", "\\}",
+	"[", "\\[", "]", "\\]", "<", "\\<", ">", "\\>", "(", "\\(", ")", "\\)",
+	"#", "\\#", "+", "\\+", "-", "\\-", ".", "\\.", "!", "\\!", "|", "\\|",
+	"&", "&amp;", "~", "&#126;",
+).Replace
 
 // whole reports whether glamour's grid shows the table whole: the header uncut,
 // every word of every cell in its place, no row past maxRowLines lines, and
@@ -270,7 +313,11 @@ func (t table) whole(grid string) bool {
 			return false
 		}
 	}
-	want, ok := t.natural()
+	w := t.naturalWidth()
+	if w > maxUnwrappedWidth {
+		return false // a cell no pane holds
+	}
+	want, ok := t.natural(w)
 	if !ok {
 		return true
 	}
@@ -278,21 +325,28 @@ func (t table) whole(grid string) bool {
 	return ok && keepsText(lines, want)
 }
 
-// natural is the table's grid read back with nothing wrapped: its header's cells,
-// then each body row's. The width doubles until no row wraps, through renderers
-// built here, since a cached one per width would evict those a frame draws with.
-func (t table) natural() ([][]string, bool) {
+// naturalWidth is a first guess at the width the table draws at unwrapped: its
+// cells' source, at least as wide as what they show, and a grid's spacing.
+func (t table) naturalWidth() int {
 	widest := make([]int, len(t.labels))
 	for _, row := range append([][]string{t.labels}, t.rows...) {
 		for c := range min(len(row), len(widest)) {
 			widest[c] = max(widest[c], ansi.StringWidth(row[c]))
 		}
 	}
-	w := 0
+	w := 2 * int(defaultMargin)
 	for _, n := range widest {
 		w += n + 3 // a column's own blank each side and its divider
 	}
-	for w += 2 * int(defaultMargin); w <= maxUnwrappedWidth; w *= 2 {
+	return w
+}
+
+// natural is the table's grid read back with nothing wrapped: its header's cells,
+// then each body row's. The width doubles from w while a row still wraps,
+// through renderers built here, since a cached one per width would evict those
+// a frame draws with. False when the grid cannot be read back at all.
+func (t table) natural(w int) ([][]string, bool) {
+	for ; w <= maxUnwrappedWidth; w *= 2 {
 		r, err := newRenderer(rendererOptions(resolvedStyle(), w)...)
 		if err != nil {
 			return nil, false // the render the grid came from would have failed too, and said so
@@ -301,7 +355,11 @@ func (t table) natural() ([][]string, bool) {
 		if err != nil {
 			return nil, false
 		}
-		if cells, ok := gridCells(out, len(t.labels)); ok && len(cells) == len(t.rows)+1 {
+		cells, ok := gridCells(out, len(t.labels))
+		if !ok || len(cells) < len(t.rows)+1 {
+			return nil, false
+		}
+		if len(cells) == len(t.rows)+1 {
 			return cells, true
 		}
 	}
@@ -403,4 +461,30 @@ func done(rest [][]string) bool {
 		}
 	}
 	return true
+}
+
+// gridRows marks the rows of glamour's grids: a header, the rule under it, and
+// the body down to the next blank row. A one-column grid has no `│` to keep
+// reflowProse off its rows, which would otherwise run together as prose.
+func gridRows(lines []string) []bool {
+	in := make([]bool, len(lines))
+	for i := 1; i < len(lines); i++ {
+		if !gridRule(lines[i]) || blankRow(lines[i-1]) {
+			continue // a thematic break has a blank row above it; a header rule never does
+		}
+		in[i-1] = true
+		for j := i; j < len(lines) && !blankRow(lines[j]); j++ {
+			in[j] = true
+		}
+	}
+	return in
+}
+
+// gridRule reports a row of only `─` and `┼`: the rule under a grid's header.
+func gridRule(line string) bool {
+	if !strings.Contains(line, "─") {
+		return false
+	}
+	t := strings.TrimSpace(ansi.Strip(line))
+	return strings.Trim(t, "─┼") == ""
 }

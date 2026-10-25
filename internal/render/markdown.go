@@ -144,9 +144,10 @@ const boxDrawing = "│─┼┌┐└┘├┤┬┴╭╮╰╯"
 // block is a blank row away.
 func reflowProse(s string, width int) string {
 	lines := strings.Split(s, "\n")
+	grid := gridRows(lines)
 	out := make([]string, 0, len(lines))
 	for i := 0; i < len(lines); {
-		if !reflowable(lines[i]) {
+		if grid[i] || !reflowable(lines[i]) {
 			out = append(out, lines[i])
 			i++
 			continue
@@ -160,7 +161,7 @@ func reflowProse(s string, width int) string {
 			if mark != "" {
 				row = unstyledLead(row)
 			}
-			if !reflowable(row) || leadSpaces(row) != lead || startsItem(group[0], row, itemTag) {
+			if grid[i] || !reflowable(row) || leadSpaces(row) != lead || startsItem(group[0], row, itemTag) {
 				break
 			}
 			group = append(group, row)

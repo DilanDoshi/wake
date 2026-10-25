@@ -44,14 +44,19 @@ laid out as Claude Code lays them out. The rule lives in
     built for the purpose. A cached renderer per width would evict the ones a
     frame draws with (`CachedWidths`).
   - A grid that cannot be read back (a cell holding `│`, say) is left to glamour,
-    exactly as before.
+    exactly as before. A table with a cell wider than `maxUnwrappedWidth` is
+    records, since no pane holds it.
 - **The switch is not monotonic at one width.** glamour cuts a right-aligned
   column's last character when the table is exactly one cell narrower than its
   natural width: the Flag table at 105 drew `ma` for `max`. The table draws as
   records at that width and as a grid on either side of it. That follows from
   the rule, which is about text, not width.
 - **Top-level tables only.** A table in a list item or a quote keeps glamour's
-  grid (`deferred.md`).
+  grid, and so does every table of a reply that defines a reference link
+  (`deferred.md`).
+- **A one-column grid keeps its rows.** On `main`, `reflowProse` ran a
+  one-column grid's body rows together as prose, since no `│` marked them.
+  `gridRows` now marks a grid's header, rule and body.
 - **How it is spliced in.** Each table's lines are replaced by a placeholder
   paragraph with a blank line on each side, the document renders once, and each
   placeholder row becomes that table's rows.
