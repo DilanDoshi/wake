@@ -14,6 +14,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // --- the feature ---------------------------------------------------------
@@ -320,7 +321,7 @@ func TestTheDraftSurvivesACommandThatIsStillRunning(t *testing.T) {
 	}
 
 	a = typeText(a, "the next thing").(App)
-	a = a.bangResult(bangResultMsg{ID: a.sessionID, Cmd: "sleep 5", Text: "done"})
+	a, _ = a.bangResult(bangResultMsg{ID: a.sessionID, Cmd: "sleep 5", Text: "done"})
 
 	if got := a.dm().Composer().Value(); got != "the next thing" {
 		t.Errorf("draft = %q once the command finished: the result was folded into a stale copy and took what was typed meanwhile with it", got)
@@ -352,30 +353,31 @@ func TestAnOrdinaryDraftIsNotACommand(t *testing.T) {
 // ordinary message and the model answers as if it had been asked about the
 // command, which is what it does today.
 //
-// Asserted on what the daemon's side of the connection received, not on the
-// absence of a call. What this cannot yet reach is the Enter key itself:
-// App.submit is where the interception has to sit and it belongs to another
-// change - see the task report.
-func TestABangIsNotSentToTheAgent(t *testing.T) {
+// Dilan's 2026-10-25 ruling reversed what this test used to assert, that a bang
+// never reaches the agent. It does now - as a shell run, never as the text of a
+// message, which is what `!ls` was before the interception and the model
+// answered as a question. Asserted on what the daemon's side received.
+func TestABangReachesTheAgentAsAShellRunNeverAsText(t *testing.T) {
 	fresh(t)
 	conn, sent := pipeClient(t)
 	a := dmApp(conn, Stream{}, "s1", "alex")
 	m, _ := a.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 	a = m.(App)
 
-	a, cmd, ok := a.bang("!echo not for the agent")
+	a, cmd, ok := a.bang("!echo for the agent")
 	if !ok {
 		t.Fatal("a bang was not taken as a local command")
 	}
-	a = a.bangResult(runBangMsg(t, cmd))
-
-	select {
-	case f := <-sent:
-		t.Errorf("a bang reached the daemon as %v %q. That is what happens today without an interception, and the model answers as if it had been asked about the command", f.Kind, f.Text)
-	case <-time.After(250 * time.Millisecond):
+	a, deliver := a.bangResult(runBangMsg(t, cmd))
+	if deliver == nil {
+		t.Fatal("the result was drawn and sent nowhere")
 	}
-	if !strings.Contains(shown(a), "not for the agent") {
-		t.Errorf("the output went neither to the agent nor to the conversation:\n%s", shown(a))
+	go deliver()
+	if f := awaitFrame(t, sent); f.Kind != rpc.FrameSend || f.Text != "" || f.Shell == nil || f.Shell.Command != "echo for the agent" {
+		t.Errorf("the daemon received %v %q shell %+v, want the shell run and no text", f.Kind, f.Text, f.Shell)
+	}
+	if !strings.Contains(shown(a), "for the agent") {
+		t.Errorf("the output was not drawn in the conversation:\n%s", shown(a))
 	}
 }
 
@@ -385,7 +387,7 @@ func TestABangIsNotSentToTheAgent(t *testing.T) {
 func TestAResultForAnotherConversationDoesNotLandInThisOne(t *testing.T) {
 	fresh(t)
 	a := bangApp(t)
-	a = a.bangResult(bangResultMsg{ID: "somebody-else", Cmd: "ls", Text: "another agent's directory"})
+	a, _ = a.bangResult(bangResultMsg{ID: "somebody-else", Cmd: "ls", Text: "another agent's directory"})
 
 	if strings.Contains(shown(a), "another agent's directory") {
 		t.Errorf("output typed into one conversation appeared in another:\n%s", shown(a))
@@ -429,7 +431,7 @@ func TestTheLinesACommandPrintedStayLines(t *testing.T) {
 // block early - `!cat README.md` is an ordinary thing to type.
 func TestOutputCarryingItsOwnFenceStaysInsideTheBlock(t *testing.T) {
 	body := "```\nfenced\n```"
-	block := bangBlock(body)
+	block := bangEvent(bangResultMsg{Cmd: "cat README.md", Text: body}).Text
 
 	if !strings.HasPrefix(block, "````") {
 		t.Errorf("block opened with %q, want a fence longer than the one in the output", strings.SplitN(block, "\n", 2)[0])
@@ -519,6 +521,19 @@ func TestOutputPastTheCapIsDroppedRatherThanRefused(t *testing.T) {
 	}
 }
 
+// Containment turns each invalid byte into a three-byte replacement rune, so a
+// cap taken before it could let three times the bound through - to the pane and
+// to the agent. The cap is on what is drawn and sent.
+func TestAnInvalidUTF8FloodStaysWithinTheCap(t *testing.T) {
+	text := bangRunWithin(t, bangTestLimit, t.TempDir(), "head -c 200000 /dev/zero | LC_ALL=C tr '\\0' '\\377'", bangTimeout, bangWaitDelay)
+	if limit := bangMaxBytes + len(bangTruncated) + 16; len(text) > limit {
+		t.Errorf("an invalid UTF-8 flood came out at %d bytes, want at most %d", len(text), limit)
+	}
+	if !strings.Contains(text, "truncated at") {
+		t.Errorf("the cut is not said: %q", text[max(0, len(text)-80):])
+	}
+}
+
 // --- helpers -------------------------------------------------------------
 
 // bangApp is a sized App with one conversation and no daemon behind it.
@@ -537,7 +552,8 @@ func dispatch(t *testing.T, a App, draft string) App {
 	if !ok {
 		t.Fatalf("%q was not taken as a local command", draft)
 	}
-	return a.bangResult(runBangMsg(t, cmd))
+	a, _ = a.bangResult(runBangMsg(t, cmd))
+	return a
 }
 
 // runBangMsg runs one dispatched command and returns its message, bounded so a
@@ -561,7 +577,7 @@ func runBangSync(t *testing.T, dir, cmdline string) bangResultMsg {
 // is how a test reaches the timeout without waiting thirty seconds for it.
 func runBangSyncWithTimeout(t *testing.T, dir, cmdline string, timeout time.Duration) bangResultMsg {
 	t.Helper()
-	msg, ok := within(t, bangTestLimit, runBang("s1", dir, cmdline, timeout))
+	msg, ok := within(t, bangTestLimit, runBang("s1", "s1", dir, cmdline, timeout))
 	if !ok {
 		t.Fatalf("`!%s` produced no result within %v: the bound did not hold", cmdline, bangTestLimit)
 	}

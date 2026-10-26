@@ -216,7 +216,7 @@ func (a App) observeMessageState(id string, ev core.Event) App {
 	var ended []string
 	switch {
 	case ev.MessageStarted():
-		a = a.takenUp(id, ev.MessageID, true)
+		a = a.shellStarted(id, ev.MessageID).takenUp(id, ev.MessageID, true)
 	case ev.MessageCancelled():
 		a, ended = a.withdrawn(id, ev.MessageID), []string{ev.MessageID}
 	case ev.MessageEnded():

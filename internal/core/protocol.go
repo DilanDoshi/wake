@@ -641,11 +641,16 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		return one(base)
 	}
 	if !isJSONArray(m.Content) {
-		// Compaction summaries, <local-command-stdout>, and a peer's
-		// <cross-session-message> all land here as string content.
+		// Compaction summaries, <local-command-stdout>, a peer's
+		// <cross-session-message> and bash mode's records all land here as string content.
 		text := jsonString(m.Content)
 		if body, name, ok := crossSession(f.Type, text); ok {
 			base.Kind, base.Text, base.FromName = KindCrossSession, body, name
+			return one(base)
+		}
+		// A `!cmd` record: claude's bash mode, or Wake's own bang. Not a typed turn.
+		if block, ok := shellRecord(text); ok && f.Type == "user" {
+			base.Kind, base.Text, base.Echoed, base.Shell = KindUserText, block, true, true
 			return one(base)
 		}
 		if f.Type == "user" && (isLocalCommandPlumbing(text) || (f.IsSynthetic && isAgentMessage(text))) {

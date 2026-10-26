@@ -11,15 +11,13 @@ package ui
 // plausible is the worst of the available failures, so Wake intercepts the bang
 // itself.
 //
-// # Why the output goes in as a user frame
+// # Where the output goes
 //
-// Because that is the shape the CLI itself uses for the same job. A slash
-// command survives stream-json and returns its output as a user frame the
-// airlock already strips its markers off and the DM already renders as an
-// echoed turn. So there is no new frame type, no new event kind, no airlock
-// change and no daemon work: an interception, a local exec, and an injected
-// event. Nothing in this file names a wire word - the markers live inside the
-// decoder, and Wake writes the stripped form directly.
+// Into the conversation it was typed in, drawn as an echoed turn, and to that
+// conversation's agent (Dilan's 2026-10-25 ruling, reversing "a bang never
+// reaches the agent"): written as claude's own bash-mode record, a turn the
+// agent answers, as Claude Code's own `!` is. Nothing here names a wire word -
+// core.EncodeShellRun does, behind the daemon. See bangapp.go.
 //
 // # Why this file spawns a process, next to a rule saying the UI does not
 //
@@ -43,6 +41,7 @@ package ui
 // and where it stops.
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -50,6 +49,7 @@ import (
 	"os/exec"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -58,7 +58,7 @@ import (
 
 const (
 	// bangPrefix is what makes a draft a local command rather than a message.
-	bangPrefix = "!"
+	bangPrefix = core.ShellPrefix
 
 	// bangTimeout bounds one command.
 	//
@@ -154,8 +154,12 @@ func isBang(text string) (string, bool) {
 // It carries the command as well as the output because the two are one thing to
 // a reader: the transcript is a record of what the operator did, and output
 // with no line above it is an unattributable block of text three messages later.
+//
+// ID is where it was typed ("" for the room) and To the agent its output goes to
+// ("" for nobody): the same agent in a conversation, the one a room mention aimed.
 type bangResultMsg struct {
 	ID   string
+	To   string
 	Cmd  string
 	Text string
 }
@@ -166,10 +170,11 @@ type bangResultMsg struct {
 // still output, and the operator wants the same treatment for a non-zero exit
 // as for a zero one. What did not happen is the only thing worth
 // distinguishing, and each of those cases says so in its own words.
-func runBang(id, dir, cmdline string, timeout time.Duration) tea.Cmd {
+func runBang(id, to, dir, cmdline string, timeout time.Duration) tea.Cmd {
 	return func() tea.Msg {
 		return bangResultMsg{
 			ID:   id,
+			To:   to,
 			Cmd:  cmdline,
 			Text: bangRun(dir, cmdline, timeout, bangWaitDelay),
 		}
@@ -208,7 +213,10 @@ func bangRun(dir, cmdline string, timeout, waitDelay time.Duration) string {
 	// and the /mcp panel, which is this same run with a different renderer.
 	// Everything bangText adds under it is Wake's own words. docs/notes/bugs.md
 	// BUG-9.
-	text := bangText(core.Contained(out.String()), out.truncated, err, ctx.Err() != nil, timeout, waitDelay)
+	// Contained after the cap can grow what it kept - an invalid byte becomes a
+	// three-byte rune - so the cap is taken again on what is drawn and sent.
+	kept, cut := capped(core.Contained(out.String()), bangMaxBytes)
+	text := bangText(kept, out.truncated || cut, err, ctx.Err() != nil, timeout, waitDelay)
 	switch {
 	// KillGroup answers nil only when the group still had a member to signal,
 	// and Run has already reaped the shell - so whatever was killed is
@@ -219,6 +227,17 @@ func bangRun(dir, cmdline string, timeout, waitDelay time.Duration) string {
 		return bangNote(text, fmt.Sprintf(bangCleanupFailed, cleanupErr))
 	}
 	return text
+}
+
+// capped is s cut to at most limit bytes on a rune boundary, and whether it was.
+func capped(s string, limit int) (string, bool) {
+	if len(s) <= limit {
+		return s, false
+	}
+	for limit > 0 && !utf8.RuneStart(s[limit]) {
+		limit--
+	}
+	return s[:limit], true
 }
 
 // bangText assembles what the conversation is told, output first and the reason
@@ -264,53 +283,17 @@ func bangNote(out, line string) string {
 	return out + "\n" + line
 }
 
-// bangEvent is how the result enters a transcript: the same echoed user turn
-// the CLI produces for a slash command, so it renders under the muted label
-// rather than as something the operator said.
-//
-// The command line rides *inside* the block with its output, which is the one
-// deliberate difference from the frame the CLI sends. A DM renders an echoed
-// user turn as markdown, and markdown joins consecutive lines into a paragraph:
-// unfenced, three files from `!ls` arrive as one line of three words, which is
-// a wrong transcript of the kind this project keeps having to name. Fenced,
-// what the command printed is what is shown, and the command line above it is
-// safe from being read as emphasis or a heading.
+// bangEvent is how the result enters a transcript: the echoed user turn a
+// slash command's output is, so it renders under the muted label rather than as
+// something the operator said. The command rides inside the block with its
+// output, fenced so markdown keeps the lines a command printed as lines - the
+// same block the agent's own record reads back as (core.ShellBlock).
 func bangEvent(m bangResultMsg) core.Event {
 	return core.Event{
 		Kind:      core.KindUserText,
-		SessionID: m.ID,
+		SessionID: cmp.Or(m.ID, m.To),
 		Echoed:    true,
-		Text:      bangBlock(bangPrefix + m.Cmd + "\n" + m.Text),
+		Shell:     true,
+		Text:      core.ShellBlock(m.Cmd, m.Text),
 	}
-}
-
-// bangBlock fences body as preformatted text, with a fence long enough to
-// survive a body that contains one. `!cat README.md` is an ordinary thing to
-// type and a fence inside a fence would end the block early, spilling the rest
-// of the file back into markdown - the failure this fence exists to prevent,
-// arrived at from the inside.
-func bangBlock(body string) string {
-	fence := strings.Repeat(bangFenceRune, max(bangFenceMin, longestRun(body, bangFenceRune)+1))
-	return fence + "\n" + strings.TrimRight(body, "\n") + "\n" + fence
-}
-
-const (
-	// bangFenceRune opens and closes a preformatted block, and bangFenceMin is
-	// the shortest markdown accepts.
-	bangFenceRune = "`"
-	bangFenceMin  = 3
-)
-
-// longestRun is the longest unbroken repetition of s in body.
-func longestRun(body, s string) int {
-	longest, run := 0, 0
-	for _, r := range body {
-		if string(r) == s {
-			run++
-			longest = max(longest, run)
-			continue
-		}
-		run = 0
-	}
-	return longest
 }

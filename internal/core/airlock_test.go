@@ -440,6 +440,11 @@ var claudeWireVocabulary = wordSet([]string{
 	// reason: the tag is the only thing identifying the line.
 	"<agent-message", "</agent-message>",
 
+	// Bash mode's record of a `!cmd`, read back by shellRecord and written by
+	// EncodeShellRun: the tags are the only thing identifying the line.
+	"<bash-input>", "</bash-input>", "<bash-stdout>", "</bash-stdout>",
+	"<bash-stderr>", "</bash-stderr>",
+
 	// Claude's abort markers. Policed as hard as any field name, and for a
 	// sharper reason than most: they arrive on a frame with no subtype and no
 	// isSynthetic, so the *string* is the only thing that identifies them, and
@@ -791,7 +796,9 @@ var notNamedByTheAirlock = map[string]string{
 // 235 → 241: the five-hour window the session bar draws ("rateLimitType",
 // "unifiedWindows", "five_hour", "utilization", "resetsAt") and its warning
 // ("allowed_warning"). question-multiselect.jsonl, midturn-two.jsonl.
-const policedWordCount = 241
+// 241 → 247: bash mode's six tags, a `!cmd` record read back and written.
+// bash-mode.jsonl, shell-run.stdin.jsonl.
+const policedWordCount = 247
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -809,6 +816,9 @@ var notWireVocabulary = wordSet([]string{
 	"decode transcript line: %w",
 	"encode user message",
 	"%w: encode user message: nothing to send",
+	"encode shell run", "%w: encode shell run: no command",
+	// The line break between a shell run's two streams.
+	"\n",
 	"encode ", "encode mcp reconnect", "encode mcp toggle",
 	// account.go: where Claude's config file lives (named outside core too),
 	// the reset clause of a usage-limit message, and the parse of its date.
@@ -1203,6 +1213,12 @@ var embeddedMarkers = map[string]bool{
 	"</cross-session-message>": true,
 	"<agent-message":           true,
 	"</agent-message>":         true,
+	"<bash-input>":             true,
+	"</bash-input>":            true,
+	"<bash-stdout>":            true,
+	"</bash-stdout>":           true,
+	"<bash-stderr>":            true,
+	"</bash-stderr>":           true,
 	// The /goal announcements' leading phrases; "<synthetic>" and "No goal set"
 	// are whole values, so they are matched quoted rather than here.
 	"Goal set: ":          true,

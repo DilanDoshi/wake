@@ -280,3 +280,62 @@ func firstLine(text string) string {
 	}
 	return strings.TrimSpace(text)
 }
+
+// Claude Code's bash mode records `!cmd` as string-content user lines: the
+// command in one, what it printed in the next, merged into stdout - or into
+// stderr when it failed (bash-mode.jsonl). Wake writes its own bang in the same
+// tags, both in one line, so the agent reads it as it reads Claude Code's.
+const (
+	bashInputOpen   = "<bash-input>"
+	bashInputClose  = "</bash-input>"
+	bashStdoutOpen  = "<bash-stdout>"
+	bashStdoutClose = "</bash-stdout>"
+	bashStderrOpen  = "<bash-stderr>"
+	bashStderrClose = "</bash-stderr>"
+)
+
+// shellRecordText is one command and its merged output in bash mode's tags.
+func shellRecordText(command, output string) string {
+	return bashInputOpen + command + bashInputClose +
+		bashStdoutOpen + output + bashStdoutClose + bashStderrOpen + bashStderrClose
+}
+
+// shellRecord reads a bash-mode line back as the block a live bang draws: a
+// whole command record, a whole output record, or Wake's one-line pair. Either
+// half may quote the tags (`!cat` of a transcript): the command closes at the
+// first close that opens the output, the output at the last.
+func shellRecord(s string) (string, bool) {
+	if body, ok := strings.CutPrefix(s, bashInputOpen); ok {
+		if command, ok := strings.CutSuffix(body, bashInputClose); ok {
+			return ShellBlock(command, ""), true
+		}
+		command, streams, ok := strings.Cut(body, bashInputClose+bashStdoutOpen)
+		if !ok {
+			return "", false
+		}
+		output, ok := shellStreams(streams)
+		return ShellBlock(command, output), ok
+	}
+	streams, ok := strings.CutPrefix(s, bashStdoutOpen)
+	if !ok {
+		return "", false
+	}
+	output, ok := shellStreams(streams)
+	return ShellBlock("", output), ok
+}
+
+// shellStreams is a record's stdout and stderr, merged, from what follows its
+// stdout's open tag.
+func shellStreams(s string) (string, bool) {
+	s, closed := strings.CutSuffix(s, bashStderrClose)
+	i := strings.LastIndex(s, bashStdoutClose+bashStderrOpen)
+	if !closed || i < 0 {
+		return "", false
+	}
+	out := strings.TrimRight(s[:i], "\n")
+	errs := strings.TrimRight(s[i+len(bashStdoutClose+bashStderrOpen):], "\n")
+	if out != "" && errs != "" {
+		out += "\n"
+	}
+	return out + errs, true
+}

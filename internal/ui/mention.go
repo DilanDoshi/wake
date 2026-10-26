@@ -193,6 +193,9 @@ func (a App) route(text string) roomRoute {
 	live := a.live()
 	r := core.Resolve(text, live, a.service())
 	if !fleetMention(r, live) {
+		if br, ok := a.bangRoute(r, text); ok {
+			return br
+		}
 		return roomRoute{Route: r, mode: a.mention}
 	}
 	// **Open mode widens a message; it does not widen a knob.** `@john hello` in
@@ -205,7 +208,8 @@ func (a App) route(text string) roomRoute {
 	// body core stripped the mention off, so leadingCommand reads the command
 	// rather than the @name. It resolves MentionDirect so the composer promises
 	// the one turn it sends.
-	if a.mention == MentionDirect || leadingCommand(r.Text) {
+	// A bang is a command too: it runs in one agent's directory and reaches it.
+	if _, bang := isBang(r.Text); a.mention == MentionDirect || leadingCommand(r.Text) || bang {
 		return roomRoute{Route: r, mentioned: true, mode: MentionDirect}
 	}
 	return roomRoute{Route: openRoute(r, text, live), direct: r, mentioned: true, mode: a.mention}

@@ -47,7 +47,7 @@ func (a App) login(arg string) (App, tea.Cmd) {
 		return a, nil
 	}
 	notice.Report("%s", authChecking)
-	return a, runAuthStatus(a.conversationID(), a.bangDir())
+	return a, runAuthStatus(a.conversationID(), a.bangDir(a.conversationID()))
 }
 
 // runAuthStatus runs the check off the draw goroutine, bounded like any bang.

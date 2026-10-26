@@ -5870,3 +5870,28 @@ Two calls BUG-53's fix left to the owner; both are true of the rulings it kept, 
 - **`wake stop` with no daemon leaves a crashed fleet behind.** It reports that no daemon is running and
   clears nothing, so the next `wake` hands the fleet to the park book. *Closes with:* `wake stop` removing
   the roster and park-ready file itself (a `cmd/wake` write to files the daemon owns), or saying so.
+
+## FROM `fix/bang-reaches-the-agent`, 2026-10-25
+
+A bang's output now reaches its agent stamped, so the daemon owes its turn, but outside the window's queue
+(decisions.md, 2026-10-25): the pane drew it at once, so a `⧗` pin would be a second copy. Each edge is narrow -
+a bang typed while that agent is busy - and none sends anything twice.
+
+- **`↑` cannot take back a bang queued behind a busy turn.** The take-back (`FrameRecall`) reaches what
+  `queue.go` holds. *Closes with:* tracking a bang there, pinned with no echo.
+- **A `⌃]` behind a queued bang ends the turn instead of backgrounding its work.** A `now` only backgrounds
+  running work with nothing queued ahead of it, and the bang is ahead of it unseen. *Closes with:* the same
+  tracking, so send-now takes it back first.
+- **An `esc` leaves a queued bang for claude to run after the interrupt** - as a turn, so the agent answers it.
+  *Closes with:* the same tracking, so the interrupt cancels it with what else is queued.
+- **A command holding `</bash-input><bash-stdout>` reads back split at it** on a reopen: Wake's one-line
+  record splits command from output at the first such pair, since an output (`!cat` of a transcript) holds it
+  far more often than a typed command. The agent was sent exactly what the pane drew; only the reopened block
+  differs. *Closes with:* two records, the command's held by `shouldQuery:false`, as Claude Code's own `!`
+  writes two - at the cost of a zero-turn result between them that the room and the done line would have to
+  learn to ignore.
+- **The room's own bang line is still gone after a room restore.** It is echoed, and the room restores only
+  typed turns; that was true before this change. *Closes with:* room provenance for a bang aimed from the room.
+- **The held form, `shouldQuery:false`, was considered and not chosen** (the owner picked a turn, 2026-10-25):
+  no turn, $0, read with the next prompt - one field in `EncodeShellRun` and the daemon not marking a turn
+  owed. Its live facts are in the findings note and want fixtures before it is ever written.

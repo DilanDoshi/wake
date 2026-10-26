@@ -11,7 +11,7 @@ package rpc
 //
 //	bytes 0-3    "wake"           recognises it
 //	byte  4      flags            MessageDirect, MessageResumed, MessageTeam, MessageSolo,
-//	                              MessageReconnected
+//	                              MessageReconnected, MessageShell
 //	bytes 5-10   send             shared by every target of one room send
 //	bytes 11-15  target           per target, so a broadcast's copies stay
 //	                              distinct records and only a fork shares one
@@ -49,6 +49,10 @@ const (
 	// MessageReconnected rides MessageResumed on a "continue" to an agent an
 	// unreachable API stopped, so a restore can say why it came.
 	MessageReconnected
+	// MessageShell is a `!cmd` the operator ran, sent to its agent: a room send
+	// (MessageDirect beside it) when the room aimed it, a conversation's when not,
+	// so its turn - live or restored - is placed where it was typed.
+	MessageShell
 )
 
 // MessageSend is one send: its flags and send bytes, shared by the uuid of

@@ -18,10 +18,11 @@ func newRoomSend(direct bool) rpc.MessageSend {
 }
 
 // roomSendOf reads a uuid as a room send: which send, whether it was direct,
-// and whether it is one at all. The daemon's resume is Wake's but no room send.
+// and whether it is one at all. The daemon's resume is Wake's but no room send,
+// and nor is a bang typed in a conversation.
 func roomSendOf(id string) (send [6]byte, direct, ok bool) {
 	send, flags, ok := rpc.MessageOf(id)
-	if !ok || flags&rpc.MessageResumed != 0 {
+	if !ok || flags&rpc.MessageResumed != 0 || flags&rpc.MessageShell != 0 && flags&rpc.MessageDirect == 0 {
 		return send, false, false
 	}
 	return send, flags&rpc.MessageDirect != 0, true
