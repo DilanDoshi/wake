@@ -171,6 +171,7 @@ type App struct {
 	resumePicker ResumePicker  // a bare /resume's own picker, over the composer; see resumepicker.go
 	workflow     workflowState // the /workflows view and the runs it draws; see workflowview.go
 	mcpUI        mcpState      // /mcp's menu and its sign-in; see mcpmenu.go
+	help         helpState     // /wake-help's view and the shell usage it lists; see help.go
 
 	// rewindAfterRestore is the session whose both just restored its files, until
 	// its conversation rewind answers. See rewindmenu.go's restoreReported.

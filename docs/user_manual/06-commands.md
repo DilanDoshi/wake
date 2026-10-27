@@ -142,6 +142,9 @@ Wake owns a short, closed list of slash commands:
 /manager-stop                  end the manager for good (a fresh /manager starts a new one)
 /board                         the fleet as one row per agent; ⇥ tiles it into a live wall; a fleet bigger than the screen scrolls
 /status [@who]                 an agent's own facts — state, ids, model, context, effort, permission mode, team, builds; read-only
+/workflows [@who]              a Workflow run's phases and agents: filter them, stop the run, or save its script as a command
+/wake-name [<name>]            rename this fleet; bare says its name
+/wake-help [<filter>]          every key and command Wake has, narrowed as you type; read-only (see below)
 /groupchat-filter [on|off]     whether a lone @name narrows the room by default (bare reports)
 /clear                         in the room only: empty the group chat in this window (agents untouched)
 /reauth                        recover a fleet knocked out by an expired shared login

@@ -189,6 +189,9 @@ func (a App) pane(id string, width, height int) string {
 	if a.workflowIn(id) {
 		return a.workflowPane(width, height)
 	}
+	if a.helpIn(id) {
+		return a.helpPane(width, height)
+	}
 	if id == "" {
 		return a.roomPane(width, height)
 	}

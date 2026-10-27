@@ -292,6 +292,12 @@ const managerStopVerb = SlashPrefix + managerStopCommand
 const wakeNameCommand = "wake-name"
 const wakeNameVerb = SlashPrefix + wakeNameCommand // for resumeVerb's reason
 
+// wakeHelpCommand lists every key and command Wake has (help.go). Wake's own
+// word: no recorded slash_commands carries it, and claude's `help` is another
+// word, answered "isn't available in this environment" headless and left alone.
+const wakeHelpCommand = "wake-help"
+const wakeHelpVerb = SlashPrefix + wakeHelpCommand // for resumeVerb's reason
+
 // quitCommand ends one agent and removes it from this window - `/manager-stop`
 // for an ordinary session. It writes `rpc.FrameStop`, the ending nothing brings
 // back, and unlike ⌃C park it is not recoverable.
@@ -336,6 +342,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	workflowsCommand:       App.openWorkflows,
 	statusCommand:          App.status,
 	wakeNameCommand:        App.renameFleet,
+	wakeHelpCommand:        App.openHelp,
 }
 
 // clearCommand is the room's own /clear (roomclear.go). The word is claude's, so
@@ -447,25 +454,33 @@ const bareOnlyCommandCount = 2
 // and the completion menu are the callers.
 func configureVerb(word string) string { return SlashPrefix + word }
 
-// wakeVerbs is every command Wake owns, rendered as somebody types them.
-//
-// Derived from the two maps rather than written out, so a command added to
-// either reaches the menu without anybody remembering to - and so the menu
-// cannot advertise a word this file does not answer. Sorted, because a Go map
-// has no order and a menu that reshuffled between frames is unreadable.
-func wakeVerbs() []string {
+// wakeWords is every command Wake owns, bare: the words of the three maps above,
+// sorted. The one enumeration - the completion menu and /wake-help both read it -
+// so a command added to any map reaches both without anybody remembering to.
+func wakeWords() []string {
 	out := make([]string, 0, len(commands)+len(bareOnlyCommands)+len(roomCommands))
 	for word := range commands {
-		out = append(out, configureVerb(word))
+		out = append(out, word)
 	}
 	for word := range roomCommands {
-		out = append(out, configureVerb(word))
+		out = append(out, word)
 	}
 	for word := range bareOnlyCommands {
-		out = append(out, configureVerb(word))
+		out = append(out, word)
 	}
 	slices.Sort(out)
 	return out
+}
+
+// wakeVerbs is wakeWords rendered as somebody types them, so the menu cannot
+// advertise a word this file does not answer. Sorted, because a Go map has no
+// order and a menu that reshuffled between frames is unreadable.
+func wakeVerbs() []string {
+	words := wakeWords()
+	for i, word := range words {
+		words[i] = configureVerb(word)
+	}
+	return words
 }
 
 // commandStem is the command a draft is part-way through typing: the text

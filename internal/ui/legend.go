@@ -27,8 +27,9 @@ import "github.com/charmbracelet/lipgloss"
 // cue itself does not get to use.
 const hintIndentWidth = 1
 
-// legendEntry is one key: the glyph, and what pressing it does.
-type legendEntry struct{ glyph, what string }
+// legendEntry is one key: the glyph, what pressing it does in a word or two (the
+// armed cue's label), and help, the line /wake-help draws beside it.
+type legendEntry struct{ glyph, what, help string }
 
 // legendEntries names every key this build binds, and only what it binds.
 //
@@ -42,38 +43,38 @@ type legendEntry struct{ glyph, what string }
 // ⌃⇧A is deliberately absent: spec §6 gives the next-agent jump that chord and
 // bubbletea v1.3.10 names no ctrl+shift+<letter> at all. ⇧⇥ carries it instead.
 var legendEntries = []legendEntry{
-	{sendGlyph, sendLabel},
-	{"⌃]", "send now"},
-	{escGlyph, escInterruptLabel},
-	{detachGlyph, detachLabel},
-	{"⌃C", "park"},
-	{"⇥", "next chat"},
-	{"⇧⇥", "permissions"},
-	{"⌃X", "next blocked"},
-	{"↑↓", "prompt history"},
+	{sendGlyph, sendLabel, "send the draft; on an empty one, open the agent or channel the roster is on"},
+	{"⌃]", "send now", "take your queued messages back and send them with the draft at once, as one message"},
+	{escGlyph, escInterruptLabel, "interrupt the running turn; twice, clear the draft - or, on an idle empty conversation, open the rewind picker"},
+	{detachGlyph, detachLabel, "arm a detach (close Wake, every agent keeps working): ↵ confirms, ⌃O again cancels"},
+	{"⌃C", "park", "park the agent in front of you; " + resumeVerb + " brings it back"},
+	{"⇥", "next chat", "move the keys to the next open pane; over a slash or @ word it completes the word instead"},
+	{"⇧⇥", "permissions", "cycle the picked agent's permission mode, in Claude Code's own order"},
+	{"⌃X", "next blocked", "jump to the next agent waiting on an answer from you"},
+	{"↑↓", "prompt history", "recall earlier prompts; in a multi-line draft they move the cursor; ↑ takes queued messages back"},
 	// Beside the bare arrows rather than with the other pane keys: ⇧↑↓ is the
 	// same two keys under a modifier, and a legend that separated them would make
 	// a reader hunt for the difference. The roster used to be the bare ↑↓; it
 	// moved here when those took Claude Code's prompt-history recall.
-	{"⇧↑↓", "pick agent or channel"},
+	{"⇧↑↓", "pick agent or channel", "move the roster cursor over agents and channel headers"},
 	// After the arrows rather than beside ⇥: it is a movement key, but it moves
 	// among panes already drawn, so it is worth less than the permission mode to
 	// somebody in an 80-column pane. Placing it higher would push ⇧⇥ out of that
 	// set, which is a change to what a narrow pane advertises.
-	{"⇧←→", "move focus"},
-	{"⌃D", "open DM"},
-	{"⌃Y", "open right"},
-	{"⌃B", "open below"},
-	{"⌃W", "close pane"},
+	{"⇧←→", "move focus", "move the keys to the pane drawn beside this one"},
+	{"⌃D", "open DM", "open the picked agent in the focused pane"},
+	{"⌃Y", "open right", "open the picked agent in a new column"},
+	{"⌃B", "open below", "open the picked agent below the focused pane"},
+	{"⌃W", "close pane", "close the open conversation; the room stays"},
 	// ⌃G workspaces is gone with the left sidebar it toggled, hidden for now;
 	// restored with the multi-groupchat version. See groups.go and keys.go.
-	{"⌃R", "activity"},
-	{"⇞⇟", "scroll"},
-	{"⌃E", "expand"},
-	{"⌃F", "fork"},
-	{"⌃Q", "quit & park all"},
-	{"⌃T", "mention mode"},
-	{"⌃A", "show all"},
+	{"⌃R", "activity", "show or hide the activity sidebar"},
+	{"⇞⇟", "scroll", "scroll the pane a page"},
+	{"⌃E", "expand", "open what the pane folded - tool results, long messages, card descriptions - and fold it again"},
+	{"⌃F", "fork", "fork the conversation: a new agent with its history so far"},
+	{"⌃Q", "quit & park all", "park every agent and quit; a second ⌃Q confirms"},
+	{"⌃T", "mention mode", "flip the mention mode: " + mentionDirectMeans + ", or " + mentionOpenMeans},
+	{"⌃A", "show all", "widen a room a lone @name or @team narrowed back to every agent's lines; again to narrow"},
 }
 
 const (

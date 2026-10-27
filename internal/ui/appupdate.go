@@ -125,6 +125,12 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		if took {
 			return next.cleared(), cmd
 		}
+		// And /wake-help, which takes ⌫ and typing before a hidden draft's selection can.
+		a = next
+		next, cmd, took = a.helpKey(m)
+		if took {
+			return next.cleared(), cmd
+		}
 		a = next
 		// A live query-box selection turns ⌫/delete into "remove what is
 		// highlighted" - read before cleared() wipes the selection, since that
