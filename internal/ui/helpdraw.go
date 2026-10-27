@@ -37,9 +37,18 @@ var helpHeadStyle = lipgloss.NewStyle().Foreground(Accent).Bold(true)
 // helpBody is the laid-out rows for a pane w cells wide and h rows tall, how
 // many of them the body draws at once, and the furthest it scrolls.
 func (a App) helpBody(w, h int) (rows []string, room, limit int) {
-	rows = helpLines(helpFilter(helpSections(a.help.usage), a.help.view.Query), w)
+	rows = a.helpRows(w)
 	room = max(h-helpBodyTop-helpFootRows, 1)
 	return rows, room, max(len(rows)-room, 0)
+}
+
+// helpRows is the rows at a width, from the view's own layout when it was made
+// for this width and query, and laid out fresh when it was not.
+func (a App) helpRows(w int) []string {
+	if v := a.help.view; v.laid.ok && v.laid.width == w && v.laid.query == v.Query {
+		return v.laid.rows
+	}
+	return helpLines(helpFilter(helpSections(a.help.shell), a.help.view.Query), w)
 }
 
 // helpPane is the view in the pane it belongs to.

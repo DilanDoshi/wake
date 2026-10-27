@@ -40,6 +40,18 @@ type HelpView struct {
 	Pane   string // the pane it is drawn in, "" the room
 	Query  string // what the rows are narrowed to
 	Scroll int    // the first body row drawn
+
+	laid helpLayout // the rows as last laid out; see helpRows
+}
+
+// helpLayout is the rows for one width and query. It is kept so a frame does not
+// lay them out again - the draw runs per message, the layout changes per key and
+// per resize - and it is only ever read against the key it was made for.
+type helpLayout struct {
+	ok    bool
+	width int
+	query string
+	rows  []string
 }
 
 func (v HelpView) Open() bool { return v.Up }
@@ -47,12 +59,12 @@ func (v HelpView) Open() bool { return v.Up }
 // helpState is the view and the one thing it draws that only cmd/wake holds.
 type helpState struct {
 	view  HelpView
-	usage string // `wake help`'s own text, for the shell section; "" draws none
+	shell []helpRow // `wake help`'s own lines, parsed once; none draws no section
 }
 
 // WithUsage hands the view the shell usage it lists. It is cmd/wake's own text,
 // so the section is `wake help` by identity rather than by a copy.
-func (a App) WithUsage(usage string) App { a.help.usage = usage; return a }
+func (a App) WithUsage(usage string) App { a.help.shell = shellRows(usage); return a }
 
 // helpIn reports whether the view is drawn in this pane.
 func (a App) helpIn(id string) bool { return a.help.view.Open() && a.help.view.Pane == id }
@@ -92,7 +104,9 @@ func (a App) helpKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		a = a.helpMoved(a.helpPage())
 	case tea.KeyBackspace:
 		a.help.view = v.backspaced()
-	case tea.KeySpace, tea.KeyRunes:
+	case tea.KeySpace:
+		a.help.view = v.typed(" ")
+	case tea.KeyRunes:
 		a.help.view = v.typed(string(m.Runes))
 	}
 	return a, nil, true
@@ -104,6 +118,22 @@ func (a App) helpWheel(up bool) App {
 		return a.helpMoved(-wheelLines)
 	}
 	return a.helpMoved(wheelLines)
+}
+
+// helpLaidOut keeps the rows for the pane's width and the query as they stand, so
+// the frames that follow read them instead of laying them out. App.Update calls
+// it after every message, which catches a key, a resize and an open alike; it is
+// not called from openHelp, because /wake-help is a value in the commands map and
+// the layout reads that map - an initialization cycle. A draw that finds the
+// layout made for another width or query lays the rows out itself.
+func (a App) helpLaidOut() App {
+	v := a.help.view
+	w, _, ok := a.paneSize(v.Pane)
+	if !v.Open() || !ok || (v.laid.ok && v.laid.width == w && v.laid.query == v.Query) {
+		return a
+	}
+	a.help.view.laid = helpLayout{ok: true, width: w, query: v.Query, rows: a.helpRows(w)}
+	return a
 }
 
 // helpPress is a press on the view's pane: it takes the keys there. Its text is

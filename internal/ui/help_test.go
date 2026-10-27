@@ -5,6 +5,7 @@ package ui
 // helpguard_test.go's.
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -195,7 +196,7 @@ func TestWakeHelpFiltersAsTypedAndWidensOnBackspace(t *testing.T) {
 	}
 	// A section that keeps no row loses its heading too. The rows are read back
 	// independently of the filter: a row matches when its text holds the word.
-	for _, s := range helpSections(helpSampleUsage) {
+	for _, s := range helpSections(shellRows(helpSampleUsage)) {
 		matches := 0
 		for _, r := range s.rows {
 			if strings.Contains(strings.ToLower(r.lead+" "+r.text), "detach") {
@@ -226,16 +227,21 @@ func TestWakeHelpFiltersAsTypedAndWidensOnBackspace(t *testing.T) {
 	}
 }
 
-// Words narrow together, so `park resume` finds the line that holds both.
+// Words narrow together, so `park resume` finds the line that holds both and
+// drops the one that holds only `park`.
 func TestWakeHelpTakesEveryWordOfTheQuery(t *testing.T) {
 	a, _ := helpRoom(t, 160, 200)
 	a = typeHelp(helpOpened(t, a, ""), "park resume")
 	words := helpWords(a)
-	if !strings.Contains(words, resumeVerb) {
-		t.Errorf("the %s line holds both words and is not drawn:\n%s", resumeVerb, helpFrame(a))
+	both, onlyPark := helpFolded(legendHelpFor(t, "⌃C")), helpFolded(legendHelpFor(t, "⌃Q"))
+	if !strings.Contains(strings.ToLower(both), "park") || !strings.Contains(strings.ToLower(both), "resume") || strings.Contains(strings.ToLower(onlyPark), "resume") {
+		t.Fatalf("the fixture lines no longer split the words: %q and %q", both, onlyPark)
 	}
-	if strings.Contains(words, "next blocked") {
-		t.Errorf("a line holding neither word is drawn:\n%s", helpFrame(a))
+	if !strings.Contains(words, both) {
+		t.Errorf("the ⌃C line holds both words and is not drawn:\n%s", helpFrame(a))
+	}
+	if strings.Contains(words, onlyPark) {
+		t.Errorf("the ⌃Q line holds only one of the words and is drawn:\n%s", helpFrame(a))
 	}
 }
 
@@ -286,7 +292,7 @@ func TestWakeHelpScrollsByRowPageAndWheelAndStaysOnePanesHeight(t *testing.T) {
 	if a.help.view.Scroll != end {
 		t.Errorf("↓ past the end moved scroll from %d to %d", end, a.help.view.Scroll)
 	}
-	rows := helpLines(helpSections(""), w)
+	rows := helpLines(helpSections(nil), w)
 	if last := stripANSI(rows[len(rows)-1]); !strings.Contains(helpFrame(a), strings.TrimSpace(last)) {
 		t.Errorf("the last row %q is not drawn at the end of the scroll:\n%s", last, helpFrame(a))
 	}
@@ -319,13 +325,13 @@ func TestWakeHelpFitsANarrowPane(t *testing.T) {
 			}
 		}
 	}
-	// Narrow, a row wraps rather than loses its end.
-	long := legendHelpFor(t, "⌃]")
-	last := strings.Fields(long)[len(strings.Fields(long))-1]
+	// Narrow, a row wraps rather than loses its end: the whole sentence is still
+	// drawn, read below the title and the filter line, which echoes the query.
 	narrow := a
 	narrow.help.view.Query = "queued messages"
-	if out := stripANSI(narrow.helpPane(30, 40)); !strings.Contains(out, last) {
-		t.Errorf("the end of the ⌃] line (%q) was cut at width 30:\n%s", last, out)
+	lines := strings.Split(stripANSI(narrow.helpPane(30, 40)), "\n")
+	if got, want := helpFolded(strings.Join(lines[helpBodyTop:], " ")), helpFolded(legendHelpFor(t, "⌃]")); !strings.Contains(got, want) {
+		t.Errorf("the ⌃] line was cut at width 30:\n%s", strings.Join(lines, "\n"))
 	}
 }
 
@@ -386,5 +392,36 @@ func TestAppKeyGivesTheOpenHelpItsKeys(t *testing.T) {
 	next, _, handled := a.key(wfKey(tea.KeyDown))
 	if !handled || next.(App).help.view.Scroll != 1 {
 		t.Errorf("App.key did not scroll the view: handled=%v scroll=%d", handled, next.(App).help.view.Scroll)
+	}
+}
+
+// The rows are laid out when the width or the query changes and read from the
+// view between, so a frame does not pay for them - and are never read for a key
+// they were not made for.
+func TestWakeHelpKeepsItsLayoutAndNeverDrawsAStaleOne(t *testing.T) {
+	a, _ := helpRoom(t, 140, 40)
+	m, _ := typeAndSubmit(a.openDMWith("s1", "alex"), wakeHelpVerb)
+	a = m.(App)
+	w, h, _ := a.paneSize("s1")
+	fresh := func(q string) []string { return helpLines(helpFilter(helpSections(nil), q), w) }
+	if v := a.help.view; !v.laid.ok || v.laid.width != w || !slices.Equal(v.laid.rows, fresh("")) {
+		t.Fatalf("opening did not lay the rows out for the pane: %+v", a.help.view.laid.width)
+	}
+	a = typeHelp(a, "park")
+	if v := a.help.view; v.laid.query != "park" || !slices.Equal(v.laid.rows, fresh("park")) {
+		t.Errorf("typing did not lay the narrowed rows out: query %q", v.laid.query)
+	}
+	// Read: a layout made for this width and query is what is drawn.
+	poisoned := a
+	poisoned.help.view.laid.rows = []string{"POISONED ROW"}
+	if !strings.Contains(stripANSI(poisoned.helpPane(w, h)), "POISONED ROW") {
+		t.Error("the draw laid the rows out again instead of reading the view's layout")
+	}
+	// Stale: one made for another width or query is never drawn.
+	for _, stale := range []helpLayout{{ok: true, width: w + 1, query: "park", rows: []string{"POISONED ROW"}}, {ok: true, width: w, query: "x", rows: []string{"POISONED ROW"}}} {
+		poisoned.help.view.laid = stale
+		if strings.Contains(stripANSI(poisoned.helpPane(w, h)), "POISONED ROW") {
+			t.Errorf("a layout for width %d query %q was drawn at width %d query %q", stale.width, stale.query, w, "park")
+		}
 	}
 }

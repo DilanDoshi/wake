@@ -41,12 +41,12 @@ type helpSection struct {
 type helpSurface struct{ via, name, keys string }
 
 // helpSections is every section the view draws. The first four are the same for
-// every window and built once; the shell section is the usage this App was
-// handed, and absent without one.
-func helpSections(usage string) []helpSection {
+// every window and built once; the shell section is the lines this App was
+// handed, and absent without any.
+func helpSections(shell []helpRow) []helpSection {
 	out := slices.Clone(staticHelp())
-	if rows := shellRows(usage); len(rows) > 0 {
-		out = append(out, helpSection{shellSectionTitle, rows})
+	if len(shell) > 0 {
+		out = append(out, helpSection{shellSectionTitle, shell})
 	}
 	return out
 }

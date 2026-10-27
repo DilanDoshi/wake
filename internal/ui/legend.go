@@ -16,7 +16,9 @@ package ui
 // requires a bijection with the tea.Key… cases in App.key, and keymap_test.go
 // derives Wake's keymap from it. Every key still works; only the drawing is
 // gone. **Do not add a key to App.key without a legendEntries entry** - the
-// bijection fails without one even though the entry is no longer drawn.
+// bijection fails without one even though the entry is no longer drawn - and
+// the entry's help line is what /wake-help draws for it
+// (TestEveryKeyTheLegendBindsHasALineInTheHelp), so write one.
 //
 // internal/core's airlock_test.go names *this* file for the word `interrupt`,
 // which is the legend's own English rather than a wire subtype.

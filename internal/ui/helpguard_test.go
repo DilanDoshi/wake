@@ -22,7 +22,7 @@ import (
 // folded to one string for a Contains.
 func helpEverything() string {
 	var b strings.Builder
-	for _, s := range helpSections(helpSampleUsage) {
+	for _, s := range helpSections(shellRows(helpSampleUsage)) {
 		for _, r := range s.rows {
 			b.WriteString(r.lead + " " + r.text + "\n")
 		}
@@ -34,7 +34,7 @@ func helpFolded(s string) string { return strings.Join(strings.Fields(s), " ") }
 
 func sectionNamed(t *testing.T, title string) helpSection {
 	t.Helper()
-	for _, s := range helpSections(helpSampleUsage) {
+	for _, s := range helpSections(shellRows(helpSampleUsage)) {
 		if s.title == title {
 			return s
 		}
@@ -45,7 +45,7 @@ func sectionNamed(t *testing.T, title string) helpSection {
 
 func helpTitles() []string {
 	var out []string
-	for _, s := range helpSections(helpSampleUsage) {
+	for _, s := range helpSections(shellRows(helpSampleUsage)) {
 		out = append(out, s.title)
 	}
 	return out

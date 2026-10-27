@@ -8,6 +8,49 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-27 — `/wake-help`: every key and command, derived, in a pane view
+
+The owner's ask ("a /wake-help that displays all of the shortcuts and cmds wake has so if someone needs
+to learn something or remember something"). Rulings (`wake-orch`'s, against `origin/main` 36fb1370):
+
+- **The name.** `wake-help`, a plain claim on the corpus rule: no recorded `init` advertises it, so it
+  needs no recording and no exemption. **A bare `/help` is not claimed**, and is the option left: it is in
+  the hand-written passthrough five, claude's headless answer ("isn't available in this environment") is
+  not recorded, and claiming it would take `testdata/stream/bare-help.jsonl`, a `bareOnlyCommands` entry
+  (count 2→3) and its removal from `claudeCommandsThatMustPassThrough`.
+- **A pane view, not `/status`'s menu.** The menu is bounded by `menuRoom` and closes on any key; this list
+  is a hundred rows and takes typing. `/workflows`' view already has what is wanted: a body that replaces the
+  pane's, key capture above `App.key`, the wheel, a press that starts a screen selection (so a drag copies),
+  and ⌃C handed on to park. Esc closes; `↑↓` `⇞⇟` and the wheel scroll; typing narrows (every word must be
+  in a row's two columns, and a section left with no row loses its heading); `/wake-help park` starts
+  narrowed. Rows wrap rather than cut, and stack the two columns when the text would get under 16 cells.
+  Nothing is written to the daemon or an agent.
+- **Derived, never copied.** Keys: `legendEntries`, each now carrying a `help` line beside its glyph; the
+  composer's newline keys, read off its own binding; and `⌃C⌃C`, which `cmd/wake` reads off the tty and so
+  has no `tea.Key` case - the one hand-written key row. Surfaces that read keys before the composer:
+  `helpSurfaces` is held both ways to the `a.<x>Key(m)` calls in `App.key` and `App.update` (an AST scan), and
+  each row is the constant or producer its surface draws; `TestTheHelpCarriesTheKeyLinesTheSurfacesDraw`
+  reads the real producers, cards through `Cards.keyLine` on recorded asks. A picker that draws no key line
+  gets a constant beside its binding (`pickerKeys`, `rewindKeys`). Commands: `wakeWords()` over slash.go's
+  three maps, each described in `slashhelp.go`; `[@who]`, "room only" and "bare only" come from
+  `roomTargetCommands`, `roomCommands` and `bareOnlyCommands`. Addressing is spelled from the router's
+  constants. The shell section is `usage`, the text `wake help` prints, handed in by `cmd/wake/room.go`
+  (`App.WithUsage`) because `internal/ui` cannot import `cmd/wake`.
+- **The manual.** `03-keyboard.md` stays hand-written - its glyph spelling differs (`⎋` for the legend's
+  `esc`) and it carries reasons the view does not - and points at `/wake-help`. `06-commands.md` stays
+  hand-written and is held to the same set (`TestTheCommandsChapterNamesEveryCommandWakeOwns`), which found
+  `/wake-name` and `/workflows` unnamed there the first time it ran.
+- **`@who !cmd` is a form** (PR #197) and is listed with `!cmd`, whose output now reaches the agent.
+- **Left out: the mouse** (wheel, click, drag-to-copy, double and triple click). There is no list to derive
+  it from, and a hand-written one is the copy this refuses.
+- **Splits.** `App.Update`'s message loop moved to `appupdate.go`, and the per-command usage sentences
+  (`newUsage`, `nameUsage`, `colorUsage`, `teamUsage` and their no-target sentences) moved beside their
+  handlers, so `app.go` and `slash.go` stay under the hard max. Every slash and legend guard passed unedited
+  across the move; only `wakeCommandCount` changed, for the new command.
+
+
+---
+
 ## 2026-10-24 — a table too narrow for its pane draws as records, as soon as glamour's grid would drop text
 
 On a narrow terminal Claude Code draws a markdown table as **records**. Each body

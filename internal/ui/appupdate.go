@@ -39,6 +39,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, blink := next.refocusBlink(a.focus)
 	next, linger := next.armNoticeLinger()
 	next, upgrade := next.dueUpdateCheck(msg)
+	next = next.helpLaidOut()
 	if ask == nil && roomAsk == nil && blink == nil && linger == nil && upgrade == nil {
 		return next, cmd
 	}
