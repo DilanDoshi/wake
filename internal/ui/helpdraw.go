@@ -64,7 +64,9 @@ func (a App) helpPane(width, height int) string {
 		body = []string{HintStyle.Render(helpNoMatch + strconv.Quote(v.Query))}
 	}
 	filter := HintStyle.Render("filter: ") + TextStyle.Render(v.Query) + saveCursor
-	block := stacked([]string{filter}, body, []string{HintStyle.Render(helpKeys)}, height-workflowTitleRows)
+	// Padded to the room, so the key line is the pane's last row however few rows
+	// are left.
+	block := stacked([]string{filter}, padRows(body, room), []string{HintStyle.Render(helpKeys)}, height-workflowTitleRows)
 	return head + "\n" + fitBlock(block, width)
 }
 

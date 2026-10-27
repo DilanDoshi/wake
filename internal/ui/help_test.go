@@ -529,3 +529,16 @@ func TestARowStacksItsColumnsWhenTheTextWouldGetUnderItsMinimum(t *testing.T) {
 		t.Errorf("at width %d the columns did not stack:\n%s", enough-1, strings.Join(stacked, "\n"))
 	}
 }
+
+// The key line is the pane's last row however few rows the filter leaves, so it
+// reads as the view's own status line rather than as a row under the others.
+func TestTheFootIsThePanesLastRowWhateverTheFilterLeaves(t *testing.T) {
+	a, _ := helpRoom(t, 160, 60)
+	for _, q := range []string{"", "detach", "zzzzqq"} {
+		v := helpOpened(t, a, q)
+		lines := strings.Split(stripANSI(v.helpPane(100, 30)), "\n")
+		if last := strings.TrimSpace(lines[len(lines)-1]); !strings.HasPrefix(last, "esc close") {
+			t.Errorf("query %q: the last row is %q, want the key line", q, last)
+		}
+	}
+}
