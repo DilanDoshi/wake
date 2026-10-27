@@ -56,6 +56,14 @@ func friendIDs(rows []string) []int {
 	return out
 }
 
+// firstOf is the first image a corner drew, for a failure message.
+func firstOf(ids []int) any {
+	if len(ids) == 0 {
+		return "no image"
+	}
+	return ids[0]
+}
+
 // allOf is n copies of id.
 func allOf(id, n int) []int {
 	out := make([]int, n)
@@ -190,13 +198,13 @@ func TestAFriendAnimatesOffTheClockOnlyWhileAnAgentWorks(t *testing.T) {
 		atClock(t, start.Add(time.Duration(n)*friendFrameEvery))
 		a := workingRoom(t)
 		if got, want := friendIDs(sidebarRows(a)), allOf(friendImage(0, n%friendFrames), friendCells9x5); !slices.Equal(got, want) {
-			t.Errorf("at %v a working fleet drew frame images %v, want frame %d", time.Duration(n)*friendFrameEvery, got[:1], n%friendFrames)
+			t.Errorf("at %v a working fleet drew frame images %v, want frame %d", time.Duration(n)*friendFrameEvery, firstOf(got), n%friendFrames)
 		}
 	}
 	atClock(t, start.Add(friendFrameEvery))
 	idle := friendRoom(t, true, "skip", &keptFriends{}).withUsageReport(aReading, "sydney")
 	if got := friendIDs(sidebarRows(idle)); !slices.Equal(got, allOf(friendImage(0, 0), friendCells9x5)) {
-		t.Errorf("an idle fleet drew images %v, want the first frame whatever the clock", got[:1])
+		t.Errorf("an idle fleet drew images %v, want the first frame whatever the clock", firstOf(got))
 	}
 	if _, cmd := idle.beat(); cmd != nil {
 		t.Error("an idle fleet with a friend on the bar scheduled a heartbeat")
@@ -213,14 +221,15 @@ func TestBareFriendsOpensOnTheKeptFriendAndTheCursorPreviews(t *testing.T) {
 		t.Fatalf("/friends opened %+v, want the cast and none with the cursor on the kept Skip", p)
 	}
 	view := ansi.Strip(a.View())
-	for _, want := range []string{friendsTitle, "Skip", "Ollie", "Bo", "none", "the tug that leaves a wake", friendsHint} {
+	for _, want := range []string{friendsTitle, "Skip · the tug that leaves a wake", "Ollie · an otter afloat, coffee in paw",
+		"Bo · a baby whale whose spout puffs", "none · " + noneBlurb, friendsHint} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the menu does not show %q", want)
 		}
 	}
 	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
 	if got := friendIDs(sidebarRows(a)); !slices.Equal(got, allOf(friendImage(1, 0), friendCells9x5)) {
-		t.Errorf("with the cursor on Ollie the corner drew %v, want Ollie", got[:1])
+		t.Errorf("with the cursor on Ollie the corner drew %v, want Ollie", firstOf(got))
 	}
 	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
 	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
@@ -252,7 +261,7 @@ func TestEnterKeepsTheCursoredFriend(t *testing.T) {
 		t.Errorf("↵ kept %v, want [bo] once", got)
 	}
 	if got := friendIDs(sidebarRows(a)); !slices.Equal(got, allOf(friendImage(2, 0), friendCells9x5)) {
-		t.Errorf("after ↵ the corner drew %v, want Bo", got[:1])
+		t.Errorf("after ↵ the corner drew %v, want Bo", firstOf(got))
 	}
 }
 
@@ -339,18 +348,32 @@ func (s *syncBuffer) String() string {
 }
 
 // runAll runs cmd and everything a batch of it holds, each on its own
-// goroutine as Bubble Tea would, returning without waiting for any.
-func runAll(cmd tea.Cmd) {
+// goroutine as Bubble Tea would, and counts them in wg.
+func runAll(cmd tea.Cmd, wg *sync.WaitGroup) {
 	if cmd == nil {
 		return
 	}
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		if batch, ok := cmd().(tea.BatchMsg); ok {
 			for _, c := range batch {
-				runAll(c)
+				runAll(c, wg)
 			}
 		}
 	}()
+}
+
+// allFinished waits for every command runAll started, or fails.
+func allFinished(t *testing.T, wg *sync.WaitGroup) {
+	t.Helper()
+	done := make(chan struct{})
+	go func() { wg.Wait(); close(done) }()
+	select {
+	case <-done:
+	case <-time.After(5 * time.Second):
+		t.Fatal("a command never finished")
+	}
 }
 
 // awaitWritten waits for out to hold want.
@@ -369,7 +392,9 @@ func TestTheFriendsAreSentAtStartAndAfterAHandOverAndNeverInAFrame(t *testing.T)
 	seq := transmission(t)
 	out := &syncBuffer{}
 	a := friendRoom(t, true, "skip", &keptFriends{}).WithOutput(out).withUsageReport(aReading, "sydney")
-	runAll(a.Init())
+	var wg sync.WaitGroup
+	runAll(a.Init(), &wg)
+	allFinished(t, &wg)
 	awaitWritten(t, out, seq)
 	if strings.Count(out.String(), seq) != 1 {
 		t.Errorf("Init sent the images %d times, want once", strings.Count(out.String(), seq))
@@ -380,7 +405,9 @@ func TestTheFriendsAreSentAtStartAndAfterAHandOverAndNeverInAFrame(t *testing.T)
 	for _, m := range []mcpSignedInMsg{{Session: "s1", Server: "x", Err: errors.New("cancelled")}, {Session: "s1", Server: "x"}} {
 		out := &syncBuffer{}
 		_, cmd := a.WithOutput(out).mcpSignedIn(m)
-		runAll(cmd)
+		var wg sync.WaitGroup
+		runAll(cmd, &wg)
+		allFinished(t, &wg)
 		awaitWritten(t, out, seq)
 	}
 	if cmd := friendRoom(t, false, "skip", &keptFriends{}).WithOutput(out).transmitFriends(); cmd != nil {
@@ -414,5 +441,61 @@ func TestASelectionOverTheFriendLeavesItsCellsAndCopiesNone(t *testing.T) {
 	a = a.cleared()
 	if !slices.Equal(sidebarRows(a), before) {
 		t.Error("after the selection the corner is not drawn as it was")
+	}
+}
+
+// Two choices made faster than a keep takes land in the order they were made,
+// so the file keeps the friend the window shows.
+func TestQuickChoicesAreKeptInTheOrderMade(t *testing.T) {
+	release := make(chan struct{})
+	var mu sync.Mutex
+	var kept []string
+	save := func(key string) error {
+		if key == "bo" {
+			<-release // the first keep is slow
+		}
+		mu.Lock()
+		defer mu.Unlock()
+		kept = append(kept, key)
+		return nil
+	}
+	fresh(t)
+	a := newRoomApp(t).withSize(100, 24).WithFriends(Friends{Pick: "skip", Save: save})
+	m, first := typeAndSubmit(a, friendsVerb+" bo")
+	_, second := typeAndSubmit(m.(App), friendsVerb+" ollie")
+	go first()
+	done := make(chan struct{})
+	go func() { second(); close(done) }()
+	time.Sleep(50 * time.Millisecond)
+	close(release)
+	<-done
+	time.Sleep(50 * time.Millisecond)
+	mu.Lock()
+	defer mu.Unlock()
+	if len(kept) == 0 || kept[len(kept)-1] != "ollie" {
+		t.Errorf("the keeps landed as %v; the last must be ollie, the later choice", kept)
+	}
+}
+
+// While the menu previews a friend other than the kept one - or none - the
+// roster is drawn in, and clicked against, the rows the preview leaves it.
+func TestClicksFollowThePreviewWhileTheFriendsMenuIsOpen(t *testing.T) {
+	names := rosterNames(30)
+	a := pick(friendRoom(t, true, friendNone, &keptFriends{}).withUsageReport(aReading, names...), "s30")
+	m, _ := typeAndSubmit(a, friendsVerb)
+	a = m.(App)
+	if got := a.rosterHeight(); a.drawnFriend() != friendNone || got != a.paneHeight()-3 {
+		t.Fatalf("the menu opened on %q with the roster %d rows, want the kept none", a.drawnFriend(), got)
+	}
+	everyClickLandsOnTheRowDrawnThere(t, a)
+	for _, want := range []string{"bo", "ollie", "skip"} {
+		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyUp})
+		if a.drawnFriend() != want {
+			t.Fatalf("the cursor previews %q, want %q", a.drawnFriend(), want)
+		}
+		if got := a.rosterHeight(); got != a.paneHeight()-friendRows-2 {
+			t.Errorf("previewing %s left the roster %d rows", want, got)
+		}
+		everyClickLandsOnTheRowDrawnThere(t, a)
 	}
 }

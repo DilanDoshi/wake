@@ -105,9 +105,9 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **`/friends`** picks who sits on the usage bar (owner's 2026-10-27 picks): Skip (the default), Ollie, Bo
   or none, 9×5 cells at the sidebar's right edge, standing on the bar's rule (alone in the corner before the
   first reading). Bare, it is a Picker over the composer whose cursor previews in the corner; `/friends <name>`
-  sets one. The choice is the machine's (`~/.wake/friends.json`, read when a window opens). Kitty and Ghostty
-  draw a picture; other terminals, tmux and `WAKE_FRIEND_ART=blocks` draw a hand-drawn half-block sprite in the
-  same cells. Original art drawn for Wake. `internal/ui/friends.go`, `friendsmenu.go`, `kittyplace.go`,
+  sets one. The choice is the machine's (`~/.wake/friends.json`, read when a window opens). A terminal whose
+  `TERM` is Kitty's or Ghostty's, or cmux, draws a picture; every other terminal, a multiplexer, an editor's
+  terminal and `WAKE_FRIEND_ART=blocks` draw a hand-drawn half-block sprite in the same cells. Original art drawn for Wake. `internal/ui/friends.go`, `friendsmenu.go`, `kittyplace.go`,
   `cmd/wake/friends.go`, `decisions.md` (2026-10-27).
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
@@ -299,7 +299,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   still does its own job. A timer (`multiClickWindow`) counts clicks but never tells a click from a
   drag. `internal/ui/multiclick.go`.
 - Clipboard: `pbcopy` → `tmux load-buffer` → OSC 52, through the writer Bubble Tea draws through,
-  which **must embed `*os.File`** or colour silently disappears (`cmd/wake/output.go`).
+  which **must embed `*os.File`** or colour silently disappears, and must override `WriteString` too, or
+  `io.WriteString` skips its lock; it is sealed when the program ends (`cmd/wake/output.go`).
 - `App.transcriptRows` measures the pane as drawn (cards, menus and previews move chrome without a
   resize); `startSelection` fences on it.
 - **Only a width change returns a reader to the newest line.** Last-read markers anchor to events.

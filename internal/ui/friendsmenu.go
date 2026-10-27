@@ -7,9 +7,9 @@ package ui
 // cmd/wake (decisions.md, 2026-10-27).
 
 import (
-	"fmt"
 	"slices"
 	"strings"
+	"sync/atomic"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -40,6 +40,14 @@ func (a App) friends(arg string) (App, tea.Cmd) {
 	return a.chooseFriend(key)
 }
 
+// friendsAsked numbers choices as they are made and friendsKept keeps them in
+// that order (clipboard.go's inOrder): a slow keep finishing after a newer one
+// would leave the file on the friend the window no longer shows.
+var (
+	friendsAsked atomic.Uint64
+	friendsKept  inOrder
+)
+
 // chooseFriend puts key on the bar and keeps it for the next start.
 func (a App) chooseFriend(key string) (App, tea.Cmd) {
 	a.corner.pick = key
@@ -47,10 +55,13 @@ func (a App) chooseFriend(key string) (App, tea.Cmd) {
 	if save == nil {
 		return a, nil
 	}
+	turn := friendsAsked.Add(1)
 	return a, func() tea.Msg {
-		if err := save(key); err != nil {
-			notice.Report(friendsNotKept, key, err)
-		}
+		friendsKept.write(turn, func() {
+			if err := save(key); err != nil {
+				notice.Report(friendsNotKept, key, err)
+			}
+		})
 		return nil
 	}
 }
@@ -74,14 +85,15 @@ func (p Picker) friendsView(width int) string {
 	return titledBox(body, w, BoxStyle.Padding(0), friendsTitle, friendsHint, AccentStyle, HintStyle)
 }
 
-// friendLabel is a menu row's words: the friend's name in a column, then its line.
+// friendLabel is a menu row's words: the friend's name, then its line. Joined
+// by factSep rather than padded into a column, since an option row collapses
+// runs of spaces.
 func friendLabel(key string) string {
-	name, blurb, width := friendNone, noneBlurb, len(friendNone)
+	name, blurb := friendNone, noneBlurb
 	for _, f := range cast {
-		width = max(width, len(f.name))
 		if f.key == key {
 			name, blurb = f.name, f.blurb
 		}
 	}
-	return fmt.Sprintf("%-*s  %s", width, name, blurb)
+	return name + factSep + blurb
 }

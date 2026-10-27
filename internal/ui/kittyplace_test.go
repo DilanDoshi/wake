@@ -218,3 +218,17 @@ func TestAnImagePastOneEscapeIsSentInChunksAndArrivesWhole(t *testing.T) {
 		t.Errorf("the chunks reassembled as %d images, the first %d bytes", len(got), len(got[0].png))
 	}
 }
+
+// A selection that reaches a friend row's end still ends the row's colour, so
+// the image id's colour does not run on into the next line Bubble Tea redraws.
+func TestAHighlightToAFriendRowsEndStillEndsItsColour(t *testing.T) {
+	row := strings.Repeat(" ", 4) + placeholderRows(friendImage(0, 0))[1]
+	w := ansi.StringWidth(row)
+	for _, from := range []int{0, 4, 7} {
+		h := highlighted(row, from, w)
+		tail := h[strings.LastIndex(h, string(placeholderRune)):]
+		if !strings.Contains(tail, "\x1b[39m") && !strings.Contains(tail, "\x1b[0m") && !strings.Contains(tail, "\x1b[m") {
+			t.Errorf("a highlight from %d to the end leaves the image's colour set: %q", from, tail)
+		}
+	}
+}

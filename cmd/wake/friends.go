@@ -46,21 +46,33 @@ func friendsFor(env map[string]string) ui.Friends {
 	return f
 }
 
-// drawsKittyImages is whether this terminal draws a friend as Kitty images:
-// Kitty and Ghostty (cmux is Ghostty underneath) do; under tmux or screen the
-// terminal outside is unknown, so nothing is sent through them.
+// embeddedTerminals are what a terminal inside another program sets - zellij,
+// an editor's terminal - which draw no Kitty images whatever the terminal around
+// them does. termsetup knows tmux and screen; these are the rest.
+var embeddedTerminals = []string{"ZELLIJ", "NVIM", "VIM_TERMINAL"}
+
+// drawsKittyImages is whether this terminal draws a friend as Kitty images: TERM
+// names Kitty or Ghostty (so it holds over ssh too), or cmux, which draws through
+// Ghostty and keeps TERM at xterm-256color. A Kitty or Ghostty variable alone is
+// not enough: it leaks into every program and terminal started from that shell.
 func drawsKittyImages(env map[string]string) bool {
 	if env[friendArtEnv] == friendArtBlocks {
 		return false
 	}
-	if mux, ok := termsetup.DetectMultiplexer(env); ok && mux != termsetup.Cmux {
+	mux, inMux := termsetup.DetectMultiplexer(env)
+	if inMux && mux != termsetup.Cmux {
 		return false
 	}
-	switch termsetup.Detect(env) {
-	case termsetup.Ghostty, termsetup.Kitty:
+	for _, k := range embeddedTerminals {
+		if env[k] != "" {
+			return false
+		}
+	}
+	switch env["TERM"] {
+	case "xterm-kitty", "xterm-ghostty":
 		return true
 	}
-	return false
+	return mux == termsetup.Cmux && termsetup.Detect(env) == termsetup.Ghostty
 }
 
 func friendsPath(env map[string]string) (string, error) {

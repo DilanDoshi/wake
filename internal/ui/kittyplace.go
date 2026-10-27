@@ -15,6 +15,7 @@ import (
 	"fmt"
 	"image"
 	"image/color"
+	"image/draw"
 	"image/png"
 	"io"
 	"regexp"
@@ -43,6 +44,9 @@ const (
 	friendImageBase = 0x574b00
 
 	friendsNotSent = "friends: the picture did not reach the terminal: %v"
+
+	// defaultFG ends a placeholder cell's colour, which is its image's id.
+	defaultFG = "\x1b[39m"
 )
 
 // placeDiacritics are the first entries of Kitty's rowcolumn-diacritics table:
@@ -66,7 +70,7 @@ func placeholderRows(id int) []string {
 			b.WriteRune(placeDiacritics[y])
 			b.WriteRune(placeDiacritics[x])
 		}
-		b.WriteString("\x1b[39m")
+		b.WriteString(defaultFG)
 		rows[y] = b.String()
 	}
 	return rows
@@ -119,11 +123,8 @@ func friendPNG(grid []string) ([]byte, error) {
 			if err != nil {
 				return nil, err
 			}
-			for dy := range friendScale {
-				for dx := range friendScale {
-					pic.SetNRGBA(x*friendScale+dx, y*friendScale+dy, c)
-				}
-			}
+			at := image.Rect(x*friendScale, y*friendScale, (x+1)*friendScale, (y+1)*friendScale)
+			draw.Draw(pic, at, image.NewUniform(c), image.Point{}, draw.Src)
 		}
 	}
 	var out bytes.Buffer
@@ -184,12 +185,18 @@ func selected(seg string) string {
 	}
 	var b strings.Builder
 	at := 0
-	for _, c := range append(cells, []int{len(seg), len(seg)}) {
+	for i, c := range cells {
 		if text := ansi.Strip(seg[at:c[0]]); text != "" {
 			b.WriteString(SelectionStyle.Render(text))
 		}
 		b.WriteString(seg[c[0]:c[1]])
+		if i+1 == len(cells) || cells[i+1][0] != c[1] {
+			b.WriteString(defaultFG) // a run of cells ends its image's colour, as the row did
+		}
 		at = c[1]
+	}
+	if text := ansi.Strip(seg[at:]); text != "" {
+		b.WriteString(SelectionStyle.Render(text))
 	}
 	return b.String()
 }

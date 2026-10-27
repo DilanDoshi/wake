@@ -5180,24 +5180,35 @@ rounds of mockups: **Skip** (a tug that leaves a wake, the default), **Ollie** (
   roster gives up four rows with a reading and five in the corner before one. The rows are the usage block's
   (`App.usageDrawn`), so the roster's draw and its clicks (`rosterHeight`, `Roster.Hit`, `Roster.At`) follow
   them; a pane too short for the friend keeps the bar alone, then the roster alone, as before.
-- **Kitty and Ghostty (so cmux) get images; every other terminal, and tmux or screen, gets a hand-drawn
-  half-block sprite in the same cells** (`termsetup.Detect`/`DetectMultiplexer`, read from the env, no
-  terminal query), so the roster's height never depends on the terminal. `WAKE_FRIEND_ART=blocks` forces the
-  sprite. Sextants were rejected: converted from the art they muddle it, and some fonts lack them.
+- **A terminal whose `TERM` is Kitty's or Ghostty's (`xterm-kitty`, `xterm-ghostty`, so over ssh too), or
+  cmux (Ghostty underneath, `TERM=xterm-256color`), gets images; everything else gets a hand-drawn half-block
+  sprite in the same cells**, so the roster's height never depends on the terminal. Read from the env, no
+  terminal query (`cmd/wake/friends.go`'s `drawsKittyImages`). A Kitty or Ghostty variable alone is not
+  enough (the code review): `KITTY_WINDOW_ID` and `TERM_PROGRAM` leak into every program started from that
+  shell, so tmux, screen, zellij, Neovim's and Vim's terminals, and another terminal opened from it, get the
+  sprite. `WAKE_FRIEND_ART=blocks` forces it. Sextants were rejected: converted from the art they muddle it,
+  and some fonts lack them.
 - **Sent once, never in a frame.** Every frame of every friend (nine PNGs, ×8 nearest-neighbour, about
   34 KB of escapes) goes through the guarded writer from `Init`, which Bubble Tea runs after entering the alt
   screen, and again from `mcpSignedIn`, because `RestoreTerminal` re-enters the alt screen and the spec clears
   a screen's images on entry. Each is a quiet (`q=2`) transmit-and-place with a virtual placement the box in
   size; a frame (`View`) never carries one. A resize sends nothing: the cells are text. A `⌃O` detach ends
   the process, and the next `wake attach` sends them from its own `Init`. Each cell carries its own colour,
-  so a cut row keeps every cell's image id; a selection's highlight leaves the friend's cells as drawn (its
-  colour would name another image) and a copy drops them.
+  so a cut row keeps every cell's image id; a selection's highlight leaves the placeholder cells as drawn
+  (its colour would name another image), ending their colour after them, and a copy drops them - the
+  half-block sprite copies as drawn, as the banner's does. Nine frames at ×8 are about 7 MB of the terminal's
+  image memory per window. **The guarded writer had to be fixed for this** (Codex): it overrode only
+  `Write`, so `io.WriteString` - Bubble Tea's escapes, the clipboard's OSC 52, the transmission - took the
+  embedded file's `WriteString` past its lock. It now overrides both, and `converseModel` seals it when
+  `p.Run` returns, so a sequence a command goroutine had yet to write is refused rather than landing on the
+  shell's screen or being cut off mid-escape by the exit.
 - **The animation is three frames, 400ms apart, off the wall clock while an agent works**, riding the
   heartbeat `beat.go` already schedules only then, and the first frame otherwise. A frame change is the
   cells naming another image, so only those rows redraw and nothing is re-sent; no timer is added. The
   half-block sprite is one static frame.
 - **The choice is the machine's.** `~/.wake/friends.json` (`{"friend":"bo"}`), beside `update-check.json`,
-  read once when a window opens and written only on a choice; another window takes it at its next start.
+  read once when a window opens and written only on a choice, whole (the daemon's `WriteFileAtomically`) and
+  in the order choices were made (clipboard.go's `inOrder`); another window takes it at its next start.
   The owner approved Wake keeping it (CLAUDE.md's list of what Wake stores). Missing, unreadable or naming
   no friend, it opens on Skip. `WAKE_FRIENDS_FILE` keeps it elsewhere, and `cmd/wake`'s `TestMain` points
   every wake the suite runs at a file keeping none, so no test reads or writes the operator's own.
