@@ -35,8 +35,9 @@ to learn something or remember something"). Rulings (`wake-orch`'s, against `ori
   name** (the board, both pickers, the resume picker, `/workflows`, `/mcp`, the cards, the completion menu,
   this view) is also written in that surface's rows (`TestEveryKeyASurfaceBindsIsNamedInItsRows`), which is
   how Home and End on the board, → and ← in `/workflows`, and ←→ and space on a question card - all handled,
-  none on any drawn line - were found; the aliases are `workflowAliasKeys`, `mcpDigitKeys`, `cardStepKeys`
-  and `cardTickKey`. **Not scanned:** a printable key (a letter or a digit), and a surface called other than
+  none on any drawn line - were found; the aliases are `workflowAliasKeys`, `mcpAliasKeys`, `cardStepKeys`
+  and `cardTickKey`, plus `helpParkKey` for the modals' ⌃C, which the guard no longer exempts: the workflow
+  save dialog closes itself on ⌃C and does not park, and the help says so. **Not scanned:** a printable key (a letter or a digit), and a surface called other than
   as `a.<x>Key(m)`; both are conventions the guard cannot see past. Commands: `wakeWords()` over slash.go's
   three maps, each described in `slashhelp.go`; `[@who]`, "room only" and "bare only" come from
   `roomTargetCommands`, `roomCommands` and `bareOnlyCommands`. Addressing is spelled from the router's

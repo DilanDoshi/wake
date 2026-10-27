@@ -56,7 +56,8 @@ func keyLine(keys ...string) string { return HintStyle.Render(strings.Join(keys,
 var workflowListKeys = []string{"↑↓ select", "↵ open", "esc close"}
 
 // workflowAliasKeys are the keys the view binds that no level draws.
-const workflowAliasKeys = "→ opens like ↵ · ← goes back like esc · ↑↓ scroll an agent like j/k"
+const workflowAliasKeys = "→ opens like ↵ · ← goes back like esc · ↑↓ scroll an agent like j/k · " +
+	"⌃C closes the view and parks the agent (in the save dialog it only closes the dialog)"
 
 func workflowRunKeys(running bool) []string {
 	keys := []string{"↑↓ select", "↵ open", "f filter"}

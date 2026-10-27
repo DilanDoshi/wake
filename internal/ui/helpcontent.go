@@ -130,11 +130,13 @@ func helpSurfaces() []helpSurface {
 		{"workflowKey", workflowsVerb + " also", workflowAliasKeys},
 		{"resumePickerKey", resumeVerb + " in the room", ResumePicker{Multi: true}.keyHint()},
 		{"resumePickerKey", resumeVerb + " in a conversation", ResumePicker{}.keyHint()},
+		{"resumePickerKey", resumeVerb + " also", helpParkKey},
 		{"mcpMenuKey", mcpVerb + " servers", MCPMenu{Level: mcpList}.keyHint()},
 		{"mcpMenuKey", mcpVerb + " one server", MCPMenu{Level: mcpDetail}.keyHint()},
 		{"mcpMenuKey", mcpVerb + " tools", MCPMenu{Level: mcpTools}.keyHint()},
-		{"mcpMenuKey", mcpVerb + " one server, also", mcpDigitKeys},
+		{"mcpMenuKey", mcpVerb + " also", mcpAliasKeys},
 		{"statusKey", statusVerb, statusHint},
+		{"statusKey", statusVerb + " also", helpParkKey},
 		{"cardKey", "permission ask", asks(cardAllowKeys)},
 		{"cardKey", "plan ask", asks(cardPlanKeys)},
 		{"cardKey", "question ask", question(cardMoveKeys, chooseKeys(cardMaxOptions))},
@@ -148,6 +150,7 @@ func helpSurfaces() []helpSurface {
 		{"rewindKey", "rewind picker", rewindKeys},
 		{"completionKey", "slash and " + agentPrefix + " menu", completionKeys + hintSep + completionAliases},
 		{"helpKey", wakeHelpVerb, helpKeys},
+		{"helpKey", wakeHelpVerb + " also", helpParkKey},
 	}
 }
 

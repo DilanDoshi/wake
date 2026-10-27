@@ -25,6 +25,12 @@ const (
 	// one way out, and a narrow pane cuts a line from its end.
 	helpKeys = "esc close · ↑↓ ⇞⇟ scroll · type to filter · ⌫ widen"
 
+	// helpParkKey is what ⌃C does in a view or menu that takes every key: it closes
+	// and goes on to park, so its first press is never a press that did nothing
+	// (cmd/wake/killswitch.go reads a second as the emergency exit). The workflow
+	// save dialog is the one place it only closes the dialog; see workflowAliasKeys.
+	helpParkKey = "⌃C closes it and parks the agent in front of you"
+
 	// helpQueryMax bounds what a paste can put in the filter.
 	helpQueryMax = 40
 

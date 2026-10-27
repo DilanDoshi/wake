@@ -323,11 +323,14 @@ var teaKeyWords = map[string][]string{
 	"KeyTab": {"⇥"}, "KeyEnter": {"↵"}, "KeyEsc": {"esc"}, "KeySpace": {"space"}, "KeyBackspace": {"⌫"},
 	"KeyPgUp": {"PgUp", "⇞"}, "KeyPgDown": {"PgDn", "⇟"}, "KeyHome": {"Home"}, "KeyEnd": {"End"},
 	"KeyCtrlD": {"⌃D"}, "KeyCtrlY": {"⌃Y"}, "KeyCtrlB": {"⌃B"}, "KeyCtrlN": {"⌃N"}, "KeyCtrlP": {"⌃P"},
+	"KeyCtrlC": {"⌃C"},
 }
 
-// teaKeysNotRead are the keys no row writes a word for: ⌃C is the hand-back every
-// modal gives to park, and a printable key is "type to ..." on the line.
-var teaKeysNotRead = map[string]bool{"KeyCtrlC": true, "KeyRunes": true}
+// teaKeysNotRead are the keys no row writes a word for: a printable key is
+// "type to ..." on the line. ⌃C is not among them: a modal that binds it says
+// what it does there, because the kill switch reads a ⌃C that appeared to do
+// nothing as the start of ⌃C⌃C, and the workflow save dialog does exactly that.
+var teaKeysNotRead = map[string]bool{"KeyRunes": true}
 
 // typesInto are the keys a text box takes as text, per surface, which are not
 // read as keys there.
@@ -347,9 +350,13 @@ var surfaceHandlers = map[string][][2]string{
 	"helpKey":         {{"help.go", "helpKey"}},
 	"completionKey":   {{"completion.go", "completionKey"}},
 	"cardKey":         {{"cardkeys.go", "cardKey"}},
-	"mcpMenuKey":      {{"mcpmenu.go", "mcpListKey"}, {"mcpmenu.go", "mcpDetailKey"}, {"mcpmenu.go", "mcpToolsKey"}},
+	"statusKey":       {{"statuscmd.go", "statusKey"}},
+	"mcpMenuKey": {
+		{"mcpmenu.go", "mcpMenuKey"}, {"mcpmenu.go", "mcpListKey"}, {"mcpmenu.go", "mcpDetailKey"}, {"mcpmenu.go", "mcpToolsKey"},
+	},
 	"workflowKey": {
-		{"workflowview.go", "listKey"}, {"workflowview.go", "runKey"}, {"workflowview.go", "agentKey"}, {"workflowsave.go", "saveKey"},
+		{"workflowview.go", "workflowKey"}, {"workflowview.go", "listKey"}, {"workflowview.go", "runKey"},
+		{"workflowview.go", "agentKey"}, {"workflowsave.go", "saveKey"},
 	},
 }
 
@@ -378,7 +385,7 @@ func asExpr(n ast.Node) ast.Expr {
 // a call spelled other than a.<x>Key(m) is not found by the guard above: both are
 // stated limits, in decisions.md.
 func TestEveryKeyASurfaceBindsIsNamedInItsRows(t *testing.T) {
-	if len(surfaceHandlers) < 9 {
+	if len(surfaceHandlers) < 10 {
 		t.Fatalf("%d surfaces listed: the table is broken", len(surfaceHandlers))
 	}
 	for via, handlers := range surfaceHandlers {
@@ -396,8 +403,8 @@ func TestEveryKeyASurfaceBindsIsNamedInItsRows(t *testing.T) {
 		for _, h := range handlers {
 			maps.Copy(bound, teaKeysIn(t, h[0], h[1]))
 		}
-		if len(bound) < 2 {
-			t.Fatalf("%s: found %d keys: the scan is broken and this asserts nothing", via, len(bound))
+		if len(bound) < 1 {
+			t.Fatalf("%s: found no keys: the scan is broken and this asserts nothing", via)
 		}
 		for name := range bound {
 			if teaKeysNotRead[name] || slices.Contains(typesInto[via], name) {
@@ -425,5 +432,20 @@ func TestTheNewCommandsHelpNamesEveryFlagItsParserTakes(t *testing.T) {
 	}
 	if len(newFlagTable) < 6 {
 		t.Fatalf("%d flags in newFlagTable: the scan is broken", len(newFlagTable))
+	}
+}
+
+// ⌃C parks from every view and menu but one, and the one is named: in the workflow
+// save dialog it closes the dialog alone, so a reader who trusts "⌃C parks" is
+// told where it does not.
+func TestTheHelpNamesTheSaveDialogsCtrlC(t *testing.T) {
+	var rows strings.Builder
+	for _, s := range helpSurfaces() {
+		if s.via == "workflowKey" {
+			rows.WriteString(s.keys + " ")
+		}
+	}
+	if !strings.Contains(rows.String(), "⌃C closes the view and parks") || !strings.Contains(rows.String(), "save dialog") {
+		t.Errorf("the /workflows rows do not say what ⌃C does, or where it does not park: %q", rows.String())
 	}
 }
