@@ -10,9 +10,9 @@ plainly: every key here is one the library names and the terminal sends. Whether
 terminal sends it is [chapter 7](07-troubleshooting.md) and `docs/live-testing.md`.
 
 **Wake draws this list for you.** `/wake-help` opens every key, every command and the addressing forms in
-the pane that holds the keys, read from the same bindings and command tables the build runs on, so it cannot
-be behind them. It lists the keys that exist only while a menu, a card or a view is up, which this page
-mentions only in passing. Type to narrow it (`/wake-help park` starts narrowed), `↑↓` `⇞⇟` or the wheel
+the pane that holds the keys, read from the same bindings and command tables the build runs on, and a test
+fails when a key or a command has no line in it. It lists the keys that exist only while a menu, a card or a
+view is up, which this page mentions only in passing. Type to narrow it (`/wake-help park` starts narrowed), `↑↓` `⇞⇟` or the wheel
 scroll, `⎋` closes. This page stays the longer account — the reasons, and the keys that are deliberately
 absent — and is not drawn from the bindings.
 

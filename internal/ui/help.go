@@ -21,8 +21,9 @@ import (
 )
 
 const (
-	// helpKeys is the view's own key line, drawn on its foot.
-	helpKeys = "↑↓ ⇞⇟ scroll · type to filter · ⌫ widen · esc close"
+	// helpKeys is the view's own key line, drawn on its foot. esc leads: it is the
+	// one way out, and a narrow pane cuts a line from its end.
+	helpKeys = "esc close · ↑↓ ⇞⇟ scroll · type to filter · ⌫ widen"
 
 	// helpQueryMax bounds what a paste can put in the filter.
 	helpQueryMax = 40
@@ -128,8 +129,11 @@ func (a App) helpWheel(up bool) App {
 // layout made for another width or query lays the rows out itself.
 func (a App) helpLaidOut() App {
 	v := a.help.view
+	if !v.Open() {
+		return a
+	}
 	w, _, ok := a.paneSize(v.Pane)
-	if !v.Open() || !ok || (v.laid.ok && v.laid.width == w && v.laid.query == v.Query) {
+	if !ok || (v.laid.ok && v.laid.width == w && v.laid.query == v.Query) {
 		return a
 	}
 	a.help.view.laid = helpLayout{ok: true, width: w, query: v.Query, rows: a.helpRows(w)}

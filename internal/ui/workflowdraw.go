@@ -55,6 +55,9 @@ func keyLine(keys ...string) string { return HintStyle.Render(strings.Join(keys,
 // /wake-help carries too, so neither is spelled twice.
 var workflowListKeys = []string{"↑↓ select", "↵ open", "esc close"}
 
+// workflowAliasKeys are the keys the view binds that no level draws.
+const workflowAliasKeys = "→ opens like ↵ · ← goes back like esc · ↑↓ scroll an agent like j/k"
+
 func workflowRunKeys(running bool) []string {
 	keys := []string{"↑↓ select", "↵ open", "f filter"}
 	if running {

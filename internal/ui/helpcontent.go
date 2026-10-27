@@ -127,16 +127,20 @@ func helpSurfaces() []helpSurface {
 		{"workflowKey", workflowsVerb + " agent", join(agentKeys(false))},
 		{"workflowKey", workflowsVerb + " agent, expanded", join(agentKeys(true))},
 		{"workflowKey", workflowsVerb + " save", saveDialogKeys},
+		{"workflowKey", workflowsVerb + " also", workflowAliasKeys},
 		{"resumePickerKey", resumeVerb + " in the room", ResumePicker{Multi: true}.keyHint()},
 		{"resumePickerKey", resumeVerb + " in a conversation", ResumePicker{}.keyHint()},
 		{"mcpMenuKey", mcpVerb + " servers", MCPMenu{Level: mcpList}.keyHint()},
 		{"mcpMenuKey", mcpVerb + " one server", MCPMenu{Level: mcpDetail}.keyHint()},
 		{"mcpMenuKey", mcpVerb + " tools", MCPMenu{Level: mcpTools}.keyHint()},
+		{"mcpMenuKey", mcpVerb + " one server, also", mcpDigitKeys},
 		{"statusKey", statusVerb, statusHint},
 		{"cardKey", "permission ask", asks(cardAllowKeys)},
 		{"cardKey", "plan ask", asks(cardPlanKeys)},
 		{"cardKey", "question ask", question(cardMoveKeys, chooseKeys(cardMaxOptions))},
 		{"cardKey", "question ask, several answers", question(cardMoveTickKeys, fmt.Sprintf(cardToggleFmt, cardMaxOptions))},
+		{"cardKey", "question ask, also", cardStepKeys},
+		{"cardKey", "question ask, several answers, also", cardTickKey},
 		{"cardKey", "question ask, answer box", answerModeKeys},
 		{"cardKey", "question ask, deny reason", denyModeKeys},
 		{"cardKey", "question ask, review", reviewKeys},
@@ -170,7 +174,8 @@ func addressingRows() []helpRow {
 var usageRow = regexp.MustCompile(`^\s+(\S.*?)\s{2,}(\S.*)$`)
 
 // shellRows are `wake help`'s own lines: an unindented line is a heading of the
-// group under it, an indented one a verb or a flag and its sentence.
+// group under it, an indented one a verb or a flag and its sentence, and an
+// indented one with no sentence of its own the rest of the row above.
 func shellRows(usage string) []helpRow {
 	var rows []helpRow
 	for _, line := range strings.Split(usage, "\n") {
@@ -179,9 +184,14 @@ func shellRows(usage string) []helpRow {
 		case line[0] != ' ' && line[0] != '\t':
 			rows = append(rows, helpRow{text: trimmed, sub: true})
 		default:
-			if m := usageRow.FindStringSubmatch(line); m != nil {
+			m := usageRow.FindStringSubmatch(line)
+			switch {
+			case m != nil:
 				rows = append(rows, helpRow{lead: m[1], text: m[2]})
-			} else {
+			case len(rows) > 0 && !rows[len(rows)-1].sub && rows[len(rows)-1].text != "":
+				// A sentence that wrapped: it carries on the row above, whole.
+				rows[len(rows)-1].text += " " + trimmed
+			default:
 				rows = append(rows, helpRow{lead: trimmed})
 			}
 		}
@@ -190,7 +200,9 @@ func shellRows(usage string) []helpRow {
 }
 
 // helpFilter narrows sections to the rows holding every word of the query, in
-// either column, and drops a section left with none. An empty query is all.
+// either column, and drops a section left with none. A heading is kept while a
+// row of its group is, and a query that names the heading brings the whole group.
+// An empty query is all.
 func helpFilter(sections []helpSection, query string) []helpSection {
 	words := strings.Fields(strings.ToLower(query))
 	if len(words) == 0 {
@@ -198,17 +210,49 @@ func helpFilter(sections []helpSection, query string) []helpSection {
 	}
 	var out []helpSection
 	for _, s := range sections {
-		var rows []helpRow
-		for _, r := range s.rows {
-			if helpMatches(r, words) {
-				rows = append(rows, r)
-			}
-		}
-		if len(rows) > 0 {
+		if rows := filteredRows(s.rows, words); len(rows) > 0 {
 			out = append(out, helpSection{s.title, rows})
 		}
 	}
 	return out
+}
+
+// filteredRows is one section's rows that match, group by group: the rows before
+// the first heading, then each heading with the rows under it.
+func filteredRows(rows []helpRow, words []string) []helpRow {
+	var out []helpRow
+	for len(rows) > 0 {
+		group := rows[:1+countUntilHeading(rows[1:])]
+		rows = rows[len(group):]
+		head, body := helpRow{}, group
+		if group[0].sub {
+			head, body = group[0], group[1:]
+		}
+		var kept []helpRow
+		for _, r := range body {
+			if helpMatches(r, words) || (head.sub && helpMatches(head, words)) {
+				kept = append(kept, r)
+			}
+		}
+		switch {
+		case len(kept) > 0 && head.sub:
+			out = append(out, head)
+			fallthrough
+		case len(kept) > 0:
+			out = append(out, kept...)
+		}
+	}
+	return out
+}
+
+// countUntilHeading is how many rows run before the next heading.
+func countUntilHeading(rows []helpRow) int {
+	for i, r := range rows {
+		if r.sub {
+			return i
+		}
+	}
+	return len(rows)
 }
 
 func helpMatches(r helpRow, words []string) bool {

@@ -100,6 +100,10 @@ func interceptedBy(t *testing.T, file, method string) map[string]bool {
 	return out
 }
 
+// The scan finds a surface by the call `a.<x>Key(m)` and nothing else: a call
+// spelled `next.fooKey(m)` or `a.fooKey(m, x)` would not be seen, which is a
+// convention the tree keeps (keys.go, appupdate.go) and decisions.md states.
+//
 // Both directions, the legend guard's own shape: a surface that takes keys with
 // no rows in the help is a key nobody is told about, and a row naming a surface
 // nothing reads any more is a line that lies.
@@ -281,15 +285,24 @@ func TestTheNameRowSaysWhatBothMentionModesDo(t *testing.T) {
 	t.Fatal("no row led by @name")
 }
 
-// The manual's commands chapter stays hand-written and is checked against the
-// same set, so a command shipped without a word there fails here too.
+// The manual's commands chapter stays hand-written and its list of commands is
+// checked against the same set, so a command shipped without a line there fails
+// here too.
 func TestTheCommandsChapterNamesEveryCommandWakeOwns(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "user_manual", "06-commands.md"))
 	if err != nil {
 		t.Fatalf("reading the commands chapter: %v", err)
 	}
+	// The list: the first fenced block under the composer heading. A command named only
+	// in prose, as /wake-help is in its own section, is not a line in it.
+	_, afterHeading, found := strings.Cut(string(raw), "## `/…` — in the composer")
+	_, rest, opened := strings.Cut(afterHeading, "```\n")
+	list, _, closed := strings.Cut(rest, "```")
+	if !found || !opened || !closed {
+		t.Fatal("the commands chapter has no fenced list under its composer heading: the scan is broken")
+	}
 	named := map[string]bool{}
-	for _, m := range slashAtALine.FindAllStringSubmatch(string(raw), -1) {
+	for _, m := range slashAtALine.FindAllStringSubmatch(list, -1) {
 		named[m[1]] = true
 	}
 	if len(named) < 15 {
@@ -302,33 +315,73 @@ func TestTheCommandsChapterNamesEveryCommandWakeOwns(t *testing.T) {
 	}
 }
 
-
-// teaKeyWords is how each tea.Key a modal's switch can name is written where
-// the help says it, any one of which counts. A key with no entry is a failure,
-// so this cannot be where a new key quietly avoids the check - legendKeyNames'
-// shape. ⌃C is the hand-back every modal gives to park, and the text-entry keys
-// are "type to ..." on the line: none is read for a word of its own.
+// teaKeyWords is how each tea.Key a surface's handlers can name is written where
+// the help says it, any one of which counts. A key with no entry is a failure, so
+// this cannot be where a new key quietly avoids the check - legendKeyNames' shape.
 var teaKeyWords = map[string][]string{
 	"KeyUp": {"↑"}, "KeyDown": {"↓"}, "KeyLeft": {"←"}, "KeyRight": {"→"},
-	"KeyTab": {"⇥"}, "KeyEnter": {"↵"}, "KeyEsc": {"esc"},
+	"KeyTab": {"⇥"}, "KeyEnter": {"↵"}, "KeyEsc": {"esc"}, "KeySpace": {"space"}, "KeyBackspace": {"⌫"},
 	"KeyPgUp": {"PgUp", "⇞"}, "KeyPgDown": {"PgDn", "⇟"}, "KeyHome": {"Home"}, "KeyEnd": {"End"},
-	"KeyCtrlD": {"⌃D"}, "KeyCtrlY": {"⌃Y"}, "KeyCtrlB": {"⌃B"},
+	"KeyCtrlD": {"⌃D"}, "KeyCtrlY": {"⌃Y"}, "KeyCtrlB": {"⌃B"}, "KeyCtrlN": {"⌃N"}, "KeyCtrlP": {"⌃P"},
 }
 
-var teaKeysNotRead = map[string]bool{"KeyCtrlC": true, "KeyBackspace": true, "KeySpace": true, "KeyRunes": true}
+// teaKeysNotRead are the keys no row writes a word for: ⌃C is the hand-back every
+// modal gives to park, and a printable key is "type to ..." on the line.
+var teaKeysNotRead = map[string]bool{"KeyCtrlC": true, "KeyRunes": true}
 
-// A surface whose keys are one switch has every key that switch binds named in
-// its rows - not only a row for the surface. The board handled Home and End and
-// drew PgUp/PgDn alone, which a reader-exists guard cannot see.
-func TestEveryKeyASingleSwitchSurfaceBindsIsNamedInItsRows(t *testing.T) {
-	switches := map[string][2]string{
-		"boardKey":        {"board.go", "boardKey"},
-		"pickerKey":       {"picker.go", "pickerKey"},
-		"rewindKey":       {"rewind.go", "rewindKey"},
-		"resumePickerKey": {"resumepicker.go", "resumePickerKey"},
-		"helpKey":         {"help.go", "helpKey"},
+// typesInto are the keys a text box takes as text, per surface, which are not
+// read as keys there.
+var typesInto = map[string][]string{
+	"resumePickerKey": {"KeySpace", "KeyBackspace"},
+	"workflowKey":     {"KeySpace", "KeyBackspace"},
+	"helpKey":         {"KeySpace"},
+}
+
+// surfaceHandlers is every method that reads a surface's keys, by the App method
+// App.key and App.update call. A surface split across methods lists each.
+var surfaceHandlers = map[string][][2]string{
+	"boardKey":        {{"board.go", "boardKey"}},
+	"pickerKey":       {{"picker.go", "pickerKey"}},
+	"rewindKey":       {{"rewind.go", "rewindKey"}},
+	"resumePickerKey": {{"resumepicker.go", "resumePickerKey"}},
+	"helpKey":         {{"help.go", "helpKey"}},
+	"completionKey":   {{"completion.go", "completionKey"}},
+	"cardKey":         {{"cardkeys.go", "cardKey"}},
+	"mcpMenuKey":      {{"mcpmenu.go", "mcpListKey"}, {"mcpmenu.go", "mcpDetailKey"}, {"mcpmenu.go", "mcpToolsKey"}},
+	"workflowKey": {
+		{"workflowview.go", "listKey"}, {"workflowview.go", "runKey"}, {"workflowview.go", "agentKey"}, {"workflowsave.go", "saveKey"},
+	},
+}
+
+// teaKeysIn is every tea.Key... a method names, in a case clause or a comparison.
+func teaKeysIn(t *testing.T, file, method string) map[string]bool {
+	t.Helper()
+	out := map[string]bool{}
+	ast.Inspect(funcDeclIn(t, file, method).Body, func(n ast.Node) bool {
+		if name := teaKeyName(asExpr(n)); name != "" && name != "KeyMsg" && name != "KeyType" {
+			out[name] = true
+		}
+		return true
+	})
+	return out
+}
+
+func asExpr(n ast.Node) ast.Expr {
+	e, _ := n.(ast.Expr)
+	return e
+}
+
+// Every key a surface's handlers bind is written in that surface's rows - not
+// only a row for the surface. The board handled Home and End and drew PgUp/PgDn
+// alone, /workflows binds → and ←, the cards ←→ and space: a reader-exists guard
+// cannot see any of them. Printable keys (a letter, a digit) are not scanned, and
+// a call spelled other than a.<x>Key(m) is not found by the guard above: both are
+// stated limits, in decisions.md.
+func TestEveryKeyASurfaceBindsIsNamedInItsRows(t *testing.T) {
+	if len(surfaceHandlers) < 9 {
+		t.Fatalf("%d surfaces listed: the table is broken", len(surfaceHandlers))
 	}
-	for via, where := range switches {
+	for via, handlers := range surfaceHandlers {
 		var rows strings.Builder
 		for _, s := range helpSurfaces() {
 			if s.via == via {
@@ -339,12 +392,15 @@ func TestEveryKeyASingleSwitchSurfaceBindsIsNamedInItsRows(t *testing.T) {
 			t.Errorf("%s has no rows in the help", via)
 			continue
 		}
-		cases := keyCasesIn(t, where[0], where[1])
-		if len(cases) < 3 {
-			t.Fatalf("%s: found %d key cases: the scan is broken and this asserts nothing", via, len(cases))
+		bound := map[string]bool{}
+		for _, h := range handlers {
+			maps.Copy(bound, teaKeysIn(t, h[0], h[1]))
 		}
-		for name := range cases {
-			if teaKeysNotRead[name] {
+		if len(bound) < 2 {
+			t.Fatalf("%s: found %d keys: the scan is broken and this asserts nothing", via, len(bound))
+		}
+		for name := range bound {
+			if teaKeysNotRead[name] || slices.Contains(typesInto[via], name) {
 				continue
 			}
 			words, known := teaKeyWords[name]

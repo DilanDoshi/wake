@@ -324,9 +324,9 @@ func (a App) renameMirrorFor(who, text string) (id, name string) {
 	return agent.ID, renameMirrorArg(text)
 }
 
-// Sentences that *spell* a command - the usage lines, and the two refusals that
-// name the way round - live in slash.go, which is where a leading slash is
-// known. See newUsage. What is here is what does not spell one.
+// The usage lines and the two refusals that name the way round spell their
+// command through nameVerb and taskVerb, the rendered forms slash.go keeps: a
+// leading slash is known there alone.
 
 const (
 	// nameUsage and taskUsage are what each verb takes. Both spell the `@`,

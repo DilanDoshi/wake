@@ -17,7 +17,10 @@ import (
 )
 
 const helpSampleUsage = "usage:\n  wake new [name]         open a conversation with a new agent\n\n" +
-	"flags, anywhere:\n  --fleet <name>          which fleet to talk to\n"
+	"flags, anywhere:\n  --fleet <name>          which fleet to talk to\n" +
+	"  --max-agents <n>        how many sessions the fleet runs at once;\n" +
+	"                          with wake, new, attach or manager\n\n" +
+	"flags, on wake status:\n  --team <name>           only the agents on that team\n"
 
 // helpRoom is the room over alex, with a recorder behind the connection so a
 // test can say nothing was written.
@@ -423,5 +426,106 @@ func TestWakeHelpKeepsItsLayoutAndNeverDrawsAStaleOne(t *testing.T) {
 		if strings.Contains(stripANSI(poisoned.helpPane(w, h)), "POISONED ROW") {
 			t.Errorf("a layout for width %d query %q was drawn at width %d query %q", stale.width, stale.query, w, "park")
 		}
+	}
+}
+
+// A usage line that wraps carries on under its description with no gap of its
+// own: it belongs to the row above, not to a row of its own that would widen the
+// section's lead column and split the sentence under a filter.
+func TestTheShellSectionJoinsAContinuationLineToItsRow(t *testing.T) {
+	var flags []helpRow
+	for _, r := range shellRows(helpSampleUsage) {
+		if strings.HasPrefix(r.lead, "with wake, new") {
+			t.Errorf("a continuation line became a row of its own: %+v", r)
+		}
+		if strings.HasPrefix(r.lead, "--max-agents") {
+			flags = append(flags, r)
+		}
+	}
+	if len(flags) != 1 || !strings.Contains(flags[0].text, "once; with wake, new, attach or manager") {
+		t.Errorf("--max-agents is %+v, want one row holding the whole sentence", flags)
+	}
+}
+
+// A heading names the group under it, so it is drawn only while a row of that
+// group is - and a query that names the heading brings the whole group.
+func TestAFilterKeepsAGroupHeadingOnlyWithARowUnderIt(t *testing.T) {
+	shell := func(query string) []helpRow {
+		for _, s := range helpFilter(helpSections(shellRows(helpSampleUsage)), query) {
+			if s.title == shellSectionTitle {
+				return s.rows
+			}
+		}
+		return nil
+	}
+	texts := func(rows []helpRow) string {
+		var b strings.Builder
+		for _, r := range rows {
+			b.WriteString(r.lead + "|" + r.text + "\n")
+		}
+		return b.String()
+	}
+	got := texts(shell("team"))
+	if !strings.Contains(got, "--team <name>") || !strings.Contains(got, "flags, on wake status:") {
+		t.Errorf("a row of the status group lost its heading:\n%s", got)
+	}
+	if strings.Contains(got, "flags, anywhere:") {
+		t.Errorf("a heading with no row under it was kept:\n%s", got)
+	}
+	got = texts(shell("anywhere"))
+	for _, want := range []string{"flags, anywhere:", "--fleet <name>", "--max-agents <n>"} {
+		if !strings.Contains(got, want) {
+			t.Errorf("naming the heading did not bring %q:\n%s", want, got)
+		}
+	}
+	if strings.Contains(got, "--team") {
+		t.Errorf("naming one heading brought another group's row:\n%s", got)
+	}
+}
+
+// esc is the only way out, so the foot says it first and a narrow pane cuts the
+// rest.
+func TestTheFootKeepsEscCloseAtEveryWidth(t *testing.T) {
+	a, _ := helpRoom(t, 160, 60)
+	a = helpOpened(t, a, "")
+	for _, w := range []int{80, 40, 30, 24} {
+		lines := strings.Split(stripANSI(a.helpPane(w, 30)), "\n")
+		foot := ""
+		for _, l := range lines[helpBodyTop:] {
+			if strings.TrimSpace(l) != "" {
+				foot = l // the last row with words in it
+			}
+		}
+		if !strings.Contains(foot, "esc close") {
+			t.Errorf("width %d: the foot is %q, and the way out is not in it", w, foot)
+		}
+	}
+}
+
+// What a paste can put in the filter is bounded, and whitespace of any kind is a
+// space.
+func TestAPasteIsBoundedByTheQueryMax(t *testing.T) {
+	v := HelpView{}.typed(strings.Repeat("x", 3*helpQueryMax))
+	if got := len([]rune(v.Query)); got != helpQueryMax {
+		t.Errorf("a long paste left %d runes in the query, want %d", got, helpQueryMax)
+	}
+	if got := (HelpView{}).typed("a\n\tb \x07 c").Query; got != "a b c" {
+		t.Errorf("whitespace and control characters left the query %q, want %q", got, "a b c")
+	}
+}
+
+// Two columns while the text keeps helpMinText cells, stacked one under the
+// other the cell after.
+func TestARowStacksItsColumnsWhenTheTextWouldGetUnderItsMinimum(t *testing.T) {
+	r := helpRow{lead: "abc", text: "alpha beta"}
+	lead := 3
+	enough := helpIndent + lead + helpGap + helpMargin + helpMinText
+	together := stripANSI(strings.Join(helpRowLines(r, lead, enough), "\n"))
+	if line := strings.Split(together, "\n")[0]; !strings.Contains(line, "abc") || !strings.Contains(line, "alpha") {
+		t.Errorf("at width %d the columns are not side by side:\n%s", enough, together)
+	}
+	stacked := strings.Split(stripANSI(strings.Join(helpRowLines(r, lead, enough-1), "\n")), "\n")
+	if strings.Contains(stacked[0], "alpha") || !strings.Contains(stacked[0], "abc") || !strings.Contains(stacked[1], "alpha") {
+		t.Errorf("at width %d the columns did not stack:\n%s", enough-1, strings.Join(stacked, "\n"))
 	}
 }

@@ -107,7 +107,9 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   a `legendEntries` entry (each carries a `help` line), a surface that reads keys before the composer is a
   `helpSurfaces` row held both ways to `App.key`'s and `App.update`'s `a.<x>Key(m)` calls, whose lines are the
   constants the surface draws, and a command is a word in slash.go's maps with a line in `slashhelp.go`'s
-  `commandHelp`. So **a key, a key-reading surface or a command added without a help line fails the build**.
+  `commandHelp`; every `tea.Key` a surface's handlers name is written in its rows. So **a legend key, a
+  key-reading surface, a bound `tea.Key` or a command added without a help line fails the build** (a printable
+  key, a letter or digit, is the one kind not scanned).
   Esc closes; `↑↓` `⇞⇟` and the wheel scroll; typing narrows; a drag copies. Nothing is written, so nothing
   enters an agent's context. `internal/ui/help.go`, `helpcontent.go`, `helpdraw.go`, `slashhelp.go`, `decisions.md`
   (2026-10-27). A bare `/help` is not claimed (the option, in `decisions.md`).
