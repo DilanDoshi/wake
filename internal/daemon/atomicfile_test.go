@@ -116,7 +116,7 @@ func TestTheAtomicWriteIsSpelledOnceInThisPackage(t *testing.T) {
 				}
 				t.Errorf("%s calls %s. Replacing a file under a reader is one sequence - temp in the "+
 					"destination's own directory, write, chmod the fd, close, rename - and it was "+
-					"copied three times before it drifted. It lives in %s; call writeFileAtomically, "+
+					"copied three times before it drifted. It lives in %s; call WriteFileAtomically, "+
 					"or say here why this one is different", name, spelled, atomicFile)
 			}
 			return true
@@ -151,8 +151,8 @@ func TestAnAtomicWriteLeavesTheFileOrNothing(t *testing.T) {
 	dir := t.TempDir()
 	path := filepath.Join(dir, "thing.json")
 
-	if err := writeFileAtomically(path, "thing", []byte(`{"a":1}`), 0o600); err != nil {
-		t.Fatalf("writeFileAtomically: %v", err)
+	if err := WriteFileAtomically(path, "thing", []byte(`{"a":1}`), 0o600); err != nil {
+		t.Fatalf("WriteFileAtomically: %v", err)
 	}
 	body, err := os.ReadFile(path)
 	if err != nil {
@@ -173,7 +173,7 @@ func TestAnAtomicWriteLeavesTheFileOrNothing(t *testing.T) {
 	// Replacing it keeps the old contents until the rename, so a reader sees
 	// one or the other and never half - which is the whole reason for the
 	// temp file, and the reason the leftover must not survive a failure.
-	if err := writeFileAtomically(path, "thing", []byte(`{"a":2}`), 0o600); err != nil {
+	if err := WriteFileAtomically(path, "thing", []byte(`{"a":2}`), 0o600); err != nil {
 		t.Fatalf("second write: %v", err)
 	}
 	left, err := os.ReadDir(dir)
@@ -187,13 +187,13 @@ func TestAnAtomicWriteLeavesTheFileOrNothing(t *testing.T) {
 
 	// A directory that does not exist is the failure managerConfig turns into
 	// a refused launch, so it has to be an error rather than a silent skip.
-	if err := writeFileAtomically(filepath.Join(dir, "nope", "thing.json"), "thing", nil, 0o600); err == nil {
+	if err := WriteFileAtomically(filepath.Join(dir, "nope", "thing.json"), "thing", nil, 0o600); err == nil {
 		t.Error("writing into a directory that does not exist succeeded")
 	}
 }
 
 // A sync cannot be seen by any test short of a power cut, so its place is held
-// by reading the source: in writeFileAtomically the file is synced before it is
+// by reading the source: in WriteFileAtomically the file is synced before it is
 // closed and renamed, and the directory after the rename; removeFile syncs the
 // directory after the removal; and syncDir really syncs.
 func TestTheAtomicWriteSyncsTheFileBeforeTheRenameAndTheDirectoryAfter(t *testing.T) {
@@ -238,9 +238,9 @@ func TestTheAtomicWriteSyncsTheFileBeforeTheRenameAndTheDirectoryAfter(t *testin
 				fn, calls, earlier, later)
 		}
 	}
-	before("writeFileAtomically", "tmp.Sync", "tmp.Close")
-	before("writeFileAtomically", "tmp.Sync", "os.Rename")
-	before("writeFileAtomically", "os.Rename", "syncDir")
+	before("WriteFileAtomically", "tmp.Sync", "tmp.Close")
+	before("WriteFileAtomically", "tmp.Sync", "os.Rename")
+	before("WriteFileAtomically", "os.Rename", "syncDir")
 	before("removeFile", "os.Remove", "syncDir")
 	if !slices.Contains(order["syncDir"], "d.Sync") {
 		t.Errorf("syncDir calls %v and syncs nothing", order["syncDir"])

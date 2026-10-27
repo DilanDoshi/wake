@@ -4,9 +4,13 @@ package main
 // on the terminal between frames.
 
 import (
+	"errors"
 	"os"
 	"sync"
 )
+
+// errHandedBack is a write of Wake's own after the program let the terminal go.
+var errHandedBack = errors.New("the terminal was handed back")
 
 // guardedOutput serialises Wake's own writes against the renderer's.
 //
@@ -19,7 +23,8 @@ import (
 // can see it happen.
 type guardedOutput struct {
 	*os.File
-	mu sync.Mutex
+	mu     sync.Mutex
+	sealed bool
 }
 
 // Write is the renderer's frames and Wake's own sequences, one at a time, so a
@@ -27,5 +32,23 @@ type guardedOutput struct {
 func (g *guardedOutput) Write(p []byte) (int, error) {
 	g.mu.Lock()
 	defer g.mu.Unlock()
+	if g.sealed {
+		return 0, errHandedBack
+	}
 	return g.File.Write(p)
+}
+
+// WriteString is Write for io.WriteString, which Bubble Tea's escapes and Wake's
+// own sequences arrive through: without it the embedded *os.File's would take
+// them past the lock.
+func (g *guardedOutput) WriteString(s string) (int, error) { return g.Write([]byte(s)) }
+
+// seal ends Wake's writes once Bubble Tea has handed the terminal back: one in
+// flight finishes first, and one a command goroutine has yet to make - the
+// friends' pictures, a copy - is refused rather than landing on the shell's
+// screen, or being cut off mid-escape by the exit.
+func (g *guardedOutput) seal() {
+	g.mu.Lock()
+	defer g.mu.Unlock()
+	g.sealed = true
 }

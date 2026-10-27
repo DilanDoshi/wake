@@ -396,6 +396,7 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 	}
 	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
 	final, err := p.Run()
+	term.seal()
 	if err != nil {
 		return err
 	}

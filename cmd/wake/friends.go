@@ -96,5 +96,6 @@ func keepFriend(path, key string) error {
 	if err := os.MkdirAll(filepath.Dir(path), friendsDirPerm); err != nil {
 		return err
 	}
-	return os.WriteFile(path, b, friendsFilePerm)
+	// Whole or not at all: another window may be opening on it right now.
+	return daemon.WriteFileAtomically(path, "the kept friend", b, friendsFilePerm)
 }

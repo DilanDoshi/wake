@@ -230,7 +230,7 @@ func (s *server) managerConfig(cfg core.Config) (core.Config, error) {
 // the life of the daemon - so rewriting it is idempotent, and doing it here
 // means there is no config on disk for a fleet that has no manager.
 //
-// Written through writeFileAtomically, like the roster and the park book: a
+// Written through WriteFileAtomically, like the roster and the park book: a
 // claude process reads this file as it starts, and a torn read is a manager with
 // no tools and no error anywhere. This was the third hand-rolled copy of that
 // sequence and the one that had already drifted from the other two - see
@@ -244,7 +244,7 @@ func writeMCPConfig(socket string, srv mcpServer) (string, error) {
 	}
 
 	path := filepath.Join(filepath.Dir(socket), mcpConfigName)
-	if err := writeFileAtomically(path, "the manager's MCP config", body, mcpConfigPerm); err != nil {
+	if err := WriteFileAtomically(path, "the manager's MCP config", body, mcpConfigPerm); err != nil {
 		return "", err
 	}
 	return path, nil

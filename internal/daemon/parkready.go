@@ -137,7 +137,7 @@ func (p *parkReady) writeLocked() error {
 	}
 	data, err := json.Marshal(rows)
 	if err == nil {
-		err = writeFileAtomically(p.path, "park-ready file", data, parkReadyPerm)
+		err = WriteFileAtomically(p.path, "park-ready file", data, parkReadyPerm)
 	}
 	p.dirty = err != nil
 	if err != nil {

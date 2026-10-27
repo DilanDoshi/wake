@@ -3,7 +3,9 @@ package main
 import (
 	"os"
 	"path/filepath"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/DilanDoshi/wake/internal/termsetup"
 )
@@ -96,4 +98,41 @@ func TestAWindowOpensOnTheKeptFriendAndKeepsItsChoice(t *testing.T) {
 	if got := loadFriend(path); got != "bo" {
 		t.Errorf("the choice kept %q, want bo", got)
 	}
+}
+
+// Two windows choosing while a third opens: every read sees a whole choice,
+// never a file caught between its truncate and its write.
+func TestAWindowOpeningWhileAnotherKeepsAChoiceReadsAWholeOne(t *testing.T) {
+	path := filepath.Join(t.TempDir(), friendsFile)
+	if err := keepFriend(path, "skip"); err != nil {
+		t.Fatal(err)
+	}
+	var wg sync.WaitGroup
+	stop := make(chan struct{})
+	for _, key := range []string{"bo", "ollie"} {
+		wg.Add(1)
+		go func() {
+			defer wg.Done()
+			for {
+				select {
+				case <-stop:
+					return
+				default:
+				}
+				if err := keepFriend(path, key); err != nil {
+					t.Error(err)
+					return
+				}
+			}
+		}()
+	}
+	deadline := time.Now().Add(500 * time.Millisecond)
+	for time.Now().Before(deadline) {
+		if got := loadFriend(path); got != "skip" && got != "bo" && got != "ollie" {
+			t.Errorf("a window opened on %q while choices were kept", got)
+			break
+		}
+	}
+	close(stop)
+	wg.Wait()
 }

@@ -455,7 +455,7 @@ func (p *parkBook) writeLocked() error {
 	if err != nil {
 		return fmt.Errorf("encode park book: %w", err)
 	}
-	return writeFileAtomically(p.path, "park book", data, parkBookPerm)
+	return WriteFileAtomically(p.path, "park book", data, parkBookPerm)
 }
 
 // loadParkBook reads what the last daemon left. A missing file is the ordinary
