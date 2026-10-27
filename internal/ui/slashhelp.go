@@ -27,7 +27,7 @@ type commandHelpLine struct{ args, what string }
 
 var commandHelp = map[string]commandHelpLine{
 	resumeCommand:          {"[<name>|" + resumeAll + "]", "bring a parked session back; bare opens a picker"},
-	newCommand:             {"[<name>] [" + dirKeyword + " <dir>] [flags]", "start an agent without leaving the room; flags: " + strings.Join(newFlagNames, " ")},
+	newCommand:             {"[<name>] [" + dirKeyword + " <dir>] [flags]", "start an agent without leaving the room; flags: " + strings.Join(newFlagNames(), " ")},
 	nameCommand:            {"<new-name>", "rename a session"},
 	taskCommand:            {"<what it is on>", "set the label beside a session's name"},
 	colorCommand:           {"<colour>", "an identity hue (" + strings.Join(rpc.ColorNames, " ") + "), or " + rpc.ColorNone + " to clear"},
@@ -50,8 +50,15 @@ var commandHelp = map[string]commandHelpLine{
 	modelCommand:           {"", "pick a model"},
 }
 
-// newFlagNames are the spawn flags /new takes, as newflags.go spells them.
-var newFlagNames = []string{worktreeFlag, addDirFlag, debugFileFlag, debugFlag, budgetNewFlag, fallbackNewFlag}
+// newFlagNames are the spawn flags /new takes, read off the table its parser
+// reads, so a flag added there reaches the help.
+func newFlagNames() []string {
+	names := make([]string, len(newFlagTable))
+	for i, f := range newFlagTable {
+		names[i] = f.name
+	}
+	return names
+}
 
 // commandRows is every command as a help row: the verb and its argument sketch,
 // with [@who] in front for the commands a mention can aim, and the sentence with

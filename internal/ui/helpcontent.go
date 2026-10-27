@@ -120,6 +120,7 @@ func helpSurfaces() []helpSurface {
 	return []helpSurface{
 		{"boardKey", boardVerb + " rows", boardKeyLineRows},
 		{"boardKey", boardVerb + " tiles", boardKeyLineTiles},
+		{"boardKey", boardVerb + " scrolling", boardScrollKeys},
 		{"workflowKey", workflowsVerb + " list", join(workflowListKeys)},
 		{"workflowKey", workflowsVerb + " run", join(workflowRunKeys(false))},
 		{"workflowKey", workflowsVerb + " run, running", join(workflowRunKeys(true))},
@@ -151,11 +152,13 @@ func helpSurfaces() []helpSurface {
 func addressingRows() []helpRow {
 	at := agentPrefix
 	return []helpRow{
-		{lead: at + "name", text: "send to one agent; the roster and the " + at + " menu list the names"},
+		{lead: at + "name", text: "address one agent; the mention mode (⌃T) decides how far it reaches: " + mentionDirectMeans + ", or " + mentionOpenMeans},
 		{lead: at + "team", text: "send to every live member of a team (" + teamVerb + " groups them)"},
 		{lead: at + core.BroadcastName, text: "send to every live agent; the target line says what that costs"},
 		{lead: at + core.ManagerName, text: "send to the manager, the session that can see and run the fleet"},
 		{lead: at + mentionQuote + "session name" + mentionQuote, text: "relay to one of the machine's other Claude sessions, through the manager"},
+		{lead: at + "path", text: "a file in the agent's directory: a word that names no agent or team is a path, offered by the menu and passed to the agent as typed"},
+		{lead: at + subagentMention + "<type>", text: "ask the agent to use one of its subagent types; the menu lists them"},
 		{lead: at + "who <command>", text: "aim one command at one agent from the room, as " + at + "alex " + statusVerb + " does"},
 		{lead: bangPrefix + "cmd", text: "run a shell line where this conversation runs; the output is drawn and goes to its agent (a bare one in the room reaches nobody)"},
 		{lead: at + "who " + bangPrefix + "cmd", text: "in the room: run in that agent's directory and send the output to it; " + at + "team and " + at + core.BroadcastName + " are refused"},

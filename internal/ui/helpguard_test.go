@@ -253,8 +253,9 @@ func TestTheAddressingRowsAreSpelledFromTheRoutersOwnWords(t *testing.T) {
 		leads += r.lead + "\n"
 	}
 	for _, want := range []string{
-		agentPrefix + "name", agentPrefix + "team", agentPrefix + core.BroadcastName,
-		agentPrefix + mentionQuote, bangPrefix + "cmd", agentPrefix + "who " + bangPrefix + "cmd",
+		agentPrefix + "name", agentPrefix + "team", agentPrefix + core.BroadcastName, agentPrefix + core.ManagerName,
+		agentPrefix + mentionQuote, agentPrefix + "path", agentPrefix + subagentMention,
+		bangPrefix + "cmd", agentPrefix + "who " + bangPrefix + "cmd",
 	} {
 		if !strings.Contains(leads, want) {
 			t.Errorf("the Addressing section has no row led by %q:\n%s", want, leads)
@@ -265,6 +266,20 @@ func TestTheAddressingRowsAreSpelledFromTheRoutersOwnWords(t *testing.T) {
 // slashAtALine is slashInAProse read line by line, so a command opening a line of
 // the chapter's fenced list counts as named as one inside a sentence does.
 var slashAtALine = regexp.MustCompile("(?m)(?:^|[ \x60(])(/[a-z][a-z-]*)(?:[^a-z/-]|$)")
+
+// A leading @name reaches one agent or the fleet by the mention mode, so the row
+// says both, in the words ⌃T says them in.
+func TestTheNameRowSaysWhatBothMentionModesDo(t *testing.T) {
+	for _, r := range sectionNamed(t, addressingSectionTitle).rows {
+		if r.lead == agentPrefix+"name" {
+			if !strings.Contains(r.text, mentionDirectMeans) || !strings.Contains(r.text, mentionOpenMeans) {
+				t.Errorf("the %sname row does not say both readings of the mention mode: %q", agentPrefix, r.text)
+			}
+			return
+		}
+	}
+	t.Fatal("no row led by @name")
+}
 
 // The manual's commands chapter stays hand-written and is checked against the
 // same set, so a command shipped without a word there fails here too.
@@ -284,5 +299,75 @@ func TestTheCommandsChapterNamesEveryCommandWakeOwns(t *testing.T) {
 		if !named[verb] {
 			t.Errorf("docs/user_manual/06-commands.md never names %s", verb)
 		}
+	}
+}
+
+
+// teaKeyWords is how each tea.Key a modal's switch can name is written where
+// the help says it, any one of which counts. A key with no entry is a failure,
+// so this cannot be where a new key quietly avoids the check - legendKeyNames'
+// shape. ⌃C is the hand-back every modal gives to park, and the text-entry keys
+// are "type to ..." on the line: none is read for a word of its own.
+var teaKeyWords = map[string][]string{
+	"KeyUp": {"↑"}, "KeyDown": {"↓"}, "KeyLeft": {"←"}, "KeyRight": {"→"},
+	"KeyTab": {"⇥"}, "KeyEnter": {"↵"}, "KeyEsc": {"esc"},
+	"KeyPgUp": {"PgUp", "⇞"}, "KeyPgDown": {"PgDn", "⇟"}, "KeyHome": {"Home"}, "KeyEnd": {"End"},
+	"KeyCtrlD": {"⌃D"}, "KeyCtrlY": {"⌃Y"}, "KeyCtrlB": {"⌃B"},
+}
+
+var teaKeysNotRead = map[string]bool{"KeyCtrlC": true, "KeyBackspace": true, "KeySpace": true, "KeyRunes": true}
+
+// A surface whose keys are one switch has every key that switch binds named in
+// its rows - not only a row for the surface. The board handled Home and End and
+// drew PgUp/PgDn alone, which a reader-exists guard cannot see.
+func TestEveryKeyASingleSwitchSurfaceBindsIsNamedInItsRows(t *testing.T) {
+	switches := map[string][2]string{
+		"boardKey":        {"board.go", "boardKey"},
+		"pickerKey":       {"picker.go", "pickerKey"},
+		"rewindKey":       {"rewind.go", "rewindKey"},
+		"resumePickerKey": {"resumepicker.go", "resumePickerKey"},
+		"helpKey":         {"help.go", "helpKey"},
+	}
+	for via, where := range switches {
+		var rows strings.Builder
+		for _, s := range helpSurfaces() {
+			if s.via == via {
+				rows.WriteString(s.keys + " ")
+			}
+		}
+		if rows.Len() == 0 {
+			t.Errorf("%s has no rows in the help", via)
+			continue
+		}
+		cases := keyCasesIn(t, where[0], where[1])
+		if len(cases) < 3 {
+			t.Fatalf("%s: found %d key cases: the scan is broken and this asserts nothing", via, len(cases))
+		}
+		for name := range cases {
+			if teaKeysNotRead[name] {
+				continue
+			}
+			words, known := teaKeyWords[name]
+			if !known {
+				t.Errorf("%s binds tea.%s and teaKeyWords does not say how the help writes it: add it there", via, name)
+				continue
+			}
+			if !slices.ContainsFunc(words, func(w string) bool { return strings.Contains(rows.String(), w) }) {
+				t.Errorf("%s binds tea.%s and its rows never write %v: %q", via, name, words, rows.String())
+			}
+		}
+	}
+}
+
+// /new's flags are the parser's own table, so a flag added there reaches the help.
+func TestTheNewCommandsHelpNamesEveryFlagItsParserTakes(t *testing.T) {
+	line := commandHelp[newCommand].what
+	for _, f := range newFlagTable {
+		if !strings.Contains(line, f.name) {
+			t.Errorf("the parser takes %s and the help line for %s says %q", f.name, newVerb, line)
+		}
+	}
+	if len(newFlagTable) < 6 {
+		t.Fatalf("%d flags in newFlagTable: the scan is broken", len(newFlagTable))
 	}
 }

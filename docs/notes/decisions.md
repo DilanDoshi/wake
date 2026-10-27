@@ -31,7 +31,12 @@ to learn something or remember something"). Rulings (`wake-orch`'s, against `ori
   `helpSurfaces` is held both ways to the `a.<x>Key(m)` calls in `App.key` and `App.update` (an AST scan), and
   each row is the constant or producer its surface draws; `TestTheHelpCarriesTheKeyLinesTheSurfacesDraw`
   reads the real producers, cards through `Cards.keyLine` on recorded asks. A picker that draws no key line
-  gets a constant beside its binding (`pickerKeys`, `rewindKeys`). Commands: `wakeWords()` over slash.go's
+  gets a constant beside its binding (`pickerKeys`, `rewindKeys`). **A surface whose keys are one switch**
+  (the board, both pickers, the resume picker, this view) also has every `tea.Key` its switch binds written in
+  its rows (`TestEveryKeyASingleSwitchSurfaceBindsIsNamedInItsRows`), which is how Home and End on the board
+  - handled, and absent from its own drawn line - were found. A surface whose keys span several methods
+  (`/workflows`, `/mcp`, the cards, the completion menu) is held only to having rows and to carrying the line
+  it draws; a key it binds beyond that line is not scanned. Commands: `wakeWords()` over slash.go's
   three maps, each described in `slashhelp.go`; `[@who]`, "room only" and "bare only" come from
   `roomTargetCommands`, `roomCommands` and `bareOnlyCommands`. Addressing is spelled from the router's
   constants. The shell section is `usage`, the text `wake help` prints, handed in by `cmd/wake/room.go`

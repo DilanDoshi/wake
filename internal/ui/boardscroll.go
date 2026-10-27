@@ -138,6 +138,10 @@ func (a App) scrollBoard(delta int) App {
 	return a
 }
 
+// boardScrollKeys is what boardScrollKey reads. The board's own key line names
+// the page keys alone, so Home and End are /wake-help's to tell.
+const boardScrollKeys = "PgUp/PgDn scroll a page · Home/End jump to the first and last stop"
+
 // boardScrollKey is PgUp, PgDn, Home and End: a page is half a pane, the size
 // every other pane pages by.
 func (a App) boardScrollKey(k tea.KeyType) App {
