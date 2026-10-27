@@ -83,6 +83,7 @@ func (a App) authenticate(menu MCPMenu, s core.MCPServerStatus) (App, tea.Cmd) {
 // the asking agent and starts the sweep; one that did not says so and changes
 // nothing.
 func (a App) mcpSignedIn(m mcpSignedInMsg) (App, tea.Cmd) {
+	a.corner.sent = false // the alt screen came back without the friends' images
 	menu := a.mcpUI.menu
 	mine := menu.Open() && menu.Session == m.Session && menu.Server == m.Server
 	if m.Err != nil {

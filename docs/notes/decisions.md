@@ -5188,16 +5188,21 @@ rounds of mockups: **Skip** (a tug that leaves a wake, the default), **Ollie** (
   shell, so tmux, screen, zellij, Neovim's and Vim's terminals, and another terminal opened from it, get the
   sprite. `WAKE_FRIEND_ART=blocks` forces it. Sextants were rejected: converted from the art they muddle it,
   and some fonts lack them.
-- **Sent once, never in a frame.** Every frame of every friend (nine PNGs, ×8 nearest-neighbour, about
-  34 KB of escapes) goes through the guarded writer from `Init`, which Bubble Tea runs after entering the alt
+- **Sent once, never in a frame.** Every frame of every friend (nine PNGs, ×4 nearest-neighbour - 204×240,
+  past the 9×5-cell box at a Retina display's usual fonts - about 20 KB of escapes, encoded before the
+  program starts) goes through the guarded writer from `Init`, which Bubble Tea runs after entering the alt
   screen, and again from `mcpSignedIn`, because `RestoreTerminal` re-enters the alt screen and the spec clears
   a screen's images on entry. Each is a quiet (`q=2`) transmit-and-place with a virtual placement the box in
   size; a frame (`View`) never carries one. A resize sends nothing: the cells are text. A `⌃O` detach ends
   the process, and the next `wake attach` sends them from its own `Init`. Each cell carries its own colour,
   so a cut row keeps every cell's image id; a selection's highlight leaves the placeholder cells as drawn
   (its colour would name another image), ending their colour after them, and a copy drops them - the
-  half-block sprite copies as drawn, as the banner's does. Nine frames at ×8 are about 7 MB of the terminal's
-  image memory per window. **The guarded writer had to be fixed for this** (Codex): it overrode only
+  half-block sprite copies as drawn, as the banner's does. Nine frames at ×4 are about 1.7 MB of the terminal's
+  image memory per window (×8 was about 7 MB; the owner's ×4 ruling, 2026-10-27). **The corner draws the
+  sprite until the images are written** (Codex): the protocol creates an image before a placeholder names it,
+  so `transmitFriends` answers `friendsSentMsg` only after the write, and the rows changing from sprite to
+  placeholders is what makes Bubble Tea redraw them then; a hand-over drops back to the sprite until the
+  images are re-sent, and a failed write keeps it. **The guarded writer had to be fixed for this** (Codex): it overrode only
   `Write`, so `io.WriteString` - Bubble Tea's escapes, the clipboard's OSC 52, the transmission - took the
   embedded file's `WriteString` past its lock. It now overrides both, and `converseModel` seals it when
   `p.Run` returns, so a sequence a command goroutine had yet to write is refused rather than landing on the
@@ -5217,6 +5222,12 @@ rounds of mockups: **Skip** (a tug that leaves a wake, the default), **Ollie** (
   previews the cursored friend, `↵` keeps it, `esc` or typing puts the kept one back. `/friends skip|ollie|bo|none`
   sets one at once; any other word is a notice naming the cast. `@who /friends` is a message to who, as
   `@who /board` is.
+- **Accepted, not fixed** (Codex's second pass): `⌃C⌃C`'s emergency exit does not take the writer's lock -
+  it exists for a renderer wedged while holding it - so a sequence in flight there can be cut, as a frame
+  can; the one image write is at start and takes a millisecond. Between Bubble Tea leaving the alt screen and
+  the seal, a late image escape is complete and draws nothing on the main screen, which has no placeholders.
+  Two windows choosing within one keep of each other: the last write wins, and each window keeps its own
+  friend until it restarts.
 - **Left out** (`deferred.md`): the friend's face following the bar (drowsy near the limit, asleep at it),
   completion of `/friends`' argument, and images through tmux.
 - **Held by** `friendsart_test.go` (sizes, the palette exactly the art's, frames that differ),

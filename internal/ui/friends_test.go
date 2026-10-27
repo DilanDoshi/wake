@@ -42,7 +42,12 @@ func (k *keptFriends) got() []string {
 func friendRoom(t *testing.T, kitty bool, pick string, kept *keptFriends) App {
 	t.Helper()
 	fresh(t)
-	return newRoomApp(t).withSize(100, 24).WithFriends(Friends{Pick: pick, Kitty: kitty, Save: kept.save})
+	a := newRoomApp(t).withSize(100, 24).WithFriends(Friends{Pick: pick, Kitty: kitty, Save: kept.save})
+	if kitty {
+		m, _ := a.Update(friendsSentMsg{}) // the images reached the terminal
+		a = m.(App)
+	}
+	return a
 }
 
 // friendIDs is the image every placeholder cell of rows names, in order.
@@ -499,3 +504,49 @@ func TestClicksFollowThePreviewWhileTheFriendsMenuIsOpen(t *testing.T) {
 		everyClickLandsOnTheRowDrawnThere(t, a)
 	}
 }
+
+// A placeholder may only name an image the terminal already has, so until the
+// transmission has been written - at start, and again after a hand-over cleared
+// the screen's images - the corner draws the half-block sprite; once it has, the
+// rows change to placeholders, which is what makes Bubble Tea redraw them.
+func TestTheCornerNamesImagesOnlyOnceTheyHaveBeenSent(t *testing.T) {
+	fresh(t)
+	out := &syncBuffer{}
+	a := newRoomApp(t).withSize(100, 24).WithOutput(out).WithFriends(Friends{Pick: "bo", Kitty: true}).withUsageReport(aReading, "sydney")
+	if ids := friendIDs(sidebarRows(a)); len(ids) != 0 {
+		t.Fatalf("before any image was sent the corner named images %v", firstOf(ids))
+	}
+	if !strings.HasSuffix(sidebarRows(a)[a.paneHeight()-friendRows-2], halfBlockRows(boArt.blocks)[0]) {
+		t.Error("before the images were sent the corner did not draw Bo's sprite")
+	}
+	msg := a.transmitFriends()()
+	if _, ok := msg.(friendsSentMsg); !ok || !strings.Contains(out.String(), transmission(t)) {
+		t.Fatalf("the transmission answered %T with %d bytes written; want friendsSentMsg after the images", msg, len(out.String()))
+	}
+	m, _ := a.Update(msg)
+	a = m.(App)
+	if got := friendIDs(sidebarRows(a)); !slices.Equal(got, allOf(friendImage(2, 0), friendCells9x5)) {
+		t.Fatalf("after the images were sent the corner drew %v, want Bo's", firstOf(got))
+	}
+	a, _ = a.mcpSignedIn(mcpSignedInMsg{Session: "s1", Server: "x", Err: errors.New("cancelled")})
+	if ids := friendIDs(sidebarRows(a)); len(ids) != 0 {
+		t.Errorf("after a hand-over cleared the screen's images the corner still names %v", firstOf(ids))
+	}
+}
+
+// A transmission that cannot be written leaves the sprite, never placeholders
+// naming images the terminal does not have.
+func TestATransmissionThatFailsLeavesTheSprite(t *testing.T) {
+	fresh(t)
+	a := newRoomApp(t).withSize(100, 24).WithOutput(failingWriter{}).WithFriends(Friends{Pick: "skip", Kitty: true})
+	if msg := a.transmitFriends()(); msg != nil {
+		t.Errorf("a failed transmission answered %T; it must not claim the images were sent", msg)
+	}
+	if n, _ := notice.Latest(); !strings.Contains(n.String(), "did not reach the terminal") {
+		t.Errorf("a failed transmission said %q", n.String())
+	}
+}
+
+type failingWriter struct{}
+
+func (failingWriter) Write([]byte) (int, error) { return 0, errors.New("closed") }

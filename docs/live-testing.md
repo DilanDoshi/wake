@@ -931,7 +931,7 @@ The tests replay recorded receipts and a scripted agent. In a scratch git reposi
 - [ ] **Open Wake in Ghostty, cmux and Kitty.** Skip sits in the sidebar's bottom-right corner as a sharp
       picture, not blocks; `/friends`, then `↓`, previews Ollie and Bo; `↵` keeps one. The suite reads the
       escapes back as a terminal would (`kittyplace_test.go`); what it cannot say is that this terminal draws
-      unicode placeholders, and that ×8 nearest-neighbour stays crisp at this screen's density.
+      unicode placeholders, and that ×4 nearest-neighbour stays crisp at this screen's density.
 - [ ] **Run an agent's turn and watch the friend.** Skip's smoke, Ollie's steam or Bo's spout moves while an
       agent works and stops when the fleet is idle.
 - [ ] **Sign an MCP server in from `/mcp`** (the terminal hand-over). When the room comes back, so does the

@@ -37,7 +37,7 @@ const (
 
 	// friendScale is how many times larger the image is sent than its art, by
 	// nearest neighbour; the terminal fits it to the box.
-	friendScale = 8
+	friendScale = 4
 
 	// friendImageBase starts the friends' image ids ("WK"), one per friend and
 	// frame; a cell's 24-bit colour carries the id.
@@ -150,7 +150,9 @@ func pixelColor(p byte) (color.NRGBA, error) {
 // transmitFriends puts every friend's images on the terminal between frames,
 // when this window draws them: from Init, which runs after Bubble Tea has
 // entered the alt screen, and again whenever a hand-over re-enters it, since
-// that clears the screen's images (mcpauth.go's mcpSignedIn).
+// that clears the screen's images (mcpauth.go's mcpSignedIn). It answers
+// friendsSentMsg only once they are written, which is when the corner may
+// start naming them; a failed write leaves the sprite.
 func (a App) transmitFriends() tea.Cmd {
 	if !a.corner.kitty || a.out == nil {
 		return nil
@@ -163,9 +165,18 @@ func (a App) transmitFriends() tea.Cmd {
 		}
 		if err != nil {
 			notice.Report(friendsNotSent, err)
+			return nil
 		}
-		return nil
+		return friendsSentMsg{}
 	}
+}
+
+// friendsSentMsg says the friends' images are on the terminal.
+type friendsSentMsg struct{}
+
+func (a App) friendsSent() App {
+	a.corner.sent = true
+	return a
 }
 
 var (

@@ -68,7 +68,7 @@ func usageRows(u *rpc.SessionUsage, width int) []string {
 func (a App) withUsageRows() App {
 	width := max(a.regions().Roster-dividerWidth, 0)
 	a.daemon.rows = usageRows(a.daemon.usage, width)
-	a.corner.rows = a.corner.rowsAt(a.daemon.rows, width)
+	a.corner = a.corner.at(a.daemon.rows, width)
 	return a
 }
 
@@ -77,7 +77,7 @@ func (a App) withUsageRows() App {
 // none with neither, or in a pane too short to leave the roster a row of its own.
 func (a App) usageDrawn() []string {
 	h := a.paneHeight()
-	if rows := a.corner.rows[a.drawnFriend()][a.friendFrame()]; len(rows) > 0 && len(rows) < h {
+	if rows := a.corner.block(a.drawnFriend(), a.friendFrame()); len(rows) > 0 && len(rows) < h {
 		return rows
 	}
 	if len(a.daemon.rows) >= h {

@@ -12,6 +12,8 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"github.com/DilanDoshi/wake/internal/notice"
 )
 
 const (
@@ -96,25 +98,38 @@ type Friends struct {
 }
 
 // corner is the friend on the usage bar. pick is a cast key or friendNone, and
-// "" - a test's App - draws no friend at all. cells are each friend's frames
-// drawn once; rows are each friend's block under the roster at the sidebar's
-// width, rebuilt with the bar's (withUsageRows), never per frame.
+// "" - a test's App - draws no friend at all. images are each friend's frames
+// as placeholder cells (Kitty terminals only) and sprites its half-block cells,
+// drawn once; the rows are those laid out under the roster at the sidebar's
+// width, rebuilt with the bar's (withUsageRows), never per frame. sent says the
+// images are on the terminal: until then a placeholder would name nothing, so
+// the sprite is drawn (kittyplace.go's transmitFriends).
 type corner struct {
-	pick  string
-	kitty bool
-	save  func(string) error
-	cells map[string][friendFrames][]string
-	rows  map[string][friendFrames][]string
+	pick        string
+	kitty, sent bool
+	save        func(string) error
+	images      map[string][friendFrames][]string
+	sprites     map[string][]string
+	imageRows   map[string][friendFrames][]string
+	spriteRows  map[string][]string
 }
 
 // WithFriends puts the kept friend on the usage bar, or Skip when none was
-// kept or the kept word names no friend.
+// kept or the kept word names no friend. The images are encoded here, before
+// the program starts, so the transmission is only a write.
 func (a App) WithFriends(f Friends) App {
 	pick := strings.ToLower(f.Pick)
 	if !slices.Contains(friendOptions(), pick) {
 		pick = defaultFriend
 	}
-	a.corner = corner{pick: pick, kitty: f.Kitty, save: f.Save, cells: friendCells(f.Kitty)}
+	kitty := f.Kitty
+	if kitty {
+		if _, err := friendTransmission(); err != nil {
+			notice.Report(friendsNotSent, err)
+			kitty = false
+		}
+	}
+	a.corner = corner{pick: pick, kitty: kitty, save: f.Save, images: friendImages(kitty), sprites: friendSprites()}
 	return a.withUsageRows()
 }
 
@@ -127,20 +142,28 @@ func friendOptions() []string {
 	return append(out, friendNone)
 }
 
-// friendCells is every friend's frames as the five rows of cells they draw:
-// placeholders naming each frame's image, or the one half-block sprite.
-func friendCells(kitty bool) map[string][friendFrames][]string {
+// friendImages is every friend's frames as placeholder cells naming each
+// frame's image, and none for a terminal that draws no Kitty images.
+func friendImages(kitty bool) map[string][friendFrames][]string {
+	if !kitty {
+		return nil
+	}
 	out := make(map[string][friendFrames][]string, len(cast))
 	for i, f := range cast {
 		var frames [friendFrames][]string
-		sprite := halfBlockRows(f.art.blocks)
 		for n := range frames {
-			frames[n] = sprite
-			if kitty {
-				frames[n] = placeholderRows(friendImage(i, n))
-			}
+			frames[n] = placeholderRows(friendImage(i, n))
 		}
 		out[f.key] = frames
+	}
+	return out
+}
+
+// friendSprites is every friend's half-block sprite as its five rows of cells.
+func friendSprites() map[string][]string {
+	out := make(map[string][]string, len(cast))
+	for _, f := range cast {
+		out[f.key] = halfBlockRows(f.art.blocks)
 	}
 	return out
 }
@@ -171,21 +194,35 @@ func halfBlock(top, bottom byte) string {
 	return lipgloss.NewStyle().Foreground(ink(top)).Background(ink(bottom)).Render(upperHalf)
 }
 
-// rowsAt is every friend's block under the roster: standing on the bar's rule,
-// over the rows under it, or alone in the corner before the first reading.
-func (c corner) rowsAt(bar []string, width int) map[string][friendFrames][]string {
+// at lays every friend's cells out under the roster: standing on the bar's
+// rule over the rows under it, or alone in the corner before the first reading.
+func (c corner) at(bar []string, width int) corner {
+	c.imageRows, c.spriteRows = nil, nil
 	if c.pick == "" || width < friendCols {
-		return nil
+		return c
 	}
-	out := make(map[string][friendFrames][]string, len(c.cells))
-	for key, frames := range c.cells {
+	c.imageRows = make(map[string][friendFrames][]string, len(c.images))
+	for key, frames := range c.images {
 		var drawn [friendFrames][]string
 		for n, cells := range frames {
 			drawn[n] = blockWithFriend(bar, cells, width)
 		}
-		out[key] = drawn
+		c.imageRows[key] = drawn
 	}
-	return out
+	c.spriteRows = make(map[string][]string, len(c.sprites))
+	for key, cells := range c.sprites {
+		c.spriteRows[key] = blockWithFriend(bar, cells, width)
+	}
+	return c
+}
+
+// block is friend's block under the roster in this frame: its images once the
+// terminal has them, its sprite otherwise; none for none.
+func (c corner) block(friend string, frame int) []string {
+	if c.kitty && c.sent {
+		return c.imageRows[friend][frame]
+	}
+	return c.spriteRows[friend]
 }
 
 // blockWithFriend lays a friend's cells at the sidebar's right edge, its last

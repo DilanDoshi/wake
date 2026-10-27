@@ -354,8 +354,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A friend's picture is sent once, never in a frame**: every frame as a quiet Kitty virtual placement from
   `Init` (after the alt screen is entered) and again after a hand-over re-enters it (`mcpSignedIn`); after that
   it is unicode-placeholder text, each cell carrying its own colour (the image id), so a selection leaves it as
-  drawn and a copy drops it. Its 3 frames step every 400ms off the wall clock while an agent works, on beat.go's
-  heartbeat; no timer. `internal/ui/kittyplace.go`.
+  drawn and a copy drops it; until it is written the corner draws the sprite (`friendsSentMsg`). Its 3 frames
+  step every 400ms off the wall clock while an agent works, on beat.go's heartbeat; no timer.
+  `internal/ui/kittyplace.go`.
 - **Compacting line** (`compacting.go`): indeterminate bar (the wire has no progress figure); end
   keys on `compact_result`, not the boundary. The `compact_boundary` metadata draws
   `✻ Compacted · A → B tokens · …`, live-only.
@@ -718,7 +719,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/fleet.go` at 799 and `internal/ui/app.go` at 798 — derived by
+  `internal/ui/app.go` at 800 and `internal/ui/fleet.go` at 799 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

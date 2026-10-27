@@ -631,6 +631,8 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case copiedMsg:
 		return a.copied(m)
+	case friendsSentMsg:
+		return a.friendsSent(), nil
 
 	case tea.KeyMsg:
 		a.clicks = clickRun{} // every keystroke ends a click run; see multiclick.go
