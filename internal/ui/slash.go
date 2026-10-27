@@ -189,27 +189,6 @@ const newCommand = "new"
 // means" stays in the router.
 const newVerb = SlashPrefix + newCommand
 
-// newUsage is every refusal `/new` can produce out of what was typed, and it is
-// one sentence for all of them.
-//
-// Each of those failures is the operator having typed a shape the parser does
-// not read, and the useful answer to all of them is the same: what the shapes
-// are. A sentence per malformation is three refusals that each say less than
-// this one does — and this is the surface where a refusal is read at the moment
-// somebody has already failed to do what they wanted.
-//
-// It lives here rather than in new.go because it *spells the command*, which is
-// this file's own ruling: the prefix is known in one place, and everywhere else
-// takes a rendered sentence.
-// Bracket notation rather than the four spellings enumerated: with six flags
-// the enumeration no longer fits the one-line notice row at 200 columns, and a
-// usage the operator cannot read to its end teaches nothing. Same shapes, one
-// line.
-const newUsage = newVerb + " [name] [" + dirKeyword + " <dir>]" +
-	"; flags: " + worktreeFlag + " <name> · " + addDirFlag + " <dir> (repeatable) · " +
-	debugFileFlag + " <name> · " + debugFlag + " <categories> · " +
-	budgetNewFlag + " <usd> · " + fallbackNewFlag + " <m,m>"
-
 // nameCommand and taskCommand are the two halves of the founding message's
 // *"you can either rename or assign a 'task' so they are called like
 // `sydney <> dev-5748` or `alex <> ui fixes`"*.
@@ -333,39 +312,6 @@ const quitVerb = SlashPrefix + quitCommand
 const (
 	nameVerb = SlashPrefix + nameCommand
 	taskVerb = SlashPrefix + taskCommand
-
-	// nameUsage and taskUsage are what each verb takes. Both spell the `@`,
-	// because the marker is what makes the grammar unambiguous rather than
-	// positional, and an operator who guessed the positional form would rename
-	// the conversation they are in to somebody else's handle.
-	nameUsage = nameVerb + " <new-name>, or " + nameVerb + " " + agentPrefix + "<who> <new-name>"
-	taskUsage = taskVerb + " <what it is working on>, or " + taskVerb + " " + agentPrefix + "<who> <what it is working on>"
-
-	// noNameTarget and noTaskTarget are each verb in the room with no handle in
-	// front of it. They refuse rather than guessing for noResumeTarget's reason
-	// and one sharper: renaming whichever agent the roster cursor rests on
-	// changes where the operator's next `@` goes, and a name that resolves is
-	// never reported.
-	noNameTarget = "which one? " + nameUsage
-	noTaskTarget = "which one? " + taskUsage
-)
-
-// colorUsage names the colours because the set is closed and small - a guessed
-// hue reads the seven that exist rather than round-tripping a refusal.
-// noColorTarget is noNameTarget's: the room does not guess a target.
-var (
-	colorUsage = colorVerb + " <colour>, or " + colorVerb + " " + agentPrefix + "<who> <colour>" +
-		"; colours: " + strings.Join(rpc.ColorNames, " ") + " (or " + rpc.ColorNone + " to clear)"
-	noColorTarget = "which one? " + colorUsage
-)
-
-// teamUsage names the shape rather than a set, because a team is operator-named
-// and open, not a closed vocabulary like colour. noTeamTarget is noColorTarget's:
-// the room does not guess a target.
-var (
-	teamUsage = teamVerb + " <name>, or " + teamVerb + " " + agentPrefix + "<who> <name>" +
-		" (or " + rpc.TeamNone + " to clear)"
-	noTeamTarget = "which one? " + teamUsage
 )
 
 // commands is every slash command Wake owns. **Closed on purpose**: anything not here is a message,

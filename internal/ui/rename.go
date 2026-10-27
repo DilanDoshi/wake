@@ -327,3 +327,20 @@ func (a App) renameMirrorFor(who, text string) (id, name string) {
 // Sentences that *spell* a command - the usage lines, and the two refusals that
 // name the way round - live in slash.go, which is where a leading slash is
 // known. See newUsage. What is here is what does not spell one.
+
+const (
+	// nameUsage and taskUsage are what each verb takes. Both spell the `@`,
+	// because the marker is what makes the grammar unambiguous rather than
+	// positional, and an operator who guessed the positional form would rename
+	// the conversation they are in to somebody else's handle.
+	nameUsage = nameVerb + " <new-name>, or " + nameVerb + " " + agentPrefix + "<who> <new-name>"
+	taskUsage = taskVerb + " <what it is working on>, or " + taskVerb + " " + agentPrefix + "<who> <what it is working on>"
+
+	// noNameTarget and noTaskTarget are each verb in the room with no handle in
+	// front of it. They refuse rather than guessing for noResumeTarget's reason
+	// and one sharper: renaming whichever agent the roster cursor rests on
+	// changes where the operator's next `@` goes, and a name that resolves is
+	// never reported.
+	noNameTarget = "which one? " + nameUsage
+	noTaskTarget = "which one? " + taskUsage
+)
