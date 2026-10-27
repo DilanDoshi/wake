@@ -5161,3 +5161,57 @@ still runs in the UI, where the operator is, and only its result now travels.
   and its stamp written, the turn owed), and the UI's `bangsend_test.go`, `bang_test.go` and `bangkey_test.go`
   (an invalid-UTF-8 flood among them), each mutation-checked;
   `TestABangIsNotSentToTheAgent(OnEnter)` asserted the old ruling and now assert the shell run.
+
+## 2026-10-27 — a friend sits on the usage bar, chosen with `/friends` (the owner)
+
+The owner asked for "a fully rendered wake dude that's cute … to sit on the usage bar" and picked from three
+rounds of mockups: **Skip** (a tug that leaves a wake, the default), **Ollie** (an otter afloat with a coffee),
+**Bo** (a baby whale), or **none**, chosen with `/friends` (owner's 2026-10-27 approval).
+
+- **The friends are original art drawn for Wake.** Each is a 51×60 pixel grid, one palette letter a pixel,
+  painted from ellipses and polygons in Wake's own colours (Skip's hull is the accent, the water the bar's
+  fill) and Wake-chosen hues for the rest, then held by hand in `friendsart_*.go`. They are not in
+  `claude-palette.json`: like `identityColors`, they are Wake's choice. Nothing is traced or derived from
+  another product. OpenAI Codex's TUI mascot was watched only to learn which protocol it draws with - the
+  Kitty graphics protocol, a PNG placed classically and re-sent on every redraw - and no byte of its output
+  was kept. Wake uses the protocol's **unicode placeholders** instead, from Kitty's own specification, because
+  that is the method made for a TUI: the image is sent once and the cells are text.
+- **Where.** 9×5 cells at the sidebar's right edge, the friend's last row standing on the bar's rule, so the
+  roster gives up four rows with a reading and five in the corner before one. The rows are the usage block's
+  (`App.usageDrawn`), so the roster's draw and its clicks (`rosterHeight`, `Roster.Hit`, `Roster.At`) follow
+  them; a pane too short for the friend keeps the bar alone, then the roster alone, as before.
+- **Kitty and Ghostty (so cmux) get images; every other terminal, and tmux or screen, gets a hand-drawn
+  half-block sprite in the same cells** (`termsetup.Detect`/`DetectMultiplexer`, read from the env, no
+  terminal query), so the roster's height never depends on the terminal. `WAKE_FRIEND_ART=blocks` forces the
+  sprite. Sextants were rejected: converted from the art they muddle it, and some fonts lack them.
+- **Sent once, never in a frame.** Every frame of every friend (nine PNGs, ×8 nearest-neighbour, about
+  34 KB of escapes) goes through the guarded writer from `Init`, which Bubble Tea runs after entering the alt
+  screen, and again from `mcpSignedIn`, because `RestoreTerminal` re-enters the alt screen and the spec clears
+  a screen's images on entry. Each is a quiet (`q=2`) transmit-and-place with a virtual placement the box in
+  size; a frame (`View`) never carries one. A resize sends nothing: the cells are text. A `⌃O` detach ends
+  the process, and the next `wake attach` sends them from its own `Init`. Each cell carries its own colour,
+  so a cut row keeps every cell's image id; a selection's highlight leaves the friend's cells as drawn (its
+  colour would name another image) and a copy drops them.
+- **The animation is three frames, 400ms apart, off the wall clock while an agent works**, riding the
+  heartbeat `beat.go` already schedules only then, and the first frame otherwise. A frame change is the
+  cells naming another image, so only those rows redraw and nothing is re-sent; no timer is added. The
+  half-block sprite is one static frame.
+- **The choice is the machine's.** `~/.wake/friends.json` (`{"friend":"bo"}`), beside `update-check.json`,
+  read once when a window opens and written only on a choice; another window takes it at its next start.
+  The owner approved Wake keeping it (CLAUDE.md's list of what Wake stores). Missing, unreadable or naming
+  no friend, it opens on Skip. `WAKE_FRIENDS_FILE` keeps it elsewhere, and `cmd/wake`'s `TestMain` points
+  every wake the suite runs at a file keeping none, so no test reads or writes the operator's own.
+- **`/friends`** joins the closed set whole (no recorded init advertises it). Bare, it opens a Picker over the
+  focused composer - the room's or a conversation's - drawn as a titled box like `/status`'s; the corner
+  previews the cursored friend, `↵` keeps it, `esc` or typing puts the kept one back. `/friends skip|ollie|bo|none`
+  sets one at once; any other word is a notice naming the cast. `@who /friends` is a message to who, as
+  `@who /board` is.
+- **Left out** (`deferred.md`): the friend's face following the bar (drowsy near the limit, asleep at it),
+  completion of `/friends`' argument, and images through tmux.
+- **Held by** `friendsart_test.go` (sizes, the palette exactly the art's, frames that differ),
+  `kittyplace_test.go` (the cells, a cut row, the transmission read back as a terminal would, the chunking),
+  `friends_test.go` (the block with and without a reading, none, the sprite, a short pane, clicks, the
+  animation and an idle fleet's unscheduled heartbeat, the picker's preview, `↵`, `esc` and typing, the word
+  form, a failed keep, the transmission at start and after a hand-over and never in a frame, and a selection
+  across the friend), `cmd/wake`'s `friends_test.go` (detection, the file) and the pty
+  `TestAFriendSitsInTheCornerAndTheChoiceOutlastsTheWindow`, each mutation-checked.

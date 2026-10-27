@@ -158,6 +158,7 @@ type App struct {
 	fleet    Fleet
 	daemon   daemonFacts // the last report's daemon and account facts; see report.go
 	statusUI StatusView  // /status's view; see statuscmd.go
+	corner   corner      // the friend on the usage bar; see friends.go
 
 	room   Room
 	cards  Cards
@@ -496,7 +497,7 @@ func (a App) WithDialer(d Dialer) App { a.dial = d; return a }
 // The blink is scheduled here because Composer focuses itself in its
 // constructor and has no Init of its own to return the command from; without
 // this the cursor is drawn once and never moves again.
-func (a App) Init() tea.Cmd { return tea.Batch(textarea.Blink, a.listen()) }
+func (a App) Init() tea.Cmd { return tea.Batch(textarea.Blink, a.listen(), a.transmitFriends()) }
 
 // listen waits for the drain to have something and takes everything it has.
 //

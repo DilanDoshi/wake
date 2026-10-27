@@ -133,7 +133,7 @@ func selectedText(lines []string, first int, m marked, joins []render.Rejoin) st
 		if started {
 			b.WriteString(j.Sep)
 		}
-		text := strings.TrimRight(ansi.Strip(ansi.Cut(l, c0, c1)), " ")
+		text := strings.TrimRight(withoutPlaceholders(ansi.Strip(ansi.Cut(l, c0, c1))), " ")
 		b.WriteString(dropSpaces(text, j.Lead-c0))
 		started = true
 	}

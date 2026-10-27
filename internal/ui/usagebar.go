@@ -66,14 +66,21 @@ func usageRows(u *rpc.SessionUsage, width int) []string {
 // withUsageRows renders the last report's reading at the sidebar's width - on
 // a report, and in resizePanes, which every change to that width goes through.
 func (a App) withUsageRows() App {
-	a.daemon.rows = usageRows(a.daemon.usage, max(a.regions().Roster-dividerWidth, 0))
+	width := max(a.regions().Roster-dividerWidth, 0)
+	a.daemon.rows = usageRows(a.daemon.usage, width)
+	a.corner.rows = a.corner.rowsAt(a.daemon.rows, width)
 	return a
 }
 
-// usageDrawn is the rows this frame draws under the roster: none with no
-// reading, or in a pane too short to leave the roster a row of its own.
+// usageDrawn is the rows this frame draws under the roster: the friend with
+// the bar (friends.go), or the bar alone where the pane is too short for both;
+// none with neither, or in a pane too short to leave the roster a row of its own.
 func (a App) usageDrawn() []string {
-	if len(a.daemon.rows) >= a.paneHeight() {
+	h := a.paneHeight()
+	if rows := a.corner.rows[a.drawnFriend()][a.friendFrame()]; len(rows) > 0 && len(rows) < h {
+		return rows
+	}
+	if len(a.daemon.rows) >= h {
 		return nil
 	}
 	return a.daemon.rows

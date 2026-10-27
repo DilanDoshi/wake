@@ -71,7 +71,7 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   lone-`@name`/`@team` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
   `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
-  `/workflows`, `/groupchat-filter`, `/status`, `/wake-name`, plus bare `/effort`/`/model` menus, and in the room alone a
+  `/workflows`, `/groupchat-filter`, `/status`, `/wake-name`, `/friends`, plus bare `/effort`/`/model` menus, and in the room alone a
   bare `/clear` (`roomCommands`, `roomclear.go`): it empties this window's group chat and reaches no agent,
   keeps ↑'s prompts, keeps restored history older than it out, and the room notes every 1,000 messages it
   holds in an ordinary timed notice. Everything else passes to the agent byte
@@ -102,6 +102,13 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   nothing enters the agent's context. Any key closes it; a card in its pane comes first.
   `@manager /status` in the room is a message to the manager, as every `@manager /cmd` is.
   `internal/ui/statuscmd.go`.
+- **`/friends`** picks who sits on the usage bar (owner's 2026-10-27 picks): Skip (the default), Ollie, Bo
+  or none, 9×5 cells at the sidebar's right edge, standing on the bar's rule (alone in the corner before the
+  first reading). Bare, it is a Picker over the composer whose cursor previews in the corner; `/friends <name>`
+  sets one. The choice is the machine's (`~/.wake/friends.json`, read when a window opens). Kitty and Ghostty
+  draw a picture; other terminals, tmux and `WAKE_FRIEND_ART=blocks` draw a hand-drawn half-block sprite in the
+  same cells. Original art drawn for Wake. `internal/ui/friends.go`, `friendsmenu.go`, `kittyplace.go`,
+  `cmd/wake/friends.go`, `decisions.md` (2026-10-27).
 - **Dynamic workflows:** a running `Workflow` run is one sidebar row under its agent
   (`⎿ ◈ name done/started`). `↵`, `⌃D` or a click on it — or `/workflows` (that agent's runs in a
   conversation, every agent's in the room; `/workflows @who` or the room's `@who /workflows` one
@@ -141,7 +148,7 @@ Violating one is a design regression, not a style nit.
 | **Claude's CLI identity flags are spelled only in `internal/core/argv.go`** — `--session-id`, `--resume`, `--fork-session`, `--continue`. Use `core.SessionArgvMarkers`. | Enforced by `argv_test.go` tree-wide. |
 | **`attention.go` stays a pure function.** | Hardest logic; testable without spawning. |
 | **The UI never touches an agent's process.** | Keeps the daemon boundary real. |
-| **Wake owns almost no state.** Transcripts are Claude's (`~/.claude/projects/…`); Wake reads them back (`internal/daemon/history.go`). Wake stores roster, park book, park-ready file, groups, layout. The park book holds id, directory, name, label, parked-at — never a PID or ParentID; the park-ready file is its rows for live agents, so a crash hands them to it. | Wake can crash and lose nothing. |
+| **Wake owns almost no state.** Transcripts are Claude's (`~/.claude/projects/…`); Wake reads them back (`internal/daemon/history.go`). Wake stores roster, park book, park-ready file, groups, layout, and the machine's friend on the usage bar (`friends.json`, the owner's 2026-10-27 OK). The park book holds id, directory, name, label, parked-at — never a PID or ParentID; the park-ready file is its rows for live agents, so a crash hands them to it. | Wake can crash and lose nothing. |
 | **Never copy cmux source.** CLI only. | cmux is GPL-3.0-or-later. |
 | **No parallel implementations.** Extend in place, or delete and replace. | Grep first; name what you extend or remove. |
 
@@ -343,6 +350,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   reset that passes draws `session · reset …` on an empty bar, noticed by the liveness tick, not a timer.
   Rendered per report and in `resizePanes`, never per frame; the roster is drawn in, and clicked against, the
   same `App.rosterHeight`. `internal/ui/usagebar.go`.
+- **A friend's picture is sent once, never in a frame**: every frame as a quiet Kitty virtual placement from
+  `Init` (after the alt screen is entered) and again after a hand-over re-enters it (`mcpSignedIn`); after that
+  it is unicode-placeholder text, each cell carrying its own colour (the image id), so a selection leaves it as
+  drawn and a copy drops it. Its 3 frames step every 400ms off the wall clock while an agent works, on beat.go's
+  heartbeat; no timer. `internal/ui/kittyplace.go`.
 - **Compacting line** (`compacting.go`): indeterminate bar (the wire has no progress figure); end
   keys on `compact_result`, not the boundary. The `compact_boundary` metadata draws
   `✻ Compacted · A → B tokens · …`, live-only.
@@ -510,13 +522,13 @@ yet says so in bold.**
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
-| Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
+| Slash commands | `internal/ui/slash.go` · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
-| Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
+| Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
@@ -705,7 +717,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/fleet.go` at 799 and `internal/ui/app.go` at 797 — derived by
+  `internal/ui/fleet.go` at 799 and `internal/ui/app.go` at 798 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

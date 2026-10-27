@@ -350,7 +350,5 @@ func highlighted(line string, c0, c1 int) string {
 	if c1 <= c0 {
 		return line
 	}
-	return ansi.Cut(line, 0, c0) +
-		SelectionStyle.Render(ansi.Strip(ansi.Cut(line, c0, c1))) +
-		ansi.Cut(line, c1, w)
+	return ansi.Cut(line, 0, c0) + selected(ansi.Cut(line, c0, c1)) + ansi.Cut(line, c1, w)
 }

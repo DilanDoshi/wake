@@ -104,6 +104,13 @@ func TestMain(m *testing.M) {
 		fmt.Fprintln(os.Stderr, "test XDG_CONFIG_HOME:", err)
 		os.Exit(1)
 	}
+	// Nor may it read or keep the owner's friend (~/.wake/friends.json): every
+	// wake here keeps none, so no screen draws one unless its test asks.
+	friendsKept := filepath.Join(configHome, friendsFile)
+	if err := keepFriend(friendsKept, "none"); err != nil || os.Setenv(friendsFileEnv, friendsKept) != nil {
+		fmt.Fprintln(os.Stderr, "test friends file:", err)
+		os.Exit(1)
+	}
 	code := m.Run()
 	_ = leaseW.Close()
 	_ = leaseR.Close()
