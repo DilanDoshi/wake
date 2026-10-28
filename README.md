@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.12 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.13 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -118,7 +118,7 @@ Flags on the verbs that start a session (`new`, `manager`):
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
 slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
 `/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status`, `/groupchat-filter`,
-`/wake-name` and `/wake-help`; `/effort` and `/model` configure the session they are addressed to. `/wake-name <name>`
+`/wake-name`, `/wake-help` and `/friends`; `/effort` and `/model` configure the session they are addressed to. `/wake-name <name>`
 renames the fleet you are in, so `wake --fleet <name>` and `wake fleets` know it by the new name; the
 agents already running keep reaching it, and every open window says so. A bare `/wake-name` says what
 the fleet is called. The unnamed fleet keeps its name. `/status [@who]` shows an agent's own facts —
@@ -143,10 +143,13 @@ Wake resumes each once — when you sign in to another account anywhere, or at t
 and draws it as `↻ resumed after the usage limit`, never as your words. A turn an unreachable API stopped (a
 lost connection, a machine asleep mid-reply) is resumed the same way once another agent's turn goes through or
 the network changes, drawn `↻ resumed after the connection came back`. Once an agent reports it, the account's
-five-hour session usage is a bar under the roster (`session · ↻ 4:09pm`). A table too narrow for its pane is
+five-hour session usage is a bar under the roster (`session · ↻ 4:09pm`), and a friend sits on it — Skip the
+tug, Ollie the otter or Bo the whale; `/friends` picks one, or none, for this machine. A table too narrow for its pane is
 drawn as records, `Header: value` a line, as Claude Code draws one. A conversation showing a question card
 scrolls as one page under the wheel. A SIGTERM or SIGINT to the daemon parks the fleet as `⌃Q⌃Q` does, and a
-fleet whose daemon crashed is parked by the next one, so `/resume` brings its agents back.
+fleet whose daemon crashed is parked by the next one, so `/resume` brings its agents back. A `!cmd` typed in a
+conversation runs, and its output then reaches that agent as Claude Code's own `!` does; in the room,
+`@name !cmd` runs it in that agent's directory and sends it there.
 
 ## Development
 

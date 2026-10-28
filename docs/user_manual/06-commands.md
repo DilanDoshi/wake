@@ -259,8 +259,14 @@ has stopped answering costs you the file list and never the window.
 !ls -la
 ```
 
-Runs the line and shows you the output in the conversation you are in. It is asked before anything
-else, so `!ls` works in a conversation with an agent that has ended.
+Runs the line and shows you the output in the conversation you are in, then sends the command and its
+output to that agent, as Claude Code's own `!` does — it reads them and answers. It is asked before
+anything else, so `!ls` works in a conversation with an agent that has ended or is parked; that agent is
+sent nothing, and a notice says so.
+
+In the room, `@name !git status` runs the line in that agent's directory, draws it in its thread, and
+sends it there; `@team` and `@all` are refused, because a shell line has one directory. A bare `!cmd`
+in the room runs where `wake` started and reaches nobody.
 
 Output is capped so a runaway command cannot fill your transcript, and there is a deadline — but the
 deadline signals the whole process group rather than one pid, so a command that spawned children

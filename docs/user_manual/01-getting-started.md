@@ -45,8 +45,8 @@ running fifteen of these, not one. `wake new` is the verb that means *an agent, 
 ## The four things to know before your second agent
 
 **1. Wake is not a terminal.** No PTY, no shell panes, no VT100. Wake talks to `claude` processes
-over structured JSON; it does not pretend to be a multiplexer. `!cmd` runs a shell line and shows
-you the output, and that is the whole of it.
+over structured JSON; it does not pretend to be a multiplexer. `!cmd` runs a shell line, shows
+you the output and hands both to the agent you typed it to, and that is the whole of it.
 
 **2. The daemon outlives your terminal.** Agents are children of a background daemon, not of your
 shell. `⌃O` closes Wake and leaves everything running. Close the terminal, shut the laptop lid,
