@@ -5895,3 +5895,15 @@ a bang typed while that agent is busy - and none sends anything twice.
 - **The held form, `shouldQuery:false`, was considered and not chosen** (the owner picked a turn, 2026-10-25):
   no turn, $0, read with the next prompt - one field in `EncodeShellRun` and the daemon not marking a turn
   owed. Its live facts are in the findings note and want fixtures before it is ever written.
+
+## FROM `feat/wake-mascot`, 2026-10-27
+
+The friend on the usage bar (decisions.md, 2026-10-27) shipped without three things the owner left for later.
+
+- **The friend's face following the bar** - drowsy near the limit, asleep at it, awake after a reset. Deferred
+  by the owner (2026-10-27): it multiplies the art by the moods, each to be reviewed. *Closes with:* a frame set
+  per mood, chosen off the reading's `Warned`, `Limited` and `Lapsed`, which `usageRows` already reads.
+- **`/friends`' argument does not complete.** The menu is the way to find the cast, and an unknown word names it.
+  *Closes with:* an argument stem like `teamArgStem` offering the four words.
+- **No image through tmux or screen.** A friend there is the half-block sprite, since the terminal outside is
+  unknown. *Closes with:* tmux's `allow-passthrough` and its DCS wrapping, with the outer terminal named.

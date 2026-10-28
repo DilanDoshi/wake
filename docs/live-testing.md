@@ -926,6 +926,18 @@ The tests replay recorded receipts and a scripted agent. In a scratch git reposi
       `auto` with `⇧⇥` and send again: Claude Code may hold the message for an approval nobody can
       give — note what you see.
 
+## A friend on the usage bar — what only a real terminal draws
+
+- [ ] **Open Wake in Ghostty, cmux and Kitty.** Skip sits in the sidebar's bottom-right corner as a sharp
+      picture, not blocks; `/friends`, then `↓`, previews Ollie and Bo; `↵` keeps one. The suite reads the
+      escapes back as a terminal would (`kittyplace_test.go`); what it cannot say is that this terminal draws
+      unicode placeholders, and that ×4 nearest-neighbour stays crisp at this screen's density.
+- [ ] **Run an agent's turn and watch the friend.** Skip's smoke, Ollie's steam or Bo's spout moves while an
+      agent works and stops when the fleet is idle.
+- [ ] **Sign an MCP server in from `/mcp`** (the terminal hand-over). When the room comes back, so does the
+      friend's picture.
+- [ ] **In iTerm2, VS Code or Terminal.app** the friend is the half-block sprite, and the same cells.
+
 ## A usage limit — what only a real plan shows
 
 - [ ] **Hit a real session limit with a few agents mid-task, then `/login` to a different account in

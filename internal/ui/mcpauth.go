@@ -83,6 +83,7 @@ func (a App) authenticate(menu MCPMenu, s core.MCPServerStatus) (App, tea.Cmd) {
 // the asking agent and starts the sweep; one that did not says so and changes
 // nothing.
 func (a App) mcpSignedIn(m mcpSignedInMsg) (App, tea.Cmd) {
+	a.corner.sent = false // the alt screen came back without the friends' images
 	menu := a.mcpUI.menu
 	mine := menu.Open() && menu.Session == m.Session && menu.Server == m.Server
 	if m.Err != nil {
@@ -92,7 +93,7 @@ func (a App) mcpSignedIn(m mcpSignedInMsg) (App, tea.Cmd) {
 		} else {
 			notice.Report("%s: "+mcpSignInUnfinish, m.Server, m.Err)
 		}
-		return a, nil
+		return a, a.transmitFriends() // the terminal came back to a cleared alt screen
 	}
 	if mine {
 		menu.Busy, menu.Result = core.MCPAskReconnect, ""
@@ -107,7 +108,7 @@ func (a App) mcpSignedIn(m mcpSignedInMsg) (App, tea.Cmd) {
 		}
 	}
 	a.mcpUI.sweep = sw
-	return a, a.write(mcpFailed, frames...)
+	return a, tea.Batch(a.write(mcpFailed, frames...), a.transmitFriends())
 }
 
 // mcpSweep is a finished sign-in's reconnect across the fleet: the agents asked

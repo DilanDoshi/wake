@@ -146,6 +146,7 @@ command that ships without a line here fails the build; `/wake-help` draws the s
 /workflows [@who]              a Workflow run's phases and agents: filter them, stop the run, or save its script as a command
 /wake-name [<name>]            rename this fleet; bare says its name
 /wake-help [<filter>]          every key and command Wake has, narrowed as you type; read-only (see below)
+/friends [skip|ollie|bo|none]  the friend on the usage bar; bare opens a picker that previews in the corner
 /groupchat-filter [on|off]     whether a lone @name narrows the room by default (bare reports)
 /clear                         in the room only: empty the group chat in this window (agents untouched)
 /reauth                        recover a fleet knocked out by an expired shared login
@@ -180,6 +181,12 @@ with no error, which is why the guard is over *what Wake must not claim* rather 
 `/effort` and `/model` are the two exceptions worth knowing: **bare**, they open a menu, because bare
 is the form a headless `claude` does nothing with. **With an argument** — `/effort max`, `/model
 opus` — they reach the agent byte for byte like anything else.
+
+`/friends` picks who sits on the session-usage bar — Skip the tug (the default), Ollie the otter, Bo
+the whale, or none — for this machine: the choice is kept in `~/.wake/friends.json`, and a window opened
+later starts with it. In Kitty, Ghostty and cmux the friend is a picture, moving while an agent works;
+in other terminals, and under tmux or an editor's terminal, it is a small block drawing in the same cells.
+`WAKE_FRIEND_ART=blocks` asks for the block drawing anywhere.
 
 One consequence: if you have your own `.claude/commands/resume.md`, Wake's `/resume` shadows it.
 

@@ -157,7 +157,7 @@ func (r *rosterFile) writeLocked() error {
 		return fmt.Errorf("encode roster: %w", err)
 	}
 
-	return writeFileAtomically(r.path, "roster", data, rosterPerm)
+	return WriteFileAtomically(r.path, "roster", data, rosterPerm)
 }
 
 // loadRoster reads what the last daemon left. A missing file is the ordinary

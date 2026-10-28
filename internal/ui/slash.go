@@ -148,6 +148,10 @@ const mcpVerb = SlashPrefix + mcpCommand // for resumeVerb's reason
 const statusCommand = "status"
 const statusVerb = SlashPrefix + statusCommand
 
+// friendsCommand picks the friend on the usage bar; no recorded init advertises it. friendsmenu.go.
+const friendsCommand = "friends"
+const friendsVerb = SlashPrefix + friendsCommand
+
 // resumeCommand is the first citizen. Named as a constant because two places
 // need it - the router and the sentence the room says about a parked fleet -
 // and a second spelling is how the offer starts naming a command that is not
@@ -341,6 +345,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	reauthCommand:          App.reauth,
 	workflowsCommand:       App.openWorkflows,
 	statusCommand:          App.status,
+	friendsCommand:         App.friends,
 	wakeNameCommand:        App.renameFleet,
 	wakeHelpCommand:        App.openHelp,
 }

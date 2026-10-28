@@ -20,6 +20,7 @@ import (
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/render"
 	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/termsetup"
 	"github.com/DilanDoshi/wake/internal/ui"
 )
 
@@ -393,8 +394,9 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 		// nobody pressing keys, and the default reader is what it always was.
 		opts = append(opts, tea.WithInput(kill.Input()))
 	}
-	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithUpdateCheck(updateCheck()), opts...)
+	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
 	final, err := p.Run()
+	term.seal()
 	if err != nil {
 		return err
 	}

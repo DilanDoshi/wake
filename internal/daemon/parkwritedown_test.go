@@ -109,7 +109,7 @@ func TestAFailedBookingAtShutdownTellsTheAttachedClients(t *testing.T) {
 // directory, so it runs first (cleanups are LIFO) and the tree can be removed.
 //
 // It is how both arms fail the atomic write the park book goes through:
-// writeFileAtomically calls os.CreateTemp in the destination's own directory,
+// WriteFileAtomically calls os.CreateTemp in the destination's own directory,
 // which needs write permission on it.
 func unwritable(t *testing.T, dir string) {
 	t.Helper()

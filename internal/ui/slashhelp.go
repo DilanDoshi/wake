@@ -45,6 +45,7 @@ var commandHelp = map[string]commandHelpLine{
 	statusCommand:          {"", "an agent's own facts: state, ids, model, context, effort, team, builds; read-only"},
 	wakeNameCommand:        {"[<name>]", "rename this fleet; bare says its name"},
 	wakeHelpCommand:        {"[<filter>]", "every key and command Wake has, narrowed as you type"},
+	friendsCommand:         {"[" + strings.Join(friendOptions(), "|") + "]", "the friend on the usage bar; bare opens a picker that previews in the corner"},
 	clearCommand:           {"", "empty the group chat in this window; no agent is touched"},
 	effortCommand:          {"", "pick a reasoning level"},
 	modelCommand:           {"", "pick a model"},

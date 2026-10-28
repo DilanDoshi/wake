@@ -97,7 +97,7 @@ func BenchmarkFleetReport(b *testing.B) {
 //
 // # What it does not isolate
 //
-// Not the disk. writeFileAtomically renames into place, and how long that
+// Not the disk. WriteFileAtomically renames into place, and how long that
 // takes is the filesystem's answer, not Wake's - which is why the arms are
 // compared against each other rather than against a target.
 func BenchmarkParkBookWrite(b *testing.B) {

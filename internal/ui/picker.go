@@ -41,7 +41,7 @@ import (
 const typedEscape = "type one…"
 
 // Picker is a choice Wake is putting to the operator about one session's
-// configuration.
+// configuration, or about the friend on the usage bar (friendsmenu.go).
 type Picker struct {
 	// Word is the command this answers, without the prefix.
 	Word string
@@ -203,6 +203,9 @@ func (a App) confirmPicker() (App, tea.Cmd) {
 	}
 	chosen := p.Options[p.Cursor]
 	a = a.closePicker()
+	if p.Word == friendsCommand {
+		return a.chooseFriend(chosen)
+	}
 
 	if chosen == typedEscape {
 		// Not a second input mode: the picker hands back a half-typed draft
@@ -251,6 +254,9 @@ func (p Picker) Header() string {
 func (p Picker) View(width int) string {
 	if !p.Open() {
 		return ""
+	}
+	if p.Word == friendsCommand {
+		return p.friendsView(width)
 	}
 	rows := make([]string, 0, len(p.Options)+2)
 	rows = append(rows, detailRow(p.Header(), width))

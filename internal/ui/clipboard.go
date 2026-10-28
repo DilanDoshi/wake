@@ -141,7 +141,8 @@ func copyWhenBuilt(build func() string) tea.Cmd {
 // asking never waits on a copy still writing - the asking is on the Update loop.
 var clipboardAsked atomic.Uint64
 
-// inOrder keeps overlapping copies in the order they were asked for. A
+// inOrder keeps overlapping writes in the order they were asked for - copies
+// here, and friendsmenu.go's keeps of a chosen friend. A
 // double-click's word and the triple-click's row a moment later are two commands
 // running at once, and whichever finished last was what the clipboard kept. Each
 // write runs under one lock, and one that finds a newer copy already written
@@ -202,8 +203,8 @@ func (a App) WithOutput(w io.Writer) App {
 // writeSequence puts an escape sequence on the terminal between frames.
 //
 // A Cmd rather than a write from Update because Update is the goroutine that
-// renders, and this is the one thing in the package that touches the terminal
-// without being a frame.
+// renders; this and kittyplace.go's transmitFriends are the package's only
+// writes to the terminal that are not frames.
 func (a App) writeSequence(turn uint64, seq string) tea.Cmd {
 	if a.out == nil || seq == "" {
 		return nil

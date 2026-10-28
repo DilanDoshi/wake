@@ -42,12 +42,13 @@ import (
 	"path/filepath"
 )
 
-// writeFileAtomically replaces path with body, or leaves it exactly as it was.
+// WriteFileAtomically replaces path with body, or leaves it exactly as it was.
+// Exported for cmd/wake's friends.json, which windows read while another writes.
 //
 // what names the thing being written, for the error a person reads. perm is the
 // mode the file ends up with, set on the descriptor before anything can open it
 // by name.
-func writeFileAtomically(path, what string, body []byte, perm os.FileMode) error {
+func WriteFileAtomically(path, what string, body []byte, perm os.FileMode) error {
 	tmp, err := os.CreateTemp(filepath.Dir(path), filepath.Base(path)+".*")
 	if err != nil {
 		return fmt.Errorf("create %s temp file: %w", what, err)
