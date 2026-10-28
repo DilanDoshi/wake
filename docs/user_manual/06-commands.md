@@ -127,7 +127,8 @@ until you restart them. See [chapter 4](04-lifecycle.md#upgrading).
 
 ## `/…` — in the composer
 
-Wake owns a short, closed list of slash commands:
+Wake owns a short, closed list of slash commands. A test holds this list to the commands Wake owns, so a
+command that ships without a line here fails the build; `/wake-help` draws the same set inside Wake.
 
 ```
 /resume [<name>|all]           bring a parked session back
@@ -142,6 +143,10 @@ Wake owns a short, closed list of slash commands:
 /manager-stop                  end the manager for good (a fresh /manager starts a new one)
 /board                         the fleet as one row per agent; ⇥ tiles it into a live wall; a fleet bigger than the screen scrolls
 /status [@who]                 an agent's own facts — state, ids, model, context, effort, permission mode, team, builds; read-only
+/workflows [@who]              a Workflow run's phases and agents: filter them, stop the run, or save its script as a command
+/wake-name [<name>]            rename this fleet; bare says its name
+/wake-help [<filter>]          every key and command Wake has, narrowed as you type; read-only (see below)
+/friends [skip|ollie|bo|none]  the friend on the usage bar; bare opens a picker that previews in the corner
 /groupchat-filter [on|off]     whether a lone @name narrows the room by default (bare reports)
 /clear                         in the room only: empty the group chat in this window (agents untouched)
 /reauth                        recover a fleet knocked out by an expired shared login
@@ -177,10 +182,38 @@ with no error, which is why the guard is over *what Wake must not claim* rather 
 is the form a headless `claude` does nothing with. **With an argument** — `/effort max`, `/model
 opus` — they reach the agent byte for byte like anything else.
 
+`/friends` picks who sits on the session-usage bar — Skip the tug (the default), Ollie the otter, Bo
+the whale, or none — for this machine: the choice is kept in `~/.wake/friends.json`, and a window opened
+later starts with it. In Kitty, Ghostty and cmux the friend is a picture, moving while an agent works;
+in other terminals, and under tmux or an editor's terminal, it is a small block drawing in the same cells.
+`WAKE_FRIEND_ART=blocks` asks for the block drawing anywhere.
+
 One consequence: if you have your own `.claude/commands/resume.md`, Wake's `/resume` shadows it.
 
 Note `/clear` **changes the session id**, which Wake tracks — the conversation continues under a new
 id and the roster follows it.
+
+## `/wake-help` — the list, inside Wake
+
+```
+/wake-help            every key, command and addressing form, then the shell verbs and flags
+/wake-help park       the same, narrowed to the rows that mention "park"
+```
+
+It opens in the pane that holds the keys and replaces its body until you close it. Type to narrow it: every
+word you type has to appear in a row, in either column, and a section with no row left disappears. `↑↓`, `⇞⇟`
+and the wheel scroll, `⌫` widens, `⎋` closes, and a drag across it copies as anywhere else. While it is up it
+owns the keyboard, as `/workflows` does, so `⌃C` is the one key that goes on to do its own work (it parks the
+agent in front of you).
+
+It is read-only and writes nothing, to the daemon or to an agent. What it lists is read from the build: the
+keys from the table every binding is checked against, the keys a menu or card reads from the lines those menus
+draw, the commands from the same tables the router decides by, and the shell section from what `wake help`
+prints. The mouse is not in it, because there is no table to read it from; see
+[chapter 3](03-keyboard.md#the-mouse).
+
+Claude Code's own `/help` is not Wake's: a headless `claude` answers it that it is not available, and Wake
+leaves the word alone, so `/help` still goes to the agent as typed.
 
 ## Completion — Wake finishes the word for you
 

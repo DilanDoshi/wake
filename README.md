@@ -80,7 +80,8 @@ A message to a working agent is read at its next tool boundary and pinned `⧗` 
 queued messages back, and `⌃]` takes them back and sends them now, with your draft. On an idle
 conversation with no draft, `⎋⎋` opens the rewind picker: restore the conversation, the code, or both.
 
-Full reference: [Keyboard shortcuts](docs/user_manual/03-keyboard.md).
+Full reference: [Keyboard shortcuts](docs/user_manual/03-keyboard.md). Or type `/wake-help` in Wake: every key and
+command it has, read from the build itself and narrowed as you type.
 
 ## Commands
 
@@ -116,8 +117,8 @@ Flags on the verbs that start a session (`new`, `manager`):
 
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
 slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
-`/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status`, `/groupchat-filter` and
-`/wake-name`; `/effort` and `/model` configure the session they are addressed to. `/wake-name <name>`
+`/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status`, `/groupchat-filter`,
+`/wake-name` and `/wake-help`; `/effort` and `/model` configure the session they are addressed to. `/wake-name <name>`
 renames the fleet you are in, so `wake --fleet <name>` and `wake fleets` know it by the new name; the
 agents already running keep reaching it, and every open window says so. A bare `/wake-name` says what
 the fleet is called. The unnamed fleet keeps its name. `/status [@who]` shows an agent's own facts —

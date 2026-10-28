@@ -144,6 +144,10 @@ func (a App) closePicker() App {
 	return a
 }
 
+// pickerKeys is what pickerKey reads, which the picker draws no line of: it is
+// /wake-help that tells somebody.
+const pickerKeys = "↑↓ move · ↵ choose · esc cancel"
+
 // pickerKey is ↑↓ to move, ↵ to choose and esc to cancel, and nothing else.
 //
 // **No digit keys, deliberately.** cardKey's arm-then-confirm exists because a

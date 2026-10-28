@@ -122,6 +122,10 @@ func (m MCPMenu) View(width, maxRows int) string {
 	return titledBox(body, w, BoxStyle.Padding(0), m.title(), m.keyHint(), AccentStyle, HintStyle)
 }
 
+// mcpAliasKeys are the keys the menu binds and its key line leaves off: a server's
+// numbered actions, and ⌃C, which closes it and parks.
+const mcpAliasKeys = "1-9 run the numbered action · ⌃C closes the menu and parks the agent in front of you"
+
 func (m MCPMenu) keyHint() string {
 	switch m.Level {
 	case mcpDetail:
