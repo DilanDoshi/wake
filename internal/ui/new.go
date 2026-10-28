@@ -247,3 +247,22 @@ func absoluteDir(typed string) (string, error) {
 		return filepath.Join(base, typed), nil
 	}
 }
+
+// newUsage is every refusal `/new` can produce out of what was typed, and it is
+// one sentence for all of them.
+//
+// Each of those failures is the operator having typed a shape the parser does
+// not read, and the useful answer to all of them is the same: what the shapes
+// are. A sentence per malformation is three refusals that each say less than
+// this one does — and this is the surface where a refusal is read at the moment
+// somebody has already failed to do what they wanted.
+//
+// It spells the command through newVerb, the rendered form slash.go keeps.
+// Bracket notation rather than the four spellings enumerated: with six flags
+// the enumeration no longer fits the one-line notice row at 200 columns, and a
+// usage the operator cannot read to its end teaches nothing. Same shapes, one
+// line.
+const newUsage = newVerb + " [name] [" + dirKeyword + " <dir>]" +
+	"; flags: " + worktreeFlag + " <name> · " + addDirFlag + " <dir> (repeatable) · " +
+	debugFileFlag + " <name> · " + debugFlag + " <categories> · " +
+	budgetNewFlag + " <usd> · " + fallbackNewFlag + " <m,m>"

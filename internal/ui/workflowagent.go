@@ -74,13 +74,16 @@ func agentFigures(ag core.WorkflowAgent) string {
 	return strings.Join(parts, " · ")
 }
 
-func agentKeyLine(expanded bool) string {
+// agentKeys is the agent level's key line, and /wake-help's.
+func agentKeys(expanded bool) []string {
 	toggle := "↵ expand"
 	if expanded {
 		toggle = "↵ collapse"
 	}
-	return keyLine("j/k scroll", toggle, "esc back")
+	return []string{"j/k scroll", toggle, "esc back"}
 }
+
+func agentKeyLine(expanded bool) string { return keyLine(agentKeys(expanded)...) }
 
 // agentBody is what scrolls. The Prompt and the Outcome are the snapshot's own
 // previews - the task text alone, where the transcript's first turn wraps it

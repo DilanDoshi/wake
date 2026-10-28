@@ -172,6 +172,9 @@ func (a App) openWorkflow(session, task string) App {
 // showWorkflow opens v, closing first the pane-scoped modal it would cover in
 // that pane: esc on the view would otherwise uncover it still open.
 func (a App) showWorkflow(v WorkflowView) App {
+	if a.helpIn(v.Pane) {
+		a = a.closeHelp()
+	}
 	if a.mcpUI.menu.Open() && a.mcpUI.menu.Pane == v.Pane {
 		a = a.closeMCP()
 	}

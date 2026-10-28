@@ -183,6 +183,10 @@ func (a App) reconcileRewind() App {
 	return a
 }
 
+// rewindKeys is what rewindKey reads, which the picker draws no line of: it is
+// /wake-help that tells somebody.
+const rewindKeys = "↑↓ move · ↵ choose · esc cancel"
+
 // rewindKey is ↑↓ to move, ↵ to confirm and esc to cancel, and nothing else -
 // pickerKey's own shape, read above App.key's switch for pickerKey's own
 // reason: this is an interception above the switch legendEntries is checked

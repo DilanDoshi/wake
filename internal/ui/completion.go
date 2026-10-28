@@ -79,6 +79,10 @@ const (
 	// above App.key's switch, and ↑↓ and ↵ are the switch's own cases.
 	completionKeys = "⇥ ↵ complete   ↑↓ walk"
 
+	// completionAliases is the other pair that walks it, which the menu leaves off
+	// its own line and /wake-help names.
+	completionAliases = "⌃N ⌃P walk too"
+
 	// wordBreak is what ends the word being typed. One spelling for both stems:
 	// they were a literal space and a set of three, which agreed only because
 	// nothing either of them offers has a tab in it.

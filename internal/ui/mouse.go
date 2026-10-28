@@ -159,6 +159,9 @@ func (a App) press(x, y int) App {
 		if a.workflowIn(id) {
 			return a.startScreenSelection(x, y).workflowPress(id, at, top, height, x, y, r)
 		}
+		if a.helpIn(id) { // the same, with no cursor to move
+			return a.startScreenSelection(x, y).helpPress(id)
+		}
 		// The anchor is taken before the keys move, because the frame that was
 		// clicked is the one drawn *before* the move: refocus re-sizes the panes,
 		// and a picker belongs to whichever pane holds the keys - so measuring
@@ -239,6 +242,9 @@ func (a App) scroll(lines, x, y int) App {
 	}
 	if a.workflowIn(id) { // the view covers that transcript; see workflowWheel
 		return a.workflowWheel(lines > 0)
+	}
+	if a.helpIn(id) { // and so does this one
+		return a.helpWheel(lines > 0)
 	}
 	if under {
 		if next, moved := a.scrollPage(id, lines); moved {

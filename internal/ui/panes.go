@@ -527,6 +527,9 @@ func (a App) withFocus(f string) App {
 		// next. Every way a pane leaves the grid moves the keys through here.
 		a = a.closeWorkflow()
 	}
+	if a.help.view.Open() && a.help.view.Pane != f {
+		a = a.closeHelp() // and the help's, for the same reason
+	}
 	if a.mcpUI.menu.Open() && a.mcpUI.menu.Pane != f {
 		a = a.closeMCP() // rewindKey's hygiene: a menu belongs to the pane that opened it
 	}

@@ -40,3 +40,12 @@ func (a App) teamAgent(arg string) (App, tea.Cmd) {
 	notice.Report(teamAsked, agentPrefix, agent.Name)
 	return a, a.write(teamFailed, rpc.Frame{Kind: rpc.FrameTeam, SessionID: agent.ID, Text: rpc.HyphenateName(team)})
 }
+
+// teamUsage names the shape rather than a set, because a team is operator-named
+// and open, not a closed vocabulary like colour. noTeamTarget is noColorTarget's:
+// the room does not guess a target.
+var (
+	teamUsage = teamVerb + " <name>, or " + teamVerb + " " + agentPrefix + "<who> <name>" +
+		" (or " + rpc.TeamNone + " to clear)"
+	noTeamTarget = "which one? " + teamUsage
+)

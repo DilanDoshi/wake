@@ -50,29 +50,50 @@ const (
 
 func keyLine(keys ...string) string { return HintStyle.Render(strings.Join(keys, " · ")) }
 
-// runKeyLine offers x only while there is a run to stop, and while x has armed
-// that stop it is the cue: the one tell that ↵ now stops the run.
-func (v WorkflowView) runKeyLine(run workflowRunView) string {
+// workflowListKeys is the list level's key line, and workflowRunKeys the run
+// level's: x is offered only while there is a run to stop. Both are what
+// /wake-help carries too, so neither is spelled twice.
+var workflowListKeys = []string{"↑↓ select", "↵ open", "esc close"}
+
+// workflowAliasKeys are the keys the view binds that no level draws.
+const workflowAliasKeys = "→ opens like ↵ · ← goes back like esc · ↑↓ scroll an agent like j/k · " +
+	"⌃C closes the view and parks the agent (in the save dialog it only closes the dialog)"
+
+func workflowRunKeys(running bool) []string {
 	keys := []string{"↑↓ select", "↵ open", "f filter"}
-	if run.Status == core.TaskRunning {
-		if v.Armed {
-			return keyLine("↵ stop "+oneLine(run.Name), "any key cancels")
-		}
+	if running {
 		keys = append(keys, "x stop")
 	}
-	return keyLine(append(keys, "s save", "esc back")...)
+	return append(keys, "s save", "esc back")
+}
+
+// runKeyLine is workflowRunKeys, and while x has armed a stop it is the cue: the
+// one tell that ↵ now stops the run.
+func (v WorkflowView) runKeyLine(run workflowRunView) string {
+	running := run.Status == core.TaskRunning
+	if running && v.Armed {
+		return keyLine("↵ stop "+oneLine(run.Name), "any key cancels")
+	}
+	return keyLine(workflowRunKeys(running)...)
+}
+
+// viewTitle is the row a pane view wears over its body: whose pane it is (the
+// room's, or an agent's) and then the view's own name.
+func (a App) viewTitle(session, suffix string, width int) string {
+	title, style := roomTitle, AccentStyle
+	if session != "" {
+		ag, _ := a.fleet.Agent(session)
+		title, style = agentPrefix+a.agentName(session), speakerStyle(ag)
+	}
+	return fitRow(style.Render(ansi.Truncate(oneLine(title)+suffix, width, ellipsis)), width)
 }
 
 // workflowPane is the view in the pane it belongs to: a row naming whose runs
 // it draws, as its composer's edge would, over the view itself.
 func (a App) workflowPane(width, height int) string {
 	v := a.workflow.view
-	title, style := roomTitle, AccentStyle
-	if v.Session != "" { // whose runs these are: the pane's own, or the one /workflows @who named
-		ag, _ := a.fleet.Agent(v.Session)
-		title, style = agentPrefix+a.agentName(v.Session), speakerStyle(ag)
-	}
-	head := fitRow(style.Render(ansi.Truncate(oneLine(title)+workflowTitleSuffix, width, ellipsis)), width)
+	// v.Session is whose runs these are: the pane's own, or the one /workflows @who named.
+	head := a.viewTitle(v.Session, workflowTitleSuffix, width)
 	if height <= workflowTitleRows {
 		return firstRows(head, height)
 	}
@@ -121,7 +142,7 @@ func (v WorkflowView) listRows(runs []workflowRunView, w, h int) []string {
 	}
 	n := h - 1
 	lines, _, start := v.listLayout(runs, w, n)
-	return stacked(nil, windowRows(lines, start, n), []string{keyLine("↑↓ select", "↵ open", "esc close")}, h)
+	return stacked(nil, windowRows(lines, start, n), []string{keyLine(workflowListKeys...)}, h)
 }
 
 // listLayout is the list's lines, the run each one is (-1 for the room's

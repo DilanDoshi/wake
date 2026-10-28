@@ -143,6 +143,11 @@ const (
 	// see. "dismiss" rather than "interrupt": the ask is refused, not the turn.
 	cardDismissHint = escGlyph + " dismiss"
 
+	// cardStepKeys and cardTickKey are keys a question card binds that its key line
+	// leaves off, and /wake-help tells.
+	cardStepKeys = "← → go between the questions and the review step, on an empty draft"
+	cardTickKey  = "space ticks the cursored row, as ↵ does"
+
 	// cardKeysPaused replaces the key line while the composer holds a draft,
 	// when cardKey reads no rune at all - a line still advertising [a]llow
 	// would be the legend rule broken on the one surface the legend guard

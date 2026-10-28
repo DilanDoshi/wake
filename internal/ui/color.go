@@ -11,6 +11,8 @@ package ui
 // the parallel implementation this project forbids, stale the day the set moves.
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -39,3 +41,12 @@ func (a App) colorAgent(arg string) (App, tea.Cmd) {
 	notice.Report(colorAsked, agentPrefix, agent.Name)
 	return a, a.write(colorFailed, rpc.Frame{Kind: rpc.FrameColor, SessionID: agent.ID, Text: color})
 }
+
+// colorUsage names the colours because the set is closed and small - a guessed
+// hue reads the seven that exist rather than round-tripping a refusal.
+// noColorTarget is noNameTarget's: the room does not guess a target.
+var (
+	colorUsage = colorVerb + " <colour>, or " + colorVerb + " " + agentPrefix + "<who> <colour>" +
+		"; colours: " + strings.Join(rpc.ColorNames, " ") + " (or " + rpc.ColorNone + " to clear)"
+	noColorTarget = "which one? " + colorUsage
+)

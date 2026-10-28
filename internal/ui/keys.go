@@ -64,6 +64,11 @@ func (a App) key(m tea.KeyMsg) (tea.Model, tea.Cmd, bool) {
 	if took {
 		return a, wfCmd, true
 	}
+	// /wake-help is a modal over its own pane the same way. See help.go.
+	a, helpCmd, helped := a.helpKey(m)
+	if helped {
+		return a, helpCmd, true
+	}
 	// Read before the disarm takes it, because the disarm is what makes "every
 	// other key takes the arm back" true without a call site per key. See
 	// detach.go.
