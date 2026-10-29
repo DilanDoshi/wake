@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -235,6 +236,110 @@ func TestAOneColumnGridKeepsItsRows(t *testing.T) {
 	got := plainRows(Markdown(src, 80))
 	if !isGrid(Markdown(src, 80)) || len(got) != 5 || strings.TrimSpace(got[3]) != "b.go" {
 		t.Fatalf("drew\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// linkTable is a grid of n links and the row glamour lists each under it.
+func linkTable(n int) (string, []string) {
+	src := "| N | Link |\n|---|---|\n"
+	var want []string
+	for i := 1; i <= n; i++ {
+		src += fmt.Sprintf("| %d | [link%d](https://example.com/%d) |\n", i, i, i)
+		want = append(want, fmt.Sprintf("[%d]: link%d https://example.com/%d", i, i, i))
+	}
+	return src, want
+}
+
+// glamour lists a grid's links under it, a row each, and the list is its layout,
+// not a paragraph: reflowProse used to run it into one. Wherever the grid is
+// drawn - alone in its place, in a reply defining a reference link, in a list
+// item - and past nine links, where glamour pads ` [1]` to `[10]`'s width, the
+// list is one run with each link on its own row.
+//
+// Mutation check: without startsItem's link clause every case runs its links
+// together, and so does the copy.
+func TestAGridsLinksKeepARowEach(t *testing.T) {
+	two, want := linkTable(2)
+	ten, wantTen := linkTable(10)
+	ref := strings.Replace(two, "(https://example.com/1)", "[r]", 1) + "\n[r]: https://example.com/1"
+	for _, c := range []struct {
+		src  string
+		want []string
+	}{
+		{two, want},
+		{"Before.\n\n" + two + "\nAfter.", want},
+		{ref, want},
+		{"- an item\n\n  " + strings.ReplaceAll(two, "\n", "\n  "), want},
+		{ten, wantTen},
+	} {
+		out := Markdown(c.src, 80)
+		if rows := plainRows(out); !isGrid(out) || !holdsRun(rows, c.want) {
+			t.Errorf("%q: no run of\n%s\nin\n%s", c.src, strings.Join(c.want, "\n"), strings.Join(rows, "\n"))
+		}
+	}
+}
+
+// holdsRun reports whether rows, each trimmed, hold want as consecutive rows.
+func holdsRun(rows, want []string) bool {
+	for i := range rows {
+		k := 0
+		for k < len(want) && i+k < len(rows) && strings.TrimSpace(rows[i+k]) == want[k] {
+			k++
+		}
+		if k == len(want) {
+			return true
+		}
+	}
+	return false
+}
+
+// A link whose text is wider than the block is wrapped by glamour itself, its
+// address dropped, and the rest of the list keeps its rows under it.
+//
+// Mutation check: reading the row above instead of the entry's first runs
+// `[2]: ` into the tail glamour wrapped.
+func TestALinkGlamourWrapsKeepsTheListUnderIt(t *testing.T) {
+	src := "- an item\n\n  | N | Link |\n  |---|---|\n" +
+		"  | 1 | [Claude Code release notes for the version](https://example.com/1) |\n  | 2 | [b](https://example.com/2) |"
+	rows := plainRows(Markdown(src, 40))
+	if !holdsRun(rows, []string{"[1]: Claude Code release notes for", "the version", "[2]: b https://example.com/2"}) {
+		t.Errorf("drew\n%s", strings.Join(rows, "\n"))
+	}
+}
+
+// A paragraph a typed list of sources opens - `[1]: ` - keeps the greedy wrap
+// and copies back whole: only where glamour's wrap starts a later source on a row
+// does that source keep the row's start, read as the next of glamour's own links
+// (decisions.md, 2026-10-29).
+//
+// Mutation check: leaving a run that opens `[1]: ` at glamour's wrap, as drawn,
+// strands words at most widths.
+func TestAParagraphOfLinkLabelsKeepsTheGreedyWrap(t *testing.T) {
+	src := "[1]: Smith et al. 2020 wrote at length about the end-to-end behaviour of --resume in many contexts.\n" +
+		"[2]: Jones 2021 on DEV-3035 and the --fork-session flag."
+	kept := false
+	for width := minMarkdownWidth; width <= 120; width++ {
+		rows := plainRows(Markdown(src, width))
+		for i := 0; i+1 < len(rows); i++ {
+			here, next := content(rows[i]), content(rows[i+1])
+			if linkEntry(next) {
+				kept = true
+				continue
+			}
+			join := 1
+			if strings.HasSuffix(here, "-") {
+				join = 0
+			}
+			if word := strings.Fields(next)[0]; ansi.StringWidth(here)+join+ansi.StringWidth(word) <= width-2*int(defaultMargin) {
+				t.Errorf("width %d: %q fits after %q:\n%s", width, word, here, strings.Join(rows, "\n"))
+			}
+		}
+		if got, want := copiedAt(src, width), strings.Replace(src, "\n", " ", 1); got != want {
+			t.Errorf("width %d copied %q", width, got)
+		}
+	}
+	if !kept {
+		t.Error("no width started the second source on a row, so the split was never tested")
 	}
 }
 

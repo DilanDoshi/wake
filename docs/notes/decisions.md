@@ -8,6 +8,42 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-29 — glamour's list of a grid's links keeps a row per link
+
+`wake-orch`'s rulings, against `origin/main` 81e3377e.
+
+- **The defect.** glamour lists a grid's links under it, `[n]: text address` a row each
+  (`printTableLinks`; images in a second list, in ImageText's colour, which reflowProse never touched).
+  The label is unstyled, since Wake leaves `LinkText` plain, so `reflowProse` read the list as a
+  paragraph and ran it into one, wherever the grid was drawn: alone in its place (`reflowedBelowGrid`
+  handed it on as prose), or inside a document (a reply defining a reference link, a list item). A copy
+  ran it together too. Prose and lists draw no such list - their links are inline - so the defect is a
+  grid's alone.
+- **The fix extends `startsItem`:** a link's `[n]: ` after a link's starts a group, as an enumerator
+  after an enumerator does. Each entry is re-wrapped alone and comes back as drawn, since glamour
+  truncates the address to fit; an entry glamour wrapped itself (its text wider than the block) keeps
+  its tail; glamour pads ` [1]`..` [9]` to `[10]`'s width, and that lead change splits them already.
+- **Rejected, each measured:**
+  - A tag on `LinkText`, as `itemTag` marks an item. glamour gives a child style's non-empty
+    `BlockPrefix` to every render of it (`cascadeStylePrimitive`), so the tag rode on prose links and
+    into grid cells, and landed before the margin, which stopped a paragraph opening with a link from
+    reflowing. No glamour style belongs to the list alone.
+  - Leaving a run that opens `[1]: ` as drawn, down to the blank row under it (the first plan). glamour
+    runs a typed list of sources (`[1]: Smith…` / `[2]: Jones…`) into one paragraph, so the run kept
+    glamour's wrap instead of the greedy one at 80 of 101 widths (20-120), and at 20 `fitToWidth` cut
+    an over-long row to a lone `-` at column 0.
+  - A lookback to the grid above the list: it misses a one-column grid's list in a document, and a
+    table drawn alone hands reflowProse no grid to look back to.
+  - `WithInlineTableLinks`: addresses move into the cells, a product change that flips most link tables
+    to records.
+- **The accepted residual.** A paragraph that a typed list of sources opens keeps the greedy wrap; only
+  where glamour's wrap starts a later source on a row does that source keep the row's start - 7 of 101
+  widths for the measured two-source paragraph, every row still greedy and the copy the one paragraph.
+  A wrap that opens a row with `[1]: ` mid-paragraph changes nothing, since no label opened the group.
+  `TestAParagraphOfLinkLabelsKeepsTheGreedyWrap`, `TestAWrapOpeningARowWithALinkLabelStaysProse`.
+
+---
+
 ## 2026-10-27 — `/wake-help`: every key and command, derived, in a pane view
 
 The owner's ask ("a /wake-help that displays all of the shortcuts and cmds wake has so if someone needs

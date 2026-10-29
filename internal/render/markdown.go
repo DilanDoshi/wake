@@ -144,7 +144,8 @@ const boxDrawing = "│─┼┌┐└┘├┤┬┴╭╮╰╯"
 // and a row mid-group splits it only where startsItem says glamour started an
 // item there. Inside an item a row glamour leads with a styled span's empty
 // styling is the item's too: a code block in an item sits deeper, and any other
-// block is a blank row away.
+// block is a blank row away. The list of links glamour draws under a grid is an
+// entry a row, each its own group (startsItem).
 func reflowProse(s string, width int) string {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
@@ -177,11 +178,25 @@ func reflowProse(s string, width int) string {
 // an item rather than continuing the group. glamour opens a new list only after
 // a blank row, so mid-group a row is an item only of first's own list - an
 // enumerator after an enumerator, a bullet or a task box after a bullet or a task
-// box. A wrapped
-// row that happens to open `2. Then` continues a paragraph, or a bullet.
+// box, a link's `[n]: ` after a link's in the list glamour draws under a grid. A
+// wrapped row that happens to open `2. Then` continues a paragraph, or a bullet.
 func startsItem(first, row, tag string) bool {
+	if linkEntry(first) && linkEntry(row) {
+		return true
+	}
 	a, b := markerOf(first, tag), markerOf(row, tag)
 	return a != "" && b != "" && enumerator(a) == enumerator(b)
+}
+
+// linkEntry reports whether a row opens an entry of the list glamour draws under
+// a grid, `[n]: text address` a link, the label unstyled and padded to the widest.
+func linkEntry(row string) bool {
+	t := strings.TrimLeft(row, " ")
+	n := 1
+	for n < len(t) && t[n] >= '0' && t[n] <= '9' {
+		n++
+	}
+	return t != "" && t[0] == '[' && n > 1 && strings.HasPrefix(t[n:], "]: ")
 }
 
 // enumerator reports whether a marker is an `N. ` one.

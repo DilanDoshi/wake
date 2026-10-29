@@ -162,3 +162,27 @@ func TestReflowKeepsSpacingFaithful(t *testing.T) {
 		}
 	}
 }
+
+// A wrap that opens a paragraph's row with `[1]: ` is still prose: a label starts
+// a row of its own only in a group a label opened, as glamour's list of a grid's
+// links is. So the paragraph wraps exactly as it would with any other label there.
+//
+// Mutation check: splitting a group at any row a label opens, not only after a
+// row one opened, keeps glamour's early break before `[1]:` at width 24.
+func TestAWrapOpeningARowWithALinkLabelStaysProse(t *testing.T) {
+	src := "DEV-3035 --resume tools park byte-identical the first ticket [1]: --session-id parent pass end-to-end me."
+	opened := false
+	for width := minMarkdownWidth; width <= 120; width++ {
+		got := plainRows(Markdown(src, width))
+		want := plainRows(Markdown(strings.Replace(src, "[1]", "[a]", 1), width))
+		for i, row := range got {
+			opened = opened || strings.HasPrefix(content(row), "[1]: ")
+			if i >= len(want) || row != strings.Replace(want[i], "[a]", "[1]", 1) {
+				t.Fatalf("width %d drew\n%s\nwant\n%s", width, strings.Join(got, "\n"), strings.Join(want, "\n"))
+			}
+		}
+	}
+	if !opened {
+		t.Error("no width opened a row with the label, so nothing was tested")
+	}
+}
