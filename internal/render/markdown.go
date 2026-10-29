@@ -146,32 +146,35 @@ const boxDrawing = "│─┼┌┐└┘├┤┬┴╭╮╰╯"
 // styling is the item's too: a code block in an item sits deeper, and any other
 // block is a blank row away.
 //
-// The list of links glamour draws under a grid is an entry a row: from a group a
-// link's `[n]: ` opens to the next blank row, each link's starts a group of its
-// own. A wrap past nine links leaves an entry's tail a column left of its padded
-// label, so the list outlives the group.
+// The list of links glamour draws under a grid is an entry a row: from a group
+// `[1]: ` opens, each next label in order starts a group of its own, to the next
+// blank row. A wrap past nine links leaves an entry's tail a column left of its
+// padded label, so the list outlives the group; it reads only the label it counts
+// to, since in a list item a paragraph follows it with no blank row.
 func reflowProse(s string, width int) string {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
-	listed := false
+	next := 0 // the label the list's next entry opens with; 0 outside a list
 	for i := 0; i < len(lines); {
 		if !reflowable(lines[i]) {
 			out = append(out, lines[i])
-			listed = false
+			next = 0
 			i++
 			continue
 		}
 		lead := leadSpaces(lines[i])
 		// Trimmed: a lone bullet's padding would read as the space after it.
 		mark := itemMarker(strings.TrimRight(lines[i][lead:], " "), itemTag)
-		listed = listed || linkEntry(lines[i])
+		if n := linkLabel(lines[i]); n == 1 || n > 1 && n == next {
+			next = n + 1
+		}
 		group := []string{lines[i]}
 		for i++; i < len(lines); i++ {
 			row := lines[i]
 			if mark != "" {
 				row = unstyledLead(row)
 			}
-			if !reflowable(row) || leadSpaces(row) != lead || startsItem(group[0], row, itemTag) || listed && linkEntry(row) {
+			if !reflowable(row) || leadSpaces(row) != lead || startsItem(group[0], row, itemTag) || next > 0 && linkLabel(row) == next {
 				break
 			}
 			group = append(group, row)
@@ -192,15 +195,17 @@ func startsItem(first, row, tag string) bool {
 	return a != "" && b != "" && enumerator(a) == enumerator(b)
 }
 
-// linkEntry reports whether a row opens an entry of the list glamour draws under
-// a grid, `[n]: text address` a link, the label unstyled and padded to the widest.
-func linkEntry(row string) bool {
-	t := strings.TrimLeft(row, " ")
-	n := 1
-	for n < len(t) && t[n] >= '0' && t[n] <= '9' {
-		n++
+// linkLabel is n for a row opening `[n]: `, as each entry of the list glamour
+// draws under a grid does, the label unstyled and padded to the widest; 0 for any
+// other row.
+func linkLabel(row string) int {
+	t, ok := strings.CutPrefix(strings.TrimLeft(row, " "), "[")
+	digits := len(t) - len(strings.TrimLeft(t, "0123456789"))
+	if !ok || digits == 0 || !strings.HasPrefix(t[digits:], "]: ") {
+		return 0
 	}
-	return t != "" && t[0] == '[' && n > 1 && strings.HasPrefix(t[n:], "]: ")
+	n, _ := strconv.Atoi(t[:digits]) // out of range: 0
+	return n
 }
 
 // enumerator reports whether a marker is an `N. ` one.

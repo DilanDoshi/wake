@@ -340,7 +340,7 @@ func TestAParagraphOfLinkLabelsKeepsTheGreedyWrap(t *testing.T) {
 		rows := plainRows(Markdown(src, width))
 		for i := 0; i+1 < len(rows); i++ {
 			here, next := content(rows[i]), content(rows[i+1])
-			if linkEntry(next) {
+			if linkLabel(next) > 0 {
 				kept = true
 				continue
 			}

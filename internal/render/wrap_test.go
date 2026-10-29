@@ -163,25 +163,32 @@ func TestReflowKeepsSpacingFaithful(t *testing.T) {
 	}
 }
 
-// A wrap that opens a paragraph's row with `[1]: ` is still prose, a grid's list
-// of links above it or not: a label starts a row of its own only in the run of
-// rows a label opened, as glamour's list is. So the paragraph wraps exactly as it
-// would with any other label there.
+// A wrap that opens a paragraph's row with a link's label is still prose, a
+// grid's list above it or not: a label starts a row of its own only in the run a
+// list's `[1]: ` opened, and only the next label in order. So the paragraph wraps
+// exactly as it would with any other label there.
 //
 // Mutation check: splitting at any row a label opens keeps glamour's early break
-// before `[1]:` at width 24, and so does a list that runs on past its blank row.
+// before `[1]:` at width 24; a list that runs on past its blank row takes `[3]`
+// after `[2]`; and one that takes a label out of order takes `[1]` from the
+// paragraph a list item puts straight under its list (Codex).
 func TestAWrapOpeningARowWithALinkLabelStaysProse(t *testing.T) {
 	para := "DEV-3035 --resume tools park byte-identical the first ticket [1]: --session-id parent pass end-to-end me."
 	grid, _ := linkTable(2)
-	for _, above := range []string{"", grid + "\n"} {
-		src, ref := above+para, "\n\n[r]: https://example.com/r" // a reference keeps the grid in the document
+	for _, c := range []struct{ above, label string }{
+		{"", "[1]"},
+		{grid + "\n", "[3]"},
+		{"- an item\n\n  " + strings.ReplaceAll(grid, "\n", "\n  ") + "\n  ", "[1]"}, // no blank row under its list
+	} {
+		ref := "\n\n[r]: https://example.com/r" // a reference keeps a grid in the document
+		src := c.above + strings.Replace(para, "[1]", c.label, 1)
 		opened := false
 		for width := minMarkdownWidth; width <= 120; width++ {
 			got := plainRows(Markdown(src+ref, width))
-			want := plainRows(Markdown(above+strings.Replace(para, "[1]", "[a]", 1)+ref, width))
+			want := plainRows(Markdown(c.above+strings.Replace(para, "[1]", "[a]", 1)+ref, width))
 			for i, row := range got {
-				opened = opened || strings.HasPrefix(content(row), "[1]: --")
-				if len(got) != len(want) || row != strings.Replace(want[i], "[a]", "[1]", 1) {
+				opened = opened || strings.HasPrefix(content(row), c.label+": --")
+				if len(got) != len(want) || row != strings.Replace(want[i], "[a]", c.label, 1) {
 					t.Fatalf("width %d drew\n%s\nwant\n%s", width, strings.Join(got, "\n"), strings.Join(want, "\n"))
 				}
 			}

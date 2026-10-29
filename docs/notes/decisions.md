@@ -19,14 +19,17 @@ that" and the answer is not in a commit message.
   handed it on as prose), or inside a document (a reply defining a reference link, a list item). A copy
   ran it together too. Prose and lists draw no such list - their links are inline - so the defect is a
   grid's alone.
-- **The fix is in `reflowProse`:** from a group that a link's `[n]: ` opens down to the next blank
-  row, each link's label starts a group of its own, as an enumerator after an enumerator does
-  (`startsItem`). Each entry is re-wrapped alone and comes back as drawn, since glamour truncates the
-  address to fit, and an entry glamour wrapped itself (its text wider than the block) keeps its tail.
-  The list is a run, not a group, because glamour pads ` [1]`..` [9]` to `[10]`'s width and not a
-  wrapped tail: ` [9]`'s tail sits at `[10]`'s lead, and a split read only off the group's first row
-  ran `[10]` into it, drawn and copied (Codex). A first cut that extended `startsItem` itself had
-  that hole.
+- **The fix is in `reflowProse`:** from a group that `[1]: ` opens, each next label in order starts a
+  group of its own, to the next blank row, as an enumerator after an enumerator does (`startsItem`).
+  Each entry is re-wrapped alone and comes back as drawn, since glamour truncates the address to fit,
+  and an entry glamour wrapped itself (its text wider than the block) keeps its tail. Two Codex finds
+  shaped it:
+  - The list is a run, not a group. glamour pads ` [1]`..` [9]` to `[10]`'s width and not a wrapped
+    tail, so ` [9]`'s tail sits at `[10]`'s lead, and a split read off the group's first row ran `[10]`
+    into it, drawn and copied. A first cut that extended `startsItem` itself had that hole.
+  - The run reads only the label it counts to. In a list item glamour draws a paragraph after the
+    table straight under its list, with no blank row, so a run that took any label split that
+    paragraph at a `[1]: ` its wrap put first on a row.
 - **Rejected, each measured:**
   - A tag on `LinkText`, as `itemTag` marks an item. glamour gives a child style's non-empty
     `BlockPrefix` to every render of it (`cascadeStylePrimitive`), so the tag rode on prose links and
@@ -43,7 +46,9 @@ that" and the answer is not in a commit message.
 - **The accepted residual.** A paragraph that a typed list of sources opens keeps the greedy wrap; only
   where glamour's wrap starts a later source on a row does that source keep the row's start - 7 of 101
   widths for the measured two-source paragraph, every row still greedy and the copy the one paragraph.
-  A wrap that opens a row with `[1]: ` mid-paragraph changes nothing, since no label opened the group.
+  A wrap that opens a row with `[1]: ` mid-paragraph changes nothing, since no list is counting; one
+  that opens a row with the very label a list item's list counts to next, in a paragraph under it,
+  would split there.
   `TestAParagraphOfLinkLabelsKeepsTheGreedyWrap`, `TestAWrapOpeningARowWithALinkLabelStaysProse`.
 - **Not this fix: a block's trailing paragraph inside a list item.** glamour draws no blank row
   between a table in an item and a paragraph after it in the same item, so on `main` that paragraph
