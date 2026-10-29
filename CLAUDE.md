@@ -103,8 +103,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `@manager /status` in the room is a message to the manager, as every `@manager /cmd` is.
   `internal/ui/statuscmd.go`.
 - **`/friends`** picks who sits on the usage bar (owner's 2026-10-27 and 2026-10-29 picks): Skip (the default),
-  Ollie, Bo, Puff or none, 9×5 cells at the sidebar's right edge, standing on the bar's rule (alone in the corner before the
-  first reading). Bare, it is a Picker over the composer whose cursor previews in the corner; `/friends <name>`
+  Ollie, Bo, Puff or none, 9×5 cells at the sidebar's right edge, standing on the bar's rule (alone in the corner
+  before the first reading). Bare, it is a Picker over the composer whose cursor previews in the corner; `/friends <name>`
   sets one. The choice is the machine's (`~/.wake/friends.json`, read when a window opens). A terminal whose
   `TERM` is Kitty's or Ghostty's, or cmux, draws a picture; every other terminal, a multiplexer, an editor's
   terminal and `WAKE_FRIEND_ART=blocks` draw a hand-drawn half-block sprite in the same cells. Original art drawn for Wake. `internal/ui/friends.go`, `friendsmenu.go`, `kittyplace.go`,

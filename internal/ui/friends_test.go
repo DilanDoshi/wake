@@ -306,6 +306,7 @@ func TestFriendsWithAWordSetsThatFriendAtOnce(t *testing.T) {
 // frames on the bar and keeps the word, and a window opened later on that word
 // draws Puff too - here as its sprite, before any image is sent.
 func TestFriendsPuffPutsThePufferfishOnTheBarAndAWindowOpenedLaterKeepsIt(t *testing.T) {
+	trueColor(t)
 	kept := &keptFriends{}
 	a := friendRoom(t, true, "skip", kept).withUsageReport(aReading, "sydney")
 	m, cmd := typeAndSubmit(a, friendsVerb+" puff")

@@ -5302,11 +5302,13 @@ pink). `/friends puff`; it follows Bo in the picker.
   mascot was traced, sampled or copied.
 - **Its frames.** It puffs up and lets it out: at rest, puffed round, between. At the biggest puff its eyes open
   2px taller and its mouth rounds out a pixel - the implementer's recommendation, since the owner did not say;
-  holding the face still is frame 1's eleven eye and mouth rows. The half-block sprite's mouth is 2×1 pink a row
-  lower, on the belly, where it does not run into the blush.
+  holding the face still means redrawing frame 1's eyes and mouth. The half-block sprite's mouth is 2×1 pink a
+  row lower, on the belly, where it does not run into the blush.
+- **Twelve frames now**, sent once as before: about 28 KB of escapes, and about 2.3 MB of the terminal's image
+  memory per window at ×4 (nine frames were 1.7 MB).
 - **Nine palette letters** (`y Y l e d f F n N`), none the cast's; `friendsart_test.go` holds the palette to
   exactly the colours drawn.
 - **Held by** `friendsart_test.go` and `kittyplace_test.go` as for the cast,
   `TestFriendsPuffPutsThePufferfishOnTheBarAndAWindowOpenedLaterKeepsIt`, and
-  `TestTheCommandsChapterNamesEveryFriend` (the manual's `/friends` line lists every word `/friends` takes, so the
-  next friend cannot miss it).
+  `TestTheCommandsChapterNamesEveryFriend` (the manual's `/friends` line carries the words `/wake-help` shows,
+  so a friend added without its place on that line fails).

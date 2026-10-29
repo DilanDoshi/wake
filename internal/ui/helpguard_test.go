@@ -315,14 +315,14 @@ func TestTheCommandsChapterNamesEveryCommandWakeOwns(t *testing.T) {
 	}
 }
 
-// The chapter's /friends line names every word /friends takes, so a friend added
-// to the cast without its place in the manual fails here.
+// The chapter's /friends line carries the words /wake-help shows it taking, so a
+// friend added to the cast without its place on that line fails here.
 func TestTheCommandsChapterNamesEveryFriend(t *testing.T) {
 	raw, err := os.ReadFile(filepath.Join("..", "..", "docs", "user_manual", "06-commands.md"))
 	if err != nil {
 		t.Fatalf("reading the commands chapter: %v", err)
 	}
-	if want := friendsVerb + " [" + strings.Join(friendOptions(), "|") + "]"; !strings.Contains(string(raw), want) {
+	if want := friendsVerb + " " + commandHelp[friendsCommand].args; !strings.Contains(string(raw), want) {
 		t.Errorf("docs/user_manual/06-commands.md never says %q", want)
 	}
 }
