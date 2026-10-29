@@ -222,12 +222,12 @@ func TestBareFriendsOpensOnTheKeptFriendAndTheCursorPreviews(t *testing.T) {
 	before := sidebarRows(a)
 	m, _ := typeAndSubmit(a, friendsVerb)
 	a = m.(App)
-	if p := a.picker; p.Word != friendsCommand || !slices.Equal(p.Options, []string{"skip", "ollie", "bo", friendNone}) || p.Cursor != 0 || p.Current != "skip" {
+	if p := a.picker; p.Word != friendsCommand || !slices.Equal(p.Options, []string{"skip", "ollie", "bo", "puff", friendNone}) || p.Cursor != 0 || p.Current != "skip" {
 		t.Fatalf("/friends opened %+v, want the cast and none with the cursor on the kept Skip", p)
 	}
 	view := ansi.Strip(a.View())
 	for _, want := range []string{friendsTitle, "Skip · the tug that leaves a wake", "Ollie · an otter afloat, coffee in paw",
-		"Bo · a baby whale whose spout puffs", "none · " + noneBlurb, friendsHint} {
+		"Bo · a baby whale whose spout puffs", "Puff · a pufferfish puffed round as a ball", "none · " + noneBlurb, friendsHint} {
 		if !strings.Contains(view, want) {
 			t.Errorf("the menu does not show %q", want)
 		}
@@ -236,8 +236,9 @@ func TestBareFriendsOpensOnTheKeptFriendAndTheCursorPreviews(t *testing.T) {
 	if got := friendIDs(sidebarRows(a)); !slices.Equal(got, allOf(friendImage(1, 0), friendCells9x5)) {
 		t.Errorf("with the cursor on Ollie the corner drew %v, want Ollie", firstOf(got))
 	}
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
-	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
+	for range len(cast) - 1 { // on past the rest of the cast to none
+		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
+	}
 	if ids := friendIDs(sidebarRows(a)); len(ids) != 0 || a.rosterHeight() != a.paneHeight()-3 {
 		t.Errorf("with the cursor on none the corner drew %d cells and the roster %d rows", len(ids), a.rosterHeight())
 	}
@@ -298,6 +299,28 @@ func TestFriendsWithAWordSetsThatFriendAtOnce(t *testing.T) {
 	n, _ := notice.Latest()
 	if a.corner.pick != "bo" || len(kept.got()) != 1 || !strings.Contains(n.String(), "Rex") || !strings.Contains(n.String(), friendsList()) {
 		t.Errorf("/friends Rex left the pick %q, kept %v, and said %q; want nothing changed and the cast named", a.corner.pick, kept.got(), n.String())
+	}
+}
+
+// Puff, the fourth friend (owner's 2026-10-29 picks): /friends puff puts its
+// frames on the bar and keeps the word, and a window opened later on that word
+// draws Puff too - here as its sprite, before any image is sent.
+func TestFriendsPuffPutsThePufferfishOnTheBarAndAWindowOpenedLaterKeepsIt(t *testing.T) {
+	kept := &keptFriends{}
+	a := friendRoom(t, true, "skip", kept).withUsageReport(aReading, "sydney")
+	m, cmd := typeAndSubmit(a, friendsVerb+" puff")
+	_ = runCmdQuietly(cmd)
+	a = m.(App)
+	if a.corner.pick != "puff" || !slices.Equal(kept.got(), []string{"puff"}) {
+		t.Fatalf("/friends puff left the pick %q and kept %v, want puff once", a.corner.pick, kept.got())
+	}
+	puff := slices.IndexFunc(cast, func(f friend) bool { return f.key == "puff" })
+	if got := friendIDs(sidebarRows(a)); !slices.Equal(got, allOf(friendImage(puff, 0), friendCells9x5)) {
+		t.Errorf("after /friends puff the corner drew %v, want Puff's first frame", firstOf(got))
+	}
+	later := friendRoom(t, false, kept.got()[0], &keptFriends{}).withUsageReport(aReading, "sydney")
+	if later.corner.pick != "puff" || !strings.HasSuffix(sidebarRows(later)[later.paneHeight()-friendRows-2], halfBlockRows(puffArt.blocks)[0]) {
+		t.Errorf("a window opened on the kept %q drew %q, want Puff's sprite", kept.got()[0], later.corner.pick)
 	}
 }
 
@@ -493,7 +516,8 @@ func TestClicksFollowThePreviewWhileTheFriendsMenuIsOpen(t *testing.T) {
 		t.Fatalf("the menu opened on %q with the roster %d rows, want the kept none", a.drawnFriend(), got)
 	}
 	everyClickLandsOnTheRowDrawnThere(t, a)
-	for _, want := range []string{"bo", "ollie", "skip"} {
+	for i := len(cast) - 1; i >= 0; i-- {
+		want := cast[i].key
 		a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyUp})
 		if a.drawnFriend() != want {
 			t.Fatalf("the cursor previews %q, want %q", a.drawnFriend(), want)

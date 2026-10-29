@@ -5287,3 +5287,26 @@ rounds of mockups: **Skip** (a tug that leaves a wake, the default), **Ollie** (
   form, a failed keep, the transmission at start and after a hand-over and never in a frame, and a selection
   across the friend), `cmd/wake`'s `friends_test.go` (detection, the file) and the pty
   `TestAFriendSitsInTheCornerAndTheChoiceOutlastsTheWindow`, each mutation-checked.
+
+## 2026-10-29 — Puff, a pufferfish, joins the friends (the owner)
+
+The owner asked for "a pufferfish that has a similar design as the pufferfish emoji" and picked through four
+rounds of mockups: **Puff**, puffed round as a ball, with tall oval eyes set wide apart (twice as tall as wide,
+a catchlight and a tiny second: the style of eye he named, "like the fire pet in gpt", OpenAI Codex's mascot -
+the style only, nothing of its art), and the same oval turned on its side for its mouth (8×4, pink, open in dark
+pink). `/friends puff`; it follows Bo in the picker.
+
+- **Drawn for Wake, from shapes**, as the cast was: the familiar look - a round body spiky all over, big eyes,
+  small fins, pursed lips, yellow-tan with a paler belly - painted from ellipses and triangles at the cast's size
+  and outline weight. No vendor's emoji art (Apple, Google, Twemoji, Microsoft, Samsung) and no other product's
+  mascot was traced, sampled or copied.
+- **Its frames.** It puffs up and lets it out: at rest, puffed round, between. At the biggest puff its eyes open
+  2px taller and its mouth rounds out a pixel - the implementer's recommendation, since the owner did not say;
+  holding the face still is frame 1's eleven eye and mouth rows. The half-block sprite's mouth is 2×1 pink a row
+  lower, on the belly, where it does not run into the blush.
+- **Nine palette letters** (`y Y l e d f F n N`), none the cast's; `friendsart_test.go` holds the palette to
+  exactly the colours drawn.
+- **Held by** `friendsart_test.go` and `kittyplace_test.go` as for the cast,
+  `TestFriendsPuffPutsThePufferfishOnTheBarAndAWindowOpenedLaterKeepsIt`, and
+  `TestTheCommandsChapterNamesEveryFriend` (the manual's `/friends` line lists every word `/friends` takes, so the
+  next friend cannot miss it).
