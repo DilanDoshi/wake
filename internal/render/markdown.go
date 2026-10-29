@@ -156,18 +156,19 @@ func reflowProse(s string, width int) string {
 	out := make([]string, 0, len(lines))
 	next := 0 // the label the list's next entry opens with; 0 outside a list
 	for i := 0; i < len(lines); {
-		if !reflowable(lines[i]) {
-			out = append(out, lines[i])
+		if n := linkLabel(lines[i]); n == 1 || n > 1 && n == next {
+			next = n + 1
+		} else if blankRow(lines[i]) {
 			next = 0
+		}
+		if !reflowable(lines[i]) { // an entry holding box drawing still counts
+			out = append(out, lines[i])
 			i++
 			continue
 		}
 		lead := leadSpaces(lines[i])
 		// Trimmed: a lone bullet's padding would read as the space after it.
 		mark := itemMarker(strings.TrimRight(lines[i][lead:], " "), itemTag)
-		if n := linkLabel(lines[i]); n == 1 || n > 1 && n == next {
-			next = n + 1
-		}
 		group := []string{lines[i]}
 		for i++; i < len(lines); i++ {
 			row := lines[i]

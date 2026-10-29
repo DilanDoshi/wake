@@ -23,13 +23,16 @@ that" and the answer is not in a commit message.
   group of its own, to the next blank row, as an enumerator after an enumerator does (`startsItem`).
   Each entry is re-wrapped alone and comes back as drawn, since glamour truncates the address to fit,
   and an entry glamour wrapped itself (its text wider than the block) keeps its tail. Two Codex finds
-  shaped it:
+  and a code review shaped it:
   - The list is a run, not a group. glamour pads ` [1]`..` [9]` to `[10]`'s width and not a wrapped
     tail, so ` [9]`'s tail sits at `[10]`'s lead, and a split read off the group's first row ran `[10]`
     into it, drawn and copied. A first cut that extended `startsItem` itself had that hole.
   - The run reads only the label it counts to. In a list item glamour draws a paragraph after the
     table straight under its list, with no blank row, so a run that took any label split that
     paragraph at a `[1]: ` its wrap put first on a row.
+  - And it ends only at a blank row. An entry, or a wrapped tail, holding box drawing is a row
+    reflowProse leaves as drawn; ending the run there ran the entries after it together (code
+    review), so such a row still counts its label.
 - **Rejected, each measured:**
   - A tag on `LinkText`, as `itemTag` marks an item. glamour gives a child style's non-empty
     `BlockPrefix` to every render of it (`cascadeStylePrimitive`), so the tag rode on prose links and

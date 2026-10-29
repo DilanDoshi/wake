@@ -253,8 +253,8 @@ func linkTable(n int) (string, []string) {
 // glamour lists a grid's links under it, a row each, and the list is its layout,
 // not a paragraph: reflowProse used to run it into one. Wherever the grid is
 // drawn - alone in its place, in a reply defining a reference link, in a list
-// item - and past nine links, where glamour pads ` [1]` to `[10]`'s width, the
-// list is one run with each link on its own row.
+// item - past nine links, where glamour pads ` [1]` to `[10]`'s width, and with
+// an entry holding box drawing - the list is one run with each link on its own row.
 //
 // Mutation check: without reflowProse's split at a link's label every case runs
 // its links together, and so does the copy.
@@ -262,6 +262,9 @@ func TestAGridsLinksKeepARowEach(t *testing.T) {
 	two, want := linkTable(2)
 	ten, wantTen := linkTable(10)
 	ref := strings.Replace(two, "(https://example.com/1)", "[r]", 1) + "\n[r]: https://example.com/1"
+	three, wantBox := linkTable(3)
+	boxed := strings.Replace(three, "[link1]", "[a ─ b]", 1) // an entry reflowProse cannot touch
+	wantBox[0] = "[1]: a ─ b https://example.com/1"
 	for _, c := range []struct {
 		src  string
 		want []string
@@ -271,6 +274,7 @@ func TestAGridsLinksKeepARowEach(t *testing.T) {
 		{ref, want},
 		{"- an item\n\n  " + strings.ReplaceAll(two, "\n", "\n  "), want},
 		{ten, wantTen},
+		{boxed, wantBox},
 	} {
 		out := Markdown(c.src, 80)
 		if rows := plainRows(out); !isGrid(out) || !holdsRun(rows, c.want) {
@@ -296,14 +300,17 @@ func holdsRun(rows, want []string) bool {
 // A link whose text is wider than the block is wrapped by glamour itself, its
 // address dropped, and the rest of the list keeps its rows under it, drawn and
 // copied - past nine links too, where the wrapped tail sits a column left of its
-// padded ` [9]`, at `[10]`'s lead (Codex).
+// padded ` [9]`, at `[10]`'s lead (Codex), and when the tail holds box drawing.
 //
 // Mutation check: splitting only a group a label opened runs `[10]: ` into the
-// tail of ` [9]`; reading the row above instead runs `[2]: ` into the tail of `[1]`.
+// tail of ` [9]`; reading the row above instead runs `[2]: ` into the tail of `[1]`;
+// ending the list at the boxed tail, not a blank row, runs `[3]: ` into `[2]`.
 func TestALinkGlamourWrapsKeepsTheListUnderIt(t *testing.T) {
 	long := "Claude Code release notes for the version"
 	two, _ := linkTable(2)
+	three, _ := linkTable(3)
 	ten, _ := linkTable(10)
+	boxedTail := strings.NewReplacer("[link1]", "[Claude Code release notes for the ─ version]", "[link2]", "[b]", "[link3]", "[c]").Replace(three)
 	for _, c := range []struct {
 		src        string
 		drawn, cut []string
@@ -314,6 +321,9 @@ func TestALinkGlamourWrapsKeepsTheListUnderIt(t *testing.T) {
 		{strings.Replace(ten, "[link9]", "["+long+"]", 1),
 			[]string{"[9]: Claude Code release notes for", "the version", "[10]: link10 https://example.com/10"},
 			[]string{"[9]: " + long, "[10]: link10 https://example.com/10"}},
+		{boxedTail, // a tail reflowProse cannot touch, and entries short enough to join
+			[]string{"[1]: Claude Code release notes for", "the ─ version", "[2]: b https://example.com/2", "[3]: c https://example.com/3"},
+			[]string{"[1]: Claude Code release notes for the ─ version", "[2]: b https://example.com/2", "[3]: c https://example.com/3"}},
 	} {
 		src := "- an item\n\n  " + strings.ReplaceAll(c.src, "\n", "\n  ")
 		if rows := plainRows(Markdown(src, 40)); !holdsRun(rows, c.drawn) {
