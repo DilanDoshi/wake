@@ -1,6 +1,7 @@
 package render
 
 import (
+	"fmt"
 	"regexp"
 	"strings"
 	"testing"
@@ -235,6 +236,138 @@ func TestAOneColumnGridKeepsItsRows(t *testing.T) {
 	got := plainRows(Markdown(src, 80))
 	if !isGrid(Markdown(src, 80)) || len(got) != 5 || strings.TrimSpace(got[3]) != "b.go" {
 		t.Fatalf("drew\n%s", strings.Join(got, "\n"))
+	}
+}
+
+// linkTable is a grid of n links and the row glamour lists each under it.
+func linkTable(n int) (string, []string) {
+	src := "| N | Link |\n|---|---|\n"
+	var want []string
+	for i := 1; i <= n; i++ {
+		src += fmt.Sprintf("| %d | [link%d](https://example.com/%d) |\n", i, i, i)
+		want = append(want, fmt.Sprintf("[%d]: link%d https://example.com/%d", i, i, i))
+	}
+	return src, want
+}
+
+// glamour lists a grid's links under it, a row each, and the list is its layout,
+// not a paragraph: reflowProse used to run it into one. Wherever the grid is
+// drawn - alone in its place, in a reply defining a reference link, in a list
+// item - past nine links, where glamour pads ` [1]` to `[10]`'s width, and with
+// an entry holding box drawing - the list is one run with each link on its own row.
+//
+// Mutation check: without reflowProse's split at a link's label every case runs
+// its links together, and so does the copy.
+func TestAGridsLinksKeepARowEach(t *testing.T) {
+	two, want := linkTable(2)
+	ten, wantTen := linkTable(10)
+	ref := strings.Replace(two, "(https://example.com/1)", "[r]", 1) + "\n[r]: https://example.com/1"
+	three, wantBox := linkTable(3)
+	boxed := strings.Replace(three, "[link1]", "[a ─ b]", 1) // an entry reflowProse cannot touch
+	wantBox[0] = "[1]: a ─ b https://example.com/1"
+	for _, c := range []struct {
+		src  string
+		want []string
+	}{
+		{two, want},
+		{"Before.\n\n" + two + "\nAfter.", want},
+		{ref, want},
+		{"- an item\n\n  " + strings.ReplaceAll(two, "\n", "\n  "), want},
+		{ten, wantTen},
+		{boxed, wantBox},
+	} {
+		out := Markdown(c.src, 80)
+		if rows := plainRows(out); !isGrid(out) || !holdsRun(rows, c.want) {
+			t.Errorf("%q: no run of\n%s\nin\n%s", c.src, strings.Join(c.want, "\n"), strings.Join(rows, "\n"))
+		}
+	}
+}
+
+// holdsRun reports whether rows, each trimmed, hold want as consecutive rows.
+func holdsRun(rows, want []string) bool {
+	for i := range rows {
+		k := 0
+		for k < len(want) && i+k < len(rows) && strings.TrimSpace(rows[i+k]) == want[k] {
+			k++
+		}
+		if k == len(want) {
+			return true
+		}
+	}
+	return false
+}
+
+// A link whose text is wider than the block is wrapped by glamour itself, its
+// address dropped, and the rest of the list keeps its rows under it, drawn and
+// copied - past nine links too, where the wrapped tail sits a column left of its
+// padded ` [9]`, at `[10]`'s lead (Codex), and when the tail holds box drawing.
+//
+// Mutation check: splitting only a group a label opened runs `[10]: ` into the
+// tail of ` [9]`; reading the row above instead runs `[2]: ` into the tail of `[1]`;
+// ending the list at the boxed tail, not a blank row, runs `[3]: ` into `[2]`.
+func TestALinkGlamourWrapsKeepsTheListUnderIt(t *testing.T) {
+	long := "Claude Code release notes for the version"
+	two, _ := linkTable(2)
+	three, _ := linkTable(3)
+	ten, _ := linkTable(10)
+	boxedTail := strings.NewReplacer("[link1]", "[Claude Code release notes for the ─ version]", "[link2]", "[b]", "[link3]", "[c]").Replace(three)
+	for _, c := range []struct {
+		src        string
+		drawn, cut []string
+	}{
+		{strings.Replace(two, "[link1]", "["+long+"]", 1),
+			[]string{"[1]: Claude Code release notes for", "the version", "[2]: link2 https://example.com/2"},
+			[]string{"[1]: " + long, "[2]: link2 https://example.com/2"}},
+		{strings.Replace(ten, "[link9]", "["+long+"]", 1),
+			[]string{"[9]: Claude Code release notes for", "the version", "[10]: link10 https://example.com/10"},
+			[]string{"[9]: " + long, "[10]: link10 https://example.com/10"}},
+		{boxedTail, // a tail reflowProse cannot touch, and entries short enough to join
+			[]string{"[1]: Claude Code release notes for", "the ─ version", "[2]: b https://example.com/2", "[3]: c https://example.com/3"},
+			[]string{"[1]: Claude Code release notes for the ─ version", "[2]: b https://example.com/2", "[3]: c https://example.com/3"}},
+	} {
+		src := "- an item\n\n  " + strings.ReplaceAll(c.src, "\n", "\n  ")
+		if rows := plainRows(Markdown(src, 40)); !holdsRun(rows, c.drawn) {
+			t.Errorf("drew\n%s", strings.Join(rows, "\n"))
+		}
+		if copied := strings.Split(copiedAt(src, 40), "\n"); !holdsRun(copied, c.cut) {
+			t.Errorf("copied\n%s", strings.Join(copied, "\n"))
+		}
+	}
+}
+
+// A paragraph a typed list of sources opens - `[1]: ` - keeps the greedy wrap
+// and copies back whole: only where glamour's wrap starts a later source on a row
+// does that source keep the row's start, read as the next of glamour's own links
+// (decisions.md, 2026-10-29).
+//
+// Mutation check: leaving a run that opens `[1]: ` at glamour's wrap, as drawn,
+// strands words at most widths.
+func TestAParagraphOfLinkLabelsKeepsTheGreedyWrap(t *testing.T) {
+	src := "[1]: Smith et al. 2020 wrote at length about the end-to-end behaviour of --resume in many contexts.\n" +
+		"[2]: Jones 2021 on DEV-3035 and the --fork-session flag."
+	kept := false
+	for width := minMarkdownWidth; width <= 120; width++ {
+		rows := plainRows(Markdown(src, width))
+		for i := 0; i+1 < len(rows); i++ {
+			here, next := content(rows[i]), content(rows[i+1])
+			if linkLabel(next) > 0 {
+				kept = true
+				continue
+			}
+			join := 1
+			if strings.HasSuffix(here, "-") {
+				join = 0
+			}
+			if word := strings.Fields(next)[0]; ansi.StringWidth(here)+join+ansi.StringWidth(word) <= width-2*int(defaultMargin) {
+				t.Errorf("width %d: %q fits after %q:\n%s", width, word, here, strings.Join(rows, "\n"))
+			}
+		}
+		if got, want := copiedAt(src, width), strings.Replace(src, "\n", " ", 1); got != want {
+			t.Errorf("width %d copied %q", width, got)
+		}
+	}
+	if !kept {
+		t.Error("no width started the second source on a row, so the split was never tested")
 	}
 }
 
