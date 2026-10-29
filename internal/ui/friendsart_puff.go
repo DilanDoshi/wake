@@ -101,7 +101,7 @@ var puffArt = friendArt{
 			".......kyyyykwwkkkyyyyyyyykwwkkkydyyyyyYk.....kkfk.",
 			"...kkkkkyyyykkkkkkyyyyyyyykkkkkkyyyyyyyYk...kkfffk.",
 			"..kddddddyllkkkkkkyyyyyyyykkkkkkyyyyyyyYYkkkfffffk.",
-			"...kdddddyyykkkkkkyyyyyyyykkkkkkyyyyyyyyYkffffffF..",
+			"...kdddddyyykkkkkkyyyyyyyykkkkkkyyyyyyyyYkffffffk..",
 			"....kdddyyyykkkkkkyyyyyyyykkkkkkyyyyyyyyYYkffffFk..",
 			".....kydyyyykkkkkkyyyyyyyykkkkkkyyyyydyyYYkfffFfk..",
 			".....kyyyyyykkkkkkyyyyyyyykkkkkkyyyydydyYYkffFfk...",
