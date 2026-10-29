@@ -256,8 +256,8 @@ func linkTable(n int) (string, []string) {
 // item - and past nine links, where glamour pads ` [1]` to `[10]`'s width, the
 // list is one run with each link on its own row.
 //
-// Mutation check: without startsItem's link clause every case runs its links
-// together, and so does the copy.
+// Mutation check: without reflowProse's split at a link's label every case runs
+// its links together, and so does the copy.
 func TestAGridsLinksKeepARowEach(t *testing.T) {
 	two, want := linkTable(2)
 	ten, wantTen := linkTable(10)
@@ -294,16 +294,34 @@ func holdsRun(rows, want []string) bool {
 }
 
 // A link whose text is wider than the block is wrapped by glamour itself, its
-// address dropped, and the rest of the list keeps its rows under it.
+// address dropped, and the rest of the list keeps its rows under it, drawn and
+// copied - past nine links too, where the wrapped tail sits a column left of its
+// padded ` [9]`, at `[10]`'s lead (Codex).
 //
-// Mutation check: reading the row above instead of the entry's first runs
-// `[2]: ` into the tail glamour wrapped.
+// Mutation check: splitting only a group a label opened runs `[10]: ` into the
+// tail of ` [9]`; reading the row above instead runs `[2]: ` into the tail of `[1]`.
 func TestALinkGlamourWrapsKeepsTheListUnderIt(t *testing.T) {
-	src := "- an item\n\n  | N | Link |\n  |---|---|\n" +
-		"  | 1 | [Claude Code release notes for the version](https://example.com/1) |\n  | 2 | [b](https://example.com/2) |"
-	rows := plainRows(Markdown(src, 40))
-	if !holdsRun(rows, []string{"[1]: Claude Code release notes for", "the version", "[2]: b https://example.com/2"}) {
-		t.Errorf("drew\n%s", strings.Join(rows, "\n"))
+	long := "Claude Code release notes for the version"
+	two, _ := linkTable(2)
+	ten, _ := linkTable(10)
+	for _, c := range []struct {
+		src        string
+		drawn, cut []string
+	}{
+		{strings.Replace(two, "[link1]", "["+long+"]", 1),
+			[]string{"[1]: Claude Code release notes for", "the version", "[2]: link2 https://example.com/2"},
+			[]string{"[1]: " + long, "[2]: link2 https://example.com/2"}},
+		{strings.Replace(ten, "[link9]", "["+long+"]", 1),
+			[]string{"[9]: Claude Code release notes for", "the version", "[10]: link10 https://example.com/10"},
+			[]string{"[9]: " + long, "[10]: link10 https://example.com/10"}},
+	} {
+		src := "- an item\n\n  " + strings.ReplaceAll(c.src, "\n", "\n  ")
+		if rows := plainRows(Markdown(src, 40)); !holdsRun(rows, c.drawn) {
+			t.Errorf("drew\n%s", strings.Join(rows, "\n"))
+		}
+		if copied := strings.Split(copiedAt(src, 40), "\n"); !holdsRun(copied, c.cut) {
+			t.Errorf("copied\n%s", strings.Join(copied, "\n"))
+		}
 	}
 }
 

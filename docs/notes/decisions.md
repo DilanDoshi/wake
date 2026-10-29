@@ -19,10 +19,14 @@ that" and the answer is not in a commit message.
   handed it on as prose), or inside a document (a reply defining a reference link, a list item). A copy
   ran it together too. Prose and lists draw no such list - their links are inline - so the defect is a
   grid's alone.
-- **The fix extends `startsItem`:** a link's `[n]: ` after a link's starts a group, as an enumerator
-  after an enumerator does. Each entry is re-wrapped alone and comes back as drawn, since glamour
-  truncates the address to fit; an entry glamour wrapped itself (its text wider than the block) keeps
-  its tail; glamour pads ` [1]`..` [9]` to `[10]`'s width, and that lead change splits them already.
+- **The fix is in `reflowProse`:** from a group that a link's `[n]: ` opens down to the next blank
+  row, each link's label starts a group of its own, as an enumerator after an enumerator does
+  (`startsItem`). Each entry is re-wrapped alone and comes back as drawn, since glamour truncates the
+  address to fit, and an entry glamour wrapped itself (its text wider than the block) keeps its tail.
+  The list is a run, not a group, because glamour pads ` [1]`..` [9]` to `[10]`'s width and not a
+  wrapped tail: ` [9]`'s tail sits at `[10]`'s lead, and a split read only off the group's first row
+  ran `[10]` into it, drawn and copied (Codex). A first cut that extended `startsItem` itself had
+  that hole.
 - **Rejected, each measured:**
   - A tag on `LinkText`, as `itemTag` marks an item. glamour gives a child style's non-empty
     `BlockPrefix` to every render of it (`cascadeStylePrimitive`), so the tag rode on prose links and
@@ -41,6 +45,11 @@ that" and the answer is not in a commit message.
   widths for the measured two-source paragraph, every row still greedy and the copy the one paragraph.
   A wrap that opens a row with `[1]: ` mid-paragraph changes nothing, since no label opened the group.
   `TestAParagraphOfLinkLabelsKeepsTheGreedyWrap`, `TestAWrapOpeningARowWithALinkLabelStaysProse`.
+- **Not this fix: a block's trailing paragraph inside a list item.** glamour draws no blank row
+  between a table in an item and a paragraph after it in the same item, so on `main` that paragraph
+  runs into the next item (`after the table 2. item two`), links or none; with links, the list's last
+  entry takes it too, as on `main`. It is reflowProse's grouping inside an item, not the list's, and
+  is left for its own fix (code review).
 
 ---
 

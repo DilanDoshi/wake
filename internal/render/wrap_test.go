@@ -163,26 +163,31 @@ func TestReflowKeepsSpacingFaithful(t *testing.T) {
 	}
 }
 
-// A wrap that opens a paragraph's row with `[1]: ` is still prose: a label starts
-// a row of its own only in a group a label opened, as glamour's list of a grid's
-// links is. So the paragraph wraps exactly as it would with any other label there.
+// A wrap that opens a paragraph's row with `[1]: ` is still prose, a grid's list
+// of links above it or not: a label starts a row of its own only in the run of
+// rows a label opened, as glamour's list is. So the paragraph wraps exactly as it
+// would with any other label there.
 //
-// Mutation check: splitting a group at any row a label opens, not only after a
-// row one opened, keeps glamour's early break before `[1]:` at width 24.
+// Mutation check: splitting at any row a label opens keeps glamour's early break
+// before `[1]:` at width 24, and so does a list that runs on past its blank row.
 func TestAWrapOpeningARowWithALinkLabelStaysProse(t *testing.T) {
-	src := "DEV-3035 --resume tools park byte-identical the first ticket [1]: --session-id parent pass end-to-end me."
-	opened := false
-	for width := minMarkdownWidth; width <= 120; width++ {
-		got := plainRows(Markdown(src, width))
-		want := plainRows(Markdown(strings.Replace(src, "[1]", "[a]", 1), width))
-		for i, row := range got {
-			opened = opened || strings.HasPrefix(content(row), "[1]: ")
-			if i >= len(want) || row != strings.Replace(want[i], "[a]", "[1]", 1) {
-				t.Fatalf("width %d drew\n%s\nwant\n%s", width, strings.Join(got, "\n"), strings.Join(want, "\n"))
+	para := "DEV-3035 --resume tools park byte-identical the first ticket [1]: --session-id parent pass end-to-end me."
+	grid, _ := linkTable(2)
+	for _, above := range []string{"", grid + "\n"} {
+		src, ref := above+para, "\n\n[r]: https://example.com/r" // a reference keeps the grid in the document
+		opened := false
+		for width := minMarkdownWidth; width <= 120; width++ {
+			got := plainRows(Markdown(src+ref, width))
+			want := plainRows(Markdown(above+strings.Replace(para, "[1]", "[a]", 1)+ref, width))
+			for i, row := range got {
+				opened = opened || strings.HasPrefix(content(row), "[1]: --")
+				if len(got) != len(want) || row != strings.Replace(want[i], "[a]", "[1]", 1) {
+					t.Fatalf("width %d drew\n%s\nwant\n%s", width, strings.Join(got, "\n"), strings.Join(want, "\n"))
+				}
 			}
 		}
-	}
-	if !opened {
-		t.Error("no width opened a row with the label, so nothing was tested")
+		if !opened {
+			t.Errorf("%q: no width opened a row with the label, so nothing was tested", src)
+		}
 	}
 }
