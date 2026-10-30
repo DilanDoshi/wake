@@ -56,6 +56,19 @@ func transcriptFiles(t *testing.T) []string {
 	return files
 }
 
+// registryGlob is claude's session registry, one record per running session.
+const registryGlob = "../../testdata/sessions/*.json"
+
+// registryFiles is the recorded registry.
+func registryFiles(t *testing.T) []string {
+	t.Helper()
+	files, err := filepath.Glob(registryGlob)
+	if err != nil || len(files) == 0 {
+		t.Fatalf("no registry records matched %s (%v)", registryGlob, err)
+	}
+	return files
+}
+
 func fixtureLines(t *testing.T, path string) []string {
 	t.Helper()
 	f, err := os.Open(path)

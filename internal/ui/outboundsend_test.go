@@ -203,3 +203,11 @@ func TestARestoredConversationAndABoardTileDrawTheSendToo(t *testing.T) {
 	assertShows(t, tile, 60, 12, crossSessionLead+"alex"+crossSessionArrow+"sydney")
 	assertShows(t, tile, 60, 12, sentWords)
 }
+
+// A send by address is headed by who it reached, as the room heads it, and never
+// by the socket path it was sent to.
+func TestADMHeadsASendByAddressWithTheRecipientsName(t *testing.T) {
+	d := sentDM(sentTo("s1", "uds:/tmp/cc-socks/40123.sock", sentWords, "sydney", "s2"))
+	assertShows(t, d, 80, 30, crossSessionLead+"alex"+crossSessionArrow+"sydney")
+	assertHides(t, d, 80, 30, "uds:")
+}

@@ -208,6 +208,11 @@ const (
 type PeerSend struct {
 	To   string `json:"recipient"`
 	Text string `json:"text"`
+	// ToName is the session a `to` address reached, by the name Claude's registry
+	// gives it, and ToID that session's id when it is a fleet agent: set by the
+	// daemon (sendto.go), empty for a bare name or an address nothing resolved.
+	ToName string `json:"recipient_name,omitempty"`
+	ToID   string `json:"recipient_session,omitempty"`
 }
 
 // ToolCall is a tool invocation, its result, or a request to run one.

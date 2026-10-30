@@ -2,6 +2,8 @@ package core
 
 import (
 	"encoding/json"
+	"os"
+	"path/filepath"
 	"reflect"
 	"slices"
 	"strings"
@@ -91,5 +93,75 @@ func TestOnlyASendMessageReceiptIsReadAsItsSentence(t *testing.T) {
 	receipt := `{"success":true,"message":"“hi” → wf peer","msg_id":"m1"}`
 	if got := toolResultText(block(receipt)); got != "“hi” → wf peer" {
 		t.Errorf("the receipt read as %q, want its sentence", got)
+	}
+}
+
+// A send's `to` is an address in two of its three forms: the `uds:` socket a
+// cross-session message arrives from, which a reply copies (cross-session.jsonl),
+// and a name with the ref /list-agents prints beside it (list-agents.jsonl). A
+// bare name is no address.
+func TestASendsAddressIsASocketOrANameWithItsRefDropped(t *testing.T) {
+	for path, recorded := range map[string]string{
+		"../../testdata/stream/cross-session.jsonl": `from=\"uds:/tmp/cc-socks/40123.sock\"`,
+		"../../testdata/stream/list-agents.jsonl":   "wf-gamma [68bfa0]",
+	} {
+		if !strings.Contains(strings.Join(fixtureLines(t, path), "\n"), recorded) {
+			t.Fatalf("%s no longer records %s", path, recorded)
+		}
+	}
+	for to, want := range map[string][2]string{
+		"uds:/tmp/cc-socks/40123.sock": {"/tmp/cc-socks/40123.sock", ""},
+		"wf-gamma [68bfa0]":            {"", "wf-gamma"},
+		"release notes [68bfa0]":       {"", "release notes"},
+		"wf-gamma":                     {"", ""},
+		"wf peer":                      {"", ""},
+		"uds:":                         {"", ""},
+		"[68bfa0]":                     {"", ""},
+		"wf-gamma [not-a-ref]":         {"", ""},
+	} {
+		if socket, name := SendAddress(to); socket != want[0] || name != want[1] {
+			t.Errorf("SendAddress(%q) = %q, %q; want %q, %q", to, socket, name, want[0], want[1])
+		}
+	}
+}
+
+// Claude Code's registry names a running session's id, its name and its socket
+// (sessions/78871.json, a sterile 2.1.311 session); the name is contained, since
+// it is drawn, and a record naming no session or socket is none.
+func TestASessionRecordNamesItsSessionNameAndSocket(t *testing.T) {
+	raw, err := os.ReadFile("../../testdata/sessions/78871.json")
+	if err != nil {
+		t.Fatal(err)
+	}
+	want := SessionRecord{ID: "dae33b75-42fc-4230-8dd2-19a731dc141d", Name: "rec-beta", Socket: "/tmp/cc-socks/78871.sock"}
+	if got, ok := DecodeSessionRecord(raw); !ok || got != want {
+		t.Errorf("DecodeSessionRecord = %+v, %v; want %+v", got, ok, want)
+	}
+	if got, _ := DecodeSessionRecord([]byte(`{"sessionId":"s1","name":"a\u001b[2Jb","messagingSocketPath":"/s"}`)); got.Name != "a [2Jb" {
+		t.Errorf("a drawn name kept a terminal control: %q", got.Name)
+	}
+	for _, raw := range []string{`{`, `{"name":"x","messagingSocketPath":"/s"}`, `{"sessionId":"s1","name":"x"}`} {
+		if got, ok := DecodeSessionRecord([]byte(raw)); ok {
+			t.Errorf("DecodeSessionRecord(%s) = %+v, want none", raw, got)
+		}
+	}
+}
+
+// The registry's records are its *.json files and nothing else beside them: a
+// session's .key file is never read.
+func TestTheRegistryIsItsRecordsAndNotItsKeys(t *testing.T) {
+	config := t.TempDir()
+	dir := filepath.Join(config, "sessions")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		t.Fatal(err)
+	}
+	for _, name := range []string{"78871.json", "78871.0a1b2c.key"} {
+		if err := os.WriteFile(filepath.Join(dir, name), []byte("{}"), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	got, err := filepath.Glob(SessionRecords(config))
+	if err != nil || len(got) != 1 || filepath.Base(got[0]) != "78871.json" {
+		t.Errorf("SessionRecords matches %v (%v), want the one record", got, err)
 	}
 }

@@ -25,6 +25,8 @@ package core
 import (
 	"encoding/json"
 	"fmt"
+	"path/filepath"
+	"regexp"
 	"strings"
 )
 
@@ -336,6 +338,53 @@ func toolPeerSend(name string, input map[string]any) *PeerSend {
 		return nil
 	}
 	return &PeerSend{To: to, Text: text}
+}
+
+// A send's `to` names a session by name, by `name [ref]` when two share it (the
+// ref /list-agents prints, list-agents.jsonl), or by `uds:<socket>`: the from of
+// the cross-session message a reply answers (cross-session.jsonl).
+const sendSocketPrefix = "uds:"
+
+var sendRef = regexp.MustCompile(`^(.+) \[[0-9a-f]+\]$`)
+
+// SendAddress is the socket a send's to names, or the name a `name [ref]` names;
+// both empty for a bare name, which is no address.
+func SendAddress(to string) (socket, name string) {
+	if path, ok := strings.CutPrefix(to, sendSocketPrefix); ok {
+		return path, ""
+	}
+	if m := sendRef.FindStringSubmatch(to); m != nil {
+		return "", m[1]
+	}
+	return "", ""
+}
+
+// Claude Code keeps a file per running session, <pid>.json under its config
+// directory's sessions/, beside a .key file Wake never reads
+// (testdata/sessions/78871.json, 2.1.311). Claude's internal, not its API.
+const (
+	sessionRegistryDir = "sessions"
+	sessionRecordGlob  = "*.json"
+)
+
+type wireSessionRecord struct {
+	SessionID string `json:"sessionId"`
+	Name      string `json:"name"`
+	Socket    string `json:"messagingSocketPath"`
+}
+
+// SessionRecords is the pattern matching every session's record under config.
+func SessionRecords(config string) string {
+	return filepath.Join(config, sessionRegistryDir, sessionRecordGlob)
+}
+
+// DecodeSessionRecord reads one record; false for one naming no session or socket.
+func DecodeSessionRecord(raw []byte) (SessionRecord, bool) {
+	var r wireSessionRecord
+	if json.Unmarshal(raw, &r) != nil || r.SessionID == "" || r.Socket == "" {
+		return SessionRecord{}, false
+	}
+	return SessionRecord{ID: r.SessionID, Name: Contained(r.Name), Socket: r.Socket}, true
 }
 
 // toolChecklistOp unwraps the one create-or-update a TaskCreate/TaskUpdate

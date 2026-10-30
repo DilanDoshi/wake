@@ -323,6 +323,8 @@ func runFakeClaude() int {
 		return fakeTool(sid)
 	case "name":
 		return fakeName(sid)
+	case "send":
+		return fakeSend(sid) // see sendto_test.go
 	case "argv":
 		return fakeArgv(sid)
 	case "question":
@@ -804,6 +806,29 @@ func fakeName(sid string) int {
 	emitText(sid, "name: "+argValue(os.Args, "--name"))
 	emitResult(sid)
 	for range stdinLines() {
+	}
+	return 0
+}
+
+// fakeSend calls SendMessage with each line's words as its to, the way a reply
+// copies the from of the message it answers - see sendto_test.go.
+func fakeSend(sid string) int {
+	emitText(sid, "ready")
+	emitResult(sid)
+	for line := range stdinLines() {
+		var f struct {
+			Message struct {
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal([]byte(line), &f) != nil || len(f.Message.Content) == 0 {
+			continue
+		}
+		fmt.Printf(`{"type":"assistant","session_id":%q,"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_send","name":"SendMessage","input":{"to":%q,"message":"hello"}}]}}`+"\n",
+			sid, f.Message.Content[0].Text)
+		emitResult(sid)
 	}
 	return 0
 }
