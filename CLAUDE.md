@@ -673,7 +673,8 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   (2.1.285). Wake's room and resume markers depend on it — `rpc`'s `messageVersion`, re-check on upgrade. A fork
   copies records under the same uuids. `docs/superpowers/notes/2026-09-29-transcript-uuid-findings.md`.
 - **A fork's transcript is written only on the fork's first turn** (2.1.311), opening with that copy, so a
-  fork's pane reads its source's transcript as long as it was at the fork until then (`server.history`).
+  fork's pane reads its source's transcript as long as it was at the fork until then (`server.history`);
+  `--resume` of an id with no transcript exits 1. `docs/superpowers/notes/2026-10-29-fork-transcript-findings.md`.
 - `/model`, `/clear`, `/compact`, `/context` survive stream-json; `/resume` does not. Bare
   `/effort`/`/model` do nothing (`num_turns: 0`, `$0`). `/status` answers "isn't available in this
   environment" with no turn (2.1.296, `testdata/stream/bare-status.jsonl`), as a hand probe found

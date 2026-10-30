@@ -10,6 +10,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -104,6 +105,25 @@ func TestAForkShowsTheConversationItCopiedAcrossAClearOnEitherSide(t *testing.T)
 	c.pollState(idGamma, rpc.StateIdle)
 	if got := paneHistory(c, idGamma); got != "" {
 		t.Errorf("a fork cleared before its first turn has conversation history %q, want none: the model no longer holds it", got)
+	}
+}
+
+// Between a /clear's reset and its successor's first frame the conversation is
+// not known yet, and what the fork inherited is gone either way.
+func TestAForkInTheGapAfterAClearHasNoHistory(t *testing.T) {
+	dir := projectsDir(t)
+	source := "eeeeeeee-7777-4777-8777-777777777777"
+	writeTranscriptLines(t, dir, source, recordLine("user", "u-1", "", "inherited"))
+	s := newServer(filepath.Join(t.TempDir(), "s"))
+	a := &agent{id: idGamma, name: "juno", forkFrom: source, forkBytes: transcriptSize(source)}
+	s.agents[idGamma] = a
+	if got, err := s.history(idGamma, true); err != nil || len(got) != 1 {
+		t.Fatalf("before the /clear the fork's history is %v (%v), want the one inherited record", got, err)
+	}
+
+	a.observe(core.Event{Kind: core.KindSessionReset, SessionID: idGamma})
+	if got, err := s.history(idGamma, true); err != nil || len(got) != 0 {
+		t.Errorf("in the gap after a /clear the fork's history is %v (%v), want none", got, err)
 	}
 }
 
