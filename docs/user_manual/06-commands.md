@@ -131,29 +131,29 @@ Wake owns a short, closed list of slash commands. A test holds this list to the 
 command that ships without a line here fails the build; `/wake-help` draws the same set inside Wake.
 
 ```
-/resume [<name>|all]           bring a parked session back
-/new [<name>] [in <dir>]       start an agent without leaving the room; takes the spawn flags too
-/name [@who] <new-name>        rename a session
-/task [@who] <what it is on>   set the label beside its name
-/color [@who] <colour>|none    an identity hue — seven named colours, or none to clear
-/team [@who] <name>|none       group a session under a named team, or none to clear
-/quit [@who]                   end one session for good and drop its row (irreversible)
-/adopt                         adopt a claude session this machine already has, from the room
-/manager                       the switch: start one, wake a parked one, or park a running one
-/manager-stop                  end the manager for good (a fresh /manager starts a new one)
-/board                         the fleet as one row per agent; ⇥ tiles it into a live wall; a fleet bigger than the screen scrolls
-/status [@who]                 an agent's own facts — state, ids, model, context, effort, permission mode, team, builds; read-only
-/workflows [@who]              a Workflow run's phases and agents: filter them, stop the run, or save its script as a command
-/wake-name [<name>]            rename this fleet; bare says its name
-/wake-help [<filter>]          every key and command Wake has, narrowed as you type; read-only (see below)
-/friends [skip|ollie|bo|none]  the friend on the usage bar; bare opens a picker that previews in the corner
-/groupchat-filter [on|off]     whether a lone @name narrows the room by default (bare reports)
-/clear                         in the room only: empty the group chat in this window (agents untouched)
-/reauth                        recover a fleet knocked out by an expired shared login
-/mcp [@who]                    an agent's MCP servers: status, sign in, reconnect, on/off, tools
-/login                         the auth panel — sign in or check status
-/effort                        pick a reasoning level — bare, no argument
-/model                         pick a model — bare, no argument
+/resume [<name>|all]                bring a parked session back
+/new [<name>] [in <dir>]            start an agent without leaving the room; takes the spawn flags too
+/name [@who] <new-name>             rename a session
+/task [@who] <what it is on>        set the label beside its name
+/color [@who] <colour>|none         an identity hue — seven named colours, or none to clear
+/team [@who] <name>|none            group a session under a named team, or none to clear
+/quit [@who]                        end one session for good and drop its row (irreversible)
+/adopt                              adopt a claude session this machine already has, from the room
+/manager                            the switch: start one, wake a parked one, or park a running one
+/manager-stop                       end the manager for good (a fresh /manager starts a new one)
+/board                              the fleet as one row per agent; ⇥ tiles it into a live wall; a fleet bigger than the screen scrolls
+/status [@who]                      an agent's own facts — state, ids, model, context, effort, permission mode, team, builds; read-only
+/workflows [@who]                   a Workflow run's phases and agents: filter them, stop the run, or save its script as a command
+/wake-name [<name>]                 rename this fleet; bare says its name
+/wake-help [<filter>]               every key and command Wake has, narrowed as you type; read-only (see below)
+/friends [skip|ollie|bo|puff|none]  the friend on the usage bar; bare opens a picker that previews in the corner
+/groupchat-filter [on|off]          whether a lone @name narrows the room by default (bare reports)
+/clear                              in the room only: empty the group chat in this window (agents untouched)
+/reauth                             recover a fleet knocked out by an expired shared login
+/mcp [@who]                         an agent's MCP servers: status, sign in, reconnect, on/off, tools
+/login                              the auth panel — sign in or check status
+/effort                             pick a reasoning level — bare, no argument
+/model                              pick a model — bare, no argument
 ```
 
 `/new` takes six of the shell verb's flags — `--worktree`, `--add-dir`, `--debug-file`, `--debug`,
@@ -183,8 +183,8 @@ is the form a headless `claude` does nothing with. **With an argument** — `/ef
 opus` — they reach the agent byte for byte like anything else.
 
 `/friends` picks who sits on the session-usage bar — Skip the tug (the default), Ollie the otter, Bo
-the whale, or none — for this machine: the choice is kept in `~/.wake/friends.json`, and a window opened
-later starts with it. In Kitty, Ghostty and cmux the friend is a picture, moving while an agent works;
+the whale, Puff the pufferfish, or none — for this machine: the choice is kept in `~/.wake/friends.json`,
+and a window opened later starts with it. In Kitty, Ghostty and cmux the friend is a picture, moving while an agent works;
 in other terminals, and under tmux or an editor's terminal, it is a small block drawing in the same cells.
 `WAKE_FRIEND_ART=blocks` asks for the block drawing anywhere.
 

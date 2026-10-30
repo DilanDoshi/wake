@@ -5904,6 +5904,6 @@ The friend on the usage bar (decisions.md, 2026-10-27) shipped without three thi
   by the owner (2026-10-27): it multiplies the art by the moods, each to be reviewed. *Closes with:* a frame set
   per mood, chosen off the reading's `Warned`, `Limited` and `Lapsed`, which `usageRows` already reads.
 - **`/friends`' argument does not complete.** The menu is the way to find the cast, and an unknown word names it.
-  *Closes with:* an argument stem like `teamArgStem` offering the four words.
+  *Closes with:* an argument stem like `teamArgStem` offering the cast's words and none.
 - **No image through tmux or screen.** A friend there is the half-block sprite, since the terminal outside is
   unknown. *Closes with:* tmux's `allow-passthrough` and its DCS wrapping, with the outer terminal named.

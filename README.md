@@ -144,7 +144,7 @@ and draws it as `↻ resumed after the usage limit`, never as your words. A turn
 lost connection, a machine asleep mid-reply) is resumed the same way once another agent's turn goes through or
 the network changes, drawn `↻ resumed after the connection came back`. Once an agent reports it, the account's
 five-hour session usage is a bar under the roster (`session · ↻ 4:09pm`), and a friend sits on it — Skip the
-tug, Ollie the otter or Bo the whale; `/friends` picks one, or none, for this machine. A table too narrow for its pane is
+tug, Ollie the otter, Bo the whale or Puff the pufferfish; `/friends` picks one, or none, for this machine. A table too narrow for its pane is
 drawn as records, `Header: value` a line, as Claude Code draws one. A conversation showing a question card
 scrolls as one page under the wheel. A SIGTERM or SIGINT to the daemon parks the fleet as `⌃Q⌃Q` does, and a
 fleet whose daemon crashed is parked by the next one, so `/resume` brings its agents back. A `!cmd` typed in a

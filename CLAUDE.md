@@ -102,13 +102,13 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   nothing enters the agent's context. Any key closes it; a card in its pane comes first.
   `@manager /status` in the room is a message to the manager, as every `@manager /cmd` is.
   `internal/ui/statuscmd.go`.
-- **`/friends`** picks who sits on the usage bar (owner's 2026-10-27 picks): Skip (the default), Ollie, Bo
-  or none, 9×5 cells at the sidebar's right edge, standing on the bar's rule (alone in the corner before the
-  first reading). Bare, it is a Picker over the composer whose cursor previews in the corner; `/friends <name>`
+- **`/friends`** picks who sits on the usage bar (owner's 2026-10-27 and 2026-10-29 picks): Skip (the default),
+  Ollie, Bo, Puff or none, 9×5 cells at the sidebar's right edge, standing on the bar's rule (alone in the corner
+  before the first reading). Bare, it is a Picker over the composer whose cursor previews in the corner; `/friends <name>`
   sets one. The choice is the machine's (`~/.wake/friends.json`, read when a window opens). A terminal whose
   `TERM` is Kitty's or Ghostty's, or cmux, draws a picture; every other terminal, a multiplexer, an editor's
   terminal and `WAKE_FRIEND_ART=blocks` draw a hand-drawn half-block sprite in the same cells. Original art drawn for Wake. `internal/ui/friends.go`, `friendsmenu.go`, `kittyplace.go`,
-  `cmd/wake/friends.go`, `decisions.md` (2026-10-27).
+  `cmd/wake/friends.go`, `decisions.md` (2026-10-27, 2026-10-29).
 - **`/wake-help [filter]`** (owner's 2026-10-27 ask) is a pane view like `/workflows`' that lists every key,
   every command and the addressing forms, and `wake help`'s own text last; it is derived, never copied. A key is
   a `legendEntries` entry (each carries a `help` line), a surface that reads keys before the composer is a
@@ -541,7 +541,7 @@ yet says so in bold.**
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
-| Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
+| Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go`/`_puff.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
