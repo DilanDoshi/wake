@@ -75,8 +75,10 @@ func sentOf(ev core.Event) *core.PeerSend {
 	return ev.Tool.Send
 }
 
-// delivered reports whether text is the delivery receipt of a send to s.To, the one
-// shape recorded (manager-relay.jsonl): `“summary” → <recipient> (…)`.
+// delivered reports whether text is the delivery receipt of a send to s.To, in the
+// shape its address form gets: `“summary” → <name> (…)` for a name
+// (manager-relay.jsonl), `“summary” → uds:<socket>; …` for a socket
+// (send-by-address.jsonl).
 func delivered(s *core.PeerSend, text string) bool {
-	return s != nil && strings.Contains(text, sentArrow+s.To+" (")
+	return s != nil && (strings.Contains(text, sentArrow+s.To+" (") || strings.Contains(text, sentArrow+s.To+"; "))
 }

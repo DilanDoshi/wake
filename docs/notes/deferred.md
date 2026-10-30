@@ -5907,3 +5907,17 @@ The friend on the usage bar (decisions.md, 2026-10-27) shipped without three thi
   *Closes with:* an argument stem like `teamArgStem` offering the cast's words and none.
 - **No image through tmux or screen.** A friend there is the half-block sprite, since the terminal outside is
   unknown. *Closes with:* tmux's `allow-passthrough` and its DCS wrapping, with the outer terminal named.
+
+## FROM `fix/send-drawn-twice`, 2026-10-29
+
+A send by address is named from Claude Code's session registry (decisions.md, 2026-10-29); two things it leaves.
+
+- **A reopened conversation draws a send by address as the address.** History is not resolved through today's
+  registry, by wake-orch's ruling: a PID can be reused, so an old send to `uds:/tmp/cc-socks/<pid>.sock` could take
+  the name of whichever session holds that socket now - a false statement where the raw path is merely unfriendly.
+  *Closes with:* resolving a history send only through a record whose session began before the send was made (the
+  record's `startedAt` against the event's `At`), which is the one check that says the socket was that session's
+  when it was written to; or wake-orch's narrower form, a current fleet agent whose conversation began first.
+- **A bare name is still the room's `ByName`, not the registry's.** So the 2026-10-16 entry above - a send by a
+  claude name that lags Wake's, drawn twice - stays open. *Closes with:* the daemon resolving a bare name through
+  the registry too, which costs a directory read on every send rather than every send by address.

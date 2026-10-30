@@ -1292,6 +1292,23 @@ is the key a typed answer is left by on the way to another question.
 takes a kept answer away; on a multi-select question the cursor lands on the walk-on row, so a second `↵` walks
 on rather than unticking the words. The refusal's reason belongs to no question, so `esc` there still drops it.
 
+## BUG-57 — one message between two fleet agents was drawn twice in the room
+
+**Found 2026-10-29 by the owner**: `↪ wake-imp-puffer → uds:/tmp/cc-socks/73009.sock ✅` and `↪ wake-imp-puffer →
+wake-orch ✅` for one SendMessage. The sender's transcript holds a single call, `to` the socket; PID 73009 was
+wake-orch's claude.
+
+**Cause.** An agent replying to a cross-session message copies its `from`, a `uds:` socket address, as its `to`.
+`withSend` draws a send unless `ByName(to)` finds a fleet agent, and an address is no name, so the call drew as a
+send outside the fleet - and the receiver, a fleet agent, drew its replayed envelope as well. A `name [ref]` address
+did the same, and a conversation headed the send with the raw path and showed its receipt, whose shape for a
+socket was not the recorded one.
+
+**Fix:** branch `fix/send-drawn-twice`. The daemon names the session behind an address from Claude Code's session
+registry (`daemon/sendto.go`, `decisions.md` 2026-10-29); the room leaves a fleet recipient to its own stream and
+heads any other send with the registry's name; a conversation heads its sends the same way and hides the socket
+form's receipt too.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
