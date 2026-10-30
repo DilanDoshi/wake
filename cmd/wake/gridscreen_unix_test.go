@@ -26,7 +26,13 @@ import (
 // case below starts.
 func gridScreen(t *testing.T, cols, rows int) (*screen, []string) {
 	t.Helper()
-	withScriptedAgent(t, "")
+	return scriptedGridScreen(t, "", cols, rows)
+}
+
+// scriptedGridScreen is gridScreen with both agents running script.
+func scriptedGridScreen(t *testing.T, script string, cols, rows int) (*screen, []string) {
+	t.Helper()
+	withScriptedAgent(t, script)
 	t.Setenv("WAKE_SOCKET", tempSocket(t))
 
 	s := startWakeInAConversation(t, cols, rows)

@@ -254,6 +254,8 @@ func runFakeAgent() int {
 		return fakeAgentCodeStream(sid, "\t")
 	case scriptCodeStreamSpaces:
 		return fakeAgentCodeStream(sid, "    ")
+	case scriptSends:
+		return fakeAgentSends(sid)
 	}
 	return fakeAgentEcho(sid)
 }
