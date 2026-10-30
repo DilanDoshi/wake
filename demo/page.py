@@ -18,7 +18,16 @@ import os
 import subprocess
 import sys
 
-from pagecopy import ALSO, META, SHOTS, Shot
+from pagecopy import (
+    ALSO,
+    FRIENDS,
+    FRIENDS_HEADING,
+    FRIENDS_PROSE,
+    META,
+    SHOTS,
+    Friend,
+    Shot,
+)
 
 HERE = os.path.dirname(os.path.abspath(__file__))
 OUT = os.path.join(HERE, ".work", "out")
@@ -47,24 +56,25 @@ def run(args: list[str]) -> None:
     subprocess.run(args, check=True)
 
 
-def encode(shot: Shot, media: str) -> int:
-    """One clip and its poster frame. Terminal video is mostly static, so it
-    survives a low bitrate far better than camera footage would."""
-    src = os.path.join(OUT, shot.clip + ".mp4")
-    dst = os.path.join(media, shot.clip + ".mp4")
+def encode(clip: str, start: float, dur: float, media: str, crop: str = "") -> int:
+    """One clip and its poster frame, at the size it was filmed: a smaller copy
+    is what a retina screen then blurs. Terminal video is mostly static, so it
+    survives a low bitrate far better than camera footage would. crop, ffmpeg's
+    w:h:x:y, cuts the friends' band out of the frame."""
+    src = os.path.join(OUT, clip + ".mp4")
+    dst = os.path.join(media, clip + ".mp4")
     run(
         [
             "ffmpeg",
             "-v",
             "error",
             "-ss",
-            str(shot.start),
+            str(start),
             "-t",
-            str(shot.dur),
+            str(dur),
             "-i",
             src,
-            "-vf",
-            "scale=1920:-2",
+            *(["-vf", "crop=" + crop] if crop else []),
             "-an",
             "-c:v",
             "libx264",
@@ -80,14 +90,14 @@ def encode(shot: Shot, media: str) -> int:
             dst,
         ]
     )
-    poster = os.path.join(media, shot.clip + ".jpg")
+    poster = os.path.join(media, clip + ".jpg")
     run(
         [
             "ffmpeg",
             "-v",
             "error",
             "-ss",
-            str(shot.dur * 0.6),
+            str(dur * 0.6),
             "-i",
             dst,
             "-frames:v",
@@ -115,6 +125,29 @@ def shot_section(shot: Shot) -> str:
         </div>
         <figcaption>Recorded from the running binary — real daemon, real room, real protocol. Click to enlarge.</figcaption>
       </figure>
+    </section>"""
+
+
+def friend_figure(friend: Friend) -> str:
+    width, height = friend.crop.split(":")[:2]
+    return f"""
+      <figure>
+        <div class="screen">
+          <video muted loop playsinline preload="none" poster="media/{friend.clip}.jpg" style="aspect-ratio:{width}/{height}">
+            <source src="media/{friend.clip}.mp4" type="video/mp4">
+          </video>
+        </div>
+        <figcaption>{friend.caption}</figcaption>
+      </figure>"""
+
+
+def friends_section() -> str:
+    clips = "".join(friend_figure(f) for f in FRIENDS)
+    return f"""
+    <section id="friends">
+      <div class="attr"><span class="glyph">·</span>friends <span class="lbl">&lt;&gt; on the usage bar</span></div>
+      <h2>{FRIENDS_HEADING}</h2>
+      <p>{FRIENDS_PROSE}</p>{clips}
     </section>"""
 
 
@@ -208,11 +241,11 @@ def hero() -> str:
   <div class="wrap">
     <h1 class="mark">Wake</h1>
     <p class="thesis">A terminal for running a fleet of Claude&nbsp;Code sessions.</p>
-    <p class="sub">Fifteen to thirty agents is not fifteen to thirty terminal tabs. Wake turns the
-      fleet into a room: one group chat as the primary surface, <code>@name</code> to reach one,
-      <code>@team</code> to reach a group, a roster that ranks agents by whether they need you and
-      marks the ones that are done, and any agent openable as a full conversation at
-      Claude&nbsp;Code fidelity. Currently in beta; the V1 release is coming soon.</p>
+    <p class="sub">Fifty agents is not fifty terminal tabs. Wake turns the fleet into a room:
+      one group chat as the primary surface, <code>@name</code> to reach one, <code>@team</code> to
+      reach a group, team channels that show one team's messages, a manager that acts on the fleet
+      for you, a roster that ranks agents by whether they need you and marks the ones that are done,
+      and any agent openable as a full conversation at Claude&nbsp;Code fidelity. Wake V1 is out.</p>
     <div class="meta">
       <a class="pill" href="{LATEST}"><b>Download</b> — latest release&nbsp;→</a>
       <span class="pill req"><b>requires Claude&nbsp;Code</b> — installed and signed in</span>
@@ -236,15 +269,16 @@ def subhead(eyebrow: str, title: str, sub: str, extra: str = "") -> str:
 
 
 def more_section() -> str:
-    count = len(SHOTS)
+    count = len(SHOTS) + len(FRIENDS)
     return f"""
   <section>
     <div class="attr"><span class="glyph">·</span>there's more <span class="lbl">&lt;&gt; {count} recordings in all</span></div>
     <h2>Everything else Wake does.</h2>
     <div class="cta">
       <a class="card" href="features.html"><h3>Features →</h3>
-        <p>Every recording, including the board, the manager, workflows and leaving — and the
-           smaller things that landed with no clip of their own.</p></a>
+        <p>Every recording, including narrowing the room, done marks, questions, <code>!cmd</code>,
+           <code>/wake-help</code> and workflows — and the smaller things that landed with no clip
+           of their own.</p></a>
       <a class="card" href="releases.html"><h3>Releases →</h3>
         <p>What changed in each version, newest first, straight from the release notes.</p></a>
     </div>
@@ -272,14 +306,16 @@ def requirements_section() -> str:
             "Install",
             f'<code>{INSTALL}</code> installs the <a href="{LATEST}">latest release</a> for macOS or '
             "Linux and puts <code>wake</code> on your <code>PATH</code>; <code>wake upgrade</code> keeps "
-            "it current. Run it in a project and a daemon, the manager and the room appear.",
+            "it current. Run <code>wake</code> in a project: a daemon starts and the room opens "
+            "with the manager alone — ask it for agents, or start one with <code>/new</code>.",
         )
     }{
         note(
             "Any terminal",
             "Wake is not a multiplexer and asks nothing of the terminal but a tty. "
             "<code>wake setup-terminal</code> teaches Ghostty, Kitty and Alacritty to send "
-            "<code>⇧↵</code> as a newline, which is the one thing they cannot do unaided.",
+            "<code>⇧↵</code> as a newline and <code>⌘←</code>/<code>⌘→</code> as line start and "
+            "end, which they cannot do unaided.",
         )
     }
     </div>
@@ -312,7 +348,7 @@ def built_section() -> str:
     }{
         note(
             "One airlock",
-            "Exactly five files are allowed to know Claude's JSON. Everything above them sees Wake's "
+            "Exactly eight files are allowed to know Claude's JSON. Everything above them sees Wake's "
             "own event type, and a test holds the file set so another cannot be added quietly.",
         )
     }{
@@ -433,11 +469,15 @@ def main() -> None:
     os.makedirs(media, exist_ok=True)
     total = 0
     for shot in SHOTS:
-        size = encode(shot, media)
+        size = encode(shot.clip, shot.start, shot.dur, media)
         total += size
         print("  %-18s %7.1f KB" % (shot.clip, size / 1024))
+    for friend in FRIENDS:
+        size = encode(friend.clip, friend.start, friend.dur, media, friend.crop)
+        total += size
+        print("  %-18s %7.1f KB" % (friend.clip, size / 1024))
 
-    home = "".join(shot_section(s) for s in SHOTS if s.home)
+    home = "".join(shot_section(s) for s in SHOTS if s.home) + friends_section()
     write(
         os.path.join(dest, "index.html"),
         page(
@@ -459,7 +499,7 @@ def main() -> None:
                 "Each clip is the real <code>wake</code> binary in a real terminal, driving a "
                 "scripted fleet. Click one to watch it full screen.",
             )
-            + f'<main class="wrap">{every}{also_section()}</main>',
+            + f'<main class="wrap">{every}{friends_section()}{also_section()}</main>',
         ),
     )
     write_releases(dest, rels)
@@ -467,7 +507,7 @@ def main() -> None:
 
     print(
         "\nsite: %s — %d beats, %.1f MB of media, %d releases"
-        % (dest, len(SHOTS), total / 1e6, len(rels))
+        % (dest, len(SHOTS) + len(FRIENDS), total / 1e6, len(rels))
     )
 
 
@@ -610,7 +650,7 @@ footer a:hover,footer a:focus-visible,.note a:hover,.note a:focus-visible{border
 """
 
 JS = """
-// Play a clip only while it is on screen: a dozen terminal recordings all
+// Play a clip only while it is on screen: a page of terminal recordings all
 // decoding at once is real work on a laptop. preload="none" means a clip is not
 // fetched at all until it is first scrolled to.
 const vids = [...document.querySelectorAll('video')];

@@ -36,6 +36,7 @@
         { "after": 0.9, "text": "Nothing for me — the counter is server side. I'll surface it on the usage panel once maya's emitting it." }
       ]
     },
+    {"match": "statuses.sh", "tokens": 1300, "steps": [{"after": 1.4, "text": "429 is the gap the check found: `messageFor` has no case for it, so a rate limit shows the raw message and reads like an outage."}, {"after": 1.0, "tool": {"name": "Edit", "input": {"file_path": "web/errors.ts", "old_string": "    case 500:", "new_string": "    case 429:\n      return `Rate limit reached. Try again in ${err.retryAfter ?? 60}s.`\n    case 500:"}, "result": "The file web/errors.ts has been updated.", "takes": 1.2}}, {"after": 1.2, "text": "Added: a 429 now says when to come back, from `Retry-After`. 401 and 500 already had theirs."}]},
     {"match": "503", "tokens": 1400, "steps": [{"after": 2.0, "text": "Same shape for 503 — the gateway sends `Retry-After` when it sheds load too."}, {"after": 1.4, "tool": {"name": "Edit", "input": {"file_path": "web/errors.ts", "old_string": "case 429: {", "new_string": "case 429:\ncase 503: {"}, "result": "The file web/errors.ts has been updated.", "takes": 1.6}}, {"after": 1.8, "text": "Done — both now say when to come back."}]}
   ],
   "default": {
