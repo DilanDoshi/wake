@@ -46,8 +46,12 @@ shot() { # shot <clip> <start> <dur> <caption|-> <cap-in> <output>
       -filter_complex "[0:v]scale=1920:1056,pad=1920:1080:0:12:color=$GROUND,setsar=1,format=yuv420p[v]" \
       -map "[v]" -r $FPS -c:v libx264 -crf 18 -y "$dst"
   else
+    # The band is drawn at the size the cards were rendered (captions.py), which
+    # need not be the size the beat was filmed at; the clip meets it there.
+    local card
+    card=$(ffprobe -v error -show_entries stream=width,height -of csv=p=0:s=x "$cards/cap-$cap.png")
     ffmpeg -v error -ss "$start" -t "$dur" -i "$clip" -loop 1 -i "$cards/cap-$cap.png" \
-      -filter_complex "[0:v][1:v]overlay=0:0:enable='gte(t,$capin)'[o];[o]scale=1920:1056,pad=1920:1080:0:12:color=$GROUND,setsar=1,format=yuv420p[v]" \
+      -filter_complex "[0:v]scale=s=${card}[c];[c][1:v]overlay=0:0:enable='gte(t,$capin)'[o];[o]scale=1920:1056,pad=1920:1080:0:12:color=$GROUND,setsar=1,format=yuv420p[v]" \
       -map "[v]" -t "$dur" -r $FPS -c:v libx264 -crf 18 -y "$dst"
   fi
 }

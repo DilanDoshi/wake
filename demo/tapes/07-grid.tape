@@ -1,32 +1,36 @@
-# BEAT 7 — the grid. ^Y opens a conversation in a new column, ^B stacks one
-# under the focused pane, ^W closes it. The room is column zero and stays.
-#
-# The roster moves on ⇧↑↓, which VHS has no spelling for — so a second agent is
-# picked off the board, whose cursor is plain ↑↓ and whose ^Y/^B place the
-# cursored row with the room's own keys. ⇥ walks the chat ring, which moves the
-# keys just as visibly for a beat about layout.
+# BEAT 7 — mention one, open one. `@priya` reaches priya alone and her answer
+# comes back into the room; the roster's cursor (⇧↓, sent as Ctrl+G through
+# shiftkeys.py) and ↵ open her conversation, which is Claude Code's. Then the
+# grid: ^Y opens a conversation in a new column, ^B stacks one under the
+# focused pane, ^W closes it. The room is column zero and stays. A second agent
+# is picked off the board, whose ^Y/^B place the cursored row with the room's
+# own keys, and ⇥ walks the chat ring.
 Output .work/out/07-grid.mp4
 Source .work/head.tape
 Hide
 Source .work/stage.tape
-Type "@all we're adding per-key rate limiting to the gateway. maya take the middleware, omar the 429 state in the client, priya a --rate-limit flag, luca the changelog."
-Enter
-Sleep 12s
-Ctrl+X
-Sleep 3s
-Type "a"
-Sleep 500ms
-Enter
-Sleep 5s
 Show
 Sleep 1500ms
+Type "@priya does --rate-limit take a number or a plan name?"
+Sleep 700ms
+Enter
+Sleep 6s
+
+# Down the roster to priya, and open her conversation.
+Ctrl+G
+Sleep 500ms
+Ctrl+G
+Sleep 500ms
+Ctrl+G
+Sleep 900ms
+Enter
+Sleep 3500ms
 
 # The session's own commands, advertised on its init frame — not Wake's guesses.
 Type "/co"
 Sleep 3s
 Backspace 3
 Sleep 800ms
-
 Type "/board"
 Enter
 Sleep 2s
@@ -34,7 +38,6 @@ Down
 Sleep 800ms
 Ctrl+Y
 Sleep 3500ms
-
 Type "/board"
 Enter
 Sleep 2s
@@ -44,7 +47,6 @@ Down
 Sleep 800ms
 Ctrl+B
 Sleep 3500ms
-
 Tab
 Sleep 1200ms
 Tab

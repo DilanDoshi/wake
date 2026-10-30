@@ -6,6 +6,11 @@
       { "after": 1.1, "text": "Changelog entry drafted. I'll hold the limits page until the header names are settled — documenting `Retry-After` before it ships is how docs start lying." },
       { "after": 1.0, "tool": { "name": "Edit", "input": { "file_path": "docs/CHANGELOG.md" }, "result": "Applied 1 edit to docs/CHANGELOG.md", "takes": 0.6 } }
     ] }
+    ,{ "match": "publish", "tokens": 760, "steps": [
+      { "after": 1.0, "text": "Publishing the limits page: it writes `docs/limits.md`, which the site builds from, so it needs your OK." },
+      { "after": 0.8, "ask": { "tool": "Write", "input": { "file_path": "docs/limits.md", "content": "# Rate limits\n\nEvery key is held to its plan's ceiling, per minute.\nA request past it gets a 429 with `Retry-After`, in seconds.\n" } } },
+      { "after": 0.6, "text": "Published. The page names `Retry-After` exactly as the gateway sends it." }
+    ] }
   ],
   "default": { "tokens": 280, "steps": [ { "after": 0.8, "text": "Will fold that into the release notes." } ] }
 }

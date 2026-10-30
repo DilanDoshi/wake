@@ -7,7 +7,13 @@ Enter
 Sleep 14s
 Show
 Sleep 1500ms
-# ⌃F forks the roster's pick. The roster moves on ⇧↑↓, which VHS cannot send,
-# so the pick is whoever attention ranks first — fine for a beat about forking.
+# ⌃F forks the roster's pick - maya, where its cursor starts - and the fork
+# opens beside her with her history so far.
 Ctrl+F
+Sleep 5s
+
+# The fork takes another approach; maya's own conversation is untouched.
+Type "try a sliding window instead of the token bucket"
+Sleep 700ms
+Enter
 Sleep 8s
