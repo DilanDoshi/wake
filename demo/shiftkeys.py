@@ -69,6 +69,9 @@ def main() -> int:
         os.execvp(sys.argv[1], sys.argv[1:])
     resize(fd)
     signal.signal(signal.SIGWINCH, lambda *_: resize(fd))
+    # Ended from outside, it still puts the terminal back on the way out.
+    for sig in (signal.SIGTERM, signal.SIGHUP):
+        signal.signal(sig, lambda signum, _: sys.exit(128 + signum))
     saved = termios.tcgetattr(sys.stdin.fileno())
     tty.setraw(sys.stdin.fileno())
     try:

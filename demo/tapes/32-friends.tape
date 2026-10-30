@@ -22,6 +22,8 @@ Down
 Sleep 2000ms
 Down
 Sleep 2000ms
+Down
+Sleep 2000ms
 Up
 Sleep 1500ms
 Enter

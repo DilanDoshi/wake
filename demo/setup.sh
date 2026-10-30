@@ -61,7 +61,7 @@ export WAKE_SOCKET="$sock"
 export WAKE_DEMO_SCENARIOS="$here/scenarios"
 export HARBOR="$harbor"
 export PS1="%F{244}harbor%f %F{209}\$%f "
-export WAKE_FRIEND_ART=blocks COLORTERM=truecolor WAKE_NO_UPDATE_CHECK=1
+export WAKE_FRIEND_ART=blocks COLORTERM=truecolor
 for v in \$(env | sed -n 's/^\\(CMUX[A-Za-z0-9_]*\\)=.*/\\1/p'); do unset "\$v"; done
 unset TERM_PROGRAM TERM_PROGRAM_VERSION GHOSTTY_RESOURCES_DIR GHOSTTY_SURFACE_ID GHOSTTY_BIN GHOSTTY_SHELL_FEATURES KITTY_WINDOW_ID WEZTERM_PANE TMUX STY
 wake() { "$here/shiftkeys.py" wake "\$@"; }
@@ -84,8 +84,9 @@ cat > "$work/stage.tape" <<EOF
 Set TypingSpeed 8ms
 
 # A socket and a friend pick per take, the socket in .work/take-socket for
-# record.sh to end; its directory names the manager, manager-harbor.
-Type "source ./.work/env.sh && take=\$(mktemp -d /tmp/wake-take.XXXXXX) && mkdir \$take/harbor && export WAKE_SOCKET=\$take/harbor/wake.sock WAKE_FRIENDS_FILE=\$take/friends.json && echo \$WAKE_SOCKET > ./.work/take-socket && cd \$HARBOR/api && clear || exit 1"
+# record.sh to end; its directory names the manager, manager-harbor. No update
+# check here, so no take shows an upgrade cue (28-update-marker wants one).
+Type "source ./.work/env.sh && take=\$(mktemp -d /tmp/wake-take.XXXXXX) && mkdir \$take/harbor && export WAKE_SOCKET=\$take/harbor/wake.sock WAKE_FRIENDS_FILE=\$take/friends.json WAKE_NO_UPDATE_CHECK=1 && echo \$WAKE_SOCKET > ./.work/take-socket && cd \$HARBOR/api && clear || exit 1"
 Enter
 Sleep 2s
 

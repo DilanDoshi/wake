@@ -1292,6 +1292,24 @@ is the key a typed answer is left by on the way to another question.
 takes a kept answer away; on a multi-select question the cursor lands on the walk-on row, so a second `↵` walks
 on rather than unticking the words. The refusal's reason belongs to no question, so `esc` there still drops it.
 
+## BUG-57 — a fork's pane opened without the conversation it inherited
+
+**Seen 2026-10-29 with the demo's stand-in `claude`, not yet reproduced with a real one.** Filming the
+landing site's fork clip (`demo/tapes/08-fork.tape`): `⌃F` on maya opened the fork's pane with its
+banner and the snapshot notice (`@juno is a fork of @maya…`), but none of maya's conversation, though
+the fork's transcript on disk held all of it - the stand-in copies its parent's records under the
+same uuids, chained by `parentUuid`, as `testdata/transcript/fork-child.jsonl` shows claude doing.
+
+**Ruled out:** the stand-in's opening line. It spoke one as soon as the fork started, which
+`historyArrived` rightly drops a disk read for (anything live since the ask). It now says nothing on
+`--resume` until spoken to, as claude does, and the pane still opened empty, so something else
+arrives between the fork pane's history ask and its reply.
+
+**Not checked:** which frame that is (the `/model` probe's reply is absorbed at `fanOut`; `init` and a
+status report are candidates), and whether a real `claude --fork-session` hits it. The drop forgets
+the ask, so reopening the pane in a new window would read the history; nothing in one window asks
+again.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

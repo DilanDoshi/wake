@@ -168,10 +168,11 @@ SHOTS = [
         "juno",
         "fork of maya",
         "Branch a conversation. Keep both.",
-        "<code>⌃F</code> forks an agent: a new session with the same history so "
-        "far, working beside the original — a second approach without losing the "
-        "first. A fork is a snapshot made with Claude's own fork, the one way to "
-        "branch that never leaves two processes writing one conversation, and "
+        "<code>⌃F</code> forks an agent: a new session that carries the conversation "
+        "so far and works beside the original — a second approach without losing "
+        "the first, and Wake says so as it opens: nothing the original does next "
+        "reaches it. A fork is a snapshot made with Claude's own fork, the one way "
+        "to branch that never leaves two processes writing one conversation, and "
         "<code>wake import</code> adopts a session you started by hand the same "
         "way.",
         True,
@@ -308,7 +309,8 @@ FRIENDS_HEADING = "A friend on the usage bar."
 FRIENDS_PROSE = (
     "Under the roster sits the account's five-hour session usage — what Claude "
     "Code's <code>/usage</code> calls Current session — and a friend stands on it: "
-    "Skip the tug, Ollie the otter, or Bo the whale. <code>/friends</code> opens a "
+    "Skip the tug, Ollie the otter, Bo the whale or Puff the pufferfish. "
+    "<code>/friends</code> opens a "
     "picker whose cursor previews each one in the corner, and <code>↵</code> keeps "
     "it for this machine, or none. In Kitty, Ghostty and cmux the friend is a picture "
     "that moves while an agent works, on the same heartbeat as the working line, so "
@@ -318,7 +320,7 @@ FRIENDS = [
     Friend(
         "32-friends",
         1.0,
-        14,
+        16.5,
         "3200:440:0:1300",
         "<code>/friends</code>, its cursor previewing each friend in the corner. Filmed "
         "in a terminal without Kitty graphics, so these are the hand-drawn block sprites "
