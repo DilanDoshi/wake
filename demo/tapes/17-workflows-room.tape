@@ -12,12 +12,12 @@ Enter
 Sleep 7s
 Ctrl+W
 Sleep 1s
-Type "/new juno in /tmp/tally"
+Type "/new juno in ~/tally"
 Enter
 Sleep 6s
 Escape
 Sleep 500ms
-Type "/new otto in /tmp/tally"
+Type "/new otto in ~/tally"
 Enter
 Sleep 6s
 Escape
