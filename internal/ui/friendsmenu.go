@@ -66,7 +66,7 @@ func (a App) chooseFriend(key string) (App, tea.Cmd) {
 	}
 }
 
-// friendsList is the words /friends takes, as a sentence: "skip, ollie, bo or none".
+// friendsList is the words /friends takes, as a sentence: "skip, ollie, bo, puff or none".
 func friendsList() string {
 	opts := friendOptions()
 	return strings.Join(opts[:len(opts)-1], ", ") + " or " + opts[len(opts)-1]

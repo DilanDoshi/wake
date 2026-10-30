@@ -1,10 +1,10 @@
 package ui
 
-// The friends: a small character sitting on the session-usage bar, Skip, Ollie
-// or Bo, chosen for the machine with /friends (owner's 2026-10-27 picks;
-// decisions.md). In Kitty and Ghostty a friend is an image (kittyplace.go);
-// everywhere else it is a hand-drawn half-block sprite in the same cells, so
-// the roster's height never depends on the terminal.
+// The friends: a small character sitting on the session-usage bar, Skip, Ollie,
+// Bo or Puff, chosen for the machine with /friends (owner's 2026-10-27 and
+// 2026-10-29 picks; decisions.md). In Kitty and Ghostty a friend is an image
+// (kittyplace.go); everywhere else it is a hand-drawn half-block sprite in the
+// same cells, so the roster's height never depends on the terminal.
 
 import (
 	"slices"
@@ -54,18 +54,23 @@ var cast = []friend{
 	{"skip", "Skip", "the tug that leaves a wake", skipArt},
 	{"ollie", "Ollie", "an otter afloat, coffee in paw", ollieArt},
 	{"bo", "Bo", "a baby whale whose spout puffs", boArt},
+	{"puff", "Puff", "a pufferfish puffed round as a ball", puffArt},
 }
 
 // friendPalette is every colour a friend is drawn in, one letter a colour, and
 // clearPixel is a pixel that is not drawn. They are Wake's own choices, not
 // Claude's, so claude-palette.json does not hold them; the grids are in
-// friendsart_skip.go, friendsart_ollie.go and friendsart_bo.go.
+// friendsart_skip.go, friendsart_ollie.go, friendsart_bo.go and friendsart_puff.go.
 var friendPalette = map[byte]string{
 	'A': "#5a331c",          // coffee in shade
 	'a': "#7a4a2b",          // coffee
 	'b': "#f0a28c",          // blush
 	'C': "#e2cfa8",          // Skip's roof
 	'c': "#f6e7c9",          // Skip's wheelhouse
+	'd': "#b8812f",          // Puff's spikes
+	'e': "#fdf3d6",          // Puff's belly
+	'F': "#c96f2c",          // Puff's fins in shade
+	'f': "#f39c4f",          // Puff's fins
 	'G': "#f0d2a8",          // Ollie's muzzle
 	'H': "#c78c5c",          // Ollie's fur shine
 	'h': AccentShimmer.Dark, // Skip's hull shine
@@ -73,7 +78,10 @@ var friendPalette = map[byte]string{
 	'j': "#3a2418",          // Ollie's nose
 	'k': "#2a1a12",          // ink: outlines, eyes
 	'L': "#e6e6ec",          // smoke and steam
+	'l': "#fde7a6",          // Puff's shine
 	'm': "#5a6ad8",          // Skip's windows
+	'N': "#a83a55",          // Puff's open mouth
+	'n': "#e6738a",          // Puff's lips
 	'O': "#b1583a",          // Skip's hull in shade
 	'o': Accent.Dark,        // Skip's hull
 	'P': "#7f88d4",          // water in shade
@@ -87,6 +95,8 @@ var friendPalette = map[byte]string{
 	'u': "#8fa7f0",          // Bo's body
 	'v': "#d3dcff",          // a window's glint, Bo's belly and spout
 	'w': "#ffffff",          // white: catchlights, crests, whiskers
+	'Y': "#d39e40",          // Puff's body in shade
+	'y': "#f4c95d",          // Puff's body
 }
 
 // Friends is cmd/wake's half of the corner: the friend this machine keeps,
