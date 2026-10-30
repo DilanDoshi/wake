@@ -102,6 +102,9 @@ def encode(clip: str, start: float, dur: float, media: str, crop: str = "") -> i
             dst,
             "-frames:v",
             "1",
+            # Only shown until the clip plays, and fetched with the page.
+            "-vf",
+            "scale=1920:-2",
             "-q:v",
             "5",
             "-y",
@@ -361,7 +364,8 @@ def built_section() -> str:
         note(
             "Wake owns almost no state",
             "Claude persists the transcripts; Wake reads one back when a conversation opens. It keeps "
-            "only a roster, a park book, groups and layout — so it can crash and lose nothing.",
+            "only a roster, a park book, groups, layout and the friend you picked — so it can crash "
+            "and lose nothing.",
         )
     }
     </div>

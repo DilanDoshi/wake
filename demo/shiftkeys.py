@@ -5,8 +5,8 @@
 
 VHS cannot send ⇧↑↓: a raw escape it types reaches Wake as a lone ⎋ and then
 text. The roster walks on ⇧↑↓, and a channel is picked there, so a tape that
-needs one runs Wake under this and types Ctrl+G / Ctrl+K, neither of which Wake
-binds. Each shifted arrow is written whole, in one write, so it arrives as one
+needs one runs Wake under this and types Ctrl+G / Ctrl+K, which never reach
+Wake as themselves. Each shifted arrow is written whole, so it arrives as one
 key. Everything else passes through untouched, both ways.
 """
 
@@ -34,26 +34,29 @@ def translate(data: bytes) -> bytes:
     return data
 
 
+def write_all(fd: int, data: bytes) -> None:
+    while data:
+        data = data[os.write(fd, data) :]
+
+
 def relay(fd: int) -> None:
+    """Until either side closes: the child exiting reads as EIO on its side."""
     stdin = sys.stdin.fileno()
-    while True:
-        try:
+    try:
+        while True:
             ready, _, _ = select.select([stdin, fd], [], [])
-        except InterruptedError:
-            continue
-        if stdin in ready:
-            data = os.read(stdin, 4096)
-            if not data:
-                return
-            os.write(fd, translate(data))
-        if fd in ready:
-            try:
+            if stdin in ready:
+                data = os.read(stdin, 4096)
+                if not data:
+                    return
+                write_all(fd, translate(data))
+            if fd in ready:
                 data = os.read(fd, 65536)
-            except OSError:  # the child closed its side
-                return
-            if not data:
-                return
-            os.write(sys.stdout.fileno(), data)
+                if not data:
+                    return
+                write_all(sys.stdout.fileno(), data)
+    except OSError:
+        return
 
 
 def main() -> int:
@@ -73,7 +76,8 @@ def main() -> int:
     finally:
         termios.tcsetattr(sys.stdin.fileno(), termios.TCSADRAIN, saved)
     _, status = os.waitpid(pid, 0)
-    return os.waitstatus_to_exitcode(status)
+    code = os.waitstatus_to_exitcode(status)
+    return code if code >= 0 else 128 - code  # a signal, as a shell reports it
 
 
 if __name__ == "__main__":
