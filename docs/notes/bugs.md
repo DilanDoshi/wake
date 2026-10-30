@@ -1292,6 +1292,21 @@ is the key a typed answer is left by on the way to another question.
 takes a kept answer away; on a multi-select question the cursor lands on the walk-on row, so a second `↵` walks
 on rather than unticking the words. The refusal's reason belongs to no question, so `esc` there still drops it.
 
+## BUG-57 — a fork's pane opened without the conversation it inherited
+
+**Seen 2026-10-29 filming the landing site's fork clip (`demo/tapes/08-fork.tape`), then reproduced with
+a real claude** (2.1.311, haiku, a scratch fleet on `main` 1d9699dc). `⌃F` on an agent opened the fork's
+pane with its banner and the snapshot notice (`@juno is a fork of @maya…`), but none of the parent's
+conversation; the fork had it, and said so on its first answer.
+
+**Cause.** claude writes a fork's transcript only on the fork's first turn, so the `FrameHistory` the pane
+sends as it opens finds no file and comes back empty, and `historyArrived` then records the ask as spent:
+nothing asks again once the file exists. The demo stand-in's opening line, which first looked like the
+cause (a live line outrunning the read, which `historyArrived` drops), was a red herring - silencing it
+changed nothing.
+
+**Fix:** in progress on `fix/fork-pane-shows-history`; that PR closes this entry.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

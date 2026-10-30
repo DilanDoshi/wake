@@ -12,6 +12,10 @@ say.
 `record.sh` counts the fleet a take staged and then **ends it**: the daemon is detached and outlives
 `vhs`, so a bare `vhs tapes/…` leaves it, and its agents, running until `wake stop`.
 
+Every take mints its own socket under `/tmp/wake-take.*`, and every tape is filmed at 3200x1760,
+font 21 (`setup.sh`'s `head.tape`). Larger loses frames on a busy machine and the take plays fast, so
+check a take's length against its script before keeping it.
+
 ## Why the agents are fake
 
 Recording against live Claude would be slow, nondeterministic, billed per take,
@@ -47,6 +51,8 @@ manager that only *drew* those calls would be a lie on camera.
     scenarios/*.json    one per cast member; `_pool.json` is the fallback
     harbor/             the fictional product, copied into a real git repo
     tapes/*.tape        one per beat; `_*.tape` are sourced helpers, never recorded
+    shiftkeys.py        runs `wake` in a pty that turns Ctrl+G/Ctrl+K into ⇧↓/⇧↑, which VHS
+                        cannot send and the roster walks on
     captions.py         title cards and caption bands, in Wake's own palette
     setup.sh            builds .work/ (and generates .work/stage.tape)
     build.sh            trims, captions, stitches, masters

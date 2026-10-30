@@ -109,6 +109,9 @@ ROLE = arg("--name") or os.environ.get("WAKE_DEMO_ROLE", "echo")
 # Claude knows the manager as manager-<fleet>; its script is the manager's in any fleet.
 if ROLE.startswith("manager-"):
     ROLE = "manager"
+# A fork's name is whatever the pool had free, so a fork plays its own script.
+if "--fork-session" in sys.argv:
+    ROLE = "fork"
 
 
 def transcript_path():
@@ -317,6 +320,22 @@ def say_api_error(text, error):
         on_disk = {k: v for k, v in frame.items() if k != "is_api_error_message"}
         on_disk["isApiErrorMessage"] = True
         journal(on_disk)
+
+
+def say_usage(used, resets_in):
+    """The account's five-hour window, as an API response reports it: shaped on
+    testdata/stream/question-multiselect.jsonl. `used` is a fraction, and a
+    scripted one, so no clip shows a real account's figure."""
+    resets = int(time.time()) + int(resets_in)
+    emit({
+        "type": "rate_limit_event",
+        "rate_limit_info": {
+            "status": "allowed", "resetsAt": resets, "rateLimitType": "five_hour",
+            "utilization": used,
+            "unifiedWindows": {"five_hour": {"utilization": used, "resetsAt": resets}},
+        },
+        "uuid": uid(), "session_id": SID,
+    })
 
 
 def say_aborted_result():
@@ -809,8 +828,13 @@ def end_shell(spec, task, tool):
 def user_text(f):
     if f.get("type") != "user":
         return None
+    content = f.get("message", {}).get("content", []) or []
+    # A `!cmd` reaches claude as one string, bash mode's tags around the command
+    # and its output (testdata/input/shell-run.stdin.jsonl), not a list of blocks.
+    if isinstance(content, str):
+        return content
     parts = []
-    for c in f.get("message", {}).get("content", []) or []:
+    for c in content:
         if isinstance(c, dict) and c.get("text"):
             parts.append(c["text"])
     return "".join(parts)
@@ -937,6 +961,9 @@ def run_steps(steps):
         elif "api_error" in step:
             e = step["api_error"]
             say_api_error(e["text"], e.get("error", "authentication_failed"))
+        elif "usage" in step:
+            u = step["usage"]
+            say_usage(u["used"], u.get("resets_in", 10800))
         elif "sleep" in step:
             if not nap(step["sleep"]):
                 return False
@@ -1070,9 +1097,12 @@ def main():
 
     threading.Thread(target=reader, daemon=True).start()
 
-    # The opening turn, so a pane is never empty when it first opens.
+    # The opening turn, so a pane is never empty when it first opens. A resumed
+    # or forked session says nothing until spoken to, as claude does - and a
+    # line it said would outrun the pane's read of what it inherited, which a
+    # pane drops as stale once anything live has arrived.
     opening = sc.get("opening")
-    if opening:
+    if opening and "--resume" not in sys.argv:
         ok = run_steps(opening.get("steps", []))
         finish(ok, opening.get("tokens", 420))
         interrupted.clear()

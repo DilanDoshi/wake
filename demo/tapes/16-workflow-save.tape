@@ -38,7 +38,7 @@ Sleep 800ms
 # A new session, from the room: its init is the first to see the saved file.
 Tab
 Sleep 800ms
-Type "/new rhea in /tmp/tally"
+Type "/new rhea in ~/tally"
 Sleep 400ms
 Enter
 Sleep 6s
