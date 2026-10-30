@@ -38,6 +38,31 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## KNOWN GAP, 2026-10-30 — the site's friends clip shows the half-block sprites, not the pictures
+
+The landing site's `/friends` clip (`demo/tapes/32-friends.tape`, on the home and features pages since
+wake-landing#7) shows Skip, Ollie, Bo and Puff as the half-block sprites
+(`WAKE_FRIEND_ART=blocks`). Those are static, chunky, and not what cmux, Ghostty or Kitty draw. VHS's
+xterm.js has no Kitty graphics, so a VHS take cannot show the sharp, animating pictures.
+
+The owner judged it not worth re-recording on its own (2026-10-30): **fix it the next time the site's
+clips are re-recorded.** The two routes:
+
+- **A real screen capture** of the take in cmux or Ghostty. This needs macOS Screen Recording granted
+  to the terminal. It was refused to agent sessions on 2026-10-27, so it needs the owner. It's the
+  honest route, because the frames are the real binary.
+- **The rebuilt clip PRs #199 and #202 used:** a pty harness running the real binary with
+  `TERM=xterm-ghostty`, its frames composited with the exact PNGs Wake transmits. The kit lived in
+  `/tmp/wake-mascot/rebuild` and `compose.py`; it is volatile, so rebuild it from those PRs' bodies.
+  It must be labelled as rebuilt on the site, because the site says every frame is the real binary.
+
+Keep the stand-in's scripted 47% on any clip that shows the bar. A real account's figure must never
+reach a public page.
+
+*Closes with:* the friends clip showing the pictures, the next time the site is re-recorded.
+
+---
+
 ## KNOWN GAP, 2026-10-24 — a table inside a list item or a quote never draws as records
 
 `feat/narrow-tables` draws a table too narrow for its pane as records

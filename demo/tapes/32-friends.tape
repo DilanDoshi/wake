@@ -3,6 +3,8 @@
 # one. VHS draws no Kitty images, so these are the half-block sprites
 # (WAKE_FRIEND_ART=blocks, setup.sh's env.sh), which do not animate. page.py
 # cuts the window's bottom out of the frame (pagecopy.FRIENDS).
+# On the next re-record, show the real pictures instead: see docs/notes/deferred.md,
+# "the site's friends clip shows the half-block sprites".
 Output .work/out/32-friends.mp4
 Source .work/head.tape
 # Fewer captures keep the take true to time on a loaded machine; a menu that
