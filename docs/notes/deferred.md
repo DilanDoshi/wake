@@ -5907,3 +5907,27 @@ The friend on the usage bar (decisions.md, 2026-10-27) shipped without three thi
   *Closes with:* an argument stem like `teamArgStem` offering the cast's words and none.
 - **No image through tmux or screen.** A friend there is the half-block sprite, since the terminal outside is
   unknown. *Closes with:* tmux's `allow-passthrough` and its DCS wrapping, with the outer terminal named.
+
+## FROM `fix/fork-pane-shows-history`, 2026-10-29
+
+A fork's pane now opens on the conversation it was taken from, read from the source's transcript as
+long as it was at the fork, until the fork's first turn writes a transcript of its own (claude writes it
+only then; `docs/superpowers/notes/2026-10-29-fork-transcript-findings.md`). The length rides on the
+agent beside `forkFrom`, in memory only.
+
+- **Not persisted, and decided so.** The park book holds no lineage (2026-08-10 ruling), and a restart
+  would have nothing to use it for: a fork parked before its first turn has no transcript, claude refuses
+  `--resume` of an id with none, and `parkedStatuses` already leaves it out of `/resume`. The wake carry
+  of `forkBytes` (as of `forkFrom`) is reached only by the test's fake claude, which resumes anything.
+- **A fork parked before its first turn cannot come back at all.** ⌃C on a fork that has not spoken yet
+  parks a session no wake can resume; the conversation is still the source's, so a fresh fork recovers it.
+  *Closes with:* refusing that park with a sentence saying why, or waking it as a fresh fork of its source.
+- **`esc esc` before a fork's first turn offers nothing to rewind to**, though the pane shows the
+  inherited prompts: `RewindTargets` reads the fork's own transcript, which is not there yet. What claude
+  does with a `rewind_conversation` before that file exists is unrecorded. *Closes with:* a recording of
+  that request, then targets from the same snapshot if claude honours it.
+- **A rewind of the source in the moment between a fork's launch and claude reading the source** leaves
+  the pane showing the turns the rewind dropped, until the fork's first turn: the length is measured
+  before claude reads, and the rewind's marker lands after it. The source must be idle to be forked,
+  so this needs an operator rewinding it within the fork's start-up. *Closes with:* the length measured
+  once claude is known to have read the source, if anything on the wire marks that.

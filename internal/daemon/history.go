@@ -67,20 +67,44 @@ func History(id string) ([]core.Event, error) {
 	if !ok {
 		return nil, nil
 	}
+	return historyAt(path, id, -1)
+}
+
+// historyAt is History over the file at path, read only to its first size bytes
+// when size is not negative. claude only appends, so a prefix is the
+// conversation as it stood when the file was that long.
+func historyAt(path, id string, size int64) ([]core.Event, error) {
 	f, err := os.Open(path)
 	if err != nil {
 		return nil, err
 	}
 	defer func() { _ = f.Close() }()
 
-	active, err := activeBranchOf(f)
+	var r io.ReadSeeker = f
+	if size >= 0 {
+		r = io.NewSectionReader(f, 0, size)
+	}
+	active, err := activeBranchOf(r)
 	if err != nil {
 		return nil, err
 	}
-	if _, err := f.Seek(0, io.SeekStart); err != nil {
+	if _, err := r.Seek(0, io.SeekStart); err != nil {
 		return nil, err
 	}
-	return liveHistory(f, id, active)
+	return liveHistory(r, id, active)
+}
+
+// transcriptSize is how long this session's transcript is now, 0 for none.
+func transcriptSize(id string) int64 {
+	path, ok := transcriptPath(id)
+	if !ok {
+		return 0
+	}
+	info, ok := regularTranscript(path)
+	if !ok {
+		return 0
+	}
+	return info.Size()
 }
 
 // activeBranchOf reads a transcript's tree - identity and rewind markers, no
@@ -298,7 +322,7 @@ func transcriptPath(id string) (string, bool) {
 // now" and "Wake could not tell you what it had", and the pane cannot tell
 // those apart from an empty reply.
 func (s *server) sendHistory(c *client, id string) {
-	s.answerHistory(c, id, rpc.FrameHistoryReply, nil)
+	s.answerHistory(c, id, rpc.FrameHistoryReply, false)
 }
 
 // sendRoomHistory is the same read answered under the room's kind.
@@ -312,14 +336,18 @@ func (s *server) sendHistory(c *client, id string) {
 // A fork's room history leaves out what it inherited: the room draws that
 // conversation under the session it came from.
 func (s *server) sendRoomHistory(c *client, id string) {
-	s.answerHistory(c, id, rpc.FrameRoomHistoryReply, s.inheritedBy(id))
+	s.answerHistory(c, id, rpc.FrameRoomHistoryReply, true)
 }
 
 // answerHistory is the read both asks share. reply is the kind it goes back
-// under; one reader of the format, two ledgers on the client. An event whose
-// record is in drop is left out.
-func (s *server) answerHistory(c *client, id, reply string, drop map[string]bool) {
-	events, err := History(s.transcriptID(id))
+// under; one reader of the format, two ledgers on the client. The room's ask
+// leaves out what a fork inherited.
+func (s *server) answerHistory(c *client, id, reply string, room bool) {
+	var drop map[string]bool
+	if room {
+		drop = s.inheritedBy(id)
+	}
+	events, err := s.history(id, !room)
 	if err != nil {
 		c.enqueue(errorFrame(id, "could not read that conversation's transcript: "+err.Error()))
 		return
@@ -334,6 +362,36 @@ func (s *server) answerHistory(c *client, id, reply string, drop map[string]bool
 		kept = append(kept, ev)
 	}
 	c.enqueue(rpc.Frame{Kind: reply, SessionID: id, Events: kept})
+}
+
+// history is the conversation one session holds. claude writes a fork's
+// transcript only on the fork's first turn, opening it with a copy of its
+// source's records, so until then, and only if inherited is asked for, it is the
+// source's transcript as long as it was at the fork. A /clear since leaves the
+// fork nothing of it, and in its gap (midClear) the conversation is not known
+// yet, so nothing is read.
+func (s *server) history(id string, inherited bool) ([]core.Event, error) {
+	a, ok := s.agent(id)
+	if !ok {
+		return History(id)
+	}
+	a.mu.Lock()
+	conv, gap := a.conversationLocked(), a.midClearLocked()
+	a.mu.Unlock()
+	if gap {
+		return nil, nil
+	}
+	if a.forkFrom == "" || conv != id {
+		return History(conv)
+	}
+	if own, ok := transcriptPath(id); ok {
+		return historyAt(own, id, -1)
+	}
+	src, ok := transcriptPath(a.forkFrom)
+	if !inherited || !ok {
+		return nil, nil
+	}
+	return historyAt(src, a.forkFrom, a.forkBytes)
 }
 
 // inheritedBy is every record a fork's transcript copied from the conversation
