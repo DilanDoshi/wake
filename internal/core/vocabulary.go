@@ -367,6 +367,7 @@ const (
 )
 
 type wireSessionRecord struct {
+	PID       int    `json:"pid"`
 	SessionID string `json:"sessionId"`
 	Name      string `json:"name"`
 	Socket    string `json:"messagingSocketPath"`
@@ -378,13 +379,13 @@ func SessionRegistry(config string) string { return filepath.Join(config, sessio
 // IsSessionRecord reports whether a file there is a session's record, not its key.
 func IsSessionRecord(name string) bool { return strings.HasSuffix(name, sessionRecordExt) }
 
-// DecodeSessionRecord reads one record; false for one naming no session, name or socket.
+// DecodeSessionRecord reads one record; false for one naming no session or socket.
 func DecodeSessionRecord(raw []byte) (SessionRecord, bool) {
 	var r wireSessionRecord
-	if json.Unmarshal(raw, &r) != nil || r.SessionID == "" || r.Name == "" || r.Socket == "" {
+	if json.Unmarshal(raw, &r) != nil || r.SessionID == "" || r.Socket == "" {
 		return SessionRecord{}, false
 	}
-	return SessionRecord{ID: r.SessionID, Name: Contained(r.Name), Socket: r.Socket}, true
+	return SessionRecord{PID: r.PID, ID: r.SessionID, Name: Contained(r.Name), Socket: r.Socket}, true
 }
 
 // toolChecklistOp unwraps the one create-or-update a TaskCreate/TaskUpdate

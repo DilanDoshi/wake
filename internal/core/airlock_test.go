@@ -494,6 +494,8 @@ var claudeWireVocabulary = wordSet([]string{
 // failure rather than a silent narrowing.
 var deliberatelyGeneric = wordSet([]string{
 	"type", "subtype", "role", "content", "message", "result", "id", "name",
+	// A session registry record's process id: Wake's own roster spells it too.
+	"pid",
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",

@@ -27,7 +27,7 @@ func (s *server) addressed(ev core.Event) core.Event {
 	}
 	send := *ev.Tool.Send
 	send.ToName = rec.Name
-	if a, ok := s.conversationRow(rec.ID); ok {
+	if a, ok := s.conversationRow(rec.ID); ok && inGroup(rec.PID, a.sess.Pgid()) {
 		send.ToID = a.id
 	}
 	tool := *ev.Tool
@@ -37,8 +37,10 @@ func (s *server) addressed(ev core.Event) core.Event {
 }
 
 // registered is the one record holding socket, or else the one named name: none
-// when two carry the name, since only a ref Wake cannot read tells them apart. An
-// unreadable registry or record costs that send its name, and is logged.
+// when two carry the name, since only a ref Wake cannot read tells them apart, or
+// when any record was unreadable, since it may be the one named. A nameless
+// record names nobody. An unreadable registry or record costs that send its
+// name, and is logged.
 func registered(config, socket, name string) (core.SessionRecord, bool) {
 	if config == "" {
 		return core.SessionRecord{}, false
@@ -50,7 +52,7 @@ func registered(config, socket, name string) (core.SessionRecord, bool) {
 		return core.SessionRecord{}, false
 	}
 	var found core.SessionRecord
-	n := 0
+	n, skipped := 0, false
 	for _, e := range entries {
 		if !core.IsSessionRecord(e.Name()) {
 			continue
@@ -59,11 +61,12 @@ func registered(config, socket, name string) (core.SessionRecord, bool) {
 		rec, ok := core.DecodeSessionRecord(raw)
 		if err != nil || !ok {
 			logf("wake: session record %s skipped: unreadable or incomplete (%v)", e.Name(), err)
+			skipped = true
 			continue
 		}
-		if socket != "" && rec.Socket == socket || socket == "" && rec.Name == name {
+		if rec.Name != "" && (socket != "" && rec.Socket == socket || socket == "" && rec.Name == name) {
 			found, n = rec, n+1
 		}
 	}
-	return found, n == 1
+	return found, n == 1 && (socket != "" || !skipped)
 }

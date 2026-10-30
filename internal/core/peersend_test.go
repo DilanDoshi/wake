@@ -125,23 +125,22 @@ func TestASendsAddressIsASocketOrANameWithItsRefDropped(t *testing.T) {
 	}
 }
 
-// Claude Code's registry names a running session's id, its name and its socket
+// Claude Code's registry names a running session's process, id, name and socket
 // (sessions/78871.json, a sterile 2.1.311 session); the name is contained, since
-// it is drawn, and a record missing any of the three is none.
+// it is drawn, and a record missing its id or socket is none.
 func TestASessionRecordNamesItsSessionNameAndSocket(t *testing.T) {
 	raw, err := os.ReadFile("../../testdata/sessions/78871.json")
 	if err != nil {
 		t.Fatal(err)
 	}
-	want := SessionRecord{ID: "dae33b75-42fc-4230-8dd2-19a731dc141d", Name: "rec-beta", Socket: "/tmp/cc-socks/78871.sock"}
+	want := SessionRecord{PID: 78871, ID: "dae33b75-42fc-4230-8dd2-19a731dc141d", Name: "rec-beta", Socket: "/tmp/cc-socks/78871.sock"}
 	if got, ok := DecodeSessionRecord(raw); !ok || got != want {
 		t.Errorf("DecodeSessionRecord = %+v, %v; want %+v", got, ok, want)
 	}
 	if got, _ := DecodeSessionRecord([]byte(`{"sessionId":"s1","name":"a\u001b[2Jb","messagingSocketPath":"/s"}`)); got.Name != "a [2Jb" {
 		t.Errorf("a drawn name kept a terminal control: %q", got.Name)
 	}
-	for _, raw := range []string{`{`, `{"name":"x","messagingSocketPath":"/s"}`, `{"sessionId":"s1","name":"x"}`,
-		`{"sessionId":"s1","messagingSocketPath":"/s"}`} {
+	for _, raw := range []string{`{`, `{"name":"x","messagingSocketPath":"/s"}`, `{"sessionId":"s1","name":"x"}`} {
 		if got, ok := DecodeSessionRecord([]byte(raw)); ok {
 			t.Errorf("DecodeSessionRecord(%s) = %+v, want none", raw, got)
 		}

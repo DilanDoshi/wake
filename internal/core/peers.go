@@ -11,9 +11,10 @@ type Peer struct {
 }
 
 // SessionRecord is one running Claude session as Claude Code's registry names
-// it: its id, its name and the socket its cross-session messages arrive on.
-// Decoded in vocabulary.go.
+// it: its process, its id, its name and the socket its cross-session messages
+// arrive on. Decoded in vocabulary.go.
 type SessionRecord struct {
+	PID    int
 	ID     string
 	Name   string
 	Socket string

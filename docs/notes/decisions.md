@@ -5323,7 +5323,9 @@ one message (BUG-57). A `name [ref]` address did the same.
 - **The daemon names who an address reached, from Claude Code's session registry** - one record per running
   session at `<config>/sessions/<pid>.json`, carrying its `sessionId`, `name` and `messagingSocketPath`
   (`testdata/sessions/78871.json`, a sterile 2.1.311 session). `daemon/sendto.go` sets `PeerSend.ToName`, and
-  `ToID` when the session is one of its agents (`conversationRow`, so a `/clear`'s conversation counts). The room
+  `ToID` when the session is one of its agents' conversations (`conversationRow`, so a `/clear`'s counts) *and*
+  the record's own `pid` runs in that agent's process group - another process holding the same conversation, an
+  outside `claude --resume`, is no fleet agent, and the room keeps its line (Codex, second pass). The room
   leaves a fleet recipient to its own stream and heads any other send with the name; a conversation heads its own
   sends the same way. Chosen over mapping the socket's PID to an agent's process group: that guesses `<pid>.sock`
   where the registry states the path, Wake starts claude through its launcher so the PID it spawned is not the
@@ -5337,9 +5339,10 @@ one message (BUG-57). A `name [ref]` address did the same.
   name has had since 2026-10-16: an ended or parked recipient draws nothing, so the call's line stays. A
   recipient that ends between the send and its replay, or a send that fails, loses the line, as a send by name
   does; `deferred.md` names the correlation that closes both.
-- **`name [ref]` drops the ref only when exactly one record carries the name.** The ref /list-agents prints is
-  not the session id or anything else the registry holds, so when two sessions share a name - the case a ref
-  exists for - Wake cannot tell which it picks, and the send keeps today's line: drawn, maybe twice, never lost.
+- **`name [ref]` drops the ref only when exactly one record carries the name and every record read.** The ref
+  /list-agents prints is not the session id or anything else the registry holds, so when two sessions share a
+  name - the case a ref exists for - Wake cannot tell which it picks, and an unreadable record may be the one
+  named (Codex, second pass); either way the send keeps today's line: drawn, maybe twice, never lost.
 - **A reopened conversation keeps the address** (wake-orch's ruling). Today's registry says who holds a socket
   now, and a PID can be reused, so an old send could take another session's name - a false statement, worse than
   a raw path. `deferred.md` names the route that is safe.
