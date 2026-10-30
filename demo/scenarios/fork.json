@@ -1,0 +1,12 @@
+{
+  "_note": "Every fork plays this, whatever name the pool gave it. 08-fork forks maya, so its one turn branches from maya's bucket.",
+  "model": "claude-opus-5",
+  "turns": [
+    {"match": "sliding window", "tokens": 1400, "steps": [
+      {"after": 1.2, "text": "Branching from maya's bucket: the same `plans` lookup and the same place after `withAuth`, but a sliding window over the last minute instead of a refill."},
+      {"after": 0.9, "tool": {"name": "Write", "input": {"file_path": "api/limit-window.ts"}, "result": "Created api/limit-window.ts (41 lines)", "takes": 1.0}},
+      {"after": 1.0, "text": "It sits beside `api/limit.ts` rather than replacing it, so alex can benchmark the two against each other."}
+    ]}
+  ],
+  "default": {"tokens": 320, "steps": [{"after": 0.8, "text": "On it, from where maya left off."}]}
+}

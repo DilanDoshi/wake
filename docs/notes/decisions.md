@@ -5318,7 +5318,7 @@ pink). `/friends puff`; it follows Bo in the picker.
 An agent replying to a cross-session message copies the message's `from`, a `uds:<socket>` address, as its
 SendMessage `to` - Claude Code's own tool description tells it to. The room drew that call as a send outside the
 fleet (`withSend` found no agent of that name), and the receiver's replayed envelope drew it again: two lines for
-one message (BUG-57). A `name [ref]` address did the same.
+one message (BUG-58). A `name [ref]` address did the same.
 
 - **The daemon names who an address reached, from Claude Code's session registry** - one record per running
   session at `<config>/sessions/<pid>.json`, carrying its `sessionId`, `name` and `messagingSocketPath`

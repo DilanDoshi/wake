@@ -1,11 +1,6 @@
 # BEAT 9 — the manager: a rollup, then "tell the agents working on X to do Y".
 Output .work/out/09-manager.mp4
-Set Shell zsh
-Set FontSize 16
-Set Width 2400
-Set Height 1320
-Set Padding 24
-Set WindowBar Colorful
+Source .work/head.tape
 Hide
 Source .work/stage.tape
 Show
