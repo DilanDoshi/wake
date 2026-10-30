@@ -215,6 +215,11 @@ type agent struct {
 	// book holds no lineage). The room's history reads it: see inheritedBy.
 	forkFrom string
 
+	// forkBytes is how long forkFrom's transcript was at launch, carried and
+	// never persisted alongside it: the conversation the pane shows until the
+	// fork's first turn writes a transcript of its own. See server.history.
+	forkBytes int64
+
 	sess   *core.Session
 	cancel context.CancelFunc
 

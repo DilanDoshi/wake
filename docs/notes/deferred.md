@@ -5907,3 +5907,18 @@ The friend on the usage bar (decisions.md, 2026-10-27) shipped without three thi
   *Closes with:* an argument stem like `teamArgStem` offering the cast's words and none.
 - **No image through tmux or screen.** A friend there is the half-block sprite, since the terminal outside is
   unknown. *Closes with:* tmux's `allow-passthrough` and its DCS wrapping, with the outer terminal named.
+
+## FROM `fix/fork-pane-shows-history`, 2026-10-29
+
+A fork's pane now opens on the conversation it was taken from, read from the source's transcript as
+long as it was at the fork, until the fork's first turn writes a transcript of its own (claude writes it
+only then). The length rides on the agent beside `forkFrom`, in memory only, so two edges stay open.
+
+- **A fork that never took a turn, outliving its daemon, opens empty again.** A ⌃Q or crash and a later
+  `/resume` start a daemon that knows no lineage (the park book holds none, by ruling), so the pane has
+  nothing to read until the fork's first turn. *Closes with:* the source id and length in the park record,
+  which the 2026-08-10 ruling against persisting lineage would have to be revisited for.
+- **`esc esc` before a fork's first turn offers nothing to rewind to**, though the pane shows the
+  inherited prompts: `RewindTargets` reads the fork's own transcript, which is not there yet. What claude
+  does with a `rewind_conversation` before that file exists is unrecorded. *Closes with:* a recording of
+  that request, then targets from the same snapshot if claude honours it.
