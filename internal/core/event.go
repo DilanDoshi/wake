@@ -208,9 +208,8 @@ const (
 type PeerSend struct {
 	To   string `json:"recipient"`
 	Text string `json:"text"`
-	// ToName is the session a `to` address reached, by the name Claude's registry
-	// gives it, and ToID that session's id when it is a fleet agent: set by the
-	// daemon (sendto.go), empty for a bare name or an address nothing resolved.
+	// Who a `to` address reached: its name in Claude's session registry, and its id
+	// when it is a fleet agent. Set by the daemon (sendto.go); empty for a bare name.
 	ToName string `json:"recipient_name,omitempty"`
 	ToID   string `json:"recipient_session,omitempty"`
 }

@@ -217,7 +217,7 @@ func TestADMHeadsASendByAddressWithTheRecipientsName(t *testing.T) {
 // `→ <name> (…)`. The shape follows the address form, not the version
 // (send-by-address.jsonl, a live reply copying the from it answers). Delivered
 // either way, so neither draws its receipt - and the path in it - under the send.
-func TestASendByAddressDrawsNoReceiptEither(t *testing.T) {
+func TestASendBySocketDrawsNoReceiptEither(t *testing.T) {
 	var recorded []core.Event
 	for _, line := range fixtureLinesAt(t, "../../testdata/transcript/send-by-address.jsonl") {
 		evs, err := core.DecodeTranscriptLine([]byte(line))

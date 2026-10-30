@@ -811,11 +811,16 @@ func fakeName(sid string) int {
 }
 
 // fakeSend calls SendMessage with each line's words as its to, the way a reply
-// copies the from of the message it answers - see sendto_test.go.
+// copies the from of the message it answers, and takes /clear as claude does -
+// see sendto_test.go.
 func fakeSend(sid string) int {
 	emitText(sid, "ready")
 	emitResult(sid)
 	for line := range stdinLines() {
+		if strings.Contains(line, clearCommand) {
+			sid = clearMemory(sid)
+			continue
+		}
 		var f struct {
 			Message struct {
 				Content []struct {

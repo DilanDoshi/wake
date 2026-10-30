@@ -136,13 +136,13 @@ func (f Fleet) crossSpeaker(name string) Agent {
 	return Agent{Name: name}
 }
 
-// reaches reports whether a send reached a live fleet agent, whose own stream
-// draws the message when it arrives: the one the daemon named an address for,
-// else the one a bare name names (Wake's names are lower-case).
+// reaches reports whether a send reached a fleet agent with a process, whose own
+// stream draws the message when it arrives: the one the daemon named an address
+// for, else the one a bare name names (Wake's names are lower-case).
 func (f Fleet) reaches(s *core.PeerSend) bool {
 	if s.ToID != "" {
 		a, ok := f.agents[s.ToID]
-		return ok && a.State != rpc.StateEnded
+		return ok && a.State != rpc.StateEnded && a.State != rpc.StateParked
 	}
 	_, ok := f.ByName(strings.ToLower(s.To))
 	return ok

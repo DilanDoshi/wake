@@ -27,9 +27,11 @@ func register(t *testing.T, config, file, id, name, socket string) {
 // A send by address reaches its clients naming who it reached, read off Claude
 // Code's registry: a fleet agent by its name and id, a session outside the fleet
 // by its name. A bare name, an address nothing holds, a name two sessions share,
-// a malformed record, a nameless one and a .key file all leave the send as it was.
+// a nameless record and a .key file all leave the send as it was, and a
+// malformed record costs nothing else. The config directory's name is one a
+// glob would misread.
 func TestASendByAddressCarriesWhoItReached(t *testing.T) {
-	config := t.TempDir()
+	config := filepath.Join(t.TempDir(), "cfg [work]")
 	t.Setenv("CLAUDE_CONFIG_DIR", config)
 	fakeClaudeOnPath(t, "send")
 	d := startDaemon(t)
@@ -45,7 +47,7 @@ func TestASendByAddressCarriesWhoItReached(t *testing.T) {
 	register(t, config, "4.json", "11111111-2222-4333-8444-555555555555", "twin", "/s/twin-a.sock")
 	register(t, config, "5.json", "66666666-7777-4888-8999-000000000000", "twin", "/s/twin-b.sock")
 	register(t, config, "6.0a1b2c.key", robin, "keyed", "/s/keyed.sock")
-	register(t, config, "8.json", "99999999-aaaa-4bbb-8ccc-dddddddddddd", "", "/s/nameless.sock")
+	register(t, config, "8.json", robin, "", "/s/nameless.sock")
 	if err := os.WriteFile(filepath.Join(config, "sessions", "7.json"), []byte("{"), 0o600); err != nil {
 		t.Fatal(err)
 	}
@@ -57,15 +59,47 @@ func TestASendByAddressCarriesWhoItReached(t *testing.T) {
 		"twin [0a1b2c]":        {},
 		"uds:/s/keyed.sock":    {},
 		"uds:/s/nowhere.sock":  {},
+		"uds:/s/nameless.sock": {},
 		"robin":                {},
 	} {
 		c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: sender, Text: to})
 		f := c.await("the send to "+to, func(f rpc.Frame) bool {
-			return f.Kind == rpc.FrameEvent && f.Event != nil && f.Event.Tool != nil &&
+			return f.Kind == rpc.FrameEvent && f.SessionID == sender && f.Event != nil && f.Event.Tool != nil &&
 				f.Event.Tool.Send != nil && f.Event.Tool.Send.To == to
 		})
 		if got := *f.Event.Tool.Send; got.ToName != want.ToName || got.ToID != want.ToID {
 			t.Errorf("a send to %q reached %q (%q), want %q (%q)", to, got.ToName, got.ToID, want.ToName, want.ToID)
 		}
+	}
+}
+
+// After a /clear claude writes its registry record under the new conversation's
+// id, and a send to it still names the agent by the id Wake spawned it under.
+func TestASendByAddressFindsAnAgentAfterItsClear(t *testing.T) {
+	config := t.TempDir()
+	t.Setenv("CLAUDE_CONFIG_DIR", config)
+	fakeClaudeOnPath(t, "send")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	defer c.close()
+	sender, robin := testSessionID("5e4d"), testSessionID("a0b1")
+	c.spawn(sender, "sender")
+	c.spawn(robin, "robin")
+	c.awaitEvent(sender, "ready")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: robin, Text: clearCommand})
+	successor := c.await("robin's conversation after its /clear", func(f rpc.Frame) bool {
+		return f.Kind == rpc.FrameEvent && f.SessionID == robin && f.Event != nil &&
+			f.Event.SessionID != "" && f.Event.SessionID != robin
+	}).Event.SessionID
+	register(t, config, "2.json", successor, "robin", "/s/robin.sock")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: sender, Text: "uds:/s/robin.sock"})
+	f := c.await("the send to robin", func(f rpc.Frame) bool {
+		return f.Kind == rpc.FrameEvent && f.SessionID == sender && f.Event != nil && f.Event.Tool != nil &&
+			f.Event.Tool.Send != nil && f.Event.Tool.Send.To == "uds:/s/robin.sock"
+	})
+	if got := f.Event.Tool.Send; got.ToID != robin || got.ToName != "robin" {
+		t.Errorf("a send to robin's cleared conversation reached %q (%q), want robin (%q)", got.ToName, got.ToID, robin)
 	}
 }

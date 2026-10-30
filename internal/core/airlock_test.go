@@ -836,7 +836,7 @@ var notWireVocabulary = wordSet([]string{
 	"CLAUDE_CONFIG_DIR", ".claude.json",
 	// vocabulary.go: where Claude's session registry keeps its records, and the
 	// ref /list-agents prints after a name a send may carry.
-	"sessions", "*.json", `^(.+) \[[0-9a-f]+\]$`,
+	"sessions", ".json", `^(.+) \[[0-9a-f]+\]$`,
 	`resets (?:([A-Z][a-z]{2}) (\d{1,2}) at )?(\d{1,2})(?::(\d{2}))?(am|pm) \(([^)]+)\)`,
 	"Jan 2", "pm",
 	"%w: encode %s: empty request id",

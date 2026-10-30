@@ -359,12 +359,11 @@ func SendAddress(to string) (socket, name string) {
 	return "", ""
 }
 
-// Claude Code keeps a file per running session, <pid>.json under its config
-// directory's sessions/, beside a .key file Wake never reads
-// (testdata/sessions/78871.json, 2.1.311). Claude's internal, not its API.
+// Claude Code keeps <pid>.json per running session in its config directory's
+// sessions/, beside a .key Wake never reads (testdata/sessions/78871.json, 2.1.311).
 const (
 	sessionRegistryDir = "sessions"
-	sessionRecordGlob  = "*.json"
+	sessionRecordExt   = ".json"
 )
 
 type wireSessionRecord struct {
@@ -373,15 +372,16 @@ type wireSessionRecord struct {
 	Socket    string `json:"messagingSocketPath"`
 }
 
-// SessionRecords is the pattern matching every session's record under config.
-func SessionRecords(config string) string {
-	return filepath.Join(config, sessionRegistryDir, sessionRecordGlob)
-}
+// SessionRegistry is the directory under config holding the records.
+func SessionRegistry(config string) string { return filepath.Join(config, sessionRegistryDir) }
 
-// DecodeSessionRecord reads one record; false for one naming no session or socket.
+// IsSessionRecord reports whether a file there is a session's record, not its key.
+func IsSessionRecord(name string) bool { return strings.HasSuffix(name, sessionRecordExt) }
+
+// DecodeSessionRecord reads one record; false for one naming no session, name or socket.
 func DecodeSessionRecord(raw []byte) (SessionRecord, bool) {
 	var r wireSessionRecord
-	if json.Unmarshal(raw, &r) != nil || r.SessionID == "" || r.Socket == "" {
+	if json.Unmarshal(raw, &r) != nil || r.SessionID == "" || r.Name == "" || r.Socket == "" {
 		return SessionRecord{}, false
 	}
 	return SessionRecord{ID: r.SessionID, Name: Contained(r.Name), Socket: r.Socket}, true

@@ -127,7 +127,7 @@ func TestASendsAddressIsASocketOrANameWithItsRefDropped(t *testing.T) {
 
 // Claude Code's registry names a running session's id, its name and its socket
 // (sessions/78871.json, a sterile 2.1.311 session); the name is contained, since
-// it is drawn, and a record naming no session or socket is none.
+// it is drawn, and a record missing any of the three is none.
 func TestASessionRecordNamesItsSessionNameAndSocket(t *testing.T) {
 	raw, err := os.ReadFile("../../testdata/sessions/78871.json")
 	if err != nil {
@@ -140,7 +140,8 @@ func TestASessionRecordNamesItsSessionNameAndSocket(t *testing.T) {
 	if got, _ := DecodeSessionRecord([]byte(`{"sessionId":"s1","name":"a\u001b[2Jb","messagingSocketPath":"/s"}`)); got.Name != "a [2Jb" {
 		t.Errorf("a drawn name kept a terminal control: %q", got.Name)
 	}
-	for _, raw := range []string{`{`, `{"name":"x","messagingSocketPath":"/s"}`, `{"sessionId":"s1","name":"x"}`} {
+	for _, raw := range []string{`{`, `{"name":"x","messagingSocketPath":"/s"}`, `{"sessionId":"s1","name":"x"}`,
+		`{"sessionId":"s1","messagingSocketPath":"/s"}`} {
 		if got, ok := DecodeSessionRecord([]byte(raw)); ok {
 			t.Errorf("DecodeSessionRecord(%s) = %+v, want none", raw, got)
 		}
@@ -160,8 +161,14 @@ func TestTheRegistryIsItsRecordsAndNotItsKeys(t *testing.T) {
 			t.Fatal(err)
 		}
 	}
-	got, err := filepath.Glob(SessionRecords(config))
-	if err != nil || len(got) != 1 || filepath.Base(got[0]) != "78871.json" {
-		t.Errorf("SessionRecords matches %v (%v), want the one record", got, err)
+	entries, err := os.ReadDir(SessionRegistry(config))
+	var got []string
+	for _, e := range entries {
+		if IsSessionRecord(e.Name()) {
+			got = append(got, e.Name())
+		}
+	}
+	if err != nil || !slices.Equal(got, []string{"78871.json"}) {
+		t.Errorf("the registry's records are %v (%v), want the one record", got, err)
 	}
 }

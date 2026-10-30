@@ -101,8 +101,8 @@ func TestASendByAddressToAFleetAgentIsDrawnOnceByItsReceiver(t *testing.T) {
 }
 
 // A session outside the fleet is drawn under the name the registry gives it; an
-// address nothing named keeps the address; and a fleet recipient that has ended
-// is drawn from the call, since no stream of its will draw it.
+// address nothing named keeps the address; and a fleet recipient with no process,
+// ended or parked, is drawn from the call, since no stream of its will draw it.
 func TestASendByAddressTheReceiverWillNotDrawIsDrawnFromTheCall(t *testing.T) {
 	a := newRoomApp(t).withSize(120, 40).withAgents(core.ManagerName, "jade", "sydney")
 	out := ansi.Strip(a.observe("s3", sentTo("s3", "uds:/tmp/cc-socks/40123.sock", "hello there", "fable QA", "")).View())
@@ -115,13 +115,15 @@ func TestASendByAddressTheReceiverWillNotDrawIsDrawnFromTheCall(t *testing.T) {
 		t.Errorf("an address nothing named is not drawn as it was sent:\n%s", out)
 	}
 
-	st := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
-		{ID: "s2", Name: "jade", State: rpc.StateEnded},
-		{ID: "s3", Name: "sydney", State: rpc.StateIdle},
-	}}
-	a = newRoomApp(t).withSize(120, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
-	out = ansi.Strip(a.observe("s3", sentTo("s3", "uds:/tmp/cc-socks/40123.sock", "hello there", "jade", "s2")).View())
-	if !strings.Contains(out, "sydney"+crossSessionArrow+"jade") {
-		t.Errorf("a send to an ended fleet agent is not drawn:\n%s", out)
+	for _, state := range []string{rpc.StateEnded, rpc.StateParked} {
+		st := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+			{ID: "s2", Name: "jade", State: state},
+			{ID: "s3", Name: "sydney", State: rpc.StateIdle},
+		}}
+		a = newRoomApp(t).withSize(120, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+		out = ansi.Strip(a.observe("s3", sentTo("s3", "uds:/tmp/cc-socks/40123.sock", "hello there", "jade", "s2")).View())
+		if !strings.Contains(out, "sydney"+crossSessionArrow+"jade") {
+			t.Errorf("a send to a %s fleet agent is not drawn:\n%s", state, out)
+		}
 	}
 }

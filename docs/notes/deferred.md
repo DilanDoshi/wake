@@ -5918,6 +5918,10 @@ A send by address is named from Claude Code's session registry (decisions.md, 20
   *Closes with:* resolving a history send only through a record whose session began before the send was made (the
   record's `startedAt` against the event's `At`), which is the one check that says the socket was that session's
   when it was written to; or wake-orch's narrower form, a current fleet agent whose conversation began first.
+- **A send to a fleet agent is left to the receiver's replay, which may never come** (Codex, first pass). A
+  recipient that ends or parks between the send and the replay, or a send that fails, draws no room line at
+  all. A send by name has had the same contract since 2026-10-16. *Closes with:* the 2026-10-16 entry's pending
+  map - the call's line held until the receiver's replay or the send's result says what happened.
 - **A bare name is still the room's `ByName`, not the registry's.** So the 2026-10-16 entry above - a send by a
   claude name that lags Wake's, drawn twice - stays open. *Closes with:* the daemon resolving a bare name through
   the registry too, which costs a directory read on every send rather than every send by address.
