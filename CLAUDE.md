@@ -411,7 +411,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   Muted; `⌃E` or a click opens it (`peerfold.go`). **A conversation draws its own agent's
   `SendMessage` the same way**, `↪ <agent> → <recipient>` and the words, every pane (`dm_blocks.go`'s
   `sentBlock`; a delivered send's receipt is hidden, a failed one's error shows), and the room draws any
-  agent's send to a session outside the fleet (`observe.go`'s `withSend`).
+  agent's send to a session outside the fleet (`observe.go`'s `withSend`). **A send by address** - the
+  `uds:` socket a reply copies from the message it answers, or `name [ref]` - is named by the daemon from
+  Claude Code's session registry (`daemon/sendto.go`): one to a fleet agent is left to that agent's own
+  stream, as a send by name is, and any other is headed by the registry's name. A reopened conversation
+  keeps the address, since today's registry cannot say who held a socket then (`decisions.md`, 2026-10-29).
 - **Slash commands resolve against a closed set Wake owns; anything else is text.** A word claude
   advertises may be claimed only in a form claude is recorded doing nothing with
   (`bareOnlyCommands` names the fixture). `/color` and the room's bare `/clear` are the owner-claimed
@@ -527,7 +531,7 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · `usage.go` (the account's session window) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (a signal interrupts, then stops) · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (a signal interrupts, then stops) · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `sendto.go` (a send by address, named from Claude's session registry) · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -551,7 +555,7 @@ yet says so in bold.**
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · the update check `updatecheck.go`, asked by the room on its first frame and on a keystroke an hour on, and named on the strip as `↑ wake X` (`internal/ui/updatecue.go`) · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
-| Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) |
+| Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) · `testdata/sessions/` (Claude's session registry) |
 | Demo film, landing site | `demo/` (Python stand-in agent, VHS tapes) · the site generator `demo/page.py`, its words `demo/pagecopy.py` → the wake-landing repo |
 | Fixture scrubber | `scripts/scrub-fixtures.py` · guard `internal/core/corpus_test.go` |
 
@@ -618,7 +622,7 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.308. A
+**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.311. A
 fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 
 | Need | Flag |
@@ -700,6 +704,13 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   (merged output; stderr when it failed) **and starts a turn every time**. Wake writes the same tags in one line;
   `shouldQuery:false` on a user line would hold it with no turn (`num_turns: 0`), unused.
   `bash-mode.jsonl`, `shell-run.jsonl`, `docs/superpowers/notes/2026-10-25-bang-to-agent-findings.md`.
+- **Claude Code keeps one record per running session at `<config>/sessions/<pid>.json`** (`sessionId`,
+  `name`, `messagingSocketPath`, beside a `.key` file Wake never reads; `$CLAUDE_CONFIG_DIR`, else `~/.claude`).
+  Claude's internal, observed at 2.1.311 (`testdata/sessions/78871.json`) and read by nothing `make drift`
+  checks, so re-check it after a claude upgrade. A cross-session message's `from` is that socket, and a reply
+  copies it as its `to`. A send's receipt names the `to` as sent: `→ <name> (…)` for a name,
+  `→ uds:<socket>; in that session's inbox…` with no parenthetical for a socket - the shape follows the
+  address form, not the version (`manager-relay.jsonl`, `testdata/transcript/send-by-address.jsonl`).
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only

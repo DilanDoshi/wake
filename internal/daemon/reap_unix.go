@@ -44,6 +44,13 @@ func groupLeader(pid int) bool {
 	return err == nil && pgid == pid
 }
 
+// inGroup reports whether pid runs in the process group pgid an agent leads,
+// which is what makes a registry record that agent's own process (sendto.go).
+func inGroup(pid, pgid int) bool {
+	got, err := syscall.Getpgid(pid)
+	return pid > 0 && pgid > 0 && err == nil && got == pgid
+}
+
 // process is what ps says about one pid: its state code and its full argv.
 type process struct {
 	state string

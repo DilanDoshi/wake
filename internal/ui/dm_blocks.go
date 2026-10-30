@@ -476,10 +476,11 @@ func (d DM) namedSends(events []core.Event) []core.Event {
 
 // sentBlock renders one of this conversation's own SendMessage calls as the peer
 // message it is: crossSessionBlock's head with this agent as the sender and the
-// recipient after the arrow, then the same Muted, folded body. Drawn from the call
-// - the agent's intent, not proof of delivery - and a failed send's error follows.
+// recipient after the arrow - the name the daemon found for an address, else the
+// `to` as sent - then the same Muted, folded body. Drawn from the call - the
+// agent's intent, not proof of delivery - and a failed send's error follows.
 func sentBlock(from string, s *core.PeerSend, width int, expanded bool) string {
-	return joinBlock(accentLine(crossSessionLead+from+crossSessionArrow+s.To, width), peerBody(s.Text, width, expanded))
+	return joinBlock(accentLine(crossSessionLead+from+crossSessionArrow+cmp.Or(s.ToName, s.To), width), peerBody(s.Text, width, expanded))
 }
 
 // crossSessionBody draws a received peer message's body in Muted - Claude's

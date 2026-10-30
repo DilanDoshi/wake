@@ -19,6 +19,8 @@ var errNoProcess = errors.New("no such process")
 
 func groupLeader(int) bool { return false }
 
+func inGroup(int, int) bool { return false }
+
 type process struct {
 	state string
 	argv  string

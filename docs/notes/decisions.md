@@ -5312,3 +5312,45 @@ pink). `/friends puff`; it follows Bo in the picker.
   `TestFriendsPuffPutsThePufferfishOnTheBarAndAWindowOpenedLaterKeepsIt`, and
   `TestTheCommandsChapterNamesEveryFriend` (the manual's `/friends` line carries the words `/wake-help` shows,
   so a friend added without its place on that line fails).
+
+## 2026-10-29 — A send by address is named from Claude Code's session registry (wake-orch's GO)
+
+An agent replying to a cross-session message copies the message's `from`, a `uds:<socket>` address, as its
+SendMessage `to` - Claude Code's own tool description tells it to. The room drew that call as a send outside the
+fleet (`withSend` found no agent of that name), and the receiver's replayed envelope drew it again: two lines for
+one message (BUG-58). A `name [ref]` address did the same.
+
+- **The daemon names who an address reached, from Claude Code's session registry** - one record per running
+  session at `<config>/sessions/<pid>.json`, carrying its `sessionId`, `name` and `messagingSocketPath`
+  (`testdata/sessions/78871.json`, a sterile 2.1.311 session). `daemon/sendto.go` sets `PeerSend.ToName`, and
+  `ToID` when the session is one of its agents' conversations (`conversationRow`, so a `/clear`'s counts) *and*
+  the record's own `pid` runs in that agent's process group - another process holding the same conversation, an
+  outside `claude --resume`, is no fleet agent, and the room keeps its line (Codex, second pass). The room
+  leaves a fleet recipient to its own stream and heads any other send with the name; a conversation heads its own
+  sends the same way. Chosen over mapping the socket's PID to an agent's process group: that guesses `<pid>.sock`
+  where the registry states the path, Wake starts claude through its launcher so the PID it spawned is not the
+  socket's, and it names nobody outside the fleet.
+- **Bounds.** Only files ending `.json` are read, never the `.key` beside them, through `os.ReadDir` so a config
+  path a glob would misread still works. One directory read per SendMessage by address (a bare name is the
+  room's `ByName`, as before; a subagent's send is named by nobody), nothing cached. A missing or unreadable
+  directory, or a malformed or nameless record, costs that send its name and nothing else - it is drawn as it
+  was sent - and the daemon logs it, since the registry's shape moving is the one way this fix stops working.
+- **The room leaves a send to a fleet agent with a process to that agent's stream**, the contract a send by
+  name has had since 2026-10-16: an ended or parked recipient draws nothing, so the call's line stays. A
+  recipient that ends between the send and its replay, or a send that fails, loses the line, as a send by name
+  does; `deferred.md` names the correlation that closes both.
+- **`name [ref]` drops the ref only when exactly one record carries the name and every record read.** The ref
+  /list-agents prints is not the session id or anything else the registry holds, so when two sessions share a
+  name - the case a ref exists for - Wake cannot tell which it picks, and an unreadable record may be the one
+  named (Codex, second pass); either way the send keeps today's line: drawn, maybe twice, never lost.
+- **A reopened conversation keeps the address** (wake-orch's ruling). Today's registry says who holds a socket
+  now, and a PID can be reused, so an old send could take another session's name - a false statement, worse than
+  a raw path. `deferred.md` names the route that is safe.
+- **A delivered send's receipt is hidden for a name and for a socket.** The receipt names the `to` as sent: `→
+  <name> (…)` for a name (`manager-relay.jsonl`), and `→ uds:<socket>; in that session's inbox…` with no
+  parenthetical for a socket (`testdata/transcript/send-by-address.jsonl`, a live reply recorded at 2.1.311 in a
+  scratch project). The shape follows the address form, not the version; `delivered()` accepts both. A `name
+  [ref]` send's receipt is unrecorded, so it is drawn, the direction an unknown shape degrades toward.
+- **The registry is Claude's internal**, observed rather than documented, and nothing in `make drift` reads it, so
+  CLAUDE.md's Traps asks for a re-check after a claude upgrade. If its shape moves, resolution fails and a send by
+  address is drawn as it was before this ruling.
