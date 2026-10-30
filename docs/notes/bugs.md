@@ -1294,21 +1294,18 @@ on rather than unticking the words. The refusal's reason belongs to no question,
 
 ## BUG-57 — a fork's pane opened without the conversation it inherited
 
-**Seen 2026-10-29 with the demo's stand-in `claude`, not yet reproduced with a real one.** Filming the
-landing site's fork clip (`demo/tapes/08-fork.tape`): `⌃F` on maya opened the fork's pane with its
-banner and the snapshot notice (`@juno is a fork of @maya…`), but none of maya's conversation, though
-the fork's transcript on disk held all of it - the stand-in copies its parent's records under the
-same uuids, chained by `parentUuid`, as `testdata/transcript/fork-child.jsonl` shows claude doing.
+**Seen 2026-10-29 filming the landing site's fork clip (`demo/tapes/08-fork.tape`), then reproduced with
+a real claude** (2.1.311, haiku, a scratch fleet on `main` 1d9699dc). `⌃F` on an agent opened the fork's
+pane with its banner and the snapshot notice (`@juno is a fork of @maya…`), but none of the parent's
+conversation; the fork had it, and said so on its first answer.
 
-**Ruled out:** the stand-in's opening line. It spoke one as soon as the fork started, which
-`historyArrived` rightly drops a disk read for (anything live since the ask). It now says nothing on
-`--resume` until spoken to, as claude does, and the pane still opened empty, so something else
-arrives between the fork pane's history ask and its reply.
+**Cause.** claude writes a fork's transcript only on the fork's first turn, so the `FrameHistory` the pane
+sends as it opens finds no file and comes back empty, and `historyArrived` then records the ask as spent:
+nothing asks again once the file exists. The demo stand-in's opening line, which first looked like the
+cause (a live line outrunning the read, which `historyArrived` drops), was a red herring - silencing it
+changed nothing.
 
-**Not checked:** which frame that is (the `/model` probe's reply is absorbed at `fanOut`; `init` and a
-status report are candidates), and whether a real `claude --fork-session` hits it. The drop forgets
-the ask, so reopening the pane in a new window would read the history; nothing in one window asks
-again.
+**Fix:** in progress on `fix/fork-pane-shows-history`; that PR closes this entry.
 
 ## Residuals carried from bugs that are fixed and merged
 
