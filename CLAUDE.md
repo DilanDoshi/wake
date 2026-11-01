@@ -95,6 +95,14 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   name. The unnamed fleet and a socket set by hand outside `~/.wake/fleets` refuse; the manager gets no
   tool for it. No CLI verb (deferred). `internal/daemon/fleetrename.go`, `internal/ui/fleetname.go`,
   `decisions.md` (2026-10-24).
+- **The terminal's tab title is the fleet's name** (the owner's 2026-11-01 ask): every window on a fleet
+  titles its terminal `sing-dev`; the unnamed fleet reads `default`, a hand-set socket outside
+  `~/.wake/fleets` reads `wake`, and a `/wake-name` retitles every window. One OSC 2 per change through the
+  terminal writer from a command, never in a frame (`App.dueTitle`: one string compare per message, the
+  name sanitised where it is folded), written again after a hand-over. The shell's title is kept on the
+  xterm title stack: `converseModel` pushes before Bubble Tea and `handBack` pops past the seal, the
+  emergency exit pops too; which terminals honour the pop is `decisions.md`'s (2026-11-01).
+  `internal/ui/title.go`.
 - **`/status`** is Wake's, since headless claude refuses it: one session's facts (name and state, id,
   a `/clear`'s conversation, directory and branch read at open, model,
   effort, context, this window's mode, MCP, team, label, both builds when the daemon's differs) in a
@@ -533,6 +541,7 @@ yet says so in bold.**
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
+| Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
 | Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |

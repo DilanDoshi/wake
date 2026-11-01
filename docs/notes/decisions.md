@@ -5312,3 +5312,52 @@ pink). `/friends puff`; it follows Bo in the picker.
   `TestFriendsPuffPutsThePufferfishOnTheBarAndAWindowOpenedLaterKeepsIt`, and
   `TestTheCommandsChapterNamesEveryFriend` (the manual's `/friends` line carries the words `/wake-help` shows,
   so a friend added without its place on that line fails).
+
+## 2026-11-01 — The terminal's tab title is the fleet's name (the owner)
+
+The owner's words: "when we rename or wake by default, it shows just the name of the fleet like 'sing-dev' or
+'harbor'". His cmux tab read `wake --fleet sing-dev`, which is Ghostty's shell integration naming the running
+command. Nothing in Wake set a title before this.
+
+- **What is written.** OSC 2 with the fleet's name, from `rpc.Status.Fleet` as every window already folds it
+  (`withFleetName`, the seed and every report), so a `wake attach` conversation and a second room on the same
+  fleet title alike and a `/wake-name` from either retitles both. The unnamed fleet reads `default`, the
+  word Wake uses for it everywhere (`wake --fleet default`, bare `/wake-name`); a socket set by hand outside
+  `~/.wake/fleets` names no fleet and reads `wake`. Just the fleet, never the open agent - his words.
+- **Wake's own bytes, not `tea.SetWindowTitle`.** Bubble Tea's command writes the same OSC 2 but keeps no
+  stack and restores nothing; owning the sequence in `title.go` puts the push, the pop and the title in
+  one vocabulary, through the writer the clipboard and the friends already use (`cmd/wake/output.go`),
+  from a command, since Update is the goroutine that draws.
+- **Once per change, never per frame.** `App.dueTitle` sits in `Update`'s seam beside the history asks and
+  the notice linger: one string compare per message, a write only when the folded title (`daemonFacts.title`)
+  differs from the last one written (`App.titled`). Written again after an mcp sign-in hand-over, where the child
+  owned the terminal. Two title commands can run at once (that re-assert behind a rename's), so each takes
+  a turn when asked and `titleOrder`, the clipboard's `inOrder`, skips an older write that would land after
+  a newer one (a Codex finding, 2026-11-01).
+- **Restore by the xterm title stack.** `converseModel` writes `CSI 22;0t` before `tea.NewProgram` and
+  `guardedOutput.handBack` writes `CSI 23;0t` after `p.Run` returns - sealed first, so a title write still
+  in flight finishes and a late one is refused, then the pop past the seal, so nothing can re-set the name
+  after it. Every ordinary exit (⌃O ↵, ⌃Q⌃Q, a hang-up) returns through `p.Run`; ⌃C⌃C and the signal grace
+  go through `restoreTerminal`, which pops after its `?1049l`. SIGKILL restores nothing, as before.
+- **Which terminals keep a stack** (read, not measured here): xterm 406+, Ghostty 1.0+ (the window title,
+  param 0 or 2) and so cmux, iTerm2, Kitty (ten deep), foot, VTE, tmux (its pane title: `screen_push_title`
+  behind `input_csi_dispatch_winops`). WezTerm's tracker says the sequences do nothing (#5800, 2024); nothing
+  found for Terminal.app; xterm.js lists the push. Where the pop is not honoured the name stays until the
+  shell's own integration writes the next title at its prompt, which is what wrote the command there to
+  begin with.
+- **tmux.** OSC 2 inside tmux sets the pane title (`#T`) natively, no passthrough; the outer terminal
+  changes only under `set-titles on`, and the status bar's window name (`#W`) keeps automatic-rename's
+  `wake`. Nothing tmux-special in Wake.
+- **Sanitised anyway.** Every report's `Fleet` is `default`, empty or a name `checkFleetName` passed, so
+  nothing hostile arrives from Wake's own daemon; `tabTitle` still drops every control character (a BEL
+  or an ESC would end the OSC or open another) and every byte that is not UTF-8, because a title is an
+  escape sequence's payload and the sink is the terminal - defence in depth, not a claim about the wire.
+  Computed once where the name is folded (`withFleetName`), so the per-message check stays a compare.
+- **Held by** `title_test.go` (the room and a conversation on open, two windows retitled by one rename,
+  `default` and `""`, the sanitising, once per change over twenty frames and repeated reports, the
+  hand-over, an older write behind a newer, no terminal), `TestHandingBackSealsBeforeTheTitleIsPopped`
+  (a title after the hand-back is refused and the pop still lands; that the seal comes *first* is the
+  method's order, which no test sees), the emergency restore's pty test (the pop after `?1049l`) and
+  `TestTheTabTitleIsTheFleetsNameAndComesBackOnExit` (vt10x's title on open and after `/wake-name`; on
+  the raw pty bytes, off `rawTail`, the harness's bounded tail of what the pty carried: the push before
+  the first title, the pop after the alt screen's end, no title after the pop), each mutation-checked.

@@ -51,6 +51,6 @@ func (a App) withFleetName(st *rpc.Status) App {
 	if was := a.daemon.fleet; was != "" && st.Fleet != "" && st.Fleet != was {
 		notice.Report(fleetRenamed, was, st.Fleet, st.Fleet)
 	}
-	a.daemon.fleet = st.Fleet
+	a.daemon.fleet, a.daemon.title = st.Fleet, tabTitle(st.Fleet)
 	return a
 }
