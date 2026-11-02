@@ -5322,8 +5322,8 @@ so below the fold - a digit typed there was blamed on the draft. The owner asked
 
 - **A card the pane cannot hold opens on its foot.** Reverses 2026-10-20's "opens on its own top": the
   rows the keys act on, Submit/Cancel and the key line are what is in view, and the wheel brings the
-  question in above them. `DM.pageAt` has one rule for every card: the page opens as far up as the card's
-  last row stays in view - the top anchor for a card the pane holds under the transcript's rows (the
+  question in above them. `placeOf` has one rule for every card the operator has not placed: the page
+  opens as far up as the card's last row stays in view - the top anchor for a card the pane holds under the transcript's rows (the
   composer scrolled away, as before), lower for one it cannot. A card exactly the pane's height is
   answerable at rest now, with the transcript's row scrolled off (`TestACardThePaneCanHoldIsAnswerableAtRest`).
   The keys' rule is unchanged: live only while the whole card is on screen (`cardFullyDrawn`).
@@ -5353,6 +5353,11 @@ Traps:
   Chrome that grows with the height - a draft's box (`maxComposerRows` bounds it), a preview the short
   pane cut - takes rows from the block again, so the page grows by what it took and is measured again,
   until the block is whole; a pane whose chrome alone outgrows it counts that overflow in `clipped` too.
+- **A rest is the step's and the draft's.** `restingAt` keys the stored rest on the ask and the wizard
+  step, and a box that emptied outside answer mode forgets it (`draftSeen`), so an answer in your own
+  words sent, a stray character deleted or a wheel on one question leaves the next step whole and its
+  keys live - a rest keyed on the ask alone outlived the step and opened the next with its top cut
+  (the second review).
 - At rest on its foot `pageHides` reports the rows moved and the box away, so a press takes the screen as
   drawn and ↵ on a draft brings the box back first - the composer-scrolled-away case's own behaviour.
 - The notch test checks the transcript's own lines only once the window's top is in the transcript: a

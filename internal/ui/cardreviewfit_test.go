@@ -22,6 +22,7 @@ import (
 type questionShape []struct {
 	question, header int
 	labels, details  []int
+	multi            bool
 }
 
 // longQuestionShape is the owner's card by the numbers in its transcript: the
@@ -29,31 +30,46 @@ type questionShape []struct {
 // 198, the second 346 over three. The lengths are what made the review outgrow a
 // pane the questions fit.
 var longQuestionShape = questionShape{
-	{475, 8, []int{36, 22}, []int{274, 198}},
-	{346, 9, []int{27, 16, 14}, []int{88, 98, 65}},
+	{475, 8, []int{36, 22}, []int{274, 198}, false},
+	{346, 9, []int{27, 16, 14}, []int{88, 98, 65}, false},
 }
 
 // bareQuestionShape is the smallest ask there is: two one-row questions over a
 // yes and a no, nothing explained - the question steps a review can least afford
 // to outgrow.
 var bareQuestionShape = questionShape{
-	{7, 4, []int{3, 2}, []int{0, 0}},
-	{7, 4, []int{3, 2}, []int{0, 0}},
+	{7, 4, []int{3, 2}, []int{0, 0}, false},
+	{7, 4, []int{3, 2}, []int{0, 0}, false},
 }
 
 // wideQuestionShape is two long questions over short options with nothing
 // explained: a question step that is all question.
 var wideQuestionShape = questionShape{
-	{600, 5, []int{5, 5}, []int{0, 0}},
-	{600, 5, []int{5, 5}, []int{0, 0}},
+	{600, 5, []int{5, 5}, []int{0, 0}, false},
+	{600, 5, []int{5, 5}, []int{0, 0}, false},
 }
 
 // labelledQuestionShape is two short questions whose first option's label runs
 // past a row: a question step cuts a label to its row, and the review must not
 // wrap what the step cut.
 var labelledQuestionShape = questionShape{
-	{7, 4, []int{90, 2}, []int{0, 0}},
-	{7, 4, []int{90, 2}, []int{0, 0}},
+	{7, 4, []int{90, 2}, []int{0, 0}, false},
+	{7, 4, []int{90, 2}, []int{0, 0}, false},
+}
+
+// twoRowQuestionShape is two questions of a hundred characters over bare
+// options: a step one row taller than the bare pair's, which a review that gave
+// a question two rows would outgrow.
+var twoRowQuestionShape = questionShape{
+	{100, 4, []int{3, 2}, []int{0, 0}, false},
+	{100, 4, []int{3, 2}, []int{0, 0}, false},
+}
+
+// multiQuestionShape is two multi-select questions over four long labels, every
+// one ticked: the longest answer a review can be handed.
+var multiQuestionShape = questionShape{
+	{7, 4, []int{40, 40, 40, 40}, []int{0, 0, 0, 0}, true},
+	{7, 4, []int{40, 40, 40, 40}, []int{0, 0, 0, 0}, true},
 }
 
 // longProse is n characters of ordinary words, so a wrapped row count is a real one.
@@ -79,7 +95,7 @@ func shapedAsk(t *testing.T, shape questionShape) *core.Event {
 		for i, n := range q.labels {
 			options = append(options, map[string]any{"label": fmt.Sprintf("option %d %s", i+1, longProse(n))[:n], "description": longProse(q.details[i])})
 		}
-		questions = append(questions, map[string]any{"question": longProse(q.question) + "?", "header": longProse(q.header), "options": options, "multiSelect": false})
+		questions = append(questions, map[string]any{"question": longProse(q.question) + "?", "header": longProse(q.header), "options": options, "multiSelect": q.multi})
 	}
 	line, err := json.Marshal(map[string]any{
 		"type": "control_request", "request_id": "req-shaped",
@@ -115,6 +131,8 @@ var reviewShapes = []struct {
 	{"bare", func(t *testing.T) *core.Event { return shapedAsk(t, bareQuestionShape) }},
 	{"wide", func(t *testing.T) *core.Event { return shapedAsk(t, wideQuestionShape) }},
 	{"labelled", func(t *testing.T) *core.Event { return shapedAsk(t, labelledQuestionShape) }},
+	{"two-row", func(t *testing.T) *core.Event { return shapedAsk(t, twoRowQuestionShape) }},
+	{"multi", func(t *testing.T) *core.Event { return shapedAsk(t, multiQuestionShape) }},
 }
 
 // Wherever every question of an ask is answerable the review is too, at the
@@ -132,12 +150,18 @@ func TestTheReviewIsAnswerableWhereverTheQuestionsAre(t *testing.T) {
 				a = a.openDMWith("s1", "john").opened(t)
 				a = a.applyFrame(rpcEvent("s1", shape.ask(t)))
 				every := true
-				for range questionCount(a) {
+				for i := range questionCount(a) {
 					if !a.cardFullyDrawn() {
 						every = false
 						break
 					}
-					a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+					a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})   // the first option: picked, or ticked
+					if q := topCard(t, a).Detail.Questions[i]; q.Multi { // then the row that walks on
+						for range nextIndex(q) {
+							a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyDown})
+						}
+						a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyEnter})
+					}
 				}
 				if !every {
 					continue
@@ -164,17 +188,28 @@ func TestTheReviewIsAnswerableWhereverTheQuestionsAre(t *testing.T) {
 // questions take - a bare yes-and-no pair's seven included.
 func TestTheReviewIsNoTallerThanTheTallestQuestion(t *testing.T) {
 	for _, shape := range reviewShapes {
-		c := newCard("s1", *shape.ask(t))
-		for i := range c.Detail.Questions {
-			c = c.Pick(i, 0)
-		}
-		for width := minBlockWidth; width <= 200; width++ {
-			tallest := 0
-			for step := range len(c.Detail.Questions) {
-				tallest = max(tallest, lipgloss.Height(c.toStep(step).body(width)))
+		for _, typed := range []bool{false, true} { // every option ticked or the first picked, or the first in your own words
+			c := newCard("s1", *shape.ask(t))
+			for i, q := range c.Detail.Questions {
+				switch {
+				case q.Multi:
+					for o := range q.Options {
+						c = c.Toggle(i, o)
+					}
+				case typed && i == 0:
+					c = c.answer(0, longProse(150))
+				default:
+					c = c.Pick(i, 0)
+				}
 			}
-			if review := lipgloss.Height(c.toStep(c.lastStep()).body(width)); review > tallest {
-				t.Errorf("%s ask at %d columns: the review is %d rows and the tallest question %d", shape.name, width, review, tallest)
+			for width := minBlockWidth; width <= 200; width++ {
+				tallest := 0
+				for step := range len(c.Detail.Questions) {
+					tallest = max(tallest, lipgloss.Height(c.toStep(step).body(width)))
+				}
+				if review := lipgloss.Height(c.toStep(c.lastStep()).body(width)); review > tallest {
+					t.Errorf("%s ask (typed %v) at %d columns: the review is %d rows and the tallest question %d", shape.name, typed, width, review, tallest)
+				}
 			}
 		}
 	}

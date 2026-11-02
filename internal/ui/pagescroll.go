@@ -17,13 +17,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// pageState is where a conversation's page was scrolled to, and for which card:
-// another ask starts at rest. Unset is the default - the card's foot, or its top
-// when the pane holds it. draft is
-// the draft as the page last saw it, because a Composer shares its text area with
-// the copy it was taken from, so a change cannot be read off the stored one.
+// pageState is where a conversation's page was scrolled to, and for which card
+// and step of it: another ask, or another question of the same one, starts at
+// rest. Unset is the default - the card's foot, or its top when the pane holds it.
+// draft is the draft as the page last saw it, because a Composer shares its text
+// area with the copy it was taken from, so a change cannot be read off the stored
+// one.
 type pageState struct {
 	req   string
+	step  int
 	up    int
 	set   bool
 	draft string
@@ -133,7 +135,7 @@ func (p pagePlace) holds(cardRows int) bool {
 // (the owner's 2026-11-02 ruling, reversing 2026-10-20's top).
 func (d DM) restingAt(card Card) (int, bool) {
 	switch {
-	case d.page.set && d.page.req == card.RequestID:
+	case d.page.set && d.page.req == card.RequestID && d.page.step == card.Cursor:
 		return d.page.up, true
 	case !blank(d.composer.Value()):
 		return 0, true
@@ -177,7 +179,7 @@ func (a App) scrollPage(id string, lines int) (App, bool) {
 		return a, false
 	}
 	next := *d
-	next.page.req, next.page.up, next.page.set = card.RequestID, up, true
+	next.page.req, next.page.step, next.page.up, next.page.set = card.RequestID, card.Cursor, up, true
 	return a.withDM(id, next), true
 }
 
@@ -186,16 +188,19 @@ func (a App) scrollPage(id string, lines int) (App, bool) {
 func (a App) pageHome(id string) App {
 	card, ok := a.cardOf(id)
 	d := a.dms[id]
-	if !ok || d == nil || (d.page.set && d.page.req == card.RequestID && d.page.up == 0) {
+	if !ok || d == nil || (d.page.set && d.page.req == card.RequestID && d.page.step == card.Cursor && d.page.up == 0) {
 		return a
 	}
 	next := *d
-	next.page.req, next.page.up, next.page.set = card.RequestID, 0, true
+	next.page.req, next.page.step, next.page.up, next.page.set = card.RequestID, card.Cursor, 0, true
 	return a.withDM(id, next)
 }
 
 // draftSeen brings id's page home when c changes what its draft holds, whichever
-// key wrote it: a draft nobody can see is one a later ↵ sends unread.
+// key wrote it: a draft nobody can see is one a later ↵ sends unread. A box that
+// emptied forgets the rest instead, unless an answer is being written in it - the
+// card settles again, so a stray character deleted or an answer in your own words
+// sent leaves the step whole and its keys live.
 func (a App) draftSeen(id string, c Composer) App {
 	d := a.dms[id]
 	if d == nil {
@@ -207,6 +212,10 @@ func (a App) draftSeen(id string, c Composer) App {
 	}
 	next := *d
 	next.page.draft = now
+	if blank(now) && a.answerTitle(id) == "" {
+		next.page.set = false
+		return a.withDM(id, next)
+	}
 	return a.withDM(id, next).pageHome(id)
 }
 

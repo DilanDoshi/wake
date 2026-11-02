@@ -59,6 +59,9 @@ func TestACardOpensOnItsFootUnderWhatThePanePins(t *testing.T) {
 			if got := a.cardFullyDrawn(); got != fits {
 				t.Errorf("%s pinned, %d-row pane: answerable=%v, want %v:\n%s", pin, pane, got, fits, strings.Join(rows, "\n"))
 			}
+			if fits && !cardWholeOn(rows, lipgloss.Height(a.cardBlock("s1", width, false))) {
+				t.Errorf("%s pinned, %d-row pane: answerable, but a row of the card is off screen:\n%s", pin, pane, strings.Join(rows, "\n"))
+			}
 			if !fits && !hasRow(rows, cardKeysCut) {
 				t.Errorf("%s pinned, %d-row pane: the card's foot is not in view:\n%s", pin, pane, strings.Join(rows, "\n"))
 			}

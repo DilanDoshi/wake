@@ -450,7 +450,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   laid out twice (`pagescroll.go`). **Its keys are live only while the whole card is on screen**
   (`App.cardFullyDrawn`, unchanged in rule) and the key line says when they return (`cardKeysCut`, over
   a draft too). A draft that changes, or opening an answer, brings the page back to the composer (watched
-  at the composer's write, not per key); a pane whose box holds a draft opens on it, and `submit` and an
+  at the composer's write, not per key), a box that emptied outside answer mode lets the card settle
+  again, and a rest is the wizard step's; a pane whose box holds a draft opens on it, and `submit` and an
   answer's `↵` act only from a page at its bottom, so a draft nobody can see is never sent. A press on a
   scrolled page takes a screen selection, not a transcript anchor, and an edge drag scrolls the
   transcript, not the page. `decisions.md` (2026-10-20, 2026-11-02).
