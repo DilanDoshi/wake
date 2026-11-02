@@ -5312,3 +5312,31 @@ pink). `/friends puff`; it follows Bo in the picker.
   `TestFriendsPuffPutsThePufferfishOnTheBarAndAWindowOpenedLaterKeepsIt`, and
   `TestTheCommandsChapterNamesEveryFriend` (the manual's `/friends` line carries the words `/wake-help` shows,
   so a friend added without its place on that line fails).
+
+## 2026-11-01 — the transcript behind an ask is drawn at full strength (the owner)
+
+The owner, watching a question card go up: "when there is a question hil pop up it like greys out
+the background text to emphasize the question it is asking, can we remove that". Since 0.1.0 a pane
+putting an answerable card drew the transcript behind it in `HintStyle` — every row stripped of its
+own colour and re-wrapped in Muted's escape pair (`askdim.go`'s `quieted`, behind a `behindAsk` flag
+on `DM`, `Room` and the card's page) — so that the card would read as modal rather than as the
+newest block. That argument lived in `askdim.go`'s header and in spec
+`2026-08-22-question-card-review-design.md` §6; no entry here recorded it, so this is the first
+ruling on it, and it reverses it.
+
+- **Removed, not switched off.** `askdim.go`, both `behindAsk` fields, `DM.WithAsk`, `Room.WithAsk`
+  and the three call sites went; `menuBlock` lost the bool it returned only to feed them. Every ask
+  kind is covered because the flag was `card != ""`, never the kind. The card's own frame, key line
+  and styling are untouched.
+- **The transcript behind a card is now held to the bytes the pane draws with no card**
+  (`internal/ui/cardbehind_test.go`, under a TrueColor profile: at the tests' default of no colour
+  the dim was a no-op, which is also why no earlier test saw it). A conversation and a paged card
+  are each held to it.
+- **No room test,** because the room never draws a card (`App.cardOf("")` is false since the room
+  stopped taking an unpaned agent's ask); `Room.behindAsk` was unreachable and went as dead code.
+- **The per-frame cost went with it.** Quieting was a strip and a re-render of a screenful of rows
+  on every frame while an agent was blocked — paid, by `askdim.go`'s own account, for the modal
+  reading. `askdim_bench_test.go` (`BenchmarkTranscriptBehindAnAsk`, `BenchmarkFrameBehindAnAsk`)
+  was deleted with it; the second had been failing on `main` since `cardOf` stopped putting the
+  room's card, which no gate runs benchmarks to notice. `deferred.md`'s 2026-08-22 card-cost entry
+  names the loss.

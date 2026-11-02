@@ -45,7 +45,13 @@ type pageSetup struct {
 
 func askingWith(t *testing.T, s pageSetup) App {
 	t.Helper()
-	ev := questionAsk(t)
+	return beforeAsking(t, s).applyFrame(rpcEvent("s1", questionAsk(t)))
+}
+
+// beforeAsking is askingWith's conversation the moment before its question
+// arrives: the same pane with no card in it.
+func beforeAsking(t *testing.T, s pageSetup) App {
+	t.Helper()
 	a := newRoomApp(t).withSize(narrowColumns, s.height).withAgents("john")
 	a = pick(a, "s1").openDMWith("s1", "john").applyGeometry()
 	if s.bar {
@@ -64,7 +70,7 @@ func askingWith(t *testing.T, s pageSetup) App {
 	if s.draft != "" { // words already in the box when the agent blocks
 		a = a.withDraft(s.draft)
 	}
-	return a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: ev})
+	return a
 }
 
 // oldestShown is the number of the oldest history line a frame draws, -1 for none.

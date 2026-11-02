@@ -5283,7 +5283,11 @@ change only when a key is pressed. **The fix is the `chunked`/`transcript` treat
 conversations already have**, invalidated on the three things that move it (the card set, the
 cursor, the width). Not taken here: this branch made the card richer and measured the result rather
 than leaving the number unknown, and caching it is a change to how a card is held rather than to
-what it draws. The richer card is ~130µs of the 910; the rest predates it.
+what it draws. The richer card is ~130µs of the 910; the rest predates it. **2026-11-01:**
+`askdim_bench_test.go` and `BenchmarkFrameBehindAnAsk` were deleted with the dimming behind an ask
+(owner's ruling, `decisions.md`), and the bench had been failing on `main` since `cardOf` stopped
+putting the room's card — so the figures above are the last measurement. Whoever takes this adds the
+benchmark first, with the conversation opened, as the Task 10 entry already says.
 
 **2026-08-22 — `--add-dir` and the debug flags still do not survive a park**, and neither does a
 typed answer in flight. The second is new with answer mode and is the same shape: `Cards.writing`
