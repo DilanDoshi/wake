@@ -443,9 +443,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A pane drawing a card scrolls as one page** (owner's 2026-10-20 ask): the wheel slides the card and
   composer off the bottom and pulls the older transcript in at the top. **A card the pane cannot hold
   opens on its foot** (owner's 2026-11-02 ruling, reversing 2026-10-20's top): the key line and the rows
-  the keys act on in view, the question a wheel notch above. `DM.pageAt` opens every page as far up as
-  the card's last row stays in view, so a card the pane holds still opens under the transcript with the
-  composer scrolled away, and one exactly the pane's height is answerable. Without a card the wheel
+  the keys act on in view, the question a wheel notch above. The page opens as far up as the card's last row stays
+  in view, read off the layout it is drawn in (`placeOf`), so a card the pane holds still opens under
+  the transcript with the composer scrolled away, and one exactly the pane's height is answerable. Without a card the wheel
   moves the transcript alone. The pane is drawn taller and a window of its top rows shown, so nothing is
   laid out twice (`pagescroll.go`). **Its keys are live only while the whole card is on screen**
   (`App.cardFullyDrawn`, unchanged in rule) and the key line says when they return (`cardKeysCut`, over

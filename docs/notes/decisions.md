@@ -5327,25 +5327,33 @@ so below the fold - a digit typed there was blamed on the draft. The owner asked
   composer scrolled away, as before), lower for one it cannot. A card exactly the pane's height is
   answerable at rest now, with the transcript's row scrolled off (`TestACardThePaneCanHoldIsAnswerableAtRest`).
   The keys' rule is unchanged: live only while the whole card is on screen (`cardFullyDrawn`).
-- **The review step is kept to the rows the question steps take.** A question is cut to
-  `reviewQuestionRows` with an ellipsis, as an answer is to `reviewAnswerRows`; the blank under the strip
-  and the second heading ("Ready to submit your answers?") are gone. For a two-question ask the review is
-  never taller than its tallest question (`TestTheReviewIsNoTallerThanTheTallestQuestion`), so a pane that
-  held every question holds the step that sends them (`TestTheReviewIsAnswerableWhereverTheQuestionsAre`).
+- **The review step is kept to the rows the question steps take.** A question is cut to one row
+  (`reviewQuestionRows`) with an ellipsis, as an answer is to `reviewAnswerRows`; the heading, the
+  blank under the strip and the blank over the options are gone - the strip's `✔ Submit` tab is the
+  heading. For a two-question ask the review is never taller than its tallest question step, a bare
+  yes-and-no pair's seven rows included (`TestTheReviewIsNoTallerThanTheTallestQuestion`), so a pane
+  that held every question holds the step that sends them
+  (`TestTheReviewIsAnswerableWhereverTheQuestionsAre`). Two reviews measured the first cut - two rows
+  per question, the heading kept - against a bare ask and found it two rows over.
 - **The cut line names the cut, over a draft too.** Reverses #184's reviewer choice that a draft over a
   cut card names the draft: the cut is what keeps the keys off whatever the box holds, and the draft's
   own line waits for a whole card.
 
 Traps:
 
-- `pageAt`'s default reads the transcript's rows off the pane laid out at its own height; the taller
-  layout keeps them (the chrome is the same with a blank draft), so no second layout is needed, and a
-  draft opens the page home anyway. The menu's rows stand in for the card's: the card is the top of the
-  pinned stack, so a picker under it only makes the rule conservative.
+- **The foot is read off the layout a page at rest is drawn in**, never assumed: the pane laid out
+  `height+clipped` rows tall, which is the same for every rest up to the top anchor, so the frame
+  still lays it out once (`placeOf`). The first cut derived it from the transcript's rows and the
+  pinned block's, and both reviews broke it: a task board, the working line or a streamed preview
+  above the card, a picker under it, or a composer grown by a draft of blank lines all moved the card
+  under the rule. The card's own rows are what is placed, since it is the top of the pinned stack.
+  Chrome that grows with the height - a draft's box (`maxComposerRows` bounds it), a preview the short
+  pane cut - takes rows from the block again, so the page grows by what it took and is measured again,
+  until the block is whole; a pane whose chrome alone outgrows it counts that overflow in `clipped` too.
 - At rest on its foot `pageHides` reports the rows moved and the box away, so a press takes the screen as
   drawn and ↵ on a draft brings the box back first - the composer-scrolled-away case's own behaviour.
 - The notch test checks the transcript's own lines only once the window's top is in the transcript: a
   card on its foot brings its own rows in first.
-- A three- or four-question ask's review can still outgrow a short pane (five fixed rows and up to five
-  per question). It opens on its foot with the key line saying so, and the window has to grow. Left
-  (`deferred.md`).
+- A three- or four-question ask's review can still outgrow a short pane (three fixed rows and up to
+  four per question), and a multi-select answer wrapped to three rows at a narrow width adds to it. It
+  opens on its foot with the key line saying so, and the window has to grow. Left (`deferred.md`).

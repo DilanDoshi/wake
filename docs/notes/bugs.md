@@ -1323,9 +1323,9 @@ typed there landed in the composer and the line then blamed the draft. Only esc 
 or a resize were live. The band for that shape: terminal heights 20–26 at 80 and 100 columns, 22–30 at
 140 with the room beside; the recorded fixture has the same band two rows wide.
 
-**Fix:** branch `fix/card-review-fits-its-pane`. The review bounds each question to
-`reviewQuestionRows` and drops its spare rows, a card the pane cannot hold opens on its foot, and the
-cut line names the cut over a draft (`decisions.md`, 2026-11-02). Tests: the sweep and the height
+**Fix:** branch `fix/card-review-fits-its-pane`. The review cuts each question to one row and drops
+its heading and blanks, a card the pane cannot hold opens on its foot - read off the layout it is drawn
+in, whatever the pane pins above the card - and the cut line names the cut over a draft (`decisions.md`, 2026-11-02). Tests: the sweep and the height
 invariant in `cardreviewfit_test.go`, the pty case
 `TestEnterSubmitsTheReviewOfATwoQuestionAskInAShortPane` at 100×24.
 

@@ -17,16 +17,35 @@ import (
 	"github.com/DilanDoshi/wake/internal/core"
 )
 
-// longQuestionShape is the owner's card by the numbers in its transcript: the
-// first question 475 characters over two options whose descriptions run 274 and
-// 198, the second 346 over three. The words are invented; the lengths are what
-// made the review outgrow a pane the questions fit.
-var longQuestionShape = []struct {
+// questionShape is an ask by its lengths: words are invented, the counts decide
+// how many rows each step takes.
+type questionShape []struct {
 	question, header int
 	labels, details  []int
-}{
+}
+
+// longQuestionShape is the owner's card by the numbers in its transcript: the
+// first question 475 characters over two options whose descriptions run 274 and
+// 198, the second 346 over three. The lengths are what made the review outgrow a
+// pane the questions fit.
+var longQuestionShape = questionShape{
 	{475, 8, []int{36, 22}, []int{274, 198}},
 	{346, 9, []int{27, 16, 14}, []int{88, 98, 65}},
+}
+
+// bareQuestionShape is the smallest ask there is: two one-row questions over a
+// yes and a no, nothing explained - the question steps a review can least afford
+// to outgrow.
+var bareQuestionShape = questionShape{
+	{7, 4, []int{3, 2}, []int{0, 0}},
+	{7, 4, []int{3, 2}, []int{0, 0}},
+}
+
+// wideQuestionShape is two long questions over short options with nothing
+// explained: a question step that is all question.
+var wideQuestionShape = questionShape{
+	{600, 5, []int{5, 5}, []int{0, 0}},
+	{600, 5, []int{5, 5}, []int{0, 0}},
 }
 
 // longProse is n characters of ordinary words, so a wrapped row count is a real one.
@@ -42,12 +61,12 @@ func longProse(n int) string {
 	return b.String()[:n]
 }
 
-// longQuestionAsk is longQuestionShape as the airlock decodes it, from the
-// control request a session writes (question-answer.jsonl's shape).
-func longQuestionAsk(t *testing.T) *core.Event {
+// shapedAsk is shape as the airlock decodes it, from the control request a
+// session writes (question-answer.jsonl's shape).
+func shapedAsk(t *testing.T, shape questionShape) *core.Event {
 	t.Helper()
-	questions := make([]any, 0, len(longQuestionShape))
-	for _, q := range longQuestionShape {
+	questions := make([]any, 0, len(shape))
+	for _, q := range shape {
 		options := make([]any, 0, len(q.labels))
 		for i, n := range q.labels {
 			options = append(options, map[string]any{"label": fmt.Sprintf("option %d %s", i+1, longProse(n))[:n], "description": longProse(q.details[i])})
@@ -55,8 +74,8 @@ func longQuestionAsk(t *testing.T) *core.Event {
 		questions = append(questions, map[string]any{"question": longProse(q.question) + "?", "header": longProse(q.header), "options": options, "multiSelect": false})
 	}
 	line, err := json.Marshal(map[string]any{
-		"type": "control_request", "request_id": "req-long",
-		"request": map[string]any{"subtype": "can_use_tool", "tool_name": "AskUserQuestion", "requires_user_interaction": true, "tool_use_id": "toolu_long", "input": map[string]any{"questions": questions}},
+		"type": "control_request", "request_id": "req-shaped",
+		"request": map[string]any{"subtype": "can_use_tool", "tool_name": "AskUserQuestion", "requires_user_interaction": true, "tool_use_id": "toolu_shaped", "input": map[string]any{"questions": questions}},
 	})
 	if err != nil {
 		t.Fatal(err)
@@ -70,15 +89,24 @@ func longQuestionAsk(t *testing.T) *core.Event {
 			return &ev
 		}
 	}
-	t.Fatal("the long ask decoded to no permission request")
+	t.Fatal("the shaped ask decoded to no permission request")
 	return nil
 }
 
-// reviewShapes are the asks the review is held to: the owner's, and the recorded one.
+// longQuestionAsk is the owner's card.
+func longQuestionAsk(t *testing.T) *core.Event { return shapedAsk(t, longQuestionShape) }
+
+// reviewShapes are the asks the review is held to: the owner's, the recorded one,
+// and the two the review can least afford to outgrow.
 var reviewShapes = []struct {
 	name string
 	ask  func(*testing.T) *core.Event
-}{{"long", longQuestionAsk}, {"recorded", questionAsk}}
+}{
+	{"long", longQuestionAsk},
+	{"recorded", questionAsk},
+	{"bare", func(t *testing.T) *core.Event { return shapedAsk(t, bareQuestionShape) }},
+	{"wide", func(t *testing.T) *core.Event { return shapedAsk(t, wideQuestionShape) }},
+}
 
 // Wherever every question of an ask is answerable the review is too, at the
 // widths a conversation is read at: a pane that fit each question fits the step
@@ -89,7 +117,7 @@ func TestTheReviewIsAnswerableWhereverTheQuestionsAre(t *testing.T) {
 	var checked int
 	for _, shape := range reviewShapes {
 		for _, width := range []int{80, 100, 140} {
-			for height := 14; height <= 44; height++ {
+			for height := 8; height <= 44; height++ {
 				a := newRoomApp(t).withSize(width, height).withAgents("john", "sydney")
 				a.layout.ShowRoster = true
 				a = a.openDMWith("s1", "john").opened(t)
@@ -121,9 +149,10 @@ func TestTheReviewIsAnswerableWhereverTheQuestionsAre(t *testing.T) {
 	}
 }
 
-// The review is never taller than the tallest question step of its ask, at any
-// width a card is drawn at: that is what makes the sweep above a rule rather
-// than a run of luck, and it holds the review to the rows the questions take.
+// The review of a two-question ask is never taller than the tallest of its
+// question steps, at any width a card is drawn at: that is what makes the sweep
+// above a rule rather than a run of luck, and it holds the review to the rows the
+// questions take - a bare yes-and-no pair's seven included.
 func TestTheReviewIsNoTallerThanTheTallestQuestion(t *testing.T) {
 	for _, shape := range reviewShapes {
 		c := newCard("s1", *shape.ask(t))

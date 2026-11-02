@@ -589,7 +589,10 @@ func TestOneNotchShiftsThePageByTheNotchesRows(t *testing.T) {
 
 			// Up to where a notch's rows are all the transcript's: past the card's top
 			// (a card on its foot has rows of its own to bring in first) and the floor.
-			for place, _, _ := a.pageOf("s1"); place.up < place.clipped+wheelLines; place, _, _ = a.pageOf("s1") {
+			for i := 0; i < 50; i++ {
+				if place, _, _ := a.pageOf("s1"); place.up >= place.clipped+wheelLines {
+					break
+				}
 				a = wheeled(a, tea.MouseButtonWheelUp, 1)
 			}
 			before = inPane(pageRows(a))

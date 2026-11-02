@@ -223,7 +223,8 @@ func (a App) cardFullyDrawn() bool {
 		return false
 	}
 	menu := a.menuAround(card, a.focus, width, height)
-	return a.pagePlace(a.focus, width, height, menu, c).holds(lipgloss.Height(card))
+	rows := lipgloss.Height(card)
+	return a.pagePlace(a.focus, width, height, menu, c, rows).holds(rows)
 }
 
 // focusedPane is the width and height of the pane holding the keys, and whether
@@ -310,12 +311,12 @@ func (a App) cardBlock(id string, width int, cut bool) string {
 		return ""
 	}
 	agent, _ := a.fleet.Agent(card.AgentID)
-	// The pause is the focused pane's own: cardKey reads a.cardOf(a.focus), so
-	// a draft gates exactly that pane's card, and pausing another pane's on it
-	// would blame a draft that is not in that pane's composer.
 	if cut {
 		return a.cards.ViewCut(card, width, agent)
 	}
+	// The pause is the focused pane's own: cardKey reads a.cardOf(a.focus), so
+	// a draft gates exactly that pane's card, and pausing another pane's on it
+	// would blame a draft that is not in that pane's composer.
 	return a.cards.View(card, width, agent, id == a.focus && !a.composerEmpty())
 }
 
@@ -504,7 +505,7 @@ func (a App) dmPane(id string, width, height int) string {
 		return paint(a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id))).View(width, height)
 	}
 	laid := a.sizedDM(id, menu, width, height)
-	place := a.placeOf(laid, id, width, menu, c)
+	place := a.placeOf(laid, id, width, menu, c, lipgloss.Height(card))
 	if !place.holds(lipgloss.Height(card)) {
 		// The same rows with the keys' line saying why they are off.
 		laid = laid.WithMenu(a.menuAround(a.cardBlock(id, width, true), id, width, height))

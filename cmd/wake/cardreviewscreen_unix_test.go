@@ -7,6 +7,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"strings"
 	"testing"
@@ -63,11 +64,32 @@ func fakeAgentLongQuestions(sid string) int {
 			continue
 		}
 		if answeredID(line) != "" {
-			sayText(sid, heardPrefix+"answered")
+			behavior, answers := answerOf(line)
+			sayText(sid, fmt.Sprintf("%s%s with %d answers", heardPrefix, behavior, answers))
 			sayResult(sid)
 		}
 	}
 	return 0
+}
+
+// answerOf reads what a permission answer carries: its behavior, and how many
+// questions the choices under its updated input answer - so a deny, or an allow
+// with nothing chosen, is not taken for the answers ↵ was meant to send.
+func answerOf(line string) (behavior string, answers int) {
+	var f struct {
+		Response struct {
+			Response struct {
+				Behavior     string `json:"behavior"`
+				UpdatedInput struct {
+					Answers map[string]string `json:"answers"`
+				} `json:"updatedInput"`
+			} `json:"response"`
+		} `json:"response"`
+	}
+	if err := json.Unmarshal([]byte(line), &f); err != nil {
+		return "", 0
+	}
+	return f.Response.Response.Behavior, len(f.Response.Response.UpdatedInput.Answers)
 }
 
 func TestEnterSubmitsTheReviewOfATwoQuestionAskInAShortPane(t *testing.T) {
@@ -87,5 +109,5 @@ func TestEnterSubmitsTheReviewOfATwoQuestionAskInAShortPane(t *testing.T) {
 	}
 
 	s.send("\r")
-	s.await(heardPrefix + "answered")
+	s.await(heardPrefix + "allow with 2 answers")
 }

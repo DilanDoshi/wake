@@ -26,11 +26,6 @@ const (
 	reviewSubmitLabel = "Submit answers"
 	reviewCancelLabel = "Cancel"
 
-	// reviewTitle heads the rows, under the strip. The step is kept to the rows the
-	// question steps take - no blank under the strip, no second heading - so a pane
-	// that held every question holds the step that sends them (BUG-59).
-	reviewTitle = "Review your answers"
-
 	// reviewAnswerLead marks the answer under the question it belongs to.
 	reviewAnswerLead = "  → "
 
@@ -43,10 +38,13 @@ const (
 	// finished thing wears elsewhere in this build.
 	reviewQuestionLead = "● "
 
-	// reviewQuestionRows bounds a question's wrap the same way. A question is read
-	// whole on its own step; here it names the answer under it, and drawn whole it
-	// made the review taller than the steps a short pane fit (BUG-59).
-	reviewQuestionRows = 2
+	// reviewQuestionRows bounds a question to one row, with an ellipsis: it names
+	// the answer under it, and is read whole on its own step. The step is kept to
+	// the rows a question step takes - no heading, no blank, the options straight
+	// under the last answer - so a pane that held every question of a two-question
+	// ask holds the step that sends them; drawn whole, the questions made the
+	// review taller than the steps a short pane fit (BUG-59).
+	reviewQuestionRows = 1
 
 	// reviewUnanswered stands where an answer would be. A gap the operator can
 	// see is what makes Submit's refusal legible before it happens.
@@ -64,12 +62,11 @@ const reviewKeys = cardMoveKeys + cardKeySep + "[1-2] choose" + cardKeySep + car
 // reviewBody is the review step's rows: each question with its answer under it,
 // then the two options.
 func (c Card) reviewBody(width int) string {
-	rows := []string{stepHeader(c, width), AccentStyle.MaxWidth(width).Render(reviewTitle)}
+	rows := []string{stepHeader(c, width)}
 	for i, q := range c.Detail.Questions {
 		rows = append(rows, reviewLines(collapseWhitespaceOneLine(q.Text), reviewQuestionLead, reviewQuestionRows, width, TextStyle))
 		rows = append(rows, reviewLines(c.answerLabel(i), reviewAnswerLead, reviewAnswerRows, width, HintStyle))
 	}
-	rows = append(rows, "")
 	for i, label := range [reviewOptions]string{reviewSubmitLabel, reviewCancelLabel} {
 		numbered := fmt.Sprintf(reviewDigitFmt, i+1, label)
 		rows = append(rows, optionRow(numbered, width, i == c.Option, false, AccentStyle))
