@@ -457,8 +457,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - Permissions/plans: rune then `↵`, read only on an empty composer; any other input disarms (key,
   composer, mouse, digit).
 - Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`) kept to the rows the question
-  steps take - a question cut to `reviewQuestionRows` there, as an answer is to `reviewAnswerRows`, so a
-  pane that held every question holds the step that sends them (BUG-59); `Other…`/`d` enter answer
+  steps take - a question and its answer each cut to one row there (`reviewRows`), so a pane that held
+  every question of a two-question ask holds the step that sends them (BUG-59); `Other…`/`d` enter answer
   mode, where the card takes `↵`; a bare `↑↓` with no draft line to move to never walks prompt history -
   from `Other…` it goes back to the options with the words kept in that row, as `esc` does, and `↵` over an
   open menu completes its word before it sends (`cardanswer.go`). Arrows reach the card with or without a

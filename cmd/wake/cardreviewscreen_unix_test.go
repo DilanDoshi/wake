@@ -24,8 +24,8 @@ var longQuestionShape = []struct {
 	{346, 9, []int{27, 16, 14}, []int{88, 98, 65}},
 }
 
-// prose is n characters of ordinary words, so a wrapped row count is a real one.
-func prose(n int) string {
+// longProse is n characters of ordinary words, so a wrapped row count is a real one.
+func longProse(n int) string {
 	words := strings.Fields("the merge agent waits for a decision on how the held replay should be handled before the next release goes out and which of the two routes the team prefers")
 	var b strings.Builder
 	for i := 0; b.Len() < n; i++ {
@@ -44,9 +44,9 @@ func sayLongQuestions(requestID string) {
 	for _, q := range longQuestionShape {
 		options := make([]string, 0, len(q.labels))
 		for i, n := range q.labels {
-			options = append(options, fmt.Sprintf(`{"label":%q,"description":%q}`, fmt.Sprintf("option %d %s", i+1, prose(n))[:n], prose(q.details[i])))
+			options = append(options, fmt.Sprintf(`{"label":%q,"description":%q}`, fmt.Sprintf("option %d %s", i+1, longProse(n))[:n], longProse(q.details[i])))
 		}
-		questions = append(questions, fmt.Sprintf(`{"question":%q,"header":%q,"multiSelect":false,"options":[%s]}`, prose(q.question)+"?", prose(q.header), strings.Join(options, ",")))
+		questions = append(questions, fmt.Sprintf(`{"question":%q,"header":%q,"multiSelect":false,"options":[%s]}`, longProse(q.question)+"?", longProse(q.header), strings.Join(options, ",")))
 	}
 	fmt.Printf(`{"type":"control_request","request_id":%q,"request":{"subtype":"can_use_tool","tool_name":"AskUserQuestion","requires_user_interaction":true,"tool_use_id":"toolu_long","input":{"questions":[%s]}}}`+"\n",
 		requestID, strings.Join(questions, ","))
@@ -65,17 +65,20 @@ func fakeAgentLongQuestions(sid string) int {
 		}
 		if answeredID(line) != "" {
 			behavior, answers := answerOf(line)
-			sayText(sid, fmt.Sprintf("%s%s with %d answers", heardPrefix, behavior, answers))
+			sayText(sid, fmt.Sprintf("%s%s with %d answers", heardPrefix, behavior, len(answers)))
+			for _, label := range answers { // one row each, so a screen can find them
+				sayText(sid, heardPrefix+"chose "+label)
+			}
 			sayResult(sid)
 		}
 	}
 	return 0
 }
 
-// answerOf reads what a permission answer carries: its behavior, and how many
-// questions the choices under its updated input answer - so a deny, or an allow
-// with nothing chosen, is not taken for the answers ↵ was meant to send.
-func answerOf(line string) (behavior string, answers int) {
+// answerOf reads what a permission answer carries: its behavior, and the labels
+// chosen under its updated input in question order - so a deny, an allow with
+// nothing chosen, or the wrong choice is not taken for the answers ↵ sent.
+func answerOf(line string) (behavior string, answers []string) {
 	var f struct {
 		Response struct {
 			Response struct {
@@ -87,9 +90,14 @@ func answerOf(line string) (behavior string, answers int) {
 		} `json:"response"`
 	}
 	if err := json.Unmarshal([]byte(line), &f); err != nil {
-		return "", 0
+		return "", nil
 	}
-	return f.Response.Response.Behavior, len(f.Response.Response.UpdatedInput.Answers)
+	for _, q := range longQuestionShape {
+		if label, ok := f.Response.Response.UpdatedInput.Answers[longProse(q.question)+"?"]; ok {
+			answers = append(answers, label)
+		}
+	}
+	return f.Response.Response.Behavior, answers
 }
 
 func TestEnterSubmitsTheReviewOfATwoQuestionAskInAShortPane(t *testing.T) {
@@ -110,4 +118,8 @@ func TestEnterSubmitsTheReviewOfATwoQuestionAskInAShortPane(t *testing.T) {
 
 	s.send("\r")
 	s.await(heardPrefix + "allow with 2 answers")
+	// The first option of each question, as the cursor stood: not any two labels.
+	for _, q := range longQuestionShape {
+		s.await(heardPrefix + "chose " + fmt.Sprintf("option 1 %s", longProse(q.labels[0]))[:q.labels[0]])
+	}
 }

@@ -5940,7 +5940,6 @@ The friend on the usage bar (decisions.md, 2026-10-27) shipped without three thi
   empty send as "encode user message: nothing to send" (sing-dev-2's log, 2026-11-01). `wake fleets`
   already says to ⌃Q⌃Q and reopen the fleet on this build, and upgrading the fleet is the remedy. The
   window could read the daemon's build off the report and say so at the bang instead of a refusal.
-- **A three- or four-question ask's review can still outgrow a short pane**: three fixed rows and up to
-  four per question, and a multi-select answer wrapped to three rows at a narrow width adds to it. It
-  opens on its foot with the key line saying the keys wait for the whole card, and the window has to
-  grow. A review that scrolls inside the card would close it.
+- **A three- or four-question ask's review can still outgrow a short pane**: three fixed rows and two
+  per question. It opens on its foot with the key line saying the keys wait for the whole card, and
+  the window has to grow. A review that scrolls inside the card would close it.

@@ -48,6 +48,14 @@ var wideQuestionShape = questionShape{
 	{600, 5, []int{5, 5}, []int{0, 0}},
 }
 
+// labelledQuestionShape is two short questions whose first option's label runs
+// past a row: a question step cuts a label to its row, and the review must not
+// wrap what the step cut.
+var labelledQuestionShape = questionShape{
+	{7, 4, []int{90, 2}, []int{0, 0}},
+	{7, 4, []int{90, 2}, []int{0, 0}},
+}
+
 // longProse is n characters of ordinary words, so a wrapped row count is a real one.
 func longProse(n int) string {
 	words := strings.Fields("the merge agent waits for a decision on how the held replay should be handled before the next release goes out and which of the two routes the team prefers")
@@ -106,6 +114,7 @@ var reviewShapes = []struct {
 	{"recorded", questionAsk},
 	{"bare", func(t *testing.T) *core.Event { return shapedAsk(t, bareQuestionShape) }},
 	{"wide", func(t *testing.T) *core.Event { return shapedAsk(t, wideQuestionShape) }},
+	{"labelled", func(t *testing.T) *core.Event { return shapedAsk(t, labelledQuestionShape) }},
 }
 
 // Wherever every question of an ask is answerable the review is too, at the
@@ -171,9 +180,9 @@ func TestTheReviewIsNoTallerThanTheTallestQuestion(t *testing.T) {
 	}
 }
 
-// A question on the review is cut to reviewQuestionRows with an ellipsis, as an
-// answer is to reviewAnswerRows: the review names what is about to be sent, and
-// the question step is where a question is read whole.
+// A question on the review is cut to reviewRows with an ellipsis, as its answer
+// is: the review names what is about to be sent, and the question step is where
+// both are read whole.
 func TestAReviewQuestionIsBoundedToItsRows(t *testing.T) {
 	c := newCard("s1", *longQuestionAsk(t))
 	c = c.Pick(0, 0).Pick(1, 0).toStep(c.lastStep())
@@ -182,8 +191,8 @@ func TestAReviewQuestionIsBoundedToItsRows(t *testing.T) {
 	for i := paneRow(rows, reviewQuestionLead); i < len(rows) && !strings.HasPrefix(rows[i], reviewAnswerLead); i++ {
 		question = append(question, rows[i])
 	}
-	if len(question) != reviewQuestionRows {
-		t.Fatalf("a %d-character question takes %d rows on the review, want %d:\n%s", longQuestionShape[0].question, len(question), reviewQuestionRows, strings.Join(rows, "\n"))
+	if len(question) != reviewRows {
+		t.Fatalf("a %d-character question takes %d rows on the review, want %d:\n%s", longQuestionShape[0].question, len(question), reviewRows, strings.Join(rows, "\n"))
 	}
 	if !strings.HasSuffix(strings.TrimRight(question[len(question)-1], " "), ellipsis) {
 		t.Errorf("the cut question does not end in an ellipsis:\n%s", strings.Join(question, "\n"))

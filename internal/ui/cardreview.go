@@ -29,22 +29,18 @@ const (
 	// reviewAnswerLead marks the answer under the question it belongs to.
 	reviewAnswerLead = "  → "
 
-	// reviewAnswerRows bounds one answer's wrap. A multi-select answer is long
-	// enough to need more than a row, and a typed one can be any length - a
-	// card taller than its pane takes no keys, so Submit must stay on it.
-	reviewAnswerRows = 3
-
 	// reviewQuestionLead marks a question in the list. The same bullet a
 	// finished thing wears elsewhere in this build.
 	reviewQuestionLead = "● "
 
-	// reviewQuestionRows bounds a question to one row, with an ellipsis: it names
-	// the answer under it, and is read whole on its own step. The step is kept to
-	// the rows a question step takes - no heading, no blank, the options straight
-	// under the last answer - so a pane that held every question of a two-question
-	// ask holds the step that sends them; drawn whole, the questions made the
-	// review taller than the steps a short pane fit (BUG-59).
-	reviewQuestionRows = 1
+	// reviewRows is one row for a question and one for its answer, each cut with
+	// an ellipsis: both name what was read whole on the question's own step. The
+	// step is kept to the rows a question step takes - no heading, no blank, the
+	// options straight under the last answer - so a pane that held every question
+	// of a two-question ask holds the step that sends them. Drawn whole, the
+	// questions made the review taller than the steps a short pane fit, and an
+	// answer wrapped past the row its label was cut to did the same (BUG-59).
+	reviewRows = 1
 
 	// reviewUnanswered stands where an answer would be. A gap the operator can
 	// see is what makes Submit's refusal legible before it happens.
@@ -64,8 +60,8 @@ const reviewKeys = cardMoveKeys + cardKeySep + "[1-2] choose" + cardKeySep + car
 func (c Card) reviewBody(width int) string {
 	rows := []string{stepHeader(c, width)}
 	for i, q := range c.Detail.Questions {
-		rows = append(rows, reviewLines(collapseWhitespaceOneLine(q.Text), reviewQuestionLead, reviewQuestionRows, width, TextStyle))
-		rows = append(rows, reviewLines(c.answerLabel(i), reviewAnswerLead, reviewAnswerRows, width, HintStyle))
+		rows = append(rows, reviewLine(collapseWhitespaceOneLine(q.Text), reviewQuestionLead, width, TextStyle))
+		rows = append(rows, reviewLine(c.answerLabel(i), reviewAnswerLead, width, HintStyle))
 	}
 	for i, label := range [reviewOptions]string{reviewSubmitLabel, reviewCancelLabel} {
 		numbered := fmt.Sprintf(reviewDigitFmt, i+1, label)
@@ -74,26 +70,17 @@ func (c Card) reviewBody(width int) string {
 	return strings.Join(rows, "\n")
 }
 
-// reviewLines is one question or answer under its lead, wrapped rather than cut
-// to a row - the review is the last look at what goes out, and a multi-select
-// answer is long - but to rows at most, ending in an ellipsis.
-func reviewLines(text, lead string, rows, width int, style lipgloss.Style) string {
-	indent := ansi.StringWidth(lead)
-	room := max(width-indent, 1)
+// reviewLine is one question or answer under its lead, cut to reviewRows with an
+// ellipsis the way optionRow cuts a label to its row.
+func reviewLine(text, lead string, width int, style lipgloss.Style) string {
+	room := max(width-ansi.StringWidth(lead), 1)
 	lines := strings.Split(style.Width(room).MaxWidth(room).Render(text), "\n")
-	if len(lines) > rows {
-		lines = lines[:rows]
-		last := ansi.Truncate(lines[rows-1], max(room-ansi.StringWidth(ellipsis), 0), "")
-		lines[rows-1] = last + style.Render(ellipsis)
+	if len(lines) > reviewRows {
+		lines = lines[:reviewRows]
+		last := ansi.Truncate(lines[reviewRows-1], max(room-ansi.StringWidth(ellipsis), 0), "")
+		lines[reviewRows-1] = last + style.Render(ellipsis)
 	}
-	for i, ln := range lines {
-		pad := strings.Repeat(" ", indent)
-		if i == 0 {
-			pad = lead
-		}
-		lines[i] = style.Render(pad) + ln
-	}
-	return strings.Join(lines, "\n")
+	return style.Render(lead) + strings.Join(lines, "\n")
 }
 
 // answerLabel is what question i will send, or the word for a gap.
