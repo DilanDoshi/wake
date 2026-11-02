@@ -5932,3 +5932,15 @@ The friend on the usage bar (decisions.md, 2026-10-27) shipped without three thi
   *Closes with:* an argument stem like `teamArgStem` offering the cast's words and none.
 - **No image through tmux or screen.** A friend there is the half-block sprite, since the terminal outside is
   unknown. *Closes with:* tmux's `allow-passthrough` and its DCS wrapping, with the outer terminal named.
+
+## FROM `fix/card-review-fits-its-pane`, 2026-11-02
+
+- **An older daemon refuses a newer window's `!cmd`.** A 0.1.13 window sends a shell run as a
+  `FrameSend` carrying `shell` and no text; a 0.1.12 daemon does not know the field and refuses the
+  empty send as "encode user message: nothing to send" (sing-dev-2's log, 2026-11-01). `wake fleets`
+  already says to ⌃Q⌃Q and reopen the fleet on this build, and upgrading the fleet is the remedy. The
+  window could read the daemon's build off the report and say so at the bang instead of a refusal.
+- **A three- or four-question ask's review can still outgrow a short pane**: five fixed rows and up to
+  five per question. It opens on its foot with the key line saying the keys wait for the whole card,
+  and the window has to grow. A review that scrolls inside the card, or one row per question, would
+  close it.

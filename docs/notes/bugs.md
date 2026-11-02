@@ -1307,6 +1307,28 @@ changed nothing.
 
 **Fix:** in progress on `fix/fork-pane-shows-history`; that PR closes this entry.
 
+## BUG-59 — a two-question ask's review step went dead in a pane that fit its questions
+
+**Found 2026-11-01 by the owner**, in a 0.1.12 window on fleet sing-dev-2: "could not enter/select a
+choice in the question hil, could only hit escape and move between choices". The agent's transcript
+shows a two-question single-select ask (475- and 346-character questions, descriptions to 274
+characters) put at 00:58Z and Wake's esc-dismiss deny at 01:18Z, with nothing written in between: no
+↵ produced a frame. Identical on v0.1.12, v0.1.13 and main.
+
+**Cause.** `Card.reviewBody` drew every question whole, so the review step was taller than any
+question step: ↵ walked the questions (the "moving between choices"), the review did not fit,
+`cardFullyDrawn` went false and `cardKey` refused ↵, the digits, the arrows, ←→ and `d`. The page
+opened the cut card on its top (2026-10-20), so the `cardKeysCut` line was below the fold; a digit
+typed there landed in the composer and the line then blamed the draft. Only esc - a deny - the wheel
+or a resize were live. The band for that shape: terminal heights 20–26 at 80 and 100 columns, 22–30 at
+140 with the room beside; the recorded fixture has the same band two rows wide.
+
+**Fix:** branch `fix/card-review-fits-its-pane`. The review bounds each question to
+`reviewQuestionRows` and drops its spare rows, a card the pane cannot hold opens on its foot, and the
+cut line names the cut over a draft (`decisions.md`, 2026-11-02). Tests: the sweep and the height
+invariant in `cardreviewfit_test.go`, the pty case
+`TestEnterSubmitsTheReviewOfATwoQuestionAskInAShortPane` at 100×24.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -25,10 +26,10 @@ const (
 	reviewSubmitLabel = "Submit answers"
 	reviewCancelLabel = "Cancel"
 
-	// The two headings. The first says what the rows are; the second asks the
-	// question the two options answer.
+	// reviewTitle heads the rows, under the strip. The step is kept to the rows the
+	// question steps take - no blank under the strip, no second heading - so a pane
+	// that held every question holds the step that sends them (BUG-59).
 	reviewTitle = "Review your answers"
-	reviewReady = "Ready to submit your answers?"
 
 	// reviewAnswerLead marks the answer under the question it belongs to.
 	reviewAnswerLead = "  → "
@@ -41,6 +42,11 @@ const (
 	// reviewQuestionLead marks a question in the list. The same bullet a
 	// finished thing wears elsewhere in this build.
 	reviewQuestionLead = "● "
+
+	// reviewQuestionRows bounds a question's wrap the same way. A question is read
+	// whole on its own step; here it names the answer under it, and drawn whole it
+	// made the review taller than the steps a short pane fit (BUG-59).
+	reviewQuestionRows = 2
 
 	// reviewUnanswered stands where an answer would be. A gap the operator can
 	// see is what makes Submit's refusal legible before it happens.
@@ -55,14 +61,15 @@ const (
 // would be a second account of one irreversible thing.
 const reviewKeys = cardMoveKeys + cardKeySep + "[1-2] choose" + cardKeySep + cardDenyLabel
 
-// reviewBody is the review step's rows: the answers, then the two options.
+// reviewBody is the review step's rows: each question with its answer under it,
+// then the two options.
 func (c Card) reviewBody(width int) string {
-	rows := []string{stepHeader(c, width), "", AccentStyle.MaxWidth(width).Render(reviewTitle), ""}
+	rows := []string{stepHeader(c, width), AccentStyle.MaxWidth(width).Render(reviewTitle)}
 	for i, q := range c.Detail.Questions {
-		rows = append(rows, TextStyle.Width(width).MaxWidth(width).Render(reviewQuestionLead+collapseWhitespaceOneLine(q.Text)))
-		rows = append(rows, reviewAnswer(c.answerLabel(i), width))
+		rows = append(rows, reviewLines(collapseWhitespaceOneLine(q.Text), reviewQuestionLead, reviewQuestionRows, width, TextStyle))
+		rows = append(rows, reviewLines(c.answerLabel(i), reviewAnswerLead, reviewAnswerRows, width, HintStyle))
 	}
-	rows = append(rows, "", mutedLine(reviewReady, width))
+	rows = append(rows, "")
 	for i, label := range [reviewOptions]string{reviewSubmitLabel, reviewCancelLabel} {
 		numbered := fmt.Sprintf(reviewDigitFmt, i+1, label)
 		rows = append(rows, optionRow(numbered, width, i == c.Option, false, AccentStyle))
@@ -70,24 +77,24 @@ func (c Card) reviewBody(width int) string {
 	return strings.Join(rows, "\n")
 }
 
-// reviewAnswer is one answer under its question, wrapped rather than cut to a
-// row - the review is the last look at what goes out, and a multi-select answer
-// is long - but to reviewAnswerRows at most, ending in an ellipsis.
-func reviewAnswer(answer string, width int) string {
-	lead := ansi.StringWidth(reviewAnswerLead)
-	room := max(width-lead, 1)
-	lines := strings.Split(HintStyle.Width(room).MaxWidth(room).Render(answer), "\n")
-	if len(lines) > reviewAnswerRows {
-		lines = lines[:reviewAnswerRows]
-		last := ansi.Truncate(lines[reviewAnswerRows-1], max(room-ansi.StringWidth(ellipsis), 0), "")
-		lines[reviewAnswerRows-1] = last + HintStyle.Render(ellipsis)
+// reviewLines is one question or answer under its lead, wrapped rather than cut
+// to a row - the review is the last look at what goes out, and a multi-select
+// answer is long - but to rows at most, ending in an ellipsis.
+func reviewLines(text, lead string, rows, width int, style lipgloss.Style) string {
+	indent := ansi.StringWidth(lead)
+	room := max(width-indent, 1)
+	lines := strings.Split(style.Width(room).MaxWidth(room).Render(text), "\n")
+	if len(lines) > rows {
+		lines = lines[:rows]
+		last := ansi.Truncate(lines[rows-1], max(room-ansi.StringWidth(ellipsis), 0), "")
+		lines[rows-1] = last + style.Render(ellipsis)
 	}
 	for i, ln := range lines {
-		pad := strings.Repeat(" ", lead)
+		pad := strings.Repeat(" ", indent)
 		if i == 0 {
-			pad = reviewAnswerLead
+			pad = lead
 		}
-		lines[i] = HintStyle.Render(pad) + ln
+		lines[i] = style.Render(pad) + ln
 	}
 	return strings.Join(lines, "\n")
 }

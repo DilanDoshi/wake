@@ -101,6 +101,10 @@ const scriptRewinds = "rewinds"
 // and tells the model nobody replied.
 const scriptQuestions = "questions"
 
+// scriptLongQuestions puts the owner's two-question ask of 2026-11-01 (BUG-59), whose
+// review step outgrew a pane its questions fit. See cardreviewscreen_unix_test.go.
+const scriptLongQuestions = "long-questions"
+
 // scriptDispatches is the agent that runs a subagent: the lifecycle frames that
 // put a row on screen, and the forwarded frames that fill that row's own
 // transcript. It is the only thing in the tree that produces both end to end.
@@ -222,6 +226,8 @@ func runFakeAgent() int {
 		return fakeAgentAsks(sid)
 	case scriptQuestions:
 		return fakeAgentQuestions(sid)
+	case scriptLongQuestions:
+		return fakeAgentLongQuestions(sid)
 	case scriptModes:
 		return fakeAgentModes(sid)
 	case scriptRewinds:

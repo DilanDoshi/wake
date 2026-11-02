@@ -313,11 +313,10 @@ func (a App) cardBlock(id string, width int, cut bool) string {
 	// The pause is the focused pane's own: cardKey reads a.cardOf(a.focus), so
 	// a draft gates exactly that pane's card, and pausing another pane's on it
 	// would blame a draft that is not in that pane's composer.
-	typing := id == a.focus && !a.composerEmpty()
 	if cut {
-		return a.cards.ViewCut(card, width, agent, typing)
+		return a.cards.ViewCut(card, width, agent)
 	}
-	return a.cards.View(card, width, agent, typing)
+	return a.cards.View(card, width, agent, id == a.focus && !a.composerEmpty())
 }
 
 // cardOf is the ask a pane is putting: a conversation puts its own agent's, and

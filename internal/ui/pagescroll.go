@@ -8,8 +8,8 @@ package ui
 // up is how far the page is scrolled from its bottom. Up one row slides one row of
 // chrome off the bottom and takes one older transcript line in at the top, so the
 // pane is drawn height+up rows tall and its top height rows are shown. A card the
-// pane has no room for opens with the clipped rows already behind the window, on
-// the card's own top, and the wheel brings the rest up from under it.
+// pane has no room for opens on its foot - the rows the keys act on and the key
+// line in view, the rest a wheel notch above (the owner's 2026-11-02 ruling).
 
 import (
 	"strings"
@@ -68,7 +68,7 @@ func (a App) placeOf(dm DM, id string, width int, menu string, card Card) pagePl
 	clipped := max(menuRows-max(dm.menuRoomAt(box), 0), 0)
 	top := min(max(dm.tr.scroll, dm.tr.first()), dm.tr.bottom())
 	limit := clipped + max(top-dm.tr.first(), 0)
-	up := min(dm.pageAt(card, clipped), limit)
+	up := min(dm.pageAt(card, clipped, menuRows), limit)
 	win := windowPage(dm.height, clipped, up)
 	// The card is placed by the layout it is drawn in: the rows a scrolled page
 	// adds let a draft or a streamed preview grow, and the card sits above them.
@@ -90,16 +90,20 @@ func (p pagePlace) holds(cardRows int) bool {
 }
 
 // pageAt is where this conversation's page stands for card: where the operator
-// left it, or the default - the clipped rows already behind the window, unless the
-// box holds a draft, which is the operator's to see and opens in view.
-func (d DM) pageAt(card Card, clipped int) int {
+// left it, or the default. A box holding a draft opens in view, since the draft is
+// the operator's to see. Otherwise the page opens as far up as the card's last row
+// stays in view: the card's top for one the pane holds under the transcript's rows
+// (the composer scrolled away), lower for one it cannot, which opens on its foot
+// with the key line and the rows the keys act on in view (the owner's 2026-11-02
+// ruling, reversing 2026-10-20's top). menuRows is the pinned block whole.
+func (d DM) pageAt(card Card, clipped, menuRows int) int {
 	switch {
 	case d.page.set && d.page.req == card.RequestID:
 		return d.page.up
 	case !blank(d.composer.Value()):
 		return 0
 	}
-	return clipped
+	return max(clipped-max(d.tr.height+menuRows-d.height, 0), 0)
 }
 
 // sizedDM is the conversation id laid out for a pane of width by height with menu

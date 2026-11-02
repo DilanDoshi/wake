@@ -5312,3 +5312,40 @@ pink). `/friends puff`; it follows Bo in the picker.
   `TestFriendsPuffPutsThePufferfishOnTheBarAndAWindowOpenedLaterKeepsIt`, and
   `TestTheCommandsChapterNamesEveryFriend` (the manual's `/friends` line carries the words `/wake-help` shows,
   so a friend added without its place on that line fails).
+
+## 2026-11-02 — a card the pane cannot hold opens on its foot, and the review step is bounded (the owner)
+
+The owner's 2026-11-01 report (BUG-59): a two-question ask walked its questions on ↵ and went dead on
+the review. The review drew every question whole, so in a pane that held each question it was cut; the
+whole-card rule turned its keys off, and the page opened the cut card on its top with the line that says
+so below the fold - a digit typed there was blamed on the draft. The owner asked for both parts.
+
+- **A card the pane cannot hold opens on its foot.** Reverses 2026-10-20's "opens on its own top": the
+  rows the keys act on, Submit/Cancel and the key line are what is in view, and the wheel brings the
+  question in above them. `DM.pageAt` has one rule for every card: the page opens as far up as the card's
+  last row stays in view - the top anchor for a card the pane holds under the transcript's rows (the
+  composer scrolled away, as before), lower for one it cannot. A card exactly the pane's height is
+  answerable at rest now, with the transcript's row scrolled off (`TestACardThePaneCanHoldIsAnswerableAtRest`).
+  The keys' rule is unchanged: live only while the whole card is on screen (`cardFullyDrawn`).
+- **The review step is kept to the rows the question steps take.** A question is cut to
+  `reviewQuestionRows` with an ellipsis, as an answer is to `reviewAnswerRows`; the blank under the strip
+  and the second heading ("Ready to submit your answers?") are gone. For a two-question ask the review is
+  never taller than its tallest question (`TestTheReviewIsNoTallerThanTheTallestQuestion`), so a pane that
+  held every question holds the step that sends them (`TestTheReviewIsAnswerableWhereverTheQuestionsAre`).
+- **The cut line names the cut, over a draft too.** Reverses #184's reviewer choice that a draft over a
+  cut card names the draft: the cut is what keeps the keys off whatever the box holds, and the draft's
+  own line waits for a whole card.
+
+Traps:
+
+- `pageAt`'s default reads the transcript's rows off the pane laid out at its own height; the taller
+  layout keeps them (the chrome is the same with a blank draft), so no second layout is needed, and a
+  draft opens the page home anyway. The menu's rows stand in for the card's: the card is the top of the
+  pinned stack, so a picker under it only makes the rule conservative.
+- At rest on its foot `pageHides` reports the rows moved and the box away, so a press takes the screen as
+  drawn and ↵ on a draft brings the box back first - the composer-scrolled-away case's own behaviour.
+- The notch test checks the transcript's own lines only once the window's top is in the transcript: a
+  card on its foot brings its own rows in first.
+- A three- or four-question ask's review can still outgrow a short pane (five fixed rows and up to five
+  per question). It opens on its foot with the key line saying so, and the window has to grow. Left
+  (`deferred.md`).
