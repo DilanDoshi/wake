@@ -41,6 +41,7 @@ type pageSetup struct {
 	height, history, readBack int
 	sent, draft               string // a prompt already sent; words typed and not
 	bar                       bool   // a status bar under the composer
+	styled                    bool   // a tool call opens the history: a lipgloss-styled row among its oldest
 }
 
 func askingWith(t *testing.T, s pageSetup) App {
@@ -61,6 +62,10 @@ func beforeAsking(t *testing.T, s pageSetup) App {
 	}
 	if s.sent != "" {
 		a, _ = pressKey(a.withDraft(s.sent), tea.KeyMsg{Type: tea.KeyEnter})
+	}
+	if s.styled {
+		call := bashCall("t0")
+		a = a.applyFrame(rpcEvent("s1", &call))
 	}
 	for i := range s.history {
 		a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1",

@@ -5287,7 +5287,8 @@ what it draws. The richer card is ~130µs of the 910; the rest predates it. **20
 `askdim_bench_test.go` and `BenchmarkFrameBehindAnAsk` were deleted with the dimming behind an ask
 (owner's ruling, `decisions.md`), and the bench had been failing on `main` since `cardOf` stopped
 putting the room's card — so the figures above are the last measurement. Whoever takes this adds the
-benchmark first, with the conversation opened, as the Task 10 entry already says.
+benchmark first, as the Task 10 entry already asks, and opens the conversation in it: the deleted
+one never did, which is why it measured no card.
 
 **2026-08-22 — `--add-dir` and the debug flags still do not survive a park**, and neither does a
 typed answer in flight. The second is new with answer mode and is the same shape: `Cards.writing`

@@ -8,9 +8,9 @@ package ui
 // it are the conversation the answer is about. Byte-identical rather than the
 // same text, because a muted re-render keeps the words and loses everything else.
 //
-// Under a colour profile, or there is nothing to lose: glamour draws a plain
-// paragraph with no colour, so a tool call is appended to give the history a
-// row lipgloss styles.
+// Under a colour profile, because otherwise there is nothing to lose. Glamour
+// draws a plain paragraph with no colour, so the history opens and closes with
+// a tool call: a row lipgloss styles at whichever end a window shows.
 
 import (
 	"strings"
@@ -40,15 +40,15 @@ func aboveTheBox(rows []string) []string {
 	return rows
 }
 
-// colouredHistory is a conversation of height rows with a history that ends on
-// a lipgloss-styled row, drawn under a colour profile for the test's duration.
+// colouredHistory is a conversation of height rows whose history opens and ends
+// on a lipgloss-styled row, drawn under a colour profile for the test's duration.
 func colouredHistory(t *testing.T, height int) App {
 	t.Helper()
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(0) // termenv.TrueColor: a re-render has colour to lose
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 	call := bashCall("t1")
-	return beforeAsking(t, pageSetup{height: height, history: pageHistory}).applyFrame(rpcEvent("s1", &call))
+	return beforeAsking(t, pageSetup{height: height, history: pageHistory, styled: true}).applyFrame(rpcEvent("s1", &call))
 }
 
 // sameRowsSameBytes holds every row of got whose text is also a row of want to
@@ -93,21 +93,26 @@ func TestTheTranscriptBehindACardIsDrawnAsItIsWithoutOne(t *testing.T) {
 	sameRowsSameBytes(t, aboveTheBox(paneRowsOf(asked, "s1")), aboveTheBox(paneRowsOf(before, "s1")))
 }
 
-// A pane shorter than its card, wheeled until the card and the composer have left
-// by the bottom: the window is transcript alone, drawn by the page's own path.
+// A pane shorter than its card, wheeled to the page's oldest line: the card and
+// the composer are rows below the window, and what shows is transcript alone,
+// drawn by the page's own path (DM.transcriptPage). The pane with no card is
+// wheeled to its oldest line too, so the two windows show the same rows. The
+// question arrives with the reader on the newest line: a page opened behind a
+// reader already at the top has only its clipped rows to give the wheel.
 func TestAPagedCardsTranscriptIsDrawnAsItIsWithoutOne(t *testing.T) {
-	const height = 10
+	const height = 12 // room for the opening call under the banner, none for the card
 	before := colouredHistory(t, height)
-	asked := before.applyFrame(rpcEvent("s1", questionAsk(t)))
-	var page []string
-	for range height { // the card's top is within height rows of the window's top at rest
-		asked = wheeled(asked, tea.MouseButtonWheelUp, 1)
-		if page = paneRowsOf(asked, "s1"); !hasRow(page, composerTopGlyph) {
-			break
-		}
+	asked := wheeled(before.applyFrame(rpcEvent("s1", questionAsk(t))), tea.MouseButtonWheelUp, pageHistory)
+	before = wheeled(before, tea.MouseButtonWheelUp, pageHistory)
+	page := paneRowsOf(asked, "s1")
+	text := strings.Split(stripANSI(strings.Join(page, "\n")), "\n")
+	if hasRow(text, composerTopGlyph) {
+		t.Fatalf("a framed block is still on the window at the page's top, so this is not the transcript-only page:\n%s", strings.Join(text, "\n"))
 	}
-	if hasRow(page, composerTopGlyph) {
-		t.Fatalf("the wheel never took the framed blocks off the window, so this is not the transcript-only page:\n%s", stripANSI(strings.Join(page, "\n")))
+	plain := aboveTheBox(paneRowsOf(before, "s1"))
+	plainText := strings.Split(stripANSI(strings.Join(plain, "\n")), "\n")
+	if !hasRow(text, "1 tool use") || !hasRow(plainText, "1 tool use") { // the history's opening call, folded: both windows are at the top
+		t.Fatalf("the two windows do not both show the history's opening tool call, so they need not share a row:\npage:\n%s\nno card:\n%s", strings.Join(text, "\n"), strings.Join(plainText, "\n"))
 	}
-	sameRowsSameBytes(t, page, aboveTheBox(paneRowsOf(before, "s1")))
+	sameRowsSameBytes(t, page, plain)
 }

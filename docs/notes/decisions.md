@@ -5334,9 +5334,9 @@ ruling on it, and it reverses it.
   are each held to it.
 - **No room test,** because the room never draws a card (`App.cardOf("")` is false since the room
   stopped taking an unpaned agent's ask); `Room.behindAsk` was unreachable and went as dead code.
-- **The per-frame cost went with it.** Quieting was a strip and a re-render of a screenful of rows
-  on every frame while an agent was blocked — paid, by `askdim.go`'s own account, for the modal
-  reading. `askdim_bench_test.go` (`BenchmarkTranscriptBehindAnAsk`, `BenchmarkFrameBehindAnAsk`)
+- **The per-frame cost went with it.** Quieting stripped every drawn row of its escapes and wrapped
+  it in Muted's pair again, a screenful of rows on every frame while an agent was blocked — paid, by
+  `askdim.go`'s own account, for the modal reading. `askdim_bench_test.go` (`BenchmarkTranscriptBehindAnAsk`, `BenchmarkFrameBehindAnAsk`)
   was deleted with it; the second had been failing on `main` since `cardOf` stopped putting the
   room's card, which no gate runs benchmarks to notice. `deferred.md`'s 2026-08-22 card-cost entry
   names the loss.
