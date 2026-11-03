@@ -64,6 +64,13 @@ const (
 	// neither parks the agent nor asks for /reauth; the daemon resumes it.
 	NoticeAPIUnreachable Notice = "api_unreachable"
 
+	// NoticeAPIRetrying rides a KindSystem for each of claude's own retries of a
+	// request the API did not answer - the connection gone, an overload - before
+	// it gives the turn up. Event.Retry carries the count and the pause, so a
+	// reader can say claude is retrying where a working line would say nothing.
+	// A 401 retry is not one: it rides KindAPIError as NoticeAPIError.
+	NoticeAPIRetrying Notice = "api_retrying"
+
 	// NoticeTurnInterrupted is Claude's own account of a turn Wake aborted.
 	//
 	// It is the one notice resolved from a frame's *content* rather than from

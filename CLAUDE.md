@@ -236,6 +236,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   stopped); one stopped again by Wake's own resume waits for a network change alone.
   `internal/daemon/unreachable.go`. Any other named failure (`core.NoticeTurnFailed`: a rejected
   request) is a timed notice only. `internal/ui/apirecover.go`.
+  **While claude retries a request the API does not answer, the turn says so** (owner's 2026-11-02 ask):
+  each non-401 `api_retry` frame is a `core.NoticeAPIRetrying` with its count and pause (`Event.Retry`), and
+  the conversation's working row reads `⚠ API unreachable · retrying in 38s (attempt 3 of 10 · 1m 12s)`
+  (`API error 529` with a status, `retrying…` once the pause has run), the room's working line
+  `⚠ API unreachable · retrying 3/10 for 1m 12s` and the roster row's glyph `⚠`. Cleared by the API's
+  answer, the turn's end, the give-up (the pin above takes over), a `/clear` or a report showing the agent
+  not working - never a timer; the heartbeat ticker redraws the countdown. A 401 retry keeps its own path.
+  `internal/ui/apiretry.go`, `decisions.md` (2026-11-02).
 
 **Keys and the legend**
 - **The legend is drawn only while an arm is live, and then it is only the armed cue:**
@@ -540,7 +548,7 @@ yet says so in bold.**
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
-| Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` |
+| Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` · `apiretry.go` (the line while claude retries the API) |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go`/`_puff.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
@@ -659,7 +667,8 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   `updatedInput.answers` (`core.askKind`, decided by payload shape, never tool name).
 - A question killed by closing stdin is indistinguishable from an operator deny.
 - **An API claude cannot reach fails the turn as `error:"server_error"`** after ten `api_retry` frames
-  (about three minutes, `error_status` null), with no HTTP status on the stream: DNS, a refused or reset
+  (about three minutes; each carries `attempt`, `max_retries` and `retry_delay_ms`, `error_status` null),
+  with no HTTP status on the stream: DNS, a refused or reset
   connection, a timeout, sleep mid-response, an overload alike. The process stays up and idle.
   `api-error-unreachable.jsonl`, `docs/superpowers/notes/2026-10-23-unreachable-api-findings.md`.
 - **`rate_limit_event` is not per turn**: one on a process's first API response, then one whenever a figure

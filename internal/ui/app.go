@@ -207,6 +207,11 @@ type App struct {
 	// session id for tails' reason. Folded from two notices; see compacting.go.
 	compacting map[string]time.Time
 
+	// retrying is which sessions claude is retrying a request for, and what the
+	// last retry said, so the working line can say so. On App beside compacting,
+	// for its reason. See apiretry.go.
+	retrying map[string]apiRetry
+
 	// askedHistory is which sessions this client has already asked for a
 	// transcript, and pendingHistory is the asks Update has not yet written.
 	// Both are copied on write for dms' reason. See history.go. subTranscripts

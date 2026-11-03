@@ -17,6 +17,10 @@ import (
 // The DM is unfiltered and gets everything, which is the promise §8 makes about
 // it - so this is not an else.
 func (a App) observe(sessionID string, ev core.Event) App {
+	// A standing retry clears on the API's answer whichever kind carries it, so
+	// it is read before the two returns below - the final failure is one. See
+	// apiretry.go.
+	a = a.observeRetry(sessionID, ev)
 	if ev.Kind == core.KindRateLimit {
 		// A quota heartbeat is a fact about now, not conversation content: it
 		// goes to the timed notice above the composer and never into a

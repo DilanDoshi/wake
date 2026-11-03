@@ -37,7 +37,7 @@ func TestTheRoomsWorkingLineNamesTheAgentAndTheAge(t *testing.T) {
 	line := stripANSI(roomWorkingLine([]Agent{
 		working("s1", "noah", 86*time.Second, 5_500),
 		{ID: "s2", Name: "robin", State: rpc.StateIdle},
-	}, 120))
+	}, nil, 120))
 
 	for _, want := range []string{"noah", "for 1m 26s"} {
 		if !strings.Contains(line, want) {
@@ -57,7 +57,7 @@ func TestTheRoomsWorkingLineNamesTheOldestTurnAndCountsTheRest(t *testing.T) {
 		working("s1", "noah", 12*time.Second, 900),
 		working("s2", "robin", 124*time.Second, 5_500),
 		working("s3", "maya", 40*time.Second, 2_000),
-	}, 160))
+	}, nil, 160))
 
 	if !strings.Contains(line, "robin") {
 		t.Errorf("the line is %q, want it to name robin - the oldest running turn", line)
@@ -72,7 +72,7 @@ func TestTheRoomsWorkingLineNamesTheOldestTurnAndCountsTheRest(t *testing.T) {
 
 // A fleet with nobody working says nothing, and the row is not reserved.
 func TestTheRoomDrawsNoWorkingLineWhenNobodyIsWorking(t *testing.T) {
-	if line := roomWorkingLine([]Agent{{ID: "s1", Name: "noah", State: rpc.StateIdle}}, 120); line != "" {
+	if line := roomWorkingLine([]Agent{{ID: "s1", Name: "noah", State: rpc.StateIdle}}, nil, 120); line != "" {
 		t.Errorf("the room drew %q with nobody working", line)
 	}
 }
@@ -87,7 +87,7 @@ func TestTheRoomsWorkingLineIsNeverMoreThanOneRow(t *testing.T) {
 		agents = append(agents, working("s"+string(rune('a'+i)), "agent-"+string(rune('a'+i)), time.Duration(i)*time.Second, i*100))
 	}
 	for _, width := range []int{20, 40, 80, 120, 200} {
-		line := roomWorkingLine(agents, width)
+		line := roomWorkingLine(agents, nil, width)
 		if strings.Contains(line, "\n") {
 			t.Errorf("at width %d the room's working line is more than one row:\n%s", width, line)
 		}
@@ -146,7 +146,7 @@ func TestTheRoomStaysInBoundsWhenItsWorkingLineAppears(t *testing.T) {
 	r := NewRoom().SetSize(80, 12)
 	before := strings.Count(r.View(80, 12), "\n")
 
-	r = r.WithWorking([]Agent{working("s1", "noah", time.Second, 100)})
+	r = r.WithWorking([]Agent{working("s1", "noah", time.Second, 100)}, nil)
 	if got := strings.Count(r.View(80, 12), "\n"); got != before {
 		t.Errorf("the room drew %d newlines with a working line against %d without: it is taller than the pane it was given", got, before)
 	}

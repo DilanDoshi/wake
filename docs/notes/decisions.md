@@ -5312,3 +5312,37 @@ pink). `/friends puff`; it follows Bo in the picker.
   `TestFriendsPuffPutsThePufferfishOnTheBarAndAWindowOpenedLaterKeepsIt`, and
   `TestTheCommandsChapterNamesEveryFriend` (the manual's `/friends` line carries the words `/wake-help` shows,
   so a friend added without its place on that line fails).
+
+## 2026-11-02 — claude's retries are said while they run (the owner)
+
+The owner, with the Wi-Fi off: "it just moved the 'thinking timer' but did not show an error saying lost
+connection". claude retries for about three minutes before it gives the turn up (BUG-55's path), and for all
+of that Wake drew a working agent with a pool word over a ticking age. Each retry is an `api_retry` frame
+(BUG-60).
+
+- **Each non-401 retry is a notice, `core.NoticeAPIRetrying`, with `Event.Retry`**: which try failed, how
+  many claude allows, the pause before the next and the status the API answered (0 for none). The three new
+  wire keys are policed (`attempt`, `max_retries`, `retry_delay_ms`); `retryOf` reads them beside
+  `apiNotice`. A 401 retry keeps `KindAPIError`/`NoticeAPIError` and the auto-park.
+- **Wording** (the owner's pick): no status is `API unreachable`, the words of the pin that follows a
+  give-up, so the two read as one story; a status is `API error 529`, the number rather than a guess at
+  "busy".
+- **Where**: the conversation's working row, `⚠ API unreachable · retrying in 38s (attempt 3 of 10 ·
+  1m 12s)`, then `retrying…` once the pause has run; the room's working line, `@alex ⚠ API unreachable ·
+  retrying 3/10 for 1m 12s`, still the oldest turn's row; the roster row's glyph. The strip is unchanged (the
+  owner): a network drop marks every row at once. The turn's age stays - it is true; the pool word beside it
+  was the lie. Warn colour, no shimmer: a warning, not a pulse.
+- **Driven by the frames alone.** Held on `App.retrying` like `compacting`, replaced by each retry frame and
+  cleared on the API's answer (a streamed start or token, prose, a tool call, thinking), the turn's end, the
+  give-up (the unreachable pin takes over), a `/clear`, or a report showing the agent not working. A
+  receipt, a queued message's lifecycle, a replayed line, a quota reading or another system frame leaves it.
+  The countdown reads the clock on the heartbeat ticker a working agent already runs; nothing is scheduled.
+- **Not on `rpc.SessionStatus`** (three reflective guards): a client attaching mid-storm draws the working
+  line until the next retry frame, at most about forty seconds (`deferred.md`).
+- **The roster carries the set behind a pointer** (`Roster.retrying`), since `stopIndex` and the cursor tests
+  compare whole `Roster` values and a map field would end that; it is set on the drawn copy only.
+- **Held by** `internal/core/apiretry_test.go` (the recording's ten, a 529, a 401, no retry on any other
+  frame), `internal/rpc/event_test.go` (the pause crosses as a Duration) and `internal/ui/apiretry_test.go`
+  (the three surfaces off the recording, the countdown and its rounding, the status, the narrow line, every
+  clearing and non-clearing kind, the prune, replacement, the 401 path, no transcript block, the row budget,
+  the room's oldest-turn rule), each mutation-checked.

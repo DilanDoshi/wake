@@ -343,6 +343,9 @@ var claudeWireVocabulary = wordSet([]string{
 	"tool_use_result", "command_uuid", "new_conversation_id",
 	"rate_limit_info", "isReplay", "isSynthetic", "is_api_error_message", "isApiErrorMessage", "isMeta",
 	"api_retry", "error_status", "authentication_failed", "server_error",
+	// The retry frame's count and pause, read only in retryOf; Wake's own words
+	// for them are core.APIRetry's fields. api-error-unreachable.jsonl.
+	"attempt", "max_retries", "retry_delay_ms",
 	"run_in_background", "last_tool_name", "task_id",
 	"non_execution_kind", "permission_denials", "terminal_reason",
 	"modelUsage", "total_cost_usd", "num_turns",
@@ -798,7 +801,10 @@ var notNamedByTheAirlock = map[string]string{
 // ("allowed_warning"). question-multiselect.jsonl, midturn-two.jsonl.
 // 241 → 247: bash mode's six tags, a `!cmd` record read back and written.
 // bash-mode.jsonl, shell-run.stdin.jsonl.
-const policedWordCount = 247
+// 247 → 250: "attempt", "max_retries" and "retry_delay_ms", the api_retry
+// frame's count and pause, read so a reader can say claude is retrying and for
+// how long. api-error-unreachable.jsonl.
+const policedWordCount = 250
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

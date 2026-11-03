@@ -195,9 +195,10 @@ func (r Room) WithWriting(t string) Room {
 	return r
 }
 
-// WithWorking is the working line this pane draws, for the draw only.
-func (r Room) WithWorking(agents []Agent) Room {
-	r.beat = roomWorkingLine(agents, r.blockWidth())
+// WithWorking is the working line this pane draws, for the draw only; retrying
+// is which of agents claude is retrying a request for (apiretry.go).
+func (r Room) WithWorking(agents []Agent, retrying map[string]apiRetry) Room {
+	r.beat = roomWorkingLine(agents, retrying, r.blockWidth())
 	return r
 }
 

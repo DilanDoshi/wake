@@ -1307,6 +1307,24 @@ changed nothing.
 
 **Fix:** in progress on `fix/fork-pane-shows-history`; that PR closes this entry.
 
+## BUG-60 — a turn claude was retrying against a dead network showed only a ticking working timer
+
+**Found 2026-11-02 by the owner**: with the Wi-Fi off, a query "just moved the thinking timer" and nothing said
+the connection was lost. Proven on `main` 7a86e5a5 by replaying `api-error-unreachable.jsonl` into a working
+agent: ten retries in, the conversation drew `· Netting… (0s)`, the room `@alex · Rekindled for 0s`, the roster
+`· alex`, and nothing of the API.
+
+**Cause.** claude retries an unanswered request ten times over about three minutes, one `system`/`api_retry`
+frame per retry carrying `attempt`, `max_retries`, `retry_delay_ms` and `error_status`. `apiRetryNotice` read
+only the 401 (the fleet-wide OAuth bug) and left every other retry a system event with no notice, which no
+surface draws; only the give-up frame (BUG-55) said anything. The working line kept its pool word over the
+turn's age - true about the age, wrong about the word.
+
+**Fix:** branch `fix/show-api-retrying`. A non-401 retry is `core.NoticeAPIRetrying` with its count and pause
+(`Event.Retry`); the conversation's working row, the room's working line and the roster glyph say so until
+the API answers, the turn ends or fails, the conversation is cleared, or a report shows the agent not working
+(`internal/ui/apiretry.go`; `decisions.md`, 2026-11-02).
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

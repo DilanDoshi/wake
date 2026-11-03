@@ -664,6 +664,10 @@ type Event struct {
 	// event - the same pointer-payload shape Goal and Task use. See CompactSummary.
 	Compaction *CompactSummary `json:"compaction,omitempty"`
 
+	// Retry is a NoticeAPIRetrying's count and pause, nil on every other event -
+	// the same pointer-payload shape Compaction uses. See APIRetry.
+	Retry *APIRetry `json:"retry,omitempty"`
+
 	// Control is the payload of a KindControlReceipt, nil on every other
 	// kind - the same pointer-payload shape Tool uses. Rewind is that shape
 	// again for KindRewindReceipt; see RewindResult.
@@ -746,6 +750,24 @@ func (f wireFrame) apiNotice() Notice {
 		return NoticeTurnFailed
 	}
 	return NoticeAPIError
+}
+
+// APIRetry is one of claude's own retries of a request the API did not answer:
+// which try failed, how many claude allows, the pause before the next, and the
+// status the API answered with - 0 when the connection itself failed.
+type APIRetry struct {
+	Attempt int           `json:"attempt_number"`
+	Max     int           `json:"attempts_allowed"`
+	Delay   time.Duration `json:"pause"`
+	Status  int           `json:"http_status,omitempty"`
+}
+
+// retryOf is an api_retry frame's retry, and nil on every other frame.
+func retryOf(f wireFrame) *APIRetry {
+	if f.Subtype != subtypeAPIRetry {
+		return nil
+	}
+	return &APIRetry{Attempt: f.RetryAttempt, Max: f.RetryMax, Delay: time.Duration(f.RetryDelayMS) * time.Millisecond, Status: f.RetryStatus}
 }
 
 // ModelOutput reports inference the API accepted - prose, a tool call, thinking -

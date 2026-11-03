@@ -80,7 +80,7 @@ func (a App) assembleFrame() string {
 		}
 	}
 	if r.Roster > 0 {
-		side := a.roster.Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
+		side := a.roster.WithRetrying(a.retrying).Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
 		if rows := a.usageDrawn(); len(rows) > 0 {
 			side += "\n" + strings.Join(rows, "\n") // the session bar under it; see usagebar.go
 		}
@@ -258,7 +258,7 @@ func (a App) roomFor() Room {
 	// so it is set for the draw for the mode's reason and cannot go stale.
 	return a.room.WithComposer(a.room.Composer().
 		WithMode(a.hintMode()).
-		WithArms(a.armsFor(""))).WithWorking(a.working()).WithWriting(a.answerTitle(""))
+		WithArms(a.armsFor(""))).WithWorking(a.working(), a.retrying).WithWriting(a.answerTitle(""))
 }
 
 // dmFor is one conversation as dmPane draws it: its agent's own facts, and a
@@ -502,7 +502,7 @@ func (a App) dmPane(id string, width, height int) string {
 	}
 	c, has := a.cardOf(id)
 	if !ask || !has { // no card, no page: the pane View lays out for itself
-		return paint(a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id))).View(width, height)
+		return paint(a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).WithRetrying(a.retryOf(id))).View(width, height)
 	}
 	laid := a.sizedDM(id, menu, width, height)
 	place := a.placeOf(laid, id, width, menu, c)

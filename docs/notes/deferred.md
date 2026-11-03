@@ -5932,3 +5932,14 @@ The friend on the usage bar (decisions.md, 2026-10-27) shipped without three thi
   *Closes with:* an argument stem like `teamArgStem` offering the cast's words and none.
 - **No image through tmux or screen.** A friend there is the half-block sprite, since the terminal outside is
   unknown. *Closes with:* tmux's `allow-passthrough` and its DCS wrapping, with the outer terminal named.
+
+## FROM `fix/show-api-retrying`, 2026-11-02
+
+The retry line (decisions.md, 2026-11-02) shipped with two things left out.
+
+- **A standing retry is not on `rpc.SessionStatus`.** A client attaching mid-storm draws the plain working
+  line until the next retry frame, at most about forty seconds; a field would trip the three reflective
+  guards for a fact the next frame restores. *Closes with:* the daemon holding the last retry per agent and
+  the report carrying it, the way `Goal` does.
+- **No `N retrying` segment on the strip** (the owner, 2026-11-02): a network drop marks every roster row
+  and the room line at once. *Closes with:* a segment beside `✔ N done`, counted off `App.retrying`.
