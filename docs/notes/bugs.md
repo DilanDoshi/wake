@@ -1292,6 +1292,7 @@ is the key a typed answer is left by on the way to another question.
 takes a kept answer away; on a multi-select question the cursor lands on the walk-on row, so a second `↵` walks
 on rather than unticking the words. The refusal's reason belongs to no question, so `esc` there still drops it.
 
+
 ## BUG-57 — a fork's pane opened without the conversation it inherited
 
 **Seen 2026-10-29 filming the landing site's fork clip (`demo/tapes/08-fork.tape`), then reproduced with
@@ -1333,6 +1334,13 @@ invariant in `cardreviewfit_test.go`, the pty case
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
 here is only the part that is **still open**, so this file stays a worklist rather than an archive.
+
+**From BUG-57 (a fork's pane opens on the conversation it was taken from).** claude writes a fork's
+transcript only on its first turn, so the daemon answers the pane from the source's transcript as long as
+it was at the fork (`server.history`, `agent.forkBytes`). Still open, each in `deferred.md`: a fork parked
+before its first turn cannot be woken (claude refuses `--resume` of an id with no transcript), `esc esc`
+offers no rewind target before that turn, and a source rewound during the fork's start-up shows its
+dropped turns until then.
 
 **From BUG-17 (a silent agent is reclaimed now).**
 - `rpc.FrameKill` still has no producer. The owner chose automatic reclaim only, which closes the

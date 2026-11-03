@@ -30,10 +30,10 @@ import (
 // may have no pane on screen. A focus that names no conversation is the room.
 func (a App) toggleExpanded() (tea.Model, tea.Cmd, bool) {
 	// A focused question card's description expands here first: while a card is up
-	// the transcript behind it is dimmed and read past, so ⌃E means "show me the
-	// rest of this option's description" - the one row the card truncates and
-	// cannot scroll to. It falls through to the tool results below when the
-	// focused pane has no question card with a description. See detailSlot.
+	// the transcript behind it is read past, so ⌃E means "show me the rest of this
+	// option's description" - the one row the card truncates and cannot scroll to.
+	// It falls through to the tool results below when the focused pane has no
+	// question card with a description. See detailSlot.
 	if next, ok := a.toggleCardDetail(); ok {
 		return next, nil, true
 	}

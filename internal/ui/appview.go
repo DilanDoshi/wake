@@ -388,8 +388,7 @@ func (a App) roomPane(width, height int) string {
 
 	// Handed over whole: the pane clips it, because only the pane knows what is
 	// left after the rest of its chrome. See Room.menuRows.
-	menu, ask := a.menuBlock("", width, height)
-	return room.WithMenu(menu).WithAsk(ask).View(width, height)
+	return room.WithMenu(a.menuBlock("", width, height)).View(width, height)
 }
 
 // menuBlock is everything a pane pins between its transcript and its composer,
@@ -414,9 +413,8 @@ func (a App) roomPane(width, height int) string {
 // knows what its transcript can spare; it clips and draws it. Nothing goes above
 // the transcript any more, which is what keeps mouse.go's startSelection a plain
 // `top`: a screen row is a transcript line with nothing to offset it by.
-func (a App) menuBlock(id string, width, height int) (string, bool) {
-	card := a.cardBlock(id, width, false)
-	return a.menuAround(card, id, width, height), card != ""
+func (a App) menuBlock(id string, width, height int) string {
+	return a.menuAround(a.cardBlock(id, width, false), id, width, height)
 }
 
 // menuAround is the menu block with card at its head.
@@ -498,7 +496,7 @@ func (a App) dmPane(id string, width, height int) string {
 	menu, ask := a.menuAround(card, id, width, height), card != ""
 	paint := func(d DM) DM {
 		return d.WithSelection(a.selectionIn(id)).WithComposerSelection(a.composerSelectionIn(id)).
-			WithAsk(ask).WithWriting(a.answerTitle(id))
+			WithWriting(a.answerTitle(id))
 	}
 	c, has := a.cardOf(id)
 	if !ask || !has { // no card, no page: the pane View lays out for itself
@@ -536,10 +534,7 @@ func (a App) dmPane(id string, width, height int) string {
 // and a mouse trusting it reads a card's own rows as conversation. Sized here
 // through the same SetSize the draw would call, so the two cannot disagree.
 func (a App) transcriptRows(id string, width, height int) int {
-	// The ask flag is the draw's business, not the measurement's: this needs the
-	// rows the menu takes, and a card contributes those whether or not the pane
-	// goes on to treat it as answerable.
-	menu, _ := a.menuBlock(id, width, height)
+	menu := a.menuBlock(id, width, height)
 	if id == "" {
 		return a.roomFor().WithMenu(menu).SetSize(width, height).tr.height
 	}
