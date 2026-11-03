@@ -223,7 +223,8 @@ func (a App) cardFullyDrawn() bool {
 		return false
 	}
 	menu := a.menuAround(card, a.focus, width, height)
-	return a.pagePlace(a.focus, width, height, menu, c).holds(lipgloss.Height(card))
+	rows := lipgloss.Height(card)
+	return a.pagePlace(a.focus, width, height, menu, c, rows).holds(rows)
 }
 
 // focusedPane is the width and height of the pane holding the keys, and whether
@@ -310,14 +311,13 @@ func (a App) cardBlock(id string, width int, cut bool) string {
 		return ""
 	}
 	agent, _ := a.fleet.Agent(card.AgentID)
+	if cut {
+		return a.cards.ViewCut(card, width, agent)
+	}
 	// The pause is the focused pane's own: cardKey reads a.cardOf(a.focus), so
 	// a draft gates exactly that pane's card, and pausing another pane's on it
 	// would blame a draft that is not in that pane's composer.
-	typing := id == a.focus && !a.composerEmpty()
-	if cut {
-		return a.cards.ViewCut(card, width, agent, typing)
-	}
-	return a.cards.View(card, width, agent, typing)
+	return a.cards.View(card, width, agent, id == a.focus && !a.composerEmpty())
 }
 
 // cardOf is the ask a pane is putting: a conversation puts its own agent's, and
@@ -388,8 +388,7 @@ func (a App) roomPane(width, height int) string {
 
 	// Handed over whole: the pane clips it, because only the pane knows what is
 	// left after the rest of its chrome. See Room.menuRows.
-	menu, ask := a.menuBlock("", width, height)
-	return room.WithMenu(menu).WithAsk(ask).View(width, height)
+	return room.WithMenu(a.menuBlock("", width, height)).View(width, height)
 }
 
 // menuBlock is everything a pane pins between its transcript and its composer,
@@ -414,9 +413,8 @@ func (a App) roomPane(width, height int) string {
 // knows what its transcript can spare; it clips and draws it. Nothing goes above
 // the transcript any more, which is what keeps mouse.go's startSelection a plain
 // `top`: a screen row is a transcript line with nothing to offset it by.
-func (a App) menuBlock(id string, width, height int) (string, bool) {
-	card := a.cardBlock(id, width, false)
-	return a.menuAround(card, id, width, height), card != ""
+func (a App) menuBlock(id string, width, height int) string {
+	return a.menuAround(a.cardBlock(id, width, false), id, width, height)
 }
 
 // menuAround is the menu block with card at its head.
@@ -498,14 +496,14 @@ func (a App) dmPane(id string, width, height int) string {
 	menu, ask := a.menuAround(card, id, width, height), card != ""
 	paint := func(d DM) DM {
 		return d.WithSelection(a.selectionIn(id)).WithComposerSelection(a.composerSelectionIn(id)).
-			WithAsk(ask).WithWriting(a.answerTitle(id))
+			WithWriting(a.answerTitle(id))
 	}
 	c, has := a.cardOf(id)
 	if !ask || !has { // no card, no page: the pane View lays out for itself
 		return paint(a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id))).View(width, height)
 	}
 	laid := a.sizedDM(id, menu, width, height)
-	place := a.placeOf(laid, id, width, menu, c)
+	place := a.placeOf(laid, id, width, menu, c, lipgloss.Height(card))
 	if !place.holds(lipgloss.Height(card)) {
 		// The same rows with the keys' line saying why they are off.
 		laid = laid.WithMenu(a.menuAround(a.cardBlock(id, width, true), id, width, height))
@@ -536,10 +534,7 @@ func (a App) dmPane(id string, width, height int) string {
 // and a mouse trusting it reads a card's own rows as conversation. Sized here
 // through the same SetSize the draw would call, so the two cannot disagree.
 func (a App) transcriptRows(id string, width, height int) int {
-	// The ask flag is the draw's business, not the measurement's: this needs the
-	// rows the menu takes, and a card contributes those whether or not the pane
-	// goes on to treat it as answerable.
-	menu, _ := a.menuBlock(id, width, height)
+	menu := a.menuBlock(id, width, height)
 	if id == "" {
 		return a.roomFor().WithMenu(menu).SetSize(width, height).tr.height
 	}

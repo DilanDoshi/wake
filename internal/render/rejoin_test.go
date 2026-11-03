@@ -296,3 +296,16 @@ func TestACopiedRecordRejoinsItsWrappedValue(t *testing.T) {
 		t.Fatalf("copied\n%s\nwant\n%s", got, want)
 	}
 }
+
+// A grid's list of links copies a link a line, as drawn: matched back to nothing
+// when the table is drawn alone (its records list none), and to the same list
+// when glamour draws the reply whole.
+func TestAGridsLinksCopyALinkALine(t *testing.T) {
+	two, want := linkTable(2)
+	ref := strings.Replace(two, "(https://example.com/1)", "[r]", 1) + "\n[r]: https://example.com/1"
+	for _, src := range []string{two, ref} {
+		if got := copiedAt(src, 80); !strings.HasSuffix(got, "\n"+strings.Join(want, "\n")) {
+			t.Errorf("%q copied\n%s", src, got)
+		}
+	}
+}

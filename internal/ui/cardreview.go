@@ -11,6 +11,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 )
 
@@ -25,22 +26,21 @@ const (
 	reviewSubmitLabel = "Submit answers"
 	reviewCancelLabel = "Cancel"
 
-	// The two headings. The first says what the rows are; the second asks the
-	// question the two options answer.
-	reviewTitle = "Review your answers"
-	reviewReady = "Ready to submit your answers?"
-
 	// reviewAnswerLead marks the answer under the question it belongs to.
 	reviewAnswerLead = "  → "
-
-	// reviewAnswerRows bounds one answer's wrap. A multi-select answer is long
-	// enough to need more than a row, and a typed one can be any length - a
-	// card taller than its pane takes no keys, so Submit must stay on it.
-	reviewAnswerRows = 3
 
 	// reviewQuestionLead marks a question in the list. The same bullet a
 	// finished thing wears elsewhere in this build.
 	reviewQuestionLead = "● "
+
+	// reviewRows is one row for a question and one for its answer, each cut with
+	// an ellipsis: both name what was read whole on the question's own step. The
+	// step is kept to the rows a question step takes - no heading, no blank, the
+	// options straight under the last answer - so a pane that held every question
+	// of a two-question ask holds the step that sends them. Drawn whole, the
+	// questions made the review taller than the steps a short pane fit, and an
+	// answer wrapped past the row its label was cut to did the same (BUG-59).
+	reviewRows = 1
 
 	// reviewUnanswered stands where an answer would be. A gap the operator can
 	// see is what makes Submit's refusal legible before it happens.
@@ -55,14 +55,14 @@ const (
 // would be a second account of one irreversible thing.
 const reviewKeys = cardMoveKeys + cardKeySep + "[1-2] choose" + cardKeySep + cardDenyLabel
 
-// reviewBody is the review step's rows: the answers, then the two options.
+// reviewBody is the review step's rows: each question with its answer under it,
+// then the two options.
 func (c Card) reviewBody(width int) string {
-	rows := []string{stepHeader(c, width), "", AccentStyle.MaxWidth(width).Render(reviewTitle), ""}
+	rows := []string{stepHeader(c, width)}
 	for i, q := range c.Detail.Questions {
-		rows = append(rows, TextStyle.Width(width).MaxWidth(width).Render(reviewQuestionLead+collapseWhitespaceOneLine(q.Text)))
-		rows = append(rows, reviewAnswer(c.answerLabel(i), width))
+		rows = append(rows, reviewLine(collapseWhitespaceOneLine(q.Text), reviewQuestionLead, width, TextStyle))
+		rows = append(rows, reviewLine(c.answerLabel(i), reviewAnswerLead, width, HintStyle))
 	}
-	rows = append(rows, "", mutedLine(reviewReady, width))
 	for i, label := range [reviewOptions]string{reviewSubmitLabel, reviewCancelLabel} {
 		numbered := fmt.Sprintf(reviewDigitFmt, i+1, label)
 		rows = append(rows, optionRow(numbered, width, i == c.Option, false, AccentStyle))
@@ -70,26 +70,17 @@ func (c Card) reviewBody(width int) string {
 	return strings.Join(rows, "\n")
 }
 
-// reviewAnswer is one answer under its question, wrapped rather than cut to a
-// row - the review is the last look at what goes out, and a multi-select answer
-// is long - but to reviewAnswerRows at most, ending in an ellipsis.
-func reviewAnswer(answer string, width int) string {
-	lead := ansi.StringWidth(reviewAnswerLead)
-	room := max(width-lead, 1)
-	lines := strings.Split(HintStyle.Width(room).MaxWidth(room).Render(answer), "\n")
-	if len(lines) > reviewAnswerRows {
-		lines = lines[:reviewAnswerRows]
-		last := ansi.Truncate(lines[reviewAnswerRows-1], max(room-ansi.StringWidth(ellipsis), 0), "")
-		lines[reviewAnswerRows-1] = last + HintStyle.Render(ellipsis)
+// reviewLine is one question or answer under its lead, cut to reviewRows with an
+// ellipsis the way optionRow cuts a label to its row.
+func reviewLine(text, lead string, width int, style lipgloss.Style) string {
+	room := max(width-ansi.StringWidth(lead), 1)
+	lines := strings.Split(style.Width(room).MaxWidth(room).Render(text), "\n")
+	if len(lines) > reviewRows {
+		lines = lines[:reviewRows]
+		last := ansi.Truncate(lines[reviewRows-1], max(room-ansi.StringWidth(ellipsis), 0), "")
+		lines[reviewRows-1] = last + style.Render(ellipsis)
 	}
-	for i, ln := range lines {
-		pad := strings.Repeat(" ", lead)
-		if i == 0 {
-			pad = reviewAnswerLead
-		}
-		lines[i] = HintStyle.Render(pad) + ln
-	}
-	return strings.Join(lines, "\n")
+	return style.Render(lead) + strings.Join(lines, "\n")
 }
 
 // answerLabel is what question i will send, or the word for a gap.

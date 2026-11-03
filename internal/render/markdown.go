@@ -145,11 +145,23 @@ const boxDrawing = "│─┼┌┐└┘├┤┬┴╭╮╰╯"
 // item there. Inside an item a row glamour leads with a styled span's empty
 // styling is the item's too: a code block in an item sits deeper, and any other
 // block is a blank row away.
+//
+// The list of links glamour draws under a grid is an entry a row: from a group
+// `[1]: ` opens, each next label in order starts a group of its own, to the next
+// blank row. A wrap past nine links leaves an entry's tail a column left of its
+// padded label, so the list outlives the group; it reads only the label it counts
+// to, since in a list item a paragraph follows it with no blank row.
 func reflowProse(s string, width int) string {
 	lines := strings.Split(s, "\n")
 	out := make([]string, 0, len(lines))
+	next := 0 // the label the list's next entry opens with; 0 outside a list
 	for i := 0; i < len(lines); {
-		if !reflowable(lines[i]) {
+		if n := linkLabel(lines[i]); n == 1 || n > 1 && n == next {
+			next = n + 1
+		} else if blankRow(lines[i]) {
+			next = 0
+		}
+		if !reflowable(lines[i]) { // an entry holding box drawing still counts
 			out = append(out, lines[i])
 			i++
 			continue
@@ -163,7 +175,7 @@ func reflowProse(s string, width int) string {
 			if mark != "" {
 				row = unstyledLead(row)
 			}
-			if !reflowable(row) || leadSpaces(row) != lead || startsItem(group[0], row, itemTag) {
+			if !reflowable(row) || leadSpaces(row) != lead || startsItem(group[0], row, itemTag) || next > 0 && linkLabel(row) == next {
 				break
 			}
 			group = append(group, row)
@@ -182,6 +194,19 @@ func reflowProse(s string, width int) string {
 func startsItem(first, row, tag string) bool {
 	a, b := markerOf(first, tag), markerOf(row, tag)
 	return a != "" && b != "" && enumerator(a) == enumerator(b)
+}
+
+// linkLabel is n for a row opening `[n]: `, as each entry of the list glamour
+// draws under a grid does, the label unstyled and padded to the widest; 0 for any
+// other row.
+func linkLabel(row string) int {
+	t, ok := strings.CutPrefix(strings.TrimLeft(row, " "), "[")
+	digits := len(t) - len(strings.TrimLeft(t, "0123456789"))
+	if !ok || digits == 0 || !strings.HasPrefix(t[digits:], "]: ") {
+		return 0
+	}
+	n, _ := strconv.Atoi(t[:digits]) // out of range: 0
+	return n
 }
 
 // enumerator reports whether a marker is an `N. ` one.

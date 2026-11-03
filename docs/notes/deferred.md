@@ -5283,7 +5283,12 @@ change only when a key is pressed. **The fix is the `chunked`/`transcript` treat
 conversations already have**, invalidated on the three things that move it (the card set, the
 cursor, the width). Not taken here: this branch made the card richer and measured the result rather
 than leaving the number unknown, and caching it is a change to how a card is held rather than to
-what it draws. The richer card is ~130µs of the 910; the rest predates it.
+what it draws. The richer card is ~130µs of the 910; the rest predates it. **2026-11-01:**
+`askdim_bench_test.go` and `BenchmarkFrameBehindAnAsk` were deleted with the dimming behind an ask
+(owner's ruling, `decisions.md`), and the bench had been failing on `main` since `cardOf` stopped
+putting the room's card — so the figures above are the last measurement. Whoever takes this adds the
+benchmark first, as the Task 10 entry already asks, and opens the conversation in it: the deleted
+one never did, which is why it measured no card.
 
 **2026-08-22 — `--add-dir` and the debug flags still do not survive a park**, and neither does a
 typed answer in flight. The second is new with answer mode and is the same shape: `Cards.writing`
@@ -5932,6 +5937,59 @@ The friend on the usage bar (decisions.md, 2026-10-27) shipped without three thi
   *Closes with:* an argument stem like `teamArgStem` offering the cast's words and none.
 - **No image through tmux or screen.** A friend there is the half-block sprite, since the terminal outside is
   unknown. *Closes with:* tmux's `allow-passthrough` and its DCS wrapping, with the outer terminal named.
+
+## FROM `fix/fork-pane-shows-history`, 2026-10-29
+
+A fork's pane now opens on the conversation it was taken from, read from the source's transcript as
+long as it was at the fork, until the fork's first turn writes a transcript of its own (claude writes it
+only then; `docs/superpowers/notes/2026-10-29-fork-transcript-findings.md`). The length rides on the
+agent beside `forkFrom`, in memory only.
+
+- **Not persisted, and decided so.** The park book holds no lineage (2026-08-10 ruling), and a restart
+  would have nothing to use it for: a fork parked before its first turn has no transcript, claude refuses
+  `--resume` of an id with none, and `parkedStatuses` already leaves it out of `/resume`. The wake carry
+  of `forkBytes` (as of `forkFrom`) is reached only by the test's fake claude, which resumes anything.
+- **A fork parked before its first turn cannot come back at all.** ⌃C on a fork that has not spoken yet
+  parks a session no wake can resume; the conversation is still the source's, so a fresh fork recovers it.
+  *Closes with:* refusing that park with a sentence saying why, or waking it as a fresh fork of its source.
+- **`esc esc` before a fork's first turn offers nothing to rewind to**, though the pane shows the
+  inherited prompts: `RewindTargets` reads the fork's own transcript, which is not there yet. What claude
+  does with a `rewind_conversation` before that file exists is unrecorded. *Closes with:* a recording of
+  that request, then targets from the same snapshot if claude honours it.
+- **A rewind of the source in the moment between a fork's launch and claude reading the source** leaves
+  the pane showing the turns the rewind dropped, until the fork's first turn: the length is measured
+  before claude reads, and the rewind's marker lands after it. The source must be idle to be forked,
+  so this needs an operator rewinding it within the fork's start-up. *Closes with:* the length measured
+  once claude is known to have read the source, if anything on the wire marks that.
+
+## FROM `fix/card-review-fits-its-pane`, 2026-11-02
+
+- **An older daemon refuses a newer window's `!cmd`.** A 0.1.13 window sends a shell run as a
+  `FrameSend` carrying `shell` and no text; a 0.1.12 daemon does not know the field and refuses the
+  empty send as "encode user message: nothing to send" (sing-dev-2's log, 2026-11-01). `wake fleets`
+  already says to ⌃Q⌃Q and reopen the fleet on this build, and upgrading the fleet is the remedy. The
+  window could read the daemon's build off the report and say so at the bang instead of a refusal.
+- **A three- or four-question ask's review can still outgrow a short pane**: three fixed rows and two
+  per question. It opens on its foot with the key line saying the keys wait for the whole card, and
+  the window has to grow. A review that scrolls inside the card would close it.
+
+## FROM `fix/send-drawn-twice`, 2026-10-29
+
+A send by address is named from Claude Code's session registry (decisions.md, 2026-10-29); two things it leaves.
+
+- **A reopened conversation draws a send by address as the address.** History is not resolved through today's
+  registry, by wake-orch's ruling: a PID can be reused, so an old send to `uds:/tmp/cc-socks/<pid>.sock` could take
+  the name of whichever session holds that socket now - a false statement where the raw path is merely unfriendly.
+  *Closes with:* resolving a history send only through a record whose session began before the send was made (the
+  record's `startedAt` against the event's `At`), which is the one check that says the socket was that session's
+  when it was written to; or wake-orch's narrower form, a current fleet agent whose conversation began first.
+- **A send to a fleet agent is left to the receiver's replay, which may never come** (Codex, first pass). A
+  recipient that ends or parks between the send and the replay, or a send that fails, draws no room line at
+  all. A send by name has had the same contract since 2026-10-16. *Closes with:* the 2026-10-16 entry's pending
+  map - the call's line held until the receiver's replay or the send's result says what happened.
+- **A bare name is still the room's `ByName`, not the registry's.** So the 2026-10-16 entry above - a send by a
+  claude name that lags Wake's, drawn twice - stays open. *Closes with:* the daemon resolving a bare name through
+  the registry too, which costs a directory read on every send rather than every send by address.
 
 ## FROM `feat/tab-title-fleet-name`, 2026-11-01
 

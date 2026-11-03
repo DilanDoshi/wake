@@ -1307,10 +1307,57 @@ changed nothing.
 
 **Fix:** in progress on `fix/fork-pane-shows-history`; that PR closes this entry.
 
+## BUG-58 — one message between two fleet agents was drawn twice in the room
+
+**Found 2026-10-29 by the owner**: `↪ wake-imp-puffer → uds:/tmp/cc-socks/73009.sock ✅` and `↪ wake-imp-puffer →
+wake-orch ✅` for one SendMessage. The sender's transcript holds a single call, `to` the socket; PID 73009 was
+wake-orch's claude.
+
+**Cause.** An agent replying to a cross-session message copies its `from`, a `uds:` socket address, as its `to`.
+`withSend` draws a send unless `ByName(to)` finds a fleet agent, and an address is no name, so the call drew as a
+send outside the fleet - and the receiver, a fleet agent, drew its replayed envelope as well. A `name [ref]` address
+did the same, and a conversation headed the send with the raw path and showed its receipt, whose shape for a
+socket was not the recorded one.
+
+**Fix:** branch `fix/send-drawn-twice`. The daemon names the session behind an address from Claude Code's session
+registry (`daemon/sendto.go`, `decisions.md` 2026-10-29); the room leaves a fleet recipient to its own stream and
+heads any other send with the registry's name; a conversation heads its sends the same way and hides the socket
+form's receipt too.
+
+## BUG-59 — a two-question ask's review step went dead in a pane that fit its questions
+
+**Found 2026-11-01 by the owner**, in a 0.1.12 window on fleet sing-dev-2: "could not enter/select a
+choice in the question hil, could only hit escape and move between choices". The agent's transcript
+shows a two-question single-select ask (475- and 346-character questions, descriptions to 274
+characters) put at 00:58Z and Wake's esc-dismiss deny at 01:18Z, with nothing written in between: no
+↵ produced a frame. Identical on v0.1.12, v0.1.13 and main.
+
+**Cause.** `Card.reviewBody` drew every question whole, so the review step was taller than any
+question step: ↵ walked the questions (the "moving between choices"), the review did not fit,
+`cardFullyDrawn` went false and `cardKey` refused ↵, the digits, the arrows, ←→ and `d`. The page
+opened the cut card on its top (2026-10-20), so the `cardKeysCut` line was below the fold; a digit
+typed there landed in the composer and the line then blamed the draft. Only esc - a deny - the wheel
+or a resize were live. The band for that shape: terminal heights 20–26 at 80 and 100 columns, 22–30 at
+140 with the room beside; the recorded fixture has the same band two rows wide.
+
+**Fix:** branch `fix/card-review-fits-its-pane`. The review cuts each question to one row and drops
+its heading and blanks, a card the pane cannot hold opens on its foot - read off the layout it is drawn
+in, whatever the pane pins above the card - and the cut line names the cut over a draft (`decisions.md`, 2026-11-02). Tests: the sweep and the height
+invariant in `cardreviewfit_test.go`, the pty case
+`TestEnterSubmitsTheReviewOfATwoQuestionAskInAShortPane` at 100×24.
+
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
 here is only the part that is **still open**, so this file stays a worklist rather than an archive.
+
+**From BUG-57 (a fork's pane opens on the conversation it was taken from).** claude writes a fork's
+transcript only on its first turn, so the daemon answers the pane from the source's transcript as long as
+it was at the fork (`server.history`, `agent.forkBytes`). Still open, each in `deferred.md`: a fork parked
+before its first turn cannot be woken (claude refuses `--resume` of an id with no transcript), `esc esc`
+offers no rewind target before that turn, and a source rewound during the fork's start-up shows its
+dropped turns until then.
 
 **From BUG-17 (a silent agent is reclaimed now).**
 - `rpc.FrameKill` still has no producer. The owner chose automatic reclaim only, which closes the

@@ -57,8 +57,9 @@ func (s *server) fanOut(a *agent) {
 		// frame. Nothing mutates an Event after the airlock decodes it, and
 		// at 30 sessions a copy per client per event is the difference
 		// between fan-out being free and being the bottleneck. A workflow's
-		// start is the one copied, to keep its script here (forClients).
-		out := forClients(ev)
+		// start is the one copied, to keep its script here (forClients), and a
+		// send by address another, to name who it reached (addressed).
+		out := s.addressed(forClients(ev))
 		f := rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &out}
 		switch c, asked := a.mcpAsker(ev); {
 		case asked && c == nil:

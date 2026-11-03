@@ -11,6 +11,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/lipgloss"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/rpc"
@@ -41,11 +42,18 @@ type pageSetup struct {
 	height, history, readBack int
 	sent, draft               string // a prompt already sent; words typed and not
 	bar                       bool   // a status bar under the composer
+	styled                    bool   // a tool call opens the history: a lipgloss-styled row among its oldest
 }
 
 func askingWith(t *testing.T, s pageSetup) App {
 	t.Helper()
-	ev := questionAsk(t)
+	return beforeAsking(t, s).applyFrame(rpcEvent("s1", questionAsk(t)))
+}
+
+// beforeAsking is askingWith's conversation the moment before its question
+// arrives: the same pane with no card in it.
+func beforeAsking(t *testing.T, s pageSetup) App {
+	t.Helper()
 	a := newRoomApp(t).withSize(narrowColumns, s.height).withAgents("john")
 	a = pick(a, "s1").openDMWith("s1", "john").applyGeometry()
 	if s.bar {
@@ -56,6 +64,10 @@ func askingWith(t *testing.T, s pageSetup) App {
 	if s.sent != "" {
 		a, _ = pressKey(a.withDraft(s.sent), tea.KeyMsg{Type: tea.KeyEnter})
 	}
+	if s.styled {
+		call := bashCall("t0")
+		a = a.applyFrame(rpcEvent("s1", &call))
+	}
 	for i := range s.history {
 		a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1",
 			Event: &core.Event{Kind: core.KindAssistantText, Text: fmt.Sprintf("history line %02d", i)}})
@@ -64,7 +76,7 @@ func askingWith(t *testing.T, s pageSetup) App {
 	if s.draft != "" { // words already in the box when the agent blocks
 		a = a.withDraft(s.draft)
 	}
-	return a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: ev})
+	return a
 }
 
 // oldestShown is the number of the oldest history line a frame draws, -1 for none.
@@ -233,32 +245,33 @@ func TestACardThatFitsOnceTheComposerIsOffScreenIsAnswerable(t *testing.T) {
 	}
 }
 
-// A pane shorter than the card itself shows the card's top, and the wheel
-// reaches the rest. Its keys stay dead until the whole card fits, and the key
-// line, where it is drawn, says so rather than advertising keys that do nothing.
+// A pane shorter than the card itself opens on the card's foot - the key line,
+// which says the keys wait for the whole card, and the rows the keys act on -
+// and the wheel brings the question in above it (the owner's 2026-11-02 ruling,
+// reversing 2026-10-20's top). Its keys stay dead until the whole card fits.
 func TestACardTallerThanThePaneIsReachedByTheWheel(t *testing.T) {
 	a := askingPage(t, 10)
-	if hasRow(pageRows(a), "[d]eny") {
-		t.Fatalf("the key line is on screen at rest in a pane shorter than the card:\n%s", strings.Join(pageRows(a), "\n"))
-	}
-	if !hasRow(pageRows(a), "has a question") {
-		t.Fatalf("the card's top is not what a short pane opens on:\n%s", strings.Join(pageRows(a), "\n"))
-	}
-
-	a = wheeled(a, tea.MouseButtonWheelDown, 3)
 	rows := pageRows(a)
-
-	if !hasRow(rows, cardKeysCut) {
-		t.Errorf("scrolled to the card's foot, the key line does not say why the keys are off:\n%s", strings.Join(rows, "\n"))
+	if !hasRow(rows, cardKeysCut) || hasRow(rows, "[d]eny") {
+		t.Fatalf("the foot of the card is not what a short pane opens on, or it advertises keys it cannot honour:\n%s", strings.Join(rows, "\n"))
 	}
-	if hasRow(rows, "[d]eny") {
-		t.Errorf("the card advertises keys it cannot honour:\n%s", strings.Join(rows, "\n"))
-	}
-	if !hasRow(rows, "@john") {
-		t.Errorf("the composer is not on screen at the bottom of the page:\n%s", strings.Join(rows, "\n"))
+	if hasRow(rows, "has a question") {
+		t.Fatalf("the card's top is on screen in a pane shorter than the card:\n%s", strings.Join(rows, "\n"))
 	}
 	if a.cardFullyDrawn() {
 		t.Error("a card taller than its pane reads as fully drawn")
+	}
+
+	for i := 0; i < 20 && !hasRow(pageRows(a), "has a question"); i++ {
+		a = wheeled(a, tea.MouseButtonWheelUp, 1)
+	}
+
+	rows = pageRows(a)
+	if !hasRow(rows, "has a question") {
+		t.Errorf("the wheel never reached the card's top:\n%s", strings.Join(rows, "\n"))
+	}
+	if hasRow(rows, "[d]eny") || a.cardFullyDrawn() {
+		t.Errorf("the card advertises keys it cannot honour, or reads as whole, with its foot scrolled off:\n%s", strings.Join(rows, "\n"))
 	}
 }
 
@@ -422,16 +435,21 @@ func TestOpeningAnAnswerBringsTheComposerBack(t *testing.T) {
 	}
 }
 
-// At rest nothing about a pane's rows has moved, so a press still anchors in the
-// transcript - in a pane too short for its card as in any other.
-func TestAPressAtRestStillAnchorsInTheTranscript(t *testing.T) {
-	for _, height := range []int{40, 10} {
-		a := askingPage(t, height)
+// At rest in a pane that shows the transcript nothing about its rows has moved,
+// so a press still anchors there - with the composer scrolled away for the card
+// as in any other. A pane too short for its card opens on the card's foot with
+// the transcript scrolled off above it, so a press there takes the screen as drawn.
+func TestAPressAtRestAnchorsInTheTranscriptItShows(t *testing.T) {
+	for _, tc := range []struct {
+		height int
+		screen bool
+	}{{40, false}, {14, false}, {10, true}} {
+		a := askingPage(t, tc.height)
 
 		a = a.press(pageWheelX, 0)
 
-		if a.sel.onScreen || a.sel.inComposer {
-			t.Errorf("at %d rows a press at rest took %+v instead of anchoring in the transcript", height, a.sel)
+		if a.sel.onScreen != tc.screen || a.sel.inComposer {
+			t.Errorf("at %d rows a press at rest took %+v, want onScreen=%v", tc.height, a.sel, tc.screen)
 		}
 	}
 }
@@ -467,23 +485,46 @@ func TestAShortPaneScrollsUpIntoItsTranscript(t *testing.T) {
 	if hasRow(pageRows(a), "history line 39") {
 		t.Fatal("the pane already shows the transcript, so there is nothing for the wheel to bring in")
 	}
+	// The card's top is clipped-up rows above the window; one notch past it is the transcript.
+	place, _, _ := a.pageOf("s1")
+	notches := (place.clipped-place.up+wheelLines-1)/wheelLines + 1
 
-	a = wheeled(a, tea.MouseButtonWheelUp, 1)
+	a = wheeled(a, tea.MouseButtonWheelUp, notches)
 
 	rows := pageRows(a)
 	if !hasRow(rows, "history line 39") || !hasRow(rows, "has a question") {
-		t.Errorf("one notch up did not bring the transcript in above the card:\n%s", strings.Join(rows, "\n"))
+		t.Errorf("%d notches up did not bring the transcript in above the card:\n%s", notches, strings.Join(rows, "\n"))
 	}
 }
 
-// However short the pane, a card too tall for it opens on its own top: the
-// question is what somebody has to read first.
-func TestAPaneTooShortForItsCardOpensOnTheCardsTop(t *testing.T) {
+// A card the pane cannot hold opens on its bottom, however short the pane: the
+// key line says the keys wait for the whole card, and the question is a wheel
+// notch above (the owner's 2026-11-02 ruling, reversing 2026-10-20's top).
+func TestAPaneTooShortForItsCardOpensOnItsBottom(t *testing.T) {
 	for height := 7; height <= 11; height++ {
 		a := askingAfter(t, height, 0, 0)
-		if rows := pageRows(a); !hasRow(rows, "has a question") {
-			t.Errorf("at %d rows the card's top is not what the pane opens on:\n%s", height, strings.Join(rows, "\n"))
+		if rows := pageRows(a); !hasRow(rows, cardKeysCut) || hasRow(rows, "has a question") {
+			t.Errorf("at %d rows the card's foot is not what the pane opens on:\n%s", height, strings.Join(rows, "\n"))
 		}
+	}
+}
+
+// A card is answerable at rest whenever the pane can hold it at all: one exactly
+// the pane's height opens with the transcript's row scrolled off and its keys live,
+// and only a card taller than the pane waits for the window to grow.
+func TestACardThePaneCanHoldIsAnswerableAtRest(t *testing.T) {
+	var sawFit, sawCut bool
+	for height := 7; height <= 22; height++ {
+		a := askingPage(t, height)
+		width, pane, _ := a.focusedPane() // the strip under the pane takes rows of the window
+		fits := lipgloss.Height(a.cardBlock("s1", width, false)) <= pane
+		if got := a.cardFullyDrawn(); got != fits {
+			t.Errorf("in a %d-row pane the card reads answerable=%v, want %v (the pane can hold it: %v):\n%s", pane, got, fits, fits, strings.Join(pageRows(a), "\n"))
+		}
+		sawFit, sawCut = sawFit || fits, sawCut || !fits
+	}
+	if !sawFit || !sawCut {
+		t.Fatalf("the sweep never crossed the card's height (fit=%v cut=%v)", sawFit, sawCut)
 	}
 }
 
@@ -503,26 +544,34 @@ func TestAnAnswerBeingWrittenKeepsItsKeyLineWhenTheCardIsCut(t *testing.T) {
 	}
 }
 
-// ⌃E opens an option's whole description, which can outgrow the pane: the wheel
-// is how the end of it is read.
-func TestAnExpandedDescriptionTooLongForThePaneIsReachedByTheWheel(t *testing.T) {
+// ⌃E opens an option's whole description, which can outgrow the pane: the card
+// opens on its foot, so the end of the description is in view, and the wheel
+// reaches the question above it.
+func TestAnExpandedDescriptionTooLongForThePaneOpensOnItsEnd(t *testing.T) {
 	const lastWords = "would fail to parse it"
 	a := askingPage(t, 14)
 	a, _ = pressKey(a, tea.KeyMsg{Type: tea.KeyCtrlE})
-	if hasRow(pageRows(a), lastWords) {
-		t.Fatal("the whole description already fits, so there is nothing for the wheel to reach")
+	if a.cardFullyDrawn() {
+		t.Fatal("the whole description fits, so this test is not exercising a card that outgrew its pane")
+	}
+	if rows := pageRows(a); !hasRow(rows, lastWords) {
+		t.Errorf("the end of the description is not in view:\n%s", strings.Join(rows, "\n"))
 	}
 
-	a = wheeled(a, tea.MouseButtonWheelDown, 1)
+	for i := 0; i < 20 && !hasRow(pageRows(a), "has a question"); i++ {
+		a = wheeled(a, tea.MouseButtonWheelUp, 1)
+	}
 
-	if rows := pageRows(a); !hasRow(rows, lastWords) {
-		t.Errorf("the end of the description is out of reach:\n%s", strings.Join(rows, "\n"))
+	if rows := pageRows(a); !hasRow(rows, "has a question") {
+		t.Errorf("the question above the description is out of reach:\n%s", strings.Join(rows, "\n"))
 	}
 }
 
 // One notch up is the whole page moving down by exactly the notch's rows, with
-// the older rows arriving above: for a reader on the newest line and for one who
-// had scrolled back, in a pane that fits its card and in one that does not.
+// the rows above arriving at the top: for a reader on the newest line and for one
+// who had scrolled back, in a pane that fits its card and in one that does not.
+// Once the window's top is in the transcript, the rows a notch brings are the
+// transcript's own lines, read off the transcript and not off a frame.
 func TestOneNotchShiftsThePageByTheNotchesRows(t *testing.T) {
 	for _, height := range []int{10, 14, 40} {
 		for _, readBack := range []int{0, 4} {
@@ -535,25 +584,37 @@ func TestOneNotchShiftsThePageByTheNotchesRows(t *testing.T) {
 				}
 				return out
 			}
-			before := inPane(pageRows(a))
+			shifted := func(before, after []string) {
+				t.Helper()
+				for i := range len(before) - wheelLines {
+					if before[i] != after[i+wheelLines] {
+						t.Fatalf("height %d, read back %d: row %d of the frame is not row %d of the frame before:\nbefore:\n%s\nafter:\n%s",
+							height, readBack, i+wheelLines, i, strings.Join(before, "\n"), strings.Join(after, "\n"))
+					}
+				}
+			}
 
+			before := inPane(pageRows(a))
+			a = wheeled(a, tea.MouseButtonWheelUp, 1)
+			shifted(before, inPane(pageRows(a)))
+
+			// Up to where a notch's rows are all the transcript's: past the card's top
+			// (a card on its foot has rows of its own to bring in first) and the floor.
+			for i := 0; i < 50; i++ {
+				if place, _, _ := a.pageOf("s1"); place.up >= place.clipped+wheelLines {
+					break
+				}
+				a = wheeled(a, tea.MouseButtonWheelUp, 1)
+			}
+			before = inPane(pageRows(a))
 			a = wheeled(a, tea.MouseButtonWheelUp, 1)
 			after := inPane(pageRows(a))
-
-			// The rows that arrive are the transcript's own lines, the ones just above
-			// where the window began: they are read off the transcript, not off a frame.
+			shifted(before, after)
 			place, _, _ := a.pageOf("s1")
 			first := place.top - (place.up - place.clipped)
 			for i, line := range a.dms["s1"].tr.lines.slice(first, first+wheelLines) {
 				if got, want := strings.TrimRight(after[i], " "), strings.TrimRight(stripANSI(line), " "); got != want {
 					t.Errorf("height %d, read back %d: row %d is %q, want the transcript's line %d, %q", height, readBack, i, got, first+i, want)
-				}
-			}
-
-			for i := range len(before) - wheelLines {
-				if before[i] != after[i+wheelLines] {
-					t.Fatalf("height %d, read back %d: row %d of the frame is not row %d of the frame before:\nbefore:\n%s\nafter:\n%s",
-						height, readBack, i+wheelLines, i, strings.Join(before, "\n"), strings.Join(after, "\n"))
 				}
 			}
 		}

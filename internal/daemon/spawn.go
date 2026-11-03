@@ -300,9 +300,9 @@ func (s *server) launch(c *client, cfg core.Config, parent string, replaces *age
 	if cfg.ClaudeName != "" { // the manager's: claude's name is manager-<part>, not Wake's
 		a.claudeName, a.claudeWant = cfg.ClaudeName, cfg.ClaudeName
 	}
-	a.forkFrom = cfg.ForkFrom
+	a.forkFrom, a.forkBytes = cfg.ForkFrom, transcriptSize(cfg.ForkFrom)
 	if replaces != nil {
-		a.forkFrom = replaces.forkFrom // a wake resumes the fork; its source is unchanged
+		a.forkFrom, a.forkBytes = replaces.forkFrom, replaces.forkBytes // a wake resumes the fork; its source is unchanged
 	}
 	// Set before the agent is published, so park can write down what it ran at.
 	a.effort = cfg.Effort

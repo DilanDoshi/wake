@@ -250,18 +250,28 @@ func TestAReplayedAskKeepsWhatWasTicked(t *testing.T) {
 	}
 }
 
-// The review is the last look at what goes out, so a joined answer too long for
-// the pane wraps rather than being cut.
-func TestTheReviewWrapsALongJoinedAnswer(t *testing.T) {
+// A joined answer too long for the pane is cut to its row on the review, with
+// an ellipsis, and travels whole: the ticks are read on the question's own step,
+// and an answer wrapped past its row made the review outgrow the steps a short
+// pane fit (BUG-59, reversing the wrap of 2026-10-18).
+func TestTheReviewCutsALongJoinedAnswerToItsRow(t *testing.T) {
 	card := cardFor(t, recordedAsks(t, multiFixture)[0])
 	for o := range card.Detail.Questions[0].Options {
 		card = card.Toggle(0, o)
 	}
 	card = card.toStep(1)
 	want, _ := card.answerOf(0)
-	out := strings.Join(strings.Fields(ansi.Strip(card.reviewBody(30))), " ")
-	if !strings.Contains(out, strings.Join(strings.Fields(want), " ")) {
-		t.Errorf("the review at 30 columns does not show the whole answer %q:\n%s", want, ansi.Strip(card.reviewBody(30)))
+	rows := strings.Split(ansi.Strip(card.reviewBody(30)), "\n")
+	at := paneRow(rows, reviewAnswerLead)
+	if at < 0 {
+		t.Fatalf("no answer row on the review:\n%s", strings.Join(rows, "\n"))
+	}
+	row := strings.TrimSpace(strings.TrimPrefix(rows[at], reviewAnswerLead))
+	if !strings.HasSuffix(row, ellipsis) || !strings.HasPrefix(want, strings.TrimSuffix(row, ellipsis)) {
+		t.Errorf("the review at 30 columns does not cut the answer %q to its row with an ellipsis: %q", want, row)
+	}
+	if at+1 < len(rows) && strings.HasPrefix(rows[at+1], "  ") && !strings.HasPrefix(strings.TrimSpace(rows[at+1]), reviewQuestionLead) {
+		t.Errorf("the answer wrapped past its row:\n%s", strings.Join(rows, "\n"))
 	}
 }
 
