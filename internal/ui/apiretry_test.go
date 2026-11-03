@@ -221,6 +221,8 @@ func TestAGapOrAReattachForgetsEveryRetry(t *testing.T) {
 		if len(a.retrying) != 0 {
 			t.Errorf("%s left a retry standing: %+v", name, a.retrying)
 		}
+		// A forgotten set is nil, and the next frame must still take: withRetry's
+		// clone of a nil map is nil, which an unguarded write would panic on.
 		if a = a.apply(retryFrame(4, 0, time.Second)); a.retrying["s1"].attempt != 4 {
 			t.Errorf("after %s the next retry frame did not restore the line: %+v", name, a.retrying)
 		}

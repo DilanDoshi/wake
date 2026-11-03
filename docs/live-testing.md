@@ -963,7 +963,9 @@ The tests replay recorded receipts and a scripted agent. In a scratch git reposi
       counting down and `retrying…` once it has run, with the room's line `@name ⚠ API unreachable ·
       retrying 1/10 for …` and the roster glyph `⚠`; the pool word must not come back until the network
       does. The suite drives this off the recording; what it cannot say is how soon a live claude's
-      first retry frame arrives.
+      first retry frame arrives. **Then the same with a background subagent running**: whether the
+      subagent's retries reach the parent's stream is unrecorded (`deferred.md`), and the line must
+      clear once the parent's own request goes through.
 
 ## Reporting back
 

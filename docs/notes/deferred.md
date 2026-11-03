@@ -5947,3 +5947,8 @@ The retry line (decisions.md, 2026-11-02) shipped with two things left out.
   note, an auto-compaction, none of which the daemon counts as a turn owed (`stateLocked`). Its retries are
   held and pruned on every report; the three surfaces draw only a working row. *Closes with:* the daemon
   reading a retry frame as a turn in flight, which would also move those turns' working lines.
+- **A subagent's own retries are unrecorded** (the reviewer). No `api_retry` in the corpus carries
+  `parent_tool_use_id`, so whether claude forwards a background subagent's retries is unknown. If it does,
+  they would read as the parent's, and since a subagent's output no longer clears the line, a parent waiting
+  on one would keep `retrying…` until its own next request, turn end or idle report. *Closes with:* a
+  recording of a network drop under a running subagent (`live-testing.md`), then a ruling on the frames.
