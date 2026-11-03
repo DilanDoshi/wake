@@ -60,10 +60,6 @@ var headerStyle = lipgloss.NewStyle().Foreground(Accent).Bold(true)
 // Call render.Prime before tea.NewProgram. The first markdown block otherwise
 // pays for a blocking terminal handshake inside the draw loop.
 type DM struct {
-	// behindAsk dims this pane's transcript, so a framed card reads as modal
-	// rather than as the newest block. Set for the draw; see WithAsk.
-	behindAsk bool
-
 	// writing titles the composer while it holds an answer rather than a
 	// message. Set for the draw; see WithWriting.
 	writing string
@@ -558,11 +554,7 @@ func (d DM) View(width, height int) string {
 		d = d.SetSize(width, height)
 	}
 	w := max(width, minComposerWidth)
-	transcript := withFollowBanner(d.tr.view(d.sel), d.tr, w)
-	if d.behindAsk {
-		transcript = quieted(transcript)
-	}
-	rows := []string{transcript}
+	rows := []string{withFollowBanner(d.tr.view(d.sel), d.tr, w)}
 	// Between the transcript and the composer, where Claude Code puts it: the
 	// newest thing said, then what is being said now, then what is happening,
 	// then where you type.

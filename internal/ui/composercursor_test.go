@@ -335,7 +335,7 @@ func TestAClickInAScrolledDraftUnderACompletionMenu(t *testing.T) {
 	a.layout.ShowRoster = false
 	a.focus = ""
 	a = a.applyGeometry().withDraft(draft)
-	if menu, _ := a.menuBlock("", a.regions().Room(), a.paneHeight()); menu == "" {
+	if menu := a.menuBlock("", a.regions().Room(), a.paneHeight()); menu == "" {
 		t.Fatal("no completion menu is open over the draft")
 	}
 	drawn := drawnDraftText(t, a)
