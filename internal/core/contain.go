@@ -433,4 +433,10 @@ var notAuthoredByTheChild = map[string]string{
 	// name. Cron beside it is the child's own cron expression and is contained;
 	// DelaySeconds, Noop and Stop are not strings, so the walk never reaches them.
 	"Event.Tool.Loop.Kind": "Wake's own vocabulary, resolved by toolLoopOp",
+
+	// Set by the daemon after the airlock, never decoded from a frame: a send's
+	// recipient as the session registry names it, contained where a record is
+	// decoded (DecodeSessionRecord), and that session's fleet id.
+	"Event.Tool.Send.ToName": "set by the daemon from a registry record, contained by DecodeSessionRecord",
+	"Event.Tool.Send.ToID":   "a fleet agent's id the daemon sets, matched rather than drawn",
 }

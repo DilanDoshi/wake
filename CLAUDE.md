@@ -95,6 +95,14 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   name. The unnamed fleet and a socket set by hand outside `~/.wake/fleets` refuse; the manager gets no
   tool for it. No CLI verb (deferred). `internal/daemon/fleetrename.go`, `internal/ui/fleetname.go`,
   `decisions.md` (2026-10-24).
+- **The terminal's tab title is the fleet's name** (the owner's 2026-11-01 ask): every window on a fleet
+  titles its terminal `sing-dev`; the unnamed fleet reads `default`, a hand-set socket outside
+  `~/.wake/fleets` reads `wake`, and a `/wake-name` retitles every window. One OSC 2 per change through the
+  terminal writer from a command, never in a frame (`App.dueTitle`: one string compare per message, the
+  name sanitised where it is folded), written again after a hand-over. The shell's title is kept on the
+  xterm title stack: `converseModel` pushes before Bubble Tea and `handBack` pops past the seal, the
+  emergency exit pops too; which terminals honour the pop is `decisions.md`'s (2026-11-01).
+  `internal/ui/title.go`.
 - **`/status`** is Wake's, since headless claude refuses it: one session's facts (name and state, id,
   a `/clear`'s conversation, directory and branch read at open, model,
   effort, context, this window's mode, MCP, team, label, both builds when the daemon's differs) in a
@@ -420,7 +428,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   Muted; `⌃E` or a click opens it (`peerfold.go`). **A conversation draws its own agent's
   `SendMessage` the same way**, `↪ <agent> → <recipient>` and the words, every pane (`dm_blocks.go`'s
   `sentBlock`; a delivered send's receipt is hidden, a failed one's error shows), and the room draws any
-  agent's send to a session outside the fleet (`observe.go`'s `withSend`).
+  agent's send to a session outside the fleet (`observe.go`'s `withSend`). **A send by address** - the
+  `uds:` socket a reply copies from the message it answers, or `name [ref]` - is named by the daemon from
+  Claude Code's session registry (`daemon/sendto.go`): one to a fleet agent is left to that agent's own
+  stream, as a send by name is, and any other is headed by the registry's name. A reopened conversation
+  keeps the address, since today's registry cannot say who held a socket then (`decisions.md`, 2026-10-29).
 - **Slash commands resolve against a closed set Wake owns; anything else is text.** A word claude
   advertises may be claimed only in a form claude is recorded doing nothing with
   (`bareOnlyCommands` names the fixture). `/color` and the room's bare `/clear` are the owner-claimed
@@ -450,19 +462,25 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **An ask belongs to its agent's conversation; the room draws none** (`Cards.For`, `App.cardOf`).
   The roster row, the strip's `N need you` and `⌃X` announce it. Nothing on that wire times out.
 - **A pane drawing a card scrolls as one page** (owner's 2026-10-20 ask): the wheel slides the card and
-  composer off the bottom and pulls the older transcript in at the top, and a card taller than its
-  pane opens on its own top with the rest a wheel notch away. Without a card the wheel moves the
-  transcript alone. The pane is drawn taller and a window of its top rows shown, so nothing is laid
-  out twice (`pagescroll.go`). **Its keys are live only while the whole card is on screen**
-  (`App.cardFullyDrawn`, unchanged in rule) and the key line says when they return (`cardKeysCut`).
-  A draft that changes, or opening an answer, brings the page back to the composer (watched at the
-  composer's write, not per key); a pane whose box holds a draft opens on it, and `submit` and an
+  composer off the bottom and pulls the older transcript in at the top. **A card the pane cannot hold
+  opens on its foot** (owner's 2026-11-02 ruling, reversing 2026-10-20's top): the key line and the rows
+  the keys act on in view, the question a wheel notch above. The page opens as far up as the card's last row stays
+  in view, read off the layout it is drawn in (`placeOf`), so a card the pane holds still opens under
+  the transcript with the composer scrolled away, and one exactly the pane's height is answerable. Without a card the wheel
+  moves the transcript alone. The pane is drawn taller and a window of its top rows shown, so nothing is
+  laid out twice (`pagescroll.go`). **Its keys are live only while the whole card is on screen**
+  (`App.cardFullyDrawn`, unchanged in rule) and the key line says when they return (`cardKeysCut`, over
+  a draft too). A draft that changes, or opening an answer, brings the page back to the composer (watched
+  at the composer's write, not per key), a box that emptied outside answer mode lets the card settle
+  again, and a rest is the wizard step's; a pane whose box holds a draft opens on it, and `submit` and an
   answer's `↵` act only from a page at its bottom, so a draft nobody can see is never sent. A press on a
   scrolled page takes a screen selection, not a transcript anchor, and an edge drag scrolls the
-  transcript, not the page. `decisions.md` (2026-10-20).
+  transcript, not the page. `decisions.md` (2026-10-20, 2026-11-02).
 - Permissions/plans: rune then `↵`, read only on an empty composer; any other input disarms (key,
   composer, mouse, digit).
-- Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer
+- Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`) kept to the rows the question
+  steps take - a question and its answer each cut to one row there (`reviewRows`), so a pane that held
+  every question of a two-question ask holds the step that sends them (BUG-59); `Other…`/`d` enter answer
   mode, where the card takes `↵`; a bare `↑↓` with no draft line to move to never walks prompt history -
   from `Other…` it goes back to the options with the words kept in that row, as `esc` does, and `↵` over an
   open menu completes its word before it sends (`cardanswer.go`). Arrows reach the card with or without a
@@ -536,12 +554,13 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · `usage.go` (the account's session window) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (a signal interrupts, then stops) · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (a signal interrupts, then stops) · `resume.go` · `discover.go` · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `sendto.go` (a send by address, named from Claude's session registry) · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
+| Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
 | Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
@@ -560,7 +579,7 @@ yet says so in bold.**
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
 | Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · the update check `updatecheck.go`, asked by the room on its first frame and on a keystroke an hour on, and named on the strip as `↑ wake X` (`internal/ui/updatecue.go`) · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
-| Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) |
+| Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) · `testdata/sessions/` (Claude's session registry) |
 | Demo film, landing site | `demo/` (Python stand-in agent, VHS tapes) · the site generator `demo/page.py`, its words `demo/pagecopy.py` → the wake-landing repo |
 | Fixture scrubber | `scripts/scrub-fixtures.py` · guard `internal/core/corpus_test.go` |
 
@@ -627,7 +646,7 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.308. A
+**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.311. A
 fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 
 | Need | Flag |
@@ -713,6 +732,13 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   (merged output; stderr when it failed) **and starts a turn every time**. Wake writes the same tags in one line;
   `shouldQuery:false` on a user line would hold it with no turn (`num_turns: 0`), unused.
   `bash-mode.jsonl`, `shell-run.jsonl`, `docs/superpowers/notes/2026-10-25-bang-to-agent-findings.md`.
+- **Claude Code keeps one record per running session at `<config>/sessions/<pid>.json`** (`sessionId`,
+  `name`, `messagingSocketPath`, beside a `.key` file Wake never reads; `$CLAUDE_CONFIG_DIR`, else `~/.claude`).
+  Claude's internal, observed at 2.1.311 (`testdata/sessions/78871.json`) and read by nothing `make drift`
+  checks, so re-check it after a claude upgrade. A cross-session message's `from` is that socket, and a reply
+  copies it as its `to`. A send's receipt names the `to` as sent: `→ <name> (…)` for a name,
+  `→ uds:<socket>; in that session's inbox…` with no parenthetical for a socket - the shape follows the
+  address form, not the version (`manager-relay.jsonl`, `testdata/transcript/send-by-address.jsonl`).
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only

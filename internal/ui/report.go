@@ -66,6 +66,7 @@ func (a App) applyStatus(st *rpc.Status) App {
 type daemonFacts struct {
 	build string
 	fleet string
+	title string // what the fleet's name titles the terminal; see title.go
 	usage *rpc.SessionUsage
 	rows  []string
 }

@@ -22,7 +22,7 @@ func TestAnEdgeDragScrollsTheTranscriptNotThePage(t *testing.T) {
 	}
 }
 
-// A card taller than its pane opens on its own top, and the composer is not
+// A card taller than its pane opens on its foot, and the composer is not
 // under it: a press where the composer would sit is on the card, and takes the
 // screen as drawn rather than moving a caret in a box nobody can see.
 func TestAPressOnTheCardOfAShortPaneDoesNotSelectTheHiddenComposer(t *testing.T) {

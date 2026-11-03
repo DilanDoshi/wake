@@ -323,9 +323,12 @@ type App struct {
 	upgrade   updateCue    // whether a newer wake is out, and when to ask; see updatecue.go
 	clicks    clickRun     // the presses landing on one cell in quick succession; see multiclick.go
 
-	// out is the terminal, for the one thing Wake writes that is not a frame.
-	// Nil writes nowhere. See clipboard.go and cmd/wake/output.go.
+	// out is the terminal, for what Wake writes that is not a frame - a copy,
+	// the friends' pictures, the title. Nil writes nowhere. See clipboard.go
+	// and cmd/wake/output.go.
 	out io.Writer
+
+	titled string // the title last written to the terminal; see title.go
 
 	beating bool // a heartbeat tick is already scheduled; see beat.go
 

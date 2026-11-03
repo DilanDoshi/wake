@@ -238,7 +238,9 @@ func TestTheEmergencyRestorePutsTheTerminalBack(t *testing.T) {
 
 	select {
 	case out := <-seen:
-		for _, want := range []string{"\x1b[?1049l", "\x1b[?1002l", "\x1b[?25h"} {
+		// The title stack pop is converseModel's on an ordinary exit; this exit
+		// skips that path, so it writes its own, after the alt screen is left.
+		for _, want := range []string{"\x1b[?1049l", "\x1b[?1002l", "\x1b[?25h", "\x1b[?1049l\x1b[23;0t"} {
 			if !strings.Contains(out, want) {
 				t.Errorf("the restore did not write %q; it wrote %q", want, out)
 			}

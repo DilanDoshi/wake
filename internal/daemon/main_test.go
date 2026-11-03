@@ -323,6 +323,8 @@ func runFakeClaude() int {
 		return fakeTool(sid)
 	case "name":
 		return fakeName(sid)
+	case "send":
+		return fakeSend(sid) // see sendto_test.go
 	case "argv":
 		return fakeArgv(sid)
 	case "question":
@@ -806,6 +808,64 @@ func fakeName(sid string) int {
 	for range stdinLines() {
 	}
 	return 0
+}
+
+// fakeSend registers in Claude Code's session registry as claude does, calls
+// SendMessage with each line's words as its to, the way a reply copies the from
+// of the message it answers, and takes /clear as claude does, registering under
+// the new conversation - see sendto_test.go.
+func fakeSend(sid string) int {
+	config, pid, name := os.Getenv("CLAUDE_CONFIG_DIR"), os.Getpid(), argValue(os.Args, "--name")
+	socket := filepath.Join(config, "socks", name+".sock")
+	record := fmt.Sprintf("%d.json", pid)
+	if err := writeRecord(config, record, pid, sid, name, socket); err != nil {
+		fmt.Fprintln(os.Stderr, "fake: register:", err)
+		return 1
+	}
+	emitText(sid, "ready")
+	emitResult(sid)
+	for line := range stdinLines() {
+		if strings.Contains(line, clearCommand) {
+			successor := uuid.NewString()
+			if err := writeRecord(config, record, pid, successor, name, socket); err != nil {
+				fmt.Fprintln(os.Stderr, "fake: register:", err)
+				return 1
+			}
+			fmt.Printf(`{"type":"conversation_reset","session_id":%q,"new_conversation_id":%q}`+"\n", sid, uuid.NewString())
+			emitInit(successor)
+			emitResult(successor)
+			sid = successor
+			continue
+		}
+		var f struct {
+			Message struct {
+				Content []struct {
+					Text string `json:"text"`
+				} `json:"content"`
+			} `json:"message"`
+		}
+		if json.Unmarshal([]byte(line), &f) != nil || len(f.Message.Content) == 0 {
+			continue
+		}
+		fmt.Printf(`{"type":"assistant","session_id":%q,"message":{"role":"assistant","content":[{"type":"tool_use","id":"toolu_send","name":"SendMessage","input":{"to":%q,"message":"hello"}}]}}`+"\n",
+			sid, f.Message.Content[0].Text)
+		emitResult(sid)
+	}
+	return 0
+}
+
+// writeRecord writes a session's record into the registry under config as file,
+// as Claude Code writes one (testdata/sessions/78871.json) as <pid>.json.
+func writeRecord(config, file string, pid int, id, name, socket string) error {
+	dir := filepath.Join(config, "sessions")
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	raw, err := json.Marshal(map[string]any{"pid": pid, "sessionId": id, "name": name, "messagingSocketPath": socket})
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(filepath.Join(dir, file), raw, 0o600)
 }
 
 // fakeArgv reports the whole command line it was started with, so a test can
