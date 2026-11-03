@@ -348,7 +348,7 @@ func TestThePaneIsItsHeightAtEveryPreviewSize(t *testing.T) {
 		},
 		"queue":      func(d DM) DM { return d.WithQueued([]string{"a message typed ahead", "and another one"}) },
 		"menu":       func(d DM) DM { return d.WithMenu("menu row one\nmenu row two\nmenu row three") },
-		"card":       func(d DM) DM { return d.WithMenu("a card\nwith a question\nand two options").WithAsk(true) },
+		"card":       func(d DM) DM { return d.WithMenu("a card\nwith a question\nand two options") },
 		"no working": func(d DM) DM { d.Agent.State = rpc.StateIdle; return d },
 	} {
 		fresh := func() DM { return chrome(base.WithComposer(NewComposer())) }
