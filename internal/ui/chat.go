@@ -221,6 +221,9 @@ type roomLine struct {
 	// it to tell "you → @iris" from a broadcast and from "you → @john". See
 	// roomfocus.go.
 	to string
+	// sentIn is the channel the operator's own line was typed in, "" under all
+	// and on every other line: it always draws there (roomchannel.go).
+	sentIn string
 	// recipient is the receiving session of a peer's cross-session line, drawn
 	// after the arrow in its own colour; zero on every other line.
 	recipient   Agent
@@ -325,9 +328,11 @@ func (r Room) WithFocus(focus, focusName string) Room {
 func (r Room) Append(ev core.Event, by Agent) Room { return r.appendLine(roomLine{ev: ev, by: by}) }
 
 // appendUser draws the operator's own room echo, stamped with the thread it was
-// addressed to (or "" for a broadcast). Only this path carries a "to" - an
-// agent's own lines are told apart by session id, not by "to".
-func (r Room) appendUser(ev core.Event, to string) Room { return r.appendLine(roomLine{ev: ev, to: to}) }
+// addressed to (or "" for a broadcast) and the channel it was typed in. Only this
+// path carries either - an agent's own lines are told apart by session id.
+func (r Room) appendUser(ev core.Event, to, sentIn string) Room {
+	return r.appendLine(roomLine{ev: ev, to: to, sentIn: sentIn})
+}
 
 // appendPeer draws a peer's cross-session message, from sender to the receiving
 // session whose stream carried it.

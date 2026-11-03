@@ -23,16 +23,34 @@ import (
 // channelGone is what the room says when the team it showed has left the roster.
 const channelGone = "%s has no one on the roster now - the group chat shows everyone"
 
+// outsideChannel is said when the operator's own send is aimed outside the channel
+// this window shows: it draws here, its replies only in their own thread.
+const outsideChannel = "%s is outside the %s channel: replies show under all"
+
 // roomFilter is what the room draws through, the channel's key and the effective
-// focus, as one comparable value.
+// focus, as one comparable value. admits reads the channel's name too, which a key
+// stands for: teams are disjoint, so the two never change apart.
 type roomFilter struct{ channel, focus string }
 
 func (r Room) filter() roomFilter { return roomFilter{r.channelKey, r.effectiveFocus()} }
 
-// admits is whether a line draws: it is in the channel's thread and, within it,
-// the focus's. An empty key admits everything.
+// admits is whether a line draws: it is in the channel's thread, or is the
+// operator's own line typed in this channel, and, within it, the focus's. An
+// empty key admits everything.
 func (r Room) admits(l roomLine) bool {
-	return focusAdmits(l, r.channelKey) && focusAdmits(l, r.effectiveFocus())
+	// sentIn is "" on every line but the operator's own, which all admits anyway.
+	inChannel := l.sentIn == r.channel || focusAdmits(l, r.channelKey)
+	return inChannel && focusAdmits(l, r.effectiveFocus())
+}
+
+// noteOutside says where the replies go when the operator's own line, addressed
+// to `to` and aimed at who, is outside the channel it is typed in: its stamp draws
+// it here, but the channel's thread holds none of the answers.
+func (a App) noteOutside(to, who string) {
+	line := roomLine{ev: core.Event{Kind: core.KindUserText}, to: to}
+	if !focusAdmits(line, a.room.channelKey) { // all's key is "", which admits every line
+		notice.Report(outsideChannel, agentPrefix+who, a.room.channel)
+	}
 }
 
 // WithChannel makes a team's thread the room's base, or all again for "". A new
