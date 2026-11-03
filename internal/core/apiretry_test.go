@@ -100,14 +100,14 @@ func TestAStatusedApiRetryCarriesItsStatus(t *testing.T) {
 }
 
 // No other frame carries a retry, and a 401 keeps its own path: a login's
-// failure, never a line that says claude is retrying.
-func TestOnlyAnApiRetryCarriesARetry(t *testing.T) {
+// failure with no retry on it, never a line that says claude is retrying.
+func TestOnlyARetryingNoticeCarriesARetry(t *testing.T) {
 	for _, dl := range decodeFixture(t, "../../testdata/stream/api-retry-auth.jsonl") {
 		if dl.Notice == NoticeAPIRetrying {
 			t.Errorf("line %d: a 401 retry was told as retrying rather than as a login's failure", dl.line)
 		}
-		if dl.Retry != nil && dl.Kind != KindAPIError {
-			t.Errorf("line %d: a %q event carries a retry", dl.line, dl.Kind)
+		if dl.Retry != nil {
+			t.Errorf("line %d: a %q event of the 401 storm carries a retry", dl.line, dl.Kind)
 		}
 	}
 	for _, dl := range decodeFixture(t, "../../testdata/stream/midturn-two.jsonl") {

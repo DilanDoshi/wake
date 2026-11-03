@@ -14,6 +14,7 @@ package ui
 
 import (
 	"fmt"
+	"maps"
 	"math"
 	"time"
 
@@ -123,8 +124,14 @@ func (a App) observeRetry(sessionID string, ev core.Event) App {
 // API answered - a streamed start or token, prose, a tool call, thinking - or the
 // turn ended, failed for good (the unreachable pin takes over), or the
 // conversation was cleared. A receipt, a queued message's lifecycle, a replayed
-// line or another system frame says nothing about the API.
+// line or another system frame says nothing about the API, and nor does a
+// subagent's output: it rides the parent's session, and a background subagent
+// speaks while the parent's own request still waits (a subagent's tokens never
+// arrive - partialEvent drops them).
 func requestOver(ev core.Event) bool {
+	if ev.Subagent != nil {
+		return false
+	}
 	switch ev.Kind {
 	case core.KindMessageStart, core.KindPartialText, core.KindTurnTokens, core.KindTurnEnd, core.KindAPIError, core.KindSessionReset:
 		return true
@@ -144,14 +151,22 @@ func (a App) pruneRetrying() App {
 	return a
 }
 
+// forgetRetries drops every standing retry: a frame gap or a reattach may have
+// eaten the answer that would have cleared one, so it goes with the other turn
+// beliefs (Fleet.ForgetTurns); the next retry frame restores it.
+func (a App) forgetRetries() App {
+	a.retrying = nil
+	return a
+}
+
 // retryOf is a session's standing retry, or the zero value for none - what the
 // conversation pane draws its line from.
 func (a App) retryOf(id string) apiRetry { return a.retrying[id] }
 
 func withRetry(m map[string]apiRetry, id string, r apiRetry) map[string]apiRetry {
-	next := make(map[string]apiRetry, len(m)+1)
-	for k, v := range m {
-		next[k] = v
+	next := maps.Clone(m)
+	if next == nil {
+		next = make(map[string]apiRetry, 1)
 	}
 	next[id] = r
 	return next
@@ -161,11 +176,7 @@ func withoutRetry(m map[string]apiRetry, id string) map[string]apiRetry {
 	if _, ok := m[id]; !ok {
 		return m
 	}
-	next := make(map[string]apiRetry, len(m))
-	for k, v := range m {
-		if k != id {
-			next[k] = v
-		}
-	}
+	next := maps.Clone(m)
+	delete(next, id)
 	return next
 }

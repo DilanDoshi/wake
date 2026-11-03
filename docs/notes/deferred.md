@@ -5943,3 +5943,7 @@ The retry line (decisions.md, 2026-11-02) shipped with two things left out.
   the report carrying it, the way `Goal` does.
 - **No `N retrying` segment on the strip** (the owner, 2026-11-02): a network drop marks every roster row
   and the room line at once. *Closes with:* a segment beside `✔ N done`, counted off `App.retrying`.
+- **A turn the daemon reads as idle shows no retry line** - a peer's `SendMessage`, a background task's
+  note, an auto-compaction, none of which the daemon counts as a turn owed (`stateLocked`). Its retries are
+  held and pruned on every report; the three surfaces draw only a working row. *Closes with:* the daemon
+  reading a retry frame as a turn in flight, which would also move those turns' working lines.

@@ -149,7 +149,9 @@ func TestARetryClearsWhenTheAPIAnswersOrTheTurnIsOver(t *testing.T) {
 	for name, ev := range map[string]core.Event{
 		"a streamed start":  {Kind: core.KindMessageStart},
 		"a streamed token":  {Kind: core.KindPartialText, Text: "h"},
+		"the turn's tokens": {Kind: core.KindTurnTokens},
 		"prose":             {Kind: core.KindAssistantText, Text: "hi"},
+		"thinking":          {Kind: core.KindThinking, Text: "hm"},
 		"a tool call":       {Kind: core.KindToolUse, Tool: &core.ToolCall{ID: "t1", Name: "Bash"}},
 		"the turn's end":    {Kind: core.KindTurnEnd},
 		"the final failure": *unreachableFrame("s1").Event,
@@ -168,14 +170,20 @@ func TestARetryClearsWhenTheAPIAnswersOrTheTurnIsOver(t *testing.T) {
 }
 
 // What is not the API's answer leaves it: a receipt, a queued message's
-// lifecycle, a replayed line, a quota reading, a system frame of another kind.
+// lifecycle, a replayed line, a quota reading, a system frame of another kind,
+// and a background subagent's output, which rides the parent's session while the
+// parent's own request still waits.
 func TestARetryOutlivesWhatIsNotTheAPIsAnswer(t *testing.T) {
+	sub := &core.Subagent{Dispatch: "t9", Type: "Explore"}
 	for name, ev := range map[string]core.Event{
-		"a control receipt":     {Kind: core.KindControlReceipt, RequestID: "r1"},
-		"a message's lifecycle": {Kind: core.KindMessageState, MessageID: "m1"},
-		"a replayed line":       {Kind: core.KindUserText, Text: "@alex go", Echoed: true},
-		"a quota reading":       {Kind: core.KindRateLimit},
-		"another system frame":  {Kind: core.KindSystem},
+		"a control receipt":      {Kind: core.KindControlReceipt, RequestID: "r1"},
+		"a message's lifecycle":  {Kind: core.KindMessageState, MessageID: "m1"},
+		"a replayed line":        {Kind: core.KindUserText, Text: "@alex go", Echoed: true},
+		"a quota reading":        {Kind: core.KindRateLimit},
+		"another system frame":   {Kind: core.KindSystem},
+		"a subagent's prose":     {Kind: core.KindAssistantText, Text: "found it", Subagent: sub},
+		"a subagent's tool call": {Kind: core.KindToolUse, Tool: &core.ToolCall{ID: "t2", Name: "Read"}, Subagent: sub},
+		"a subagent's thinking":  {Kind: core.KindThinking, Text: "hm", Subagent: sub},
 	} {
 		a := retryingInto(t, twoAgents(t))
 		ev.SessionID = "s1"
@@ -198,6 +206,38 @@ func TestARetryIsForgottenWhenTheAgentStopsWorking(t *testing.T) {
 	a := reportStates(retryingInto(t, twoAgents(t)), map[string]string{"s1": rpc.StateWorking, "s2": rpc.StateIdle})
 	if _, held := a.retrying["s1"]; !held {
 		t.Error("a report showing s1 still working forgot its retry")
+	}
+}
+
+// A frame gap or a reattach may have eaten the answer that would have cleared
+// a retry, so both forget every one as they forget the other turn beliefs; the
+// next retry frame restores it.
+func TestAGapOrAReattachForgetsEveryRetry(t *testing.T) {
+	for name, forget := range map[string]func(App) App{
+		"a gap":      func(a App) App { return a.notedGap(3) },
+		"a reattach": func(a App) App { m, _ := a.reattached(reattachedMsg{}); return m.(App) },
+	} {
+		a := forget(retryingInto(t, twoAgents(t)))
+		if len(a.retrying) != 0 {
+			t.Errorf("%s left a retry standing: %+v", name, a.retrying)
+		}
+		if a = a.apply(retryFrame(4, 0, time.Second)); a.retrying["s1"].attempt != 4 {
+			t.Errorf("after %s the next retry frame did not restore the line: %+v", name, a.retrying)
+		}
+	}
+}
+
+// Both lines stay within any width, the head cut before the count is dropped:
+// a row wider than its pane is the alt-screen scroll DM.chrome exists for.
+func TestTheRetryLinesStayWithinEveryWidth(t *testing.T) {
+	forceTrueColour(t)
+	r := apiRetry{attempt: 3, max: 10, delay: 30 * time.Second, since: clock()}
+	for _, width := range []int{1, 5, 10, 20, 28, 40} {
+		for name, line := range map[string]string{"conversation": retryLine(r, time.Minute, width), "room": roomRetryLine(r, time.Minute, width)} {
+			if got := lipgloss.Width(line); got > width || got == 0 {
+				t.Errorf("the %s line at width %d drew %d cells: %q", name, width, got, stripANSI(line))
+			}
+		}
 	}
 }
 
@@ -256,9 +296,9 @@ func TestARetryNoticeLeavesNoTranscriptBlock(t *testing.T) {
 	}
 }
 
-// The retry line takes the working line's row, so a pane sized for a working
-// agent draws exactly its rows with a retry up - the alt screen never scrolls.
-func TestTheRetryLineKeepsThePaneInBounds(t *testing.T) {
+// The retry line takes the working line's row - the same one row, so a pane
+// sized for a working agent draws exactly its rows with a retry up.
+func TestTheRetryLineTakesTheWorkingLinesRow(t *testing.T) {
 	forceTrueColour(t)
 	const w, h = 100, 29
 	d := NewDM("s1", "alex").SetSize(w, h)
@@ -272,6 +312,23 @@ func TestTheRetryLineKeepsThePaneInBounds(t *testing.T) {
 	}
 	if !d.hasBeat() {
 		t.Error("hasBeat is false with a retry up; the row is unbudgeted")
+	}
+}
+
+// The roster's glyph waits for a row the daemon reads as working, as the DM and
+// the room do: a turn it reads as idle (a peer's message, a background task's
+// note) is pruned on the next report, so a glyph drawn meanwhile would flicker.
+func TestTheRosterGlyphWaitsForAWorkingRow(t *testing.T) {
+	a := twoAgents(t).apply(retryFrame(2, 0, time.Second))
+	if _, held := a.retrying["s1"]; !held {
+		t.Fatal("the retry was not held for the idle agent")
+	}
+	if view := shown(a); strings.Contains(view, retryGlyph+" alex") || !strings.Contains(view, "○ alex") {
+		t.Errorf("an idle agent's row drew the retry glyph:\n%s", view)
+	}
+	a = reportStates(a, map[string]string{"s1": rpc.StateWorking, "s2": rpc.StateIdle}).apply(retryFrame(3, 0, time.Second))
+	if view := shown(a); !strings.Contains(view, retryGlyph+" alex") {
+		t.Errorf("a working agent's row kept its glyph through a retry:\n%s", view)
 	}
 }
 

@@ -664,8 +664,9 @@ type Event struct {
 	// event - the same pointer-payload shape Goal and Task use. See CompactSummary.
 	Compaction *CompactSummary `json:"compaction,omitempty"`
 
-	// Retry is a NoticeAPIRetrying's count and pause, nil on every other event -
-	// the same pointer-payload shape Compaction uses. See APIRetry.
+	// Retry is a NoticeAPIRetrying's count and pause, nil on every other event, a
+	// 401 retry's KindAPIError included - the same pointer-payload shape
+	// Compaction uses. See APIRetry.
 	Retry *APIRetry `json:"retry,omitempty"`
 
 	// Control is the payload of a KindControlReceipt, nil on every other
@@ -762,9 +763,10 @@ type APIRetry struct {
 	Status  int           `json:"http_status,omitempty"`
 }
 
-// retryOf is an api_retry frame's retry, and nil on every other frame.
+// retryOf is a retrying notice's retry, and nil on every other frame - a 401
+// retry's too, which is a login's failure rather than a wait (authFailedRetry).
 func retryOf(f wireFrame) *APIRetry {
-	if f.Subtype != subtypeAPIRetry {
+	if f.Subtype != subtypeAPIRetry || f.authFailedRetry() {
 		return nil
 	}
 	return &APIRetry{Attempt: f.RetryAttempt, Max: f.RetryMax, Delay: time.Duration(f.RetryDelayMS) * time.Millisecond, Status: f.RetryStatus}

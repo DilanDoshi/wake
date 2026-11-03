@@ -240,10 +240,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   each non-401 `api_retry` frame is a `core.NoticeAPIRetrying` with its count and pause (`Event.Retry`), and
   the conversation's working row reads `⚠ API unreachable · retrying in 38s (attempt 3 of 10 · 1m 12s)`
   (`API error 529` with a status, `retrying…` once the pause has run), the room's working line
-  `⚠ API unreachable · retrying 3/10 for 1m 12s` and the roster row's glyph `⚠`. Cleared by the API's
-  answer, the turn's end, the give-up (the pin above takes over), a `/clear` or a report showing the agent
-  not working - never a timer; the heartbeat ticker redraws the countdown. A 401 retry keeps its own path.
-  `internal/ui/apiretry.go`, `decisions.md` (2026-11-02).
+  `⚠ API unreachable · retrying 3/10 for 1m 12s` and the roster row's glyph `⚠`, each on a row the daemon
+  reads as working. Cleared by the API's answer (never a subagent's), the turn's end, the give-up (the pin
+  above takes over), a `/clear` or a report showing the agent not working, and forgotten with the other turn
+  beliefs on a frame gap or a reattach - never a timer; the heartbeat ticker redraws the countdown. A 401
+  retry keeps its own path. `internal/ui/apiretry.go`, `decisions.md` (2026-11-02).
 
 **Keys and the legend**
 - **The legend is drawn only while an arm is live, and then it is only the armed cue:**

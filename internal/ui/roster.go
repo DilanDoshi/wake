@@ -353,7 +353,10 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (rosterSpo
 // beside the one thing this file must not get wrong.
 func (r Roster) rows(a Agent, subs []Task, width int) []string {
 	glyph := rowGlyph(a, turnDone(a, len(subs) > 0))
-	if r.retried(a.ID) {
+	// Only a working row, as the DM and the room draw it: a turn the daemon reads
+	// as idle (a peer's message, a background task's note) is pruned on the next
+	// report, and a glyph drawn meanwhile would come and go with the frames.
+	if a.State == rpc.StateWorking && r.retried(a.ID) {
 		glyph = retryGlyph
 	}
 	out := []string{r.headStyle(a).Render(headLine(a, glyph, width))}

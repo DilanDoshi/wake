@@ -5333,10 +5333,19 @@ of that Wake drew a working agent with a pool word over a ticking age. Each retr
   owner): a network drop marks every row at once. The turn's age stays - it is true; the pool word beside it
   was the lie. Warn colour, no shimmer: a warning, not a pulse.
 - **Driven by the frames alone.** Held on `App.retrying` like `compacting`, replaced by each retry frame and
-  cleared on the API's answer (a streamed start or token, prose, a tool call, thinking), the turn's end, the
-  give-up (the unreachable pin takes over), a `/clear`, or a report showing the agent not working. A
-  receipt, a queued message's lifecycle, a replayed line, a quota reading or another system frame leaves it.
-  The countdown reads the clock on the heartbeat ticker a working agent already runs; nothing is scheduled.
+  cleared on the API's answer (a streamed start or token, the turn's tokens, prose, a tool call, thinking),
+  the turn's end, the give-up (the unreachable pin takes over), a `/clear`, or a report showing the agent
+  not working. A receipt, a queued message's lifecycle, a replayed line, a quota reading or another system
+  frame leaves it, and so does a subagent's output (Codex): it rides the parent's session, and a background
+  subagent speaks while the parent's own request still waits. A frame gap or a reattach forgets every retry
+  with the other turn beliefs (Codex, the reviewer): the answer may have been in the gap, and the next
+  retry frame restores it. The countdown reads the clock on the heartbeat ticker a working agent already
+  runs; nothing is scheduled.
+- **Only a row the daemon reads as working draws any of it** (the reviewer): a turn it reads as idle - a
+  peer's message, a background task's note, an auto-compaction (`stateLocked`'s `!owed`) - is pruned on the
+  next report, so a roster glyph drawn meanwhile came and went with the frames; `deferred.md` keeps the gap.
+- **A 401 retry carries no `Retry`** (the reviewer): it is a login's failure, not a wait, and `Event.Retry`'s
+  "nil on every other event" is then true.
 - **Not on `rpc.SessionStatus`** (three reflective guards): a client attaching mid-storm draws the working
   line until the next retry frame, at most about forty seconds (`deferred.md`).
 - **The roster carries the set behind a pointer** (`Roster.retrying`), since `stopIndex` and the cursor tests
@@ -5345,4 +5354,5 @@ of that Wake drew a working agent with a pool word over a ticking age. Each retr
   frame), `internal/rpc/event_test.go` (the pause crosses as a Duration) and `internal/ui/apiretry_test.go`
   (the three surfaces off the recording, the countdown and its rounding, the status, the narrow line, every
   clearing and non-clearing kind, the prune, replacement, the 401 path, no transcript block, the row budget,
-  the room's oldest-turn rule), each mutation-checked.
+  the room's oldest-turn rule, a subagent's output, a gap and a reattach, every width, the roster's working
+  gate), each mutation-checked.
