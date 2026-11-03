@@ -189,11 +189,7 @@ func (a App) pageHides(id string) (rows, box bool) {
 // transcriptPage is the window when the chrome has scrolled out of it entirely:
 // height lines of the transcript, drawn without laying out the rest of the pane.
 func (d DM) transcriptPage(height int) string {
-	page := d.tr.sized(d.tr.width, height).view(d.sel)
-	if d.behindAsk {
-		page = quieted(page)
-	}
-	return page
+	return d.tr.sized(d.tr.width, height).view(d.sel)
 }
 
 // skipRows drops the first n rows of a block.

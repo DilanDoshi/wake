@@ -82,11 +82,15 @@ func TestANewDaemonReapsTheFleetACrashedOneLeftRunning(t *testing.T) {
 		t.Fatalf("Status = %+v, want the abandoned session reported as orphaned", orphaned.Sessions)
 	}
 
-	// Starting a daemon on the same socket is what cleans up.
+	// Starting a daemon on the same socket is what cleans up. The reaper kills
+	// the group before the roster is removed (the hand-over and the removal are
+	// fsynced), so a read the instant the process is gone can still see the
+	// record; a hello comes from the accept loop, which runs after the reaper.
 	d := startDaemonOn(t, sock)
 	waitForProcessGone(t, agent)
-	if recs := loadRoster(rosterPath(d.socket)); len(recs) != 0 {
-		t.Errorf("roster after reaping = %+v, want empty", recs)
+	attachConn(t, dialWhenUp(t, sock)).status()
+	if recs := loadRoster(rosterPath(d.socket)); len(recs) != 0 || !fileGone(rosterPath(d.socket)) {
+		t.Errorf("roster after reaping = %+v, want the file removed", recs)
 	}
 }
 

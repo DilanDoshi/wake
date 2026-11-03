@@ -38,10 +38,6 @@ const (
 // Its methods take value receivers and return a new Room, so a caller holding
 // an older copy keeps the transcript and the scroll position it had.
 type Room struct {
-	// behindAsk dims this pane's transcript, so a framed card reads as modal
-	// rather than as the newest block. Set for the draw; see WithAsk.
-	behindAsk bool
-
 	// writing titles the composer while it holds an answer rather than a
 	// message. Set for the draw; see WithWriting.
 	writing string
@@ -175,13 +171,6 @@ type Room struct {
 	// the bottom of the frame - the awareness strip and the notice row first,
 	// the box's own last rows after them.
 	chrome int
-}
-
-// WithAsk says an answerable card is drawn in this pane, which quiets the
-// transcript behind it. For the draw only; see askdim.go for the cost.
-func (r Room) WithAsk(v bool) Room {
-	r.behindAsk = v
-	return r
 }
 
 // WithWriting titles the composer for a draft that is an answer rather than a
@@ -607,11 +596,7 @@ func (r Room) View(width, height int) string {
 		r = r.SetSize(width, height)
 	}
 	w := max(width, minComposerWidth)
-	transcript := r.tr.view(r.sel)
-	if r.behindAsk {
-		transcript = quieted(transcript)
-	}
-	rows := []string{transcript}
+	rows := []string{r.tr.view(r.sel)}
 	// The working line, with a blank row above it so it sits clear of the output
 	// rather than crammed against it - Claude Code's own spacing. Its breathing
 	// room below is the composer gap the idle room already keeps.

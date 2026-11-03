@@ -136,6 +136,10 @@ width. That is `DM.bar`'s own shape. `deferred.md:1790` measured 185 µs/op with
 a question; a benchmark is added beside it and **the number is reported in the PR**. If it cannot be
 made cheap the dimming is dropped and the border kept, rather than a per-frame cost shipped quietly.
 
+> **Superseded 2026-11-01** (owner's ruling, `docs/notes/decisions.md`): the dimming was removed. The
+> transcript behind a card is drawn exactly as it is drawn without one; the frame and the key line
+> stand as above.
+
 ## 7. The room, and the transcript
 
 `App.observe` appends the ask to the room **as well as** adding the card, and `roomBlock` grows a
