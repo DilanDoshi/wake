@@ -8,6 +8,59 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-10-29 — glamour's list of a grid's links keeps a row per link
+
+`wake-orch`'s rulings, against `origin/main` 81e3377e.
+
+- **The defect.** glamour lists a grid's links under it, `[n]: text address` a row each
+  (`printTableLinks`; images in a second list, in ImageText's colour, which reflowProse never touched).
+  The label is unstyled, since Wake leaves `LinkText` plain, so `reflowProse` read the list as a
+  paragraph and ran it into one, wherever the grid was drawn: alone in its place (`reflowedBelowGrid`
+  handed it on as prose), or inside a document (a reply defining a reference link, a list item). A copy
+  ran it together too. Prose and lists draw no such list - their links are inline - so the defect is a
+  grid's alone.
+- **The fix is in `reflowProse`:** from a group that `[1]: ` opens, each next label in order starts a
+  group of its own, to the next blank row, as an enumerator after an enumerator does (`startsItem`).
+  Each entry is re-wrapped alone and comes back as drawn, since glamour truncates the address to fit,
+  and an entry glamour wrapped itself (its text wider than the block) keeps its tail. Two Codex finds
+  and a code review shaped it:
+  - The list is a run, not a group. glamour pads ` [1]`..` [9]` to `[10]`'s width and not a wrapped
+    tail, so ` [9]`'s tail sits at `[10]`'s lead, and a split read off the group's first row ran `[10]`
+    into it, drawn and copied. A first cut that extended `startsItem` itself had that hole.
+  - The run reads only the label it counts to. In a list item glamour draws a paragraph after the
+    table straight under its list, with no blank row, so a run that took any label split that
+    paragraph at a `[1]: ` its wrap put first on a row.
+  - And it ends only at a blank row. An entry, or a wrapped tail, holding box drawing is a row
+    reflowProse leaves as drawn; ending the run there ran the entries after it together (code
+    review), so such a row still counts its label.
+- **Rejected, each measured:**
+  - A tag on `LinkText`, as `itemTag` marks an item. glamour gives a child style's non-empty
+    `BlockPrefix` to every render of it (`cascadeStylePrimitive`), so the tag rode on prose links and
+    into grid cells, and landed before the margin, which stopped a paragraph opening with a link from
+    reflowing. No glamour style belongs to the list alone.
+  - Leaving a run that opens `[1]: ` as drawn, down to the blank row under it (the first plan). glamour
+    runs a typed list of sources (`[1]: Smith…` / `[2]: Jones…`) into one paragraph, so the run kept
+    glamour's wrap instead of the greedy one at 80 of 101 widths (20-120), and at 20 `fitToWidth` cut
+    an over-long row to a lone `-` at column 0.
+  - A lookback to the grid above the list: it misses a one-column grid's list in a document, and a
+    table drawn alone hands reflowProse no grid to look back to.
+  - `WithInlineTableLinks`: addresses move into the cells, a product change that flips most link tables
+    to records.
+- **The accepted residual.** A paragraph that a typed list of sources opens keeps the greedy wrap; only
+  where glamour's wrap starts a later source on a row does that source keep the row's start - 7 of 101
+  widths for the measured two-source paragraph, every row still greedy and the copy the one paragraph.
+  A wrap that opens a row with `[1]: ` mid-paragraph changes nothing, since no list is counting; one
+  that opens a row with the very label a list item's list counts to next, in a paragraph under it,
+  would split there.
+  `TestAParagraphOfLinkLabelsKeepsTheGreedyWrap`, `TestAWrapOpeningARowWithALinkLabelStaysProse`.
+- **Not this fix: a block's trailing paragraph inside a list item.** glamour draws no blank row
+  between a table in an item and a paragraph after it in the same item, so on `main` that paragraph
+  runs into the next item (`after the table 2. item two`), links or none; with links, the list's last
+  entry takes it too, as on `main`. It is reflowProse's grouping inside an item, not the list's, and
+  is left for its own fix (code review).
+
+---
+
 ## 2026-10-27 — `/wake-help`: every key and command, derived, in a pane view
 
 The owner's ask ("a /wake-help that displays all of the shortcuts and cmds wake has so if someone needs

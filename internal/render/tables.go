@@ -465,9 +465,9 @@ func done(rest [][]string) bool {
 
 // reflowedBelowGrid is reflowProse for a table rendered alone: its grid - the
 // rows from the first down to the next blank one - stays as glamour drew it, and
-// what follows (glamour's list of the table's links) is prose as ever. A
-// one-column grid has no `│` to keep reflowProse off its rows, which would
-// otherwise run together.
+// what follows (glamour's list of the table's links) goes to reflowProse, which
+// keeps a row per link. A one-column grid has no `│` to keep reflowProse off its
+// rows, which would otherwise run together.
 func reflowedBelowGrid(s string, width int) string {
 	lines := strings.Split(s, "\n")
 	i := 0
