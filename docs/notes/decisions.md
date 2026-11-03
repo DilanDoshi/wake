@@ -5393,3 +5393,56 @@ ruling on it, and it reverses it.
   was deleted with it; the second had been failing on `main` since `cardOf` stopped putting the
   room's card, which no gate runs benchmarks to notice. `deferred.md`'s 2026-08-22 card-cost entry
   names the loss.
+
+## 2026-11-02 — a card the pane cannot hold opens on its foot, and the review step is bounded (the owner)
+
+The owner's 2026-11-01 report (BUG-59): a two-question ask walked its questions on ↵ and went dead on
+the review. The review drew every question whole, so in a pane that held each question it was cut; the
+whole-card rule turned its keys off, and the page opened the cut card on its top with the line that says
+so below the fold - a digit typed there was blamed on the draft. The owner asked for both parts.
+
+- **A card the pane cannot hold opens on its foot.** Reverses 2026-10-20's "opens on its own top": the
+  rows the keys act on, Submit/Cancel and the key line are what is in view, and the wheel brings the
+  question in above them. `placeOf` has one rule for every card the operator has not placed: the page
+  opens as far up as the card's last row stays in view - the top anchor for a card the pane holds under the transcript's rows (the
+  composer scrolled away, as before), lower for one it cannot. A card exactly the pane's height is
+  answerable at rest now, with the transcript's row scrolled off (`TestACardThePaneCanHoldIsAnswerableAtRest`).
+  The keys' rule is unchanged: live only while the whole card is on screen (`cardFullyDrawn`).
+- **The review step is kept to the rows the question steps take.** A question and its answer are
+  each cut to one row (`reviewRows`) with an ellipsis, as a question step cuts a label to its row; the
+  heading, the blank under the strip and the blank over the options are gone - the strip's `✔ Submit`
+  tab is the heading. For any two-question ask the review is never taller than its tallest question
+  step, a bare yes-and-no pair's seven rows included (`TestTheReviewIsNoTallerThanTheTallestQuestion`),
+  so a pane that held every question holds the step that sends them
+  (`TestTheReviewIsAnswerableWhereverTheQuestionsAre`). The reviews measured the first two cuts - two
+  rows per question with the heading kept, then answers still wrapped to three rows - against a bare
+  ask and against a label longer than its row, and found each over. This reverses 2026-10-18's
+  wrapped joined answer: a multi-select answer longer than its row is cut there with an ellipsis, and
+  its ticks are read on the question's own step.
+- **The cut line names the cut, over a draft too.** Reverses #184's reviewer choice that a draft over a
+  cut card names the draft: the cut is what keeps the keys off whatever the box holds, and the draft's
+  own line waits for a whole card.
+
+Traps:
+
+- **The foot is read off the layout a page at rest is drawn in**, never assumed: the pane laid out
+  `height+clipped` rows tall, which is the same for every rest up to the top anchor, so the frame
+  still lays it out once (`placeOf`). The first cut derived it from the transcript's rows and the
+  pinned block's, and both reviews broke it: a task board, the working line or a streamed preview
+  above the card, a picker under it, or a composer grown by a draft of blank lines all moved the card
+  under the rule. The card's own rows are what is placed, since it is the top of the pinned stack.
+  Chrome that grows with the height - a draft's box (`maxComposerRows` bounds it), a preview the short
+  pane cut - takes rows from the block again, so the page grows by what it took and is measured again,
+  until the block is whole; a pane whose chrome alone outgrows it counts that overflow in `clipped` too.
+- **A rest is the step's and the draft's.** `restingAt` keys the stored rest on the ask and the wizard
+  step, and a box that emptied outside answer mode forgets it (`draftSeen`), so an answer in your own
+  words sent, a stray character deleted or a wheel on one question leaves the next step whole and its
+  keys live - a rest keyed on the ask alone outlived the step and opened the next with its top cut
+  (the second review).
+- At rest on its foot `pageHides` reports the rows moved and the box away, so a press takes the screen as
+  drawn and ↵ on a draft brings the box back first - the composer-scrolled-away case's own behaviour.
+- The notch test checks the transcript's own lines only once the window's top is in the transcript: a
+  card on its foot brings its own rows in first.
+- A three- or four-question ask's review can still outgrow a short pane (three fixed rows and two
+  per question). It opens on its foot with the key line saying so, and the window has to grow. Left
+  (`deferred.md`).

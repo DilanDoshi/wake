@@ -441,19 +441,25 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **An ask belongs to its agent's conversation; the room draws none** (`Cards.For`, `App.cardOf`).
   The roster row, the strip's `N need you` and `⌃X` announce it. Nothing on that wire times out.
 - **A pane drawing a card scrolls as one page** (owner's 2026-10-20 ask): the wheel slides the card and
-  composer off the bottom and pulls the older transcript in at the top, and a card taller than its
-  pane opens on its own top with the rest a wheel notch away. Without a card the wheel moves the
-  transcript alone. The pane is drawn taller and a window of its top rows shown, so nothing is laid
-  out twice (`pagescroll.go`). **Its keys are live only while the whole card is on screen**
-  (`App.cardFullyDrawn`, unchanged in rule) and the key line says when they return (`cardKeysCut`).
-  A draft that changes, or opening an answer, brings the page back to the composer (watched at the
-  composer's write, not per key); a pane whose box holds a draft opens on it, and `submit` and an
+  composer off the bottom and pulls the older transcript in at the top. **A card the pane cannot hold
+  opens on its foot** (owner's 2026-11-02 ruling, reversing 2026-10-20's top): the key line and the rows
+  the keys act on in view, the question a wheel notch above. The page opens as far up as the card's last row stays
+  in view, read off the layout it is drawn in (`placeOf`), so a card the pane holds still opens under
+  the transcript with the composer scrolled away, and one exactly the pane's height is answerable. Without a card the wheel
+  moves the transcript alone. The pane is drawn taller and a window of its top rows shown, so nothing is
+  laid out twice (`pagescroll.go`). **Its keys are live only while the whole card is on screen**
+  (`App.cardFullyDrawn`, unchanged in rule) and the key line says when they return (`cardKeysCut`, over
+  a draft too). A draft that changes, or opening an answer, brings the page back to the composer (watched
+  at the composer's write, not per key), a box that emptied outside answer mode lets the card settle
+  again, and a rest is the wizard step's; a pane whose box holds a draft opens on it, and `submit` and an
   answer's `↵` act only from a page at its bottom, so a draft nobody can see is never sent. A press on a
   scrolled page takes a screen selection, not a transcript anchor, and an edge drag scrolls the
-  transcript, not the page. `decisions.md` (2026-10-20).
+  transcript, not the page. `decisions.md` (2026-10-20, 2026-11-02).
 - Permissions/plans: rune then `↵`, read only on an empty composer; any other input disarms (key,
   composer, mouse, digit).
-- Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`); `Other…`/`d` enter answer
+- Questions: a wizard with a review step (`cardsteps.go`, `cardreview.go`) kept to the rows the question
+  steps take - a question and its answer each cut to one row there (`reviewRows`), so a pane that held
+  every question of a two-question ask holds the step that sends them (BUG-59); `Other…`/`d` enter answer
   mode, where the card takes `↵`; a bare `↑↓` with no draft line to move to never walks prompt history -
   from `Other…` it goes back to the options with the words kept in that row, as `esc` does, and `↵` over an
   open menu completes its word before it sends (`cardanswer.go`). Arrows reach the card with or without a

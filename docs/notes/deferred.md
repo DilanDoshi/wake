@@ -5961,3 +5961,14 @@ agent beside `forkFrom`, in memory only.
   before claude reads, and the rewind's marker lands after it. The source must be idle to be forked,
   so this needs an operator rewinding it within the fork's start-up. *Closes with:* the length measured
   once claude is known to have read the source, if anything on the wire marks that.
+
+## FROM `fix/card-review-fits-its-pane`, 2026-11-02
+
+- **An older daemon refuses a newer window's `!cmd`.** A 0.1.13 window sends a shell run as a
+  `FrameSend` carrying `shell` and no text; a 0.1.12 daemon does not know the field and refuses the
+  empty send as "encode user message: nothing to send" (sing-dev-2's log, 2026-11-01). `wake fleets`
+  already says to ⌃Q⌃Q and reopen the fleet on this build, and upgrading the fleet is the remedy. The
+  window could read the daemon's build off the report and say so at the bang instead of a refusal.
+- **A three- or four-question ask's review can still outgrow a short pane**: three fixed rows and two
+  per question. It opens on its foot with the key line saying the keys wait for the whole card, and
+  the window has to grow. A review that scrolls inside the card would close it.

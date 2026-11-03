@@ -234,11 +234,11 @@ func (cs Cards) View(card Card, width int, by Agent, typing bool) string {
 
 // ViewCut is View for a card the pane does not hold whole: its keys are not read,
 // so the key line says when they return - unless an answer is being written,
-// which is read whether or not the card is all on screen, or a draft is what
-// pauses them, which is the reason to give first.
-func (cs Cards) ViewCut(card Card, width int, by Agent, typing bool) string {
-	if _, writing := cs.writingFor(card); writing || typing {
-		return cs.View(card, width, by, typing)
+// which is read whether or not the card is all on screen. A draft pauses the keys
+// of a whole card; over a cut one the cut is the reason, so it is the line (BUG-59).
+func (cs Cards) ViewCut(card Card, width int, by Agent) string {
+	if _, writing := cs.writingFor(card); writing {
+		return cs.View(card, width, by, false)
 	}
 	return cs.draw(card, width, by, func(int) string { return cardKeysCut })
 }

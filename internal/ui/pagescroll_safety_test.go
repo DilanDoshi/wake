@@ -227,13 +227,14 @@ func TestSendingWithTheComposerScrolledAwayBringsItBackFirst(t *testing.T) {
 	}
 }
 
-// A draft pauses the card's keys, and the line over a card the pane has cut off
-// says that rather than only that the card is cut.
-func TestACutCardWithADraftSaysTheDraftPausesItsKeys(t *testing.T) {
+// A card the pane has cut off says so over a draft too: the cut is what keeps the
+// keys off whatever the box holds, and the draft's own line waits for a whole card
+// (BUG-59: a digit typed at a cut review was blamed for the keys it did not pause).
+func TestACutCardWithADraftStillSaysTheCardIsCut(t *testing.T) {
 	a := askingWith(t, pageSetup{height: 10, history: pageHistory, draft: "my secret draft"})
 
-	if rows := pageRows(a); !hasRow(rows, cardKeysPaused) || hasRow(rows, cardKeysCut) {
-		t.Errorf("a cut card with a draft does not name the draft:\n%s", strings.Join(rows, "\n"))
+	if rows := pageRows(a); !hasRow(rows, cardKeysCut) || hasRow(rows, cardKeysPaused) {
+		t.Errorf("a cut card with a draft blames the draft:\n%s", strings.Join(rows, "\n"))
 	}
 }
 

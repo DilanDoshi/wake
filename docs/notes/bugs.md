@@ -1292,6 +1292,44 @@ is the key a typed answer is left by on the way to another question.
 takes a kept answer away; on a multi-select question the cursor lands on the walk-on row, so a second `↵` walks
 on rather than unticking the words. The refusal's reason belongs to no question, so `esc` there still drops it.
 
+
+## BUG-57 — a fork's pane opened without the conversation it inherited
+
+**Seen 2026-10-29 filming the landing site's fork clip (`demo/tapes/08-fork.tape`), then reproduced with
+a real claude** (2.1.311, haiku, a scratch fleet on `main` 1d9699dc). `⌃F` on an agent opened the fork's
+pane with its banner and the snapshot notice (`@juno is a fork of @maya…`), but none of the parent's
+conversation; the fork had it, and said so on its first answer.
+
+**Cause.** claude writes a fork's transcript only on the fork's first turn, so the `FrameHistory` the pane
+sends as it opens finds no file and comes back empty, and `historyArrived` then records the ask as spent:
+nothing asks again once the file exists. The demo stand-in's opening line, which first looked like the
+cause (a live line outrunning the read, which `historyArrived` drops), was a red herring - silencing it
+changed nothing.
+
+**Fix:** in progress on `fix/fork-pane-shows-history`; that PR closes this entry.
+
+## BUG-59 — a two-question ask's review step went dead in a pane that fit its questions
+
+**Found 2026-11-01 by the owner**, in a 0.1.12 window on fleet sing-dev-2: "could not enter/select a
+choice in the question hil, could only hit escape and move between choices". The agent's transcript
+shows a two-question single-select ask (475- and 346-character questions, descriptions to 274
+characters) put at 00:58Z and Wake's esc-dismiss deny at 01:18Z, with nothing written in between: no
+↵ produced a frame. Identical on v0.1.12, v0.1.13 and main.
+
+**Cause.** `Card.reviewBody` drew every question whole, so the review step was taller than any
+question step: ↵ walked the questions (the "moving between choices"), the review did not fit,
+`cardFullyDrawn` went false and `cardKey` refused ↵, the digits, the arrows, ←→ and `d`. The page
+opened the cut card on its top (2026-10-20), so the `cardKeysCut` line was below the fold; a digit
+typed there landed in the composer and the line then blamed the draft. Only esc - a deny - the wheel
+or a resize were live. The band for that shape: terminal heights 20–26 at 80 and 100 columns, 22–30 at
+140 with the room beside; the recorded fixture has the same band two rows wide.
+
+**Fix:** branch `fix/card-review-fits-its-pane`. The review cuts each question to one row and drops
+its heading and blanks, a card the pane cannot hold opens on its foot - read off the layout it is drawn
+in, whatever the pane pins above the card - and the cut line names the cut over a draft (`decisions.md`, 2026-11-02). Tests: the sweep and the height
+invariant in `cardreviewfit_test.go`, the pty case
+`TestEnterSubmitsTheReviewOfATwoQuestionAskInAShortPane` at 100×24.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
