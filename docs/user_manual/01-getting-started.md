@@ -86,6 +86,10 @@ way back. `wake --fleet <name>` reopens one you already have, and `wake fleets` 
 fresh machine with nothing running, a bare `wake` is still the right first command — it makes your
 first fleet and starts its manager.
 
+Each Wake window titles your terminal's tab with the fleet's name, so a tab says which fleet it is.
+When you leave, the shell gets its own title back, in terminals that keep a title stack (most do;
+WezTerm and Terminal.app are not known to).
+
 ## Stopping
 
 Read [chapter 4](04-lifecycle.md) before you stop anything, because the four ways to stop are

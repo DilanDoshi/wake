@@ -78,6 +78,19 @@ usage limit`, not as your words. If you message the agent first, the resume wait
 if it goes through nothing more is sent; `esc` on the agent cancels the resume. Signing in again to the same account changes nothing — only
 a different account, or the reset, lifts the limit.
 
+## The network dropped mid-turn
+
+With the network gone, claude retries a request ten times over about three minutes before it gives
+up. While it retries, the agent's working row says so — in its conversation
+`⚠ API unreachable · retrying in 38s (attempt 3 of 10 · 1m 12s)`, in the room
+`⚠ API unreachable · retrying 3/10 for 1m 12s`, and `⚠` on its roster row. A retry the API answered
+with a status reads `API error 529` instead.
+
+When claude gives up, the notice row keeps `@x: … — Wake resumes it when the connection is back`. You
+don't have to send anything: Wake writes `continue` to the agent once, as soon as another agent's turn
+goes through or the machine reports a network change, and draws it as
+`↻ resumed after the connection came back`, not as your words.
+
 ## A key does nothing
 
 Check it is on the list in [chapter 3](03-keyboard.md) — if it is not there, Wake does not bind it,
