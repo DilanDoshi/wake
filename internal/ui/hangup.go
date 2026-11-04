@@ -135,7 +135,7 @@ func (a App) reattached(m reattachedMsg) (tea.Model, tea.Cmd) {
 	// and the fleet report it comes back with carries no permission mode. A
 	// belief that survived the disconnection is one nothing can confirm - see
 	// forgotModes for which way that fails.
-	a = a.forgotModes().unsyncedAll() // and every pane's block may be missing its start
+	a = a.forgotModes().unsyncedAll().forgetRetries() // and every pane's block may be missing its start
 	// And what any turn in flight had produced, for the same reason one step
 	// further: the boundary that would have cleared it may have been in the gap.
 	// See Fleet.ForgetTurns.

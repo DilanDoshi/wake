@@ -37,6 +37,11 @@ func (d DM) heartbeat() string {
 		return compactingLine(d.compactingSince, d.blockWidth())
 	}
 	if d.Agent.State == rpc.StateWorking {
+		// A request claude is retrying takes the row: the turn is as old as the
+		// working line would say, and this says why it has nothing to show.
+		if d.retry.active() {
+			return retryLine(d.retry, turnAge(d.Agent.State, d.Agent.startedAt), d.blockWidth())
+		}
 		line := workingLine(d.SessionID, d.Agent.State, d.Agent.Doing, d.Agent.startedAt, d.Agent.TurnTokens, d.blockWidth())
 		// The loop clause is appended and the whole line re-truncated, so it never
 		// runs past the row it is budgeted for; a tight width drops the clause first.

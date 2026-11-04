@@ -359,7 +359,7 @@ func (b *inbox) take(limit int) batch {
 // that opened a fence (partialchunks.go).
 func (a App) notedGap(n int) App {
 	notice.Report("dropped %d frames: this window fell behind, so the conversation above has a gap", n)
-	a = a.forgotModes().unsyncedAll()
+	a = a.forgotModes().unsyncedAll().forgetRetries()
 	a.fleet = a.fleet.ForgetTurns()
 	return a
 }

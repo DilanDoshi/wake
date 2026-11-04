@@ -146,7 +146,7 @@ func (d DM) restingAt(card Card) (int, bool) {
 // sizedDM is the conversation id laid out for a pane of width by height with menu
 // pinned - transcriptRows' measurement, and the page's.
 func (a App) sizedDM(id, menu string, width, height int) DM {
-	return a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).SetSize(width, height)
+	return a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).WithRetrying(a.retryOf(id)).SetSize(width, height)
 }
 
 // pageOf is the page of a drawn conversation that has a card up.

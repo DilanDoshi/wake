@@ -6004,3 +6004,23 @@ terminal keeps.
 - **No title through a multiplexer's status bar.** Inside tmux the fleet's name is the pane title (`#T`),
   which the window name (`#W`) and the outer terminal show only when the operator's tmux config says so.
   *Closes with:* nothing of Wake's - it is tmux's `set-titles` and `set-titles-string`.
+
+## FROM `fix/show-api-retrying`, 2026-11-02
+
+The retry line (decisions.md, 2026-11-02) shipped with two things left out.
+
+- **A standing retry is not on `rpc.SessionStatus`.** A client attaching mid-storm draws the plain working
+  line until the next retry frame, at most about forty seconds; a field would trip the three reflective
+  guards for a fact the next frame restores. *Closes with:* the daemon holding the last retry per agent and
+  the report carrying it, the way `Goal` does.
+- **No `N retrying` segment on the strip** (the owner, 2026-11-02): a network drop marks every roster row
+  and the room line at once. *Closes with:* a segment beside `✔ N done`, counted off `App.retrying`.
+- **A turn the daemon reads as idle shows no retry line** - a peer's `SendMessage`, a background task's
+  note, an auto-compaction, none of which the daemon counts as a turn owed (`stateLocked`). Its retries are
+  held and pruned on every report; the three surfaces draw only a working row. *Closes with:* the daemon
+  reading a retry frame as a turn in flight, which would also move those turns' working lines.
+- **A subagent's own retries are unrecorded** (the reviewer). No `api_retry` in the corpus carries
+  `parent_tool_use_id`, so whether claude forwards a background subagent's retries is unknown. If it does,
+  they would read as the parent's, and since a subagent's output no longer clears the line, a parent waiting
+  on one would keep `retrying…` until its own next request, turn end or idle report. *Closes with:* a
+  recording of a network drop under a running subagent (`live-testing.md`), then a ruling on the frames.

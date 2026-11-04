@@ -11,6 +11,7 @@ package rpc
 import (
 	"encoding/json"
 	"testing"
+	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -56,6 +57,21 @@ func TestEventFieldsSurviveTheWire(t *testing.T) {
 	}
 	if got.Tool.Input["command"] != "ls" || got.Tool.Input["timeout"] != 30.0 {
 		t.Errorf("Tool.Input = %#v, want %#v", got.Tool.Input, want.Tool.Input)
+	}
+}
+
+// A retry's count and pause cross whole: the pause is a Duration, which would
+// quietly become nanoseconds-as-a-number on a tag that lost it.
+func TestARetryCrossesTheWire(t *testing.T) {
+	want := &core.APIRetry{Attempt: 3, Max: 10, Delay: 2486 * time.Millisecond, Status: 529}
+	got := roundTrip(t, Frame{Kind: FrameEvent, SessionID: "s-42", Event: &core.Event{
+		Kind: core.KindSystem, SessionID: "s-42", Notice: core.NoticeAPIRetrying, Retry: want,
+	}}).Event
+	if got == nil || got.Retry == nil {
+		t.Fatal("the retry dropped on the wire")
+	}
+	if *got.Retry != *want || got.Notice != core.NoticeAPIRetrying {
+		t.Errorf("retry = %+v %q, want %+v %q", *got.Retry, got.Notice, *want, core.NoticeAPIRetrying)
 	}
 }
 

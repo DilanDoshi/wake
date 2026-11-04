@@ -110,7 +110,11 @@ const roomMoreFormat = metaSep + "+%d more working"
 // "should I stop what I am doing", where this answers "how long has it been and
 // how much has come back". Same line as the conversation pane's, reached
 // through the same function.
-func roomWorkingLine(agents []Agent, width int) string {
+//
+// A turn claude is retrying against the API (retrying, apiretry.go) says so in
+// place of its word: the row is still the oldest turn's, and the fact worth the
+// glance is why it has run so long with nothing to show.
+func roomWorkingLine(agents []Agent, retrying map[string]apiRetry, width int) string {
 	var oldest Agent
 	working := 0
 	for _, a := range agents {
@@ -135,12 +139,14 @@ func roomWorkingLine(agents []Agent, width int) string {
 	// line itself is roomHeartbeatLine's minimal `✻ Sailed for 49s` rather than
 	// the DM's fuller form - the room is the glance, so it drops the tokens.
 	head := agentPrefix + oldest.Name + " "
-	line := HintStyle.Render(head) + roomHeartbeatLine(
-		roomWorkingWord(oldest.ID, oldest.Doing, oldest.startedAt),
-		turnAge(oldest.State, oldest.startedAt),
-		max(width-ansi.StringWidth(head)-ansi.StringWidth(more), 1),
-	)
-	return ansi.Truncate(line+HintStyle.Render(more), width, ellipsis)
+	age, room := turnAge(oldest.State, oldest.startedAt), max(width-ansi.StringWidth(head)-ansi.StringWidth(more), 1)
+	var body string
+	if r, ok := retrying[oldest.ID]; ok {
+		body = roomRetryLine(r, age, room)
+	} else {
+		body = roomHeartbeatLine(roomWorkingWord(oldest.ID, oldest.Doing, oldest.startedAt), age, room)
+	}
+	return ansi.Truncate(HintStyle.Render(head)+body+HintStyle.Render(more), width, ellipsis)
 }
 
 // workingLine is the heartbeat drawn for an agent with a turn in flight, and ""

@@ -958,6 +958,14 @@ The tests replay recorded receipts and a scripted agent. In a scratch git reposi
       this machine's Wi-Fi rejoining reaches the routing socket as an address or a gateway route.
 - [ ] **Close the lid mid-turn and open it later.** The `went to sleep mid-response` failure should
       resume the same way once the network is back.
+- [ ] **Turn Wi-Fi off with an agent mid-turn and watch the row above its composer.** Within claude's
+      first retry it should read `⚠ API unreachable · retrying in Ns (attempt 1 of 10 · …)`, the pause
+      counting down and `retrying…` once it has run, with the room's line `@name ⚠ API unreachable ·
+      retrying 1/10 for …` and the roster glyph `⚠`; the pool word must not come back until the network
+      does. The suite drives this off the recording; what it cannot say is how soon a live claude's
+      first retry frame arrives. **Then the same with a background subagent running**: whether the
+      subagent's retries reach the parent's stream is unrecorded (`deferred.md`), and the line must
+      clear once the parent's own request goes through.
 
 ## The tab title — what only a real terminal's tab bar shows
 
