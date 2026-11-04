@@ -203,3 +203,38 @@ func TestARestoredConversationAndABoardTileDrawTheSendToo(t *testing.T) {
 	assertShows(t, tile, 60, 12, crossSessionLead+"alex"+crossSessionArrow+"sydney")
 	assertShows(t, tile, 60, 12, sentWords)
 }
+
+// A send by address is headed by who it reached, as the room heads it, and never
+// by the socket path it was sent to.
+func TestADMHeadsASendByAddressWithTheRecipientsName(t *testing.T) {
+	d := sentDM(sentTo("s1", "uds:/tmp/cc-socks/40123.sock", sentWords, "sydney", "s2"))
+	assertShows(t, d, 80, 30, crossSessionLead+"alex"+crossSessionArrow+"sydney")
+	assertHides(t, d, 80, 30, "uds:")
+}
+
+// A send by socket address is receipted with the address and no parenthetical:
+// `“…” → uds:<socket>; in that session's inbox…`, where a send by name gets
+// `→ <name> (…)`. The shape follows the address form, not the version
+// (send-by-address.jsonl, a live reply copying the from it answers). Delivered
+// either way, so neither draws its receipt - and the path in it - under the send.
+func TestASendBySocketDrawsNoReceiptEither(t *testing.T) {
+	var recorded []core.Event
+	for _, line := range fixtureLinesAt(t, "../../testdata/transcript/send-by-address.jsonl") {
+		evs, err := core.DecodeTranscriptLine([]byte(line))
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, ev := range evs {
+			if ev.Kind == core.KindToolUse || ev.Kind == core.KindToolResult {
+				ev.SessionID = "s1"
+				recorded = append(recorded, ev)
+			}
+		}
+	}
+	if len(recorded) != 2 || recorded[0].Tool.Send == nil || !strings.HasPrefix(recorded[0].Tool.Send.To, "uds:") {
+		t.Fatalf("the recording is not one send by address and its result: %+v", recorded)
+	}
+	d := sentDM(recorded...)
+	assertShows(t, d, 80, 30, "ack")
+	assertHides(t, d, 80, 30, "inbox")
+}

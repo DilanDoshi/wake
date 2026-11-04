@@ -1292,7 +1292,6 @@ is the key a typed answer is left by on the way to another question.
 takes a kept answer away; on a multi-select question the cursor lands on the walk-on row, so a second `↵` walks
 on rather than unticking the words. The refusal's reason belongs to no question, so `esc` there still drops it.
 
-
 ## BUG-57 — a fork's pane opened without the conversation it inherited
 
 **Seen 2026-10-29 filming the landing site's fork clip (`demo/tapes/08-fork.tape`), then reproduced with
@@ -1307,6 +1306,23 @@ cause (a live line outrunning the read, which `historyArrived` drops), was a red
 changed nothing.
 
 **Fix:** in progress on `fix/fork-pane-shows-history`; that PR closes this entry.
+
+## BUG-58 — one message between two fleet agents was drawn twice in the room
+
+**Found 2026-10-29 by the owner**: `↪ wake-imp-puffer → uds:/tmp/cc-socks/73009.sock ✅` and `↪ wake-imp-puffer →
+wake-orch ✅` for one SendMessage. The sender's transcript holds a single call, `to` the socket; PID 73009 was
+wake-orch's claude.
+
+**Cause.** An agent replying to a cross-session message copies its `from`, a `uds:` socket address, as its `to`.
+`withSend` draws a send unless `ByName(to)` finds a fleet agent, and an address is no name, so the call drew as a
+send outside the fleet - and the receiver, a fleet agent, drew its replayed envelope as well. A `name [ref]` address
+did the same, and a conversation headed the send with the raw path and showed its receipt, whose shape for a
+socket was not the recorded one.
+
+**Fix:** branch `fix/send-drawn-twice`. The daemon names the session behind an address from Claude Code's session
+registry (`daemon/sendto.go`, `decisions.md` 2026-10-29); the room leaves a fleet recipient to its own stream and
+heads any other send with the registry's name; a conversation heads its sends the same way and hides the socket
+form's receipt too.
 
 ## BUG-59 — a two-question ask's review step went dead in a pane that fit its questions
 
@@ -1329,6 +1345,7 @@ its heading and blanks, a card the pane cannot hold opens on its foot - read off
 in, whatever the pane pins above the card - and the cut line names the cut over a draft (`decisions.md`, 2026-11-02). Tests: the sweep and the height
 invariant in `cardreviewfit_test.go`, the pty case
 `TestEnterSubmitsTheReviewOfATwoQuestionAskInAShortPane` at 100×24.
+
 
 ## Residuals carried from bugs that are fixed and merged
 

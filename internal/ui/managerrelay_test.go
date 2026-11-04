@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // sendCall is a SendMessage tool call from sid, as the airlock decodes one
@@ -70,6 +71,59 @@ func TestAnyAgentsSendOutsideTheFleetIsDrawnAndOnlyThat(t *testing.T) {
 		}
 		if out := ansi.Strip(a.observe(tc.sid, ev).View()); strings.Contains(out, "hello there") {
 			t.Errorf("%s reached the room:\n%s", name, out)
+		}
+	}
+}
+
+// sentTo is sendCall as the daemon delivers a send by address: who it reached,
+// read off Claude Code's session registry (daemon sendto.go).
+func sentTo(sid, to, text, toName, toID string) core.Event {
+	ev := sendCall(sid, to, text)
+	ev.Tool.Send.ToName, ev.Tool.Send.ToID = toName, toID
+	return ev
+}
+
+// A reply copies the from of the message it answers, a socket address. One the
+// daemon names as a fleet agent is left to that agent's own stream, as a send by
+// name is: the room draws the message once, sender → recipient, never the path.
+func TestASendByAddressToAFleetAgentIsDrawnOnceByItsReceiver(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 40).withAgents(core.ManagerName, "jade", "sydney")
+	a = a.observe("s3", sentTo("s3", "uds:/tmp/cc-socks/40123.sock", "ready to be quit", "jade", "s2"))
+	a = a.observe("s2", core.Event{Kind: core.KindCrossSession, SessionID: "s2", FromName: "sydney", Text: "ready to be quit"})
+
+	out := ansi.Strip(a.View())
+	if n := strings.Count(out, "ready to be quit"); n != 1 {
+		t.Errorf("the message is drawn %d times, want once:\n%s", n, out)
+	}
+	if !strings.Contains(out, "sydney"+crossSessionArrow+"jade") || strings.Contains(out, "uds:") {
+		t.Errorf("the room does not draw sydney → jade alone:\n%s", out)
+	}
+}
+
+// A session outside the fleet is drawn under the name the registry gives it; an
+// address nothing named keeps the address; and a fleet recipient with no process,
+// ended or parked, is drawn from the call, since no stream of its will draw it.
+func TestASendByAddressTheReceiverWillNotDrawIsDrawnFromTheCall(t *testing.T) {
+	a := newRoomApp(t).withSize(120, 40).withAgents(core.ManagerName, "jade", "sydney")
+	out := ansi.Strip(a.observe("s3", sentTo("s3", "uds:/tmp/cc-socks/40123.sock", "hello there", "fable QA", "")).View())
+	if !strings.Contains(out, "sydney"+crossSessionArrow+"fable QA") || strings.Contains(out, "uds:") {
+		t.Errorf("a send outside the fleet is not drawn under its name:\n%s", out)
+	}
+
+	out = ansi.Strip(a.observe("s3", sendCall("s3", "uds:/tmp/cc-socks/40123.sock", "hello there")).View())
+	if !strings.Contains(out, "sydney"+crossSessionArrow+"uds:/tmp/cc-socks/40123.sock") {
+		t.Errorf("an address nothing named is not drawn as it was sent:\n%s", out)
+	}
+
+	for _, state := range []string{rpc.StateEnded, rpc.StateParked} {
+		st := rpc.Status{Running: true, Sessions: []rpc.SessionStatus{
+			{ID: "s2", Name: "jade", State: state},
+			{ID: "s3", Name: "sydney", State: rpc.StateIdle},
+		}}
+		a = newRoomApp(t).withSize(120, 40).applyFrame(rpc.Frame{Kind: rpc.FrameStatusPush, Status: &st})
+		out = ansi.Strip(a.observe("s3", sentTo("s3", "uds:/tmp/cc-socks/40123.sock", "hello there", "jade", "s2")).View())
+		if !strings.Contains(out, "sydney"+crossSessionArrow+"jade") {
+			t.Errorf("a send to a %s fleet agent is not drawn:\n%s", state, out)
 		}
 	}
 }

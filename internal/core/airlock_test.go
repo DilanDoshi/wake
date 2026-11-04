@@ -64,6 +64,7 @@ import (
 	"os"
 	"path/filepath"
 	"reflect"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -435,6 +436,13 @@ var claudeWireVocabulary = wordSet([]string{
 	// carries attributes, so it is the tag start rather than a whole tag.
 	"<cross-session-message", "</cross-session-message>",
 
+	// A send's address: the socket prefix a cross-session message's from carries
+	// and a reply copies as its to, and the registry record that names the
+	// session behind a socket (vocabulary.go's SendAddress, DecodeSessionRecord).
+	// The prefix is a value's start rather than a whole value, so it is in
+	// embeddedMarkers below; the keys are recorded in testdata/sessions.
+	"uds:", "sessionId", "messagingSocketPath",
+
 	// The envelope a subagent's message to its own session arrives in - its
 	// SubagentHandback report - dropped whole by isAgentMessage, for the same
 	// reason: the tag is the only thing identifying the line.
@@ -486,6 +494,8 @@ var claudeWireVocabulary = wordSet([]string{
 // failure rather than a silent narrowing.
 var deliberatelyGeneric = wordSet([]string{
 	"type", "subtype", "role", "content", "message", "result", "id", "name",
+	// A session registry record's process id: Wake's own roster spells it too.
+	"pid",
 	"input", "text", "description", "state", "request", "response",
 	"session_id", "request_id", "is_error", "tool_name", "behavior",
 	"cancelled", "label", "model",
@@ -798,7 +808,10 @@ var notNamedByTheAirlock = map[string]string{
 // ("allowed_warning"). question-multiselect.jsonl, midturn-two.jsonl.
 // 241 → 247: bash mode's six tags, a `!cmd` record read back and written.
 // bash-mode.jsonl, shell-run.stdin.jsonl.
-const policedWordCount = 247
+// 247 → 250: a send's address, "uds:", and the session registry's "sessionId" and
+// "messagingSocketPath", which name the session behind it. cross-session.jsonl,
+// testdata/sessions/78871.json.
+const policedWordCount = 250
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -823,6 +836,9 @@ var notWireVocabulary = wordSet([]string{
 	// account.go: where Claude's config file lives (named outside core too),
 	// the reset clause of a usage-limit message, and the parse of its date.
 	"CLAUDE_CONFIG_DIR", ".claude.json",
+	// vocabulary.go: where Claude's session registry keeps its records, and the
+	// ref /list-agents prints after a name a send may carry.
+	"sessions", ".json", `^(.+) \[[0-9a-f]+\]$`,
 	`resets (?:([A-Z][a-z]{2}) (\d{1,2}) at )?(\d{1,2})(?::(\d{2}))?(am|pm) \(([^)]+)\)`,
 	"Jan 2", "pm",
 	"%w: encode %s: empty request id",
@@ -1211,6 +1227,7 @@ var embeddedMarkers = map[string]bool{
 	"Current model:":           true,
 	"<cross-session-message":   true,
 	"</cross-session-message>": true,
+	"uds:":                     true,
 	"<agent-message":           true,
 	"</agent-message>":         true,
 	"<bash-input>":             true,
@@ -1241,10 +1258,10 @@ var embeddedMarkers = map[string]bool{
 // with its reason.
 func TestTheVocabularyDescribesTheRecordedCorpus(t *testing.T) {
 	corpus := map[string]bool{}
-	// Both recorded formats. The vocabulary polices words from claude's stream
-	// *and* from its on-disk transcript, which DecodeTranscriptLine reads, and
-	// a word recorded in either is a fact rather than a guess.
-	for _, path := range append(fixtureFiles(t), transcriptFiles(t)...) {
+	// Every recorded format. The vocabulary polices words from claude's stream,
+	// its on-disk transcript, which DecodeTranscriptLine reads, and its session
+	// registry, and a word recorded in any is a fact rather than a guess.
+	for _, path := range slices.Concat(fixtureFiles(t), transcriptFiles(t), registryFiles(t)) {
 		for _, line := range fixtureLines(t, path) {
 			for word := range claudeWireVocabulary {
 				if corpus[word] {
