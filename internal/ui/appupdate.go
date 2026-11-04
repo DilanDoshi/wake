@@ -39,11 +39,12 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, blink := next.refocusBlink(a.focus)
 	next, linger := next.armNoticeLinger()
 	next, upgrade := next.dueUpdateCheck(msg)
+	next, title := next.dueTitle()
 	next = next.helpLaidOut()
-	if ask == nil && roomAsk == nil && blink == nil && linger == nil && upgrade == nil {
+	if ask == nil && roomAsk == nil && blink == nil && linger == nil && upgrade == nil && title == nil {
 		return next, cmd
 	}
-	return next, tea.Batch(cmd, ask, roomAsk, blink, linger, upgrade)
+	return next, tea.Batch(cmd, ask, roomAsk, blink, linger, upgrade, title)
 }
 
 func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {

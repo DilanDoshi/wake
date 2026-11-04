@@ -959,6 +959,22 @@ The tests replay recorded receipts and a scripted agent. In a scratch git reposi
 - [ ] **Close the lid mid-turn and open it later.** The `went to sleep mid-response` failure should
       resume the same way once the network is back.
 
+## The tab title — what only a real terminal's tab bar shows
+
+The suite reads the OSC 2 off a pty and vt10x's title; whether a terminal *shows* it, and what it shows after
+Wake leaves, is the tab bar's to say.
+
+- [ ] **`wake` in Ghostty or cmux, iTerm2, Kitty.** The tab reads the fleet's name (`harbor`, or whatever
+      `wake fleets` lists) the moment the room opens - not `wake`, not `wake --fleet harbor`.
+- [ ] **Two tabs on one fleet, `/wake-name dev` in one.** Both tabs read `dev` without touching the other.
+- [ ] **`wake --fleet default`** reads `default`; a hand-set `WAKE_SOCKET=/tmp/x/wake.sock` reads `wake`.
+- [ ] **Leave by `⌃O ↵`, by `⌃Q⌃Q`, and by `⌃C⌃C`.** In each of those terminals the tab reads what it did
+      before `wake` was typed - the directory, or the shell - at once, before the next prompt is drawn.
+- [ ] **WezTerm and Terminal.app.** Expected to keep the fleet's name until the next prompt (deferred.md);
+      say whether that is what you see, and whether the prompt does reset it.
+- [ ] **Inside tmux.** `tmux display -p '#{pane_title}'` reads the fleet's name while Wake is up and the
+      old one after; the tab's name in the status bar stays whatever tmux names it.
+
 ## Reporting back
 
 For anything that fails, this is what makes it fixable:

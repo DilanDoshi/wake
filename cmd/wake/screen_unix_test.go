@@ -13,6 +13,7 @@ package main
 import (
 	"bufio"
 	"fmt"
+	"io"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -77,6 +78,36 @@ type screen struct {
 	term vt10x.Terminal
 	cols int
 	rows int
+	raw  rawTail // the bytes the binary wrote, for what vt10x reads and forgets
+}
+
+// rawTail keeps at least the newest rawTailKeep bytes a pty carried: a sequence
+// the screen does not show (a title stack push, the pop that restores it) is
+// only assertable from the bytes, and a long test must not keep every frame.
+// It sits in the one goroutine draining the pty, so a write is a copy of p and,
+// once per rawTailKeep of input, one trim - never a copy of the tail per read.
+type rawTail struct {
+	mu sync.Mutex
+	b  []byte
+}
+
+const rawTailKeep = 1 << 20
+
+func (r *rawTail) Write(p []byte) (int, error) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.b = append(r.b, p...)
+	if len(r.b) > 2*rawTailKeep {
+		r.b = append([]byte(nil), r.b[len(r.b)-rawTailKeep:]...)
+	}
+	return len(p), nil
+}
+
+// String is everything kept so far.
+func (r *rawTail) String() string {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	return string(r.b)
 }
 
 // startWake runs the real binary in a pty of exactly this size.
@@ -149,7 +180,7 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 	}
 
 	go func() {
-		br := bufio.NewReader(ptmx)
+		br := bufio.NewReader(io.TeeReader(ptmx, &s.raw))
 		for {
 			if err := s.term.Parse(br); err != nil {
 				return

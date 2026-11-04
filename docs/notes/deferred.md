@@ -5990,3 +5990,17 @@ A send by address is named from Claude Code's session registry (decisions.md, 20
 - **A bare name is still the room's `ByName`, not the registry's.** So the 2026-10-16 entry above - a send by a
   claude name that lags Wake's, drawn twice - stays open. *Closes with:* the daemon resolving a bare name through
   the registry too, which costs a directory read on every send rather than every send by address.
+
+## FROM `feat/tab-title-fleet-name`, 2026-11-01
+
+The tab title (decisions.md, 2026-11-01) restores the shell's title by the xterm title stack, which not every
+terminal keeps.
+
+- **WezTerm and Terminal.app keep the fleet's name after exit** until the shell's own integration writes the
+  next title at its prompt; neither honours `CSI 23;0t` as far as could be read (WezTerm's #5800; nothing
+  found for Terminal.app). *Closes with:* a measured check on each, and where the stack is missing, reading
+  the title back with `CSI 21 t` before the first write and setting it again on exit - only on terminals
+  that answer the report, since an unanswered query leaves bytes on stdin.
+- **No title through a multiplexer's status bar.** Inside tmux the fleet's name is the pane title (`#T`),
+  which the window name (`#W`) and the outer terminal show only when the operator's tmux config says so.
+  *Closes with:* nothing of Wake's - it is tmux's `set-titles` and `set-titles-string`.

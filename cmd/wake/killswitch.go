@@ -81,6 +81,8 @@ import (
 
 	"github.com/charmbracelet/x/term"
 	"github.com/muesli/cancelreader"
+
+	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 const (
@@ -524,8 +526,9 @@ func (k *killSwitch) restoreTerminal() {
 	go func() {
 		defer close(written)
 		// Mouse reporting off, bracketed paste off, cursor back, alt screen
-		// left - bubbletea's own restoreTerminalState, in the order it does it.
-		_, _ = io.WriteString(k.out, "\x1b[?1006l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25h\x1b[?1049l")
+		// left - bubbletea's own restoreTerminalState, in the order it does it -
+		// then the shell's title, which converseModel's exit is not here to pop.
+		_, _ = io.WriteString(k.out, "\x1b[?1006l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25h\x1b[?1049l"+ui.TitleStackPop)
 		_, _ = fmt.Fprintf(k.out, "%s\r\n", emergencyLine)
 	}()
 	select {

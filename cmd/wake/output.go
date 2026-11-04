@@ -7,6 +7,8 @@ import (
 	"errors"
 	"os"
 	"sync"
+
+	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 // errHandedBack is a write of Wake's own after the program let the terminal go.
@@ -42,6 +44,15 @@ func (g *guardedOutput) Write(p []byte) (int, error) {
 // own sequences arrive through: without it the embedded *os.File's would take
 // them past the lock.
 func (g *guardedOutput) WriteString(s string) (int, error) { return g.Write([]byte(s)) }
+
+// handBack is the terminal's return to the shell once Bubble Tea has handed it
+// back: sealed first, so a title write in flight finishes and a late one is
+// refused, then the shell's title popped past the seal - nothing can retitle
+// after it. See internal/ui/title.go.
+func (g *guardedOutput) handBack() {
+	g.seal()
+	_, _ = g.File.WriteString(ui.TitleStackPop)
+}
 
 // seal ends Wake's writes once Bubble Tea has handed the terminal back: one in
 // flight finishes first, and one a command goroutine has yet to make - the
