@@ -47,6 +47,7 @@ func (a App) FleetName() string { return a.daemon.fleet }
 
 // WithFleetNamed hands f the fleet's name now and each name a report changes it
 // to: cmd/wake's emergency exit runs when the loop that folds them has stopped.
+// f runs on the Update goroutine, so it must not block.
 func (a App) WithFleetNamed(f func(string)) App {
 	a.fleetNamed = f
 	if f != nil {

@@ -61,6 +61,7 @@ Two more gaps, both narrow:
 - **A socket set by hand directly in `~/.wake`** (`WAKE_SOCKET=~/.wake/test.sock`) reads as the unnamed fleet
   (`fleetNameOf`), so its hints say `--fleet default`. This is not new, and such a socket already shares the
   unnamed fleet's files beside it.
+
 Deferred #16 ("parking 1 agents", the notice row's bare `%d agents`) stays as it was. The notice now names
 the fleet, but it still counts with `%d`.
 

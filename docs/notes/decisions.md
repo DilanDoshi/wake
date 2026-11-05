@@ -5612,4 +5612,4 @@ named fleet's operator somewhere else.
   `TestAClientNamesItsFleetByTheNameItHasNow`, the UI's notice, reattach and hand-on tests, and two on the
   real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
   once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
-  which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own three sentences are `deferred.md`'s (2026-11-05).
+  which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own four sentences are `deferred.md`'s (2026-11-05).
