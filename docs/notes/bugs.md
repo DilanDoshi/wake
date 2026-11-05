@@ -1374,9 +1374,10 @@ through `SubagentHandback` gets back a tool result whose one text block is
 2.1.314). `receiptSentence` read only SendMessage's three-key receipt as prose, so the pane drew the JSON;
 `TestNoToolResultReachesAReaderAsJSON` caught it on the new recording.
 
-**Fix:** branch `fix/nested-subagents-in-the-sidebar`. `receiptSentence` also reads that exact shape - a
-true `success` and a non-empty `message`, no other key - as its message. A third key, a non-bool or false
-`success`, or an empty message stays whole.
+**Fix:** branch `fix/nested-subagents-in-the-sidebar`. `receiptSentence` also reads exactly that receipt -
+two keys, a true `success` and the message `Report delivered to your caller.` (all 2,264 delivered receipts on
+the recording machine) - as its message. Any other tool's two-key result, a third key (`msg_id: null` too), a
+non-bool or false `success` stays whole; a refused hand-back (`"success":false`) still draws as JSON.
 
 ## Residuals carried from bugs that are fixed and merged
 

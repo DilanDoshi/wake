@@ -14,6 +14,7 @@ package ui
 // transcript behind it must never offer one.
 
 import (
+	"slices"
 	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -103,6 +104,10 @@ func (t Task) Selectable() bool {
 // The zero value is a conversation that has dispatched nothing.
 type Tasks struct {
 	rows []Task
+
+	// running is what Fleet.RunningTasks answers, built as each task frame folds
+	// because a draw asks for it several times per agent (tasktree.go).
+	running []Task
 }
 
 // Observe folds one event in and returns the result. It ignores everything
@@ -120,13 +125,13 @@ func (t Tasks) Observe(ev core.Event) Tasks {
 	}
 	rows := make([]Task, len(t.rows), len(t.rows)+1)
 	copy(rows, t.rows)
-	for i, row := range rows {
-		if row.ID == u.ID {
-			rows[i] = row.updated(u)
-			return Tasks{rows: rows}
-		}
+	at := slices.IndexFunc(rows, func(row Task) bool { return row.ID == u.ID })
+	if at < 0 {
+		rows = append(rows, Task{ID: u.ID}.updated(u))
+	} else {
+		rows[at] = rows[at].updated(u)
 	}
-	return Tasks{rows: append(rows, Task{ID: u.ID}.updated(u))}
+	return Tasks{rows: rows, running: taskTree(rows, sidebarListed)}
 }
 
 // updated applies one frame to one row.

@@ -742,8 +742,9 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   address form, not the version (`manager-relay.jsonl`, `testdata/transcript/send-by-address.jsonl`).
 - **A subagent can dispatch its own** (2.1.314): the inner `task_started` carries `parent_task_id` (the
   dispatching subagent's `task_id`) and `spawn_depth`; its frames are forwarded under its own `tool_use_id`,
-  and its file sits flat beside its parent's in `subagents/`. In auto mode a subagent's `SubagentHandback`
-  receipt is `{"success":true,"message":…}`, read as its message. `subagent-nested.jsonl`.
+  and its file sits flat beside its parent's in `subagents/`. In auto mode a subagent's delivered
+  `SubagentHandback` receipt is `{"success":true,"message":"Report delivered to your caller."}`, read as its
+  message only whole (`receiptSentence`). `subagent-nested.jsonl`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only

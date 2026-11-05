@@ -19,7 +19,7 @@ func taskTree(rows []Task, listed func(Task) bool) []Task {
 		}
 	}
 	if !nests {
-		return kept // every draw asks, and almost every one is flat: no map built
+		return kept // almost every session is flat: no map built
 	}
 	return treeOf(rows, kept, listed)
 }

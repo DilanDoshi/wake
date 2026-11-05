@@ -4,6 +4,7 @@ package ui
 // dispatched them, not beside it (the owner's 2026-11-03 report, BUG-61).
 
 import (
+	"slices"
 	"strings"
 	"testing"
 
@@ -16,10 +17,9 @@ import (
 // The recorded nest, subagent-nested.jsonl: a general-purpose subagent and the
 // two Explore subagents it dispatched.
 const (
-	nestOuter       = "a87d4741805dbd4b7"
-	nestFirst       = "aa6ffd9fbacd9f792"
-	nestSecond      = "aeec95ae93411f2a1"
-	nestSecondCalls = "toolu_01THxym7cXeUwNJKPamWQu8o"
+	nestOuter  = "a87d4741805dbd4b7"
+	nestFirst  = "aa6ffd9fbacd9f792"
+	nestSecond = "aeec95ae93411f2a1"
 )
 
 // nestedEvents is the recording up to its first ending, where all three run.
@@ -208,18 +208,32 @@ func TestTheCursorWalksTheTreeInTheOrderItIsDrawn(t *testing.T) {
 	}
 }
 
-// A click on a nested row lands on that row's dispatch.
+// crossStarted is two subagents and a child of the first that started after the
+// second, so start order (aa, bb, ac) and tree order (aa, ac, bb) differ.
+func crossStarted() []core.Event {
+	return []core.Event{
+		started("aa", "toolu_aa", "", "general-purpose", core.TaskAgent),
+		started("bb", "toolu_bb", "", "general-purpose", core.TaskAgent),
+		under("aa", "ac", "toolu_ac", "Explore"),
+	}
+}
+
+// A click on a nested row lands on that row's dispatch: the second sub row is
+// the child, not the second subagent started.
 func TestAClickOnANestedRowLandsOnIt(t *testing.T) {
-	f := nestedFleet(t)
+	f := NewFleet()
+	for _, ev := range crossStarted() {
+		f, _ = f.Observe(ev, "s1")
+	}
 	agents := []Agent{{ID: "s1", Name: "alex", State: rpc.StateWorking}}
 	lines := strings.Split(stripANSI(Roster{}.View(agents, f.RunningTasks, rosterWidth, 12)), "\n")
-	y := len(lines) - 1
-	for y >= 0 && !strings.Contains(lines[y], "Explore") {
-		y--
+	y := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "Explore") })
+	if parent := slices.IndexFunc(lines, func(l string) bool { return strings.Contains(l, "general-purpose") }); y != parent+1 {
+		t.Fatalf("the Explore row is at %d, want %d under its parent:\n%s", y, parent+1, strings.Join(lines, "\n"))
 	}
 	spot, ok := Roster{}.At(agents, f.RunningTasks, rosterWidth, 12, y)
-	if !ok || spot.dispatch != nestSecondCalls {
-		t.Errorf("a click on %q resolved to %q, want the second Explore's %s", lines[y], spot.dispatch, nestSecondCalls)
+	if !ok || spot.dispatch != "toolu_ac" {
+		t.Errorf("a click on the Explore row (%d) resolved to %q, want toolu_ac", y, spot.dispatch)
 	}
 }
 
@@ -228,18 +242,50 @@ func TestAClickOnANestedRowLandsOnIt(t *testing.T) {
 func TestOpeningANestedRowViewsThatSubagent(t *testing.T) {
 	fresh(t)
 	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withSize(120, 40)
-	for _, ev := range nestedEvents(t) {
+	for _, ev := range crossStarted() {
 		a = a.applyFrame(taskFrame("s1", ev))
 	}
-	a = a.pickAgent(3) // alex, the general-purpose row, then each Explore
+	a = a.pickAgent(2) // alex, aa, then aa's own
 	a, frames := opened(t, a)
 
-	if got := viewedBy(t, a, "s1"); got != nestSecondCalls {
-		t.Errorf("the pane is viewing %q, want the second Explore's %s", got, nestSecondCalls)
+	if got := viewedBy(t, a, "s1"); got != "toolu_ac" {
+		t.Errorf("the pane is viewing %q, want the child's toolu_ac", got)
 	}
 	asks := subagentAsks(frames)
-	if len(asks) != 1 || asks[0].Workflow == nil || asks[0].Workflow.Agent != nestSecond {
-		t.Errorf("asked for %+v, want the second Explore's own file %s", asks, nestSecond)
+	if len(asks) != 1 || asks[0].Workflow == nil || asks[0].Workflow.Agent != "ac" {
+		t.Errorf("asked for %+v, want the child's own file ac", asks)
+	}
+}
+
+// A late client is replayed running tasks sorted by id, so a child can fold
+// before its parent; it still draws under it.
+func TestAChildFoldedBeforeItsParentStillDrawsUnderIt(t *testing.T) {
+	f := NewFleet()
+	evs := crossStarted()
+	for _, ev := range []core.Event{evs[2], evs[1], evs[0]} {
+		f, _ = f.Observe(ev, "s1")
+	}
+	if got, want := strings.Join(shape(f.RunningTasks("s1")), " "), "bb aa >ac"; got != want {
+		t.Errorf("drawn as %q, want %q", got, want)
+	}
+}
+
+// The board's rows view draws a nested subagent a level deeper too.
+func TestTheBoardNestsASubagentsOwnSubagent(t *testing.T) {
+	a := boardApp(t)
+	inner := under("t1", "t2", "d2", "Explore")
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &inner})
+	outer, child := -1, -1
+	for _, l := range strings.Split(shown(a), "\n") {
+		switch {
+		case strings.Contains(l, subGlyph+" general-purpose"):
+			outer = subColumn(l)
+		case strings.Contains(l, subGlyph+" Explore"):
+			child = subColumn(l)
+		}
+	}
+	if outer < 0 || child != outer+subStep {
+		t.Errorf("the board draws the Explore's ⎿ at %d, want %d under the general-purpose name:\n%s", child, outer+subStep, shown(a))
 	}
 }
 

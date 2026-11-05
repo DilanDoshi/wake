@@ -720,13 +720,12 @@ func blockEvent(f wireFrame, rb, raw json.RawMessage) Event {
 		ev.Tool = &ToolCall{ID: b.ToolUseID, IsError: b.IsError}
 		ev.Text = toolResultText(b.Content)
 		if ev.Subagent == nil {
-			// Only when the frame is not itself forwarded. A forwarded frame
-			// carrying a dispatch receipt would be a subagent dispatching a
-			// subagent, which §11 of the findings note lists as never
-			// recorded, so the speaker attribution wins and the receipt half
-			// is dropped. That errs toward showing the body rather than
-			// suppressing it as a duplicate - the safe direction for a shape
-			// nobody has seen.
+			// Only when the frame is not itself forwarded. A forwarded one
+			// carrying a dispatch's result is a subagent's own dispatch
+			// (subagent-nested.jsonl:56, which carries no tool_use_result):
+			// the speaker attribution wins and the body is drawn, the one
+			// place the outer subagent's pane shows what its child reported,
+			// since the child's own frames are filed under the child's row.
 			ev.Subagent = dispatchReceipt(f, b)
 		}
 	default:

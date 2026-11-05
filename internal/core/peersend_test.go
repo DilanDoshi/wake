@@ -97,7 +97,8 @@ func TestOnlyASendMessageReceiptIsReadAsItsSentence(t *testing.T) {
 }
 
 // BUG-62: a subagent's SubagentHandback receipt (2.1.314) reached its pane as
-// JSON. Its exact recorded shape reads as its sentence; anything looser stays whole.
+// JSON. Exactly that receipt reads as its sentence; any other tool's two-key
+// result, or anything looser, stays whole.
 func TestASubagentHandbackReceiptIsReadAsItsSentence(t *testing.T) {
 	line, at := findFixtureLine(t, "subagent-nested.jsonl", "toolu_01VALGxY3Ez6iPYCSuyrJh4Z\",\"type\":\"tool_result")
 	evs, err := DecodeLine([]byte(line))
@@ -112,6 +113,8 @@ func TestASubagentHandbackReceiptIsReadAsItsSentence(t *testing.T) {
 		return raw
 	}
 	for _, text := range []string{
+		`{"success":true,"message":"Done."}`,
+		`{"success":true,"message":"Report delivered to your caller.","msg_id":null}`,
 		`{"success":true,"message":"Report delivered to your caller.","extra":1}`,
 		`{"success":"true","message":"Report delivered to your caller."}`,
 		`{"success":1,"message":"Report delivered to your caller."}`,

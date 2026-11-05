@@ -19,7 +19,9 @@ For BUG-61.
 - **Each task's usage is its own.** The outer's `total_tokens` went 12,982 → 15,314 across its two
   children's ~10,400 each (`:36`, `:62`): reading their reports into its context, not their spend.
 - **In auto mode a subagent's `SubagentHandback` receipt** is one text block,
-  `{"success":true,"message":"Report delivered to your caller."}` (`:53`, `:57`, `:64`). BUG-62.
+  `{"success":true,"message":"Report delivered to your caller."}` (`:53`, `:57`, `:64`); the same on all
+  2,264 delivered receipts in the machine's subagent transcripts, and `"success":false` with a reason on
+  the 8 refused ones. BUG-62.
 
 ## On disk
 

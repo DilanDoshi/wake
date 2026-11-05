@@ -19,7 +19,11 @@ package ui
 // is the same fold; only its owner changed, and DM keeps the cursor because the
 // cursor is per-conversation.
 
-import "github.com/DilanDoshi/wake/internal/core"
+import (
+	"slices"
+
+	"github.com/DilanDoshi/wake/internal/core"
+)
 
 // foldTask folds a dispatch frame into one session's list, reporting whether
 // there was one to fold.
@@ -74,7 +78,10 @@ func (f Fleet) named(sessionID string, ev core.Event) core.Event {
 // follow it a level deeper (tasktree.go), so every surface drawing this list -
 // the sidebar, its cursor and clicks, the board - nests them alike.
 func (f Fleet) RunningTasks(sessionID string) []Task {
-	return taskTree(f.tasks[sessionID].Rows(), func(row Task) bool {
-		return row.Status == core.TaskRunning && (row.Selectable() || row.Kind == core.TaskShell)
-	})
+	return slices.Clone(f.tasks[sessionID].running)
+}
+
+// sidebarListed is RunningTasks' rule for one row, applied as each frame folds.
+func sidebarListed(row Task) bool {
+	return row.Status == core.TaskRunning && (row.Selectable() || row.Kind == core.TaskShell)
 }
