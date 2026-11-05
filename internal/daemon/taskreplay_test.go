@@ -15,6 +15,7 @@
 package daemon
 
 import (
+	"encoding/json"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -93,6 +94,31 @@ func TestRunningTaskFramesCarryTheStartedDispatch(t *testing.T) {
 	}})
 	if got := a.runningTaskFrames(); got != nil {
 		t.Fatalf("a finished dispatch is still offered for replay: %d frames", len(got))
+	}
+}
+
+// A late client's sidebar nests a subagent's own dispatch only if the replay,
+// over the socket's JSON, still names the subagent that started it.
+func TestAReplayedNestedDispatchStillNamesItsParent(t *testing.T) {
+	a := newAgent(idAlpha, "sydney", "dev-1", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
+	a.observe(core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{
+		ID: "inner", Parent: "outer", Dispatch: "toolu_2", Kind: core.TaskAgent,
+		Phase: core.TaskStarted, Status: core.TaskRunning, Type: "Explore",
+	}})
+	frames := a.runningTaskFrames()
+	if len(frames) != 1 {
+		t.Fatalf("runningTaskFrames() returned %d frames, want 1", len(frames))
+	}
+	raw, err := json.Marshal(frames[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	var got rpc.Frame
+	if err := json.Unmarshal(raw, &got); err != nil {
+		t.Fatal(err)
+	}
+	if got.Event == nil || got.Event.Task == nil || got.Event.Task.Parent != "outer" {
+		t.Errorf("the replayed dispatch arrives as %s, want it naming its parent", raw)
 	}
 }
 

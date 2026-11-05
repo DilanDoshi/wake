@@ -30,6 +30,14 @@ type Task struct {
 	// ending never does - see Observe.
 	Dispatch string
 
+	// Parent is the ID of the subagent that dispatched this one, "" for one the
+	// agent dispatched itself (core.TaskUpdate.Parent).
+	Parent string
+
+	// Depth is how many listed rows this one is drawn under, set by
+	// Fleet.RunningTasks alone (tasktree.go).
+	Depth int
+
 	Kind   core.TaskKind
 	Status core.TaskStatus
 
@@ -138,6 +146,9 @@ func (t Task) updated(u *core.TaskUpdate) Task {
 	t.Status = u.Status
 	if u.Dispatch != "" {
 		t.Dispatch = u.Dispatch
+	}
+	if u.Parent != "" {
+		t.Parent = u.Parent
 	}
 	// TaskKindUnknown reaches here from two different frames and means the
 	// same thing in both: a progress frame names no task_type, and an

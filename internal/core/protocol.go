@@ -368,6 +368,7 @@ func taskUpdate(f wireFrame) *TaskUpdate {
 	kind := taskKind(f.TaskType)
 	return &TaskUpdate{
 		ID:       f.TaskID,
+		Parent:   f.ParentTaskID,
 		Dispatch: f.ToolUseID,
 		Kind:     kind,
 		Phase:    phase,

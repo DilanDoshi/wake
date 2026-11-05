@@ -347,7 +347,7 @@ var claudeWireVocabulary = wordSet([]string{
 	// The retry frame's count and pause, read only in retryOf; Wake's own words
 	// for them are core.APIRetry's fields. api-error-unreachable.jsonl.
 	"attempt", "max_retries", "retry_delay_ms",
-	"run_in_background", "last_tool_name", "task_id",
+	"run_in_background", "last_tool_name", "task_id", "parent_task_id",
 	"non_execution_kind", "permission_denials", "terminal_reason",
 	"modelUsage", "total_cost_usd", "num_turns",
 
@@ -817,7 +817,9 @@ var notNamedByTheAirlock = map[string]string{
 // 250 → 253: "attempt", "max_retries" and "retry_delay_ms", the api_retry
 // frame's count and pause, read so a reader can say claude is retrying and for
 // how long. api-error-unreachable.jsonl.
-const policedWordCount = 253
+// 253 → 254: "parent_task_id", the dispatching subagent's task id on a nested
+// task_started, which nests a subagent's own under it. subagent-nested.jsonl.
+const policedWordCount = 254
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
