@@ -421,7 +421,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   members the roster draws under the header (parked ones too) plus the manager's seat; a lone `@name`/`@team`
   narrows within it (`orchs › @who`), and `⌃A`, `/groupchat-filter` and routing are unchanged. The working
   line is the channel's; a team left with no header returns the window to all. **Your own line always draws in
-  the channel it was typed in** (`roomLine.sentIn`; a room bang keeps its dispatch channel), and one aimed
+  the channel it was typed in** (`Room.typedIn`; a room bang keeps its dispatch channel), and one aimed
   outside it says `@who is outside the <team> channel: replies show under all`, a timed notice; the replies
   stay their own thread's, and a restore keeps the channel's own rule (owner, 2026-11-03).
 - **Peer cross-session messages** show in the room as `↪ sender → recipient`

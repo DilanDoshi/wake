@@ -5592,8 +5592,13 @@ X reached its agents and was never drawn in the window that sent it, because `Ro
 channel's key, which holds only X's members and the manager's seat, and the echo is addressed to Y's.
 Only the roster's unread counts moved, which reads as nobody having got it.
 
-- **The operator's own line carries the channel it was typed in** (`roomLine.sentIn`, set only by
-  `Room.appendUser`), and `admits` lets it through in that channel before the key's test. One predicate
+- **The operator's own line carries the channel it was typed in** (`Room.typedIn`, set only by
+  `Room.appendUser`), and `admits` lets it through in that channel before the key's test. The stamp is
+  a table keyed on the line's id beside the lines, as `expanded` is, not a field on `roomLine`: a
+  field put every line over the room's allocation budget at the 20,000-line cap
+  (`TestRoomBeforeMetadataAllocationStaysBoundedAtTheCap`, 6 KiB a line; main sat 6 bytes under it),
+  and only the lines typed in a channel need one. It is pruned as lines leave (`forgotten`, `keptOn`,
+  the expand set's own helpers made generic) and emptied by the room's `/clear`. One predicate
   still: the focus half is unchanged, so a lone `@name` typed later narrows past it, and the line still
   draws wherever it drew before (all, its addressees' thread).
 - **The replies stay their own thread's** (Dilan's pick of three): a channel is its team's thread, so the
@@ -5614,5 +5619,5 @@ Only the roster's unread counts moved, which reads as nobody having got it.
   names one team, so the name and the key never change apart.
 - **Held by** `channelownsend_test.go` (the draw in each channel, the replies, the notice table, the
   broadcast, the bang's dispatch channel and a parked one, a live stamp through a restore's merge and a
-  resize, a restored send, the notice over the reminder) and the pty
+  resize, a restored send, the notice over the reminder, the stamp's prune) and the pty
   `TestYourOwnSendStaysInTheChannelItWasTypedIn`, each mutation-checked.

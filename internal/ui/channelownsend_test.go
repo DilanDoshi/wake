@@ -195,3 +195,24 @@ func TestTheOutsideNoticeOutlastsTheRoomsReminder(t *testing.T) {
 		t.Errorf("the notice reads %q, want %q", got, want)
 	}
 }
+
+// The channels typed in are bounded by what the room retains, as the expand set
+// is: a stamped line that ages out of the cap leaves no entry behind, and the
+// prune does not mutate an older Room that still holds it.
+func TestATypedInStampIsPrunedWhenItsLineIsReclaimed(t *testing.T) {
+	r := NewRoom().SetSize(80, 12).WithChannel("frontend", joinIDs([]string{"s3", "s5"}))
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@backend ship it"}, joinIDs([]string{"s1", "s2"}), "frontend")
+	if len(r.typedIn) != 1 || !strings.Contains(roomShown(r, 80, 12), "@backend ship it") {
+		t.Fatalf("the send typed in frontend is not stamped and drawn there (%v)", r.typedIn)
+	}
+	held := r
+	for i := range wantRoomRetention + 5 {
+		r = r.Append(retainedRoomEvent(i), roomScaleAgent)
+	}
+	if len(r.typedIn) != 0 {
+		t.Errorf("the typed-in set kept %d entries after its only line aged out", len(r.typedIn))
+	}
+	if len(held.typedIn) != 1 {
+		t.Error("pruning on reclaim mutated an older Room's typed-in set")
+	}
+}

@@ -14,6 +14,7 @@ package ui
 // prose and the turns you sent it - an unaddressed draft is its - draw in each.
 
 import (
+	"maps"
 	"slices"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -38,9 +39,33 @@ func (r Room) filter() roomFilter { return roomFilter{r.channelKey, r.effectiveF
 // operator's own line typed in this channel, and, within it, the focus's. An
 // empty key admits everything.
 func (r Room) admits(l roomLine) bool {
-	// sentIn is "" on every line but the operator's own, which all admits anyway.
-	inChannel := l.sentIn == r.channel || focusAdmits(l, r.channelKey)
+	// typedIn holds the operator's own lines typed in a channel; all ("") admits anyway.
+	inChannel := r.typedIn[l.id] == r.channel || focusAdmits(l, r.channelKey)
 	return inChannel && focusAdmits(l, r.effectiveFocus())
+}
+
+// appendUser draws the operator's own room echo, stamped with the thread it was
+// addressed to (or "" for a broadcast) and the channel it was typed in. Only this
+// path carries either - an agent's own lines are told apart by session id. The
+// channel is kept beside the lines (Room.typedIn), not on them, because the
+// 20,000-line cap prices every byte a line carries; copied on write, pruned with
+// the expand set.
+func (r Room) appendUser(ev core.Event, to, sentIn string) Room {
+	line := roomLine{ev: ev, to: to}
+	if sentIn == "" {
+		return r.appendLine(line)
+	}
+	// Stamped under the id appendLine is about to give it, so admits reads the
+	// stamp as the line is drawn; a line that draws nothing spends no id or stamp.
+	line.id = r.nextLineID + 1
+	stamped := r
+	stamped.typedIn = make(map[uint64]string, len(r.typedIn)+1)
+	maps.Copy(stamped.typedIn, r.typedIn)
+	stamped.typedIn[line.id] = sentIn
+	if next := stamped.appendLine(line); next.nextLineID != r.nextLineID {
+		return next
+	}
+	return r
 }
 
 // noteOutside says where the replies go when the operator's own line, addressed

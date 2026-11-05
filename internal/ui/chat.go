@@ -93,6 +93,10 @@ type Room struct {
 	// rare, and never wrong, the way the DM's per-item opens are transient.
 	expanded map[uint64]bool
 
+	// typedIn is the channel the operator typed each of their own lines in, by
+	// roomLine.id, for those typed in one; see appendUser (roomchannel.go).
+	typedIn map[uint64]string
+
 	composer Composer
 	width    int
 	height   int
@@ -222,9 +226,6 @@ type roomLine struct {
 	// it to tell "you → @iris" from a broadcast and from "you → @john". See
 	// roomfocus.go.
 	to string
-	// sentIn is the channel the operator's own line was typed in, "" under all
-	// and on every other line: it always draws there (roomchannel.go).
-	sentIn string
 	// recipient is the receiving session of a peer's cross-session line, drawn
 	// after the arrow in its own colour; zero on every other line.
 	recipient   Agent
@@ -328,13 +329,6 @@ func (r Room) WithFocus(focus, focusName string) Room {
 // what makes it true.
 func (r Room) Append(ev core.Event, by Agent) Room { return r.appendLine(roomLine{ev: ev, by: by}) }
 
-// appendUser draws the operator's own room echo, stamped with the thread it was
-// addressed to (or "" for a broadcast) and the channel it was typed in. Only this
-// path carries either - an agent's own lines are told apart by session id.
-func (r Room) appendUser(ev core.Event, to, sentIn string) Room {
-	return r.appendLine(roomLine{ev: ev, to: to, sentIn: sentIn})
-}
-
 // appendPeer draws a peer's cross-session message, from sender to the receiving
 // session whose stream carried it.
 func (r Room) appendPeer(ev core.Event, sender, recipient Agent) Room {
@@ -432,7 +426,7 @@ func (r Room) Before(earlier []roomLine) Room {
 	// opens whose block is still in the room, which bounds the set to what is
 	// retained. On the rebuild path, not the per-event one, so its cost rides
 	// with the render already happening here.
-	r.expanded = keptExpanded(r.expanded, combined)
+	r.expanded, r.typedIn = keptOn(r.expanded, combined), keptOn(r.typedIn, combined)
 	blocks := renderRoom(r, combined)
 
 	base := 0
@@ -469,7 +463,7 @@ func (r Room) reclaimOldest(drop int) Room {
 	}
 	oldFirst := r.tr.first()
 	evicted := r.said.slice(r.said.first(), r.said.first()+drop)
-	r = r.forgetExpanded(evicted)
+	r.expanded, r.typedIn = forgotten(r.expanded, evicted), forgotten(r.typedIn, evicted)
 	cut := r.tr.lines.first() + roomRenderedLines(evicted)
 	if !r.reclaimed {
 		cut += len(blockLines(roomBanner(r.blockWidth()), true))
