@@ -14,9 +14,9 @@ package ui
 //
 // **And the way back stopped being the obvious command when fleets landed.** A
 // bare `wake` makes a *new* fleet rather than reopening one (cmd/wake/main.go);
-// `wake --fleet <name>` is what comes back, and the line the client prints on
-// its way out names neither - `detachHint` is `wake status · wake stop`. The
-// window that closed is the one that was showing which fleet this was.
+// `wake --fleet <name>` is what comes back. The line the client prints on its way
+// out names it (cmd/wake's `detachHint`), but the window that closed is the one
+// that was showing which fleet this was.
 //
 // # Why the confirm is ↵ and not a second ⌃O
 //

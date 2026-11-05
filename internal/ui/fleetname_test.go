@@ -2,6 +2,7 @@ package ui
 
 import (
 	"errors"
+	"slices"
 	"strings"
 	"testing"
 
@@ -155,5 +156,18 @@ func TestTheFleetNameFollowsTheReport(t *testing.T) {
 	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withSize(200, 40).withFleetCalled("atlas").withFleetCalled("dev")
 	if got := a.FleetName(); got != "dev" {
 		t.Errorf("after a rename to dev the model names its fleet %q", got)
+	}
+}
+
+// The emergency exit is handed each name the fleet is reported under - the seed's
+// and a rename's - since the loop that folds them is what it runs without.
+func TestEveryNameTheFleetIsReportedUnderIsHandedOn(t *testing.T) {
+	fresh(t)
+	var got []string
+	a := NewRoomApp(newRecorder(t), Stream{}, &rpc.Status{Running: true, Fleet: "atlas"}).withSize(200, 40).
+		WithFleetNamed(func(name string) { got = append(got, name) })
+	_ = a.withFleetCalled("atlas").withFleetCalled("dev")
+	if want := []string{"atlas", "dev"}; !slices.Equal(got, want) {
+		t.Errorf("the names handed on were %q, want %q: the seed's, then the rename, once each", got, want)
 	}
 }

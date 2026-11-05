@@ -206,8 +206,10 @@ type killSwitch struct {
 	feed  *os.File     // the write end the forwarder writes
 	queue chan []byte
 
-	// socket is the fleet's, read for its name only when the exit fires: the
-	// loop that knows a /wake-name is the one that stopped answering.
+	// fleet is the name the window was last told (fleetNamed), and socket the
+	// fleet's, read for one only when no report named it: the loop that knows a
+	// /wake-name is the one that stopped answering.
+	fleet  atomic.Pointer[string]
 	socket string
 
 	// exit is the seam a test replaces. Nothing but a test assigns it.
@@ -539,12 +541,29 @@ func (k *killSwitch) restoreTerminal() {
 		// left - bubbletea's own restoreTerminalState, in the order it does it -
 		// then the shell's title, which converseModel's exit is not here to pop.
 		_, _ = io.WriteString(k.out, "\x1b[?1006l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25h\x1b[?1049l"+ui.TitleStackPop)
-		_, _ = fmt.Fprintf(k.out, "%s\r\n", emergencyLine(daemon.FleetName(k.socket)))
+		_, _ = fmt.Fprintf(k.out, "%s\r\n", emergencyLine(k.fleetName()))
 	}()
 	select {
 	case <-written:
 	case <-time.After(restoreTimeout):
 	}
+}
+
+// fleetNamed keeps the name the window was last told, for the emergency line. Safe
+// on a nil switch, which has no exit to say it on.
+func (k *killSwitch) fleetNamed(name string) {
+	if k != nil {
+		k.fleet.Store(&name)
+	}
+}
+
+// fleetName is the fleet the emergency line names: the window's last report, or
+// the socket's through a rename's link when no report named one.
+func (k *killSwitch) fleetName() string {
+	if name := k.fleet.Load(); name != nil && *name != "" {
+		return *name
+	}
+	return daemon.FleetName(k.socket)
 }
 
 // emergencyExit is the ending this file exists to provide: the terminal back,

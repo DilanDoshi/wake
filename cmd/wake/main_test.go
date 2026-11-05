@@ -293,7 +293,10 @@ func startForkRefusingDaemon(t *testing.T, status rpc.Status, why string) *fakeD
 func listenAs(t *testing.T, d *fakeDaemon) *fakeDaemon {
 	t.Helper()
 
-	socket := tempSocket(t)
+	socket := d.socket
+	if socket == "" {
+		socket = tempSocket(t)
+	}
 	ln, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatalf("listen on %s: %v", socket, err)

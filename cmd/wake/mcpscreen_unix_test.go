@@ -64,7 +64,8 @@ func TestCtrlCAtTheSignInCancelsItAndNotWake(t *testing.T) {
 	s.await("Paste the redirect URL here")
 	s.send("\x03\x03")
 	s.await("did not finish")
-	if got := s.text(); strings.Contains(got, emergencyLine("")) {
+	// A fragment: the whole line is wider than the screen and would wrap.
+	if got := s.text(); strings.Contains(got, "closed without parking anything") {
 		t.Fatalf("⌃C⌃C at the child's prompt fired Wake's emergency exit:\n%s", s.dump())
 	}
 }

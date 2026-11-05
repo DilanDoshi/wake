@@ -24,7 +24,7 @@ Park pauses an employee. Detach is you going home while they keep working.
 | **`⌃C`** | Park the agent in front of you | **Yes** — `/resume <name>` |
 | **`⌃Q⌃Q`** | Park the whole fleet, then quit Wake (the first `⌃Q` arms, the second confirms) | **Yes** — next `wake --fleet <name>` offers it back |
 | **`⌃O`** | Detach: close Wake, leave everyone running | Nothing stopped |
-| **`wake stop`** | End every session and the daemon | **No** |
+| **`wake stop --fleet <name>`** | End every session and the daemon | **No** |
 
 `wake stop` is the only irreversible one. Nothing brings a *stopped* session back — that is exactly
 the gap park was built to close.

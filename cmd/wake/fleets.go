@@ -80,7 +80,7 @@ func printFleets(out io.Writer) error {
 }
 
 // staleFleetFormat follows a running fleet on another build than this wake.
-const staleFleetFormat = " - not this build (wake %s): ⌃Q⌃Q it, then `wake --fleet %s`, to upgrade it"
+const staleFleetFormat = " - not this build (wake %s): ⌃Q⌃Q it, then `%s`, to upgrade it"
 
 // formatFleets is the listing, separated from the dialling so a test reads a
 // string. builds holds only the fleets that are running.
@@ -94,7 +94,7 @@ func formatFleets(names []string, builds map[string]string, ours string) string 
 		if build, running := builds[name]; running {
 			fmt.Fprintf(&b, "  running wake %s", daemonBuild(build))
 			if build != ours {
-				fmt.Fprintf(&b, staleFleetFormat, ours, name)
+				fmt.Fprintf(&b, staleFleetFormat, ours, ui.FleetCommand(name))
 			}
 		}
 		b.WriteString("\n")
@@ -109,7 +109,7 @@ func formatFleets(names []string, builds map[string]string, ours string) string 
 // running `wake fleets` and guessing which row is theirs. It is printed before
 // the alt screen for the reason announceFork's line was: after it, the terminal
 // belongs to Bubble Tea and anything written is drawn over.
-const newFleetLine = "fleet %s. `wake --fleet %s` comes back to it; `wake fleets` lists them all.\n"
+const newFleetLine = "fleet %s. `%s` comes back to it; `wake fleets` lists them all.\n"
 
 // openNewFleet makes a fleet nobody named and opens it.
 func openNewFleet(out io.Writer) error {
@@ -117,7 +117,7 @@ func openNewFleet(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(out, newFleetLine, name, name); err != nil {
+	if _, err := fmt.Fprintf(out, newFleetLine, name, ui.FleetCommand(name)); err != nil {
 		return err
 	}
 	return openRoom(socket, out)

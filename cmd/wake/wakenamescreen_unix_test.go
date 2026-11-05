@@ -8,6 +8,7 @@ package main
 
 import (
 	"os"
+	"os/exec"
 	"path/filepath"
 	"slices"
 	"testing"
@@ -34,6 +35,18 @@ func TestCtrlQAfterAWakeNameNamesTheFleetItReopens(t *testing.T) {
 	s.send("\x11") // ⌃Q (arm)
 	s.await("park all & quit")
 	s.send("\x11") // ⌃Q (confirm)
+	s.await("`wake --fleet dev` reopens the room")
+}
+
+// ⌃C⌃C names the fleet the window was last told, even once another hand has ended
+// the daemon and, with it, the link from the old name the window opened under.
+func TestCtrlCCtrlCAfterAWakeNameNamesTheFleet(t *testing.T) {
+	s, _ := renamedAtlas(t)
+	if out, err := exec.Command(wakeBinary(t), "stop").CombinedOutput(); err != nil {
+		t.Fatalf("`wake stop` from another terminal: %v\n%s", err, out)
+	}
+	s.await("⌃O, then `wake --fleet dev`")
+	s.send("\x03\x03")
 	s.await("`wake --fleet dev` reopens the room")
 }
 

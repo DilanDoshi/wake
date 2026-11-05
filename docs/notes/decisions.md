@@ -5597,14 +5597,19 @@ named fleet's operator somewhere else.
   an empty fleet under the old name. `--fleet <new>` is refused only while the variable is set, and the
   refusal names it.
 - **Where the name comes from.** ⌃Q's line uses the last report's name (`App.FleetName`), not the socket's,
-  because the daemon drops a rename's old names as it exits, before the line prints. If no report named the
-  fleet (an older daemon), it falls back to `daemon.FleetName(socket)`. ⌃C⌃C reads `daemon.FleetName` when it
-  fires: the loop that knows the name is the one that stopped, and the daemon it left running still holds the
-  link. Every other line reads the report in hand; `FleetOnDisk` names its fleet too, so a stopped one does.
+  because the daemon drops a rename's old names as it exits and may do so before the line prints. If no report
+  named the fleet (an older daemon), it falls back to `daemon.FleetName(socket)`, and ⌃O's line does the same.
+  ⌃C⌃C runs when the loop that folds reports has stopped, so the window hands the kill switch each name as it
+  is folded (`App.WithFleetNamed`, an atomic). It reads the socket only when no report named one: another
+  window's ⌃Q can end the daemon and drop the link first. The other lines read the report in hand, or the
+  socket where none is (`wake manager`, `wake stop`'s wait). `FleetOnDisk` names its fleet too, so a stopped
+  fleet's report does.
 - **⌃O names three commands**: back in, a look, the end, each with `--fleet`. A bare `wake stop` there would
   have ended the unnamed fleet.
-- **Held by** `cmd/wake/fleetlines_test.go` (every line for a named fleet, `default` and a hand-set socket;
-  ⌃Q's report name over the socket's; the socket fallback; the emergency exit through a rename's link),
-  `TestAClientNamesItsFleetByTheNameItHasNow`, the UI's notice and reattach tests, and
-  `TestCtrlQAfterAWakeNameNamesTheFleetItReopens` (the real binary: `/wake-name dev`, ⌃Q⌃Q, the line). Each
-  is mutation-checked. The daemon's own three sentences are `deferred.md`'s (2026-11-05).
+- **Held by** `cmd/wake/fleetlines_test.go` and `fleetlines_unix_test.go` (every line for a named fleet,
+  `default` and a hand-set socket; ⌃Q's report name over a socket naming another fleet; the socket fallback
+  for ⌃Q and for an older daemon's ⌃O; the emergency exit through a rename's link and after it is gone),
+  `TestAClientNamesItsFleetByTheNameItHasNow`, the UI's notice, reattach and hand-on tests, and two on the
+  real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
+  once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
+  which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own three sentences are `deferred.md`'s (2026-11-05).

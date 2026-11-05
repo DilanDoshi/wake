@@ -98,7 +98,7 @@ genuinely different and one of them cannot be undone. The short version:
 - **`⌃O`** — you leave, they keep working.
 - **`⌃C`** — park the agent in front of you. Recoverable with `/resume`.
 - **`⌃Q⌃Q`** — park everything and quit (the first `⌃Q` arms, the second confirms). Next `wake --fleet <name>` offers it back.
-- **`wake stop`** — end the fleet. **Not recoverable.**
+- **`wake stop --fleet <name>`** — end the fleet. **Not recoverable.**
 
 ## Where your conversations actually live
 

@@ -400,7 +400,7 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 		// nobody pressing keys, and the default reader is what it always was.
 		opts = append(opts, tea.WithInput(kill.Input()))
 	}
-	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
+	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithFleetNamed(kill.fleetNamed).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
 	final, err := p.Run()
 	term.handBack()
 	if err != nil {
@@ -450,7 +450,11 @@ func leavingLine(final tea.Model, socket string) string {
 			return parkAllLine(n, fleet, err)
 		}
 	}
-	return detachLine(daemon.Status(socket))
+	st, err := daemon.Status(socket)
+	if st.Fleet == "" {
+		st.Fleet = daemon.FleetName(socket)
+	}
+	return detachLine(st, err)
 }
 
 // parkAllLine is ⌃Q's exit line, and there are two of them because the ask has

@@ -71,6 +71,9 @@ func TestTheDetachLineNamesTheWayBackToTheFleet(t *testing.T) {
 		if want := tc.reopen + " · " + tc.status + " · " + tc.stop; !strings.HasSuffix(running, want) {
 			t.Errorf("on fleet %q ⌃O printed %q, want it to end %q", tc.fleet, running, want)
 		}
+		if none := detachLine(rpc.Status{Running: true, Fleet: tc.fleet}, nil); !strings.HasSuffix(none, "    "+tc.reopen+" · "+tc.status+" · "+tc.stop) {
+			t.Errorf("on fleet %q ⌃O with nothing running printed %q", tc.fleet, none)
+		}
 		orphans := detachLine(rpc.Status{Fleet: tc.fleet, Sessions: []rpc.SessionStatus{{ID: "a", State: rpc.StateOrphaned}}}, nil)
 		if !strings.HasSuffix(orphans, "    "+tc.status) {
 			t.Errorf("on fleet %q a crashed daemon's line is %q, want it to end %q", tc.fleet, orphans, tc.status)
@@ -88,14 +91,15 @@ func TestTheEmergencyLineNamesTheFleet(t *testing.T) {
 }
 
 // ⌃Q's line names the fleet the last report named - after a /wake-name, the new
-// name - not the socket's: the daemon drops a rename's old names as it exits.
+// name - over the socket's: the daemon drops a rename's old names as it exits,
+// and the socket then names the old one. ⌃Q's path never dials, so no daemon.
 func TestCtrlQsLineNamesTheFleetTheLastReportNamed(t *testing.T) {
-	d := startFakeDaemon(t, 0, twoLiveAgents())
+	socket := fleetsHome(t, "atlas", "atlas")
 	seed := twoLiveAgents()
 	seed.Fleet = "dev"
-	got := leavingLine(ctrlQTwice(ui.NewRoomApp(nil, ui.Stream{}, &seed)), d.socket)
+	got := leavingLine(ctrlQTwice(ui.NewRoomApp(nil, ui.Stream{}, &seed)), socket)
 	if !strings.Contains(got, "`wake --fleet dev` reopens the room") {
-		t.Errorf("after ⌃Q on fleet dev, `wake` printed %q", got)
+		t.Errorf("after ⌃Q on fleet dev, opened as atlas, `wake` printed %q", got)
 	}
 }
 
@@ -106,6 +110,14 @@ func TestCtrlQsLineFallsBackToTheSocketsFleet(t *testing.T) {
 	got := leavingLine(ctrlQTwice(ui.NewRoomApp(nil, ui.Stream{}, statusOf(twoLiveAgents()))), socket)
 	if !strings.Contains(got, "`wake --fleet dev` reopens the room") {
 		t.Errorf("after ⌃Q on a socket under atlas, renamed dev, `wake` printed %q", got)
+	}
+}
+
+// A daemon from before reports named the fleet leaves the name to the socket.
+func TestLeavingAnOlderDaemonNamesTheSocketsFleet(t *testing.T) {
+	d := listenAs(t, &fakeDaemon{socket: fleetsHome(t, "dev", "dev"), status: twoLiveAgents()})
+	if got := leavingLine(ui.NewRoomApp(nil, ui.Stream{}, nil), d.socket); !strings.HasSuffix(got, "wake stop --fleet dev") {
+		t.Errorf("⌃O on fleet dev, whose daemon names no fleet, printed %q", got)
 	}
 }
 
@@ -147,6 +159,29 @@ func TestTheEmergencyExitNamesTheFleetARenameMoved(t *testing.T) {
 	}
 }
 
+// After a rename and the daemon's exit the link is gone and the socket names the
+// old fleet; the name the window was last told is the one ⌃C⌃C prints.
+func TestTheEmergencyExitNamesTheFleetTheWindowWasLastTold(t *testing.T) {
+	socket := fleetsHome(t, "atlas", "atlas")
+	r, w, err := os.Pipe()
+	if err != nil {
+		t.Fatal(err)
+	}
+	read := make(chan string, 1)
+	go func() {
+		b, _ := io.ReadAll(r)
+		read <- string(b)
+	}()
+	k := newKillSwitch(os.Stdin, w, nil, nil, nil)
+	k.socket = socket
+	k.fleetNamed("dev")
+	k.restoreTerminal()
+	_ = w.Close()
+	if got := <-read; !strings.Contains(got, emergencyLine("dev")) {
+		t.Errorf("⌃C⌃C on a window told dev, opened as atlas, wrote %q, want %q", got, emergencyLine("dev"))
+	}
+}
+
 func TestStatusNamesTheFleetADaemonWouldReap(t *testing.T) {
 	got := formatStatus(rpc.Status{Fleet: "dev", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateOrphaned}}}, "")
 	if !strings.Contains(got, "Starting a daemon with `wake --fleet dev` reaps") {
@@ -155,8 +190,14 @@ func TestStatusNamesTheFleetADaemonWouldReap(t *testing.T) {
 }
 
 func TestStopNamesTheFleetInEveryWayOnward(t *testing.T) {
-	if _, err := stoppedOutcome(rpc.Status{Running: true, Fleet: "dev"}, nil, true); err == nil || !strings.Contains(err.Error(), "check `wake status --fleet dev`") {
-		t.Errorf("a daemon still answering on fleet dev failed with %v", err)
+	for _, st := range []rpc.Status{
+		{Running: true, Fleet: "dev"},
+		{Fleet: "dev", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateOrphaned}}},
+		{Fleet: "dev", ProbeIncomplete: true},
+	} {
+		if _, err := stoppedOutcome(st, nil, true); err == nil || !strings.Contains(err.Error(), "check `wake status --fleet dev`") {
+			t.Errorf("a stop of fleet dev that ended with %+v failed with %v", st, err)
+		}
 	}
 	for _, tc := range []struct {
 		name string
