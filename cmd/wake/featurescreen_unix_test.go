@@ -258,7 +258,6 @@ func TestAQuestionIsAnsweredInTheConversationThatPutIt(t *testing.T) {
 	// asked, that step is the review: every answer laid out before the press
 	// that sends it, which is what a question ask has instead of an arm.
 	s.send("\r")
-	s.await("Review your answers")
 	s.await("Submit answers")
 
 	// ↵ on Submit is the press. There is no second key: the review is what the
@@ -296,7 +295,6 @@ func TestAQuestionIsAnsweredInTheOperatorsOwnWords(t *testing.T) {
 	// ↵ takes it as the answer rather than sending it as a message, and the
 	// review says so back.
 	s.send("\r")
-	s.await("Review your answers")
 	s.await(mine)
 	s.await("Submit answers")
 

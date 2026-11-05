@@ -203,8 +203,8 @@ func (a App) WithOutput(w io.Writer) App {
 // writeSequence puts an escape sequence on the terminal between frames.
 //
 // A Cmd rather than a write from Update because Update is the goroutine that
-// renders; this and kittyplace.go's transmitFriends are the package's only
-// writes to the terminal that are not frames.
+// renders; this, kittyplace.go's transmitFriends and title.go's writeTitle are
+// the package's only writes to the terminal that are not frames.
 func (a App) writeSequence(turn uint64, seq string) tea.Cmd {
 	if a.out == nil || seq == "" {
 		return nil

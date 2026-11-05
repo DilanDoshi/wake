@@ -484,7 +484,7 @@ func slicesContains(haystack []string, needle string) bool {
 // idle and not running a tool.
 func TestARosterRowMarksAnActiveGoal(t *testing.T) {
 	idle := Agent{ID: "s1", Name: "iris", State: rpc.StateIdle, goal: GoalState{Condition: "ship the PR", Active: true}}
-	if head := headLine(idle, false, rosterWidth); !strings.Contains(head, goalGlyph) {
+	if head := headLine(idle, rowGlyph(idle, false), rosterWidth); !strings.Contains(head, goalGlyph) {
 		t.Errorf("an idle goal-active row has no ◆ marker: %q", head)
 	}
 	rows := Roster{}.rows(idle, nil, rosterWidth)
@@ -496,7 +496,7 @@ func TestARosterRowMarksAnActiveGoal(t *testing.T) {
 	// A working row keeps the ◆ marker but the tool owns the one activity line.
 	working := Agent{ID: "s1", Name: "iris", State: rpc.StateWorking, Tool: "Edit", ToolArg: "auth/token.go",
 		goal: GoalState{Condition: "ship the PR", Active: true}}
-	if head := headLine(working, false, rosterWidth); !strings.Contains(head, goalGlyph) {
+	if head := headLine(working, rowGlyph(working, false), rosterWidth); !strings.Contains(head, goalGlyph) {
 		t.Errorf("a working goal-active row lost its ◆ marker: %q", head)
 	}
 	wrows := Roster{}.rows(working, nil, rosterWidth)
@@ -510,7 +510,7 @@ func TestARosterRowMarksAnActiveGoal(t *testing.T) {
 func TestTheGoalMarkerOutranksTheTokenCount(t *testing.T) {
 	a := Agent{ID: "s1", Name: "a-fairly-long-name", State: rpc.StateWorking, TurnTokens: 12345,
 		goal: GoalState{Condition: "x", Active: true}}
-	head := headLine(a, false, rosterWidth)
+	head := headLine(a, rowGlyph(a, false), rosterWidth)
 	if !strings.Contains(head, goalGlyph) {
 		t.Errorf("the ◆ marker dropped instead of the tokens: %q", head)
 	}

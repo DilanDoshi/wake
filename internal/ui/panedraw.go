@@ -48,6 +48,13 @@ func (d DM) WithCompacting(since time.Time) DM {
 	return d
 }
 
+// WithRetrying is the request claude is retrying for this agent, or the zero
+// value for none. See DM.heartbeat.
+func (d DM) WithRetrying(r apiRetry) DM {
+	d.retry = r
+	return d
+}
+
 // WithRunningSub records whether this agent has a subagent still running, which
 // suppresses the done line. See DM.showsDone.
 func (d DM) WithRunningSub(v bool) DM {

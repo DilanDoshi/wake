@@ -80,7 +80,7 @@ func (a App) assembleFrame() string {
 		}
 	}
 	if r.Roster > 0 {
-		side := a.roster.Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
+		side := a.roster.WithRetrying(a.retrying).Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
 		if rows := a.usageDrawn(); len(rows) > 0 {
 			side += "\n" + strings.Join(rows, "\n") // the session bar under it; see usagebar.go
 		}
@@ -223,7 +223,8 @@ func (a App) cardFullyDrawn() bool {
 		return false
 	}
 	menu := a.menuAround(card, a.focus, width, height)
-	return a.pagePlace(a.focus, width, height, menu, c).holds(lipgloss.Height(card))
+	rows := lipgloss.Height(card)
+	return a.pagePlace(a.focus, width, height, menu, c, rows).holds(rows)
 }
 
 // focusedPane is the width and height of the pane holding the keys, and whether
@@ -258,7 +259,7 @@ func (a App) roomFor() Room {
 	// so it is set for the draw for the mode's reason and cannot go stale.
 	return a.room.WithComposer(a.room.Composer().
 		WithMode(a.hintMode()).
-		WithArms(a.armsFor(""))).WithWorking(a.working()).WithWriting(a.answerTitle(""))
+		WithArms(a.armsFor(""))).WithWorking(a.working(), a.retrying).WithWriting(a.answerTitle(""))
 }
 
 // dmFor is one conversation as dmPane draws it: its agent's own facts, and a
@@ -310,14 +311,13 @@ func (a App) cardBlock(id string, width int, cut bool) string {
 		return ""
 	}
 	agent, _ := a.fleet.Agent(card.AgentID)
+	if cut {
+		return a.cards.ViewCut(card, width, agent)
+	}
 	// The pause is the focused pane's own: cardKey reads a.cardOf(a.focus), so
 	// a draft gates exactly that pane's card, and pausing another pane's on it
 	// would blame a draft that is not in that pane's composer.
-	typing := id == a.focus && !a.composerEmpty()
-	if cut {
-		return a.cards.ViewCut(card, width, agent, typing)
-	}
-	return a.cards.View(card, width, agent, typing)
+	return a.cards.View(card, width, agent, id == a.focus && !a.composerEmpty())
 }
 
 // cardOf is the ask a pane is putting: a conversation puts its own agent's, and
@@ -500,10 +500,10 @@ func (a App) dmPane(id string, width, height int) string {
 	}
 	c, has := a.cardOf(id)
 	if !ask || !has { // no card, no page: the pane View lays out for itself
-		return paint(a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id))).View(width, height)
+		return paint(a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).WithRetrying(a.retryOf(id))).View(width, height)
 	}
 	laid := a.sizedDM(id, menu, width, height)
-	place := a.placeOf(laid, id, width, menu, c)
+	place := a.placeOf(laid, id, width, menu, c, lipgloss.Height(card))
 	if !place.holds(lipgloss.Height(card)) {
 		// The same rows with the keys' line saying why they are off.
 		laid = laid.WithMenu(a.menuAround(a.cardBlock(id, width, true), id, width, height))

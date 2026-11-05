@@ -5394,6 +5394,194 @@ ruling on it, and it reverses it.
   room's card, which no gate runs benchmarks to notice. `deferred.md`'s 2026-08-22 card-cost entry
   names the loss.
 
+## 2026-11-02 — a card the pane cannot hold opens on its foot, and the review step is bounded (the owner)
+
+The owner's 2026-11-01 report (BUG-59): a two-question ask walked its questions on ↵ and went dead on
+the review. The review drew every question whole, so in a pane that held each question it was cut; the
+whole-card rule turned its keys off, and the page opened the cut card on its top with the line that says
+so below the fold - a digit typed there was blamed on the draft. The owner asked for both parts.
+
+- **A card the pane cannot hold opens on its foot.** Reverses 2026-10-20's "opens on its own top": the
+  rows the keys act on, Submit/Cancel and the key line are what is in view, and the wheel brings the
+  question in above them. `placeOf` has one rule for every card the operator has not placed: the page
+  opens as far up as the card's last row stays in view - the top anchor for a card the pane holds under the transcript's rows (the
+  composer scrolled away, as before), lower for one it cannot. A card exactly the pane's height is
+  answerable at rest now, with the transcript's row scrolled off (`TestACardThePaneCanHoldIsAnswerableAtRest`).
+  The keys' rule is unchanged: live only while the whole card is on screen (`cardFullyDrawn`).
+- **The review step is kept to the rows the question steps take.** A question and its answer are
+  each cut to one row (`reviewRows`) with an ellipsis, as a question step cuts a label to its row; the
+  heading, the blank under the strip and the blank over the options are gone - the strip's `✔ Submit`
+  tab is the heading. For any two-question ask the review is never taller than its tallest question
+  step, a bare yes-and-no pair's seven rows included (`TestTheReviewIsNoTallerThanTheTallestQuestion`),
+  so a pane that held every question holds the step that sends them
+  (`TestTheReviewIsAnswerableWhereverTheQuestionsAre`). The reviews measured the first two cuts - two
+  rows per question with the heading kept, then answers still wrapped to three rows - against a bare
+  ask and against a label longer than its row, and found each over. This reverses 2026-10-18's
+  wrapped joined answer: a multi-select answer longer than its row is cut there with an ellipsis, and
+  its ticks are read on the question's own step.
+- **The cut line names the cut, over a draft too.** Reverses #184's reviewer choice that a draft over a
+  cut card names the draft: the cut is what keeps the keys off whatever the box holds, and the draft's
+  own line waits for a whole card.
+
+Traps:
+
+- **The foot is read off the layout a page at rest is drawn in**, never assumed: the pane laid out
+  `height+clipped` rows tall, which is the same for every rest up to the top anchor, so the frame
+  still lays it out once (`placeOf`). The first cut derived it from the transcript's rows and the
+  pinned block's, and both reviews broke it: a task board, the working line or a streamed preview
+  above the card, a picker under it, or a composer grown by a draft of blank lines all moved the card
+  under the rule. The card's own rows are what is placed, since it is the top of the pinned stack.
+  Chrome that grows with the height - a draft's box (`maxComposerRows` bounds it), a preview the short
+  pane cut - takes rows from the block again, so the page grows by what it took and is measured again,
+  until the block is whole; a pane whose chrome alone outgrows it counts that overflow in `clipped` too.
+- **A rest is the step's and the draft's.** `restingAt` keys the stored rest on the ask and the wizard
+  step, and a box that emptied outside answer mode forgets it (`draftSeen`), so an answer in your own
+  words sent, a stray character deleted or a wheel on one question leaves the next step whole and its
+  keys live - a rest keyed on the ask alone outlived the step and opened the next with its top cut
+  (the second review).
+- At rest on its foot `pageHides` reports the rows moved and the box away, so a press takes the screen as
+  drawn and ↵ on a draft brings the box back first - the composer-scrolled-away case's own behaviour.
+- The notch test checks the transcript's own lines only once the window's top is in the transcript: a
+  card on its foot brings its own rows in first.
+- A three- or four-question ask's review can still outgrow a short pane (three fixed rows and two
+  per question). It opens on its foot with the key line saying so, and the window has to grow. Left
+  (`deferred.md`).
+
+## 2026-10-29 — A send by address is named from Claude Code's session registry (wake-orch's GO)
+
+An agent replying to a cross-session message copies the message's `from`, a `uds:<socket>` address, as its
+SendMessage `to` - Claude Code's own tool description tells it to. The room drew that call as a send outside the
+fleet (`withSend` found no agent of that name), and the receiver's replayed envelope drew it again: two lines for
+one message (BUG-58). A `name [ref]` address did the same.
+
+- **The daemon names who an address reached, from Claude Code's session registry** - one record per running
+  session at `<config>/sessions/<pid>.json`, carrying its `sessionId`, `name` and `messagingSocketPath`
+  (`testdata/sessions/78871.json`, a sterile 2.1.311 session). `daemon/sendto.go` sets `PeerSend.ToName`, and
+  `ToID` when the session is one of its agents' conversations (`conversationRow`, so a `/clear`'s counts) *and*
+  the record's own `pid` runs in that agent's process group - another process holding the same conversation, an
+  outside `claude --resume`, is no fleet agent, and the room keeps its line (Codex, second pass). The room
+  leaves a fleet recipient to its own stream and heads any other send with the name; a conversation heads its own
+  sends the same way. Chosen over mapping the socket's PID to an agent's process group: that guesses `<pid>.sock`
+  where the registry states the path, Wake starts claude through its launcher so the PID it spawned is not the
+  socket's, and it names nobody outside the fleet.
+- **Bounds.** Only files ending `.json` are read, never the `.key` beside them, through `os.ReadDir` so a config
+  path a glob would misread still works. One directory read per SendMessage by address (a bare name is the
+  room's `ByName`, as before; a subagent's send is named by nobody), nothing cached. A missing or unreadable
+  directory, or a malformed or nameless record, costs that send its name and nothing else - it is drawn as it
+  was sent - and the daemon logs it, since the registry's shape moving is the one way this fix stops working.
+- **The room leaves a send to a fleet agent with a process to that agent's stream**, the contract a send by
+  name has had since 2026-10-16: an ended or parked recipient draws nothing, so the call's line stays. A
+  recipient that ends between the send and its replay, or a send that fails, loses the line, as a send by name
+  does; `deferred.md` names the correlation that closes both.
+- **`name [ref]` drops the ref only when exactly one record carries the name and every record read.** The ref
+  /list-agents prints is not the session id or anything else the registry holds, so when two sessions share a
+  name - the case a ref exists for - Wake cannot tell which it picks, and an unreadable record may be the one
+  named (Codex, second pass); either way the send keeps today's line: drawn, maybe twice, never lost.
+- **A reopened conversation keeps the address** (wake-orch's ruling). Today's registry says who holds a socket
+  now, and a PID can be reused, so an old send could take another session's name - a false statement, worse than
+  a raw path. `deferred.md` names the route that is safe.
+- **A delivered send's receipt is hidden for a name and for a socket.** The receipt names the `to` as sent: `→
+  <name> (…)` for a name (`manager-relay.jsonl`), and `→ uds:<socket>; in that session's inbox…` with no
+  parenthetical for a socket (`testdata/transcript/send-by-address.jsonl`, a live reply recorded at 2.1.311 in a
+  scratch project). The shape follows the address form, not the version; `delivered()` accepts both. A `name
+  [ref]` send's receipt is unrecorded, so it is drawn, the direction an unknown shape degrades toward.
+- **The registry is Claude's internal**, observed rather than documented, and nothing in `make drift` reads it, so
+  CLAUDE.md's Traps asks for a re-check after a claude upgrade. If its shape moves, resolution fails and a send by
+  address is drawn as it was before this ruling.
+
+## 2026-11-01 — The terminal's tab title is the fleet's name (the owner)
+
+The owner's words: "when we rename or wake by default, it shows just the name of the fleet like 'sing-dev' or
+'harbor'". His cmux tab read `wake --fleet sing-dev`, which is Ghostty's shell integration naming the running
+command. Nothing in Wake set a title before this.
+
+- **What is written.** OSC 2 with the fleet's name, from `rpc.Status.Fleet` as every window already folds it
+  (`withFleetName`, the seed and every report), so a `wake attach` conversation and a second room on the same
+  fleet title alike and a `/wake-name` from either retitles both. The unnamed fleet reads `default`, the
+  word Wake uses for it everywhere (`wake --fleet default`, bare `/wake-name`); a socket set by hand outside
+  `~/.wake/fleets` names no fleet and reads `wake`. Just the fleet, never the open agent - his words.
+- **Wake's own bytes, not `tea.SetWindowTitle`.** Bubble Tea's command writes the same OSC 2 but keeps no
+  stack and restores nothing; owning the sequence in `title.go` puts the push, the pop and the title in
+  one vocabulary, through the writer the clipboard and the friends already use (`cmd/wake/output.go`),
+  from a command, since Update is the goroutine that draws.
+- **Once per change, never per frame.** `App.dueTitle` sits in `Update`'s seam beside the history asks and
+  the notice linger: one string compare per message, a write only when the folded title (`daemonFacts.title`)
+  differs from the last one written (`App.titled`). Written again after an mcp sign-in hand-over, where the child
+  owned the terminal. Two title commands can run at once (that re-assert behind a rename's), so each takes
+  a turn when asked and `titleOrder`, the clipboard's `inOrder`, skips an older write that would land after
+  a newer one (a Codex finding, 2026-11-01).
+- **Restore by the xterm title stack.** `converseModel` writes `CSI 22;0t` before `tea.NewProgram` and
+  `guardedOutput.handBack` writes `CSI 23;0t` after `p.Run` returns - sealed first, so a title write still
+  in flight finishes and a late one is refused, then the pop past the seal, so nothing can re-set the name
+  after it. Every ordinary exit (⌃O ↵, ⌃Q⌃Q, a hang-up) returns through `p.Run`; ⌃C⌃C and the signal grace
+  go through `restoreTerminal`, which pops after its `?1049l`. SIGKILL restores nothing, as before.
+- **Which terminals keep a stack** (read, not measured here): xterm 406+, Ghostty 1.0+ (the window title,
+  param 0 or 2) and so cmux, iTerm2, Kitty (ten deep), foot, VTE, tmux (its pane title: `screen_push_title`
+  behind `input_csi_dispatch_winops`). WezTerm's tracker says the sequences do nothing (#5800, 2024); nothing
+  found for Terminal.app; xterm.js lists the push. Where the pop is not honoured the name stays until the
+  shell's own integration writes the next title at its prompt, which is what wrote the command there to
+  begin with.
+- **tmux.** OSC 2 inside tmux sets the pane title (`#T`) natively, no passthrough; the outer terminal
+  changes only under `set-titles on`, and the status bar's window name (`#W`) keeps automatic-rename's
+  `wake`. Nothing tmux-special in Wake.
+- **Sanitised anyway.** Every report's `Fleet` is `default`, empty or a name `checkFleetName` passed, so
+  nothing hostile arrives from Wake's own daemon; `tabTitle` still drops every control character (a BEL
+  or an ESC would end the OSC or open another) and every byte that is not UTF-8, because a title is an
+  escape sequence's payload and the sink is the terminal - defence in depth, not a claim about the wire.
+  Computed once where the name is folded (`withFleetName`), so the per-message check stays a compare.
+- **Held by** `title_test.go` (the room and a conversation on open, two windows retitled by one rename,
+  `default` and `""`, the sanitising, once per change over twenty frames and repeated reports, the
+  hand-over, an older write behind a newer, no terminal), `TestHandingBackSealsBeforeTheTitleIsPopped`
+  (a title after the hand-back is refused and the pop still lands; that the seal comes *first* is the
+  method's order, which no test sees), the emergency restore's pty test (the pop after `?1049l`) and
+  `TestTheTabTitleIsTheFleetsNameAndComesBackOnExit` (vt10x's title on open and after `/wake-name`; on
+  the raw pty bytes, off `rawTail`, the harness's bounded tail of what the pty carried: the push before
+  the first title, the pop after the alt screen's end, no title after the pop), each mutation-checked.
+
+## 2026-11-02 — claude's retries are said while they run (the owner)
+
+The owner, with the Wi-Fi off: "it just moved the 'thinking timer' but did not show an error saying lost
+connection". claude retries for about three minutes before it gives the turn up (BUG-55's path), and for all
+of that Wake drew a working agent with a pool word over a ticking age. Each retry is an `api_retry` frame
+(BUG-60).
+
+- **Each non-401 retry is a notice, `core.NoticeAPIRetrying`, with `Event.Retry`**: which try failed, how
+  many claude allows, the pause before the next and the status the API answered (0 for none). The three new
+  wire keys are policed (`attempt`, `max_retries`, `retry_delay_ms`); `retryOf` reads them beside
+  `apiNotice`. A 401 retry keeps `KindAPIError`/`NoticeAPIError` and the auto-park.
+- **Wording** (the owner's pick): no status is `API unreachable`, the words of the pin that follows a
+  give-up, so the two read as one story; a status is `API error 529`, the number rather than a guess at
+  "busy".
+- **Where**: the conversation's working row, `⚠ API unreachable · retrying in 38s (attempt 3 of 10 ·
+  1m 12s)`, then `retrying…` once the pause has run; the room's working line, `@alex ⚠ API unreachable ·
+  retrying 3/10 for 1m 12s`, still the oldest turn's row; the roster row's glyph. The strip is unchanged (the
+  owner): a network drop marks every row at once. The turn's age stays - it is true; the pool word beside it
+  was the lie. Warn colour, no shimmer: a warning, not a pulse.
+- **Driven by the frames alone.** Held on `App.retrying` like `compacting`, replaced by each retry frame and
+  cleared on the API's answer (a streamed start or token, the turn's tokens, prose, a tool call, thinking),
+  the turn's end, the give-up (the unreachable pin takes over), a `/clear`, or a report showing the agent
+  not working. A receipt, a queued message's lifecycle, a replayed line, a quota reading or another system
+  frame leaves it, and so does a subagent's output (Codex): it rides the parent's session, and a background
+  subagent speaks while the parent's own request still waits. A frame gap or a reattach forgets every retry
+  with the other turn beliefs (Codex, the reviewer): the answer may have been in the gap, and the next
+  retry frame restores it. The countdown reads the clock on the heartbeat ticker a working agent already
+  runs; nothing is scheduled.
+- **Only a row the daemon reads as working draws any of it** (the reviewer): a turn it reads as idle - a
+  peer's message, a background task's note, an auto-compaction (`stateLocked`'s `!owed`) - is pruned on the
+  next report, so a roster glyph drawn meanwhile came and went with the frames; `deferred.md` keeps the gap.
+- **A 401 retry carries no `Retry`** (the reviewer): it is a login's failure, not a wait, and `Event.Retry`'s
+  "nil on every other event" is then true.
+- **Not on `rpc.SessionStatus`** (three reflective guards): a client attaching mid-storm draws the working
+  line until the next retry frame, at most about forty seconds (`deferred.md`).
+- **The roster carries the set behind a pointer** (`Roster.retrying`), since `stopIndex` and the cursor tests
+  compare whole `Roster` values and a map field would end that; it is set on the drawn copy only.
+- **Held by** `internal/core/apiretry_test.go` (the recording's ten, a 529, a 401, no retry on any other
+  frame), `internal/rpc/event_test.go` (the pause crosses as a Duration) and `internal/ui/apiretry_test.go`
+  (the three surfaces off the recording, the countdown and its rounding, the status, the narrow line, every
+  clearing and non-clearing kind, the prune, replacement, the 401 path, no transcript block, the row budget,
+  the room's oldest-turn rule, a subagent's output, a gap and a reattach, every width, the roster's working
+  gate), each mutation-checked.
+
 ## 2026-11-03 — your own send draws in the channel it was typed in (the owner)
 
 Dilan suspected "@<team> message does not message everyone in the team", then "it needs to display in chat

@@ -414,7 +414,7 @@ func TestARoomPressAnchorsToTheRowUnderThePointerWhileAnAgentWorks(t *testing.T)
 	// An agent working is what makes the room draw a working line - the chrome the
 	// stored room is never sized for. Without it there is no mismatch to catch.
 	a = a.applyStatus(&rpc.Status{Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateWorking}}})
-	if a.roomFor().WithWorking(a.fleet.OnRoster()).beat == "" {
+	if a.roomFor().WithWorking(a.fleet.OnRoster(), nil).beat == "" {
 		t.Fatal("the room draws no working line, so this proves nothing about the chrome it adds")
 	}
 

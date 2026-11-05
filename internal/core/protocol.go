@@ -321,6 +321,7 @@ func systemEvent(f wireFrame, raw json.RawMessage) Event {
 		Raw:            raw,
 		Session:        initFacts(f),
 		Task:           taskUpdate(f),
+		Retry:          retryOf(f),
 	}
 	// Only a successful compaction's boundary carries a summary. See CompactSummary.
 	if m := f.CompactMetadata; m != nil {

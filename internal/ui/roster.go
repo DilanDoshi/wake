@@ -84,6 +84,13 @@ const turnDoneGlyph = "✔"
 
 // Roster is the sidebar and where the cursor is in it.
 type Roster struct {
+	// retrying is which agents claude is retrying a request for, set on the
+	// drawn copy by WithRetrying: their rows open with retryGlyph in place of the
+	// animated one, since a pulse would say the turn is getting somewhere. A
+	// pointer so Roster stays comparable - stopIndex and the cursor tests compare
+	// whole values - and nil on the App's own.
+	retrying *map[string]apiRetry
+
 	// Selected is the agent the cursor is on, by id. Empty means none - which
 	// is the honest state for a fleet with nothing in it, and for a jump that
 	// found nothing to jump to.
@@ -108,6 +115,21 @@ type Roster struct {
 
 	// channel is the picked channel ("" for all), set by Column for the draw.
 	channel string
+}
+
+// WithRetrying is the agents claude is retrying a request for, for the draw.
+func (r Roster) WithRetrying(retrying map[string]apiRetry) Roster {
+	r.retrying = &retrying
+	return r
+}
+
+// retried is whether id's request is being retried, off the set the draw gave.
+func (r Roster) retried(id string) bool {
+	if r.retrying == nil {
+		return false
+	}
+	_, ok := (*r.retrying)[id]
+	return ok
 }
 
 // View draws one row per agent, in the order it was given them, scrolled so the
@@ -330,7 +352,14 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (rosterSpo
 // in this package still green - a bound whose failure nothing reaches, sitting
 // beside the one thing this file must not get wrong.
 func (r Roster) rows(a Agent, subs []Task, width int) []string {
-	out := []string{r.headStyle(a).Render(headLine(a, turnDone(a, len(subs) > 0), width))}
+	glyph := rowGlyph(a, turnDone(a, len(subs) > 0))
+	// Only a working row, as the DM and the room draw it: a turn the daemon reads
+	// as idle (a peer's message, a background task's note) is pruned on the next
+	// report, and a glyph drawn meanwhile would come and go with the frames.
+	if a.State == rpc.StateWorking && r.retried(a.ID) {
+		glyph = retryGlyph
+	}
+	out := []string{r.headStyle(a).Render(headLine(a, glyph, width))}
 	if a.Tool != "" {
 		// Indented to sit under the name rather than under the glyph: the glyph
 		// is the row's own column and what follows it is about the agent.
@@ -428,8 +457,9 @@ func (r Roster) headStyle(a Agent) lipgloss.Style {
 	return identityRowStyle(a, selected)
 }
 
-// headLine is a row's first line: liveness, name, the count of what you have
-// not read, and what the agent has produced.
+// headLine is a row's first line: liveness (glyph, the caller's - rowGlyph's,
+// or retryGlyph while claude retries), name, the count of what you have not
+// read, and what the agent has produced.
 //
 // # The budget, in the order it is spent
 //
@@ -448,8 +478,8 @@ func (r Roster) headStyle(a Agent) lipgloss.Style {
 // Dropped rather than abbreviated further for the same reason `⌃Q` reads
 // `quit & park all`: a partial `↓ 12` is a *different number*, and a wrong
 // figure on screen is worse than no figure.
-func headLine(a Agent, done bool, width int) string {
-	head := rowGlyph(a, done) + " " + a.Name
+func headLine(a Agent, glyph string, width int) string {
+	head := glyph + " " + a.Name
 	if a.Unread > 0 {
 		badge := " " + unreadBadge(a.Unread)
 		head = clip(head, width-lipgloss.Width(badge)) + badge

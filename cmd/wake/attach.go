@@ -388,6 +388,9 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 	promptTerminalSetupOnce()
 
 	term := &guardedOutput{File: os.Stdout}
+	// The terminal's own title goes on its stack before anything of Wake's is
+	// written, for the pop below. See internal/ui/title.go.
+	_, _ = term.WriteString(ui.TitleStackPush)
 	opts := []tea.ProgramOption{tea.WithAltScreen(), tea.WithMouseCellMotion(), tea.WithOutput(term)}
 	if kill != nil {
 		// Only when there is a terminal to read. With input piped there is
@@ -396,7 +399,7 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 	}
 	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
 	final, err := p.Run()
-	term.seal()
+	term.handBack()
 	if err != nil {
 		return err
 	}

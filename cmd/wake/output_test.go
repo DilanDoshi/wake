@@ -6,6 +6,8 @@ import (
 	"os"
 	"testing"
 	"time"
+
+	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 // pipeOutput is a guardedOutput over a pipe, and what was written to it.
@@ -50,6 +52,20 @@ func TestEveryWriteToTheTerminalTakesTheLock(t *testing.T) {
 		t.Error("Write wrote while a frame held the terminal")
 	}
 	g.mu.Unlock()
+}
+
+// Handing the terminal back seals it before the shell's title is popped: a
+// title a command goroutine had yet to write is refused rather than retitling
+// the shell's screen after the pop, and the pop still reaches the terminal.
+func TestHandingBackSealsBeforeTheTitleIsPopped(t *testing.T) {
+	g, written := pipeOutput(t)
+	g.handBack()
+	if _, err := io.WriteString(g, "\x1b]2;late\x07"); !errors.Is(err, errHandedBack) {
+		t.Errorf("a title after the hand-back got %v, want %v", err, errHandedBack)
+	}
+	if got := written(); got != ui.TitleStackPop {
+		t.Errorf("the terminal got %q, want only the pop %q", got, ui.TitleStackPop)
+	}
 }
 
 // Once Bubble Tea has handed the terminal back, a sequence a command goroutine

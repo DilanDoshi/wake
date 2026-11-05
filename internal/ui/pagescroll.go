@@ -8,8 +8,8 @@ package ui
 // up is how far the page is scrolled from its bottom. Up one row slides one row of
 // chrome off the bottom and takes one older transcript line in at the top, so the
 // pane is drawn height+up rows tall and its top height rows are shown. A card the
-// pane has no room for opens with the clipped rows already behind the window, on
-// the card's own top, and the wheel brings the rest up from under it.
+// pane has no room for opens on its foot - the rows the keys act on and the key
+// line in view, the rest a wheel notch above (the owner's 2026-11-02 ruling).
 
 import (
 	"strings"
@@ -17,12 +17,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// pageState is where a conversation's page was scrolled to, and for which card:
-// another ask starts at rest. Unset is the default - the card's own top. draft is
-// the draft as the page last saw it, because a Composer shares its text area with
-// the copy it was taken from, so a change cannot be read off the stored one.
+// pageState is where a conversation's page was scrolled to, and for which card
+// and step of it: another ask, or another question of the same one, starts at
+// rest. Unset is the default - the card's foot, or its top when the pane holds it.
+// draft is the draft as the page last saw it, because a Composer shares its text
+// area with the copy it was taken from, so a change cannot be read off the stored
+// one.
 type pageState struct {
 	req   string
+	step  int
 	up    int
 	set   bool
 	draft string
@@ -55,31 +58,65 @@ type pagePlace struct {
 	tall    DM   // the pane laid out at win.render, for the draw to use - zero at rest
 }
 
-// pagePlace measures the pane id at width by height with menu pinned.
-func (a App) pagePlace(id string, width, height int, menu string, card Card) pagePlace {
-	return a.placeOf(a.sizedDM(id, menu, width, height), id, width, menu, card)
+// pagePlace measures the pane id at width by height with menu pinned, for a card
+// of cardRows.
+func (a App) pagePlace(id string, width, height int, menu string, card Card, cardRows int) pagePlace {
+	return a.placeOf(a.sizedDM(id, menu, width, height), id, width, menu, card, cardRows)
 }
 
 // placeOf is pagePlace for a pane already laid out at its own height with menu
-// pinned, which is the one the draw lays out: the frame measures it once.
-func (a App) placeOf(dm DM, id string, width int, menu string, card Card) pagePlace {
+// pinned, which is the one the draw lays out: the frame measures it once. cardRows
+// is the card's own height - the top of the pinned block, which a picker can
+// stack under.
+func (a App) placeOf(dm DM, id string, width int, menu string, card Card, cardRows int) pagePlace {
 	menuRows := lipgloss.Height(menu)
-	box := dm.composerRows()
-	clipped := max(menuRows-max(dm.menuRoomAt(box), 0), 0)
+	// Past the block, the chrome a pane too short for it has no room for either.
+	clipped := max(menuRows-dm.menuRoomAt(dm.composerRows()), 0)
+	// A page at rest is drawn height+clipped rows tall wherever its rest is, so the
+	// layout that finds the foot is the one the frame draws, and whatever the pane
+	// pins above the card is counted. Chrome that grows with the height - a draft's
+	// box, a preview the pane cut - takes rows from the block again; the page grows
+	// by what it took, and both are bounded (maxComposerRows, the preview's rows).
+	tall, laid := DM{}, dm.height
+	for clipped > 0 {
+		tall, laid = a.sizedDM(id, menu, width, dm.height+clipped), dm.height+clipped
+		short := menuRows - tall.menuRoomAt(tall.composerRows())
+		if short <= 0 {
+			break
+		}
+		clipped += short
+	}
 	top := min(max(dm.tr.scroll, dm.tr.first()), dm.tr.bottom())
 	limit := clipped + max(top-dm.tr.first(), 0)
-	up := min(dm.pageAt(card, clipped), limit)
-	win := windowPage(dm.height, clipped, up)
-	// The card is placed by the layout it is drawn in: the rows a scrolled page
-	// adds let a draft or a streamed preview grow, and the card sits above them.
-	drawn, drawnBox, tall := dm, box, DM{}
-	if win.render != dm.height {
-		tall = a.sizedDM(id, menu, width, win.render)
-		drawn, drawnBox = tall, tall.composerRows()
+	up, rested := dm.restingAt(card)
+	if !rested {
+		up = clipped
+		if clipped > 0 {
+			_, cardTop := menuPlace(tall, menuRows)
+			up = clipped - max(cardTop+cardRows-dm.height, 0)
+		}
 	}
-	rows := max(min(menuRows, drawn.menuRoomAt(drawnBox)), 0)
+	up = min(up, limit)
+	win := windowPage(dm.height, clipped, up)
+	drawn := dm
+	if win.render != dm.height {
+		if win.render != laid {
+			tall = a.sizedDM(id, menu, width, win.render)
+		}
+		drawn = tall
+	}
+	rows, cardTop := menuPlace(drawn, menuRows)
 	return pagePlace{height: dm.height, win: win, up: up, limit: limit, clipped: clipped, top: top, follow: dm.tr.atBottom(), tall: tall,
-		drawn: rows, cardTop: win.render - drawnBox - barRows(drawn.bar) - rows}
+		drawn: rows, cardTop: cardTop}
+}
+
+// menuPlace is the rows of the pinned block a layout draws and the row its top
+// is on: the composer's box and the bar, which sit under it, counted up from the
+// pane's last row.
+func menuPlace(d DM, menuRows int) (rows, top int) {
+	box := d.composerRows()
+	rows = max(min(menuRows, d.menuRoomAt(box)), 0)
+	return rows, d.height - box - barRows(d.bar) - rows
 }
 
 // holds reports whether every one of a card's rows is inside the window: the
@@ -89,23 +126,27 @@ func (p pagePlace) holds(cardRows int) bool {
 	return p.drawn >= cardRows && p.cardTop >= p.win.skip && p.cardTop+cardRows <= p.win.skip+p.height
 }
 
-// pageAt is where this conversation's page stands for card: where the operator
-// left it, or the default - the clipped rows already behind the window, unless the
-// box holds a draft, which is the operator's to see and opens in view.
-func (d DM) pageAt(card Card, clipped int) int {
+// restingAt is where the operator left the page for card, or where a draft puts
+// it - the bottom, with the box in view, since the draft is theirs to see - and
+// whether either applies. Otherwise the page opens as far up as the card's last
+// row stays in view (placeOf): the card's top for one the pane holds under the
+// transcript's rows, with the composer scrolled away, lower for one it cannot,
+// which opens on its foot with the key line and the rows the keys act on in view
+// (the owner's 2026-11-02 ruling, reversing 2026-10-20's top).
+func (d DM) restingAt(card Card) (int, bool) {
 	switch {
-	case d.page.set && d.page.req == card.RequestID:
-		return d.page.up
+	case d.page.set && d.page.req == card.RequestID && d.page.step == card.Cursor:
+		return d.page.up, true
 	case !blank(d.composer.Value()):
-		return 0
+		return 0, true
 	}
-	return clipped
+	return 0, false
 }
 
 // sizedDM is the conversation id laid out for a pane of width by height with menu
 // pinned - transcriptRows' measurement, and the page's.
 func (a App) sizedDM(id, menu string, width, height int) DM {
-	return a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).SetSize(width, height)
+	return a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).WithRetrying(a.retryOf(id)).SetSize(width, height)
 }
 
 // pageOf is the page of a drawn conversation that has a card up.
@@ -115,8 +156,9 @@ func (a App) pageOf(id string) (pagePlace, Card, bool) {
 	if !ok || !drawn {
 		return pagePlace{}, Card{}, false
 	}
-	menu := a.menuAround(a.cardBlock(id, width, false), id, width, height)
-	return a.pagePlace(id, width, height, menu, card), card, true
+	block := a.cardBlock(id, width, false)
+	menu := a.menuAround(block, id, width, height)
+	return a.pagePlace(id, width, height, menu, card, lipgloss.Height(block)), card, true
 }
 
 // scrollPage moves id's page by lines, up for a positive count. It reports false
@@ -137,7 +179,7 @@ func (a App) scrollPage(id string, lines int) (App, bool) {
 		return a, false
 	}
 	next := *d
-	next.page.req, next.page.up, next.page.set = card.RequestID, up, true
+	next.page.req, next.page.step, next.page.up, next.page.set = card.RequestID, card.Cursor, up, true
 	return a.withDM(id, next), true
 }
 
@@ -146,16 +188,19 @@ func (a App) scrollPage(id string, lines int) (App, bool) {
 func (a App) pageHome(id string) App {
 	card, ok := a.cardOf(id)
 	d := a.dms[id]
-	if !ok || d == nil || (d.page.set && d.page.req == card.RequestID && d.page.up == 0) {
+	if !ok || d == nil || (d.page.set && d.page.req == card.RequestID && d.page.step == card.Cursor && d.page.up == 0) {
 		return a
 	}
 	next := *d
-	next.page.req, next.page.up, next.page.set = card.RequestID, 0, true
+	next.page.req, next.page.step, next.page.up, next.page.set = card.RequestID, card.Cursor, 0, true
 	return a.withDM(id, next)
 }
 
 // draftSeen brings id's page home when c changes what its draft holds, whichever
-// key wrote it: a draft nobody can see is one a later ↵ sends unread.
+// key wrote it: a draft nobody can see is one a later ↵ sends unread. A box that
+// emptied forgets the rest instead, unless an answer is being written in it - the
+// card settles again, so a stray character deleted or an answer in your own words
+// sent leaves the step whole and its keys live.
 func (a App) draftSeen(id string, c Composer) App {
 	d := a.dms[id]
 	if d == nil {
@@ -167,6 +212,10 @@ func (a App) draftSeen(id string, c Composer) App {
 	}
 	next := *d
 	next.page.draft = now
+	if blank(now) && a.answerTitle(id) == "" {
+		next.page.set = false
+		return a.withDM(id, next)
+	}
 	return a.withDM(id, next).pageHome(id)
 }
 

@@ -93,7 +93,9 @@ func (a App) mcpSignedIn(m mcpSignedInMsg) (App, tea.Cmd) {
 		} else {
 			notice.Report("%s: "+mcpSignInUnfinish, m.Server, m.Err)
 		}
-		return a, a.transmitFriends() // the terminal came back to a cleared alt screen
+		// The terminal came back to a cleared alt screen, under whatever title
+		// the child left.
+		return a, tea.Batch(a.transmitFriends(), a.retitle())
 	}
 	if mine {
 		menu.Busy, menu.Result = core.MCPAskReconnect, ""
@@ -108,7 +110,7 @@ func (a App) mcpSignedIn(m mcpSignedInMsg) (App, tea.Cmd) {
 		}
 	}
 	a.mcpUI.sweep = sw
-	return a, tea.Batch(a.write(mcpFailed, frames...), a.transmitFriends())
+	return a, tea.Batch(a.write(mcpFailed, frames...), a.transmitFriends(), a.retitle())
 }
 
 // mcpSweep is a finished sign-in's reconnect across the fleet: the agents asked

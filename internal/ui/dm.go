@@ -73,6 +73,11 @@ type DM struct {
 	// drives the working one. See WithCompacting, DM.heartbeat.
 	compactingSince time.Time
 
+	// retry is the request claude is retrying for this session, or none - set for
+	// the draw by App.dmPane off the App-owned map (apiretry.go); it takes the
+	// working line's row. See WithRetrying, DM.heartbeat.
+	retry apiRetry
+
 	// subRunning is whether this agent has a dispatch still running - a subagent,
 	// workflow or background shell - set for the draw by App.dmFor off
 	// Fleet.RunningTasks. It suppresses the done line: fold keeps a subagent's

@@ -5961,3 +5961,66 @@ agent beside `forkFrom`, in memory only.
   before claude reads, and the rewind's marker lands after it. The source must be idle to be forked,
   so this needs an operator rewinding it within the fork's start-up. *Closes with:* the length measured
   once claude is known to have read the source, if anything on the wire marks that.
+
+## FROM `fix/card-review-fits-its-pane`, 2026-11-02
+
+- **An older daemon refuses a newer window's `!cmd`.** A 0.1.13 window sends a shell run as a
+  `FrameSend` carrying `shell` and no text; a 0.1.12 daemon does not know the field and refuses the
+  empty send as "encode user message: nothing to send" (sing-dev-2's log, 2026-11-01). `wake fleets`
+  already says to ⌃Q⌃Q and reopen the fleet on this build, and upgrading the fleet is the remedy. The
+  window could read the daemon's build off the report and say so at the bang instead of a refusal.
+- **A three- or four-question ask's review can still outgrow a short pane**: three fixed rows and two
+  per question. It opens on its foot with the key line saying the keys wait for the whole card, and
+  the window has to grow. A review that scrolls inside the card would close it.
+
+## FROM `fix/send-drawn-twice`, 2026-10-29
+
+A send by address is named from Claude Code's session registry (decisions.md, 2026-10-29); two things it leaves.
+
+- **A reopened conversation draws a send by address as the address.** History is not resolved through today's
+  registry, by wake-orch's ruling: a PID can be reused, so an old send to `uds:/tmp/cc-socks/<pid>.sock` could take
+  the name of whichever session holds that socket now - a false statement where the raw path is merely unfriendly.
+  *Closes with:* resolving a history send only through a record whose session began before the send was made (the
+  record's `startedAt` against the event's `At`), which is the one check that says the socket was that session's
+  when it was written to; or wake-orch's narrower form, a current fleet agent whose conversation began first.
+- **A send to a fleet agent is left to the receiver's replay, which may never come** (Codex, first pass). A
+  recipient that ends or parks between the send and the replay, or a send that fails, draws no room line at
+  all. A send by name has had the same contract since 2026-10-16. *Closes with:* the 2026-10-16 entry's pending
+  map - the call's line held until the receiver's replay or the send's result says what happened.
+- **A bare name is still the room's `ByName`, not the registry's.** So the 2026-10-16 entry above - a send by a
+  claude name that lags Wake's, drawn twice - stays open. *Closes with:* the daemon resolving a bare name through
+  the registry too, which costs a directory read on every send rather than every send by address.
+
+## FROM `feat/tab-title-fleet-name`, 2026-11-01
+
+The tab title (decisions.md, 2026-11-01) restores the shell's title by the xterm title stack, which not every
+terminal keeps.
+
+- **WezTerm and Terminal.app keep the fleet's name after exit** until the shell's own integration writes the
+  next title at its prompt; neither honours `CSI 23;0t` as far as could be read (WezTerm's #5800; nothing
+  found for Terminal.app). *Closes with:* a measured check on each, and where the stack is missing, reading
+  the title back with `CSI 21 t` before the first write and setting it again on exit - only on terminals
+  that answer the report, since an unanswered query leaves bytes on stdin.
+- **No title through a multiplexer's status bar.** Inside tmux the fleet's name is the pane title (`#T`),
+  which the window name (`#W`) and the outer terminal show only when the operator's tmux config says so.
+  *Closes with:* nothing of Wake's - it is tmux's `set-titles` and `set-titles-string`.
+
+## FROM `fix/show-api-retrying`, 2026-11-02
+
+The retry line (decisions.md, 2026-11-02) shipped with two things left out.
+
+- **A standing retry is not on `rpc.SessionStatus`.** A client attaching mid-storm draws the plain working
+  line until the next retry frame, at most about forty seconds; a field would trip the three reflective
+  guards for a fact the next frame restores. *Closes with:* the daemon holding the last retry per agent and
+  the report carrying it, the way `Goal` does.
+- **No `N retrying` segment on the strip** (the owner, 2026-11-02): a network drop marks every roster row
+  and the room line at once. *Closes with:* a segment beside `✔ N done`, counted off `App.retrying`.
+- **A turn the daemon reads as idle shows no retry line** - a peer's `SendMessage`, a background task's
+  note, an auto-compaction, none of which the daemon counts as a turn owed (`stateLocked`). Its retries are
+  held and pruned on every report; the three surfaces draw only a working row. *Closes with:* the daemon
+  reading a retry frame as a turn in flight, which would also move those turns' working lines.
+- **A subagent's own retries are unrecorded** (the reviewer). No `api_retry` in the corpus carries
+  `parent_tool_use_id`, so whether claude forwards a background subagent's retries is unknown. If it does,
+  they would read as the parent's, and since a subagent's output no longer clears the line, a parent waiting
+  on one would keep `retrying…` until its own next request, turn end or idle report. *Closes with:* a
+  recording of a network drop under a running subagent (`live-testing.md`), then a ruling on the frames.

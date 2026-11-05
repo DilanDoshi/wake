@@ -179,10 +179,13 @@ type wireFrame struct {
 	// emits one per retry on a failed API call, on the LIVE stream from attempt 1
 	// (recorded 2026-09-09 in api-retry-auth.jsonl). It is what lets a 401 - a
 	// dead OAuth token a running process will not recover - be surfaced as an auth
-	// failure in a second, where the give-up frame is ~5 min later, and lets an
-	// overload (429/529) be left alone because it usually recovers. See
-	// authFailedRetry and docs/notes/bugs.md.
-	RetryStatus int `json:"error_status"`
+	// failure in a second, where the give-up frame is ~5 min later. The three
+	// beside it are the retry's count and the pause before the next try, told as
+	// NoticeAPIRetrying so a reader can say so. See authFailedRetry, retryOf.
+	RetryStatus  int `json:"error_status"`
+	RetryAttempt int `json:"attempt"`
+	RetryMax     int `json:"max_retries"`
+	RetryDelayMS int `json:"retry_delay_ms"`
 
 	// The subagent dimension, and it is three fields rather than one. All
 	// three are top-level on an assistant or user frame the CLI forwarded
@@ -577,8 +580,8 @@ const (
 // retrying a dead OAuth token, which a running process will not recover. The
 // three helpers below let systemEvent surface it as a KindAPIError - the same
 // route the synthetic give-up frame takes - without adding to protocol.go, which
-// is at its size cap. A non-401 retry (an overload) is left a plain system event
-// because it usually recovers. See docs/notes/bugs.md.
+// is at its size cap. A non-401 retry (a lost connection, an overload) stays a
+// system event, told as retrying since it usually recovers. See docs/notes/bugs.md.
 func (f wireFrame) authFailedRetry() bool {
 	return f.Subtype == subtypeAPIRetry && f.RetryStatus == authErrorStatus
 }
@@ -600,6 +603,9 @@ func systemText(f wireFrame) string {
 func apiRetryNotice(f wireFrame, base Notice) Notice {
 	if f.authFailedRetry() {
 		return NoticeAPIError
+	}
+	if f.Subtype == subtypeAPIRetry {
+		return NoticeAPIRetrying
 	}
 	return base
 }

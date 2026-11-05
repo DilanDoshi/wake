@@ -207,6 +207,11 @@ type App struct {
 	// session id for tails' reason. Folded from two notices; see compacting.go.
 	compacting map[string]time.Time
 
+	// retrying is which sessions claude is retrying a request for, and what the
+	// last retry said, so the working line can say so. On App beside compacting,
+	// for its reason. See apiretry.go.
+	retrying map[string]apiRetry
+
 	// askedHistory is which sessions this client has already asked for a
 	// transcript, and pendingHistory is the asks Update has not yet written.
 	// Both are copied on write for dms' reason. See history.go. subTranscripts
@@ -318,9 +323,12 @@ type App struct {
 	upgrade   updateCue    // whether a newer wake is out, and when to ask; see updatecue.go
 	clicks    clickRun     // the presses landing on one cell in quick succession; see multiclick.go
 
-	// out is the terminal, for the one thing Wake writes that is not a frame.
-	// Nil writes nowhere. See clipboard.go and cmd/wake/output.go.
+	// out is the terminal, for what Wake writes that is not a frame - a copy,
+	// the friends' pictures, the title. Nil writes nowhere. See clipboard.go
+	// and cmd/wake/output.go.
 	out io.Writer
+
+	titled string // the title last written to the terminal; see title.go
 
 	beating bool // a heartbeat tick is already scheduled; see beat.go
 

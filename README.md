@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.13 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.14 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -121,7 +121,9 @@ slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/ad
 `/wake-name`, `/wake-help` and `/friends`; `/effort` and `/model` configure the session they are addressed to. `/wake-name <name>`
 renames the fleet you are in, so `wake --fleet <name>` and `wake fleets` know it by the new name; the
 agents already running keep reaching it, and every open window says so. A bare `/wake-name` says what
-the fleet is called. The unnamed fleet keeps its name. `/status [@who]` shows an agent's own facts —
+the fleet is called. The unnamed fleet keeps its name. Every window titles its terminal tab with the
+fleet's name, retitles it on a `/wake-name`, and gives the shell its own title back when you leave.
+`/status [@who]` shows an agent's own facts —
 state, ids, model, context, effort, permission mode, team, builds — without sending it anything, the
 manager's included. A bare `/clear` typed in the room is Wake's own: it empties this window's group chat
 and reaches no agent (conversations and `↑` history are kept), and the room notes every 1,000 messages it
@@ -142,7 +144,9 @@ tick with `↵`, the option's digit or space, and Next or Submit walks on. When 
 Wake resumes each once — when you sign in to another account anywhere, or at the reset the limit named —
 and draws it as `↻ resumed after the usage limit`, never as your words. A turn an unreachable API stopped (a
 lost connection, a machine asleep mid-reply) is resumed the same way once another agent's turn goes through or
-the network changes, drawn `↻ resumed after the connection came back`. Once an agent reports it, the account's
+the network changes, drawn `↻ resumed after the connection came back`. While claude is still retrying
+one, the agent's working line says so (`⚠ API unreachable · retrying in 38s (attempt 3 of 10)`) and its
+roster row reads `⚠`. Once an agent reports it, the account's
 five-hour session usage is a bar under the roster (`session · ↻ 4:09pm`), and a friend sits on it — Skip the
 tug, Ollie the otter, Bo the whale or Puff the pufferfish; `/friends` picks one, or none, for this machine. A table too narrow for its pane is
 drawn as records, `Header: value` a line, as Claude Code draws one. A conversation showing a question card

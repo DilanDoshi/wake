@@ -33,7 +33,7 @@ func TestWorkingLineFlattensAMultilineActiveForm(t *testing.T) {
 	}
 	room := roomWorkingLine([]Agent{
 		{ID: "s1", Name: "noah", State: rpc.StateWorking, startedAt: clock(), Doing: multiline},
-	}, 80)
+	}, nil, 80)
 	if got := lipgloss.Height(room); got != 1 {
 		t.Errorf("the room working line drew %d rows for a multiline activeForm, want 1:\n%s", got, stripANSI(room))
 	}
@@ -173,7 +173,7 @@ func TestRoomWorkingLineHasBlankRowsAroundIt(t *testing.T) {
 	forceTrueColour(t)
 	r := NewRoom().SetSize(80, 20).
 		Append(core.Event{Kind: core.KindAssistantText, Text: "some output"}, Agent{ID: "s1", Name: "noah"})
-	r = r.WithWorking([]Agent{working("s1", "noah", time.Second, 100)})
+	r = r.WithWorking([]Agent{working("s1", "noah", time.Second, 100)}, nil)
 
 	lines := strings.Split(stripANSI(r.View(80, 20)), "\n")
 	beat := beatRowIn(lines)
@@ -196,7 +196,7 @@ func TestRoomWorkingLineHasBlankRowsAroundIt(t *testing.T) {
 func TestRoomStaysInBoundsWithAWorkingLineAndAGrownComposer(t *testing.T) {
 	forceTrueColour(t)
 	const w, h = 60, 10
-	r := NewRoom().SetSize(w, h).WithWorking([]Agent{working("s1", "noah", time.Second, 100)})
+	r := NewRoom().SetSize(w, h).WithWorking([]Agent{working("s1", "noah", time.Second, 100)}, nil)
 
 	// Typed through the real rune path, long enough to wrap past maxComposerRows.
 	c := r.Composer()
