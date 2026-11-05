@@ -96,6 +96,34 @@ func TestOnlyASendMessageReceiptIsReadAsItsSentence(t *testing.T) {
 	}
 }
 
+// BUG-62: a subagent's SubagentHandback receipt (2.1.314) reached its pane as
+// JSON. Its exact recorded shape reads as its sentence; anything looser stays whole.
+func TestASubagentHandbackReceiptIsReadAsItsSentence(t *testing.T) {
+	line, at := findFixtureLine(t, "subagent-nested.jsonl", "toolu_01VALGxY3Ez6iPYCSuyrJh4Z\",\"type\":\"tool_result")
+	evs, err := DecodeLine([]byte(line))
+	if err != nil || len(evs) != 1 || evs[0].Kind != KindToolResult {
+		t.Fatalf("subagent-nested.jsonl:%d decoded to %+v, %v; want one tool result", at, evs, err)
+	}
+	if want := "Report delivered to your caller."; evs[0].Text != want {
+		t.Errorf("subagent-nested.jsonl:%d reads %q, want %q", at, evs[0].Text, want)
+	}
+	block := func(text string) json.RawMessage {
+		raw, _ := json.Marshal([]map[string]string{{"type": "text", "text": text}})
+		return raw
+	}
+	for _, text := range []string{
+		`{"success":true,"message":"Report delivered to your caller.","extra":1}`,
+		`{"success":"true","message":"Report delivered to your caller."}`,
+		`{"success":1,"message":"Report delivered to your caller."}`,
+		`{"success":true,"message":""}`,
+		`{"success":true,"message":7}`,
+	} {
+		if got := toolResultText(block(text)); got != text {
+			t.Errorf("toolResultText(%s) = %q, want it verbatim", text, got)
+		}
+	}
+}
+
 // A send's `to` is an address in two of its three forms: the `uds:` socket a
 // cross-session message arrives from, which a reply copies (cross-session.jsonl),
 // and a name with the ref /list-agents prints beside it (list-agents.jsonl). A

@@ -694,18 +694,25 @@ func toolResultText(content json.RawMessage) string {
 
 // receiptSentence is a text block as prose: a SendMessage receipt - its three
 // recorded keys and no other, success, message and a msg_id - reads as its
-// message (manager-relay.jsonl). Any other text, JSON or not, is left whole: the
-// block names no tool, so only the receipt's own shape says it is one.
+// message (manager-relay.jsonl), and so does a SubagentHandback receipt - a true
+// success and a message, no other key (subagent-nested.jsonl). Any other text,
+// JSON or not, is left whole: the block names no tool, so only the receipt's own
+// shape says it is one.
 func receiptSentence(text string) string {
 	var r struct {
 		Success *bool   `json:"success"`
 		Message *string `json:"message"`
-		MsgID   string  `json:"msg_id"`
+		MsgID   *string `json:"msg_id"`
 	}
 	dec := json.NewDecoder(strings.NewReader(text))
 	dec.DisallowUnknownFields()
 	if !strings.HasPrefix(text, "{") || dec.Decode(&r) != nil || dec.More() ||
-		r.Success == nil || r.Message == nil || r.MsgID == "" {
+		r.Success == nil || r.Message == nil {
+		return text
+	}
+	sent := r.MsgID != nil && *r.MsgID != ""
+	handedBack := r.MsgID == nil && *r.Success && *r.Message != ""
+	if !sent && !handedBack {
 		return text
 	}
 	return *r.Message
