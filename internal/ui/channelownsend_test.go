@@ -216,3 +216,36 @@ func TestATypedInStampIsPrunedWhenItsLineIsReclaimed(t *testing.T) {
 		t.Error("pruning on reclaim mutated an older Room's typed-in set")
 	}
 }
+
+// A second stamp copies the set it adds to: an older Room keeps the one it had.
+func TestStampingASendLeavesAnOlderRoomsSetAlone(t *testing.T) {
+	r := NewRoom().SetSize(80, 12).WithChannel("frontend", joinIDs([]string{"s3", "s5"}))
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@backend one"}, "s1", "frontend")
+	held := r
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@backend two"}, "s1", "frontend")
+	if len(held.typedIn) != 1 || len(r.typedIn) != 2 {
+		t.Errorf("the older Room holds %d stamps and the newer %d, want 1 and 2", len(held.typedIn), len(r.typedIn))
+	}
+}
+
+// The room's /clear empties the set with the lines it stamped.
+func TestTheRoomsClearEmptiesTheStamps(t *testing.T) {
+	r := NewRoom().SetSize(80, 12).WithChannel("frontend", joinIDs([]string{"s3", "s5"}))
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@backend one"}, "s1", "frontend")
+	if r = r.cleared(time.Now()); len(r.typedIn) != 0 {
+		t.Errorf("/clear left %d stamps for lines it emptied", len(r.typedIn))
+	}
+}
+
+// A line that draws nothing spends no id, so it leaves no stamp for the next
+// line appended under that id to inherit.
+func TestALineThatDrawsNothingLeavesNoStamp(t *testing.T) {
+	original := renderRoomBlock
+	renderRoomBlock = func(core.Event, Agent, Agent, int, bool) block { return block{} }
+	t.Cleanup(func() { renderRoomBlock = original })
+	r := NewRoom().SetSize(80, 12).WithChannel("frontend", joinIDs([]string{"s3", "s5"}))
+	next := r.appendUser(core.Event{Kind: core.KindUserText, Text: "@delta drawn as nothing"}, "s3", "frontend")
+	if len(next.typedIn) != 0 || next.nextLineID != r.nextLineID {
+		t.Errorf("a line that drew nothing left %d stamps and moved the id to %d", len(next.typedIn), next.nextLineID)
+	}
+}

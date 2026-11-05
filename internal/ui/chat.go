@@ -426,7 +426,7 @@ func (r Room) Before(earlier []roomLine) Room {
 	// opens whose block is still in the room, which bounds the set to what is
 	// retained. On the rebuild path, not the per-event one, so its cost rides
 	// with the render already happening here.
-	r.expanded, r.typedIn = keptOn(r.expanded, combined), keptOn(r.typedIn, combined)
+	r.expanded = keptOn(r.expanded, combined) // typedIn's lines are live, which a merge never drops
 	blocks := renderRoom(r, combined)
 
 	base := 0

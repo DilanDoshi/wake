@@ -5597,8 +5597,9 @@ Only the roster's unread counts moved, which reads as nobody having got it.
   a table keyed on the line's id beside the lines, as `expanded` is, not a field on `roomLine`: a
   field put every line over the room's allocation budget at the 20,000-line cap
   (`TestRoomBeforeMetadataAllocationStaysBoundedAtTheCap`, 6 KiB a line; main sat 6 bytes under it),
-  and only the lines typed in a channel need one. It is pruned as lines leave (`forgotten`, `keptOn`,
-  the expand set's own helpers made generic) and emptied by the room's `/clear`. One predicate
+  and only the lines typed in a channel need one. It is pruned as lines leave (`forgotten`, the expand
+  set's own helper made generic) and emptied by the room's `/clear`; a restore's merge never drops a live
+  line, so it has none to prune there. One predicate
   still: the focus half is unchanged, so a lone `@name` typed later narrows past it, and the line still
   draws wherever it drew before (all, its addressees' thread).
 - **The replies stay their own thread's** (Dilan's pick of three): a channel is its team's thread, so the
@@ -5619,5 +5620,6 @@ Only the roster's unread counts moved, which reads as nobody having got it.
   names one team, so the name and the key never change apart.
 - **Held by** `channelownsend_test.go` (the draw in each channel, the replies, the notice table, the
   broadcast, the bang's dispatch channel and a parked one, a live stamp through a restore's merge and a
-  resize, a restored send, the notice over the reminder, the stamp's prune) and the pty
+  resize, a restored send, the notice over the reminder, the stamp's prune, copy and clear, a line that
+  draws nothing) and the pty
   `TestYourOwnSendStaysInTheChannelItWasTypedIn`, each mutation-checked.
