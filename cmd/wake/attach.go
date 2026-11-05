@@ -45,8 +45,11 @@ const helloPatience = 400 * time.Millisecond
 // confidently wrong for a first-ever `wake`.
 const waitingLine = "The daemon is not answering yet - it is either starting up or still stopping a previous fleet. Waiting…"
 
-// detachHint is the two commands that reach a fleet with no window open.
-const detachHint = "wake status · wake stop"
+// detachHint is the three commands that reach a fleet with no window open: back
+// in, a look, the end. Each names the fleet, or a bare `wake stop` ends another.
+func detachHint(fleet string) string {
+	return ui.FleetCommand(fleet) + " · " + ui.FleetCommand(fleet, cmdStatus) + " · " + ui.FleetCommand(fleet, cmdStop)
+}
 
 // attach opens a conversation with a new agent.
 //
@@ -378,7 +381,7 @@ func converseRoom(socket string, seed *rpc.Status, conn net.Conn, stream ui.Stre
 // itself a terminal, and the reader it gets here is a pipe - so the restore is
 // deferred here, on the one path every conversation leaves through.
 func converseModel(socket string, model ui.App, out io.Writer) error {
-	kill, err := armKillSwitch()
+	kill, err := armKillSwitch(socket)
 	if err != nil {
 		return err
 	}
@@ -433,10 +436,18 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 //
 // Split out of converse so the decision is reachable without a terminal: the
 // program above needs a TTY and this does not.
+//
+// ⌃Q's fleet is the one the last report named, a /wake-name's included: the
+// daemon drops a rename's old names as it exits, so the socket may no longer
+// say. A report that named none - an older daemon - leaves it to the socket.
 func leavingLine(final tea.Model, socket string) string {
 	if app, ok := final.(ui.App); ok {
 		if n, parked, err := app.ParkedFleet(); parked {
-			return parkAllLine(n, err)
+			fleet := app.FleetName()
+			if fleet == "" {
+				fleet = daemon.FleetName(socket)
+			}
+			return parkAllLine(n, fleet, err)
 		}
 	}
 	return detachLine(daemon.Status(socket))
@@ -459,12 +470,16 @@ func leavingLine(final tea.Model, socket string) string {
 // daemon that went quiet may have taken the verb and died with the book half
 // written. So it reports what is *not* known and names the two verbs that
 // answer it, which is `wake stop`'s own rule: never claim more than you can see.
-func parkAllLine(n int, err error) string {
+//
+// Both name the fleet (ui.FleetCommand): a bare `wake` starts a new one.
+func parkAllLine(n int, fleet string, err error) string {
 	if err != nil {
 		return fmt.Sprintf("Could not confirm that ⌃Q parked the fleet (%s): %v. "+
-			"`wake status` says what is still running; `wake` reopens the room.", agents(n), err)
+			"`%s` says what is still running; `%s` reopens the room.",
+			agents(n), err, ui.FleetCommand(fleet, cmdStatus), ui.FleetCommand(fleet))
 	}
-	return fmt.Sprintf("Parking %s. `wake` reopens the room and offers back whatever finished in time.", agents(n))
+	return fmt.Sprintf("Parking %s. `%s` reopens the room and offers back whatever finished in time.",
+		agents(n), ui.FleetCommand(fleet))
 }
 
 // redial is one reattach attempt: is the session still there, and can this
@@ -644,14 +659,14 @@ func detachLine(st rpc.Status, err error) string {
 	case err != nil:
 		return fmt.Sprintf("Detached, but could not count what is still running: %v", err)
 	case !st.Running && len(st.Sessions) > 0:
-		return fmt.Sprintf("Detached. The daemon is gone and left %s running with nothing holding them.    wake status",
-			agents(len(st.Sessions)))
+		return fmt.Sprintf("Detached. The daemon is gone and left %s running with nothing holding them.    %s",
+			agents(len(st.Sessions)), ui.FleetCommand(st.Fleet, cmdStatus))
 	case !st.Running:
 		return "Detached. The daemon is no longer running."
 	case runningCount(st) == 0:
-		return "Detached. No agents are running.    " + detachHint
+		return "Detached. No agents are running.    " + detachHint(st.Fleet)
 	default:
-		return fmt.Sprintf("Detached. %s still running.    %s", agents(runningCount(st)), detachHint)
+		return fmt.Sprintf("Detached. %s still running.    %s", agents(runningCount(st)), detachHint(st.Fleet))
 	}
 }
 

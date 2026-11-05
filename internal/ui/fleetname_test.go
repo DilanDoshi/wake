@@ -1,9 +1,11 @@
 package ui
 
 import (
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -79,5 +81,79 @@ func TestTheSeedNamesTheFleet(t *testing.T) {
 	a := NewRoomApp(newRecorder(t), Stream{}, &rpc.Status{Running: true, Fleet: "atlas"}).withSize(200, 40)
 	if got := shown(a.withFleetCalled("dev")); !strings.Contains(got, "fleet atlas is now dev") {
 		t.Errorf("a rename after the seed was not announced:\n%s", got)
+	}
+}
+
+// The way back names the fleet as it is now: a bare `wake` starts a new fleet,
+// and a bare verb reaches the unnamed one. Only a socket set by hand, which names
+// no fleet, is reached bare.
+func TestAFleetCommandNamesTheFleet(t *testing.T) {
+	for _, tc := range []struct {
+		fleet string
+		words []string
+		want  string
+	}{
+		{fleet: "dev", want: "wake --fleet dev"},
+		{fleet: "dev", words: []string{"status"}, want: "wake status --fleet dev"},
+		{fleet: "dev", words: []string{"attach", "4f78b3d7"}, want: "wake attach 4f78b3d7 --fleet dev"},
+		{fleet: "default", want: "wake --fleet default"},
+		{fleet: "", want: "wake"},
+		{fleet: "", words: []string{"stop"}, want: "wake stop"},
+	} {
+		if got := FleetCommand(tc.fleet, tc.words...); got != tc.want {
+			t.Errorf("FleetCommand(%q, %q) = %q, want %q", tc.fleet, tc.words, got, tc.want)
+		}
+	}
+}
+
+// ⌃Q's notice row names the fleet by the name the last report gave it.
+func TestCtrlQsNoticeNamesTheFleetItReopens(t *testing.T) {
+	for _, tc := range []struct{ fleet, want string }{
+		{fleet: "dev", want: "`wake --fleet dev` reopens the room"},
+		{fleet: "", want: "`wake` reopens the room"},
+	} {
+		fresh(t)
+		conn, _ := pipeClient(t)
+		a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30).withFleetCalled("atlas").withFleetCalled(tc.fleet)
+		if _, _, handled := confirmQuit(t, a); !handled {
+			t.Fatal("the confirming ⌃Q was not taken by App.key")
+		}
+		if n, ok := notice.Latest(); !ok || !strings.Contains(n.Text, tc.want) {
+			t.Errorf("on fleet %q, ⌃Q said %q, want it to contain %q", tc.fleet, n.Text, tc.want)
+		}
+	}
+}
+
+// A reattach that failed names a way back into this fleet: `wake attach` with no
+// fleet looks in the unnamed one.
+func TestAFailedReattachNamesTheFleet(t *testing.T) {
+	for _, tc := range []struct {
+		fleet, session, want string
+	}{
+		{fleet: "dev", session: "s1", want: "⌃O, then `wake attach s1 --fleet dev`"},
+		{fleet: "dev", want: "⌃O, then `wake --fleet dev`"},
+		{fleet: "", session: "s1", want: "⌃O, then `wake attach s1`"},
+	} {
+		fresh(t)
+		d := &stubDialer{err: errors.New("refused")}
+		a := NewRoomApp(newRecorder(t), Stream{}, &rpc.Status{Running: true, Fleet: tc.fleet}).withSize(200, 40).
+			WithOpenDM(tc.session, "alex").WithDialer(d.dial)
+		_, cmd := a.hungUp(errors.New("hung up"))
+		if cmd == nil {
+			t.Fatal("a hang-up with a dialer wired did not try to reattach")
+		}
+		msg, ok := cmd().(errMsg)
+		if !ok || !strings.Contains(msg.Err.Error(), tc.want) {
+			t.Errorf("on fleet %q a failed reattach said %v, want it to contain %q", tc.fleet, msg.Err, tc.want)
+		}
+	}
+}
+
+// cmd/wake's exit line reads the name the last report gave, a rename's included.
+func TestTheFleetNameFollowsTheReport(t *testing.T) {
+	fresh(t)
+	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withSize(200, 40).withFleetCalled("atlas").withFleetCalled("dev")
+	if got := a.FleetName(); got != "dev" {
+		t.Errorf("after a rename to dev the model names its fleet %q", got)
 	}
 }

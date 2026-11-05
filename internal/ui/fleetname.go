@@ -6,6 +6,8 @@ package ui
 // that was away when it happened says so on its next report.
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -26,6 +28,22 @@ const (
 	// fleetRenameFailed is a write that never reached the daemon.
 	fleetRenameFailed = "asking to rename the fleet"
 )
+
+// FleetCommand is a `wake` command line that reaches the fleet a report names:
+// `--fleet <name>` after the words, since a bare `wake` starts a new fleet and a
+// bare verb reaches the unnamed one. A fleet with no name - a socket set by
+// hand, which a bare `wake` under that $WAKE_SOCKET opens - gets none.
+func FleetCommand(fleet string, words ...string) string {
+	line := strings.Join(append([]string{"wake"}, words...), " ")
+	if fleet == "" {
+		return line
+	}
+	return line + " " + rpc.FleetFlag + " " + fleet
+}
+
+// FleetName is what the last report called this fleet, for the line cmd/wake
+// prints once the program has ended.
+func (a App) FleetName() string { return a.daemon.fleet }
 
 // renameFleet is /wake-name. The daemon refuses what it cannot rename, and the
 // report that follows a rename is what announces it.

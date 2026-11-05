@@ -12,19 +12,18 @@ import (
 	"strings"
 
 	"github.com/DilanDoshi/wake/internal/daemon"
+	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/ui"
 	"github.com/DilanDoshi/wake/internal/version"
 )
-
-// fleetFlagName is the flag, spelled once.
-const fleetFlagName = "--fleet"
 
 // noFleetsYet is what `wake fleets` says on a machine with none.
 //
 // It names how to make one, because "none" is a complete answer to the question
 // asked and a useless one to the person asking it: somebody typing this verb has
 // either just made a fleet or is about to.
-const noFleetsYet = "no named fleets. `wake --fleet <name>` starts one; a bare `wake` is the unnamed fleet, " +
-	"which is separate from all of them"
+var noFleetsYet = "no named fleets. A bare `wake` starts one and names it, and `wake --fleet <name>` starts one " +
+	"called that; `" + ui.FleetCommand(daemon.LegacyFleet) + "` is the unnamed fleet, which is separate from all of them"
 
 // fleetFlag takes `--fleet <name>` off the arguments, returning the rest.
 //
@@ -41,15 +40,15 @@ func fleetFlag(args []string) (rest []string, fleet string, err error) {
 	rest = make([]string, 0, len(args))
 	seen := false
 	for i := 0; i < len(args); i++ {
-		if args[i] != fleetFlagName {
+		if args[i] != rpc.FleetFlag {
 			rest = append(rest, args[i])
 			continue
 		}
 		if seen {
-			return nil, "", fmt.Errorf("%s was given twice: a command is addressed to one fleet", fleetFlagName)
+			return nil, "", fmt.Errorf("%s was given twice: a command is addressed to one fleet", rpc.FleetFlag)
 		}
 		if i+1 >= len(args) {
-			return nil, "", fmt.Errorf("%s needs a name: which fleet to talk to", fleetFlagName)
+			return nil, "", fmt.Errorf("%s needs a name: which fleet to talk to", rpc.FleetFlag)
 		}
 		i++
 		fleet, seen = args[i], true
@@ -57,7 +56,7 @@ func fleetFlag(args []string) (rest []string, fleet string, err error) {
 			// Almost certainly the next flag, which means the name was left
 			// out. Taking it as a name would create a fleet called `--effort`.
 			return nil, "", fmt.Errorf("%s was given %q, which is a flag rather than a fleet name",
-				fleetFlagName, fleet)
+				rpc.FleetFlag, fleet)
 		}
 	}
 	return rest, fleet, nil

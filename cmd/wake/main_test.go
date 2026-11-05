@@ -489,8 +489,14 @@ type realDaemon struct {
 
 func startRealDaemon(t *testing.T) *realDaemon {
 	t.Helper()
+	return startRealDaemonAt(t, tempSocket(t))
+}
 
-	socket := tempSocket(t)
+// startRealDaemonAt is startRealDaemon on a chosen socket: one in a fleet's
+// directory, for a daemon that reports the fleet's name.
+func startRealDaemonAt(t *testing.T, socket string) *realDaemon {
+	t.Helper()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
 	go func() { errc <- daemon.Serve(ctx, socket) }()

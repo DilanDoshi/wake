@@ -300,12 +300,12 @@ func TestCtrlQsExitLineIsCountedByTheModelRatherThanAskedOfTheDaemon(t *testing.
 // reports what is not known and names the verbs that answer it, which is `wake
 // stop`'s own rule about never claiming more than you can see.
 func TestTheExitLineOnlyPromisesAParkedFleetWhenTheDaemonConfirmedIt(t *testing.T) {
-	confirmed := parkAllLine(2, nil)
+	confirmed := parkAllLine(2, "", nil)
 	if !strings.Contains(confirmed, "Parking 2 agents") {
 		t.Errorf("a ⌃Q the daemon confirmed printed %q, and the promise is what the key is for", confirmed)
 	}
 
-	unconfirmed := parkAllLine(2, errors.New("the daemon did not answer within 3s"))
+	unconfirmed := parkAllLine(2, "", errors.New("the daemon did not answer within 3s"))
 	if strings.Contains(unconfirmed, "Parking 2 agents") {
 		t.Errorf("a ⌃Q nothing confirmed printed %q - the same sentence a confirmed one prints. That is "+
 			"the whole of outstanding bug 3: an operator is told a fleet is parked, closes the window, "+

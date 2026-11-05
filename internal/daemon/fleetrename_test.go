@@ -279,6 +279,33 @@ func TestTheReportNamesTheFleetBySocket(t *testing.T) {
 	}
 }
 
+// What a client with no report calls its fleet: the name it has now, through the
+// links a rename left, so a window started under the old name names the new one.
+func TestAClientNamesItsFleetByTheNameItHasNow(t *testing.T) {
+	t.Setenv("HOME", tempHome(t))
+	root, err := StateRoot()
+	if err != nil {
+		t.Fatal(err)
+	}
+	fleetsUnder(t, root, "atlas", "mesa")
+	mustMoveFleet(t, root, "atlas", "dev")
+	mustMoveFleet(t, root, "dev", "prod")
+	for _, tc := range []struct{ socket, want string }{
+		{filepath.Join(fleetPath(root, "atlas"), socketFileName), "prod"},
+		{filepath.Join(fleetPath(root, "mesa"), socketFileName), "mesa"},
+		{filepath.Join(root, socketFileName), LegacyFleet},
+		{tempSocket(t), ""},
+	} {
+		if got := FleetName(tc.socket); got != tc.want {
+			t.Errorf("a client on %s names its fleet %q, want %q", tc.socket, got, tc.want)
+		}
+		// With no daemon to ask, the report off the disk names the fleet too.
+		if got := FleetOnDisk(tc.socket).Fleet; got != tc.want {
+			t.Errorf("the on-disk report for %s names fleet %q, want %q", tc.socket, got, tc.want)
+		}
+	}
+}
+
 // The unnamed fleet has no directory of its own, and a hand-set socket names no
 // fleet, so neither has a name to change.
 func TestTheUnnamedAndHandSetFleetsKeepTheirSockets(t *testing.T) {

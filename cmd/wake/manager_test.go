@@ -31,8 +31,9 @@ func TestTheManagerVerbStartsAManagerWhoseToolsPassTheirSelfTest(t *testing.T) {
 	if err := startManager(d.socket, spawnOpts{}, &out); err != nil {
 		t.Fatalf("`wake manager` against a real daemon was refused: %v", err)
 	}
-	if !strings.Contains(out.String(), managerStarted) {
-		t.Errorf("`wake manager` said %q, want %q", out.String(), managerStarted)
+	// A scratch socket names no fleet, so the room is reached by a bare `wake`.
+	if want := fmt.Sprintf(managerStarted, "wake"); !strings.Contains(out.String(), want) {
+		t.Errorf("`wake manager` said %q, want %q", out.String(), want)
 	}
 }
 

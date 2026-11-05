@@ -82,6 +82,7 @@ import (
 	"github.com/charmbracelet/x/term"
 	"github.com/muesli/cancelreader"
 
+	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/ui"
 )
 
@@ -147,9 +148,13 @@ var killSignalGrace = 2 * time.Second
 
 // emergencyLine is printed to the terminal on the way out. It promises nothing
 // about the fleet, because this path asked the daemon for nothing: the agents
-// are still running, and still parked or not, exactly as they were.
-const emergencyLine = "Wake stopped responding and was closed without parking anything. " +
-	"The fleet is untouched - `wake` reopens the room, `wake status` says what is there."
+// are still running, and still parked or not, exactly as they were. It names the
+// fleet (ui.FleetCommand), since a bare `wake` starts a new one.
+func emergencyLine(fleet string) string {
+	return fmt.Sprintf("Wake stopped responding and was closed without parking anything. "+
+		"The fleet is untouched - `%s` reopens the room, `%s` says what is there.",
+		ui.FleetCommand(fleet), ui.FleetCommand(fleet, cmdStatus))
+}
 
 // killTrigger is the decision, and it is a value so the one thing here that can
 // close somebody's window is testable without a terminal.
@@ -201,6 +206,10 @@ type killSwitch struct {
 	feed  *os.File     // the write end the forwarder writes
 	queue chan []byte
 
+	// socket is the fleet's, read for its name only when the exit fires: the
+	// loop that knows a /wake-name is the one that stopped answering.
+	socket string
+
 	// exit is the seam a test replaces. Nothing but a test assigns it.
 	exit func()
 
@@ -224,7 +233,7 @@ type killSwitch struct {
 // A nil switch is the whole of the not-a-tty case - `wake` with its input piped
 // is not a session anybody is pressing keys at - and every method below is safe
 // on one, so no caller tests for it.
-func armKillSwitch() (*killSwitch, error) {
+func armKillSwitch(socket string) (*killSwitch, error) {
 	if !term.IsTerminal(os.Stdin.Fd()) {
 		return nil, nil
 	}
@@ -238,6 +247,7 @@ func armKillSwitch() (*killSwitch, error) {
 		return nil, fmt.Errorf("opening the input pipe: %w", err)
 	}
 	k := newKillSwitch(os.Stdin, os.Stdout, state, pipe, feed)
+	k.socket = socket
 	k.startReading()
 	go k.pump()
 	go k.forward()
@@ -529,7 +539,7 @@ func (k *killSwitch) restoreTerminal() {
 		// left - bubbletea's own restoreTerminalState, in the order it does it -
 		// then the shell's title, which converseModel's exit is not here to pop.
 		_, _ = io.WriteString(k.out, "\x1b[?1006l\x1b[?1002l\x1b[?1003l\x1b[?2004l\x1b[?25h\x1b[?1049l"+ui.TitleStackPop)
-		_, _ = fmt.Fprintf(k.out, "%s\r\n", emergencyLine)
+		_, _ = fmt.Fprintf(k.out, "%s\r\n", emergencyLine(daemon.FleetName(k.socket)))
 	}()
 	select {
 	case <-written:

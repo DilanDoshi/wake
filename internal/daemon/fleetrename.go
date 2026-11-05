@@ -74,6 +74,24 @@ func fleetNameOf(root, socket string) string {
 	return ""
 }
 
+// FleetName is fleetNameOf for a client holding socket, followed through the
+// links a rename left: a window started under the old name names the new one
+// while the daemon lives. A link the client cannot follow keeps the name it has.
+func FleetName(socket string) string {
+	root, err := StateRoot()
+	if err != nil {
+		return ""
+	}
+	name := fleetNameOf(root, socket)
+	if name == "" || name == LegacyFleet {
+		return name
+	}
+	if now, err := forwardedName(root, name); err == nil {
+		return now
+	}
+	return name
+}
+
 // renameFleet is FrameRenameFleet. The asker hears a refusal; every window hears
 // the rename on the report that follows it.
 func (s *server) renameFleet(c *client, f rpc.Frame) {
