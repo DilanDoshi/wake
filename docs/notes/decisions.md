@@ -5581,3 +5581,25 @@ of that Wake drew a working agent with a pool word over a ticking age. Each retr
   clearing and non-clearing kind, the prune, replacement, the 401 path, no transcript block, the row budget,
   the room's oldest-turn rule, a subagent's output, a gap and a reattach, every width, the roster's working
   gate), each mutation-checked.
+
+## 2026-11-05 — the frame sits one column in from either edge of the window (the owner)
+
+The owner, on a screenshot of the room: "see how close it is to the side? its the same on the right side
+with the usage bar, can we add a smidge of a gap, very small just so that the text is not pressed right up
+to the edge". `wake-orch`'s GO on the plan; the owner approved one column each side.
+
+- **One column, `ui.SideMargin`**: the smallest gap a terminal can draw. At 100 columns the room wraps at
+  74 instead of 76; the roster keeps its 24.
+- **At the program's boundary, not in the frame.** `ui.Margined` is the model the terminal runs: it takes
+  `2×SideMargin` off a `WindowSizeMsg`'s width, moves a `MouseMsg` one margin left, and draws each row one
+  margin in (Bubble Tea erases a short row to its end, so the right margin needs no blanks). The App,
+  every surface and every hit-test - clicks, roster targets, drags, dividers, the wheel, the board - work
+  in the frame's columns unchanged, so one translation moves them all. The same subtraction in
+  `resized`, `mouse` and `App.View` was measured first: 83 in-process tests read the frame's columns and
+  went red.
+- **A press in a margin is the edge cell's**, clamped rather than dropped: the window's edge stays a
+  target, and a drag past it ends on the edge cell, so no handler sees a column off the frame.
+- **§8's breakpoints are the window's width** (`Layout.windowWidth`): `Layout.Width` is now the frame's,
+  and read against it a 100-column window lost the roster and a 120-column one its split.
+- **Left out**: a vertical margin (not asked). The landing site's clips show the gap from their next
+  re-recording.

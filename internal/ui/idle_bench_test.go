@@ -240,21 +240,19 @@ func benchFleetApp(b *testing.B, agents int, manager bool) App {
 func benchAgentID(i int) string   { return fmt.Sprintf("s%02d", i) }
 func benchAgentName(i int) string { return fmt.Sprintf("a%02d", i) }
 
-// BenchmarkView is one steady-state frame: what every Bubble Tea message pays
-// after the size is already applied.
+// BenchmarkView is one steady-state frame as the terminal draws it, margins and
+// all: what every Bubble Tea message pays after the size is already applied.
 func BenchmarkView(b *testing.B) {
-	app := dmApp(nil, Stream{}, "s1", "alex")
-	m, _ := app.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
-	app = m.(App)
+	var win tea.Model = Margined{App: dmApp(nil, Stream{}, "s1", "alex")}
+	win, _ = win.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	for range 3000 {
-		mm, _ := app.Update(eventMsg{Event: core.Event{
+		win, _ = win.Update(eventMsg{Event: core.Event{
 			Kind: core.KindAssistantText, SessionID: "s1", Text: benchParagraph,
 		}})
-		app = mm.(App)
 	}
 	b.ResetTimer()
 	for b.Loop() {
-		_ = app.View()
+		_ = win.View()
 	}
 }
 

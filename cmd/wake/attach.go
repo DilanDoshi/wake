@@ -397,7 +397,7 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 		// nobody pressing keys, and the default reader is what it always was.
 		opts = append(opts, tea.WithInput(kill.Input()))
 	}
-	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
+	p := tea.NewProgram(ui.Margined{App: model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ())))}, opts...)
 	final, err := p.Run()
 	term.handBack()
 	if err != nil {
@@ -434,8 +434,8 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 // Split out of converse so the decision is reachable without a terminal: the
 // program above needs a TTY and this does not.
 func leavingLine(final tea.Model, socket string) string {
-	if app, ok := final.(ui.App); ok {
-		if n, parked, err := app.ParkedFleet(); parked {
+	if m, ok := final.(ui.Margined); ok {
+		if n, parked, err := m.ParkedFleet(); parked {
 			return parkAllLine(n, err)
 		}
 	}
