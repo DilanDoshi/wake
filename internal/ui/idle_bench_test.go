@@ -243,7 +243,7 @@ func benchAgentName(i int) string { return fmt.Sprintf("a%02d", i) }
 // BenchmarkView is one steady-state frame as the terminal draws it, margins and
 // all: what every Bubble Tea message pays after the size is already applied.
 func BenchmarkView(b *testing.B) {
-	var win tea.Model = Margined{App: dmApp(nil, Stream{}, "s1", "alex")}
+	var win tea.Model = Margined{Model: dmApp(nil, Stream{}, "s1", "alex")}
 	win, _ = win.Update(tea.WindowSizeMsg{Width: 100, Height: 40})
 	for range 3000 {
 		win, _ = win.Update(eventMsg{Event: core.Event{

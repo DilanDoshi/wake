@@ -5598,7 +5598,16 @@ to the edge". `wake-orch`'s GO on the plan; the owner approved one column each s
   `resized`, `mouse` and `App.View` was measured first: 83 in-process tests read the frame's columns and
   went red.
 - **A press in a margin is the edge cell's**, clamped rather than dropped: the window's edge stays a
-  target, and a drag past it ends on the edge cell, so no handler sees a column off the frame.
+  target, and a drag past it ends on the edge cell, so no handler sees a column off the frame. The
+  bound is the newest frame width `Margined` was told, not the App's settled one: mid window-drag the
+  old frame is drawn short of a grown window's edge, and a press out there must not land on it.
+- **It holds the App boxed** (`tea.Model`, as `App.Update` returns it), so each message's result is
+  wrapped for 24 bytes. A struct embedding the App re-boxed it: 3.5µs and 18 KB more a message
+  (the reviewer's measurement, confirmed).
+- **Under 10 columns the composer's 8-column floor still reaches the right edge**, as it reached
+  the window's edge before, and one stale repaint after a hand-over that shrank the terminal can do
+  the same until its size arrives. Bubble Tea cuts any row wider than the window, so nothing wraps;
+  cutting every row on every frame for those cases was not worth the cost (Codex's finding, weighed).
 - **§8's breakpoints are the window's width** (`Layout.windowWidth`): `Layout.Width` is now the frame's,
   and read against it a 100-column window lost the roster and a 120-column one its split.
 - **Left out**: a vertical margin (not asked). The landing site's clips show the gap from their next

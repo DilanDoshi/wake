@@ -13,11 +13,14 @@ import (
 // inWindow is a run as the terminal runs it: told a w×h window's size through
 // its margins, and settled, so the frame is laid out for it.
 func inWindow(a App, w, h int) Margined {
-	m, _ := Margined{App: a}.Update(tea.WindowSizeMsg{Width: w, Height: h})
+	m, _ := Margined{Model: a}.Update(tea.WindowSizeMsg{Width: w, Height: h})
 	next := m.(Margined)
-	next.App = next.applyGeometry()
+	next.Model = next.app().applyGeometry()
 	return next
 }
+
+// app is the App inside the margins.
+func (m Margined) app() App { return m.Model.(App) }
 
 // bareFrame is a told the size of the frame a w×h window holds, with no margins
 // of its own: what Margined must hand it.
@@ -74,7 +77,7 @@ func TestNoRowOfTheWindowTouchesItsEdges(t *testing.T) {
 func TestAWindowNarrowerThanItsMarginsDrawsNoFrame(t *testing.T) {
 	for w := range 2*SideMargin + 2 {
 		m := inWindow(newRoomApp(t).withAgents("sydney"), w, 20)
-		if got := m.layout.Width; got != max(w-2*SideMargin, 0) {
+		if got := m.app().layout.Width; got != max(w-2*SideMargin, 0) {
 			t.Errorf("a %d-column window laid the frame out %d wide", w, got)
 		}
 		_ = m.View()
@@ -85,11 +88,11 @@ func TestAWindowNarrowerThanItsMarginsDrawsNoFrame(t *testing.T) {
 // window's own.
 func TestTheWindowsSizeReachesTheAppLessItsMargins(t *testing.T) {
 	m := inWindow(newRoomApp(t).withAgents("sydney"), 100, 30)
-	if m.layout.Width != 100-2*SideMargin || m.layout.Height != 30 {
-		t.Errorf("a 100×30 window laid the frame out %d×%d, want %d×30", m.layout.Width, m.layout.Height, 100-2*SideMargin)
+	if l := m.app().layout; l.Width != 100-2*SideMargin || l.Height != 30 {
+		t.Errorf("a 100×30 window laid the frame out %d×%d, want %d×30", l.Width, l.Height, 100-2*SideMargin)
 	}
 	pad := strings.Repeat(" ", SideMargin)
-	if got, want := m.View(), pad+strings.ReplaceAll(m.App.View(), "\n", "\n"+pad); got != want {
+	if got, want := m.View(), pad+strings.ReplaceAll(m.app().View(), "\n", "\n"+pad); got != want {
 		t.Errorf("the window is not the frame one margin in:\n%s\nwant:\n%s", ansi.Strip(got), ansi.Strip(want))
 	}
 }
@@ -193,9 +196,43 @@ func TestEveryMouseGestureReachesTheFrameOneMarginIn(t *testing.T) {
 			if !g.did(before, bare) {
 				t.Fatalf("the gesture did nothing to the bare frame, so it proves nothing")
 			}
-			if got, want := ansi.Strip(win.App.View()), ansi.Strip(bare.View()); got != want || win.focus != bare.focus || win.sel != bare.sel {
+			got, want := ansi.Strip(win.app().View()), ansi.Strip(bare.View())
+			if got != want || win.app().focus != bare.focus || win.app().sel != bare.sel {
 				t.Errorf("the window's frame differs from the bare frame's after the same gesture one margin in:\nwindow:\n%s\nbare:\n%s", got, want)
 			}
 		})
 	}
+}
+
+// Mid window-drag the frame is still laid out for the old width until the settle.
+// A grown window draws it short of the new edge, so a press out there lands on the
+// newest frame's edge, past the drawn one, and does nothing - never on the old
+// frame's edge, the roster, far from the pointer. A shrunk one clips the old frame
+// to the newest width, so its right margin holds before the settle too.
+func TestAWindowDragBoundsThePressAndTheFrameByTheNewestWidth(t *testing.T) {
+	press := func(m Margined, x, y int) Margined {
+		for _, msg := range []tea.MouseMsg{pressAt(x, y), {Action: tea.MouseActionRelease, X: x, Y: y}} {
+			next, _ := m.Update(msg)
+			m = next.(Margined)
+		}
+		return m
+	}
+	grown := func(t *testing.T) Margined {
+		m := inWindow(newRoomApp(t).withAgents("sydney", "john"), 100, 30)
+		next, _ := m.Update(tea.WindowSizeMsg{Width: 140, Height: 30}) // no settle
+		return next.(Margined)
+	}
+	m := grown(t)
+	if m.app().layout.Width != 98 {
+		t.Fatalf("the grown window's frame is %d wide before the settle, want the old 98", m.app().layout.Width)
+	}
+	if edge := press(grown(t), 98, 2).app(); edge.focus == "" && edge.roster.Selected == "" {
+		t.Fatal("a press on the old frame's last column opened nothing, so the press below proves nothing")
+	}
+	if got := press(m, 139, 2).app(); got.focus != m.app().focus || got.roster.Selected != m.app().roster.Selected {
+		t.Errorf("a press in the grown window's right margin acted on the old frame (focus %q, roster %q)", got.focus, got.roster.Selected)
+	}
+
+	shrunk, _ := inWindow(newRoomApp(t).withAgents("sydney", "john"), 140, 30).Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	requireEdgesBlank(t, "a window shrunk before the settle", shrunk.View(), 100)
 }

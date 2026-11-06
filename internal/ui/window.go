@@ -16,7 +16,16 @@ var marginPad = strings.Repeat(" ", SideMargin)
 
 // Margined is the App as the terminal runs it: told the window's size less its
 // margins, its mouse moved into the frame, and its frame drawn one margin in.
-type Margined struct{ App }
+//
+// It holds the App boxed, as App.Update returns it, so wrapping a message's
+// result copies three words rather than the whole model.
+type Margined struct {
+	tea.Model
+
+	// frame is the newest frame width, the window's less both margins: what a
+	// mid-drag frame is clipped to, so what a press is bound by.
+	frame int
+}
 
 // Update moves a window size and a mouse cell into the frame, then hands the
 // message on. A press in a margin is the edge cell's, so the window's edge is
@@ -24,21 +33,20 @@ type Margined struct{ App }
 func (m Margined) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch v := msg.(type) {
 	case tea.WindowSizeMsg:
-		v.Width = max(v.Width-2*SideMargin, 0)
+		m.frame = max(v.Width-2*SideMargin, 0)
+		v.Width = m.frame
 		msg = v
 	case tea.MouseMsg:
-		v.X = clamp(v.X-SideMargin, 0, max(m.pending.width-1, 0))
+		v.X = clamp(v.X-SideMargin, 0, max(m.frame-1, 0))
 		msg = v
 	}
-	next, cmd := m.App.Update(msg)
-	if app, ok := next.(App); ok {
-		return Margined{App: app}, cmd
-	}
-	return next, cmd
+	var cmd tea.Cmd
+	m.Model, cmd = m.Model.Update(msg)
+	return m, cmd
 }
 
 // View is the frame one margin in. Bubble Tea erases a short row to its end, so
 // the right margin needs no blanks of its own.
 func (m Margined) View() string {
-	return marginPad + strings.ReplaceAll(m.App.View(), "\n", "\n"+marginPad)
+	return marginPad + strings.ReplaceAll(m.Model.View(), "\n", "\n"+marginPad)
 }
