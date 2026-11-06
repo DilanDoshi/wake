@@ -5603,11 +5603,11 @@ to the edge". `wake-orch`'s GO on the plan; the owner approved one column each s
   old frame is drawn short of a grown window's edge, and a press out there must not land on it.
 - **It holds the App boxed** (`tea.Model`, as `App.Update` returns it), so each message's result is
   wrapped for 24 bytes. A struct embedding the App re-boxed it: 3.5µs and 18 KB more a message
-  (the reviewer's measurement, confirmed).
+  (the reviewer).
 - **Under 10 columns the composer's 8-column floor still reaches the right edge**, as it reached
   the window's edge before, and one stale repaint after a hand-over that shrank the terminal can do
   the same until its size arrives. Bubble Tea cuts any row wider than the window, so nothing wraps;
-  cutting every row on every frame for those cases was not worth the cost (Codex's finding, weighed).
+  cutting every row on every frame for those cases was not worth the cost (Codex).
 - **§8's breakpoints are the window's width** (`Layout.windowWidth`): `Layout.Width` is now the frame's,
   and read against it a 100-column window lost the roster and a 120-column one its split.
 - **Left out**: a vertical margin (not asked). The landing site's clips show the gap from their next
