@@ -5654,6 +5654,11 @@ named fleet's operator somewhere else.
   real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
   once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
   which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. Since 2026-11-07 the daemon's own refusals name the fleet too, through
-  `server.fleetName` (the report's own name): the cap refusal, import's, and a taken name's, held by
-  `internal/daemon/fleetlines_unix_test.go`. The orphaned-parent fork arm, which no daemon reaches, names no
-  command.
+  `server.fleetName` (the report's own name): import's and a taken name's (a parked holder's points at
+  `/resume`), held by `internal/daemon/fleetlines_unix_test.go`. The orphaned-parent fork arm, which no daemon
+  reaches, names no command.
+- **A fleet at its cap is never offered a stop** (wake-orch, 2026-11-07). The cap refusal dropped "or `wake stop`
+  ends the fleet" rather than gaining `--fleet`. A spawn past the cap wants room for one more agent, and
+  ending the fleet is irreversible. The room's one-row notice also cut the flagged command, at about 116
+  columns, down to a bare `wake stop`. It names ⌃C, `/resume` and, under a lowered cap, `--max-agents`;
+  `TestTheCapRefusalNeverOffersAStop` holds both doors to no "stop".

@@ -45,7 +45,7 @@ func TestASpawnPastTheCapIsRefusedAndTheOneBeforeItIsNot(t *testing.T) {
 	if !strings.Contains(why, strconv.Itoa(liveCap)) {
 		t.Errorf("the refusal is %q and does not say how many are running. A cap an operator cannot see the edge of is a refusal they cannot act on", why)
 	}
-	for _, remedy := range []string{"parks one", "wake stop"} {
+	for _, remedy := range []string{"parks one", "/resume"} {
 		if !strings.Contains(why, remedy) {
 			t.Errorf("the refusal is %q and does not name %q. Every other refusal in this daemon names what to do next", why, remedy)
 		}

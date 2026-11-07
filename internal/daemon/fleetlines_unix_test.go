@@ -78,20 +78,29 @@ func atCap(t *testing.T, s *server) {
 	}
 }
 
-// A spawn past the cap is told `wake stop` ends the fleet, at both doors: the
-// one a spawn frame passes and the last one, which holds two racing spawns.
-func TestTheCapRefusalStopsTheFleetThatRefused(t *testing.T) {
-	onEachFleet(t, func(t *testing.T, s *server, flag string) {
-		atCap(t, s)
-		late := liveAgent(idBeta, "alex", t.TempDir())
-		says(t, "the last door", s.admitLive(late, nil, false), flag, "wake stop")
-
-		c := newClient(nil)
-		if s.maySpawn(context.Background(), c, rpc.Frame{SessionID: idGamma}) {
-			t.Fatal("a spawn past the cap was allowed")
+// A spawn past the cap is told what makes room - park one, raise a lowered cap -
+// and never a stop, at both doors: a sentence naming no command leaves no width
+// the room cuts its row to ending on a bare verb (wake-orch, 2026-11-07).
+func TestTheCapRefusalNeverOffersAStop(t *testing.T) {
+	s := newServer(tempSocket(t))
+	atCap(t, s)
+	c := newClient(nil)
+	if s.maySpawn(context.Background(), c, rpc.Frame{SessionID: idGamma}) {
+		t.Fatal("a spawn past the cap was allowed")
+	}
+	for door, why := range map[string]string{
+		"maySpawn":      firstRefusal(t, c).Text,
+		"the last door": s.admitLive(liveAgent(idBeta, "alex", t.TempDir()), nil, false),
+	} {
+		if strings.Contains(why, "stop") || strings.Contains(why, "`wake") {
+			t.Errorf("%s says %q: a fleet at its cap is offered a stop, or a command a cut row can leave bare", door, why)
 		}
-		says(t, "maySpawn", firstRefusal(t, c).Text, flag, "wake stop")
-	})
+		for _, remedy := range []string{"parks one", "/resume", "--max-agents"} {
+			if !strings.Contains(why, remedy) {
+				t.Errorf("%s says %q and does not name %q", door, why, remedy)
+			}
+		}
+	}
 }
 
 // An import of a session already here offers the verbs that open and branch it,
@@ -166,6 +175,31 @@ func TestATakenNameOpensItsHolderOnThisFleet(t *testing.T) {
 		s.importSession(ctx, c, rpc.Frame{SessionID: testSessionID("a33a"), ParentID: source, Text: "alex"})
 		says(t, "an import", firstRefusal(t, c).Text, flag, "wake attach alex")
 	})
+}
+
+// A name a parked session holds is refused with /resume, which brings it back -
+// not called live, and not offered `wake attach`, which refuses a parked session.
+func TestATakenNameHeldByAParkedSessionPointsAtResume(t *testing.T) {
+	onlyPsOnPath(t)
+	s := newServer(tempSocket(t))
+	if _, err := s.names.claim("alex"); err != nil {
+		t.Fatal(err)
+	}
+	a := liveAgent(testSessionID("b44b"), "alex", t.TempDir())
+	a.finish(nil)
+	a.markParked()
+	if !s.register(a) {
+		t.Fatal("could not put the parked session in the fleet")
+	}
+	c := newClient(nil)
+	s.spawn(context.Background(), c, rpc.Frame{SessionID: testSessionID("c55c"), Text: "alex", Dir: t.TempDir()})
+	why := firstRefusal(t, c).Text
+	if !strings.Contains(why, "`/resume alex`") {
+		t.Errorf("a spawn under a parked session's name says %q, want it to name `/resume alex`", why)
+	}
+	if strings.Contains(why, "wake attach") || strings.Contains(why, "live") {
+		t.Errorf("a spawn under a parked session's name says %q: it is not live, and `wake attach` refuses it", why)
+	}
 }
 
 // An orphaned parent never reaches forkRefusal from a daemon - only FleetOnDisk,

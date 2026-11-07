@@ -180,23 +180,31 @@ func (r *nameRegistry) claim(requested string) (string, error) {
 	return name, nil
 }
 
-// nameHeld is a requested name a live session already wears. What an operator
-// reads is claimName's, since only the server knows the fleet that session is in.
+// nameHeld is a requested name a session already wears. What an operator reads
+// is claimName's, since only the server knows that session and its fleet.
 type nameHeld string
 
 func (n nameHeld) Error() string {
-	return fmt.Sprintf("a live session is already called %q", string(n))
+	return fmt.Sprintf("a session is already called %q", string(n))
 }
 
-// claimName is claim for a name somebody typed, refusing a held one with the
-// command that opens its holder on this fleet: typed bare, it reaches the unnamed one.
+// claimName is claim for a name somebody typed. A held name is refused with what
+// reaches its holder: /resume for a parked one, which attach refuses, else the
+// attach on this fleet - typed bare, it reaches the unnamed one.
 func (s *server) claimName(requested string) (string, error) {
 	name, err := s.names.claim(requested)
 	var held nameHeld
-	if errors.As(err, &held) {
-		return "", fmt.Errorf("%w; `%s` opens it, or choose another name", err, rpc.FleetCommand(s.fleetName(), "attach", string(held)))
+	if !errors.As(err, &held) {
+		return name, err
 	}
-	return name, err
+	for _, p := range s.fleet().Sessions {
+		if p.Name == string(held) && p.State == rpc.StateParked {
+			return "", fmt.Errorf("a parked session is already called %q: bring it back with `/resume %s` in the room, "+
+				"or choose another name", p.Name, p.Name)
+		}
+	}
+	return "", fmt.Errorf("a live session is already called %q; `%s` opens it, or choose another name",
+		string(held), rpc.FleetCommand(s.fleetName(), "attach", string(held)))
 }
 
 // claimManager reserves the one name claim refuses to everybody, and is how

@@ -64,7 +64,7 @@ func (s *server) maySpawn(ctx context.Context, c *client, f rpc.Frame) bool {
 		return false
 	}
 	if n, limit := s.liveCount(), s.agentCap(); n >= limit {
-		c.enqueue(errorFrame(f.SessionID, s.capRefusal(n, limit)))
+		c.enqueue(errorFrame(f.SessionID, capRefusal(n, limit)))
 		return false
 	}
 	return true
@@ -81,16 +81,17 @@ const defaultLiveCap = rpc.MaxAgentsCeiling
 // shortSilence, which is the same seam for the same reason.
 var liveCap = defaultLiveCap
 
-// capRefusal is what a spawn past the cap is told, and it names the two things
-// that make room rather than only saying no. The stop names this fleet: typed
-// bare in a shell, it ends the unnamed one.
-func (s *server) capRefusal(n, limit int) string {
+// capRefusal is what a spawn past the cap is told, and it names what makes room
+// rather than only saying no. Never `wake stop`: ending the fleet is the wrong
+// answer to wanting one more agent, and the room's one-row notice can cut a
+// command at its end down to a bare verb (wake-orch, 2026-11-07).
+func capRefusal(n, limit int) string {
 	raise := ""
 	if limit < rpc.MaxAgentsCeiling {
 		// First, so a one-row notice that cuts the sentence still shows it.
 		raise = fmt.Sprintf(" (--max-agents raises it, up to %d)", rpc.MaxAgentsCeiling)
 	}
-	return fmt.Sprintf("%d sessions are already running, which is this fleet's cap%s. ⌃C parks one and /resume brings it back, or `%s` ends the fleet", n, raise, rpc.FleetCommand(s.fleetName(), "stop"))
+	return fmt.Sprintf("%d sessions are already running, which is this fleet's cap%s. ⌃C parks one and /resume brings it back", n, raise)
 }
 
 // agentCap is this fleet's cap now.
@@ -132,7 +133,7 @@ func (s *server) admitLive(a, replaces *agent, wake bool) string {
 	}
 	if !wake {
 		if n, limit := s.liveCount(), s.agentCap(); n >= limit {
-			return s.capRefusal(n, limit)
+			return capRefusal(n, limit)
 		}
 	}
 	if !s.admit(a, replaces, wake) {
