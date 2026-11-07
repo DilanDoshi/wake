@@ -26,35 +26,39 @@ import (
 // first draft row is on, how many draft rows are drawn, the box width, and the
 // rendered draft rows with where each begins in the draft. ok is false when the
 // pane is too short to draw a box whose interior is on screen.
-//
-// Computed from the bottom because that has the fewest moving parts: the
-// composer is the last thing a pane draws bar the DM's status bar, so its rows
-// are the pane's height less that bar and less the composer's own view height,
-// and its interior is the box top border down.
 func (a App) composerRegion(id string, width, top, height int) (draftTop, draftRows, boxWidth int, drawn drawnDraft, ok bool) {
+	c, draftTop, ok := a.drawnBox(id, width, top, height)
+	if !ok {
+		return 0, 0, 0, drawnDraft{}, false
+	}
 	w := max(width, minComposerWidth)
-	c, below, minH := a.drawnComposer(id, w, height)
-	// Too short to draw the composer inside its allocation: the pane overflows
-	// and App.View clips it from the bottom, so the bottom-up placement below
-	// would point at rows the frame never drew. Take no selection there.
-	if height < minH {
-		return 0, 0, 0, drawnDraft{}, false
-	}
 	draftRows = c.ta.Height()
-	if draftRows <= 0 {
-		return 0, 0, 0, drawnDraft{}, false
-	}
 	block := strings.Split(c.View(w), "\n")
 	// The box's draft rows: its top border down, for draftRows of them.
 	if len(block) < 1+draftRows {
 		return 0, 0, 0, drawnDraft{}, false
 	}
-	viewHeight := draftRows + c.overhead()
-	draftTop = top + height - below - viewHeight + 1 // +1 past the box's top border
-	if draftTop < top {
-		return 0, 0, 0, drawnDraft{}, false
-	}
 	return draftTop, draftRows, w, drawnDraft{block[1 : 1+draftRows], c.drawnRowStarts(draftRows)}, true
+}
+
+// drawnBox is a pane's composer as it is drawn, and the screen row its first draft
+// row is on. ok is false when the pane is too short to draw a box whose interior
+// is on screen.
+//
+// Computed from the bottom because that has the fewest moving parts: the
+// composer is the last thing a pane draws bar the DM's status bar, so its rows
+// are the pane's height less that bar and less the composer's own view height,
+// and its interior is the box top border down.
+func (a App) drawnBox(id string, width, top, height int) (c Composer, draftTop int, ok bool) {
+	c, below, minH := a.drawnComposer(id, max(width, minComposerWidth), height)
+	// Too short to draw the composer inside its allocation: the pane overflows
+	// and App.View clips it from the bottom, so the bottom-up placement below
+	// would point at rows the frame never drew. Take no selection there.
+	if height < minH || c.ta.Height() <= 0 {
+		return Composer{}, 0, false
+	}
+	draftTop = top + height - below - (c.ta.Height() + c.overhead()) + 1 // +1 past the box's top border
+	return c, draftTop, draftTop >= top
 }
 
 // drawnComposer is a pane's composer as it is drawn - sized the same way View
@@ -64,7 +68,7 @@ func (a App) composerRegion(id string, width, top, height int) (draftTop, draftR
 func (a App) drawnComposer(id string, width, height int) (c Composer, below, minH int) {
 	menu := a.menuBlock(id, width, height)
 	if id == "" {
-		room := a.roomFor().WithMenu(menu).SetSize(width, height)
+		room := a.roomFor().WithMenu(menu).laidOut(width, height)
 		// The room bar rides inside the composer as a draw-time overlay
 		// (Room.View's WithBar), so overhead() cannot see it - count its real rows
 		// here, the same barRows chromeHeight budgets, or a room addressing an
@@ -72,9 +76,12 @@ func (a App) drawnComposer(id string, width, height int) (c Composer, below, min
 		// A narrow bar wraps to dmBarRows, so this is not always one.
 		return room.composer, barRows(room.bar), room.minHeight()
 	}
-	// WithCompacting too, as dmPane draws it: the compacting bar is a row
-	// taller, and in a short pane that row comes out of the box.
-	d := a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).SetSize(width, height)
+	// Laid out as dmPane draws it: WithCompacting because the compacting bar is a
+	// row taller, and in a short pane that row comes out of the box; and re-laid
+	// only for what moved (DM.laidOut), since a fresh layout can draw the box a row
+	// taller than the frame does. A card up always moves the chrome, so that is the
+	// fresh layout the page draws.
+	d := a.dmFor(id).WithMenu(menu).WithCompacting(a.compactingSince(id)).laidOut(width, height)
 	return d.composer, barRows(d.bar), d.minHeight()
 }
 

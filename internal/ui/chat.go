@@ -578,6 +578,16 @@ func mergeByTime(held, arriving []roomLine) []roomLine {
 	return append(append(out, held[i:]...), arriving[j:]...)
 }
 
+// laidOut is the room as View draws it at width by height: re-laid only for a size
+// it was not given or chrome that moved. The mouse reads the box through it too
+// (drawnComposer), so a press, the wheel and the draw cannot disagree.
+func (r Room) laidOut(width, height int) Room {
+	if width != r.width || height != r.height || r.chromeHeight() != r.chrome {
+		return r.SetSize(width, height)
+	}
+	return r
+}
+
 // View draws the header, the conversation and the composer, measuring exactly
 // width by height.
 //
@@ -591,9 +601,7 @@ func (r Room) View(width, height int) string {
 	// only one that is not an argument here: the composer grows with the draft
 	// on a keystroke, and the working line appears when an agent starts a turn.
 	// Neither is a resize. See Room.chrome.
-	if width != r.width || height != r.height || r.chromeHeight() != r.chrome {
-		r = r.SetSize(width, height)
-	}
+	r = r.laidOut(width, height)
 	w := max(width, minComposerWidth)
 	rows := []string{r.tr.view(r.sel)}
 	// The working line, with a blank row above it so it sits clear of the output

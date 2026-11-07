@@ -50,7 +50,7 @@ you the output and hands both to the agent you typed it to, and that is the whol
 
 **2. The daemon outlives your terminal.** Agents are children of a background daemon, not of your
 shell. `⌃O` closes Wake and leaves everything running. Close the terminal, shut the laptop lid,
-come back tomorrow, run `wake` — the work is done and waiting.
+come back tomorrow, run `wake --fleet <name>` — the work is done and waiting.
 
 **3. Every agent starts in `auto` permission mode.** It will act without asking for most things, and
 ask you when it genuinely needs a decision. `⇧⇥` cycles it — `default` → `acceptEdits` → `plan` →
@@ -97,8 +97,8 @@ genuinely different and one of them cannot be undone. The short version:
 
 - **`⌃O`** — you leave, they keep working.
 - **`⌃C`** — park the agent in front of you. Recoverable with `/resume`.
-- **`⌃Q⌃Q`** — park everything and quit (the first `⌃Q` arms, the second confirms). Next `wake` offers it back.
-- **`wake stop`** — end the fleet. **Not recoverable.**
+- **`⌃Q⌃Q`** — park everything and quit (the first `⌃Q` arms, the second confirms). Next `wake --fleet <name>` offers it back.
+- **`wake stop --fleet <name>`** — end the fleet. **Not recoverable.**
 
 ## Where your conversations actually live
 

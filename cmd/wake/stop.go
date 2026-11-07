@@ -12,6 +12,7 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 // stopCeiling bounds the wait for the daemon to let go.
@@ -144,7 +145,7 @@ func stopFleet(socket string, out io.Writer) error {
 		return fmt.Errorf("bounding the wait: %w", derr)
 	}
 
-	if werr := waitForTheDaemonToLetGo(frames, errs); werr != nil {
+	if werr := waitForTheDaemonToLetGo(frames, errs, daemon.FleetName(socket)); werr != nil {
 		return werr
 	}
 	return confirmFleetDown(socket, out)
@@ -205,18 +206,18 @@ func stoppedOutcome(st rpc.Status, err error, released bool) (string, error) {
 		return "", fmt.Errorf("the daemon let go, but what is still running could not be established%s: %w",
 			unlinkNote(released), err)
 	case st.Running:
-		return "", fmt.Errorf("a daemon is still answering on that socket, so the fleet was not stopped%s: check `wake status`",
-			unlinkNote(released))
+		return "", fmt.Errorf("a daemon is still answering on that socket, so the fleet was not stopped%s: check `%s`",
+			unlinkNote(released), ui.FleetCommand(st.Fleet, cmdStatus))
 	case runningCount(st) > 0:
-		return "", fmt.Errorf("the daemon is gone but %s still running with nothing holding them%s: check `wake status`",
-			agents(runningCount(st)), unlinkNote(released))
+		return "", fmt.Errorf("the daemon is gone but %s still running with nothing holding them%s: check `%s`",
+			agents(runningCount(st)), unlinkNote(released), ui.FleetCommand(st.Fleet, cmdStatus))
 	case st.ProbeIncomplete:
 		// runningCount is zero, but the liveness sweep timed out before every
 		// record was checked - so zero is an under-count, not an answer. Reported
 		// after the runningCount>0 branch so a positive report keeps its specific
 		// "still running" error; only the would-be-default false-down is caught.
-		return "", fmt.Errorf("could not confirm the fleet is down: the liveness sweep timed out before every session was checked%s: check `wake status`",
-			unlinkNote(released))
+		return "", fmt.Errorf("could not confirm the fleet is down: the liveness sweep timed out before every session was checked%s: check `%s`",
+			unlinkNote(released), ui.FleetCommand(st.Fleet, cmdStatus))
 	default:
 		return "Stopped. The fleet is down.", nil
 	}
@@ -246,12 +247,13 @@ func awaitSocketRelease(socket string, within time.Duration) bool {
 	}
 }
 
-// waitForTheDaemonToLetGo drains this connection until the daemon closes it.
+// waitForTheDaemonToLetGo drains this connection until the daemon closes it,
+// naming fleet in the command that says whether it did.
 //
 // Draining rather than waiting: the daemon keeps broadcasting while it stops,
 // and rpc.ReadFrames has no cancellation - abandoning its channel parks that
 // goroutine on a send for good.
-func waitForTheDaemonToLetGo(frames <-chan rpc.Frame, errs <-chan error) error {
+func waitForTheDaemonToLetGo(frames <-chan rpc.Frame, errs <-chan error, fleet string) error {
 	for range frames {
 	}
 	err := <-errs
@@ -259,7 +261,8 @@ func waitForTheDaemonToLetGo(frames <-chan rpc.Frame, errs <-chan error) error {
 	case err == nil:
 		return nil
 	case errors.Is(err, os.ErrDeadlineExceeded):
-		return fmt.Errorf("the daemon did not let go within %v, so the fleet may still be running: check `wake status`", stopCeiling)
+		return fmt.Errorf("the daemon did not let go within %v, so the fleet may still be running: check `%s`",
+			stopCeiling, ui.FleetCommand(fleet, cmdStatus))
 	default:
 		return fmt.Errorf("waiting for the daemon to stop: %w", err)
 	}
@@ -339,7 +342,8 @@ func reportNothingToStop(st rpc.Status, out io.Writer) error {
 		// so runningCount is an under-count and "nothing is running" would be a
 		// guess in the one direction `wake stop` must never guess. Say so and
 		// fail, the way stoppedOutcome does for the same signal on the live path.
-		if err := say(out, "Could not confirm the fleet is down: the liveness sweep timed out before every session was checked. Check `wake status`."); err != nil {
+		if err := say(out, "Could not confirm the fleet is down: the liveness sweep timed out before every session was checked. Check `%s`.",
+			ui.FleetCommand(st.Fleet, cmdStatus)); err != nil {
 			return err
 		}
 		return fmt.Errorf("could not confirm the fleet is down: the liveness sweep timed out before every session was checked")
@@ -349,17 +353,19 @@ func reportNothingToStop(st rpc.Status, out io.Writer) error {
 			// Not a failure and not silence. Nothing is running, so this exits
 			// zero - but `wake stop` is the verb that forgets a parked fleet,
 			// and it cannot do that with no daemon to ask. Neither half names a
-			// verb this build does not have: `wake` picks the sessions up into
-			// its fleet, and nothing yet resumes one.
+			// verb this build does not have: reopening the fleet picks the
+			// sessions up into it, and nothing yet resumes one.
 			return say(out, "No daemon is running. %s parked, with their transcripts still on disk; "+
-				"`wake` starts a daemon that holds them again, and `wake stop` is what forgets them for good.", agents(parked))
+				"`%s` starts a daemon that holds them again, and `%s` is what forgets them for good.",
+				agents(parked), ui.FleetCommand(st.Fleet), ui.FleetCommand(st.Fleet, cmdStop))
 		}
 		return say(out, "No daemon is running.")
 	}
 	if err := say(out, "No daemon is running, but a previous one left %s behind.", agents(runningCount(st))); err != nil {
 		return err
 	}
-	if err := say(out, "`wake stop` cannot reach them - there is nothing to ask. Starting a daemon with `wake` reaps what it can identify."); err != nil {
+	if err := say(out, "`wake stop` cannot reach them - there is nothing to ask. Starting a daemon with `%s` reaps what it can identify.",
+		ui.FleetCommand(st.Fleet)); err != nil {
 		return err
 	}
 	return fmt.Errorf("the fleet is not down: %s still running with nothing holding them", agents(runningCount(st)))

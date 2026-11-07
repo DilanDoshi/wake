@@ -62,7 +62,7 @@ func (a App) hungUp(err error) (tea.Model, tea.Cmd) {
 	notice.Report("the daemon hung up; reattaching%s…", a.reattachTarget())
 
 	dial := a.dial
-	id := a.sessionID
+	id, named := a.sessionID, a.daemon.fleet
 	// A wake after /clear re-keys the agent onto its conversation; a window that
 	// missed that report still knows the conversation, and the old id is gone.
 	var then string
@@ -75,7 +75,7 @@ func (a App) hungUp(err error) (tea.Model, tea.Cmd) {
 			conn, stream, sess, fleet, err = dial(then)
 		}
 		if err != nil {
-			return errMsg{Err: fmt.Errorf("%w. %s", err, reattachAdvice(id))}
+			return errMsg{Err: fmt.Errorf("%w. %s", err, reattachAdvice(named, id))}
 		}
 		return reattachedMsg{conn: conn, stream: stream, session: sess, fleet: fleet}
 	}
@@ -196,13 +196,14 @@ func reattachedText(target string, s rpc.SessionStatus) string {
 // word.** `wake attach` with nothing after it is refused by cmd/wake.checkArity
 // - *"`wake attach` takes one session id or name"* - because attaching to
 // whichever session happens to be running is a guess that is wrong the moment
-// there are two. So a room, which has no session id to put there, is told to run
-// bare `wake` instead: the verb that reopens a room is the one this client is.
-// Naming a wake verb that does not work is the legend rule broken at the shell,
-// and a failure path is the worst place to break it.
-func reattachAdvice(sessionID string) string {
+// there are two. So a room, which has no session id to put there, is told to
+// reopen the room instead. Both name the fleet (FleetCommand): a bare `wake`
+// starts a new one, and a bare `wake attach` looks in the unnamed one. Naming a
+// wake verb that does not work is the legend rule broken at the shell, and a
+// failure path is the worst place to break it.
+func reattachAdvice(fleet, sessionID string) string {
 	if sessionID == "" {
-		return "⌃O, then `wake`"
+		return fmt.Sprintf("⌃O, then `%s`", FleetCommand(fleet))
 	}
-	return fmt.Sprintf("⌃O, then `wake attach %s`", sessionID)
+	return fmt.Sprintf("⌃O, then `%s`", FleetCommand(fleet, "attach", sessionID))
 }

@@ -4,6 +4,8 @@ import (
 	"bytes"
 	"strings"
 	"testing"
+
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // The flag comes off wherever it appears, and what is left is the verb and its
@@ -81,9 +83,9 @@ func TestFleetsSaysHowToMakeOneWhenThereAreNone(t *testing.T) {
 	if err := printFleets(&out); err != nil {
 		t.Fatalf("printFleets: %v", err)
 	}
-	if !strings.Contains(out.String(), fleetFlagName) {
+	if !strings.Contains(out.String(), rpc.FleetFlag) {
 		t.Errorf("an empty listing does not name %s, so it says nothing about how to make one:\n%s",
-			fleetFlagName, out.String())
+			rpc.FleetFlag, out.String())
 	}
 }
 

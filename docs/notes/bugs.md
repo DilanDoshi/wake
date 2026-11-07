@@ -1349,6 +1349,31 @@ turn's age - true about the age, wrong about the word.
 the API answers, the turn ends or fails, the conversation is cleared, or a report shows the agent not working
 (`internal/ui/apiretry.go`; `decisions.md`, 2026-11-02).
 
+## BUG-63 — a query-box drag, click or ⌫ landed a row off in a short conversation with a menu up
+
+**Found 2026-11-06 by the draft-wheel branch's second adversarial review, then confirmed on `main`
+fa87e320.** The setup: a conversation pane short of the box's ten-row cap, holding a draft at the box's
+bound, with a completion menu up (`dmApp` at 80x14, `tallDraft(20)+" @b"`).
+
+What went wrong: `composerRegion` read the box's first draft row one row above where the frame drew it.
+It read the frame's top border as `line 11`, while the frame drew `line 12` on the row below. So:
+- a drag copied the row above the one under the pointer;
+- a click put the caret on that row;
+- ⌫ over a highlight deleted that row.
+
+A room showed the same after any re-lay with its draft tall.
+
+The cause:
+- `drawnComposer` laid every pane out afresh with `SetSize`.
+- `Room.View` and `DM.View` re-lay only for a size or chrome that moved.
+- A one-row menu cancels, in `chromeHeight`, the gap it drops, so the frame kept the stored layout.
+- The fresh layout drew the box a row taller than the frame did.
+
+**Fix:** branch `feat/wheel-scrolls-the-draft` (#216). The re-lay predicate is now one function,
+`Room.laidOut`/`DM.laidOut`, which `View` and `drawnComposer` both call.
+`TestTheWheelMapsTheRowsTheFrameDraws` holds the box the mouse reads to the rows `App.View` draws, and
+every box read in `composerscroll_test.go` is checked against that frame.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

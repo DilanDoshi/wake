@@ -9,7 +9,8 @@ package ui
 //
 // A draft taller than the box scrolls inside it, so the drawn rows are a window
 // into the value rather than its first rows. bubbles keeps the window's offset to
-// itself; drawnRowStarts finds the window from the caret instead.
+// itself; drawnRowStarts finds the window from the caret instead, or from where
+// the wheel left it.
 
 import (
 	"strings"
@@ -86,20 +87,29 @@ func (c Composer) deleteSelected(m marked, d drawnDraft, boxWidth int) (Composer
 // drawnRowStarts is where each of the n draft rows the box draws begins, walked
 // through the text area's own wrap (LineInfo) on a copy, so bubbles' wrap rules
 // have no second copy here.
-//
-// The walk starts at the caret because reposition fixes the drawn window there:
-// it leaves the caret on the bottom row of a draft taller than the box and the
-// view at the top of one that fits. So the first drawn row is the caret's, less
-// up to bound-1 rows. **Both walks are bounded by the box, not the draft** -
-// LineInfo rehashes the whole logical line, so a walk over every row of a big
-// single-line paste would be quadratic in it.
 func (c Composer) drawnRowStarts(n int) []rowStart {
+	return c.rowsFrom(c.firstDrawn(), n)
+}
+
+// followedTop is the first row reposition draws: it leaves the caret on the
+// bottom row of a draft taller than the box and the view at the top of one that
+// fits, so it is the caret's row less up to bound-1 rows. **Every walk here is
+// bounded by the box, not the draft** - LineInfo rehashes the whole logical line,
+// so a walk over every row of a big single-line paste would be quadratic in it.
+func (c Composer) followedTop() rowStart {
 	probe := c.ta
 	for range c.bound() - 1 {
 		if !rowUp(&probe) {
 			break
 		}
 	}
+	return startOf(probe)
+}
+
+// rowsFrom is where each of up to n draft rows begins, from the row at top down.
+func (c Composer) rowsFrom(top rowStart, n int) []rowStart {
+	probe := c.ta
+	caretTo(&probe, top)
 	out := []rowStart{startOf(probe)}
 	for len(out) < n && rowDown(&probe) {
 		out = append(out, startOf(probe))
@@ -208,17 +218,22 @@ func (c Composer) placeCursor(value string, offset int) Composer {
 	if nl := strings.LastIndex(before, "\n"); nl >= 0 {
 		col = len([]rune(before[nl+1:]))
 	}
-	// Hop whole logical lines, never wrapped rows: from a line's start CursorUp
-	// reaches the line above and from its end CursorDown the line below, so a
-	// long wrapped line costs one LineInfo, not one per row.
-	for range c.ta.Line() - targetLine {
-		c.ta.CursorStart()
-		c.ta.CursorUp()
-	}
-	for range targetLine - c.ta.Line() {
-		c.ta.CursorEnd()
-		c.ta.CursorDown()
-	}
-	c.ta.SetCursor(col)
+	caretTo(&c.ta, rowStart{line: targetLine, col: col})
 	return c
+}
+
+// caretTo moves ta's caret to rune col of logical line line. It hops whole
+// logical lines, never wrapped rows: from a line's start CursorUp reaches the
+// line above and from its end CursorDown the line below, so a long wrapped line
+// costs one LineInfo, not one per row.
+func caretTo(ta *textarea.Model, at rowStart) {
+	for range ta.Line() - at.line {
+		ta.CursorStart()
+		ta.CursorUp()
+	}
+	for range at.line - ta.Line() {
+		ta.CursorEnd()
+		ta.CursorDown()
+	}
+	ta.SetCursor(at.col)
 }

@@ -233,9 +233,11 @@ func (a App) paneAt(col, y int) (id string, top, height int, ok bool) {
 // is the honest fallback: there is no transcript under it to move.
 func (a App) scroll(lines, x, y int) App {
 	id, under := a.focus, false
+	col, top, height := 0, 0, 0
 	// Where the columns are drawn: mid-drag the divider is ahead of the layout.
 	if region, at := a.layout.Hit(a.frameRegions(a.regions()), x); region == RegionPane {
-		id, _, _, under = a.paneAt(at, y)
+		col = at
+		id, top, height, under = a.paneAt(at, y)
 		if !under {
 			id = a.focus
 		}
@@ -247,6 +249,9 @@ func (a App) scroll(lines, x, y int) App {
 		return a.helpWheel(lines > 0)
 	}
 	if under {
+		if next, took := a.scrollDraft(id, col, top, height, lines, y); took {
+			return next
+		}
 		if next, moved := a.scrollPage(id, lines); moved {
 			return next
 		}
