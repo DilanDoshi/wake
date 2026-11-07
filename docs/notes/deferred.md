@@ -38,6 +38,34 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## PRODUCT CALL NOT TAKEN, 2026-11-07 — a turn a peer's message started is resumed after a limit too
+
+The owner reported that agents which were idle when he hit the limit were woken by Wake's resume. The
+transcripts showed none of them was idle at the limit. Between 22:36:50 and 22:37:16 PST on 2026-11-06,
+orchestrators sent a new rule by `SendMessage` to 31 agents across two fleets, ten of them idle for over a
+day. That started a turn on each, and those turns took the account over its limit within 26 s. The login at
+22:37:58 resumed exactly those 31, as designed (`decisions.md`, 2026-10-17).
+
+**The narrower option:** resume only a turn the operator or Wake started, and leave one a peer's message
+started stopped. Wake can tell which: the turn's first user line is replayed on stdout, and core already
+recognises the cross-session envelope (`core.KindCrossSession`). The cost is that the peer's message waits
+unanswered until that agent's next turn. Its words are in the agent's context, but nobody acts on them, and
+on 2026-11-06 that would have skipped 29 of the 31.
+
+**Not taken:** the owner's go on BUG-64 (2026-11-07, via wake-orch) asked for no change here, so today's rule
+stands: the turn the limit cut is continued, whoever started it.
+
+**A known gap beside it, older than BUG-64's retries:** a turn a peer's message starts is one Wake did not
+send, so it owes nothing (`agent.owed` is set by Wake's own sends and their lifecycle), and until its first
+tool `limited` reads the agent as ready. A resume due in that window - a login's, a reset's, now a retry's -
+is written into the running turn, which claude reads at its next tool boundary or as the next turn. Rare,
+since the window is the seconds before the turn's first tool or failure, and the retries only add moments
+to it. *Closes with:* a replayed cross-session line marking the agent busy until its turn ends.
+
+*Revisit if:* the owner asks for peer-started turns to wait, or a stray `continue` is seen mid-turn.
+
+---
+
 ## FOLLOW-UP, 2026-11-05 — four daemon sentences still name a bare verb
 
 `fix/park-line-names-the-fleet` made every way-back line `cmd/wake` and `internal/ui` print name the fleet
