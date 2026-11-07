@@ -252,7 +252,7 @@ func TestCtrlQsExitLineIsCountedByTheModelRatherThanAskedOfTheDaemon(t *testing.
 	// Two ⌃Q, because the first only arms now - a single accidental or
 	// auto-repeated press must not park the fleet. The second confirms. See
 	// internal/ui/park.go's armParkFleet.
-	armed, _ := ui.NewRoomApp(nil, ui.Stream{}, statusOf(twoLiveAgents())).
+	armed, _ := ui.Margined{Model: ui.NewRoomApp(nil, ui.Stream{}, statusOf(twoLiveAgents()))}.
 		Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
 	m, _ := armed.Update(tea.KeyMsg{Type: tea.KeyCtrlQ})
 
@@ -336,7 +336,7 @@ func TestTheExitLineOnlyPromisesAParkedFleetWhenTheDaemonConfirmedIt(t *testing.
 func TestLeavingWithoutCtrlQStillCountsWhatIsRunning(t *testing.T) {
 	d := startFakeDaemon(t, 0, twoLiveAgents())
 
-	got := leavingLine(ui.NewRoomApp(nil, ui.Stream{}, nil), d.socket)
+	got := leavingLine(ui.Margined{Model: ui.NewRoomApp(nil, ui.Stream{}, nil)}, d.socket)
 	if !strings.Contains(got, "Detached") {
 		t.Errorf("leaving without ⌃Q printed %q, want the detach line: ⌃O, a hang-up and a crashed "+
 			"daemon all leave the fleet running, and a background process nobody can see is a "+
