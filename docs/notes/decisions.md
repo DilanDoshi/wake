@@ -5654,3 +5654,45 @@ named fleet's operator somewhere else.
   real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
   once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
   which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own four sentences are `deferred.md`'s (2026-11-05).
+
+## 2026-11-03 — your own send draws in the channel it was typed in (the owner)
+
+Dilan suspected "@<team> message does not message everyone in the team", then "it needs to display in chat
+when i message that". An investigation found delivery whole: the code fans out to every live member (idle,
+working, blocked, silent), and every one of his team sends in ten days reached every member that had a
+transcript. The display gap was real: with team X's channel picked, a send to `@Y` or to an agent outside
+X reached its agents and was never drawn in the window that sent it, because `Room.admits` asks the
+channel's key, which holds only X's members and the manager's seat, and the echo is addressed to Y's.
+Only the roster's unread counts moved, which reads as nobody having got it.
+
+- **The operator's own line carries the channel it was typed in** (`Room.typedIn`, set only by
+  `Room.appendUser`), and `admits` lets it through in that channel before the key's test. The stamp is
+  a table keyed on the line's id beside the lines, as `expanded` is, not a field on `roomLine`: a
+  field put every line over the room's allocation budget at the 20,000-line cap
+  (`TestRoomBeforeMetadataAllocationStaysBoundedAtTheCap`, 6 KiB a line; main sat 6 bytes under it),
+  and only the lines typed in a channel need one. It is pruned as lines leave (`forgotten`, the expand
+  set's own helper made generic) and emptied by the room's `/clear`; a restore's merge never drops a live
+  line, so it has none to prune there. One predicate
+  still: the focus half is unchanged, so a lone `@name` typed later narrows past it, and the line still
+  draws wherever it drew before (all, its addressees' thread).
+- **The replies stay their own thread's** (Dilan's pick of three): a channel is its team's thread, so the
+  other team's answers draw under all and in theirs, not here. A timed notice says so on the send,
+  `@backend is outside the frontend channel: replies show under all` (`noteOutside`), on exactly the
+  condition that hides the replies - the key does not admit the line. So never under all, never for a
+  member, for your own team or for the manager's seat, and never for a broadcast route (wake-orch's
+  ruling: `@all` to a lone outsider is addressed to that one agent, and "@all is outside" reads wrong).
+  It is said after the echo is drawn, so the send that passes another thousand messages leaves the operator
+  reading it rather than the room's `/clear` reminder (Codex).
+- **A room bang keeps its dispatch channel** (`bangResultMsg.Channel`, wake-orch's ruling): its echo lands
+  when the command returns, and is drawn in the channel it was typed in even if the window moved since.
+  Its notice is said at dispatch, and not for a parked or ended agent, which the bang runs for and never
+  reaches: no reply will come, and its not-sent notice says so (code review).
+- **Restore keeps the channel's own rule.** A channel is per window and in memory, and restored lines are
+  re-derived from the transcripts, so they carry no stamp; a window's live lines keep theirs through
+  `Before`, which keeps the live tail as it is held. `roomFilter` stays `{channelKey, focus}`: a key always
+  names one team, so the name and the key never change apart.
+- **Held by** `channelownsend_test.go` (the draw in each channel, the replies, the notice table, the
+  broadcast, the bang's dispatch channel and a parked one, a live stamp through a restore's merge and a
+  resize, a restored send, the notice over the reminder, the stamp's prune, copy and clear, a line that
+  draws nothing) and the pty
+  `TestYourOwnSendStaysInTheChannelItWasTypedIn`, each mutation-checked.

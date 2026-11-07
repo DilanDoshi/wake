@@ -58,7 +58,7 @@ func (a App) bang(text string) (App, tea.Cmd, bool) {
 	}
 	id := a.conversationID()
 	a = a.clearDraft()
-	return a, runBang(id, id, a.bangDir(id), cmdline, bangTimeout), true
+	return a, runBang(id, id, "", a.bangDir(id), cmdline, bangTimeout), true
 }
 
 // roomBang runs a bang the room's route aimed with a leading mention: at one
@@ -76,7 +76,10 @@ func (a App) roomBang(r roomRoute, wire string) (tea.Model, tea.Cmd, bool) {
 	}
 	to := r.Targets[0]
 	a = a.clearDraft()
-	return a, runBang("", to, a.bangDir(to), cmdline, bangTimeout), true
+	if _, gone := bangGone[a.bangState(to)]; !gone { // a parked one is not sent: no replies to place
+		a.noteOutside(to, r.Resolved)
+	}
+	return a, runBang("", to, a.room.channel, a.bangDir(to), cmdline, bangTimeout), true
 }
 
 // bangRoute is App.route's answer for `@name !cmd` where core resolved no live
@@ -156,7 +159,7 @@ func (a App) bangResult(m bangResultMsg) (App, tea.Cmd) {
 		if m.To != "" {
 			line.Text = agentPrefix + a.agentName(m.To) + " " + line.Text
 		}
-		a = a.withRoom(a.room.appendUser(line, m.To))
+		a = a.withRoom(a.room.appendUser(line, m.To, m.Channel))
 	}
 	// The conversation it was typed in, or the one a room mention aimed at.
 	if dm, ok := a.dms[ev.SessionID]; ok && ev.SessionID != "" {
@@ -177,12 +180,7 @@ func (a App) deliverBang(m bangResultMsg) (App, tea.Cmd) {
 	if m.To == "" {
 		return a, nil
 	}
-	state := rpc.StateEnded
-	if !a.endedAgent(m.To) {
-		agent, _ := a.fleet.Agent(m.To)
-		state = agent.State
-	}
-	if gone, ok := bangGone[state]; ok {
+	if gone, ok := bangGone[a.bangState(m.To)]; ok {
 		notice.Report(bangNotSent, agentPrefix+a.agentName(m.To), gone)
 		return a, nil
 	}
@@ -193,6 +191,15 @@ func (a App) deliverBang(m bangResultMsg) (App, tea.Cmd) {
 	a = a.withInflight(m.To, id)
 	return a, a.write(sendFailed, rpc.Frame{Kind: rpc.FrameSend, SessionID: m.To, MessageID: id,
 		Shell: &rpc.ShellRun{Command: m.Cmd, Output: m.Text}})
+}
+
+// bangState is the state a bang's agent is in, ended for one this window saw end.
+func (a App) bangState(id string) string {
+	if a.endedAgent(id) {
+		return rpc.StateEnded
+	}
+	agent, _ := a.fleet.Agent(id)
+	return agent.State
 }
 
 // bangDir is the directory a bang runs in: the one its agent runs in.

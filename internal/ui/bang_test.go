@@ -577,7 +577,7 @@ func runBangSync(t *testing.T, dir, cmdline string) bangResultMsg {
 // is how a test reaches the timeout without waiting thirty seconds for it.
 func runBangSyncWithTimeout(t *testing.T, dir, cmdline string, timeout time.Duration) bangResultMsg {
 	t.Helper()
-	msg, ok := within(t, bangTestLimit, runBang("s1", "s1", dir, cmdline, timeout))
+	msg, ok := within(t, bangTestLimit, runBang("s1", "s1", "", dir, cmdline, timeout))
 	if !ok {
 		t.Fatalf("`!%s` produced no result within %v: the bound did not hold", cmdline, bangTestLimit)
 	}
