@@ -19,7 +19,11 @@ package ui
 // is the same fold; only its owner changed, and DM keeps the cursor because the
 // cursor is per-conversation.
 
-import "github.com/DilanDoshi/wake/internal/core"
+import (
+	"slices"
+
+	"github.com/DilanDoshi/wake/internal/core"
+)
 
 // foldTask folds a dispatch frame into one session's list, reporting whether
 // there was one to fold.
@@ -51,8 +55,8 @@ func (f Fleet) named(sessionID string, ev core.Event) core.Event {
 	return ev
 }
 
-// RunningTasks is the dispatches a session is running *now*, in start order: its
-// subagents, workflows and background shells.
+// RunningTasks is the dispatches a session is running *now*: its subagents,
+// workflows and background shells.
 //
 // **Running only**, which is the sidebar's rule and not the pane's: the pane
 // keeps a finished dispatch because its transcript is readable and dropping the
@@ -69,13 +73,15 @@ func (f Fleet) named(sessionID string, ev core.Event) core.Event {
 // running is not done. It forwards no frames, so the cursor and a click treat
 // its row as the agent's own. A workflow is the other row with no transcript:
 // ↵, ⌃D or a click on it opens the /workflows view (viewingPicked).
+//
+// **In tree order**, start order among siblings: a subagent's own dispatches
+// follow it a level deeper (tasktree.go), so every surface drawing this list -
+// the sidebar, its cursor and clicks, the board - nests them alike.
 func (f Fleet) RunningTasks(sessionID string) []Task {
-	rows := f.tasks[sessionID].Rows()
-	out := make([]Task, 0, len(rows))
-	for _, row := range rows {
-		if row.Status == core.TaskRunning && (row.Selectable() || row.Kind == core.TaskShell) {
-			out = append(out, row)
-		}
-	}
-	return out
+	return slices.Clone(f.tasks[sessionID].running)
+}
+
+// sidebarListed is RunningTasks' rule for one row, applied as each frame folds.
+func sidebarListed(row Task) bool {
+	return row.Status == core.TaskRunning && (row.Selectable() || row.Kind == core.TaskShell)
 }
