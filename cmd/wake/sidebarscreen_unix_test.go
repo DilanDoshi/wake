@@ -9,7 +9,6 @@
 package main
 
 import (
-	"strings"
 	"testing"
 )
 
@@ -83,7 +82,7 @@ func TestAShortRosterSaysHowManyAgentsAreHidden(t *testing.T) {
 	s.resize(100, 8)
 	s.settle()
 
-	if !strings.Contains(s.text(), "more") {
+	if !rosterCount.MatchString(s.text()) {
 		t.Fatalf("a column too short for nine agents does not say any are hidden.\n%s", s.dump())
 	}
 	if got := len(s.rosterNames()); got >= 9 {
