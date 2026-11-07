@@ -2,10 +2,12 @@ package daemon
 
 // stopForShutdown is shutdown's stop of one agent.
 //
-// Under a signal every agent whose stdin still takes a line is first sent the
-// interrupt Esc sends, cancelling what is queued behind its turn too, so a turn
-// in flight ends at once and the session parks inside the grace rather than
-// being killed at its end and lost (owner's 2026-10-22 ruling). An interrupt
+// When the fleet parks - a signal or ⌃Q - every agent whose stdin still takes a
+// line is first sent the interrupt Esc sends, cancelling what is queued behind
+// its turn too, so a turn in flight ends at once and the session parks inside
+// the grace rather than being killed at its end and lost (owner's 2026-10-22
+// ruling for a signal, 2026-11-07 for ⌃Q). An ask outstanding is withdrawn as
+// Esc withdraws it, where a bare stdin close would deny it. An interrupt
 // between turns is a no-op claude answers (interrupt-idle.jsonl), so nothing
 // judges which agents are busy. A message already queued is dropped: run after
 // the interrupt, it would start a turn the grace then kills.

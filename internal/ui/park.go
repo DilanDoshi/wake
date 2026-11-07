@@ -91,15 +91,15 @@ const (
 
 	// parkingFleet is said on the keypress. The window is about to close, so
 	// this is the last thing the notice row can carry, and it names the verb
-	// that undoes it, on this fleet (FleetCommand).
-	//
-	// "offers back whatever finished in time" rather than "offers them back",
-	// and the hedge is load-bearing: the daemon gives each agent the grace and
-	// **kills whatever has not ended by the end of it**, and a killed session is
-	// never a parked one, so it is dropped from the book. A turn running a build
-	// routinely outlasts the grace. This client cannot know which - it is
-	// leaving - so it may not promise the outcome, only the ask.
-	parkingFleet = "parking %d agents and closing Wake. `%s` reopens the room and offers back whatever finished in time."
+	// that undoes it, on this fleet (FleetCommand). The daemon interrupts every
+	// turn on the way out (owner's 2026-11-07 ruling), and a session told
+	// `continue` after its wake picks the turn back up.
+	parkingFleet = "parking %s and closing Wake - a turn in flight is interrupted. `%s` reopens the room; " +
+		resumeVerb + " and `continue` pick them up."
+
+	// parkingDropped follows it when messages are pinned ⧗: the interrupt
+	// cancels them and nothing keeps their words (parkdropped.go).
+	parkingDropped = " Dropping %s still queued; Wake prints the words as it closes."
 
 	// parkWouldDeny is ⌃C on an agent that is waiting for the operator, and it
 	// is the one state park refuses.
@@ -200,6 +200,10 @@ type parkAll struct {
 	// parked fleet.
 	settled bool
 	err     error
+
+	// dropped is what was pinned ⧗ at the press, which the daemon's interrupt
+	// cancels. See parkdropped.go.
+	dropped []DroppedMessage
 }
 
 // waiting is the window between the keypress and the answer: asked for, not yet
@@ -313,8 +317,12 @@ func (a App) parkFleet() (tea.Model, tea.Cmd, bool) {
 	// caller and returns on a.quit.pressed before it reaches here, so a second
 	// ⌃Q never re-asks and never schedules a second deadline racing the first.
 	// beginQuit's first verb wins at the daemon regardless.
-	a.quit = parkAll{asked: a.carriedForward(), pressed: true}
-	notice.Report(parkingFleet, a.quit.asked, FleetCommand(a.daemon.fleet))
+	a.quit = parkAll{asked: a.carriedForward(), pressed: true, dropped: a.queuedNow()}
+	said := fmt.Sprintf(parkingFleet, plural(a.quit.asked, "agent"), FleetCommand(a.daemon.fleet))
+	if n := len(a.quit.dropped); n > 0 {
+		said += fmt.Sprintf(parkingDropped, plural(n, "message"))
+	}
+	notice.Report("%s", said)
 	return a, tea.Sequence(a.askParkAll(), a.parkAllDeadline()), true
 }
 

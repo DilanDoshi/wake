@@ -369,12 +369,12 @@ back.**
       Wake refuses rather than doing it; what only you can check is that the agent that comes back
       does *not* believe it was refused something. If it does, the refusal is not covering every
       path into park.
-- [ ] **`⌃Q` while an agent is mid-build.** The line says *"Parking N agents … offers back whatever
-      finished in time"*, and the hedge is the point: anything that has not ended within the quit
-      grace is SIGKILLed and dropped from the park book. Start something long, `⌃Q`, then `wake` and
-      count what comes back. **Is the hedge enough, or does an operator need the real number?**
-      Getting it would mean asking a daemon that is shutting down, which costs the whole status
-      timeout for an i/o error.
+- [ ] **`⌃Q` while an agent is mid-build.** `⌃Q` interrupts the build as Esc would, and the line says
+      *"Parking N agents (a turn in flight is interrupted)"*. Start something long, type a message
+      behind it, `⌃Q⌃Q`: the window should close within a second or two, and the exit line should
+      print the queued message's words under the agent. Then `wake --fleet <name>`, `/resume`, and
+      tell it `continue` - does it pick the build up where it stopped? A woken pane may draw *"No
+      response requested."* under the interrupted turn (BUG-65).
 - [ ] Your terminal is left in a sane state — cursor visible, no leftover colour, prompt intact.
 - [ ] `wake attach <name>` returns you to the live conversation with the transcript intact.
 - [ ] `wake status` lists what is alive.

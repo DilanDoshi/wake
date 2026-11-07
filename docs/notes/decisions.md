@@ -5182,7 +5182,7 @@ came out of it.
   (`interrupt-idle.jsonl`), so nothing judges which agents are busy. **It cancels what is queued** behind
   the turn (`cancel_queued`, `interrupt-cancel-queued.jsonl`), unlike Esc: a message typed ahead would
   otherwise run as the next turn after stdin closed and be killed at the grace's end, so such a message is
-  dropped at a signalled shutdown. `⌃Q` keeps letting a turn run. `writeFileAtomically` now syncs the file
+  dropped at a signalled shutdown. `⌃Q` keeps letting a turn run (reversed 2026-11-07, below). `writeFileAtomically` now syncs the file
   before its rename and the directory after, and `removeFile` the directory after a removal, so a force
   restart keeps the last change to the state files; about 4 ms a file on this machine, on writes made
   when a session changes, held by `TestTheAtomicWriteSyncsTheFileBeforeTheRenameAndTheDirectoryAfter`.
@@ -5654,3 +5654,40 @@ named fleet's operator somewhere else.
   real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
   once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
   which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own four sentences are `deferred.md`'s (2026-11-05).
+
+## 2026-11-07 — ⌃Q interrupts every agent, then parks it (the owner, via wake-orch)
+
+The owner, on the deferred call BUG-53's fix left: "yes for this. it should interrupt but i think on resume
+claude can continue an interrupted turn". Until now `⌃Q` let a turn run for `quitGrace` and killed what was
+still working at its end, and a killed session is never booked, so `/resume` never offered it again.
+
+- **The rule.** `⌃Q` stops the fleet the way a signal has since 2026-10-22: every agent whose stdin is open
+  is sent the interrupt Esc sends (`InterruptAll`), then its stdin is closed, so a turn in flight ends at once
+  as an interrupted turn and the session parks inside the grace. The kill at the grace's end is left for a
+  process that does not end after the interrupt. `wake stop` still lets a turn finish; it parks nothing.
+  `server.shutdown` passes `parking` to `stopForShutdown`, one condition for both parking quits.
+- **A turn picks up when told to, never by itself.** Checked live (haiku, claude 2.1.319, Wake's own argv):
+  a turn interrupted mid-`sleep` and its stdin closed exited 0.83 s later; `--resume` and a plain `continue`
+  re-ran the interrupted step and finished the task. On disk the interrupted turn ends in a rejected tool
+  result and `[Request interrupted by user for tool use]`, and the resume writes one synthetic assistant record
+  (`No response requested.`) ahead of the next prompt (BUG-65). Wake sends no `continue` on wake: the
+  operator chose to quit, and `/resume all` would start twenty turns at once.
+  `docs/superpowers/notes/2026-11-07-interrupted-turn-resume-findings.md`.
+- **A behaviour change for a blocked agent, approved by wake-orch.** `⌃Q` used to close stdin under an
+  outstanding ask, which claude records as a denial (`permission-rule`), the state `⌃C` refuses to cause.
+  The interrupt now reaches it first and withdraws the ask as Esc does (`interrupt-pending-basic.jsonl`),
+  so the session parks without being told no and asks again when continued. `⌃C`'s refusal is unchanged.
+- **What is queued is cancelled, and its words are printed.** As under a signal, the interrupt cancels what
+  is queued behind the turn: left queued, it would run as a turn of its own after stdin closed, the grace
+  would kill it, and the agent would be lost. A cancelled message is in no user record on disk, only in
+  claude's `queue-operation` records, which nothing reads back, so no `↑` and no reopened pane brings it
+  back (checked live, same probe). So the `⌃Q` notice counts what is pinned ⧗, and the exit line, printed
+  after the alt screen is gone, lists each message's words under the agents it was waiting at - once per send,
+  a broadcast's copies grouped by their send bytes (`internal/ui/parkdropped.go`). The residuals are
+  `deferred.md`'s (2026-11-07).
+- **The words** no longer hedge on the grace: "Parking N agents (a turn in flight is interrupted).
+  `wake --fleet <name>` reopens the room; /resume and `continue` pick them up."
+- **Held by** `internal/daemon/shutdownstop_test.go`, tabled over both parking quits: a busy agent is
+  interrupted once, ends well inside the grace and is offered by the next daemon on the socket; an idle one
+  is interrupted harmlessly; a queued message does not keep it running; an outstanding ask is interrupted
+  before stdin closes. `internal/ui/parkdropped_test.go` and `cmd/wake/attach_test.go` hold the named words.

@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -420,14 +421,10 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 // wrote the frame, which is why ui.App.ParkedFleet exists at all.
 //
 // **So the number is what was asked for, and the sentence says so.** The daemon
-// gives each agent the quit grace and kills whatever has not ended by the end of
-// it; a killed session is never a parked one, so it is dropped from the book,
-// and a turn running a build routinely outlasts the grace. This process is
-// leaving and cannot learn which - that is the whole reason it is not asking -
-// so it may not print an outcome as an accomplished fact. "Parking N" and
-// "offers back whatever finished in time" are both the hedge, and the
-// alternative was printing no number at all, which loses the one thing this
-// client does know.
+// interrupts every turn and kills only what has not ended by the end of the
+// grace, which is never parked. This process is leaving and cannot learn which,
+// so "Parking N" is the ask, not an outcome; the alternative was printing no
+// number at all, which loses the one thing this client does know.
 //
 // Every other way out asks, because a background process nobody can see is a
 // liability - 20 sessions is about 16GB with no window open - and the count has
@@ -447,7 +444,7 @@ func leavingLine(final tea.Model, socket string) string {
 			if fleet == "" {
 				fleet = daemon.FleetName(socket)
 			}
-			return parkAllLine(n, fleet, err)
+			return parkAllLine(n, fleet, app.DroppedOnPark(), err)
 		}
 	}
 	st, err := daemon.Status(socket)
@@ -475,15 +472,33 @@ func leavingLine(final tea.Model, socket string) string {
 // written. So it reports what is *not* known and names the two verbs that
 // answer it, which is `wake stop`'s own rule: never claim more than you can see.
 //
-// Both name the fleet (ui.FleetCommand): a bare `wake` starts a new one.
-func parkAllLine(n int, fleet string, err error) string {
+// Both name the fleet (ui.FleetCommand): a bare `wake` starts a new one. Both
+// print the words of what was queued: the daemon's interrupt cancels it and
+// nothing on disk keeps it, and an unconfirmed park may still have happened.
+func parkAllLine(n int, fleet string, dropped []ui.DroppedMessage, err error) string {
 	if err != nil {
 		return fmt.Sprintf("Could not confirm that ⌃Q parked the fleet (%s): %v. "+
 			"`%s` says what is still running; `%s` reopens the room.",
-			agents(n), err, ui.FleetCommand(fleet, cmdStatus), ui.FleetCommand(fleet))
+			agents(n), err, ui.FleetCommand(fleet, cmdStatus), ui.FleetCommand(fleet)) +
+			droppedLines("Queued when ⌃Q was pressed, and dropped if the fleet parked:", dropped)
 	}
-	return fmt.Sprintf("Parking %s. `%s` reopens the room and offers back whatever finished in time.",
-		agents(n), ui.FleetCommand(fleet))
+	return fmt.Sprintf("Parking %s (a turn in flight is interrupted). `%s` reopens the room; /resume and `continue` pick them up.",
+		agents(n), ui.FleetCommand(fleet)) +
+		droppedLines("Dropped from the queue, never sent:", dropped)
+}
+
+// droppedLines lists each dropped message under its agents, a line apiece and
+// its own lines indented, or nothing when nothing was queued.
+func droppedLines(head string, dropped []ui.DroppedMessage) string {
+	if len(dropped) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n" + head)
+	for _, d := range dropped {
+		fmt.Fprintf(&b, "\n  %s: %s", strings.Join(d.To, ", "), strings.ReplaceAll(d.Text, "\n", "\n    "))
+	}
+	return b.String()
 }
 
 // redial is one reattach attempt: is the session still there, and can this

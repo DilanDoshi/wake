@@ -277,12 +277,13 @@ const (
 	// a parked fleet behind would give it one by accident.
 	quitStop
 
-	// quitPark is FrameParkAll, which is ⌃Q. Every session is parked on the
-	// way out and written down, so the next start can offer them back.
+	// quitPark is FrameParkAll, which is ⌃Q. Every session is interrupted,
+	// parked on the way out and written down, so the next start can offer them
+	// back.
 	quitPark
 
 	// quitSignal is a SIGTERM, a logout, a machine going down: nobody chose to
-	// lose the fleet, so it parks as ⌃Q does, interrupting busy agents first.
+	// lose the fleet, so it parks as ⌃Q does.
 	quitSignal
 )
 
@@ -315,9 +316,10 @@ func (s *server) quitReason() quitVerb {
 // this server started.
 //
 // The order is the contract. Sessions are stopped the gentle way first -
-// stdin closed, in-flight turn allowed to finish or, under a signal, ended as
-// Esc ends it, by claude itself - because a daemon exit is not leave to kill. Only what is still alive after the grace
-// is killed, and it is killed by process group, because an agent is a tree.
+// stdin closed, an in-flight turn allowed to finish under `wake stop` or, when
+// parking, ended as Esc ends it, by claude itself - because a daemon exit is not
+// leave to kill. Only what is still alive after the grace is killed, and it is
+// killed by process group, because an agent is a tree.
 //
 // The quit verb decides two things here and nothing else does: whether each
 // stop is labelled a park on the way in, and what happens to the park book on
@@ -355,7 +357,7 @@ func (s *server) shutdown() error {
 			}
 			continue
 		}
-		s.stopForShutdown(a, verb == quitSignal)
+		s.stopForShutdown(a, parking)
 	}
 	remaining := waitForAgents(agents, quitGrace)
 	for _, a := range remaining {
