@@ -6056,3 +6056,20 @@ The retry line (decisions.md, 2026-11-02) shipped with two things left out.
   they would read as the parent's, and since a subagent's output no longer clears the line, a parent waiting
   on one would keep `retrying…` until its own next request, turn end or idle report. *Closes with:* a
   recording of a network drop under a running subagent (`live-testing.md`), then a ruling on the frames.
+
+## FROM `fix/no-done-on-a-failed-turn`, 2026-11-07
+
+A turn the API failed no longer reads as done (decisions.md, 2026-11-07). Left out:
+
+- **Nothing is drawn in the done line's place** (wake-orch's ruling on the product call). The alternative was
+  BUG-35's own "what would settle it": the failed agent's DM row reading the failure where the done line sits
+  (`⚠ usage limit · failed 6:48 PM`, or `auth failed — /reauth`), plus a roster or strip mark for an agent whose
+  DM is closed. Not taken: it adds a surface and a meaning, and the pin already names the failure for a 401, a
+  usage limit and an unreachable API. A rejected request (`NoticeTurnFailed`) says so only in its timed notice,
+  so once that lapses its row reads as plain idle. *Closes with:* the owner asking for a failure mark, drawn off
+  the same `Agent.failed` bit so the surfaces still agree.
+- **A subagent's own API failure is unrecorded.** None of the three failure recordings carries a
+  `parent_tool_use_id`, so whether claude forwards a subagent's synthetic failure frame is unknown. If it does,
+  the done rule ignores it (a subagent's frames are not its parent's turn), but `apiErrored` still marks, pins and
+  counts it against the parent as before. *Closes with:* a recording of a subagent failing, then a ruling on the
+  pin.

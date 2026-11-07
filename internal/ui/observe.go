@@ -21,6 +21,9 @@ func (a App) observe(sessionID string, ev core.Event) App {
 	// it is read before the two returns below - the final failure is one. See
 	// apiretry.go.
 	a = a.observeRetry(sessionID, ev)
+	// Read before the failure's return below too: turnDone withholds the ✔ and
+	// the done line over a turn the API failed. See turnoutcome.go.
+	a.fleet = a.fleet.withTurnOutcome(sessionID, ev)
 	if ev.Kind == core.KindRateLimit {
 		// A quota heartbeat is a fact about now, not conversation content: it
 		// goes to the timed notice above the composer and never into a

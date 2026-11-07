@@ -114,6 +114,7 @@ type Agent struct {
 	// turn finishes; a park, an end and a gap each forget them. See DM.heartbeat.
 	doneAt  time.Time
 	turnDur time.Duration
+	failed  bool // the API failed the agent's own last turn, so it is not done; forgotten with doneAt. See turnoutcome.go.
 
 	// watchedStart is whether the current turn's start was observed - false when
 	// the agent's first report was already working, a turn begun before this client
@@ -403,7 +404,7 @@ func (f Fleet) WithStatus(st *rpc.Status) Fleet {
 		// (no working report between), so the pre-park summary must not reappear.
 		// inDM goes too - a woken session's first turn must not inherit a stale one.
 		if s.State == rpc.StateParked || s.State == rpc.StateEnded {
-			a.doneAt, a.turnDur, a.watchedStart, a.inDM = time.Time{}, 0, false, false
+			a.doneAt, a.turnDur, a.failed, a.watchedStart, a.inDM = time.Time{}, 0, false, false, false
 			delete(f.tasks, s.ID) // its shells died with it; their endings may never have come
 		}
 		a.State, a.QuietMS = s.State, s.QuietMS
@@ -566,22 +567,6 @@ func (a Agent) withCommands(names []string) Agent {
 	if len(names) > 0 && !a.advertised.same(names) {
 		a.advertised = &commandSet{names: slices.Clone(names)}
 	}
-	return a
-}
-
-// notDone forgets the last turn's done summary, so the agent's own new-turn
-// content - prose, a tool call, or reasoning - drops the `✻ … done` line.
-// WithStatus's working→idle→working report edge normally ends it, but that never
-// fires for a turn Wake did not initiate: --brief self-starts a turn and a long
-// job goes idle between turns, so stateLocked reports idle (`!owed`) while the
-// agent works and no working report arrives. The event stream is the only
-// observable of that turn here - the mirror of WithStatus reconciling inDM off
-// the report because a gap can eat the KindTurnEnd. Its callers gate on
-// ev.Subagent==nil: a subagent streams past the parent's result and is not the
-// agent's own turn. A streaming preview forgets it too, but on the DM's own
-// showsDone - a partial never reaches fold.
-func (a Agent) notDone() Agent {
-	a.doneAt, a.turnDur = time.Time{}, 0
 	return a
 }
 
@@ -790,7 +775,7 @@ func (f Fleet) ForgetTurns() Fleet {
 	for id, a := range f.agents {
 		a.Tool, a.ToolArg, a.Doing = "", "", ""
 		a.TurnTokens, a.turnDone, a.turnCur, a.startedAt = 0, 0, 0, time.Time{}
-		a.doneAt, a.turnDur, a.watchedStart = time.Time{}, 0, false
+		a.doneAt, a.turnDur, a.failed, a.watchedStart = time.Time{}, 0, false, false
 		f.agents[id] = a
 	}
 	return f

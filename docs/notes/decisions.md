@@ -5654,3 +5654,29 @@ named fleet's operator somewhere else.
   real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
   once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
   which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own four sentences are `deferred.md`'s (2026-11-05).
+
+## 2026-11-07 — a turn the API failed is not done (the owner approved the fix; wake-orch's rulings)
+
+A turn that failed on the API (a dead login, a usage limit, an unreachable API, a rejected request) read as done:
+the roster's `✔`, the DM's `✻ … · done 6:48 PM` and the strip's `N done`, over the pinned notice saying the opposite
+(bugs.md BUG-35, the done-line residual). The failure reaches the UI only as a `core.KindAPIError`, which `observe`
+routes to the notice row before `Fleet.Observe`, and the result behind it reads idle like any turn's, so the
+working→idle edge captured `doneAt` over it.
+
+- **What it shows: nothing.** No `✔` (the row is idle's `○`), no done line, not counted in `N done`. No new glyph,
+  and `⚠` is not reused: it means "working, claude is retrying" (`apiretry.go`). The pin already names the failure
+  for a 401, a usage limit and an unreachable API; a rejected request keeps its timed notice. The alternative, a
+  failure line in the done line's row, is `deferred.md`'s (2026-11-07).
+- **How the UI knows: `Agent.failed`**, set by the agent's own `KindAPIError` of any notice kind (a 401 retry
+  included) and cleared by its own model output (`core.Event.ModelOutput`): the API answering again, the daemon's
+  resume included once it goes through. A local command's reply ran no inference and leaves it, as it leaves the
+  auth mark. A subagent's frames are not the agent's turn either way. A denial ends `success` and an interrupt
+  `error_during_execution`; neither is a `KindAPIError`. Forgotten where `doneAt` is: a parked or ended report
+  and a gap. A `/clear` does not lift it: it ran no inference either.
+- **One predicate.** `turnDone` reads the bit, so the DM's line and its row (`hasBeat`), `Fleet.done`, the roster
+  and the strip cannot disagree. Read there rather than gated at the capture: a failed turn Wake did not start
+  (`--brief`, no working report) would otherwise leave the turn before it standing as done.
+- **Held by** `internal/ui/turnoutcome_test.go`: the three recorded failures and the auth recording re-kinded as a
+  usage limit and a rejected request (no stream recording of a limit exists), each through `App.apply` with
+  reports, then a healthy turn, a denial, `/status`'s reply, a park and wake, a gap, and a subagent's failure and
+  answer. Each guard is mutation-checked.

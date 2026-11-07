@@ -99,7 +99,10 @@ root — the failure has one tell, it is transient, and it is not where the oper
   over the 401'd turn: `doneAt`/`turnDur` are captured at the working→idle edge (`Fleet.WithStatus`)
   with no knowledge of `authFailed` (absent from `beat.go`/`dmbeat.go`/`fleet.go`/`report.go`) —
   BUG-34's shape one turn on, a done line minted over a *failure* rather than a stale one over live
-  work.
+  work. **Closed (`fix/no-done-on-a-failed-turn`, 2026-11-07)** for every failure kind, not only the 401:
+  the agent's own `KindAPIError` sets `Agent.failed`, which `turnDone` reads, so the done line, the roster's
+  `✔` and the strip's `N done` all go, and nothing is drawn in their place. Its own next model output
+  clears it (`internal/ui/turnoutcome.go`, decisions.md 2026-11-07).
 - **The retry storm is silent.** #66 keys on the terminal `isApiErrorMessage` frame; the ~3–4 min of
   `system/api_error` retries before it are unmarked (nine unmarked, then one marked, in a real
   transcript), so even the notice waits minutes. (Read from the frames; the first two were watched.)
