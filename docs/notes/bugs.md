@@ -1377,6 +1377,30 @@ The cause:
 `TestTheWheelMapsTheRowsTheFrameDraws` holds the box the mouse reads to the rows `App.View` draws, and
 every box read in `composerscroll_test.go` is checked against that frame.
 
+## BUG-65 — a woken session's pane draws "No response requested." under the turn that was interrupted
+
+**Found 2026-11-07, live, on claude 2.1.319, by the check behind `fix/quit-interrupts-and-parks-busy-agents`.**
+A headless session was interrupted mid-tool (the interrupt Esc and a shutdown send) and its stdin closed.
+It was then resumed with `--resume` and told `continue`. At the resume, claude writes one assistant
+record into the transcript, ahead of the next prompt: the text `No response requested.` under the
+synthetic model, with usage, and with neither `isMeta` nor `isApiErrorMessage` set. It is not on stdout.
+Nothing reads it to the model as the operator's words; it closes the interrupted turn on disk.
+
+What goes wrong: `core.DecodeTranscriptLine` decodes that record as agent text marked `LocalCommand`
+(a synthetic model's reply is a local command's in `blockEvents`). This was checked by running the
+woken transcript through the decoder. So a pane reopened on the session, and a room restore, draw
+`No response requested.` as a reply, under the `[Request interrupted by user for tool use]` line,
+where Claude Code draws nothing. That is read off the decoder and `drawnAsLines`, not yet watched
+on a screen.
+
+It is not new: any interrupted turn later resumed leaves this record, whether esc then `⌃C`, a
+signalled shutdown since 2026-10-22, or, once that branch merges, every `⌃Q`. That branch made it
+common, so it is filed here and not fixed there.
+
+**Closes with:** recognising the record (synthetic model, the one fixed text, immediately after an
+interrupted turn) as plumbing in the decoder, from a committed fixture of a resumed interrupted
+transcript, scrubbed. A fix keyed on the text alone would also hide an agent that typed those words.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
