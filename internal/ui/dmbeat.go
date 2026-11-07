@@ -88,9 +88,10 @@ func (d DM) showsDone() bool {
 // turnDone is whether an agent has finished a turn this client watched, with
 // nothing of it still running - the DM's done line, and the roster's ✔ (see
 // Fleet.done). One predicate so the two surfaces cannot disagree. A live loop
-// is not done: it is waiting for its next wakeup (showsLoopWait).
+// is not done: it is waiting for its next wakeup (showsLoopWait). Nor is a turn
+// the API failed: it ended, but nothing was done (withTurnOutcome).
 func turnDone(a Agent, subRunning bool) bool {
-	return a.State == rpc.StateIdle && !a.doneAt.IsZero() && !a.loop.Active && !subRunning
+	return a.State == rpc.StateIdle && !a.doneAt.IsZero() && !a.failed && !a.loop.Active && !subRunning
 }
 
 // hasBeat is whether the pane draws the line above the composer at all - the one

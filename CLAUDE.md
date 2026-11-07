@@ -376,7 +376,12 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   this client watched start; forgotten on park/end/gap, on new agent content (`notDone`), and hidden
   while a subagent, workflow or background shell runs (`subRunning`; a shell is a sidebar row the
   cursor skips). `DM.hasBeat` is the one row predicate. The roster's `✔` and the strip's `N done`
-  read the same `turnDone` — an annotation over idle, never an `rpc` state.
+  read the same `turnDone` — an annotation over idle, never an `rpc` state. **A turn the API failed
+  is not done** (2026-11-07, `decisions.md`): the agent's own `KindAPIError`, any notice kind, sets
+  `Agent.failed`, which withholds all three and draws nothing in their place; its own next model
+  output clears it, as it lifts the pin (a local command's reply or an interrupt before the first block
+  does neither), and a park, an end or a gap forgets it.
+  `internal/ui/turnoutcome.go`.
 - **Every notice times out**: `max(10s, drawn cells × 100ms)`, one tick per `notice.Seq`, armed in
   `App.Update`. An API failure stays pinned under them until a healthy turn or a resume
   (`noticelinger.go`, `apierror.go`'s `pinnedNotice`).
@@ -576,7 +581,7 @@ yet says so in bold.**
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
-| Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` · `apiretry.go` (the line while claude retries the API) |
+| Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` · `apiretry.go` (the line while claude retries the API) · `turnoutcome.go` (how the last turn ended: `notDone`, the failed bit) |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go`/`_puff.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
@@ -777,7 +782,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/fleet.go` at 799 and `internal/core/wire.go` at 794 — derived by
+  `internal/core/wire.go` at 794 and `internal/core/protocol.go` at 791 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

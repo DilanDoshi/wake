@@ -99,7 +99,10 @@ root — the failure has one tell, it is transient, and it is not where the oper
   over the 401'd turn: `doneAt`/`turnDur` are captured at the working→idle edge (`Fleet.WithStatus`)
   with no knowledge of `authFailed` (absent from `beat.go`/`dmbeat.go`/`fleet.go`/`report.go`) —
   BUG-34's shape one turn on, a done line minted over a *failure* rather than a stale one over live
-  work.
+  work. **Closed (`fix/no-done-on-a-failed-turn`, 2026-11-07)** for every failure kind, not only the 401:
+  the agent's own `KindAPIError` sets `Agent.failed`, which `turnDone` reads, so the done line, the roster's
+  `✔` and the strip's `N done` all go, and nothing is drawn in their place. Its own next model output
+  clears it (`internal/ui/turnoutcome.go`, decisions.md 2026-11-07).
 - **The retry storm is silent.** #66 keys on the terminal `isApiErrorMessage` frame; the ~3–4 min of
   `system/api_error` retries before it are unmarked (nine unmarked, then one marked, in a real
   transcript), so even the notice waits minutes. (Read from the frames; the first two were watched.)
@@ -494,7 +497,7 @@ accepting a permission on an unowed turn mints a *fresh* wrong done line, and th
 runs — its result is a `KindToolResult`, not a new block — so the summary stands for the whole length
 of that tool (a long bash → a long-lived lie).
 
-**Fix (`Agent.notDone`, `internal/ui/fleet.go`).** The client sees the events the daemon's `owed`
+**Fix (`Agent.notDone`, `internal/ui/fleet.go`; in `turnoutcome.go` since 2026-11-07).** The client sees the events the daemon's `owed`
 model cannot: the agent's own new-turn content forgets the done summary in `fold` — `KindToolUse`,
 `KindToolResult`, `KindAssistantText`, `KindThinking`, all gated `ev.Subagent==nil` (a subagent
 streams past the parent's result and is not the agent's turn). It is the mirror of `WithStatus`
