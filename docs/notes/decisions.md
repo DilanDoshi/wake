@@ -8,6 +8,47 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-06 — the wheel over a draft taller than its box scrolls the draft, the view only
+
+The owner's ask ("if i scroll while cursor is on query box, it should scroll query"), with `wake-orch`'s
+rulings against `origin/main` fa87e320.
+
+- **The view, never the caret**, as an editor's wheel moves it. A wheel that moved the caret would put the
+  words typed after a quick re-read into the middle of an earlier paragraph. The next key that reaches the
+  box brings the view back to the caret, and so does any change to the draft; a key the App takes without
+  touching the draft (`⇥`, `⇧↑↓`) leaves it. A click in a scrolled box lands on the drawn character and
+  keeps the view.
+- **It stops at the draft's first and last row** rather than carrying on into the transcript, browser
+  style: under three-row notches and wheel floods a carried wheel jumps the transcript after any
+  overshoot. One `case` in `Composer.Wheel` is the whole decision, so the other choice is a one-line flip.
+- **Held in bubbles' own viewport, not a second text area.** bubbles keeps the offset to itself and moves
+  it only to follow the caret, so the caret is walked to the window's last row and then its first, an
+  Update after each, and put back with no Update after. It survives because `reposition` leaves a held
+  view alone and a blink reaches only the caret while one is held (`textarea.Update` ends with
+  `repositionView`). Nothing runs per frame.
+- **The box the frame draws.** `drawnComposer` laid every pane out afresh, while `Room.View` and `DM.View`
+  re-lay only what moved, so in a short conversation with a menu up the two put the box a row apart - on
+  `main` too, where a drag or ⌫ in the query box was already a row off there. Both read `laidOut` now,
+  and the tests hold every box the mouse reads to the rows `App.View` draws (the second adversarial pass:
+  the first round's tests compared `composerRegion` with itself).
+- **The box as drawn, not as the pane holds it.** Chrome drawn above the box changes its height in a pane
+  short of the ten-row cap: a menu drops the gap over it, the room's working line, a compacting or retry
+  line take rows. So the wheel runs on the drawn composer (`drawnBox`, the query-box selection's own
+  placement), whose fit sets the height of the viewport every copy shares, and writes its view back.
+  Before that, the walk ran at the height a draw copy had left on that viewport, and the adversarial
+  review had ⌫ over a highlighted row in a short room with a menu up delete the row below it.
+- **The box is its borders too**, so a room, a conversation and either half of a stacked column hit the
+  same way; a card's page scrolled off its rest, or cut by a pane too short for its card, keeps the page's
+  wheel, as a press there takes a screen selection.
+  A one-row draft, or a wheel above the rows a box can take at its pane's foot (`wheelFoot`), is turned
+  away before any layout; otherwise each notch lays the pane out once to find the box, as a press does.
+- **Known limits.** A wheel forgets the arrow keys' remembered column, because bubbles' `SetCursor`, the
+  one way to put the caret back with no Update, zeroes it. A held view within two rows of the draft's
+  foot, in a pane whose held box is taller than the drawn one, lets go at the pane's next re-lay; one
+  drawn in a box taller than it (a working line gone in a short room) shows the caret's rows until the
+  box is drawn short again. A mouse message disarms before it is measured, so with an arm's cue up a
+  notch on the box's top border lands a row above the box.
+
 ## 2026-10-29 — glamour's list of a grid's links keeps a row per link
 
 `wake-orch`'s rulings, against `origin/main` 81e3377e.

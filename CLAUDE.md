@@ -309,6 +309,14 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
   through the 80ms settle, drawn at the pointer meanwhile (each pane at its wrap width, cut or padded —
   `fitCells`) and committed on release; row drags don't settle. The wheel scrolls the pane under the pointer.
+- **Over a draft taller than its box the wheel scrolls the box's rows** (owner's 2026-11-06 ask), borders
+  included: the view only, never the caret, held in bubbles' own viewport by walking the caret onto the
+  rows and back (`composerscroll.go`), worked on the box as drawn (`drawnBox`), whose chrome can change
+  its height. Any key that reaches the box, or a changed draft, brings the view
+  back to the caret; a blink reaches the caret alone while it is held. It stops at the draft's ends rather
+  than carrying on into the transcript (one `case` in `Composer.Wheel`); a draft the box shows whole, and a
+  card's page scrolled or cut, keep the old wheel. The mouse reads every box through the frame's own
+  lay-out (`Room`/`DM.laidOut`).
 - **Drag selects, release copies**, on every surface: transcript (anchored to `transcript.lines`
   indices), query box (`composersel.go`), everything else as a frame-wide screen selection
   (`screensel.go`) — the `/workflows` view included, where the press still moves its cursor. Every
@@ -559,7 +567,7 @@ yet says so in bold.**
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
 | Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
-| Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `clipboard.go` · `cmd/wake/output.go` |
+| Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `composerscroll.go` (the wheel over a tall draft) · `clipboard.go` · `cmd/wake/output.go` · pty test `cmd/wake/draftwheelscreen_unix_test.go` |
 | Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
@@ -769,7 +777,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/fleet.go` at 799 and `internal/ui/composer.go` at 795 — derived by
+  `internal/ui/fleet.go` at 799 and `internal/core/wire.go` at 794 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go
