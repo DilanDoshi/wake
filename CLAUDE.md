@@ -314,9 +314,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   header never parts from its member), held where the wheel left it: the selection never moves, and one
   the held window does not draw takes no key - ⌃C, esc, ↵, ⌃D/⌃Y/⌃B/⌃F, bare `/status`/`/mcp` - until it
   is drawn again, and says so (`rosterPickHidden`, the one place that rule lives, decided in Update's seam
-  on a change, never per frame; the conversation holding the keys is on screen as its pane). Any selection change lets go of the hold from where the window was drawn, and ⇧↑↓,
-  a click, ⌃X and a re-rank move it the least that shows the cursor. The count row says which way:
-  `+5 above · +2 below`. The usage bar stays put. `internal/ui/rosterscroll.go`, `decisions.md` (2026-11-06).
+  on a change, never per frame; nothing selected hides nothing, and the conversation holding the keys is
+  on screen as its pane). Any selection change, and ⌃X, lets go of the hold from where the window was
+  drawn; ⇧↑↓, a click, ⌃X and a re-rank move it the least that shows the cursor. The count row says which
+  way: `+5 above · +2 below`. The usage bar stays put. `internal/ui/rosterscroll.go`, `decisions.md`
+  (2026-11-06).
 - **Over a draft taller than its box the wheel scrolls the box's rows** (owner's 2026-11-06 ask), borders
   included: the view only, never the caret, held in bubbles' own viewport by walking the caret onto the
   rows and back (`composerscroll.go`), worked on the box as drawn (`drawnBox`), whose chrome can change

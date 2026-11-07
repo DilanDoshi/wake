@@ -564,10 +564,11 @@ func (a App) withFocus(f string) App {
 // that lies about the fleet. So this says so rather than opening whichever
 // conversation the cursor happened to be resting on.
 func (a App) nextBlocked() App {
+	_, _, drawn := a.rosterWindow()
 	a.roster = a.roster.Next(a.fleet.sectioned(a.fleet.Agents()))
 	// A jump is to be seen: it lets go of the wheel's hold even when it lands on
 	// the selection it left, which the seam cannot tell from no move at all.
-	a.rosterView.held = false
+	a = a.rosterLetGo(drawn.from)
 	if a.roster.Selected == "" {
 		notice.Report("nothing is waiting on you")
 		return a

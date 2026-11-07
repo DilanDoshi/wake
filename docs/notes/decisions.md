@@ -31,15 +31,16 @@ could be reached only with ⇧↑↓.
   `rosterPickHidden`, read by `pickedAgent`, `pickedHeader` and `dmTarget`. The other two options the owner
   was asked about would each land in one place too: a key that first scrolls a hidden selection back into
   view would be one guard in `App.key` ahead of the keys those three serve, and the board's carry would be
-  its `landing` called from `wheelRoster`. The pinned `all` is always drawn, and so is the conversation
-  holding the keys, as its pane: ⌃F in it forks it however its row scrolled. A refused key says the
+  its `landing` called from `wheelRoster`. Nothing selected hides nothing (the keys fall back as they did).
+  The pinned `all` is always drawn, and so is the conversation holding the keys, as its pane: ⌃F in it
+  forks it however its row scrolled - but a subagent row under it is a row like any. A refused key says the
   selection is out of view (`pickOutOfView`). The room's `/` and `@` menus only offer, so they stay on the
   selection (`cursorAgent`).
 - **Decided on a change, never per frame.** Update's seam (`rosterSettled`) compares the selection before
   and after each message: a change lets go of the hold from where the window was *drawn*, so a click on a
   drawn row moves nothing, and stores where it is drawn after, so a re-rank that keeps the cursor on screen
-  moves nothing either. ⌃X lets go of the hold itself, since a jump onto the selection it left is no
-  change to the seam. While held, it works out whether the selection is drawn only when the fleet (one
+  moves nothing either. ⌃X lets go of the hold itself the same way (`rosterLetGo`), since a jump onto the
+  selection it left is no change to the seam. While held, it works out whether the selection is drawn only when the fleet (one
   `agents` map per write: `Fleet.same`), the window or its rows changed, and stores it; `pickedAgent` reads
   a field. A roster that comes to fit lets go of the hold.
 - **⇧↑↓ move the window the least that shows the cursor**, as the board's arrows do, where the cursor used to

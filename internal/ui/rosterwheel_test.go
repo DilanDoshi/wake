@@ -522,7 +522,6 @@ func TestHeadersUnderTheWheel(t *testing.T) {
 		t.Error("the cursor on the pinned all does not count once the wheel holds the window")
 	}
 
-
 	a = wheelFleet(t)
 	for range 3 * len(rankedNames(a)) {
 		if a, _ = keyVia(a, tea.KeyShiftDown); a.roster.Header == "infra" {
@@ -760,5 +759,60 @@ func TestTheWheelOverTheSidebarsLastRowScrollsIt(t *testing.T) {
 	a = wheelAt(a, tea.MouseButtonWheelDown, sidebarX(a), a.paneHeight()-1, 1)
 	if after := drawnAgents(a); len(after) == 0 || after[0] != before[1] {
 		t.Errorf("the wheel over the sidebar's last row drew %v, want one agent on from %v", after, before)
+	}
+}
+
+// With nothing selected there is no selection to hide: the keys fall back as they
+// always did, and nothing says a selection is out of view.
+func TestTheWheelWithNothingSelectedHidesNoSelection(t *testing.T) {
+	a := wheelSidebar(wheelFleet(t), true, 3)
+	if a.roster != (Roster{}) || !a.rosterView.held {
+		t.Fatalf("want nothing selected under the wheel's hold: %+v, %+v", a.roster, a.rosterView)
+	}
+	notice.Reset()
+	m, _, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlC})
+	if n, _ := notice.Latest(); n.Text == pickOutOfView {
+		t.Errorf("⌃C with nothing selected said %q", n.Text)
+	}
+	first, _ := m.(App).cursorAgent()
+	m, _, _ = a.key(tea.KeyMsg{Type: tea.KeyCtrlD})
+	if got := m.(App).focus; got != first.ID {
+		t.Errorf("⌃D with nothing selected opened %q, want the first agent %s, as without the wheel", got, first.ID)
+	}
+}
+
+// A subagent row out of view takes no key, even in its own agent's conversation:
+// the conversation is on screen, the row the cursor names is not.
+func TestASubagentRowOutOfViewTakesNoKeyInItsConversation(t *testing.T) {
+	a := viaUpdate(wheelFleet(t), taskFrame("s4", started("t4", "toolu_4", "Check the docs", "general-purpose", core.TaskAgent)))
+	a = clickVia(a, sidebarX(a), agentRowY(a, "agent04")+1) // agent04's subagent row
+	if a.focus != "s4" || a.roster.SelectedTask == "" {
+		t.Fatalf("a click on agent04's subagent row left focus %q, %+v", a.focus, a.roster)
+	}
+	a = wheelSidebar(a, true, 100)
+	notice.Reset()
+	a.key(tea.KeyMsg{Type: tea.KeyCtrlD})
+	if n, _ := notice.Latest(); n.Text != pickOutOfView {
+		t.Errorf("⌃D on agent04's subagent row, out of view, said %q, want %q", n.Text, pickOutOfView)
+	}
+}
+
+// ⌃X onto the selection it left keeps the window where it drew it, so a re-rank
+// that keeps the cursor on screen moves nothing afterwards.
+func TestNextBlockedOntoTheSameSelectionKeepsItsWindow(t *testing.T) {
+	a := wheelFleet(t)
+	a = viaUpdate(a, rpc.Frame{Kind: rpc.FrameStatusPush, Status: wheelStatus(25, map[string]string{"s4": rpc.StateBlocked})})
+	a, _ = keyVia(a, tea.KeyCtrlX)
+	a = wheelSidebar(a, true, 100)
+	a, _ = keyVia(a, tea.KeyCtrlX)
+	drawn := drawnAgents(a)
+	if drawn[0] != "agent04" {
+		t.Fatalf("⌃X onto agent04 drew %v, want it first", drawn)
+	}
+	// agent08 ranks above agent04 now, one row down: the window keeps its top, so
+	// both are drawn.
+	a = viaUpdate(a, rpc.Frame{Kind: rpc.FrameStatusPush, Status: wheelStatus(25, map[string]string{"s4": rpc.StateWorking, "s8": rpc.StateBlocked})})
+	if got := drawnAgents(a); len(got) < 2 || got[0] != "agent08" || got[1] != "agent04" {
+		t.Errorf("a re-rank that kept agent04 drawn moved the window: %v, then %v", drawn, got)
 	}
 }

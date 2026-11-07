@@ -16,7 +16,7 @@ import (
 )
 
 // pickOutOfView is what a key refused for a selection out of view says.
-const pickOutOfView = "the agent selected in the sidebar is scrolled out of view. ⇧↑↓ or the wheel brings it back"
+const pickOutOfView = "the agent selected in the sidebar is scrolled out of view. The wheel brings it back, ⇧↑↓ moves on from it"
 
 // rosterView is where the sidebar's window stands.
 type rosterView struct {
@@ -152,10 +152,7 @@ func (a App) wheelRoster(lines int) App {
 func (a App) rosterSettled(was App) App {
 	if a.roster != was.roster {
 		_, _, drawn := was.rosterWindow()
-		a.rosterView = rosterView{top: drawn.from}
-		_, _, w := a.rosterWindow() // the new cursor shown the least from there, kept
-		a.rosterView.top = w.from
-		return a
+		return a.rosterLetGo(drawn.from)
 	}
 	v, old := a.rosterView, was.rosterView
 	if !v.held || old.held && v.top == old.top && a.fleet.same(was.fleet) && a.rosterRows() == was.rosterRows() {
@@ -171,12 +168,24 @@ func (a App) rosterSettled(was App) App {
 	return a
 }
 
+// rosterLetGo drops the wheel's hold from top, where the window was drawn, and
+// keeps the window as it is drawn now: the cursor shown the least from there.
+func (a App) rosterLetGo(top int) App {
+	a.rosterView = rosterView{top: top}
+	_, _, w := a.rosterWindow()
+	a.rosterView.top = w.from
+	return a
+}
+
 // rosterPickHidden is the one ruling on a selection the wheel scrolled out of
 // view (wake-orch, 2026-11-06): it takes no key until it is drawn again.
-// pickedAgent, pickedHeader and dmTarget read it. The conversation holding the
-// keys is on screen as its pane, whatever the sidebar shows.
+// pickedAgent, pickedHeader and dmTarget read it. Nothing selected hides
+// nothing, and the conversation holding the keys is on screen as its pane - a
+// subagent row under it is still a row.
 func (a App) rosterPickHidden() bool {
-	return a.rosterView.held && !a.rosterView.shown && (a.focus == "" || a.roster.Selected != a.focus)
+	r := a.roster
+	inPane := a.focus != "" && r.Selected == a.focus && r.SelectedTask == ""
+	return a.rosterView.held && !a.rosterView.shown && r != (Roster{}) && !inPane
 }
 
 // unseenOr is a key's no-target notice: why, when the selection is out of view.
