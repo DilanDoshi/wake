@@ -52,6 +52,7 @@ import (
 	"sync"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // maxNameLen bounds a name a client asks for. It is a **safety** bound as much
@@ -173,10 +174,29 @@ func (r *nameRegistry) claim(requested string) (string, error) {
 	if name == "" {
 		name = r.freeNameLocked()
 	} else if _, held := r.taken[name]; held {
-		return "", fmt.Errorf("a live session is already called %q; `wake attach %s` opens it, or choose another name", name, name)
+		return "", nameHeld(name)
 	}
 	r.taken[name] = struct{}{}
 	return name, nil
+}
+
+// nameHeld is a requested name a live session already wears. What an operator
+// reads is claimName's, since only the server knows the fleet that session is in.
+type nameHeld string
+
+func (n nameHeld) Error() string {
+	return fmt.Sprintf("a live session is already called %q", string(n))
+}
+
+// claimName is claim for a name somebody typed, refusing a held one with the
+// command that opens its holder on this fleet: typed bare, it reaches the unnamed one.
+func (s *server) claimName(requested string) (string, error) {
+	name, err := s.names.claim(requested)
+	var held nameHeld
+	if errors.As(err, &held) {
+		return "", fmt.Errorf("%w; `%s` opens it, or choose another name", err, rpc.FleetCommand(s.fleetName(), "attach", string(held)))
+	}
+	return name, err
 }
 
 // claimManager reserves the one name claim refuses to everybody, and is how

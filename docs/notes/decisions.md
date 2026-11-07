@@ -5630,7 +5630,7 @@ got said "`wake` reopens the room". Since 2026-10-16 a bare `wake` starts a new 
 named fleet's operator somewhere else.
 
 - **The rule.** A line that tells the operator what to type names the fleet by its current name:
-  `wake --fleet <name>` and `wake <verb> --fleet <name>` (`ui.FleetCommand`; the flag is `rpc.FleetFlag`).
+  `wake --fleet <name>` and `wake <verb> --fleet <name>` (`rpc.FleetCommand`; the flag is `rpc.FleetFlag`).
   The unnamed fleet is `wake --fleet default` (`daemon.LegacyFleet`). Only a fleet with no name is reached
   bare: a socket set by hand outside `~/.wake/fleets`, where a bare `wake` under that `$WAKE_SOCKET` opens it.
 - **A `$WAKE_SOCKET` inside `~/.wake/fleets` reads as its fleet**, as the tab title and /wake-name's own

@@ -381,3 +381,25 @@ func readOne(t *testing.T, r *bytes.Buffer) Frame {
 	}
 	return f
 }
+
+// The way back names the fleet as it is now: a bare `wake` starts a new fleet,
+// and a bare verb reaches the unnamed one. Only a socket set by hand, which names
+// no fleet, is reached bare.
+func TestAFleetCommandNamesTheFleet(t *testing.T) {
+	for _, tc := range []struct {
+		fleet string
+		words []string
+		want  string
+	}{
+		{fleet: "dev", want: "wake --fleet dev"},
+		{fleet: "dev", words: []string{"status"}, want: "wake status --fleet dev"},
+		{fleet: "dev", words: []string{"attach", "4f78b3d7"}, want: "wake attach 4f78b3d7 --fleet dev"},
+		{fleet: "default", want: "wake --fleet default"},
+		{fleet: "", want: "wake"},
+		{fleet: "", words: []string{"stop"}, want: "wake stop"},
+	} {
+		if got := FleetCommand(tc.fleet, tc.words...); got != tc.want {
+			t.Errorf("FleetCommand(%q, %q) = %q, want %q", tc.fleet, tc.words, got, tc.want)
+		}
+	}
+}

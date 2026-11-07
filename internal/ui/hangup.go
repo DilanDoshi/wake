@@ -197,13 +197,13 @@ func reattachedText(target string, s rpc.SessionStatus) string {
 // - *"`wake attach` takes one session id or name"* - because attaching to
 // whichever session happens to be running is a guess that is wrong the moment
 // there are two. So a room, which has no session id to put there, is told to
-// reopen the room instead. Both name the fleet (FleetCommand): a bare `wake`
+// reopen the room instead. Both name the fleet (rpc.FleetCommand): a bare `wake`
 // starts a new one, and a bare `wake attach` looks in the unnamed one. Naming a
 // wake verb that does not work is the legend rule broken at the shell, and a
 // failure path is the worst place to break it.
 func reattachAdvice(fleet, sessionID string) string {
 	if sessionID == "" {
-		return fmt.Sprintf("⌃O, then `%s`", FleetCommand(fleet))
+		return fmt.Sprintf("⌃O, then `%s`", rpc.FleetCommand(fleet))
 	}
-	return fmt.Sprintf("⌃O, then `%s`", FleetCommand(fleet, "attach", sessionID))
+	return fmt.Sprintf("⌃O, then `%s`", rpc.FleetCommand(fleet, "attach", sessionID))
 }

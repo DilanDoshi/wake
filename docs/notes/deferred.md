@@ -38,7 +38,7 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
-## FOLLOW-UP, 2026-11-05 — four daemon sentences still name a bare verb
+## ~~FOLLOW-UP, 2026-11-05 — four daemon sentences still name a bare verb~~ CLOSED 2026-11-07 (`fix/daemon-lines-name-the-fleet`)
 
 `fix/park-line-names-the-fleet` made every way-back line `cmd/wake` and `internal/ui` print name the fleet
 (`ui.FleetCommand`): a bare `wake` starts a new fleet, and a bare `wake status`, `wake stop`, `wake attach`
@@ -53,20 +53,33 @@ named fleet each points at the unnamed one:
 
 They were left out because they are the daemon's, not the way out (wake-orch's scope ruling).
 
-Two more gaps, both narrow:
+*Closes with:* the daemon naming its fleet in those four (`fleetNameOf(root, s.fleetSocket())`, the
+report's own), held by a test per sentence.
+
+**Closed 2026-11-07.** The renderer moved to `rpc.FleetCommand`, so the daemon spells a command as cmd/wake
+and the UI do, and `server.fleetName` (the report's own `fleetNameOf(root, s.fleetSocket())`) names the fleet
+in the cap refusal at both doors (`maySpawn`, `admitLive`), in import's `heldRefusal` and `explainHeldSource`,
+and in a taken name (`nameHeld`, worded by `claimName` at spawn, fork and import).
+`daemon/fleetlines_test.go` holds each against a named fleet, the unnamed one and a socket set by hand. The
+orphaned-parent fork arm is not reachable: only `FleetOnDisk` reports `StateOrphaned`, and `forkSource`
+reads `s.fleet()`. So it now names no command instead of gaining a fleet (wake-orch's ruling). The two
+narrow gaps that sat here are the entry below.
+
+---
+
+## FOLLOW-UP, 2026-11-05 — two narrow way-back gaps
+
+Both narrow, and both left by `fix/park-line-names-the-fleet` (split from the entry above when it closed):
 - **A daemon from before 2026-10-24 reports no fleet name.** `cmd/wake` falls back to the socket for ⌃Q's and
   ⌃O's lines and for ⌃C⌃C. But the UI's ⌃Q notice row and its failed-reattach advice read only the report, so
   under such a daemon they say a bare `wake`. The stale-daemon notice already tells the operator to reopen the
   fleet on this build.
 - **A socket set by hand directly in `~/.wake`** (`WAKE_SOCKET=~/.wake/test.sock`) reads as the unnamed fleet
-  (`fleetNameOf`), so its hints say `--fleet default`. This is not new, and such a socket already shares the
-  unnamed fleet's files beside it.
+  (`fleetNameOf`), so its hints say `--fleet default`, the daemon's refusals included. This is not new: the
+  bare verb they said before reached the unnamed fleet too, and such a socket already shares its files.
 
 Deferred #16 ("parking 1 agents", the notice row's bare `%d agents`) stays as it was. The notice now names
 the fleet, but it still counts with `%d`.
-
-*Closes with:* the daemon naming its fleet in those four (`fleetNameOf(root, s.fleetSocket())`, the
-report's own), held by a test per sentence.
 
 ---
 
