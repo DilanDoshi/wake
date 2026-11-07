@@ -369,9 +369,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (2026-10-24).
 - The composer grows with the draft; the pane bounds it (`composerRowsIn`), never itself. A pane's
   chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
-  screen. A draft is measured once per draft, prompt, width and bound, remembered by every copy of
-  its composer (`composermeasure.go`): a measure lays out a text area (~0.5 MB), and a pane drawing a
-  card is re-laid on every View.
+  screen. A re-lay that changes none of the draft, prompt, width or bound measures nothing; the
+  answers are shared by every copy of a composer (`composermeasure.go`), since a measure lays out a
+  whole text area and a pane drawing a card is re-laid on every View.
 - **The room's working line is one row**: oldest running turn, `+N more working`
   (`roomWorkingLine`, `roomwords.go`).
 - **The DM's done line** is captured at the working→idle edge (`Fleet.WithStatus`), only for turns

@@ -38,25 +38,44 @@ func TestARelayThatChangesNothingMeasuresNothing(t *testing.T) {
 	}
 }
 
+// Every copy of a composer shares its measures: App.View lays out a copy of a
+// pane and throws it away, and what that copy measured is what the kept one is
+// re-laid with. A planted answer, written through the discarded copy, shows it.
+func TestADiscardedCopysMeasureServesTheComposer(t *testing.T) {
+	const bound = 4
+	c := measuredDraft(40, maxComposerRows, strings.Repeat("word ", 30))
+	discarded := c.WithMaxRows(bound)
+	measured := discarded.ta.Height()
+	if measured < 2 {
+		t.Fatalf("the draft measured %d rows at %d; it needs two for a planted answer to differ", measured, bound)
+	}
+	discarded.measures.rows[bound-1] = measured - 1
+
+	if got := c.WithMaxRows(bound).ta.Height(); got != measured-1 {
+		t.Fatalf("the composer drew %d rows at %d, want the %d its discarded copy remembered (measured %d): "+
+			"copies do not share their measures", got, bound, measured-1, measured)
+	}
+}
+
 // Every input a measure reads is in what it is remembered by: changing any one
 // of them changes the answer, and the box must take the new one rather than
-// the answer remembered for the draft before. The bound changes it only for a
-// draft whose top rows hold a line of spaces, which the probe cannot tell from
-// its padding: drawn three rows tall, that draft's last content row is its first.
+// the answer remembered for the draft before. A measure is capped at its bound,
+// so a bound that grows past what a draft was measured at changes it too.
 func TestEachInputOfAMeasureMeasuresAgain(t *testing.T) {
-	const width, bound = 40, 10
+	const width = 40
 	words := strings.Repeat("word ", 15)
 	cases := []struct {
 		input, draft string
+		bound        int
 		change       func(Composer) Composer
 	}{
-		{"draft", words, func(c Composer) Composer { return c.InsertText(strings.Repeat(" more", 10)) }},
-		{"prompt", words, func(c Composer) Composer { c.ta.Prompt = strings.Repeat(">", 12) + " "; return c.fit() }},
-		{"width", words, func(c Composer) Composer { return c.SetWidth(width / 2) }},
-		{"bound", "a\n \n \n \nb", func(c Composer) Composer { return c.WithMaxRows(3) }},
+		{"draft", words, maxComposerRows, func(c Composer) Composer { return c.InsertText(strings.Repeat(" more", 10)) }},
+		{"prompt", words, maxComposerRows, func(c Composer) Composer { c.ta.Prompt = strings.Repeat(">", 12) + " "; return c.fit() }},
+		{"width", words, maxComposerRows, func(c Composer) Composer { return c.SetWidth(width / 2) }},
+		{"bound", "a\nb\nc\nd\ne", 3, func(c Composer) Composer { return c.WithMaxRows(maxComposerRows) }},
 	}
 	for _, tc := range cases {
-		before := measuredDraft(width, bound, tc.draft)
+		before := measuredDraft(width, tc.bound, tc.draft)
 		after := tc.change(before)
 		fresh := min(after.draftRows(after.bound()), after.bound())
 		if remembered := min(before.ta.Height(), after.bound()); fresh == remembered {
