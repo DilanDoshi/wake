@@ -6074,6 +6074,12 @@ A turn the API failed no longer reads as done (decisions.md, 2026-11-07). Left o
   counts it against the parent as before. The same goes for a subagent's 401 `api_retry` frames, themselves a
   `KindAPIError`: none in the corpus carries `parent_tool_use_id`, so if claude forwards them without one they
   would set the parent's bit. *Closes with:* a recording of a subagent failing, then a ruling on the pin.
+- **After a gap, or a park and a wake, the bit and the pin part.** Both forget the bit, as they forget `doneAt`
+  (the 2026-11-07 ruling); a gap keeps every pin, and a wake keeps a usage-limit or unreachable one. So a turn that
+  redoes nothing after either (a local command, an interrupt before the first block) reads `✔` beside a standing
+  pin. Found by the adversarial review, reproduced for all three pinned kinds. It needs a gap or a park between the
+  failure and such a turn. *Closes with:* forgetting the bit only for a session with no pin standing, which would
+  mean `App.notedGap` and the report fold reading `notices.stuck` back into the fleet.
 - **Only the API's failure counts.** A turn claude ends on its own error that is not the API's (a spend ceiling
   from `--max-budget-usd`, an `error_during_execution` that no interrupt caused) still reads done: nothing in the UI
   decodes those as a failed turn. *Closes with:* a recording of each and a ruling on whether it is one.

@@ -175,17 +175,27 @@ func TestAnInterruptedTurnIsStillDone(t *testing.T) {
 	wantDone(t, "an interrupted turn", turnOf(t, twoAgents(t), interrupted), true)
 }
 
-// A turn interrupted before the API's first block redoes nothing a failure
-// left undone, and it lifts the failure's pin no more than the bit: the two
-// read the same evidence, so the row never draws ✔ beside a standing pin.
+// After a failure, an interrupted turn is judged by whether the API answered
+// it first. Before its first block it redoes nothing, and lifts the failure's
+// pin no more than the bit; after a block (here a thinking block and a tool
+// call, no prose) the API answered, and both go. The two read the same evidence.
 //
-// Mutation check: clear the bit on an interrupt and this goes red.
-func TestAnInterruptAfterAFailureLeavesItStanding(t *testing.T) {
-	interrupted := firstTurn(t, "interrupt-mid-generation.jsonl")
-	a := turnOf(t, turnOf(t, twoAgents(t), fixtureLines(t, "api-error-unreachable.jsonl")), interrupted)
-	wantDone(t, "a failure, then an interrupt", a, false)
-	if a.pinnedNotice() == "" {
-		t.Error("the interrupt lifted the failure's pin; the bit and the pin must read the same evidence")
+// Mutation check: clear the bit on an interrupt, or only on prose, and a row
+// goes red.
+func TestAnInterruptAfterAFailureIsJudgedByTheAPIsAnswer(t *testing.T) {
+	for name, tc := range map[string]struct {
+		recording string
+		done      bool
+	}{
+		"before its first block": {"interrupt-mid-generation.jsonl", false},
+		"after a block":          {"interrupt-mid-tool.jsonl", true},
+	} {
+		failed := turnOf(t, twoAgents(t), fixtureLines(t, "api-error-unreachable.jsonl"))
+		a := turnOf(t, failed, firstTurn(t, tc.recording))
+		wantDone(t, "a failure, then an interrupt "+name, a, tc.done)
+		if pinned := a.pinnedNotice() != ""; pinned == tc.done {
+			t.Errorf("a failure, then an interrupt %s: pinned = %v beside done = %v", name, pinned, tc.done)
+		}
 	}
 }
 
