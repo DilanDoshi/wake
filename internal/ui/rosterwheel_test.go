@@ -20,6 +20,7 @@ import (
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
+	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -554,14 +555,17 @@ func TestARosterThatFitsLetsGoOfTheWheel(t *testing.T) {
 
 // A shorter terminal decides again whether the wheel's selection is drawn.
 func TestAResizeDecidesWhetherTheWheelsSelectionCounts(t *testing.T) {
-	a := wheelSidebar(wheelFleet(t), true, 1)
+	a := wheelFleet(t) // the room holds the keys: ⇧↓ opens no conversation
 	drawn := drawnAgents(a)
 	name := drawn[len(drawn)-1]
-	a = clickVia(a, sidebarX(a), agentRowY(a, name)) // the last row drawn
-	a = clickVia(a, 2, 2)                            // back in the room
+	for range 3 * len(rankedNames(a)) {
+		if a, _ = keyVia(a, tea.KeyShiftDown); selectedName(a) == name {
+			break
+		}
+	}
 	a = wheelSidebar(a, true, 1)
-	a = wheelSidebar(a, false, 1)
-	if _, ok := a.pickedAgent(); !ok {
+	a = wheelSidebar(a, false, 1) // held at the top, the cursor on its last row
+	if _, ok := a.pickedAgent(); !ok || a.focus != "" {
 		t.Fatalf("%s, on the window's last row, does not count: %v", name, drawnAgents(a))
 	}
 	if a = a.withSize(100, 24); agentRowY(a, name) >= 0 {
@@ -569,5 +573,118 @@ func TestAResizeDecidesWhetherTheWheelsSelectionCounts(t *testing.T) {
 	}
 	if _, ok := a.pickedAgent(); ok {
 		t.Errorf("a shorter terminal cut %s off the wheel's window (%v) and it still counts", name, drawnAgents(a))
+	}
+}
+
+// ⌃X onto the agent already selected is still a jump to be seen: it lets go of
+// the wheel's hold though the selection did not change.
+func TestNextBlockedOntoTheSelectionTheWheelHidShowsIt(t *testing.T) {
+	a := wheelFleet(t)
+	a = viaUpdate(a, rpc.Frame{Kind: rpc.FrameStatusPush, Status: wheelStatus(25, map[string]string{"s4": rpc.StateBlocked})})
+	a, _ = keyVia(a, tea.KeyCtrlX)
+	a = wheelSidebar(a, true, 100)
+	if a.roster.Selected != "s4" || agentRowY(a, "agent04") >= 0 {
+		t.Fatalf("want agent04 selected and scrolled away; selected %q, drawn %v", a.roster.Selected, drawnAgents(a))
+	}
+	a, _ = keyVia(a, tea.KeyCtrlX)
+	if agentRowY(a, "agent04") < 0 {
+		t.Errorf("⌃X onto agent04, already selected, left it scrolled away: %v", drawnAgents(a))
+	}
+}
+
+// A conversation holding the keys is on screen as its pane, so ⌃F forks it however
+// the wheel scrolled its sidebar row away.
+func TestForkInAConversationWhoseRowTheWheelHid(t *testing.T) {
+	a := wheelFleet(t)
+	a = clickVia(a, sidebarX(a), agentRowY(a, "agent04"))
+	if a.focus != "s4" {
+		t.Fatalf("a click on agent04 focused %q", a.focus)
+	}
+	recorderOf(t, a).taken(t)
+	a = wheelSidebar(a, true, 100)
+	if agentRowY(a, "agent04") >= 0 {
+		t.Fatalf("agent04 is still drawn: %v", drawnAgents(a))
+	}
+	m, cmd, _ := a.key(tea.KeyMsg{Type: tea.KeyCtrlF})
+	var forked []string
+	for _, f := range writtenFrames(t, m.(App), cmd) {
+		if f.Kind == rpc.FrameFork {
+			forked = append(forked, f.ParentID)
+		}
+	}
+	if !slices.Equal(forked, []string{"s4"}) {
+		t.Errorf("⌃F in agent04's conversation forked %v, want s4", forked)
+	}
+}
+
+// After a key moved the window, a re-rank that keeps the cursor on screen moves
+// nothing: the window is stored where it was drawn after the move.
+func TestAReRankKeepsTheWindowAKeyMoved(t *testing.T) {
+	a := wheelFleet(t)
+	for _, k := range []tea.KeyType{tea.KeyShiftDown, tea.KeyShiftUp, tea.KeyShiftUp} { // wraps to the last agent
+		a, _ = keyVia(a, k)
+	}
+	last := rankedNames(a)[len(rankedNames(a))-1]
+	if selectedName(a) != last {
+		t.Fatalf("⇧↓⇧↑⇧↑ is on %q, want the wrap to %s", selectedName(a), last)
+	}
+	drawn := drawnAgents(a)
+	a = viaUpdate(a, rpc.Frame{Kind: rpc.FrameStatusPush, Status: wheelStatus(25, map[string]string{a.roster.Selected: rpc.StateBlocked})})
+	if got := drawnAgents(a); agentRowY(a, last) < 0 || got[0] != drawn[0] {
+		t.Errorf("a re-rank inside the window moved it: %v, then %v", drawn, got)
+	}
+}
+
+// The room's menus only offer, so the wheel hiding the selection leaves them on
+// the agent the cursor names.
+func TestTheWheelLeavesTheRoomsMenusOnTheSelection(t *testing.T) {
+	a := wheelFleet(t)
+	a, _ = keyVia(a, tea.KeyShiftDown)
+	picked := a.roster.Selected
+	a = wheelSidebar(a, true, 1)
+	if got := a.completionAgent().ID; got != picked {
+		t.Errorf("with the selection scrolled away the room's menus read %q, want %s", got, picked)
+	}
+}
+
+// A key refused for a selection out of view says so, not that nothing is selected.
+func TestARefusalForAHiddenSelectionSaysWhy(t *testing.T) {
+	for _, k := range []tea.KeyType{tea.KeyCtrlC, tea.KeyCtrlD, tea.KeyCtrlF} {
+		a := wheelFleet(t)
+		a, _ = keyVia(a, tea.KeyShiftDown)
+		a = wheelSidebar(a, true, 1)
+		notice.Reset()
+		a.key(tea.KeyMsg{Type: k})
+		if n, ok := notice.Latest(); !ok || n.Text != pickOutOfView {
+			t.Errorf("%v on a selection out of view said %q, want %q", k, n.Text, pickOutOfView)
+		}
+	}
+}
+
+// A re-rank that pulled the window to keep the cursor drawn leaves it there for a
+// click: the click starts from where the window was drawn, not where it was left.
+func TestAClickAfterAReRankPulledTheWindowMovesNothing(t *testing.T) {
+	a := wheelFleet(t)
+	drawn := drawnAgents(a)
+	last := drawn[len(drawn)-1]
+	for range 3 * len(rankedNames(a)) {
+		if a, _ = keyVia(a, tea.KeyShiftDown); selectedName(a) == last {
+			break
+		}
+	}
+	moved := wheelStatus(25, nil)
+	for i, s := range moved.Sessions {
+		if s.Name == last {
+			moved.Sessions[i].Team = "infra" // the cursor's agent goes below the window
+		}
+	}
+	a = viaUpdate(a, rpc.Frame{Kind: rpc.FrameStatusPush, Status: moved})
+	pulled := drawnAgents(a)
+	if pulled[0] == drawn[0] || agentRowY(a, last) < 0 {
+		t.Fatalf("moving %s below the window did not pull it: %v, then %v", last, drawn, pulled)
+	}
+	a = clickVia(a, sidebarX(a), agentRowY(a, pulled[1]))
+	if got := drawnAgents(a); !slices.Equal(got, pulled) {
+		t.Errorf("a click on %s moved the window: %v, then %v", pulled[1], pulled, got)
 	}
 }

@@ -31,10 +31,15 @@ could be reached only with ⇧↑↓.
   `rosterPickHidden`, read by `pickedAgent`, `pickedHeader` and `dmTarget`. The other two options the owner
   was asked about would each land in one place too: a key that first scrolls a hidden selection back into
   view would be one guard in `App.key` ahead of the keys those three serve, and the board's carry would be
-  its `landing` called from `wheelRoster`. The pinned `all` is always drawn.
+  its `landing` called from `wheelRoster`. The pinned `all` is always drawn, and so is the conversation
+  holding the keys, as its pane: ⌃F in it forks it however its row scrolled. A refused key says the
+  selection is out of view (`pickOutOfView`). The room's `/` and `@` menus only offer, so they stay on the
+  selection (`cursorAgent`).
 - **Decided on a change, never per frame.** Update's seam (`rosterSettled`) compares the selection before
   and after each message: a change lets go of the hold from where the window was *drawn*, so a click on a
-  drawn row moves nothing. While held, it works out whether the selection is drawn only when the fleet (one
+  drawn row moves nothing, and stores where it is drawn after, so a re-rank that keeps the cursor on screen
+  moves nothing either. ⌃X lets go of the hold itself, since a jump onto the selection it left is no
+  change to the seam. While held, it works out whether the selection is drawn only when the fleet (one
   `agents` map per write: `Fleet.same`), the window or its rows changed, and stores it; `pickedAgent` reads
   a field. A roster that comes to fit lets go of the hold.
 - **⇧↑↓ move the window the least that shows the cursor**, as the board's arrows do, where the cursor used to
@@ -49,6 +54,8 @@ could be reached only with ⇧↑↓.
   the seam (about 6µs of a 25-agent Update's profile, plus the copies ranking makes).
 - **Known limits.** An item taller than the column draws as the count alone, as a cursor on one always did.
   A held window keeps its first item through a re-rank, so the agents under it reorder in place.
+
+## 2026-11-06 — the wheel over a draft taller than its box scrolls the draft, the view only
 
 The owner's ask ("if i scroll while cursor is on query box, it should scroll query"), with `wake-orch`'s
 rulings against `origin/main` fa87e320.

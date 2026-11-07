@@ -14,14 +14,14 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// copy is the immutability contract. The map and the order slice are both
-// duplicated, so a caller holding an older Fleet holds the fleet it had.
-// same is whether g is f with nothing written since: every write copies agents,
-// so one map is one fleet. Update's seam asks it to decide on a change.
+// same is whether g is f with nothing written since: every write copies agents
+// (copy, below), so one map is one fleet. Update's seam asks it to decide on a change.
 func (f Fleet) same(g Fleet) bool {
 	return reflect.ValueOf(f.agents).UnsafePointer() == reflect.ValueOf(g.agents).UnsafePointer()
 }
 
+// copy is the immutability contract. The map and the order slice are both
+// duplicated, so a caller holding an older Fleet holds the fleet it had.
 func (f Fleet) copy() Fleet {
 	out := Fleet{
 		agents:     make(map[string]Agent, len(f.agents)+1),

@@ -1,22 +1,10 @@
 package ui
 
-// The sidebar's window over a roster taller than its column (the owner's
-// 2026-11-06 ask, wake-orch's rulings). It starts at an item - an agent with the
-// gap and team header it leads with - so a header never parts from its first
-// member, and View, At and Hit walk whole items as they always have.
-//
-// Two things move it. The wheel over the sidebar scrolls it an item a notch and
-// holds it there: the selection does not move and nothing pulls the window back
-// to it. Otherwise it stays where it was drawn and moves the least that shows the
-// cursor, for a ⇧↑↓, a click, ⌃X or a re-rank alike.
-//
-// The stored top is only where the window starts. Whether the cursor is inside
-// it is worked out at every draw, so a re-rank never leaves the cursor off screen
-// - the case that once argued for no stored offset at all - unless the wheel
-// holds the window, and then a selection it does not draw takes no key
-// (rosterPickHidden, the one place that rule lives, decided in Update's seam on
-// a change, never per frame). Heights come from rowsFor, never a render: choosing
-// a window is arithmetic.
+// The sidebar's window over a roster taller than its column, starting at an item
+// (an agent with the gap and header it leads with). The wheel holds it where it
+// left it; otherwise it moves the least that shows the cursor, worked out at every
+// draw, so a re-rank cannot strand the cursor unless the wheel holds the window -
+// and then a selection it does not draw takes no key. decisions.md, 2026-11-06.
 
 import (
 	"strconv"
@@ -26,6 +14,9 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
+
+// pickOutOfView is what a key refused for a selection out of view says.
+const pickOutOfView = "the agent selected in the sidebar is scrolled out of view. ⇧↑↓ or the wheel brings it back"
 
 // rosterView is where the sidebar's window stands.
 type rosterView struct {
@@ -74,36 +65,28 @@ func (h heights) lastTop(room int) int {
 	return max(min(top, len(h)-1), 0)
 }
 
-// reveal is the smallest move of top that draws item c whole: c first when it is
-// above the window, last when below. An item taller than the room goes first and
-// draws as the count alone, which never understates the fleet.
-func (h heights) reveal(top, c, room int) int {
-	if c < top {
-		return c
-	}
-	if c < h.grow(top, room).to {
-		return top
-	}
-	used, from := h[c], c
-	for from > 0 && used+h[from-1] <= room {
-		used += h[from-1]
-		from--
-	}
-	return from
-}
-
 // window is the items a column `height` rows tall draws: all of them when they
 // fit, else from the view's top kept inside the list and, unless the wheel holds
-// it, moved the least that shows the cursor. The count takes a row whenever
-// anything is left out.
+// it, moved the least that draws the cursor's item whole - first when it was
+// above, last when below. An item taller than the room goes first and draws as
+// the count alone, which never understates the fleet. The count takes a row
+// whenever anything is left out.
 func (r Roster) window(rows []rosterItem, h heights, height int) span {
 	if h.total() <= height {
 		return span{from: 0, to: len(rows)}
 	}
 	room := height - 1
 	top := clamp(r.view.top, 0, h.lastTop(room))
-	if c := r.cursorRow(rows); c >= 0 && !r.view.held {
-		top = h.reveal(top, c, room)
+	c := r.cursorRow(rows)
+	switch {
+	case c < 0 || r.view.held || c >= top && c < h.grow(top, room).to:
+	case c < top:
+		top = c
+	default:
+		used := h[c]
+		for top = c; top > 0 && used+h[top-1] <= room; top-- {
+			used += h[top-1]
+		}
 	}
 	return h.grow(top, room)
 }
@@ -160,12 +143,15 @@ func (a App) wheelRoster(lines int) App {
 
 // rosterSettled is Update's seam for the window, against the model before the
 // message. A selection that changed lets go of the wheel's hold from where the
-// window was drawn. While the wheel holds it, whether the selection is drawn is
-// decided only when the fleet, the window or its rows changed.
+// window was drawn, and stores where it is drawn now. While the wheel holds it,
+// whether the selection is drawn is decided only when the fleet, the window or
+// its rows changed.
 func (a App) rosterSettled(was App) App {
 	if a.roster != was.roster {
-		_, _, w := was.rosterWindow()
-		a.rosterView = rosterView{top: w.from}
+		_, _, drawn := was.rosterWindow()
+		a.rosterView = rosterView{top: drawn.from}
+		_, _, w := a.rosterWindow() // the new cursor shown the least from there, kept
+		a.rosterView.top = w.from
 		return a
 	}
 	v, old := a.rosterView, was.rosterView
@@ -184,5 +170,16 @@ func (a App) rosterSettled(was App) App {
 
 // rosterPickHidden is the one ruling on a selection the wheel scrolled out of
 // view (wake-orch, 2026-11-06): it takes no key until it is drawn again.
-// pickedAgent, pickedHeader and dmTarget read it.
-func (a App) rosterPickHidden() bool { return a.rosterView.held && !a.rosterView.shown }
+// pickedAgent, pickedHeader and dmTarget read it. The conversation holding the
+// keys is on screen as its pane, whatever the sidebar shows.
+func (a App) rosterPickHidden() bool {
+	return a.rosterView.held && !a.rosterView.shown && (a.focus == "" || a.roster.Selected != a.focus)
+}
+
+// unseenOr is a key's no-target notice: why, when the selection is out of view.
+func (a App) unseenOr(advice string) string {
+	if a.rosterPickHidden() {
+		return pickOutOfView
+	}
+	return advice
+}
