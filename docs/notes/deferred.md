@@ -55,7 +55,14 @@ on 2026-11-06 that would have skipped 29 of the 31.
 **Not taken:** the owner's go on BUG-64 (2026-11-07, via wake-orch) asked for no change here, so today's rule
 stands: the turn the limit cut is continued, whoever started it.
 
-*Revisit if:* the owner asks for peer-started turns to wait.
+**A known gap beside it, older than BUG-64's retries:** a turn a peer's message starts is one Wake did not
+send, so it owes nothing (`agent.owed` is set by Wake's own sends and their lifecycle), and until its first
+tool `limited` reads the agent as ready. A resume due in that window - a login's, a reset's, now a retry's -
+is written into the running turn, which claude reads at its next tool boundary or as the next turn. Rare,
+since the window is the seconds before the turn's first tool or failure, and the retries only add moments
+to it. *Closes with:* a replayed cross-session line marking the agent busy until its turn ends.
+
+*Revisit if:* the owner asks for peer-started turns to wait, or a stray `continue` is seen mid-turn.
 
 ---
 

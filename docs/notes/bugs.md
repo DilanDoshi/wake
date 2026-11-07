@@ -1396,13 +1396,14 @@ had come before it: "Not logged in" is no stop at all, and the old account's lim
 the new account.
 
 **Fix:** branch `fix/login-resume-retries-on-the-old-token`. A login's resume is remembered on the agent
-(`agent.login`, a `loginTry`) until its turn goes through, fails, is interrupted or is cleared. If that turn
-fails the way a process still on the old login fails - "Not logged in", or a limit naming the reset the stop
-named - the stop is re-armed with a retry. The retries come 15 s, 1 min and 5 min after each failure, on the
-resume goroutine's one timer; after the third the stop waits for its reset or the next login, as before
+(`agent.login`, a `loginTry`) until its turn ends, fails, is interrupted or is cleared. If that turn fails
+the way a process still on the old login fails - "Not logged in", or a limit naming the reset the stop named -
+the stop is re-armed with a retry. The retries come 15 s, 1 min and 5 min after each failure, on the resume
+goroutine's one timer; after the third the stop waits for its reset or the next login. A turn Wake did not
+send - the operator's, a peer's - that meets the old login meanwhile leaves the retry standing
 (`internal/daemon/loginretry.go`; `decisions.md`, 2026-11-07). Held by `usagelimit_e2e_test.go` (the old
-limit again, "Not logged in", the cap) and `loginretry_test.go` (what is not retried, a fresh login's count,
-the timer), each mutation-checked.
+limit again, "Not logged in", the cap) and `loginretry_test.go` (what is and is not retried, the retry kept
+through another turn, a fresh login's count, the waits and the timer), each mutation-checked.
 
 ## Residuals carried from bugs that are fixed and merged
 

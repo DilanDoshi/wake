@@ -95,39 +95,49 @@ type limitWatch struct {
 // reporting a new one, and clears it when the agent's own turn goes through or a
 // /clear abandons the conversation. A send does not: its turn is in flight, which
 // already holds a resume off, and a local command runs no turn. A subagent's
-// events are not the agent's. A failure of a turn a login's resume started may be
-// the process still on the old login, retried (loginretry.go).
+// events are not the agent's. A failure of the turn a login's resume started may
+// be the process still on the old login, and is retried (loginretry.go).
 func (a *agent) noteLimit(ev core.Event, now time.Time) bool {
-	if ev.Subagent != nil {
+	switch {
+	case ev.Subagent != nil:
 		return false
-	}
-	if ev.ModelOutput() || ev.Kind == core.KindSessionReset {
+	case ev.ModelOutput() || ev.Kind == core.KindSessionReset:
 		a.mu.Lock()
 		a.limit, a.unproven, a.login = usageStop{}, false, loginTry{}
 		a.mu.Unlock()
 		return false
-	}
-	if ev.Kind != core.KindAPIError {
+	case ev.Kind == core.KindTurnEnd:
+		a.mu.Lock()
+		a.login = loginTry{} // the turn's failure, if any, came before its end
+		a.mu.Unlock()
+		return false
+	case ev.Kind != core.KindAPIError:
 		return false
 	}
-	account := signedIn()
+	var reset time.Time
+	var account core.Account
+	if ev.Notice == core.NoticeUsageLimit || ev.Notice == core.NoticeAPIError {
+		reset, account = limitReset(ev.Text, now), signedIn()
+	}
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	login := a.login
 	a.login = loginTry{}
-	if stop, ok := login.failed(ev, now, account); ok {
+	if stop, ok := login.failed(ev.Notice, reset, now, account); ok {
 		a.limit = stop
 		return true
 	}
-	switch ev.Notice {
-	case core.NoticeAPIUnreachable: // right after Wake's own resume, it waits for the network
+	switch {
+	case ev.Notice == core.NoticeAPIUnreachable: // right after Wake's own resume, it waits for the network
 		a.limit = usageStop{at: now, unreachable: true, netOnly: a.unproven}
-		return true
-	case core.NoticeUsageLimit:
-		a.limit = usageStop{at: now, reset: limitReset(ev.Text, now), account: account}
-		return true
+	case ev.Notice != core.NoticeUsageLimit:
+		return false
+	case a.limit.tries > 0 && reset.Equal(a.limit.reset):
+		// a turn Wake did not send met the old login too: its retry stands
+	default:
+		a.limit = usageStop{at: now, reset: reset, account: account}
 	}
-	return false
+	return true
 }
 
 // limitReset is the reset a limit's message names, zero for none - or for one not
@@ -319,8 +329,8 @@ func (s *server) resumeOnLogin() {
 }
 
 // resumeDue resumes every agent whose login's retry is due or whose reset has
-// passed. Wall-clock time, so a laptop that slept through it resumes on the next
-// wake.
+// passed. A reset is wall-clock time, so a laptop that slept through it resumes
+// on the next wake; a retry counts awake time, as a timer does.
 func (s *server) resumeDue(now time.Time) {
 	for a, stop := range s.limited() {
 		switch {
