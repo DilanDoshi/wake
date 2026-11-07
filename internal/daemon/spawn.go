@@ -120,7 +120,7 @@ func (s *server) spawnName(f rpc.Frame) (string, error) {
 		}
 		return name, err
 	}
-	return s.names.claim(f.Text)
+	return s.claimName(f.Text)
 }
 
 // fork starts a session that inherits another's conversation.
@@ -157,7 +157,7 @@ func (s *server) fork(ctx context.Context, c *client, f rpc.Frame) {
 		c.enqueue(errorFrame(f.SessionID, err.Error()))
 		return
 	}
-	name, err := s.names.claim(f.Text)
+	name, err := s.claimName(f.Text)
 	if err != nil {
 		c.enqueue(errorFrame(f.SessionID, err.Error()))
 		return
@@ -488,7 +488,9 @@ func forkRefusal(p rpc.SessionStatus) string {
 	case rpc.StateSilent:
 		return who + " has gone silent with a turn still open. Fork it when it comes back, or stop it first."
 	case rpc.StateOrphaned:
-		return who + " has no daemon holding it: check `wake status`."
+		// Unreachable from forkSource (only FleetOnDisk reports an orphan), so it
+		// names no command that would need this fleet's name.
+		return who + " has no daemon holding it, so check that its fleet is running before forking it."
 	default:
 		return "nothing is known about the state of " + who + ", so it cannot be forked"
 	}

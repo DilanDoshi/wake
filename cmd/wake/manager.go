@@ -39,7 +39,6 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
-	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 // managerStarted is what the terminal says, and it claims exactly what the
@@ -57,7 +56,7 @@ import (
 // a person who started a service and was told nothing has no way to find out
 // whether it worked, and `@manager` is not guessable from a command called
 // `manager`. The first thing to ask it is the check this line cannot make.
-// It names the fleet (ui.FleetCommand): a bare `wake` opens a new one.
+// It names the fleet (rpc.FleetCommand): a bare `wake` opens a new one.
 const managerStarted = "The manager is started. `%s` opens the room, where @manager reaches it and an unaddressed message goes to it - ask it to list its agents to confirm its tools came up."
 
 // startManager asks the daemon for the manager and reports what happened.
@@ -96,5 +95,5 @@ func startManager(socket string, opts spawnOpts, out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	return say(out, managerStarted, ui.FleetCommand(daemon.FleetName(socket)))
+	return say(out, managerStarted, rpc.FleetCommand(daemon.FleetName(socket)))
 }

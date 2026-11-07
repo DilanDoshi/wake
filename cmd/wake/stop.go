@@ -12,7 +12,6 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
-	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 // stopCeiling bounds the wait for the daemon to let go.
@@ -207,17 +206,17 @@ func stoppedOutcome(st rpc.Status, err error, released bool) (string, error) {
 			unlinkNote(released), err)
 	case st.Running:
 		return "", fmt.Errorf("a daemon is still answering on that socket, so the fleet was not stopped%s: check `%s`",
-			unlinkNote(released), ui.FleetCommand(st.Fleet, cmdStatus))
+			unlinkNote(released), rpc.FleetCommand(st.Fleet, cmdStatus))
 	case runningCount(st) > 0:
 		return "", fmt.Errorf("the daemon is gone but %s still running with nothing holding them%s: check `%s`",
-			agents(runningCount(st)), unlinkNote(released), ui.FleetCommand(st.Fleet, cmdStatus))
+			agents(runningCount(st)), unlinkNote(released), rpc.FleetCommand(st.Fleet, cmdStatus))
 	case st.ProbeIncomplete:
 		// runningCount is zero, but the liveness sweep timed out before every
 		// record was checked - so zero is an under-count, not an answer. Reported
 		// after the runningCount>0 branch so a positive report keeps its specific
 		// "still running" error; only the would-be-default false-down is caught.
 		return "", fmt.Errorf("could not confirm the fleet is down: the liveness sweep timed out before every session was checked%s: check `%s`",
-			unlinkNote(released), ui.FleetCommand(st.Fleet, cmdStatus))
+			unlinkNote(released), rpc.FleetCommand(st.Fleet, cmdStatus))
 	default:
 		return "Stopped. The fleet is down.", nil
 	}
@@ -262,7 +261,7 @@ func waitForTheDaemonToLetGo(frames <-chan rpc.Frame, errs <-chan error, fleet s
 		return nil
 	case errors.Is(err, os.ErrDeadlineExceeded):
 		return fmt.Errorf("the daemon did not let go within %v, so the fleet may still be running: check `%s`",
-			stopCeiling, ui.FleetCommand(fleet, cmdStatus))
+			stopCeiling, rpc.FleetCommand(fleet, cmdStatus))
 	default:
 		return fmt.Errorf("waiting for the daemon to stop: %w", err)
 	}
@@ -343,7 +342,7 @@ func reportNothingToStop(st rpc.Status, out io.Writer) error {
 		// guess in the one direction `wake stop` must never guess. Say so and
 		// fail, the way stoppedOutcome does for the same signal on the live path.
 		if err := say(out, "Could not confirm the fleet is down: the liveness sweep timed out before every session was checked. Check `%s`.",
-			ui.FleetCommand(st.Fleet, cmdStatus)); err != nil {
+			rpc.FleetCommand(st.Fleet, cmdStatus)); err != nil {
 			return err
 		}
 		return fmt.Errorf("could not confirm the fleet is down: the liveness sweep timed out before every session was checked")
@@ -357,7 +356,7 @@ func reportNothingToStop(st rpc.Status, out io.Writer) error {
 			// sessions up into it, and nothing yet resumes one.
 			return say(out, "No daemon is running. %s parked, with their transcripts still on disk; "+
 				"`%s` starts a daemon that holds them again, and `%s` is what forgets them for good.",
-				agents(parked), ui.FleetCommand(st.Fleet), ui.FleetCommand(st.Fleet, cmdStop))
+				agents(parked), rpc.FleetCommand(st.Fleet), rpc.FleetCommand(st.Fleet, cmdStop))
 		}
 		return say(out, "No daemon is running.")
 	}
@@ -365,7 +364,7 @@ func reportNothingToStop(st rpc.Status, out io.Writer) error {
 		return err
 	}
 	if err := say(out, "`wake stop` cannot reach them - there is nothing to ask. Starting a daemon with `%s` reaps what it can identify.",
-		ui.FleetCommand(st.Fleet)); err != nil {
+		rpc.FleetCommand(st.Fleet)); err != nil {
 		return err
 	}
 	return fmt.Errorf("the fleet is not down: %s still running with nothing holding them", agents(runningCount(st)))

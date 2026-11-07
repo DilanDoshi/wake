@@ -56,6 +56,13 @@ func (s *server) fleetSocket() string {
 	return s.socket
 }
 
+// fleetName is what this fleet is called now, as its report says: the name a
+// command the daemon offers must carry to reach it (rpc.FleetCommand).
+func (s *server) fleetName() string {
+	root, _ := StateRoot()
+	return fleetNameOf(root, s.fleetSocket())
+}
+
 // fleetNameOf is what the fleet on socket is called: a named fleet's name,
 // LegacyFleet for the one at root, and "" for a socket outside that layout,
 // which names no fleet.

@@ -91,7 +91,7 @@ const (
 
 	// parkingFleet is said on the keypress. The window is about to close, so
 	// this is the last thing the notice row can carry, and it names the verb
-	// that undoes it, on this fleet (FleetCommand).
+	// that undoes it, on this fleet (rpc.FleetCommand).
 	//
 	// "offers back whatever finished in time" rather than "offers them back",
 	// and the hedge is load-bearing: the daemon gives each agent the grace and
@@ -314,7 +314,7 @@ func (a App) parkFleet() (tea.Model, tea.Cmd, bool) {
 	// ⌃Q never re-asks and never schedules a second deadline racing the first.
 	// beginQuit's first verb wins at the daemon regardless.
 	a.quit = parkAll{asked: a.carriedForward(), pressed: true}
-	notice.Report(parkingFleet, a.quit.asked, FleetCommand(a.daemon.fleet))
+	notice.Report(parkingFleet, a.quit.asked, rpc.FleetCommand(a.daemon.fleet))
 	return a, tea.Sequence(a.askParkAll(), a.parkAllDeadline()), true
 }
 
