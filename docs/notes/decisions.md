@@ -53,7 +53,9 @@ could be reached only with ⇧↑↓.
   selection change works one window out. While held, a message that changed the fleet works one out in
   the seam (about 6µs of a 25-agent Update's profile, plus the copies ranking makes).
 - **Known limits.** An item taller than the column draws as the count alone, as a cursor on one always did.
-  A held window keeps its first item through a re-rank, so the agents under it reorder in place.
+  A held window keeps its first item through a re-rank, so the agents under it reorder in place. A window
+  that starts inside a team draws the rest of it without its header, which rides on the team's first
+  agent - as the window that followed the cursor always did, and as the board's sections do.
 
 ## 2026-11-06 — the wheel over a draft taller than its box scrolls the draft, the view only
 
