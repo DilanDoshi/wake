@@ -15,9 +15,10 @@ import (
 // reaches the UI only as a KindAPIError, which observe routes to the notice row
 // before Fleet.Observe, so it is marked here, ahead of that return; the result
 // behind it still reads idle and captures doneAt, so turnDone reads this bit.
-// The agent's own model output is the API answering again and clears it; a
-// local command's reply (/context) ran no inference and proves nothing. A
-// subagent's frames are not the agent's turn. Forgotten where doneAt is.
+// The agent's own model output is the API answering again and clears it, the
+// same evidence that lifts the failure's pin; a local command's reply (/context)
+// and a turn interrupted before its first block prove nothing. A subagent's
+// frames are not the agent's turn. A park, an end or a gap forgets it.
 func (f Fleet) withTurnOutcome(id string, ev core.Event) Fleet {
 	failed := ev.Kind == core.KindAPIError
 	if ev.Subagent != nil || (!failed && !ev.ModelOutput()) {

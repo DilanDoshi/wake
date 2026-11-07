@@ -497,7 +497,7 @@ accepting a permission on an unowed turn mints a *fresh* wrong done line, and th
 runs — its result is a `KindToolResult`, not a new block — so the summary stands for the whole length
 of that tool (a long bash → a long-lived lie).
 
-**Fix (`Agent.notDone`, `internal/ui/fleet.go`).** The client sees the events the daemon's `owed`
+**Fix (`Agent.notDone`, `internal/ui/fleet.go`; in `turnoutcome.go` since 2026-11-07).** The client sees the events the daemon's `owed`
 model cannot: the agent's own new-turn content forgets the done summary in `fold` — `KindToolUse`,
 `KindToolResult`, `KindAssistantText`, `KindThinking`, all gated `ev.Subagent==nil` (a subagent
 streams past the parent's result and is not the agent's turn). It is the mirror of `WithStatus`

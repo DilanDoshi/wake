@@ -86,6 +86,21 @@ func failsAs(t *testing.T, name string, turn recordedTurn) {
 	t.Fatalf("%s: the recording holds no failure of the agent's own decoding to %q", name, turn.want)
 }
 
+// firstTurn is a recording up to and including its first turn's result.
+func firstTurn(t *testing.T, name string) []string {
+	t.Helper()
+	lines := fixtureLines(t, name)
+	for i, line := range lines {
+		for _, ev := range eventsOf(t, []string{line}) {
+			if ev.Kind == core.KindTurnEnd {
+				return lines[:i+1]
+			}
+		}
+	}
+	t.Fatalf("%s holds no turn end", name)
+	return nil
+}
+
 // turnOf is one turn of alex's (s1), watched from its start: the report into
 // working, the recording's events, and the idle report its result is followed by.
 func turnOf(t *testing.T, a App, lines []string) App {
@@ -112,8 +127,14 @@ func doneSaid(a App) []bool {
 
 var doneSurfaces = []string{"Fleet.done", "the roster's ✔", "the strip's N done", "the DM's done line"}
 
+// wantDone holds every surface to one answer. A "not done" is checked against a
+// turn whose end was captured, so it is the failure alone that withholds the ✔ -
+// not a done line nobody minted.
 func wantDone(t *testing.T, name string, a App, want bool) {
 	t.Helper()
+	if ag, _ := a.fleet.Agent("s1"); !want && ag.doneAt.IsZero() {
+		t.Fatalf("%s: the turn's end was never captured, so not done proves nothing", name)
+	}
 	for i, said := range doneSaid(a) {
 		if said != want {
 			t.Errorf("%s: %s says done = %v, want %v", name, doneSurfaces[i], said, want)
@@ -121,25 +142,21 @@ func wantDone(t *testing.T, name string, a App, want bool) {
 	}
 }
 
-// The turn was watched and its end captured, so it is the failure alone that
-// withholds the ✔ - not a done line nobody minted.
-//
 // Mutation check: drop turnDone's failed gate, or the observe call that sets it,
 // and every surface reads done again.
 func TestAFailedTurnIsNotDone(t *testing.T) {
 	for name, turn := range failedTurns(t) {
 		failsAs(t, name, turn)
-		a := turnOf(t, twoAgents(t), turn.lines)
-		if ag, _ := a.fleet.Agent("s1"); ag.doneAt.IsZero() {
-			t.Fatalf("%s: the failed turn's end was never captured, so this proves nothing", name)
-		}
-		wantDone(t, name, a, false)
+		wantDone(t, name, turnOf(t, twoAgents(t), turn.lines), false)
 	}
 }
 
-// The API answering the agent's next turn is the failure over.
+// The API answering the agent's next turn is the failure over. The healthy
+// recording's quota heartbeat (a rate_limit_event) comes after its reply, so
+// this also holds that the heartbeat is no failure.
 //
-// Mutation check: stop model output clearing the bit and no surface reads done.
+// Mutation check: stop model output clearing the bit, or count a
+// rate_limit_event as a failure, and no surface reads done.
 func TestAHealthyTurnAfterAFailureIsDoneAgain(t *testing.T) {
 	healthy := fixtureLines(t, "basic-turn.jsonl")
 	for name, turn := range failedTurns(t) {
@@ -148,9 +165,32 @@ func TestAHealthyTurnAfterAFailureIsDoneAgain(t *testing.T) {
 	}
 }
 
+// An interrupt is the operator's ending, not a failure. The recording's first
+// turn is cut at its result, so the refused tool's error result and the
+// interrupt are the last of it, with no reply after them.
+//
+// Mutation check: count an error tool result as a failure and this goes red.
+func TestAnInterruptedTurnIsStillDone(t *testing.T) {
+	interrupted := firstTurn(t, "interrupt-mid-tool.jsonl")
+	wantDone(t, "an interrupted turn", turnOf(t, twoAgents(t), interrupted), true)
+}
+
+// A turn interrupted before the API's first block redoes nothing a failure
+// left undone, and it lifts the failure's pin no more than the bit: the two
+// read the same evidence, so the row never draws ✔ beside a standing pin.
+//
+// Mutation check: clear the bit on an interrupt and this goes red.
+func TestAnInterruptAfterAFailureLeavesItStanding(t *testing.T) {
+	interrupted := firstTurn(t, "interrupt-mid-generation.jsonl")
+	a := turnOf(t, turnOf(t, twoAgents(t), fixtureLines(t, "api-error-unreachable.jsonl")), interrupted)
+	wantDone(t, "a failure, then an interrupt", a, false)
+	if a.pinnedNotice() == "" {
+		t.Error("the interrupt lifted the failure's pin; the bit and the pin must read the same evidence")
+	}
+}
+
 // A denial is the operator's answer, not a failure: the turn ends success with
-// the tool refused. The recording also carries a rate_limit_event, the quota
-// heartbeat every turn may bring, which is no failure either.
+// the tool refused and the model replying to the refusal.
 func TestADeniedTurnIsStillDone(t *testing.T) {
 	denied := fixtureLines(t, "permission-deny-response.jsonl")
 	refused := false

@@ -379,7 +379,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   read the same `turnDone` — an annotation over idle, never an `rpc` state. **A turn the API failed
   is not done** (2026-11-07, `decisions.md`): the agent's own `KindAPIError`, any notice kind, sets
   `Agent.failed`, which withholds all three and draws nothing in their place; its own next model
-  output clears it (a local command's reply does not), and it is forgotten where `doneAt` is.
+  output clears it, as it lifts the pin (a local command's reply or an interrupt before the first block
+  does neither), and a park, an end or a gap forgets it.
   `internal/ui/turnoutcome.go`.
 - **Every notice times out**: `max(10s, drawn cells × 100ms)`, one tick per `notice.Seq`, armed in
   `App.Update`. An API failure stays pinned under them until a healthy turn or a resume

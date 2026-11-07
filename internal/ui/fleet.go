@@ -114,7 +114,7 @@ type Agent struct {
 	// turn finishes; a park, an end and a gap each forget them. See DM.heartbeat.
 	doneAt  time.Time
 	turnDur time.Duration
-	failed  bool // the API failed the agent's own last turn, so it is not done; forgotten with doneAt. See turnoutcome.go.
+	failed  bool // the API failed the agent's own last turn, so it is not done; a park, an end or a gap forgets it. See turnoutcome.go.
 
 	// watchedStart is whether the current turn's start was observed - false when
 	// the agent's first report was already working, a turn begun before this client
