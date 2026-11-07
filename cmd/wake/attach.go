@@ -404,6 +404,8 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithFleetNamed(kill.fleetNamed).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
 	final, err := p.Run()
 	term.handBack()
+	// Cooked before the leaving line, or each of its newlines returns no carriage.
+	kill.restore()
 	if err != nil {
 		return err
 	}
