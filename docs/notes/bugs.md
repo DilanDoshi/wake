@@ -1401,6 +1401,41 @@ common, so it is filed here and not fixed there.
 interrupted turn) as plumbing in the decoder, from a committed fixture of a resumed interrupted
 transcript, scrubbed. A fix keyed on the text alone would also hide an agent that typed those words.
 
+## BUG-66 — after a `/wake-name` and a `/new`, ⌃Q's exit line sends the operator to a bare `wake`
+
+**Found 2026-11-07, recording takes for `fix/quit-interrupts-and-parks-busy-agents`, on `main` 507223b7.**
+The setup was a scratch `HOME` under `/private/tmp`, no `WAKE_SOCKET`, and the demo's scripted claude on a
+shim `PATH`.
+
+The repro, typed in this order:
+1. A bare `wake` in `~/harbor`. It prints ``fleet harbor. `wake --fleet harbor` comes back to it``.
+2. `/wake-name dev`. The roster's manager becomes `manager-dev`.
+3. `/new otto`, then `@otto migrate the sessions table`, so otto is mid-turn.
+4. `⌃Q⌃Q`.
+
+What went wrong: the exit line read ``Parking 2 agents. `wake` reopens the room…``, a bare `wake`, which
+starts a new fleet (2026-10-16). It should have named `wake --fleet dev`, as #214 made every way-back line
+do. Following it opens a different fleet, so the parked one is not where the operator is sent.
+
+Two takes narrow it:
+- **Without step 2** (no rename, otto spawned and busy), the line read ``wake --fleet harbor``, which is
+  right.
+- **Without step 3** (renamed, no agent spawned after), the line read ``wake --fleet dev``, which is also
+  right.
+
+So it takes the rename and an agent spawned after it. Not separated yet: whether otto being busy at the
+press matters, and whether it is the report's `Fleet` or the socket fallback that came back empty.
+
+`App.FleetName()` is folded from every report (`withFleetName`), the `FrameStatusReply` that answers ⌃Q
+included, and only an empty name falls back to `daemon.FleetName(socket)`. So both must have come back
+empty, or the reply cleared a name the window had.
+
+**The guess:** `TestCtrlQAfterAWakeNameNamesTheFleetItReopens` renames and presses ⌃Q in a fleet with no
+agent spawned after the rename, and it opens with `WAKE_SOCKET` hand-set inside `~/.wake/fleets`, while the
+take used a bare `wake`. Either difference may be what the test misses.
+
+**Closes with:** a pty test that renames, then spawns, then presses ⌃Q and reads the line.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept
