@@ -191,7 +191,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   park alike**, first interrupting every agent as Esc does and cancelling what is queued behind its turn,
   so a turn in flight ends inside the grace and an outstanding ask is withdrawn, not denied (owner's
   2026-10-21, -22 and 2026-11-07 rulings); a woken session told `continue` picks the turn up, and the `⌃Q`
-  window prints the words of the ⧗ messages it dropped (`internal/ui/parkdropped.go`); **a crash**
+  window prints the words of every message claude had not read (`internal/ui/parkdropped.go`; a daemon on
+  another build keeps the old hedge); **a crash**
   (SIGKILL, a panic, a force restart - the state files' writes and removals are
   fsynced) leaves `parkready.json`, and the next daemon's reaper moves each finished roster row's record
   into the park book (BUG-53; `internal/daemon/parkready.go`, `reap.go`'s `handOver`). A row it retains stays out.

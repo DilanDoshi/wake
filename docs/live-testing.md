@@ -371,10 +371,10 @@ back.**
       path into park.
 - [ ] **`⌃Q` while an agent is mid-build.** `⌃Q` interrupts the build as Esc would, and the line says
       *"Parking N agents (a turn in flight is interrupted)"*. Start something long, type a message
-      behind it, `⌃Q⌃Q`: the window should close within a second or two, and the exit line should
-      print the queued message's words under the agent. Then `wake --fleet <name>`, `/resume`, and
-      tell it `continue` - does it pick the build up where it stopped? A woken pane may draw *"No
-      response requested."* under the interrupted turn (BUG-65).
+      behind it, `⌃Q⌃Q`: the exit line should print the queued message's words under the agent, and
+      `wake --fleet <name>` should open the room at once rather than waiting out a 30 s shutdown.
+      `/resume all` should bring the agent back; tell it `continue` - does it pick the build up where
+      it stopped? A woken pane may draw *"No response requested."* under the interrupted turn (BUG-65).
 - [ ] Your terminal is left in a sane state — cursor visible, no leftover colour, prompt intact.
 - [ ] `wake attach <name>` returns you to the live conversation with the transcript intact.
 - [ ] `wake status` lists what is alive.

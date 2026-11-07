@@ -18,11 +18,12 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// quitGrace is how long a quitting daemon waits for stopped sessions to
-// finish their in-flight turns before it kills what is left.
+// quitGrace is how long a quitting daemon waits for stopped sessions to end
+// before it kills what is left: a parking quit's interrupted turns, and under
+// `wake stop` turns let run to their end.
 //
 // It is a compromise between two things Wake owes the operator and cannot owe
-// both of: an agent mid-Edit must be allowed to finish the edit, and the
+// both of: an agent mid-Edit under `wake stop` must be allowed to finish, and the
 // daemon must not still be alive minutes after `wake stop`. Exiting early is
 // the worse failure of the two - it leaves process trees with nobody holding
 // a handle - so the grace is generous and the ending is a group kill rather
@@ -345,8 +346,8 @@ func (s *server) shutdown() error {
 			a.beginPark()
 		}
 		if a.reclaimingNow() {
-			// The grace exists so an in-flight turn can finish. This agent
-			// has no process left to finish one, so waiting is unnecessary.
+			// The grace exists so an in-flight turn can end. This agent
+			// has no process left to end one, so waiting is unnecessary.
 			// ParkAll must preserve the label beginPark just installed: kill
 			// clears it on a not-yet-retired agent. Reclaim's endProcess is
 			// idempotent and lets retire/completePark decide the parked ending.

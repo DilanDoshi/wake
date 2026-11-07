@@ -50,11 +50,11 @@ func fleetsHome(t *testing.T, from, to string) string {
 
 func TestCtrlQsLineNamesTheFleet(t *testing.T) {
 	for _, tc := range fleetLines {
-		confirmed := parkAllLine(2, tc.fleet, nil, nil)
+		confirmed := parkAllLine(2, tc.fleet, ui.QueueAtQuit{}, nil)
 		if want := "`" + tc.reopen + "` reopens the room"; !strings.Contains(confirmed, want) {
 			t.Errorf("on fleet %q a confirmed ⌃Q printed %q, want %q", tc.fleet, confirmed, want)
 		}
-		failed := parkAllLine(2, tc.fleet, nil, errTest)
+		failed := parkAllLine(2, tc.fleet, ui.QueueAtQuit{}, errTest)
 		for _, want := range []string{"`" + tc.status + "` says what is still running", "`" + tc.reopen + "` reopens the room"} {
 			if !strings.Contains(failed, want) {
 				t.Errorf("on fleet %q an unconfirmed ⌃Q printed %q, want %q", tc.fleet, failed, want)

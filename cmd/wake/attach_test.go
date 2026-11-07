@@ -299,12 +299,12 @@ func TestCtrlQsExitLineIsCountedByTheModelRatherThanAskedOfTheDaemon(t *testing.
 // reports what is not known and names the verbs that answer it, which is `wake
 // stop`'s own rule about never claiming more than you can see.
 func TestTheExitLineOnlyPromisesAParkedFleetWhenTheDaemonConfirmedIt(t *testing.T) {
-	confirmed := parkAllLine(2, "", nil, nil)
+	confirmed := parkAllLine(2, "", ui.QueueAtQuit{}, nil)
 	if !strings.Contains(confirmed, "Parking 2 agents") {
 		t.Errorf("a ⌃Q the daemon confirmed printed %q, and the promise is what the key is for", confirmed)
 	}
 
-	unconfirmed := parkAllLine(2, "", nil, errors.New("the daemon did not answer within 3s"))
+	unconfirmed := parkAllLine(2, "", ui.QueueAtQuit{}, errors.New("the daemon did not answer within 3s"))
 	if strings.Contains(unconfirmed, "Parking 2 agents") {
 		t.Errorf("a ⌃Q nothing confirmed printed %q - the same sentence a confirmed one prints. That is "+
 			"the whole of outstanding bug 3: an operator is told a fleet is parked, closes the window, "+
@@ -330,26 +330,32 @@ func TestTheExitLineOnlyPromisesAParkedFleetWhenTheDaemonConfirmedIt(t *testing.
 	}
 }
 
-// ⌃Q interrupts every turn rather than letting it run out the grace, so the line
-// says so and promises nothing about what "finished in time". A message queued
-// behind a turn is cancelled and kept nowhere on disk, so its words are printed
-// here, once per message with every agent it was waiting at - and, when the park
-// is unconfirmed, still printed, since the daemon may have taken the verb.
-func TestTheExitLineSaysTurnsAreInterruptedAndPrintsTheDroppedWords(t *testing.T) {
-	dropped := []ui.DroppedMessage{{To: []string{"alex", "robin"}, Text: "ship it\nand the docs"}}
+// A daemon on this build interrupts every turn rather than letting it run out the
+// grace, so the line says so; one on another build may still let turns run, so the
+// line keeps the grace's hedge. A message claude had not read is kept nowhere on
+// disk, so its words are printed, once per message with every agent it was
+// waiting at, whether or not the park was confirmed.
+func TestTheExitLineSaysWhatTheDaemonDoesWithTurnsAndPrintsTheQueuedWords(t *testing.T) {
+	queued := []ui.QueuedMessage{{To: []string{"alex", "robin"}, Text: "ship it\nand the docs"}}
 
-	plain := parkAllLine(2, "", nil, nil)
-	if !strings.Contains(plain, "interrupted") || strings.Contains(plain, "finished in time") {
-		t.Errorf("a confirmed ⌃Q printed %q: it interrupts every turn, so the grace's hedge no longer describes it", plain)
+	this := parkAllLine(2, "", ui.QueueAtQuit{Cancelled: true}, nil)
+	if !strings.Contains(this, "interrupted") || strings.Contains(this, "finished in time") {
+		t.Errorf("a ⌃Q this build's daemon confirmed printed %q: it interrupts every turn, so the grace's hedge no longer describes it", this)
 	}
-	if strings.Contains(plain, "queued") {
-		t.Errorf("a ⌃Q that dropped nothing printed %q", plain)
+	if strings.Contains(this, "queued") {
+		t.Errorf("a ⌃Q with nothing queued printed %q", this)
 	}
-	for _, err := range []error{nil, errors.New("the daemon did not answer within 3s")} {
-		got := parkAllLine(2, "", dropped, err)
-		for _, want := range []string{"alex, robin: ship it", "and the docs"} {
-			if !strings.Contains(got, want) {
-				t.Errorf("⌃Q (err %v) printed %q, missing %q: the words were cancelled from claude's queue and kept nowhere else", err, got, want)
+	other := parkAllLine(2, "", ui.QueueAtQuit{Messages: queued}, nil)
+	if strings.Contains(other, "interrupted") || !strings.Contains(other, "finished in time") || !strings.Contains(other, "may still run") {
+		t.Errorf("a ⌃Q to a daemon on another build printed %q: that daemon may let a turn run and run what is queued", other)
+	}
+	for _, q := range []ui.QueueAtQuit{{Messages: queued, Cancelled: true}, {Messages: queued}} {
+		for _, err := range []error{nil, errors.New("the daemon did not answer within 3s")} {
+			got := parkAllLine(2, "", q, err)
+			for _, want := range []string{"alex, robin: ship it", "and the docs"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("⌃Q (cancelled %v, err %v) printed %q, missing %q: nothing on disk keeps those words", q.Cancelled, err, got, want)
+				}
 			}
 		}
 	}

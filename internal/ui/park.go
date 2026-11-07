@@ -60,6 +60,7 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/version"
 )
 
 const (
@@ -90,16 +91,13 @@ const (
 	parkConfirmed = "%s%s is parked - " + resumeVerb + " %s brings it back"
 
 	// parkingFleet is said on the keypress. The window is about to close, so
-	// this is the last thing the notice row can carry, and it names the verb
-	// that undoes it, on this fleet (FleetCommand). The daemon interrupts every
-	// turn on the way out (owner's 2026-11-07 ruling), and a session told
-	// `continue` after its wake picks the turn back up.
-	parkingFleet = "parking %s and closing Wake - a turn in flight is interrupted. `%s` reopens the room; " +
-		resumeVerb + " and `continue` pick them up."
+	// this is the last thing the notice row can carry; WayBack names the verbs
+	// that undo it, on this fleet.
+	parkingFleet = "parking %s and closing Wake%s"
 
-	// parkingDropped follows it when messages are pinned ⧗: the interrupt
-	// cancels them and nothing keeps their words (parkdropped.go).
-	parkingDropped = " Dropping %s still queued; Wake prints the words as it closes."
+	// parkingQueued follows it when claude had not read everything sent: the
+	// interrupt cancels it and nothing keeps the words (parkdropped.go).
+	parkingQueued = " %s still queued; Wake prints the words as it closes."
 
 	// parkWouldDeny is ⌃C on an agent that is waiting for the operator, and it
 	// is the one state park refuses.
@@ -201,9 +199,20 @@ type parkAll struct {
 	settled bool
 	err     error
 
-	// dropped is what was pinned ⧗ at the press, which the daemon's interrupt
-	// cancels. See parkdropped.go.
-	dropped []DroppedMessage
+	// queue is what claude had not read at the press. See parkdropped.go.
+	queue QueueAtQuit
+}
+
+// WayBack is what follows ⌃Q's count, in its notice and cmd/wake's exit line. A
+// daemon on this build interrupts every turn (owner's 2026-11-07 ruling), and a
+// session told `continue` picks its turn up; one on another build may let a turn
+// run and kill what outlasts the grace, which is never parked.
+func WayBack(fleet string, interrupted bool) string {
+	back := "`" + FleetCommand(fleet) + "` reopens the room"
+	if !interrupted {
+		return ". " + back + " and offers back whatever finished in time."
+	}
+	return " (a turn in flight is interrupted). " + back + "; " + resumeVerb + " and `continue` pick them up."
 }
 
 // waiting is the window between the keypress and the answer: asked for, not yet
@@ -317,10 +326,11 @@ func (a App) parkFleet() (tea.Model, tea.Cmd, bool) {
 	// caller and returns on a.quit.pressed before it reaches here, so a second
 	// ⌃Q never re-asks and never schedules a second deadline racing the first.
 	// beginQuit's first verb wins at the daemon regardless.
-	a.quit = parkAll{asked: a.carriedForward(), pressed: true, dropped: a.queuedNow()}
-	said := fmt.Sprintf(parkingFleet, plural(a.quit.asked, "agent"), FleetCommand(a.daemon.fleet))
-	if n := len(a.quit.dropped); n > 0 {
-		said += fmt.Sprintf(parkingDropped, plural(n, "message"))
+	queue := QueueAtQuit{Messages: a.queuedNow(), Cancelled: a.daemon.build == version.Build()}
+	a.quit = parkAll{asked: a.carriedForward(), pressed: true, queue: queue}
+	said := fmt.Sprintf(parkingFleet, plural(a.quit.asked, "agent"), WayBack(a.daemon.fleet, queue.Cancelled))
+	if n := len(queue.Messages); n > 0 {
+		said += fmt.Sprintf(parkingQueued, plural(n, "message"))
 	}
 	notice.Report("%s", said)
 	return a, tea.Sequence(a.askParkAll(), a.parkAllDeadline()), true

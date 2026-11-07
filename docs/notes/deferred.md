@@ -6067,3 +6067,8 @@ nothing reads back, so the `⌃Q` window prints the words of what it had pinned 
 - **A message taken up in the last moment before the interrupt is listed as dropped too.** The list is
   the pins at the press; one claude reads at a tool boundary between the press and the interrupt is in the
   transcript and also printed. Printed twice is the safe side of that race.
+- **An agent `⌃C` parked mid-turn is not interrupted by a `⌃Q` that follows.** `⌃C` closes stdin and lets
+  the turn run (`apply.go`'s park sets `stopped`), so `inputOpen` is false and there is no stdin left to
+  write the interrupt to; a turn that outlasts the grace is still killed and not booked, as before this
+  change. *Closes with:* `⌃C` interrupting a working agent first too, or a kill short of SIGKILL that claude
+  ends as an interrupt.

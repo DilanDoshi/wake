@@ -444,7 +444,7 @@ func leavingLine(final tea.Model, socket string) string {
 			if fleet == "" {
 				fleet = daemon.FleetName(socket)
 			}
-			return parkAllLine(n, fleet, app.DroppedOnPark(), err)
+			return parkAllLine(n, fleet, app.QueueAtQuit(), err)
 		}
 	}
 	st, err := daemon.Status(socket)
@@ -473,30 +473,32 @@ func leavingLine(final tea.Model, socket string) string {
 // answer it, which is `wake stop`'s own rule: never claim more than you can see.
 //
 // Both name the fleet (ui.FleetCommand): a bare `wake` starts a new one. Both
-// print the words of what was queued: the daemon's interrupt cancels it and
+// print the words of what claude had not read: this build's daemon cancels it and
 // nothing on disk keeps it, and an unconfirmed park may still have happened.
-func parkAllLine(n int, fleet string, dropped []ui.DroppedMessage, err error) string {
+func parkAllLine(n int, fleet string, q ui.QueueAtQuit, err error) string {
 	if err != nil {
 		return fmt.Sprintf("Could not confirm that ⌃Q parked the fleet (%s): %v. "+
 			"`%s` says what is still running; `%s` reopens the room.",
 			agents(n), err, ui.FleetCommand(fleet, cmdStatus), ui.FleetCommand(fleet)) +
-			droppedLines("Queued when ⌃Q was pressed, and dropped if the fleet parked:", dropped)
+			queuedLines("Queued when ⌃Q was pressed:", q.Messages)
 	}
-	return fmt.Sprintf("Parking %s (a turn in flight is interrupted). `%s` reopens the room; /resume and `continue` pick them up.",
-		agents(n), ui.FleetCommand(fleet)) +
-		droppedLines("Dropped from the queue, never sent:", dropped)
+	head := "Still queued when ⌃Q was pressed; the interrupt cancels these:"
+	if !q.Cancelled {
+		head = "Queued when ⌃Q was pressed; a daemon on another build may still run these:"
+	}
+	return "Parking " + agents(n) + ui.WayBack(fleet, q.Cancelled) + queuedLines(head, q.Messages)
 }
 
-// droppedLines lists each dropped message under its agents, a line apiece and
-// its own lines indented, or nothing when nothing was queued.
-func droppedLines(head string, dropped []ui.DroppedMessage) string {
-	if len(dropped) == 0 {
+// queuedLines lists each queued message under its agents, a line apiece and its
+// own lines indented, or nothing when nothing was queued.
+func queuedLines(head string, queued []ui.QueuedMessage) string {
+	if len(queued) == 0 {
 		return ""
 	}
 	var b strings.Builder
 	b.WriteString("\n" + head)
-	for _, d := range dropped {
-		fmt.Fprintf(&b, "\n  %s: %s", strings.Join(d.To, ", "), strings.ReplaceAll(d.Text, "\n", "\n    "))
+	for _, q := range queued {
+		fmt.Fprintf(&b, "\n  %s: %s", strings.Join(q.To, ", "), strings.ReplaceAll(q.Text, "\n", "\n    "))
 	}
 	return b.String()
 }

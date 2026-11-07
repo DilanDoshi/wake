@@ -8,7 +8,7 @@ before it parks (`fix/quit-interrupts-and-parks-busy-agents`; `decisions.md`, 20
 - **Live, without Wake in between**: a Python driver started `claude` with Wake's own argv (`buildArgs`:
   stream-json both ways, `--verbose`, `--permission-prompt-tool stdio`, `--brief`, the four visibility
   flags, `--permission-mode auto`, `--model haiku`, `--session-id`), wrote the stream-json lines Wake
-  writes, and allowed every ask. Projects were at `/tmp/quitpark-probe` and `/tmp/quitpark-probe2`. The
+  writes, and allowed every ask. Projects were at `/tmp/quitpark-probe`, `/tmp/quitpark-probe2` and `/tmp/quitpark-probe3`. The
   operator's own login was used with `CLAUDE*`, `CMUX*` and `WAKE_SOCKET` unset, since a sterile `HOME`
   cannot sign in.
 - **No fixture is committed.** What was measured is the on-disk transcript beside the stream, and the
@@ -51,6 +51,19 @@ second user line, waited two seconds, wrote the interrupt with `cancel_queued`, 
 - **So nothing Wake reads brings it back.** Core drops `queue-operation` records as on-disk plumbing, a
   conversation's `↑` history is its transcript's user turns, and the room's is its restored echo. That is
   why the `⌃Q` window prints the words itself (`internal/ui/parkdropped.go`).
+
+## An ask outstanding, then the interrupt and stdin closed in one burst
+
+The prompt asked for one `Write`, under `--permission-mode default` so it asked. On the `can_use_tool`
+request the driver wrote no answer: it wrote the interrupt with `cancel_queued` and closed stdin at once,
+the order `stopForShutdown` writes them in.
+
+- **The ask is withdrawn, not denied.** Next on stdout came `control_cancel_request` naming the ask, the
+  interrupt's receipt, the tool result rejected (`The user doesn't want to proceed…`), the user text
+  `[Request interrupted by user for tool use]`, and a `result` of `error_during_execution` with
+  `aborted_tools`. The process exited 1 with an empty stderr; no file was written.
+- **This is not what a bare stdin close does.** `question-park-close.jsonl` records an ask killed by
+  EOF alone: the request fails with an `AbortError` and the turn carries on running tools.
 
 ## Re-checking
 
