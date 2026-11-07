@@ -347,13 +347,14 @@ then hang there. Either raise the compressed deadline enough to clear a loaded c
 well under the hook's `sleep 60`), or gate the deadline's start on the hook having recorded its pid —
 so the bound measures the *hang*, not the checkout. The current 2s measures both.
 
-**Fixed on `fix/ci-package-timeout-and-two-flakes` (PR awaiting merge), by the second way.** Re-read
-2026-11-07: under CPU load 32–66 and a 120s fsync hammer it passed 45/45, git reaching its hook in
-~0.3s; a hook made to sleep 2.5s before it backgrounds its child failed it every time with the logged
-symptom (17.18s). `git` now takes the caller's context and sets `gitTimeout` under it, and the test,
-renamed `TestAHungWorktreeAddHasItsTreeReapedWhenItsCallEnds`, ends the call once the hook has
-recorded its pid; that slow hook now passes. `TestAGitCallIsBoundedByGitTimeout` pins the deadline
-itself with one that has already passed, so nothing races a clock.
+**Fixed on `fix/ci-package-timeout-and-two-flakes` (PR awaiting merge), close to the second way.**
+Re-read 2026-11-07: under CPU load 32–66 and a 120s fsync hammer it passed 45/45, git reaching its
+hook in ~0.3s; a hook made to sleep 2.5s before it backgrounds its child failed it every time with the
+logged symptom (17.18s). `git` now takes the caller's context and sets `gitTimeout` under it, and the
+test, renamed `TestAHungWorktreeAddHasItsTreeReapedWhenItsCallEnds`, ends the call by hand once the
+hook has recorded its pid, through the same cancel a deadline reaches; that slow hook now passes.
+`TestAGitCallRunsUnderGitTimeout` pins that the call carries a deadline from `gitTimeout`, with one
+already past, so nothing races a clock.
 
 
 ---

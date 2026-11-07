@@ -41,8 +41,9 @@ func writeHook(t *testing.T, repo, body string) {
 }
 
 // recordedPid reads the pid a hook wrote, waiting for it to appear - the hook
-// records it before it blocks, so this returns while git is still hung.
-func recordedPid(t *testing.T, pidFile string) int {
+// records it before it blocks, so this returns while git is still hung. A git
+// that returns first failed before its hook ran, and its error says why.
+func recordedPid(t *testing.T, pidFile string, done <-chan error) int {
 	t.Helper()
 	deadline := time.Now().Add(testTimeout)
 	for time.Now().Before(deadline) {
@@ -51,7 +52,11 @@ func recordedPid(t *testing.T, pidFile string) int {
 				return pid
 			}
 		}
-		time.Sleep(20 * time.Millisecond)
+		select {
+		case err := <-done:
+			t.Fatalf("git returned before its post-checkout hook recorded a pid: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
 	}
 	t.Fatalf("the post-checkout hook never recorded a pid at %s", pidFile)
 	return 0
@@ -149,7 +154,7 @@ func TestAHungWorktreeAddHasItsTreeReapedWhenItsCallEnds(t *testing.T) {
 		done <- err
 	}()
 
-	pid := recordedPid(t, pidFile)
+	pid := recordedPid(t, pidFile, done)
 	cancel()
 	select {
 	case <-done:
@@ -162,10 +167,10 @@ func TestAHungWorktreeAddHasItsTreeReapedWhenItsCallEnds(t *testing.T) {
 	}
 }
 
-// TestAGitCallIsBoundedByGitTimeout pins the deadline the test above ends by
-// hand. A call whose gitTimeout has already passed is refused before git starts,
-// so nothing races a clock.
-func TestAGitCallIsBoundedByGitTimeout(t *testing.T) {
+// TestAGitCallRunsUnderGitTimeout pins that a call carries a deadline set from
+// gitTimeout, which the test above ends by hand: one already past is refused
+// before git starts, so nothing races a clock. How long it is goes unpinned.
+func TestAGitCallRunsUnderGitTimeout(t *testing.T) {
 	shortGitTimeout(t, 0)
 	if _, err := git(context.Background(), t.TempDir(), "--version"); !errors.Is(err, context.DeadlineExceeded) {
 		t.Fatalf("git with its deadline already past = %v, want %v: the call is not bounded by gitTimeout", err, context.DeadlineExceeded)
