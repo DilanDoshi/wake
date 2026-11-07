@@ -165,6 +165,18 @@ harness can do this, and a screen is the only thing that can show which rows wen
 
 ## BUG-15 — `TestAnOversizedLineEndsTheSessionAndReapsWhatItSpawned` fails in a full run and passes alone
 
+**Not reproducible on `9fd48573` (re-read 2026-11-07); kept for the record.** Under `-race` it passed
+30/30 at load 66, about 1s each against its 12s budget, and in three full lanes that day (0.55s in the
+race lane). The failure below took the whole budget on both runs, so it was a hang rather than a slow
+path, and the ending has been rebuilt since (Wake owns stdout's read end; `awaitExit`'s grace). The
+fixing commit cannot be named: history before 0.1.0 is squashed. Every wait in the test is on a real
+condition. What the re-read did find was a false pass: `startFake`'s 10s deadline fell inside the
+test's own wait, and a run it ended ("read |0: file already closed") passed every assertion without
+the oversized line ever being read - a helper made to sleep 11s first passed at 10.00s. Closed on
+`fix/ci-package-timeout-and-two-flakes`: the session starts under a context nothing cancels until the
+test is over, and the error must wrap `bufio.ErrTooLong`. That slow helper now passes by its own path
+(11.27s); a pump whose kill waits for a cancel fails at 12.03s with the message below.
+
 **Observed 2026-08-23**, and settled the same day by running the gate on both sides.
 
 ```
