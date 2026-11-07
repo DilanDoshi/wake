@@ -5668,13 +5668,14 @@ stop, or it got the old account's limit again (2026-11-06), which became a new s
   any; an overload or an unreachable API is the turn's own too. The reset's resume and the unreachable
   path's stay one-shot: neither raced a login.
   - **Two limits naming no reset read as the same**, so such a failure is retried. Every limit message
-    recorded names one, and the cost is bounded: three more failed turns over about six minutes.
+    in the field transcripts named one (2026-10-21 to 2026-11-06), and the cost is bounded: three more
+    failed turns over about six minutes.
   - **A 401 is `core.NoticeAPIError` too**, mid-turn retry frames included, so a dead token after a login's
     resume is retried, each try another of claude's own five-minute 401 hangs. In a window the UI's
     auto-park at three (`authRetryParkAttempt`) takes it first, often within that first turn; the parked
     agent leaves the retries (`limited` skips one parking) and waits for the UI's proof of a working login,
     which wakes it but writes no `continue`. With no window, at most three tries.
-- **A turn Wake did not send keeps the retry.** The operator's own `continue`, or a peer's message, landing
+- **Another turn keeps the retry.** One no login's resume started - the operator's own `continue`, a peer's message - landing
   while a retry waits runs on the same process. A limit naming the stop's reset from it leaves the stop and
   its retry as they were (a "Not logged in" never replaced a stop). Without this, the turns that started
   2026-11-06's stops would have wiped the retry.
@@ -5710,7 +5711,7 @@ stop, or it got the old account's limit again (2026-11-06), which became a new s
   the cap, each ending in the count of `continue`s the fake received), and `loginretry_test.go` (no retry
   for the new account's own limit, an overload, an unreachable API, the reset's or the network's resume, or
   after the resumed turn went through, ended, failed otherwise, was interrupted or cleared; the retry kept
-  through a turn Wake did not send; a reset already past dropped; a due retry resumed as a login's past its
+  through another turn; a reset already past dropped; a due retry resumed as a login's past its
   reset; the tick at a retry; a fresh login's count; the waits). Twenty-one mutations, each red, among them
   every survivor of the adversarial review.
 

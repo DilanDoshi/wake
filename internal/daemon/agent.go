@@ -280,8 +280,8 @@ type agent struct {
 	// limit is set while this agent's last turn ended on a usage limit or an
 	// unreachable API and nothing has run since: what resumes it. unproven is
 	// Wake's resume of an unreachable one with no output of the agent's own
-	// since, login a login's resume until its turn goes through or fails. See
-	// usagelimit.go, unreachable.go and loginretry.go.
+	// since, login a login's resume until its turn ends. See usagelimit.go,
+	// unreachable.go and loginretry.go.
 	limit    usageStop
 	unproven bool
 	login    loginTry
@@ -612,6 +612,7 @@ func (a *agent) observe(ev core.Event) (learned bool) {
 		// through a fake that ends the turn in the same breath - see
 		// fakeWithdrawTheAsk.
 		a.owed = false
+		a.login = loginTry{} // its failure, if any, came first: under the same lock as owed
 		a.pending = nil
 		// And nothing is being run any more. Cleared here rather than on the
 		// tool's own result for the reason rpc.SessionStatus.Tool gives: a

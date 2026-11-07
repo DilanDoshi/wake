@@ -19,15 +19,27 @@ func resumed(t *testing.T, trigger func(*testing.T, *server, *agent)) *agent {
 }
 
 // written writes the resume the agent's input holds, as its input goroutine
-// would, and ends the turn it starts as the agent's next event will.
+// would; the turn it starts is the agent's next event.
 func written(t *testing.T, a *agent) {
+	t.Helper()
+	a.sendResume(*queued(t, a))
+}
+
+// queued is the resume the agent's input holds, failing at once on none.
+func queued(t *testing.T, a *agent) *resumeAsk {
 	t.Helper()
 	select {
 	case p := <-a.in:
-		a.sendResume(*p.resume)
+		return p.resume
 	default:
 		t.Fatal("nothing resumed the agent")
+		return nil
 	}
+}
+
+// failedAt fails the resumed turn with ev at now, then ends it, as claude does.
+func failedAt(a *agent, ev core.Event, now time.Time) {
+	a.noteLimit(ev, now)
 	a.observe(core.Event{Kind: core.KindTurnEnd})
 }
 
@@ -75,7 +87,7 @@ func TestOnlyAFailureLikeTheOldLoginsIsRetried(t *testing.T) {
 		}, noLogin},
 		{"after an interrupt", byLogin, (*agent).dropLimit, noLogin},
 		{"after a /clear", byLogin, func(a *agent) { a.noteLimit(core.Event{Kind: core.KindSessionReset}, after) }, noLogin},
-		{"after the turn ended with neither", byLogin, func(a *agent) { a.noteLimit(core.Event{Kind: core.KindTurnEnd}, after) }, noLogin},
+		{"after the turn ended with neither", byLogin, func(a *agent) { a.observe(core.Event{Kind: core.KindTurnEnd}) }, noLogin},
 		{"after an overload", byLogin, func(a *agent) { a.noteLimit(overload, after) }, noLogin},
 		{"an overload", byLogin, nil, overload},
 		{"an unreachable API", byLogin, nil, unreachable},
@@ -105,7 +117,7 @@ func TestTheOldLoginsLimitArmsARetryAndAFreshLoginRestartsTheCount(t *testing.T)
 	la := losAngeles(t)
 	after := time.Date(2026, 11, 6, 14, 44, 0, 0, la)
 	a := resumed(t, byLogin)
-	a.noteLimit(limitEvent("6:50pm"), after)
+	failedAt(a, limitEvent("6:50pm"), after)
 	want := usageStop{at: after, reset: time.Date(2026, 11, 6, 18, 50, 0, 0, la), retry: after.Add(loginRetries[0]), tries: 1}
 	if got := a.limit; !got.retry.Equal(want.retry) || got.tries != 1 || !got.reset.Equal(want.reset) || got.account.ID != "acct-b" {
 		t.Fatalf("stop %+v, want a retry at %v, try 1, the reset %v, under acct-b", got, want.retry, want.reset)
@@ -113,7 +125,7 @@ func TestTheOldLoginsLimitArmsARetryAndAFreshLoginRestartsTheCount(t *testing.T)
 	fleetOf(t, a).resumeDue(want.retry)
 	written(t, a)
 	second := want.retry.Add(time.Second)
-	a.noteLimit(limitEvent("6:50pm"), second)
+	failedAt(a, limitEvent("6:50pm"), second)
 	if got := a.limit; got.tries != 2 || !got.retry.Equal(second.Add(loginRetries[1])) {
 		t.Fatalf("after the retry failed: try %d, retry %v; want try 2 at %v", got.tries, got.retry, second.Add(loginRetries[1]))
 	}
@@ -124,7 +136,7 @@ func TestTheOldLoginsLimitArmsARetryAndAFreshLoginRestartsTheCount(t *testing.T)
 	signIn(t, os.Getenv("CLAUDE_CONFIG_DIR"), "acct-c", "3")
 	fleetOf(t, a).resumeOnLogin()
 	written(t, a)
-	a.noteLimit(limitEvent("6:50pm"), after)
+	failedAt(a, limitEvent("6:50pm"), after)
 	if a.limit.tries != 1 || a.limit.retry.IsZero() {
 		t.Errorf("after a fresh login the retry count reads %d, retry %v; want 1 and armed", a.limit.tries, a.limit.retry)
 	}
@@ -153,18 +165,18 @@ func TestAStopIsDueAtTheSoonerOfItsRetryAndItsReset(t *testing.T) {
 	}
 }
 
-// A turn Wake did not send - the operator's, a peer's - that meets the old login
-// while a retry waits leaves the retry standing; another reset is the new
-// account's own limit, a stop like any.
-func TestATurnWakeDidNotSendLeavesTheRetryStanding(t *testing.T) {
+// Another turn - the operator's own, a peer's - that meets the old login while a
+// retry waits leaves the retry standing; another reset is the new account's own
+// limit, a stop like any.
+func TestAnotherTurnMeetingTheOldLoginLeavesTheRetryStanding(t *testing.T) {
 	la := losAngeles(t)
 	after := time.Date(2026, 11, 6, 14, 44, 0, 0, la)
 	a := resumed(t, byLogin)
-	a.noteLimit(limitEvent("6:50pm"), after)
+	failedAt(a, limitEvent("6:50pm"), after)
 	armed := a.limit
 	for _, ev := range []core.Event{limitEvent("6:50pm"), noLogin} {
 		if a.noteLimit(ev, after.Add(5*time.Second)); a.limit != armed {
-			t.Fatalf("%q from a turn Wake did not send left %+v, want the armed stop %+v", ev.Text, a.limit, armed)
+			t.Fatalf("%q from another turn left %+v, want the armed stop %+v", ev.Text, a.limit, armed)
 		}
 	}
 	a.noteLimit(limitEvent("9:15pm"), after.Add(10*time.Second))
@@ -192,8 +204,8 @@ func TestADueRetryIsResumedAsALoginsEvenPastTheReset(t *testing.T) {
 	a.limit.retry, a.limit.tries, a.limit.reset = time.Now().Add(-time.Second), 1, time.Now().Add(-2*resetSlack)
 	a.mu.Unlock()
 	fleetOf(t, a).resumeDue(time.Now())
-	if p := <-a.in; p.resume == nil || !p.resume.login.made || p.resume.login.tries != 1 {
-		t.Errorf("queued %+v, want the login's retry 1", p.resume)
+	if r := queued(t, a); !r.login.made || r.login.tries != 1 {
+		t.Errorf("queued %+v, want the login's retry 1", r.login)
 	}
 }
 

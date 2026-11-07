@@ -106,11 +106,6 @@ func (a *agent) noteLimit(ev core.Event, now time.Time) bool {
 		a.limit, a.unproven, a.login = usageStop{}, false, loginTry{}
 		a.mu.Unlock()
 		return false
-	case ev.Kind == core.KindTurnEnd:
-		a.mu.Lock()
-		a.login = loginTry{} // the turn's failure, if any, came before its end
-		a.mu.Unlock()
-		return false
 	case ev.Kind != core.KindAPIError:
 		return false
 	}
@@ -133,7 +128,7 @@ func (a *agent) noteLimit(ev core.Event, now time.Time) bool {
 	case ev.Notice != core.NoticeUsageLimit:
 		return false
 	case a.limit.tries > 0 && reset.Equal(a.limit.reset):
-		// a turn Wake did not send met the old login too: its retry stands
+		// a turn no login's resume started met the old login too: its retry stands
 	default:
 		a.limit = usageStop{at: now, reset: reset, account: account}
 	}

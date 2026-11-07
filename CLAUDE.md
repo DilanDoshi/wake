@@ -239,8 +239,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   **A login's resume that a process still on the old login answers is tried again** (BUG-64, the owner's
   2026-11-07 go): "Not logged in", or the limit naming the same reset, re-arms the stop with a retry at 15 s,
   1 min and 5 min after each failure, on the same timer; after that it waits for the reset or the next login.
-  A turn Wake did not send that meets the old login meanwhile leaves the retry standing, and three "Not logged
-  in"s in a window still auto-park it (the 401 path). `internal/daemon/loginretry.go`.
+  Another turn that meets the old login meanwhile (the operator's own, a peer's) leaves the retry standing,
+  and three "Not logged in"s with a window attached still auto-park it (the 401 path).
+  `internal/daemon/loginretry.go`.
   **An unreachable API (`core.NoticeAPIUnreachable`, claude's `server_error`: the connection lost, the
   machine asleep mid-response, an overload) is pinned and resumed the same way** (owner's 2026-10-23
   ruling), never marking or clearing a mark: one `continue` stamped `rpc.MessageReconnected` too, drawn
