@@ -1,3 +1,5 @@
+//go:build unix
+
 package daemon
 
 import (
@@ -15,23 +17,41 @@ import (
 // reaches the unnamed fleet: so each names the fleet that wrote it, as #214's
 // way-back lines do, and only a socket set by hand gets the bare verb.
 
-// onEachFleet runs check against a server on a named fleet, the unnamed one and a
-// socket set by hand, with the flag every command it names must end in.
+// onEachFleet runs check against a server on a named fleet, one renamed by
+// /wake-name, the unnamed one and a socket set by hand, with the flag every
+// command it names must end in. Only ps is on PATH: a regression past a refusal
+// must fail to launch rather than start the operator's claude.
 func onEachFleet(t *testing.T, check func(t *testing.T, s *server, flag string)) {
 	t.Helper()
+	onlyPsOnPath(t)
 	t.Setenv("HOME", tempHome(t))
-	t.Setenv("WAKE_PROJECTS", t.TempDir())
 	root, err := StateRoot()
 	if err != nil {
 		t.Fatal(err)
 	}
-	fleetsUnder(t, root, "dev")
-	for _, tc := range []struct{ what, socket, flag string }{
-		{"a named fleet", filepath.Join(fleetPath(root, "dev"), socketFileName), " --fleet dev"},
-		{"the unnamed fleet", filepath.Join(root, socketFileName), " --fleet default"},
-		{"a socket set by hand", tempSocket(t), ""},
+	fleetsUnder(t, root, "dev", "atlas")
+	on := func(socket string) func(*testing.T) *server {
+		return func(*testing.T) *server { return newServer(socket) }
+	}
+	for _, tc := range []struct {
+		what, flag string
+		server     func(*testing.T) *server
+	}{
+		{"a named fleet", " --fleet dev", on(filepath.Join(fleetPath(root, "dev"), socketFileName))},
+		{"a renamed fleet", " --fleet ops", func(t *testing.T) *server {
+			s := newServer(filepath.Join(fleetPath(root, "atlas"), socketFileName))
+			if err := s.moveFleetTo("ops"); err != nil {
+				t.Fatal(err)
+			}
+			return s
+		}},
+		{"the unnamed fleet", " --fleet default", on(filepath.Join(root, socketFileName))},
+		{"a socket set by hand", "", on(tempSocket(t))},
 	} {
-		t.Run(tc.what, func(t *testing.T) { check(t, newServer(tc.socket), tc.flag) })
+		t.Run(tc.what, func(t *testing.T) {
+			t.Setenv("WAKE_PROJECTS", t.TempDir())
+			check(t, tc.server(t), tc.flag)
+		})
 	}
 }
 
@@ -46,28 +66,6 @@ func says(t *testing.T, door, why, flag string, commands ...string) {
 	}
 	if flag != "" && strings.Contains(why, "`wake stop`") {
 		t.Errorf("%s says %q: a bare `wake stop` typed for this fleet ends the unnamed one", door, why)
-	}
-}
-
-// queueClient is a client with a queue and no connection: what the server says
-// to it stays readable.
-func queueClient() *client {
-	return &client{out: make(chan rpc.Frame, clientQueue), closing: make(chan struct{})}
-}
-
-// refusalTo is the error the server queued for id, or a failure when it queued none.
-func refusalTo(t *testing.T, c *client, id string) string {
-	t.Helper()
-	for {
-		select {
-		case f := <-c.out:
-			if f.Kind == rpc.FrameError && f.SessionID == id {
-				return f.Text
-			}
-		default:
-			t.Fatalf("nothing refused %s", id)
-			return ""
-		}
 	}
 }
 
@@ -88,11 +86,11 @@ func TestTheCapRefusalStopsTheFleetThatRefused(t *testing.T) {
 		late := liveAgent(idBeta, "alex", t.TempDir())
 		says(t, "the last door", s.admitLive(late, nil, false), flag, "wake stop")
 
-		c := queueClient()
+		c := newClient(nil)
 		if s.maySpawn(context.Background(), c, rpc.Frame{SessionID: idGamma}) {
 			t.Fatal("a spawn past the cap was allowed")
 		}
-		says(t, "maySpawn", refusalTo(t, c, idGamma), flag, "wake stop")
+		says(t, "maySpawn", firstRefusal(t, c).Text, flag, "wake stop")
 	})
 }
 
@@ -137,17 +135,6 @@ func TestASecondImportOpensTheImportOnThisFleet(t *testing.T) {
 	})
 }
 
-// After a /wake-name the stop names the fleet's new name: the old one forwards
-// only while this daemon lives.
-func TestTheCapRefusalFollowsARenamedFleet(t *testing.T) {
-	s, _ := namedServer(t, "atlas")
-	if err := s.moveFleetTo("dev"); err != nil {
-		t.Fatal(err)
-	}
-	atCap(t, s)
-	says(t, "the last door", s.admitLive(liveAgent(idBeta, "alex", t.TempDir()), nil, false), " --fleet dev", "wake stop")
-}
-
 // A name somebody typed that a live session already wears is refused with the
 // command that opens that session on this fleet, at every door a typed name
 // comes through: spawn, fork and import.
@@ -158,9 +145,9 @@ func TestATakenNameOpensItsHolderOnThisFleet(t *testing.T) {
 		}
 		ctx := context.Background()
 
-		spawned, c := testSessionID("c99c"), queueClient()
-		s.spawn(ctx, c, rpc.Frame{SessionID: spawned, Text: "alex", Dir: t.TempDir()})
-		says(t, "a spawn", refusalTo(t, c, spawned), flag, "wake attach alex")
+		c := newClient(nil)
+		s.spawn(ctx, c, rpc.Frame{SessionID: testSessionID("c99c"), Text: "alex", Dir: t.TempDir()})
+		says(t, "a spawn", firstRefusal(t, c).Text, flag, "wake attach alex")
 
 		parent := testSessionID("d00d")
 		p := liveAgent(parent, "sydney", t.TempDir())
@@ -169,15 +156,15 @@ func TestATakenNameOpensItsHolderOnThisFleet(t *testing.T) {
 		if !s.register(p) {
 			t.Fatal("could not put the fork's parent in the fleet")
 		}
-		forked, c := testSessionID("e11e"), queueClient()
-		s.fork(ctx, c, rpc.Frame{SessionID: forked, ParentID: parent, Text: "alex"})
-		says(t, "a fork", refusalTo(t, c, forked), flag, "wake attach alex")
+		c = newClient(nil)
+		s.fork(ctx, c, rpc.Frame{SessionID: testSessionID("e11e"), ParentID: parent, Text: "alex"})
+		says(t, "a fork", firstRefusal(t, c).Text, flag, "wake attach alex")
 
 		source, real := testSessionID("f22f"), t.TempDir()
 		writeTranscript(t, ProjectsDir(), slugOf(real), source, real)
-		imported, c := testSessionID("a33a"), queueClient()
-		s.importSession(ctx, c, rpc.Frame{SessionID: imported, ParentID: source, Text: "alex"})
-		says(t, "an import", refusalTo(t, c, imported), flag, "wake attach alex")
+		c = newClient(nil)
+		s.importSession(ctx, c, rpc.Frame{SessionID: testSessionID("a33a"), ParentID: source, Text: "alex"})
+		says(t, "an import", firstRefusal(t, c).Text, flag, "wake attach alex")
 	})
 }
 

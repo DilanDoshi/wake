@@ -60,7 +60,8 @@ report's own), held by a test per sentence.
 and the UI do, and `server.fleetName` (the report's own `fleetNameOf(root, s.fleetSocket())`) names the fleet
 in the cap refusal at both doors (`maySpawn`, `admitLive`), in import's `heldRefusal` and `explainHeldSource`,
 and in a taken name (`nameHeld`, worded by `claimName` at spawn, fork and import).
-`daemon/fleetlines_test.go` holds each against a named fleet, the unnamed one and a socket set by hand. The
+`daemon/fleetlines_unix_test.go` holds each against a named fleet, a renamed one, the unnamed one and a
+socket set by hand. The
 orphaned-parent fork arm is not reachable: only `FleetOnDisk` reports `StateOrphaned`, and `forkSource`
 reads `s.fleet()`. So it now names no command instead of gaining a fleet (wake-orch's ruling). The two
 narrow gaps that sat here are the entry below.
@@ -75,8 +76,10 @@ Both narrow, and both left by `fix/park-line-names-the-fleet` (split from the en
   under such a daemon they say a bare `wake`. The stale-daemon notice already tells the operator to reopen the
   fleet on this build.
 - **A socket set by hand directly in `~/.wake`** (`WAKE_SOCKET=~/.wake/test.sock`) reads as the unnamed fleet
-  (`fleetNameOf`), so its hints say `--fleet default`, the daemon's refusals included. This is not new: the
-  bare verb they said before reached the unnamed fleet too, and such a socket already shares its files.
+  (`fleetNameOf`), so its hints say `--fleet default`, the daemon's refusals included. This is not new, and it
+  is not destructive. In the shell holding that `$WAKE_SOCKET`, `--fleet default` is refused, where the bare verb
+  reached the right daemon. In any other shell it reaches the unnamed fleet, as the bare verb did. Such a socket
+  already shares the unnamed fleet's files.
 
 Deferred #16 ("parking 1 agents", the notice row's bare `%d agents`) stays as it was. The notice now names
 the fleet, but it still counts with `%d`.
