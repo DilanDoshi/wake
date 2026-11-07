@@ -236,6 +236,9 @@ type Composer struct {
 	// draft so a chip's number never reuses one a deleted chip had. Reset clears
 	// it with the rest.
 	nextImageID int
+
+	// scroll is where the wheel left a draft taller than the box. See composerscroll.go.
+	scroll draftScroll
 }
 
 // NewComposer returns an empty, focused composer showing the mode sessions are
@@ -293,6 +296,10 @@ func (c Composer) Refocus() (Composer, tea.Cmd) {
 // daemon answers. The text area binds neither it nor ⇥, so the App takes both
 // without shadowing anything.
 func (c Composer) Update(msg tea.Msg) (Composer, tea.Cmd) {
+	if _, key := msg.(tea.KeyMsg); !key && c.held() {
+		return c.heldUpdate(msg) // a blink keeps the wheel's view; see composerscroll.go
+	}
+	c.scroll = draftScroll{} // and a key brings the view back to the caret
 	if k, ok := msg.(tea.KeyMsg); ok && k.Type == tea.KeyRunes && !k.Alt {
 		// A run of typed characters arrives as ONE KeyMsg whose String() is the
 		// characters themselves, and bubbles matches its keymap on that string.
@@ -369,6 +376,12 @@ func (c Composer) Update(msg tea.Msg) (Composer, tea.Cmd) {
 // It runs at the bound for the phantom-row reason above, is bounded by the cap,
 // and exits the moment the box stops changing - one Update on an unscrolled box.
 func (c Composer) reposition() Composer {
+	// The wheel's view stands while it still fills the box (composerscroll.go): one
+	// grown past the draft's last row would draw blank rows under it.
+	if c.held() && len(c.rowsFrom(c.scroll.top, c.ta.Height())) == c.ta.Height() {
+		return c
+	}
+	c.scroll = draftScroll{}
 	fitted := c.ta.Height()
 	c.ta.SetHeight(c.bound())
 	_ = c.ta.View()
@@ -674,48 +687,6 @@ func (c Composer) AtEnd() bool {
 	return info.StartColumn+info.ColumnOffset >= len([]rune(rows[last]))
 }
 
-// CanCursorUp reports whether ↑ would actually move the text cursor within the
-// draft, which is when App.key gives the arrow to the composer rather than the
-// roster. False for an empty or single-line draft, and false at the top row of
-// a multi-line or soft-wrapped one.
-//
-// It runs the move on a copy and compares the position rather than trusting
-// LineInfo's row count: bubbles' wrap adds a synthetic trailing row when a
-// line's width is exactly the wrap width (its `>=`), which Height counts but the
-// cursor cannot land on - so a count alone reports a move CursorUp does not make,
-// which swallows the arrow (moving neither the cursor nor the roster). Because
-// this is exactly the move App.key delegates to, the two can never disagree.
-func (c Composer) CanCursorUp() bool {
-	return c.cursorMoves((*textarea.Model).CursorUp)
-}
-
-// CanCursorDown is CanCursorUp's mirror for ↓.
-func (c Composer) CanCursorDown() bool {
-	return c.cursorMoves((*textarea.Model).CursorDown)
-}
-
-// cursorMoves applies a vertical move to a copy of the text area and reports
-// whether the cursor changed rows. The copy shares the read-only draft buffer
-// and the idempotent wrap cache by pointer but owns its own row and column, so
-// the probe never disturbs the live draft.
-func (c Composer) cursorMoves(move func(*textarea.Model)) bool {
-	probe := c.ta
-	before := cursorRow(probe)
-	move(&probe)
-	return cursorRow(probe) != before
-}
-
-// cursorRow is the cursor's vertical position: its logical line and the wrapped
-// row within that line. Deliberately not the column - at an edge bubbles'
-// CursorUp/CursorDown shuffles the column *within* a multi-rune grapheme (a
-// combining accent, a wide ZWJ sequence) without changing the row, and reading
-// that as a move would nudge the cursor into the middle of the glyph rather than
-// moving the roster. Vertical movement is exactly a change of row.
-func cursorRow(ta textarea.Model) [2]int {
-	info := ta.LineInfo()
-	return [2]int{ta.Line(), info.RowOffset}
-}
-
 // Mode is the permission mode this composer's status bar names, read back by
 // the pane's withBar.
 func (c Composer) Mode() string { return c.mode }
@@ -750,6 +721,7 @@ func (c Composer) Reset() Composer {
 	c.hist = promptWalk{}
 	c.attachments = nil
 	c.nextImageID = 0
+	c.scroll = draftScroll{}
 	return c
 }
 
@@ -772,6 +744,7 @@ func (c Composer) WithDraft(text string) Composer {
 	c.ta.SetValue(text)
 	c.ta.CursorEnd()
 	c.hist = promptWalk{}
+	c.scroll = draftScroll{} // SetValue moved the view, even onto the same draft
 	return c
 }
 

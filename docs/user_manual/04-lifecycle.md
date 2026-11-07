@@ -22,9 +22,9 @@ Park pauses an employee. Detach is you going home while they keep working.
 | | What it does | Recoverable |
 |---|---|---|
 | **`⌃C`** | Park the agent in front of you | **Yes** — `/resume <name>` |
-| **`⌃Q⌃Q`** | Park the whole fleet, then quit Wake (the first `⌃Q` arms, the second confirms) | **Yes** — next `wake` offers it back |
+| **`⌃Q⌃Q`** | Park the whole fleet, then quit Wake (the first `⌃Q` arms, the second confirms) | **Yes** — next `wake --fleet <name>` offers it back |
 | **`⌃O`** | Detach: close Wake, leave everyone running | Nothing stopped |
-| **`wake stop`** | End every session and the daemon | **No** |
+| **`wake stop --fleet <name>`** | End every session and the daemon | **No** |
 
 `wake stop` is the only irreversible one. Nothing brings a *stopped* session back — that is exactly
 the gap park was built to close.
@@ -45,7 +45,7 @@ cannot be told apart from a real one afterwards. Interrupt with `⎋` first, the
 ## Parking everything and quitting
 
 `⌃Q` parks the fleet and exits, and it is armed: the first press arms it (the cue reads
-`⌃Q park all & quit`), a second confirms. The next `wake` sees what was parked and offers it back:
+`⌃Q park all & quit`), a second confirms. The next `wake --fleet <name>` sees what was parked and offers it back:
 
 ```
 1 session parked: @kwame.
@@ -61,7 +61,7 @@ in time it is killed rather than parked, and it will not be in the offer.
 ## Detaching
 
 `⌃O`. Wake closes, the fleet keeps working, your terminal is returned to you sane. Come back with
-`wake`.
+`wake --fleet <name>`.
 
 This is what the background daemon exists for. If you only ever detach, you never lose anything —
 but you also leave 30 `claude` processes running, which is what park is for.

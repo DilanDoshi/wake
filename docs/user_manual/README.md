@@ -28,8 +28,8 @@ You get a daemon, an agent, and an open conversation. Then:
 - **`@name`** in the room talks to one agent; **`@all`** talks to everybody.
 - **`⌃C`** parks the agent you are looking at — its process stops, its conversation is kept, and
   `/resume` brings it back.
-- **`⌃O`** detaches. Wake closes, every agent keeps working. `wake` reopens.
-- **`⌃Q`** parks the whole fleet and quits. Next `wake` offers it all back.
+- **`⌃O`** detaches. Wake closes, every agent keeps working. `wake --fleet <name>` reopens.
+- **`⌃Q`** parks the whole fleet and quits. Next `wake --fleet <name>` offers it all back.
 
 The distinction that matters most is in [chapter 4](04-lifecycle.md): **park is about the agent,
 detach is about you.**

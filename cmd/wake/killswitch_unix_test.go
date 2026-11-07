@@ -371,7 +371,7 @@ func TestThereIsNoKillSwitchWithoutATerminal(t *testing.T) {
 	if term.IsTerminal(os.Stdin.Fd()) {
 		t.Skip("this test binary was given a terminal on stdin")
 	}
-	k, err := armKillSwitch()
+	k, err := armKillSwitch("")
 	if err != nil {
 		t.Fatalf("arming without a terminal: %v", err)
 	}

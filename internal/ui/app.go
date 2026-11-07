@@ -330,6 +330,8 @@ type App struct {
 
 	titled string // the title last written to the terminal; see title.go
 
+	fleetNamed func(string) // told each name the fleet is reported under; see fleetname.go
+
 	beating bool // a heartbeat tick is already scheduled; see beat.go
 
 	notices noticeState // the notice row's linger and pins; see noticelinger.go

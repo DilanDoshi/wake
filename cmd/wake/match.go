@@ -15,6 +15,7 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 // resolveSession is the fleet's account of one session, or why there is not
@@ -41,8 +42,8 @@ func resolveSession(socket, want string) (rpc.SessionStatus, rpc.Status, error) 
 	}
 	if !st.Running {
 		if len(st.Sessions) > 0 {
-			return rpc.SessionStatus{}, rpc.Status{}, fmt.Errorf("no daemon is running, and a previous one left %s behind with nothing holding them: check `wake status`",
-				agents(len(st.Sessions)))
+			return rpc.SessionStatus{}, rpc.Status{}, fmt.Errorf("no daemon is running, and a previous one left %s behind with nothing holding them: check `%s`",
+				agents(len(st.Sessions)), ui.FleetCommand(st.Fleet, cmdStatus))
 		}
 		return rpc.SessionStatus{}, rpc.Status{}, errors.New("no daemon is running, so there is nothing to attach to")
 	}
@@ -93,11 +94,12 @@ func liveSession(socket, sessionID string) (rpc.SessionStatus, rpc.Status, error
 		// exited parent is what every recorded fork resumed.
 		return rpc.SessionStatus{}, rpc.Status{}, fmt.Errorf(
 			"session %s is parked, so its process has stopped and there is no conversation to attach to; "+
-				"run `wake` and type `/resume %s` to bring this conversation back, "+
-				"or `wake fork %s` to branch what it said into a new session",
-			shortID(sess.ID), displayName(sess), displayName(sess))
+				"run `%s` and type `/resume %s` to bring this conversation back, "+
+				"or `%s` to branch what it said into a new session",
+			shortID(sess.ID), ui.FleetCommand(st.Fleet), displayName(sess), ui.FleetCommand(st.Fleet, cmdFork, displayName(sess)))
 	case rpc.StateOrphaned:
-		return rpc.SessionStatus{}, rpc.Status{}, fmt.Errorf("session %s has no daemon holding it: check `wake status`", shortID(sess.ID))
+		return rpc.SessionStatus{}, rpc.Status{}, fmt.Errorf("session %s has no daemon holding it: check `%s`",
+			shortID(sess.ID), ui.FleetCommand(st.Fleet, cmdStatus))
 	default:
 		return sess, st, nil
 	}
