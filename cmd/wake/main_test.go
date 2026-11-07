@@ -293,7 +293,10 @@ func startForkRefusingDaemon(t *testing.T, status rpc.Status, why string) *fakeD
 func listenAs(t *testing.T, d *fakeDaemon) *fakeDaemon {
 	t.Helper()
 
-	socket := tempSocket(t)
+	socket := d.socket
+	if socket == "" {
+		socket = tempSocket(t)
+	}
 	ln, err := net.Listen("unix", socket)
 	if err != nil {
 		t.Fatalf("listen on %s: %v", socket, err)
@@ -489,8 +492,14 @@ type realDaemon struct {
 
 func startRealDaemon(t *testing.T) *realDaemon {
 	t.Helper()
+	return startRealDaemonAt(t, tempSocket(t))
+}
 
-	socket := tempSocket(t)
+// startRealDaemonAt is startRealDaemon on a chosen socket: one in a fleet's
+// directory, for a daemon that reports the fleet's name.
+func startRealDaemonAt(t *testing.T, socket string) *realDaemon {
+	t.Helper()
+
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
 	go func() { errc <- daemon.Serve(ctx, socket) }()

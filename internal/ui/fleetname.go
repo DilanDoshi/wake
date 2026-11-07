@@ -6,6 +6,8 @@ package ui
 // that was away when it happened says so on its next report.
 
 import (
+	"strings"
+
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -21,11 +23,38 @@ const (
 	wakeNameUsage = wakeNameVerb + " <name> renames it"
 
 	// fleetRenamed is said in every window, with the way back to the fleet.
-	fleetRenamed = "fleet %s is now %s · `wake --fleet %s` comes back to it"
+	fleetRenamed = "fleet %s is now %s · `%s` comes back to it"
 
 	// fleetRenameFailed is a write that never reached the daemon.
 	fleetRenameFailed = "asking to rename the fleet"
 )
+
+// FleetCommand is a `wake` command line that reaches the fleet a report names:
+// `--fleet <name>` after the words, since a bare `wake` starts a new fleet and a
+// bare verb reaches the unnamed one. A fleet with no name - a socket set by
+// hand, which a bare `wake` under that $WAKE_SOCKET opens - gets none.
+func FleetCommand(fleet string, words ...string) string {
+	line := strings.Join(append([]string{"wake"}, words...), " ")
+	if fleet == "" {
+		return line
+	}
+	return line + " " + rpc.FleetFlag + " " + fleet
+}
+
+// FleetName is what the last report called this fleet, for the line cmd/wake
+// prints once the program has ended.
+func (a App) FleetName() string { return a.daemon.fleet }
+
+// WithFleetNamed hands f the fleet's name now and each name a report changes it
+// to: cmd/wake's emergency exit runs when the loop that folds them has stopped.
+// f runs on the Update goroutine, so it must not block.
+func (a App) WithFleetNamed(f func(string)) App {
+	a.fleetNamed = f
+	if f != nil {
+		f(a.daemon.fleet)
+	}
+	return a
+}
 
 // renameFleet is /wake-name. The daemon refuses what it cannot rename, and the
 // report that follows a rename is what announces it.
@@ -49,7 +78,10 @@ func (a App) withFleetName(st *rpc.Status) App {
 		return a
 	}
 	if was := a.daemon.fleet; was != "" && st.Fleet != "" && st.Fleet != was {
-		notice.Report(fleetRenamed, was, st.Fleet, st.Fleet)
+		notice.Report(fleetRenamed, was, st.Fleet, FleetCommand(st.Fleet))
+	}
+	if st.Fleet != a.daemon.fleet && a.fleetNamed != nil {
+		a.fleetNamed(st.Fleet)
 	}
 	a.daemon.fleet, a.daemon.title = st.Fleet, tabTitle(st.Fleet)
 	return a

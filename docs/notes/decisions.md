@@ -5622,3 +5622,35 @@ of that Wake drew a working agent with a pool word over a ticking age. Each retr
   clearing and non-clearing kind, the prune, replacement, the 401 path, no transcript block, the row budget,
   the room's oldest-turn rule, a subagent's output, a gap and a reattach, every width, the roster's working
   gate), each mutation-checked.
+
+## 2026-11-05 — every way back names the fleet (the owner, via wake-orch)
+
+The owner, after renaming harbor-2 to sing-dev-2 and pressing ⌃Q⌃Q: "have this wording updated". The line he
+got said "`wake` reopens the room". Since 2026-10-16 a bare `wake` starts a new fleet, so that line sent every
+named fleet's operator somewhere else.
+
+- **The rule.** A line that tells the operator what to type names the fleet by its current name:
+  `wake --fleet <name>` and `wake <verb> --fleet <name>` (`ui.FleetCommand`; the flag is `rpc.FleetFlag`).
+  The unnamed fleet is `wake --fleet default` (`daemon.LegacyFleet`). Only a fleet with no name is reached
+  bare: a socket set by hand outside `~/.wake/fleets`, where a bare `wake` under that `$WAKE_SOCKET` opens it.
+- **A `$WAKE_SOCKET` inside `~/.wake/fleets` reads as its fleet**, as the tab title and /wake-name's own
+  notice already do. After a rename that path is gone once the daemon exits, so a bare `wake` there would make
+  an empty fleet under the old name. `--fleet <new>` is refused only while the variable is set, and the
+  refusal names it.
+- **Where the name comes from.** ⌃Q's line uses the last report's name (`App.FleetName`), not the socket's,
+  because the daemon drops a rename's old names as it exits and may do so before the line prints. If no report
+  named the fleet (an older daemon), it falls back to `daemon.FleetName(socket)`, and ⌃O's line does the same.
+  ⌃C⌃C runs when the loop that folds reports has stopped, so the window hands the kill switch each name as it
+  is folded (`App.WithFleetNamed`, an atomic). It reads the socket only when no report named one: another
+  window's ⌃Q can end the daemon and drop the link first. The other lines read the report in hand, or the
+  socket where none is (`wake manager`, `wake stop`'s wait). `FleetOnDisk` names its fleet too, so a stopped
+  fleet's report does.
+- **⌃O names three commands**: back in, a look, the end, each with `--fleet`. A bare `wake stop` there would
+  have ended the unnamed fleet.
+- **Held by** `cmd/wake/fleetlines_test.go` and `fleetlines_unix_test.go` (every line for a named fleet,
+  `default` and a hand-set socket; ⌃Q's report name over a socket naming another fleet; the socket fallback
+  for ⌃Q and for an older daemon's ⌃O; the emergency exit through a rename's link and after it is gone),
+  `TestAClientNamesItsFleetByTheNameItHasNow`, the UI's notice, reattach and hand-on tests, and two on the
+  real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
+  once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
+  which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own four sentences are `deferred.md`'s (2026-11-05).

@@ -593,3 +593,7 @@ type SessionStatus struct {
 // at when nobody set one (owner's 2026-10-20 ruling). It bounds new sessions;
 // waking a parked one is exempt from any cap, as it always was.
 const MaxAgentsCeiling = 50
+
+// FleetFlag names the fleet a `wake` command is addressed to. Here rather than in
+// cmd/wake because the UI's way-back lines spell it too, TeamFilterFlag's reason.
+const FleetFlag = "--fleet"
