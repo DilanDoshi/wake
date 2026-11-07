@@ -645,9 +645,10 @@ masks ordering bugs. **Never collect coverage under `-race`:** it forces atomic 
 can hide real data races from the detector (`citarget_test.go` reads the recipes, `racelane_race_test.go`
 fails such a run however the flag arrived).
 `make ci` runs both and may not drift from the workflow (`internal/core/citarget_test.go`);
-`make quick` is not a gate. A goroutine leak is a bug. The race lane carries `-timeout=20m`, since
-`internal/ui` runs past go test's 10m default under `-race`; each lane's timeout stays under the CI
-job's `timeout-minutes` (`TestEachLanesTimeoutFiresBeforeTheCIJobsOwn`).
+`make quick` is not a gate. A goroutine leak is a bug. The race lane's package timeout is the Makefile's
+`RACE_TIMEOUT` (20m), since `internal/ui` runs past go test's 10m default under `-race`; a gate on a
+machine too loaded for it says `RACE_TIMEOUT=40m`, as GOFLAGS cannot. Each lane's timeout stays under
+the CI job's `timeout-minutes` (`TestEachLanesTimeoutIsUnderTheCIJobs`).
 
 **Guards that derive claims — never "fix" one by editing the number:**
 `TestCLAUDEmdNamesTheTwoLargestNonTestFiles` and `TestCLAUDEmdDescribesTheLegendItDraws` read this
