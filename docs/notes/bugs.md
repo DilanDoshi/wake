@@ -1398,40 +1398,45 @@ common, so it is filed here and not fixed there.
 interrupted turn) as plumbing in the decoder, from a committed fixture of a resumed interrupted
 transcript, scrubbed. A fix keyed on the text alone would also hide an agent that typed those words.
 
-## BUG-66 — after a `/wake-name` and a `/new`, ⌃Q's exit line sends the operator to a bare `wake`
+## BUG-66 — after a `/wake-name` and a `/new`, ⌃Q's exit line sent the operator to a bare `wake` — PARKED, not reproduced
 
-**Found 2026-11-07, recording takes for `fix/quit-interrupts-and-parks-busy-agents`, on `main` 507223b7.**
-The setup was a scratch `HOME` under `/private/tmp`, no `WAKE_SOCKET`, and the demo's scripted claude on a
-shim `PATH`.
+**Seen once, 2026-11-07**, recording takes for `fix/quit-interrupts-and-parks-busy-agents` on `main`
+507223b7. The setup was a scratch `HOME` under `/private/tmp`, no `WAKE_SOCKET`, and the demo's scripted
+claude. The steps: a bare `wake` (fleet `harbor`), `/wake-name dev`, `/new otto`,
+`@otto migrate the sessions table`, then ⌃Q⌃Q with otto mid-turn. The line read
+``Parking 2 agents. `wake` reopens the room…``. A bare `wake` starts a new fleet, so it sent the operator
+away from the parked one. The same take without the rename named `harbor`, and without the `/new` it
+named `dev`.
 
-The repro, typed in this order:
-1. A bare `wake` in `~/harbor`. It prints ``fleet harbor. `wake --fleet harbor` comes back to it``.
-2. `/wake-name dev`. The roster's manager becomes `manager-dev`.
-3. `/new otto`, then `@otto migrate the sessions table`, so otto is mid-turn.
-4. `⌃Q⌃Q`.
+**Not reproduced in about 20 tries on 507223b7:**
+- 7 VHS takes of that flow:
+  - 3 were the take's own tape regenerated with only the paths changed;
+  - 1 used the take's own binary, whose `leavingLine` disassembles the same as `main`'s;
+  - 1 put `wake` on `PATH` as a symlink, as the take's kit did.
+- 13+ pty runs, with otto idle and busy, under the Go fake and the demo claude.
 
-What went wrong: the exit line read ``Parking 2 agents. `wake` reopens the room…``, a bare `wake`, which
-starts a new fleet (2026-10-16). It should have named `wake --fleet dev`, as #214 made every way-back line
-do. Following it opens a different fleet, so the parked one is not where the operator is sent.
+Every run printed `wake --fleet dev`. Builds that logged at `leavingLine` read `dev` from both name
+sources, and no report carried an empty `Fleet`.
 
-Two takes narrow it:
-- **Without step 2** (no rename, otto spawned and busy), the line read ``wake --fleet harbor``, which is
-  right.
-- **Without step 3** (renamed, no agent spawned after), the line read ``wake --fleet dev``, which is also
-  right.
+**What is unexplained.** A bare line needs both of ⌃Q's name sources empty:
+- `App.FleetName()`, the last report's name;
+- `daemon.FleetName(socket)`, its fallback.
 
-So it takes the rename and an agent spawned after it. Not separated yet: whether otto being busy at the
-press matters, and whether it is the report's `Fleet` or the socket fallback that came back empty.
+For `fleets/harbor/daemon.sock` the fallback returns `harbor` or `dev` in every state of that directory
+(`fleetNameOf`, `forwardedName`). It returns "" only with `HOME` unset, which the take did not have. The
+take's daemon log and its room before ⌃Q match the takes that printed `dev`.
 
-`App.FleetName()` is folded from every report (`withFleetName`), the `FrameStatusReply` that answers ⌃Q
-included, and only an empty name falls back to `daemon.FleetName(socket)`. So both must have come back
-empty, or the reply cleared a name the window had.
+**Hardened:** the report half. `withFleetName` no longer lets a report naming no fleet wipe a name the
+window has (`TestAReportNamingNoFleetKeepsTheNameTheWindowHas`). A named fleet never becomes a hand-set
+one, so an empty name after a known one is never news. A hand-set socket and a pre-2026-10-24 daemon
+never named one, so they are unchanged.
 
-**The guess:** `TestCtrlQAfterAWakeNameNamesTheFleetItReopens` renames and presses ⌃Q in a fleet with no
-agent spawned after the rename, and it opens with `WAKE_SOCKET` hand-set inside `~/.wake/fleets`, while the
-take used a bare `wake`. Either difference may be what the test misses.
+**Guarded:** `TestCtrlQAfterAWakeNameAndASpawnNamesTheFleet`. It runs a bare `wake` under a scratch
+`HOME`, `/wake-name dev`, `/new otto` with a turn in flight and ⌃Q⌃Q, then reads `wake --fleet dev`.
+It passes on 507223b7, so it guards the scenario rather than proving a fix.
 
-**Closes with:** a pty test that renames, then spawns, then presses ⌃Q and reads the line.
+**Parked 2026-11-07 by wake-orch.** Reopen on a take that prints it again, with both name sources
+logged at `leavingLine`: the fallback half is the part nobody can explain.
 
 ## Residuals carried from bugs that are fixed and merged
 
