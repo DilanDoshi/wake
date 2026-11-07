@@ -7,6 +7,7 @@ package ui
 
 import (
 	"maps"
+	"reflect"
 	"strings"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -15,6 +16,12 @@ import (
 
 // copy is the immutability contract. The map and the order slice are both
 // duplicated, so a caller holding an older Fleet holds the fleet it had.
+// same is whether g is f with nothing written since: every write copies agents,
+// so one map is one fleet. Update's seam asks it to decide on a change.
+func (f Fleet) same(g Fleet) bool {
+	return reflect.ValueOf(f.agents).UnsafePointer() == reflect.ValueOf(g.agents).UnsafePointer()
+}
+
 func (f Fleet) copy() Fleet {
 	out := Fleet{
 		agents:     make(map[string]Agent, len(f.agents)+1),

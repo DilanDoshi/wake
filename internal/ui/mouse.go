@@ -229,13 +229,17 @@ func (a App) paneAt(col, y int) (id string, top, height int, ok bool) {
 // wrong pane every time. It moves no keys - reading is not focusing, and a wheel
 // that stole the focus would send the next keystroke somewhere nobody chose.
 //
-// A pointer over a sidebar, a divider or a rule scrolls the focused pane, which
-// is the honest fallback: there is no transcript under it to move.
+// The right sidebar scrolls itself, and only when its roster overflows. A
+// pointer over the strip, a divider or a rule scrolls the focused pane, which is
+// the honest fallback: there is no transcript under it to move.
 func (a App) scroll(lines, x, y int) App {
 	id, under := a.focus, false
 	col, top, height := 0, 0, 0
 	// Where the columns are drawn: mid-drag the divider is ahead of the layout.
-	if region, at := a.layout.Hit(a.frameRegions(a.regions()), x); region == RegionPane {
+	switch region, at := a.layout.Hit(a.frameRegions(a.regions()), x); {
+	case region == RegionRoster && y < a.paneHeight(): // the sidebar's own rows; see rosterscroll.go
+		return a.wheelRoster(lines)
+	case region == RegionPane:
 		col = at
 		id, top, height, under = a.paneAt(at, y)
 		if !under {

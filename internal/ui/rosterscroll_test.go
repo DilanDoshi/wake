@@ -10,6 +10,8 @@ package ui
 
 import (
 	"fmt"
+	"regexp"
+	"slices"
 	"strconv"
 	"strings"
 	"testing"
@@ -89,21 +91,30 @@ func TestTheCountIsExactlyWhatWasLeftOut(t *testing.T) {
 			for _, cursor := range []string{"", agents[n-1].ID, agents[n/2].ID} {
 				out := stripANSI(Roster{Selected: cursor}.View(agents, nil, rosterWidth, height))
 
-				drawn := 0
-				for _, a := range agents {
+				drawn, first, last := 0, -1, -1
+				for i, a := range agents {
 					if strings.Contains(out, a.Name+" ") {
 						drawn++
+						if first < 0 {
+							first = i
+						}
+						last = i
 					}
 				}
-				want := n - drawn
-				if want == 0 {
-					if strings.Contains(out, "more") {
+				if drawn == n {
+					if hasCountRow(out) {
 						t.Errorf("%d agents in %d rows: everything fits and the column still says something is hidden:\n%s", n, height, out)
 					}
 					continue
 				}
-				if !strings.Contains(out, moreLine(want)) {
-					t.Errorf("%d agents in %d rows, cursor %q: drew %d and does not say %q:\n%s", n, height, cursor, drawn, moreLine(want), out)
+				// The window is one run of the fleet: the agents before it are above,
+				// the rest below - and with nothing drawn, all of them below.
+				above, below := max(first, 0), n-1-last
+				if drawn == 0 {
+					above, below = 0, n
+				}
+				if want := countLine(above, below, rosterWidth); !strings.Contains(out, want) || above+below != n-drawn {
+					t.Errorf("%d agents in %d rows, cursor %q: drew %d and does not say %q:\n%s", n, height, cursor, drawn, want, out)
 				}
 			}
 		}
@@ -124,7 +135,7 @@ func TestTheWindowFillsTheColumn(t *testing.T) {
 			for _, height := range []int{3, 5, 8, 12} {
 				for _, cursor := range []string{agents[0].ID, agents[len(agents)/2].ID, agents[len(agents)-1].ID} {
 					r := Roster{Selected: cursor}
-					w := r.window(agents, subs, rosterWidth, height)
+					w := r.window(sectionRows(agents), itemHeights(sectionRows(agents), subs), height)
 					if w.from == 0 && w.to == len(agents) {
 						continue // everything fits
 					}
@@ -133,6 +144,9 @@ func TestTheWindowFillsTheColumn(t *testing.T) {
 						used += rowsFor(a, subsFor(subs, a.ID))
 					}
 					room := height - 1
+					if c := indexOf(agents, cursor); w.from == w.to && w.from == c && rowsFor(agents[c], subsFor(subs, cursor)) > room {
+						continue // the cursor's own agent is taller than the room: the count alone is drawn
+					}
 					if w.to < len(agents) && used+rowsFor(agents[w.to], subsFor(subs, agents[w.to].ID)) <= room {
 						t.Errorf("%d agents, height %d, cursor %q: window [%d,%d) uses %d of %d rows and the agent after it would fit",
 							len(agents), height, cursor, w.from, w.to, used, room)
@@ -167,7 +181,7 @@ func TestTheCursorIsAlwaysInsideTheWindow(t *testing.T) {
 			for height := 1; height <= 12; height++ {
 				for i, a := range agents {
 					r := Roster{Selected: a.ID}
-					w := r.window(agents, subs, rosterWidth, height)
+					w := r.window(sectionRows(agents), itemHeights(sectionRows(agents), subs), height)
 					if w.to == w.from {
 						// An empty window is only honest when no whole agent fits.
 						// Skipping it unconditionally is what made the first draft
@@ -222,7 +236,7 @@ func TestAClickOnAScrolledColumnLandsOnTheAgentUnderIt(t *testing.T) {
 		name := strings.TrimSpace(strings.TrimPrefix(strings.TrimSpace(line), "○"))
 		spot, ok := r.At(agents, nil, rosterWidth, height, y)
 		got := spot.agent
-		if name == "" || strings.Contains(line, "more") {
+		if name == "" || isCountRow(line) {
 			continue
 		}
 		if !ok || got.Name != name {
@@ -283,7 +297,7 @@ func TestAColumnWithNoRoomForAnAgentSaysHowManyThereAre(t *testing.T) {
 		{fleetOf(5), 1},
 	} {
 		out := stripANSI(Roster{}.View(tc.agents, nil, rosterWidth, tc.height))
-		if !strings.Contains(out, moreLine(len(tc.agents))) {
+		if !strings.Contains(out, countLine(0, len(tc.agents), rosterWidth)) {
 			t.Errorf("%d agents in %d rows does not say all %d are hidden:\n%q", len(tc.agents), tc.height, len(tc.agents), out)
 		}
 	}
@@ -335,6 +349,16 @@ func TestAtAnswersForTheRowsTheColumnDrewAndNoOthers(t *testing.T) {
 	}
 }
 
+// countRow matches the line a column draws for the agents it left out: "+5 above",
+// "+3 below", "+5 above · +2 below", or "+7 more" where both do not fit.
+var countRow = regexp.MustCompile(`^\+\d+ (above|below|more)( · \+\d+ below)?$`)
+
+// isCountRow is whether a drawn row is that line.
+func isCountRow(row string) bool { return countRow.MatchString(strings.TrimSpace(stripANSI(row))) }
+
+// hasCountRow is whether any row of a drawn column is the count.
+func hasCountRow(out string) bool { return slices.ContainsFunc(strings.Split(out, "\n"), isCountRow) }
+
 // ownerPerRow is which agent each drawn row belongs to, by name, and "" for a
 // row that belongs to none - the count, or the padding below the fleet.
 //
@@ -345,7 +369,7 @@ func ownerPerRow(rows []string) []string {
 	current := ""
 	for i, row := range rows {
 		switch {
-		case strings.TrimSpace(row) == "" || strings.Contains(row, "more"):
+		case strings.TrimSpace(row) == "" || isCountRow(row):
 			current = ""
 		case strings.HasPrefix(row, "  "):
 			// A continuation keeps the agent above it.

@@ -166,6 +166,9 @@ func (a App) openPicked(open func(App, string, string) App) App {
 // dmTarget is whose DM ⌃D opens.
 func (a App) dmTarget() (Agent, bool) {
 	if a.roster.Selected != "" {
+		if a.rosterPickHidden() { // scrolled out of view: no key, and no fallback either
+			return Agent{}, false
+		}
 		if agent, ok := a.fleet.Agent(a.roster.Selected); ok {
 			return agent, true
 		}
@@ -211,7 +214,7 @@ func (a App) pickAgent(delta int) App {
 // because three keys disagreeing about whose agent this is would be three
 // different wrong answers.
 func (a App) pickedAgent() (Agent, bool) {
-	if !a.layout.ShowRoster || a.roster.Selected == "" {
+	if !a.layout.ShowRoster || a.roster.Selected == "" || a.rosterPickHidden() {
 		return Agent{}, false
 	}
 	return a.fleet.Agent(a.roster.Selected)
@@ -225,7 +228,7 @@ func (a App) clickedRow(y int) (rosterSpot, bool) {
 	if r.Roster <= 0 {
 		return rosterSpot{}, false
 	}
-	return a.roster.Hit(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), y)
+	return a.rosterDrawn().Hit(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), y)
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the

@@ -8,7 +8,47 @@ that" and the answer is not in a commit message.
 
 ---
 
-## 2026-11-06 — the wheel over a draft taller than its box scrolls the draft, the view only
+## 2026-11-06 — the wheel over the right sidebar scrolls the roster
+
+The owner's ask ("if mouse over right side bar, that should scroll too", "for in case i have more agents
+then what can curentl be showin the right side bar"), with `wake-orch`'s rulings against `origin/main`
+9fd48573. Before it, the wheel over the sidebar scrolled the focused pane, and an agent below the fold
+could be reached only with ⇧↑↓.
+
+- **A roster that fits takes no wheel.** The old fallback made the same gesture over the same place change
+  meaning as the fleet crossed the column's height, both ways; the wheel elsewhere moves only what is under
+  the pointer. The sidebar is its own rows, `all` and the usage bar's foot; the strip and the notice row
+  under its column keep the focused pane's wheel.
+- **By items, never lines.** An item is an agent with the gap and team header it leads with, so a header
+  never parts from its first member (the teams feature's atomic-header trap) and View, At and Hit walk whole
+  items as they did. One notch is one item, clamped at both ends (`lastTop`), so a flood past the end
+  leaves nothing to unwind.
+- **The wheel holds the window and never moves the selection; a selection the held window does not draw
+  takes no key** until it is drawn again: ⌃C parks nothing, esc interrupts nothing, ↵ and ⌃D/⌃Y/⌃B/⌃F open
+  nothing (no fallback to the first agent), bare `/status` and `/mcp` find no target, the ⇧⇥ hint falls back.
+  mouse.go's rule is that reading is not focusing, and in the room esc on an empty composer interrupts the
+  roster's selection; the board's carry would let a passive wheel re-aim it. One predicate,
+  `rosterPickHidden`, read by `pickedAgent`, `pickedHeader` and `dmTarget`. The other two options the owner
+  was asked about would each land in one place too: a key that first scrolls a hidden selection back into
+  view would be one guard in `App.key` ahead of the keys those three serve, and the board's carry would be
+  its `landing` called from `wheelRoster`. The pinned `all` is always drawn.
+- **Decided on a change, never per frame.** Update's seam (`rosterSettled`) compares the selection before
+  and after each message: a change lets go of the hold from where the window was *drawn*, so a click on a
+  drawn row moves nothing. While held, it works out whether the selection is drawn only when the fleet (one
+  `agents` map per write: `Fleet.same`), the window or its rows changed, and stores it; `pickedAgent` reads
+  a field. A roster that comes to fit lets go of the hold.
+- **⇧↑↓ move the window the least that shows the cursor**, as the board's arrows do, where the cursor used to
+  be pinned to the window's top row and every step scrolled the list. A re-rank and ⌃X go the same way, from
+  where the window was left, so a selection ranked back into it returns the window there.
+- **The count says which way, on its one row**: `+5 above`, `+3 below`, `+5 above · +2 below`, and
+  `+7 more` where both do not fit the column (never at the sidebar's 23 cells under a hundred agents). The
+  workspaces sidebar keeps `+N more`. The board, the workspaces sidebar and page keys for the roster are
+  out of scope.
+- **Cost.** Nothing per frame: the window is still `rowsFor` arithmetic, drawn once. Each notch and each
+  selection change works one window out. While held, a message that changed the fleet works one out in
+  the seam (about 6µs of a 25-agent Update's profile, plus the copies ranking makes).
+- **Known limits.** An item taller than the column draws as the count alone, as a cursor on one always did.
+  A held window keeps its first item through a re-rank, so the agents under it reorder in place.
 
 The owner's ask ("if i scroll while cursor is on query box, it should scroll query"), with `wake-orch`'s
 rulings against `origin/main` fa87e320.
