@@ -520,6 +520,22 @@ func (d DM) Viewing(dispatch string) DM {
 // Viewed is the dispatch this pane is drawing, or "" for the conversation.
 func (d DM) Viewed() string { return d.viewing }
 
+// laidOut is the conversation as View draws it at width by height: re-laid only
+// for what View's guard names. The mouse reads the box through it too
+// (drawnComposer), so a press, the wheel and the draw cannot disagree.
+func (d DM) laidOut(width, height int) DM {
+	d = d.withBar(max(width, minComposerWidth))
+	// A menu over a preview above the floor re-lays: with the preview at its ceiling
+	// the menu's rows and the composerGap it drops cancel in chromeHeight, so the
+	// sum would alias the stored chrome and the preview would never yield to it. A
+	// preview at the floor already has the cap a menu gives it.
+	menuOverPreview := d.menu != "" && d.partial.rows() > minPreviewRows
+	if width != d.width || height != d.height || d.chromeHeight() != d.chrome || menuOverPreview {
+		d = d.SetSize(width, height)
+	}
+	return d
+}
+
 // View draws the header, the transcript, and the composer, measuring exactly
 // width by height for any size at or above the floor.
 //
@@ -549,15 +565,7 @@ func (d DM) View(width, height int) string {
 	// DM.chrome. It is compared rather than assumed for the same reason width
 	// is - a pane drawn one row taller than it was given scrolls the alt screen
 	// away on every frame, which is what it did.
-	d = d.withBar(max(width, minComposerWidth))
-	// A menu over a preview above the floor re-lays: with the preview at its ceiling
-	// the menu's rows and the composerGap it drops cancel in chromeHeight, so the
-	// sum would alias the stored chrome and the preview would never yield to it. A
-	// preview at the floor already has the cap a menu gives it.
-	menuOverPreview := d.menu != "" && d.partial.rows() > minPreviewRows
-	if width != d.width || height != d.height || d.chromeHeight() != d.chrome || menuOverPreview {
-		d = d.SetSize(width, height)
-	}
+	d = d.laidOut(width, height)
 	w := max(width, minComposerWidth)
 	rows := []string{withFollowBanner(d.tr.view(d.sel), d.tr, w)}
 	// Between the transcript and the composer, where Claude Code puts it: the
