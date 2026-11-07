@@ -176,7 +176,7 @@ func TestTheFilterTakesEveryNameTheTeamFenceAccepts(t *testing.T) {
 // be listed. The fence closes that for every spelling at once: each is a dash
 // word, and none may be a team.
 func TestNoFlagThisBinaryStripsIsATeamName(t *testing.T) {
-	flags := []string{fleetFlagName, rpc.TeamFilterFlag}
+	flags := []string{rpc.FleetFlag, rpc.TeamFilterFlag}
 	for _, f := range knownFlags {
 		flags = append(flags, f.name)
 	}

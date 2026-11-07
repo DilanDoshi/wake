@@ -38,6 +38,38 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FOLLOW-UP, 2026-11-05 — four daemon sentences still name a bare verb
+
+`fix/park-line-names-the-fleet` made every way-back line `cmd/wake` and `internal/ui` print name the fleet
+(`ui.FleetCommand`): a bare `wake` starts a new fleet, and a bare `wake status`, `wake stop`, `wake attach`
+or `wake fork` reaches the unnamed one. Four sentences the daemon writes still name the bare verb, and on a
+named fleet each points at the unnamed one:
+
+- `daemon/mayspawn.go`'s `capRefusal`: "`wake stop` ends the fleet". Typed in a shell, it ends the unnamed fleet,
+  and a stop cannot be undone. This is the one that matters.
+- `daemon/spawn.go`'s fork refusal for an orphaned parent: "check `wake status`".
+- `daemon/import.go`'s refusals: "`wake attach %s`" and "`wake fork %s`".
+- `daemon/names.go`'s taken name: "`wake attach %s` opens it", which `wake new <name> --fleet dev` relays.
+
+They were left out because they are the daemon's, not the way out (wake-orch's scope ruling).
+
+Two more gaps, both narrow:
+- **A daemon from before 2026-10-24 reports no fleet name.** `cmd/wake` falls back to the socket for ⌃Q's and
+  ⌃O's lines and for ⌃C⌃C. But the UI's ⌃Q notice row and its failed-reattach advice read only the report, so
+  under such a daemon they say a bare `wake`. The stale-daemon notice already tells the operator to reopen the
+  fleet on this build.
+- **A socket set by hand directly in `~/.wake`** (`WAKE_SOCKET=~/.wake/test.sock`) reads as the unnamed fleet
+  (`fleetNameOf`), so its hints say `--fleet default`. This is not new, and such a socket already shares the
+  unnamed fleet's files beside it.
+
+Deferred #16 ("parking 1 agents", the notice row's bare `%d agents`) stays as it was. The notice now names
+the fleet, but it still counts with `%d`.
+
+*Closes with:* the daemon naming its fleet in those four (`fleetNameOf(root, s.fleetSocket())`, the
+report's own), held by a test per sentence.
+
+---
+
 ## KNOWN GAP, 2026-10-30 — the site's friends clip shows the half-block sprites, not the pictures
 
 The landing site's `/friends` clip (`demo/tapes/32-friends.tape`, on the home and features pages since

@@ -8,6 +8,47 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-06 — the wheel over a draft taller than its box scrolls the draft, the view only
+
+The owner's ask ("if i scroll while cursor is on query box, it should scroll query"), with `wake-orch`'s
+rulings against `origin/main` fa87e320.
+
+- **The view, never the caret**, as an editor's wheel moves it. A wheel that moved the caret would put the
+  words typed after a quick re-read into the middle of an earlier paragraph. The next key that reaches the
+  box brings the view back to the caret, and so does any change to the draft; a key the App takes without
+  touching the draft (`⇥`, `⇧↑↓`) leaves it. A click in a scrolled box lands on the drawn character and
+  keeps the view.
+- **It stops at the draft's first and last row** rather than carrying on into the transcript, browser
+  style: under three-row notches and wheel floods a carried wheel jumps the transcript after any
+  overshoot. One `case` in `Composer.Wheel` is the whole decision, so the other choice is a one-line flip.
+- **Held in bubbles' own viewport, not a second text area.** bubbles keeps the offset to itself and moves
+  it only to follow the caret, so the caret is walked to the window's last row and then its first, an
+  Update after each, and put back with no Update after. It survives because `reposition` leaves a held
+  view alone and a blink reaches only the caret while one is held (`textarea.Update` ends with
+  `repositionView`). Nothing runs per frame.
+- **The box the frame draws.** `drawnComposer` laid every pane out afresh, while `Room.View` and `DM.View`
+  re-lay only what moved, so in a short conversation with a menu up the two put the box a row apart - on
+  `main` too, where a drag or ⌫ in the query box was already a row off there. Both read `laidOut` now,
+  and the tests hold every box the mouse reads to the rows `App.View` draws (the second adversarial pass:
+  the first round's tests compared `composerRegion` with itself).
+- **The box as drawn, not as the pane holds it.** Chrome drawn above the box changes its height in a pane
+  short of the ten-row cap: a menu drops the gap over it, the room's working line, a compacting or retry
+  line take rows. So the wheel runs on the drawn composer (`drawnBox`, the query-box selection's own
+  placement), whose fit sets the height of the viewport every copy shares, and writes its view back.
+  Before that, the walk ran at the height a draw copy had left on that viewport, and the adversarial
+  review had ⌫ over a highlighted row in a short room with a menu up delete the row below it.
+- **The box is its borders too**, so a room, a conversation and either half of a stacked column hit the
+  same way; a card's page scrolled off its rest, or cut by a pane too short for its card, keeps the page's
+  wheel, as a press there takes a screen selection.
+  A one-row draft, or a wheel above the rows a box can take at its pane's foot (`wheelFoot`), is turned
+  away before any layout; otherwise each notch lays the pane out once to find the box, as a press does.
+- **Known limits.** A wheel forgets the arrow keys' remembered column, because bubbles' `SetCursor`, the
+  one way to put the caret back with no Update, zeroes it. A held view within two rows of the draft's
+  foot, in a pane whose held box is taller than the drawn one, lets go at the pane's next re-lay; one
+  drawn in a box taller than it (a working line gone in a short room) shows the caret's rows until the
+  box is drawn short again. A mouse message disarms before it is measured, so with an arm's cue up a
+  notch on the box's top border lands a row above the box.
+
 ## 2026-10-29 — glamour's list of a grid's links keeps a row per link
 
 `wake-orch`'s rulings, against `origin/main` 81e3377e.
@@ -5581,3 +5622,35 @@ of that Wake drew a working agent with a pool word over a ticking age. Each retr
   clearing and non-clearing kind, the prune, replacement, the 401 path, no transcript block, the row budget,
   the room's oldest-turn rule, a subagent's output, a gap and a reattach, every width, the roster's working
   gate), each mutation-checked.
+
+## 2026-11-05 — every way back names the fleet (the owner, via wake-orch)
+
+The owner, after renaming harbor-2 to sing-dev-2 and pressing ⌃Q⌃Q: "have this wording updated". The line he
+got said "`wake` reopens the room". Since 2026-10-16 a bare `wake` starts a new fleet, so that line sent every
+named fleet's operator somewhere else.
+
+- **The rule.** A line that tells the operator what to type names the fleet by its current name:
+  `wake --fleet <name>` and `wake <verb> --fleet <name>` (`ui.FleetCommand`; the flag is `rpc.FleetFlag`).
+  The unnamed fleet is `wake --fleet default` (`daemon.LegacyFleet`). Only a fleet with no name is reached
+  bare: a socket set by hand outside `~/.wake/fleets`, where a bare `wake` under that `$WAKE_SOCKET` opens it.
+- **A `$WAKE_SOCKET` inside `~/.wake/fleets` reads as its fleet**, as the tab title and /wake-name's own
+  notice already do. After a rename that path is gone once the daemon exits, so a bare `wake` there would make
+  an empty fleet under the old name. `--fleet <new>` is refused only while the variable is set, and the
+  refusal names it.
+- **Where the name comes from.** ⌃Q's line uses the last report's name (`App.FleetName`), not the socket's,
+  because the daemon drops a rename's old names as it exits and may do so before the line prints. If no report
+  named the fleet (an older daemon), it falls back to `daemon.FleetName(socket)`, and ⌃O's line does the same.
+  ⌃C⌃C runs when the loop that folds reports has stopped, so the window hands the kill switch each name as it
+  is folded (`App.WithFleetNamed`, an atomic). It reads the socket only when no report named one: another
+  window's ⌃Q can end the daemon and drop the link first. The other lines read the report in hand, or the
+  socket where none is (`wake manager`, `wake stop`'s wait). `FleetOnDisk` names its fleet too, so a stopped
+  fleet's report does.
+- **⌃O names three commands**: back in, a look, the end, each with `--fleet`. A bare `wake stop` there would
+  have ended the unnamed fleet.
+- **Held by** `cmd/wake/fleetlines_test.go` and `fleetlines_unix_test.go` (every line for a named fleet,
+  `default` and a hand-set socket; ⌃Q's report name over a socket naming another fleet; the socket fallback
+  for ⌃Q and for an older daemon's ⌃O; the emergency exit through a rename's link and after it is gone),
+  `TestAClientNamesItsFleetByTheNameItHasNow`, the UI's notice, reattach and hand-on tests, and two on the
+  real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
+  once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
+  which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own four sentences are `deferred.md`'s (2026-11-05).

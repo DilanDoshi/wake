@@ -89,7 +89,7 @@ built in parallel and both wanted the pair, and the order they intercept in deci
 | Key | Does | Reversible |
 |---|---|---|
 | `⌃C` | **Park** the agent in front of you | Yes — `/resume` |
-| `⌃Q` | **Quit** Wake and park the whole fleet — armed, like the detach: the first `⌃Q` arms (the cue reads `⌃Q park all & quit`), a second confirms | Yes — next `wake` offers it back |
+| `⌃Q` | **Quit** Wake and park the whole fleet — armed, like the detach: the first `⌃Q` arms (the cue reads `⌃Q park all & quit`), a second confirms | Yes — next `wake --fleet <name>` offers it back |
 | `⌃O` | **Arm a detach** — closing Wake and leaving everyone working. `↵` finishes it; a second `⌃O` takes it back. While it is armed the cue reads `↵ detach   …   ⌃O cancel` | Nothing stopped |
 
 ## While the completion menu is up — see [chapter 6](06-commands.md)

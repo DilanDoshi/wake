@@ -12,19 +12,18 @@ import (
 	"strings"
 
 	"github.com/DilanDoshi/wake/internal/daemon"
+	"github.com/DilanDoshi/wake/internal/rpc"
+	"github.com/DilanDoshi/wake/internal/ui"
 	"github.com/DilanDoshi/wake/internal/version"
 )
-
-// fleetFlagName is the flag, spelled once.
-const fleetFlagName = "--fleet"
 
 // noFleetsYet is what `wake fleets` says on a machine with none.
 //
 // It names how to make one, because "none" is a complete answer to the question
 // asked and a useless one to the person asking it: somebody typing this verb has
 // either just made a fleet or is about to.
-const noFleetsYet = "no named fleets. `wake --fleet <name>` starts one; a bare `wake` is the unnamed fleet, " +
-	"which is separate from all of them"
+var noFleetsYet = "no named fleets. A bare `wake` starts one and names it, and `wake --fleet <name>` starts one " +
+	"called that; `" + ui.FleetCommand(daemon.LegacyFleet) + "` is the unnamed fleet, which is separate from all of them"
 
 // fleetFlag takes `--fleet <name>` off the arguments, returning the rest.
 //
@@ -41,15 +40,15 @@ func fleetFlag(args []string) (rest []string, fleet string, err error) {
 	rest = make([]string, 0, len(args))
 	seen := false
 	for i := 0; i < len(args); i++ {
-		if args[i] != fleetFlagName {
+		if args[i] != rpc.FleetFlag {
 			rest = append(rest, args[i])
 			continue
 		}
 		if seen {
-			return nil, "", fmt.Errorf("%s was given twice: a command is addressed to one fleet", fleetFlagName)
+			return nil, "", fmt.Errorf("%s was given twice: a command is addressed to one fleet", rpc.FleetFlag)
 		}
 		if i+1 >= len(args) {
-			return nil, "", fmt.Errorf("%s needs a name: which fleet to talk to", fleetFlagName)
+			return nil, "", fmt.Errorf("%s needs a name: which fleet to talk to", rpc.FleetFlag)
 		}
 		i++
 		fleet, seen = args[i], true
@@ -57,7 +56,7 @@ func fleetFlag(args []string) (rest []string, fleet string, err error) {
 			// Almost certainly the next flag, which means the name was left
 			// out. Taking it as a name would create a fleet called `--effort`.
 			return nil, "", fmt.Errorf("%s was given %q, which is a flag rather than a fleet name",
-				fleetFlagName, fleet)
+				rpc.FleetFlag, fleet)
 		}
 	}
 	return rest, fleet, nil
@@ -81,7 +80,7 @@ func printFleets(out io.Writer) error {
 }
 
 // staleFleetFormat follows a running fleet on another build than this wake.
-const staleFleetFormat = " - not this build (wake %s): ⌃Q⌃Q it, then `wake --fleet %s`, to upgrade it"
+const staleFleetFormat = " - not this build (wake %s): ⌃Q⌃Q it, then `%s`, to upgrade it"
 
 // formatFleets is the listing, separated from the dialling so a test reads a
 // string. builds holds only the fleets that are running.
@@ -95,7 +94,7 @@ func formatFleets(names []string, builds map[string]string, ours string) string 
 		if build, running := builds[name]; running {
 			fmt.Fprintf(&b, "  running wake %s", daemonBuild(build))
 			if build != ours {
-				fmt.Fprintf(&b, staleFleetFormat, ours, name)
+				fmt.Fprintf(&b, staleFleetFormat, ours, ui.FleetCommand(name))
 			}
 		}
 		b.WriteString("\n")
@@ -110,7 +109,7 @@ func formatFleets(names []string, builds map[string]string, ours string) string 
 // running `wake fleets` and guessing which row is theirs. It is printed before
 // the alt screen for the reason announceFork's line was: after it, the terminal
 // belongs to Bubble Tea and anything written is drawn over.
-const newFleetLine = "fleet %s. `wake --fleet %s` comes back to it; `wake fleets` lists them all.\n"
+const newFleetLine = "fleet %s. `%s` comes back to it; `wake fleets` lists them all.\n"
 
 // openNewFleet makes a fleet nobody named and opens it.
 func openNewFleet(out io.Writer) error {
@@ -118,7 +117,7 @@ func openNewFleet(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(out, newFleetLine, name, name); err != nil {
+	if _, err := fmt.Fprintf(out, newFleetLine, name, ui.FleetCommand(name)); err != nil {
 		return err
 	}
 	return openRoom(socket, out)

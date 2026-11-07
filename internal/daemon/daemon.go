@@ -540,7 +540,7 @@ var fleetProbeBudget = statusTimeout
 // of runningCount as "nothing is running" - must respect, so an under-count
 // cannot be mistaken for an answer.
 func FleetOnDisk(socket string) rpc.Status {
-	st := rpc.Status{Socket: socket}
+	st := rpc.Status{Socket: socket, Fleet: FleetName(socket)}
 	seen := map[string]bool{}
 	// One deadline over the whole sweep, not one per record: each r.alive is a ps
 	// a broken one can hang for probeTimeout, and successive probes share what is
