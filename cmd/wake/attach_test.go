@@ -262,15 +262,14 @@ func TestCtrlQsExitLineIsCountedByTheModelRatherThanAskedOfTheDaemon(t *testing.
 			"model's own - taken before the frame went out, because after the program ends there is no "+
 			"model anybody reads", got)
 	}
-	// The hedge, and it is not a style choice. shutdown kills whatever has not
-	// ended by the end of the quit grace, kill clears the park flag, and a
-	// killed session is dropped from the book - so a long build outlasting the
-	// grace means this count is larger than what comes back. This process is
-	// leaving and cannot learn which, so it may not print the outcome as done.
+	// The count is the ask, not an outcome. shutdown interrupts every turn, but a
+	// process that does not end after the interrupt is killed at the end of the
+	// grace and is absent from the book, and this process is leaving and cannot
+	// learn which, so it may not print the outcome as done.
 	if strings.Contains(got, "offers them back") || strings.Contains(got, "Parked 2") {
-		t.Errorf("after ⌃Q, `wake` printed %q, which states an outcome this client cannot know. Three "+
-			"agents mid-build are SIGKILLed at the end of the grace and are absent from the park book; "+
-			"the operator finds out by coming back and counting", got)
+		t.Errorf("after ⌃Q, `wake` printed %q, which states an outcome this client cannot know: an "+
+			"agent that does not end after the interrupt is killed at the end of the grace and is "+
+			"absent from the park book", got)
 	}
 	if strings.Contains(got, "could not count") || strings.Contains(got, "Detached") {
 		t.Errorf("after ⌃Q, `wake` printed %q - which is the line that asks a daemon. That daemon is the "+
@@ -300,12 +299,12 @@ func TestCtrlQsExitLineIsCountedByTheModelRatherThanAskedOfTheDaemon(t *testing.
 // reports what is not known and names the verbs that answer it, which is `wake
 // stop`'s own rule about never claiming more than you can see.
 func TestTheExitLineOnlyPromisesAParkedFleetWhenTheDaemonConfirmedIt(t *testing.T) {
-	confirmed := parkAllLine(2, "", nil)
+	confirmed := parkAllLine(2, "", ui.QueueAtQuit{}, nil)
 	if !strings.Contains(confirmed, "Parking 2 agents") {
 		t.Errorf("a ⌃Q the daemon confirmed printed %q, and the promise is what the key is for", confirmed)
 	}
 
-	unconfirmed := parkAllLine(2, "", errors.New("the daemon did not answer within 3s"))
+	unconfirmed := parkAllLine(2, "", ui.QueueAtQuit{}, errors.New("the daemon did not answer within 3s"))
 	if strings.Contains(unconfirmed, "Parking 2 agents") {
 		t.Errorf("a ⌃Q nothing confirmed printed %q - the same sentence a confirmed one prints. That is "+
 			"the whole of outstanding bug 3: an operator is told a fleet is parked, closes the window, "+
@@ -328,6 +327,52 @@ func TestTheExitLineOnlyPromisesAParkedFleetWhenTheDaemonConfirmedIt(t *testing.
 				"parking. `wake status` is what answers it, which is why the line names that instead",
 				unconfirmed, claim)
 		}
+	}
+}
+
+// A daemon on this build interrupts every turn rather than letting it run out the
+// grace, so the line says so; one on another build may still let turns run, so the
+// line keeps the grace's hedge. A message claude had not read is kept nowhere on
+// disk, so its words are printed, once per message with every agent it was
+// waiting at, whether or not the park was confirmed.
+func TestTheExitLineSaysWhatTheDaemonDoesWithTurnsAndPrintsTheQueuedWords(t *testing.T) {
+	queued := []ui.QueuedMessage{{To: []string{"alex", "robin"}, Text: "ship it\nand the docs"}}
+
+	this := parkAllLine(2, "", ui.QueueAtQuit{Cancelled: true}, nil)
+	if !strings.Contains(this, "interrupted") || strings.Contains(this, "finished in time") {
+		t.Errorf("a ⌃Q this build's daemon confirmed printed %q: it interrupts every turn, so the grace's hedge no longer describes it", this)
+	}
+	if strings.Contains(this, "queued") {
+		t.Errorf("a ⌃Q with nothing queued printed %q", this)
+	}
+	other := parkAllLine(2, "", ui.QueueAtQuit{Messages: queued}, nil)
+	if strings.Contains(other, "interrupted") || !strings.Contains(other, "finished in time") || !strings.Contains(other, "may still run") {
+		t.Errorf("a ⌃Q to a daemon on another build printed %q: that daemon may let a turn run and run what is queued", other)
+	}
+	for _, q := range []ui.QueueAtQuit{{Messages: queued, Cancelled: true}, {Messages: queued}} {
+		for _, err := range []error{nil, errors.New("the daemon did not answer within 3s")} {
+			got := parkAllLine(2, "", q, err)
+			for _, want := range []string{"alex, robin: ship it", "and the docs"} {
+				if !strings.Contains(got, want) {
+					t.Errorf("⌃Q (cancelled %v, err %v) printed %q, missing %q: nothing on disk keeps those words", q.Cancelled, err, got, want)
+				}
+			}
+		}
+	}
+}
+
+// The words come from the window that pressed ⌃Q: what it had pinned ⧗ when the
+// key went, carried on the final model to the line printed after the alt screen.
+func TestCtrlQsExitLinePrintsWhatTheWindowHadQueued(t *testing.T) {
+	d := startFakeDaemon(t, 0, twoLiveAgents())
+	m, _ := ui.NewRoomApp(nil, ui.Stream{}, statusOf(twoLiveAgents())).
+		Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("@sydney and then the docs")})
+	m, _ = m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+
+	got := leavingLine(ctrlQTwice(m.(ui.App)), d.socket)
+	if !strings.Contains(got, "sydney: @sydney and then the docs") {
+		t.Errorf("after ⌃Q with a message queued at a working agent, `wake` printed %q: the interrupt "+
+			"cancels it, nothing on disk keeps it, and this line is the last place its words are", got)
 	}
 }
 

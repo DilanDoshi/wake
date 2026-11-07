@@ -12,6 +12,7 @@ import (
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -223,6 +224,35 @@ func TestQuitParksTheFleetAndTheNextRunComesBackEmpty(t *testing.T) {
 	// start rather than a loss.
 	again.send("/resume all\r")
 	again.await(name)
+}
+
+// ⌃Q's line is printed with the terminal cooked again. Printed in raw mode a line
+// feed returns no carriage, so the next line - the shell's prompt, or the queued
+// words ⌃Q lists under the first - starts where the last one ended.
+func TestCtrlQsLineReturnsTheCarriage(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+	s := startWake(t, 200, 30)
+	s.await("group chat")
+
+	s.send("\x11") // ⌃Q (arm)
+	s.await("park all & quit")
+	s.send("\x11") // ⌃Q (confirm)
+	s.await("reopens the room")
+
+	deadline := time.Now().Add(screenTimeout)
+	for {
+		s.term.Lock()
+		x := s.term.Cursor().X
+		s.term.Unlock()
+		if x == 0 {
+			return
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("after ⌃Q's line the cursor sits at column %d, not 0: its newline was written in raw mode.\n%s", x, s.dump())
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // A newline reaches the draft as real bytes through a real terminal.

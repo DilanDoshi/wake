@@ -10,6 +10,7 @@ import (
 	"io"
 	"net"
 	"os"
+	"strings"
 	"sync"
 	"time"
 
@@ -403,6 +404,8 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithFleetNamed(kill.fleetNamed).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
 	final, err := p.Run()
 	term.handBack()
+	// Cooked before the leaving line, or each of its newlines returns no carriage.
+	kill.restore()
 	if err != nil {
 		return err
 	}
@@ -420,14 +423,10 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 // wrote the frame, which is why ui.App.ParkedFleet exists at all.
 //
 // **So the number is what was asked for, and the sentence says so.** The daemon
-// gives each agent the quit grace and kills whatever has not ended by the end of
-// it; a killed session is never a parked one, so it is dropped from the book,
-// and a turn running a build routinely outlasts the grace. This process is
-// leaving and cannot learn which - that is the whole reason it is not asking -
-// so it may not print an outcome as an accomplished fact. "Parking N" and
-// "offers back whatever finished in time" are both the hedge, and the
-// alternative was printing no number at all, which loses the one thing this
-// client does know.
+// interrupts every turn and kills only what has not ended by the end of the
+// grace, which is never parked. This process is leaving and cannot learn which,
+// so "Parking N" is the ask, not an outcome; the alternative was printing no
+// number at all, which loses the one thing this client does know.
 //
 // Every other way out asks, because a background process nobody can see is a
 // liability - 20 sessions is about 16GB with no window open - and the count has
@@ -447,7 +446,7 @@ func leavingLine(final tea.Model, socket string) string {
 			if fleet == "" {
 				fleet = daemon.FleetName(socket)
 			}
-			return parkAllLine(n, fleet, err)
+			return parkAllLine(n, fleet, app.QueueAtQuit(), err)
 		}
 	}
 	st, err := daemon.Status(socket)
@@ -475,15 +474,35 @@ func leavingLine(final tea.Model, socket string) string {
 // written. So it reports what is *not* known and names the two verbs that
 // answer it, which is `wake stop`'s own rule: never claim more than you can see.
 //
-// Both name the fleet (ui.FleetCommand): a bare `wake` starts a new one.
-func parkAllLine(n int, fleet string, err error) string {
+// Both name the fleet (ui.FleetCommand): a bare `wake` starts a new one. Both
+// print the words of what claude had not read: this build's daemon cancels it and
+// nothing on disk keeps it, and an unconfirmed park may still have happened.
+func parkAllLine(n int, fleet string, q ui.QueueAtQuit, err error) string {
 	if err != nil {
 		return fmt.Sprintf("Could not confirm that ⌃Q parked the fleet (%s): %v. "+
 			"`%s` says what is still running; `%s` reopens the room.",
-			agents(n), err, ui.FleetCommand(fleet, cmdStatus), ui.FleetCommand(fleet))
+			agents(n), err, ui.FleetCommand(fleet, cmdStatus), ui.FleetCommand(fleet)) +
+			queuedLines("Queued when ⌃Q was pressed:", q.Messages)
 	}
-	return fmt.Sprintf("Parking %s. `%s` reopens the room and offers back whatever finished in time.",
-		agents(n), ui.FleetCommand(fleet))
+	head := "Still queued when ⌃Q was pressed; the interrupt cancels these:"
+	if !q.Cancelled {
+		head = "Queued when ⌃Q was pressed; a daemon on another build may still run these:"
+	}
+	return "Parking " + agents(n) + ui.WayBack(fleet, q.Cancelled) + queuedLines(head, q.Messages)
+}
+
+// queuedLines lists each queued message under its agents, a line apiece and its
+// own lines indented, or nothing when nothing was queued.
+func queuedLines(head string, queued []ui.QueuedMessage) string {
+	if len(queued) == 0 {
+		return ""
+	}
+	var b strings.Builder
+	b.WriteString("\n" + head)
+	for _, q := range queued {
+		fmt.Fprintf(&b, "\n  %s: %s", strings.Join(q.To, ", "), strings.ReplaceAll(q.Text, "\n", "\n    "))
+	}
+	return b.String()
 }
 
 // redial is one reattach attempt: is the session still there, and can this

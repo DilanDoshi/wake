@@ -1000,12 +1000,11 @@ type parkVerdict struct {
 	//
 	// **Blocked is where they part, and the asymmetry is deliberate rather than
 	// an oversight.** ⌃C refuses a blocked agent because parking closes stdin
-	// under an outstanding ask and the agent is told that is a denial. ⌃Q has
-	// no such option: the window is closing either way, and FrameParkAll is one
-	// frame the daemon applies to the fleet - so a blocked session is parked,
-	// booked, and carried. Counting it is honest about that; leaving it out
-	// would under-report the fleet in the one state where something was already
-	// lost.
+	// under an outstanding ask and the agent is told that is a denial. ⌃Q's
+	// daemon interrupts first, which withdraws the ask as esc does (2026-11-07),
+	// and FrameParkAll is one frame the daemon applies to the fleet - so a
+	// blocked session is parked, booked, and carried, and counting it is honest
+	// about that.
 	carried bool
 }
 

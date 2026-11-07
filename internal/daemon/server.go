@@ -18,11 +18,12 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// quitGrace is how long a quitting daemon waits for stopped sessions to
-// finish their in-flight turns before it kills what is left.
+// quitGrace is how long a quitting daemon waits for stopped sessions to end
+// before it kills what is left: a parking quit's interrupted turns, and under
+// `wake stop` turns let run to their end.
 //
 // It is a compromise between two things Wake owes the operator and cannot owe
-// both of: an agent mid-Edit must be allowed to finish the edit, and the
+// both of: an agent mid-Edit under `wake stop` must be allowed to finish, and the
 // daemon must not still be alive minutes after `wake stop`. Exiting early is
 // the worse failure of the two - it leaves process trees with nobody holding
 // a handle - so the grace is generous and the ending is a group kill rather
@@ -277,12 +278,13 @@ const (
 	// a parked fleet behind would give it one by accident.
 	quitStop
 
-	// quitPark is FrameParkAll, which is ⌃Q. Every session is parked on the
-	// way out and written down, so the next start can offer them back.
+	// quitPark is FrameParkAll, which is ⌃Q. Every session is interrupted,
+	// parked on the way out and written down, so the next start can offer them
+	// back.
 	quitPark
 
 	// quitSignal is a SIGTERM, a logout, a machine going down: nobody chose to
-	// lose the fleet, so it parks as ⌃Q does, interrupting busy agents first.
+	// lose the fleet, so it parks as ⌃Q does.
 	quitSignal
 )
 
@@ -315,9 +317,10 @@ func (s *server) quitReason() quitVerb {
 // this server started.
 //
 // The order is the contract. Sessions are stopped the gentle way first -
-// stdin closed, in-flight turn allowed to finish or, under a signal, ended as
-// Esc ends it, by claude itself - because a daemon exit is not leave to kill. Only what is still alive after the grace
-// is killed, and it is killed by process group, because an agent is a tree.
+// stdin closed, an in-flight turn allowed to finish under `wake stop` or, when
+// parking, ended as Esc ends it, by claude itself - because a daemon exit is not
+// leave to kill. Only what is still alive after the grace is killed, and it is
+// killed by process group, because an agent is a tree.
 //
 // The quit verb decides two things here and nothing else does: whether each
 // stop is labelled a park on the way in, and what happens to the park book on
@@ -343,8 +346,8 @@ func (s *server) shutdown() error {
 			a.beginPark()
 		}
 		if a.reclaimingNow() {
-			// The grace exists so an in-flight turn can finish. This agent
-			// has no process left to finish one, so waiting is unnecessary.
+			// The grace exists so an in-flight turn can end. This agent
+			// has no process left to end one, so waiting is unnecessary.
 			// ParkAll must preserve the label beginPark just installed: kill
 			// clears it on a not-yet-retired agent. Reclaim's endProcess is
 			// idempotent and lets retire/completePark decide the parked ending.
@@ -355,7 +358,7 @@ func (s *server) shutdown() error {
 			}
 			continue
 		}
-		s.stopForShutdown(a, verb == quitSignal)
+		s.stopForShutdown(a, parking)
 	}
 	remaining := waitForAgents(agents, quitGrace)
 	for _, a := range remaining {

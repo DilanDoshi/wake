@@ -579,9 +579,18 @@ func fakeInterruptible(sid string) int {
 	return 0
 }
 
-// fakeInterruptLogEnv names a file fakeBusy appends a line to for every
-// interrupt it is sent, so a test can tell whether one reached an idle agent.
+// fakeInterruptLogEnv names a file fakeBusy and fakeAsk append a line to for
+// every interrupt they are sent, so a test can tell whether one reached an agent.
 const fakeInterruptLogEnv = "WAKE_FAKE_INTERRUPT_LOG"
+
+func logInterrupt() {
+	if path := os.Getenv(fakeInterruptLogEnv); path != "" {
+		if f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+			_, _ = f.WriteString("interrupt\n")
+			_ = f.Close()
+		}
+	}
+}
 
 // fakeBusyPrompt is the message that starts fakeBusy's long turn. Anything else
 // - the daemon's own handshake and probes included - is answered at once.
@@ -616,12 +625,7 @@ func fakeBusy(sid string) int {
 			}
 			continue
 		}
-		if path := os.Getenv(fakeInterruptLogEnv); path != "" {
-			if f, err := os.OpenFile(path, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
-				_, _ = f.WriteString("interrupt\n")
-				_ = f.Close()
-			}
-		}
+		logInterrupt()
 		fmt.Printf(`{"type":"control_response","response":{"subtype":"success","request_id":%q,"response":{"still_queued":[]}}}`+"\n",
 			controlRequestID(line))
 		interrupted = true
@@ -953,6 +957,7 @@ func fakeAsk(sid string) int {
 	for line := range stdinLines() {
 		switch {
 		case strings.Contains(line, `"subtype":"interrupt"`):
+			logInterrupt()
 			fakeWithdrawTheAsk(line)
 			aborted = true
 			continue
