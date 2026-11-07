@@ -1374,6 +1374,36 @@ The cause:
 `TestTheWheelMapsTheRowsTheFrameDraws` holds the box the mouse reads to the rows `App.View` draws, and
 every box read in `composerscroll_test.go` is checked against that frame.
 
+## BUG-64 — a login's resume that reached a process still on the old login left the agent stopped
+
+**Found in two forms.**
+- **2026-10-21** (v0.1.11): at one login, all 12 agents the daemon resumed failed `Not logged in · Please
+  run /login` (`authentication_failed`) on their first request. Claude's config file names the new account
+  about a second before the login's credential is written, and the daemon resumed the instant the account
+  changed. An auth failure is no stop, so nothing resumed them again; peers' messages revived most within a
+  minute, which hid it.
+- **2026-11-06, 22:37:58 PST** (v0.1.14, two fleets): a login resumed 31 agents a usage limit had stopped.
+  6 of them got the old account's limit again, 3 to 10 s after the `continue`: the same `resets 2:40am`, each
+  a real API answer. Others had already gone through 2 s after it. So a running process can keep the old
+  login's token for at least ten seconds after the config file names the new account. Each new stop was
+  recorded under the account signed in now, so the login no longer read as another account, and the six
+  waited about four hours for the old account's reset. The operator sent one of them a `continue` by hand
+  six minutes later, and it worked.
+
+**Cause.** A login's resume was one-shot, and it took the config file's account as proof the new login was
+in use. `sendResume` clears the stop at the write, so the resumed turn's failure was judged as if nothing
+had come before it: "Not logged in" is no stop at all, and the old account's limit became a new stop under
+the new account.
+
+**Fix:** branch `fix/login-resume-retries-on-the-old-token`. A login's resume is remembered on the agent
+(`agent.login`, a `loginTry`) until its turn goes through, fails, is interrupted or is cleared. If that turn
+fails the way a process still on the old login fails - "Not logged in", or a limit naming the reset the stop
+named - the stop is re-armed with a retry. The retries come 15 s, 1 min and 5 min after each failure, on the
+resume goroutine's one timer; after the third the stop waits for its reset or the next login, as before
+(`internal/daemon/loginretry.go`; `decisions.md`, 2026-11-07). Held by `usagelimit_e2e_test.go` (the old
+limit again, "Not logged in", the cap) and `loginretry_test.go` (what is not retried, a fresh login's count,
+the timer), each mutation-checked.
+
 ## Residuals carried from bugs that are fixed and merged
 
 Their entries are gone; `git log -p docs/notes/bugs.md` still has every one in full. What is kept

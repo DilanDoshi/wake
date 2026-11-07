@@ -280,9 +280,11 @@ type agent struct {
 	// limit is set while this agent's last turn ended on a usage limit or an
 	// unreachable API and nothing has run since: what resumes it. unproven is
 	// Wake's resume of an unreachable one with no output of the agent's own
-	// since. See usagelimit.go and unreachable.go.
+	// since, login a login's resume until its turn goes through or fails. See
+	// usagelimit.go, unreachable.go and loginretry.go.
 	limit    usageStop
 	unproven bool
+	login    loginTry
 
 	// runningSubs is the set of agent dispatches (subagents) this session has
 	// running now, keyed on the task id. It is what forkSource refuses a fork on

@@ -250,7 +250,7 @@ func TestAFullInputQueueRetriesOnTheNextNudgeNotAtOnce(t *testing.T) {
 	if !a.limit.blocked || a.limit.queued {
 		t.Fatalf("a resume that found the input full: blocked %v, queued %v; want true, false", a.limit.blocked, a.limit.queued)
 	}
-	if due, _ := s.nextReset(); !due.IsZero() {
+	if due, _ := s.nextDue(); !due.IsZero() {
 		t.Errorf("a blocked resume still arms the timer at %v, which a past reset fires at once", due)
 	}
 	queuedResumes(a) // the input drains

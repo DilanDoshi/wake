@@ -5654,3 +5654,48 @@ named fleet's operator somewhere else.
   real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
   once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
   which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own four sentences are `deferred.md`'s (2026-11-05).
+
+## 2026-11-07 — a login's resume the old login answers is tried again (the owner, via wake-orch)
+
+The owner's go on BUG-64: "ok yea do bug 64 as well". A login's resume could reach a process still on the
+old login, fail, and leave the agent stopped. Either it failed "Not logged in" (2026-10-21), which is no
+stop, or it got the old account's limit again (2026-11-06), which became a new stop under the new account.
+
+- **What is retried.** Only a failure of the turn a login's resume started (`loginTry`, carried from
+  `resumeOnLogin` through `resumeAsk` onto `agent.login`), and only one that looks like the old login: an
+  auth failure (`core.NoticeAPIError`), or a usage limit naming the same reset as the stop it answered. A
+  limit naming another reset is the new account's own, so it becomes a stop like any. The reset's resume and
+  the unreachable path's stay one-shot: neither raced a login.
+- **The numbers: 15 s, 1 min, 5 min**, each counted from the failure before it (`loginRetries`).
+  - On 2026-11-06, of 31 resumes sent at one login, the six the old login answered failed 3 to 10 s after
+    the `continue`, while others went through from 2 s. So 15 s waits past the longest hold seen.
+  - On 2026-10-21 the config file led the login's credential by about a second, and leads up to 6 s were
+    seen that day; 15 s covers those too.
+  - The minute and five minutes are for a slower process. Five stays under the six minutes after which a
+    hand-sent `continue` worked on 2026-11-06.
+  - After the third retry, a still-failing agent is a limited account or a dead login. It waits for its
+    reset or the next login, as before.
+  - The cap and the order are held by `TestALoginsRetriesStopAtTheirCap` and
+    `TestAStopIsDueAtTheSoonerOfItsRetryAndItsReset`.
+- **One timer, only while such a stop exists.** A retry is a time on `usageStop` (`retry`, `tries`). The
+  resume goroutine's timer fires at the sooner of a retry and a reset plus its slack (`usageStop.due`).
+  The reset alone keeps the slack, since a limit names its reset only to the minute. The liveness tick
+  catches a retry slept through, as it catches a reset. Nothing is armed while no agent is stopped.
+- **The re-armed stop records the account signed in now, not the old one** (the brief proposed the old one).
+  Under the old account, the next nudge would resume the stop at once and skip the wait the retry exists
+  for. Another agent's limit, a stopped agent's own turn end and any config write all run its login check,
+  and each would read the old account as "another account". Recording the account signed in now has three
+  effects. A further login to another account still resumes the stop early. A fresh login restarts the
+  count. When the retries run out, the stop is exactly today's.
+- **The UI's 401 path still applies.** Each "Not logged in" is an API error notice in every window and
+  counts toward the auto-park at three (`authRetryParkAttempt`). An agent parked that way leaves the
+  retries (`limited` skips one parking) and waits for the UI's proof of a working login.
+- **A turn a peer's message started is still resumed** (the owner's go asked for no change). The limit cut a turn, and
+  that turn is continued, whoever started it. On 2026-11-06 all 31 resumed turns had begun 0 to 26 s before
+  the limit, on an orchestrator's relay of a new rule. The narrower option is in `deferred.md`.
+- **Held by** `usagelimit_e2e_test.go`'s three over real processes (the old limit again, "Not logged in",
+  the cap, each ending in the count of `continue`s the fake received), and `loginretry_test.go` (no retry
+  for the new account's own limit, the reset's resume, a turn that went through or was interrupted; a fresh
+  login's count; the timer). Eleven mutations, each red.
+
+---

@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -28,6 +29,13 @@ const (
 
 	// noResetNamed is a limit message naming no reset, so no timer is armed.
 	noResetNamed = "You've hit your session limit"
+
+	// fakeOldLoginEnv is how many "continue"s after a login the fake answers as a
+	// process still on the old login: the old account's limit again, or with
+	// fakeOldLoginAuthEnv set, "Not logged in" (api-error-auth.jsonl's words).
+	fakeOldLoginEnv     = "WAKE_FAKE_OLD_LOGIN"
+	fakeOldLoginAuthEnv = "WAKE_FAKE_OLD_LOGIN_AUTH"
+	notLoggedIn         = "Not logged in · Please run /login"
 )
 
 // fakeUsageLimit answers every turn by the account Claude's config file names:
@@ -36,6 +44,7 @@ const (
 func fakeUsageLimit(sid string) int {
 	path := filepath.Join(os.Getenv("CLAUDE_CONFIG_DIR"), ".claude.json")
 	continues, marked, turns := 0, 0, 0
+	oldLogin, _ := strconv.Atoi(os.Getenv(fakeOldLoginEnv))
 	for line := range stdinLines() {
 		switch {
 		case strings.Contains(line, `"type":"control_request"`):
@@ -55,15 +64,29 @@ func fakeUsageLimit(sid string) int {
 		raw, _ := os.ReadFile(path)
 		acct, _ := core.DecodeAccount(raw)
 		limited := acct.ID == acctLimited && (os.Getenv(fakeLimitOnceEnv) == "" || turns == 1)
-		if limited {
-			fmt.Printf(`{"type":"assistant","is_api_error_message":true,"error":"rate_limit","session_id":%q,"message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":%q}]}}`+"\n",
-				sid, os.Getenv(fakeLimitTextEnv))
-		} else {
+		switch {
+		case acct.ID != acctLimited && oldLogin > 0 && strings.Contains(line, `"text":"continue"`):
+			oldLogin--
+			if os.Getenv(fakeOldLoginAuthEnv) != "" {
+				emitAPIError(sid, "authentication_failed", notLoggedIn)
+			} else {
+				emitAPIError(sid, "rate_limit", os.Getenv(fakeLimitTextEnv))
+			}
+		case limited:
+			emitAPIError(sid, "rate_limit", os.Getenv(fakeLimitTextEnv))
+		default:
 			emitText(sid, "working as "+acct.ID)
 		}
 		emitResult(sid)
 	}
 	return 0
+}
+
+// emitAPIError fails a turn the way claude does: a synthetic assistant frame
+// naming the error's kind.
+func emitAPIError(sid, kind, text string) {
+	fmt.Printf(`{"type":"assistant","is_api_error_message":true,"error":%q,"session_id":%q,"message":{"model":"<synthetic>","role":"assistant","content":[{"type":"text","text":%q}]}}`+"\n",
+		kind, sid, text)
 }
 
 // lineResumed reports whether a stdin line carries the daemon's resume mark.
@@ -185,4 +208,89 @@ func compressReset(t *testing.T) {
 	was := limitClock
 	limitClock = func() time.Time { return time.Now().Add(24 * time.Hour) }
 	t.Cleanup(func() { limitClock = was })
+}
+
+// compressRetries runs a login's retries at a test's pace, still growing.
+func compressRetries(t *testing.T) {
+	t.Helper()
+	was := loginRetries
+	loginRetries = []time.Duration{20 * time.Millisecond, 40 * time.Millisecond, 80 * time.Millisecond}
+	t.Cleanup(func() { loginRetries = was })
+}
+
+// pastTheRetries waits out every retry a login could still make.
+func pastTheRetries() {
+	var all time.Duration
+	for _, d := range loginRetries {
+		all += d
+	}
+	time.Sleep(4 * all)
+}
+
+// oldLoginAnswers makes the fake answer the first n "continue"s after a login as
+// a process still holding the old login, by the auth failure if auth.
+func oldLoginAnswers(t *testing.T, n int, auth bool) {
+	t.Helper()
+	t.Setenv(fakeOldLoginEnv, strconv.Itoa(n))
+	if auth {
+		t.Setenv(fakeOldLoginAuthEnv, "1")
+	}
+}
+
+// A process still on the old login answers the login's resume with the old
+// account's limit (BUG-64: six of 31 agents, 2026-11-06). The daemon tries again
+// once that process has had time to take the new login, and stops once a turn
+// goes through.
+func TestALoginsResumeTheOldLoginAnswersIsRetried(t *testing.T) {
+	compressRetries(t)
+	oldLoginAnswers(t, 1, false)
+	c, dir := limitedFleet(t, noResetNamed)
+	id := testSessionID("e5e5")
+	stopOnLimit(t, c, id, "sydney")
+
+	signIn(t, dir, "acct-b", "2")
+	c.awaitResumed(id)
+	c.awaitEvent(id, noResetNamed)
+	c.awaitResumed(id)
+	c.awaitEvent(id, "working as acct-b")
+	pastTheRetries()
+	continuesSent(c, id, "continues=2 marked=2")
+}
+
+// A login's resume that reaches the process before its new login can be read
+// fails "Not logged in", which is no stop at all (BUG-64, 2026-10-21): the
+// daemon tries again rather than leaving the agent idle with nothing to wake it.
+func TestALoginsResumeThatFindsNoLoginYetIsRetried(t *testing.T) {
+	compressRetries(t)
+	oldLoginAnswers(t, 1, true)
+	c, dir := limitedFleet(t, noResetNamed)
+	id := testSessionID("e6e6")
+	stopOnLimit(t, c, id, "sydney")
+
+	signIn(t, dir, "acct-b", "2")
+	c.awaitResumed(id)
+	c.awaitEvent(id, notLoggedIn)
+	c.awaitResumed(id)
+	c.awaitEvent(id, "working as acct-b")
+	pastTheRetries()
+	continuesSent(c, id, "continues=2 marked=2")
+}
+
+// A login that never takes - the old login answers every time - is tried
+// loginRetries' number of times after the first, then left to its reset or the
+// next login like any stop.
+func TestALoginsRetriesStopAtTheirCap(t *testing.T) {
+	compressRetries(t)
+	oldLoginAnswers(t, 100, false)
+	c, dir := limitedFleet(t, noResetNamed)
+	id := testSessionID("e7e7")
+	stopOnLimit(t, c, id, "sydney")
+
+	signIn(t, dir, "acct-b", "2")
+	tries := 1 + len(loginRetries)
+	for range tries {
+		c.awaitResumed(id)
+	}
+	pastTheRetries()
+	continuesSent(c, id, fmt.Sprintf("continues=%d marked=%d", tries, tries))
 }
