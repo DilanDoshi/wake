@@ -45,8 +45,14 @@ run: build ## Build and start wake
 
 # Two lanes, one per target, and `make ci` runs both. Never coverage under -race:
 # atomic cover counters can hide real races (decisions.md, 2026-10-14).
+#
+# The race lane's -timeout: internal/ui takes 630-790s under -race on a quiet
+# machine and ~900s on a loaded one, past go test's 10m default, which failed a
+# bare `make ci` with no failing test. 20m is a third over the worst, and under
+# the workflow job's timeout-minutes (citarget_test.go holds that) so a hang
+# still names its test. The plain lane's slowest package is ~130s: default kept.
 test: ## Run the suite under the race detector (`make cover` is the plain lane)
-	go test $(PKG) -race -count=1
+	go test $(PKG) -race -count=1 -timeout=20m
 
 cover: ## Run the suite without the detector and enforce the coverage gate on every package
 	go test $(PKG) -count=1 -coverprofile=coverage.out
