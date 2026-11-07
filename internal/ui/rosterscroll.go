@@ -127,10 +127,13 @@ func (a App) rosterWindow() ([]rosterItem, heights, span) {
 }
 
 // wheelRoster is a notch over the sidebar: the window an item on (down) or back,
-// and held. A roster that fits takes no wheel - the seam lets go of the hold, and
-// nothing else moves, since the pointer says what scrolls.
+// and held. A roster that fits takes no wheel: nothing moves, not even where the
+// window opens when the fleet next overflows, since the pointer says what scrolls.
 func (a App) wheelRoster(lines int) App {
 	_, h, w := a.rosterWindow()
+	if h.total() <= a.rosterRows() {
+		return a
+	}
 	step := 1
 	if lines > 0 { // a wheel up reads back toward the top
 		step = -1
