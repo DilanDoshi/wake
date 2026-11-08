@@ -350,9 +350,10 @@ func (d DM) Append(ev core.Event) DM {
 	}
 	d = d.observedTool(ev).settled(ev)
 
-	// Whether the reader follows the newest row, sampled with the answer's rows
-	// still under the last line: a reader scrolled back into them is not following.
-	following := d.tr.atBottom()
+	// Whether the reader follows the newest row, and how many rows the window
+	// holds, sampled with the answer's rows still under the last line: a reader
+	// scrolled back into them is not following.
+	following, end := d.tr.atBottom(), d.tr.end()
 
 	// The preview, which is the one event kind that never reaches the
 	// record. Returning here is what keeps the claim in partial.go true:
@@ -364,7 +365,7 @@ func (d DM) Append(ev core.Event) DM {
 		if d.partial.shown() != shown {
 			d = d.drawnLayout() // an answer hides the done line: settled once, not per frame
 		}
-		return d.withTail(following)
+		return d.withTail(following).heldBack(following, end)
 	case core.KindMessageStart, core.KindAssistantText, core.KindTurnEnd:
 		// The block that supersedes it, a turn that ended without ever producing
 		// one (an interrupt: nothing else would clear it) or the next message
@@ -404,7 +405,7 @@ func (d DM) Append(ev core.Event) DM {
 		// off disk can re-derive the board from it - the one invisible event this
 		// path keeps. Every other empty render is a stray that consumes no slot.
 		if b.text == "" && !d.isChecklistOp(ev) {
-			return d.drawnLayout().withTail(following)
+			return d.drawnLayout().withTail(following).heldBack(following, end)
 		}
 		d.runKey, d.runTally = "", nil // a non-tool block, a checklist op or a stray ends the run
 	}
@@ -442,16 +443,25 @@ func (d DM) Append(ev core.Event) DM {
 		// the composer, not a block. Everything else that reaches here draws.
 		d.tr = d.tr.add(b)
 	}
-	return d.drawnLayout().withTail(following).retained()
+	return d.drawnLayout().withTail(following).heldBack(following, end).retained()
 }
 
-// withTail puts the answer being written under the transcript's last line, keeps
-// a follower on the newest row and a reader reading back off it.
+// withTail puts the answer being written under the transcript's last line and
+// keeps a follower on the newest row.
 func (d DM) withTail(following bool) DM {
 	d.tr.tail = d.tailRows()
 	if following {
 		d.tr = d.tr.toBottom()
-	} else {
+	}
+	return d
+}
+
+// heldBack keeps a reader who was reading back off the newest row when the
+// window's rows shrank under them - an answer's block laid out shorter as it
+// finished, or its rows gone with nothing landing - so the next row never pushes
+// them. end is how many rows the window held before.
+func (d DM) heldBack(following bool, end int) DM {
+	if !following && d.tr.end() < end {
 		d.tr = d.tr.keptBack()
 	}
 	return d

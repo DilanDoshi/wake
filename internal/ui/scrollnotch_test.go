@@ -309,3 +309,26 @@ func TestTheWayBackDownPassesThroughEveryRowOfTheAnswer(t *testing.T) {
 		t.Errorf("at the bottom the answer's newest paragraph %s is not on screen:\n%s", last, strings.Join(dmRows(a), "\n"))
 	}
 }
+
+// A channel whose members are idle while another team works draws no working
+// line, and picking it takes the line off the stored room too, or the first
+// notch there moved the room one row.
+func TestTheFirstNotchInAChannelWithNobodyWorkingMovesByTheNotch(t *testing.T) {
+	sessions := channelSessions()
+	sessions[0].State = rpc.StateWorking // sydney, on backend
+	a := newRoomApp(t).withSize(160, 45).applyStatus(channelReport(sessions...))
+	for i := range 60 {
+		a = a.applyFrame(kindFrame("s3", core.KindAssistantText, fmt.Sprintf("Turn %03d. %s", i, benchParagraph)))
+	}
+	working := agentPrefix + "sydney "
+	if !strings.Contains(strings.Join(roomRows(a), "\n"), working) {
+		t.Fatalf("the room draws no working line for sydney, so this measures nothing:\n%s", strings.Join(roomRows(a), "\n"))
+	}
+	a = a.selectChannel("frontend")
+	before := roomRows(a)
+	if strings.Contains(strings.Join(before, "\n"), working) {
+		t.Fatalf("frontend's channel still draws sydney working:\n%s", strings.Join(before, "\n"))
+	}
+	a = roomWheel(a, tea.MouseButtonWheelUp)
+	assertMovedBy(t, "the first notch in frontend's channel", before, roomRows(a), wheelLines)
+}

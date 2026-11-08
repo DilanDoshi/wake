@@ -271,3 +271,26 @@ func TestAFinishingBlockThatShrinksLeavesAReaderReading(t *testing.T) {
 		t.Errorf("the next tokens moved the reader:\n%s\nwas\n%s", strings.Join(got, "\n"), strings.Join(reading, "\n"))
 	}
 }
+
+// A subagent's words land between two of the agent's tokens and end none of the
+// agent's: the answer being written stays, and so does a reader scrolled back into
+// it - its rows are not taken away under them, and the agent's next tokens move
+// nothing they read.
+func TestASubagentSpeakingMidAnswerLeavesTheAnswerAndItsReader(t *testing.T) {
+	d := messageStarted(pushDM(t, pushH))
+	d, text := streamRows(d, "", previewRoom(d)+8)
+	d = d.ScrollUp(9)
+	reading := frameRows(d)
+
+	d = d.Append(spoke("dispatch-1", "the subagent reports in"))
+	if got := frameRows(d); !slices.Equal(got[:len(windowOf(d))], reading[:len(windowOf(d))]) {
+		t.Fatalf("a subagent speaking moved the reader:\n%s\nwas\n%s", strings.Join(got, "\n"), strings.Join(reading, "\n"))
+	}
+	d, _ = streamRows(d, text, len(wrappedRows(text))+2)
+	if d.tr.atBottom() {
+		t.Fatal("the agent's next tokens found the reader following")
+	}
+	if got := frameRows(d); !slices.Equal(got[:len(windowOf(d))], reading[:len(windowOf(d))]) {
+		t.Errorf("the agent's next tokens moved the reader:\n%s\nwas\n%s", strings.Join(got, "\n"), strings.Join(reading, "\n"))
+	}
+}

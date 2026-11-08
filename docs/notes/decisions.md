@@ -3204,8 +3204,15 @@ amendment's floor and "bounded by the pane":
   reader scrolled back *into* the open block, the rows they read change at that moment: a list with
   inline markup can come out many rows shorter, and a code fence closing drops its opener row. A block
   that shrinks under such a reader never makes them a follower that the next token pushes
-  (`transcript.keptBack`, which holds them a row above the newest). Matching the plain rows to glamour's
-  closely enough to remove this would mean rendering per token, which the ruling above rejects.
+  (`DM.heldBack`, only when the window's rows shrank: `transcript.keptBack` holds them a row above the
+  newest). Matching the plain rows to glamour's closely enough to remove this would mean rendering per
+  token, which the ruling above rejects. Two edges are accepted: a held reader whose pane then grows by a
+  row or more is at the newest row and follows, as any reader that close always did; and after an
+  interrupt with nothing landed, the banner over a held reader points at one row.
+- **A subagent's words landing mid-answer leave the answer.** `superseded` used to clear the preview on
+  any landing, a subagent's included, though its own comment said a subagent's block ends none of the
+  agent's. With the whole message in the window that took the answer away under a reader; it now only
+  stops the pane reading the rest for blocks.
 - **A single line longer than `render.MaxChunk` keeps its newest bytes**, so its rows slide under a
   reader inside it. That is the bound on per-token work. A line that long (4 KB with no newline) is rare
   outside generated data.

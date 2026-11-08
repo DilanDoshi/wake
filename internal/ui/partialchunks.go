@@ -94,14 +94,15 @@ func (p partial) prose() bool { return !p.raw && (p.synced || p.fin != nil || p.
 // superseded is the preview once ev has ended its block: the block landed, the turn
 // ended, or the next message began. Only a message start syncs a pane, since every
 // token of a block follows one. A subagent's block landing between two of the
-// agent's tokens ends none of the agent's, so it unsyncs.
+// agent's tokens ends none of the agent's: the answer stays, read no further for
+// blocks.
 func (p partial) superseded(ev core.Event) partial {
+	if ev.Subagent != nil {
+		return p.unsynced()
+	}
 	p = p.cleared()
-	switch {
-	case ev.Kind == core.KindMessageStart:
+	if ev.Kind == core.KindMessageStart {
 		p.synced = true
-	case ev.Subagent != nil:
-		p.synced = false
 	}
 	return p
 }

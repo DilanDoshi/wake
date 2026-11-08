@@ -285,9 +285,8 @@ func (t transcript) toBottom() transcript {
 	return t
 }
 
-// keptBack keeps a reader who was reading back off the newest row when what they
-// read shrank under them - a block laid out again as it finished - so the next
-// row never pushes them.
+// keptBack is t with a reader who was reading back held off the newest row, a
+// row above it, for one the rows shrank under (DM.heldBack).
 func (t transcript) keptBack() transcript {
 	if t.atBottom() && t.bottom() > t.first() {
 		t.scroll = t.bottom() - 1
