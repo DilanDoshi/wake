@@ -1468,3 +1468,48 @@ leak a still-running private turn into the room. The only residual: a gap that e
 `KindTurnEnd` event and the working→idle report for the same turn leaves `inDM` stale until the next
 observed turn-end, so that agent's room prose is held back until then. Far narrower than the original,
 where a daemon-side gap invalidated nothing at all.
+
+## BUG-67 — a fleet streaming answers keeps the window's draw loop busy all the time
+
+**Found 2026-11-08 while measuring the scroll jank of `fix/scroll-moves-by-the-notch-during-a-stream`, on
+`main` f4a9b55a.** Not built: written up for the owner's call.
+
+The setup:
+- The real binary in a pty, 200×50, with one conversation open beside the room.
+- A scratch fleet of 31 sessions: 30 agents spawned with `/new`, plus the manager.
+- Every session is the demo's scripted claude streaming at the corpus median, 43 tokens a second.
+- The window process's CPU was read with `ps -o time=` over 10 seconds.
+
+| fleet | window process |
+|---|---|
+| 31 sessions streaming, `main` | 14.9 CPU s in 10 s: **148% of one core** |
+| the same, the scroll branch | 12.0 CPU s in 10 s: 119% |
+| the same 31 sessions idle, `main` | 0.13 CPU s in 10 s: 1% |
+
+**Why.** Bubble Tea calls `View` after every message, and each `streamMsg` is one message. The inbox hands
+over whatever is waiting (`take`). Frames from 30 agents arrive evenly, about 1,300 a second, and the loop
+drains faster than they arrive. So each batch holds about 1.3 frames, and the loop draws about 1,000
+frames a second at about 1 ms each.
+
+Only the one conversation on screen changes anything the frame draws. The other agents' tokens are
+dropped in `App.wants`, but only after they have woken the loop and paid for a `View`.
+
+An in-process run of the same arrival pattern (30 × 43 tokens a second, spread evenly) gave:
+- 3,008 batches in 3 s, 1.3 frames a batch, 3,097 `View`s;
+- the loop busy 100% of the time;
+- a wheel notch still handled within 3 ms p50 and 10 ms max, so scrolling stays smooth.
+
+The cost is power and heat on a machine that runs a fleet all day. It is the "cheap to leave open" rule's
+own case.
+
+**Why nothing caught it.** `BenchmarkStreamingFleetSecond` folds the fleet's second in 256-frame batches,
+which is the most `take` hands over, not what it hands over under steady arrival. So it prices about 1% of a
+core where the loop pays a whole one.
+
+**Directions, not chosen:**
+1. Drop an undrawn session's partial frames in the inbox, before they ring the doorbell. The pump would read
+   a snapshot of the drawn set, and a pane that comes on screen mid-block would be marked `Lost` there.
+2. Skip the draw for a batch that changed nothing on screen, keyed on what the frame reads.
+3. A benchmark that feeds the loop at steady arrival, to price either.
+
+A timer that coalesces the doorbell is the poll the first non-negotiable rules out.
