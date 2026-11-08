@@ -122,7 +122,7 @@ const (
 //
 // A trim leaves the DM a block with its beginning missing, so the frame is marked
 // Lost, as is the next one after any token the ring drops (partialchunks.go).
-var foldChars = previewChars(foldWidth, minPreviewRows)
+var foldChars = previewChars(foldWidth)
 
 // inbox is the frames that have arrived and not yet been drawn.
 //

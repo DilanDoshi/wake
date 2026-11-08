@@ -161,7 +161,7 @@ var lastReadStyle = lipgloss.NewStyle().Foreground(LastRead)
 // first of them - which is the case this bug lives in, not an edge of it.
 func (d DM) Leave() DM {
 	d.partial = d.partial.cleared().unsynced()
-	d = d.withTail(false)
+	d.tr.tail = d.tailRows()
 	at := d.events.len()
 	// A seed-only DM (opened after the agent spoke in the room, no live event yet)
 	// still has a transcript the reader has read - the room turns above events -

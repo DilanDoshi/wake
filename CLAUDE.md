@@ -355,9 +355,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **A preview is never a record, and it scrolls as the newest part of the conversation** (owner's
   2026-11-08 ruling): its rows are the window's last, under the transcript's last line
   (`transcript.tail`), so a wheel notch moves it and everything above it by the notch, a follower watches
-  each row push the conversation up, and a reader scrolled back reads it standing still - nothing above
-  the row a token lands on ever changes (`previewRows`). It keeps the whole message, the most the landed
-  block holds a moment later; a token lays out only the open block or line, at most `render.MaxChunk`.
+  each row push the conversation up, and a reader scrolled back over it reads it standing still - nothing
+  above the open block ever changes (`previewRows`); the open block's own rows are laid out once more as it
+  finishes, plain to formatted, and a reader inside one that shrinks is kept reading
+  (`transcript.keptBack`). It keeps the whole message, the most the landed block holds a moment later; a
+  token lays out only the open block or line, at most `render.MaxChunk`.
   Accumulated only for panes on screen (`App.wants`), dropped on leave, not drawn in a subagent's view;
   a drag over it copies it like any row. Each *finished* block goes
   through glamour once, as it completes (`render.Splitter`) — never per token — and only the open

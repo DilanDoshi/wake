@@ -284,7 +284,7 @@ func (d DM) SetSize(w, h int) DM {
 	d.height = h
 	// The answer being written is laid out again at the width, under the last line.
 	d.partial = d.partial.sized(d.blockWidth())
-	d = d.withTail(false)
+	d.tr.tail = d.tailRows()
 	// The composer wraps the draft as keys arrive, so it is sized here rather
 	// than only when it is drawn (see Composer.SetWidth).
 	// The pinned rows above the composer - the task board and the type-ahead queue
@@ -359,7 +359,11 @@ func (d DM) Append(ev core.Event) DM {
 	// nothing below this line runs for a token.
 	switch ev.Kind {
 	case core.KindPartialText:
+		shown := d.partial.shown()
 		d.partial = d.partial.sized(d.blockWidth()).add(ev.Text)
+		if d.partial.shown() != shown {
+			d = d.drawnLayout() // an answer hides the done line: settled once, not per frame
+		}
 		return d.withTail(following)
 	case core.KindMessageStart, core.KindAssistantText, core.KindTurnEnd:
 		// The block that supersedes it, a turn that ended without ever producing
@@ -371,9 +375,9 @@ func (d DM) Append(ev core.Event) DM {
 		// would fold differently after a re-wrap than before. Two turns whose
 		// tools are adjacent with no prose between them fold together on screen.
 		// A landing block takes the rows its preview had, so a reader scrolled back
-		// over them stays where they were.
+		// over them stays where they were: held below, once the block is in.
 		d.partial = d.partial.superseded(ev)
-		d = d.withTail(false)
+		d.tr.tail = d.tailRows()
 	}
 
 	if dispatch := forwardedTo(ev); dispatch != "" {
@@ -400,7 +404,7 @@ func (d DM) Append(ev core.Event) DM {
 		// off disk can re-derive the board from it - the one invisible event this
 		// path keeps. Every other empty render is a stray that consumes no slot.
 		if b.text == "" && !d.isChecklistOp(ev) {
-			return d
+			return d.drawnLayout().withTail(following)
 		}
 		d.runKey, d.runTally = "", nil // a non-tool block, a checklist op or a stray ends the run
 	}
@@ -438,24 +442,28 @@ func (d DM) Append(ev core.Event) DM {
 		// the composer, not a block. Everything else that reaches here draws.
 		d.tr = d.tr.add(b)
 	}
-	if following {
-		d.tr = d.tr.toBottom()
-	}
-	return d.retained()
+	return d.drawnLayout().withTail(following).retained()
 }
 
-// withTail puts the answer being written under the transcript's last line - none
-// while a subagent is open, whose transcript the pane draws instead - and keeps a
-// follower on the newest row.
+// withTail puts the answer being written under the transcript's last line, keeps
+// a follower on the newest row and a reader reading back off it.
 func (d DM) withTail(following bool) DM {
-	d.tr.tail = previewRows{}
-	if d.viewing == "" {
-		d.tr.tail = d.partial.rows.under(d.tr)
-	}
+	d.tr.tail = d.tailRows()
 	if following {
 		d.tr = d.tr.toBottom()
+	} else {
+		d.tr = d.tr.keptBack()
 	}
 	return d
+}
+
+// tailRows is the answer being written as the rows under the transcript's last
+// line - none while a subagent is open, whose transcript the pane draws instead.
+func (d DM) tailRows() previewRows {
+	if d.viewing != "" {
+		return previewRows{}
+	}
+	return d.partial.rows.under(d.tr)
 }
 
 // forwardedTo is the dispatch an event belongs to, and "" for one that belongs
@@ -706,7 +714,7 @@ func (d DM) Before(earlier []core.Event) DM {
 func (d DM) Composer() Composer { return d.composer }
 
 // WithComposer returns a DM carrying c, its layout settled: a box that gained or
-// lost rows moves the chrome the stored preview cap is measured against. The one
+// lost rows moves the chrome the stored transcript is sized against. The one
 // write every stored composer goes through; a no-op while the box's rows hold.
 func (d DM) WithComposer(c Composer) DM { d.composer = c; return d.drawnLayout() }
 

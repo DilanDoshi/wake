@@ -192,7 +192,7 @@ func TestRoomWorkingLineHasBlankRowsAroundIt(t *testing.T) {
 // transcript sizing: a draft grown near its cap while the working line is up
 // must not push the frame past the pane. Without the beat and its gaps in
 // composerRowsIn the box outgrows its allowance and the room scrolls the alt
-// screen - the DM's own aboveComposerExtra rule, applied to the room.
+// screen - the DM's own beatBarRows rule, applied to the room.
 func TestRoomStaysInBoundsWithAWorkingLineAndAGrownComposer(t *testing.T) {
 	forceTrueColour(t)
 	const w, h = 60, 10

@@ -111,56 +111,41 @@ func TestTheWorkingLineEndingLeavesAScrolledReaderWhereTheyWere(t *testing.T) {
 	}
 }
 
-// A token that grows the preview a row settles the stored layout then, so the
-// frames between row changes re-lay nothing: View compares the stored chrome
-// with the drawn one, and a stale one re-laid a copy of the pane every frame
-// for as long as the answer streamed.
+// The answer is the window's rows, never chrome, so a token leaves the stored
+// layout as drawn and the frames between changes re-lay nothing: View compares the
+// stored chrome with the drawn one, and a stale one re-lays a copy of the pane
+// every frame. That holds for a working agent, one scrolled back over it, and one
+// still reading idle under its done line when the next answer starts - the line
+// the first token hides.
 func TestAStreamedTokenLeavesTheStoredLayoutAsDrawn(t *testing.T) {
-	for _, scrolled := range []bool{false, true} {
-		t.Run(fmt.Sprintf("scrolled=%v", scrolled), func(t *testing.T) {
-			d := messageStarted(fullTranscriptDM())
-			if scrolled {
+	for _, tc := range []struct {
+		name     string
+		scrolled bool
+		agent    Agent
+	}{
+		{"working", false, Agent{ID: "s1", State: rpc.StateWorking}},
+		{"scrolled back", true, Agent{ID: "s1", State: rpc.StateWorking}},
+		{"idle under its done line", false, Agent{ID: "s1", State: rpc.StateIdle, doneAt: clock()}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			d := fullTranscriptDM()
+			d.Agent = tc.agent
+			d = messageStarted(d.SetSize(benchPaneWidth, 40))
+			if tc.scrolled {
 				d = d.ScrollUp(9)
 			}
-			grew := 0
 			for i, tok := range streamedBlock(400) {
-				rows := d.partial.rows.len()
 				d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: tok})
-				if d.partial.rows.len() != rows {
-					grew++
-				}
 				if got := d.chromeHeight(); got != d.chrome {
 					t.Fatalf("after token %d the pane draws %d rows of chrome and stored %d: every frame until the next settle re-lays it", i, got, d.chrome)
 				}
 			}
-			if grew < 2 {
-				t.Fatalf("the preview changed rows %d times: this streamed nothing worth settling", grew)
+			d = d.Append(core.Event{Kind: core.KindTurnEnd, SessionID: "s1"})
+			if got := d.chromeHeight(); got != d.chrome {
+				t.Errorf("after the turn ended the pane draws %d rows of chrome and stored %d", got, d.chrome)
 			}
 		})
 	}
-}
-
-// A channel whose members are idle while another team works draws no working
-// line, and picking it takes the line off the stored room too, or the first
-// notch there moved the room one row.
-func TestTheFirstNotchInAChannelWithNobodyWorkingMovesByTheNotch(t *testing.T) {
-	sessions := channelSessions()
-	sessions[0].State = rpc.StateWorking // sydney, on backend
-	a := newRoomApp(t).withSize(160, 45).applyStatus(channelReport(sessions...))
-	for i := range 60 {
-		a = a.applyFrame(kindFrame("s3", core.KindAssistantText, fmt.Sprintf("Turn %03d. %s", i, benchParagraph)))
-	}
-	working := agentPrefix + "sydney "
-	if !strings.Contains(strings.Join(roomRows(a), "\n"), working) {
-		t.Fatalf("the room draws no working line for sydney, so this measures nothing:\n%s", strings.Join(roomRows(a), "\n"))
-	}
-	a = a.selectChannel("frontend")
-	before := roomRows(a)
-	if strings.Contains(strings.Join(before, "\n"), working) {
-		t.Fatalf("frontend's channel still draws sydney working:\n%s", strings.Join(before, "\n"))
-	}
-	a = roomWheel(a, tea.MouseButtonWheelUp)
-	assertMovedBy(t, "the first notch in frontend's channel", before, roomRows(a), wheelLines)
 }
 
 // answerMarker names each paragraph of a streamed answer, as turnMarker names

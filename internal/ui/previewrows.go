@@ -16,7 +16,8 @@ import (
 // finished blocks' first shown rows, the gap a block keeps from what follows it,
 // the finished lines, and the open rows. Only the open rows are laid out per
 // token; the runs above them never change while the message lasts, so a reader
-// scrolled back over them sees nothing move.
+// scrolled back over them sees nothing move. The open rows are the open block as
+// plain text, laid out once more as formatted rows when it finishes.
 type previewRows struct {
 	lead  []string
 	head  chunked[string]
@@ -68,6 +69,7 @@ func (r previewRows) under(t transcript) previewRows {
 // Trailing blank rows of the last block are drawn only once something follows
 // them, so the answer never ends on a blank row.
 func (p partial) laidOut() partial {
+	p.prosed = p.prose()
 	var fin blocks
 	if p.fin != nil {
 		fin = *p.fin

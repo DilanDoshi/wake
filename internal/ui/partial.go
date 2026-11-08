@@ -64,9 +64,10 @@ package ui
 // # The five properties, each with a test named for it
 //
 // A preview never enters the record, so it cannot make Append superlinear.
-// Its **rows above the one a token lands on never change** (previewRows), so the
-// work per token is flat rather than growing with the answer and nothing a
-// scrolled-back reader is reading moves. It is **cleared by the block that
+// Its **rows above the open block never change** (previewRows), so the work per
+// token is flat rather than growing with the answer and nothing a reader scrolled
+// back over them is reading moves; the open block's own rows are laid out once
+// more as it finishes, plain to formatted, as they always were. It is **cleared by the block that
 // supersedes it**, or by the turn ending, which is the interrupted case where no
 // block ever arrives. And it is **only accumulated for a pane on screen** - see
 // wants, which is the one of the four that is App's rather than this type's. The
@@ -132,10 +133,10 @@ const (
 	previewSlack = 2
 )
 
-// previewChars is how many characters of the block are retained at width w for a
-// preview that may draw rows rows, at least the floor's.
-func previewChars(w, rows int) int {
-	return max(w, minBlockWidth) * (max(rows, minPreviewRows) + previewSlack)
+// previewChars is how many characters of a board tile's preview are retained at
+// width w: its rows and the slack.
+func previewChars(w int) int {
+	return max(w, minBlockWidth) * (minPreviewRows + previewSlack)
 }
 
 // partial is the block being written, and the rows it draws.
@@ -161,6 +162,7 @@ type partial struct {
 	lines  chunked[string]
 	srcs   chunked[string]
 	rows   previewRows
+	prosed bool // laid out as prose since the message began
 	scan   render.Splitter
 	synced bool
 	raw    bool
@@ -176,7 +178,7 @@ func (p partial) add(s string) partial {
 	if p.raw {
 		// Bytes rather than runes: this is a bound on work, and a multi-byte rune
 		// cut in half at the front is dropped by the wrap - what the slack is for.
-		p.text = tail(p.text, previewChars(p.width, minPreviewRows))
+		p.text = tail(p.text, previewChars(p.width))
 		return p.wrapped()
 	}
 	if p.formats() {
@@ -194,7 +196,7 @@ func tail(s string, n int) string { return s[max(len(s)-n, 0):] }
 // cleared is the preview after the block it was previewing has landed.
 func (p partial) cleared() partial {
 	p.text, p.view, p.col, p.fin, p.scan = "", "", 0, nil, render.Splitter{}
-	p.lines, p.srcs, p.rows = chunked[string]{}, chunked[string]{}, previewRows{}
+	p.lines, p.srcs, p.rows, p.prosed = chunked[string]{}, chunked[string]{}, previewRows{}, false
 	return p
 }
 
@@ -217,6 +219,10 @@ func (p partial) sized(w int) partial {
 			}
 		}
 		p.fin = finishedBlocks(redone)
+	}
+	if p.formats() {
+		// The open block is still being read for blocks, from where the splitter is.
+		return p.laidOut()
 	}
 	srcs, text := p.srcs, p.text
 	p.lines, p.srcs = chunked[string]{}, chunked[string]{}

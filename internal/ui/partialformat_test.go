@@ -8,6 +8,7 @@ package ui
 
 import (
 	"fmt"
+	"slices"
 	"strings"
 	"testing"
 
@@ -463,5 +464,45 @@ func TestATabInAStreamedAnswerNeverReachesTheFrame(t *testing.T) {
 				t.Errorf("the streamed text is not on screen:\n%s", out)
 			}
 		})
+	}
+}
+
+// A width change while a block is still being written lays the answer out again
+// at the new width and leaves the open block to be read from where it was: the
+// tokens after it go on finishing blocks in order. Settling its lines here would
+// have left the splitter's place pointing into text that was no longer there.
+func TestAWidthChangeMidBlockKeepsReadingTheBlockInOrder(t *testing.T) {
+	for _, open := range []string{
+		"Intro.\n\n```go\nfunc main() {\n",
+		"- a fairly long first item of the list here\n- se",
+		"First para.\n\nline one of a list\nline two of it",
+	} {
+		d := streamed(formatDM(fmtH), open)
+		d = d.SetSize(40, fmtH)
+		d = streamed(d, " more\n\nThe last paragraph.\n\nAnd an open one")
+		out := stripANSI(strings.Join(d.partial.rows.slice(0, d.partial.rows.len()), "\n"))
+		last := -1
+		for _, want := range []string{"more", "The last paragraph.", "And an open one"} {
+			at := strings.Index(out, want)
+			if at <= last {
+				t.Errorf("after %q and a resize, %q is out of order in the preview:\n%s", open, want, out)
+			}
+			last = at
+		}
+	}
+}
+
+// A pane that loses a token stops reading the block for finished ones, and keeps
+// drawing it as it was drawing it: the rows already laid out stay where they are,
+// in the margin they were drawn in.
+func TestALostTokenMidAnswerLeavesItsRowsWhereTheyWere(t *testing.T) {
+	d := streamed(formatDM(fmtH), "line one of it\nline two of it\nline three of it\nand the open li")
+	before := d.partial.rows.slice(0, d.partial.rows.len())
+	d.partial = d.partial.unsynced()
+	d = streamed(d, "ne goes on\nand a next line")
+	after := d.partial.rows.slice(0, d.partial.rows.len())
+	if len(after) < len(before) || !slices.Equal(after[:len(before)-1], before[:len(before)-1]) {
+		t.Errorf("a lost token re-laid the rows above the open line:\nbefore\n%s\nafter\n%s",
+			strings.Join(before, "\n"), strings.Join(after, "\n"))
 	}
 }

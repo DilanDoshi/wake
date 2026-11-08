@@ -3197,9 +3197,18 @@ amendment's floor and "bounded by the pane":
   the most the landed block holds a moment later, so the bound is the message, never the conversation.
   The open block stays held to `render.MaxChunk` as before, and so does the open line of a pane not
   reading blocks: a token lays out only that.
-- **Nothing above the row a token lands on changes.** `previewRows` holds the finished blocks, their gap,
-  the finished lines and the open rows. Only the open rows are laid out per token, so a scrolled-back
-  reader's rows are fixed and the work per token stays flat in the answer's length.
+- **Nothing above the open block changes.** `previewRows` holds the finished blocks, their gap, the
+  finished lines and the open rows. Only the open rows are laid out per token, so a reader scrolled back
+  over the finished ones sees nothing move and the work per token stays flat in the answer's length.
+- **The open block is laid out once more as it finishes**, plain to formatted, as it always was. For a
+  reader scrolled back *into* the open block, the rows they read change at that moment: a list with
+  inline markup can come out many rows shorter, and a code fence closing drops its opener row. A block
+  that shrinks under such a reader never makes them a follower that the next token pushes
+  (`transcript.keptBack`, which holds them a row above the newest). Matching the plain rows to glamour's
+  closely enough to remove this would mean rendering per token, which the ruling above rejects.
+- **A single line longer than `render.MaxChunk` keeps its newest bytes**, so its rows slide under a
+  reader inside it. That is the bound on per-token work. A line that long (4 KB with no newline) is rare
+  outside generated data.
 - **Not drawn in a subagent's view** (the parent's words are not what the reader opened), where it used
   to take the floor. Back in the conversation it is under the last line again.
 - **A drag over the answer selects and copies it**, as any row of the conversation. Before, the preview

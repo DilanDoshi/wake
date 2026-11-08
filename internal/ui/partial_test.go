@@ -128,11 +128,11 @@ func TestTheAnswerFillsThePaneAndThePaneKeepsItsHeight(t *testing.T) {
 	}
 }
 
-// A pane too short to also hold a preview yields the preview to zero rows rather
-// than drawing it and overflowing - a frame one row past its height scrolls the
-// alt screen away on every draw. Regression for the tiny-working-pane case the
-// code review caught: previewCap's floor forced a row that did not fit.
-func TestATightPaneYieldsThePreviewRatherThanOverflowing(t *testing.T) {
+// A pane at its tightest draws exactly its height with a long answer streaming
+// into it - a frame one row past its height scrolls the alt screen away on every
+// draw. Regression for the tiny-working-pane case a code review caught, when the
+// preview was chrome with a floor that forced a row that did not fit.
+func TestATightPaneKeepsItsHeightUnderALongAnswer(t *testing.T) {
 	long := strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200)
 	d := NewDM("s1", "alex")
 	d.Agent = Agent{ID: "s1", State: rpc.StateWorking}

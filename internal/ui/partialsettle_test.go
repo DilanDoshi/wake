@@ -241,3 +241,33 @@ func TestADragThatPullsAFollowerBackMapsThePointerIntoTheNewWindow(t *testing.T)
 		t.Errorf("the pointer on row %d (%q) selected line %d (%q)", y, want, line, got)
 	}
 }
+
+// A block that finishes is laid out again as the landed one will be, and a list
+// written with inline markup can come out shorter than its plain rows. A reader
+// scrolled back into it keeps reading: the rows shrinking under them never make
+// them a follower the next token pushes.
+func TestAFinishingBlockThatShrinksLeavesAReaderReading(t *testing.T) {
+	d := messageStarted(pushDM(t, pushH))
+	var list strings.Builder
+	for i := range 30 {
+		fmt.Fprintf(&list, "- **item %02d** says `x` and *a* few **more** words here to wrap\n", i)
+	}
+	d = streamed(d, list.String())
+	open := d.partial.rows.len()
+	d = d.ScrollUp(6)
+	if d.tr.atBottom() {
+		t.Fatal("the reader is not scrolled back")
+	}
+	d = streamed(d, "\nThe next paragraph")
+	if d.partial.rows.len() >= open {
+		t.Fatalf("the finished list drew %d rows against %d plain: this fixture does not shrink", d.partial.rows.len(), open)
+	}
+	if d.tr.atBottom() || !showsBanner(d) {
+		t.Errorf("the list shrinking under a reader reading back made them a follower (banner = %v)", showsBanner(d))
+	}
+	reading := frameRows(d)
+	d = streamed(d, " goes on for a while.")
+	if got := frameRows(d); !slices.Equal(got[:len(windowOf(d))], reading[:len(windowOf(d))]) {
+		t.Errorf("the next tokens moved the reader:\n%s\nwas\n%s", strings.Join(got, "\n"), strings.Join(reading, "\n"))
+	}
+}

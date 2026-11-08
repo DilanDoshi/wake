@@ -87,8 +87,9 @@ func (p partial) formats() bool { return p.synced && !p.raw && !p.scan.Frozen() 
 
 // prose reports whether the preview is drawn the way the landed block will be:
 // inside the document margin, under the finished blocks. One that never formatted
-// anything is drawn as it was before they existed.
-func (p partial) prose() bool { return !p.raw && (p.synced || p.fin != nil) }
+// anything is drawn as it was before they existed, and one that has drawn prose
+// keeps it, so a lost token re-lays no row (laidOut latches it).
+func (p partial) prose() bool { return !p.raw && (p.synced || p.fin != nil || p.prosed) }
 
 // superseded is the preview once ev has ended its block: the block landed, the turn
 // ended, or the next message began. Only a message start syncs a pane, since every
