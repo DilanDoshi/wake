@@ -357,7 +357,12 @@ func (d DM) Append(ev core.Event) DM {
 	// nothing below this line runs for a token.
 	switch ev.Kind {
 	case core.KindPartialText:
+		rows := d.partial.rows()
 		d.partial = d.partial.sized(d.blockWidth()).add(ev.Text)
+		if d.partial.rows() != rows {
+			// Its rows are chrome: settled per row, or every frame re-lays a copy.
+			d = d.drawnLayout()
+		}
 		return d
 	case core.KindMessageStart, core.KindAssistantText, core.KindTurnEnd:
 		// The block that supersedes it, a turn that ended without ever producing

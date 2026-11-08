@@ -255,8 +255,8 @@ func (a App) paneSize(id string) (width, height int, ok bool) {
 // own - so it is set for the draw and not held, and cannot go stale against the
 // pick that decides it.
 func (a App) roomFor() Room {
-	// The working line is a fact about the fleet and the room holds no roster,
-	// so it is set for the draw for the mode's reason and cannot go stale.
+	// The working line's words move with the clock, so they are set for the draw;
+	// whether there is one is stored too (withRoomWorking), for the layout.
 	return a.room.WithComposer(a.room.Composer().
 		WithMode(a.hintMode()).
 		WithArms(a.armsFor(""))).WithWorking(a.working(), a.retrying).WithWriting(a.answerTitle(""))
