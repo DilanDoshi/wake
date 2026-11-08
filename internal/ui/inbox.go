@@ -114,13 +114,11 @@ const (
 // It is a bound on *work* rather than on what is shown. Deltas are additive, so
 // a draw loop stalled for a minute would otherwise grow one string per session
 // for as long as it stalls, and appending to a string costs its length. It is
-// taken at the preview's floor, not DM.previewCap's larger pane-filling cap: the
-// DM accumulates its own tail across the frequent consumes that empty this fold,
-// so the cap is fed frame by frame rather than from one fold's buffer. 800 x 5 is
-// 4,000 bytes, so after a long stall the fold trims below what previewCap would
-// grow to only where (rows + 2) x width passes that - about 100 columns by 38
-// rows - and the preview is short by rows until tokens refill it. Briefly short
-// rather than wrong, and not worth a larger bound multiplied across a stalled fleet.
+// taken at a board tile's rows: the DM keeps the whole answer itself across the
+// frequent consumes that empty this fold, so it is fed frame by frame rather than
+// from one fold's buffer. 800 x 5 is 4,000 bytes; past that a long stall costs the
+// pane the answer's middle, plain to its end - briefly short rather than wrong, and
+// not worth a larger bound multiplied across a stalled fleet.
 //
 // A trim leaves the DM a block with its beginning missing, so the frame is marked
 // Lost, as is the next one after any token the ring drops (partialchunks.go).

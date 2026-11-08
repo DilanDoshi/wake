@@ -367,10 +367,10 @@ func TestAPressIsMeasuredAgainstTheFrameThatWasClicked(t *testing.T) {
 	}
 }
 
-// A streamed answer is the other chrome that grows without a resize, and the
-// commonest: an agent writing takes rows from its own transcript for as long as
-// the turn runs. A press on one of them is a press on the preview.
-func TestADragOnAStreamingPreviewTakesNothing(t *testing.T) {
+// The answer being written is the window's last rows (transcript.tail), so a drag
+// across one of its rows selects it as any row of the conversation, and the
+// release copies what is drawn there.
+func TestADragOnAStreamingAnswerSelectsAndCopiesIt(t *testing.T) {
 	a := splitApp(t, 200, 40, 40).openDMWith("s1", "alex")
 	col := a.columnOf("s1")
 	d := *a.dms["s1"]
@@ -381,18 +381,19 @@ func TestADragOnAStreamingPreviewTakesNothing(t *testing.T) {
 
 	w, h := a.regions().Cols[col], a.paneHeight()
 	rows := strings.Split(a.dmPane("s1", w, h), "\n")
-	first := slices.IndexFunc(rows, func(r string) bool {
-		return strings.Contains(ansi.Strip(r), "streamingnow")
-	})
-	if first < 0 {
-		t.Fatalf("no preview is drawn, so this proves nothing about one:\n%s", strings.Join(rows, "\n"))
+	y := slices.IndexFunc(rows, func(r string) bool { return strings.Contains(ansi.Strip(r), "streamingnow") })
+	if y < 0 {
+		t.Fatalf("no answer is drawn, so this proves nothing about one:\n%s", strings.Join(rows, "\n"))
 	}
-	x := midOf(a.regions(), col)
-	for y := first; y < h; y++ {
-		if got, _ := drag(a, x, x+20, y); got.selectionIn("s1") != (marked{}) {
-			t.Errorf("a drag on row %d resolved to a transcript selection: the preview starts at row %d and is not conversation",
-				y, first)
-		}
+	x := a.layout.PaneLeft(a.regions(), col)
+	got, cmd := drag(a, x, x+30, y)
+	m := got.selectionIn("s1")
+	if m == (marked{}) || cmd == nil {
+		t.Fatalf("a drag across the answer's row %d took no selection (copy = %v)", y, cmd != nil)
+	}
+	lines, first := got.transcriptIn("s1").selectionLines(m)
+	if text := selectedText(lines, first, m, nil); !strings.Contains(text, "streamingnow") {
+		t.Errorf("the drag across the answer copies %q, want its words", text)
 	}
 }
 

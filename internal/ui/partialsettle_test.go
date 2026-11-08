@@ -1,9 +1,8 @@
 package ui
 
-// The stored layout lags what View draws - a preview grows chrome with no resize,
-// and View re-lays only a throwaway - so every move of the reader settles it
-// first and keeps the transcript's bottom line where the scroll put it across a
-// change of the preview's cap. See followbanner.go.
+// The stored layout lags what View draws - chrome moves with no resize, and View
+// re-lays only a throwaway - so every move of the reader settles it first, and the
+// answer being written is the window's last rows. See followbanner.go.
 
 import (
 	"fmt"
@@ -26,12 +25,12 @@ func drawnOf(d DM) DM {
 	return d
 }
 
-// behindNewest is how many lines the foot of the drawn transcript is behind its
-// newest line: 0 for a reader following.
+// behindNewest is how many rows the foot of the drawn window is behind its newest
+// row, the answer's when one is being written: 0 for a reader following.
 func behindNewest(d DM) int {
 	tr := drawnOf(d).tr
 	top := min(max(tr.scroll, tr.first()), tr.bottom())
-	return tr.lines.len() - 1 - (top + tr.height - 1)
+	return tr.end() - 1 - (top + tr.height - 1)
 }
 
 func showsBanner(d DM) bool { return slices.ContainsFunc(frameRows(d), hasText(followBannerText)) }
@@ -44,9 +43,9 @@ func landed(d DM, text string) DM {
 	return d.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: text})
 }
 
-// A wheel notch moves what the reader sees by the notch, whatever the preview
-// has done to the layout since the last resize: three up is three lines back,
-// and three down is back at the newest line - not six, and not three early.
+// A wheel notch moves what the reader sees by the notch, whatever the answer has
+// done since the last resize: three up is three rows back, and three down is back
+// at the newest row - not six, and not three early.
 func TestAWheelNotchMovesTheDrawnBottomLineByExactlyTheNotch(t *testing.T) {
 	d := pushDM(t, pushH)
 	room := previewRoom(d)
@@ -68,18 +67,15 @@ func TestAWheelNotchMovesTheDrawnBottomLineByExactlyTheNotch(t *testing.T) {
 		}
 	}
 
-	// Following resumed exactly at the newest line, so the preview has its room back.
-	d, _ = streamRows(d, text, len(wrappedRows(text))+room+2)
-	if got := previewUnder(t, frameRows(d), pushNewest); len(got) != room {
-		t.Errorf("back at the newest line the preview drew %d rows, want the pane's %d", len(got), room)
-	}
+	// Following resumed exactly at the newest row, so the answer pushes the pane up.
+	d, text = streamRows(d, text, len(wrappedRows(text))+room+2)
+	assertFollowsAnswer(t, "back at the newest row", d, text)
 }
 
-// The production order of the symptom: a resize stores the layout of a full
-// preview, the block lands, and the reader wheels up. The stored layout must
-// not outlive the preview, or the wheel measures a one-row transcript and the
-// pane draws as following - no banner - over a preview held at three rows.
-func TestAStoredFullPreviewLayoutDoesNotOutliveItsPreview(t *testing.T) {
+// The production order of an old symptom: a resize mid-answer, the block lands,
+// the reader wheels up, and the next answer streams under them. Every notch moves
+// them by the notch and the banner says when they have left the newest row.
+func TestAResizeMidAnswerThenALandingLeavesTheWheelExact(t *testing.T) {
 	d := pushDM(t, pushH)
 	d, _ = streamRows(d, "", previewRoom(d)+2)
 	d = d.SetSize(pushW, pushH) // a resize mid-answer
@@ -93,10 +89,7 @@ func TestAStoredFullPreviewLayoutDoesNotOutliveItsPreview(t *testing.T) {
 		t.Fatalf("after one notch the reader is %d lines back with the banner = %v, want 3 and a banner", got, showsBanner(d))
 	}
 	d, _ = streamRows(d, "", minPreviewRows+2)
-	if got := previewUnder(t, frameRows(d), followBannerText); len(got) != minPreviewRows {
-		t.Errorf("a scrolled-back reader's preview drew %d rows, want the floor of %d", len(got), minPreviewRows)
-	}
-	behind := behindNewest(d) // the new answer's rows now cover the foot of the window
+	behind := behindNewest(d) // the new answer's rows are under the window
 	if got := behindNewest(d.ScrollUp(-3)); got != behind-3 {
 		t.Errorf("a notch down left the reader %d lines behind, want %d", got, behind-3)
 	}
@@ -106,8 +99,8 @@ func TestAStoredFullPreviewLayoutDoesNotOutliveItsPreview(t *testing.T) {
 }
 
 // A subagent's view is the conversation's transcript swapped under the same
-// chrome, and the parent's preview is drawn under it all the same. The preview
-// must not take the view's rows: it is not what the reader opened.
+// chrome. The parent's answer is not what the reader opened, so none of it is
+// drawn there, and it is back under the conversation when they return.
 func TestAParentTalkingDoesNotSqueezeASubagentView(t *testing.T) {
 	d := pushDM(t, pushH)
 	for i := range 30 {
@@ -117,18 +110,21 @@ func TestAParentTalkingDoesNotSqueezeASubagentView(t *testing.T) {
 	d, _ = streamRows(d, "", previewRoom(d)+2)
 
 	frame := frameRows(d)
-	if got := previewUnder(t, frame, "subagent line 29"); len(got) != minPreviewRows {
-		t.Errorf("the parent's preview drew %d rows under a subagent's view, want the floor of %d", len(got), minPreviewRows)
+	if slices.ContainsFunc(frame, hasText("Sentence")) {
+		t.Errorf("the parent's answer is drawn in a subagent's view:\n%s", strings.Join(frame, "\n"))
 	}
 	if got := len(slices.DeleteFunc(slices.Clone(frame), func(l string) bool { return !strings.Contains(l, "subagent line") })); got < 5 {
-		t.Errorf("the subagent's view shows %d lines, squeezed by the parent's preview:\n%s", got, strings.Join(frame, "\n"))
+		t.Errorf("the subagent's view shows %d lines, squeezed by the parent's answer:\n%s", got, strings.Join(frame, "\n"))
+	}
+	if back := frameRows(d.Viewing("")); !slices.ContainsFunc(back, hasText("Sentence")) {
+		t.Errorf("back in the conversation, the parent's answer is not drawn:\n%s", strings.Join(back, "\n"))
 	}
 }
 
-// Folding a long open result brings the newest line onto the screen under a
-// reader who had scrolled into it: they are following again, and the preview
-// has its room, though no wheel or key said so.
-func TestFoldingALongResultOverAStreamingAnswerRestoresThePreviewsRoom(t *testing.T) {
+// Folding a long open result brings the newest row onto the screen under a reader
+// who had scrolled into it: they are following the answer again, though no wheel
+// or key said so.
+func TestFoldingALongResultOverAStreamingAnswerFollowsItAgain(t *testing.T) {
 	d := NewDM("s1", "alex")
 	d.Agent = Agent{ID: "s1", State: rpc.StateWorking}
 	d = withRunOpen(d.SetSize(pushW, pushH), "t1")
@@ -146,18 +142,16 @@ func TestFoldingALongResultOverAStreamingAnswerRestoresThePreviewsRoom(t *testin
 	d, _ = d.openTool(head) // open the 60-line result
 	d = d.ScrollUp(40)      // and read back into it
 	d, text := streamRows(d, "", minPreviewRows+2)
-	if got := previewUnder(t, frameRows(d), followBannerText); len(got) != minPreviewRows {
-		t.Fatalf("scrolled back, the preview drew %d rows, want %d", len(got), minPreviewRows)
+	if !showsBanner(d) {
+		t.Fatal("scrolled back into the result, the reader is not told they left the newest row")
 	}
 
-	d, _ = d.openTool(head) // fold it again: the newest line is on screen under the reader
+	d, _ = d.openTool(head) // fold it again: the newest row is on screen under the reader
 	if showsBanner(d) {
 		t.Fatal("the fold left the banner up over a reader at the newest line")
 	}
-	d, _ = streamRows(d, text, len(wrappedRows(text))+room+2)
-	if got := previewUnder(t, frameRows(d), "closing words"); len(got) != room {
-		t.Errorf("after the fold the preview drew %d rows, want the pane's %d", len(got), room)
-	}
+	d, text = streamRows(d, text, len(wrappedRows(text))+room+2)
+	assertFollowsAnswer(t, "after the fold", d, text)
 }
 
 // A fold decides whether the reader reached the newest line, and it must decide
@@ -183,36 +177,26 @@ func TestFoldingAResultDoesNotYankAReaderTwoLinesBackUnderAStreamingAnswer(t *te
 	}
 }
 
-// The stored cap is measured against the composer as it stands, and View
-// re-measures only a copy, so a draft that was tall when a block landed would
-// leave the stored cap squeezed after it is sent: later tokens would be trimmed
-// to it, and the preview would stay short of the pane's room.
-func TestAComposerThatShrinksGivesThePreviewItsRoomBack(t *testing.T) {
+// A draft sent mid-answer gives its rows back to the window, which the answer
+// fills under a reader following it: a stored layout squeezed by the tall box would
+// leave the window short.
+func TestAComposerThatShrinksGivesTheWindowItsRowsBack(t *testing.T) {
 	var draft []string
 	for i := range 10 {
 		draft = append(draft, fmt.Sprintf("draft line %d", i))
 	}
 	d := withDraft(t, pushDM(t, pushH), draft...)
-	squeezed := previewRoom(d)
-	d, _ = streamRows(d, "", squeezed+2)
-	d = landed(d, "a block that landed under a tall draft") // stores the cap the tall box leaves
+	squeezed := len(windowOf(d))
+	d, _ = streamRows(d, "", previewRoom(d)+2)
+	d = landed(d, "a block that landed under a tall draft")
 
 	d = d.WithComposer(d.Composer().Reset()) // sent
-	room := previewRoom(d)
-	if room < squeezed+4 {
-		t.Fatalf("the one-row box leaves %d rows against %d under the draft: too close to tell a stale cap", room, squeezed)
+	if room := len(windowOf(d)); room < squeezed+4 {
+		t.Fatalf("the one-row box leaves a %d-row window against %d under the draft: too close to tell", room, squeezed)
 	}
-	d, text := streamRows(d, "", room+2)
-
-	frame := frameRows(d)
-	got := previewUnder(t, frame, "a block that landed")
-	if len(got) != room {
-		t.Errorf("the preview drew %d rows after the draft was sent, want the pane's %d", len(got), room)
-	}
-	if last := got[len(got)-1]; !strings.HasSuffix(last, "answer.") || !strings.Contains(strings.Join(got, "\n"), fmt.Sprintf("Sentence %02d", strings.Count(text, "Sentence "))) {
-		t.Errorf("the preview is not the answer's newest words: %q", got)
-	}
-	if len(frame) != pushH {
+	d, text := streamRows(d, "", previewRoom(d)+2)
+	assertFollowsAnswer(t, "after the draft was sent", d, text)
+	if frame := frameRows(d); len(frame) != pushH {
 		t.Errorf("the pane drew %d rows, want %d", len(frame), pushH)
 	}
 }

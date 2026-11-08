@@ -282,10 +282,11 @@ func (d DM) SetSize(w, h int) DM {
 		following = true
 	}
 	d.height = h
-	// The composer wraps the draft as keys arrive, so it is sized here rather
-	// than only when it is drawn (see Composer.SetWidth). The preview is re-wrapped
-	// first, and its rows are left out of the draft's ceiling: the draft wins.
+	// The answer being written is laid out again at the width, under the last line.
 	d.partial = d.partial.sized(d.blockWidth())
+	d = d.withTail(false)
+	// The composer wraps the draft as keys arrive, so it is sized here rather
+	// than only when it is drawn (see Composer.SetWidth).
 	// The pinned rows above the composer - the task board and the type-ahead queue
 	// - are reserved from the draft's growth as well as from the transcript's
 	// floor, or a full board plus a deep queue plus a growing draft draws the pane
@@ -294,9 +295,6 @@ func (d DM) SetSize(w, h int) DM {
 	// here, to the draft's own ceiling.
 	d.composer = d.composer.SetWidth(max(w, minComposerWidth)).
 		WithMaxRows(composerRowsIn(h, d.composer.overhead()+d.beatBarRows()+d.checklistRows()+d.queuedRows()))
-	// The preview's cap follows the box as drawn and whether the reader follows. A
-	// growing preview retriggers this through View's chrome guard, not per token.
-	d.partial = d.partial.capped(d.previewCap(following))
 
 	// A height change is not that. It moves a window over lines that already
 	// exist, so a reader who has scrolled back keeps their place - which is the
@@ -352,18 +350,17 @@ func (d DM) Append(ev core.Event) DM {
 	}
 	d = d.observedTool(ev).settled(ev)
 
+	// Whether the reader follows the newest row, sampled with the answer's rows
+	// still under the last line: a reader scrolled back into them is not following.
+	following := d.tr.atBottom()
+
 	// The preview, which is the one event kind that never reaches the
-	// transcript. Returning here is what keeps the claim in partial.go true:
+	// record. Returning here is what keeps the claim in partial.go true:
 	// nothing below this line runs for a token.
 	switch ev.Kind {
 	case core.KindPartialText:
-		rows := d.partial.rows()
 		d.partial = d.partial.sized(d.blockWidth()).add(ev.Text)
-		if d.partial.rows() != rows {
-			// Its rows are chrome: settled per row, or every frame re-lays a copy.
-			d = d.drawnLayout()
-		}
-		return d
+		return d.withTail(following)
 	case core.KindMessageStart, core.KindAssistantText, core.KindTurnEnd:
 		// The block that supersedes it, a turn that ended without ever producing
 		// one (an interrupt: nothing else would clear it) or the next message
@@ -373,13 +370,10 @@ func (d DM) Append(ev core.Event) DM {
 		// stored, so renderAll never sees it, and breaking a run on it live
 		// would fold differently after a re-wrap than before. Two turns whose
 		// tools are adjacent with no prose between them fold together on screen.
-		//
-		// Its rows were chrome: re-settle the layout, or a stale full-preview one outlives it.
-		shown := d.partial.view != ""
+		// A landing block takes the rows its preview had, so a reader scrolled back
+		// over them stays where they were.
 		d.partial = d.partial.superseded(ev)
-		if shown {
-			d = d.drawnLayout()
-		}
+		d = d.withTail(false)
 	}
 
 	if dispatch := forwardedTo(ev); dispatch != "" {
@@ -415,7 +409,6 @@ func (d DM) Append(ev core.Event) DM {
 	// open the conversation still accumulates - nothing is dropped for being off
 	// screen - and the transcript it accumulates into is rebuilt on the way back.
 	drawn := d.viewing == ""
-	following := d.tr.atBottom()
 
 	if breaksRun {
 		if drawn {
@@ -448,11 +441,21 @@ func (d DM) Append(ev core.Event) DM {
 	if following {
 		d.tr = d.tr.toBottom()
 	}
-	// The transcript's height just moved, so the preview's cap is recomputed
-	// against it - the token path returns above and keeps the cap this settled,
-	// so a stream re-measures only when a block lands rather than per token.
-	d.partial = d.partial.capped(d.previewCap(following))
 	return d.retained()
+}
+
+// withTail puts the answer being written under the transcript's last line - none
+// while a subagent is open, whose transcript the pane draws instead - and keeps a
+// follower on the newest row.
+func (d DM) withTail(following bool) DM {
+	d.tr.tail = previewRows{}
+	if d.viewing == "" {
+		d.tr.tail = d.partial.rows.under(d.tr)
+	}
+	if following {
+		d.tr = d.tr.toBottom()
+	}
+	return d
 }
 
 // forwardedTo is the dispatch an event belongs to, and "" for one that belongs
@@ -519,7 +522,7 @@ func (d DM) Viewing(dispatch string) DM {
 	}
 	d.viewing = dispatch
 	d.tr = d.rewrapped()
-	return d.followed()
+	return d.withTail(true)
 }
 
 // Viewed is the dispatch this pane is drawing, or "" for the conversation.
@@ -530,12 +533,7 @@ func (d DM) Viewed() string { return d.viewing }
 // (drawnComposer), so a press, the wheel and the draw cannot disagree.
 func (d DM) laidOut(width, height int) DM {
 	d = d.withBar(max(width, minComposerWidth))
-	// A menu over a preview above the floor re-lays: with the preview at its ceiling
-	// the menu's rows and the composerGap it drops cancel in chromeHeight, so the
-	// sum would alias the stored chrome and the preview would never yield to it. A
-	// preview at the floor already has the cap a menu gives it.
-	menuOverPreview := d.menu != "" && d.partial.rows() > minPreviewRows
-	if width != d.width || height != d.height || d.chromeHeight() != d.chrome || menuOverPreview {
+	if width != d.width || height != d.height || d.chromeHeight() != d.chrome {
 		d = d.SetSize(width, height)
 	}
 	return d
@@ -572,13 +570,9 @@ func (d DM) View(width, height int) string {
 	// away on every frame, which is what it did.
 	d = d.laidOut(width, height)
 	w := max(width, minComposerWidth)
+	// The transcript, the answer being written at its foot (transcript.tail), then
+	// what is happening, then where you type - where Claude Code puts them.
 	rows := []string{withFollowBanner(d.tr.view(d.sel), d.tr, w)}
-	// Between the transcript and the composer, where Claude Code puts it: the
-	// newest thing said, then what is being said now, then what is happening,
-	// then where you type.
-	if d.partial.view != "" {
-		rows = append(rows, d.partial.view)
-	}
 	// The working/done line, preceded by its beatGap blank (dmbeat.go).
 	if beat := d.heartbeat(); beat != "" {
 		rows = append(rows, "", beat)
@@ -767,17 +761,6 @@ func (d DM) menuRows() int {
 // allowance is measured against. The task board is counted rather than drawn -
 // rendering it costs a truncation per row and this runs on every re-lay.
 func (d DM) baseChrome() int { return d.baseChromeWith(d.composerRows()) }
-
-// aboveComposerExtra is the rows above the composer that are neither transcript
-// nor the board: the streamed preview, the working/done line with its beatGap,
-// the composerGap, and the status bar. baseChrome adds the board; SetSize's draft
-// ceiling uses beatBarRows instead, so the draft wins over the preview. Counts,
-// not renders, because this runs on every View: the preview off its wrap, the beat
-// as a predicate, the bar from its cache. The composerGap is keyed on the raw menu
-// field so this and View never disagree - a row out scrolls the alt screen.
-func (d DM) aboveComposerExtra() int {
-	return d.partial.rows() + d.beatBarRows()
-}
 
 // minHeight is the shortest pane this conversation draws: its chrome, plus one
 // row of transcript. Below it the DM stops shrinking rather than drawing a

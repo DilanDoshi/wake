@@ -62,6 +62,10 @@ type transcript struct {
 	// move it, which is the whole reason Append samples atBottom first.
 	scroll int
 
+	// tail is the answer being written, drawn under the last line (previewrows.go):
+	// never a record, here so the window scrolls over it as over the rest.
+	tail previewRows
+
 	width  int
 	height int
 }
@@ -256,7 +260,20 @@ func (t transcript) first() int {
 	return t.lines.first()
 }
 
-func (t transcript) bottom() int { return max(t.first(), t.lines.len()-t.height) }
+func (t transcript) bottom() int { return max(t.first(), t.end()-t.height) }
+
+// end is the absolute index one past the last row: the lines, then the tail.
+func (t transcript) end() int { return t.lines.len() + t.tail.len() }
+
+// rows is rows [from, to) of the lines and the tail under them.
+func (t transcript) rows(from, to int) []string {
+	n := t.lines.len()
+	out := t.lines.slice(from, to)
+	if to > n {
+		out = append(out, t.tail.slice(from-n, to-n)...)
+	}
+	return out
+}
 
 // atBottom reports whether the newest line is on screen - which is to say,
 // whether the reader is following the conversation rather than reading back.
@@ -293,7 +310,7 @@ func (t transcript) view(m marked) string {
 		lines = append(lines, t.prefix)
 		top++
 	}
-	lines = append(lines, t.lines.slice(top, top+t.height-len(lines))...)
+	lines = append(lines, t.rows(top, top+t.height-len(lines))...)
 	for i, l := range lines {
 		l = t.visibleLine(l)
 		if c0, c1, ok := m.covers(first + i); ok {
@@ -330,7 +347,7 @@ func (t transcript) selectionLines(m marked) ([]string, int) {
 		lines = append(lines, t.visibleLine(t.prefix))
 	}
 	from := max(m.from.line, t.lines.first())
-	for _, line := range t.lines.slice(from, m.to.line+1) {
+	for _, line := range t.rows(from, m.to.line+1) {
 		lines = append(lines, t.visibleLine(line))
 	}
 	return lines, first

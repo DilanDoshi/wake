@@ -132,10 +132,11 @@ func TestEachFinishedChunkIsRenderedOnce(t *testing.T) {
 	}
 }
 
-// A preview is bounded to what a pane can draw, finished blocks included: the
-// rows kept are the newest ones, and no older chunk is held that the view could
-// never reach.
-func TestThePreviewKeepsOnlyAPaneOfFinishedRows(t *testing.T) {
+// A preview keeps every finished block of the answer, each rendered once, so a
+// reader can scroll back over the whole of it; the pane following it draws the
+// newest rows.
+func TestThePreviewKeepsEveryFinishedRowOfTheAnswer(t *testing.T) {
+	renders := chunkCounter(t)
 	d := formatDM(fmtH)
 	var text strings.Builder
 	for i := range 60 {
@@ -143,32 +144,18 @@ func TestThePreviewKeepsOnlyAPaneOfFinishedRows(t *testing.T) {
 	}
 	d = streamed(d, text.String()+"Paragraph 60 is still being")
 
-	rows := d.partial.rows()
-	if limit := d.previewCap(true); rows == 0 || rows > limit {
-		t.Fatalf("the preview draws %d rows, want 1 to %d", rows, limit)
+	if n := len(d.partial.fin.chunks()); n != 60 || *renders != 60 {
+		t.Errorf("%d finished blocks held from %d renders, want all 60, each rendered once", n, *renders)
 	}
 	out := visible(d, fmtW, fmtH)
 	if !strings.Contains(out, "Paragraph 59 says") || !strings.Contains(out, "Paragraph 60 is still being") {
 		t.Errorf("the newest rows are not the ones drawn:\n%s", out)
 	}
 	if strings.Contains(out, "Paragraph 10 says") {
-		t.Errorf("an old paragraph is still on screen:\n%s", out)
+		t.Errorf("an old paragraph is still on screen for a reader following the answer:\n%s", out)
 	}
-
-	// Held: enough rows to reach cap+slack, and not one chunk more than that.
-	if len(d.partial.fin.chunks()) == 0 {
-		t.Fatal("no finished block is held")
-	}
-	held := len(d.partial.fin.rows())
-	want := d.partial.cap + previewSlack
-	if held < want {
-		t.Errorf("%d finished rows held, want at least cap+slack = %d", held, want)
-	}
-	if first := d.partial.fin.chunks()[0]; held-len(first.rows)-1 >= want {
-		t.Errorf("%d finished rows held, and the oldest chunk (%d rows) is not needed to reach %d", held, len(first.rows), want)
-	}
-	if n := len(d.partial.fin.chunks()); n > want {
-		t.Errorf("%d finished chunks held for a pane of %d rows", n, d.partial.cap)
+	if top := visible(d.ScrollUp(d.tr.end()), fmtW, fmtH); !strings.Contains(top, "Paragraph 00 says") {
+		t.Errorf("scrolled to the top, the answer's first paragraph is not there:\n%s", top)
 	}
 }
 
@@ -181,21 +168,21 @@ func TestAWidthChangeReWrapsFinishedChunksAndWrapsTheTail(t *testing.T) {
 	if *renders != 1 {
 		t.Fatalf("%d renders for one finished block, want 1", *renders)
 	}
-	wide := d.partial.rows()
+	wide := d.partial.rows.len()
 
 	*renders = 0
 	d = d.SetSize(40, fmtH)
 	if *renders != len(d.partial.fin.chunks()) || *renders != 1 {
 		t.Errorf("a width change rendered %d times for %d held chunks, want 1 for the one", *renders, len(d.partial.fin.chunks()))
 	}
-	if narrow := d.partial.rows(); narrow <= wide {
+	if narrow := d.partial.rows.len(); narrow <= wide {
 		t.Errorf("%d rows at 60 columns and %d at 40: the preview was not re-wrapped", wide, narrow)
 	}
 	out := visible(d, 40, fmtH)
 	if strings.Contains(out, "**first**") {
 		t.Errorf("the finished paragraph came back as raw markdown:\n%s", out)
 	}
-	for _, row := range strings.Split(d.partial.view, "\n") {
+	for _, row := range d.partial.rows.slice(0, d.partial.rows.len()) {
 		if w := ansi.StringWidth(row); w > 40 {
 			t.Errorf("a preview row measures %d cells in a 40-column pane: %q", w, row)
 		}
@@ -220,10 +207,10 @@ func TestALandedBlockMatchesThePreviewsFinishedRows(t *testing.T) {
 	}
 	for i, text := range answers {
 		d := streamed(formatDM(60), text)
-		preview := d.partial.rows()
+		preview := d.partial.rows.len()
 		land := len(strings.Split(renderMarkdown(text, fmtW), "\n"))
 		if delta := preview - land; delta < -1 || delta > 1 {
-			t.Errorf("answer %d: the preview draws %d rows and the landed block %d\n%s", i, preview, land, d.partial.view)
+			t.Errorf("answer %d: the preview draws %d rows and the landed block %d\n%s", i, preview, land, strings.Join(d.partial.rows.slice(0, preview), "\n"))
 		}
 	}
 
@@ -234,7 +221,7 @@ func TestALandedBlockMatchesThePreviewsFinishedRows(t *testing.T) {
 			continue
 		}
 		d := streamed(formatDM(120), text)
-		preview, land := d.partial.rows(), len(strings.Split(renderMarkdown(text, fmtW), "\n"))
+		preview, land := d.partial.rows.len(), len(strings.Split(renderMarkdown(text, fmtW), "\n"))
 		checked++
 		worst = max(worst, max(preview-land, land-preview))
 	}
@@ -403,14 +390,14 @@ func TestAnOffScreenPaneRendersNoChunk(t *testing.T) {
 		t.Errorf("an off-screen conversation rendered %d chunks", *renders)
 	}
 	a = a.applyFrame(startFrame("s1")).streams("s1", "one.\n\ntwo.\n\nthree")
-	if *renders != 2 || a.dms["s1"].partial.view == "" {
-		t.Errorf("the drawn conversation rendered %d chunks (preview %q), want its 2 and a preview", *renders, a.dms["s1"].partial.view)
+	if *renders != 2 || !a.dms["s1"].partial.shown() {
+		t.Errorf("the drawn conversation rendered %d chunks (preview shown %v), want its 2 and a preview", *renders, a.dms["s1"].partial.shown())
 	}
 }
 
 // The bound that keeps the work per token flat, now that a block is kept whole
 // until it is read: the open block holds up to MaxChunk bytes, and past that the
-// splitter freezes and the tail is cut as it always was.
+// splitter freezes and a token lays out only the line it lands on.
 func TestAFormattedPreviewIsBoundedToo(t *testing.T) {
 	d := streamed(formatDM(20), "a finished block.\n\n")
 	if len(d.partial.fin.chunks()) != 0 {
@@ -423,12 +410,9 @@ func TestAFormattedPreviewIsBoundedToo(t *testing.T) {
 	token := "the quick brown fox jumps over the lazy dog. "
 	for range 400 {
 		d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: token})
-		if limit := max(previewChars(fmtW, d.partial.cap), render.MaxChunk); len(d.partial.text) > limit {
-			t.Fatalf("the open block holds %d bytes, want at most %d", len(d.partial.text), limit)
+		if len(d.partial.text) > render.MaxChunk+len(token) {
+			t.Fatalf("the open block holds %d bytes, want at most %d", len(d.partial.text), render.MaxChunk+len(token))
 		}
-	}
-	if d.partial.rows() > d.previewCap(true) {
-		t.Errorf("the preview draws %d rows, want at most %d", d.partial.rows(), d.previewCap(true))
 	}
 
 	// Lines of a paragraph that add up to just under the bound, then a long line:

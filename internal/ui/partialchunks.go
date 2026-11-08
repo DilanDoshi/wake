@@ -19,7 +19,6 @@ package ui
 // An unsynced pane previews the block as plain text to its end, as before.
 
 import (
-	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -36,15 +35,16 @@ type chunk struct {
 	rows []string
 }
 
-// blocks are an answer's finished blocks and their rows laid one under another.
-// Immutable and shared by every copy of the DM: a cut or a width change makes a
-// new one, and a pane that reads nothing holds none.
+// blocks are an answer's finished blocks and their rows laid one under another,
+// with how many blank rows end them. Immutable and shared by every copy of the DM:
+// a cut appends to a new one, and a pane that reads nothing holds none.
 type blocks struct {
-	done  []chunk
-	stack []string
+	done     []chunk
+	stack    chunked[string]
+	trailing int
 }
 
-// chunks and rows are nil-safe: a pane that has finished nothing holds no blocks.
+// chunks is nil-safe: a pane that has finished nothing holds no blocks.
 func (b *blocks) chunks() []chunk {
 	if b == nil {
 		return nil
@@ -52,33 +52,35 @@ func (b *blocks) chunks() []chunk {
 	return b.done
 }
 
-func (b *blocks) rows() []string {
-	if b == nil {
-		return nil
+// with is b and one more finished block under it, laid as render.Stack lays it:
+// the cost of the block's own rows, never of the answer above it.
+func (b *blocks) with(c chunk) *blocks {
+	var prev blocks
+	if b != nil {
+		prev = *b
 	}
-	return b.stack
+	n := prev.stack.count()
+	gap := gapUnder(prev.stack.slice(n-2, n))
+	next := &blocks{
+		done:  append(prev.done[:len(prev.done):len(prev.done)], c),
+		stack: prev.stack.append(append(gap, c.rows...)...),
+	}
+	if blank := len(c.rows) - len(trimmedBlank(c.rows)); blank < len(c.rows) {
+		next.trailing = blank
+	} else {
+		next.trailing = prev.trailing + len(gap) + blank
+	}
+	return next
 }
 
-// finishedBlocks is the newest of done whose rows reach want, the slack being what
-// absorbs a block that is partly above the rows a pane can draw.
-func finishedBlocks(done []chunk, want int) *blocks {
-	rows, keep := 0, len(done)
-	for keep > 0 && rows < want {
-		keep--
-		if rows > 0 {
-			rows++ // the blank row between it and the one under it
-		}
-		rows += len(done[keep].rows)
-	}
-	b := &blocks{done: slices.Clone(done[keep:])}
-	for _, c := range b.done {
-		b.stack = render.Stack(b.stack, c.rows)
+// finishedBlocks is every block of done, laid one under another.
+func finishedBlocks(done []chunk) *blocks {
+	var b *blocks
+	for _, c := range done {
+		b = b.with(c)
 	}
 	return b
 }
-
-// wanted is how many rows of finished blocks are worth keeping.
-func (p partial) wanted() int { return max(p.cap, minPreviewRows) + previewSlack }
 
 // formats reports whether the open text is still being read for finished blocks.
 func (p partial) formats() bool { return p.synced && !p.raw && !p.scan.Frozen() }
@@ -118,8 +120,7 @@ func (p partial) cut() partial {
 			return p
 		}
 		if rows := p.draw(p.text[:at]); len(rows) > 0 {
-			done := p.fin.chunks()
-			p.fin = finishedBlocks(append(done[:len(done):len(done)], chunk{src: p.text[:at], rows: rows}), p.wanted())
+			p.fin = p.fin.with(chunk{src: p.text[:at], rows: rows})
 		}
 		p.text = p.text[at:]
 	}
@@ -134,43 +135,36 @@ func (p partial) draw(src string) []string {
 	return strings.Split(out, "\n")
 }
 
-// proseView is the preview of a pane that reads blocks: the newest rows of the
-// finished blocks and, under them, the open one as plain text laid out the way
-// glamour will lay it out, so the block that finishes keeps its column and breaks.
-func (p partial) proseView() partial {
-	rows := p.fin.rows()
-	rows = rows[max(len(rows)-max(p.cap, 2), 0):]
-	if open := p.openRows(); len(open) > 0 {
-		rows = render.Stack(rows, open)
-	} else {
-		// A rule or a nested list ends in a blank row, which would sit above the
-		// working line's own gap.
-		for len(rows) > 0 && strings.TrimSpace(ansi.Strip(rows[len(rows)-1])) == "" {
-			rows = rows[:len(rows)-1]
+// settle wraps the open text's finished lines once, for a pane not reading it for
+// blocks, so a token lays out only the line it lands on. Both layouts are per
+// line (render.Prose, ansi.Wrap), so the rows of a finished line never change.
+// A line past render.MaxChunk keeps its newest bytes, which bounds the work.
+func (p partial) settle() partial {
+	if at := strings.LastIndexByte(p.text, '\n'); at >= 0 {
+		done := p.text[:at+1]
+		p.text = p.text[at+1:]
+		p.srcs = p.srcs.append(done)
+		for _, line := range strings.Split(done[:at], "\n") {
+			p.lines = p.lines.append(p.lineRows(line)...)
 		}
 	}
-	if keep := max(p.cap, 0); len(rows) > keep {
-		rows = rows[len(rows)-keep:]
+	if len(p.text) > render.MaxChunk {
+		p.text = p.text[len(p.text)-render.MaxChunk:]
 	}
-	p.view = strings.Join(rows, "\n")
 	return p
 }
 
-// openRows is the open block as the rows it draws: its last previewChars bytes,
-// which is all a pane can show, without the blank lines a cut leaves at its head.
-func (p partial) openRows() []string {
-	text := strings.ToValidUTF8(tail(p.text, previewChars(p.width, p.cap)), "")
-	for {
-		line, rest, found := strings.Cut(text, "\n")
-		if !found || strings.TrimSpace(line) != "" {
-			break
-		}
-		text = rest
-	}
-	if strings.TrimSpace(text) == "" {
+// lineRows is one finished line's rows. Blank lines before the first worded one
+// draw nothing in prose, as the open text's head draws none (openRows).
+func (p partial) lineRows(line string) []string {
+	width := max(p.width, minBlockWidth)
+	switch {
+	case !p.prose():
+		return strings.Split(ansi.Wrap(strings.ToValidUTF8(line, ""), width, ""), "\n")
+	case p.lines.count() == 0 && strings.TrimSpace(line) == "":
 		return nil
 	}
-	return strings.Split(render.Prose(text, max(p.width, minBlockWidth)), "\n")
+	return strings.Split(render.Prose(strings.ToValidUTF8(line, ""), width), "\n")
 }
 
 // unsynced tells one conversation, if the model holds it, that tokens of its block

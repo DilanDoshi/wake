@@ -19,10 +19,9 @@ package ui
 // render, which BenchmarkOneBlockStreamed prices against this file at three
 // block sizes: 3.9x at 64 tokens, 9.7x at 256, and 17x at 1,024 - 22ms here
 // against 363ms there (2026-10-07, a 40-row pane over an empty transcript).
-// Read the shape rather than the ratio: this design's per-token cost stops
-// growing once the retained tail has filled the pane - 20, 24 and 25 microseconds
-// a token at 1,024, 4,096 and 16,384 - and that one's keeps growing with the
-// answer.
+// Read the shape rather than the ratio: this design's per-token cost does not grow
+// with the answer - 10.6, 8.0 and 7.3 microseconds a token at 1,024, 4,096 and
+// 16,384 tokens of a formatted one (2026-11-08) - and that one's does.
 //
 // The five candidates and what the numbers do to them:
 //
@@ -50,32 +49,34 @@ package ui
 // It works because the preview is not the record. The same words arrive a
 // moment later as a complete assistant frame and go through glamour exactly
 // once, as they always did - so the transcript is byte-identical to what this
-// build drew before, and the preview costs a wrap of at most the rows the pane
-// can spare (DM.previewCap): all of them for a reader following the newest line,
-// each streamed row pushing the transcript up one, as Claude Code's does, and a
-// floor for one scrolled back over a full transcript. Nothing about the
-// conversation's length enters that: finished blocks are kept only while their rows
-// can be drawn, and the open one whole only up to render.MaxChunk. The reader pays
-// a beat of lag, and the open block as plain text at the formatted rows' left edge
-// and wrap (render.Prose), so the block that finishes does not jump.
+// build drew before. The preview's rows are drawn under the transcript's last
+// line, in the same window (transcript.tail): the answer being written is the
+// newest part of the conversation, so a wheel notch moves it and everything above
+// it by the notch, a follower watches each row push the conversation up, and a
+// reader scrolled back reads it standing still (the owner's 2026-11-08 ruling,
+// decisions.md). It keeps the whole message, the most the landed block holds a
+// moment later, and the work per token stays flat: a finished block is rendered
+// once, a finished line wrapped once, and only the line or open block a token
+// lands on is laid out again, at most render.MaxChunk of it. The reader pays a beat
+// of lag, and the open block as plain text at the formatted rows' left edge and
+// wrap (render.Prose), so the block that finishes does not jump.
 //
 // # The five properties, each with a test named for it
 //
-// A preview never enters the transcript, so it cannot make Append superlinear
-// and a resize has nothing extra to re-wrap. It is **bounded to what a pane can
-// draw**, so the work per token is flat rather than growing with the answer -
-// the retained text is the tail, because the newest tokens are the ones being
-// read. It is **cleared by the block that supersedes it**, or by the turn
-// ending, which is the interrupted case where no block ever arrives. And it is
-// **only accumulated for a pane on screen** - see wants, which is the one of the
-// four that is App's rather than this type's. The fifth: a pane **reads finished
-// blocks only if it has heard every token of the one it is in** (synced; see
-// partialchunks.go), or it would cut inside a fence it never saw open.
+// A preview never enters the record, so it cannot make Append superlinear.
+// Its **rows above the one a token lands on never change** (previewRows), so the
+// work per token is flat rather than growing with the answer and nothing a
+// scrolled-back reader is reading moves. It is **cleared by the block that
+// supersedes it**, or by the turn ending, which is the interrupted case where no
+// block ever arrives. And it is **only accumulated for a pane on screen** - see
+// wants, which is the one of the four that is App's rather than this type's. The
+// fifth: a pane **reads finished blocks only if it has heard every token of the
+// one it is in** (synced; see partialchunks.go), or it would cut inside a fence it
+// never saw open.
 
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -119,110 +120,95 @@ func (a App) wants(sessionID string, ev core.Event) bool {
 }
 
 const (
-	// minPreviewRows is the cap of a reader who has scrolled back over a full
-	// transcript, and of a preview the pane never sized (a board tile's).
-	//
-	// It is a preview of the sentence being written rather than of the message,
-	// which arrives whole a moment later and is rendered properly. Three rows
-	// read a sentence at any pane width, and for a reader who is reading back
-	// nothing may move: more would push what they read off screen to show
-	// something temporary. A reader who is following gets the pane's room instead
-	// (DM.previewCap), as does a scrolled-back one over a transcript that does not
-	// fill the pane - there is nothing to push off.
+	// minPreviewRows is how many rows a board tile shows of an answer being
+	// written: a preview of the sentence rather than of the message, which a tile
+	// has no room for.
 	minPreviewRows = 3
 
-	// previewSlack is how many rows of text are kept beyond the drawn ones. The
-	// tail is cut by byte to bound the work, so the slack is what absorbs the
+	// previewSlack is how many rows of text a tile keeps beyond the drawn ones.
+	// The tail is cut by byte to bound the work, so the slack is what absorbs the
 	// cut: a word split at the front, or a multi-byte rune, is dropped by the
 	// wrap rather than drawn as a fragment on the top row.
 	previewSlack = 2
 )
 
 // previewChars is how many characters of the block are retained at width w for a
-// preview that may draw rows rows. Everything before that is dropped as it
-// arrives: it can never be drawn, and keeping it would make the wrap below cost
-// the length of the answer. rows below the floor is treated as the floor, so an
-// unset cap (a partial the DM never sized) still retains the three-row minimum.
+// preview that may draw rows rows, at least the floor's.
 func previewChars(w, rows int) int {
 	return max(w, minBlockWidth) * (max(rows, minPreviewRows) + previewSlack)
 }
 
 // partial is the block being written, and the rows it draws.
 //
-// view is rendered when the text or the width changes and never per frame, for
-// the reason DM.bar is cached: this sits under a working agent, which is
-// exactly when something is redrawing.
-//
-// text is the open block, raw, since the last cut; fin the blocks finished above it
-// (partialchunks.go), nil for a pane that reads nothing. cap is how many rows the
-// preview may draw, set by DM.previewCap and refreshed by SetSize, a landing block,
-// ScrollUp and DM.followed. synced is whether this pane has heard every token of
-// the block since its message began; only then are finished blocks read out of it.
-// raw is a pane that never formats: a board tile's.
+// text is the open text: since the last finished block of a pane that reads them,
+// since the last finished line of one that does not. fin is the blocks finished
+// above it (partialchunks.go), nil for a pane that reads nothing; lines and srcs
+// are the finished lines' rows and sources, wrapped once (settle). rows is what a
+// pane draws, laid out when the text or the width changes and never per frame.
+// synced is whether this pane has heard every token of the block since its message
+// began; only then are finished blocks read out of it. raw is a board tile's: the
+// newest minPreviewRows rows of plain text, in view.
 //
 // Its methods take value receivers and return a new partial, like everything else a
-// DM holds; fin is shared by every copy and never written.
+// DM holds; fin, lines and srcs are shared by every copy and never written.
 type partial struct {
 	text  string
 	view  string
 	width int
-	cap   int
 	col   int // the cell column text's last line has reached, for its next tab
 
 	fin    *blocks
+	lines  chunked[string]
+	srcs   chunked[string]
+	rows   previewRows
 	scan   render.Splitter
 	synced bool
 	raw    bool
 }
 
-// add appends the tokens that just arrived and reads any block they finished,
-// keeping only what can be drawn.
+// add appends the tokens that just arrived, reads any block or line they
+// finished, and lays out what changed.
 func (p partial) add(s string) partial {
-	// Expanded from the column the line had reached, kept here because the trim
-	// below can cut the line's start away (bytes an inbox fold drops are not counted).
+	// Expanded from the column the line had reached, kept here because a cut can
+	// take the line's start away (bytes an inbox fold drops are not counted).
 	s, p.col = render.ExpandTabsAt(p.col, s)
 	p.text += s
+	if p.raw {
+		// Bytes rather than runes: this is a bound on work, and a multi-byte rune
+		// cut in half at the front is dropped by the wrap - what the slack is for.
+		p.text = tail(p.text, previewChars(p.width, minPreviewRows))
+		return p.wrapped()
+	}
 	if p.formats() {
 		p = p.cut()
 	}
 	if !p.formats() {
-		// Bytes rather than runes: this is a bound on work, and a multi-byte
-		// rune cut in half at the front is dropped by the wrap below rather
-		// than drawn - which is what the slack is for.
-		p.text = tail(p.text, previewChars(p.width, p.cap))
+		p = p.settle()
 	}
-	return p.wrapped()
+	return p.laidOut()
 }
 
 // tail is the last n bytes of s.
 func tail(s string, n int) string { return s[max(len(s)-n, 0):] }
 
-// capped sets how many rows the preview may draw and re-wraps to it. A no-op
-// when the cap has not moved, so streaming a token past a settled cap costs
-// nothing here.
-func (p partial) capped(n int) partial {
-	if n == p.cap {
-		return p
-	}
-	p.cap = n
-	return p.wrapped()
-}
-
 // cleared is the preview after the block it was previewing has landed.
 func (p partial) cleared() partial {
 	p.text, p.view, p.col, p.fin, p.scan = "", "", 0, nil, render.Splitter{}
+	p.lines, p.srcs, p.rows = chunked[string]{}, chunked[string]{}, previewRows{}
 	return p
 }
 
-// sized re-wraps for a new pane width, and returns the receiver untouched when
-// the width has not moved - a height change does not re-wrap here for the same
-// reason it does not re-wrap the transcript. A finished block is rendered again
-// at the new width, as the transcript's are.
+// sized lays the preview out again for a new pane width, and returns the receiver
+// untouched when the width has not moved. A finished block is rendered again at the
+// new width, and a finished line wrapped again, as the transcript's are.
 func (p partial) sized(w int) partial {
 	if w == p.width {
 		return p
 	}
 	p.width = w
+	if p.raw {
+		return p.wrapped()
+	}
 	if done := p.fin.chunks(); len(done) > 0 {
 		redone := make([]chunk, 0, len(done))
 		for _, c := range done {
@@ -230,76 +216,33 @@ func (p partial) sized(w int) partial {
 				redone = append(redone, chunk{src: c.src, rows: rows})
 			}
 		}
-		p.fin = finishedBlocks(redone, p.wanted())
+		p.fin = finishedBlocks(redone)
 	}
-	return p.wrapped()
+	srcs, text := p.srcs, p.text
+	p.lines, p.srcs = chunked[string]{}, chunked[string]{}
+	p.text = strings.Join(srcs.slice(0, srcs.len()), "") + text
+	return p.settle().laidOut()
 }
 
-// wrapped lays the preview out for the pane and keeps the last rows of it.
+// wrapped lays a board tile's preview out and keeps its newest rows.
 //
 // The floor is the same one previewChars applies, so the width the tail is cut
-// to and the width it is laid out at cannot drift - and a pane that has not been
+// to and the width it is laid out at cannot drift - and a tile that has not been
 // sized yet wraps at the floor rather than at zero, which is what render.Markdown
 // does one package over and for the same reason.
 func (p partial) wrapped() partial {
-	if p.prose() {
-		return p.proseView()
-	}
 	if p.text == "" {
 		p.view = ""
 		return p
 	}
 	// ToValidUTF8 drops the rune the byte-wise cut in add may have halved.
 	lines := strings.Split(ansi.Wrap(strings.ToValidUTF8(p.text, ""), max(p.width, minBlockWidth), ""), "\n")
-	// Honour the cap exactly - previewCap keeps it no larger than the pane can
-	// spare over the transcript's floor, so respecting it (including a cap of
-	// zero, a pane too tight for any preview) is what keeps the pane in bounds. A
-	// partial the DM never sized has cap zero and is never drawn (View sizes the
-	// pane before rendering), so it wraps to nothing here, which is harmless.
-	if keep := max(p.cap, 0); len(lines) > keep {
-		lines = lines[len(lines)-keep:]
+	if len(lines) > minPreviewRows {
+		lines = lines[len(lines)-minPreviewRows:]
 	}
 	p.view = strings.Join(lines, "\n")
 	return p
 }
 
-// rows is how many rows the preview draws, and 0 for one with nothing in it.
-// Read by chromeHeight, which is why it is counted rather than measured off a
-// render.
-func (p partial) rows() int {
-	if p.view == "" {
-		return 0
-	}
-	return strings.Count(p.view, "\n") + 1
-}
-
-// previewCap is how many rows the preview may draw: the pane's room for a reader
-// who follows the newest line, the floor over a full transcript for one scrolled
-// back, and the floor under a menu or a subagent's view (the parent's words are
-// not what they opened). The pool is the pane less the chrome the preview does not
-// own, the composer as drawn, so the draft wins. following is the caller's, never
-// tr.atBottom(), which is stale after a width re-wrap.
-func (d DM) previewCap(following bool) int {
-	if d.height <= 0 {
-		return minPreviewRows // a pane never sized: a board tile's
-	}
-	pool := d.height - d.chromeSansPreview()
-	room := max(pool-minTranscriptHeight, 0) // the transcript keeps its own floor
-	switch {
-	case d.menu != "" || d.viewing != "":
-		return min(minPreviewRows, room)
-	case following:
-		return room
-	}
-	blank := pool - d.tr.lines.count() // rows the transcript is not using
-	return min(max(blank, minPreviewRows), room)
-}
-
-// chromeSansPreview is chromeHeight without the preview's rows or the menu's: the
-// pool the preview, the menu and the transcript share. Summed rather than taken
-// as chromeHeight()-partial.rows(), because menuRows is itself a function of the
-// preview.
-func (d DM) chromeSansPreview() int {
-	composer := lipgloss.Height(d.composer.View(max(d.width, minComposerWidth)))
-	return composer + d.beatBarRows() + d.checklistRows() + d.queuedRows()
-}
+// shown reports whether the preview draws anything.
+func (p partial) shown() bool { return p.view != "" || p.rows.len() > 0 }

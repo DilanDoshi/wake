@@ -534,7 +534,7 @@ func (a App) pointIn(id string, col, y int) point {
 	}
 	first := min(max(drawn.scroll, drawn.first()), drawn.bottom())
 	return point{
-		line: clamp(first+y-a.selTop, tr.first(), max(tr.lines.len()-1, tr.first())),
+		line: clamp(first+y-a.selTop, tr.first(), max(tr.end()-1, tr.first())),
 		col:  max(col, 0),
 	}
 }

@@ -77,16 +77,12 @@ func TestAnInterruptedTurnLeavesNoHalfSentenceUnderTheTranscript(t *testing.T) {
 }
 
 // The bound is what makes the cost flat. Without it a 13,499-character block -
-// the longest in the recorded corpus - is wrapped in full on every token that
-// arrives, and the work per delta grows with the answer. The cap is the pane's
-// now rather than a fixed three rows, but it is still the pane's and never the
-// block's, so the cost stays flat however long the answer runs.
-//
-// A pane that reads blocks (it saw the message begin) keeps the open one whole,
-// since a block that finishes is rendered from its whole source, until the
-// splitter gives up on it at render.MaxChunk. So its bound is the larger of the two;
-// one that does not read blocks is held to the pane's alone.
-func TestThePreviewIsBoundedToItsRowsHoweverLongTheBlockGets(t *testing.T) {
+// the longest in the recorded corpus - is laid out in full on every token that
+// arrives, and the work per delta grows with the answer. The pane keeps every
+// row of the answer, but a token lays out only the open block it lands on, or the
+// line once it is not read for blocks, and that is held to render.MaxChunk - the
+// newest of it, since the newest tokens are the ones being read.
+func TestATokenLaysOutOnlyTheBoundedTextItLandsOn(t *testing.T) {
 	for _, reads := range []bool{false, true} {
 		d := NewDM("s1", "alex").SetSize(60, 20)
 		if reads {
@@ -95,71 +91,40 @@ func TestThePreviewIsBoundedToItsRowsHoweverLongTheBlockGets(t *testing.T) {
 		for range 400 {
 			d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: "the quick brown fox jumps over the lazy dog. "})
 		}
-		if limit := d.previewCap(true); d.partial.rows() > limit {
-			t.Errorf("reads blocks = %v: the preview draws %d rows, want at most the pane's cap of %d", reads, d.partial.rows(), limit)
+		if got := len(d.partial.text); got > render.MaxChunk {
+			t.Errorf("reads blocks = %v: a token lays out %d characters, want at most %d: an unbounded open text is an unbounded wrap on every token", reads, got, render.MaxChunk)
 		}
-		want := previewChars(60, d.previewCap(true))
-		if reads {
-			want = max(want, render.MaxChunk)
-		}
-		if got := len(d.partial.text); got > want {
-			t.Errorf("reads blocks = %v: the preview retains %d characters, want at most %d: an unbounded tail is an unbounded wrap on every token", reads, got, want)
-		}
-		// The newest tokens are the ones being read, so the tail is the end.
 		if !strings.HasSuffix(d.partial.text, "lazy dog. ") {
 			t.Errorf("reads blocks = %v: the preview kept the wrong end of the block: %q", reads, lastRunes(d.partial.text, 40))
 		}
 	}
 }
 
-// The preview grows to fill an otherwise-empty pane rather than sitting in a
-// three-row box while the rest of it stays blank. Over a full transcript it is
-// the reader's place that decides: one who follows is given the pane's room, each
-// streamed row pushing the conversation up one, and one who has scrolled back
-// keeps the floor so nothing they read moves. The pane draws exactly its height
-// in every case, which is the alt-screen invariant the fixed cap protected and
-// this must keep.
-func TestThePreviewFillsAnEmptyPaneAndAFullOneGivesAFollowerItsRoomAndAReaderBackTheFloor(t *testing.T) {
+// The answer fills an otherwise-empty pane rather than sitting in a box while the
+// rest of it stays blank, and the pane draws exactly its height with an answer of
+// any length under a reader following it or scrolled back: a frame past its height
+// scrolls the alt screen away on every draw.
+func TestTheAnswerFillsThePaneAndThePaneKeepsItsHeight(t *testing.T) {
 	const w, h = 60, 30
 	long := strings.Repeat("the quick brown fox jumps over the lazy dog. ", 200)
 
-	// Empty transcript, tall pane: the preview fills far past the old floor.
 	empty := NewDM("s1", "alex")
 	empty.Agent = Agent{ID: "s1", State: rpc.StateWorking}
 	empty = tokens(empty.SetSize(w, h), long)
-	if got := empty.partial.rows(); got <= minPreviewRows {
-		t.Errorf("into an empty %d-row pane the preview drew only %d rows: it is stuck in the old box while the pane sits blank", h, got)
-	}
-	if got := lipgloss.Height(empty.View(w, h)); got != h {
-		t.Fatalf("filling the preview drew %d rows in a %d-row pane: a frame past its height scrolls the alt screen away on every draw", got, h)
+	if got := strings.Count(visible(empty, w, h), "lazy dog."); got < h/2 {
+		t.Errorf("into an empty %d-row pane the answer drew %d rows: it is stuck in a box while the pane sits blank", h, got)
 	}
 
-	// Full transcript, the agent already working when it is laid out.
 	full := NewDM("s1", "alex")
 	full.Agent = Agent{ID: "s1", State: rpc.StateWorking}
 	full = full.SetSize(w, h)
 	for range 100 {
 		full = full.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "an earlier line of the conversation"})
 	}
-	full = full.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "the newest line of the conversation"})
-	room := full.tr.height - minTranscriptHeight // laid out with no preview, so this is all it may take
-
-	following := tokens(full, long)
-	frame := strings.Split(visible(following, w, h), "\n")
-	if got := len(previewUnder(t, frame, "the newest line")); got != room {
-		t.Errorf("a reader following a full transcript got a %d-row preview, want the pane's room of %d", got, room)
-	}
-	if len(frame) != h {
-		t.Fatalf("the preview over a full transcript drew %d rows in a %d-row pane", len(frame), h)
-	}
-
-	scrolled := tokens(full.ScrollUp(3), long)
-	frame = strings.Split(visible(scrolled, w, h), "\n")
-	if got := len(previewUnder(t, frame, followBannerText)); got != minPreviewRows {
-		t.Errorf("a reader scrolled back over a full transcript got a %d-row preview, want the floor of %d: it is shoving what they read off screen", got, minPreviewRows)
-	}
-	if len(frame) != h {
-		t.Fatalf("the preview under a scrolled-back reader drew %d rows in a %d-row pane", len(frame), h)
+	for name, d := range map[string]DM{"empty": empty, "following": tokens(full, long), "scrolled back": tokens(full.ScrollUp(3), long)} {
+		if got := lipgloss.Height(d.View(w, h)); got != h {
+			t.Errorf("%s: the answer drew the pane %d rows tall, want %d", name, got, h)
+		}
 	}
 }
 
@@ -181,25 +146,24 @@ func TestATightPaneYieldsThePreviewRatherThanOverflowing(t *testing.T) {
 	}
 }
 
-// The tail is cut by byte, because the bound is on work and counting runes to
-// find it would cost the length of the answer. So the cut lands mid-rune on any
-// text that is not ASCII, and what must not happen is a replacement character
-// on the top row - or a view whose display width no longer matches the pane it
-// was laid out for.
-func TestCuttingTheTailByByteNeverDrawsAHalfRune(t *testing.T) {
+// The open line is cut by byte, because the bound is on work and counting runes
+// to find it would cost the length of the answer. So the cut lands mid-rune on any
+// text that is not ASCII, and what must not happen is a replacement character on a
+// row - or a row whose display width no longer matches the pane it was laid out for.
+func TestCuttingTheOpenLineByByteNeverDrawsAHalfRune(t *testing.T) {
 	d := NewDM("s1", "alex").SetSize(40, 20)
-	for range 200 {
+	for range 400 {
 		// No spaces, so the wrap has no break opportunity and every row is
 		// exactly the pane's width - which is what makes a split rune visible.
 		d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: "日本語のテキスト"})
 	}
-	if !utf8.ValidString(d.partial.view) {
-		t.Errorf("the preview is not valid UTF-8: %q", d.partial.view)
+	if len(d.partial.text) < render.MaxChunk-len("日本語のテキスト") {
+		t.Fatalf("the open line holds %d bytes: it was never cut, so this proves nothing", len(d.partial.text))
 	}
-	if strings.ContainsRune(d.partial.view, utf8.RuneError) {
-		t.Errorf("the preview draws a replacement character: %q", d.partial.view)
-	}
-	for _, l := range strings.Split(d.partial.view, "\n") {
+	for _, l := range d.partial.rows.slice(0, d.partial.rows.len()) {
+		if !utf8.ValidString(l) || strings.ContainsRune(l, utf8.RuneError) {
+			t.Errorf("a preview row draws a broken rune: %q", l)
+		}
 		if w := ansi.StringWidth(l); w > 40 {
 			t.Errorf("a preview row measures %d cells in a 40-column pane: %q", w, l)
 		}
@@ -221,23 +185,19 @@ func TestThePaneStaysInBoundsWhileAPreviewIsDrawn(t *testing.T) {
 	}
 }
 
-// The preview raises the pane's own floor, which is what stops a short pane -
-// one half of a stacked column - drawing more rows than it was given. It is
-// measured off chromeHeight rather than added anywhere, so the mechanism is the
-// one already in place for the heartbeat's row and the status bar's; what this
-// pins is that the preview is inside it.
-func TestAShortPaneFloorsWithThePreviewInIt(t *testing.T) {
+// The answer is the window's last rows, never chrome, so a preview leaves the
+// pane's floor where it was, and at that floor the pane still draws its height.
+func TestAPreviewLeavesThePanesFloorWhereItWas(t *testing.T) {
 	d := NewDM("s1", "alex").SetSize(60, 20)
 	d.Agent = Agent{ID: "s1", State: rpc.StateWorking}
 	bare := d.minHeight()
 
 	d = tokens(d, strings.Repeat("token ", 200))
-	floor := d.minHeight()
-	if floor <= bare {
-		t.Fatalf("the floor is %d rows with a preview and %d without: a pane sized to the old floor draws over its own bounds", floor, bare)
+	if floor := d.minHeight(); floor != bare {
+		t.Errorf("the floor is %d rows with a preview and %d without: the answer is being counted as chrome", floor, bare)
 	}
-	if got := lipgloss.Height(d.View(60, floor)); got != floor {
-		t.Errorf("at its own floor of %d rows the pane drew %d: a frame one row too tall scrolls the alt screen away on every draw", floor, got)
+	if got := lipgloss.Height(d.View(60, bare)); got != bare {
+		t.Errorf("at its floor of %d rows the pane drew %d: a frame one row too tall scrolls the alt screen away on every draw", bare, got)
 	}
 }
 
@@ -261,8 +221,8 @@ func TestThePreviewSitsBetweenTheTranscriptAndTheWorkingLine(t *testing.T) {
 // else: the rows it was laid out for no longer exist.
 func TestAWidthChangeReWrapsThePreview(t *testing.T) {
 	d := tokens(NewDM("s1", "alex").SetSize(120, 20), strings.Repeat("token ", 30))
-	wide := d.partial.rows()
-	narrow := d.SetSize(40, 20).partial.rows()
+	wide := d.partial.rows.len()
+	narrow := d.SetSize(40, 20).partial.rows.len()
 	if narrow <= wide {
 		t.Errorf("the preview drew %d rows at 120 columns and %d at 40: it was not re-wrapped", wide, narrow)
 	}

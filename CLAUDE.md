@@ -151,7 +151,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
   (absent→spawn, parked→wake, running→park); `/manager-stop` ends it.
 - **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
-  above the composer, running subagents in the right sidebar, streamed preview tail, DM done line
+  above the composer, running subagents in the right sidebar, the streamed answer as the newest rows of
+  the scrollback, DM done line
   (`✻ Cooked for 1m 59s · done 6:48 PM`), compacting line, loop line, question cards as a wizard
   with a review step, drag-to-select-and-copy on every surface.
 
@@ -337,8 +338,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - Clipboard: `pbcopy` → `tmux load-buffer` → OSC 52, through the writer Bubble Tea draws through,
   which **must embed `*os.File`** or colour silently disappears, and must override `WriteString` too, or
   `io.WriteString` skips its lock; it is sealed when the program ends (`cmd/wake/output.go`).
-- `App.transcriptRows` measures the pane as drawn (cards, menus and previews move chrome without a
-  resize); `startSelection` fences on it.
+- `App.transcriptRows` measures the pane as drawn (cards and menus move chrome without a resize);
+  `startSelection` fences on it.
 - **Only a width change returns a reader to the newest line.** Last-read markers anchor to events.
 
 **Rendering and cost**
@@ -351,12 +352,18 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
 - **No tab reaches the terminal**: `ansi` measures one as no cell and a terminal draws up to eight
   without erasing what it skips, so markdown, the streamed preview, diffs and tool results
   expand them column-aware where they are measured (`render.ExpandTabs`); not at the airlock.
-- **A preview is never a record**: bounded by the pane (the open block by `render.MaxChunk` too),
-  accumulated only for panes on screen (`App.wants`), dropped on leave. Each *finished* block goes
+- **A preview is never a record, and it scrolls as the newest part of the conversation** (owner's
+  2026-11-08 ruling): its rows are the window's last, under the transcript's last line
+  (`transcript.tail`), so a wheel notch moves it and everything above it by the notch, a follower watches
+  each row push the conversation up, and a reader scrolled back reads it standing still - nothing above
+  the row a token lands on ever changes (`previewRows`). It keeps the whole message, the most the landed
+  block holds a moment later; a token lays out only the open block or line, at most `render.MaxChunk`.
+  Accumulated only for panes on screen (`App.wants`), dropped on leave, not drawn in a subagent's view;
+  a drag over it copies it like any row. Each *finished* block goes
   through glamour once, as it completes (`render.Splitter`) — never per token — and only the open
   block stays plain text. A pane that missed a token (not drawn, a gap, `rpc.Frame.Lost`) or never
   heard the block begin, and a board tile, keep all of it plain. No preview in the room or for
-  subagents. `internal/ui/partial.go`, `partialchunks.go`.
+  subagents. `internal/ui/partial.go`, `partialchunks.go`, `previewrows.go`.
 - **A local command's reply is drawn as its lines** (`/list-agents`, `/cost`, `/config`), as Claude
   Code draws it; one opening with a markdown heading (`/context`'s) stays markdown.
   `internal/ui/dm_blocks.go`'s `drawnAsLines`.
@@ -371,7 +378,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
   screen.
 - **The room's working line is one row**: oldest running turn, `+N more working`
-  (`roomWorkingLine`, `roomwords.go`).
+  (`roomWorkingLine`, `roomwords.go`). Its words are set per draw; whether there is one is stored on the
+  room too (`withRoomWorking`, per report and channel pick), so a wheel notch is measured on the layout
+  drawn.
 - **The DM's done line** is captured at the working→idle edge (`Fleet.WithStatus`), only for turns
   this client watched start; forgotten on park/end/gap, on new agent content (`notDone`), and hidden
   while a subagent, workflow or background shell runs (`subRunning`; a shell is a sidebar row the
@@ -575,7 +584,7 @@ yet says so in bold.**
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
-| DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
+| DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `previewrows.go` (the answer's rows under the transcript's last line) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` · `apiretry.go` (the line while claude retries the API) |
 | Roster, strip, status bar | `internal/ui/roster.go` · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go`/`_puff.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
