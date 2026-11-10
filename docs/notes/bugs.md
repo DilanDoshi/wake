@@ -1370,6 +1370,36 @@ turn's age - true about the age, wrong about the word.
 the API answers, the turn ends or fails, the conversation is cleared, or a report shows the agent not working
 (`internal/ui/apiretry.go`; `decisions.md`, 2026-11-02).
 
+## BUG-61 — a subagent's own subagents were drawn beside it in the sidebar, not under it
+
+**Found 2026-11-03 by the owner**: under `handbook-helper 8`, four `general-purpose` rows and five
+`Explore ↓ 2xx.xk` rows sat at one indent, though some Explores were the general-purpose subagents' own.
+Proven on `main` fa87e320 by folding `subagent-nested.jsonl` (claude 2.1.314: a general-purpose subagent
+dispatching two Explores): the roster drew all three rows at the same `⎿` column.
+
+**Cause.** Since 2.1.3xx a subagent can dispatch its own, and its `task_started` names the dispatching
+subagent's task id as `parent_task_id`. The airlock read no such key, and `subagentRow` drew every
+dispatch at one fixed indent in start order. Each row's `↓` figure was always its own task's usage (the
+outer's does not include its children's), so only the placement was wrong.
+
+**Fix:** branch `fix/nested-subagents-in-the-sidebar`. `core.TaskUpdate.Parent` carries the link;
+`Fleet.RunningTasks` returns the running rows as a tree (`internal/ui/tasktree.go`), each under the
+nearest running row it descends from, and the sidebar and board indent each level by `⎿ `'s width, down
+to `maxSubDepth`. The cursor, clicks and opening a nested row follow the same list.
+
+## BUG-62 — a subagent's pane ended with its hand-back receipt as raw JSON
+
+**Found 2026-11-05 recording BUG-61's fixture**: in auto mode (every Wake agent), a subagent that reports
+through `SubagentHandback` gets back a tool result whose one text block is
+`{"success":true,"message":"Report delivered to your caller."}` (`subagent-nested.jsonl:53`, claude
+2.1.314). `receiptSentence` read only SendMessage's three-key receipt as prose, so the pane drew the JSON;
+`TestNoToolResultReachesAReaderAsJSON` caught it on the new recording.
+
+**Fix:** branch `fix/nested-subagents-in-the-sidebar`. `receiptSentence` also reads exactly that receipt -
+two keys, a true `success` and the message `Report delivered to your caller.` (all 2,264 delivered receipts on
+the recording machine) - as its message. Any other tool's two-key result, a third key (`msg_id: null` too), a
+non-bool or false `success` stays whole; a refused hand-back (`"success":false`) still draws as JSON.
+
 ## BUG-63 — a query-box drag, click or ⌫ landed a row off in a short conversation with a menu up
 
 **Found 2026-11-06 by the draft-wheel branch's second adversarial review, then confirmed on `main`

@@ -151,8 +151,8 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **Manager:** started by default by every verb that opens the room. `/manager` toggles
   (absent→spawn, parked→wake, running→park); `/manager-stop` ends it.
 - **Rendering:** folded tool runs (`⌃E`/click opens), `Edit` diffs drawn whole, task board pinned
-  above the composer, running subagents in the right sidebar, the streamed answer as the newest rows of
-  the scrollback, DM done line
+  above the composer, running subagents in the right sidebar (a subagent's own nested under it,
+  `tasktree.go`), the streamed answer as the newest rows of the scrollback, DM done line
   (`✻ Cooked for 1m 59s · done 6:48 PM`), compacting line, loop line, question cards as a wizard
   with a review step, drag-to-select-and-copy on every surface.
 
@@ -603,7 +603,7 @@ yet says so in bold.**
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
 | DM | `internal/ui/dm.go` · `dm_blocks.go` · `dmtranscript.go` · `dmretention.go` · `dmbeat.go` · `partial.go` · `partialchunks.go` (the preview's finished blocks and the synced rule) · `previewrows.go` (the answer's rows under the transcript's last line) · `toolblocks.go` · `rollup.go` · `checklist.go`/`checklistpin.go` · `followbanner.go` · `compacting.go` · `loop.go` |
 | Working/done lines | `internal/ui/beat.go` (start here) · `heartbeat.go` · `shimmer.go` · `heartbeatwords.go` · `roomwords.go` · `donewords.go` · `apiretry.go` (the line while claude retries the API) |
-| Roster, strip, status bar | `internal/ui/roster.go` · `rosterscroll.go` (the window, the wheel over the sidebar; pty test `cmd/wake/sidebarwheelscreen_unix_test.go`) · `rostersubs.go` · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go`/`_puff.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
+| Roster, strip, status bar | `internal/ui/roster.go` · `rosterscroll.go` (the window, the wheel over the sidebar; pty test `cmd/wake/sidebarwheelscreen_unix_test.go`) · `rostersubs.go` · `tasktree.go` (running dispatches as a tree) · `subtranscript.go` (a subagent's own file read on open; daemon: `workflowdisk.go`'s `AgentHistory`) · `rostersection.go` · `usagebar.go` (the session-usage bar under the roster) · `friends.go` (the friend on it: the corner, its rows), `friendsart_skip.go`/`_ollie.go`/`_bo.go`/`_puff.go` (the art), `kittyplace.go` (as Kitty images), `cmd/wake/friends.go` (the kept pick, detection) · `awareness.go` · `statusbar.go` · `attention.go` (not `internal/core/attention.go` as the spec says) |
 | Completion | `internal/ui/completion.go` · `completionpath.go` · `completionpeers.go` · `completionindex.go` · pty test `cmd/wake/atmenuscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-27-at-menu-findings.md` |
 | Dynamic workflows | decode: `internal/core/workflow.go` · `encode.go`'s `workflowSnapshotOf`/`workflowOf`/`DecodeWorkflowRun`/`EncodeStopTask`/`DecodeSidechainLine` · `rawjson.go` · frames: `internal/rpc/workflow.go` · daemon: `taskreplay.go`'s `withProgress` · `workflowdisk.go` (runs and agent transcripts through an `os.Root`) · `workflowsave.go` · ui: `tasks.go` · `fleettasks.go` · `rostersubs.go`'s `workflowRow` · `taskline.go` · `workflowroom.go` · `workflowview.go` · `workflowdraw.go` · `workflowagent.go` (the agent level) · `workflowdata.go` · `workflowsave.go` · pty test `cmd/wake/workflowscreen_unix_test.go` · findings `docs/superpowers/notes/2026-09-23-workflow-findings.md` |
 | Board | `internal/ui/board.go` · `boardtile.go` · `boardtilesection.go` · `boardrows.go` · `boardscroll.go` (the window both views scroll under) · `boardtranscript.go` |
@@ -683,7 +683,7 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.311. A
+**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.314. A
 fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 
 | Need | Flag |
@@ -776,6 +776,11 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   copies it as its `to`. A send's receipt names the `to` as sent: `→ <name> (…)` for a name,
   `→ uds:<socket>; in that session's inbox…` with no parenthetical for a socket - the shape follows the
   address form, not the version (`manager-relay.jsonl`, `testdata/transcript/send-by-address.jsonl`).
+- **A subagent can dispatch its own** (2.1.314): the inner `task_started` carries `parent_task_id` (the
+  dispatching subagent's `task_id`) and `spawn_depth`; its frames are forwarded under its own `tool_use_id`,
+  and its file sits flat beside its parent's in `subagents/`. In auto mode a subagent's delivered
+  `SubagentHandback` receipt is `{"success":true,"message":"Report delivered to your caller."}`, read as its
+  message only whole (`receiptSentence`). `subagent-nested.jsonl`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only
@@ -806,7 +811,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/ui/fleet.go` at 799 and `internal/core/wire.go` at 794 — derived by
+  `internal/ui/fleet.go` at 799 and `internal/core/wire.go` at 796 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

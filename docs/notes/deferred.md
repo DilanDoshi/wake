@@ -6056,3 +6056,17 @@ The retry line (decisions.md, 2026-11-02) shipped with two things left out.
   they would read as the parent's, and since a subagent's output no longer clears the line, a parent waiting
   on one would keep `retrying…` until its own next request, turn end or idle report. *Closes with:* a
   recording of a network drop under a running subagent (`live-testing.md`), then a ruling on the frames.
+
+## FROM `fix/nested-subagents-in-the-sidebar`, 2026-11-05
+
+The sidebar nests a subagent's own subagents under it (BUG-61). Left out, by the orchestrator's ruling:
+
+- **An inner subagent's ending is drawn in the agent's own conversation as though the agent dispatched
+  it.** `taskLine` draws `● Subagent "…" finished` for every `task_notification` on the agent's stream, and a
+  nested one's arrives there too; the room draws none for subagents. *Closes with:* attributing it to its
+  parent through `Task.Parent` (`↳ under general-purpose`), or dropping it, since the parent's own receipt
+  carries what it handed back.
+- **Past `maxSubDepth` (2) a row is drawn at the cap's indent**, so a fourth level reads as a sibling of
+  its parent. Never observed: of 1,693 subagents on the recording machine none was deeper than
+  `spawnDepth` 2, though a depth-2 subagent is offered the Agent tool. *Closes with:* a recorded deeper
+  nest and a ruling on how it is drawn in 23 columns.

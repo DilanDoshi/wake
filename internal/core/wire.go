@@ -233,7 +233,9 @@ type wireFrame struct {
 	// ToolUseID is top-level here and on system/permission_denied, which is
 	// not a task frame - so it is read only inside the task branch. It is a
 	// different key from the ToolUseID nested in a control request.
+	// ParentTaskID: the dispatching subagent's task_id (2.1.314, subagent-nested.jsonl).
 	TaskID           string             `json:"task_id"`
+	ParentTaskID     string             `json:"parent_task_id"`
 	ToolUseID        string             `json:"tool_use_id"`
 	TaskType         string             `json:"task_type"`
 	Description      string             `json:"description"`
