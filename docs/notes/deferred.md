@@ -38,6 +38,24 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FROM `feat/team-park-quit-resume`, 2026-11-09 — what the team verbs left out
+
+`/park @team`, `/quit @team` and `/resume <team>` shipped (`decisions.md`, 2026-11-09). Left out on purpose:
+
+- **A roster header action**, such as ⌃C on a picked team header parking the team. It reads well beside
+  the channels (#194), but ⌃C is a reflex key and ⌃C⌃C is the emergency exit, so a whole team would be
+  one reflex away. Today a picked header gets ⌃C's "parks one conversation" advice. Owner's call.
+- **`@all /park` and `@all /quit`** still reach every agent as literal text, the hole the team refusal's
+  comment names. `⌃Q⌃Q` and `wake stop` are the fleet-wide forms.
+- **A name/team collision** (an agent named like a team) is still not refused by the daemon (the teams
+  entry below). Every team verb resolves the name first, as routing does, so a team that shares an
+  agent's name cannot be parked or quit by that word while the agent is live. It can be resumed by it
+  only while no parked session holds the name.
+- **A team park's single confirmation waits for every member it asked for.** A member whose park the
+  daemon refuses, or that ends instead, holds it back for good; that member's own refusal is what shows.
+
+---
+
 ## PRODUCT CALL NOT TAKEN, 2026-11-07 — a turn a peer's message started is resumed after a limit too
 
 The owner reported that agents which were idle when he hit the limit were woken by Wake's resume. The

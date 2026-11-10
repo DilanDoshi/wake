@@ -70,13 +70,14 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `⌃F` fork · `⌃D` open here · `⌃Y` new column · `⌃B` open below · `⌃W` close pane · `⌃A` toggle the
   lone-`@name`/`@team` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
-  `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
+  `/team`, `/quit`, `/park`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
   `/workflows`, `/groupchat-filter`, `/status`, `/wake-name`, `/wake-help`, `/friends`, plus bare `/effort`/`/model` menus, and in the room alone a
   bare `/clear` (`roomCommands`, `roomclear.go`): it empties this window's group chat and reaches no agent,
   keeps ↑'s prompts, keeps restored history older than it out, and the room notes every 1,000 messages it
   holds in an ordinary timed notice. Everything else passes to the agent byte
-  for byte. `@who /cmd` in the room aims a target-command at that agent, and `@who !cmd` a bang. A spaced `/team` or
-  `/name` argument is hyphenated.
+  for byte. `@who /cmd` in the room aims a target-command at that agent, and `@who !cmd` a bang; `@team /park`
+  and `@team /quit` fold into `/park @team` and `/quit @team`, and every other target-command refuses a team
+  (`teamTargetCommands`). A spaced `/team` or `/name` argument is hyphenated.
 - **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
   (`mcp_status`/`mcp_reconnect`/`mcp_toggle`, replies sent only to the asking window). Authenticate
   hands the real terminal to `claude mcp login <server>`, then reconnects every live agent stuck on
@@ -225,6 +226,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `/resume` refuses a conversation a held agent is writing. `internal/daemon/park.go`.
 - `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
   confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
+- **A team's verbs** (owner's 2026-11-09 yes, `internal/ui/teamverbs.go`): `/park @team` parks its live
+  members but a blocked one and confirms once for the team; `/resume <team>` wakes its parked ones, the
+  book's included; `/quit @team` opens a Picker whose cursor starts on `never mind` (↓ ↵ quits), over
+  targets held from the open, and stops only those still live. Members are `@team`'s - `App.live`, never
+  the manager - and `@who` resolves as `core.Resolve` routes: a live agent, a team, a parked agent. N
+  one-agent frames in one write; no team frame. A picker closes on a focus change, and ⌃C closes it and
+  parks (`decisions.md`, 2026-11-09).
 - `/manager-stop` refuses a parked manager and a missing one; it does not borrow park's
   blocked-agent refusal (a stop has no wake).
 - `/reauth` parks sessions marked by a 401 (upstream bug #48786, shared-OAuth refresh race) so
@@ -616,7 +624,7 @@ yet says so in bold.**
 | Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
-| Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
+| Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go` · `quit.go` · `teamverbs.go` (a team's park, quit and resume) · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |

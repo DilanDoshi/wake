@@ -21,7 +21,7 @@ Park pauses an employee. Detach is you going home while they keep working.
 
 | | What it does | Recoverable |
 |---|---|---|
-| **`⌃C`** | Park the agent in front of you | **Yes** — `/resume <name>` |
+| **`⌃C`** | Park the agent in front of you (`/park @who` or `/park @team` from the composer) | **Yes** — `/resume <name>` or `/resume <team>` |
 | **`⌃Q⌃Q`** | Park the whole fleet, then quit Wake (the first `⌃Q` arms, the second confirms) | **Yes** — next `wake --fleet <name>` offers it back |
 | **`⌃O`** | Detach: close Wake, leave everyone running | Nothing stopped |
 | **`wake stop --fleet <name>`** | End every session and the daemon | **No** |
@@ -41,6 +41,23 @@ Bring it back with **`/resume sydney`** typed into the composer, or **`/resume a
 parking closes the agent's stdin, and closing stdin while it is waiting on a permission question is
 recorded by the CLI as *you denying it* — a denial you never made, which survives the wake and
 cannot be told apart from a real one afterwards. Interrupt with `⎋` first, then park.
+
+## Parking or quitting a team
+
+**`/park @backend`** parks every live agent on the backend team at once. An agent blocked on a
+permission question is skipped, for the reason above, and the notice names it. Once every one is
+parked, the notice says `@backend is parked - /resume @backend brings it back`.
+
+**`/resume backend`** (or `@backend`) wakes every parked member of the team, whether you parked it
+in this daemon or it came back from a `⌃Q`.
+
+**`/quit @backend`** ends the team's live agents for good, so it asks first. A menu over the composer
+names who would end, with its cursor on **never mind**: `↓` then `↵` quits them, and `↵` alone or `esc`
+does nothing. Members already parked stay parked. Each row leaves your roster once its ending lands.
+
+In the room, `@backend /park` and `@backend /quit` do the same. A live agent that happens to share the
+team's name wins it, as it does for `@backend` messages. The manager is never part of a team's verbs:
+`/manager` parks it and `/manager-stop` ends it.
 
 ## Parking everything and quitting
 

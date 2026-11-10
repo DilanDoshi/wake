@@ -65,6 +65,9 @@ type Picker struct {
 	// does not reverse-map to an alias, so it is a line only. See App.pickerCurrent.
 	Current string
 
+	// Team is the team a quit confirm is over (teamverbs.go), "" otherwise.
+	Team string
+
 	Options []string
 	Cursor  int
 }
@@ -146,9 +149,10 @@ func (a App) closePicker() App {
 
 // pickerKeys is what pickerKey reads, which the picker draws no line of: it is
 // /wake-help that tells somebody.
-const pickerKeys = "↑↓ move · ↵ choose · esc cancel"
+const pickerKeys = "↑↓ move · ↵ choose · esc cancel · ⌃C close and park"
 
-// pickerKey is ↑↓ to move, ↵ to choose and esc to cancel, and nothing else.
+// pickerKey is ↑↓ to move, ↵ to choose and esc to cancel, and ⌃C closes it and
+// parks.
 //
 // **No digit keys, deliberately.** cardKey's arm-then-confirm exists because a
 // card arrives *unbidden* and the first character of a draft lands in an empty
@@ -173,6 +177,11 @@ func (a App) pickerKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
 		return a, nil, false
 	}
 	switch m.Type {
+	case tea.KeyCtrlC:
+		// Closes and parks, as over the resume picker: the kill switch needs a
+		// first ⌃C that visibly does something (resumePickerKey).
+		model, cmd, _ := a.closePicker().park()
+		return model.(App), cmd, true
 	case tea.KeyUp:
 		return a.movePicker(-1), nil, true
 	case tea.KeyDown:
@@ -205,6 +214,12 @@ func (a App) confirmPicker() (App, tea.Cmd) {
 	a = a.closePicker()
 	if p.Word == friendsCommand {
 		return a.chooseFriend(chosen)
+	}
+	if p.Word == quitCommand {
+		if chosen == quitNeverMind {
+			return a, nil
+		}
+		return a.quitTeam(p.Team, p.Targets)
 	}
 
 	if chosen == typedEscape {
@@ -240,6 +255,9 @@ func (a App) confirmPicker() (App, tea.Cmd) {
 // One name when there is one and a count when there are more - bringBack's rule
 // and its reason, that "1 agents" is worse than a name.
 func (p Picker) Header() string {
+	if p.Word == quitCommand {
+		return fmt.Sprintf(quitTeamHeader, agentPrefix, p.Team, agentPrefix+strings.Join(p.Names, " "+agentPrefix))
+	}
 	switch len(p.Names) {
 	case 0:
 		return p.Word

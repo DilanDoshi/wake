@@ -26,13 +26,14 @@ const (
 type commandHelpLine struct{ args, what string }
 
 var commandHelp = map[string]commandHelpLine{
-	resumeCommand:          {"[<name>|" + resumeAll + "]", "bring a parked session back; bare opens a picker"},
+	resumeCommand:          {"[<name>|<team>|" + resumeAll + "]", "bring a parked session, or a team's parked ones, back; bare opens a picker"},
 	newCommand:             {"[<name>] [" + dirKeyword + " <dir>] [flags]", "start an agent without leaving the room; flags: " + strings.Join(newFlagNames(), " ")},
 	nameCommand:            {"<new-name>", "rename a session"},
 	taskCommand:            {"<what it is on>", "set the label beside a session's name"},
 	colorCommand:           {"<colour>", "an identity hue (" + strings.Join(rpc.ColorNames, " ") + "), or " + rpc.ColorNone + " to clear"},
 	teamCommand:            {"<name>", "group a session under a team - " + agentPrefix + "<name> then reaches them all - or " + rpc.TeamNone + " to clear"},
-	quitCommand:            {"", "end one session for good and drop its row (irreversible)"},
+	quitCommand:            {"", "end one session for good and drop its row, or every live one of a team after a confirm (irreversible)"},
+	parkCommand:            {"", "park one session, as ⌃C does, or every live one of a team; " + resumeVerb + " brings them back"},
 	adoptCommand:           {"[<id> ...]", "adopt a claude session this machine already has; bare lists them in the room"},
 	mcpCommand:             {"", "an agent's MCP servers: status, sign in, reconnect, turn on or off, tools"},
 	managerCommand:         {"", "the switch: start the manager, wake a parked one, or park a running one"},

@@ -235,6 +235,13 @@ func (a App) park() (tea.Model, tea.Cmd, bool) {
 		notice.Report("%s", a.unseenOr(noParkTarget))
 		return a, nil, true
 	}
+	next, cmd, _ := a.parkOne(id)
+	return next, cmd, true
+}
+
+// parkOne parks one session for ⌃C and /park, reporting false only when it
+// refused (parkTarget's blocked ask).
+func (a App) parkOne(id string) (App, tea.Cmd, bool) {
 	if a.endedAgent(id) || a.parkedAgent(id) {
 		// Nothing to park and nothing lost, so this is silent - the same trade
 		// interrupt makes for an ended session.
@@ -242,7 +249,7 @@ func (a App) park() (tea.Model, tea.Cmd, bool) {
 	}
 	next, cmd, parked := a.parkTarget(id, a.agentName(id))
 	if !parked {
-		return a, nil, true
+		return a, nil, false
 	}
 	if a.focus == "" {
 		notice.Report(parkedFormat, agentPrefix, a.agentName(id))
@@ -547,6 +554,10 @@ func (a App) parkArrived(st *rpc.Status) App {
 			}
 		}
 		a.parking = next
+		if team, ours := a.teamParkArrived(s.ID); ours {
+			a = team
+			continue
+		}
 		if name := a.fleet.shown(s.Name); !a.reportAPIPark(s.ID, name) {
 			notice.Report(parkConfirmed, agentPrefix, name, name)
 		}
