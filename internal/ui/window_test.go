@@ -168,6 +168,9 @@ func mouseGestures() []gesture {
 		{"a press in the right margin", threeColumns, 200, 40, func(App) []tea.MouseMsg {
 			return []tea.MouseMsg{pressAt(199, 2), {Action: tea.MouseActionRelease, X: 199, Y: 2}}
 		}, func(b, a App) bool { return a.focus != b.focus || a.roster.Selected != b.roster.Selected }},
+		{"the wheel on the roster's first column", wheelFleet, 100, 30, func(a App) []tea.MouseMsg {
+			return []tea.MouseMsg{windowAt(tea.MouseActionPress, tea.MouseButtonWheelDown, a.layout.Width-a.regions().Roster, 10)}
+		}, func(b, a App) bool { return a.rosterView != b.rosterView }},
 		{"a click on the gap's last column between two tiles", tiled, 120, 30, func(a App) []tea.MouseMsg {
 			l := a.boardTileLayout(a.boardAgents())
 			x, y := l.cellW+tileGap-1, boardChromeRows+1
@@ -177,9 +180,10 @@ func mouseGestures() []gesture {
 }
 
 // Every gesture the mouse makes reaches the frame one margin left of the cell it
-// was made on: a divider, a drag across text or the query box, the wheel, the
-// roster, the board. So a window's mouse does exactly what the bare frame does
-// at that cell - and a press in a margin is the edge cell's.
+// was made on: a divider, a drag across text or the query box, the wheel over a
+// pane or the roster, a roster click, the board. So a window's mouse does exactly
+// what the bare frame does at that cell - and a press in a margin is the edge
+// cell's.
 func TestEveryMouseGestureReachesTheFrameOneMarginIn(t *testing.T) {
 	for _, g := range mouseGestures() {
 		t.Run(g.name, func(t *testing.T) {
