@@ -22,9 +22,9 @@ func rung(b *inbox) bool {
 	}
 }
 
-func TestATokenForASessionNotShownRingsNothing(t *testing.T) {
+func TestATokenForASessionNothingShowsRingsNothing(t *testing.T) {
 	b := newInbox()
-	b.show([]string{"s1"})
+	b.setUnseen([]string{"s2"})
 	b.add(tokenFrame("s2", "hidden "))
 	if rung(b) {
 		t.Fatal("a token for s2, whose tokens nothing on screen draws, woke the draw loop")
@@ -45,7 +45,7 @@ func TestBeforeTheWindowSaysWhatItShowsEveryTokenRings(t *testing.T) {
 
 func TestAWaitingTokenArrivesWithTheNextFrameAndInOrder(t *testing.T) {
 	b := newInbox()
-	b.show([]string{"s1"})
+	b.setUnseen([]string{"s2"})
 	b.add(tokenFrame("s2", "one "))
 	b.add(tokenFrame("s2", "two "))
 	b.add(eventFrame("s3", "a block"))
@@ -60,9 +60,9 @@ func TestAWaitingTokenArrivesWithTheNextFrameAndInOrder(t *testing.T) {
 
 func TestShowingASessionRingsForTheTokensWaitingForIt(t *testing.T) {
 	b := newInbox()
-	b.show([]string{"s1"})
+	b.setUnseen([]string{"s2", "s3"})
 	b.add(tokenFrame("s2", "waiting "))
-	b.show([]string{"s1", "s2"})
+	b.setUnseen([]string{"s3"})
 	if !rung(b) {
 		t.Fatal("s2 came on screen with tokens waiting for it and the loop was not woken to draw them")
 	}
@@ -71,13 +71,13 @@ func TestShowingASessionRingsForTheTokensWaitingForIt(t *testing.T) {
 	}
 }
 
-func TestSayingTheSameShownSetAgainRingsNothing(t *testing.T) {
+func TestSayingTheSameUnseenSetAgainRingsNothing(t *testing.T) {
 	b := newInbox()
-	b.show([]string{"s1"})
+	b.setUnseen([]string{"s2"})
 	b.add(tokenFrame("s2", "waiting "))
-	b.show([]string{"s1"})
+	b.setUnseen([]string{"s2"})
 	if rung(b) {
-		t.Fatal("an unchanged shown set woke the loop")
+		t.Fatal("an unchanged unseen set woke the loop")
 	}
 }
 
@@ -85,7 +85,11 @@ func TestSayingTheSameShownSetAgainRingsNothing(t *testing.T) {
 // else waking the loop, costs one slot of at most foldChars - however long it talks.
 func TestALongStreamNobodyIsShownHoldsOneSlotEach(t *testing.T) {
 	b := newInbox()
-	b.show(nil)
+	var all []string
+	for i := range benchFleetSize {
+		all = append(all, benchAgentID(i))
+	}
+	b.setUnseen(all)
 	talk := func(tokens int) {
 		for range tokens {
 			for i := range benchFleetSize {
@@ -163,10 +167,10 @@ func drained(a App, wakes int) (App, int) {
 	return a, wakes
 }
 
-// The shown set crosses from the draw loop to the pump. Raced here with nothing
+// The unseen set crosses from the draw loop to the pump. Raced here with nothing
 // else between them - no glamour, no App - so the race lane sees only the inbox's
 // own lock ordering the two.
-func TestTheShownSetCrossesToThePumpUnderTheInboxsLock(t *testing.T) {
+func TestTheUnseenSetCrossesToThePumpUnderTheInboxsLock(t *testing.T) {
 	b := newInbox()
 	done := make(chan struct{})
 	go func() {
@@ -179,7 +183,7 @@ func TestTheShownSetCrossesToThePumpUnderTheInboxsLock(t *testing.T) {
 		}
 	}()
 	for i := range 2_000 {
-		b.show([]string{benchAgentID(i % benchFleetSize)})
+		b.setUnseen([]string{benchAgentID(i % benchFleetSize)})
 	}
 	<-done
 }

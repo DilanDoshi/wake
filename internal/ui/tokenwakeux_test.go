@@ -4,13 +4,16 @@ package ui
 // changes nothing anybody sees. Two windows take the same scripted fleet: one is
 // woken for every frame, as main's loop is under steady arrival, the other runs on
 // the inbox that lets such a token wait. Both are drawn after every frame and must
-// draw the same bytes - and at every one of those moments, a token for any session
-// tokensShown leaves out must change nothing drawn, which is apply's short path.
+// draw the same bytes. And at every one of those moments, for every session and
+// one the fleet has never heard of, applied must leave the model exactly as
+// observe would - its short path - and a token tokensUnseen names must change nothing drawn.
 
 import (
 	"fmt"
+	"reflect"
 	"regexp"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -87,24 +90,102 @@ func (tw *twins) keys(step, s string) {
 	}
 }
 
-// same fails unless both windows draw the same frame, and unless a token for any
-// session the window does not show would leave that frame as it is.
+// same fails unless both windows draw the same frame; unless applied's answer to a
+// token is observe's, field for field, for every session and one nobody reported;
+// and unless a token tokensUnseen names leaves the frame as it is.
 func (tw *twins) same(step string) {
 	tw.t.Helper()
 	want, got := tw.every.View(), tw.deferred.View()
 	if want != got {
 		tw.t.Fatalf("%s: the window that lets tokens wait draws a different frame:\n%s", step, frameDiff(want, got))
 	}
-	shown := tw.every.tokensShown()
-	for _, id := range tw.every.fleet.order {
-		if slices.Contains(shown, id) {
+	unseen := tw.every.tokensUnseen()
+	for _, id := range append(slices.Clone(tw.every.fleet.order), "s-nobody-reported") {
+		tok := core.Event{Kind: core.KindPartialText, SessionID: id, Text: "unseen "}
+		full := tw.every.observe(id, tok)
+		if path, same := sameModel(full, tw.every.applied([]rpc.Frame{tokenFrame(id, tok.Text)})); !same {
+			tw.t.Fatalf("%s: applied's answer to a token for %s differs from observe's at %s", step, id, path)
+		}
+		if !slices.Contains(unseen, id) {
 			continue
 		}
 		tw.unshown++
-		if after := tw.every.observe(id, core.Event{Kind: core.KindPartialText, SessionID: id, Text: "unseen "}).View(); after != want {
-			tw.t.Fatalf("%s: a token for %s, which tokensShown leaves out, changed the frame:\n%s", step, id, frameDiff(want, after))
+		if after := full.View(); after != want {
+			tw.t.Fatalf("%s: a token for %s, which tokensUnseen names, changed the frame:\n%s", step, id, frameDiff(want, after))
 		}
 	}
+}
+
+// sameModel walks two models field by field and names the first that differs. A
+// func is not compared: nothing a token does writes one.
+func sameModel(x, y App) (string, bool) {
+	return sameValue(reflect.ValueOf(x), reflect.ValueOf(y), "App", map[[2]uintptr]bool{})
+}
+
+func sameValue(x, y reflect.Value, path string, seen map[[2]uintptr]bool) (string, bool) {
+	switch x.Kind() {
+	case reflect.Func:
+		return "", true
+	case reflect.Pointer, reflect.Map, reflect.Slice:
+		if x.IsNil() || y.IsNil() {
+			return path, x.IsNil() == y.IsNil()
+		}
+		key := [2]uintptr{x.Pointer(), y.Pointer()}
+		if (x.Kind() != reflect.Slice || x.Len() == y.Len()) && key[0] == key[1] || seen[key] {
+			return "", true
+		}
+		seen[key] = true
+	}
+	switch x.Kind() {
+	case reflect.Pointer, reflect.Interface:
+		if x.IsNil() || y.IsNil() {
+			return path, x.IsNil() == y.IsNil()
+		}
+		return sameValue(x.Elem(), y.Elem(), path, seen)
+	case reflect.Struct:
+		for i := range x.NumField() {
+			if p, ok := sameValue(x.Field(i), y.Field(i), path+"."+x.Type().Field(i).Name, seen); !ok {
+				return p, false
+			}
+		}
+	case reflect.Slice, reflect.Array:
+		if x.Len() != y.Len() {
+			return path, false
+		}
+		for i := range x.Len() {
+			if p, ok := sameValue(x.Index(i), y.Index(i), fmt.Sprintf("%s[%d]", path, i), seen); !ok {
+				return p, false
+			}
+		}
+	case reflect.Map:
+		if x.Len() != y.Len() {
+			return path, false
+		}
+		for _, k := range x.MapKeys() {
+			v := y.MapIndex(k)
+			if !v.IsValid() {
+				return fmt.Sprintf("%s[%v]", path, k), false
+			}
+			if p, ok := sameValue(x.MapIndex(k), v, fmt.Sprintf("%s[%v]", path, k), seen); !ok {
+				return p, false
+			}
+		}
+	case reflect.Chan, reflect.UnsafePointer:
+		return path, x.Pointer() == y.Pointer()
+	case reflect.String:
+		return path, x.String() == y.String()
+	case reflect.Bool:
+		return path, x.Bool() == y.Bool()
+	case reflect.Int, reflect.Int8, reflect.Int16, reflect.Int32, reflect.Int64:
+		return path, x.Int() == y.Int()
+	case reflect.Uint, reflect.Uint8, reflect.Uint16, reflect.Uint32, reflect.Uint64, reflect.Uintptr:
+		return path, x.Uint() == y.Uint()
+	case reflect.Float32, reflect.Float64:
+		return path, x.Float() == y.Float()
+	case reflect.Complex64, reflect.Complex128:
+		return path, x.Complex() == y.Complex()
+	}
+	return "", true
 }
 
 func frameDiff(want, got string) string {
@@ -288,16 +369,17 @@ func TestLettingTokensWaitChangesNothingDrawn(t *testing.T) {
 // A pane that comes on screen mid-answer is the one place the two windows may
 // differ, and only one way: a token main refused while the pane was off screen,
 // the deferred window hands the pane once it is drawn, because it was waiting
-// still. So the pane draws what main drew and the words before it, one contiguous
-// run ending in the newest - never a hole - and the landed block draws the same in
-// both.
+// still. So the pane draws every word main drew and some before them, ending in
+// the newest, with no hole main does not have, and the landed block draws the
+// same in both.
 func TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		speaker string
 		open    string // the conversation open beside the room from the start
 		w, h    int
-		off     func(*twins) // the speaker's pane goes off screen, if it starts on it
+		off     func(*twins) // the speaker's pane goes off screen before its answer starts
+		midway  func(*twins) // or once it has drawn the answer's first words
 		on      func(*twins)
 	}{
 		{name: "opened with ⌃D", speaker: "s2", open: "s1", w: 200, h: 45, on: func(tw *twins) {
@@ -306,6 +388,18 @@ func TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid(t *testing.T) {
 		}},
 		{name: "a narrow window hides it and a wide one brings it back", speaker: "s1", open: "s1", w: 200, h: 45,
 			off: func(tw *twins) {
+				tw.do("the room takes the keys", func(a App) App { return a.refocus("") })
+				tw.msg("the window narrows past two columns", tea.WindowSizeMsg{Width: dmTakeoverColumns - 10, Height: 45})
+				tw.msg("the settle commits", geometrySettledMsg{gen: tw.every.geoGen})
+			},
+			on: func(tw *twins) {
+				tw.onScreen(tea.WindowSizeMsg{Width: 200, Height: 45})
+				tw.onScreen(geometrySettledMsg{gen: tw.every.geoGen})
+			}},
+		// Main glues the words after the hole onto the ones before it here (BUG-69);
+		// the deferred window may fill some of it, never widen it.
+		{name: "a narrow window hides it mid-answer and a wide one brings it back", speaker: "s1", open: "s1", w: 200, h: 45,
+			midway: func(tw *twins) {
 				tw.do("the room takes the keys", func(a App) App { return a.refocus("") })
 				tw.msg("the window narrows past two columns", tea.WindowSizeMsg{Width: dmTakeoverColumns - 10, Height: 45})
 				tw.msg("the settle commits", geometrySettledMsg{gen: tw.every.geoGen})
@@ -333,6 +427,12 @@ func TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid(t *testing.T) {
 			tw.frame("message start", startFrame(tc.speaker))
 			n := 0
 			say := func() rpc.Frame { n++; return tokenFrame(tc.speaker, fmt.Sprintf("%s%03d ", tc.speaker, n)) }
+			if tc.midway != nil {
+				for range 4 {
+					tw.frame("on screen", say())
+				}
+				tc.midway(tw)
+			}
 			for range 6 {
 				tw.frame("off screen, with the fleet waking the loop", say())
 				tw.frame("the fleet", tokenFrame(other, "elsewhere "))
@@ -345,7 +445,7 @@ func TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid(t *testing.T) {
 			for i := range 6 {
 				tw.both(say())
 				tw.both(tokenFrame(other, "elsewhere "))
-				if longer := tw.suffixOf(t, tc.speaker, n); i == 0 && !longer {
+				if longer := tw.atLeastMain(t, tc.speaker, n); i == 0 && !longer {
 					t.Fatal("the pane came on screen with no waiting token handed to it: the case tests nothing main does not")
 				}
 			}
@@ -372,33 +472,48 @@ func (tw *twins) both(f rpc.Frame) {
 	tw.deferred = woken(tw.deferred)
 }
 
-// suffixOf fails unless the deferred window draws the speaker's words as one
-// contiguous run ending in its newest, n, and main's are the end of that run. It
-// reports whether the run is longer than main's.
-func (tw *twins) suffixOf(t *testing.T, speaker string, n int) bool {
+// atLeastMain fails unless the deferred window draws every word of the speaker's
+// that main draws, ends on the newest, n, and has no hole main lacks: a word it
+// skips, main skips too. It reports whether it draws more than main.
+func (tw *twins) atLeastMain(t *testing.T, speaker string, n int) bool {
 	t.Helper()
 	words := func(a App) []int {
 		var out []int
 		for _, m := range regexpWords(speaker).FindAllStringSubmatch(stripANSI(a.View()), -1) {
-			var i int
-			fmt.Sscanf(m[1], "%d", &i)
+			i, err := strconv.Atoi(m[1])
+			if err != nil {
+				t.Fatalf("%q is not a word number: %v", m[1], err)
+			}
 			out = append(out, i)
 		}
 		return out
 	}
 	d, e := words(tw.deferred), words(tw.every)
 	if len(d) == 0 || d[len(d)-1] != n {
-		t.Fatalf("the deferred window draws %v of %s's words, want a run ending in %d", d, speaker, n)
+		t.Fatalf("the deferred window draws %v of %s's words, want them ending in %d", d, speaker, n)
 	}
-	for i := 1; i < len(d); i++ {
-		if d[i] != d[i-1]+1 {
-			t.Fatalf("the deferred window draws %v of %s's words: a hole after %d", d, speaker, d[i-1])
+	for _, w := range e {
+		if !slices.Contains(d, w) {
+			t.Fatalf("main draws %v of %s's words and the deferred window %v: it misses %d", e, speaker, d, w)
 		}
 	}
-	if len(e) > len(d) || !slices.Equal(e, d[len(d)-len(e):]) {
-		t.Fatalf("main draws %v of %s's words and the deferred window %v: main's are not the end of the deferred run", e, speaker, d)
+	for _, k := range holes(d) {
+		if !slices.Contains(holes(e), k) {
+			t.Fatalf("the deferred window draws %v of %s's words and main %v: a hole at %d main does not have", d, speaker, e, k)
+		}
 	}
 	return len(d) > len(e)
+}
+
+// holes is every number missing between the first and last of an ascending run.
+func holes(run []int) []int {
+	var out []int
+	for i := 1; i < len(run); i++ {
+		for k := run[i-1] + 1; k < run[i]; k++ {
+			out = append(out, k)
+		}
+	}
+	return out
 }
 
 func regexpWords(speaker string) *regexp.Regexp {

@@ -152,13 +152,13 @@ func (m *steadyMeter) tokensIn(frames []rpc.Frame) []time.Time {
 	return out
 }
 
-// steadyFleet sends benchFleetSize agents' turns at medianTokensPerSecond each,
+// steadyFleet sends talking agents' turns at medianTokensPerSecond each,
 // one token at a time, evenly spaced across the fleet, until stop closes. The
 // drawn conversation's tokens are numbered words, stamped in sent as they go.
-func steadyFleet(out chan<- rpc.Frame, sent []time.Time, stop <-chan struct{}) {
-	every := time.Second / time.Duration(benchFleetSize*medianTokensPerSecond)
+func steadyFleet(out chan<- rpc.Frame, talking int, sent []time.Time, stop <-chan struct{}) {
+	every := time.Second / time.Duration(talking*medianTokensPerSecond)
 	words := strings.Fields(benchParagraph)
-	told := make([]int, benchFleetSize) // tokens each agent has said
+	told := make([]int, talking) // tokens each agent has said
 	drawn := 0
 	start := time.Now()
 	for k := 0; ; k++ {
@@ -170,7 +170,7 @@ func steadyFleet(out chan<- rpc.Frame, sent []time.Time, stop <-chan struct{}) {
 			return
 		default:
 		}
-		i := k % benchFleetSize
+		i := k % talking
 		id := benchAgentID(i)
 		if told[i]%steadyMessageTokens == 0 {
 			out <- kindFrame(id, core.KindMessageStart, "")
@@ -194,7 +194,7 @@ func steadyFleet(out chan<- rpc.Frame, sent []time.Time, stop <-chan struct{}) {
 
 // steadyApp is streamingApp with a live inbox: the whole fleet working, the first
 // agent's conversation open beside the room.
-func steadyApp(tb testing.TB, frames <-chan rpc.Frame) App {
+func steadyApp(tb testing.TB, frames <-chan rpc.Frame, errs <-chan error) App {
 	tb.Helper()
 	fresh(tb)
 	seed := &rpc.Status{Running: true}
@@ -204,7 +204,7 @@ func steadyApp(tb testing.TB, frames <-chan rpc.Frame) App {
 			State: rpc.StateWorking,
 		})
 	}
-	a := NewRoomApp(nil, Stream{Frames: frames, Errs: make(chan error)}, seed).WithOpenDM(benchAgentID(0), benchAgentName(0))
+	a := NewRoomApp(nil, Stream{Frames: frames, Errs: errs}, seed).WithOpenDM(benchAgentID(0), benchAgentName(0))
 	a.layout.ShowRoster = true
 	return a.withSize(idleTerminalWidth, idleTerminalHeight)
 }
@@ -223,9 +223,17 @@ func wheelOver(tb testing.TB, a App) int {
 	return 0
 }
 
+// talking=1 is the open conversation streaming alone, the rest of the fleet quiet:
+// what a token costs a loop that is not already busy, on main as on this branch.
 func BenchmarkStreamingFleetSteadyArrival(b *testing.B) {
+	for _, talking := range []int{benchFleetSize, 1} {
+		b.Run(fmt.Sprintf("talking=%d", talking), func(b *testing.B) { steadyArrival(b, talking) })
+	}
+}
+
+func steadyArrival(b *testing.B, talking int) {
 	for b.Loop() {
-		m := steadyRunOnce(b)
+		m := steadyRunOnce(b, talking)
 		wall := steadyRun.Seconds()
 		b.ReportMetric(float64(m.views)/wall, "views/s")
 		b.ReportMetric(float64(m.frames)/wall, "frames/s")
@@ -248,9 +256,9 @@ func BenchmarkStreamingFleetSteadyArrival(b *testing.B) {
 var steadyCPU float64
 
 // steadyRunOnce runs the program over a streaming fleet and returns the meter.
-func steadyRunOnce(tb testing.TB) steadyMeter {
-	frames := make(chan rpc.Frame, takeLimit)
-	a := steadyApp(tb, frames)
+func steadyRunOnce(tb testing.TB, talking int) steadyMeter {
+	frames, errs := make(chan rpc.Frame, takeLimit), make(chan error, 1)
+	a := steadyApp(tb, frames, errs)
 	x := wheelOver(tb, a)
 	meter := &steadyMeter{sent: make([]time.Time, 2*int((steadyRun+steadyWarm).Seconds()+1)*medianTokensPerSecond)}
 	p := tea.NewProgram(metered{Model: Margined{Model: a}, m: meter},
@@ -260,7 +268,8 @@ func steadyRunOnce(tb testing.TB) steadyMeter {
 	p.Send(tea.WindowSizeMsg{Width: idleTerminalWidth + 2*SideMargin, Height: idleTerminalHeight})
 
 	stop := make(chan struct{})
-	go steadyFleet(frames, meter.sent, stop)
+	fed := make(chan struct{})
+	go func() { steadyFleet(frames, talking, meter.sent, stop); close(fed) }()
 	time.Sleep(steadyWarm)
 	p.Send(steadyReset{})
 	cpu0 := cpuSeconds(tb)
@@ -279,6 +288,9 @@ func steadyRunOnce(tb testing.TB) steadyMeter {
 	got := <-read
 	steadyCPU = cpuSeconds(tb) - cpu0
 	close(stop)
+	<-fed
+	close(frames) // the pump ends, and with it the read waiting on it
+	errs <- nil
 	p.Quit()
 	if err := <-done; err != nil {
 		tb.Fatal(err)

@@ -1562,7 +1562,25 @@ where a daemon-side gap invalidated nothing at all.
 ## BUG-67 — a fleet streaming answers keeps the window's draw loop busy all the time
 
 **Found 2026-11-08 while measuring the scroll jank of `fix/scroll-moves-by-the-notch-during-a-stream`, on
-`main` f4a9b55a.** Not built: written up for the owner's call.
+`main` f4a9b55a.**
+
+**Fixed on `fix/draw-loop-idle-under-a-streaming-fleet` (PR awaiting merge)**, by direction 1 deferred rather
+than dropped, and direction 3 (the owner's go through wake-orch, 2026-11-10):
+- Update's seam tells the inbox `App.tokensUnseen`: the sessions the fleet holds with no drawn conversation, no
+  tile on a tiled board and no standing retry. A token for one of them folds into its one slot without ringing
+  and is handed over, in order, with the next frame that rings; `applied` answers it with `unsynced` alone.
+  Every other token, and every other frame, rings as before. Nothing is dropped and nothing waits on a timer.
+- Two windows over one scripted fleet, one woken for every frame as main is, draw the same bytes after every
+  frame (`TestLettingTokensWaitChangesNothingDrawn`). The one difference is a pane coming on screen mid-answer:
+  it is handed the tokens that waited for it, so it draws every word main draws and some before them
+  (`TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid`).
+- `BenchmarkStreamingFleetSteadyArrival` is direction 3: the real program at steady arrival. With 30 agents
+  talking and one conversation open, main drew 1,346 Views a second with the loop busy 86% and the process at
+  110% of a core; the branch draws 116-120 a second, busy 14-15%, at 21-24%. Its token, key and wheel latency
+  with 30 talking equals main's with one (`talking=1`): main's lower figures under a fleet came from a loop
+  that never went idle.
+- On the real binary, 30 scripted agents streaming at 43 tokens a second: the window used 73-74% of a core on
+  main and 21% on the branch, with token-to-screen, key and wheel latency the same within noise.
 
 The setup:
 - The real binary in a pty, 200×50, with one conversation open beside the room.
@@ -1603,3 +1621,25 @@ core where the loop pays a whole one.
 3. A benchmark that feeds the loop at steady arrival, to price either.
 
 A timer that coalesces the doorbell is the poll the first non-negotiable rules out.
+
+## BUG-69 — a conversation a resize hides mid-answer comes back with a hole in its streamed answer
+
+**Found 2026-11-10 by the adversarial review of `fix/draw-loop-idle-under-a-streaming-fleet` (BUG-67), and on
+`main` 6e27337d.** Not built.
+
+A resize that takes a conversation off screen - narrower than `dmTakeoverColumns` with the room holding the
+keys, or, by the same code, a height that hides a lower pane - never calls `DM.Leave`; only `refocus`, `hideDM`
+and a displaced pane do (`panes.go`). So the pane keeps its preview and its synced mark. The tokens it misses
+while hidden are refused by `App.wants`, which unsyncs it, and when a resize brings it back its next tokens are
+drawn glued onto the old preview: `s1001 s1002 s1003 s1004 s1015`, words 5 to 14 gone with nothing to say so.
+The landed block replaces it whole.
+
+Reproduction: `TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid`'s case "a narrow window hides it
+mid-answer and a wide one brings it back" - width 200, the room holding the keys, s1's conversation open; a
+message start and words 1 to 4 drawn; a resize to `dmTakeoverColumns-10` and its settle; words 5 to 14 while
+hidden; a resize back and its settle; word 15. Main draws `1 2 3 4 15`. The BUG-67 branch draws
+`1 2 3 4 11 12 13 14 15`, because the words that waited in the inbox are handed over, and never a wider hole.
+
+Direction: in the resize's settle, leave a conversation that stops being drawn, as `App.refocus` does with its
+was/now walk. A pane that comes back then previews from its next token, raw, as every other way of coming on
+screen does.

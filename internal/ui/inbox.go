@@ -66,8 +66,8 @@ package ui
 // Bubble Tea draws a whole View after every message, and under steady arrival the
 // loop drains faster than a fleet talks, so a batch is about one frame: thirty
 // agents' tokens were a thousand Views a second, nearly all of them the same frame
-// (BUG-67). So the window says which sessions' tokens it shows (show,
-// App.tokensShown), and a token for any other session folds as above without
+// (BUG-67). So the window says which sessions' tokens change nothing on screen
+// (setUnseen, App.tokensUnseen), and a token for one of them folds as above without
 // ringing the doorbell. It waits in its one slot and is handed over, in order, with
 // the next frame that does ring. Nothing is dropped and no timer is involved: the
 // tokens that change the screen and every other frame wake the loop as before.
@@ -165,12 +165,12 @@ type inbox struct {
 	// message start, where a pane reads afresh.
 	pending map[string]struct{}
 
-	// shown is the sessions whose tokens change something on screen, as the
-	// window last said (show); until it has said, every frame rings. A token for
-	// any other session folds as ever but rings nothing: it waits in its one slot
-	// and rides the next frame that does (BUG-67).
-	shown []string
-	said  bool
+	// unseen is the sessions whose tokens change nothing on screen, as the
+	// window last said (setUnseen); until it has said, every frame rings. A token
+	// for one of them folds as ever but rings nothing: it waits in its one slot and
+	// rides the next frame that does (BUG-67).
+	unseen []string
+	said   bool
 
 	dropped int
 	err     error
@@ -203,7 +203,7 @@ func (b *inbox) add(f rpc.Frame) {
 	ring := true
 	if partialFrame(f) {
 		b.addPartial(f)
-		ring = !b.said || slices.Contains(b.shown, f.SessionID)
+		ring = !b.said || !slices.Contains(b.unseen, f.SessionID)
 	} else {
 		// This session's preview is closed by anything else it says: the block
 		// that supersedes one arrives between two turns' tokens.
@@ -289,14 +289,14 @@ func (b *inbox) unfold(at int, sessionID string) {
 	}
 }
 
-// show records the sessions whose tokens change something on screen
-// (App.tokensShown). ids is the caller's to give away: it is held, never written.
+// setUnseen records the sessions whose tokens change nothing on screen
+// (App.tokensUnseen). ids is the caller's to give away: it is held, never written.
 // A change rings when frames wait, so a session that came on screen is handed the
 // tokens folded for it now rather than with the next frame.
-func (b *inbox) show(ids []string) {
+func (b *inbox) setUnseen(ids []string) {
 	b.mu.Lock()
-	changed := !b.said || !slices.Equal(b.shown, ids)
-	b.shown, b.said = ids, true
+	changed := !b.said || !slices.Equal(b.unseen, ids)
+	b.unseen, b.said = ids, true
 	waiting := b.n > 0
 	b.mu.Unlock()
 	if changed && waiting {

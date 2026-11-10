@@ -364,7 +364,7 @@ func (a App) drawnConversations() func(string) bool {
 }
 
 // drawnIDs is every conversation a pane with a width draws: the list
-// drawnConversations answers from, and the start of App.tokensShown.
+// drawnConversations answers from.
 func (a App) drawnIDs() []string {
 	r := a.drawnRegions()
 	var ids []string

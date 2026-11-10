@@ -117,37 +117,48 @@ import (
 // let a reopened pane splice new tokens onto old ones. And a token refused here
 // is a token the pane lost, so observe unsyncs it: whichever way it went off
 // screen, it will not read the rest of that block (partialchunks.go).
-// tokensShown widens this to everything a token can reach, and is what the inbox
-// wakes the loop for.
+// tokensUnseen widens this to everything a token can reach: what apply and the
+// inbox let a token skip.
 func (a App) wants(sessionID string, ev core.Event) bool {
 	return ev.Kind != core.KindPartialText || a.drawnConversations()(sessionID)
 }
 
-// tokensShown is every session whose next token changes something on screen:
-// a drawn conversation (wants), a tile while the board is tiled (foldBoard), and a
-// standing retry, which a token clears (requestOver). Anywhere else a token only
-// unsyncs a pane nobody sees, so the inbox lets it wait for the next frame that
-// wakes the loop rather than drawing a frame for it (BUG-67). Sorted, and a new
-// slice each call: the inbox holds it.
-func (a App) tokensShown() []string {
-	ids := a.drawnIDs()
-	if a.board.Up && a.board.Tiled {
-		for id := range a.boardDMs {
+// tokensUnseen is every session whose next token changes nothing on screen: one
+// the fleet holds (a token from one it does not adds its row), whose conversation
+// is not drawn (wants), with no tile on a tiled board (foldBoard) and no standing
+// retry, which a token clears (requestOver). Such a token only unsyncs a pane
+// nobody sees, so applied does that alone and the inbox lets it wait for the next
+// frame that wakes the loop rather than drawing a frame for it (BUG-67). Every
+// other token rings. Sorted, and a new slice each call: the inbox holds it.
+func (a App) tokensUnseen() []string {
+	unseen := a.unseenTokens()
+	var ids []string
+	for _, id := range a.fleet.order {
+		if unseen(id) {
 			ids = append(ids, id)
 		}
 	}
-	for id := range a.retrying {
-		ids = append(ids, id)
-	}
 	slices.Sort(ids)
-	return slices.Compact(ids)
+	return ids
 }
 
-// showTokens tells the inbox what tokensShown is now. Update's seam, so every
-// message that moves a pane, the board or a retry is followed by it.
-func (a App) showTokens() App {
+// unseenTokens answers tokensUnseen for one session, with the layout resolved once.
+func (a App) unseenTokens() func(string) bool {
+	drawn := a.drawnConversations()
+	return func(id string) bool {
+		_, known := a.fleet.agents[id]
+		_, tile := a.boardDMs[id]
+		_, retry := a.retrying[id]
+		tiled := tile && a.board.Up && a.board.Tiled
+		return known && !drawn(id) && !tiled && !retry
+	}
+}
+
+// unseenTold tells the inbox what tokensUnseen is now. Update's seam, so every
+// message that moves a pane, the board, a retry or the fleet is followed by it.
+func (a App) unseenTold() App {
 	if a.in != nil {
-		a.in.show(a.tokensShown())
+		a.in.setUnseen(a.tokensUnseen())
 	}
 	return a
 }

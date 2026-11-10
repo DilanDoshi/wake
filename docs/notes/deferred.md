@@ -6189,3 +6189,9 @@ inbox slot for the next frame that does.
   draw one within a millisecond; now it is the next heartbeat (every 50 ms while any agent works), the cursor's
   blink or the next frame, as an idle fleet always did. *Closes with:* each failure returning a message, as
   `kittyplace.go`'s success already does.
+- **A few clock-read words wait for the next draw too.** With no agent the daemon reports working - a `--brief`
+  self-start or a loop's own turn can stream with none - there is no heartbeat, so text View reads off the
+  clock refreshes at the cursor's blink (about 530 ms) or the next frame that rings: a loop line's "next at"
+  clause dropping once that time passes (`beat.go`'s `loopWaitLine`) and the resume picker's ages
+  (`resume.go`). A streaming fleet used to redraw them at its token rate. Found by the adversarial review.
+  *Closes with:* a View-time read of the clock on its own message, if one is ever worth its wake.
