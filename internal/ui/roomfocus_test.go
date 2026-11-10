@@ -56,7 +56,7 @@ func TestFocusAdmits(t *testing.T) {
 
 func TestRoomEchoCarriesAddressee(t *testing.T) {
 	r := NewRoom().SetSize(80, 24)
-	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@iris rebase"}, "iris-id")
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@iris rebase"}, "iris-id", "")
 	lines := r.said.slice(r.said.first(), r.said.len())
 	if len(lines) == 0 {
 		t.Fatal("expected one room line")
@@ -73,11 +73,11 @@ func TestRoomViewNarrowsToFocus(t *testing.T) {
 	mgrA := Agent{ID: mgr, Name: core.ManagerName}
 
 	r := NewRoom().SetSize(80, 24)
-	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "everyone: status?"}, "")
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "everyone: status?"}, "", "")
 	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: john, Text: "john here, all green"}, johnA)
 	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: iris, Text: "iris here, still building"}, irisA)
 	r = r.Append(core.Event{Kind: core.KindAssistantText, SessionID: mgr, Text: "manager coordinating"}, mgrA)
-	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@iris hurry"}, iris)
+	r = r.appendUser(core.Event{Kind: core.KindUserText, Text: "@iris hurry"}, iris, "")
 
 	full := r.View(80, 24)
 	for _, want := range []string{"all green", "still building", "manager coordinating", "hurry"} {

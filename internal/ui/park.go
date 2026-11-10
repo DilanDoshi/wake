@@ -219,7 +219,7 @@ type parkAllMsg struct{ err error }
 func (a App) park() (tea.Model, tea.Cmd, bool) {
 	id, ok := a.interruptTarget()
 	if !ok {
-		notice.Report("%s", noParkTarget)
+		notice.Report("%s", a.unseenOr(noParkTarget))
 		return a, nil, true
 	}
 	if a.endedAgent(id) || a.parkedAgent(id) {

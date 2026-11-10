@@ -59,6 +59,20 @@ const workflowGlyph = "◈"
 // shellWord heads a running background shell's row.
 const shellWord = "shell"
 
+// subStep is one level of nesting, the width of "⎿ ", so a subagent's own
+// dispatch has its ⎿ under its parent's name. maxSubDepth is the deepest level
+// that still draws general-purpose whole in the sidebar; a row deeper is drawn
+// there (TestTheIndentStopsWhereGeneralPurposeStillFitsWhole).
+const (
+	subStep     = 2
+	maxSubDepth = 2
+)
+
+// subLead opens a dispatch's row: its indent for its depth, then the ⎿.
+func subLead(t Task) string {
+	return strings.Repeat(" ", toolIndent+subStep*min(t.Depth, maxSubDepth)) + subGlyph + " "
+}
+
 // subagentRow is one running dispatch: what kind of agent it is, and what it
 // has spent if the column can hold the figure whole.
 func subagentRow(t Task, width int) string {
@@ -68,7 +82,7 @@ func subagentRow(t Task, width int) string {
 	case core.TaskShell:
 		return shellRow(t, width)
 	}
-	head := strings.Repeat(" ", toolIndent) + subGlyph + " " + subagentName(t)
+	head := subLead(t) + subagentName(t)
 	count := tokenArrow + " " + humanTokens(t.Tokens)
 	if t.Tokens <= 0 || lipgloss.Width(head)+1+lipgloss.Width(count) > width {
 		return clip(head, width)
@@ -79,7 +93,7 @@ func subagentRow(t Task, width int) string {
 // shellRow is a running background shell's row: the word, then what it was asked
 // to run. No count - a shell reports no usage.
 func shellRow(t Task, width int) string {
-	head := strings.Repeat(" ", toolIndent) + subGlyph + " " + shellWord
+	head := subLead(t) + shellWord
 	if what := oneLine(cmp.Or(t.Label, t.Name)); what != "" {
 		head += " " + what
 	}
@@ -93,7 +107,7 @@ func shellRow(t Task, width int) string {
 // rather than a second row-drawing site, so the sidebar and the board can
 // never disagree about what a workflow's row says.
 func workflowRow(t Task, width int) string {
-	head := strings.Repeat(" ", toolIndent) + subGlyph + " " + workflowGlyph + " " + oneLine(t.Name)
+	head := subLead(t) + workflowGlyph + " " + oneLine(t.Name)
 	if len(t.Workflow.Agents) == 0 {
 		return clip(head, width)
 	}

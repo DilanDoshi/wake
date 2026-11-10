@@ -27,6 +27,7 @@ func TestTurnDoneIsAWitnessedFinishWithNothingStillRunning(t *testing.T) {
 		{"idle after a witnessed turn", finished, false, true},
 		{"idle with no witnessed turn", Agent{State: rpc.StateIdle}, false, false},
 		{"a subagent still running", finished, true, false},
+		{"a turn the API failed", Agent{State: rpc.StateIdle, doneAt: time.Now(), failed: true}, false, false},
 		{"a loop waiting for its next wakeup", Agent{State: rpc.StateIdle, doneAt: time.Now(), loop: LoopState{Active: true}}, false, false},
 		{"working again", Agent{State: rpc.StateWorking, doneAt: time.Now()}, false, false},
 		{"blocked", Agent{State: rpc.StateBlocked, doneAt: time.Now()}, false, false},

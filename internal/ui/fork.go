@@ -106,7 +106,7 @@ func SnapshotNotice(fork, parent string) string {
 func (a App) fork() (tea.Model, tea.Cmd, bool) {
 	agent, ok := a.dmTarget()
 	if !ok {
-		notice.Report("%s", noForkTarget)
+		notice.Report("%s", a.unseenOr(noForkTarget))
 		return a, nil, true
 	}
 	forkID := uuid.NewString()

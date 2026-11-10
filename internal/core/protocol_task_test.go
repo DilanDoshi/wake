@@ -374,6 +374,32 @@ func TestTaskStartedJoinsBothIdentifierSpaces(t *testing.T) {
 	}
 }
 
+// A subagent can dispatch its own (2.1.314). The inner task_started names the
+// dispatching subagent's task id; the one the agent dispatched itself names none.
+func TestANestedDispatchNamesTheSubagentThatStartedIt(t *testing.T) {
+	parents := map[string]string{} // task id -> Parent, from task_started
+	types := map[string]string{}
+	for _, d := range decodeFixture(t, "../../testdata/stream/subagent-nested.jsonl") {
+		if u := d.Task; u != nil && u.Phase == TaskStarted {
+			parents[u.ID], types[u.ID] = u.Parent, u.Type
+		}
+	}
+	var outer string
+	for id, parent := range parents {
+		if parent == "" {
+			outer = id
+		}
+	}
+	if len(parents) != 3 || types[outer] != "general-purpose" {
+		t.Fatalf("want one general-purpose dispatch and two of its own, got parents %v types %v", parents, types)
+	}
+	for id, parent := range parents {
+		if id != outer && parent != outer {
+			t.Errorf("%s (%s) names parent %q, want the general-purpose task %s", id, types[id], parent, outer)
+		}
+	}
+}
+
 // Every task frame in the corpus decodes to a task. The count is derived, so a
 // fixture added later is covered by this test without editing it.
 func TestEveryRecordedTaskFrameDecodes(t *testing.T) {

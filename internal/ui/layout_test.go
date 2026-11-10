@@ -62,8 +62,9 @@ func TestClosingTheRightSidebarBuysHalfOfItAPane(t *testing.T) {
 }
 
 func TestBelowOneHundredAndTwentyColumnsTheDMTakesOverInsteadOfSplitting(t *testing.T) {
+	// w is the window's width; Layout.Width is the frame inside its margins.
 	for _, w := range []int{119, 100, 80} {
-		r := Layout{Width: w, Height: 40}.Regions(2, 1)
+		r := Layout{Width: w - 2*SideMargin, Height: 40}.Regions(2, 1)
 		if r.Room() != 0 {
 			t.Errorf("width %d: the room still had %d columns. Below 120 a split gives 42 columns a pane, which is poor - the DM takes the pane instead", w, r.Room())
 		}
@@ -71,7 +72,7 @@ func TestBelowOneHundredAndTwentyColumnsTheDMTakesOverInsteadOfSplitting(t *test
 			t.Errorf("width %d: neither pane was drawn", w)
 		}
 	}
-	if r := (Layout{Width: 120, Height: 40}).Regions(2, 1); r.Room() == 0 {
+	if r := (Layout{Width: 120 - 2*SideMargin, Height: 40}).Regions(2, 1); r.Room() == 0 {
 		t.Error("at exactly 120 the split is still on: the rule is *below* 120, and an off-by-one here is a pane that vanishes at the width somebody sized their terminal to")
 	}
 }
@@ -87,10 +88,13 @@ func TestSidebarsCollapseBeforeThePanesDo(t *testing.T) {
 	// And the conversation keeps what they gave up, rather than the columns
 	// going nowhere: a sidebar that collapses without widening a pane is a
 	// sidebar that collapsed for nothing.
-	wide := Layout{Width: 160, Height: 40, ShowGroups: true, ShowRoster: true}.Regions(1, 0)
-	narrow := Layout{Width: 159, Height: 40, ShowGroups: true, ShowRoster: true}.Regions(1, 0)
+	// Layout.Width is the frame's, inside the window's margins; the breakpoint is
+	// the window's.
+	at := groupsCollapseColumns - 2*SideMargin
+	wide := Layout{Width: at, Height: 40, ShowGroups: true, ShowRoster: true}.Regions(1, 0)
+	narrow := Layout{Width: at - 1, Height: 40, ShowGroups: true, ShowRoster: true}.Regions(1, 0)
 	if narrow.Room() <= wide.Room()-groupsWidth {
-		t.Errorf("the groups sidebar collapsed at 159 and the room went from %d to %d: the %d columns it gave up did not reach the conversation", wide.Room(), narrow.Room(), groupsWidth)
+		t.Errorf("the groups sidebar collapsed at %d and the room went from %d to %d: the %d columns it gave up did not reach the conversation", groupsCollapseColumns-1, wide.Room(), narrow.Room(), groupsWidth)
 	}
 }
 
@@ -321,22 +325,50 @@ func spanned(r Regions) int {
 // the takeover threshold or widening a sidebar fails here - naming the fix -
 // instead of producing a negative pane width in a terminal nobody owns yet.
 func TestTheTakeoverThresholdIsWhatKeepsBothPanesReadable(t *testing.T) {
+	// The breakpoints are the window's width, and the window's margins are no
+	// pane's: every figure below is what the frame inside them has left.
+	margins := 2 * SideMargin
 	// Below groupsCollapseColumns only the right sidebar is drawn, so the
 	// narrowest split is the takeover width less the roster.
-	if left := dmTakeoverColumns - rosterWidth - dividerWidth; left < 2*minPaneWidth {
+	if left := dmTakeoverColumns - margins - rosterWidth - dividerWidth; left < 2*minPaneWidth {
 		t.Errorf("at %d columns a split leaves %d for two panes with a floor of %d: either raise dmTakeoverColumns or give panes a floor of its own", dmTakeoverColumns, left, minPaneWidth)
 	}
 	// At and above it, both sidebars are.
-	if left := groupsCollapseColumns - rosterWidth - groupsWidth - dividerWidth; left < 2*minPaneWidth {
+	if left := groupsCollapseColumns - margins - rosterWidth - groupsWidth - dividerWidth; left < 2*minPaneWidth {
 		t.Errorf("at %d columns both sidebars leave %d for two panes with a floor of %d", groupsCollapseColumns, left, minPaneWidth)
 	}
 	// And with one pane, where the sidebars' own breakpoints are the only
 	// thing standing between a sidebar and an unreadable conversation.
-	if left := sidebarsHideColumns - rosterWidth; left < minPaneWidth {
+	if left := sidebarsHideColumns - margins - rosterWidth; left < minPaneWidth {
 		t.Errorf("at the sidebar cutoff of %d the roster leaves %d columns, floor %d: raise sidebarsHideColumns", sidebarsHideColumns, left, minPaneWidth)
 	}
-	if left := groupsCollapseColumns - rosterWidth - groupsWidth; left < minPaneWidth {
+	if left := groupsCollapseColumns - margins - rosterWidth - groupsWidth; left < minPaneWidth {
 		t.Errorf("at %d both sidebars leave %d columns, floor %d", groupsCollapseColumns, left, minPaneWidth)
+	}
+}
+
+// §8's breakpoints are the window's width, margins and all. Layout.Width is the
+// frame inside them, so a 100-column window still draws the roster and a
+// 120-column one still splits - read against the frame, both lost them.
+func TestTheBreakpointsAreTheWindowsWidth(t *testing.T) {
+	for _, tc := range []struct {
+		window         int
+		roster, groups bool
+		drawn          int
+	}{
+		{sidebarsHideColumns - 1, false, false, 1},
+		{sidebarsHideColumns, true, false, 1},
+		{dmTakeoverColumns - 1, true, false, 1},
+		{dmTakeoverColumns, true, false, 2},
+		{groupsCollapseColumns - 1, true, false, 2},
+		{groupsCollapseColumns, true, true, 2},
+	} {
+		l := Layout{Width: tc.window - 2*SideMargin, Height: 40, ShowGroups: true, ShowRoster: true}
+		r := l.Regions(2, 1)
+		if (r.Roster > 0) != tc.roster || (r.Groups > 0) != tc.groups || r.Drawn() != tc.drawn {
+			t.Errorf("a %d-column window drew roster %d, groups %d and %d columns; want roster %v, groups %v, %d columns",
+				tc.window, r.Roster, r.Groups, r.Drawn(), tc.roster, tc.groups, tc.drawn)
+		}
 	}
 }
 

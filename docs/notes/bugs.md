@@ -99,7 +99,10 @@ root — the failure has one tell, it is transient, and it is not where the oper
   over the 401'd turn: `doneAt`/`turnDur` are captured at the working→idle edge (`Fleet.WithStatus`)
   with no knowledge of `authFailed` (absent from `beat.go`/`dmbeat.go`/`fleet.go`/`report.go`) —
   BUG-34's shape one turn on, a done line minted over a *failure* rather than a stale one over live
-  work.
+  work. **Closed (`fix/no-done-on-a-failed-turn`, 2026-11-07)** for every failure kind, not only the 401:
+  the agent's own `KindAPIError` sets `Agent.failed`, which `turnDone` reads, so the done line, the roster's
+  `✔` and the strip's `N done` all go, and nothing is drawn in their place. Its own next model output
+  clears it (`internal/ui/turnoutcome.go`, decisions.md 2026-11-07).
 - **The retry storm is silent.** #66 keys on the terminal `isApiErrorMessage` frame; the ~3–4 min of
   `system/api_error` retries before it are unmarked (nine unmarked, then one marked, in a real
   transcript), so even the notice waits minutes. (Read from the frames; the first two were watched.)
@@ -164,6 +167,18 @@ harness can do this, and a screen is the only thing that can show which rows wen
 
 
 ## BUG-15 — `TestAnOversizedLineEndsTheSessionAndReapsWhatItSpawned` fails in a full run and passes alone
+
+**Not reproducible on `9fd48573` (re-read 2026-11-07); kept for the record.** Under `-race` it passed
+30/30 at load 66, about 1s each against its 12s budget, and in three full lanes that day (0.55s in the
+race lane). The failure below took the whole budget on both runs, so it was a hang rather than a slow
+path, and the ending has been rebuilt since (Wake owns stdout's read end; `awaitExit`'s grace). The
+fixing commit cannot be named: history before 0.1.0 is squashed. Every wait in the test is on a real
+condition. What the re-read did find was a false pass: `startFake`'s 10s deadline fell inside the
+test's own wait, and a run it ended ("read |0: file already closed") passed every assertion without
+the oversized line ever being read - a helper made to sleep 11s first passed at 10.00s. Closed on
+`fix/ci-package-timeout-and-two-flakes`: the session starts under a context nothing cancels until the
+test is over, and the error must wrap `bufio.ErrTooLong`. That slow helper now passes by its own path
+(11.27s); a pump whose kill waits for a cancel fails at 12.03s with the message below.
 
 **Observed 2026-08-23**, and settled the same day by running the gate on both sides.
 
@@ -335,6 +350,15 @@ then hang there. Either raise the compressed deadline enough to clear a loaded c
 well under the hook's `sleep 60`), or gate the deadline's start on the hook having recorded its pid —
 so the bound measures the *hang*, not the checkout. The current 2s measures both.
 
+**Fixed on `fix/ci-package-timeout-and-two-flakes` (PR awaiting merge), close to the second way.**
+Re-read 2026-11-07: under CPU load 32–66 and a 120s fsync hammer it passed 45/45, git reaching its
+hook in ~0.3s; a hook made to sleep 2.5s before it backgrounds its child failed it every time with the
+logged symptom (17.18s). `git` now takes the caller's context and sets `gitTimeout` under it, and the
+test, renamed `TestAHungWorktreeAddHasItsTreeReapedWhenItsCallEnds`, ends the call by hand once the
+hook has recorded its pid, through the same cancel a deadline reaches; that slow hook now passes.
+`TestAGitCallRunsUnderGitTimeout` pins that the call carries a deadline from `gitTimeout`, with one
+already past, so nothing races a clock.
+
 
 ---
 
@@ -494,7 +518,7 @@ accepting a permission on an unowed turn mints a *fresh* wrong done line, and th
 runs — its result is a `KindToolResult`, not a new block — so the summary stands for the whole length
 of that tool (a long bash → a long-lived lie).
 
-**Fix (`Agent.notDone`, `internal/ui/fleet.go`).** The client sees the events the daemon's `owed`
+**Fix (`Agent.notDone`, `internal/ui/fleet.go`; in `turnoutcome.go` since 2026-11-07).** The client sees the events the daemon's `owed`
 model cannot: the agent's own new-turn content forgets the done summary in `fold` — `KindToolUse`,
 `KindToolResult`, `KindAssistantText`, `KindThinking`, all gated `ev.Subagent==nil` (a subagent
 streams past the parent's result and is not the agent's turn). It is the mirror of `WithStatus`
@@ -1349,6 +1373,36 @@ turn's age - true about the age, wrong about the word.
 the API answers, the turn ends or fails, the conversation is cleared, or a report shows the agent not working
 (`internal/ui/apiretry.go`; `decisions.md`, 2026-11-02).
 
+## BUG-61 — a subagent's own subagents were drawn beside it in the sidebar, not under it
+
+**Found 2026-11-03 by the owner**: under `handbook-helper 8`, four `general-purpose` rows and five
+`Explore ↓ 2xx.xk` rows sat at one indent, though some Explores were the general-purpose subagents' own.
+Proven on `main` fa87e320 by folding `subagent-nested.jsonl` (claude 2.1.314: a general-purpose subagent
+dispatching two Explores): the roster drew all three rows at the same `⎿` column.
+
+**Cause.** Since 2.1.3xx a subagent can dispatch its own, and its `task_started` names the dispatching
+subagent's task id as `parent_task_id`. The airlock read no such key, and `subagentRow` drew every
+dispatch at one fixed indent in start order. Each row's `↓` figure was always its own task's usage (the
+outer's does not include its children's), so only the placement was wrong.
+
+**Fix:** branch `fix/nested-subagents-in-the-sidebar`. `core.TaskUpdate.Parent` carries the link;
+`Fleet.RunningTasks` returns the running rows as a tree (`internal/ui/tasktree.go`), each under the
+nearest running row it descends from, and the sidebar and board indent each level by `⎿ `'s width, down
+to `maxSubDepth`. The cursor, clicks and opening a nested row follow the same list.
+
+## BUG-62 — a subagent's pane ended with its hand-back receipt as raw JSON
+
+**Found 2026-11-05 recording BUG-61's fixture**: in auto mode (every Wake agent), a subagent that reports
+through `SubagentHandback` gets back a tool result whose one text block is
+`{"success":true,"message":"Report delivered to your caller."}` (`subagent-nested.jsonl:53`, claude
+2.1.314). `receiptSentence` read only SendMessage's three-key receipt as prose, so the pane drew the JSON;
+`TestNoToolResultReachesAReaderAsJSON` caught it on the new recording.
+
+**Fix:** branch `fix/nested-subagents-in-the-sidebar`. `receiptSentence` also reads exactly that receipt -
+two keys, a true `success` and the message `Report delivered to your caller.` (all 2,264 delivered receipts on
+the recording machine) - as its message. Any other tool's two-key result, a third key (`msg_id: null` too), a
+non-bool or false `success` stays whole; a refused hand-back (`"success":false`) still draws as JSON.
+
 ## BUG-63 — a query-box drag, click or ⌫ landed a row off in a short conversation with a menu up
 
 **Found 2026-11-06 by the draft-wheel branch's second adversarial review, then confirmed on `main`
@@ -1374,6 +1428,37 @@ The cause:
 `TestTheWheelMapsTheRowsTheFrameDraws` holds the box the mouse reads to the rows `App.View` draws, and
 every box read in `composerscroll_test.go` is checked against that frame.
 
+## BUG-64 — a login's resume that reached a process still on the old login left the agent stopped
+
+**Found in two forms.**
+- **2026-10-21** (v0.1.11): at one login, all 12 agents the daemon resumed failed `Not logged in · Please
+  run /login` (`authentication_failed`) on their first request. Claude's config file names the new account
+  about a second before the login's credential is written, and the daemon resumed the instant the account
+  changed. An auth failure is no stop, so nothing resumed them again; peers' messages revived most within a
+  minute, which hid it.
+- **2026-11-06, 22:37:58 PST** (v0.1.14, two fleets): a login resumed 31 agents a usage limit had stopped.
+  6 of them got the old account's limit again, 3 to 10 s after the `continue`: the same `resets 2:40am`, each
+  a real API answer. Others had already gone through 2 s after it. So a running process can keep the old
+  login's token for at least ten seconds after the config file names the new account. Each new stop was
+  recorded under the account signed in now, so the login no longer read as another account, and the six
+  waited about four hours for the old account's reset. The operator sent one of them a `continue` by hand
+  six minutes later, and it worked.
+
+**Cause.** A login's resume was one-shot, and it took the config file's account as proof the new login was
+in use. `sendResume` clears the stop at the write, so the resumed turn's failure was judged as if nothing
+had come before it: "Not logged in" is no stop at all, and the old account's limit became a new stop under
+the new account.
+
+**Fix:** branch `fix/login-resume-retries-on-the-old-token`. A login's resume is remembered on the agent
+(`agent.login`, a `loginTry`) until its turn ends, fails, is interrupted or is cleared. If that turn fails
+the way a process still on the old login fails - "Not logged in", or a limit naming the reset the stop named -
+the stop is re-armed with a retry. The retries come 15 s, 1 min and 5 min after each failure, on the resume
+goroutine's one timer; after the third the stop waits for its reset or the next login. Another turn - the
+operator's own, a peer's - that meets the old login meanwhile leaves the retry standing
+(`internal/daemon/loginretry.go`; `decisions.md`, 2026-11-07). Held by `usagelimit_e2e_test.go` (the old
+limit again, "Not logged in", the cap) and `loginretry_test.go` (what is and is not retried, the retry kept
+through another turn, a fresh login's count, the waits and the timer), each mutation-checked.
+
 ## BUG-65 — a woken session's pane draws "No response requested." under the turn that was interrupted
 
 **Found 2026-11-07, live, on claude 2.1.319, by the check behind `fix/quit-interrupts-and-parks-busy-agents`.**
@@ -1398,40 +1483,45 @@ common, so it is filed here and not fixed there.
 interrupted turn) as plumbing in the decoder, from a committed fixture of a resumed interrupted
 transcript, scrubbed. A fix keyed on the text alone would also hide an agent that typed those words.
 
-## BUG-66 — after a `/wake-name` and a `/new`, ⌃Q's exit line sends the operator to a bare `wake`
+## BUG-66 — after a `/wake-name` and a `/new`, ⌃Q's exit line sent the operator to a bare `wake` — PARKED, not reproduced
 
-**Found 2026-11-07, recording takes for `fix/quit-interrupts-and-parks-busy-agents`, on `main` 507223b7.**
-The setup was a scratch `HOME` under `/private/tmp`, no `WAKE_SOCKET`, and the demo's scripted claude on a
-shim `PATH`.
+**Seen once, 2026-11-07**, recording takes for `fix/quit-interrupts-and-parks-busy-agents` on `main`
+507223b7. The setup was a scratch `HOME` under `/private/tmp`, no `WAKE_SOCKET`, and the demo's scripted
+claude. The steps: a bare `wake` (fleet `harbor`), `/wake-name dev`, `/new otto`,
+`@otto migrate the sessions table`, then ⌃Q⌃Q with otto mid-turn. The line read
+``Parking 2 agents. `wake` reopens the room…``. A bare `wake` starts a new fleet, so it sent the operator
+away from the parked one. The same take without the rename named `harbor`, and without the `/new` it
+named `dev`.
 
-The repro, typed in this order:
-1. A bare `wake` in `~/harbor`. It prints ``fleet harbor. `wake --fleet harbor` comes back to it``.
-2. `/wake-name dev`. The roster's manager becomes `manager-dev`.
-3. `/new otto`, then `@otto migrate the sessions table`, so otto is mid-turn.
-4. `⌃Q⌃Q`.
+**Not reproduced in about 20 tries on 507223b7:**
+- 7 VHS takes of that flow:
+  - 3 were the take's own tape regenerated with only the paths changed;
+  - 1 used the take's own binary, whose `leavingLine` disassembles the same as `main`'s;
+  - 1 put `wake` on `PATH` as a symlink, as the take's kit did.
+- 13+ pty runs, with otto idle and busy, under the Go fake and the demo claude.
 
-What went wrong: the exit line read ``Parking 2 agents. `wake` reopens the room…``, a bare `wake`, which
-starts a new fleet (2026-10-16). It should have named `wake --fleet dev`, as #214 made every way-back line
-do. Following it opens a different fleet, so the parked one is not where the operator is sent.
+Every run printed `wake --fleet dev`. Builds that logged at `leavingLine` read `dev` from both name
+sources, and no report carried an empty `Fleet`.
 
-Two takes narrow it:
-- **Without step 2** (no rename, otto spawned and busy), the line read ``wake --fleet harbor``, which is
-  right.
-- **Without step 3** (renamed, no agent spawned after), the line read ``wake --fleet dev``, which is also
-  right.
+**What is unexplained.** A bare line needs both of ⌃Q's name sources empty:
+- `App.FleetName()`, the last report's name;
+- `daemon.FleetName(socket)`, its fallback.
 
-So it takes the rename and an agent spawned after it. Not separated yet: whether otto being busy at the
-press matters, and whether it is the report's `Fleet` or the socket fallback that came back empty.
+For `fleets/harbor/daemon.sock` the fallback returns `harbor` or `dev` in every state of that directory
+(`fleetNameOf`, `forwardedName`). It returns "" only with `HOME` unset, which the take did not have. The
+take's daemon log and its room before ⌃Q match the takes that printed `dev`.
 
-`App.FleetName()` is folded from every report (`withFleetName`), the `FrameStatusReply` that answers ⌃Q
-included, and only an empty name falls back to `daemon.FleetName(socket)`. So both must have come back
-empty, or the reply cleared a name the window had.
+**Hardened:** the report half. `withFleetName` no longer lets a report naming no fleet wipe a name the
+window has (`TestAReportNamingNoFleetKeepsTheNameTheWindowHas`). A named fleet never becomes a hand-set
+one, so an empty name after a known one is never news. A hand-set socket and a pre-2026-10-24 daemon
+never named one, so they are unchanged.
 
-**The guess:** `TestCtrlQAfterAWakeNameNamesTheFleetItReopens` renames and presses ⌃Q in a fleet with no
-agent spawned after the rename, and it opens with `WAKE_SOCKET` hand-set inside `~/.wake/fleets`, while the
-take used a bare `wake`. Either difference may be what the test misses.
+**Guarded:** `TestCtrlQAfterAWakeNameAndASpawnNamesTheFleet`. It runs a bare `wake` under a scratch
+`HOME`, `/wake-name dev`, `/new otto` with a turn in flight and ⌃Q⌃Q, then reads `wake --fleet dev`.
+It passes on 507223b7, so it guards the scenario rather than proving a fix.
 
-**Closes with:** a pty test that renames, then spawns, then presses ⌃Q and reads the line.
+**Parked 2026-11-07 by wake-orch.** Reopen on a take that prints it again, with both name sources
+logged at `leavingLine`: the fallback half is the part nobody can explain.
 
 ## Residuals carried from bugs that are fixed and merged
 
@@ -1468,3 +1558,48 @@ leak a still-running private turn into the room. The only residual: a gap that e
 `KindTurnEnd` event and the working→idle report for the same turn leaves `inDM` stale until the next
 observed turn-end, so that agent's room prose is held back until then. Far narrower than the original,
 where a daemon-side gap invalidated nothing at all.
+
+## BUG-67 — a fleet streaming answers keeps the window's draw loop busy all the time
+
+**Found 2026-11-08 while measuring the scroll jank of `fix/scroll-moves-by-the-notch-during-a-stream`, on
+`main` f4a9b55a.** Not built: written up for the owner's call.
+
+The setup:
+- The real binary in a pty, 200×50, with one conversation open beside the room.
+- A scratch fleet of 31 sessions: 30 agents spawned with `/new`, plus the manager.
+- Every session is the demo's scripted claude streaming at the corpus median, 43 tokens a second.
+- The window process's CPU was read with `ps -o time=` over 10 seconds.
+
+| fleet | window process |
+|---|---|
+| 31 sessions streaming, `main` | 14.9 CPU s in 10 s: **148% of one core** |
+| the same, the scroll branch | 12.0 CPU s in 10 s: 119% |
+| the same 31 sessions idle, `main` | 0.13 CPU s in 10 s: 1% |
+
+**Why.** Bubble Tea calls `View` after every message, and each `streamMsg` is one message. The inbox hands
+over whatever is waiting (`take`). Frames from 30 agents arrive evenly, about 1,300 a second, and the loop
+drains faster than they arrive. So each batch holds about 1.3 frames, and the loop draws about 1,000
+frames a second at about 1 ms each.
+
+Only the one conversation on screen changes anything the frame draws. The other agents' tokens are
+dropped in `App.wants`, but only after they have woken the loop and paid for a `View`.
+
+An in-process run of the same arrival pattern (30 × 43 tokens a second, spread evenly) gave:
+- 3,008 batches in 3 s, 1.3 frames a batch, 3,097 `View`s;
+- the loop busy 100% of the time;
+- a wheel notch still handled within 3 ms p50 and 10 ms max, so scrolling stays smooth.
+
+The cost is power and heat on a machine that runs a fleet all day. It is the "cheap to leave open" rule's
+own case.
+
+**Why nothing caught it.** `BenchmarkStreamingFleetSecond` folds the fleet's second in 256-frame batches,
+which is the most `take` hands over, not what it hands over under steady arrival. So it prices about 1% of a
+core where the loop pays a whole one.
+
+**Directions, not chosen:**
+1. Drop an undrawn session's partial frames in the inbox, before they ring the doorbell. The pump would read
+   a snapshot of the drawn set, and a pane that comes on screen mid-block would be marked `Lost` there.
+2. Skip the draw for a batch that changed nothing on screen, keyed on what the frame reads.
+3. A benchmark that feeds the loop at steady arrival, to price either.
+
+A timer that coalesces the doorbell is the poll the first non-negotiable rules out.

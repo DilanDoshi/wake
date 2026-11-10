@@ -38,6 +38,34 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## PRODUCT CALL NOT TAKEN, 2026-11-07 — a turn a peer's message started is resumed after a limit too
+
+The owner reported that agents which were idle when he hit the limit were woken by Wake's resume. The
+transcripts showed none of them was idle at the limit. Between 22:36:50 and 22:37:16 PST on 2026-11-06,
+orchestrators sent a new rule by `SendMessage` to 31 agents across two fleets, ten of them idle for over a
+day. That started a turn on each, and those turns took the account over its limit within 26 s. The login at
+22:37:58 resumed exactly those 31, as designed (`decisions.md`, 2026-10-17).
+
+**The narrower option:** resume only a turn the operator or Wake started, and leave one a peer's message
+started stopped. Wake can tell which: the turn's first user line is replayed on stdout, and core already
+recognises the cross-session envelope (`core.KindCrossSession`). The cost is that the peer's message waits
+unanswered until that agent's next turn. Its words are in the agent's context, but nobody acts on them, and
+on 2026-11-06 that would have skipped 29 of the 31.
+
+**Not taken:** the owner's go on BUG-64 (2026-11-07, via wake-orch) asked for no change here, so today's rule
+stands: the turn the limit cut is continued, whoever started it.
+
+**A known gap beside it, older than BUG-64's retries:** a turn a peer's message starts is one Wake did not
+send, so it owes nothing (`agent.owed` is set by Wake's own sends and their lifecycle), and until its first
+tool `limited` reads the agent as ready. A resume due in that window - a login's, a reset's, now a retry's -
+is written into the running turn, which claude reads at its next tool boundary or as the next turn. Rare,
+since the window is the seconds before the turn's first tool or failure, and the retries only add moments
+to it. *Closes with:* a replayed cross-session line marking the agent busy until its turn ends.
+
+*Revisit if:* the owner asks for peer-started turns to wait, or a stray `continue` is seen mid-turn.
+
+---
+
 ## ~~FOLLOW-UP, 2026-11-05 — four daemon sentences still name a bare verb~~ CLOSED 2026-11-07 (`fix/daemon-lines-name-the-fleet`)
 
 `fix/park-line-names-the-fleet` made every way-back line `cmd/wake` and `internal/ui` print name the fleet
@@ -6092,3 +6120,44 @@ The retry line (decisions.md, 2026-11-02) shipped with two things left out.
   they would read as the parent's, and since a subagent's output no longer clears the line, a parent waiting
   on one would keep `retrying…` until its own next request, turn end or idle report. *Closes with:* a
   recording of a network drop under a running subagent (`live-testing.md`), then a ruling on the frames.
+
+## FROM `fix/nested-subagents-in-the-sidebar`, 2026-11-05
+
+The sidebar nests a subagent's own subagents under it (BUG-61). Left out, by the orchestrator's ruling:
+
+- **An inner subagent's ending is drawn in the agent's own conversation as though the agent dispatched
+  it.** `taskLine` draws `● Subagent "…" finished` for every `task_notification` on the agent's stream, and a
+  nested one's arrives there too; the room draws none for subagents. *Closes with:* attributing it to its
+  parent through `Task.Parent` (`↳ under general-purpose`), or dropping it, since the parent's own receipt
+  carries what it handed back.
+- **Past `maxSubDepth` (2) a row is drawn at the cap's indent**, so a fourth level reads as a sibling of
+  its parent. Never observed: of 1,693 subagents on the recording machine none was deeper than
+  `spawnDepth` 2, though a depth-2 subagent is offered the Agent tool. *Closes with:* a recorded deeper
+  nest and a ruling on how it is drawn in 23 columns.
+
+## FROM `fix/no-done-on-a-failed-turn`, 2026-11-07
+
+A turn the API failed no longer reads as done (decisions.md, 2026-11-07). Left out:
+
+- **Nothing is drawn in the done line's place** (wake-orch's ruling on the product call). The alternative was
+  BUG-35's own "what would settle it": the failed agent's DM row reading the failure where the done line sits
+  (`⚠ usage limit · failed 6:48 PM`, or `auth failed — /reauth`), plus a roster or strip mark for an agent whose
+  DM is closed. Not taken: it adds a surface and a meaning, and the pin already names the failure for a 401, a
+  usage limit and an unreachable API. A rejected request (`NoticeTurnFailed`) says so only in its timed notice,
+  so once that lapses its row reads as plain idle. *Closes with:* the owner asking for a failure mark, drawn off
+  the same `Agent.failed` bit so the surfaces still agree.
+- **A subagent's own API failure is unrecorded.** None of the three failure recordings carries a
+  `parent_tool_use_id`, so whether claude forwards a subagent's synthetic failure frame is unknown. If it does,
+  the done rule ignores it (a subagent's frames are not its parent's turn), but `apiErrored` still marks, pins and
+  counts it against the parent as before. The same goes for a subagent's 401 `api_retry` frames, themselves a
+  `KindAPIError`: none in the corpus carries `parent_tool_use_id`, so if claude forwards them without one they
+  would set the parent's bit. *Closes with:* a recording of a subagent failing, then a ruling on the pin.
+- **After a gap, or a park and a wake, the bit and the pin part.** Both forget the bit, as they forget `doneAt`
+  (the 2026-11-07 ruling); a gap keeps every pin, and a wake keeps a usage-limit or unreachable one. So a turn that
+  redoes nothing after either (a local command, an interrupt before the first block) reads `✔` beside a standing
+  pin. Found by the adversarial review, reproduced for all three pinned kinds. It needs a gap or a park between the
+  failure and such a turn. *Closes with:* forgetting the bit only for a session with no pin standing, which would
+  mean `App.notedGap` and the report fold reading `notices.stuck` back into the fleet.
+- **Only the API's failure counts.** A turn claude ends on its own error that is not the API's (a spend ceiling
+  from `--max-budget-usd`, an `error_during_execution` that no interrupt caused) still reads done: nothing in the UI
+  decodes those as a failed turn. *Closes with:* a recording of each and a ruling on whether it is one.

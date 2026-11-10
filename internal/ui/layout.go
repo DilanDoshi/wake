@@ -58,6 +58,11 @@ func (r Region) String() string {
 	}
 }
 
+// SideMargin is the blank columns the window keeps either side of the frame, so
+// no text touches its edge: one, the smallest gap a terminal can draw. Margined
+// draws it; the frame inside it never sees it.
+const SideMargin = 1
+
 const (
 	// groupsWidth and rosterWidth are the two sidebars, in columns: workspaces
 	// on the left, what agents are doing on the right.
@@ -114,6 +119,7 @@ const (
 
 // Layout is the terminal and what is currently shown in it.
 type Layout struct {
+	// Width is the frame's: the window less SideMargin either side (Margined).
 	Width  int
 	Height int
 
@@ -186,11 +192,11 @@ func (l Layout) Regions(cols, focused int) Regions {
 
 	// Sidebars first, and they give way first. They are context; the
 	// conversation is the work.
-	if l.ShowRoster && l.Width >= sidebarsHideColumns {
+	if l.ShowRoster && l.windowWidth() >= sidebarsHideColumns {
 		r.Roster = rosterWidth
 		rest -= rosterWidth
 	}
-	if l.ShowGroups && l.Width >= groupsCollapseColumns {
+	if l.ShowGroups && l.windowWidth() >= groupsCollapseColumns {
 		r.Groups = groupsWidth
 		rest -= groupsWidth
 	}
@@ -199,7 +205,7 @@ func (l Layout) Regions(cols, focused int) Regions {
 	// drawn however many are open, which is the rule the room and a single DM
 	// have always followed, read for any number of them.
 	fit := 1
-	if l.Width >= dmTakeoverColumns {
+	if l.windowWidth() >= dmTakeoverColumns {
 		fit = fits(rest, len(r.Cols))
 	}
 	first := window(len(r.Cols), fit, focused)
@@ -210,6 +216,10 @@ func (l Layout) Regions(cols, focused int) Regions {
 	}
 	return r
 }
+
+// windowWidth is the terminal's width, margins and all. §8's breakpoints name
+// the window the operator sizes, so they are read against it, not the frame.
+func (l Layout) windowWidth() int { return l.Width + 2*SideMargin }
 
 // fits is how many columns of minPaneWidth the space carries, at least one and
 // never more than there are.

@@ -87,18 +87,24 @@ func TestTheSeedNamesTheFleet(t *testing.T) {
 
 // ⌃Q's notice row names the fleet by the name the last report gave it.
 func TestCtrlQsNoticeNamesTheFleetItReopens(t *testing.T) {
-	for _, tc := range []struct{ fleet, want string }{
-		{fleet: "dev", want: "`wake --fleet dev` reopens the room"},
-		{fleet: "", want: "`wake` reopens the room"},
+	for _, tc := range []struct {
+		reports []string
+		want    string
+	}{
+		{reports: []string{"atlas", "dev"}, want: "`wake --fleet dev` reopens the room"},
+		{reports: []string{""}, want: "`wake` reopens the room"},
 	} {
 		fresh(t)
 		conn, _ := pipeClient(t)
-		a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30).withFleetCalled("atlas").withFleetCalled(tc.fleet)
+		a := dmApp(conn, Stream{}, "s1", "alex").withAgents("alex").withSize(160, 30)
+		for _, name := range tc.reports {
+			a = a.withFleetCalled(name)
+		}
 		if _, _, handled := confirmQuit(t, a); !handled {
 			t.Fatal("the confirming ⌃Q was not taken by App.key")
 		}
 		if n, ok := notice.Latest(); !ok || !strings.Contains(n.Text, tc.want) {
-			t.Errorf("on fleet %q, ⌃Q said %q, want it to contain %q", tc.fleet, n.Text, tc.want)
+			t.Errorf("on fleets %q, ⌃Q said %q, want it to contain %q", tc.reports, n.Text, tc.want)
 		}
 	}
 }
@@ -134,6 +140,21 @@ func TestTheFleetNameFollowsTheReport(t *testing.T) {
 	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withSize(200, 40).withFleetCalled("atlas").withFleetCalled("dev")
 	if got := a.FleetName(); got != "dev" {
 		t.Errorf("after a rename to dev the model names its fleet %q", got)
+	}
+}
+
+// A report naming no fleet keeps the name the window has, for the exit lines and
+// the title alike: a named fleet never becomes a hand-set one (BUG-66).
+func TestAReportNamingNoFleetKeepsTheNameTheWindowHas(t *testing.T) {
+	fresh(t)
+	var handed string
+	a := dmApp(newRecorder(t), Stream{}, "s1", "alex").withSize(200, 40).
+		WithFleetNamed(func(name string) { handed = name }).withFleetCalled("dev").withFleetCalled("")
+	if got := a.FleetName(); got != "dev" {
+		t.Errorf("after a report naming no fleet the model names its fleet %q, want dev", got)
+	}
+	if a.daemon.title != tabTitle("dev") || handed != "dev" {
+		t.Errorf("the title is %q and the emergency exit was last handed %q, want both dev", a.daemon.title, handed)
 	}
 }
 

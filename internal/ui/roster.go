@@ -115,6 +115,10 @@ type Roster struct {
 
 	// channel is the picked channel ("" for all), set by Column for the draw.
 	channel string
+
+	// view is where the window stands, set on the drawn copy (App.rosterDrawn)
+	// and zero on the App's own, which the seam and stopIndex compare whole.
+	view rosterView
 }
 
 // WithRetrying is the agents claude is retrying a request for, for the draw.
@@ -132,28 +136,18 @@ func (r Roster) retried(id string) bool {
 	return ok
 }
 
-// View draws one row per agent, in the order it was given them, scrolled so the
-// cursor is always on screen.
+// View draws one row per agent, in the order it was given them, through the
+// window (rosterscroll.go): the wheel's, or one that shows the cursor.
 //
 // That order is attention order, because Fleet.Agents ranks before it returns.
 // This does not rank again: a second sort here would be a second opinion about
 // the same question, and the roster would disagree with the room about which
 // agent is first.
 //
-// # Why it scrolls at all, and why it has no scroll position
-//
-// The column stopped drawing at the bottom and said nothing. At thirty agents
-// on a forty-row terminal that is a third of the fleet invisible, in the one
-// surface whose whole job is telling an operator who needs them - and ↑↓ could
-// move the cursor onto a row nobody could see, so ⌃D opened a conversation with
-// an agent the operator had never been shown.
-//
-// The window is **derived from the cursor** rather than stored beside it. A
-// stored offset is a second piece of state that can disagree with the first:
-// the ranking reorders between frames, so an offset that was right when it was
-// written points at a different agent by the time it is drawn. Deriving it means
-// the invariant - the cursor is on screen - is true by construction rather than
-// by every writer remembering to maintain it.
+// It scrolls at all because a column that stopped drawing at the bottom and said
+// nothing hid a third of a thirty-agent fleet, in the one surface whose whole job
+// is telling an operator who needs them - and ↑↓ could move the cursor onto a row
+// nobody could see.
 func (r Roster) View(agents []Agent, subs subsOf, width, height int) string {
 	if width <= 0 || height <= 0 {
 		// A column nobody has is drawn as nothing at all, and "nothing" has to
@@ -168,17 +162,15 @@ func (r Roster) View(agents []Agent, subs subsOf, width, height int) string {
 	}
 
 	rows := sectionRows(agents)
-	w := r.window(agents, subs, width, height)
+	w := r.window(rows, itemHeights(rows, subs), height)
 	lines := make([]string, 0, height)
 	for _, item := range rows[w.from:w.to] {
 		lines = append(lines, r.rowLines(item, subs, width)...)
 	}
-	// One item per agent, so the hidden count is agents the window did not reach.
-	// Cut to make room for the count rather than letting MaxHeight cut it:
-	// window's fallback draws one row taller than the whole column, so without
-	// this the line saying the fleet is bigger is the first thing off the bottom.
-	if hidden := len(agents) - (w.to - w.from); hidden > 0 {
-		lines = append(lines, moreRow(hidden, width))
+	// One item per agent, so the counts are agents the window did not reach, on
+	// the row window budgeted for them.
+	if above, below := w.from, len(rows)-w.to; above+below > 0 {
+		lines = append(lines, moreRow(countLine(above, below, width), width))
 	}
 	// Width pads every row out to the column and Height pads the column out to
 	// its rows; MaxHeight is the cut, and the last agent to fit is the one that
@@ -200,75 +192,14 @@ type span struct{ from, to int }
 // is indistinguishable from a fleet that ends.
 func moreLine(n int) string { return "  +" + strconv.Itoa(n) + " more" }
 
-// moreRow is that line as a sidebar draws it: styled, cut to the column and
+// moreRow is a count line as a sidebar draws it: styled, cut to the column and
 // padded back out to it. Both sidebars call it, because a row narrower than the
 // column makes the whole block narrower - lipgloss then joins the pane beside it
 // several columns early while Layout.Hit goes on using the reserved width, and
 // every click lands on the wrong region.
-func moreRow(n, width int) string {
-	line := clip(HintStyle.Render(moreLine(n)), width)
+func moreRow(text string, width int) string {
+	line := clip(HintStyle.Render(text), width)
 	return line + strings.Repeat(" ", max(width-ansi.StringWidth(line), 0))
-}
-
-// window is which agents fit, chosen so the cursor is among them.
-//
-// The cursor's own agent is placed first and the window grows around it, which
-// is what makes "the cursor is on screen" true by construction. The first draft
-// grew forwards from the cursor and then backwards, measuring each range from
-// scratch - and an adversarial review found that when the cursor's own agent was
-// taller than the room, the forward loop could not place it and the backward
-// loop then measured a range that did not contain it, so the column drew the
-// agent *above* the cursor and ⌃D opened a conversation with an agent that was
-// not on screen. That is the defect this whole file exists to remove, arriving
-// through the fix for it.
-//
-// Heights come from rowsFor rather than from rendering, so choosing a window
-// costs arithmetic rather than a lipgloss render per agent per step. The same
-// review measured the rendering version at 833µs for one column against a
-// ~250µs budget for the whole frame.
-//
-// The overflow line costs a row whenever anything is hidden, budgeted before
-// the walk: a window sized as though it were free is one row too tall, and
-// lipgloss wraps the row it cannot fit.
-func (r Roster) window(agents []Agent, subs subsOf, width, height int) span {
-	// Over the flattened rows - agents with a team header before each section -
-	// so the span [from, to) is row indices and View/At walk the same list. With
-	// no team the rows are one-to-one with agents and this is the flat window it
-	// always was.
-	rows := sectionRows(agents)
-	if len(rows) == 0 {
-		return span{}
-	}
-	total := 0
-	for _, row := range rows {
-		total += rowsForRow(row, subs)
-	}
-	if total <= height {
-		return span{from: 0, to: len(rows)}
-	}
-	room := height - 1
-
-	cursor := r.cursorRow(rows)
-	if cursor < 0 {
-		cursor = 0
-	}
-	if rowsForRow(rows[cursor], subs) > room {
-		// No whole row fits. Drawn as the count alone, which is the honest
-		// answer: a cut agent implies the fleet is that agent, and the one thing
-		// this column must never do is understate the fleet.
-		return span{}
-	}
-	used, to := rowsForRow(rows[cursor], subs), cursor+1
-	for to < len(rows) && used+rowsForRow(rows[to], subs) <= room {
-		used += rowsForRow(rows[to], subs)
-		to++
-	}
-	from := cursor
-	for from > 0 && used+rowsForRow(rows[from-1], subs) <= room {
-		used += rowsForRow(rows[from-1], subs)
-		from--
-	}
-	return span{from: from, to: to}
 }
 
 // rowsFor is how many lines an agent draws, without drawing them.
@@ -301,7 +232,7 @@ func (r Roster) At(agents []Agent, subs subsOf, width, height, y int) (rosterSpo
 		return rosterSpot{}, false
 	}
 	rows := sectionRows(agents)
-	w := r.window(agents, subs, width, height)
+	w := r.window(rows, itemHeights(rows, subs), height)
 	line := 0
 	for _, item := range rows[w.from:w.to] {
 		rl := r.rowLines(item, subs, width)

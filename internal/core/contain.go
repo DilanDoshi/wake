@@ -241,7 +241,7 @@ func containedTask(t *TaskUpdate) *TaskUpdate {
 		return nil
 	}
 	c := *t
-	c.ID, c.Dispatch = Contained(c.ID), Contained(c.Dispatch)
+	c.ID, c.Parent, c.Dispatch = Contained(c.ID), Contained(c.Parent), Contained(c.Dispatch)
 	c.Label, c.Type, c.Tool = Contained(c.Label), Contained(c.Type), Contained(c.Tool)
 	c.Kind, c.Phase = TaskKind(Contained(string(c.Kind))), TaskPhase(Contained(string(c.Phase)))
 	c.Status = TaskStatus(Contained(string(c.Status)))

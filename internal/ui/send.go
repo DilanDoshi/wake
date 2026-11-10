@@ -300,12 +300,16 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	// addressed, or else the one session it reached (the manager, by @manager or
 	// as the default addressee), so the view filter can tell it from a broadcast
 	// and from a turn aimed elsewhere. Open mode and @all to several agents are
-	// broadcasts (to == "") - open mode widens the message, not the view.
+	// broadcasts (to == "") - open mode widens the message, not the view. It
+	// always draws in the channel it was typed in; a broadcast says nothing.
 	to := r.thread()
 	if to == "" && len(r.Targets) == 1 {
 		to = r.Targets[0]
 	}
-	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to))
+	a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: text}, to, a.room.channel))
+	if !r.Broadcast { // after withRoom, whose /clear reminder would otherwise replace it
+		a.noteOutside(to, r.Resolved)
+	}
 	return a, tea.Sequence(mirror, a.write(sendFailed, frames...)) // the mirror first, as in sendDM
 }
 
