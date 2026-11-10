@@ -22,9 +22,10 @@ trusted and a lying one is, and a manual is the easiest place to break it.
 make build && ./bin/wake
 ```
 
-You get a daemon, an agent, and an open conversation. Then:
+You get a daemon and the room, with the manager in it. Then:
 
-- Type to talk to the agent whose pane has the keys.
+- **`/new`** starts an agent. Anything you type in the room without an `@name` goes to the manager,
+  which can start agents for you; in an open conversation, you talk to that agent.
 - **`@name`** in the room talks to one agent; **`@all`** talks to everybody.
 - **`⌃C`** parks the agent you are looking at — its process stops, its conversation is kept, and
   `/resume` brings it back.
@@ -38,10 +39,10 @@ detach is about you.**
 
 Named here so you do not go looking:
 
-- **A manager session.** You cannot `@manager`. That is Phase 2's remaining work.
-- **Creating or naming an agent from inside Wake.** No `/new`, no `+` button, no rename. Every
-  session starts from the shell with `wake` or `wake new`, and its label comes from the git branch.
-- **Subagents in the sidebar.** Deferred in favour of shipping the room.
+- **A key or a `+` button that creates an agent.** `/new` creates one, `wake new` does it from the
+  shell, and `⌃F` forks the conversation you are in; `⌃D` opens a conversation rather than creating one.
+- **A queue past the cap.** A spawn past `--max-agents` is refused rather than held until there is
+  room; park an agent with `⌃C` first ([chapter 6](06-commands.md)).
 
 ## A warning worth reading once
 
