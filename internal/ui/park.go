@@ -208,7 +208,7 @@ type parkAll struct {
 // session told `continue` picks its turn up; one on another build may let a turn
 // run and kill what outlasts the grace, which is never parked.
 func WayBack(fleet string, interrupted bool) string {
-	back := "`" + FleetCommand(fleet) + "` reopens the room"
+	back := "`" + rpc.FleetCommand(fleet) + "` reopens the room"
 	if !interrupted {
 		return ". " + back + " and offers back whatever finished in time."
 	}
@@ -232,7 +232,7 @@ type parkAllMsg struct{ err error }
 func (a App) park() (tea.Model, tea.Cmd, bool) {
 	id, ok := a.interruptTarget()
 	if !ok {
-		notice.Report("%s", noParkTarget)
+		notice.Report("%s", a.unseenOr(noParkTarget))
 		return a, nil, true
 	}
 	if a.endedAgent(id) || a.parkedAgent(id) {

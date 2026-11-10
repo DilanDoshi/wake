@@ -83,6 +83,7 @@ import (
 	"github.com/muesli/cancelreader"
 
 	"github.com/DilanDoshi/wake/internal/daemon"
+	"github.com/DilanDoshi/wake/internal/rpc"
 	"github.com/DilanDoshi/wake/internal/ui"
 )
 
@@ -149,11 +150,11 @@ var killSignalGrace = 2 * time.Second
 // emergencyLine is printed to the terminal on the way out. It promises nothing
 // about the fleet, because this path asked the daemon for nothing: the agents
 // are still running, and still parked or not, exactly as they were. It names the
-// fleet (ui.FleetCommand), since a bare `wake` starts a new one.
+// fleet (rpc.FleetCommand), since a bare `wake` starts a new one.
 func emergencyLine(fleet string) string {
 	return fmt.Sprintf("Wake stopped responding and was closed without parking anything. "+
 		"The fleet is untouched - `%s` reopens the room, `%s` says what is there.",
-		ui.FleetCommand(fleet), ui.FleetCommand(fleet, cmdStatus))
+		rpc.FleetCommand(fleet), rpc.FleetCommand(fleet, cmdStatus))
 }
 
 // killTrigger is the decision, and it is a value so the one thing here that can

@@ -100,6 +100,10 @@ type TaskUpdate struct {
 	// so it is what points an operator at the row that is blocked.
 	ID string `json:"id"`
 
+	// Parent is the task id of the subagent that dispatched this one, on its
+	// task_started alone, and "" for a dispatch the agent made itself.
+	Parent string `json:"parent,omitempty"`
+
 	// Dispatch is the parent tool call that started this task, and the join
 	// to everything the subagent says: it equals the parent_tool_use_id on
 	// every frame the subagent forwards, which is core.Subagent.Dispatch.

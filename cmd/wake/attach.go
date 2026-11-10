@@ -49,7 +49,7 @@ const waitingLine = "The daemon is not answering yet - it is either starting up 
 // detachHint is the three commands that reach a fleet with no window open: back
 // in, a look, the end. Each names the fleet, or a bare `wake stop` ends another.
 func detachHint(fleet string) string {
-	return ui.FleetCommand(fleet) + " · " + ui.FleetCommand(fleet, cmdStatus) + " · " + ui.FleetCommand(fleet, cmdStop)
+	return rpc.FleetCommand(fleet) + " · " + rpc.FleetCommand(fleet, cmdStatus) + " · " + rpc.FleetCommand(fleet, cmdStop)
 }
 
 // attach opens a conversation with a new agent.
@@ -401,7 +401,7 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 		// nobody pressing keys, and the default reader is what it always was.
 		opts = append(opts, tea.WithInput(kill.Input()))
 	}
-	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithFleetNamed(kill.fleetNamed).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
+	p := tea.NewProgram(ui.Margined{Model: model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithFleetNamed(kill.fleetNamed).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ())))}, opts...)
 	final, err := p.Run()
 	term.handBack()
 	// Cooked before the leaving line, or each of its newlines returns no carriage.
@@ -440,6 +440,9 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 // daemon drops a rename's old names as it exits, so the socket may no longer
 // say. A report that named none - an older daemon - leaves it to the socket.
 func leavingLine(final tea.Model, socket string) string {
+	if m, ok := final.(ui.Margined); ok {
+		final = m.Model
+	}
 	if app, ok := final.(ui.App); ok {
 		if n, parked, err := app.ParkedFleet(); parked {
 			fleet := app.FleetName()
@@ -474,14 +477,14 @@ func leavingLine(final tea.Model, socket string) string {
 // written. So it reports what is *not* known and names the two verbs that
 // answer it, which is `wake stop`'s own rule: never claim more than you can see.
 //
-// Both name the fleet (ui.FleetCommand): a bare `wake` starts a new one. Both
+// Both name the fleet (rpc.FleetCommand): a bare `wake` starts a new one. Both
 // print the words of what claude had not read: this build's daemon cancels it and
 // nothing on disk keeps it, and an unconfirmed park may still have happened.
 func parkAllLine(n int, fleet string, q ui.QueueAtQuit, err error) string {
 	if err != nil {
 		return fmt.Sprintf("Could not confirm that ⌃Q parked the fleet (%s): %v. "+
 			"`%s` says what is still running; `%s` reopens the room.",
-			agents(n), err, ui.FleetCommand(fleet, cmdStatus), ui.FleetCommand(fleet)) +
+			agents(n), err, rpc.FleetCommand(fleet, cmdStatus), rpc.FleetCommand(fleet)) +
 			queuedLines("Queued when ⌃Q was pressed:", q.Messages)
 	}
 	head := "Still queued when ⌃Q was pressed; the interrupt cancels these:"
@@ -683,7 +686,7 @@ func detachLine(st rpc.Status, err error) string {
 		return fmt.Sprintf("Detached, but could not count what is still running: %v", err)
 	case !st.Running && len(st.Sessions) > 0:
 		return fmt.Sprintf("Detached. The daemon is gone and left %s running with nothing holding them.    %s",
-			agents(len(st.Sessions)), ui.FleetCommand(st.Fleet, cmdStatus))
+			agents(len(st.Sessions)), rpc.FleetCommand(st.Fleet, cmdStatus))
 	case !st.Running:
 		return "Detached. The daemon is no longer running."
 	case runningCount(st) == 0:

@@ -493,9 +493,9 @@ func TestTheWheelUnderAMenuScrollsTheBoxAsDrawn(t *testing.T) {
 	}
 }
 
-// A working line drawn above the room's box makes it shorter than the pane holds
-// it: a draft that fits the held box but not the drawn one still scrolls, three
-// rows a notch, and the transcript stays where it was.
+// A working line drawn above the room's box takes its rows from the box, the one
+// the room holds as well as the one it draws (withRoomWorking): a draft taller than
+// that box scrolls, three rows a notch, and the transcript stays where it was.
 func TestTheWheelScrollsADraftTheWorkingLineLeavesTooTall(t *testing.T) {
 	a := shortRoom(t, 17)
 	a = a.applyStatus(&rpc.Status{Running: true, Sessions: []rpc.SessionStatus{{ID: "s1", Name: "alex", State: rpc.StateWorking}}})
@@ -505,8 +505,11 @@ func TestTheWheelScrollsADraftTheWorkingLineLeavesTooTall(t *testing.T) {
 	draft := tallDraft(12)
 	a = a.withComposerFor("", a.room.Composer().InsertText(draft))
 	x, top, rows := boxIn(t, a, "")
-	if rows >= 12 || rows >= a.room.Composer().ta.Height() {
-		t.Fatalf("want a drawn box shorter than both the draft and the box the pane holds: drawn %d, held %d", rows, a.room.Composer().ta.Height())
+	if rows >= 12 {
+		t.Fatalf("want a drawn box shorter than the draft: drawn %d", rows)
+	}
+	if held := a.room.Composer().ta.Height(); held != rows {
+		t.Errorf("the room holds a %d-row box and draws %d: its stored layout is missing the working line", held, rows)
 	}
 	before, heldRows := a.room.tr.scroll, a.room.Composer().ta.Height()
 	a = wheelAt(a, tea.MouseButtonWheelUp, x, top, 1)

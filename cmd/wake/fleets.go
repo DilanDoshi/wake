@@ -13,7 +13,6 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
-	"github.com/DilanDoshi/wake/internal/ui"
 	"github.com/DilanDoshi/wake/internal/version"
 )
 
@@ -23,7 +22,7 @@ import (
 // asked and a useless one to the person asking it: somebody typing this verb has
 // either just made a fleet or is about to.
 var noFleetsYet = "no named fleets. A bare `wake` starts one and names it, and `wake --fleet <name>` starts one " +
-	"called that; `" + ui.FleetCommand(daemon.LegacyFleet) + "` is the unnamed fleet, which is separate from all of them"
+	"called that; `" + rpc.FleetCommand(daemon.LegacyFleet) + "` is the unnamed fleet, which is separate from all of them"
 
 // fleetFlag takes `--fleet <name>` off the arguments, returning the rest.
 //
@@ -94,7 +93,7 @@ func formatFleets(names []string, builds map[string]string, ours string) string 
 		if build, running := builds[name]; running {
 			fmt.Fprintf(&b, "  running wake %s", daemonBuild(build))
 			if build != ours {
-				fmt.Fprintf(&b, staleFleetFormat, ours, ui.FleetCommand(name))
+				fmt.Fprintf(&b, staleFleetFormat, ours, rpc.FleetCommand(name))
 			}
 		}
 		b.WriteString("\n")
@@ -117,7 +116,7 @@ func openNewFleet(out io.Writer) error {
 	if err != nil {
 		return err
 	}
-	if _, err := fmt.Fprintf(out, newFleetLine, name, ui.FleetCommand(name)); err != nil {
+	if _, err := fmt.Fprintf(out, newFleetLine, name, rpc.FleetCommand(name)); err != nil {
 		return err
 	}
 	return openRoom(socket, out)

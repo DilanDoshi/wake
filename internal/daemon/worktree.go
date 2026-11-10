@@ -71,7 +71,8 @@ func addWorktree(dir, name string) (string, error) {
 	if err := rpc.ValidWorktreeName(name); err != nil {
 		return "", err
 	}
-	root, err := git(dir, "rev-parse", "--show-toplevel")
+	ctx := context.Background()
+	root, err := git(ctx, dir, "rev-parse", "--show-toplevel")
 	if err != nil {
 		return "", fmt.Errorf("a worktree needs a git repository, and %s is not inside one: %w", dir, err)
 	}
@@ -81,12 +82,12 @@ func addWorktree(dir, name string) (string, error) {
 	// Asked rather than inferred from a failure: git's wording for "branch
 	// already exists" is not something to parse across versions or locales.
 	add := []string{"worktree", "add", "--quiet", path}
-	if _, err := git(root, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
+	if _, err := git(ctx, root, "show-ref", "--verify", "--quiet", "refs/heads/"+branch); err == nil {
 		add = append(add, branch)
 	} else {
 		add = append(add, "-b", branch)
 	}
-	if _, err := git(root, add...); err != nil {
+	if _, err := git(ctx, root, add...); err != nil {
 		return "", fmt.Errorf("create the worktree %s: %w", path, err)
 	}
 	return path, nil
@@ -106,12 +107,14 @@ func sessionDir(f rpc.Frame) (string, error) {
 	return addWorktree(dir, f.Worktree)
 }
 
-// git runs one git command in dir and returns its trimmed stdout.
+// git runs one git command in dir, bounded by gitTimeout under ctx, and returns
+// its trimmed stdout. ctx ending ends the call too, which is how a test ends a
+// hung one once its hook is running rather than on a clock (BUG-31).
 //
 // Errors carry git's own stderr: this refuses a spawn, and "exit status 128" is
 // not something an operator can act on.
-func git(dir string, args ...string) (string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
+func git(ctx context.Context, dir string, args ...string) (string, error) {
+	ctx, cancel := context.WithTimeout(ctx, gitTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", append([]string{"-C", dir}, args...)...)
 	var stderr strings.Builder

@@ -8,6 +8,56 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-06 — the wheel over the right sidebar scrolls the roster
+
+The owner's ask ("if mouse over right side bar, that should scroll too", "for in case i have more agents
+then what can curentl be showin the right side bar"), with `wake-orch`'s rulings against `origin/main`
+9fd48573. Before it, the wheel over the sidebar scrolled the focused pane, and an agent below the fold
+could be reached only with ⇧↑↓.
+
+- **A roster that fits takes no wheel.** The old fallback made the same gesture over the same place change
+  meaning as the fleet crossed the column's height, both ways; the wheel elsewhere moves only what is under
+  the pointer. The sidebar is its own rows, `all` and the usage bar's foot; the strip and the notice row
+  under its column keep the focused pane's wheel.
+- **By items, never lines.** An item is an agent with the gap and team header it leads with, so a header
+  never parts from its first member (the teams feature's atomic-header trap) and View, At and Hit walk whole
+  items as they did. One notch is one item, clamped at both ends (`lastTop`), so a flood past the end
+  leaves nothing to unwind.
+- **The wheel holds the window and never moves the selection; a selection the held window does not draw
+  takes no key** until it is drawn again: ⌃C parks nothing, esc interrupts nothing, ↵ and ⌃D/⌃Y/⌃B/⌃F open
+  nothing (no fallback to the first agent), bare `/status` and `/mcp` find no target, the ⇧⇥ hint falls back.
+  mouse.go's rule is that reading is not focusing, and in the room esc on an empty composer interrupts the
+  roster's selection; the board's carry would let a passive wheel re-aim it. One predicate,
+  `rosterPickHidden`, read by `pickedAgent`, `pickedHeader` and `dmTarget`. The other two options the owner
+  was asked about would each land in one place too: a key that first scrolls a hidden selection back into
+  view would be one guard in `App.key` ahead of the keys those three serve, and the board's carry would be
+  its `landing` called from `wheelRoster`. Nothing selected hides nothing (the keys fall back as they did).
+  The pinned `all` is always drawn, and so is the conversation holding the keys, as its pane: ⌃F in it
+  forks it however its row scrolled - but a subagent row under it is a row like any. A refused key says the
+  selection is out of view (`pickOutOfView`). The room's `/` and `@` menus only offer, so they stay on the
+  selection (`cursorAgent`).
+- **Decided on a change, never per frame.** Update's seam (`rosterSettled`) compares the selection before
+  and after each message: a change lets go of the hold from where the window was *drawn*, so a click on a
+  drawn row moves nothing, and stores where it is drawn after, so a re-rank that keeps the cursor on screen
+  moves nothing either. ⌃X lets go of the hold itself the same way (`rosterLetGo`), since a jump onto the
+  selection it left is no change to the seam. While held, it works out whether the selection is drawn only when the fleet (one
+  `agents` map per write: `Fleet.same`), the window or its rows changed, and stores it; `pickedAgent` reads
+  a field. A roster that comes to fit lets go of the hold.
+- **⇧↑↓ move the window the least that shows the cursor**, as the board's arrows do, where the cursor used to
+  be pinned to the window's top row and every step scrolled the list. A re-rank and ⌃X go the same way, from
+  where the window was left, so a selection ranked back into it returns the window there.
+- **The count says which way, on its one row**: `+5 above`, `+3 below`, `+5 above · +2 below`, and
+  `+7 more` where both do not fit the column (never at the sidebar's 23 cells under a hundred agents). The
+  workspaces sidebar keeps `+N more`. The board, the workspaces sidebar and page keys for the roster are
+  out of scope.
+- **Cost.** Nothing per frame: the window is still `rowsFor` arithmetic, drawn once. Each notch and each
+  selection change works one window out. While held, a message that changed the fleet works one out in
+  the seam (about 6µs of a 25-agent Update's profile, plus the copies ranking makes).
+- **Known limits.** An item taller than the column draws as the count alone, as a cursor on one always did.
+  A held window keeps its first item through a re-rank, so the agents under it reorder in place. A window
+  that starts inside a team draws the rest of it without its header, which rides on the team's first
+  agent - as the window that followed the cursor always did, and as the board's sections do.
+
 ## 2026-11-06 — the wheel over a draft taller than its box scrolls the draft, the view only
 
 The owner's ask ("if i scroll while cursor is on query box, it should scroll query"), with `wake-orch`'s
@@ -2894,7 +2944,8 @@ That is what licenses every property in `internal/ui/partial.go`:
   invalidate the memoized lines, and gives a width change nothing extra to re-wrap. The transcript
   is *rendered lines* precisely because re-rendering is expensive (11.3 ms of an 11.5 ms `Append` at
   4,000 events); a per-token writer into it would have been that defect returning through a new door.
-- **It is bounded to the pane (`DM.previewCap`),** and the retained text with it — the tail, because
+- **It is bounded to the pane (`DM.previewCap`),** *(replaced 2026-11-08 by the third amendment below:
+  it keeps the whole message and scrolls with the transcript)* and the retained text with it — the tail, because
   the newest tokens are the ones being read. Its size is the pane's room for a reader
   following the newest line, and `minPreviewRows` (3) for one scrolled back over a full transcript
   (*amended 2026-10-07, below*; it was three rows over any full transcript, growing only into unused
@@ -3168,6 +3219,83 @@ pane taken off screen by `⌃Y` at takeover width, or by `⌃W` on another pane,
 A board tile (`ensureBoardDMs`) is `raw`: no scan, no glamour, the view exactly as before.
 `rpc.Frame.Lost` sits in the padding after `Now`: a Frame is copied by value on every event, and a
 bool of its own grew it a word and cost a fleet's second 8%.
+
+### Third amendment, 2026-11-08 — the answer scrolls with the transcript, as its newest rows
+
+The owner's report (via wake-orch): "scrolling while wake is printing a agent response is not smooth".
+Measured on `main` f4a9b55a, it was not slowness. A notch reached the screen in one 60 fps flush (15 ms,
+real binary), and a frame cost 0.7–1.1 ms. What the reader saw was the *content jumping*. Following a
+long answer, the preview took the pane's room (41 of 48 rows at 200×50). The first notch up dropped it
+to the 3-row floor this ruling's first amendment gave a scrolled-back reader, so the pane swapped the
+answer for the history above it. At the bottom, each notch moved the content by the preview's height, not
+by three. And while the reader was scrolled back the preview kept only cap + slack rows, so the way down
+came back to an answer missing everything they had left.
+
+The owner's ruling: the preview scrolls with the transcript as one continuous document, as Claude Code
+and Codex draw a streaming answer — the newest part of the scrollback. This replaces the first
+amendment's floor and "bounded by the pane":
+
+- **The preview's rows are the window's last rows** (`transcript.tail`, `previewrows.go`), drawn under the
+  transcript's last line after the blank row `blockLines` puts above the block that will land. A notch
+  moves every row by the notch. A follower watches each row push the conversation up, as before. A reader
+  scrolled back reads the answer standing still: the tokens after it, the paragraphs finishing under it
+  and the block landing move nothing (`TestNothingAReaderScrolledIntoTheAnswerReadsMoves`). The way down
+  passes through every row of the answer (`TestTheWayBackDownPassesThroughEveryRowOfTheAnswer`). The
+  preview is not chrome, so no `previewCap`, no floor, and no re-lay when it grows.
+- **It keeps the whole message**: every finished block's rows (rendered once, appended to a `chunked`
+  stack) and every finished line's rows (wrapped once, `settle`) for a pane not reading blocks. That is
+  the most the landed block holds a moment later, so the bound is the message, never the conversation.
+  The open block stays held to `render.MaxChunk` as before, and so does the open line of a pane not
+  reading blocks: a token lays out only that.
+- **Nothing above the open block changes.** `previewRows` holds the finished blocks, their gap, the
+  finished lines and the open rows. Only the open rows are laid out per token, so a reader scrolled back
+  over the finished ones sees nothing move and the work per token stays flat in the answer's length.
+- **The open block is laid out once more as it finishes**, plain to formatted, as it always was. For a
+  reader scrolled back *into* the open block, the rows they read change at that moment: a list with
+  inline markup can come out many rows shorter, and a code fence closing drops its opener row. A block
+  that shrinks under such a reader never makes them a follower that the next token pushes
+  (`DM.heldBack`, only when the window's rows shrank: `transcript.keptBack` holds them a row above the
+  newest). Matching the plain rows to glamour's closely enough to remove this would mean rendering per
+  token, which the ruling above rejects. Two edges are accepted: a held reader whose pane then grows by a
+  row or more is at the newest row and follows, as any reader that close always did; and after an
+  interrupt with nothing landed, the banner over a held reader points at one row.
+- **A subagent's words landing mid-answer leave the answer.** `superseded` used to clear the preview on
+  any landing, a subagent's included, though its own comment said a subagent's block ends none of the
+  agent's. With the whole message in the window that took the answer away under a reader; it now only
+  stops the pane reading the rest for blocks.
+- **A single line longer than `render.MaxChunk` keeps its newest bytes**, so its rows slide under a
+  reader inside it. That is the bound on per-token work. A line that long (4 KB with no newline) is rare
+  outside generated data.
+- **Not drawn in a subagent's view** (the parent's words are not what the reader opened), where it used
+  to take the floor. Back in the conversation it is under the last line again.
+- **A drag over the answer selects and copies it**, as any row of the conversation. Before, the preview
+  was chrome and took nothing.
+
+Interleaved on one machine, branch against `main`:
+
+| `BenchmarkOneBlockStreamed` | main | branch |
+|---|---|---|
+| formatted, 1,024 tokens | 7.3–7.5 ms | 7.7–7.8 ms |
+| plain, 1,024 tokens of one unbroken line | 21.1–21.8 ms | 26.3–26.8 ms |
+| a 30-agent fleet second, one/thirty open | 25.8/28.4 ms | 25.3–25.7/27.9–28.1 ms |
+
+The unbroken line is dearer because its open line is held to `MaxChunk` rather than to a pane's rows.
+
+| per token, following over a full transcript | 1,024 | 4,096 | 16,384 |
+|---|---|---|---|
+| formatted, main | 14.2 µs | 8.7 µs | 7.3 µs |
+| formatted, branch | 10.6 µs | 8.0 µs | 7.3 µs |
+| plain with a line break every 20 tokens, main | 27.9 µs | 26.6 µs | 26.0 µs |
+| plain with a line break every 20 tokens, branch | 7.9 µs | 5.7 µs | 5.2 µs |
+
+The flat columns are the property. A first cut that re-stacked every finished block on each cut was not
+flat: 15.9 µs a token and 1 GB allocated over a 16,384-token answer.
+
+**The room's notch, in the same change.** With any agent working, the room's first notch from the
+bottom, and the last one back to it, moved five rows. `roomFor` adds the working line per draw, but the
+stored room never held it, so the move was measured on a transcript two rows taller than the one on
+screen. The stored room now keeps whether there is a working line (`withRoomWorking`, at the report seam
+and on a channel pick), re-laid only when the line comes or goes.
 
 ---
 
@@ -5630,7 +5758,7 @@ got said "`wake` reopens the room". Since 2026-10-16 a bare `wake` starts a new 
 named fleet's operator somewhere else.
 
 - **The rule.** A line that tells the operator what to type names the fleet by its current name:
-  `wake --fleet <name>` and `wake <verb> --fleet <name>` (`ui.FleetCommand`; the flag is `rpc.FleetFlag`).
+  `wake --fleet <name>` and `wake <verb> --fleet <name>` (`rpc.FleetCommand`; the flag is `rpc.FleetFlag`).
   The unnamed fleet is `wake --fleet default` (`daemon.LegacyFleet`). Only a fleet with no name is reached
   bare: a socket set by hand outside `~/.wake/fleets`, where a bare `wake` under that `$WAKE_SOCKET` opens it.
 - **A `$WAKE_SOCKET` inside `~/.wake/fleets` reads as its fleet**, as the tab title and /wake-name's own
@@ -5653,7 +5781,193 @@ named fleet's operator somewhere else.
   `TestAClientNamesItsFleetByTheNameItHasNow`, the UI's notice, reattach and hand-on tests, and two on the
   real binary after `/wake-name dev`: ⌃Q⌃Q's line (`TestCtrlQAfterAWakeNameNamesTheFleetItReopens`), and ⌃C⌃C
   once another terminal's `wake stop` has dropped the old name's link (`TestCtrlCCtrlCAfterAWakeNameNamesTheFleet`,
-  which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. The daemon's own four sentences are `deferred.md`'s (2026-11-05).
+  which reads `wake --fleet atlas` without the hand-on). Each is mutation-checked. Since 2026-11-07 the daemon's own refusals name the fleet too, through
+  `server.fleetName` (the report's own name): import's and a taken name's (a parked holder's points at
+  `/resume`), held by `internal/daemon/fleetlines_unix_test.go`. The orphaned-parent fork arm, which no daemon
+  reaches, names no command.
+- **A fleet at its cap is never offered a stop** (wake-orch, 2026-11-07). The cap refusal dropped "or `wake stop`
+  ends the fleet" rather than gaining `--fleet`. A spawn past the cap wants room for one more agent, and
+  ending the fleet is irreversible. The room's one-row notice also cut the flagged command, at about 116
+  columns, down to a bare `wake stop`. It names ⌃C, `/resume` and, under a lowered cap, `--max-agents`;
+  `TestTheCapRefusalNeverOffersAStop` holds both doors to no "stop".
+
+## 2026-11-03 — your own send draws in the channel it was typed in (the owner)
+
+Dilan suspected "@<team> message does not message everyone in the team", then "it needs to display in chat
+when i message that". An investigation found delivery whole: the code fans out to every live member (idle,
+working, blocked, silent), and every one of his team sends in ten days reached every member that had a
+transcript. The display gap was real: with team X's channel picked, a send to `@Y` or to an agent outside
+X reached its agents and was never drawn in the window that sent it, because `Room.admits` asks the
+channel's key, which holds only X's members and the manager's seat, and the echo is addressed to Y's.
+Only the roster's unread counts moved, which reads as nobody having got it.
+
+- **The operator's own line carries the channel it was typed in** (`Room.typedIn`, set only by
+  `Room.appendUser`), and `admits` lets it through in that channel before the key's test. The stamp is
+  a table keyed on the line's id beside the lines, as `expanded` is, not a field on `roomLine`: a
+  field put every line over the room's allocation budget at the 20,000-line cap
+  (`TestRoomBeforeMetadataAllocationStaysBoundedAtTheCap`, 6 KiB a line; main sat 6 bytes under it),
+  and only the lines typed in a channel need one. It is pruned as lines leave (`forgotten`, the expand
+  set's own helper made generic) and emptied by the room's `/clear`; a restore's merge never drops a live
+  line, so it has none to prune there. One predicate
+  still: the focus half is unchanged, so a lone `@name` typed later narrows past it, and the line still
+  draws wherever it drew before (all, its addressees' thread).
+- **The replies stay their own thread's** (Dilan's pick of three): a channel is its team's thread, so the
+  other team's answers draw under all and in theirs, not here. A timed notice says so on the send,
+  `@backend is outside the frontend channel: replies show under all` (`noteOutside`), on exactly the
+  condition that hides the replies - the key does not admit the line. So never under all, never for a
+  member, for your own team or for the manager's seat, and never for a broadcast route (wake-orch's
+  ruling: `@all` to a lone outsider is addressed to that one agent, and "@all is outside" reads wrong).
+  It is said after the echo is drawn, so the send that passes another thousand messages leaves the operator
+  reading it rather than the room's `/clear` reminder (Codex).
+- **A room bang keeps its dispatch channel** (`bangResultMsg.Channel`, wake-orch's ruling): its echo lands
+  when the command returns, and is drawn in the channel it was typed in even if the window moved since.
+  Its notice is said at dispatch, and not for a parked or ended agent, which the bang runs for and never
+  reaches: no reply will come, and its not-sent notice says so (code review).
+- **Restore keeps the channel's own rule.** A channel is per window and in memory, and restored lines are
+  re-derived from the transcripts, so they carry no stamp; a window's live lines keep theirs through
+  `Before`, which keeps the live tail as it is held. `roomFilter` stays `{channelKey, focus}`: a key always
+  names one team, so the name and the key never change apart.
+- **Held by** `channelownsend_test.go` (the draw in each channel, the replies, the notice table, the
+  broadcast, the bang's dispatch channel and a parked one, a live stamp through a restore's merge and a
+  resize, a restored send, the notice over the reminder, the stamp's prune, copy and clear, a line that
+  draws nothing) and the pty
+  `TestYourOwnSendStaysInTheChannelItWasTypedIn`, each mutation-checked.
+
+## 2026-11-05 — the frame sits one column in from either edge of the window (the owner)
+
+The owner, on a screenshot of the room: "see how close it is to the side? its the same on the right side
+with the usage bar, can we add a smidge of a gap, very small just so that the text is not pressed right up
+to the edge". `wake-orch`'s GO on the plan; the owner approved one column each side.
+
+- **One column, `ui.SideMargin`**: the smallest gap a terminal can draw. At 100 columns the room wraps at
+  74 instead of 76; the roster keeps its 24.
+- **At the program's boundary, not in the frame.** `ui.Margined` is the model the terminal runs: it takes
+  `2×SideMargin` off a `WindowSizeMsg`'s width, moves a `MouseMsg` one margin left, and draws each row one
+  margin in (Bubble Tea erases a short row to its end, so the right margin needs no blanks). The App,
+  every surface and every hit-test - clicks, roster targets, drags, dividers, the wheel, the board - work
+  in the frame's columns unchanged, so one translation moves them all. The same subtraction in
+  `resized`, `mouse` and `App.View` was measured first: 83 in-process tests read the frame's columns and
+  went red.
+- **A press in a margin is the edge cell's**, clamped rather than dropped: the window's edge stays a
+  target, and a drag past it ends on the edge cell, so no handler sees a column off the frame. The
+  bound is the newest frame width `Margined` was told, not the App's settled one: mid window-drag the
+  old frame is drawn short of a grown window's edge, and a press out there must not land on it.
+- **It holds the App boxed** (`tea.Model`, as `App.Update` returns it), so each message's result is
+  wrapped for 24 bytes. A struct embedding the App re-boxed it: 3.5µs and 18 KB more a message
+  (the reviewer).
+- **Under 10 columns the composer's 8-column floor still reaches the right edge**, as it reached
+  the window's edge before, and one stale repaint after a hand-over that shrank the terminal can do
+  the same until its size arrives. Bubble Tea cuts any row wider than the window, so nothing wraps;
+  cutting every row on every frame for those cases was not worth the cost (Codex).
+- **§8's breakpoints are the window's width** (`Layout.windowWidth`): `Layout.Width` is now the frame's,
+  and read against it a 100-column window lost the roster and a 120-column one its split.
+- **Left out**: a vertical margin (not asked). The landing site's clips show the gap from their next
+  re-recording.
+
+## 2026-11-07 — a login's resume the old login answers is tried again (the owner, via wake-orch)
+
+The owner's go on BUG-64: "ok yea do bug 64 as well". A login's resume could reach a process still on the
+old login, fail, and leave the agent stopped. Either it failed "Not logged in" (2026-10-21), which is no
+stop, or it got the old account's limit again (2026-11-06), which became a new stop under the new account.
+
+- **What is retried.** Only a failure of the turn a login's resume started (`loginTry`, carried from
+  `resumeOnLogin` through `resumeAsk` onto `agent.login`, and dropped at that turn's end), and only one that
+  looks like the old login: an auth failure (`core.NoticeAPIError`), or a usage limit naming the same reset
+  as the stop it answered. A limit naming another reset is the new account's own, so it becomes a stop like
+  any; an overload or an unreachable API is the turn's own too. The reset's resume and the unreachable
+  path's stay one-shot: neither raced a login.
+  - **Two limits naming no reset read as the same**, so such a failure is retried. Every limit message
+    in the field transcripts named one (2026-10-21 to 2026-11-06), and the cost is bounded: three more
+    failed turns over about six minutes.
+  - **A 401 is `core.NoticeAPIError` too**, mid-turn retry frames included, so a dead token after a login's
+    resume is retried, each try another of claude's own five-minute 401 hangs. In a window the UI's
+    auto-park at three (`authRetryParkAttempt`) takes it first, often within that first turn; the parked
+    agent leaves the retries (`limited` skips one parking) and waits for the UI's proof of a working login,
+    which wakes it but writes no `continue`. With no window, at most three tries.
+- **Another turn keeps the retry.** One no login's resume started - the operator's own `continue`, a peer's message - landing
+  while a retry waits runs on the same process. A limit naming the stop's reset from it leaves the stop and
+  its retry as they were (a "Not logged in" never replaced a stop). Without this, the turns that started
+  2026-11-06's stops would have wiped the retry.
+- **The numbers: 15 s, 1 min, 5 min**, each counted from the failure before it (`loginRetries`).
+  - On 2026-11-06, of 31 resumes sent at one login, the six the old login answered failed 3 to 10 s after
+    the `continue`, while others went through from 2 s. So 15 s waits past the longest hold seen.
+  - On 2026-10-21 the config file led the login's credential by about a second, and leads up to 6 s were
+    seen that day; 15 s covers those too.
+  - The minute and five minutes are for a slower process. Five is still under the six minutes after which a
+    hand-sent `continue` worked on 2026-11-06.
+  - After the third retry, a still-failing agent is a limited account or a dead login. A limit's stop is then
+    the one main would have recorded; an auth failure, which left no stop at all before, leaves one that
+    waits for the old reset, if still ahead, or the next login.
+  - The rationale is held by `TestTheLoginRetriesOutwaitTheHoldsSeen`, the order of use by
+    `TestTheOldLoginsLimitArmsARetryAndAFreshLoginRestartsTheCount`, the cap by
+    `TestALoginsRetriesStopAtTheirCap`.
+- **One timer, only while such a stop exists.** A retry is a time on `usageStop` (`retry`, `tries`). The
+  resume goroutine's timer fires at the sooner of a retry and a reset plus its slack (`usageStop.due`). The
+  reset alone keeps the slack, since a limit names its reset only to the minute. A retry counts awake time,
+  as any timer does; a reset is wall-clock, which is why the liveness tick catches one slept through.
+  Nothing is armed while no agent is stopped, and the account file is read only for a limit or an auth
+  failure.
+- **The re-armed stop records the account signed in now, not the old one** (the brief proposed the old one).
+  Under the old account, the next nudge would resume the stop at once and skip the wait the retry exists
+  for. Another agent's limit, a stopped agent's own turn end and any config write all run its login check,
+  and each would read the old account as "another account". Recording the account signed in now means a
+  further login to another account still resumes the stop early, and a fresh login restarts the count.
+- **A turn a peer's message started is still resumed** (the owner's go asked for no change). The limit cut a
+  turn, and that turn is continued, whoever started it. On 2026-11-06 all 31 resumed turns had begun 0 to
+  26 s before the limit, on an orchestrator's relay of a new rule. The narrower option, and the gap that a
+  resume can land on such a turn before its first tool, are in `deferred.md`.
+- **Held by** `usagelimit_e2e_test.go`'s three over real processes (the old limit again, "Not logged in",
+  the cap, each ending in the count of `continue`s the fake received), and `loginretry_test.go` (no retry
+  for the new account's own limit, an overload, an unreachable API, the reset's or the network's resume, or
+  after the resumed turn went through, ended, failed otherwise, was interrupted or cleared; the retry kept
+  through another turn; a reset already past dropped; a due retry resumed as a login's past its
+  reset; the tick at a retry; a fresh login's count; the waits). Twenty-one mutations, each red, among them
+  every survivor of the adversarial review.
+
+---
+
+## 2026-11-07 — a turn the API failed is not done (the owner approved the fix; wake-orch's rulings)
+
+A turn that failed on the API (a dead login, a usage limit, an unreachable API, a rejected request) read as done:
+the roster's `✔`, the DM's `✻ … · done 6:48 PM` and the strip's `N done`, over the pinned notice saying the opposite
+(bugs.md BUG-35, the done-line residual). The failure reaches the UI only as a `core.KindAPIError`, which `observe`
+routes to the notice row before `Fleet.Observe`, and the result behind it reads idle like any turn's, so the
+working→idle edge captured `doneAt` over it.
+
+- **What it shows: nothing.** No `✔` (the row is idle's `○`), no done line, not counted in `N done`. No new glyph,
+  and `⚠` is not reused: it means "working, claude is retrying" (`apiretry.go`). The pin already names the failure
+  for a 401, a usage limit and an unreachable API; a rejected request keeps its timed notice. The alternative, a
+  failure line in the done line's row, is `deferred.md`'s (2026-11-07).
+- **How the UI knows: `Agent.failed`**, set by the agent's own `KindAPIError` of any notice kind (a 401 retry
+  included) and cleared by its own model output (`core.Event.ModelOutput`): the API answering again, the daemon's
+  resume included once it goes through. A local command's reply ran no inference and leaves it, as it leaves the
+  auth mark. A subagent's frames are not the agent's turn either way. A denial ends `success` and an interrupt
+  `error_during_execution`; neither is a `KindAPIError`, so a turn either ends on its own reads done. A parked or
+  ended report and a gap forget it, as they forget `doneAt` (which a tool result or a local command's reply also
+  clears; the bit they do not).
+- **What does not lift it.** A `/clear` ran no inference. A `/compact` did, but emits no model output
+  (`compaction.jsonl`). A turn interrupted before its first block, the daemon's resume included, redid nothing;
+  one interrupted after a block (thinking or a tool call will do) was answered, and lifts both. Each leaves the pin
+  standing too: on the agent's own turns the pin and the bit read the same model output, so such a turn never
+  reads `✔` beside a pin that says the opposite. They part in three places, because the pin is the condition (a
+  login, a quota, the network) and the bit is the agent's own turn:
+  - any model output on the session lifts the pin, a subagent's included, so a subagent's answer can clear it while
+    its parent's failed turn stays not done, as plain idle;
+  - a gap forgets the bit and keeps every pin;
+  - a park and a wake forget the bit and keep a usage-limit or unreachable pin, which a new process does not lift.
+
+  After either of the last two, a turn that redoes nothing (a local command, an early interrupt) reads `✔` beside a
+  standing pin. That corner is `deferred.md`'s (2026-11-07).
+- **One predicate.** `turnDone` reads the bit, so the DM's line and its row (`hasBeat`), `Fleet.done`, the roster
+  and the strip cannot disagree. Read there rather than gated at the capture: a failed turn Wake did not start
+  (`--brief`, no working report) would otherwise leave the turn before it standing as done.
+- **Held by** `internal/ui/turnoutcome_test.go`, through `App.apply` with reports: the three recorded failures and
+  the auth recording re-kinded as a usage limit and a rejected request (no stream recording of a limit exists),
+  each alone and each followed by a healthy turn; a denial and an interrupted turn alone; after the auth failure,
+  `/status`'s reply, a park and wake, and a gap; after the unreachable one, an interrupt before the first block and
+  one after; and a subagent's failure and answer. Each guard is mutation-checked: the gate, the call, the clearing, the
+  subagent gate, the two forgettings, a local command, an interrupt, prose alone clearing it, an error tool
+  result and a quota heartbeat.
 
 ## 2026-11-07 — ⌃Q interrupts every agent, then parks it (the owner, via wake-orch)
 

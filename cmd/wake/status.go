@@ -11,7 +11,6 @@ import (
 
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
-	"github.com/DilanDoshi/wake/internal/ui"
 	"github.com/DilanDoshi/wake/internal/version"
 )
 
@@ -76,7 +75,7 @@ func formatStatus(st rpc.Status, team string) string {
 		// back off the roster it left on disk, and it is the case that roster
 		// exists for: 15-30 process trees with nobody holding a handle.
 		fmt.Fprintf(&b, "No daemon is running, but a previous one left %s behind.\n", agents(len(st.Sessions)))
-		fmt.Fprintf(&b, "Nothing is holding them. Starting a daemon with `%s` reaps what it can identify.\n", ui.FleetCommand(st.Fleet))
+		fmt.Fprintf(&b, "Nothing is holding them. Starting a daemon with `%s` reaps what it can identify.\n", rpc.FleetCommand(st.Fleet))
 
 	default:
 		return "No daemon is running.\n"

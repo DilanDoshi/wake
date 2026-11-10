@@ -18,11 +18,11 @@ import (
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
-// narrowColumns is a terminal below dmTakeoverColumns, where exactly one grid
-// column is drawn. Derived from the breakpoint rather than typed, so a build
-// that moves it re-measures instead of testing a width that no longer means
-// anything.
-const narrowColumns = dmTakeoverColumns - 1
+// narrowColumns is the frame of a window below dmTakeoverColumns, where exactly
+// one grid column is drawn. Derived from the breakpoint rather than typed, so a
+// build that moves it re-measures instead of testing a width that no longer
+// means anything.
+const narrowColumns = dmTakeoverColumns - 2*SideMargin - 1
 
 // asking is one agent's conversation open at this width, with a recorded
 // AskChoice delivered into it - the real order, which is that the pane is open

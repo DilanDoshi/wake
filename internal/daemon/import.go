@@ -76,7 +76,7 @@ func (s *server) importSession(ctx context.Context, c *client, f rpc.Frame) {
 		c.enqueue(errorFrame(f.SessionID, err.Error()))
 		return
 	}
-	name, err := s.names.claim(f.Text)
+	name, err := s.claimName(f.Text)
 	if err != nil {
 		c.enqueue(errorFrame(f.SessionID, err.Error()))
 		return
@@ -168,6 +168,7 @@ func (s *server) importSource(sourceID string) (FoundSession, error) {
 // There is still no `wake resume` shell verb, which is why it names the in-TUI
 // command and says where it is typed.
 func (s *server) heldRefusal(sourceID string) string {
+	fleet := s.fleetName()
 	for _, p := range s.fleet().Sessions {
 		if p.ID != sourceID {
 			continue
@@ -181,10 +182,11 @@ func (s *server) heldRefusal(sourceID string) string {
 		}
 		return fmt.Sprintf("session %s is parked in this fleet rather than gone, so there is nothing to import: "+
 			"bring it back with `/resume %s` in the room. `wake attach` refuses a parked session, and "+
-			"`wake fork %s` would make a second one and leave this one parked", sourceID, who, short(sourceID))
+			"`%s` would make a second one and leave this one parked", sourceID, who, rpc.FleetCommand(fleet, "fork", short(sourceID)))
 	}
 	return fmt.Sprintf("session %s is already in this fleet, so there is nothing to import: "+
-		"open it with `wake attach %s`, or branch it with `wake fork %s`", sourceID, short(sourceID), short(sourceID))
+		"open it with `%s`, or branch it with `%s`", sourceID,
+		rpc.FleetCommand(fleet, "attach", short(sourceID)), rpc.FleetCommand(fleet, "fork", short(sourceID)))
 }
 
 // explainHeldSource replaces resumeSafe's sentence when the process it saw is
@@ -217,7 +219,8 @@ func (s *server) explainHeldSource(sourceID string, why error) error {
 		}
 		return fmt.Errorf("session %s has already been imported, as @%s, and that agent carries the source id in "+
 			"its own command line for as long as it runs - so Wake can no longer tell whether anything else is "+
-			"holding it. Open the import with `wake attach %s`, or stop it and import again", sourceID, who, who)
+			"holding it. Open the import with `%s`, or stop it and import again", sourceID, who,
+			rpc.FleetCommand(s.fleetName(), "attach", who))
 	}
 	return why
 }

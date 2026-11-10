@@ -6,8 +6,6 @@ package ui
 // that was away when it happened says so on its next report.
 
 import (
-	"strings"
-
 	tea "github.com/charmbracelet/bubbletea"
 
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -28,18 +26,6 @@ const (
 	// fleetRenameFailed is a write that never reached the daemon.
 	fleetRenameFailed = "asking to rename the fleet"
 )
-
-// FleetCommand is a `wake` command line that reaches the fleet a report names:
-// `--fleet <name>` after the words, since a bare `wake` starts a new fleet and a
-// bare verb reaches the unnamed one. A fleet with no name - a socket set by
-// hand, which a bare `wake` under that $WAKE_SOCKET opens - gets none.
-func FleetCommand(fleet string, words ...string) string {
-	line := strings.Join(append([]string{"wake"}, words...), " ")
-	if fleet == "" {
-		return line
-	}
-	return line + " " + rpc.FleetFlag + " " + fleet
-}
 
 // FleetName is what the last report called this fleet, for the line cmd/wake
 // prints once the program has ended.
@@ -72,13 +58,14 @@ func (a App) renameFleet(arg string) (App, tea.Cmd) {
 }
 
 // withFleetName takes a report's fleet name, saying so when it names another
-// fleet than the last one did.
+// fleet than the last one did. A report naming none keeps a known name: a named
+// fleet never becomes a hand-set one, so the empty name is never news (BUG-66).
 func (a App) withFleetName(st *rpc.Status) App {
-	if st == nil {
+	if st == nil || st.Fleet == "" && a.daemon.fleet != "" {
 		return a
 	}
 	if was := a.daemon.fleet; was != "" && st.Fleet != "" && st.Fleet != was {
-		notice.Report(fleetRenamed, was, st.Fleet, FleetCommand(st.Fleet))
+		notice.Report(fleetRenamed, was, st.Fleet, rpc.FleetCommand(st.Fleet))
 	}
 	if st.Fleet != a.daemon.fleet && a.fleetNamed != nil {
 		a.fleetNamed(st.Fleet)

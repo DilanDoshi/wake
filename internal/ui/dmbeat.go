@@ -66,7 +66,7 @@ func (d DM) heartbeat() string {
 // the waiting line and the done line are told apart only by whether a loop is
 // live, never drawn at once.
 func (d DM) showsLoopWait() bool {
-	return d.Agent.State == rpc.StateIdle && d.Agent.loop.Active && d.partial.view == "" && !d.subRunning
+	return d.Agent.State == rpc.StateIdle && d.Agent.loop.Active && !d.partial.shown() && !d.subRunning
 }
 
 // showsDone is whether the idle agent has a finished turn to summarise. Gated to
@@ -82,15 +82,16 @@ func (d DM) showsLoopWait() bool {
 // records) keeps the line hidden until the agent's next turn or a park - a stuck
 // row was only a phantom sidebar entry before and now costs the done line too.
 func (d DM) showsDone() bool {
-	return turnDone(d.Agent, d.subRunning) && d.partial.view == ""
+	return turnDone(d.Agent, d.subRunning) && !d.partial.shown()
 }
 
 // turnDone is whether an agent has finished a turn this client watched, with
 // nothing of it still running - the DM's done line, and the roster's ✔ (see
 // Fleet.done). One predicate so the two surfaces cannot disagree. A live loop
-// is not done: it is waiting for its next wakeup (showsLoopWait).
+// is not done: it is waiting for its next wakeup (showsLoopWait). Nor is a turn
+// the API failed: it ended, but nothing was done (withTurnOutcome).
 func turnDone(a Agent, subRunning bool) bool {
-	return a.State == rpc.StateIdle && !a.doneAt.IsZero() && !a.loop.Active && !subRunning
+	return a.State == rpc.StateIdle && !a.doneAt.IsZero() && !a.failed && !a.loop.Active && !subRunning
 }
 
 // hasBeat is whether the pane draws the line above the composer at all - the one
@@ -100,10 +101,11 @@ func (d DM) hasBeat() bool {
 	return !d.compactingSince.IsZero() || d.Agent.State == rpc.StateWorking || d.showsLoopWait() || d.showsDone()
 }
 
-// beatBarRows is aboveComposerExtra without the preview's own rows: the
-// working/done line with its gap, the composer's gap, and the status bar. Split
-// out so previewCap can size the pool the preview competes with the transcript
-// for without counting the preview itself.
+// beatBarRows is the rows above the composer that are neither transcript nor the
+// board: the working/done line with its gap, the composer's gap, and the status
+// bar. Counts, not renders, because this runs on every View: the beat as a
+// predicate, the bar from its cache. The composerGap is keyed on the raw menu
+// field so this and View never disagree - a row out scrolls the alt screen.
 func (d DM) beatBarRows() int {
 	n := 0
 	if d.hasBeat() {
