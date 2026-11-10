@@ -298,3 +298,41 @@ func TestAFinishedInnerLeavesItsParentAndSiblingInPlace(t *testing.T) {
 		t.Errorf("drawn as %q, want %q", got, want)
 	}
 }
+
+// A nested tree far down a sidebar the window has to scroll to: each sub row
+// drawn there is indented by its depth, and a click on it lands on its own
+// dispatch (rosterscroll.go measures and walks the same rows).
+func TestANestedTreeOnAScrolledSidebarDrawsAndClicksAsTheTree(t *testing.T) {
+	agents := fleetOf(30)
+	f := NewFleet()
+	for _, ev := range crossStarted() {
+		f, _ = f.Observe(ev, agents[20].ID)
+	}
+	const height = 8
+	r := Roster{Selected: agents[20].ID, SelectedTask: "toolu_ac"}
+	lines := strings.Split(stripANSI(r.View(agents, f.RunningTasks, rosterWidth, height)), "\n")
+
+	want := map[string]string{"general-purpose": "", "Explore": "toolu_ac"}
+	gp, seen := -1, map[string]bool{}
+	for y, line := range lines {
+		for name := range want {
+			if !strings.Contains(line, subGlyph+" "+name) {
+				continue
+			}
+			spot, ok := r.At(agents, f.RunningTasks, rosterWidth, height, y)
+			if !ok || spot.agent.ID != agents[20].ID {
+				t.Errorf("row %d draws %q and a click there lands on %+v", y, line, spot)
+			}
+			if name == "Explore" && (spot.dispatch != want[name] || subColumn(line) != gp+subStep) {
+				t.Errorf("the child at row %d: dispatch %q at column %d, want %s at %d:\n%s", y, spot.dispatch, subColumn(line), want[name], gp+subStep, strings.Join(lines, "\n"))
+			}
+			if name == "general-purpose" && gp < 0 {
+				gp = subColumn(line)
+			}
+			seen[name] = true
+		}
+	}
+	if !seen["general-purpose"] || !seen["Explore"] {
+		t.Fatalf("the window did not draw the cursor's tree:\n%s", strings.Join(lines, "\n"))
+	}
+}
