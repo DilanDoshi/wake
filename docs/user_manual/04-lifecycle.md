@@ -55,8 +55,12 @@ cannot be told apart from a real one afterwards. Interrupt with `⎋` first, the
 The offer is an offer, not an automatic restore. Waking N sessions the instant Wake starts would
 put N process launches in front of everything else it needs to do.
 
-**Anything still mid-turn when you press `⌃Q` gets a grace period to finish.** If it does not finish
-in time it is killed rather than parked, and it will not be in the offer.
+**Anything still mid-turn when you press `⌃Q` is interrupted, as `⎋` would, and parked.** The turn
+ends at once and the agent is in the offer; after `/resume`, tell it `continue` and it picks the turn
+up. An agent waiting on a permission question has the question withdrawn, not denied. A message still
+queued behind a turn is cancelled, and nothing can bring it back afterwards, so the line Wake leaves in
+your terminal prints its words under the agent it was waiting at. A fleet whose daemon is still the
+build before this one lets turns run to the end of a grace period instead, and the line says so.
 
 ## Detaching
 
