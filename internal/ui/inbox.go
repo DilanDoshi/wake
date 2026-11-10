@@ -60,8 +60,20 @@ package ui
 // in the transcript App.stream's notice describes - and that notice discards
 // this window's permission-mode beliefs, which a lost token is no reason to do.
 // dropped therefore counts frames that were the record and nothing else.
+//
+// # A token nothing on screen shows rings nothing
+//
+// Bubble Tea draws a whole View after every message, and under steady arrival the
+// loop drains faster than a fleet talks, so a batch is about one frame: thirty
+// agents' tokens were a thousand Views a second, nearly all of them the same frame
+// (BUG-67). So the window says which sessions' tokens it shows (show,
+// App.tokensShown), and a token for any other session folds as above without
+// ringing the doorbell. It waits in its one slot and is handed over, in order, with
+// the next frame that does ring. Nothing is dropped and no timer is involved: the
+// tokens that change the screen and every other frame wake the loop as before.
 
 import (
+	"slices"
 	"sync"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -153,6 +165,13 @@ type inbox struct {
 	// message start, where a pane reads afresh.
 	pending map[string]struct{}
 
+	// shown is the sessions whose tokens change something on screen, as the
+	// window last said (show); until it has said, every frame rings. A token for
+	// any other session folds as ever but rings nothing: it waits in its one slot
+	// and rides the next frame that does (BUG-67).
+	shown []string
+	said  bool
+
 	dropped int
 	err     error
 	ended   bool
@@ -181,8 +200,10 @@ func (b *inbox) pump(s Stream) {
 // partial, which folds and never evicts. See the header.
 func (b *inbox) add(f rpc.Frame) {
 	b.mu.Lock()
+	ring := true
 	if partialFrame(f) {
 		b.addPartial(f)
+		ring = !b.said || slices.Contains(b.shown, f.SessionID)
 	} else {
 		// This session's preview is closed by anything else it says: the block
 		// that supersedes one arrives between two turns' tokens.
@@ -196,7 +217,9 @@ func (b *inbox) add(f rpc.Frame) {
 		b.put(f)
 	}
 	b.mu.Unlock()
-	b.signal()
+	if ring {
+		b.signal()
+	}
 }
 
 // partialFrame reports whether a frame is tokens of a block being written
@@ -263,6 +286,21 @@ func (b *inbox) evictOldest() {
 func (b *inbox) unfold(at int, sessionID string) {
 	if i, ok := b.folds[sessionID]; ok && i == at {
 		delete(b.folds, sessionID)
+	}
+}
+
+// show records the sessions whose tokens change something on screen
+// (App.tokensShown). ids is the caller's to give away: it is held, never written.
+// A change rings when frames wait, so a session that came on screen is handed the
+// tokens folded for it now rather than with the next frame.
+func (b *inbox) show(ids []string) {
+	b.mu.Lock()
+	changed := !b.said || !slices.Equal(b.shown, ids)
+	b.shown, b.said = ids, true
+	waiting := b.n > 0
+	b.mu.Unlock()
+	if changed && waiting {
+		b.signal()
 	}
 }
 

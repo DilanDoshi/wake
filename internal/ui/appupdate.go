@@ -41,7 +41,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, upgrade := next.dueUpdateCheck(msg)
 	next, title := next.dueTitle()
 	next = next.helpLaidOut()
-	next = next.rosterSettled(a)
+	next = next.rosterSettled(a).showTokens()
 	if ask == nil && roomAsk == nil && blink == nil && linger == nil && upgrade == nil && title == nil {
 		return next, cmd
 	}

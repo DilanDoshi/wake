@@ -371,6 +371,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   through one 80ms settle (`geometry.go`).
 - **A streamed preview never costs the record a slot**: partials fold into one slot and never evict,
   and a dropped partial is not a gap (`inbox.go`, daemon `client.go`'s `partialCeiling`).
+- **A token nothing on screen shows wakes nothing** (BUG-67): Update's seam tells the inbox
+  `App.tokensShown` (drawn conversations, a tiled board's tiles, a standing retry); any other session's
+  token folds into its one slot without ringing and rides the next frame that does, in order, and
+  `apply` answers it with `unsynced` alone. Nothing is dropped and nothing waits on a timer
+  (`inbox.go`, `partial.go`).
 - **A conversation keeps its newest `dmRetentionEvents` (3,000)** — the re-wrap budget — and reclaims
   the oldest a chunk at a time, only before a non-tool event, under one fixed line (`dmretention.go`).
 - **No tab reaches the terminal**: `ansi` measures one as no cell and a terminal draws up to eight

@@ -8,6 +8,7 @@ package ui
 // over a pure function rather than a golden frame.
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -358,26 +359,29 @@ func (a App) cardOf(id string) (Card, bool) {
 // Settling, not committed: mid-drag View draws the old layout clipped, so the
 // columns that stay on screen are the ones the settle will commit (drawnRegions).
 func (a App) drawnConversations() func(string) bool {
+	ids := a.drawnIDs()
+	return func(agentID string) bool { return agentID != "" && slices.Contains(ids, agentID) }
+}
+
+// drawnIDs is every conversation a pane with a width draws: the list
+// drawnConversations answers from, and the start of App.tokensShown.
+func (a App) drawnIDs() []string {
 	r := a.drawnRegions()
-	return func(agentID string) bool {
-		if agentID == "" {
-			return false
+	var ids []string
+	for i, c := range a.grid.Cols {
+		if i >= len(r.Cols) || r.Cols[i] <= 0 {
+			continue
 		}
-		for i, c := range a.grid.Cols {
-			if i >= len(r.Cols) || r.Cols[i] <= 0 {
-				continue
-			}
-			if c.Top == agentID {
-				return true
-			}
-			if c.Bottom == agentID {
-				if _, bottom := a.rowsOf(i); bottom > 0 {
-					return true
-				}
+		if c.Top != "" {
+			ids = append(ids, c.Top)
+		}
+		if c.Bottom != "" {
+			if _, bottom := a.rowsOf(i); bottom > 0 {
+				ids = append(ids, c.Bottom)
 			}
 		}
-		return false
 	}
+	return ids
 }
 
 func (a App) roomPane(width, height int) string {

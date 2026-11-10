@@ -76,6 +76,7 @@ package ui
 // never saw open.
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/x/ansi"
@@ -116,8 +117,39 @@ import (
 // let a reopened pane splice new tokens onto old ones. And a token refused here
 // is a token the pane lost, so observe unsyncs it: whichever way it went off
 // screen, it will not read the rest of that block (partialchunks.go).
+// tokensShown widens this to everything a token can reach, and is what the inbox
+// wakes the loop for.
 func (a App) wants(sessionID string, ev core.Event) bool {
 	return ev.Kind != core.KindPartialText || a.drawnConversations()(sessionID)
+}
+
+// tokensShown is every session whose next token changes something on screen:
+// a drawn conversation (wants), a tile while the board is tiled (foldBoard), and a
+// standing retry, which a token clears (requestOver). Anywhere else a token only
+// unsyncs a pane nobody sees, so the inbox lets it wait for the next frame that
+// wakes the loop rather than drawing a frame for it (BUG-67). Sorted, and a new
+// slice each call: the inbox holds it.
+func (a App) tokensShown() []string {
+	ids := a.drawnIDs()
+	if a.board.Up && a.board.Tiled {
+		for id := range a.boardDMs {
+			ids = append(ids, id)
+		}
+	}
+	for id := range a.retrying {
+		ids = append(ids, id)
+	}
+	slices.Sort(ids)
+	return slices.Compact(ids)
+}
+
+// showTokens tells the inbox what tokensShown is now. Update's seam, so every
+// message that moves a pane, the board or a retry is followed by it.
+func (a App) showTokens() App {
+	if a.in != nil {
+		a.in.show(a.tokensShown())
+	}
+	return a
 }
 
 const (

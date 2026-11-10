@@ -16,6 +16,7 @@ import (
 	"errors"
 	"io"
 	"net"
+	"slices"
 	"time"
 
 	"github.com/charmbracelet/bubbles/textarea"
@@ -558,6 +559,12 @@ func (a App) apply(f rpc.Frame) App {
 	case rpc.FrameEvent:
 		if f.Event == nil {
 			return a
+		}
+		if partialFrame(f) && !slices.Contains(a.tokensShown(), f.SessionID) {
+			// A token nothing on screen draws only costs its pane the block it was
+			// following; observe would copy the whole App a dozen times to say so.
+			// Whatever else a token must do belongs in tokensShown (BUG-67).
+			return a.unsynced(f.SessionID)
 		}
 		return a.observe(f.SessionID, *f.Event)
 

@@ -6177,3 +6177,15 @@ nothing reads back, so the `⌃Q` window prints the words of what it had pinned 
   write the interrupt to; a turn that outlasts the grace is still killed and not booked, as before this
   change. *Closes with:* `⌃C` interrupting a working agent first too, or a kill short of SIGKILL that claude
   ends as an interrupt.
+
+## FROM `fix/draw-loop-idle-under-a-streaming-fleet`, 2026-11-10
+
+A token for a session nothing on screen shows no longer wakes the draw loop (BUG-67): it waits in its one
+inbox slot for the next frame that does.
+
+- **Four error notices wait for the next message.** A clipboard write, a title write, a `/friends` save and a
+  Kitty send report their failure from a command goroutine that returns no message (`clipboard.go`, `title.go`,
+  `friendsmenu.go`, `kittyplace.go`), so the notice row draws it at the next View. A streaming fleet used to
+  draw one within a millisecond; now it is the next heartbeat (every 50 ms while any agent works), the cursor's
+  blink or the next frame, as an idle fleet always did. *Closes with:* each failure returning a message, as
+  `kittyplace.go`'s success already does.
