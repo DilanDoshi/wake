@@ -60,3 +60,33 @@ func TestAChannelPickedInTheRosterFiltersTheRoom(t *testing.T) {
 	s.await("group chat ─╮")
 	s.await("alphaword")
 }
+
+// Your own send to a team outside the picked channel stays in the window that
+// sent it, with a notice that its replies are under all - where they are.
+func TestYourOwnSendStaysInTheChannelItWasTypedIn(t *testing.T) {
+	withScriptedAgent(t, "")
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+
+	s := startWakeInAConversation(t, 200, 40)
+	teamedFleet(t, s)
+	s.settle()
+
+	s.click(s.cols-3, s.rowOf("─ frontend ─"))
+	s.await("frontend ─╮")
+	s.send("@backend crossword\r")
+	s.await("@backend is outside the frontend channel: replies show under all")
+	s.await("@backend crossword")
+
+	// Both backend members have answered once all shows both replies, so the
+	// frontend channel drawing neither is the channel's choice, not a race.
+	s.click(s.cols-3, s.rowOf("─ all ─"))
+	s.await("group chat ─╮")
+	s.await("@backend crossword")
+	s.awaitCount("agent heard: crossword", 2)
+
+	s.click(s.cols-3, s.rowOf("─ frontend ─"))
+	s.await("frontend ─╮")
+	s.await("@backend crossword")
+	s.awaitCount("agent heard: crossword", 0)
+	t.Logf("SCREENSHOT the frontend channel after @backend:\n%s", s.dump())
+}
