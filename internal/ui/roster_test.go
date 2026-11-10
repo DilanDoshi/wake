@@ -135,7 +135,7 @@ func TestASidebarTallerThanTheFleetIsPaddedAndOneShorterIsCut(t *testing.T) {
 	out := Roster{}.View(working, nil, rosterWidth, 7)
 	measureColumn(t, out, rosterWidth, 7)
 	flat := stripANSI(out)
-	if !strings.Contains(flat, "+3 more") {
+	if !strings.Contains(flat, "+3 below") {
 		t.Errorf("a 7-row column over 6 two-row agents does not say how many it left out:\n%s", out)
 	}
 	// Never a tool call whose agent is not above it. This used to be a property

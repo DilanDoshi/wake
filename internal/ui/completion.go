@@ -502,7 +502,7 @@ func (a App) completionAgent() Agent {
 	if agent, ok := a.addressedAgent(); ok {
 		return agent
 	}
-	agent, _ := a.dmTarget()
+	agent, _ := a.cursorAgent() // a menu only offers, so the wheel's hold does not move it
 	return agent
 }
 

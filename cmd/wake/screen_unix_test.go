@@ -12,6 +12,7 @@ package main
 
 import (
 	"bufio"
+	"cmp"
 	"fmt"
 	"io"
 	"os"
@@ -129,9 +130,10 @@ func startWake(t *testing.T, cols, rows int, args ...string) *screen {
 func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *screen {
 	t.Helper()
 
+	// A scratch socket, or none under a scratch HOME, where a bare `wake` makes its fleet.
 	socket := os.Getenv("WAKE_SOCKET")
-	if socket == "" || !strings.HasPrefix(socket, os.TempDir()) {
-		t.Fatalf("WAKE_SOCKET must be a scratch path, got %q - the default is the owner's real fleet", socket)
+	if scratch := cmp.Or(socket, os.Getenv("HOME")); !strings.HasPrefix(scratch, os.TempDir()) {
+		t.Fatalf("WAKE_SOCKET must be a scratch path, or empty under a scratch HOME; got %q - the default is the owner's real fleet", socket)
 	}
 
 	bin := wakeBinary(t)
@@ -144,8 +146,7 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 	// machine's own ~/.config. termsetup.ConfigHome checks this before ever
 	// falling back to $HOME, so this alone is enough - $HOME itself is left
 	// real, which is what discover.go's ProjectsDir and fleet.go's own
-	// ~/.wake fallback (unreachable here, since WAKE_SOCKET is always set)
-	// already assume.
+	// ~/.wake fallback (reached here only under a scratch HOME) already assume.
 	//
 	// withoutTerminalDetectionEnv strips every variable internal/termsetup.Detect
 	// or DetectMultiplexer reads, rather than overriding each with an empty

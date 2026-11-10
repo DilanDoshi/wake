@@ -101,8 +101,8 @@ func TestATileNeverOvershootsItsCellHeightWhenTheTranscriptWraps(t *testing.T) {
 // cell shows as many rows of the conversation as its own body can draw - the
 // board's revised guardrail 2, bounded to the cell body and with no scrollback.
 // The tile's preview and the inbox fold keep the three-row floor; the tile shows
-// the whole transcript tail. (A conversation's preview is the pane's room for a
-// reader following, DM.previewCap - the tile never asks it.)
+// the whole transcript tail. (A conversation's preview is the window's last rows,
+// transcript.tail - the tile never draws it that way.)
 func TestABigTileFillsWithTranscriptBeyondThePreviewCap(t *testing.T) {
 	a := boardApp(t)
 	a.board.Tiled = true
