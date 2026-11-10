@@ -5986,13 +5986,9 @@ Left out of the channels build on purpose; each is its own small change if someb
 
 ## FROM `fix/crashed-fleet-reaches-park-book`, 2026-10-21
 
-Two calls BUG-53's fix left to the owner; both are true of the rulings it kept, not defects it added.
+One call BUG-53's fix left to the owner, true of the rulings it kept rather than a defect it added. (The
+other, a busy agent lost when `⌃Q`'s grace ended, closed 2026-11-07: `⌃Q` interrupts as a signal does.)
 
-- **A busy agent is lost when `⌃Q`'s grace ends.** `⌃Q` lets a turn in flight run for `quitGrace` and refuses
-  to book a session it then had to kill (what `--resume` loads from a transcript a SIGKILL cut mid-turn is
-  unrecorded). *Closed for a signal 2026-10-22:* a SIGTERM interrupts busy agents first, as Esc does, so they
-  end at once and park. `⌃Q` was left letting turns run because the operator chose that moment. *Closes
-  with:* the same interrupt for `⌃Q`, if the owner wants a quit that never waits.
 - **`wake stop` with no daemon leaves a crashed fleet behind.** It reports that no daemon is running and
   clears nothing, so the next `wake` hands the fleet to the park book. *Closes with:* `wake stop` removing
   the roster and park-ready file itself (a `cmd/wake` write to files the daemon owns), or saying so.
@@ -6161,3 +6157,23 @@ A turn the API failed no longer reads as done (decisions.md, 2026-11-07). Left o
 - **Only the API's failure counts.** A turn claude ends on its own error that is not the API's (a spend ceiling
   from `--max-budget-usd`, an `error_during_execution` that no interrupt caused) still reads done: nothing in the UI
   decodes those as a failed turn. *Closes with:* a recording of each and a ruling on whether it is one.
+
+## FROM `fix/quit-interrupts-and-parks-busy-agents`, 2026-11-07
+
+`⌃Q` now interrupts every agent on the way out, cancelling what claude has queued behind each turn
+(decisions.md, 2026-11-07). A cancelled message is kept only in claude's `queue-operation` records, which
+nothing reads back, so the `⌃Q` window prints the words of what it had pinned ⧗ as it closes.
+
+- **Another window's queued messages are dropped without a word.** The list is the pressing window's own
+  pins (`App.queued` is per window); a second window on the same fleet sees only the daemon end, and so does
+  every window under a signal (the 2026-10-22 ruling dropped them first). *Closes with:* the daemon naming
+  what each interrupt's receipt lists in `cancelled`, to every client before it closes them - a frame
+  ahead of `closeClients`, and a client that prints it on the way out.
+- **A message taken up in the last moment before the interrupt is listed as dropped too.** The list is
+  the pins at the press; one claude reads at a tool boundary between the press and the interrupt is in the
+  transcript and also printed. Printed twice is the safe side of that race.
+- **An agent `⌃C` parked mid-turn is not interrupted by a `⌃Q` that follows.** `⌃C` closes stdin and lets
+  the turn run (`apply.go`'s park sets `stopped`), so `inputOpen` is false and there is no stdin left to
+  write the interrupt to; a turn that outlasts the grace is still killed and not booked, as before this
+  change. *Closes with:* `⌃C` interrupting a working agent first too, or a kill short of SIGKILL that claude
+  ends as an interrupt.

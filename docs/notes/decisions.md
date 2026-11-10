@@ -5310,7 +5310,7 @@ came out of it.
   (`interrupt-idle.jsonl`), so nothing judges which agents are busy. **It cancels what is queued** behind
   the turn (`cancel_queued`, `interrupt-cancel-queued.jsonl`), unlike Esc: a message typed ahead would
   otherwise run as the next turn after stdin closed and be killed at the grace's end, so such a message is
-  dropped at a signalled shutdown. `⌃Q` keeps letting a turn run. `writeFileAtomically` now syncs the file
+  dropped at a signalled shutdown. `⌃Q` keeps letting a turn run (reversed 2026-11-07, below). `writeFileAtomically` now syncs the file
   before its rename and the directory after, and `removeFile` the directory after a removal, so a force
   restart keeps the last change to the state files; about 4 ms a file on this machine, on writes made
   when a session changes, held by `TestTheAtomicWriteSyncsTheFileBeforeTheRenameAndTheDirectoryAfter`.
@@ -5968,3 +5968,49 @@ working→idle edge captured `doneAt` over it.
   one after; and a subagent's failure and answer. Each guard is mutation-checked: the gate, the call, the clearing, the
   subagent gate, the two forgettings, a local command, an interrupt, prose alone clearing it, an error tool
   result and a quota heartbeat.
+
+## 2026-11-07 — ⌃Q interrupts every agent, then parks it (the owner, via wake-orch)
+
+The owner, on the deferred call BUG-53's fix left: "yes for this. it should interrupt but i think on resume
+claude can continue an interrupted turn". Until now `⌃Q` let a turn run for `quitGrace` and killed what was
+still working at its end. A killed session is never booked, so `/resume all` never brought it back and it
+lost what a park keeps (name, team, colour, effort); at best `/resume` found its transcript on disk.
+
+- **The rule.** `⌃Q` stops the fleet the way a signal has since 2026-10-22: every agent whose stdin is open
+  is sent the interrupt Esc sends (`InterruptAll`), then its stdin is closed, so a turn in flight ends at once
+  as an interrupted turn and the session parks inside the grace. The kill at the grace's end is left for a
+  process that does not end after the interrupt. `wake stop` still lets a turn finish; it parks nothing.
+  `server.shutdown` passes `parking` to `stopForShutdown`, one condition for both parking quits.
+- **A turn picks up when told to, never by itself.** Checked live (haiku, claude 2.1.319, Wake's own argv):
+  a turn interrupted mid-`sleep` and its stdin closed exited 0.83 s later; `--resume` and a plain `continue`
+  re-ran the interrupted step and finished the task. On disk the interrupted turn ends in a rejected tool
+  result and `[Request interrupted by user for tool use]`, and the resume writes one synthetic assistant record
+  (`No response requested.`) ahead of the next prompt (BUG-65). Wake sends no `continue` on wake: the
+  operator chose to quit, and `/resume all` would start twenty turns at once.
+  `docs/superpowers/notes/2026-11-07-interrupted-turn-resume-findings.md`.
+- **A behaviour change for a blocked agent, approved by wake-orch.** `⌃Q` used to close stdin under an
+  outstanding ask, which claude records as a denial (`permission-rule`), the state `⌃C` refuses to cause.
+  The interrupt now reaches it first and withdraws the ask as Esc does (`interrupt-pending-basic.jsonl`),
+  so the session parks without being told no and asks again when continued. `⌃C`'s refusal is unchanged.
+  Checked live with the stdin close in the same burst (haiku, 2.1.319): `control_cancel_request`, the
+  rejected tool result, `[Request interrupted by user for tool use]`, `aborted_tools`, and no file written.
+- **What is queued is cancelled, and its words are printed.** As under a signal, the interrupt cancels what
+  is queued behind the turn: left queued, it would run as a turn of its own after stdin closed, the grace
+  would kill it, and the agent would be lost. A cancelled message is in no user record on disk, only in
+  claude's `queue-operation` records, which nothing reads back, so no `↑` and no reopened pane brings it
+  back (checked live, same probe). So the `⌃Q` notice counts what is pinned ⧗, and the exit line, printed
+  after the alt screen is gone, lists each message's words under the agents it was waiting at - once per send,
+  a send's copies grouped by their send bytes and words (`internal/ui/parkdropped.go`). A take-back or
+  send-now still on its way is listed too: what claude has given back so far and the send-now's own words
+  live outside the pin (`recall.go`). The residuals are `deferred.md`'s (2026-11-07).
+- **The words** no longer hedge on the grace: "Parking N agents (a turn in flight is interrupted).
+  `wake --fleet <name>` reopens the room; /resume and `continue` pick them up." (`ui.WayBack`, one sentence
+  for the notice and the exit line.) **Unless the daemon runs another build**: the first `⌃Q` after an
+  upgrade reaches the old daemon, as the stale-daemon notice asks, and an older one lets turns run and runs
+  what is queued. So the window compares the report's `Build` with its own at the press and, on a mismatch,
+  keeps the old "offers back whatever finished in time" and heads the words "a daemon on another build may
+  still run these".
+- **Held by** `internal/daemon/shutdownstop_test.go`, tabled over both parking quits: a busy agent is
+  interrupted once, ends well inside the grace and is offered by the next daemon on the socket; an idle one
+  is interrupted harmlessly; a queued message does not keep it running; an outstanding ask is interrupted
+  before stdin closes. `internal/ui/parkdropped_test.go` and `cmd/wake/attach_test.go` hold the named words.
