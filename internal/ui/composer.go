@@ -239,6 +239,10 @@ type Composer struct {
 
 	// scroll is where the wheel left a draft taller than the box. See composerscroll.go.
 	scroll draftScroll
+
+	// measures remembers how many rows a draft measured, shared by every copy.
+	// See composermeasure.go.
+	measures *draftMeasures
 }
 
 // NewComposer returns an empty, focused composer showing the mode sessions are
@@ -271,7 +275,7 @@ func NewComposer() Composer {
 	// with the keys must not blink. App.Init starts the focused composer's blink
 	// and App.refocusBlink restarts it whenever the keys arrive - see Refocus.
 	_ = ta.Focus()
-	return Composer{ta: ta, mode: spawnedMode}
+	return Composer{ta: ta, mode: spawnedMode, measures: &draftMeasures{}}
 }
 
 // Refocus makes the cursor visible again and restarts its blink, returning the
@@ -541,7 +545,7 @@ func (c Composer) overhead() int {
 // work per change.
 func (c Composer) fit() Composer {
 	bound := c.bound()
-	c.ta.SetHeight(min(c.draftRows(bound), bound))
+	c.ta.SetHeight(min(c.measures.rowsFor(c, bound), bound))
 	return c
 }
 

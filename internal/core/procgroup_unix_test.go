@@ -8,6 +8,7 @@
 package core
 
 import (
+	"bufio"
 	"context"
 	"errors"
 	"os"
@@ -125,7 +126,16 @@ func TestAnOversizedLineEndsTheSessionAndReapsWhatItSpawned(t *testing.T) {
 	t.Setenv("WAKE_HELPER_SCRIPT", "bigline")
 	t.Setenv("WAKE_HELPER_BIGLINE", strconv.Itoa(maxLineBytes+1))
 	t.Setenv("WAKE_HELPER_PIDFILE", pidPath)
-	s := startFake(t, Config{SessionID: "s1", Dir: t.TempDir()})
+	withFakeExec(t)
+	// Not startFake: its 10s deadline lands inside this test's own wait, and a
+	// slow run it ended passed every assertion below without the oversized line
+	// ever being read (BUG-15). Nothing cancels this one until the test is over.
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
+	s := NewSession(Config{SessionID: "s1", Dir: t.TempDir()})
+	if err := s.Start(ctx); err != nil {
+		t.Fatalf("Start: %v", err)
+	}
 
 	// Written by the agent right after the fork, so it is on disk before the
 	// first byte of the line - reading it cannot race the kill.
@@ -141,8 +151,8 @@ func TestAnOversizedLineEndsTheSessionAndReapsWhatItSpawned(t *testing.T) {
 	if err == nil {
 		t.Fatal("Err = nil after the scan gave up on an oversized line")
 	}
-	if !strings.Contains(err.Error(), "stopped reading stdout") {
-		t.Errorf("Err = %v, want the reason the stream ended", err)
+	if !strings.Contains(err.Error(), "stopped reading stdout") || !errors.Is(err, bufio.ErrTooLong) {
+		t.Errorf("Err = %v, want the scan stopped by the oversized line (%v)", err, bufio.ErrTooLong)
 	}
 	// The scan reason outranks the rest but must not replace it. This branch
 	// is every cancel and every oversized line - the wedged endings, where

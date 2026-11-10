@@ -400,7 +400,7 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 		// nobody pressing keys, and the default reader is what it always was.
 		opts = append(opts, tea.WithInput(kill.Input()))
 	}
-	p := tea.NewProgram(model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithFleetNamed(kill.fleetNamed).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ()))), opts...)
+	p := tea.NewProgram(ui.Margined{Model: model.WithOutput(term).WithHandOver(kill.handOverFunc()).WithFleetNamed(kill.fleetNamed).WithUpdateCheck(updateCheck()).WithFriends(friendsFor(termsetup.EnvMap(os.Environ())))}, opts...)
 	final, err := p.Run()
 	term.handBack()
 	if err != nil {
@@ -441,6 +441,9 @@ func converseModel(socket string, model ui.App, out io.Writer) error {
 // daemon drops a rename's old names as it exits, so the socket may no longer
 // say. A report that named none - an older daemon - leaves it to the socket.
 func leavingLine(final tea.Model, socket string) string {
+	if m, ok := final.(ui.Margined); ok {
+		final = m.Model
+	}
 	if app, ok := final.(ui.App); ok {
 		if n, parked, err := app.ParkedFleet(); parked {
 			fleet := app.FleetName()

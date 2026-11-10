@@ -157,11 +157,13 @@ func isBang(text string) (string, bool) {
 //
 // ID is where it was typed ("" for the room) and To the agent its output goes to
 // ("" for nobody): the same agent in a conversation, the one a room mention aimed.
+// Channel is the room's channel a mention bang was typed in, where its line draws.
 type bangResultMsg struct {
-	ID   string
-	To   string
-	Cmd  string
-	Text string
+	ID      string
+	To      string
+	Channel string
+	Cmd     string
+	Text    string
 }
 
 // runBang runs one command off the draw goroutine and reports what it said.
@@ -170,13 +172,14 @@ type bangResultMsg struct {
 // still output, and the operator wants the same treatment for a non-zero exit
 // as for a zero one. What did not happen is the only thing worth
 // distinguishing, and each of those cases says so in its own words.
-func runBang(id, to, dir, cmdline string, timeout time.Duration) tea.Cmd {
+func runBang(id, to, channel, dir, cmdline string, timeout time.Duration) tea.Cmd {
 	return func() tea.Msg {
 		return bangResultMsg{
-			ID:   id,
-			To:   to,
-			Cmd:  cmdline,
-			Text: bangRun(dir, cmdline, timeout, bangWaitDelay),
+			ID:      id,
+			To:      to,
+			Channel: channel,
+			Cmd:     cmdline,
+			Text:    bangRun(dir, cmdline, timeout, bangWaitDelay),
 		}
 	}
 }
