@@ -79,9 +79,9 @@ var forkVerdicts = map[string]bool{
 // the fourth is why: every refusal names the verb it is refusing - the default
 // arm ends "so it cannot be forked" - so counting it would make this vacuous.
 //
-// StateOrphaned's next step is `wake status` and carries no "when", which is
-// correct rather than an exception: an orphan has no daemon to wait for. That is
-// the reason this asserts an *action* and not a time.
+// StateOrphaned's next step is a check and carries no "when", which is correct
+// rather than an exception: an orphan has no daemon to wait for. That is the
+// reason this asserts an *action* and not a time.
 var forkNextSteps = []string{"stop", "answer", "deny", "check"}
 
 // The gate asserted per member over its whole state space, rather than by the

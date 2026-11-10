@@ -4,6 +4,8 @@
 
 package rpc
 
+import "strings"
+
 // Ending a session, and ending the daemon. Spec §5 names four verbs and they
 // are deliberately four: park, detach (nothing on the wire - the client just
 // disconnects), stop, and quit. Kill is the fifth thing, and it is not a verb
@@ -597,3 +599,16 @@ const MaxAgentsCeiling = 50
 // FleetFlag names the fleet a `wake` command is addressed to. Here rather than in
 // cmd/wake because the UI's way-back lines spell it too, TeamFilterFlag's reason.
 const FleetFlag = "--fleet"
+
+// FleetCommand is a `wake` command line that reaches the fleet a report names:
+// `--fleet <name>` after the words, since a bare `wake` starts a new fleet and a
+// bare verb reaches the unnamed one. A fleet with no name - a socket set by
+// hand, which a bare `wake` under that $WAKE_SOCKET opens - gets none. Here so
+// the daemon's refusals render their commands as the UI and cmd/wake do.
+func FleetCommand(fleet string, words ...string) string {
+	line := strings.Join(append([]string{"wake"}, words...), " ")
+	if fleet == "" {
+		return line
+	}
+	return line + " " + FleetFlag + " " + fleet
+}

@@ -81,15 +81,17 @@ const defaultLiveCap = rpc.MaxAgentsCeiling
 // shortSilence, which is the same seam for the same reason.
 var liveCap = defaultLiveCap
 
-// capRefusal is what a spawn past the cap is told, and it names the two things
-// that make room rather than only saying no.
+// capRefusal is what a spawn past the cap is told, and it names what makes room
+// rather than only saying no. Never `wake stop`: ending the fleet is the wrong
+// answer to wanting one more agent, and the room's one-row notice can cut a
+// command at its end down to a bare verb (wake-orch, 2026-11-07).
 func capRefusal(n, limit int) string {
 	raise := ""
 	if limit < rpc.MaxAgentsCeiling {
 		// First, so a one-row notice that cuts the sentence still shows it.
 		raise = fmt.Sprintf(" (--max-agents raises it, up to %d)", rpc.MaxAgentsCeiling)
 	}
-	return fmt.Sprintf("%d sessions are already running, which is this fleet's cap%s. ⌃C parks one and /resume brings it back, or `wake stop` ends the fleet", n, raise)
+	return fmt.Sprintf("%d sessions are already running, which is this fleet's cap%s. ⌃C parks one and /resume brings it back", n, raise)
 }
 
 // agentCap is this fleet's cap now.
