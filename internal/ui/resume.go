@@ -504,11 +504,12 @@ func (a App) rekeyPane(from, conv, name string) App {
 // wins it, as resume does. The typed `@`, if any, is kept on every offer. Once a
 // character is typed, so an accepted `/resume ` is a finished word.
 func (a App) resumeArgMenu(draft, head, partial string) completion {
-	c := completion{pane: a.focus, draft: draft, head: head}
+	none := completion{pane: a.focus} // no draft, so ⇥ still moves the keys (typingWord)
 	parked := a.parkedAgents()
 	if partial == "" || len(parked) == 0 {
-		return c
+		return none
 	}
+	c := completion{pane: a.focus, draft: draft, head: head}
 	typed, marked := strings.CutPrefix(partial, agentPrefix)
 	mark := ""
 	if marked {
@@ -536,6 +537,9 @@ func (a App) resumeArgMenu(draft, head, partial string) completion {
 	}
 	if !marked && strings.HasPrefix(resumeAll, lower) {
 		c.names = append(c.names, resumeAll)
+	}
+	if len(c.names) == 0 {
+		return none
 	}
 	return c
 }

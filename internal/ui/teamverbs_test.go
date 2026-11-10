@@ -579,4 +579,104 @@ func TestAnAcceptedResumeIsAFinishedWordWithSessionsParked(t *testing.T) {
 	if next.completionUp() {
 		t.Errorf("a menu is up over the accepted /resume, offering %v", next.completion.offers)
 	}
+	if next.typingWord() {
+		t.Error("an accepted /resume still reads as a word being typed, so ⇥ would stay put instead of moving the keys")
+	}
+}
+
+// A card arriving in the confirm's pane takes its place, and its page can hide
+// it; ↓ ↵ meant for the card must not quit a team nobody can see.
+func TestAQuitConfirmYieldsToACardInItsPane(t *testing.T) {
+	a := dmApp(newRecorder(t), Stream{}, "s1", "john").withSize(200, 40).withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "john", State: rpc.StateIdle},
+		rpc.SessionStatus{ID: "s2", Name: "sydney", Team: "backend", State: rpc.StateIdle},
+	)
+	a, _, _ = a.slash(quitVerb + " @backend")
+	if !a.picker.Open() {
+		t.Fatal("test precondition: the confirm did not open")
+	}
+	plan := planAsk(t)
+	a = a.applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1", Event: &plan})
+	if _, carded := a.cardOf("s1"); !carded {
+		t.Fatal("test precondition: the plan card did not arrive in john's pane")
+	}
+
+	if strings.Contains(shown(a), quitNeverMind) {
+		t.Errorf("the confirm is drawn under a card that is the pane's to answer:\n%s", shown(a))
+	}
+	for _, k := range []tea.KeyType{tea.KeyDown, tea.KeyEnter} {
+		var cmd tea.Cmd
+		a, cmd = keyed(a, tea.KeyMsg{Type: k})
+		if cmd != nil {
+			if stops := kindIDs(sentFrames(t, a, cmd), rpc.FrameStop); len(stops) > 0 {
+				t.Fatalf("a key meant for the card stopped %v through a confirm nobody could see", stops)
+			}
+		}
+	}
+}
+
+// `@team /park` and `@team /quit` at a team with nothing running give the typed
+// form's answer, rather than reaching the manager as text.
+func TestATeamAtRestFoldsInTheRoomToo(t *testing.T) {
+	for _, verb := range []string{parkVerb, quitVerb} {
+		a := backendRoom(t).withRoster(
+			rpc.SessionStatus{ID: "s1", Name: "sydney", Team: "backend", State: rpc.StateParked},
+			rpc.SessionStatus{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateParked},
+		)
+		m, cmd := a.withDraft("@backend " + verb).submit(false)
+		if cmd != nil {
+			t.Fatalf("@backend %s at a team at rest wrote %+v", verb, sentFrames(t, m.(App), cmd))
+		}
+		if note := latestNotice(t); !strings.Contains(note, "nothing of @backend is running") {
+			t.Errorf("@backend %s said %q, want the typed form's answer", verb, note)
+		}
+	}
+}
+
+// A member that ended instead of parking holds back that ask's confirm, never a
+// later one: a new team park replaces the team's old wait.
+func TestANewTeamParkReplacesAWaitThatNeverLanded(t *testing.T) {
+	a := backendRoom(t)
+	a, _, _ = a.slash(parkVerb + " @backend")
+	a = a.withRoster(
+		rpc.SessionStatus{ID: "s1", Name: "sydney", Team: "backend", State: rpc.StateParked},
+		rpc.SessionStatus{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateEnded},
+	)
+	a = a.withRoster(rpc.SessionStatus{ID: "s1", Name: "sydney", Team: "backend", State: rpc.StateIdle})
+
+	a, _, _ = a.slash(parkVerb + " @backend")
+	_ = a.withRoster(rpc.SessionStatus{ID: "s1", Name: "sydney", Team: "backend", State: rpc.StateParked})
+
+	if note := latestNotice(t); !strings.Contains(note, "@backend is parked") {
+		t.Errorf("the second team park confirmed as %q: the first ask's lost member held it back", note)
+	}
+}
+
+// A member parked by hand after a team park that missed it is confirmed as one
+// agent, not as the team.
+func TestAHandParkOfAMemberIsConfirmedAsOne(t *testing.T) {
+	a := backendRoom(t)
+	a, _, _ = a.slash(parkVerb + " @backend")
+	a = a.withRoster(rpc.SessionStatus{ID: "s1", Name: "sydney", Team: "backend", State: rpc.StateParked})
+
+	a, _, _ = a.slash(parkVerb + " @thea")
+	_ = a.withRoster(rpc.SessionStatus{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateParked})
+
+	if note := latestNotice(t); !strings.Contains(note, "@thea is parked") {
+		t.Errorf("thea's own park confirmed as %q, want it named as one agent", note)
+	}
+}
+
+// A typed /park at an agent already parked says so; a key stays silent.
+func TestParkAParkedAgentSaysSo(t *testing.T) {
+	a := backendRoom(t, rpc.SessionStatus{ID: "s6", Name: "otto", State: rpc.StateParked})
+
+	next, cmd, _ := a.slash(parkVerb + " @otto")
+
+	if cmd != nil {
+		t.Fatalf("/park @otto over a parked otto wrote %+v", sentFrames(t, next, cmd))
+	}
+	if note := latestNotice(t); !strings.Contains(note, "@otto is parked already") {
+		t.Errorf("/park @otto said %q, want it to say otto is parked already", note)
+	}
 }

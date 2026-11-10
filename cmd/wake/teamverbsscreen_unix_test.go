@@ -51,9 +51,11 @@ func teamStatesHold(st rpc.Status, want map[string]func(rpc.SessionStatus) bool)
 	return true
 }
 
-func isParked(ss rpc.SessionStatus) bool  { return ss.State == rpc.StateParked }
-func isRunning(ss rpc.SessionStatus) bool { return ss.State != rpc.StateParked && ss.State != rpc.StateEnded }
-func isEnded(ss rpc.SessionStatus) bool   { return ss.State == rpc.StateEnded }
+func isParked(ss rpc.SessionStatus) bool { return ss.State == rpc.StateParked }
+func isRunning(ss rpc.SessionStatus) bool {
+	return ss.State != rpc.StateParked && ss.State != rpc.StateEnded
+}
+func isEnded(ss rpc.SessionStatus) bool { return ss.State == rpc.StateEnded }
 
 func TestATeamIsParkedResumedAndQuitOnTheRealScreen(t *testing.T) {
 	withScriptedAgent(t, "")

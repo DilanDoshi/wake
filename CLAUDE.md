@@ -231,8 +231,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   book's included; `/quit @team` opens a Picker whose cursor starts on `never mind` (↓ ↵ quits), over
   targets held from the open, and stops only those still live. Members are `@team`'s - `App.live`, never
   the manager - and `@who` resolves as `core.Resolve` routes: a live agent, a team, a parked agent. N
-  one-agent frames in one write; no team frame. A picker closes on a focus change, and ⌃C closes it and
-  parks (`decisions.md`, 2026-11-09).
+  one-agent frames in one write; no team frame. A picker reads keys only while drawn: it closes on a focus
+  change, yields to a card in its pane, and ⌃C closes it and parks (`decisions.md`, 2026-11-09).
 - `/manager-stop` refuses a parked manager and a missing one; it does not borrow park's
   blocked-agent refusal (a stop has no wake).
 - `/reauth` parks sessions marked by a 401 (upstream bug #48786, shared-OAuth refresh race) so

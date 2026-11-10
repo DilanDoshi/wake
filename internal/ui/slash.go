@@ -344,7 +344,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	managerCommand:         App.manager,
 	managerStopCommand:     App.managerStop,
 	quitCommand:            App.quitAgent,
-	parkCommand:            App.parkCommand,
+	parkCommand:            App.parkAgent,
 	boardCommand:           App.openBoard,
 	loginCommand:           App.login,
 	groupchatFilterCommand: App.groupchatFilter,

@@ -52,7 +52,14 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
   agent's name cannot be parked or quit by that word while the agent is live. It can be resumed by it
   only while no parked session holds the name.
 - **A team park's single confirmation waits for every member it asked for.** A member whose park the
-  daemon refuses, or that ends instead, holds it back for good; that member's own refusal is what shows.
+  daemon refuses, or that ends instead, holds that ask's confirmation back; the member's own refusal is
+  what shows. The next team park replaces the wait.
+- **`/resume <team>` says one `@x has been resumed.` per member**, as `/resume all` does, so the notice
+  slot ends on one name. A team-level line would want the wake's own report bookkeeping.
+- **The menus offer what the team verbs refuse.** A conversation's `@` menu is Claude Code's own (peers,
+  sessions, `@agent-…`), so it offers no team after `/park @` or `/quit @`, though those forms work there.
+  The room's `@` menu offers `@all` and parked agents after them; `/park @all` says no such agent, and
+  `/park @parked` says it is parked already.
 
 ---
 

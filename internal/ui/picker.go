@@ -173,7 +173,9 @@ const pickerKeys = "↑↓ move · ↵ choose · esc cancel · ⌃C close and pa
 // meant to send it, which is how `/model` typed over an open `/effort` picker
 // confirmed the effort and lost the command.
 func (a App) pickerKey(m tea.KeyMsg) (App, tea.Cmd, bool) {
-	if !a.picker.Open() {
+	if _, carded := a.cardOf(a.focus); !a.picker.Open() || carded {
+		// A card in the pane takes its place and its page (pickerView), and a
+		// picker reads keys only while it is drawn - a team's quit among them.
 		return a, nil, false
 	}
 	switch m.Type {

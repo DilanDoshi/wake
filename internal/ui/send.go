@@ -242,6 +242,10 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	if next, cmd, ok := a.roomBang(r, wire); ok {
 		return next, cmd
 	}
+	if team, aimed, ok := a.restingTeam(wire); ok {
+		next, cmd, _ := a.mentionCommand(team, aimed)
+		return next, cmd
+	}
 	if len(r.Targets) == 0 {
 		switch {
 		case r.Broadcast:

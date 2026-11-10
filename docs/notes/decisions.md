@@ -34,7 +34,10 @@ calls. Built in `internal/ui/teamverbs.go`.
 - **Park** skips a blocked member, for `parkWouldDeny`'s reason, and the keypress notice names it. The
   report confirms once for the team (`@backend is parked - /resume @backend brings it back`) rather than
   once per member, because per-member lines would fight over the one notice slot. A member whose park the
-  daemon refuses holds that line back, and the refusal shows.
+  daemon refuses, or that ends instead, holds that line back, and the refusal shows. A new team park
+  replaces the team's old wait, and a hand park takes a member off it, so a lost member never silences a
+  later confirm. The park's one rule is `parkable`, shared with ⌃C's `parkTarget`. A typed `/park` at an
+  agent already parked says so; ⌃C stays silent.
 - **Quit asks first, in a Picker, not in a legend arm** (`wake-orch`'s call 2). The legend arm would have
   ↵ confirm what ↵ armed. On `/quit @back`, one ↵ accepts the completion, the next sends the command, and
   a third would stop the team: the same-key confirm `detach.go` rejects. So the confirm's cursor opens on
@@ -46,10 +49,14 @@ calls. Built in `internal/ui/teamverbs.go`.
   - Rows drop per window through `awaitingQuit` and `departedQuit`.
   - This reverses the teams design's "never team-wide `/quit`", on the owner's yes, with the confirm as the
     answer to "a set is worse than a cursor".
-- **The Picker grew two rules that every picker now keeps.** ⌃C closes it and parks, as over the resume
-  picker, so the kill switch's first press visibly does something. A focus change closes it
-  (`withFocus`): a picker is drawn only over the pane holding the keys, and one left open read ↓ and ↵ in
-  the next pane undrawn.
+- **The Picker grew three rules that every picker now keeps.** A picker reads keys only while it is drawn:
+  - ⌃C closes it and parks, as over the resume picker, so the kill switch's first press visibly does
+    something.
+  - A focus change closes it (`withFocus`). A picker is drawn only over the pane holding the keys, and one
+    left open read ↓ and ↵ in the next pane undrawn.
+  - It yields to a card in its pane, which takes its place and whose page could scroll it out of sight: it
+    draws nothing and reads no key until the card is answered (the adversarial review's finding: ↓ ↵
+    meant for a plan card quit the team).
 - **The room bridge folds a team** (`wake-orch`'s call 1): `@backend /park` and `@backend /quit` become
   `/park @backend` and `/quit @backend`, as `@sydney /quit` already becomes `/quit @sydney`
   (`teamTargetCommands`).
@@ -58,6 +65,8 @@ calls. Built in `internal/ui/teamverbs.go`.
     The fold also resolves the same way the router does, by construction.
   - Every other Wake target-command still refuses a team (`TestEveryOtherTargetCommandAtATeamIsStillRefused`),
     and the set is pinned to exactly these two.
+  - A team with nothing running is folded too (`restingTeam`). `core.Resolve` fans out to live members
+    only, so `@backend /park` would otherwise reach the manager as text.
 - **Completion.** `/park` reaches the `/` menu through `wakeWords`. In the room, `/park @` and `/quit @`
   already offered a live team as `(team)`. `/resume ` with one character typed offers the parked
   sessions, then teams with a parked member (which the `@` menu, keyed on routing, leaves out when no

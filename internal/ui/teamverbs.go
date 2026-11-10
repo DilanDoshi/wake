@@ -50,6 +50,8 @@ const (
 	teamQuitting   = "quitting %s…"
 	teamQuitGone   = "none of the %s%s agents that confirm named is running any more"
 
+	parkedAlready = "%s%s is parked already - " + resumeVerb + " %s brings it back"
+
 	resumeAskedTeam = "bringing %s%s back (%s)…"
 )
 
@@ -119,13 +121,13 @@ func (a App) sayAtRest(team string) {
 	notice.Report(teamAtRest, agentPrefix, team, plural(n, "agent"), agentPrefix, team)
 }
 
-// parkCommand is /park: bare, ⌃C's target; `@who`, that agent or team.
-func (a App) parkCommand(arg string) (App, tea.Cmd) {
+// parkAgent is /park: bare, ⌃C's target; `@who`, that agent or team.
+func (a App) parkAgent(arg string) (App, tea.Cmd) {
 	fields := strings.Fields(arg)
 	if len(fields) == 0 {
 		id, ok := a.interruptTarget()
 		if !ok {
-			notice.Report("%s", noParkCommandTarget)
+			notice.Report("%s", a.unseenOr(noParkCommandTarget))
 			return a, nil
 		}
 		return a.parkTyped(id)
@@ -145,7 +147,13 @@ func (a App) parkCommand(arg string) (App, tea.Cmd) {
 
 // parkTyped is ⌃C's park for a typed command, which also takes its draft unless
 // the park was refused - then the draft stays to be fixed, displayTarget's trade.
+// A command that changed nothing says so, where a key stays silent.
 func (a App) parkTyped(id string) (App, tea.Cmd) {
+	if a.parkedAgent(id) {
+		name := a.agentName(id)
+		notice.Report(parkedAlready, agentPrefix, name, name)
+		return a.clearDraft(), nil
+	}
 	next, cmd, done := a.parkOne(id)
 	if !done {
 		return a, nil
@@ -154,16 +162,20 @@ func (a App) parkTyped(id string) (App, tea.Cmd) {
 }
 
 // parkTeam parks every live member but a blocked one, in one write.
+// A new ask replaces the team's old wait, so a member that never parked cannot
+// hold back every later confirm.
 func (a App) parkTeam(team string, members []core.Addressee) (App, tea.Cmd) {
+	a = a.unfiled(func(_, held string) bool { return held == team })
 	var frames []rpc.Frame
 	var blocked []string
 	for _, m := range members {
-		if a.blockedAgent(m.ID) {
+		next, park, ok := a.parkable(m.ID)
+		if !ok {
 			blocked = append(blocked, agentPrefix+m.Name) // parkWouldDeny's reason
 			continue
 		}
-		a = a.awaitingPark(m.ID).forgetAPIPark(m.ID).awaitingTeamPark(m.ID, team)
-		frames = append(frames, rpc.Frame{Kind: rpc.FramePark, SessionID: m.ID})
+		a = next.awaitingTeamPark(m.ID, team)
+		frames = append(frames, park)
 	}
 	if len(frames) == 0 {
 		notice.Report(teamParkBlocked, agentPrefix, team, agentPrefix, team)
@@ -193,6 +205,14 @@ func (a App) awaitingTeamPark(id, team string) App {
 	return a
 }
 
+// unfiled takes the waits drop matches off its team's park, copy on write.
+func (a App) unfiled(drop func(id, team string) bool) App {
+	next := maps.Clone(a.teamParks)
+	maps.DeleteFunc(next, drop)
+	a.teamParks = next
+	return a
+}
+
 // teamParkArrived takes one confirmed member off its team's wait, saying the
 // team is parked once none is left; false for a park no team verb asked for.
 func (a App) teamParkArrived(id string) (App, bool) {
@@ -200,13 +220,28 @@ func (a App) teamParkArrived(id string) (App, bool) {
 	if !ours {
 		return a, false
 	}
-	next := maps.Clone(a.teamParks)
-	delete(next, id)
-	a.teamParks = next
-	if !slices.Contains(slices.Collect(maps.Values(next)), team) {
+	a = a.unfiled(func(held, _ string) bool { return held == id })
+	if !slices.Contains(slices.Collect(maps.Values(a.teamParks)), team) {
 		notice.Report(teamParkConfirmed, agentPrefix, team, agentPrefix, team)
 	}
 	return a, true
+}
+
+// restingTeam is a room draft `@team /park` or `@team /quit` at a team with
+// nothing running, which core.Resolve routes past the team (it fans out to live
+// members only) to the manager as text; the fold gives it the typed form's answer.
+func (a App) restingTeam(wire string) (team, text string, ok bool) {
+	head, rest, _ := strings.Cut(strings.TrimSpace(wire), " ")
+	who, mention := strings.CutPrefix(head, agentPrefix)
+	team = strings.ToLower(who)
+	if _, named := a.fleet.ByName(who); !mention || named || len(a.teamLive(team)) > 0 || len(a.teamParked(team)) == 0 {
+		return "", "", false
+	}
+	word, cmd := leadingRoomTargetCommand(rest)
+	if _, takesTeam := teamTargetCommands[word]; !cmd || !takesTeam {
+		return "", "", false
+	}
+	return team, strings.TrimSpace(rest), true
 }
 
 // confirmTeamQuit opens the quit confirm over the members, resolved now and held:
