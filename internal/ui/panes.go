@@ -146,7 +146,7 @@ func (a App) conversationID() string { return a.focus }
 func (a App) openDM() App {
 	agent, ok := a.dmTarget()
 	if !ok {
-		notice.Report("%s", noPaneAdvice)
+		notice.Report("%s", a.unseenOr(noPaneAdvice))
 		return a
 	}
 	return a.openDMWith(agent.ID, agent.Name).viewingPicked(agent.ID)
@@ -157,14 +157,23 @@ func (a App) openDM() App {
 func (a App) openPicked(open func(App, string, string) App) App {
 	agent, ok := a.dmTarget()
 	if !ok {
-		notice.Report("%s", noPaneAdvice)
+		notice.Report("%s", a.unseenOr(noPaneAdvice))
 		return a
 	}
 	return open(a, agent.ID, agent.Name).viewingPicked(agent.ID)
 }
 
-// dmTarget is whose DM ⌃D opens.
+// dmTarget is whose DM ⌃D opens: the cursor's agent, and none while the wheel
+// has scrolled the selection out of view - no fallback to another either.
 func (a App) dmTarget() (Agent, bool) {
+	if a.rosterPickHidden() {
+		return Agent{}, false
+	}
+	return a.cursorAgent()
+}
+
+// cursorAgent is the roster's selection, else the first agent in attention order.
+func (a App) cursorAgent() (Agent, bool) {
 	if a.roster.Selected != "" {
 		if agent, ok := a.fleet.Agent(a.roster.Selected); ok {
 			return agent, true
@@ -211,7 +220,7 @@ func (a App) pickAgent(delta int) App {
 // because three keys disagreeing about whose agent this is would be three
 // different wrong answers.
 func (a App) pickedAgent() (Agent, bool) {
-	if !a.layout.ShowRoster || a.roster.Selected == "" {
+	if !a.layout.ShowRoster || a.roster.Selected == "" || a.rosterPickHidden() {
 		return Agent{}, false
 	}
 	return a.fleet.Agent(a.roster.Selected)
@@ -225,7 +234,7 @@ func (a App) clickedRow(y int) (rosterSpot, bool) {
 	if r.Roster <= 0 {
 		return rosterSpot{}, false
 	}
-	return a.roster.Hit(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), y)
+	return a.rosterDrawn().Hit(a.fleet.sectioned(a.fleet.OnRoster()), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), y)
 }
 
 // openDMWith puts one agent's conversation beside the room and gives it the
@@ -555,7 +564,11 @@ func (a App) withFocus(f string) App {
 // that lies about the fleet. So this says so rather than opening whichever
 // conversation the cursor happened to be resting on.
 func (a App) nextBlocked() App {
+	_, _, drawn := a.rosterWindow()
 	a.roster = a.roster.Next(a.fleet.sectioned(a.fleet.Agents()))
+	// A jump is to be seen: it lets go of the wheel's hold even when it lands on
+	// the selection it left, which the seam cannot tell from no move at all.
+	a = a.rosterLetGo(drawn.from)
 	if a.roster.Selected == "" {
 		notice.Report("nothing is waiting on you")
 		return a

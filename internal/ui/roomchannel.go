@@ -108,7 +108,7 @@ func (a App) rechanneled() App {
 // pickedHeader is the channel header the cursor is on, while the sidebar drawing
 // it is shown - pickedAgent's rule, for ↵.
 func (a App) pickedHeader() (string, bool) {
-	if !a.layout.ShowRoster || a.roster.Header == "" {
+	if !a.layout.ShowRoster || a.roster.Header == "" || a.rosterPickHidden() {
 		return "", false
 	}
 	return a.roster.Header, true

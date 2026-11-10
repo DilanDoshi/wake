@@ -80,7 +80,7 @@ func (a App) assembleFrame() string {
 		}
 	}
 	if r.Roster > 0 {
-		side := a.roster.WithRetrying(a.retrying).Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
+		side := a.rosterDrawn().WithRetrying(a.retrying).Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
 		if rows := a.usageDrawn(); len(rows) > 0 {
 			side += "\n" + strings.Join(rows, "\n") // the session bar under it; see usagebar.go
 		}
