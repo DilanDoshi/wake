@@ -10,6 +10,8 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
 // rung reports whether the doorbell was rung, and clears it.
@@ -186,4 +188,16 @@ func TestTheUnseenSetCrossesToThePumpUnderTheInboxsLock(t *testing.T) {
 		b.setUnseen([]string{benchAgentID(i % benchFleetSize)})
 	}
 	<-done
+}
+
+// applied judges a run of waiting tokens once, so a frame folded in full between
+// two of them has to be heard: here a retry makes the next token one that shows,
+// because it clears the retry's line.
+func TestATokenAfterAFrameThatShowsItsSessionIsFoldedInFull(t *testing.T) {
+	a := streamingApp(t, 1)
+	id := benchAgentID(3)
+	a = a.applied([]rpc.Frame{tokenFrame(id, "before "), retryOn(id), tokenFrame(id, "answered ")})
+	if _, standing := a.retrying[id]; standing {
+		t.Fatal("a token after the retry, in the same batch, was judged by the run before it and left the retry standing")
+	}
 }
