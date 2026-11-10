@@ -128,7 +128,7 @@ func TestEveryDrawnRowIsTheRowAClickHits(t *testing.T) {
 					t.Errorf("height %d, cursor %+v, row %d %q hits the %s header", height, r, y, line, spot.header)
 				case ok && !strings.Contains(line, spot.agent.Name):
 					t.Errorf("height %d, cursor %+v, row %d %q hits %s", height, r, y, line, spot.agent.Name)
-				case !ok && strings.TrimSpace(line) != "" && !strings.Contains(line, "more"):
+				case !ok && strings.TrimSpace(line) != "" && !isCountRow(line):
 					t.Errorf("height %d, cursor %+v, row %d %q hits nothing", height, r, y, line)
 				}
 			}

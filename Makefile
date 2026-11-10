@@ -18,6 +18,15 @@ COVER_MIN  := 80
 # and the only thing that changes for the advertised hour: SOAK_DURATION=1h.
 SOAK_DURATION ?= 30s
 
+# The race lane's package timeout. internal/ui takes 630-790s under -race (648s
+# measured on a quiet machine, 2026-11-07) and ~900s under load, past go test's
+# 10m default, which failed a bare `make ci` with no failing test. 20m is a
+# third over the worst and under the workflow job's timeout-minutes
+# (citarget_test.go holds that). A recipe flag beats GOFLAGS, so a gate on a
+# machine too loaded for it says RACE_TIMEOUT=40m. The plain lane's slowest
+# package is ~130s, so it keeps go test's default.
+RACE_TIMEOUT ?= 20m
+
 help: ## Show available targets
 	@grep -hE '^[a-z-]+:.*?## ' $(MAKEFILE_LIST) | awk 'BEGIN{FS=":.*?## "}{printf "  \033[33m%-8s\033[0m %s\n", $$1, $$2}'
 
@@ -46,7 +55,7 @@ run: build ## Build and start wake
 # Two lanes, one per target, and `make ci` runs both. Never coverage under -race:
 # atomic cover counters can hide real races (decisions.md, 2026-10-14).
 test: ## Run the suite under the race detector (`make cover` is the plain lane)
-	go test $(PKG) -race -count=1
+	go test $(PKG) -race -count=1 -timeout=$(RACE_TIMEOUT)
 
 cover: ## Run the suite without the detector and enforce the coverage gate on every package
 	go test $(PKG) -count=1 -coverprofile=coverage.out

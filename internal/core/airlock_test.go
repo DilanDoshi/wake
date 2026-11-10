@@ -347,7 +347,7 @@ var claudeWireVocabulary = wordSet([]string{
 	// The retry frame's count and pause, read only in retryOf; Wake's own words
 	// for them are core.APIRetry's fields. api-error-unreachable.jsonl.
 	"attempt", "max_retries", "retry_delay_ms",
-	"run_in_background", "last_tool_name", "task_id",
+	"run_in_background", "last_tool_name", "task_id", "parent_task_id",
 	"non_execution_kind", "permission_denials", "terminal_reason",
 	"modelUsage", "total_cost_usd", "num_turns",
 
@@ -415,6 +415,9 @@ var claudeWireVocabulary = wordSet([]string{
 	// receipt key that, beside success and message, says a result is its own.
 	// The key sits inside a JSON string, so it is in embeddedMarkers below.
 	"SendMessage", "msg_id",
+	// A delivered SubagentHandback receipt's whole message, which alone makes a
+	// two-key result read as its sentence (receiptSentence).
+	"Report delivered to your caller.",
 
 	// The two interactive tools. Policed precisely because neither is ever
 	// named: askKind classifies an ask from requires_user_interaction and its
@@ -817,7 +820,10 @@ var notNamedByTheAirlock = map[string]string{
 // 250 → 253: "attempt", "max_retries" and "retry_delay_ms", the api_retry
 // frame's count and pause, read so a reader can say claude is retrying and for
 // how long. api-error-unreachable.jsonl.
-const policedWordCount = 253
+// 253 → 255: "parent_task_id", the dispatching subagent's task id on a nested
+// task_started, which nests a subagent's own under it, and "Report delivered to
+// your caller.", a delivered SubagentHandback receipt. subagent-nested.jsonl.
+const policedWordCount = 255
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -1252,8 +1258,10 @@ var embeddedMarkers = map[string]bool{
 	"No subagents, teammates or other Claude sessions": true,
 	"Session renamed to: ":                             true,
 	"says it was ":                                     true,
-	// The SendMessage receipt's key, inside its JSON-in-text result.
-	"msg_id": true,
+	// The SendMessage receipt's key, and a SubagentHandback receipt's message,
+	// inside their JSON-in-text results.
+	"msg_id":                           true,
+	"Report delivered to your caller.": true,
 	// Every connector's name begins with it ("claude.ai Gmail"); never whole.
 	"claude.ai ": true,
 }

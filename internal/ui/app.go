@@ -160,10 +160,11 @@ type App struct {
 	statusUI StatusView  // /status's view; see statuscmd.go
 	corner   corner      // the friend on the usage bar; see friends.go
 
-	room   Room
-	cards  Cards
-	roster Roster
-	groups Groups
+	room       Room
+	cards      Cards
+	roster     Roster
+	rosterView rosterView // where the sidebar's window stands; see rosterscroll.go
+	groups     Groups
 
 	// picker is the menu Wake draws for a bare /effort or /model; the zero value is none. Beside
 	// cards rather than in them: it is Wake's own and appears in no fleet report. See picker.go.

@@ -38,6 +38,31 @@ func TestCtrlQAfterAWakeNameNamesTheFleetItReopens(t *testing.T) {
 	s.await("`wake --fleet dev` reopens the room")
 }
 
+// BUG-66, Dilan's flow: a bare `wake`'s own fleet, renamed, then an agent spawned
+// and mid-turn at ⌃Q. A guard: main already prints the new name here.
+func TestCtrlQAfterAWakeNameAndASpawnNamesTheFleet(t *testing.T) {
+	withScriptedAgent(t, scriptInterruptible)
+	scratchHome(t)
+	t.Setenv("WAKE_SOCKET", "")
+
+	s := startWake(t, 200, 40)
+	s.await("group chat")
+	s.send("/wake-name dev\r")
+	s.await("is now dev")
+	s.send("/new otto\r")
+	s.await("otto")
+	s.settle()
+	if names := s.rosterNames(); !slices.Contains(names, "otto") {
+		t.Fatalf("/new otto spawned no otto; the roster lists %v.\n%s", names, s.dump())
+	}
+	s.send("@otto migrate the sessions table\r")
+	s.await(workingMarker)
+	s.send("\x11") // ⌃Q (arm)
+	s.await("park all & quit")
+	s.send("\x11") // ⌃Q (confirm)
+	s.await("`wake --fleet dev` reopens the room")
+}
+
 // ⌃C⌃C names the fleet the window was last told, even once another hand has ended
 // the daemon and, with it, the link from the old name the window opened under.
 func TestCtrlCCtrlCAfterAWakeNameNamesTheFleet(t *testing.T) {
@@ -55,12 +80,7 @@ func TestCtrlCCtrlCAfterAWakeNameNamesTheFleet(t *testing.T) {
 func renamedAtlas(t *testing.T) (*screen, string) {
 	t.Helper()
 	withScriptedAgent(t, "")
-	home, err := os.MkdirTemp("", "wakeh")
-	if err != nil {
-		t.Fatal(err)
-	}
-	t.Cleanup(func() { _ = os.RemoveAll(home) })
-	t.Setenv("HOME", home)
+	home := scratchHome(t)
 	// A scratch socket where a fleet called atlas keeps its own, so the daemon
 	// reads it as that fleet; an agent's WAKE_SOCKET still names it afterwards.
 	old := filepath.Join(home, ".wake", "fleets", "atlas", "daemon.sock")
@@ -71,4 +91,16 @@ func renamedAtlas(t *testing.T) (*screen, string) {
 	s.send("/wake-name dev\r")
 	s.await("fleet atlas is now dev")
 	return s, old
+}
+
+// scratchHome is a HOME of the test's own, short enough for a fleet's socket.
+func scratchHome(t *testing.T) string {
+	t.Helper()
+	home, err := os.MkdirTemp("", "wakeh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(home) })
+	t.Setenv("HOME", home)
+	return home
 }

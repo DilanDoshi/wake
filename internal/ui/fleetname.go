@@ -72,9 +72,10 @@ func (a App) renameFleet(arg string) (App, tea.Cmd) {
 }
 
 // withFleetName takes a report's fleet name, saying so when it names another
-// fleet than the last one did.
+// fleet than the last one did. A report naming none keeps a known name: a named
+// fleet never becomes a hand-set one, so the empty name is never news (BUG-66).
 func (a App) withFleetName(st *rpc.Status) App {
-	if st == nil {
+	if st == nil || st.Fleet == "" && a.daemon.fleet != "" {
 		return a
 	}
 	if was := a.daemon.fleet; was != "" && st.Fleet != "" && st.Fleet != was {

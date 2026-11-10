@@ -3,20 +3,16 @@ package ui
 // Following: where the reader stands against the newest line, the moves across
 // it, and the banner that says they have left it.
 //
-// A follower gets the pane's room for the streamed preview and a scrolled-back
-// reader the floor (DM.previewCap), so every move across the line re-caps it:
-// ScrollUp, JumpToLatest, and followed for every other return (⌃E, a fold that
-// reaches the bottom, a subagent view, a restore). SetSize and Append re-cap with
-// the follow they sampled; clear.go and roomseed.go are not returns - the pane is
-// blank there, or not yet sized.
+// The answer being written is the window's last rows (transcript.tail), so a
+// move across the line is a move like any other: ScrollUp, JumpToLatest, and
+// followed for every other return (⌃E, a fold that reaches the bottom, a restore).
 //
 // Append deliberately never yanks a scrolled-back reader to the newest line -
-// see dm.go's own comment on that. But the streamed preview and the working
-// line are drawn unconditionally, regardless of scroll position, so a reader
-// who has drifted even one wheel notch off the bottom sees the transcript
-// freeze exactly where they left it while those two rows keep changing below
-// it - "the old text stays put and the new text scrolls in a box under it",
-// with nothing on screen saying why. This is that missing signal, and a click
+// see dm.go's own comment on that. But the working line is drawn
+// unconditionally, regardless of scroll position, so a reader who has drifted
+// even one wheel notch off the bottom sees the transcript freeze exactly where
+// they left it while the agent keeps working below it, with nothing on screen
+// saying why. This is that missing signal, and a click
 // on it is the way back - scrolling down far enough already resumes following
 // (transcript.scrolledUp clamps to bottom()), this just makes that
 // discoverable and one click.
@@ -37,21 +33,12 @@ import (
 // a negative count, and stops at either end.
 //
 // The stored layout lags the drawn one (View re-lays a copy), so it is brought up
-// to date first and the move is measured on what is on screen. When the move
-// changes the preview's cap the pane is laid out again with the bottom line held
-// where the scroll put it, so n up is n lines back and n down is the newest line.
+// to date first and the move is measured on what is on screen. The answer being
+// written is the window's last rows (transcript.tail), so n up is n rows back
+// across it and the transcript alike.
 func (d DM) ScrollUp(lines int) DM {
 	d = d.drawnLayout()
 	d.tr = d.tr.scrolledUp(lines)
-	following := d.tr.atBottom()
-	if d.height <= 0 || d.previewCap(following) == d.partial.cap {
-		return d
-	}
-	foot := d.tr.footLine()
-	d = d.SetSize(d.width, d.height) // re-caps, and keeps a follower on the newest line
-	if !following {
-		d.tr = d.tr.withFootAt(foot)
-	}
 	return d
 }
 
@@ -59,21 +46,11 @@ func (d DM) ScrollUp(lines int) DM {
 // click on the follow banner means.
 func (d DM) JumpToLatest() DM { return d.followed() }
 
-// followed returns the reader to the newest line and gives the preview the room
-// a follower gets. Every return outside SetSize and Append goes through it.
+// followed returns the reader to the newest row. Every return outside SetSize
+// and Append goes through it.
 func (d DM) followed() DM {
 	d.tr = d.tr.toBottom()
-	d.partial = d.partial.capped(d.previewCap(true))
 	return d
-}
-
-// footLine is the line on the window's last row, which the banner covers.
-func (t transcript) footLine() int { return t.scroll + t.height - 1 }
-
-// withFootAt scrolls the window so line is on its last row, as far as it can.
-func (t transcript) withFootAt(line int) transcript {
-	t.scroll = min(max(line-t.height+1, t.first()), t.bottom())
-	return t
 }
 
 // followBannerText is the whole of the banner. Short, because it takes the

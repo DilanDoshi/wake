@@ -33,7 +33,7 @@ func roomSaying(t *testing.T, words ...string) App {
 	a := roomWithHistoryAsked(t)
 	sydney, _ := a.fleet.Agent("s1")
 	for _, w := range words {
-		a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney " + w}, "s1"))
+		a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney " + w}, "s1", ""))
 		a = a.withRoom(a.room.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: "re " + w}, sydney))
 	}
 	return a
@@ -163,7 +163,7 @@ func TestTheRoomRemindsEveryThousandMessages(t *testing.T) {
 	a := roomWithHistoryAsked(t)
 	fill := func(a App, n int) App {
 		for range n {
-			a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1"))
+			a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1", ""))
 		}
 		return a
 	}
@@ -260,7 +260,7 @@ func TestTheReminderWaitsForTheRoomToHoldTheKeys(t *testing.T) {
 	a := roomWithHistoryAsked(t)
 	a.focus = "s1"
 	for range roomReminderEvery {
-		a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1"))
+		a = a.withRoom(a.room.appendUser(core.Event{Kind: core.KindUserText, Text: "@sydney hi"}, "s1", ""))
 	}
 	if strings.Contains(noticeNow(), "/clear") {
 		t.Fatalf("the reminder fired while a conversation held the keys: %q", noticeNow())

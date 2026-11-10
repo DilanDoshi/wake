@@ -4,7 +4,6 @@ package ui
 // it, so each team reads as its own chunk the way the board's bands do.
 
 import (
-	"strconv"
 	"strings"
 	"testing"
 
@@ -98,7 +97,7 @@ func TestAFleetWithNoTeamsDrawsNoBlankRows(t *testing.T) {
 			t.Errorf("row %d of a team-less roster is blank:\n%s", i, strings.Join(lines, "\n"))
 		}
 	}
-	if !strings.Contains(lines[3], "+3 more") {
+	if !strings.Contains(lines[3], "+3 below") {
 		t.Errorf("three agents fit and the other three are counted, but the last row is %q:\n%s", lines[3], strings.Join(lines, "\n"))
 	}
 }
@@ -139,7 +138,7 @@ func TestEveryRosterRowResolvesToWhatIsDrawnThereAtEveryHeight(t *testing.T) {
 				}
 				// A gap or a header is never left over the count: whatever the window
 				// keeps of a section, it keeps with a member under what leads it.
-				if strings.Contains(line, " more") && y > 0 &&
+				if isCountRow(line) && y > 0 &&
 					(strings.TrimSpace(lines[y-1]) == "" || strings.Contains(lines[y-1], "─")) {
 					t.Errorf("height %d, cursor %s: the %q count has a gap or header just above it:\n%s",
 						height, sel, strings.TrimSpace(line), strings.Join(lines, "\n"))
@@ -197,7 +196,7 @@ func TestTheWindowFitsTheColumnAndKeepsItsCountAtEveryHeight(t *testing.T) {
 	for height := 3; height <= 18; height++ {
 		for _, sel := range []string{"s0", "s1", "s2", "s3", "s4", "s5"} {
 			r := Roster{Selected: sel}
-			w := r.window(agents, teamedSubs, width, height)
+			w := r.window(rows, itemHeights(rows, teamedSubs), height)
 			if w.to == w.from {
 				continue // no whole block fits beside the count: the count alone is drawn
 			}
@@ -228,8 +227,7 @@ func TestTheWindowFitsTheColumnAndKeepsItsCountAtEveryHeight(t *testing.T) {
 				t.Errorf("height %d, cursor %s: the previous block would have fitted above the window", height, sel)
 			}
 			view := rosterLines(agents, sel, teamedSubs, width, height)
-			hidden := len(agents) - (w.to - w.from)
-			if want := "+" + strconv.Itoa(hidden) + " more"; rowContaining(view, want) != shown {
+			if want := strings.TrimSpace(countLine(w.from, len(rows)-w.to, width)); rowContaining(view, want) != shown {
 				t.Errorf("height %d, cursor %s: the %q count is not on the row (%d) just under the window:\n%s",
 					height, sel, want, shown, strings.Join(view, "\n"))
 			}
