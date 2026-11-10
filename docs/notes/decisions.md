@@ -5855,3 +5855,65 @@ to the edge". `wake-orch`'s GO on the plan; the owner approved one column each s
   and read against it a 100-column window lost the roster and a 120-column one its split.
 - **Left out**: a vertical margin (not asked). The landing site's clips show the gap from their next
   re-recording.
+
+## 2026-11-07 — a login's resume the old login answers is tried again (the owner, via wake-orch)
+
+The owner's go on BUG-64: "ok yea do bug 64 as well". A login's resume could reach a process still on the
+old login, fail, and leave the agent stopped. Either it failed "Not logged in" (2026-10-21), which is no
+stop, or it got the old account's limit again (2026-11-06), which became a new stop under the new account.
+
+- **What is retried.** Only a failure of the turn a login's resume started (`loginTry`, carried from
+  `resumeOnLogin` through `resumeAsk` onto `agent.login`, and dropped at that turn's end), and only one that
+  looks like the old login: an auth failure (`core.NoticeAPIError`), or a usage limit naming the same reset
+  as the stop it answered. A limit naming another reset is the new account's own, so it becomes a stop like
+  any; an overload or an unreachable API is the turn's own too. The reset's resume and the unreachable
+  path's stay one-shot: neither raced a login.
+  - **Two limits naming no reset read as the same**, so such a failure is retried. Every limit message
+    in the field transcripts named one (2026-10-21 to 2026-11-06), and the cost is bounded: three more
+    failed turns over about six minutes.
+  - **A 401 is `core.NoticeAPIError` too**, mid-turn retry frames included, so a dead token after a login's
+    resume is retried, each try another of claude's own five-minute 401 hangs. In a window the UI's
+    auto-park at three (`authRetryParkAttempt`) takes it first, often within that first turn; the parked
+    agent leaves the retries (`limited` skips one parking) and waits for the UI's proof of a working login,
+    which wakes it but writes no `continue`. With no window, at most three tries.
+- **Another turn keeps the retry.** One no login's resume started - the operator's own `continue`, a peer's message - landing
+  while a retry waits runs on the same process. A limit naming the stop's reset from it leaves the stop and
+  its retry as they were (a "Not logged in" never replaced a stop). Without this, the turns that started
+  2026-11-06's stops would have wiped the retry.
+- **The numbers: 15 s, 1 min, 5 min**, each counted from the failure before it (`loginRetries`).
+  - On 2026-11-06, of 31 resumes sent at one login, the six the old login answered failed 3 to 10 s after
+    the `continue`, while others went through from 2 s. So 15 s waits past the longest hold seen.
+  - On 2026-10-21 the config file led the login's credential by about a second, and leads up to 6 s were
+    seen that day; 15 s covers those too.
+  - The minute and five minutes are for a slower process. Five is still under the six minutes after which a
+    hand-sent `continue` worked on 2026-11-06.
+  - After the third retry, a still-failing agent is a limited account or a dead login. A limit's stop is then
+    the one main would have recorded; an auth failure, which left no stop at all before, leaves one that
+    waits for the old reset, if still ahead, or the next login.
+  - The rationale is held by `TestTheLoginRetriesOutwaitTheHoldsSeen`, the order of use by
+    `TestTheOldLoginsLimitArmsARetryAndAFreshLoginRestartsTheCount`, the cap by
+    `TestALoginsRetriesStopAtTheirCap`.
+- **One timer, only while such a stop exists.** A retry is a time on `usageStop` (`retry`, `tries`). The
+  resume goroutine's timer fires at the sooner of a retry and a reset plus its slack (`usageStop.due`). The
+  reset alone keeps the slack, since a limit names its reset only to the minute. A retry counts awake time,
+  as any timer does; a reset is wall-clock, which is why the liveness tick catches one slept through.
+  Nothing is armed while no agent is stopped, and the account file is read only for a limit or an auth
+  failure.
+- **The re-armed stop records the account signed in now, not the old one** (the brief proposed the old one).
+  Under the old account, the next nudge would resume the stop at once and skip the wait the retry exists
+  for. Another agent's limit, a stopped agent's own turn end and any config write all run its login check,
+  and each would read the old account as "another account". Recording the account signed in now means a
+  further login to another account still resumes the stop early, and a fresh login restarts the count.
+- **A turn a peer's message started is still resumed** (the owner's go asked for no change). The limit cut a
+  turn, and that turn is continued, whoever started it. On 2026-11-06 all 31 resumed turns had begun 0 to
+  26 s before the limit, on an orchestrator's relay of a new rule. The narrower option, and the gap that a
+  resume can land on such a turn before its first tool, are in `deferred.md`.
+- **Held by** `usagelimit_e2e_test.go`'s three over real processes (the old limit again, "Not logged in",
+  the cap, each ending in the count of `continue`s the fake received), and `loginretry_test.go` (no retry
+  for the new account's own limit, an overload, an unreachable API, the reset's or the network's resume, or
+  after the resumed turn went through, ended, failed otherwise, was interrupted or cleared; the retry kept
+  through another turn; a reset already past dropped; a due retry resumed as a login's past its
+  reset; the tick at a retry; a fresh login's count; the waits). Twenty-one mutations, each red, among them
+  every survivor of the adversarial review.
+
+---

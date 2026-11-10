@@ -41,9 +41,9 @@ func (s *server) resumeUnreachable(changed time.Time) {
 		}
 		switch {
 		case stop.ready && stop.at.Before(changed):
-			s.resume(a, stop.at, "an unreachable API, on a network change")
+			s.resume(a, stop.at, "an unreachable API, on a network change", loginTry{})
 		case stop.ready && !stop.netOnly && stop.at.Before(answered):
-			s.resume(a, stop.at, "an unreachable API, on another turn going through")
+			s.resume(a, stop.at, "an unreachable API, on another turn going through", loginTry{})
 		default:
 			waiting = waiting || !stop.netOnly
 		}
