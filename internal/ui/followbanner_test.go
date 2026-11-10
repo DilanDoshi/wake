@@ -110,13 +110,13 @@ func TestClickingTheFollowBannerJumpsToTheLatestMessage(t *testing.T) {
 }
 
 // The regression Codex's review caught: DM.View resizes a throwaway copy
-// whenever chrome moves without a geometry change (a streaming preview
+// whenever chrome moves without a geometry change (the working line
 // appearing), and the stored transcript is left too tall by exactly what that
 // chrome took. A banner hit decided from the stored transcript would land one
 // row off from where the banner is actually drawn - this pins the fix
 // (deciding the hit at press time, from the same measurement transcriptRows
 // uses) against exactly that drift.
-func TestClickingTheFollowBannerStillWorksWhileAPreviewHasGrownTheChromeWithNoResize(t *testing.T) {
+func TestClickingTheFollowBannerStillWorksWhileTheChromeHasGrownWithNoResize(t *testing.T) {
 	a := splitApp(t, 200, 40, 4)
 	col := a.columnOf("s1")
 	a = a.refocus("s1")
@@ -126,12 +126,12 @@ func TestClickingTheFollowBannerStillWorksWhileAPreviewHasGrownTheChromeWithNoRe
 		d = d.Append(core.Event{Kind: core.KindAssistantText, SessionID: "s1", Text: fmt.Sprintf("message-%02d", i)})
 	}
 	d.tr = d.tr.scrolledUp(1)
-	// Grows the chrome (a working line and a streaming preview) without ever
-	// calling SetSize - Append never does, for a partial - so the DM's own
-	// stored tr.height stays exactly what it was before this loop.
-	d.Agent = Agent{ID: "s1", State: rpc.StateWorking}
-	before := d.tr.height
+	// A streaming answer under the reader, then the working line growing the
+	// chrome without ever calling SetSize - the agent's state is folded in by a
+	// report, not a resize - so the DM's own stored tr.height stays what it was.
 	d = tokens(d, strings.Repeat("token ", 40))
+	before := d.tr.height
+	d.Agent = Agent{ID: "s1", State: rpc.StateWorking}
 	if d.tr.height != before {
 		t.Fatalf("the stored transcript height moved to %d from %d: this test needs it to stay stale", d.tr.height, before)
 	}

@@ -29,7 +29,7 @@ func (d DM) composerRows() int {
 
 // baseChromeWith is baseChrome for a composer measured at box rows.
 func (d DM) baseChromeWith(box int) int {
-	return box + d.aboveComposerExtra() + d.checklistRows() + d.queuedRows()
+	return box + d.beatBarRows() + d.checklistRows() + d.queuedRows()
 }
 
 // menuRoom is the room's, DM.menuRoom's rule.

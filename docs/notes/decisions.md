@@ -2944,7 +2944,8 @@ That is what licenses every property in `internal/ui/partial.go`:
   invalidate the memoized lines, and gives a width change nothing extra to re-wrap. The transcript
   is *rendered lines* precisely because re-rendering is expensive (11.3 ms of an 11.5 ms `Append` at
   4,000 events); a per-token writer into it would have been that defect returning through a new door.
-- **It is bounded to the pane (`DM.previewCap`),** and the retained text with it — the tail, because
+- **It is bounded to the pane (`DM.previewCap`),** *(replaced 2026-11-08 by the third amendment below:
+  it keeps the whole message and scrolls with the transcript)* and the retained text with it — the tail, because
   the newest tokens are the ones being read. Its size is the pane's room for a reader
   following the newest line, and `minPreviewRows` (3) for one scrolled back over a full transcript
   (*amended 2026-10-07, below*; it was three rows over any full transcript, growing only into unused
@@ -3218,6 +3219,83 @@ pane taken off screen by `⌃Y` at takeover width, or by `⌃W` on another pane,
 A board tile (`ensureBoardDMs`) is `raw`: no scan, no glamour, the view exactly as before.
 `rpc.Frame.Lost` sits in the padding after `Now`: a Frame is copied by value on every event, and a
 bool of its own grew it a word and cost a fleet's second 8%.
+
+### Third amendment, 2026-11-08 — the answer scrolls with the transcript, as its newest rows
+
+The owner's report (via wake-orch): "scrolling while wake is printing a agent response is not smooth".
+Measured on `main` f4a9b55a, it was not slowness. A notch reached the screen in one 60 fps flush (15 ms,
+real binary), and a frame cost 0.7–1.1 ms. What the reader saw was the *content jumping*. Following a
+long answer, the preview took the pane's room (41 of 48 rows at 200×50). The first notch up dropped it
+to the 3-row floor this ruling's first amendment gave a scrolled-back reader, so the pane swapped the
+answer for the history above it. At the bottom, each notch moved the content by the preview's height, not
+by three. And while the reader was scrolled back the preview kept only cap + slack rows, so the way down
+came back to an answer missing everything they had left.
+
+The owner's ruling: the preview scrolls with the transcript as one continuous document, as Claude Code
+and Codex draw a streaming answer — the newest part of the scrollback. This replaces the first
+amendment's floor and "bounded by the pane":
+
+- **The preview's rows are the window's last rows** (`transcript.tail`, `previewrows.go`), drawn under the
+  transcript's last line after the blank row `blockLines` puts above the block that will land. A notch
+  moves every row by the notch. A follower watches each row push the conversation up, as before. A reader
+  scrolled back reads the answer standing still: the tokens after it, the paragraphs finishing under it
+  and the block landing move nothing (`TestNothingAReaderScrolledIntoTheAnswerReadsMoves`). The way down
+  passes through every row of the answer (`TestTheWayBackDownPassesThroughEveryRowOfTheAnswer`). The
+  preview is not chrome, so no `previewCap`, no floor, and no re-lay when it grows.
+- **It keeps the whole message**: every finished block's rows (rendered once, appended to a `chunked`
+  stack) and every finished line's rows (wrapped once, `settle`) for a pane not reading blocks. That is
+  the most the landed block holds a moment later, so the bound is the message, never the conversation.
+  The open block stays held to `render.MaxChunk` as before, and so does the open line of a pane not
+  reading blocks: a token lays out only that.
+- **Nothing above the open block changes.** `previewRows` holds the finished blocks, their gap, the
+  finished lines and the open rows. Only the open rows are laid out per token, so a reader scrolled back
+  over the finished ones sees nothing move and the work per token stays flat in the answer's length.
+- **The open block is laid out once more as it finishes**, plain to formatted, as it always was. For a
+  reader scrolled back *into* the open block, the rows they read change at that moment: a list with
+  inline markup can come out many rows shorter, and a code fence closing drops its opener row. A block
+  that shrinks under such a reader never makes them a follower that the next token pushes
+  (`DM.heldBack`, only when the window's rows shrank: `transcript.keptBack` holds them a row above the
+  newest). Matching the plain rows to glamour's closely enough to remove this would mean rendering per
+  token, which the ruling above rejects. Two edges are accepted: a held reader whose pane then grows by a
+  row or more is at the newest row and follows, as any reader that close always did; and after an
+  interrupt with nothing landed, the banner over a held reader points at one row.
+- **A subagent's words landing mid-answer leave the answer.** `superseded` used to clear the preview on
+  any landing, a subagent's included, though its own comment said a subagent's block ends none of the
+  agent's. With the whole message in the window that took the answer away under a reader; it now only
+  stops the pane reading the rest for blocks.
+- **A single line longer than `render.MaxChunk` keeps its newest bytes**, so its rows slide under a
+  reader inside it. That is the bound on per-token work. A line that long (4 KB with no newline) is rare
+  outside generated data.
+- **Not drawn in a subagent's view** (the parent's words are not what the reader opened), where it used
+  to take the floor. Back in the conversation it is under the last line again.
+- **A drag over the answer selects and copies it**, as any row of the conversation. Before, the preview
+  was chrome and took nothing.
+
+Interleaved on one machine, branch against `main`:
+
+| `BenchmarkOneBlockStreamed` | main | branch |
+|---|---|---|
+| formatted, 1,024 tokens | 7.3–7.5 ms | 7.7–7.8 ms |
+| plain, 1,024 tokens of one unbroken line | 21.1–21.8 ms | 26.3–26.8 ms |
+| a 30-agent fleet second, one/thirty open | 25.8/28.4 ms | 25.3–25.7/27.9–28.1 ms |
+
+The unbroken line is dearer because its open line is held to `MaxChunk` rather than to a pane's rows.
+
+| per token, following over a full transcript | 1,024 | 4,096 | 16,384 |
+|---|---|---|---|
+| formatted, main | 14.2 µs | 8.7 µs | 7.3 µs |
+| formatted, branch | 10.6 µs | 8.0 µs | 7.3 µs |
+| plain with a line break every 20 tokens, main | 27.9 µs | 26.6 µs | 26.0 µs |
+| plain with a line break every 20 tokens, branch | 7.9 µs | 5.7 µs | 5.2 µs |
+
+The flat columns are the property. A first cut that re-stacked every finished block on each cut was not
+flat: 15.9 µs a token and 1 GB allocated over a 16,384-token answer.
+
+**The room's notch, in the same change.** With any agent working, the room's first notch from the
+bottom, and the last one back to it, moved five rows. `roomFor` adds the working line per draw, but the
+stored room never held it, so the move was measured on a transcript two rows taller than the one on
+screen. The stored room now keeps whether there is a working line (`withRoomWorking`, at the report seam
+and on a channel pick), re-laid only when the line comes or goes.
 
 ---
 

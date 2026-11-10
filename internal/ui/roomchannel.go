@@ -129,7 +129,7 @@ func (a App) selectChannel(header string) App {
 	a.room = a.room.WithChannel(team, key)
 	a.roster = Roster{Header: header}
 	a.fleet = a.fleet.Focus("")
-	return a.clearedSelOnFocusChange(prev).refocus("")
+	return a.clearedSelOnFocusChange(prev).withRoomWorking().refocus("")
 }
 
 // rechanneled follows the channel's members on a fleet report, and returns the
@@ -155,6 +155,22 @@ func (a App) pickedHeader() (string, bool) {
 		return "", false
 	}
 	return a.roster.Header, true
+}
+
+// withRoomWorking keeps the stored room's working line in step with the fleet, so
+// the stored layout is the drawn one: a room stored without the line roomFor draws
+// was two rows taller than the room on screen, and a wheel notch measured on it
+// moved the room five rows. Re-laid only when the line comes or goes.
+func (a App) withRoomWorking() App {
+	r := a.room.WithWorking(a.working(), a.retrying)
+	if (r.beat == "") == (a.room.beat == "") {
+		return a
+	}
+	if r.width > 0 && r.height > 0 {
+		r = r.laidOut(r.width, r.height)
+	}
+	a.room = r
+	return a
 }
 
 // working is who the room's working line may name: the channel's thread, or the

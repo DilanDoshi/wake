@@ -91,7 +91,7 @@ func BenchmarkOneBlockStreamed(b *testing.B) {
 				for _, tok := range toks {
 					d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: tok})
 				}
-				sinkPreview = d.partial.view
+				sinkRows = d.partial.rows
 			}
 		})
 
@@ -107,10 +107,10 @@ func BenchmarkOneBlockStreamed(b *testing.B) {
 				for _, tok := range toks {
 					d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: tok})
 				}
-				if d.partial.view == "" {
+				if !d.partial.shown() {
 					b.Fatal("the full-transcript arm holds no preview after its block: it is pricing a fold that discarded the tokens")
 				}
-				sinkPreview = d.partial.view
+				sinkRows = d.partial.rows
 			}
 		})
 
@@ -127,7 +127,7 @@ func BenchmarkOneBlockStreamed(b *testing.B) {
 					d = d.Append(core.Event{Kind: core.KindPartialText, SessionID: "s1", Text: tok})
 				}
 				finished = len(d.partial.fin.chunks())
-				sinkPreview = d.partial.view
+				sinkRows = d.partial.rows
 			}
 			// The arm has to reach the thing it prices: a pane that never read a
 			// block is the preview arm again, and reads as a free feature.
@@ -226,7 +226,7 @@ func BenchmarkStreamingFleetSecond(b *testing.B) {
 				b.StopTimer()
 				drawn, previews := a.drawnConversations(), 0
 				for i := range open {
-					held := a.dms[benchAgentID(i)].partial.view != ""
+					held := a.dms[benchAgentID(i)].partial.shown()
 					if held != drawn(benchAgentID(i)) {
 						b.Fatalf("conversation %d: preview held = %v, on screen = %v - App.wants is not gating what it claims to", i, held, drawn(benchAgentID(i)))
 					}
@@ -324,8 +324,12 @@ var benchPaneWidth = func() int {
 	return l.Regions(2, 1).Cols[1]
 }()
 
-// sinkPreview keeps the compiler from deciding a measured render had no effect.
-var sinkPreview string
+// sinkPreview and sinkRows keep the compiler from deciding a measured render had
+// no effect.
+var (
+	sinkPreview string
+	sinkRows    previewRows
+)
 
 // sinkApp is sinkPreview for a measured withDM write.
 var sinkApp App
