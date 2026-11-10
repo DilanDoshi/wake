@@ -5917,3 +5917,46 @@ stop, or it got the old account's limit again (2026-11-06), which became a new s
   every survivor of the adversarial review.
 
 ---
+
+## 2026-11-07 — a turn the API failed is not done (the owner approved the fix; wake-orch's rulings)
+
+A turn that failed on the API (a dead login, a usage limit, an unreachable API, a rejected request) read as done:
+the roster's `✔`, the DM's `✻ … · done 6:48 PM` and the strip's `N done`, over the pinned notice saying the opposite
+(bugs.md BUG-35, the done-line residual). The failure reaches the UI only as a `core.KindAPIError`, which `observe`
+routes to the notice row before `Fleet.Observe`, and the result behind it reads idle like any turn's, so the
+working→idle edge captured `doneAt` over it.
+
+- **What it shows: nothing.** No `✔` (the row is idle's `○`), no done line, not counted in `N done`. No new glyph,
+  and `⚠` is not reused: it means "working, claude is retrying" (`apiretry.go`). The pin already names the failure
+  for a 401, a usage limit and an unreachable API; a rejected request keeps its timed notice. The alternative, a
+  failure line in the done line's row, is `deferred.md`'s (2026-11-07).
+- **How the UI knows: `Agent.failed`**, set by the agent's own `KindAPIError` of any notice kind (a 401 retry
+  included) and cleared by its own model output (`core.Event.ModelOutput`): the API answering again, the daemon's
+  resume included once it goes through. A local command's reply ran no inference and leaves it, as it leaves the
+  auth mark. A subagent's frames are not the agent's turn either way. A denial ends `success` and an interrupt
+  `error_during_execution`; neither is a `KindAPIError`, so a turn either ends on its own reads done. A parked or
+  ended report and a gap forget it, as they forget `doneAt` (which a tool result or a local command's reply also
+  clears; the bit they do not).
+- **What does not lift it.** A `/clear` ran no inference. A `/compact` did, but emits no model output
+  (`compaction.jsonl`). A turn interrupted before its first block, the daemon's resume included, redid nothing;
+  one interrupted after a block (thinking or a tool call will do) was answered, and lifts both. Each leaves the pin
+  standing too: on the agent's own turns the pin and the bit read the same model output, so such a turn never
+  reads `✔` beside a pin that says the opposite. They part in three places, because the pin is the condition (a
+  login, a quota, the network) and the bit is the agent's own turn:
+  - any model output on the session lifts the pin, a subagent's included, so a subagent's answer can clear it while
+    its parent's failed turn stays not done, as plain idle;
+  - a gap forgets the bit and keeps every pin;
+  - a park and a wake forget the bit and keep a usage-limit or unreachable pin, which a new process does not lift.
+
+  After either of the last two, a turn that redoes nothing (a local command, an early interrupt) reads `✔` beside a
+  standing pin. That corner is `deferred.md`'s (2026-11-07).
+- **One predicate.** `turnDone` reads the bit, so the DM's line and its row (`hasBeat`), `Fleet.done`, the roster
+  and the strip cannot disagree. Read there rather than gated at the capture: a failed turn Wake did not start
+  (`--brief`, no working report) would otherwise leave the turn before it standing as done.
+- **Held by** `internal/ui/turnoutcome_test.go`, through `App.apply` with reports: the three recorded failures and
+  the auth recording re-kinded as a usage limit and a rejected request (no stream recording of a limit exists),
+  each alone and each followed by a healthy turn; a denial and an interrupted turn alone; after the auth failure,
+  `/status`'s reply, a park and wake, and a gap; after the unreachable one, an interrupt before the first block and
+  one after; and a subagent's failure and answer. Each guard is mutation-checked: the gate, the call, the clearing, the
+  subagent gate, the two forgettings, a local command, an interrupt, prose alone clearing it, an error tool
+  result and a quota heartbeat.
