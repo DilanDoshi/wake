@@ -126,12 +126,13 @@ func sameValue(x, y reflect.Value, path string, seen map[[2]uintptr]bool) (strin
 	switch x.Kind() {
 	case reflect.Func:
 		return "", true
-	case reflect.Pointer, reflect.Map, reflect.Slice:
+	case reflect.Pointer, reflect.Map:
+		// Remembered by address: one object, or a cycle already being compared.
 		if x.IsNil() || y.IsNil() {
 			return path, x.IsNil() == y.IsNil()
 		}
 		key := [2]uintptr{x.Pointer(), y.Pointer()}
-		if (x.Kind() != reflect.Slice || x.Len() == y.Len()) && key[0] == key[1] || seen[key] {
+		if key[0] == key[1] || seen[key] {
 			return "", true
 		}
 		seen[key] = true
@@ -140,6 +141,9 @@ func sameValue(x, y reflect.Value, path string, seen map[[2]uintptr]bool) (strin
 	case reflect.Pointer, reflect.Interface:
 		if x.IsNil() || y.IsNil() {
 			return path, x.IsNil() == y.IsNil()
+		}
+		if x.Elem().Type() != y.Elem().Type() {
+			return path, false
 		}
 		return sameValue(x.Elem(), y.Elem(), path, seen)
 	case reflect.Struct:
@@ -472,9 +476,9 @@ func (tw *twins) both(f rpc.Frame) {
 	tw.deferred = woken(tw.deferred)
 }
 
-// atLeastMain fails unless the deferred window draws every word of the speaker's
-// that main draws, ends on the newest, n, and has no hole main lacks: a word it
-// skips, main skips too. It reports whether it draws more than main.
+// atLeastMain fails unless the deferred window draws the speaker's words once each
+// and in order, every word main draws, ending on the newest, n, with no hole main
+// lacks: a word it skips, main skips too. It reports whether it draws more.
 func (tw *twins) atLeastMain(t *testing.T, speaker string, n int) bool {
 	t.Helper()
 	words := func(a App) []int {
@@ -489,6 +493,11 @@ func (tw *twins) atLeastMain(t *testing.T, speaker string, n int) bool {
 		return out
 	}
 	d, e := words(tw.deferred), words(tw.every)
+	for i := 1; i < len(d); i++ {
+		if d[i] <= d[i-1] {
+			t.Fatalf("the deferred window draws %v of %s's words: %d after %d", d, speaker, d[i], d[i-1])
+		}
+	}
 	if len(d) == 0 || d[len(d)-1] != n {
 		t.Fatalf("the deferred window draws %v of %s's words, want them ending in %d", d, speaker, n)
 	}

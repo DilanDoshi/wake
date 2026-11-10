@@ -1572,8 +1572,8 @@ than dropped, and direction 3 (the owner's go through wake-orch, 2026-11-10):
   Every other token, and every other frame, rings as before. Nothing is dropped and nothing waits on a timer.
 - Two windows over one scripted fleet, one woken for every frame as main is, draw the same bytes after every
   frame (`TestLettingTokensWaitChangesNothingDrawn`). The one difference is a pane coming on screen mid-answer:
-  it is handed the tokens that waited for it, so it draws every word main draws and some before them
-  (`TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid`).
+  it is handed the tokens that waited for it, so it draws every word main draws and some main lost while it
+  was off screen (`TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid`).
 - `BenchmarkStreamingFleetSteadyArrival` is direction 3: the real program at steady arrival. With 30 agents
   talking and one conversation open, main drew 1,346 Views a second with the loop busy 86% and the process at
   110% of a core; the branch draws 116-120 a second, busy 14-15%, at 21-24%. Its token, key and wheel latency
