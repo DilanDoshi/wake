@@ -305,6 +305,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   a 20-row floor; a fleet past the frame scrolls (wheel and `PgUp`/`PgDn` freely, arrows by the least
   that shows the selection) rather than shrinking the tiles. `internal/ui/boardscroll.go`, rulings in
   `decisions.md` (2026-10-12).
+- **The frame sits one column in from either edge of the window** (owner's 2026-11-05 ask): `ui.Margined`
+  is the model the terminal runs. It takes `2×SideMargin` off the window's width, moves every mouse cell one
+  margin left (a press in a margin is the edge cell's) and draws each row one margin in; the App, every
+  surface and every hit-test work in the frame's columns, and §8's breakpoints read the window's
+  (`Layout.windowWidth`). `internal/ui/window.go`, `decisions.md` (2026-11-05).
 - **The grid is bounded:** columns, each split once (spec §8). The room is `Cols[0]` and cannot be
   closed. Arbitrary tiling is out of scope.
 - Dividers store fractions; widths allocate on a running total so a drag stays local. Width drags go
@@ -592,7 +597,7 @@ yet says so in bold.**
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
-| Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` |
+| Input drain, geometry | `internal/ui/inbox.go` · `geometry.go` · `layout.go` · `grid.go` · `panes.go` · `window.go` (the window's margins around the frame) |
 | Mouse, selection, clipboard | `internal/ui/mouse.go` · `selection.go` · `copytext.go` · `composersel.go` · `screensel.go` · `multiclick.go` · `edgescroll.go` · `composercursor.go` · `composerdelete.go` · `composerscroll.go` (the wheel over a tall draft) · `clipboard.go` · `cmd/wake/output.go` · pty test `cmd/wake/draftwheelscreen_unix_test.go` |
 | Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |

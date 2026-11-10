@@ -50,10 +50,10 @@ func TestASendToAFleetAgentByItsAddressIsDrawnOnceUnderItsName(t *testing.T) {
 			t.Errorf("%q is drawn %d times, want once", sentPrefix+words, n)
 		}
 	}
-	if n := len(regexp.MustCompile(`(?m)^↪ `+from+`\b.* → robin  `).FindAllString(out, -1)); n != 2 {
+	if n := len(regexp.MustCompile(`(?m)^`+margin+`↪ `+from+`\b.* → robin  `).FindAllString(out, -1)); n != 2 {
 		t.Errorf("%s → robin is drawn %d times, want once per message", from, n)
 	}
-	if !regexp.MustCompile(`(?m)^↪ `+from+`\b.* → outsider  `).MatchString(out) || strings.Contains(out, "uds:") || strings.Contains(out, "[0a1b2c]") {
+	if !regexp.MustCompile(`(?m)^`+margin+`↪ `+from+`\b.* → outsider  `).MatchString(out) || strings.Contains(out, "uds:") || strings.Contains(out, "[0a1b2c]") {
 		t.Errorf("the room draws an address rather than the recipient's name")
 	}
 	if t.Failed() {

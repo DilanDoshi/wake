@@ -82,7 +82,7 @@ func TestATiledBoardTileIsAFullFourSidedBox(t *testing.T) {
 
 	walled := false
 	for _, ln := range strings.Split(s.text(), "\n") {
-		if !strings.HasPrefix(ln, "│") {
+		if !strings.HasPrefix(ln, margin+"│") {
 			continue
 		}
 		if !strings.HasSuffix(ln, "│") {
