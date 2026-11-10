@@ -388,7 +388,9 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (2026-10-24).
 - The composer grows with the draft; the pane bounds it (`composerRowsIn`), never itself. A pane's
   chrome height is re-checked in `View` (`DM.chrome`) — a frame one row too tall scrolls the alt
-  screen.
+  screen. A re-lay that changes none of the draft, prompt, width or bound measures nothing; the
+  answers are shared by every copy of a composer (`composermeasure.go`), since a measure lays out a
+  whole text area and a pane drawing a card is re-laid on every View.
 - **The room's working line is one row**: oldest running turn, `+N more working`
   (`roomWorkingLine`, `roomwords.go`). Its words are set per draw; whether there is one is stored on the
   room too (`withRoomWorking`, per report and channel pick), so a wheel notch is measured on the layout
@@ -667,7 +669,10 @@ masks ordering bugs. **Never collect coverage under `-race`:** it forces atomic 
 can hide real data races from the detector (`citarget_test.go` reads the recipes, `racelane_race_test.go`
 fails such a run however the flag arrived).
 `make ci` runs both and may not drift from the workflow (`internal/core/citarget_test.go`);
-`make quick` is not a gate. A goroutine leak is a bug.
+`make quick` is not a gate. A goroutine leak is a bug. The race lane's package timeout is the Makefile's
+`RACE_TIMEOUT` (20m), since `internal/ui` runs past go test's 10m default under `-race`; a gate on a
+machine too loaded for it says `RACE_TIMEOUT=40m`, as GOFLAGS cannot. Each lane's timeout stays under
+the CI job's `timeout-minutes` (`TestEachLanesTimeoutIsUnderTheCIJobs`).
 
 **Guards that derive claims — never "fix" one by editing the number:**
 `TestCLAUDEmdNamesTheTwoLargestNonTestFiles` and `TestCLAUDEmdDescribesTheLegendItDraws` read this

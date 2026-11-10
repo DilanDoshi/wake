@@ -165,6 +165,18 @@ harness can do this, and a screen is the only thing that can show which rows wen
 
 ## BUG-15 — `TestAnOversizedLineEndsTheSessionAndReapsWhatItSpawned` fails in a full run and passes alone
 
+**Not reproducible on `9fd48573` (re-read 2026-11-07); kept for the record.** Under `-race` it passed
+30/30 at load 66, about 1s each against its 12s budget, and in three full lanes that day (0.55s in the
+race lane). The failure below took the whole budget on both runs, so it was a hang rather than a slow
+path, and the ending has been rebuilt since (Wake owns stdout's read end; `awaitExit`'s grace). The
+fixing commit cannot be named: history before 0.1.0 is squashed. Every wait in the test is on a real
+condition. What the re-read did find was a false pass: `startFake`'s 10s deadline fell inside the
+test's own wait, and a run it ended ("read |0: file already closed") passed every assertion without
+the oversized line ever being read - a helper made to sleep 11s first passed at 10.00s. Closed on
+`fix/ci-package-timeout-and-two-flakes`: the session starts under a context nothing cancels until the
+test is over, and the error must wrap `bufio.ErrTooLong`. That slow helper now passes by its own path
+(11.27s); a pump whose kill waits for a cancel fails at 12.03s with the message below.
+
 **Observed 2026-08-23**, and settled the same day by running the gate on both sides.
 
 ```
@@ -334,6 +346,15 @@ run, so the gate is the one place it appears and the gate is the thing that must
 then hang there. Either raise the compressed deadline enough to clear a loaded checkout (and keep it
 well under the hook's `sleep 60`), or gate the deadline's start on the hook having recorded its pid —
 so the bound measures the *hang*, not the checkout. The current 2s measures both.
+
+**Fixed on `fix/ci-package-timeout-and-two-flakes` (PR awaiting merge), close to the second way.**
+Re-read 2026-11-07: under CPU load 32–66 and a 120s fsync hammer it passed 45/45, git reaching its
+hook in ~0.3s; a hook made to sleep 2.5s before it backgrounds its child failed it every time with the
+logged symptom (17.18s). `git` now takes the caller's context and sets `gitTimeout` under it, and the
+test, renamed `TestAHungWorktreeAddHasItsTreeReapedWhenItsCallEnds`, ends the call by hand once the
+hook has recorded its pid, through the same cancel a deadline reaches; that slow hook now passes.
+`TestAGitCallRunsUnderGitTimeout` pins that the call carries a deadline from `gitTimeout`, with one
+already past, so nothing races a clock.
 
 
 ---

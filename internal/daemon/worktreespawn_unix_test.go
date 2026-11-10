@@ -13,6 +13,8 @@
 package daemon
 
 import (
+	"context"
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -39,8 +41,9 @@ func writeHook(t *testing.T, repo, body string) {
 }
 
 // recordedPid reads the pid a hook wrote, waiting for it to appear - the hook
-// records it before it blocks, so this returns while git is still hung.
-func recordedPid(t *testing.T, pidFile string) int {
+// records it before it blocks, so this returns while git is still hung. A git
+// that returns first failed before its hook ran, and its error says why.
+func recordedPid(t *testing.T, pidFile string, done <-chan error) int {
 	t.Helper()
 	deadline := time.Now().Add(testTimeout)
 	for time.Now().Before(deadline) {
@@ -49,7 +52,11 @@ func recordedPid(t *testing.T, pidFile string) int {
 				return pid
 			}
 		}
-		time.Sleep(20 * time.Millisecond)
+		select {
+		case err := <-done:
+			t.Fatalf("git returned before its post-checkout hook recorded a pid: %v", err)
+		case <-time.After(20 * time.Millisecond):
+		}
 	}
 	t.Fatalf("the post-checkout hook never recorded a pid at %s", pidFile)
 	return 0
@@ -83,10 +90,9 @@ func waitForDeath(pid int, d time.Duration) bool {
 	return !processAlive(pid)
 }
 
-// shortGitTimeout drives the git deadline down so a test can reach the
-// cancel path without waiting two minutes. gitTimeout is a var for this, the
-// liveCap seam; nothing runs a daemon concurrently in this package, so writing
-// it here is safe.
+// shortGitTimeout drives the git deadline down so a test can reach it without
+// waiting two minutes. gitTimeout is a var for this, the liveCap seam; nothing
+// runs a daemon concurrently in this package, so writing it here is safe.
 func shortGitTimeout(t *testing.T, d time.Duration) {
 	t.Helper()
 	prev := gitTimeout
@@ -125,37 +131,49 @@ func TestAWorktreeAddThatBackgroundsAProcessDoesNotHang(t *testing.T) {
 	}
 }
 
-// TestAHungWorktreeAddHasItsTreeReapedOnTheDeadline pins the process group.
+// TestAHungWorktreeAddHasItsTreeReapedWhenItsCallEnds pins the process group.
 //
 // Here git itself hangs: the hook backgrounds a child, records its pid, and
-// waits on it, so the whole tree is alive when the deadline fires. The group
-// kill reaps the child; the default cancel would SIGKILL the git leader alone
-// and orphan it. So a WaitDelay with no group returns just as promptly and
-// leaves the child running - which is what this test's second half refuses.
-func TestAHungWorktreeAddHasItsTreeReapedOnTheDeadline(t *testing.T) {
-	shortGitTimeout(t, 2*time.Second)
+// waits on it. The call's context is ended once that pid is recorded - the tree
+// is alive - and not by a clock started with git, which also had to outlast the
+// checkout and under load did not (BUG-31). The group kill reaps the child; the
+// default cancel would SIGKILL the git leader alone and orphan it. So a
+// WaitDelay with no group returns just as promptly and leaves the child running
+// - which is what this test's second half refuses.
+func TestAHungWorktreeAddHasItsTreeReapedWhenItsCallEnds(t *testing.T) {
 	repo := tempRepo(t)
 	pidFile := filepath.Join(t.TempDir(), "childpid")
 	writeHook(t, repo, "#!/bin/sh\nsleep 60 &\necho $! > "+pidFile+"\nwait\n")
 	t.Cleanup(func() { killRecorded(pidFile) })
 
+	ctx, cancel := context.WithCancel(context.Background())
+	t.Cleanup(cancel)
 	done := make(chan error, 1)
 	go func() {
-		_, err := addWorktree(repo, "iso")
+		_, err := git(ctx, repo, "worktree", "add", "--quiet", filepath.Join(repo, "iso"), "-b", worktreeBranch("iso"))
 		done <- err
 	}()
 
+	pid := recordedPid(t, pidFile, done)
+	cancel()
 	select {
 	case <-done:
 	case <-time.After(testTimeout):
-		t.Fatalf("addWorktree did not return within %v of a %v git deadline; a hung git worktree add was not bounded",
-			testTimeout, gitTimeout)
+		t.Fatalf("git worktree add did not return within %v of its call ending; a hung add was not bounded", testTimeout)
 	}
-
-	pid := recordedPid(t, pidFile)
 	if !waitForDeath(pid, testTimeout) {
 		t.Fatalf("the process git's post-checkout hook started (pid %d) was still alive after the worktree add returned; "+
-			"the deadline reaped the git leader alone and orphaned its tree", pid)
+			"ending the call reaped the git leader alone and orphaned its tree", pid)
+	}
+}
+
+// TestAGitCallRunsUnderGitTimeout pins that a call carries a deadline set from
+// gitTimeout, which the test above ends by hand: one already past is refused
+// before git starts, so nothing races a clock. How long it is goes unpinned.
+func TestAGitCallRunsUnderGitTimeout(t *testing.T) {
+	shortGitTimeout(t, 0)
+	if _, err := git(context.Background(), t.TempDir(), "--version"); !errors.Is(err, context.DeadlineExceeded) {
+		t.Fatalf("git with its deadline already past = %v, want %v: the call is not bounded by gitTimeout", err, context.DeadlineExceeded)
 	}
 }
 
