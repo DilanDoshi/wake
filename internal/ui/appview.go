@@ -80,7 +80,7 @@ func (a App) assembleFrame() string {
 		}
 	}
 	if r.Roster > 0 {
-		side := a.roster.WithRetrying(a.retrying).Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
+		side := a.rosterDrawn().WithRetrying(a.retrying).Column(a.fleet.sectioned(agents), a.fleet.RunningTasks, r.Roster-dividerWidth, a.rosterHeight(), a.room.channel)
 		if rows := a.usageDrawn(); len(rows) > 0 {
 			side += "\n" + strings.Join(rows, "\n") // the session bar under it; see usagebar.go
 		}
@@ -255,8 +255,8 @@ func (a App) paneSize(id string) (width, height int, ok bool) {
 // own - so it is set for the draw and not held, and cannot go stale against the
 // pick that decides it.
 func (a App) roomFor() Room {
-	// The working line is a fact about the fleet and the room holds no roster,
-	// so it is set for the draw for the mode's reason and cannot go stale.
+	// The working line's words move with the clock, so they are set for the draw;
+	// whether there is one is stored too (withRoomWorking), for the layout.
 	return a.room.WithComposer(a.room.Composer().
 		WithMode(a.hintMode()).
 		WithArms(a.armsFor(""))).WithWorking(a.working(), a.retrying).WithWriting(a.answerTitle(""))

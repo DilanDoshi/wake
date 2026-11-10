@@ -14,6 +14,7 @@ package daemon
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"sync"
 	"time"
@@ -38,13 +39,16 @@ var limitClock = time.Now
 // its resume is queued, and whether the last try found the input full - then
 // only a nudge retries it, never the timer, or a reset already past would spin.
 // An unreachable API's stop has no reset or account; netOnly waits for the
-// network alone (unreachable.go).
+// network alone (unreachable.go). retry is when a login's failed resume is tried
+// again, tries how many have failed (loginretry.go).
 type usageStop struct {
 	at      time.Time
 	reset   time.Time
 	account core.Account
 	queued  bool
 	blocked bool
+	retry   time.Time
+	tries   int
 
 	unreachable bool
 	netOnly     bool
@@ -68,10 +72,12 @@ func (a *agent) usageStopped() bool {
 	return a.limit.stopped()
 }
 
-// resumeAsk is one queued resume: the stop it answers, and how to announce it.
+// resumeAsk is one queued resume: the stop it answers, how to announce it, and
+// whether a login made it.
 type resumeAsk struct {
 	at       time.Time
 	announce func(messageID string)
+	login    loginTry
 }
 
 // limitWatch is the goroutine resuming stopped agents, the nudge that tells it
@@ -89,36 +95,54 @@ type limitWatch struct {
 // reporting a new one, and clears it when the agent's own turn goes through or a
 // /clear abandons the conversation. A send does not: its turn is in flight, which
 // already holds a resume off, and a local command runs no turn. A subagent's
-// events are not the agent's. A reset not after the hit is stale - it would fire
-// at once and stop again - so it arms no timer.
+// events are not the agent's. A failure of the turn a login's resume started may
+// be the process still on the old login, and is retried (loginretry.go).
 func (a *agent) noteLimit(ev core.Event, now time.Time) bool {
-	if ev.Subagent != nil {
+	switch {
+	case ev.Subagent != nil:
 		return false
-	}
-	if ev.ModelOutput() || ev.Kind == core.KindSessionReset {
+	case ev.ModelOutput() || ev.Kind == core.KindSessionReset:
 		a.mu.Lock()
-		a.limit, a.unproven = usageStop{}, false
+		a.limit, a.unproven, a.login = usageStop{}, false, loginTry{}
 		a.mu.Unlock()
 		return false
+	case ev.Kind != core.KindAPIError:
+		return false
 	}
-	if ev.Kind == core.KindAPIError && ev.Notice == core.NoticeAPIUnreachable {
-		a.mu.Lock() // right after Wake's own resume, it waits for the network
-		a.limit = usageStop{at: now, unreachable: true, netOnly: a.unproven}
-		a.mu.Unlock()
+	var reset time.Time
+	var account core.Account
+	if ev.Notice == core.NoticeUsageLimit || ev.Notice == core.NoticeAPIError {
+		reset, account = limitReset(ev.Text, now), signedIn()
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	login := a.login
+	a.login = loginTry{}
+	if stop, ok := login.failed(ev.Notice, reset, now, account); ok {
+		a.limit = stop
 		return true
 	}
-	if ev.Kind != core.KindAPIError || ev.Notice != core.NoticeUsageLimit {
+	switch {
+	case ev.Notice == core.NoticeAPIUnreachable: // right after Wake's own resume, it waits for the network
+		a.limit = usageStop{at: now, unreachable: true, netOnly: a.unproven}
+	case ev.Notice != core.NoticeUsageLimit:
 		return false
+	case a.limit.tries > 0 && reset.Equal(a.limit.reset):
+		// a turn no login's resume started met the old login too: its retry stands
+	default:
+		a.limit = usageStop{at: now, reset: reset, account: account}
 	}
-	reset, ok := core.UsageLimitReset(ev.Text, now)
-	if !ok || !reset.After(now) {
-		reset = time.Time{}
-	}
-	stop := usageStop{at: now, reset: reset, account: signedIn()}
-	a.mu.Lock()
-	a.limit = stop
-	a.mu.Unlock()
 	return true
+}
+
+// limitReset is the reset a limit's message names, zero for none - or for one not
+// after the hit, which is stale: it would fire at once and stop again.
+func limitReset(text string, now time.Time) time.Time {
+	reset, ok := core.UsageLimitReset(text, now)
+	if !ok || !reset.After(now) {
+		return time.Time{}
+	}
+	return reset
 }
 
 // signedIn is the account Claude's config file names now, zero if unreadable.
@@ -176,7 +200,7 @@ func (s *server) watchLimits() {
 	s.resumeOnLogin()            // a login between a stop's read and the watch
 	s.resumeUnreachable(changed) // an answer between a stop and this goroutine
 	for {
-		due, held := s.nextReset()
+		due, held := s.nextDue()
 		if !held && s.limitsIdle() {
 			return
 		}
@@ -202,7 +226,7 @@ func (s *server) watchLimits() {
 	}
 }
 
-// rearm points the timer at a reset, or stops it for none.
+// rearm points the timer at the next resume due, or stops it for none.
 func rearm(timer *time.Timer, due time.Time) {
 	if !timer.Stop() {
 		select {
@@ -211,7 +235,7 @@ func rearm(timer *time.Timer, due time.Time) {
 		}
 	}
 	if !due.IsZero() {
-		timer.Reset(max(due.Add(resetSlack).Sub(limitClock()), 0))
+		timer.Reset(max(due.Sub(limitClock()), 0))
 	}
 }
 
@@ -248,17 +272,27 @@ func (s *server) limited() map[*agent]heldStop {
 	return out
 }
 
-// nextReset is the earliest reset a ready agent waits for, and whether any
-// agent is stopped at all.
-func (s *server) nextReset() (time.Time, bool) {
+// nextDue is the earliest a ready agent resumes on its own - a retry, or a reset
+// past its slack - and whether any agent is stopped at all.
+func (s *server) nextDue() (time.Time, bool) {
 	stops := s.limited()
 	var due time.Time
 	for _, stop := range stops {
-		if stop.ready && !stop.blocked && !stop.reset.IsZero() && (due.IsZero() || stop.reset.Before(due)) {
-			due = stop.reset
+		if at := stop.due(); stop.ready && !stop.blocked && !at.IsZero() && (due.IsZero() || at.Before(due)) {
+			due = at
 		}
 	}
 	return due, len(stops) > 0
+}
+
+// due is when this stop resumes on its own, zero for never: the sooner of its
+// retry and its reset past the slack.
+func (u usageStop) due() time.Time {
+	due := u.retry
+	if reset := u.reset.Add(resetSlack); !u.reset.IsZero() && (due.IsZero() || reset.Before(due)) {
+		due = reset
+	}
+	return due
 }
 
 // resumeOnLogin resumes every agent stopped under an account other than the
@@ -284,17 +318,23 @@ func (s *server) resumeOnLogin() {
 			a.limit.account = now
 			a.mu.Unlock()
 		case stop.ready && stop.account != now:
-			s.resume(a, stop.at, "its usage limit, on a login to another account")
+			s.resume(a, stop.at, "its usage limit, on a login to another account", loginTry{made: true, reset: stop.reset})
 		}
 	}
 }
 
-// resumeDue resumes every agent whose reset has passed. Wall-clock time, so a
-// laptop that slept through it resumes on the next wake.
+// resumeDue resumes every agent whose login's retry is due or whose reset has
+// passed. A reset is wall-clock time, so a laptop that slept through it resumes
+// on the next wake; a retry counts awake time, as a timer does.
 func (s *server) resumeDue(now time.Time) {
 	for a, stop := range s.limited() {
-		if stop.ready && !stop.reset.IsZero() && !now.Before(stop.reset.Add(resetSlack)) {
-			s.resume(a, stop.at, "its usage limit, on its reset")
+		switch {
+		case !stop.ready:
+		case !stop.retry.IsZero() && !now.Before(stop.retry):
+			why := fmt.Sprintf("its usage limit, retrying a login's resume (%d of %d)", stop.tries, len(loginRetries))
+			s.resume(a, stop.at, why, loginTry{made: true, reset: stop.reset, tries: stop.tries})
+		case !stop.reset.IsZero() && !now.Before(stop.reset.Add(resetSlack)):
+			s.resume(a, stop.at, "its usage limit, on its reset", loginTry{})
 		}
 	}
 }
@@ -303,8 +343,8 @@ func (s *server) resumeDue(now time.Time) {
 // has passed - a timer counts no time while the machine sleeps - or a resume
 // found the agent's input full and is waiting to try again.
 func (s *server) nudgeLimitsDue(now time.Time) {
-	due, _ := s.nextReset()
-	if !due.IsZero() && !now.Before(due.Add(resetSlack)) || s.anyBlocked() {
+	due, _ := s.nextDue()
+	if !due.IsZero() && !now.Before(due) || s.anyBlocked() {
 		s.limitHit()
 	}
 }
@@ -322,11 +362,11 @@ func (s *server) anyBlocked() bool {
 // resume queues the "continue" behind whatever the agent's input already
 // holds, marking the stop it answers queued; sendResume decides at the write
 // whether it is still owed. A full input blocks it until the next nudge.
-func (s *server) resume(a *agent, at time.Time, why string) {
+func (s *server) resume(a *agent, at time.Time, why string, login loginTry) {
 	if !a.queueResume(at, true) {
 		return
 	}
-	ask := &resumeAsk{at: at, announce: func(id string) {
+	ask := &resumeAsk{at: at, login: login, announce: func(id string) {
 		logf("wake: session %s resumed after %s", a.id, why)
 		ev := core.Event{Kind: core.KindUserText, Notice: core.NoticeAutoResumed, Text: resumeText, MessageID: id}
 		s.broadcast(rpc.Frame{Kind: rpc.FrameEvent, SessionID: a.id, Event: &ev})
@@ -353,7 +393,7 @@ func (a *agent) blockResume(at time.Time) {
 func (a *agent) dropLimit() {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	a.limit, a.unproven = usageStop{}, false
+	a.limit, a.unproven, a.login = usageStop{}, false, loginTry{}
 }
 
 // queueResume marks the stop that hit at at queued or not, reporting whether
@@ -386,7 +426,7 @@ func (a *agent) sendResume(r resumeAsk) {
 		if a.limit.unreachable {
 			flags |= rpc.MessageReconnected
 		}
-		a.limit, a.unproven, a.owed = usageStop{}, a.limit.unreachable, true
+		a.limit, a.unproven, a.login, a.owed = usageStop{}, a.limit.unreachable, r.login, true
 	case mine:
 		a.limit.queued = false // a later trigger may try again
 	}

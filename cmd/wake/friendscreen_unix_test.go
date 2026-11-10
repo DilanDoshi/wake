@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/DilanDoshi/wake/internal/ui"
 )
 
 // cornerCols and cornerRows are the cells a friend takes at the sidebar's right
@@ -15,13 +17,15 @@ import (
 // the strip and the notice row, under the pane.
 const cornerCols, cornerRows = 9, 5
 
-// corner is the screen's bottom-right cells where a friend sits, as text.
+// corner is the screen's bottom-right cells where a friend sits, as text: at the
+// sidebar's right edge, one margin in from the window's.
 func (s *screen) corner() string {
 	s.term.Lock()
 	defer s.term.Unlock()
 	var b strings.Builder
+	right := s.cols - ui.SideMargin
 	for y := s.rows - 2 - cornerRows; y < s.rows-2; y++ {
-		for x := s.cols - cornerCols; x < s.cols; x++ {
+		for x := right - cornerCols; x < right; x++ {
 			b.WriteRune(s.term.Cell(x, y).Char)
 		}
 		b.WriteByte('\n')

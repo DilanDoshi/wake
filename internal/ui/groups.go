@@ -162,7 +162,7 @@ func (g Groups) View(agents []Agent, width, height int) string {
 		// for that reason and this one has to as well - and lipgloss then joins
 		// the room several columns early while Layout.Hit still uses the width
 		// the layout reserved, so every click lands on the wrong region.
-		rows = append(rows, moreRow(hidden, width))
+		rows = append(rows, moreRow(moreLine(hidden), width))
 	}
 
 	blank := strings.Repeat(" ", width)

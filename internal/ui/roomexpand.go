@@ -6,8 +6,13 @@ package ui
 // expand.go. A long agent reply or peer message draws as a pointer in the room
 // (agentSaid's and peerBody's boundaries); these methods flip it open - globally with ⌃E (toggleExpandAll),
 // one line with a click (toggleLine, hit-tested by blockAt) - and keep the
-// expand set bounded as lines leave the room (forgetExpanded, keptExpanded).
+// expand set bounded as lines leave the room (forgotten, keptOn).
 // Split from chat.go to keep that file under the hard max; no logic changed.
+
+import (
+	"maps"
+	"slices"
+)
 
 // blockAt is the room line whose rendered rows contain an absolute transcript
 // line, and whether one does. Built from roomSpans so it reads the same layout
@@ -116,51 +121,37 @@ func (r Room) toggleExpandAll() Room {
 	return r
 }
 
-// forgetExpanded drops the per-line opens of blocks that are leaving the room,
-// so the expand set stays bounded by what is retained rather than by every
-// response ever clicked. Copied on write for Room's value contract, and only
-// when an evicted block was actually open - reclamation runs once per event
-// past the cap, so its common path (nothing opened, or nothing opened among the
-// evicted) must allocate nothing.
-func (r Room) forgetExpanded(evicted []roomLine) Room {
-	if len(r.expanded) == 0 {
-		return r
+// forgotten drops a per-line set's entries (the opens, the channels typed in) for
+// blocks that are leaving the room, so it stays bounded by what is retained
+// rather than by every line ever marked. Copied on write for Room's value
+// contract, and only when an evicted block was actually marked - reclamation runs
+// once per event past the cap, so its common path (nothing marked, or nothing
+// marked among the evicted) must allocate nothing.
+func forgotten[V any](m map[uint64]V, evicted []roomLine) map[uint64]V {
+	if len(m) == 0 || !slices.ContainsFunc(evicted, func(l roomLine) bool { _, ok := m[l.id]; return ok }) {
+		return m
 	}
-	drop := false
+	kept := maps.Clone(m)
 	for _, l := range evicted {
-		if r.expanded[l.id] {
-			drop = true
-			break
-		}
+		delete(kept, l.id)
 	}
-	if !drop {
-		return r
-	}
-	expanded := make(map[uint64]bool, len(r.expanded))
-	for k, v := range r.expanded {
-		expanded[k] = v
-	}
-	for _, l := range evicted {
-		delete(expanded, l.id)
-	}
-	r.expanded = expanded
-	return r
+	return kept
 }
 
-// keptExpanded rebuilds the open set to only the ids still present in lines, for
-// the merge path where ids both leave and are re-minted. Returns the same map
-// when there is nothing to keep track of and nil once the last open is gone, so
-// an empty set never carries an allocation. A live open survives, because a held
-// live line keeps its id across a merge; a restored one may not, which is the
-// documented, harmless re-collapse.
-func keptExpanded(expanded map[uint64]bool, lines []roomLine) map[uint64]bool {
-	if len(expanded) == 0 {
-		return expanded
+// keptOn rebuilds a per-line set (the opens, the channels typed in) to only the
+// ids still present in lines, for the merge path where ids both leave and are
+// re-minted. Returns the same map when there is nothing to keep track of and nil
+// once the last entry is gone, so an empty set never carries an allocation. A live
+// entry survives, because a held live line keeps its id across a merge; a restored
+// one may not, which is the documented, harmless re-collapse.
+func keptOn[V any](m map[uint64]V, lines []roomLine) map[uint64]V {
+	if len(m) == 0 {
+		return m
 	}
-	kept := make(map[uint64]bool, len(expanded))
+	kept := make(map[uint64]V, len(m))
 	for _, l := range lines {
-		if expanded[l.id] {
-			kept[l.id] = true
+		if v, ok := m[l.id]; ok {
+			kept[l.id] = v
 		}
 	}
 	if len(kept) == 0 {

@@ -694,22 +694,34 @@ func toolResultText(content json.RawMessage) string {
 
 // receiptSentence is a text block as prose: a SendMessage receipt - its three
 // recorded keys and no other, success, message and a msg_id - reads as its
-// message (manager-relay.jsonl). Any other text, JSON or not, is left whole: the
-// block names no tool, so only the receipt's own shape says it is one.
+// message (manager-relay.jsonl), and so does a subagent's SubagentHandback
+// receipt, exactly (subagent-nested.jsonl). Any other text, JSON or not, is left
+// whole: the block names no tool, so only the receipt's own shape says it is one.
 func receiptSentence(text string) string {
 	var r struct {
-		Success *bool   `json:"success"`
-		Message *string `json:"message"`
-		MsgID   string  `json:"msg_id"`
+		Success *bool           `json:"success"`
+		Message *string         `json:"message"`
+		MsgID   json.RawMessage `json:"msg_id"`
 	}
 	dec := json.NewDecoder(strings.NewReader(text))
 	dec.DisallowUnknownFields()
 	if !strings.HasPrefix(text, "{") || dec.Decode(&r) != nil || dec.More() ||
-		r.Success == nil || r.Message == nil || r.MsgID == "" {
+		r.Success == nil || r.Message == nil {
+		return text
+	}
+	var id string
+	sent := r.MsgID != nil && json.Unmarshal(r.MsgID, &id) == nil && id != ""
+	handedBack := r.MsgID == nil && *r.Success && *r.Message == handbackDelivered
+	if !sent && !handedBack {
 		return text
 	}
 	return *r.Message
 }
+
+// handbackDelivered is a delivered SubagentHandback receipt's whole message,
+// matched against Claude Code and maintained by hand: every one of the 2,264 on
+// the recording machine read it (2.1.314). Any other two-key result stays whole.
+const handbackDelivered = "Report delivered to your caller."
 
 // MessageEnded reports whether a KindMessageState says the message Wake sent is
 // over - completed or cancelled. Both free the wire for the next. See queue.go.

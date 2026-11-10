@@ -4,8 +4,10 @@ import (
 	"os"
 	"path/filepath"
 	"slices"
+	"strconv"
 	"strings"
 	"testing"
+	"time"
 )
 
 // `make ci` is a second copy of the workflow's step list, and this is what
@@ -278,4 +280,110 @@ func TestTheRaceLaneCarriesNoCoverageAndTheCoverLaneNoRace(t *testing.T) {
 	if !slices.ContainsFunc(cover, func(arg string) bool { return strings.HasPrefix(arg, "-coverprofile=") }) {
 		t.Errorf("`make cover` writes no coverage profile, so the gate would read nothing: %v", cover)
 	}
+}
+
+// goTestDefaultTimeout is what `go test` uses when no -timeout is given (`go
+// help testflag`).
+const goTestDefaultTimeout = 10 * time.Minute
+
+// TestEachLanesTimeoutIsUnderTheCIJobs holds each lane's go test -timeout under
+// the workflow test job's timeout-minutes. A package timeout names the test that
+// hung and dumps every goroutine; the runner killing the job says nothing, the
+// failure testTimeout in cmd/wake/main_test.go was written against. This is
+// necessary for a hang to name itself, not sufficient: the lanes run one after
+// the other in that job. It reads the recipes, not GOFLAGS. The lower bound,
+// above the slowest healthy package, is measured (the Makefile's RACE_TIMEOUT).
+func TestEachLanesTimeoutIsUnderTheCIJobs(t *testing.T) {
+	job := workflowJobTimeout(t, "test")
+	for _, target := range []string{"test", "cover"} {
+		if lane := laneTimeout(t, target); lane >= job {
+			t.Errorf("`make %s` lets a package run %v, and the workflow's test job is killed at %v.\n"+
+				"A hang there is reported by the runner's kill, which names no test and dumps no goroutine; "+
+				"keep the lane's -timeout under the job's timeout-minutes.", target, lane, job)
+		}
+	}
+}
+
+// laneTimeout is the package timeout a lane's go test runs under: its -timeout
+// (or -test.timeout), with a Makefile variable resolved, else go test's default.
+func laneTimeout(t *testing.T, target string) time.Duration {
+	t.Helper()
+	for _, cmd := range makeRecipeCommands(t, target) {
+		if !strings.HasPrefix(cmd, "go test ") {
+			continue
+		}
+		fields := strings.Fields(cmd)
+		for i, f := range fields {
+			name, v, joined := strings.Cut(strings.TrimLeft(f, "-"), "=")
+			if !strings.HasPrefix(f, "-") || (name != "timeout" && name != "test.timeout") {
+				continue
+			}
+			if !joined && i+1 < len(fields) {
+				v = fields[i+1]
+			}
+			resolved := makeVariable(t, v)
+			d, err := time.ParseDuration(resolved)
+			if err != nil {
+				t.Fatalf("`make %s` gives -timeout %s = %q, which is not a duration: %v", target, v, resolved, err)
+			}
+			if d <= 0 {
+				t.Fatalf("`make %s` gives -timeout %s = %q, which turns go test's timeout off: a hang there is never reported",
+					target, v, resolved)
+			}
+			return d
+		}
+	}
+	return goTestDefaultTimeout
+}
+
+// makeVariable is v with a whole $(NAME) replaced by what the Makefile assigns
+// NAME, as make expands a recipe; anything else comes back as it is.
+func makeVariable(t *testing.T, v string) string {
+	t.Helper()
+	inner, opened := strings.CutPrefix(v, "$(")
+	name, closed := strings.CutSuffix(inner, ")")
+	if !opened || !closed {
+		return v
+	}
+	b, err := os.ReadFile(filepath.Join(repoRoot, makefileFile))
+	if err != nil {
+		t.Fatalf("read %s: %v", makefileFile, err)
+	}
+	for _, line := range strings.Split(string(b), "\n") {
+		lhs, rhs, assigns := strings.Cut(line, "=")
+		if assigns && strings.TrimSpace(strings.TrimRight(strings.TrimSpace(lhs), "?:")) == name {
+			return strings.TrimSpace(rhs)
+		}
+	}
+	t.Fatalf("%s names %s, which the %s never assigns", v, name, makefileFile)
+	return ""
+}
+
+// workflowJobTimeout reads one job's own timeout-minutes from the workflow, by
+// the same line scan workflowCommands uses: the key at a job's indent, never a
+// step's.
+func workflowJobTimeout(t *testing.T, job string) time.Duration {
+	t.Helper()
+	b, err := os.ReadFile(filepath.Join(repoRoot, workflowFile))
+	if err != nil {
+		t.Fatalf("read %s: %v", workflowFile, err)
+	}
+	in := false
+	for _, line := range strings.Split(string(b), "\n") {
+		if strings.HasPrefix(line, "  ") && !strings.HasPrefix(line, "   ") && strings.HasSuffix(line, ":") {
+			in = strings.TrimSpace(line) == job+":"
+			continue
+		}
+		v, ok := strings.CutPrefix(line, "    timeout-minutes:")
+		if !in || !ok {
+			continue
+		}
+		minutes, err := strconv.Atoi(strings.TrimSpace(v))
+		if err != nil {
+			t.Fatalf("%s: the %s job's timeout-minutes %q is not a whole number: %v", workflowFile, job, v, err)
+		}
+		return time.Duration(minutes) * time.Minute
+	}
+	t.Fatalf("%s has no timeout-minutes on its %s job, so there is no bound to hold the lanes under", workflowFile, job)
+	return 0
 }
