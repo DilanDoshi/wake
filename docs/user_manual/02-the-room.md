@@ -103,14 +103,15 @@ of the conversation you are in.
 **Right — activity.** One row per agent, ordered by whether it needs you: blocked agents first
 with the tool they are waiting on, then working agents stalest-first, then idle. At 30 agents in a
 short terminal the list gets cut — and it is cut from the *idle* end, so what needs you is never
-what disappears.
+what disappears. The wheel over the sidebar scrolls the rest into view.
 
 **Middle — the room**, and below it the composer, outlined in orange so you can find where you type.
 
 The box **grows as you type**. An empty one is a single row; it gains a row for every line the draft
 wraps onto or every newline you put in with `⌥↵`, up to ten — and less than ten in a pane too short
 to spare them, because the conversation above keeps its floor. Past that the draft scrolls under the
-cursor, so what you are typing now is always the part you can see. It shrinks back as you delete.
+cursor, so what you are typing now is always the part you can see; the wheel over the box scrolls
+the rest into view without moving the cursor. It shrinks back as you delete.
 
 Open a conversation with `⌃D` and it appears **beside** the room, with a divider you can drag. The
 right sidebar stays open — picking a row is a request to read that conversation, not to put the

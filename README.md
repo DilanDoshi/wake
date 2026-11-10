@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.14 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.15 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -71,7 +71,7 @@ come back.
 | `⌃T` mention mode | `⌃A` show all | `⌥↵`/`⌃J` newline | `⌃]` send now |
 
 `↑↓` recall your previous prompts into the query bar (Claude Code's own history keys); `⇧↑↓` walk the
-roster instead — including a conversation's running subagents in the right sidebar — and `↵` or `⌃D`
+roster instead — including a conversation's running subagents in the right sidebar, a subagent's own nested under it — and `↵` or `⌃D`
 opens the one the cursor is on. The roster's team headers are channels: `↵` or a click on one shows
 only that team's thread in the room, and `── all ──` at the top shows everyone again. `⌃O` arms the detach and `↵` finishes it; a second `⌃O` cancels.
 While a completion menu is up, `⌃N`/`⌃P` walk it and `⇥` or `↵` completes.
@@ -150,7 +150,10 @@ roster row reads `⚠`. Once an agent reports it, the account's
 five-hour session usage is a bar under the roster (`session · ↻ 4:09pm`), and a friend sits on it — Skip the
 tug, Ollie the otter, Bo the whale or Puff the pufferfish; `/friends` picks one, or none, for this machine. A table too narrow for its pane is
 drawn as records, `Header: value` a line, as Claude Code draws one. A conversation showing a question card
-scrolls as one page under the wheel. A SIGTERM or SIGINT to the daemon parks the fleet as `⌃Q⌃Q` does, and a
+scrolls as one page under the wheel; the wheel over the right sidebar scrolls a roster taller than its column,
+and over a query box a draft taller than the box. `⌃Q⌃Q` interrupts a turn in flight and parks it, so `/resume`
+and `continue` pick it up, and prints the words of any message an agent had not read yet as Wake exits. A
+SIGTERM or SIGINT to the daemon parks the fleet as `⌃Q⌃Q` does, and a
 fleet whose daemon crashed is parked by the next one, so `/resume` brings its agents back. A `!cmd` typed in a
 conversation runs, and its output then reaches that agent as Claude Code's own `!` does; in the room,
 `@name !cmd` runs it in that agent's directory and sends it there.
