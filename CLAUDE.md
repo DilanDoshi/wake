@@ -767,6 +767,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - `stream_event` text deltas are byte-identical to the completed `assistant` block
   (`testdata/stream/partial-turn.jsonl`); unrecognised shapes yield no event.
 - The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id; `TodoWrite` is retired.
+- **A self-paced `/loop` ends when its own wakeup turn finishes without a `ScheduleWakeup`** (2.1.319+;
+  `CLAUDE_CODE_LOOP_KEEPALIVE=1` keeps the old fallback). No frame says so: the wakeup turn's
+  `command_lifecycle` names `wakeup_source:"loop_wakeup"`, and its `completed` with nothing rescheduled is
+  the end (`daemon/loop.go`'s `foldWakeup`, `loop-self-paced-end.jsonl`).
 - A `Workflow` run is `task_type:"local_workflow"` on the `task_*` frames; every `workflow_progress`
   is a **full snapshot**. Agent states are `start`/`progress`/`done`/**`error`** (never `failed`; an
   agent refused before starting has no `agentId`). A workflow agent's words never reach stdout — only

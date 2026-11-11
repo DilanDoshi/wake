@@ -540,6 +540,11 @@ type Event struct {
 	// knows a queued message was read when its started lifecycle went missing.
 	Answered []string `json:"answered,omitempty"`
 
+	// LoopWakeup marks a KindMessageState for a turn claude started itself to run
+	// a self-paced loop's next iteration; its MessageID is claude's, not Wake's.
+	// Read by the daemon alone, so it never reaches a client.
+	LoopWakeup bool `json:"-"`
+
 	// PermissionMode is the mode a session is running in, and it has two
 	// observables that are one fact: a KindControlReceipt answering a
 	// set_permission_mode, and every KindSystem init. One field rather than

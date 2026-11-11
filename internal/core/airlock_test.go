@@ -269,6 +269,9 @@ var claudeWireVocabulary = wordSet([]string{
 	// where Wake's own words are LoopOp's fields. See core/loop.go.
 	"CronCreate", "ScheduleWakeup", "CronDelete",
 	"cron", "recurring", "delaySeconds", "noop",
+	// A self-paced loop's own wakeup turn names itself on its lifecycle, which
+	// is how the daemon tells that its loop ended (foldWakeup).
+	"wakeup_source", "loop_wakeup",
 
 	// control_request / control_response.
 	"can_use_tool", "cancel_queued", "still_queued",
@@ -823,7 +826,10 @@ var notNamedByTheAirlock = map[string]string{
 // 253 → 255: "parent_task_id", the dispatching subagent's task id on a nested
 // task_started, which nests a subagent's own under it, and "Report delivered to
 // your caller.", a delivered SubagentHandback receipt. subagent-nested.jsonl.
-const policedWordCount = 255
+// 255 → 257: "wakeup_source" and its "loop_wakeup", the lifecycle of a turn claude
+// starts for a self-paced loop, whose ending without a reschedule ends the loop.
+// loop-self-paced-end.jsonl.
+const policedWordCount = 257
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
