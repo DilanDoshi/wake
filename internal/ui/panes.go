@@ -484,15 +484,20 @@ func (a App) showRoom() App { return a.refocus("") }
 func (a App) refocus(next string) App {
 	was := a.drawn()
 	a = a.withFocus(next).resizePanes()
-	now := a.drawn()
+	a = a.left(was, a.drawn())
+	if next == "" {
+		// A reminder the room passed while a conversation held the keys is owed now.
+		a.room = a.room.remind()
+	}
+	return a
+}
+
+// left marks every conversation drawn in was and not in now as left.
+func (a App) left(was, now []string) App {
 	for _, id := range was {
 		if id != "" && !slices.Contains(now, id) {
 			a = a.withDM(id, a.dms[id].Leave())
 		}
-	}
-	if next == "" {
-		// A reminder the room passed while a conversation held the keys is owed now.
-		a.room = a.room.remind()
 	}
 	return a
 }
