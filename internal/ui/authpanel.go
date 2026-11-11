@@ -14,6 +14,7 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -104,7 +105,7 @@ func authPanel(st authStatus, ok bool, width int) string {
 	case !ok:
 		return joinBlock(accentLine(authTitle, width),
 			warnLine(authNeeds+" "+authUnreadable, width),
-			mutedLine("  "+authCheckHint+authLoginCmd, width))
+			mutedLine(ansi.Truncate("  "+authCheckHint+authLoginCmd, width, ellipsis), width))
 	case st.LoggedIn:
 		line := authOK + " " + authSignedIn
 		if m := strings.TrimSpace(st.Method); m != "" {
@@ -114,7 +115,7 @@ func authPanel(st authStatus, ok bool, width int) string {
 	default:
 		return joinBlock(accentLine(authTitle, width),
 			warnLine(authNeeds+" "+authSignedOut, width),
-			mutedLine("  "+authSignInHint+authLoginCmd, width))
+			mutedLine(ansi.Truncate("  "+authSignInHint+authLoginCmd, width, ellipsis), width))
 	}
 }
 

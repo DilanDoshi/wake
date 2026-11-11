@@ -38,6 +38,20 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FOLLOW-UP, 2026-11-11 — a name cut bare can read as another session's
+
+Every other one-row cut was checked when the notice row got its "…": the rest already cut with one (`detailRow`,
+`boardRow`, `commandecho`, `field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting
+(cards, the question text, titled boxes), or cut a label nobody types (a dispatch's description, a task's
+subject). One kind can mislead: the
+rows that cut an **agent's name** with no mark - the roster's `headLine` (`clip`), the room's speaker head
+(`agentSaid`) and cross-session head (`crossSaid`), and the composer's target line. A name is how an agent is
+typed, and a cut one can be another live session's whole name (`fix-login-bug` drawn `fix-login`).
+`headLine`'s own comment chose the bare cut ("a name stays recognisable three characters short"), so the call
+is the owner's: an ellipsis there costs a name one more cell.
+
+---
+
 ## PRODUCT CALL NOT TAKEN, 2026-11-07 — a turn a peer's message started is resumed after a limit too
 
 The owner reported that agents which were idle when he hit the limit were woken by Wake's resume. The
@@ -122,7 +136,7 @@ the fleet, but it still counts with `%d`.
 
 ---
 
-## FOLLOW-UP, 2026-11-07 — a cut notice row ends with nothing to say it was cut
+## ~~FOLLOW-UP, 2026-11-07 — a cut notice row ends with nothing to say it was cut~~ CLOSED 2026-11-11 (`fix/cut-notice-ends-in-an-ellipsis`)
 
 `noticeLine` (`internal/ui/appview.go`) draws a notice on one row with lipgloss's `MaxWidth`, which cuts at
 the pane's width and adds no ellipsis. A row cut inside a command reads as a shorter command: the adversarial
@@ -131,6 +145,14 @@ review of `fix/daemon-lines-name-the-fleet` measured the cap refusal's old "`wak
 row ends on a destructive verb today, but any long notice still loses its tail without a mark.
 
 *Closes with:* a cut notice row ending in "…", measured by the same width, with a test at the cut.
+
+**Closed by `noticeRow`** (`appview.go`): the row's words are cut by `ansi.Truncate` to `noticeWidth` with the
+DM's `ellipsis`, then coloured, so the "…" is the row's last cell inside the style. The timed, lingering and
+pinned notices all draw through it, and `noticeLinger` measures the same cut row: "drawn cells" is after the
+cut, the "…" one of them. The two other one-row cuts that could read as a shorter command or a whole list went
+with it: the auth panel's `claude auth login` hint (`authpanel.go`) and the rewind menu's "⚠ … also runs in this
+directory" (`rewindmenu.go`). Tests: `noticerow_test.go`, `TestANarrowPanelMarksItsCutCommand`,
+`TestANarrowPaneMarksItsCutSharedDirectoryWarning`. The rows that still cut a name bare are the entry below.
 
 ---
 
