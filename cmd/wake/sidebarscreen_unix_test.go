@@ -87,6 +87,9 @@ func TestAShortRosterSaysHowManyAgentsAreHidden(t *testing.T) {
 	s.awaitFrame("a column too short for nine agents saying some are hidden", sayHidden)
 	rows := s.settle()
 
+	if !sayHidden(rows) {
+		t.Fatalf("a column too short for nine agents stopped saying any are hidden.\n%s", s.dump())
+	}
 	if got := len(rosterNamesIn(rows)); got >= 9 {
 		t.Fatalf("the column claims to have hidden agents and drew all %d of them.\n%s", got, s.dump())
 	}

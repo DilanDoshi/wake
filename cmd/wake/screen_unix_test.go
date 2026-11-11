@@ -224,6 +224,11 @@ const (
 // it (its sockets are sized to it), where the bar draws the whole path.
 func screenWorkspace(t *testing.T) (dir, home string) {
 	t.Helper()
+	// One per test, so a second window's agents are under the HOME it draws by.
+	if ws, ok := workspaces.Load(t); ok {
+		w := ws.([2]string)
+		return w[0], w[1]
+	}
 	home = os.Getenv("HOME")
 	if !strings.HasPrefix(home, os.TempDir()) {
 		resolved, err := filepath.EvalSymlinks(t.TempDir())
@@ -239,12 +244,19 @@ func screenWorkspace(t *testing.T) (dir, home string) {
 	for _, args := range [][]string{{"init", "--quiet"}, {"symbolic-ref", "HEAD", "refs/heads/" + screenBranch}} {
 		git := exec.Command("git", args...)
 		git.Dir = dir
+		// Without GIT_* a hook's GIT_DIR cannot point these at a real repository.
+		git.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "GIT_") })
 		if out, err := git.CombinedOutput(); err != nil {
 			t.Fatalf("git %v in the screen workspace: %v\n%s", args, err, out)
 		}
 	}
+	workspaces.Store(t, [2]string{dir, home})
+	t.Cleanup(func() { workspaces.Delete(t) })
 	return dir, home
 }
+
+// workspaces is each running test's screenWorkspace: dir, then home.
+var workspaces sync.Map
 
 func testLeaseEnv(env []string, fd int) []string {
 	prefix := testParentLeaseSourceEnv + "="
