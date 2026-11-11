@@ -109,10 +109,10 @@ type wireFrame struct {
 
 	RateLimit *wireRateLimit `json:"rate_limit_info"`
 
-	// stream_event carries one Anthropic streaming event here. It is the only
-	// frame in the corpus's format that Wake decodes into *nothing* on most of
-	// its shapes - see wireStreamEvent, and partialEvent for why.
-	StreamEvent *wireStreamEvent `json:"event"`
+	// stream_event carries one Anthropic streaming event here (wireStreamEvent,
+	// and partialEvent for why most decode to nothing); system/ui_invalidate
+	// carries a string (ui-invalidate.jsonl:2), so it is raw.
+	StreamEvent json.RawMessage `json:"event"`
 
 	// What the session is running as, and how full its context is - the two
 	// facts a status bar shows that are not the conversation.

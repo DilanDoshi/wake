@@ -702,8 +702,9 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.314. A
-fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
+**Verified against v2.1.322** (re-checked 2026-11-11: every flag below but `--permission-prompt-tool` has
+its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226–2.1.322. A fixture's `init` names its version. Findings notes:
+`docs/superpowers/notes/`.
 
 | Need | Flag |
 |---|---|
@@ -766,6 +767,9 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   `/permissions`, `/memory`, `/hooks` and `/help` do; only `/status`'s answer is recorded.
 - `stream_event` text deltas are byte-identical to the completed `assistant` block
   (`testdata/stream/partial-turn.jsonl`); unrecognised shapes yield no event.
+- **2.1.322 prints `system/ui_invalidate` before every session's `init`** (after `session_title_changed`,
+  which `--name` brings), its `event` a string where `stream_event`'s is an object, so
+  `wireFrame.StreamEvent` stays raw and a stream event it cannot read is nothing (`ui-invalidate.jsonl:2`).
 - The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id; `TodoWrite` is retired.
 - A `Workflow` run is `task_type:"local_workflow"` on the `task_*` frames; every `workflow_progress`
   is a **full snapshot**. Agent states are `start`/`progress`/`done`/**`error`** (never `failed`; an

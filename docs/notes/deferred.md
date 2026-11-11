@@ -5811,7 +5811,27 @@ message and a subagent's gutter (neither opts in), and a paragraph or token wide
   runs on a drop (`imagedrop.go`), not on a take-back or a send-now's join. The daemon's reader would
   refuse that frame and end the connection, a hangup the client reattaches from.
 
-## 2026-10-03 — a bare one-shot's `system/ui_invalidate` frame does not decode
+## 2026-11-11 — ideas from the 2.1.322 audit (not bugs)
+
+- **`system/init` names the session's own `messaging_socket_path`**, and has since the August findings
+  (`2026-08-08-stream-json-findings.md`; it can be null, and the scrubber drops it). The daemon names a
+  send by address from Claude Code's session registry (`daemon/sendto.go`), a file Claude keeps for
+  itself; an agent's own socket could come off its init instead. *Worth it when:* the registry moves or
+  its read costs something.
+- **`result` carries `credential_expires_at`** (2.1.318: when the stored claude.ai sign-in ends). Wake
+  could say a login is about to lapse before the turns fail, beside `/reauth`. *Worth it when:* the owner
+  wants a warning ahead of the 401s.
+- **`--help` now documents `--permission-prompts <host|none>`** (2.1.322), whose `host` is "the SDK host or
+  `--permission-prompt-tool`". Wake still spawns the undocumented `--permission-prompt-tool stdio`, which
+  2.1.322 honours (the audit's asks were answered on it). *Worth it when:* the old flag goes away; record
+  `host` first.
+
+## ~~2026-10-03 — a bare one-shot's `system/ui_invalidate` frame does not decode~~ CLOSED 2026-11-11 (`fix/ui-invalidate-frame-decodes`)
+
+**Closed:** `wireFrame.StreamEvent` is raw now, read as a stream event by `partialEvent` alone, so a string
+`event` is read as nothing. `ui-invalidate.jsonl` is an ordinary 2.1.322 agent's first turn, which prints it
+before `init`. The one-shot's own line was never kept, so `list-agents-bare-renamed.jsonl` stays without it
+rather than carry a line nobody recorded.
 
 claude 2.1.288's bare `/list-agents` one-shot prints `{"type":"system","subtype":"ui_invalidate",
 "event":"ui.render",…}` before `init`. `wireFrame.StreamEvent` takes `event` as a stream event's
