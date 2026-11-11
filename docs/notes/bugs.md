@@ -1651,7 +1651,7 @@ from the previous frame) and read one awaited whole frame anyway. Where a test e
 it waits for the change before it settles, since a whole frame can still be the frame before the keystroke.
 `TestSettleNeverSettlesOnHalfAFrame` and `TestAConversationsNameIsReadFromAWholeFrame` hold the two helpers.
 
-## BUG-71 — three `make ci` false reds from the harness: a refused first dial, a stale lint cache, a killed `ps`
+## BUG-71 — `make ci` false reds from the harness: a refused first dial, a stale lint cache, a killed `ps`, the checkout's own name
 
 **Seen on the v0.1.15 and #223 gates, 2026-11-07 to -09.** Each failed a gate with no code at fault. Fixed on
 `fix/test-waits-on-real-conditions` (PR awaiting merge).
@@ -1674,3 +1674,10 @@ it waits for the change before it settles, since a whole frame can still be the 
   `ps` slowed by 2.5s fails `TestAWokenSessionComesBackUnderItsOwnIdAndName` the same way. internal/daemon's
   `TestMain` now sets `probeTimeout` to `testTimeout`; the tests about a `ps` that cannot answer already set
   their own with `shortProbeTimeout`.
+- **`2 rows hold /resume, want the one in the composer`** on `fix/resume-plumbing-is-not-a-reply`, and PR
+  #204's "fork" in a worktree path. Every screen draws the directory wake runs in and its branch, and a pty
+  test naming no directory ran in the checkout, so a word in a worktree's name was on screen: a count read it,
+  and an await on it would return at once. Such a test now runs in `screenWorkspace`, a repository on `main`
+  at the main checkout's path under a scratch `HOME`; internal/ui's `TestMain` pins `wakeDir`, the room
+  banner's directory, the same way. Both failures reproduced in a worktree named `fork-ready-resume` on
+  `fix/resume-fork-ready`, and pass there now.
