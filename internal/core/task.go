@@ -101,7 +101,8 @@ type TaskUpdate struct {
 	ID string `json:"id"`
 
 	// Parent is the task id of the subagent that dispatched this one, on its
-	// task_started alone, and "" for a dispatch the agent made itself.
+	// task_started alone (the UI's Tasks.named carries it onto the ending), and
+	// "" for a dispatch the agent made itself.
 	Parent string `json:"parent,omitempty"`
 
 	// Dispatch is the parent tool call that started this task, and the join

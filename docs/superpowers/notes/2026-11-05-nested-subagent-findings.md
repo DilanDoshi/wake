@@ -35,3 +35,22 @@ A depth-2 subagent is offered the Agent tool (the probe's answer), so a third le
 seen: across the recording machine's 1,693 subagent `.meta.json` files, 1,427 are `spawnDepth` 1 and 266
 are 2, each of the 266 naming a `parentAgentId`. In a three-level ask, the depth-2 subagent did the
 work itself rather than dispatch.
+
+## Re-checked on 2.1.322 (2026-11-11)
+
+Same argv and project shape, for the inner subagent's ending line (deferred.md, 2026-11-05).
+
+- **The foreground nest is unchanged.** The fixture's own prompt gave the same frames in the same order
+  with the same keys on `task_started`, `task_updated` and `task_notification`. Not committed: it adds
+  nothing `subagent-nested.jsonl` lacks.
+- **No ending names its parent.** On both versions only the inner `task_started` carries
+  `parent_task_id`; its `task_notification` does not (`subagent-nested-background.jsonl:74`, `:96`), so
+  `Tasks.named` carries it over from the row.
+- **A background nest ends its parent first.** Committed as `subagent-nested-background.jsonl`
+  (`run_in_background` at both levels, `is_backgrounded: true`): the outer hands back at once and its one
+  `task_notification` is `completed` (`:66`) while both children run. Their hand-backs then reach the
+  agent itself (`:108`, `:114`), with the cross-session lead-in ahead of `<agent-message …>`. The
+  recording opened with a `system/ui_invalidate` line, left out (deferred.md, 2026-10-03).
+- **Claude Code's own UI draws no inner ending.** Two interactive probes (haiku, auto mode), one with the
+  outer waiting for background children and one with it told not to: the main conversation drew only the
+  outer's `Agent "…" finished`, and in both the outer stayed alive until its children ended.

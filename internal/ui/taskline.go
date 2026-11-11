@@ -114,8 +114,12 @@ func taskLineKind(k core.TaskKind) string {
 // event on a re-wrap, so a line built from a transition the fold remembered
 // would either vanish or double at the next width change - the failure class
 // lastread.go is an essay about.
+//
+// **A subagent's own subagent draws none** (a Parent, which Tasks.named carries
+// onto the ending). Its report went to that subagent, whose pane shows the
+// dispatch and its result; Claude Code too draws only the agent's own endings.
 func taskLine(u *core.TaskUpdate, width int) string {
-	if u == nil || u.Phase != core.TaskEnded || u.Dispatch == "" {
+	if u == nil || u.Phase != core.TaskEnded || u.Dispatch == "" || u.Parent != "" {
 		return ""
 	}
 	line := taskLineGlyph + " " + taskLineSubject(u) + " " + taskLineWord(u.Status)

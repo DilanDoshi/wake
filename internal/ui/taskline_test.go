@@ -3,6 +3,7 @@ package ui
 // The line a dispatch leaves in the conversation when it ends.
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -413,5 +414,38 @@ func TestAFailedWorkflowsEndingLineNamesItAndShowsItsErrorThroughTheRealFold(t *
 		if !strings.Contains(out, want) {
 			t.Errorf("the transcript is missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// A subagent's own subagent ends on the agent's stream too, but the agent did not
+// dispatch it. Claude Code draws only the agent's own dispatch ending, and so does
+// the conversation: one line for the one dispatch, through the ingest a live
+// window uses. The background nest (2.1.322) ends its inner subagents after their
+// parent has ended, so the parent's row is no longer running when they arrive.
+func TestAnInnerSubagentsEndingIsNotDrawnInTheAgentsConversation(t *testing.T) {
+	for _, tc := range []struct{ fixture, outer string }{
+		{"subagent-nested.jsonl", "Nested explore subagents task"},
+		{"subagent-nested-background.jsonl", "Launch background subagent"},
+	} {
+		t.Run(tc.fixture, func(t *testing.T) {
+			fresh(t)
+			a := dmApp(nil, Stream{}, "s1", "alex").withSize(120, 60)
+			for _, ev := range decodeWorkflowFixture(t, tc.fixture) {
+				a = a.applyFrame(taskFrame("s1", ev))
+			}
+			out := conversationRegion(t, *a.dms["s1"], 120, 60)
+
+			if n := strings.Count(out, taskLineGlyph+" "+taskLineAgent); n != 1 {
+				t.Errorf("%d ending lines for the agent's one dispatch, want 1:\n%s", n, out)
+			}
+			if !strings.Contains(out, strconv.Quote(tc.outer)+" "+taskLineFinished) {
+				t.Errorf("the agent's own subagent lost its ending:\n%s", out)
+			}
+			for _, inner := range []string{"List current directory files", "Print first line of alpha.txt"} {
+				if strings.Contains(out, inner) {
+					t.Errorf("the inner subagent %q is drawn in the agent's conversation:\n%s", inner, out)
+				}
+			}
+		})
 	}
 }
