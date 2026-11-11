@@ -88,7 +88,7 @@ func TestANewDaemonReapsTheFleetACrashedOneLeftRunning(t *testing.T) {
 	// record; a hello comes from the accept loop, which runs after the reaper.
 	d := startDaemonOn(t, sock)
 	waitForProcessGone(t, agent)
-	attachConn(t, dialWhenUp(t, sock)).status()
+	attach(t, sock).status()
 	if recs := loadRoster(rosterPath(d.socket)); len(recs) != 0 || !fileGone(rosterPath(d.socket)) {
 		t.Errorf("roster after reaping = %+v, want the file removed", recs)
 	}
