@@ -72,6 +72,22 @@ func TestSettleNeverSettlesOnHalfAFrame(t *testing.T) {
 	}
 }
 
+// The screen a TUI leaves behind settles, though its exit line holds the cursor
+// mid-screen: outside the alt screen nothing paints frames.
+func TestSettleReturnsOnTheScreenLeftAfterTheAltScreen(t *testing.T) {
+	const cols, rows = 30, 8
+	term := vt10x.New(vt10x.WithSize(cols, rows))
+	left := "\x1b[?1049h" + altFrame([]string{"group chat"}, cols, rows) + "\x1b[?1049lParked 1 agent.\r\n"
+	if _, err := term.Write([]byte(left)); err != nil {
+		t.Fatal(err)
+	}
+	s := &screen{t: t, term: term, cols: cols, rows: rows}
+
+	if got := strings.Join(s.settle(), "\n"); !strings.HasPrefix(got, "Parked 1 agent.") {
+		t.Fatalf("settle returned a screen that is not the one left after the TUI:\n%s", got)
+	}
+}
+
 // The name on a composer border is read from the frame that drew it, not from a
 // later read that may hold only the border's first cells, or one border's first
 // cells over the rest of the frame before's.

@@ -2,8 +2,9 @@
 
 // The operator's own environment as a test dimension.
 //
-// Every other fixture in this package runs wake from screenWorkspace: the main
-// checkout's short path on main. Real operators are not there. The report that opened
+// Every other fixture in this package runs wake from screenWorkspace: a short
+// path shaped like a main checkout's, on main. Real operators are not there.
+// The report that opened
 // docs/notes/bugs.md BUG-1 came with a screenshot of
 // `~/Documents/Project Pufferfish/Singularity  feat-doshi` in a split pane, and
 // BUG-8 is that same shape defeating BUG-1's fix: the status bar drops the

@@ -1679,6 +1679,6 @@ it waits for the change before it settles, since a whole frame can still be the 
   #204's "fork" in a worktree path. Every screen draws the directory wake runs in and its branch, and a pty
   test naming no directory ran in the checkout, so a word in a worktree's name was on screen: a count read it,
   and an await on it would return at once. Such a test now runs in `screenWorkspace`, a repository on `main`
-  at the main checkout's path under a scratch `HOME`; internal/ui's `TestMain` pins `wakeDir`, the room
+  at a fixed path shaped like a main checkout's, under a scratch `HOME`; internal/ui's `TestMain` pins `wakeDir`, the room
   banner's directory, the same way. Both failures reproduced in a worktree named `fork-ready-resume` on
   `fix/resume-fork-ready`, and pass there now.

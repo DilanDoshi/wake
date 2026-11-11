@@ -209,17 +209,19 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 
 // screenNesting and screenBranch are where a test that names no directory runs
 // wake: a fixed path and branch shaped like a main checkout's, the shape the
-// suite was written against, in a repository under a scratch home. Every screen draws the checkout's path and branch (the status bar, a
-// banner), so a word in a worktree's name was a word every await and count read
-// ("/resume" in fix/resume-plumbing-is-not-a-reply, "fork" in a worktree path).
+// suite was written against, in a repository under a scratch home. Every screen
+// draws the checkout's path and branch (the status bar, a banner), so a word in
+// a worktree's name was a word every await and count read ("/resume" in
+// fix/resume-plumbing-is-not-a-reply, "fork" in a worktree path).
 const (
 	screenNesting = "Documents/wake-public/cmd/wake"
 	screenBranch  = "main"
 )
 
-// screenWorkspace makes that repository, and returns it with the HOME wake must
-// see for it to draw as ~/…: the test's own scratch HOME if it set one, else a
-// fresh one resolved through symlinks, as the child's getcwd reports it.
+// screenWorkspace makes that repository, and returns it with the HOME wake runs
+// under: a fresh one resolved through symlinks, as the child's getcwd reports it,
+// so the bar draws ~/…; or the test's own scratch HOME, left as the test spelled
+// it (its sockets are sized to it), where the bar draws the whole path.
 func screenWorkspace(t *testing.T) (dir, home string) {
 	t.Helper()
 	home = os.Getenv("HOME")
