@@ -6198,17 +6198,31 @@ A subagent's own subagent no longer draws an ending in the agent's conversation 
 `subagent-nested.jsonl` (2.1.314) frame for frame; the background nest is `subagent-nested-background.jsonl`.
 Left out:
 
-- **A double ending for a subagent waiting on its own background subagents.** Interactive 2.1.322 drew
+- ~~**A double ending for a subagent waiting on its own background subagents.** Interactive 2.1.322 drew
   `Agent "…" is waiting on its own background work · 16s`, then `finished · 1m 16s` for the same task, and
   counts the inner ones in `Waiting for 2 background agents to finish`. The headless background recording
   never waited: the outer's one `task_notification` is a plain `completed`, before its children end
   (`subagent-nested-background.jsonl:66`). If a headless outer can wait, Wake likely draws `ended` for a
   status it does not know, then `finished`. *Closes with:* a stream-json recording of an outer that waits for
-  its background children, then a ruling on its first ending.
+  its background children, then a ruling on its first ending.~~ **CLOSED on `fix/subagent-waiting-ending`
+  for a wait on a background shell** (wake-orch's ruling, 2026-11-11): a headless outer waiting on its own
+  background shell is recorded (`subagent-waits-background.jsonl`). Its first `task_notification` is a plain `completed` whose whole
+  summary says it has not reported yet (`:53`), then the same task id starts again and ends with its
+  hand-back (`:86`, `:91`); Wake drew `finished` at both. Core reads that summary as progress
+  (`subagentWaiting`), so the row stays running and only the real ending draws. Left out: the row says
+  nothing of waiting where Claude Code says `is waiting on its own background work`; the `task_updated`
+  just before the notice still ends the row for the one frame between them; and the daemon drops the row
+  there, so a window attaching mid-wait sees only the shell until the outer starts again, and `trackSub`
+  forgets the outer too, so `forkSource` allows a fork while its hand-back is still to come (as before).
+  Also left out: a headless outer waiting on its background *subagents* is unrecorded, so whether its
+  notice is the same sentence is not known; a subagent whose own final reply is exactly that sentence reads
+  as waiting, its row running until a park, end or `/clear`; and a later claude rewording the sentence
+  brings the double ending back silently, since task frames are live-only and `make drift` reads
+  transcripts.
 - **Nothing marks a report an orphaned inner subagent hands the agent itself.** Once the headless outer has
   ended, its children's hand-backs reach the agent as `<agent-message from="<inner id>">` with no parent tool
   use (`subagent-nested-background.jsonl:108`, `:114`). Core drops every hand-back line, the agent's own
   subagents' included, and the inner ending that used to sit there is now dropped too, so only the agent's
   reply says what came back. Interactive Claude Code never reaches this state: it keeps the outer alive
   until its children end. *Closes with:* a ruling on drawing a hand-back in the conversation it reaches,
-  which is the hand-back surface for every subagent, not only an orphan.
+  which is the hand-back surface for every subagent, not only an orphan. Filed as BUG-74.

@@ -800,6 +800,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   and its file sits flat beside its parent's in `subagents/`. In auto mode a subagent's delivered
   `SubagentHandback` receipt is `{"success":true,"message":"Report delivered to your caller."}`, read as its
   message only whole (`receiptSentence`). `subagent-nested.jsonl`.
+- **A background subagent that ends its turn while its own background work runs is told as `completed`**
+  (2.1.322), with a summary saying it has not reported yet; the same task id then starts again and ends
+  with its hand-back. Only that whole summary tells it from an ending (`subagentWaiting`, read as
+  progress). `subagent-waits-background.jsonl`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only
@@ -830,7 +834,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/wire.go` at 796 and `internal/ui/dm.go` at 794 — derived by
+  `internal/core/wire.go` at 797 and `internal/ui/dm.go` at 794 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

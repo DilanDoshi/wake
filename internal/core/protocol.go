@@ -361,8 +361,10 @@ func taskUpdate(f wireFrame) *TaskUpdate {
 		return nil
 	}
 	// A frame that names no outcome is no ending: task_updated also patches
-	// is_backgrounded, and reading that as the end drops a running shell.
-	if phase == TaskEnded && f.Status == "" && (f.Patch == nil || f.Patch.Status == "") {
+	// is_backgrounded, and reading that as the end drops a running shell. Nor is
+	// a subagent's notice that it is waiting on its own work (subagentWaiting).
+	unnamed := f.Status == "" && (f.Patch == nil || f.Patch.Status == "")
+	if phase == TaskEnded && (unnamed || waitingNotice(f.Summary)) {
 		phase = TaskProgress
 	}
 	kind := taskKind(f.TaskType)
