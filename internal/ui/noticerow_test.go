@@ -23,8 +23,8 @@ const noticeRowWidth = 80
 var longNotice = strings.TrimSpace(strings.Repeat("the daemon refused that because ", 6))
 
 // assertCutAt fails unless row is a cut of full: the words up to the edge, then
-// "…" as the row's last cell, and no wider than width.
-func assertCutAt(t *testing.T, row, full string, width int) {
+// "…" as the row's last cell, drawing exactly cells.
+func assertCutAt(t *testing.T, row, full string, cells int) {
 	t.Helper()
 	if !strings.HasSuffix(row, ellipsis) {
 		t.Errorf("a cut row does not end in %q: %q", ellipsis, row)
@@ -32,19 +32,15 @@ func assertCutAt(t *testing.T, row, full string, width int) {
 	if !strings.HasPrefix(full, strings.TrimSuffix(row, ellipsis)) {
 		t.Errorf("the cut row is not the start of its text:\n row %q\nfull %q", row, full)
 	}
-	if got := ansi.StringWidth(row); got > width || got < width-1 {
-		t.Errorf("the cut row draws %d cells, want %d (or one less, a wide rune at the cut)", got, width)
+	if got := ansi.StringWidth(row); got != cells {
+		t.Errorf("the cut row draws %d cells, want %d", got, cells)
 	}
 }
 
 func TestACutNoticeEndsInAnEllipsisAtTheRowsWidth(t *testing.T) {
 	a := sizedApp(t, nil, nil, "s1")
 	notice.Report("%s", longNotice)
-	row := stripANSI(a.noticeLine())
-	assertCutAt(t, row, noticePrefix+longNotice, noticeRowWidth)
-	if got := ansi.StringWidth(row); got != noticeRowWidth {
-		t.Errorf("the cut row draws %d cells, want all %d", got, noticeRowWidth)
-	}
+	assertCutAt(t, stripANSI(a.noticeLine()), noticePrefix+longNotice, noticeRowWidth)
 }
 
 // The pinned API failure is drawn through the same row, so it is cut the same way.
@@ -85,7 +81,7 @@ func TestANoticeThatFitsIsNotMarkedCut(t *testing.T) {
 
 // The colour opens before the words and closes after the "…", so the cut never
 // leaves the row's style on for the cells after it; and a control sequence in
-// the words is still neutralised before the cut, never cut in half.
+// the words is flattened before the cut, so it is never measured as cells.
 func TestACutNoticeKeepsItsColourSealed(t *testing.T) {
 	prev := lipgloss.ColorProfile()
 	lipgloss.SetColorProfile(0) // termenv.TrueColor, so warnStyle renders an escape
@@ -109,16 +105,17 @@ func TestACutNoticeKeepsItsColourSealed(t *testing.T) {
 
 // A wide rune that will not fit before the "…" is dropped whole, so the row is
 // never wider than the window - a row one cell too wide wraps and scrolls the
-// alt screen on every draw.
+// alt screen on every draw. Here that leaves the row's last cell blank.
 func TestACutNoticeOfWideRunesStaysInsideTheRow(t *testing.T) {
 	a := sizedApp(t, nil, nil, "s1")
 	wide := strings.Repeat("漢", noticeRowWidth)
 	notice.Report("%s", wide)
-	assertCutAt(t, stripANSI(a.noticeLine()), noticePrefix+wide, noticeRowWidth)
+	assertCutAt(t, stripANSI(a.noticeLine()), noticePrefix+wide, noticeRowWidth-1)
 }
 
 // "Drawn cells" in the linger is the row after the cut, the "…" one of them:
-// a cut row stands for the cells it shows, not for the words it lost.
+// a cut row stands for the cells it shows, not for the words it lost. (So it
+// was before the "…"; this pins that a cut row past the floor keeps it.)
 func TestACutNoticeLingersForTheCellsItDraws(t *testing.T) {
 	ticks := recordNoticeTicks(t)
 	const width = 150 // wide enough that the cut row stands past the floor

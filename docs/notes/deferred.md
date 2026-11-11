@@ -38,17 +38,26 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
-## FOLLOW-UP, 2026-11-11 — a name cut bare can read as another session's
+## FOLLOW-UP, 2026-11-11 — a name or address cut bare can read as another session's
 
-Every other one-row cut was checked when the notice row got its "…": the rest already cut with one (`detailRow`,
-`boardRow`, `commandecho`, `field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting
-(cards, the question text, titled boxes), or cut a label nobody types (a dispatch's description, a task's
-subject). One kind can mislead: the
-rows that cut an **agent's name** with no mark - the roster's `headLine` (`clip`), the room's speaker head
-(`agentSaid`) and cross-session head (`crossSaid`), and the composer's target line. A name is how an agent is
-typed, and a cut one can be another live session's whole name (`fix-login-bug` drawn `fix-login`).
-`headLine`'s own comment chose the bare cut ("a name stays recognisable three characters short"), so the call
-is the owner's: an ellipsis there costs a name one more cell.
+The one-row cuts were surveyed when the notice row got its "…". Most already cut with one (`detailRow`, `boardRow`,
+`commandecho`, `field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting (cards, the
+question text, titled boxes), or cut a label nobody types (a dispatch's description, a task's subject). One kind
+can mislead: rows that cut an **agent's name or a send's address** with no mark. Those found:
+
+- the roster's `headLine` (`clip`)
+- the room's speaker head (`agentSaid`), cross-session head (`crossSaid`) and marker rows (`chat_blocks.go`: the
+  taken-back row ends on the name; the finished, ask, cancelled and resumed rows carry it)
+- the conversation's cross-session heads (`dm_blocks.go`'s `crossSessionBlock`, `sentBlock`, whose recipient can be
+  a `uds:` address)
+- the composer's target line
+
+A name is how an agent is typed, and a cut one can be another live session's whole name (`fix-login-bug` drawn
+`fix-login`); a cut socket path names another socket. `headLine`'s own comment chose the bare cut ("a name stays
+recognisable three characters short"), so the call is the owner's: an ellipsis there costs a name one more cell.
+
+The auth panel's title and warn rows are still cut at the panel's width, though both surfaces that draw it wrap
+them (`! Could not read authenticatio` in a 30-column room); the cut mangles a word, never a command.
 
 ---
 
@@ -150,9 +159,11 @@ row ends on a destructive verb today, but any long notice still loses its tail w
 DM's `ellipsis`, then coloured, so the "…" is the row's last cell inside the style. The timed, lingering and
 pinned notices all draw through it, and `noticeLinger` measures the same cut row: "drawn cells" is after the
 cut, the "…" one of them. The two other one-row cuts that could read as a shorter command or a whole list went
-with it: the auth panel's `claude auth login` hint (`authpanel.go`) and the rewind menu's "⚠ … also runs in this
-directory" (`rewindmenu.go`). Tests: `noticerow_test.go`, `TestANarrowPanelMarksItsCutCommand`,
-`TestANarrowPaneMarksItsCutSharedDirectoryWarning`. The rows that still cut a name bare are the entry below.
+with it: the rewind menu's "⚠ … also runs in this directory" (`rewindmenu.go`) now ends in "…", and the auth
+panel's `claude auth login` hint (`authpanel.go`) is no longer cut at all, since the room and the conversation both
+wrap the panel and a cut threw away a command they would have shown whole. Tests: `noticerow_test.go`,
+`TestANarrowPanelKeepsItsWholeCommand`, `TestANarrowPaneMarksItsCutSharedDirectoryWarning`. The rows that still
+cut a name bare are the entry above.
 
 ---
 

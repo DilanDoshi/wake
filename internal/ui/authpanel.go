@@ -14,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
-	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -99,13 +98,14 @@ const (
 	authNeeds = "!"
 )
 
-// authPanel renders the status.
+// authPanel renders the status. The hint row is never cut to width: both surfaces
+// that draw the panel wrap it, and a command cut short reads as a shorter one.
 func authPanel(st authStatus, ok bool, width int) string {
 	switch {
 	case !ok:
 		return joinBlock(accentLine(authTitle, width),
 			warnLine(authNeeds+" "+authUnreadable, width),
-			mutedLine(ansi.Truncate("  "+authCheckHint+authLoginCmd, width, ellipsis), width))
+			HintStyle.Render("  "+authCheckHint+authLoginCmd))
 	case st.LoggedIn:
 		line := authOK + " " + authSignedIn
 		if m := strings.TrimSpace(st.Method); m != "" {
@@ -115,7 +115,7 @@ func authPanel(st authStatus, ok bool, width int) string {
 	default:
 		return joinBlock(accentLine(authTitle, width),
 			warnLine(authNeeds+" "+authSignedOut, width),
-			mutedLine(ansi.Truncate("  "+authSignInHint+authLoginCmd, width, ellipsis), width))
+			HintStyle.Render("  "+authSignInHint+authLoginCmd))
 	}
 }
 

@@ -605,7 +605,7 @@ func (a App) noticeLine() string {
 // noticeRow is what the row draws of text: one line, cut to the row with an
 // ellipsis, so a row cut inside a command never reads as a shorter command.
 //
-// One row means one row: a cut keeps the line *count*, so a notice carrying a
+// One row means one row: flattened before the cut, since a notice carrying a
 // newline would make the frame one row taller than the window and scroll the
 // alt screen on every draw - and the text is not ours: it is a daemon's error
 // frame, which reaches it from an agent's stderr. See oneLine.

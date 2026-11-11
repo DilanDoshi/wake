@@ -5,8 +5,6 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-
-	"github.com/charmbracelet/x/ansi"
 )
 
 const (
@@ -110,10 +108,12 @@ func TestAnUnreadablePanelSaysSoAndOffersTheCommand(t *testing.T) {
 	}
 }
 
-// The hint row names a command, so a panel narrower than it cuts it with a
-// mark: cut bare at the edge, "sign in from a terminal: claude auth login" reads
-// as "claude" - a complete command, and the wrong one.
-func TestANarrowPanelMarksItsCutCommand(t *testing.T) {
+// The hint names a command, and both surfaces that draw the panel - the room's
+// shaded turn and the conversation's echoed one - wrap it, so the panel must not
+// cut it first: cut at the panel's width, "sign in from a terminal: claude auth
+// login" read as "claude", a complete command and the wrong one.
+func TestANarrowPanelKeepsItsWholeCommand(t *testing.T) {
+	const width = 30 // narrower than either hint row
 	signedOut, ok := parseAuthStatus(loggedOutJSON)
 	for _, c := range []struct {
 		st   authStatus
@@ -123,26 +123,17 @@ func TestANarrowPanelMarksItsCutCommand(t *testing.T) {
 		{signedOut, ok, authSignInHint},
 		{authStatus{}, false, authCheckHint},
 	} {
-		full := "  " + c.hint + authLoginCmd
-		width := ansi.StringWidth(full) - len(" auth login") // the old cut ended on "claude"
-		row := panelRow(t, authPanel(c.st, c.ok, width), c.hint)
-		assertCutAt(t, row, full, width)
-		if wide := panelRow(t, authPanel(c.st, c.ok, 120), c.hint); wide != full {
-			t.Errorf("a hint the panel holds was changed:\n got %q\nwant %q", wide, full)
+		ev := authEvent("s1", c.st, c.ok, width)
+		want := c.hint + authLoginCmd
+		for surface, drawn := range map[string]string{
+			"room":         youSaid(ev.Text, width),
+			"conversation": userBlock(ev, width),
+		} {
+			if got := strings.Join(strings.Fields(stripANSI(drawn)), " "); !strings.Contains(got, want) {
+				t.Errorf("the %s at %d columns does not show %q whole:\n%s", surface, width, want, stripANSI(drawn))
+			}
 		}
 	}
-}
-
-// panelRow is the panel's row that starts with lead, as drawn.
-func panelRow(t *testing.T, panel, lead string) string {
-	t.Helper()
-	for _, row := range strings.Split(stripANSI(panel), "\n") {
-		if strings.HasPrefix(strings.TrimSpace(row), strings.TrimSpace(lead)) {
-			return row
-		}
-	}
-	t.Fatalf("no row starting %q in the panel:\n%s", lead, panel)
-	return ""
 }
 
 // The status is claude's own output, so a value carrying a terminal escape
