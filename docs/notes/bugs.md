@@ -1641,7 +1641,8 @@ No other wait in `cmd/wake`'s pty tests keeps its first match to compare later. 
 alone and listed on the PR.
 
 **The related reads, on `fix/test-waits-on-real-conditions` (stacked on the fix above).** The rule now lives
-in one place, `screen.frame()`, and `corner` reads its rows from it. `settle` counts only whole frames and
+in one place, `screen.frame()`, and `corner` reads its rows from it; outside the alt screen (before the TUI,
+after it exits) nothing paints frames, so every read there is whole. `settle` counts only whole frames and
 returns the rows it settled on; `awaitFrame` waits for a whole frame a predicate accepts and returns it. A
 throwaway feed that handed vt10x 16 bytes a millisecond turned `agentName` (await `╭`, parse a later read) red
 9/10; adding a 120ms stall every 97th chunk turned the settle-then-read sites in `sidebarscreen` and
