@@ -282,6 +282,15 @@ directories against a harness that tidies up correctly on the happy path.
 
 ## BUG-29 — `TestTheWholeLifecycleComposesFromAKeyboard` waits 15s for a woken agent, in a full run
 
+**Fixed on `fix/test-waits-on-real-conditions` (PR awaiting merge); the wake was never slow.** Seen again on
+2026-11-09 (the v0.1.15 gate, plain lane) with the draft still in the box. The test waited on the *daemon*
+(`awaitSessionState`, `awaitParkBook`) and then typed `@name zebrafish↵`, but the room routes on its own
+fleet, which folds the daemon's report a beat later. A ↵ folded first finds no live `@name`, so `sendRoom`
+refuses it and leaves the draft. A throwaway relay that delivered the window's frames 500ms late failed it 3/3 with
+the logged symptom. The test now types the words, waits for the window's own route line `@name · direct`
+(drawn only for a live match, from the same `route` `sendRoom` reads), then sends: 5/5 under that lag, and red
+again with the wait removed.
+
 **Observed 2026-08-23**, in the `make ci` immediately after PR #86, #87 and #88 merged together.
 
 ```
@@ -1630,3 +1639,38 @@ near the bottom, two equal reads in a row, and every corner row holding a block.
 
 No other wait in `cmd/wake`'s pty tests keeps its first match to compare later. Related reads were left
 alone and listed on the PR.
+
+**The related reads, on `fix/test-waits-on-real-conditions` (stacked on the fix above).** The rule now lives
+in one place, `screen.frame()`, and `corner` reads its rows from it. `settle` counts only whole frames and
+returns the rows it settled on; `awaitFrame` waits for a whole frame a predicate accepts and returns it. A
+throwaway feed that handed vt10x 16 bytes a millisecond turned `agentName` (await `╭`, parse a later read) red
+9/10; adding a 120ms stall every 97th chunk turned the settle-then-read sites in `sidebarscreen` and
+`sidebarwheelscreen` red in 4 of 9 runs, one read mixing two frames. All of them pass 28/28 on that feed now.
+`completionscreen`'s two row reads and `fleetOfNine`'s counts never went red (the rows they read carry over
+from the previous frame) and read one awaited whole frame anyway. Where a test expects the screen to change,
+it waits for the change before it settles, since a whole frame can still be the frame before the keystroke.
+`TestSettleNeverSettlesOnHalfAFrame` and `TestAConversationsNameIsReadFromAWholeFrame` hold the two helpers.
+
+## BUG-71 — three `make ci` false reds from the harness: a refused first dial, a stale lint cache, a killed `ps`
+
+**Seen on the v0.1.15 and #223 gates, 2026-11-07 to -09.** Each failed a gate with no code at fault. Fixed on
+`fix/test-waits-on-real-conditions` (PR awaiting merge).
+
+- **`Dial: … connection refused` on a test's first attach** (`shutdownstop_test.go`'s ctrl-q case). The
+  harness waited for the socket *file*, which exists before `listen()`; a successor's path holds a crashed
+  daemon's stale file, then none, until `listen()` binds its own. A socket bound but not yet listening refuses
+  a dial every time, but 3,400 real starts (14 CPU hogs, `-race`) never caught that window, so the observed
+  refusal may equally be the kernel declining to queue a connection under heavy load (`listen()`'s comment:
+  ECONNREFUSED is ambiguous). `mustDial`, which every attach goes through, now retries a refused or missing
+  socket until `testTimeout` (#208's `dialWhenUp`, which it replaces). Not a probe dial in
+  `waitForListening`: an accepted connection that closes makes an empty daemon quit (`reconsiderEmptyExit`).
+- **`../bump-0115/internal/ui/panes.go: func App.toggleGroups is unused`** from a worktree already removed.
+  golangci-lint's shared cache is keyed by package contents, so it served that worktree's finding, with its
+  paths, to another checkout; the gone file's `//nolint` could not be read, so the finding stood. Reproduced
+  deterministically on a scratch cache (lint A, remove A, lint B: exit 1). `make lint` now keeps a cache per
+  checkout (`.lintcache`, ignored), which goes with the worktree.
+- **`ps -A: signal: killed`** in two `wake_durability` tests at load 64–100. That is `exec.CommandContext`
+  killing `ps` at `probeTimeout` (2s), after which `resumeSafe` refuses the wake, as it must in production. A
+  `ps` slowed by 2.5s fails `TestAWokenSessionComesBackUnderItsOwnIdAndName` the same way. internal/daemon's
+  `TestMain` now sets `probeTimeout` to `testTimeout`; the tests about a `ps` that cannot answer already set
+  their own with `shortProbeTimeout`.
