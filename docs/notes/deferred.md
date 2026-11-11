@@ -38,12 +38,12 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
-## FOLLOW-UP, 2026-11-11 — a name or address cut bare can read as another session's
+## FOLLOW-UP, 2026-11-11 — a name, address, path or figure cut bare can read as another
 
 The one-row cuts were surveyed when the notice row got its "…". Most already cut with one (`detailRow`, `boardRow`,
 `commandecho`, `field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting (cards, the
 question text, titled boxes), or cut a label nobody types (a dispatch's description, a task's subject). One kind
-can mislead: rows that cut an **agent's name or a send's address** with no mark. Those found:
+can mislead: rows that cut an **agent's name, a send's address, a path or a figure** with no mark. Those found:
 
 - the roster's `headLine` (`clip`)
 - the room's speaker head (`agentSaid`), cross-session head (`crossSaid`) and marker rows (`chat_blocks.go`: the
@@ -51,10 +51,19 @@ can mislead: rows that cut an **agent's name or a send's address** with no mark.
 - the conversation's cross-session heads (`dm_blocks.go`'s `crossSessionBlock`, `sentBlock`, whose recipient can be
   a `uds:` address)
 - the composer's target line
+- the workflow save dialog's path row (`workflowsave.go`, through `fitRow`): `.claude/workflows/deploy-s` at 40
+  columns
+- figures and error text: the compacted line's token counts (`beat.go`, `50.8k → 4.` at 24 columns), a task line's elapsed time
+  and a failed workflow's error line (`taskline.go`), the room's workflow ending (`chat_blocks.go`), and the
+  strip's counts below the widths `awareness.go` budgets for
 
 A name is how an agent is typed, and a cut one can be another live session's whole name (`fix-login-bug` drawn
 `fix-login`); a cut socket path names another socket. `headLine`'s own comment chose the bare cut ("a name stays
 recognisable three characters short"), so the call is the owner's: an ellipsis there costs a name one more cell.
+A cut figure is a plausible wrong number, the roster's and the strip's own argument for dropping one whole.
+
+For the 80ms a narrowing resize settles, `clipMidDrag` cuts the whole frame to the new width with no mark, the
+notice row included; the row is re-cut with its "…" once the resize settles.
 
 The auth panel's title and warn rows are still cut at the panel's width, though both surfaces that draw it wrap
 them (`! Could not read authenticatio` in a 30-column room); the cut mangles a word, never a command.
