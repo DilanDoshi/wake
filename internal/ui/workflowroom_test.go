@@ -175,6 +175,21 @@ func TestTheBareWorkflowEndingAloneDoesNotReachTheRoom(t *testing.T) {
 	}
 }
 
+// A workflow a subagent ran is no more the agent's than an inner subagent is:
+// taskLine draws no ending for it, so the room must not admit one, or the agent
+// would count an unread line nobody can see. Unrecorded; the frames are built.
+func TestAWorkflowASubagentRanNeverReachesTheRoom(t *testing.T) {
+	f := NewFleet()
+	f, _ = f.Observe(started("a1", "toolu_1", "Auditing the diff", "general-purpose", core.TaskAgent), "s1")
+	inner := workflowStarted("w1", "toolu_2", "desc", "count-lines")
+	inner.Task.Parent = "a1"
+	f, _ = f.Observe(inner, "s1")
+	_, out := f.Observe(core.Event{Kind: core.KindSystem, Task: workflowNotification("w1", "toolu_2", core.TaskDone)}, "s1")
+	if len(out) != 0 {
+		t.Errorf("a subagent's workflow ending reached the room: %+v", out)
+	}
+}
+
 // workflowRoomEvent is fold's own admission rule, tested directly: only a
 // workflow's ending naming its dispatch survives, and nothing else does -
 // including a workflow frame that has not ended yet.

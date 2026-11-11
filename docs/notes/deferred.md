@@ -6132,12 +6132,13 @@ The sidebar nests a subagent's own subagents under it (BUG-61). Left out, by the
   parent through `Task.Parent` (`↳ under general-purpose`), or dropping it, since the parent's own receipt
   carries what it handed back.~~ **CLOSED on `fix/inner-subagent-ending-names-its-parent` by dropping it**
   (wake-orch's ruling, 2026-11-11): `Tasks.named` carries the row's `Parent` onto the ending and `taskLine`
-  draws none for one. Parity with Claude Code: a live probe of interactive 2.1.322 (haiku, a general-purpose
-  subagent dispatching two Explores) drew only the outer's `Agent "…" finished`, collapsed and under ctrl+o,
-  and listed only the outer under the prompt. Caveat: haiku backgrounded the agents though asked for the
-  foreground, so the probe is a background nest where `subagent-nested.jsonl` is a foreground one. The
-  inner's work stays readable in the outer's own pane (its dispatch call and result); attributing would have
-  been cut off at a narrow width, where the line already is.
+  draws none for one (nor does the room admit one for a workflow a subagent ran). Parity with Claude Code:
+  two live probes of interactive 2.1.322 (haiku, a general-purpose subagent dispatching two Explores) drew
+  only the outer's `Agent "…" finished`, collapsed and under ctrl+o, and listed only the outer under the
+  prompt. Caveat: haiku backgrounded the agents, the first time though asked for the foreground, so both
+  probes are background nests where `subagent-nested.jsonl` is a foreground one. In a
+  foreground nest the inner's work stays readable in the outer's own pane (its dispatch call and result);
+  attributing would have been cut off at a narrow width, where the line already is.
 - **Past `maxSubDepth` (2) a row is drawn at the cap's indent**, so a fourth level reads as a sibling of
   its parent. Never observed: of 1,693 subagents on the recording machine none was deeper than
   `spawnDepth` 2, though a depth-2 subagent is offered the Agent tool. *Closes with:* a recorded deeper
@@ -6211,8 +6212,3 @@ Left out:
   reply says what came back. Interactive Claude Code never reaches this state: it keeps the outer alive
   until its children end. *Closes with:* a ruling on drawing a hand-back in the conversation it reaches,
   which is the hand-back surface for every subagent, not only an orphan.
-- **A take started from inside a Claude Code session records no transcript.** The session's env carries
-  `CLAUDE_CODE_CHILD_SESSION`, which a spawned `claude` inherits and answers by turning transcript saving
-  off (it says so under its prompt), so a take's history, room restore and subagent pane read nothing off
-  disk. A take must `unset -m 'CLAUDE*'` before `wake` (`docs/live-testing.md` has no takes section to hold
-  it). *Closes with:* the daemon unsetting it for its agents, if a live session should never inherit it.

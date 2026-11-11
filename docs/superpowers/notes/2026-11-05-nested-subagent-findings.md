@@ -43,9 +43,10 @@ Same argv and project shape, for the inner subagent's ending line (deferred.md, 
 - **The foreground nest is unchanged.** The fixture's own prompt gave the same frames in the same order
   with the same keys on `task_started`, `task_updated` and `task_notification`. Not committed: it adds
   nothing `subagent-nested.jsonl` lacks.
-- **No ending names its parent.** On both versions only the inner `task_started` carries
-  `parent_task_id`; its `task_notification` does not (`subagent-nested-background.jsonl:74`, `:96`), so
-  `Tasks.named` carries it over from the row.
+- **No ending names its parent.** Of the frames core decodes, only the inner `task_started` carries
+  `parent_task_id`, on both versions; its `task_notification` does not (`subagent-nested-background.jsonl:74`,
+  `:96`), so `Tasks.named` carries it over from the row. 2.1.322's undecoded `background_tasks_changed`
+  lists it per member too (`:50`).
 - **A background nest ends its parent first.** Committed as `subagent-nested-background.jsonl`
   (`run_in_background` at both levels, `is_backgrounded: true`): the outer hands back at once and its one
   `task_notification` is `completed` (`:66`) while both children run. Their hand-backs then reach the
@@ -54,3 +55,7 @@ Same argv and project shape, for the inner subagent's ending line (deferred.md, 
 - **Claude Code's own UI draws no inner ending.** Two interactive probes (haiku, auto mode), one with the
   outer waiting for background children and one with it told not to: the main conversation drew only the
   outer's `Agent "…" finished`, and in both the outer stayed alive until its children ended.
+- **A `claude` run by hand from inside a Claude Code session saves no transcript.** It inherits
+  `CLAUDE_CODE_CHILD_SESSION` and says so under its prompt; the probes above ran that way. Wake's agents
+  never inherit it (`core.nestedSessionEnv`), but a hand-run recording or probe needs
+  `env -u CLAUDE_CODE_CHILD_SESSION`.
