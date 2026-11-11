@@ -7,7 +7,6 @@ import (
 	"context"
 	"fmt"
 	"io"
-	"maps"
 	"os"
 	"path/filepath"
 	"slices"
@@ -68,7 +67,13 @@ func upgradeWake(ctx context.Context, rel releases, exe string, out io.Writer) e
 	if err != nil {
 		return err
 	}
-	running := slices.Sorted(maps.Keys(daemon.RunningBuilds(names)))
+	var running []string
+	for name, st := range daemon.FleetStates(names) {
+		if st.Report != nil {
+			running = append(running, name)
+		}
+	}
+	slices.Sort(running)
 	if len(running) == 0 {
 		return nil
 	}

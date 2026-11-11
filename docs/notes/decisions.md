@@ -6014,3 +6014,43 @@ lost what a park keeps (name, team, colour, effort); at best `/resume` found its
   interrupted once, ends well inside the grace and is offered by the next daemon on the socket; an idle one
   is interrupted harmlessly; a queued message does not keep it running; an outstanding ask is interrupted
   before stdin closes. `internal/ui/parkdropped_test.go` and `cmd/wake/attach_test.go` hold the named words.
+
+## 2026-11-11 — a stopped fleet leaves the list: `wake stop` removes it (the owner, via wake-orch; BUG-21)
+
+A directory with no socket is still a fleet (`fleet.go`), and that ruling stands. What was never decided
+was whether a fleet is ever *done*. It is done when nothing in it can come back.
+
+- **Done means**, all read under the fleet's own daemon lock and failing closed: no daemon (the lock taken
+  exclusively, which `lock.go` argues is the one unambiguous liveness proof; a socket file alone is
+  debris); no roster rows and no `parkready.json` (a crash the next daemon's reaper hands to the park book,
+  BUG-53); a park book that is absent or `[]`; and nothing in the directory but Wake's own files. An
+  unreadable book or roster is **not** empty, though `loadParkBook` reads one as empty so a daemon still
+  starts. `debug/` keeps a fleet (`debuglog.go`: Wake never removes a log), and so does any other file,
+  such as a hand-made `parked.json.before-restore-…`. A fleet whose only parked session is the manager
+  is parked, not done.
+- **`wake stop` is where a fleet ends, and there is no new verb.** It is already the irreversible ending and
+  already forgets the parked half, and a second ending verb would have its own refusals. After a confirmed
+  down of a named fleet, stop takes the fleet's lock (it waits up to `releaseCeiling` while the exiting
+  daemon still holds it) and removes the fleet unless a crash, an unreadable file or a foreign entry keeps
+  it, saying what kept it; either way it exits 0, since the stop happened.
+- **With no daemon and parked sessions, stop forgets them and removes the fleet** (the owner chose this
+  over refusing, 2026-11-11). It names every session it forgets ("Forgot 2 agents parked (alex, manager)
+  and removed fleet dev…"). Their transcripts stay on disk. Before this the branch said "`wake stop` is
+  what forgets them for good" and could not, and it was unreachable anyway (BUG-72). The unnamed fleet
+  (`~/.wake` itself) and a hand-set socket keep today's words, since they have no directory to remove.
+- **How it removes.** Old names forwarding to the fleet go first (`dropForwards`, under the same lock), so
+  no `--fleet <old>` forwards to nothing. Then Wake's files go one by one with the lock last, then
+  `os.Remove` of the directory. Never `RemoveAll`: a starting daemon opens its log before it takes the
+  lock, so anything that arrives meanwhile makes the directory's removal fail, and the fleet stays.
+- **The listing takes no lock.** `wake fleets` reads `running` off the dial (one statusTimeout for the
+  whole list, as `RunningBuilds` did) and every other state off the files. A lock held even briefly by a
+  listing could make a daemon starting on that fleet refuse.
+- **No directory until a daemon starts.** `FleetSocketPath` makes no named fleet's directory (`~/.wake` itself, the unnamed
+  fleet's, is still made private), so
+  `wake --fleet typo bogus`, `status` and `stop` leave nothing. The forked daemon makes its own directory
+  through the `$WAKE_SOCKET` branch, and a bare `wake` makes the one it drew, because that directory is
+  the name's reservation.
+- **The pool is unchanged.** `nextFleetName` keys on what is in `fleets/`, and a removed fleet's directory
+  and links are gone, so its name is free. A stopped directory that was not removed is never adopted.
+- **Not in this ruling:** claude's background shells outlive a stop (BUG-73), and a park keeps an agent's
+  process group by design. Whether "no stale processes" overrides that is the owner's call.

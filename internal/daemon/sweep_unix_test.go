@@ -15,6 +15,7 @@
 package daemon
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -53,6 +54,79 @@ func TestACleanExitSweepsTheProcessGroupTheAgentLeftBehind(t *testing.T) {
 	c.pollState(idAlpha, rpc.StateEnded)
 
 	waitForProcessGone(t, child)
+}
+
+// `wake stop` leaves nothing of the fleet running: every agent, what each left
+// in its process group, and the daemon (BUG-25's open question, asked of the
+// stop). Two agents, so the sweep is shown per agent rather than for one lucky
+// group; each group is asked of the OS whole, so a child nobody recorded counts.
+func TestAStopLeavesNothingOfTheFleetRunning(t *testing.T) {
+	pidPath := filepath.Join(t.TempDir(), "children.pid")
+	t.Setenv("WAKE_FAKE_PIDFILE", pidPath)
+	fakeClaudeOnPath(t, "leak")
+
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	for id, name := range map[string]string{idAlpha: "alex", idBeta: "bo"} {
+		c.spawn(id, name)
+		c.awaitEvent(id, "ready")
+	}
+	children := waitForPids(t, pidPath, 2)
+	var groups []int
+	for _, s := range c.status().Sessions {
+		groups = append(groups, s.PID)
+	}
+	t.Cleanup(func() {
+		for _, pid := range append(children, groups...) {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+	if len(groups) != 2 {
+		t.Fatalf("the fleet reports process groups %v, want one per agent", groups)
+	}
+	for _, pid := range children {
+		if !processAlive(pid) {
+			t.Fatal("a child an agent spawned was not running before the stop, so this test proves nothing")
+		}
+	}
+
+	c.send(rpc.Frame{Kind: rpc.FrameQuit})
+	if !d.waitForExitWithin(t, testTimeout) {
+		t.Fatal("the daemon was still running after the stop")
+	}
+	for _, pgid := range groups {
+		if err := syscall.Kill(-pgid, 0); !errors.Is(err, syscall.ESRCH) {
+			t.Errorf("process group %d still has a member after the stop (kill -0: %v)", pgid, err)
+		}
+	}
+	for _, pid := range children {
+		if processAlive(pid) {
+			t.Errorf("child %d outlived the stop of the fleet that started it", pid)
+		}
+	}
+}
+
+// waitForPids reads n pids the agents recorded for their children, a line each.
+func waitForPids(t *testing.T, path string, n int) []int {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	for {
+		var pids []int
+		if b, err := os.ReadFile(path); err == nil {
+			for _, f := range strings.Fields(string(b)) {
+				if pid, err := strconv.Atoi(f); err == nil && pid > 0 {
+					pids = append(pids, pid)
+				}
+			}
+		}
+		if len(pids) >= n {
+			return pids
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the agents recorded %v of the %d children they spawned (%s)", pids, n, path)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
 }
 
 // The mirror, and the one that must not be "fixed" into symmetry: a parked

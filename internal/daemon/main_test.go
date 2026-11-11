@@ -548,8 +548,12 @@ func fakeLeak(sid string) int {
 		fmt.Fprintln(os.Stderr, "leak:", err)
 		return 1
 	}
+	// Appended, a line per agent, so a fleet of them can share one file.
 	if pidfile := os.Getenv("WAKE_FAKE_PIDFILE"); pidfile != "" {
-		_ = os.WriteFile(pidfile, []byte(strconv.Itoa(cmd.Process.Pid)), 0o600)
+		if f, err := os.OpenFile(pidfile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+			_, _ = fmt.Fprintln(f, cmd.Process.Pid)
+			_ = f.Close()
+		}
 	}
 	return fakeTurns(sid)
 }

@@ -342,6 +342,10 @@ func TestRenamingARunningFleetKeepsEveryPathToIt(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// What a forked daemon's own FleetSocketPath makes under $WAKE_SOCKET.
+	if err := os.MkdirAll(filepath.Dir(old), stateDirPerm); err != nil {
+		t.Fatal(err)
+	}
 	renamed := filepath.Join(filepath.Dir(filepath.Dir(old)), "dev", socketFileName)
 	d := startDaemonOn(t, old)
 	c := attach(t, old)
@@ -394,6 +398,9 @@ func TestTheManagerFollowsARenamedFleet(t *testing.T) {
 	t.Setenv(SocketEnv, "")
 	sock, err := FleetSocketPath("atlas")
 	if err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(filepath.Dir(sock), stateDirPerm); err != nil {
 		t.Fatal(err)
 	}
 	startDaemonOn(t, sock)

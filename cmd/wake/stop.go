@@ -97,7 +97,7 @@ func stopFleet(socket string, out io.Writer) error {
 		// is exactly the path on which Status cannot fail, because it takes
 		// the same failure as its signal to read the roster instead.
 		st, _ := daemon.Status(socket)
-		return reportNothingToStop(st, out)
+		return reportNothingToStop(st, socket, out)
 	}
 	defer func() { _ = conn.Close() }()
 
@@ -115,7 +115,10 @@ func stopFleet(socket string, out io.Writer) error {
 		if err := say(out, "A daemon was already stopping."); err != nil {
 			return err
 		}
-		return confirmFleetDown(socket, out)
+		if err := confirmFleetDown(socket, out); err != nil {
+			return err
+		}
+		return endFleet(socket, releaseCeiling, out)
 	}
 
 	// Only now, with the daemon provably accepting. The count comes from
@@ -147,7 +150,11 @@ func stopFleet(socket string, out io.Writer) error {
 	if werr := waitForTheDaemonToLetGo(frames, errs, daemon.FleetName(socket)); werr != nil {
 		return werr
 	}
-	return confirmFleetDown(socket, out)
+	if err := confirmFleetDown(socket, out); err != nil {
+		return err
+	}
+	// Down, and its daemon cleared the park book: a named fleet ends with it.
+	return endFleet(socket, releaseCeiling, out)
 }
 
 // confirmFleetDown establishes what is actually still running, now that this
@@ -292,27 +299,20 @@ func stoppingLine(st rpc.Status, err error) string {
 	}
 }
 
-// parkedSessions is every parked session in a report.
-//
-// One filter, because two things ask this package that question now and they
-// must not be able to disagree: `wake stop` counts them, and bare `wake` names
-// them in the offer the room opens with. It hands back the rows rather than the
-// names so the count does not depend on a display decision - a parkedNames that
-// ever dropped a row would otherwise change what `wake stop` reports.
-func parkedSessions(st rpc.Status) []rpc.SessionStatus {
-	var out []rpc.SessionStatus
+// parkedCount is every parked session a report names, all of which a stop
+// forgets: one a live daemon parked with ⌃C stays in Sessions, and the park
+// book is on Parked, disjoint from them (with no daemon, every parked one is).
+// Separate from runningCount because a parked session is not running, and it is
+// not gone either.
+func parkedCount(st rpc.Status) int {
+	n := len(st.Parked)
 	for _, s := range st.Sessions {
 		if s.State == rpc.StateParked {
-			out = append(out, s)
+			n++
 		}
 	}
-	return out
+	return n
 }
-
-// parkedCount is how many sessions are parked. Separate from runningCount
-// because they are opposite answers to the same question: a parked session is
-// not running, and it is not gone either.
-func parkedCount(st rpc.Status) int { return len(parkedSessions(st)) }
 
 // reportNothingToStop covers the two ways there is no daemon to talk to, and
 // they are not the same thing - one of them exits zero and the other must not.
@@ -335,7 +335,7 @@ func parkedCount(st rpc.Status) int { return len(parkedSessions(st)) }
 //
 // The printed lines stay as they are - they carry the advice, which an error
 // line cannot - and the error is a short summary for the exit code.
-func reportNothingToStop(st rpc.Status, out io.Writer) error {
+func reportNothingToStop(st rpc.Status, socket string, out io.Writer) error {
 	if st.ProbeIncomplete {
 		// The liveness sweep timed out before every roster record was verified,
 		// so runningCount is an under-count and "nothing is running" would be a
@@ -348,17 +348,18 @@ func reportNothingToStop(st rpc.Status, out io.Writer) error {
 		return fmt.Errorf("could not confirm the fleet is down: the liveness sweep timed out before every session was checked")
 	}
 	if runningCount(st) == 0 {
-		if parked := parkedCount(st); parked > 0 {
-			// Not a failure and not silence. Nothing is running, so this exits
-			// zero - but `wake stop` is the verb that forgets a parked fleet,
-			// and it cannot do that with no daemon to ask. Neither half names a
-			// verb this build does not have: reopening the fleet picks the
-			// sessions up into it, and nothing yet resumes one.
+		if parked := parkedCount(st); parked > 0 && (st.Fleet == "" || st.Fleet == daemon.LegacyFleet) {
+			// A named fleet's removal forgets its parked sessions and names them
+			// (endFleet); the unnamed fleet and a socket set by hand have no
+			// directory to remove, so their park book waits for a daemon's stop.
 			return say(out, "No daemon is running. %s parked, with their transcripts still on disk; "+
 				"`%s` starts a daemon that holds them again, and `%s` is what forgets them for good.",
 				agents(parked), rpc.FleetCommand(st.Fleet), rpc.FleetCommand(st.Fleet, cmdStop))
 		}
-		return say(out, "No daemon is running.")
+		if err := say(out, "No daemon is running."); err != nil {
+			return err
+		}
+		return endFleet(socket, 0, out)
 	}
 	if err := say(out, "No daemon is running, but a previous one left %s behind.", agents(runningCount(st))); err != nil {
 		return err

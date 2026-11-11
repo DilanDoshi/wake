@@ -11,6 +11,7 @@ import (
 	"io"
 	"strings"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
 	"github.com/DilanDoshi/wake/internal/version"
@@ -61,11 +62,8 @@ func fleetFlag(args []string) (rest []string, fleet string, err error) {
 	return rest, fleet, nil
 }
 
-// printFleets lists the named fleets, and the build each running one is on.
-//
-// Only a fleet with a daemon listening is asked (daemon.RunningBuilds): a
-// stopped one costs one failed dial rather than FleetOnDisk's sweep, so the
-// listing stays as fast as the names alone were.
+// printFleets lists the fleets and what each is (daemon.FleetStates): a
+// running one by its daemon's report, any other by its files, never a lock.
 func printFleets(out io.Writer) error {
 	names, err := daemon.Fleets()
 	if err != nil {
@@ -74,7 +72,7 @@ func printFleets(out io.Writer) error {
 	// One checked write rather than a line at a time, which is printStatus's
 	// shape: a listing half-written to a closed pipe is worse than one that
 	// says it could not be written.
-	_, err = io.WriteString(out, formatFleets(names, daemon.RunningBuilds(names), version.Build()))
+	_, err = io.WriteString(out, formatFleets(names, daemon.FleetStates(names), version.Build()))
 	return err
 }
 
@@ -82,23 +80,47 @@ func printFleets(out io.Writer) error {
 const staleFleetFormat = " - not this build (wake %s): ⌃Q⌃Q it, then `%s`, to upgrade it"
 
 // formatFleets is the listing, separated from the dialling so a test reads a
-// string. builds holds only the fleets that are running.
-func formatFleets(names []string, builds map[string]string, ours string) string {
+// string: one row a fleet, its name padded to the longest.
+func formatFleets(names []string, states map[string]daemon.FleetState, ours string) string {
 	if len(names) == 0 {
 		return noFleetsYet + "\n"
 	}
+	width := 0
+	for _, name := range names {
+		width = max(width, len(name))
+	}
 	var b strings.Builder
 	for _, name := range names {
-		b.WriteString(name)
-		if build, running := builds[name]; running {
-			fmt.Fprintf(&b, "  running wake %s", daemonBuild(build))
-			if build != ours {
-				fmt.Fprintf(&b, staleFleetFormat, ours, rpc.FleetCommand(name))
-			}
-		}
-		b.WriteString("\n")
+		fmt.Fprintf(&b, "%-*s  %s\n", width, name, fleetState(name, states[name], ours))
 	}
 	return b.String()
+}
+
+// fleetState is what one fleet is, in the words its row says it with.
+func fleetState(name string, st daemon.FleetState, ours string) string {
+	if r := st.Report; r != nil {
+		line := fmt.Sprintf("running · %s · wake %s", agents(runningCount(*r)), daemonBuild(r.Build))
+		if r.Build != ours {
+			line += fmt.Sprintf(staleFleetFormat, ours, rpc.FleetCommand(name))
+		}
+		return line
+	}
+	left := st.Left
+	switch {
+	case left.Err != nil:
+		return "unreadable · " + left.Err.Error()
+	case left.Crashed:
+		return fmt.Sprintf("crashed · `%s` recovers its sessions", rpc.FleetCommand(name))
+	case len(left.Parked) == 1 && left.Parked[0] == core.ManagerName:
+		return "parked · the manager"
+	case len(left.Parked) > 0:
+		return "parked · " + agents(len(left.Parked))
+	case len(left.Kept) > 0:
+		return fmt.Sprintf("stopped · keeps %s, which Wake does not remove", strings.Join(left.Kept, ", "))
+	case name == daemon.LegacyFleet:
+		return "stopped · ~/.wake itself, which no stop removes"
+	}
+	return fmt.Sprintf("stopped · `%s` removes it", rpc.FleetCommand(name, cmdStop))
 }
 
 // newFleetLine is what a fresh fleet says about itself before the room opens.

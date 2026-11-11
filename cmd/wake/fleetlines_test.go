@@ -204,14 +204,14 @@ func TestStopNamesTheFleetInEveryWayOnward(t *testing.T) {
 		st   rpc.Status
 		want string
 	}{
-		{"parked", rpc.Status{Fleet: "dev", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateParked}}},
-			"`wake --fleet dev` starts a daemon that holds them again, and `wake stop --fleet dev` is what forgets them"},
+		{"parked", rpc.Status{Fleet: "default", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateParked}}},
+			"`wake --fleet default` starts a daemon that holds them again, and `wake stop --fleet default` is what forgets them"},
 		{"orphans", rpc.Status{Fleet: "dev", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateOrphaned}}},
 			"Starting a daemon with `wake --fleet dev` reaps"},
 		{"a short sweep", rpc.Status{Fleet: "dev", ProbeIncomplete: true}, "Check `wake status --fleet dev`"},
 	} {
 		var out bytes.Buffer
-		_ = reportNothingToStop(tc.st, &out)
+		_ = reportNothingToStop(tc.st, tempSocket(t), &out)
 		if !strings.Contains(out.String(), tc.want) {
 			t.Errorf("`wake stop` with no daemon and %s printed %q, want %q", tc.name, out.String(), tc.want)
 		}

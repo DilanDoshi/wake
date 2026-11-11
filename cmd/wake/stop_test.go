@@ -170,6 +170,16 @@ func TestStoppingLineCountsOnlyWhatIsAlive(t *testing.T) {
 			}},
 			want: "Stopping 1 agent and forgetting 2 agents parked",
 		},
+		{
+			// The park book: a live daemon reports it on Parked, disjoint from
+			// Sessions, and the stop clears it all the same - so it is counted.
+			name: "a park book beside a ⌃C park",
+			st: rpc.Status{Running: true,
+				Sessions: []rpc.SessionStatus{{ID: "a", State: rpc.StateWorking}, {ID: "b", State: rpc.StateParked}},
+				Parked:   []rpc.SessionStatus{{ID: "c", State: rpc.StateParked}, {ID: "d", State: rpc.StateParked}},
+			},
+			want: "Stopping 1 agent and forgetting 3 agents parked",
+		},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
