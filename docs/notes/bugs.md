@@ -1634,9 +1634,11 @@ resuming each one that came back, so a round trip that missed nothing draws no r
 enough: `wants` reads the *pending* geometry, so a drag past the takeover that came back before any settle
 refused tokens with no settle to leave in. The reviews found three more ways off screen with no leave, all on
 `main` too and now covered by the seam: a ⇥ before the settle (refocus read the committed layout; it reads
-`drawnIDs` now and still leaves at once, since a rekey moves the keys mid-batch), ⌃Y below the takeover sliding
-the focused conversation off, and ⌃R or ⇧↓ opening the roster and dropping a column. A pane that comes back
-previews from its next token (BUG-67's inbox hands it the ones that waited first).
+`drawnIDs` now), ⌃Y below the takeover sliding the focused conversation off, and ⌃R or ⇧↓ opening the roster and
+dropping a column. One absence stays one rule: the seam leaves no pane taken out of the grid (hideDM and show
+leave those as they take them), show leaves a displaced pane only if it was drawn and resumes the one it opens only
+once it is. A pane that comes back previews from its next token (BUG-67's inbox hands it the ones that waited
+first).
 `TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid` fails on any hole in either window, with a case for
 each path; `resizeleave_test.go` holds the rule's cases.
 

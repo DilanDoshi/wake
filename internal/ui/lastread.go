@@ -59,9 +59,10 @@ package ui
 // # What sets it
 //
 // Leaving a conversation, and nothing else: its pane stops being drawn. App.left
-// marks it, run by Update's seam for every message and at once by refocus, so a
-// resize, a slid window and a sidebar taking a column leave as closing a pane
-// does; one back with nothing landed resumes (BUG-69).
+// marks it, run by Update's seam for every message and at once by refocus, and
+// hideDM and show mark a pane they take out of the grid, so a resize, a slid
+// window and a sidebar taking a column leave as closing a pane does; one back
+// with nothing landed resumes (BUG-69).
 //
 // A focus change is deliberately *not* leaving: with both panes drawn, a DM that
 // has lost the keyboard is still on screen and still being read. What takes a
