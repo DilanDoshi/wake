@@ -1628,14 +1628,17 @@ A timer that coalesces the doorbell is the poll the first non-negotiable rules o
 `main` 6e27337d.**
 
 **Fixed on `fix/resize-leaves-a-hidden-conversation` (PR awaiting merge, stacked on BUG-67's)**, by the direction
-below moved from the settle to the resize itself: `changeGeometry` leaves every conversation the new geometry
-stops drawing, read through `drawnIDs`, the predicate `App.wants` refuses tokens by, and `App.left` is the walk
-`refocus` already did. The settle alone was not enough: `wants` reads the *pending* geometry, so a drag past the
-takeover that came back before any settle refused tokens with no settle to leave in, and left the same hole. A
-pane that comes back previews from its next token (BUG-67's inbox hands it the ones that waited first), and
-gets the last-read mark a ⇥ away gives. `TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid` now fails on
-any hole in either window, with the drag-through, a height that hides a lower pane, and a resize that changes
-both at once as cases of their own.
+below moved from the settle to Update's seam: every message ends with `App.left` over `drawnIDs` before and
+after it, the predicate `App.wants` refuses tokens by, leaving each conversation that stopped being drawn and
+resuming each one that came back, so a round trip that missed nothing draws no rule. The settle alone was not
+enough: `wants` reads the *pending* geometry, so a drag past the takeover that came back before any settle
+refused tokens with no settle to leave in. The reviews found three more ways off screen with no leave, all on
+`main` too and now covered by the seam: a ⇥ before the settle (refocus read the committed layout; it reads
+`drawnIDs` now and still leaves at once, since a rekey moves the keys mid-batch), ⌃Y below the takeover sliding
+the focused conversation off, and ⌃R or ⇧↓ opening the roster and dropping a column. A pane that comes back
+previews from its next token (BUG-67's inbox hands it the ones that waited first).
+`TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid` fails on any hole in either window, with a case for
+each path; `resizeleave_test.go` holds the rule's cases.
 
 A resize that takes a conversation off screen - narrower than `dmTakeoverColumns` with the room holding the
 keys, or, by the same code, a height that hides a lower pane - never calls `DM.Leave`; only `refocus`, `hideDM`

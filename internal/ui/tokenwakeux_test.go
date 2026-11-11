@@ -442,6 +442,38 @@ func TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid(t *testing.T) {
 				tw.onScreen(tea.WindowSizeMsg{Width: 200, Height: 45})
 				tw.onScreen(geometrySettledMsg{gen: tw.every.geoGen})
 			}},
+		// A ⇥ before the settle: the pending width already draws one column, so
+		// handing the room the keys hides the conversation then, not at a settle.
+		{name: "a ⇥ to the room before the settle hides it mid-answer", speaker: "s1", open: "s1", w: 200, h: 45,
+			midway: func(tw *twins) {
+				tw.do("alex holds the keys", func(a App) App { return a.refocus("s1") })
+				tw.msg("the window narrows past two columns", tea.WindowSizeMsg{Width: dmTakeoverColumns - 10, Height: 45})
+				tw.msg("⇥ to the room", tea.KeyMsg{Type: tea.KeyTab})
+			},
+			on: func(tw *twins) { tw.onScreen(tea.WindowSizeMsg{Width: 200, Height: 45}) }},
+		// Below the takeover one column is drawn: ⌃Y opens bea beside alex and
+		// slides alex off, displacing nobody.
+		{name: "⌃Y below the takeover slides it off mid-answer and ⇧← brings it back", speaker: "s1", open: "s1", w: dmTakeoverColumns - 10, h: 45,
+			setup: func(tw *twins) {
+				tw.do("alex holds the keys", func(a App) App { return a.refocus("s1") })
+			},
+			midway: func(tw *twins) {
+				tw.do("bea is picked", func(a App) App { a.roster = Roster{Selected: "s2"}; return a })
+				tw.msg("⌃Y opens bea to the right", tea.KeyMsg{Type: tea.KeyCtrlY})
+			},
+			on: func(tw *twins) { tw.onScreen(tea.KeyMsg{Type: tea.KeyShiftLeft}) }},
+		// Four columns fit this frame without the roster and three beside it.
+		{name: "⌃R drops a column mid-answer and ⌃R brings it back", speaker: "s3", open: "s1", w: dmTakeoverColumns - 2*SideMargin, h: 45,
+			setup: func(tw *twins) {
+				tw.do("bea and cy open to the right", func(a App) App {
+					return a.refocus("s1").openRight("s2", "bea").openRight("s3", "cy")
+				})
+				tw.msg("⌃R hides the roster", tea.KeyMsg{Type: tea.KeyCtrlR})
+				tw.do("the room takes the keys", func(a App) App { return a.refocus("") })
+				tw.shows("all four columns drawn", "@alex ─", "@bea ─", "@cy ─")
+			},
+			midway: func(tw *twins) { tw.msg("⌃R shows the roster", tea.KeyMsg{Type: tea.KeyCtrlR}) },
+			on:     func(tw *twins) { tw.onScreen(tea.KeyMsg{Type: tea.KeyCtrlR}) }},
 		{name: "the board comes up tiled", speaker: "s2", open: "s1", w: 200, h: 45, on: func(tw *twins) {
 			tw.every.board, tw.deferred.board = Board{Up: true, Tiled: true}, Board{Up: true, Tiled: true}
 			tw.onScreen(nudge{})

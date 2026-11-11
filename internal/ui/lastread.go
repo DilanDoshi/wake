@@ -58,15 +58,14 @@ package ui
 //
 // # What sets it
 //
-// Leaving a conversation, and nothing else. App.openDMWith and App.closeDM are
-// the only two places a.focus stops naming a DM, and they are the same two places
-// Fleet.Focus already marks that agent's arrivals read - so the badge in the
-// sidebar and the rule in the transcript are two renderings of one fact rather
-// than two accounts of it.
+// Leaving a conversation, and nothing else: its pane stops being drawn. App.left
+// marks it, run by Update's seam for every message and at once by refocus, so a
+// resize, a slid window and a sidebar taking a column leave as closing a pane
+// does; one back with nothing landed resumes (BUG-69).
 //
 // A focus change is deliberately *not* leaving: with both panes drawn, a DM that
 // has lost the keyboard is still on screen and still being read. What takes a
-// conversation away from a reader is another one taking its pane.
+// conversation away from a reader is its pane going off screen.
 
 import (
 	"slices"

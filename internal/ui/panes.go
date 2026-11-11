@@ -482,9 +482,9 @@ func (a App) showRoom() App { return a.refocus("") }
 // or the marker is silently lost at exactly the width where the conversation is
 // the only pane there is. See lastread.go.
 func (a App) refocus(next string) App {
-	was := a.drawn()
+	was := a.drawnIDs()
 	a = a.withFocus(next).resizePanes()
-	a = a.left(was, a.drawn())
+	a = a.left(was, a.drawnIDs())
 	if next == "" {
 		// A reminder the room passed while a conversation held the keys is owed now.
 		a.room = a.room.remind()
@@ -492,11 +492,21 @@ func (a App) refocus(next string) App {
 	return a
 }
 
-// left marks every conversation drawn in was and not in now as left.
+// left marks every conversation drawn in was and not in now as left, and resumes
+// every one drawn now and not in was, so a pane that missed nothing earns no rule.
+// The lists are drawnIDs', the predicate App.wants refuses tokens by: a pane that
+// kept its preview while refused glued the next token onto words from before the
+// hole (BUG-69). Update's seam runs it for every message; refocus runs it at once
+// too, since a rekey moves the keys mid-batch, ahead of the batch's tokens.
 func (a App) left(was, now []string) App {
 	for _, id := range was {
-		if id != "" && !slices.Contains(now, id) {
-			a = a.withDM(id, a.dms[id].Leave())
+		if dm, ok := a.dms[id]; ok && !slices.Contains(now, id) {
+			a = a.withDM(id, dm.Leave())
+		}
+	}
+	for _, id := range now {
+		if dm, ok := a.dms[id]; ok && !slices.Contains(was, id) {
+			a = a.withDM(id, dm.Resume())
 		}
 	}
 	return a

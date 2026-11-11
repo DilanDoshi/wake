@@ -89,22 +89,14 @@ func (a App) resized(w, h int) (App, tea.Cmd) {
 // rendered. The first geometry is applied whole, because there is no drag to
 // wait out and a first frame drawn at a guessed width is a frame nobody asked
 // for.
-//
-// A conversation the new geometry stops drawing is left here, not at the settle:
-// App.wants refuses its tokens from now on (drawnIDs reads the pending geometry),
-// and one that kept its preview glued the next token it heard onto words from
-// before the hole (BUG-69), a drag that came back before any settle included.
 func (a App) changeGeometry(g geometry) (App, tea.Cmd) {
-	was := a.drawnIDs()
 	a.pending = g
 	a.geoGen++
 
 	if a.layout.Width == 0 || g.width == a.layout.Width && slices.Equal(g.weights, a.layout.Weights) {
-		a = a.applyGeometry()
-		return a.left(was, a.drawnIDs()), nil
+		return a.applyGeometry(), nil
 	}
 	a = a.applyHeightOnly()
-	a = a.left(was, a.drawnIDs()) // apart: drawnIDs must read the height just applied
 
 	gen := a.geoGen
 	return a, settleTimer(resizeQuiet, func(time.Time) tea.Msg { return geometrySettledMsg{gen: gen} })
