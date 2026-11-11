@@ -78,10 +78,9 @@ cover: ## Run the suite without the detector and enforce the coverage gate on ev
 # golangci-lint's cache is keyed by package contents, not paths, so a shared one
 # hands this checkout another worktree's findings under that worktree's paths;
 # once that worktree is removed, its //nolint cannot be read and the finding is
-# reported here. A cache per checkout goes with its worktree.
-lint: export GOLANGCI_LINT_CACHE ?= $(CURDIR)/.lintcache
+# reported here. A cache per checkout goes with its worktree; a set one still wins.
 lint: ## Run golangci-lint
-	golangci-lint run
+	GOLANGCI_LINT_CACHE="$${GOLANGCI_LINT_CACHE:-$(CURDIR)/.lintcache}" golangci-lint run
 
 # Everything CI runs, in one command, for the days CI cannot run it - a spend
 # cap, an outage, or a change nobody wants to burn ten-times-billed macOS

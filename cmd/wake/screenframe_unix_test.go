@@ -48,12 +48,13 @@ func altFrame(lines []string, cols, rows int) string {
 	return b.String()
 }
 
-// halfPainted is a screen holding frame up to the byte cut, which gets the rest
-// only after three reads, so neither one read nor two alike pass for whole.
+// halfPainted is a screen in the alt screen, as Bubble Tea's is, holding frame up
+// to the byte cut; it gets the rest only after three reads, so neither one read
+// nor two alike pass for whole.
 func halfPainted(t *testing.T, frame string, cut, cols, rows int) *screen {
 	t.Helper()
 	term := vt10x.New(vt10x.WithSize(cols, rows))
-	if _, err := term.Write([]byte(frame[:cut])); err != nil {
+	if _, err := term.Write([]byte("\x1b[?1049h" + frame[:cut])); err != nil {
 		t.Fatal(err)
 	}
 	return &screen{t: t, term: &splitPaint{Terminal: term, rest: []byte(frame[cut:]), reads: 3}, cols: cols, rows: rows}
@@ -72,12 +73,16 @@ func TestSettleNeverSettlesOnHalfAFrame(t *testing.T) {
 }
 
 // The name on a composer border is read from the frame that drew it, not from a
-// later read that may hold only the border's first cells.
+// later read that may hold only the border's first cells, or one border's first
+// cells over the rest of the frame before's.
 func TestAConversationsNameIsReadFromAWholeFrame(t *testing.T) {
 	const cols, rows = 40, 8
+	pane := func(border string) string {
+		return altFrame([]string{"", "ready", "", border, "│ >                │", "╰──────────────────╯"}, cols, rows)
+	}
 	border := "╭──────── @alex ─╮"
-	frame := altFrame([]string{"", "ready", "", border, "│ >                │", "╰──────────────────╯"}, cols, rows)
-	s := halfPainted(t, frame, strings.Index(frame, border)+len("╭────"), cols, rows)
+	before, frame := pane("╭──────── @bob ─╮"), pane(border)
+	s := halfPainted(t, before+frame, len(before)+strings.Index(frame, border)+len("╭────"), cols, rows)
 
 	if got := s.agentName(); got != "alex" {
 		t.Fatalf("agentName read %q off a half-painted border, want alex", got)

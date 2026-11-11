@@ -1,6 +1,7 @@
 package ui
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"testing"
@@ -21,12 +22,17 @@ var shippedLsFiles = lsFiles
 // Nor does any `@` run git: every other test's directory is a t.TempDir, which
 // no repository holds, and notARepository is git's answer there.
 //
-// And the room's banner draws the main checkout's path, never the one running
-// the tests: a word in a worktree's name was a word on screen ("fork").
+// And the room's banner draws a fixed path shaped like a main checkout's, never
+// the checkout running the tests: a word in a worktree's name was a word on
+// screen ("fork").
 func TestMain(m *testing.M) {
 	noticeTimer = func(time.Duration, func(time.Time) tea.Msg) tea.Cmd { return nil }
 	lsFiles = notARepository
-	home, _ := os.UserHomeDir()
+	home, err := os.UserHomeDir()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "the home the room's banner is drawn under: %v\n", err)
+		os.Exit(1)
+	}
 	wakeDir = func() string { return filepath.Join(home, "Documents", "wake-public", "internal", "ui") }
 	os.Exit(m.Run())
 }

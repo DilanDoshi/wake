@@ -208,8 +208,8 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 }
 
 // screenNesting and screenBranch are where a test that names no directory runs
-// wake: the main checkout's own path and branch, in a repository under a scratch
-// home. Every screen draws the checkout's path and branch (the status bar, a
+// wake: a fixed path and branch shaped like a main checkout's, the shape the
+// suite was written against, in a repository under a scratch home. Every screen draws the checkout's path and branch (the status bar, a
 // banner), so a word in a worktree's name was a word every await and count read
 // ("/resume" in fix/resume-plumbing-is-not-a-reply, "fork" in a worktree path).
 const (
@@ -313,7 +313,9 @@ func (s *screen) lines() []string {
 
 // frame is lines, and whether every row above the last is one frame's: Bubble
 // Tea paints top to bottom and parks the cursor on the last row, and vt10x
-// parses a frame across several lock holds (BUG-68). The one place that rule is.
+// parses a frame across several lock holds (BUG-68). Outside the alt screen -
+// before the TUI, after it exits - nothing paints frames. The one place that
+// rule is.
 func (s *screen) frame() (rows []string, whole bool) {
 	s.term.Lock()
 	defer s.term.Unlock()
@@ -326,11 +328,12 @@ func (s *screen) frame() (rows []string, whole bool) {
 		}
 		out[y] = strings.TrimRight(b.String(), " ")
 	}
-	return out, s.term.Cursor().Y == s.rows-1
+	return out, s.term.Mode()&vt10x.ModeAltScreen == 0 || s.term.Cursor().Y == s.rows-1
 }
 
 // awaitFrame waits for a whole frame ok accepts and returns its rows, so what
 // the caller reads is the frame the wait saw rather than a later, partial one.
+// Whole is frame's: every row above the last, never the notice row itself.
 func (s *screen) awaitFrame(what string, ok func(rows []string) bool) []string {
 	s.t.Helper()
 	deadline := time.Now().Add(screenTimeout)
@@ -341,7 +344,7 @@ func (s *screen) awaitFrame(what string, ok func(rows []string) bool) []string {
 		time.Sleep(20 * time.Millisecond)
 	}
 	_, whole := s.frame()
-	s.t.Fatalf("no whole frame showed %s; the newest read was a whole frame's: %v.\n%s", what, whole, s.dump())
+	s.t.Fatalf("no whole frame showed %s (the newest read was whole: %v).\n%s", what, whole, s.dump())
 	return nil
 }
 
@@ -425,8 +428,8 @@ func (s *screen) awaitCount(want string, n int) {
 
 // settle waits for the frame to stop changing, for assertions about what is
 // *not* there - which no amount of waiting for a string can decide. It returns
-// the rows it settled on. Only whole frames count: two equal reads of half a
-// paint are a stall, not quiet.
+// the rows it settled on, and returns only on a whole frame (frame's sense):
+// two equal reads of half a paint are a stall, not quiet.
 func (s *screen) settle() []string {
 	s.t.Helper()
 	prev := ""
@@ -436,9 +439,6 @@ func (s *screen) settle() []string {
 		now := strings.Join(rows, "\n")
 		if whole && now == prev {
 			return rows
-		}
-		if !whole {
-			now = ""
 		}
 		prev = now
 	}

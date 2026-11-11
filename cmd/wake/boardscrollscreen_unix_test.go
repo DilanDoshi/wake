@@ -99,6 +99,9 @@ func TestTheTiledBoardIsThreeAcrossAndScrollsOnAScreen(t *testing.T) {
 	first := rows[top]
 	s.send("\x1b[<65;20;10M") // wheel down, SGR
 	s.awaitFrame("a wheel notch drawing a new top row", func(rows []string) bool { return rows[top] != first })
+	if s.settle()[top] == first {
+		t.Fatalf("a wheel notch drew a new top row and then the old one again.\n%s", s.dump())
+	}
 
 	// PgDn scrolls rather than closing the board, and walking it reaches every
 	// agent that /new started.

@@ -84,7 +84,8 @@ func TestAShortRosterSaysHowManyAgentsAreHidden(t *testing.T) {
 	}
 
 	s.resize(100, 8)
-	rows := s.awaitFrame("a column too short for nine agents saying some are hidden", sayHidden)
+	s.awaitFrame("a column too short for nine agents saying some are hidden", sayHidden)
+	rows := s.settle()
 
 	if got := len(rosterNamesIn(rows)); got >= 9 {
 		t.Fatalf("the column claims to have hidden agents and drew all %d of them.\n%s", got, s.dump())
@@ -103,7 +104,8 @@ func TestTheCursorReachesAnAgentBelowTheFold(t *testing.T) {
 	s := startWakeInAConversation(t, 100, 30)
 	fleetOfNine(t, s)
 	s.resize(100, 8)
-	shown := rosterNamesIn(s.awaitFrame("the column saying some agents are hidden", sayHidden))
+	s.awaitFrame("the column saying some agents are hidden", sayHidden)
+	shown := rosterNamesIn(s.settle())
 	if len(shown) >= 9 {
 		t.Fatalf("the column drew the whole fleet, so there is no fold to reach past.\n%s", s.dump())
 	}
