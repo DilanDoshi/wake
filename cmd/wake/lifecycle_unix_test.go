@@ -179,7 +179,13 @@ func TestTheWholeLifecycleComposesFromAKeyboard(t *testing.T) {
 	// sent message locally, so asserting on what was typed proves only that it
 	// was typed. This is the assertion that the session on the other end of
 	// `--resume` is a process that reads its stdin.
-	r.typeKeys("@" + name + " zebrafish\r")
+	//
+	// ↵ only once the window routes the mention to the woken agent: the window
+	// folds the report a beat after the daemon answered the waits above, and
+	// before it does, ↵ finds no live @name and leaves the draft (BUG-29).
+	r.typeKeys("@" + name + " zebrafish")
+	r.awaitView("the window routing to the woken agent", "@"+name+" · direct")
+	r.typeKeys("\r")
 	r.awaitViewAny("the woken agent's answer", heardPrefix+"zebrafish")
 }
 
