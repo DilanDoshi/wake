@@ -200,22 +200,11 @@ func serveOn(t *testing.T, socket string) *chainDaemon {
 	errc := make(chan error, 1)
 	go func() { errc <- daemon.Serve(ctx, socket) }()
 
-	deadline := time.Now().Add(testTimeout)
-	for time.Now().Before(deadline) {
-		if info, err := os.Lstat(socket); err == nil && info.Mode()&os.ModeSocket != 0 {
-			return &chainDaemon{err: errc, cancel: cancel}
-		}
-		select {
-		case err := <-errc:
-			cancel()
-			t.Fatalf("Serve returned before it was listening: %v", err)
-		default:
-		}
-		time.Sleep(10 * time.Millisecond)
+	if exited, err := awaitListening(t, socket, errc); exited {
+		cancel()
+		t.Fatalf("Serve returned before it was listening: %v", err)
 	}
-	cancel()
-	t.Fatal("the daemon never started listening")
-	return nil
+	return &chainDaemon{err: errc, cancel: cancel}
 }
 
 type chainDaemon struct {

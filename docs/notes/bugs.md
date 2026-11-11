@@ -1665,6 +1665,11 @@ it waits for the change before it settles, since a whole frame can still be the 
   ECONNREFUSED is ambiguous). `mustDial`, which every attach goes through, now retries a refused or missing
   socket until `testTimeout` (#208's `dialWhenUp`, which it replaces). Not a probe dial in
   `waitForListening`: an accepted connection that closes makes an empty daemon quit (`reconsiderEmptyExit`).
+  cmd/wake had the same file-only wait in `startRealDaemonAt`, `serveOn` and `serveInProcess`, and there the
+  first dial is the product's own (`wake stop` printed "No daemon is running." in #232's gate,
+  `TestStatusAndStopReachTheirOwnCommands`). All three now share `awaitListening`, which dials and holds the
+  connection, drained, until the test ends, since one closed at once ends an empty daemon (shown: two status
+  tests then fail with "daemon closed the connection without answering").
 - **`../bump-0115/internal/ui/panes.go: func App.toggleGroups is unused`** from a worktree already removed.
   golangci-lint's shared cache is keyed by package contents, so it served that worktree's finding, with its
   paths, to another checkout; the gone file's `//nolint` could not be read, so the finding stood. Reproduced
