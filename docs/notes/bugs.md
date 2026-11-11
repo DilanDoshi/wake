@@ -1519,7 +1519,7 @@ never named one, so they are unchanged.
 **Guarded:** `TestCtrlQAfterAWakeNameAndASpawnNamesTheFleet`. It runs a bare `wake` under a scratch
 `HOME`, `/wake-name dev`, `/new otto` with a turn in flight and ⌃Q⌃Q, then reads `wake --fleet dev`.
 It passed on 507223b7, so it guards the scenario rather than proving a fix. Since
-`fix/relative-home-keeps-fleet-names` it waits for the exit line's own words (`Parking 2 agents (…)`, #221's
+#230 it waits for the exit line's own words (`Parking 2 agents (…)`, #221's
 wording), which the keypress notice never draws, and for otto's turn under otto's name. It goes red on a
 bare exit line. Each name source alone is held by unit tests: `TestCtrlQsLineNamesTheFleetTheLastReportNamed`
 for the report, and `TestCtrlQsLineFallsBackToTheSocketsFleet` for the fallback. A pty test cannot part them,
@@ -1528,7 +1528,7 @@ since the old name's link still forwards until the daemon exits.
 **Parked 2026-11-07 by wake-orch.** Reopen on a take that prints it again, with both name sources
 logged at `leavingLine`: the fallback half is the part nobody can explain.
 
-## BUG-70 — under a relative `HOME`, every fleet read as a socket set by hand — FIXED on `fix/relative-home-keeps-fleet-names`
+## BUG-70 — under a relative `HOME`, every fleet read as a socket set by hand — FIXED by #230
 
 **Found 2026-11-10 by wake-imp-renameexit, in #222's post-merge review, and reproduced on the real binary on
 `main` 6e27337d.** `HOME=h`, `./h` or a literal `~`, from any directory. Not BUG-66's cause: that take's `HOME`
