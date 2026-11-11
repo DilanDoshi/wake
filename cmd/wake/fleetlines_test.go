@@ -205,7 +205,7 @@ func TestStopNamesTheFleetInEveryWayOnward(t *testing.T) {
 		want string
 	}{
 		{"parked", rpc.Status{Fleet: "default", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateParked}}},
-			"`wake --fleet default` starts a daemon that holds them again, and `wake stop --fleet default` is what forgets them"},
+			"`wake --fleet default` starts a daemon that holds them again, and `wake stop --fleet default` run while that daemon is up forgets them"},
 		{"orphans", rpc.Status{Fleet: "dev", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateOrphaned}}},
 			"Starting a daemon with `wake --fleet dev` reaps"},
 		{"a short sweep", rpc.Status{Fleet: "dev", ProbeIncomplete: true}, "Check `wake status --fleet dev`"},

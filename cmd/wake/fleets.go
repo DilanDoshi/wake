@@ -107,8 +107,10 @@ func fleetState(name string, st daemon.FleetState, ours string) string {
 	}
 	left := st.Left
 	switch {
+	case st.Silent:
+		return "running · not answering (stopping, or wedged)"
 	case left.Err != nil:
-		return "unreadable · " + left.Err.Error()
+		return "unreadable · " + errLine(left.Err)
 	case left.Crashed:
 		return fmt.Sprintf("crashed · `%s` recovers its sessions", rpc.FleetCommand(name))
 	case len(left.Parked) == 1 && left.Parked[0] == core.ManagerName:

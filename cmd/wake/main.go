@@ -250,11 +250,9 @@ func run(args []string, out io.Writer) error {
 	}
 
 	// wake upgrade and wake setup-terminal touch no fleet at all - handled here, before
-	// daemon.FleetSocketPath below, because that call creates the fleet's
-	// state directory (mkdir -p ~/.wake or a named fleet's own directory)
-	// as a side effect of resolving a path this verb has no use for. Every
-	// other verb needs that path; this is the one that would otherwise
-	// leave a directory behind for a fleet that was never started.
+	// daemon.FleetSocketPath below, because for the unnamed fleet that call makes
+	// ~/.wake as a side effect of resolving a path these verbs have no use for.
+	// A named fleet's directory is made by its daemon, never by resolving it.
 	if len(args) > 0 && args[0] == cmdUpgrade {
 		return runUpgrade(args, out)
 	}

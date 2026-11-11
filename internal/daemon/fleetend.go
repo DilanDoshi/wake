@@ -101,9 +101,11 @@ func readRecords[T any](path string) ([]T, error) {
 }
 
 // FleetState is one fleet as `wake fleets` lists it: its daemon's report when
-// one answers, else what its files hold.
+// one answers, Silent for one that took the dial and did not (a quit's grace, a
+// wedge), and otherwise what its files hold.
 type FleetState struct {
 	Report *rpc.Status
+	Silent bool
 	Left   FleetLeft
 }
 
@@ -126,9 +128,13 @@ func FleetStates(names []string) map[string]FleetState {
 		}
 		wg.Go(func() {
 			var st FleetState
-			if report, running, err := runningStatus(filepath.Join(dir, socketFileName)); running && err == nil {
+			report, running, err := runningStatus(filepath.Join(dir, socketFileName))
+			switch {
+			case running && err == nil:
 				st.Report = &report
-			} else {
+			case running:
+				st.Silent = true
+			default:
 				st.Left = readFleetLeft(dir, name != LegacyFleet)
 			}
 			mu.Lock()
@@ -151,59 +157,78 @@ type FleetEnd struct {
 }
 
 // RemoveFleet removes the named fleet at socket unless something in it can come
-// back other than its parked sessions, which it forgets: `wake stop` is the one
-// caller, and a stop forgets the parked half (owner's 2026-11-11 ruling, the
-// same as a live stop's).
-func RemoveFleet(socket string) (FleetEnd, error) {
+// back, and says what came of it. `wake stop` is the one caller. forgetParked is
+// a stop that found no daemon: its parked sessions are forgotten with the fleet
+// (owner's 2026-11-11 ruling), each one named. After a daemon's own stop, which
+// cleared the book, a parked session is one parked since, and keeps the fleet.
+func RemoveFleet(socket string, forgetParked bool) (FleetEnd, error) {
 	root, err := StateRoot()
 	if err != nil {
 		return FleetEnd{}, err
 	}
-	return removeFleetIn(root, socket)
+	return removeFleetIn(root, socket, forgetParked)
 }
 
 // removeFleetIn is RemoveFleet against a given root, for fleetDirIn's reason.
 // The unnamed fleet (~/.wake itself) and a socket set by hand have no directory
 // of their own, and are left alone before anything on disk is touched.
-func removeFleetIn(root, socket string) (FleetEnd, error) {
-	name := fleetNameOf(root, socket)
-	if name == "" || name == LegacyFleet {
+func removeFleetIn(root, socket string, forgetParked bool) (FleetEnd, error) {
+	end := FleetEnd{Name: fleetNameOf(root, socket)}
+	if end.Name == "" || end.Name == LegacyFleet {
 		return FleetEnd{}, nil
 	}
-	name, err := forwardedName(root, name)
+	name, err := forwardedName(root, end.Name)
 	if err != nil {
-		return FleetEnd{}, err
+		return end, err
 	}
-	end := FleetEnd{Name: name}
+	end.Name = name
 	dir := fleetPath(root, name)
 	if at, err := os.Lstat(dir); errors.Is(err, fs.ErrNotExist) {
 		return end, nil
 	} else if err != nil || !at.IsDir() {
 		return end, errors.Join(err, fmt.Errorf("%s is not a fleet's directory", dir))
 	}
-	lock, err := takeLock(filepath.Join(dir, lockFileName))
-	if errors.Is(err, errLockHeld) {
-		return end, ErrFleetRunning
-	}
+	lock, err := lockFleet(dir)
 	if err != nil {
 		return end, err
-	}
-	if !lock.exclusive {
-		return end, fmt.Errorf("the fleet's lock could not be taken, so nothing proves no daemon is running: %w", lock.why)
 	}
 	defer func() { _ = lock.release() }()
 
 	left := readFleetLeft(dir, true)
-	if left.Crashed || len(left.Kept) > 0 || left.Err != nil {
+	if left.Crashed || len(left.Kept) > 0 || left.Err != nil || (len(left.Parked) > 0 && !forgetParked) {
 		end.Left = left
 		return end, nil
 	}
-	dropForwards(root, dir)
-	if err := removeFleetDir(dir); err != nil {
+	// Read now and removed after: a fleet that stays keeps its old names, and
+	// once its directory is gone no link can be told to forward to it.
+	forwards := forwardsHere(root, dir)
+	err = removeFleetDir(dir)
+	// A removal that fails after the book went has forgotten its sessions all
+	// the same, so they are named either way.
+	if _, gone := os.Lstat(filepath.Join(dir, parkBookName)); errors.Is(gone, fs.ErrNotExist) {
+		end.Forgot = left.Parked
+	}
+	if err != nil {
 		return end, err
 	}
-	end.Removed, end.Forgot = true, left.Parked
+	removeForwards(forwards)
+	end.Removed = true
 	return end, nil
+}
+
+// lockFleet takes a stopped fleet's daemon lock: a held one is a daemon running,
+// and one that cannot be taken at all proves none is not.
+func lockFleet(dir string) (*lockfile, error) {
+	lock, err := takeLock(filepath.Join(dir, lockFileName))
+	switch {
+	case errors.Is(err, errLockHeld):
+		return nil, ErrFleetRunning
+	case err != nil:
+		return nil, err
+	case !lock.exclusive:
+		return nil, fmt.Errorf("the fleet's lock could not be taken, so nothing proves no daemon is running: %w", lock.why)
+	}
+	return lock, nil
 }
 
 // removeFleetDir removes Wake's files from a done fleet's directory, then the

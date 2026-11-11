@@ -74,8 +74,9 @@ func TestFleetStatesAskTheRunningAndReadTheStopped(t *testing.T) {
 
 // A daemon that takes the dial and never answers - mid-shutdown, or wedged -
 // costs statusTimeout, so the fleets are asked together: three such fleets
-// cost one timeout, not three.
-func TestRunningBuildsAsksEveryFleetAtOnce(t *testing.T) {
+// cost one timeout, not three. Each is listed as a daemon that did not answer,
+// never read off its files as a crash or a stopped fleet.
+func TestFleetStatesAskEveryFleetAtOnce(t *testing.T) {
 	t.Setenv("HOME", tempHome(t))
 	t.Setenv(SocketEnv, "")
 	names := []string{"a", "b", "c"}
@@ -104,8 +105,8 @@ func TestRunningBuildsAsksEveryFleetAtOnce(t *testing.T) {
 	}
 	start := time.Now()
 	for name, st := range FleetStates(names) {
-		if st.Report != nil {
-			t.Errorf("silent daemon %s reported %+v", name, st.Report)
+		if st.Report != nil || !st.Silent {
+			t.Errorf("silent daemon %s is listed %+v, want no report and silent", name, st)
 		}
 	}
 	if took := time.Since(start); took >= 2*statusTimeout {

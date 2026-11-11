@@ -6037,13 +6037,23 @@ was whether a fleet is ever *done*. It is done when nothing in it can come back.
   over refusing, 2026-11-11). It names every session it forgets ("Forgot 2 agents parked (alex, manager)
   and removed fleet dev…"). Their transcripts stay on disk. Before this the branch said "`wake stop` is
   what forgets them for good" and could not, and it was unreachable anyway (BUG-72). The unnamed fleet
-  (`~/.wake` itself) and a hand-set socket keep today's words, since they have no directory to remove.
-- **How it removes.** Old names forwarding to the fleet go first (`dropForwards`, under the same lock), so
-  no `--fleet <old>` forwards to nothing. Then Wake's files go one by one with the lock last, then
+  (`~/.wake` itself) and a hand-set socket have no directory to remove: they say a daemon must be started
+  and stopped to forget them. After a *live* stop the daemon has cleared the book, so a session found in it
+  was parked since, by a daemon someone started meanwhile; the stop never named it, so it keeps the fleet
+  (the adversarial review's case). What is counted and named is the book's records, every one of them,
+  since that is what a stop removes. The report's `Parked` leaves out a record Wake did not mint or with
+  no transcript, so the listing can say `parked · the manager` for a manager `/resume` would not offer.
+- **A removal that fails after the book went still names what it forgot.** The park book goes before the
+  directory, so a directory that cannot be removed (a daemon starting meanwhile wrote to it) leaves the
+  fleet with its book already gone, and the stop says so rather than "stays".
+- **How it removes.** Old names forwarding to the fleet are read first and removed once the directory has
+  gone (a fleet that stays keeps them), so no `--fleet <old>` forwards to nothing. Then Wake's files go one by one with the lock last, then
   `os.Remove` of the directory. Never `RemoveAll`: a starting daemon opens its log before it takes the
   lock, so anything that arrives meanwhile makes the directory's removal fail, and the fleet stays.
 - **The listing takes no lock.** `wake fleets` reads `running` off the dial (one statusTimeout for the
-  whole list, as `RunningBuilds` did) and every other state off the files. A lock held even briefly by a
+  whole list, as `RunningBuilds` did) and every other state off the files. A daemon that takes the dial
+  and does not answer (a quit's grace, a wedge) is `running · not answering`, never read off its files as
+  a crash or a stopped fleet. A lock held even briefly by a
   listing could make a daemon starting on that fleet refuse.
 - **No directory until a daemon starts.** `FleetSocketPath` makes no named fleet's directory (`~/.wake` itself, the unnamed
   fleet's, is still made private), so

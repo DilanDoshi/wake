@@ -194,7 +194,7 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   forgets (BUG-72). **A stopped named fleet is removed** (owner's 2026-11-11 ruling, BUG-21): under its own
   daemon lock, Wake's files one by one, the lock last, then the directory - never the tree - and every
   old name forwarding to it, so its name is free. With no daemon the stop forgets the park book itself,
-  naming each session. A crash's leftovers (roster rows, `parkready.json`), an unreadable book or anything
+  naming each session; after a daemon's own stop a session parked since keeps the fleet. A crash's leftovers (roster rows, `parkready.json`), an unreadable book or anything
   Wake does not remove (`debug/`, a hand-made backup) keep it, and so does a live daemon's lock; the
   unnamed fleet and a hand-set socket have no directory to remove. `internal/daemon/fleetend.go`. **`⌃Q` and a SIGTERM or SIGINT
   park alike**, first interrupting every agent as Esc does and cancelling what is queued behind its turn,

@@ -118,7 +118,7 @@ func stopFleet(socket string, out io.Writer) error {
 		if err := confirmFleetDown(socket, out); err != nil {
 			return err
 		}
-		return endFleet(socket, releaseCeiling, out)
+		return endFleet(socket, true, out)
 	}
 
 	// Only now, with the daemon provably accepting. The count comes from
@@ -154,7 +154,7 @@ func stopFleet(socket string, out io.Writer) error {
 		return err
 	}
 	// Down, and its daemon cleared the park book: a named fleet ends with it.
-	return endFleet(socket, releaseCeiling, out)
+	return endFleet(socket, true, out)
 }
 
 // confirmFleetDown establishes what is actually still running, now that this
@@ -353,13 +353,13 @@ func reportNothingToStop(st rpc.Status, socket string, out io.Writer) error {
 			// (endFleet); the unnamed fleet and a socket set by hand have no
 			// directory to remove, so their park book waits for a daemon's stop.
 			return say(out, "No daemon is running. %s parked, with their transcripts still on disk; "+
-				"`%s` starts a daemon that holds them again, and `%s` is what forgets them for good.",
+				"`%s` starts a daemon that holds them again, and `%s` run while that daemon is up forgets them for good.",
 				agents(parked), rpc.FleetCommand(st.Fleet), rpc.FleetCommand(st.Fleet, cmdStop))
 		}
 		if err := say(out, "No daemon is running."); err != nil {
 			return err
 		}
-		return endFleet(socket, 0, out)
+		return endFleet(socket, false, out)
 	}
 	if err := say(out, "No daemon is running, but a previous one left %s behind.", agents(runningCount(st))); err != nil {
 		return err

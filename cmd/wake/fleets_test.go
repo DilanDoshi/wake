@@ -2,6 +2,7 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
@@ -131,7 +132,7 @@ func TestFleetsSayWhatEachFleetIs(t *testing.T) {
 		return daemon.FleetState{Report: &st}
 	}
 	stopped := func(left daemon.FleetLeft) daemon.FleetState { return daemon.FleetState{Left: left} }
-	got := formatFleets([]string{"default", "atlas", "basin", "bayou", "canyon", "cove", "harbor", "reef", "torn"},
+	got := formatFleets([]string{"default", "atlas", "basin", "bayou", "canyon", "cove", "harbor", "reef", "torn", "wedged"},
 		map[string]daemon.FleetState{
 			"default": stopped(daemon.FleetLeft{Parked: []string{"alex", "manager"}}),
 			"atlas":   stopped(daemon.FleetLeft{Parked: []string{"manager"}}),
@@ -141,7 +142,8 @@ func TestFleetsSayWhatEachFleetIs(t *testing.T) {
 			"cove":    stopped(daemon.FleetLeft{}),
 			"harbor":  live("0.1.5+aaaaaaa", 12),
 			"reef":    live(ours, 1),
-			"torn":    stopped(daemon.FleetLeft{Err: errTest}),
+			"torn":    stopped(daemon.FleetLeft{Err: errors.Join(errTest, errTest)}),
+			"wedged":  {Silent: true},
 		}, ours)
 	want := []string{
 		"default  parked · 2 agents",
@@ -152,7 +154,8 @@ func TestFleetsSayWhatEachFleetIs(t *testing.T) {
 		"cove     stopped · `wake stop --fleet cove` removes it",
 		"harbor   running · 12 agents · wake 0.1.5+aaaaaaa - not this build (wake 0.1.6+bbbbbbb): ⌃Q⌃Q it, then `wake --fleet harbor`, to upgrade it",
 		"reef     running · 1 agent · wake 0.1.6+bbbbbbb",
-		"torn     unreadable · " + errTest.Error(),
+		"torn     unreadable · " + errTest.Error() + "; " + errTest.Error(),
+		"wedged   running · not answering (stopping, or wedged)",
 	}
 	if lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n"); strings.Join(lines, "\n") != strings.Join(want, "\n") {
 		t.Errorf("listing:\n%s\nwant:\n%s", got, strings.Join(want, "\n"))

@@ -69,7 +69,7 @@ func TestADoneFleetIsRemovedAndFreesItsName(t *testing.T) {
 	socket := fleetWith(t, root, fleetPool[0], with(stoppedFiles(), parkBookName, "[]"))
 	fleetWith(t, root, fleetPool[1], stoppedFiles())
 
-	end, err := removeFleetIn(root, socket)
+	end, err := removeFleetIn(root, socket, true)
 	if err != nil || !end.Removed || end.Name != fleetPool[0] {
 		t.Fatalf("removeFleetIn = %+v, %v; want %s removed", end, err, fleetPool[0])
 	}
@@ -96,7 +96,7 @@ func TestAFleetIsNotRemovedWhileADaemonHoldsItsLock(t *testing.T) {
 	}
 	t.Cleanup(func() { _ = held.release() })
 
-	end, err := removeFleetIn(root, socket)
+	end, err := removeFleetIn(root, socket, true)
 	if !errors.Is(err, ErrFleetRunning) || end.Removed {
 		t.Fatalf("removeFleetIn under a held lock = %+v, %v; want ErrFleetRunning", end, err)
 	}
@@ -121,7 +121,7 @@ func TestARemovalForgetsParkedSessionsAndNamesThem(t *testing.T) {
 				t.Errorf("a fleet with %s parked reads as done", tc.what)
 			}
 
-			end, err := removeFleetIn(root, socket)
+			end, err := removeFleetIn(root, socket, true)
 			if err != nil || !end.Removed || !slices.Equal(end.Forgot, tc.names) {
 				t.Fatalf("removeFleetIn = %+v, %v; want removed, forgetting %v", end, err, tc.names)
 			}
@@ -139,7 +139,7 @@ func TestAKeptFleetForgetsNothing(t *testing.T) {
 	files := with(with(stoppedFiles(), parkBookName, `[{"id":"a","name":"alex"}]`), parkReadyName, "[]")
 	socket := fleetWith(t, root, "dev", files)
 
-	end, err := removeFleetIn(root, socket)
+	end, err := removeFleetIn(root, socket, true)
 	if err != nil || end.Removed || len(end.Forgot) > 0 {
 		t.Fatalf("removeFleetIn = %+v, %v; want a crashed fleet kept whole", end, err)
 	}
@@ -155,7 +155,7 @@ func TestAnUnreadableBookOrRosterIsNotEmpty(t *testing.T) {
 			files := with(stoppedFiles(), file, "{not json")
 			socket := fleetWith(t, root, "dev", files)
 
-			end, err := removeFleetIn(root, socket)
+			end, err := removeFleetIn(root, socket, true)
 			if err != nil || end.Removed || end.Left.Err == nil {
 				t.Fatalf("removeFleetIn = %+v, %v; want the fleet kept for an unreadable %s", end, err, file)
 			}
@@ -177,7 +177,7 @@ func TestACrashedFleetIsNotRemoved(t *testing.T) {
 			files := with(stoppedFiles(), file, body)
 			socket := fleetWith(t, root, "dev", files)
 
-			end, err := removeFleetIn(root, socket)
+			end, err := removeFleetIn(root, socket, true)
 			if err != nil || end.Removed || !end.Left.Crashed {
 				t.Fatalf("removeFleetIn = %+v, %v; want the fleet kept as crashed", end, err)
 			}
@@ -192,7 +192,7 @@ func TestAnEmptyRosterIsNotACrash(t *testing.T) {
 	root := testRoot(t)
 	socket := fleetWith(t, root, "dev", with(stoppedFiles(), rosterFileName, "[]"))
 
-	if end, err := removeFleetIn(root, socket); err != nil || !end.Removed {
+	if end, err := removeFleetIn(root, socket, true); err != nil || !end.Removed {
 		t.Fatalf("removeFleetIn = %+v, %v; want removed", end, err)
 	}
 }
@@ -206,7 +206,7 @@ func TestAFleetHoldingWhatWakeDoesNotRemoveIsKept(t *testing.T) {
 		parkBookName+".before-restore", "[]")
 	socket := fleetWith(t, root, "dev", files)
 
-	end, err := removeFleetIn(root, socket)
+	end, err := removeFleetIn(root, socket, true)
 	if err != nil || end.Removed {
 		t.Fatalf("removeFleetIn = %+v, %v; want the fleet kept", end, err)
 	}
@@ -230,7 +230,7 @@ func TestTheUnnamedFleetAndAHandSetSocketAreNeverRemoved(t *testing.T) {
 				t.Fatal(err)
 			}
 		}
-		end, err := removeFleetIn(root, socket)
+		end, err := removeFleetIn(root, socket, true)
 		if err != nil || end.Removed || end.Name != "" {
 			t.Errorf("removeFleetIn(%s) = %+v, %v; want nothing done", socket, end, err)
 		}
@@ -253,7 +253,7 @@ func TestRemovingAFleetDropsItsOldNamesAndNoOneElses(t *testing.T) {
 		}
 	}
 
-	end, err := removeFleetIn(root, filepath.Join(fleetPath(root, "atlas"), socketFileName))
+	end, err := removeFleetIn(root, filepath.Join(fleetPath(root, "atlas"), socketFileName), true)
 	if err != nil || !end.Removed || end.Name != "dev" {
 		t.Fatalf("removeFleetIn through atlas = %+v, %v; want dev removed", end, err)
 	}
@@ -271,10 +271,13 @@ func TestRemovingAFleetDropsItsOldNamesAndNoOneElses(t *testing.T) {
 
 // Removal is file by file, never the whole tree: anything that appears while it
 // runs - a starting daemon's log, opened before its lock - keeps the directory,
-// and keeps that file.
+// that file and the fleet's old names.
 func TestRemovalNeverRemovesWhatAppearsWhileItRuns(t *testing.T) {
 	root := testRoot(t)
-	socket := fleetWith(t, root, "dev", stoppedFiles())
+	socket := fleetWith(t, root, "dev", with(stoppedFiles(), parkBookName, `[{"id":"a","name":"alex"}]`))
+	if err := os.Symlink("dev", fleetPath(root, "atlas")); err != nil {
+		t.Fatal(err)
+	}
 	late := filepath.Join(filepath.Dir(socket), "arrived")
 	removeFleetFile = func(path string) error {
 		if filepath.Base(path) == lockFileName {
@@ -286,13 +289,53 @@ func TestRemovalNeverRemovesWhatAppearsWhileItRuns(t *testing.T) {
 	}
 	t.Cleanup(func() { removeFleetFile = os.Remove })
 
-	end, err := removeFleetIn(root, socket)
+	end, err := removeFleetIn(root, socket, true)
 	if err == nil || end.Removed {
 		t.Fatalf("removeFleetIn = %+v, %v; want the directory kept and said", end, err)
 	}
 	if !exists(t, late) {
 		t.Error("a file that arrived during the removal was removed with it")
 	}
+	if !exists(t, fleetPath(root, "atlas")) {
+		t.Error("the fleet stayed but its old name was removed")
+	}
+	// The book went before the directory's removal failed, so what it held is
+	// forgotten all the same, and named.
+	if !slices.Equal(end.Forgot, []string{"alex"}) {
+		t.Errorf("forgot = %v, want alex named: the book is gone though the fleet stays", end.Forgot)
+	}
+}
+
+// After a daemon's own stop the book is empty, so a session in it was parked
+// since - by a daemon started meanwhile - and the stop never named it: the
+// fleet stays, book and all.
+func TestAfterADaemonsStopAParkedSessionKeepsTheFleet(t *testing.T) {
+	root := testRoot(t)
+	files := with(stoppedFiles(), parkBookName, `[{"id":"a","name":"alex"}]`)
+	socket := fleetWith(t, root, "dev", files)
+
+	end, err := removeFleetIn(root, socket, false)
+	if err != nil || end.Removed || len(end.Forgot) > 0 || !slices.Equal(end.Left.Parked, []string{"alex"}) {
+		t.Fatalf("removeFleetIn = %+v, %v; want the fleet kept with alex parked", end, err)
+	}
+	mustStay(t, socket, files)
+}
+
+// A lock that cannot be taken at all proves no daemon is not running, so
+// nothing is removed.
+func TestALockThatCannotBeTakenRemovesNothing(t *testing.T) {
+	root := testRoot(t)
+	files := stoppedFiles()
+	socket := fleetWith(t, root, "dev", files)
+	if err := os.Chmod(lockPath(socket), 0); err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.Chmod(lockPath(socket), 0o600) })
+
+	if end, err := removeFleetIn(root, socket, true); err == nil || end.Removed {
+		t.Fatalf("removeFleetIn = %+v, %v; want a refusal", end, err)
+	}
+	mustStay(t, socket, files)
 }
 
 // The lock is the last of Wake's files to go: until then a daemon starting on
@@ -307,7 +350,7 @@ func TestTheLockIsTheLastFileRemoved(t *testing.T) {
 	}
 	t.Cleanup(func() { removeFleetFile = os.Remove })
 
-	if end, err := removeFleetIn(root, socket); err != nil || !end.Removed {
+	if end, err := removeFleetIn(root, socket, true); err != nil || !end.Removed {
 		t.Fatalf("removeFleetIn = %+v, %v", end, err)
 	}
 	if len(order) == 0 || order[len(order)-1] != lockFileName {
@@ -319,7 +362,7 @@ func TestTheLockIsTheLastFileRemoved(t *testing.T) {
 // `wake stop --fleet typo` reaches.
 func TestAFleetThatIsNotThereIsNothingToRemove(t *testing.T) {
 	root := testRoot(t)
-	end, err := removeFleetIn(root, filepath.Join(fleetPath(root, "typo"), socketFileName))
+	end, err := removeFleetIn(root, filepath.Join(fleetPath(root, "typo"), socketFileName), true)
 	if err != nil || end.Removed {
 		t.Errorf("removeFleetIn on no fleet = %+v, %v", end, err)
 	}
@@ -377,5 +420,24 @@ func TestResolvingAFleetMakesNoDirectoryButABareWakeReservesItsName(t *testing.T
 	}
 	if !exists(t, filepath.Dir(drawn)) || name != fleetPool[0] {
 		t.Errorf("a bare wake drew %q at %s without reserving it", name, drawn)
+	}
+}
+
+// An old name that forwards to nothing is said, under that name, and nothing is
+// removed: a link to nothing is the operator's to clear (forwardsNowhere).
+func TestAForwardToNothingIsSaid(t *testing.T) {
+	root := testRoot(t)
+	if err := os.MkdirAll(filepath.Join(root, fleetsDirName), stateDirPerm); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink("gone", fleetPath(root, "atlas")); err != nil {
+		t.Fatal(err)
+	}
+	end, err := removeFleetIn(root, filepath.Join(fleetPath(root, "atlas"), socketFileName), true)
+	if err == nil || end.Name != "atlas" || end.Removed {
+		t.Errorf("removeFleetIn through a link to nothing = %+v, %v; want atlas named and refused", end, err)
+	}
+	if !exists(t, fleetPath(root, "atlas")) {
+		t.Error("the link to nothing was removed")
 	}
 }

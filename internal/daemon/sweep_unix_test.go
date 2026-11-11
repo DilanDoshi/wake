@@ -77,8 +77,11 @@ func TestAStopLeavesNothingOfTheFleetRunning(t *testing.T) {
 		groups = append(groups, s.PID)
 	}
 	t.Cleanup(func() {
+		// Only what is still alive, and never 0 or 1: kill(0) is this test's own group.
 		for _, pid := range append(children, groups...) {
-			_ = syscall.Kill(pid, syscall.SIGKILL)
+			if pid > 1 && processAlive(pid) {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
 		}
 	})
 	if len(groups) != 2 {
@@ -160,20 +163,8 @@ func TestParkingDoesNotSweepTheProcessGroup(t *testing.T) {
 	}
 }
 
-// waitForPid reads the pid the agent recorded for its child, polling because it
-// is written by another process this test never waits for.
+// waitForPid reads the pid the agent recorded for its child.
 func waitForPid(t *testing.T, path string) int {
 	t.Helper()
-	deadline := time.Now().Add(testTimeout)
-	for {
-		if b, err := os.ReadFile(path); err == nil {
-			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(b))); convErr == nil && pid > 0 {
-				return pid
-			}
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the agent never recorded the pid of what it spawned (%s)", path)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	return waitForPids(t, path, 1)[0]
 }

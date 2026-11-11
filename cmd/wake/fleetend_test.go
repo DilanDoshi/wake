@@ -82,10 +82,14 @@ func TestStopRemovesAStoppedFleetThatIsDone(t *testing.T) {
 // 2026-11-11 ruling), each one named, and the fleet removed with them.
 func TestStopForgetsAStoppedFleetsParkedSessionsByName(t *testing.T) {
 	socket := stoppedFleet(t, "daemon.lock", "daemon.log")
-	book := `[{"id":"a","name":"alex"},{"id":"m","name":"manager"}]`
+	// Ids Wake minted, with transcripts, so the report counts them (parkedStatuses)
+	// and the stop takes its parked branch rather than the empty one.
+	book := `[{"id":"` + idAlpha + `","name":"alex"},{"id":"` + idBeta + `","name":"manager"}]`
 	if err := os.WriteFile(filepath.Join(filepath.Dir(socket), "parked.json"), []byte(book), 0o600); err != nil {
 		t.Fatal(err)
 	}
+	plantTranscript(t, idAlpha)
+	plantTranscript(t, idBeta)
 
 	var out bytes.Buffer
 	if err := stopFleet(socket, &out); err != nil {
@@ -109,6 +113,10 @@ func TestStopSaysWhatKeepsAFleet(t *testing.T) {
 	} {
 		t.Run(tc.what, func(t *testing.T) {
 			socket := stoppedFleet(t, "daemon.lock", tc.file)
+			book := `[{"id":"a","name":"alex"}]`
+			if err := os.WriteFile(filepath.Join(filepath.Dir(socket), "parked.json"), []byte(book), 0o600); err != nil {
+				t.Fatal(err)
+			}
 
 			var out bytes.Buffer
 			if err := stopFleet(socket, &out); err != nil {
@@ -117,8 +125,10 @@ func TestStopSaysWhatKeepsAFleet(t *testing.T) {
 			if vanished(t, filepath.Join(filepath.Dir(socket), tc.file)) {
 				t.Fatalf("%s was removed", tc.file)
 			}
-			if !strings.Contains(out.String(), "Fleet dev stays") || !strings.Contains(out.String(), tc.says) {
-				t.Errorf("the stop said %q, want it to say why dev stays: %q", out.String(), tc.says)
+			for _, want := range []string{"Fleet dev stays", tc.says, "The 1 agent parked in it stays too."} {
+				if !strings.Contains(out.String(), want) {
+					t.Errorf("the stop said %q, want it to say %q", out.String(), want)
+				}
 			}
 		})
 	}
@@ -138,5 +148,31 @@ func TestATyposFleetIsNeverMade(t *testing.T) {
 		if !vanished(t, filepath.Join(fleets, "typo")) {
 			t.Errorf("wake %s made fleet typo", strings.Join(args, " "))
 		}
+	}
+}
+
+// After a daemon's own stop a parked session is one parked since: the fleet
+// stays, and the line says how to forget it.
+func TestALiveStopKeepsWhatWasParkedAfterIt(t *testing.T) {
+	socket := stoppedFleet(t, "daemon.lock")
+	book := filepath.Join(filepath.Dir(socket), "parked.json")
+	if err := os.WriteFile(book, []byte(`[{"id":"a","name":"alex"}]`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+
+	var out bytes.Buffer
+	if err := endFleet(socket, true, &out); err != nil {
+		t.Fatal(err)
+	}
+	if vanished(t, book) || !strings.Contains(out.String(), "Fleet dev stays: 1 agent parked in it after the stop began") {
+		t.Errorf("a live stop over a book parked since said %q", out.String())
+	}
+}
+
+// A removal that failed after the book went still names what it forgot.
+func TestAFailedRemovalNamesWhatItForgot(t *testing.T) {
+	got := endLine(daemon.FleetEnd{Name: "dev", Forgot: []string{"alex"}}, errTest)
+	if !strings.Contains(got, "Fleet dev stays") || !strings.Contains(got, "forgot 1 agent parked (alex)") {
+		t.Errorf("endLine = %q", got)
 	}
 }

@@ -39,7 +39,7 @@ func TestTheRemovalWaitsOnlyForADaemonOnItsWayOut(t *testing.T) {
 	socket := stoppedFleet(t, "daemon.log")
 	holdLock(t, socket, 200*time.Millisecond)
 	var out bytes.Buffer
-	if err := endFleet(socket, 0, &out); err != nil {
+	if err := endFleet(socket, false, &out); err != nil {
 		t.Fatal(err)
 	}
 	if vanished(t, filepath.Dir(socket)) || !strings.Contains(out.String(), "Fleet dev stays: a daemon is running on it again") {
@@ -47,7 +47,7 @@ func TestTheRemovalWaitsOnlyForADaemonOnItsWayOut(t *testing.T) {
 	}
 
 	out.Reset()
-	if err := endFleet(socket, releaseCeiling, &out); err != nil {
+	if err := endFleet(socket, true, &out); err != nil {
 		t.Fatal(err)
 	}
 	if !vanished(t, filepath.Dir(socket)) || !strings.Contains(out.String(), "Removed fleet dev") {
