@@ -123,10 +123,8 @@ func startWake(t *testing.T, cols, rows int, args ...string) *screen {
 
 // startWakeIn is startWake from a chosen working directory, and the whole of
 // what the directory changes is what the operator sees: the status bar's path,
-// the branch beside it, and where a spawned agent starts. An empty dir keeps
-// exec's own default, which is this package's directory - a short path on
-// whatever branch the checkout is on, and the environment every fixture here
-// used before realistic_unix_test.go existed.
+// the branch beside it, and where a spawned agent starts. An empty dir is
+// screenWorkspace's, never the checkout's.
 func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *screen {
 	t.Helper()
 
@@ -138,6 +136,11 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 
 	bin := wakeBinary(t)
 	cmd := exec.Command(bin, args...)
+	var home []string
+	if dir == "" {
+		ws, h := screenWorkspace(t)
+		dir, home = ws, []string{"HOME=" + h}
+	}
 	cmd.Dir = dir
 	// XDG_CONFIG_HOME is pinned to a scratch directory for the same reason
 	// WAKE_SOCKET is asserted above: internal/termsetup reads it to find the
@@ -160,6 +163,7 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 	// is asserting on - and it is what made TestTheRoomDrawsAWorkingLineOnARealScreen
 	// flake under full-suite load.
 	cmd.Env = append(withoutTerminalDetectionEnv(os.Environ()), "TERM=xterm-256color", "XDG_CONFIG_HOME="+t.TempDir())
+	cmd.Env = append(cmd.Env, home...)
 	if testParentLeaseRead != nil {
 		childFD := 3 + len(cmd.ExtraFiles)
 		cmd.ExtraFiles = append(cmd.ExtraFiles, testParentLeaseRead)
@@ -201,6 +205,43 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 		_ = stop.Run()
 	})
 	return s
+}
+
+// screenNesting and screenBranch are where a test that names no directory runs
+// wake: the main checkout's own path and branch, in a repository under a scratch
+// home. Every screen draws the checkout's path and branch (the status bar, a
+// banner), so a word in a worktree's name was a word every await and count read
+// ("/resume" in fix/resume-plumbing-is-not-a-reply, "fork" in a worktree path).
+const (
+	screenNesting = "Documents/wake-public/cmd/wake"
+	screenBranch  = "main"
+)
+
+// screenWorkspace makes that repository, and returns it with the HOME wake must
+// see for it to draw as ~/…: the test's own scratch HOME if it set one, else a
+// fresh one resolved through symlinks, as the child's getcwd reports it.
+func screenWorkspace(t *testing.T) (dir, home string) {
+	t.Helper()
+	home = os.Getenv("HOME")
+	if !strings.HasPrefix(home, os.TempDir()) {
+		resolved, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatalf("resolve the screen workspace's home: %v", err)
+		}
+		home = resolved
+	}
+	dir = filepath.Join(home, screenNesting)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("make the screen workspace: %v", err)
+	}
+	for _, args := range [][]string{{"init", "--quiet"}, {"symbolic-ref", "HEAD", "refs/heads/" + screenBranch}} {
+		git := exec.Command("git", args...)
+		git.Dir = dir
+		if out, err := git.CombinedOutput(); err != nil {
+			t.Fatalf("git %v in the screen workspace: %v\n%s", args, err, out)
+		}
+	}
+	return dir, home
 }
 
 func testLeaseEnv(env []string, fd int) []string {
