@@ -51,6 +51,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/google/uuid"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -236,7 +237,7 @@ func absoluteDir(typed string) (string, error) {
 	case typed == "":
 		return base, nil
 	case typed == homePrefix || strings.HasPrefix(typed, homePrefix+string(filepath.Separator)):
-		home, herr := os.UserHomeDir()
+		home, herr := core.HomeDir()
 		if herr != nil {
 			return "", fmt.Errorf("%s: %w", noHomeDir, herr)
 		}

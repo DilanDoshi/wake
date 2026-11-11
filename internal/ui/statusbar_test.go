@@ -79,6 +79,20 @@ func TestShortPathUsesTilde(t *testing.T) {
 	}
 }
 
+// BUG-70: a relative HOME is the working directory's, so a session under it is
+// still drawn under ~ rather than as the whole absolute path.
+func TestShortPathUsesTildeUnderARelativeHome(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("HOME", "h")
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, want := shortPath(filepath.Join(wd, "h", "wake")), "~/wake"; got != want {
+		t.Errorf("shortPath under HOME=h = %q, want %q", got, want)
+	}
+}
+
 // A fact nobody has reported is left out rather than drawn as a placeholder.
 // Wake learns these one frame at a time, so a bar of "unknown  unknown" is the
 // ordinary state for the first second of every session.
