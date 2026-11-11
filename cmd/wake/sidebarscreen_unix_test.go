@@ -9,6 +9,8 @@
 package main
 
 import (
+	"fmt"
+	"strings"
 	"testing"
 )
 
@@ -22,13 +24,13 @@ func fleetOfNine(t *testing.T, s *screen) []string {
 	t.Helper()
 	s.await("ready")
 	s.send("\x17") // ⌃W
-	s.await("group chat")
+	room := s.awaitFrame("the room", func(rows []string) bool { return rowIn(rows, "group chat") >= 0 })
 
 	// The one agent already on the roster - `/new` opens no pane and selects
 	// nothing (starts.go's draftMention), so the cursor stays on whichever
 	// agent startWakeInAConversation opened, which is this one, through the
 	// whole loop below.
-	before := agentsOnRoster(s)
+	before := agentsIn(room)
 	if len(before) != 1 {
 		t.Fatalf("want one agent on the roster before the fleet is grown, got %v.\n%s", before, s.dump())
 	}
@@ -57,13 +59,15 @@ func fleetOfNine(t *testing.T, s *screen) []string {
 		s.send("\x17") // ⌃W, harmless: the room is what has the keys throughout
 		s.await("group chat")
 	}
-	// No ⌃R: the sidebar is open on arrival and nothing above closes it.
-	s.settle()
+	// No ⌃R: the sidebar is open on arrival and nothing above closes it. Every
+	// agent started has a row before the walk below reads the bottom one.
+	all := agentsIn(s.awaitFrame("the whole fleet on the roster", func(rows []string) bool {
+		return len(agentsIn(rows)) == len(before)+len(names)
+	}))
 
 	// Walk the cursor onto the bottom of the fleet as drawn, so the fold this
 	// helper exists to test has something below it to reach - the cursor is
 	// otherwise still on the one agent that predates the loop.
-	all := agentsOnRoster(s)
 	s.pickRoster(before[0], all[len(all)-1])
 	return names
 }
@@ -80,12 +84,9 @@ func TestAShortRosterSaysHowManyAgentsAreHidden(t *testing.T) {
 	}
 
 	s.resize(100, 8)
-	s.settle()
+	rows := s.awaitFrame("a column too short for nine agents saying some are hidden", sayHidden)
 
-	if !rosterCount.MatchString(s.text()) {
-		t.Fatalf("a column too short for nine agents does not say any are hidden.\n%s", s.dump())
-	}
-	if got := len(s.rosterNames()); got >= 9 {
+	if got := len(rosterNamesIn(rows)); got >= 9 {
 		t.Fatalf("the column claims to have hidden agents and drew all %d of them.\n%s", got, s.dump())
 	}
 }
@@ -102,9 +103,7 @@ func TestTheCursorReachesAnAgentBelowTheFold(t *testing.T) {
 	s := startWakeInAConversation(t, 100, 30)
 	fleetOfNine(t, s)
 	s.resize(100, 8)
-	s.settle()
-
-	shown := s.rosterNames()
+	shown := rosterNamesIn(s.awaitFrame("the column saying some agents are hidden", sayHidden))
 	if len(shown) >= 9 {
 		t.Fatalf("the column drew the whole fleet, so there is no fold to reach past.\n%s", s.dump())
 	}
@@ -116,23 +115,28 @@ func TestTheCursorReachesAnAgentBelowTheFold(t *testing.T) {
 	for range len(shown) {
 		s.send("\x1b[1;2A") // ⇧↑
 	}
-	s.settle()
-
-	after := s.rosterNames()
-	fresh := ""
-	for _, name := range after {
-		if !contains(shown, name) {
-			fresh = name
-			break
+	freshIn := func(rows []string) string {
+		for _, name := range rosterNamesIn(rows) {
+			if !contains(shown, name) {
+				return name
+			}
 		}
+		return ""
 	}
+	s.awaitFrame(fmt.Sprintf("an agent the column had not drawn (it drew %v)", shown), func(rows []string) bool { return freshIn(rows) != "" })
+	// Settled, so every ⇧↑ has landed and the first new row is the cursor's.
+	after := s.settle()
+	fresh := freshIn(after)
 	if fresh == "" {
-		t.Fatalf("the cursor moved past the fold and the column drew the same agents: %v then %v.\n%s", shown, after, s.dump())
+		t.Fatalf("the cursor moved past the fold and the column drew the same agents: %v then %v.\n%s", shown, rosterNamesIn(after), s.dump())
 	}
 
 	s.send("\x04") // ⌃D on the agent the cursor reached
 	s.await("@" + fresh)
 }
+
+// sayHidden is a frame whose roster says how many agents its window leaves out.
+func sayHidden(rows []string) bool { return rosterCount.MatchString(strings.Join(rows, "\n")) }
 
 func contains(names []string, want string) bool {
 	for _, n := range names {

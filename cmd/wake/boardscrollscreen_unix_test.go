@@ -17,9 +17,9 @@ var boardTileTitle = regexp.MustCompile(`╭─ [●◐○▪·] ([a-z][a-z0-9-]
 
 // titlesOn is the tile names drawn on the board right now, off the tiles' top
 // edges.
-func titlesOn(s *screen) []string {
+func titlesOn(rows []string) []string {
 	var out []string
-	for _, ln := range s.lines() {
+	for _, ln := range rows {
 		for _, m := range boardTileTitle.FindAllStringSubmatch(ln, -1) {
 			out = append(out, m[1])
 		}
@@ -58,20 +58,20 @@ func TestTheTiledBoardIsThreeAcrossAndScrollsOnAScreen(t *testing.T) {
 	s.await("BOARD")
 	s.send("\t") // ⇥ to tiles
 	s.await("╭")
-	s.settle()
+	rows := s.settle()
 
 	seen := map[string]bool{}
-	note := func() {
-		for _, n := range titlesOn(s) {
+	note := func(rows []string) {
+		for _, n := range titlesOn(rows) {
 			seen[n] = true
 		}
 	}
-	note()
+	note(rows)
 
 	// Three across at most, three across when there are enough to fill a row, and
 	// a tile at least the floor tall.
 	widest, top := 0, -1
-	for y, ln := range s.lines() {
+	for y, ln := range rows {
 		n := strings.Count(ln, "╭")
 		widest = max(widest, n)
 		if n > 3 {
@@ -85,7 +85,7 @@ func TestTheTiledBoardIsThreeAcrossAndScrollsOnAScreen(t *testing.T) {
 		t.Fatalf("no row draws three tiles across (widest %d).\n%s", widest, s.dump())
 	}
 	bottom := top
-	for y, ln := range s.lines() {
+	for y, ln := range rows {
 		if y > top && strings.Contains(ln, "╰") {
 			bottom = y
 			break
@@ -96,22 +96,19 @@ func TestTheTiledBoardIsThreeAcrossAndScrollsOnAScreen(t *testing.T) {
 	}
 
 	// One wheel notch scrolls the window: the tiles' top edge leaves the frame.
-	first := s.lines()[top]
+	first := rows[top]
 	s.send("\x1b[<65;20;10M") // wheel down, SGR
-	s.settle()
-	if got := s.lines()[top]; got == first {
-		t.Fatalf("a wheel notch drew the same top row.\n%s", s.dump())
-	}
+	s.awaitFrame("a wheel notch drawing a new top row", func(rows []string) bool { return rows[top] != first })
 
 	// PgDn scrolls rather than closing the board, and walking it reaches every
 	// agent that /new started.
 	for range 12 {
 		s.send("\x1b[6~") // PgDn
-		s.settle()
-		if !strings.Contains(s.text(), "BOARD") {
+		rows := s.settle()
+		if !strings.Contains(strings.Join(rows, "\n"), "BOARD") {
 			t.Fatalf("PgDn closed the board.\n%s", s.dump())
 		}
-		note()
+		note(rows)
 	}
 	for _, name := range names {
 		if !seen[name] {
