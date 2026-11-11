@@ -1681,4 +1681,7 @@ it waits for the change before it settles, since a whole frame can still be the 
   and an await on it would return at once. Such a test now runs in `screenWorkspace`, a repository on `main`
   at a fixed path shaped like a main checkout's, under a scratch `HOME`; internal/ui's `TestMain` pins `wakeDir`, the room
   banner's directory, the same way. Both failures reproduced in a worktree named `fork-ready-resume` on
-  `fix/resume-fork-ready`, and pass there now.
+  `fix/resume-fork-ready`, and pass there now. cmd/wake's in-process conversation (`startConversation`) had
+  the same leak, since `requestSpawn` starts the agent where the process stands: there a "ready" in the
+  path passed the opening-turn wait at once. It now `t.Chdir`s into the workspace. A second pty window
+  shares the first's workspace, so its agents draw under the same `~`.

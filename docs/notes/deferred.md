@@ -6189,3 +6189,11 @@ Harness waits now wait on what the test needs (BUG-29, BUG-68's related reads, B
 - **A few raw dials right after `startDaemon`** (`build_test.go`'s `Status`, `manager_test.go`'s `Status`,
   `daemon_test.go`'s `Dial`) have `mustDial`'s window and no retry, since they test the product call itself.
   Never seen failing. cmd/wake's `serveOn` waits on the file too; its client goes through `EnsureRunning`.
+- **cmd/wake's in-process room banner can still draw the checkout's path.** `internal/ui`'s `wakeDir` is the
+  first cwd it is asked under in a test binary, and only internal/ui's own `TestMain` can pin it; in cmd/wake
+  the first room drawn decides (the lifecycle test's stands in the workspace; a test that draws a room from
+  the checkout first fixes the path for the rest). No await reads the room banner today. *Closes with:* a test
+  hook for the banner's directory, which is a product-file change this test-only branch did not make.
+- **A test's own scratch HOME is not resolved through symlinks** (`screenWorkspace`): on macOS the child's
+  cwd reports `/private/var/…` and the bar draws the whole path, as these tests did before. Resolving it would
+  lengthen a bare-wake socket path under it by 8 bytes, near sun_path's 104. No test asserts on that path.
