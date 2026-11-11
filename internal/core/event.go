@@ -540,11 +540,6 @@ type Event struct {
 	// knows a queued message was read when its started lifecycle went missing.
 	Answered []string `json:"answered,omitempty"`
 
-	// LoopWakeup marks a KindMessageState for a turn claude started itself to run
-	// a self-paced loop's next iteration; its MessageID is claude's, not Wake's.
-	// Read by the daemon alone, so it never reaches a client.
-	LoopWakeup bool `json:"-"`
-
 	// PermissionMode is the mode a session is running in, and it has two
 	// observables that are one fact: a KindControlReceipt answering a
 	// set_permission_mode, and every KindSystem init. One field rather than
@@ -619,6 +614,10 @@ type Event struct {
 	// the operator ran and its output - rather than claude's own note: claude
 	// answers it, so a room restore reads it as the turn it opens.
 	Shell bool `json:"shell,omitempty"`
+
+	// LoopWakeup marks a KindMessageState for a turn claude started for a self-paced loop; daemon-only,
+	// and among these bools so it fills their padding: a retained event may not grow (room_retention).
+	LoopWakeup bool `json:"-"`
 
 	// FromName attributes a KindCrossSession event: the peer's display name (its
 	// own --name). It is what the room heads the line with, matched to a fleet
