@@ -243,6 +243,13 @@ type nudge struct{}
 func startConversation(t *testing.T, socket string) *drivenApp {
 	t.Helper()
 
+	// requestSpawn starts the agent where this process stands, and its banner and
+	// status bar draw that directory and its branch: stand in screenWorkspace, not
+	// the checkout (BUG-71).
+	dir, home := screenWorkspace(t)
+	t.Setenv("HOME", home)
+	t.Chdir(dir)
+
 	conn, stream, err := connect(socket, io.Discard)
 	if err != nil {
 		t.Fatalf("connect: %v", err)

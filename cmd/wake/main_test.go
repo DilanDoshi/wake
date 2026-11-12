@@ -5,10 +5,13 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"io"
+	"io/fs"
 	"net"
 	"os"
 	"path/filepath"
 	"sync"
+	"syscall"
 	"testing"
 	"time"
 
@@ -509,21 +512,38 @@ func startRealDaemonAt(t *testing.T, socket string) *realDaemon {
 		cancel()
 		d.waitForExit(t)
 	})
+	if exited, err := awaitListening(t, socket, errc); exited {
+		d.waited = true
+		t.Fatalf("Serve returned before it was listening: %v", err)
+	}
+	return d
+}
 
+// awaitListening waits for a dial the daemon on socket accepts, or for its Serve
+// to return (exited, with Serve's error). The socket file is no sign: it exists
+// before listen() (BUG-71). The dial is held, drained, until the test ends,
+// because an empty daemon quits when a client leaves (reconsiderEmptyExit).
+func awaitListening(t *testing.T, socket string, served <-chan error) (exited bool, err error) {
+	t.Helper()
 	deadline := time.Now().Add(testTimeout)
-	for time.Now().Before(deadline) {
-		if info, err := os.Lstat(socket); err == nil && info.Mode()&os.ModeSocket != 0 {
-			return d
+	for {
+		conn, err := daemon.Dial(socket)
+		if err == nil {
+			go func() { _, _ = io.Copy(io.Discard, conn) }()
+			t.Cleanup(func() { _ = conn.Close() })
+			return false, nil
+		}
+		notYet := errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, fs.ErrNotExist)
+		if !notYet || time.Now().After(deadline) {
+			t.Fatalf("the daemon on %s never took a dial: %v", socket, err)
 		}
 		select {
-		case err := <-d.err:
-			t.Fatalf("Serve returned before it was listening: %v", err)
+		case err := <-served:
+			return true, err
 		default:
 		}
 		time.Sleep(10 * time.Millisecond)
 	}
-	t.Fatal("the daemon never started listening")
-	return nil
 }
 
 // waitForExit insists Serve actually returns. Idempotent, so a test that shuts

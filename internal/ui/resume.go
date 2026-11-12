@@ -20,6 +20,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -87,13 +88,17 @@ func (a App) resume(arg string) (App, tea.Cmd) {
 		return a.bringBack(parked)
 
 	default:
+		// A parked session wins its name over a team, the order every other
+		// resolution keeps (teamverbs.go).
 		who := strings.TrimPrefix(arg, agentPrefix)
-		agent, ok := a.parkedNamed(who)
-		if !ok {
-			notice.Report(notParked+"\n%s", agentPrefix, who, parkedList(parked))
-			return a, nil
+		if agent, ok := a.parkedNamed(who); ok {
+			return a.bringBack([]Agent{agent})
 		}
-		return a.bringBack([]Agent{agent})
+		if team := a.teamParked(strings.ToLower(who)); len(team) > 0 {
+			return a.bringBackTeam(strings.ToLower(who), team)
+		}
+		notice.Report(notParked+"\n%s", agentPrefix, who, parkedList(parked))
+		return a, nil
 	}
 }
 
@@ -114,6 +119,11 @@ func (a App) wake(agents []Agent) (App, tea.Cmd) {
 	} else {
 		notice.Report(resumeAskedN, len(agents))
 	}
+	return a.rouse(agents)
+}
+
+// rouse is the wake itself, with nothing said.
+func (a App) rouse(agents []Agent) (App, tea.Cmd) {
 	ids := make([]string, 0, len(agents))
 	for _, ag := range agents {
 		ids = append(ids, ag.ID)
@@ -486,4 +496,50 @@ func (a App) rekeyPane(from, conv, name string) App {
 	a.roster = cursor
 	a.fleet = a.fleet.Focus(focused)
 	return a.refocus(focus)
+}
+
+// resumeArgMenu offers what /resume can bring back: the parked sessions, then
+// the teams with a parked member - which the @ menu, keyed on routing, leaves
+// out when none is live - then `all`. A parked session holding a team's name
+// wins it, as resume does. The typed `@`, if any, is kept on every offer. Once a
+// character is typed, so an accepted `/resume ` is a finished word.
+func (a App) resumeArgMenu(draft, head, partial string) completion {
+	none := completion{pane: a.focus} // no draft, so ⇥ still moves the keys (typingWord)
+	parked := a.parkedAgents()
+	if partial == "" || len(parked) == 0 {
+		return none
+	}
+	c := completion{pane: a.focus, draft: draft, head: head}
+	typed, marked := strings.CutPrefix(partial, agentPrefix)
+	mark := ""
+	if marked {
+		mark = agentPrefix
+	}
+	if strings.EqualFold(typed, core.ManagerName) {
+		c.routed = mark + a.fleet.shown(typed) // resume reads `manager` as the drawn row, so ↵ sends it
+	}
+	lower := strings.ToLower(typed)
+	held := make(map[string]bool, len(parked))
+	for _, agent := range parked {
+		held[strings.ToLower(agent.Name)] = true
+		if agent.Name != "" && strings.HasPrefix(strings.ToLower(agent.Name), lower) {
+			c.names = append(c.names, mark+agent.Name)
+		}
+	}
+	teams := map[string]bool{}
+	for _, agent := range parked {
+		team := agent.Team
+		if team == "" || teams[team] || held[team] || a.fleet.isManager(agent.Name) || !strings.HasPrefix(team, lower) {
+			continue
+		}
+		teams[team] = true
+		c.names, c.tags = tagged(c.names, c.tags, mark+team, offerTag{suffix: teamMenuSuffix})
+	}
+	if !marked && strings.HasPrefix(resumeAll, lower) {
+		c.names = append(c.names, resumeAll)
+	}
+	if len(c.names) == 0 {
+		return none
+	}
+	return c
 }

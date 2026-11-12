@@ -226,6 +226,9 @@ func (a App) completing() completion {
 	if head, word, ok := commandStem(draft); ok {
 		return a.commandMenu(draft, head, word)
 	}
+	if head, partial, ok := resumeArgStem(draft); ok {
+		return a.resumeArgMenu(draft, head, partial)
+	}
 	if head, partial, who, bridge, ok := teamArgStem(draft); ok {
 		return a.teamArgMenu(draft, head, partial, who, bridge)
 	}

@@ -304,6 +304,17 @@ func interruptNotice(kind EventKind, text string) Notice {
 	return ""
 }
 
+// noResponseText is what claude writes, under the synthetic model, to close a turn
+// left with no reply (an interrupt, a kill) when the session is resumed: on disk
+// only (BUG-65, testdata/transcript/resume-interrupted.jsonl, resume-killed.jsonl).
+const noResponseText = "No response requested."
+
+// isResumeClose reports whether a message is that close: plumbing, drawn by
+// nothing. The synthetic model is the gate, so an agent writing the words still speaks.
+func isResumeClose(m wireMessage) bool {
+	return m.Model == syntheticModel && messageText(m.Content) == noResponseText
+}
+
 // toolCall builds the ToolCall for an invocation, resolving the display
 // argument and the diff so nothing above has to index Input.
 func toolCall(id, name string, input map[string]any) *ToolCall {
@@ -737,15 +748,20 @@ func waitingNotice(summary json.RawMessage) bool {
 	return json.Unmarshal(summary, &s) == nil && strings.TrimSpace(s) == subagentWaiting
 }
 
-// MessageEnded reports whether a KindMessageState says the message Wake sent is
-// over - completed or cancelled. Both free the wire for the next. See queue.go.
+// MessageEnded reports whether a KindMessageState says the message Wake sent, or
+// the turn claude started itself (LoopWakeup), is over - completed or cancelled.
+// Both free the wire for the next. See queue.go.
 func (e Event) MessageEnded() bool {
 	return e.Kind == KindMessageState && (e.Text == "completed" || e.Text == "cancelled")
 }
 
+// wakeupLoop is the wakeup_source of a turn claude starts itself for a self-paced
+// loop's next iteration (loop-self-paced-end.jsonl:53).
+const wakeupLoop = "loop_wakeup"
+
 // MessageStarted reports claude taking up a message Wake sent: into the running
 // turn at a tool boundary, or as a turn of its own (midturn-absent.jsonl:37,
-// midturn-later.jsonl:52).
+// midturn-later.jsonl:52); or starting a loop's wakeup turn (LoopWakeup).
 func (e Event) MessageStarted() bool { return e.Kind == KindMessageState && e.Text == "started" }
 
 // MessageCancelled reports a message that will never run: taken back before

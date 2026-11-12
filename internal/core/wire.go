@@ -78,14 +78,14 @@ type wireFrame struct {
 	// for every one of them.
 	Response *wireControlResp `json:"response"`
 
-	// command_lifecycle reports what became of a message Wake sent. It
-	// appears only for messages Wake stamped with a top-level uuid, which
-	// comes back here as CommandUUID; the frame's own uuid identifies the
-	// frame and is dropped like every other frame's. State is queued,
-	// started, completed or cancelled across the corpus, and the set is open
-	// - see KindMessageState.
-	CommandUUID string `json:"command_uuid"`
-	State       string `json:"state"`
+	// command_lifecycle reports what became of a message Wake stamped with a
+	// top-level uuid (CommandUUID), or of a turn claude starts itself, whose
+	// started frame names its WakeupSource (loop-self-paced-end.jsonl:53). State
+	// is queued, started, completed or cancelled across the corpus, and the set
+	// is open - see KindMessageState.
+	CommandUUID  string `json:"command_uuid"`
+	State        string `json:"state"`
+	WakeupSource string `json:"wakeup_source"`
 
 	// system/init reports the mode the session is genuinely running in, and it
 	// arrives on every turn. It is the second observable for a permission mode
@@ -109,10 +109,10 @@ type wireFrame struct {
 
 	RateLimit *wireRateLimit `json:"rate_limit_info"`
 
-	// stream_event carries one Anthropic streaming event here. It is the only
-	// frame in the corpus's format that Wake decodes into *nothing* on most of
-	// its shapes - see wireStreamEvent, and partialEvent for why.
-	StreamEvent *wireStreamEvent `json:"event"`
+	// stream_event carries one Anthropic streaming event here (wireStreamEvent,
+	// and partialEvent for why most decode to nothing); system/ui_invalidate
+	// carries a string (ui-invalidate.jsonl:2), so it is raw.
+	StreamEvent json.RawMessage `json:"event"`
 
 	// What the session is running as, and how full its context is - the two
 	// facts a status bar shows that are not the conversation.
