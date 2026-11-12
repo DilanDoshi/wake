@@ -284,7 +284,7 @@ func (a App) show(sessionID, name string, place func(Grid) Grid) App {
 	if sessionID == "" {
 		return a
 	}
-	before := a.grid
+	before, drawn := a.grid, a.drawnIDs()
 	if _, ok := a.dms[sessionID]; !ok {
 		// A conversation opening for the first time seeds itself from the room's
 		// account of this agent's turns, so a room turn that happened before this
@@ -300,14 +300,15 @@ func (a App) show(sessionID, name string, place func(Grid) Grid) App {
 		a.dmOrder = append(slices.Clone(a.dmOrder), sessionID)
 	}
 	a.grid = place(a.grid)
-	if displaced, ok := displacedBy(before, a.grid, sessionID); ok {
+	if displaced, ok := displacedBy(before, a.grid, sessionID); ok && slices.Contains(drawn, displaced) {
 		// The conversation that lost the slot is the one somebody is leaving,
 		// and where they got to in it is what they will want when they come
-		// back. Only a slot taken counts: a new column displaces nobody.
+		// back. Only a slot taken counts: a new column displaces nobody. One
+		// already off screen was left when it went, and one absence is one rule.
 		a = a.withDM(displaced, a.dms[displaced].Leave())
 	}
-	// And the one taking it drops a boundary nothing arrived under. See
-	// lastread.go.
+	// And the one taking it drops a boundary nothing arrived under, once it is
+	// drawn (below). See lastread.go.
 	//
 	// The parent is re-read on every open rather than only on the first, so a
 	// conversation opened before its fork's report arrived picks the name up
@@ -325,8 +326,7 @@ func (a App) show(sessionID, name string, place func(Grid) Grid) App {
 	// the seed. docs/notes/bugs.md BUG-5.
 	a = a.withDM(sessionID, a.dms[sessionID].
 		WithParentName(a.parentName(sessionID)).
-		withAgent(a.fleet).
-		Resume())
+		withAgent(a.fleet))
 	// Reading a DM is reading its arrivals: Focus clears what accumulated for
 	// that agent while somebody was elsewhere.
 	a.fleet = a.fleet.Focus(sessionID)
@@ -342,8 +342,11 @@ func (a App) show(sessionID, name string, place func(Grid) Grid) App {
 	a.roster = Roster{Selected: sessionID, SelectedTask: task}
 	// A conversation this client has not seen before comes back with what it
 	// already said; Update writes the ask. See history.go.
-	a = a.askHistory(sessionID)
-	return a.withFocus(sessionID).resizePanes().retarget()
+	a = a.askHistory(sessionID).withFocus(sessionID).resizePanes().retarget()
+	if slices.Contains(a.drawnIDs(), sessionID) { // a lower pane with no row stays hidden
+		a = a.withDM(sessionID, a.dms[sessionID].Resume())
+	}
+	return a
 }
 
 // displacedBy is the conversation that was on screen before and is not now,
@@ -482,17 +485,33 @@ func (a App) showRoom() App { return a.refocus("") }
 // or the marker is silently lost at exactly the width where the conversation is
 // the only pane there is. See lastread.go.
 func (a App) refocus(next string) App {
-	was := a.drawn()
+	was := a.drawnIDs()
 	a = a.withFocus(next).resizePanes()
-	now := a.drawn()
-	for _, id := range was {
-		if id != "" && !slices.Contains(now, id) {
-			a = a.withDM(id, a.dms[id].Leave())
-		}
-	}
+	a = a.left(was, a.drawnIDs())
 	if next == "" {
 		// A reminder the room passed while a conversation held the keys is owed now.
 		a.room = a.room.remind()
+	}
+	return a
+}
+
+// left marks every conversation drawn in was and not in now as left, and resumes
+// every one drawn now and not in was, so a pane that missed nothing earns no rule.
+// The lists are drawnIDs', the predicate App.wants refuses tokens by: a pane that
+// kept its preview while refused glued the next token onto words from before the
+// hole (BUG-69). Update's seam runs it for every message, and refocus at once, so
+// a move is left within the call that made it.
+func (a App) left(was, now []string) App {
+	for _, id := range was {
+		// One taken out of the grid was left by what took it (hideDM, show).
+		if dm, ok := a.dms[id]; ok && !slices.Contains(now, id) && a.grid.Has(id) {
+			a = a.withDM(id, dm.Leave())
+		}
+	}
+	for _, id := range now {
+		if dm, ok := a.dms[id]; ok && !slices.Contains(was, id) {
+			a = a.withDM(id, dm.Resume())
+		}
 	}
 	return a
 }

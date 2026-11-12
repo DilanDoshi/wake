@@ -374,14 +374,15 @@ func TestLettingTokensWaitChangesNothingDrawn(t *testing.T) {
 // differ, and only one way: a token main refused while the pane was off screen,
 // the deferred window hands the pane once it is drawn, because it was waiting
 // still. So the pane draws every word main drew and some before them, ending in
-// the newest, with no hole main does not have, and the landed block draws the
-// same in both.
+// the newest, with no hole in either window (BUG-69), and the landed block draws
+// the same in both.
 func TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid(t *testing.T) {
 	for _, tc := range []struct {
 		name    string
 		speaker string
 		open    string // the conversation open beside the room from the start
 		w, h    int
+		setup   func(*twins) // the panes, before anything is said
 		off     func(*twins) // the speaker's pane goes off screen before its answer starts
 		midway  func(*twins) // or once it has drawn the answer's first words
 		on      func(*twins)
@@ -400,8 +401,8 @@ func TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid(t *testing.T) {
 				tw.onScreen(tea.WindowSizeMsg{Width: 200, Height: 45})
 				tw.onScreen(geometrySettledMsg{gen: tw.every.geoGen})
 			}},
-		// Main glues the words after the hole onto the ones before it here (BUG-69);
-		// the deferred window may fill some of it, never widen it.
+		// A resize that hides a pane leaves it, so the words it brings back start
+		// from the next one rather than gluing onto the ones before (BUG-69).
 		{name: "a narrow window hides it mid-answer and a wide one brings it back", speaker: "s1", open: "s1", w: 200, h: 45,
 			midway: func(tw *twins) {
 				tw.do("the room takes the keys", func(a App) App { return a.refocus("") })
@@ -412,6 +413,67 @@ func TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid(t *testing.T) {
 				tw.onScreen(tea.WindowSizeMsg{Width: 200, Height: 45})
 				tw.onScreen(geometrySettledMsg{gen: tw.every.geoGen})
 			}},
+		// Tokens are refused from the resize on, not from its settle: a drag that
+		// comes back before one lands left the same hole.
+		{name: "a drag past two columns and back before it settles", speaker: "s1", open: "s1", w: 200, h: 45,
+			midway: func(tw *twins) {
+				tw.do("the room takes the keys", func(a App) App { return a.refocus("") })
+				tw.msg("the window narrows past two columns", tea.WindowSizeMsg{Width: dmTakeoverColumns - 10, Height: 45})
+			},
+			on: func(tw *twins) { tw.onScreen(tea.WindowSizeMsg{Width: 200, Height: 45}) }},
+		{name: "a short window hides the lower pane mid-answer and a tall one brings it back", speaker: "s2", open: "s1", w: 200, h: 45,
+			setup: func(tw *twins) {
+				tw.do("bea opens below alex", func(a App) App { return a.refocus("s1").openBelow("s2", "bea") })
+			},
+			midway: func(tw *twins) {
+				tw.msg("the window shortens past two rows of panes", tea.WindowSizeMsg{Width: 200, Height: 2*minPaneHeight + dividerHeight})
+			},
+			on: func(tw *twins) { tw.onScreen(tea.WindowSizeMsg{Width: 200, Height: 45}) }},
+		// Width and height in one resize, as a window manager sends them: the height
+		// lands at once and the width waits for its settle.
+		{name: "a narrower, short window hides the lower pane mid-answer and a tall one brings it back", speaker: "s2", open: "s1", w: 200, h: 45,
+			setup: func(tw *twins) {
+				tw.do("bea opens below alex", func(a App) App { return a.refocus("s1").openBelow("s2", "bea") })
+			},
+			midway: func(tw *twins) {
+				tw.msg("the window shrinks both ways", tea.WindowSizeMsg{Width: 190, Height: 2*minPaneHeight + dividerHeight})
+			},
+			on: func(tw *twins) {
+				tw.onScreen(tea.WindowSizeMsg{Width: 200, Height: 45})
+				tw.onScreen(geometrySettledMsg{gen: tw.every.geoGen})
+			}},
+		// A ⇥ before the settle: the pending width already draws one column, so
+		// handing the room the keys hides the conversation then, not at a settle.
+		{name: "a ⇥ to the room before the settle hides it mid-answer", speaker: "s1", open: "s1", w: 200, h: 45,
+			midway: func(tw *twins) {
+				tw.do("alex holds the keys", func(a App) App { return a.refocus("s1") })
+				tw.msg("the window narrows past two columns", tea.WindowSizeMsg{Width: dmTakeoverColumns - 10, Height: 45})
+				tw.msg("⇥ to the room", tea.KeyMsg{Type: tea.KeyTab})
+			},
+			on: func(tw *twins) { tw.onScreen(tea.WindowSizeMsg{Width: 200, Height: 45}) }},
+		// Below the takeover one column is drawn: ⌃Y opens bea beside alex and
+		// slides alex off, displacing nobody.
+		{name: "⌃Y below the takeover slides it off mid-answer and ⇧← brings it back", speaker: "s1", open: "s1", w: dmTakeoverColumns - 10, h: 45,
+			setup: func(tw *twins) {
+				tw.do("alex holds the keys", func(a App) App { return a.refocus("s1") })
+			},
+			midway: func(tw *twins) {
+				tw.do("bea is picked", func(a App) App { a.roster = Roster{Selected: "s2"}; return a })
+				tw.msg("⌃Y opens bea to the right", tea.KeyMsg{Type: tea.KeyCtrlY})
+			},
+			on: func(tw *twins) { tw.onScreen(tea.KeyMsg{Type: tea.KeyShiftLeft}) }},
+		// Four columns fit this frame without the roster and three beside it.
+		{name: "⌃R drops a column mid-answer and ⌃R brings it back", speaker: "s3", open: "s1", w: dmTakeoverColumns - 2*SideMargin, h: 45,
+			setup: func(tw *twins) {
+				tw.do("bea and cy open to the right", func(a App) App {
+					return a.refocus("s1").openRight("s2", "bea").openRight("s3", "cy")
+				})
+				tw.msg("⌃R hides the roster", tea.KeyMsg{Type: tea.KeyCtrlR})
+				tw.do("the room takes the keys", func(a App) App { return a.refocus("") })
+				tw.shows("all four columns drawn", "@alex ─", "@bea ─", "@cy ─")
+			},
+			midway: func(tw *twins) { tw.msg("⌃R shows the roster", tea.KeyMsg{Type: tea.KeyCtrlR}) },
+			on:     func(tw *twins) { tw.onScreen(tea.KeyMsg{Type: tea.KeyCtrlR}) }},
 		{name: "the board comes up tiled", speaker: "s2", open: "s1", w: 200, h: 45, on: func(tw *twins) {
 			tw.every.board, tw.deferred.board = Board{Up: true, Tiled: true}, Board{Up: true, Tiled: true}
 			tw.onScreen(nudge{})
@@ -424,6 +486,9 @@ func TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid(t *testing.T) {
 			other := "s1"
 			if tc.speaker == "s1" {
 				other = "s3"
+			}
+			if tc.setup != nil {
+				tc.setup(tw)
 			}
 			if tc.off != nil {
 				tc.off(tw)
@@ -477,8 +542,9 @@ func (tw *twins) both(f rpc.Frame) {
 }
 
 // atLeastMain fails unless the deferred window draws the speaker's words once each
-// and in order, every word main draws, ending on the newest, n, with no hole main
-// lacks: a word it skips, main skips too. It reports whether it draws more.
+// and in order, every word main draws, ending on the newest, n, and neither window
+// skips a word between the first it draws and the last. It reports whether the
+// deferred window draws more.
 func (tw *twins) atLeastMain(t *testing.T, speaker string, n int) bool {
 	t.Helper()
 	words := func(a App) []int {
@@ -506,10 +572,8 @@ func (tw *twins) atLeastMain(t *testing.T, speaker string, n int) bool {
 			t.Fatalf("main draws %v of %s's words and the deferred window %v: it misses %d", e, speaker, d, w)
 		}
 	}
-	for _, k := range holes(d) {
-		if !slices.Contains(holes(e), k) {
-			t.Fatalf("the deferred window draws %v of %s's words and main %v: a hole at %d main does not have", d, speaker, e, k)
-		}
+	if hd, he := holes(d), holes(e); len(hd) > 0 || len(he) > 0 {
+		t.Fatalf("the deferred window draws %v of %s's words and main %v: holes at %v and %v", d, speaker, e, hd, he)
 	}
 	return len(d) > len(e)
 }
