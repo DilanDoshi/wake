@@ -3,6 +3,7 @@ package ui
 // `/adopt` from the outside: the word, the set, and the ids it waits on.
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -295,8 +296,15 @@ const (
 type fakeSessions struct {
 	listing   string
 	resolved  []string
-	resumable []DiskSession
+	resumable []DiskSession // complete rows, nothing more to come
 	err       error
+
+	// A streamed walk, when listed is set: the stat-only rows, and the channel
+	// the test completes them on. The context of every walk is kept, so a test
+	// can say whether its reads were ended.
+	listed []DiskSession
+	filled chan DiskSession
+	walks  *[]context.Context
 }
 
 func (f fakeSessions) Listing() (string, error) { return f.listing, f.err }
@@ -308,7 +316,15 @@ func (f fakeSessions) Resolve(typed []string) ([]string, error) {
 	return f.resolved, nil
 }
 
-func (f fakeSessions) Resumable() ([]DiskSession, error) { return f.resumable, f.err }
+func (f fakeSessions) Resumable(ctx context.Context) ([]DiskSession, <-chan DiskSession, error) {
+	if f.walks != nil {
+		*f.walks = append(*f.walks, ctx)
+	}
+	if f.listed != nil {
+		return f.listed, f.filled, f.err
+	}
+	return f.resumable, nil, f.err
+}
 
 type countingSessions struct {
 	listing string
@@ -322,7 +338,10 @@ func (c *countingSessions) Resolve(typed []string) ([]string, error) {
 	return nil, fmt.Errorf("no")
 }
 
-func (c *countingSessions) Resumable() ([]DiskSession, error) { c.calls++; return nil, nil }
+func (c *countingSessions) Resumable(context.Context) ([]DiskSession, <-chan DiskSession, error) {
+	c.calls++
+	return nil, nil, nil
+}
 
 // adoptArrival runs one `/adopt` draft the way Bubble Tea does: the router
 // hands back a command, the command produces a message, and the model folds it.

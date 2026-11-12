@@ -305,18 +305,7 @@ func foundSessions(jobs []transcriptFile) []FoundSession {
 			if !isReg {
 				return
 			}
-			read := sessionRead(j, info)
-			found[i] = FoundSession{
-				ID:       j.id,
-				Dir:      verifiedDir(j.slug, read.cwds),
-				Slug:     j.slug,
-				Path:     j.path,
-				Modified: info.ModTime(),
-				Preview:  read.preview,
-				Title:    read.title,
-				Name:     read.recorded,
-			}
-			ok[i] = true
+			found[i], ok[i] = foundSession(j, info), true
 		}(i, j)
 	}
 	wg.Wait()
@@ -327,15 +316,34 @@ func foundSessions(jobs []transcriptFile) []FoundSession {
 			out = append(out, found[i])
 		}
 	}
-	// Newest first, and by id where two share a timestamp so the order is
-	// stable rather than whatever the filesystem said.
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].Modified.Equal(out[j].Modified) {
-			return out[i].Modified.After(out[j].Modified)
-		}
-		return out[i].ID < out[j].ID
-	})
+	sort.Slice(out, func(i, j int) bool { return newestFirst(out[i], out[j]) })
 	return out
+}
+
+// foundSession is one transcript's row: what reading it found, from the cache
+// while the file is as it was, and the directory proved against the disk now.
+func foundSession(j transcriptFile, info os.FileInfo) FoundSession {
+	read := sessionRead(j, info)
+	return FoundSession{
+		ID:       j.id,
+		Dir:      verifiedDir(j.slug, read.cwds),
+		Slug:     j.slug,
+		Path:     j.path,
+		Modified: info.ModTime(),
+		Preview:  read.preview,
+		Title:    read.title,
+		Name:     read.recorded,
+	}
+}
+
+// newestFirst is the order every listing keeps: newest first, and by id where
+// two share a timestamp so the order is stable rather than whatever the
+// filesystem said.
+func newestFirst(a, b FoundSession) bool {
+	if !a.Modified.Equal(b.Modified) {
+		return a.Modified.After(b.Modified)
+	}
+	return a.ID < b.ID
 }
 
 // transcriptFile is one candidate the parallel reads will open: found by a
