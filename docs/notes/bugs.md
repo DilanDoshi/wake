@@ -1618,3 +1618,30 @@ core where the loop pays a whole one.
 3. A benchmark that feeds the loop at steady arrival, to price either.
 
 A timer that coalesces the doorbell is the poll the first non-negotiable rules out.
+
+## BUG-68 — the friend's screen test kept a half-painted corner as the picture to match
+
+**Found 2026-11-09 in run 2 of `make ci` on 8d73179f (the v0.1.15 bump), race lane, at load 6–7 from another
+project's tests.** `TestAFriendSitsInTheCornerAndTheChoiceOutlastsTheWindow` failed with "the next window
+opened with" Bo's five rows, "want Bo's" top two rows over three blank ones. It passed 5/5 alone and on the
+next run. Wake drew nothing wrong; the test misread the screen.
+
+**Why.** `awaitCorner` returned the first read of the corner holding any `▀`/`▄`. Bubble Tea writes a frame
+in one write, rows top to bottom, but vt10x does not read it in one piece. Its `Parse` lets go of the lock
+each time its 4 KiB buffer empties, so a frame larger than that is always parsed across several lock holds,
+and the pty can split it further. A harness read can land between two of them. After `/friends bo` the
+corner was blank, so a read two rows into Bo's paint counts as drawn, and it became the `want` the next
+window was held to. Replaying a real window's bytes into vt10x a rune at a time shows that shape and a
+dozen others mid-frame. `skip` had the same weakness, and so did the `bo == skip` check it feeds.
+
+**Fix:** branch `fix/friend-corner-waits-for-a-settled-paint`. A corner read counts only when vt10x's cursor
+is on the screen's last row. Bubble Tea's alt-screen renderer paints top to bottom and leaves the cursor
+there after every frame, so every row above it, the corner's among them, belongs to one frame. In that
+replay, the corners the rule accepts are only three: blank, Skip whole and Bo whole.
+
+`TestTheCornerIsNeverReadHalfPainted` hands vt10x one frame cut inside the corner's last row, and holds the
+rest back for three reads. It is red on the old helper and on three plausible wrong rules: the cursor merely
+near the bottom, two equal reads in a row, and every corner row holding a block.
+
+No other wait in `cmd/wake`'s pty tests keeps its first match to compare later. Related reads were left
+alone and listed on the PR.
