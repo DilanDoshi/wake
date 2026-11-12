@@ -233,6 +233,48 @@ func Discoverable() ([]FoundSession, error) {
 // What a read finds is remembered per file, keyed on its size and time, so a
 // second discovery reads only the transcripts that changed (discovercache.go).
 func discover(projects string) ([]FoundSession, error) {
+	jobs, err := listTranscripts(projects)
+	if err != nil {
+		return nil, err
+	}
+	out := foundSessions(jobs)
+	live := make(map[string]struct{}, len(out))
+	for _, f := range out {
+		live[f.Path] = struct{}{}
+	}
+	sessionScans.retain(projects, live)
+	return out, nil
+}
+
+// discoverID is the one session a pick named: the row discover gives that id -
+// the newest where it sits under two slugs - and whether there is one. It lists
+// the projects as discover does, so it finds what discover finds and fails where
+// discover fails, but it reads only the transcripts that carry the id: a pick has
+// already had its walk, and the daemon confirming it must not make another.
+//
+// It does not tell the cache what is gone (discover does, from a whole listing):
+// the rest of the machine is still there.
+func discoverID(projects, id string) (FoundSession, bool, error) {
+	jobs, err := listTranscripts(projects)
+	if err != nil {
+		return FoundSession{}, false, err
+	}
+	var named []transcriptFile
+	for _, j := range jobs {
+		if j.id == id {
+			named = append(named, j)
+		}
+	}
+	rows := foundSessions(named)
+	if len(rows) == 0 {
+		return FoundSession{}, false, nil
+	}
+	return rows[0], true, nil
+}
+
+// listTranscripts is every transcript under a projects tree, with no content
+// read: one ReadDir per project.
+func listTranscripts(projects string) ([]transcriptFile, error) {
 	if projects == "" {
 		return nil, errors.New("no projects directory to look in: claude persists transcripts under ~/.claude/projects and this process cannot tell where home is")
 	}
@@ -243,8 +285,12 @@ func discover(projects string) ([]FoundSession, error) {
 	if err != nil {
 		return nil, err
 	}
+	return transcriptFiles(projects, entries), nil
+}
 
-	jobs := transcriptFiles(projects, entries)
+// foundSessions reads each transcript, fanned across discoverWorkers, and
+// returns the rows newest first. A file that is not a regular one is no row.
+func foundSessions(jobs []transcriptFile) []FoundSession {
 	found := make([]FoundSession, len(jobs))
 	ok := make([]bool, len(jobs))
 	sem := make(chan struct{}, discoverWorkers)
@@ -276,14 +322,11 @@ func discover(projects string) ([]FoundSession, error) {
 	wg.Wait()
 
 	out := make([]FoundSession, 0, len(jobs))
-	live := make(map[string]struct{}, len(jobs))
 	for i := range found {
 		if ok[i] {
 			out = append(out, found[i])
-			live[found[i].Path] = struct{}{}
 		}
 	}
-	sessionScans.retain(projects, live)
 	// Newest first, and by id where two share a timestamp so the order is
 	// stable rather than whatever the filesystem said.
 	sort.Slice(out, func(i, j int) bool {
@@ -292,7 +335,7 @@ func discover(projects string) ([]FoundSession, error) {
 		}
 		return out[i].ID < out[j].ID
 	})
-	return out, nil
+	return out
 }
 
 // transcriptFile is one candidate the parallel reads will open: found by a

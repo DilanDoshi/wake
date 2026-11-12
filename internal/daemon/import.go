@@ -117,11 +117,10 @@ func (s *server) importSource(sourceID string) (FoundSession, error) {
 	if s.holds(sourceID) {
 		return FoundSession{}, errors.New(s.heldRefusal(sourceID))
 	}
-	found, err := discover(ProjectsDir())
+	src, ok, err := discoverID(ProjectsDir(), sourceID)
 	if err != nil {
 		return FoundSession{}, fmt.Errorf("could not read the sessions on this machine: %w", err)
 	}
-	src, ok := findSession(found, sourceID)
 	if !ok {
 		return FoundSession{}, fmt.Errorf("there is no transcript for session %s on this machine: "+
 			"claude keeps one file per session and `wake import` lists the ones it can see", sourceID)
@@ -223,19 +222,6 @@ func (s *server) explainHeldSource(sourceID string, why error) error {
 			rpc.FleetCommand(s.fleetName(), "attach", who))
 	}
 	return why
-}
-
-// findSession picks one discovered session out of the listing.
-//
-// A linear scan rather than a map because the caller wants the whole listing
-// anyway for its refusals, and 428 transcripts was this machine's count.
-func findSession(found []FoundSession, id string) (FoundSession, bool) {
-	for _, f := range found {
-		if f.ID == id {
-			return f, true
-		}
-	}
-	return FoundSession{}, false
 }
 
 // short is the eight characters `wake status` prints and invites somebody to
