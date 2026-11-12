@@ -57,6 +57,10 @@ type server struct {
 	// inside it - see parkbook.go's header for why they are two files.
 	parked *parkBook
 
+	// worlds is what parked agents started, held until the session ends or this
+	// daemon does (world.go).
+	worlds worldLedger
+
 	// ready is every live agent's park book row, for the reaper - see parkready.go.
 	ready *parkReady
 
@@ -330,6 +334,7 @@ func (s *server) quitReason() quitVerb {
 func (s *server) shutdown() error {
 	verb := s.quitReason()
 	agents := s.takeAgents()
+	s.noteFleet(agents) // before any is stopped: a stop lets the turn run on
 	if verb == quitStop {
 		s.dropReady() // a fleet being stopped must not be handed on if the daemon dies in the grace
 	}
@@ -443,6 +448,7 @@ func (s *server) shutdown() error {
 	// processes that are already gone, so they cost nothing to keep and
 	// everything to lose - which is why the question above is "which verb"
 	// rather than "did this daemon exit".
+	s.sweepFleet(agents) // the last time anything can reach what the fleet started
 	return errors.Join(s.roster.clear(), s.ready.clear())
 }
 

@@ -85,3 +85,31 @@ func (f Fleet) RunningTasks(sessionID string) []Task {
 func sidebarListed(row Task) bool {
 	return row.Status == core.TaskRunning && (row.Selectable() || row.Kind == core.TaskShell)
 }
+
+// keepRunning is what a /clear does to a session's dispatches: the model's
+// conversation is dropped and the work it had running is not - claude 2.1.319
+// no longer kills a background agent, shell or workflow at a clear, and its
+// frames go on arriving, its ending under the new conversation. So a running
+// dispatch keeps its row and what it said, and a finished one, which belonged to
+// the conversation, goes. Dropping a running row left its ending nameless and
+// let the done line draw while the work ran.
+func (f Fleet) keepRunning(sessionID string) {
+	kept := f.tasks[sessionID].keepingRunning()
+	if len(kept.rows) == 0 {
+		delete(f.tasks, sessionID)
+		delete(f.subs, sessionID)
+		return
+	}
+	f.tasks[sessionID] = kept
+	subs := make(map[string]chunked[core.Event], len(kept.rows))
+	for _, row := range kept.rows {
+		if said, ok := f.subs[sessionID][row.Dispatch]; ok {
+			subs[row.Dispatch] = said
+		}
+	}
+	if len(subs) == 0 {
+		delete(f.subs, sessionID)
+		return
+	}
+	f.subs[sessionID] = subs
+}

@@ -6014,3 +6014,43 @@ lost what a park keeps (name, team, colour, effort); at best `/resume` found its
   interrupted once, ends well inside the grace and is offered by the next daemon on the socket; an idle one
   is interrupted harmlessly; a queued message does not keep it running; an outstanding ask is interrupted
   before stdin closes. `internal/ui/parkdropped_test.go` and `cmd/wake/attach_test.go` hold the named words.
+
+## 2026-11-11 — no process outlives its fleet (the owner, via wake-orch)
+
+The owner's standing rule: "we do not want to leave any stale running processes anywhere." It amends the old
+ruling that a park sweeps nothing (`TestParkingDoesNotSweepTheProcessGroup`, `deferred.md`'s clean-exit entry:
+"a woken session needs the world it spawned"). That ruling holds for a daemon that lives on, and no further.
+
+- **A ⌃C park inside a live daemon still keeps what its agent started.** The daemon holds each parked agent's
+  groups in memory (`worldLedger`, never on disk, so the park book still holds no pid), and a wake, a `/quit`
+  of the woken session, `wake stop` or the daemon's exit can still reach them.
+- **Every daemon exit sweeps** (`shutdown`, last): `wake stop`, ⌃Q⌃Q, a signal and an empty daemon's exit end
+  the groups every agent it held started, parked ones included. After the exit nothing can reach them: the
+  park book names no pid and a resumed claude does not manage them (owner, 2026-11-11, "yes" to ⌃Q⌃Q).
+- **What is swept.** Not only the agent's own group (retire already did): claude starts a background shell, and a
+  hook, in a process group of its own (BUG-73), so the daemon notes, while the agent runs, the groups led by a
+  direct child of its group, in one `ps` (pid, ppid, pgid, start), at a stop or park, at a shell's start
+  (coalesced per agent) and for the whole fleet at shutdown. One level deep: a daemon a command in the agent
+  started is that command's grandchild and is another fleet's.
+- **Nothing is signalled on a guess.** A noted group is signalled only while a process noted in it still runs
+  under the same start time: a pid is not reused while its group has a member, so a survivor proves the number
+  is still that group's. A listing that cannot be read, or lacks this daemon, signals nothing (a leak, never a
+  kill), as `processTable` refuses one.
+- **The env-marker walk is out** (the owner's agreement via wake-orch). An inherited marker follows an agent's
+  process tree into any fleet it starts (`wake new` from an agent makes a child daemon whose agents carry the
+  parent's marker), so one fleet's `wake stop` would end another's: the one signal the rule above forbids.
+  It also reads every same-user process's environment at each ending, and ends what the operator deliberately
+  daemonised from an agent. Left as `deferred.md`'s.
+- **A stopped agent that claude holds open is ended.** A headless claude does not exit on stdin EOF while a
+  background shell runs, so `/quit` and ⌃C never completed for such an agent (BUG-75, BUG-76). Once an agent is
+  stopped and between turns with a shell in `runningTasks`, the daemon ends its process (`endIfHeldOpen`, the
+  precedent `lostProcess`): `endProcess` and not `kill`, so a park's label survives for `completePark`; a turn
+  in flight is let to finish and its end asks again. Ending claude takes its own group with it, as every kill
+  of it does; the shell's group stays for a wake.
+- **`/clear` keeps running background work** (owner, 2026-11-11; claude 2.1.319 stopped killing it). The
+  premise "a dispatch from before the clear is a claim about work the model no longer has" is reversed for
+  work still running: its row, its backlog and the daemon's replay stay, its ending arrives under the new
+  conversation and is named; what had finished was the conversation's and goes (`Fleet.keepRunning`).
+  A running workflow's armed stop is still good after one (BUG-77).
+- Held by `internal/daemon/world_unix_test.go`, `world_test.go`, `internal/ui/fleetsubs_test.go`,
+  `clearbackground_test.go` (over `testdata/stream/clear-keeps-background.jsonl`).

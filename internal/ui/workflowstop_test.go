@@ -155,18 +155,32 @@ func TestTheRunEndingUnderTheArmDisarmsIt(t *testing.T) {
 	}
 }
 
-// A /clear takes the run away with no task frame of its own, so no ending folds
-// in: the next key finds the arm stale, writes nothing, and does its own job
-// rather than being spent cancelling an arm nobody can see.
-func TestARunClearedUnderTheArmWritesNothingAndSwallowsNoKey(t *testing.T) {
+// A /clear leaves a running workflow running (claude 2.1.319), so the arm that
+// stands over it is still good: the run is still there to stop.
+func TestARunRunningAcrossAClearKeepsItsArmAndStillStops(t *testing.T) {
+	a := armed(t, runOpen(t)).applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1",
+		Event: &core.Event{Kind: core.KindSessionReset, SessionID: "s1"}})
+
+	if keys := keyRow(drawnView(t, a)); !strings.Contains(keys, "stop") {
+		t.Errorf("a run that survived the clear no longer offers its stop: %q", keys)
+	}
+	a, cmd := pressKey(a, wfKey(tea.KeyEnter))
+	if got := stopsWritten(t, a, cmd); len(got) != 1 {
+		t.Errorf("↵ after the clear wrote %d stops, want the one the arm was for", len(got))
+	}
+}
+
+// A run that had ended and is still on screen is the conversation's history,
+// and a /clear takes it away with no frame of its own: the next key finds
+// nothing to stop, writes nothing, and does its own job rather than being spent
+// on a run nobody can see.
+func TestAFinishedRunClearedFromUnderTheViewWritesNothingAndSwallowsNoKey(t *testing.T) {
 	cleared := func() App {
-		return armed(t, runOpen(t)).applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1",
-			Event: &core.Event{Kind: core.KindSessionReset, SessionID: "s1"}})
+		return runOpen(t).applyFrame(taskFrame("s1", ended(wfTask, core.TaskDone))).
+			applyFrame(rpc.Frame{Kind: rpc.FrameEvent, SessionID: "s1",
+				Event: &core.Event{Kind: core.KindSessionReset, SessionID: "s1"}})
 	}
 	a := cleared()
-	if keys := keyRow(drawnView(t, a)); strings.Contains(keys, "stop") {
-		t.Errorf("a cleared run still draws a stop: %q", keys)
-	}
 	a, cmd := pressKey(a, wfKey(tea.KeyEnter))
 	if got := stopsWritten(t, a, cmd); len(got) != 0 {
 		t.Errorf("↵ after the clear wrote %d stops", len(got))
