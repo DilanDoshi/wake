@@ -258,14 +258,17 @@ func forwardedName(root, name string) (string, error) {
 // dropForwards removes every old name that forwards to the fleet at dir, and
 // nobody else's. They are all read before any goes, so a chain is not broken
 // into a link to nothing halfway through.
-func dropForwards(root, dir string) {
+func dropForwards(root, dir string) { removeForwards(forwardsHere(root, dir)) }
+
+// forwardsHere is every old name that forwards to the fleet at dir.
+func forwardsHere(root, dir string) []string {
 	home, err := os.Stat(dir)
 	if err != nil {
-		return
+		return nil
 	}
 	entries, err := os.ReadDir(filepath.Join(root, fleetsDirName))
 	if err != nil {
-		return
+		return nil
 	}
 	var ours []string
 	for _, e := range entries {
@@ -274,7 +277,11 @@ func dropForwards(root, dir string) {
 			ours = append(ours, path)
 		}
 	}
-	for _, path := range ours {
+	return ours
+}
+
+func removeForwards(paths []string) {
+	for _, path := range paths {
 		if err := os.Remove(path); err != nil {
 			logf("wake: remove the old fleet name %s: %v", path, err)
 		}

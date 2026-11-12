@@ -54,7 +54,8 @@ var systemNotice = map[string]Notice{
 // every other system frame, so this map is the decoder's whole test for one.
 //
 // Four subtypes and three phases: task_updated and task_notification report
-// the same ending and differ only in what they carry with it. Collapsing them
+// the same ending and differ only in what they carry with it - but for a
+// waiting subagent's notice, which taskUpdate reads as progress. Collapsing them
 // here rather than above the airlock is the point of this file - a view that
 // switched on two spellings of "ended" would be holding Claude's vocabulary.
 //
@@ -301,6 +302,17 @@ func interruptNotice(kind EventKind, text string) Notice {
 		return NoticeTurnInterrupted
 	}
 	return ""
+}
+
+// noResponseText is what claude writes, under the synthetic model, to close a turn
+// left with no reply (an interrupt, a kill) when the session is resumed: on disk
+// only (BUG-65, testdata/transcript/resume-interrupted.jsonl, resume-killed.jsonl).
+const noResponseText = "No response requested."
+
+// isResumeClose reports whether a message is that close: plumbing, drawn by
+// nothing. The synthetic model is the gate, so an agent writing the words still speaks.
+func isResumeClose(m wireMessage) bool {
+	return m.Model == syntheticModel && messageText(m.Content) == noResponseText
 }
 
 // toolCall builds the ToolCall for an invocation, resolving the display
@@ -723,15 +735,33 @@ func receiptSentence(text string) string {
 // the recording machine read it (2.1.314). Any other two-key result stays whole.
 const handbackDelivered = "Report delivered to your caller."
 
-// MessageEnded reports whether a KindMessageState says the message Wake sent is
-// over - completed or cancelled. Both free the wire for the next. See queue.go.
+// subagentWaiting is the whole summary of a 2.1.322 task_notification that ends
+// nothing: the subagent ended its turn while its own background work runs, then
+// starts again under the same id and reports (subagent-waits-background.jsonl:53).
+// Matched against Claude Code and maintained by hand; any other summary is prose.
+const subagentWaiting = "This agent has not reported yet: it is waiting on its own background work and will deliver its report through SubagentHandback when that finishes."
+
+// waitingNotice reads a task frame's summary as that sentence, whole: only a
+// string, and only the sentence, so a reply that quotes it or rewords it ends.
+func waitingNotice(summary json.RawMessage) bool {
+	var s string
+	return json.Unmarshal(summary, &s) == nil && strings.TrimSpace(s) == subagentWaiting
+}
+
+// MessageEnded reports whether a KindMessageState says the message Wake sent, or
+// the turn claude started itself (LoopWakeup), is over - completed or cancelled.
+// Both free the wire for the next. See queue.go.
 func (e Event) MessageEnded() bool {
 	return e.Kind == KindMessageState && (e.Text == "completed" || e.Text == "cancelled")
 }
 
+// wakeupLoop is the wakeup_source of a turn claude starts itself for a self-paced
+// loop's next iteration (loop-self-paced-end.jsonl:53).
+const wakeupLoop = "loop_wakeup"
+
 // MessageStarted reports claude taking up a message Wake sent: into the running
 // turn at a tool boundary, or as a turn of its own (midturn-absent.jsonl:37,
-// midturn-later.jsonl:52).
+// midturn-later.jsonl:52); or starting a loop's wakeup turn (LoopWakeup).
 func (e Event) MessageStarted() bool { return e.Kind == KindMessageState && e.Text == "started" }
 
 // MessageCancelled reports a message that will never run: taken back before

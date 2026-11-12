@@ -701,9 +701,9 @@ func TestUpdateIsImmutable(t *testing.T) {
 
 // --- the notice row is one row ---------------------------------------------
 
-// lipgloss's MaxWidth truncates each line but preserves the line count, so a
-// notice carrying a newline makes the frame one row too tall and the alt
-// screen scrolls on every draw. The text comes from the daemon's error frames,
+// Cutting the row to width does not join its lines, so a notice carrying a
+// newline would make the frame one row too tall and the alt screen scroll on
+// every draw. The text comes from the daemon's error frames,
 // which carry an agent's stderr.
 func TestAMultiLineNoticeStaysOneRow(t *testing.T) {
 	fresh(t)

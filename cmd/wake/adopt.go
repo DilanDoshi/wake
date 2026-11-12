@@ -19,6 +19,7 @@
 package main
 
 import (
+	"context"
 	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/ui"
 )
@@ -39,11 +40,13 @@ const adoptRows = 10
 
 // machineSessions answers ui.Sessions out of this package's own two functions.
 //
-// A type with no state because there is none to hold: every answer is a fresh
-// walk of ~/.claude/projects, which is the only thing that can be true about a
-// directory other processes are writing to. Caching it would be a picker that
-// stopped listing a session somebody started a minute ago - and the walk
-// happens on a tea.Cmd's goroutine, never on the one that draws.
+// A type with no state of its own: every answer is a fresh listing of
+// ~/.claude/projects, which is the only thing that can be true about a directory
+// other processes are writing to, so a session somebody started a minute ago is
+// there. What is read out of each transcript is remembered per file by
+// internal/daemon (discovercache.go), keyed on its size and time, so only one
+// that changed is read again. The walk happens on a tea.Cmd's goroutine, never on
+// the one that draws.
 type machineSessions struct{}
 
 // Listing is the picker, bounded for a pane and naming the room's own command.
@@ -100,23 +103,40 @@ func (machineSessions) Resolve(typed []string) ([]string, error) {
 }
 
 // Resumable is the same walk as Listing, structured for the resume picker rather
-// than formatted for a block. One walk, one source of truth: the picker sorts
-// and dedups these rows, and the daemon still decides whether each may resume.
-func (machineSessions) Resumable() ([]ui.DiskSession, error) {
-	found, err := daemon.Discoverable()
+// than formatted for a block, and streamed: the listing comes back at once, each
+// row marked as still being read, and each is sent again complete as its
+// transcript is read. One walk, one source of truth: the picker sorts and dedups
+// these rows, and the daemon still decides whether each may resume.
+func (machineSessions) Resumable(ctx context.Context) ([]ui.DiskSession, <-chan ui.DiskSession, error) {
+	listed, filled, err := daemon.DiscoverStream(ctx)
 	if err != nil {
-		return nil, err
+		return nil, nil, err
 	}
-	out := make([]ui.DiskSession, 0, len(found))
-	for _, f := range found {
-		out = append(out, ui.DiskSession{
-			ID:       f.ID,
-			Dir:      f.Dir,
-			Slug:     f.Slug,
-			Preview:  f.Preview,
-			Title:    f.Title,
-			Modified: f.Modified,
-		})
+	rows := make([]ui.DiskSession, len(listed))
+	for i, f := range listed {
+		rows[i] = diskSession(f, true)
 	}
-	return out, nil
+	// Held in full, so this goroutine ends with the walk's and never waits on a
+	// picker that has gone.
+	out := make(chan ui.DiskSession, len(listed))
+	go func() {
+		defer close(out)
+		for f := range filled {
+			out <- diskSession(f, false)
+		}
+	}()
+	return rows, out, nil
+}
+
+// diskSession is one discovered session as the picker's seam carries it.
+func diskSession(f daemon.FoundSession, reading bool) ui.DiskSession {
+	return ui.DiskSession{
+		ID:       f.ID,
+		Dir:      f.Dir,
+		Slug:     f.Slug,
+		Preview:  f.Preview,
+		Title:    f.Title,
+		Modified: f.Modified,
+		Reading:  reading,
+	}
 }

@@ -15,6 +15,7 @@
 package daemon
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"strconv"
@@ -55,6 +56,82 @@ func TestACleanExitSweepsTheProcessGroupTheAgentLeftBehind(t *testing.T) {
 	waitForProcessGone(t, child)
 }
 
+// `wake stop` leaves nothing of the fleet running: every agent, what each left
+// in its process group, and the daemon (BUG-25's open question, asked of the
+// stop). Two agents, so the sweep is shown per agent rather than for one lucky
+// group; each group is asked of the OS whole, so a child nobody recorded counts.
+func TestAStopLeavesNothingOfTheFleetRunning(t *testing.T) {
+	pidPath := filepath.Join(t.TempDir(), "children.pid")
+	t.Setenv("WAKE_FAKE_PIDFILE", pidPath)
+	fakeClaudeOnPath(t, "leak")
+
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	for id, name := range map[string]string{idAlpha: "alex", idBeta: "bo"} {
+		c.spawn(id, name)
+		c.awaitEvent(id, "ready")
+	}
+	children := waitForPids(t, pidPath, 2)
+	var groups []int
+	for _, s := range c.status().Sessions {
+		groups = append(groups, s.PID)
+	}
+	t.Cleanup(func() {
+		// Only what is still alive, and never 0 or 1: kill(0) is this test's own group.
+		for _, pid := range append(children, groups...) {
+			if pid > 1 && processAlive(pid) {
+				_ = syscall.Kill(pid, syscall.SIGKILL)
+			}
+		}
+	})
+	if len(groups) != 2 {
+		t.Fatalf("the fleet reports process groups %v, want one per agent", groups)
+	}
+	for _, pid := range children {
+		if !processAlive(pid) {
+			t.Fatal("a child an agent spawned was not running before the stop, so this test proves nothing")
+		}
+	}
+
+	c.send(rpc.Frame{Kind: rpc.FrameQuit})
+	if !d.waitForExitWithin(t, testTimeout) {
+		t.Fatal("the daemon was still running after the stop")
+	}
+	for _, pgid := range groups {
+		if err := syscall.Kill(-pgid, 0); !errors.Is(err, syscall.ESRCH) {
+			t.Errorf("process group %d still has a member after the stop (kill -0: %v)", pgid, err)
+		}
+	}
+	for _, pid := range children {
+		if processAlive(pid) {
+			t.Errorf("child %d outlived the stop of the fleet that started it", pid)
+		}
+	}
+}
+
+// waitForPids reads n pids the agents recorded for their children, a line each.
+func waitForPids(t *testing.T, path string, n int) []int {
+	t.Helper()
+	deadline := time.Now().Add(testTimeout)
+	for {
+		var pids []int
+		if b, err := os.ReadFile(path); err == nil {
+			for _, f := range strings.Fields(string(b)) {
+				if pid, err := strconv.Atoi(f); err == nil && pid > 0 {
+					pids = append(pids, pid)
+				}
+			}
+		}
+		if len(pids) >= n {
+			return pids
+		}
+		if time.Now().After(deadline) {
+			t.Fatalf("the agents recorded %v of the %d children they spawned (%s)", pids, n, path)
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+}
+
 // The mirror, and the one that must not be "fixed" into symmetry: a parked
 // session comes back, and the world it spawned - the dev server it will resume
 // against - has to be there when it does. So completePark sweeps nothing, and a
@@ -86,20 +163,8 @@ func TestParkingDoesNotSweepTheProcessGroup(t *testing.T) {
 	}
 }
 
-// waitForPid reads the pid the agent recorded for its child, polling because it
-// is written by another process this test never waits for.
+// waitForPid reads the pid the agent recorded for its child.
 func waitForPid(t *testing.T, path string) int {
 	t.Helper()
-	deadline := time.Now().Add(testTimeout)
-	for {
-		if b, err := os.ReadFile(path); err == nil {
-			if pid, convErr := strconv.Atoi(strings.TrimSpace(string(b))); convErr == nil && pid > 0 {
-				return pid
-			}
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("the agent never recorded the pid of what it spawned (%s)", path)
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
+	return waitForPids(t, path, 1)[0]
 }

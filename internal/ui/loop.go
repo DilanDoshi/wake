@@ -35,8 +35,9 @@ const loopGlyph = "↻"
 
 // withLoop folds one scheduler op onto the agent for the watching client: a
 // recurring CronCreate or a ScheduleWakeup activates it, a CronDelete ends it.
-// A loop reads active until a delete - an expired or completed one is silent on
-// the wire, the loop half of the goal's own limitation (spec §6). A self-paced
+// The daemon alone sees a loop end otherwise - a self-paced one whose wakeup turn
+// rescheduled nothing (daemon/loop.go's foldWakeup) - and says so in its report,
+// which replaces this; a fixed loop's expiry is silent (spec §6). A self-paced
 // tick accumulates the run onto the existing state (the daemon's foldLoop does
 // the same for the report); the next-fire is stamped off clock() the way doneAt is.
 func (a Agent) withLoop(op core.LoopOp) Agent {

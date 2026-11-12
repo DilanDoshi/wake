@@ -615,6 +615,10 @@ type Event struct {
 	// answers it, so a room restore reads it as the turn it opens.
 	Shell bool `json:"shell,omitempty"`
 
+	// LoopWakeup marks a KindMessageState for a turn claude started for a self-paced loop; daemon-only,
+	// and among these bools so it fills their padding: a retained event may not grow (room_retention).
+	LoopWakeup bool `json:"-"`
+
 	// FromName attributes a KindCrossSession event: the peer's display name (its
 	// own --name). It is what the room heads the line with, matched to a fleet
 	// agent for its colour; set by the decoder off the <cross-session-message>

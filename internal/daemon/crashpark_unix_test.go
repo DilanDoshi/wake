@@ -45,24 +45,6 @@ func writeReady(t *testing.T, sock string, rows map[string]parkedRecord) {
 	}
 }
 
-// dialWhenUp dials a daemon that is still binding. A SIGKILLed one leaves its
-// socket file behind, so startDaemonOn's wait for the file proves nothing about
-// its successor; the reaper has finished by the time a dial is accepted.
-func dialWhenUp(t *testing.T, sock string) net.Conn {
-	t.Helper()
-	deadline := time.Now().Add(testTimeout)
-	for {
-		conn, err := Dial(sock)
-		if err == nil {
-			return conn
-		}
-		if time.Now().After(deadline) {
-			t.Fatalf("nothing began listening on %s: %v", sock, err)
-		}
-		time.Sleep(10 * time.Millisecond)
-	}
-}
-
 func fileGone(path string) bool {
 	_, err := os.Stat(path)
 	return os.IsNotExist(err)
@@ -432,7 +414,7 @@ func TestAFleetWhoseDaemonAndAgentsAllDiedAtOnceComesBackParked(t *testing.T) {
 
 	startDaemonOn(t, sock)
 	byID := map[string]rpc.SessionStatus{}
-	for _, p := range attachConn(t, dialWhenUp(t, sock)).status().Parked {
+	for _, p := range attach(t, sock).status().Parked {
 		byID[p.ID] = p
 	}
 	if alex := byID[idAlpha]; alex.Name != "alex" || alex.Team != "api" {
@@ -477,7 +459,7 @@ func TestAFleetWhoseDaemonWasKilledComesBackParkedWithItsConfiguration(t *testin
 	waitForDaemonGone(t, sock)
 
 	startDaemonOn(t, sock)
-	c2 := attachConn(t, dialWhenUp(t, sock))
+	c2 := attach(t, sock)
 	byID := map[string]rpc.SessionStatus{}
 	for _, p := range c2.status().Parked {
 		byID[p.ID] = p

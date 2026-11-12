@@ -79,6 +79,7 @@ package ui
 // listing arrives as one run-on line.
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -171,8 +172,14 @@ type Sessions interface {
 
 	// Resumable is the same walk as Listing, structured rather than formatted:
 	// the resume picker needs fields (a directory, a preview, an mtime) to build
-	// and sort its rows, where /adopt only prints a block. Newest first.
-	Resumable() ([]DiskSession, error)
+	// and sort its rows, where /adopt only prints a block.
+	//
+	// It answers at once with every session newest first from the directory
+	// listing alone - each marked Reading, its content not yet read - and then
+	// sends each one again, complete, on the channel as its transcript is read.
+	// The channel is closed when every one has arrived or ctx is cancelled; nil
+	// means the rows are already complete and nothing more will come.
+	Resumable(ctx context.Context) (listed []DiskSession, filled <-chan DiskSession, err error)
 }
 
 // DiskSession is one on-disk conversation the resume picker can offer, carried
@@ -185,6 +192,7 @@ type DiskSession struct {
 	Preview  string
 	Title    string // the session's name, or ""
 	Modified time.Time
+	Reading  bool // listed but not yet read: Dir, Preview and Title are not known yet
 }
 
 // WithSessions returns an App that can see the claude sessions on this machine

@@ -12,6 +12,7 @@ package ui
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"maps"
 	"sort"
@@ -20,6 +21,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
@@ -87,13 +89,17 @@ func (a App) resume(arg string) (App, tea.Cmd) {
 		return a.bringBack(parked)
 
 	default:
+		// A parked session wins its name over a team, the order every other
+		// resolution keeps (teamverbs.go).
 		who := strings.TrimPrefix(arg, agentPrefix)
-		agent, ok := a.parkedNamed(who)
-		if !ok {
-			notice.Report(notParked+"\n%s", agentPrefix, who, parkedList(parked))
-			return a, nil
+		if agent, ok := a.parkedNamed(who); ok {
+			return a.bringBack([]Agent{agent})
 		}
-		return a.bringBack([]Agent{agent})
+		if team := a.teamParked(strings.ToLower(who)); len(team) > 0 {
+			return a.bringBackTeam(strings.ToLower(who), team)
+		}
+		notice.Report(notParked+"\n%s", agentPrefix, who, parkedList(parked))
+		return a, nil
 	}
 }
 
@@ -114,6 +120,11 @@ func (a App) wake(agents []Agent) (App, tea.Cmd) {
 	} else {
 		notice.Report(resumeAskedN, len(agents))
 	}
+	return a.rouse(agents)
+}
+
+// rouse is the wake itself, with nothing said.
+func (a App) rouse(agents []Agent) (App, tea.Cmd) {
 	ids := make([]string, 0, len(agents))
 	for _, ag := range agents {
 		ids = append(ids, ag.ID)
@@ -298,49 +309,66 @@ func (a App) wakeArrived(st *rpc.Status) App {
 	return a
 }
 
-// resumeReadyMsg is what the disk walk hands back, folded by App.Update.
-type resumeReadyMsg struct {
-	disk []DiskSession
-	err  error
+// resumeListedMsg is what the disk walk hands back first, folded by App.Update:
+// the listing, and the channel its rows are completed on. seq says which
+// /resume asked, and cancel ends the reads when nobody wants them.
+type resumeListedMsg struct {
+	disk   []DiskSession
+	filled <-chan DiskSession
+	cancel context.CancelFunc
+	seq    uint64
+	err    error
 }
 
 // openResumePicker gathers what can be resumed and opens the picker. The parked
 // half is local; the on-disk half needs the walk of ~/.claude/projects, so it
-// goes off the draw goroutine (adopt.go's rule) and the picker opens when it
-// returns. With no way to see the disk it opens on the parked half alone.
+// goes off the draw goroutine (adopt.go's rule) and the picker opens when the
+// listing returns - which is the directory listing alone, so at once; the
+// transcripts are read behind it (resumefill.go). With no way to see the disk it
+// opens on the parked half alone.
 func (a App) openResumePicker() (App, tea.Cmd) {
 	if a.sessions == nil {
 		return a.showResume(nil)
 	}
 	a = a.clearDraft()
-	return a, resumableCmd(a.sessions)
+	a.resumeSeq++
+	return a, resumableCmd(a.sessions, a.resumeSeq)
 }
 
-// resumableCmd walks the disk on its own goroutine, askMachine's arrangement.
-func resumableCmd(s Sessions) tea.Cmd {
+// resumableCmd lists the disk on its own goroutine, askMachine's arrangement.
+func resumableCmd(s Sessions, seq uint64) tea.Cmd {
 	return func() tea.Msg {
-		disk, err := s.Resumable()
-		return resumeReadyMsg{disk: disk, err: err}
+		ctx, cancel := context.WithCancel(context.Background())
+		disk, filled, err := s.Resumable(ctx)
+		return resumeListedMsg{disk: disk, filled: filled, cancel: cancel, seq: seq, err: err}
 	}
 }
 
-// resumeArrived folds the walk: the rows open the picker, and a read that failed
-// falls back to the parked half rather than to nothing.
+// resumeArrived folds the listing: the rows open the picker, and a read that
+// failed falls back to the parked half rather than to nothing.
 //
-// A slow ~/.claude/projects walk (hundreds of transcripts on NFS) can land after
-// the operator has moved on and started typing. Opening then would clear the
-// draft they began - openResume calls clearDraft - so a walk that returns to a
-// non-empty composer is dropped rather than stealing it. The common case is a
-// sub-second walk into a still-empty box, which opens.
-func (a App) resumeArrived(m resumeReadyMsg) (App, tea.Cmd) {
-	if a.composer().Value() != "" {
+// A slow ~/.claude/projects listing (hundreds of project directories on NFS) can
+// land after the operator has moved on and started typing. Opening then would
+// clear the draft they began - openResume calls clearDraft - so a listing that
+// returns to a non-empty composer is dropped rather than stealing it, and so is
+// one a later /resume has replaced. A dropped listing ends its reads.
+func (a App) resumeArrived(m resumeListedMsg) (App, tea.Cmd) {
+	if m.seq != a.resumeSeq || a.composer().Value() != "" {
+		m.cancel()
 		return a, nil
 	}
 	if m.err != nil {
+		m.cancel()
 		notice.Report("could not read this machine's sessions, showing parked only: %v", m.err)
 		return a.showResume(nil)
 	}
-	return a.showResume(m.disk)
+	a, _ = a.showResume(m.disk)
+	if !a.resumePicker.Open() {
+		m.cancel()
+		return a, nil
+	}
+	a.resumePicker.Seq, a.resumePicker.cancel = m.seq, m.cancel
+	return a, fillCmd(m.filled, m.seq)
 }
 
 // showResume merges the parked fleet and the disk rows and opens the picker, or
@@ -405,7 +433,7 @@ func (a App) resumeRowsFrom(disk []DiskSession) (rows []resumeRow, more int) {
 		}
 		all = append(all, resumeRow{
 			ID: d.ID, Dir: d.Dir, Preview: d.Preview, Title: d.Title,
-			Age: ago(d.Modified), Resumable: d.Dir != "",
+			Age: ago(d.Modified), Resumable: d.Dir != "", Reading: d.Reading, slug: d.Slug,
 		})
 	}
 	// Parked sessions the walk did not surface (no transcript found, or no disk
@@ -486,4 +514,50 @@ func (a App) rekeyPane(from, conv, name string) App {
 	a.roster = cursor
 	a.fleet = a.fleet.Focus(focused)
 	return a.refocus(focus)
+}
+
+// resumeArgMenu offers what /resume can bring back: the parked sessions, then
+// the teams with a parked member - which the @ menu, keyed on routing, leaves
+// out when none is live - then `all`. A parked session holding a team's name
+// wins it, as resume does. The typed `@`, if any, is kept on every offer. Once a
+// character is typed, so an accepted `/resume ` is a finished word.
+func (a App) resumeArgMenu(draft, head, partial string) completion {
+	none := completion{pane: a.focus} // no draft, so ⇥ still moves the keys (typingWord)
+	parked := a.parkedAgents()
+	if partial == "" || len(parked) == 0 {
+		return none
+	}
+	c := completion{pane: a.focus, draft: draft, head: head}
+	typed, marked := strings.CutPrefix(partial, agentPrefix)
+	mark := ""
+	if marked {
+		mark = agentPrefix
+	}
+	if strings.EqualFold(typed, core.ManagerName) {
+		c.routed = mark + a.fleet.shown(typed) // resume reads `manager` as the drawn row, so ↵ sends it
+	}
+	lower := strings.ToLower(typed)
+	held := make(map[string]bool, len(parked))
+	for _, agent := range parked {
+		held[strings.ToLower(agent.Name)] = true
+		if agent.Name != "" && strings.HasPrefix(strings.ToLower(agent.Name), lower) {
+			c.names = append(c.names, mark+agent.Name)
+		}
+	}
+	teams := map[string]bool{}
+	for _, agent := range parked {
+		team := agent.Team
+		if team == "" || teams[team] || held[team] || a.fleet.isManager(agent.Name) || !strings.HasPrefix(team, lower) {
+			continue
+		}
+		teams[team] = true
+		c.names, c.tags = tagged(c.names, c.tags, mark+team, offerTag{suffix: teamMenuSuffix})
+	}
+	if !marked && strings.HasPrefix(resumeAll, lower) {
+		c.names = append(c.names, resumeAll)
+	}
+	if len(c.names) == 0 {
+		return none
+	}
+	return c
 }

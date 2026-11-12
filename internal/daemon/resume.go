@@ -112,11 +112,10 @@ func (s *server) resumeSource(sourceID string) (FoundSession, error) {
 	if _, parked := s.parked.record(sourceID); parked {
 		return FoundSession{}, fmt.Errorf("session %s is parked in this fleet; /resume brings a parked session back in place rather than resuming a second copy under its id", sourceID)
 	}
-	found, err := discover(ProjectsDir())
+	src, ok, err := discoverID(ProjectsDir(), sourceID)
 	if err != nil {
 		return FoundSession{}, fmt.Errorf("could not read the sessions on this machine: %w", err)
 	}
-	src, ok := findSession(found, sourceID)
 	if !ok {
 		return FoundSession{}, fmt.Errorf("there is no transcript for session %s on this machine: "+
 			"claude keeps one file per session and /resume lists the ones it can see", sourceID)

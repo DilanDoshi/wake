@@ -75,8 +75,12 @@ cover: ## Run the suite without the detector and enforce the coverage gate on ev
 	@awk -v min=$(COVER_MIN) -v xpkg='' -v xmin='' \
 	  -f scripts/covergate.awk coverage.out
 
+# golangci-lint's cache is keyed by package contents, not paths, so a shared one
+# hands this checkout another worktree's findings under that worktree's paths;
+# once that worktree is removed, its //nolint cannot be read and the finding is
+# reported here. A cache per checkout goes with its worktree; a set one still wins.
 lint: ## Run golangci-lint
-	golangci-lint run
+	GOLANGCI_LINT_CACHE="$${GOLANGCI_LINT_CACHE:-$(CURDIR)/.lintcache}" golangci-lint run
 
 # Everything CI runs, in one command, for the days CI cannot run it - a spend
 # cap, an outage, or a change nobody wants to burn ten-times-billed macOS
@@ -162,6 +166,9 @@ drift: ## Audit this machine's own claude transcripts for what the corpus would 
 	@go test ./internal/core -tags=drift -list='^TestDrift$$' | grep -qx TestDrift \
 	  || { echo "no TestDrift under -tags=drift: this target would pass without running anything"; exit 1; }
 	go test ./internal/core -tags=drift -run '^TestDrift$$' -count=1 -v
+	@go test ./internal/daemon -tags=drift -list='^TestDriftDiscovery$$' | grep -qx TestDriftDiscovery \
+	  || { echo "no TestDriftDiscovery under -tags=drift: this target would pass without running anything"; exit 1; }
+	go test ./internal/daemon -tags=drift -run '^TestDriftDiscovery$$' -count=1 -v
 
 tidy: ## Sync go.mod and go.sum
 	go mod tidy

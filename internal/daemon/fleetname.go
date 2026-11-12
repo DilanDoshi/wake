@@ -97,6 +97,11 @@ func NewFleetSocketPath() (sock, name string, err error) {
 	if err != nil {
 		return "", "", err
 	}
+	// Made now, unlike a named fleet's: the directory is the drawn name's
+	// reservation, which the next bare `wake` reads.
+	if err := os.MkdirAll(filepath.Dir(sock), stateDirPerm); err != nil {
+		return "", "", fmt.Errorf("create %s: %w", filepath.Dir(sock), err)
+	}
 	return sock, name, nil
 }
 

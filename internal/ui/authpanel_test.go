@@ -108,6 +108,34 @@ func TestAnUnreadablePanelSaysSoAndOffersTheCommand(t *testing.T) {
 	}
 }
 
+// The hint names a command, and both surfaces that draw the panel - the room's
+// shaded turn and the conversation's echoed one - wrap it, so the panel must not
+// cut it first: cut at the panel's width, "sign in from a terminal: claude auth
+// login" read as "claude", a complete command and the wrong one.
+func TestANarrowPanelKeepsItsWholeCommand(t *testing.T) {
+	const width = 30 // narrower than either hint row
+	signedOut, ok := parseAuthStatus(loggedOutJSON)
+	for _, c := range []struct {
+		st   authStatus
+		ok   bool
+		hint string
+	}{
+		{signedOut, ok, authSignInHint},
+		{authStatus{}, false, authCheckHint},
+	} {
+		ev := authEvent("s1", c.st, c.ok, width)
+		want := c.hint + authLoginCmd
+		for surface, drawn := range map[string]string{
+			"room":         youSaid(ev.Text, width),
+			"conversation": userBlock(ev, width),
+		} {
+			if got := strings.Join(strings.Fields(stripANSI(drawn)), " "); !strings.Contains(got, want) {
+				t.Errorf("the %s at %d columns does not show %q whole:\n%s", surface, width, want, stripANSI(drawn))
+			}
+		}
+	}
+}
+
 // The status is claude's own output, so a value carrying a terminal escape
 // cannot drive the terminal - the /mcp panel's BUG-9 rule, one subcommand over.
 //

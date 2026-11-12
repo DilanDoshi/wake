@@ -171,6 +171,7 @@ type App struct {
 	picker       Picker
 	rewind       RewindPicker  // esc esc's own picker, on an idle empty conversation; see rewind.go
 	resumePicker ResumePicker  // a bare /resume's own picker, over the composer; see resumepicker.go
+	resumeSeq    uint64        // which /resume the walk in flight answers; see resume.go
 	workflow     workflowState // the /workflows view and the runs it draws; see workflowview.go
 	mcpUI        mcpState      // /mcp's menu and its sign-in; see mcpmenu.go
 	help         helpState     // /wake-help's view and the shell usage it lists; see help.go
@@ -361,6 +362,9 @@ type App struct {
 	// parked. pendingStarts' shape, for pendingStarts' reason - see parkArrived.
 	parking  map[string]struct{}
 	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
+	// teamParks files each park a team verb asked for under its team, so the
+	// reports confirm the team once (teamverbs.go).
+	teamParks map[string]string
 
 	// queued is what claude has queued for each agent and not yet taken up (and a
 	// held /rename), inflight the Wake messages it has started and not finished,

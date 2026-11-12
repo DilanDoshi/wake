@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"os"
 	"path/filepath"
 	"regexp"
@@ -14,42 +15,62 @@ import (
 
 // Resumable is the structured half of the same discovery Listing formats: it
 // returns the same session ids, each with the directory discovery proved, so the
-// resume picker can build and sort rows without walking the disk itself.
+// resume picker can build and sort rows without walking the disk itself. It
+// lists first, every row still being read, and completes each as it is read.
 func TestResumableReturnsStructuredDiscovery(t *testing.T) {
 	projects := projectsTree(t)
 	real := t.TempDir()
 	transcript(t, projects, real, importA, real)
 
-	got, err := machineSessions{}.Resumable()
+	listed, filled, err := machineSessions{}.Resumable(context.Background())
 	if err != nil {
 		t.Fatalf("Resumable: %v", err)
 	}
-	var found bool
-	for _, d := range got {
-		if d.ID != importA {
-			continue
-		}
-		found = true
-		if d.Dir != real {
-			t.Errorf("Resumable Dir = %q, want the proven directory %q", d.Dir, real)
-		}
+	if len(listed) != 1 || listed[0].ID != importA || !listed[0].Reading || listed[0].Dir != "" {
+		t.Fatalf("the listing is %+v, want the seeded session %s marked as still being read, with no directory yet", listed, importA)
 	}
-	if !found {
-		t.Fatalf("Resumable did not return the seeded session %s; got %d rows", importA, len(got))
+	var got []ui.DiskSession
+	for d := range filled {
+		got = append(got, d)
+	}
+	if len(got) != 1 || got[0].ID != importA || got[0].Reading || got[0].Dir != real {
+		t.Errorf("the completed rows are %+v, want %s read, in the proven directory %q", got, importA, real)
 	}
 }
 
 // A machine with no sessions is a real, common shape — the first day — and
-// Resumable answers it with an empty slice and no error, so the picker can take
-// the empty-state path rather than crashing on a nil walk.
+// Resumable answers it with an empty listing, a closed stream and no error, so
+// the picker can take the empty-state path rather than crashing on a nil walk.
 func TestResumableOnAnEmptyMachine(t *testing.T) {
 	projectsTree(t)
-	got, err := machineSessions{}.Resumable()
+	listed, filled, err := machineSessions{}.Resumable(context.Background())
 	if err != nil {
 		t.Fatalf("Resumable on an empty machine errored: %v", err)
 	}
-	if len(got) != 0 {
-		t.Errorf("Resumable found %d sessions on an empty machine", len(got))
+	if len(listed) != 0 {
+		t.Errorf("Resumable found %d sessions on an empty machine", len(listed))
+	}
+	if d, open := <-filled; open {
+		t.Errorf("the stream of an empty machine carried %+v", d)
+	}
+}
+
+// A walk whose picker has gone is ended by its context and gives its goroutines
+// back: the stream closes without anyone reading it.
+func TestAResumableWalkEndsWithItsContext(t *testing.T) {
+	projects := projectsTree(t)
+	for _, id := range []string{importA, importB} {
+		real := t.TempDir()
+		transcript(t, projects, real, id, real)
+	}
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	listed, filled, err := machineSessions{}.Resumable(ctx)
+	if err != nil || len(listed) != 2 {
+		t.Fatalf("a cancelled walk still lists: %d sessions, err %v", len(listed), err)
+	}
+	for d := range filled {
+		t.Errorf("a cancelled walk read %+v", d)
 	}
 }
 
@@ -77,7 +98,9 @@ func TestAResumablesDirCannotDriveTheTerminal(t *testing.T) {
 	if walk == nil {
 		t.Fatal("a bare /resume did not walk the disk")
 	}
-	room, _ = room.Update(walk())
+	// The listing opens the picker; each transcript's directory arrives behind it.
+	for room, walk = room.Update(walk()); walk != nil; room, walk = room.Update(walk()) {
+	}
 
 	var drawn []string
 	for _, line := range strings.Split(room.View(), "\n") {

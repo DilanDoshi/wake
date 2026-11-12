@@ -88,6 +88,10 @@ func TestMain(m *testing.M) {
 	// this variable. testQuitGrace carries the argument for why the
 	// production value cannot be one of them.
 	quitGrace = testQuitGrace
+	// One process lookup's 2s is a production deadline that `ps -A` outlives on
+	// a loaded gate, refusing a wake a test is not about. The tests about a ps
+	// that cannot answer compress it themselves (shortProbeTimeout).
+	probeTimeout = testTimeout
 
 	// The order of these is load-bearing, and each one cost a debugging round
 	// somewhere in this project.
@@ -548,8 +552,12 @@ func fakeLeak(sid string) int {
 		fmt.Fprintln(os.Stderr, "leak:", err)
 		return 1
 	}
+	// Appended, a line per agent, so a fleet of them can share one file.
 	if pidfile := os.Getenv("WAKE_FAKE_PIDFILE"); pidfile != "" {
-		_ = os.WriteFile(pidfile, []byte(strconv.Itoa(cmd.Process.Pid)), 0o600)
+		if f, err := os.OpenFile(pidfile, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0o600); err == nil {
+			_, _ = fmt.Fprintln(f, cmd.Process.Pid)
+			_ = f.Close()
+		}
 	}
 	return fakeTurns(sid)
 }

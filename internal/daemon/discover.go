@@ -37,15 +37,14 @@ package daemon
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
 	"io"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"sort"
 	"strings"
-	"sync"
 	"time"
 )
 
@@ -65,6 +64,18 @@ const (
 	keyAITitle     = "aiTitle"
 )
 
+// The fields a line is scanned for, in transcriptFields' order.
+const (
+	fieldCwd = iota
+	fieldLastPrompt
+	fieldCustomTitle
+	fieldAITitle
+	fieldCount
+)
+
+// transcriptFields are the keys readTranscript wants out of a line.
+var transcriptFields = [fieldCount]string{keyCwd, keyLastPrompt, keyCustomTitle, keyAITitle}
+
 // previewBytes bounds one preview line. A prompt is unbounded text somebody
 // typed, and this lands in a terminal listing beside a column of ids.
 const previewBytes = 72
@@ -81,8 +92,8 @@ const transcriptScanBytes = 1 << 20
 // session's directory proof needs a **full** scan of its transcript - a
 // slug-matching cwd can sit megabytes in - so the read cannot be shortened
 // without losing sessions (measured: 18 of a 358-file corpus have their proving
-// cwd 260KB-9MB deep). Read one after another that is a multi-second hang (3.5s
-// measured); read in parallel it is sub-second. A bound rather than one
+// cwd 260KB-9MB deep). Read one after another that is a multi-second hang; read
+// in parallel it is a fraction of that. A bound rather than one
 // goroutine per file: hundreds of open files at once buys nothing past
 // saturating the disk and the cores, and costs a file descriptor each.
 const discoverWorkers = 16
@@ -217,7 +228,51 @@ func Discoverable() ([]FoundSession, error) {
 // fanned across discoverWorkers. Each worker writes its own slot, so there is no
 // shared state to guard beyond the WaitGroup; logf goes through the standard
 // logger, which is safe under concurrency.
+//
+// What a read finds is remembered per file, keyed on its size and time, so a
+// second discovery reads only the transcripts that changed (discovercache.go).
 func discover(projects string) ([]FoundSession, error) {
+	jobs, err := listTranscripts(projects)
+	if err != nil {
+		return nil, err
+	}
+	files := statSessions(jobs)
+	rows := make([]FoundSession, len(files))
+	readSessions(context.Background(), files, func(i int, row FoundSession) { rows[i] = row })
+	sessionScans.retain(projects, jobs)
+	return rows, nil
+}
+
+// discoverID is the one session a pick named: the row discover gives that id -
+// the newest where it sits under two slugs - and whether there is one. It lists
+// the projects as discover does, so it finds what discover finds and fails where
+// discover fails, but it reads only the transcripts that carry the id: a pick has
+// already had its walk, and the daemon confirming it must not make another.
+//
+// The listing is whole, so it also tells the cache what is gone.
+func discoverID(projects, id string) (FoundSession, bool, error) {
+	jobs, err := listTranscripts(projects)
+	if err != nil {
+		return FoundSession{}, false, err
+	}
+	sessionScans.retain(projects, jobs)
+	var named []transcriptFile
+	for _, j := range jobs {
+		if j.id == id {
+			named = append(named, j)
+		}
+	}
+	files := statSessions(named)
+	if len(files) == 0 {
+		return FoundSession{}, false, nil
+	}
+	// Sorted newest first, so the first is the row; the other copies are not read.
+	return foundSession(files[0].job, files[0].info), true, nil
+}
+
+// listTranscripts is every transcript under a projects tree, with no content
+// read: one ReadDir per project.
+func listTranscripts(projects string) ([]transcriptFile, error) {
 	if projects == "" {
 		return nil, errors.New("no projects directory to look in: claude persists transcripts under ~/.claude/projects and this process cannot tell where home is")
 	}
@@ -228,53 +283,7 @@ func discover(projects string) ([]FoundSession, error) {
 	if err != nil {
 		return nil, err
 	}
-
-	jobs := transcriptFiles(projects, entries)
-	found := make([]FoundSession, len(jobs))
-	ok := make([]bool, len(jobs))
-	sem := make(chan struct{}, discoverWorkers)
-	var wg sync.WaitGroup
-	for i, j := range jobs {
-		wg.Add(1)
-		sem <- struct{}{}
-		go func(i int, j transcriptFile) {
-			defer wg.Done()
-			defer func() { <-sem }()
-			info, isReg := regularTranscript(j.path)
-			if !isReg {
-				return
-			}
-			cwds, preview, title, name := readTranscript(j.path)
-			found[i] = FoundSession{
-				ID:       j.id,
-				Dir:      verifiedDir(j.slug, cwds),
-				Slug:     j.slug,
-				Path:     j.path,
-				Modified: info.ModTime(),
-				Preview:  preview,
-				Title:    title,
-				Name:     name,
-			}
-			ok[i] = true
-		}(i, j)
-	}
-	wg.Wait()
-
-	out := make([]FoundSession, 0, len(jobs))
-	for i := range found {
-		if ok[i] {
-			out = append(out, found[i])
-		}
-	}
-	// Newest first, and by id where two share a timestamp so the order is
-	// stable rather than whatever the filesystem said.
-	sort.Slice(out, func(i, j int) bool {
-		if !out[i].Modified.Equal(out[j].Modified) {
-			return out[i].Modified.After(out[j].Modified)
-		}
-		return out[i].ID < out[j].ID
-	})
-	return out, nil
+	return transcriptFiles(projects, entries), nil
 }
 
 // transcriptFile is one candidate the parallel reads will open: found by a
@@ -346,16 +355,7 @@ func sessionIDOf(name string) (string, bool) {
 func verifiedDir(slug string, cwds []string) string {
 	var found string
 	for _, c := range cwds {
-		// maySpawn's rule, applied to the one directory that does not arrive
-		// through maySpawn. It refuses a relative Dir off the wire because "a
-		// relative directory would resolve against the daemon's own working
-		// directory, which is the confusion this field exists to end" - and a
-		// Dir supplied out of band here would be Stat'd and then run relative
-		// to the daemon, which is the $PWD failure the whole file prevents.
-		if !filepath.IsAbs(c) {
-			continue
-		}
-		if slugOf(c) != slug {
+		if !fitsSlug(slug, c) {
 			continue
 		}
 		if fi, err := os.Stat(c); err != nil || !fi.IsDir() {
@@ -369,15 +369,45 @@ func verifiedDir(slug string, cwds []string) string {
 	return found
 }
 
-// readTranscript pulls the three keys this package knows out of one file.
+// fitsSlug is the part of verifiedDir's proof that is a fact about the
+// transcript alone: the cwd is absolute, and slugs to the directory the
+// transcript sits under.
 //
-// One pass, line by line, decoding each line into a map rather than a struct:
-// a struct would put a `json` tag carrying one of claude's key names into this
-// tree, and the airlock's detector reads tags and literals alike. A map keyed
-// on the consts above keeps the whole vocabulary in one const block where a
-// guard can see it.
+// Absolute is maySpawn's rule, applied to the one directory that does not arrive
+// through maySpawn. It refuses a relative Dir off the wire because "a relative
+// directory would resolve against the daemon's own working directory, which is
+// the confusion this field exists to end" - and a Dir supplied out of band here
+// would be Stat'd and then run relative to the daemon, which is the $PWD failure
+// the whole file prevents.
+func fitsSlug(slug, cwd string) bool {
+	return filepath.IsAbs(cwd) && slugOf(cwd) == slug
+}
+
+// transcriptRead is what one pass over a transcript found.
+type transcriptRead struct {
+	cwds                     []string // every distinct cwd, in order of first appearance
+	preview, title, recorded string   // recorded: the newest custom title as written
+}
+
+// openTranscript opens a transcript to read. A variable only so the suite can
+// count the reads discovery makes and act when one ends.
+var openTranscript = func(path string) (io.ReadCloser, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
+}
+
+// readTranscript pulls the keys this package knows out of one file.
 //
-// A line that will not parse is skipped rather than fatal. A transcript is
+// One pass, line by line, through scanTopLevel, which hands back the raw value
+// of each wanted key without decoding the rest of the line: a struct would put a
+// `json` tag carrying one of claude's key names into this tree, and the
+// airlock's detector reads tags and literals alike, so the keys stay in the const
+// block above where a guard can see them.
+//
+// A line that will not scan is skipped rather than fatal. A transcript is
 // appended to by a live process, so the last line of a file being read may be a
 // partial write - 2026-08-12 findings §7 records that no torn line was observed
 // in 428 files and that this is therefore not designed around, only survived.
@@ -388,62 +418,97 @@ func verifiedDir(slug string, cwds []string) string {
 // sessions. The cost is paid off the draw goroutine and in parallel (discover).
 // readTranscriptLine rather than a Scanner, which would stop at the first
 // oversized attachment and hide every cwd and /rename after it.
-func readTranscript(path string) (cwds []string, preview, title, name string) {
-	f, err := os.Open(path)
+//
+// The error says what came back is not the whole file (it would not open, or a
+// read failed part-way) and must not be remembered.
+func readTranscript(path string) (r transcriptRead, readErr error) {
+	f, err := openTranscript(path)
 	if err != nil {
 		logf("wake: transcript %s could not be opened: %v", path, err)
-		return nil, "", "", ""
+		return transcriptRead{}, err
 	}
 	defer func() { _ = f.Close() }()
-	seen := map[string]bool{}
-	var generated string
+	t := newTally()
+	var vals [fieldCount][]byte
 	br := bufio.NewReaderSize(f, 64*1024)
 	for {
 		raw, err := readTranscriptLine(br)
-		var line map[string]json.RawMessage
-		if len(raw) > 0 && json.Unmarshal(raw, &line) == nil {
-			if c, ok := decodeString(line, keyCwd); ok && !seen[c] {
-				seen[c] = true
-				cwds = append(cwds, c)
-			}
-			// Last one wins for both: a transcript carries one `last-prompt` frame
-			// per turn, and the newest is what says what this session is doing.
-			if p, ok := decodeString(line, keyLastPrompt); ok {
-				preview = p
-			}
-			if t, ok := decodeString(line, keyCustomTitle); ok {
-				title = t
-			}
-			if t, ok := decodeString(line, keyAITitle); ok {
-				generated = t
-			}
+		if len(raw) > 0 && scanTopLevel(raw, transcriptFields[:], vals[:]) {
+			t.line(vals[:])
 		}
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				logf("wake: transcript %s could not be read to the end: %v", path, err)
+				readErr = err
 			}
 			break
 		}
 	}
-	name = title
-	if title == "" {
-		title = generated
-	}
-	if preview == "" {
-		// 379 of 428 carry a prompt and 390 carry a custom title; 424 carry
-		// either. A title is a name, which is a worse "what is this doing" and a
-		// better nothing.
-		preview = title
-	}
-	return cwds, oneLine(preview, previewBytes), oneLine(title, previewBytes), name
+	return t.result(), readErr
 }
 
-// decodeString reads one top-level string key, treating any other shape as
-// absent. A transcript is a file on disk that outlives whichever build wrote
+// tally folds a transcript's lines, in order, into what readTranscript returns.
+type tally struct {
+	cwds                      []string
+	seen                      map[string]bool // cwds already collected
+	cwdRaw                    map[string]bool // cwd values already decoded
+	preview, title, generated string
+}
+
+func newTally() *tally { return &tally{seen: map[string]bool{}, cwdRaw: map[string]bool{}} }
+
+// line takes the wanted values of one scanned line. The last prompt and title
+// win: a transcript carries one `last-prompt` frame per turn, and the newest is
+// what says what this session is doing.
+func (t *tally) line(vals [][]byte) {
+	t.cwd(vals[fieldCwd])
+	if p, ok := decodeString(vals[fieldLastPrompt]); ok {
+		t.preview = p
+	}
+	if v, ok := decodeString(vals[fieldCustomTitle]); ok {
+		t.title = v
+	}
+	if v, ok := decodeString(vals[fieldAITitle]); ok {
+		t.generated = v
+	}
+}
+
+// cwd collects a directory once. Nearly every line repeats the cwd before it, so a
+// value already read is not decoded again: what it decodes to is a function of its
+// bytes.
+func (t *tally) cwd(raw []byte) {
+	if len(raw) == 0 || t.cwdRaw[string(raw)] {
+		return
+	}
+	t.cwdRaw[string(raw)] = true
+	if c, ok := decodeString(raw); ok && !t.seen[c] {
+		t.seen[c] = true
+		t.cwds = append(t.cwds, c)
+	}
+}
+
+// result is the reading: the custom title is the name, a generated one stands in
+// as the title, and the title stands in for a missing prompt (379 of 428
+// transcripts carry a prompt, 390 a custom title, 424 either: a title is a worse
+// "what is this doing" and a better nothing).
+func (t *tally) result() transcriptRead {
+	name, title, preview := t.title, t.title, t.preview
+	if title == "" {
+		title = t.generated
+	}
+	if preview == "" {
+		preview = title
+	}
+	return transcriptRead{
+		cwds: t.cwds, preview: oneLine(preview, previewBytes), title: oneLine(title, previewBytes), recorded: name,
+	}
+}
+
+// decodeString reads a field's raw value as a string, treating any other shape
+// as absent. A transcript is a file on disk that outlives whichever build wrote
 // it, so a key that is one day an object must not become an error here.
-func decodeString(line map[string]json.RawMessage, key string) (string, bool) {
-	raw, ok := line[key]
-	if !ok {
+func decodeString(raw []byte) (string, bool) {
+	if len(raw) == 0 {
 		return "", false
 	}
 	var s string

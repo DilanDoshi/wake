@@ -269,6 +269,9 @@ var claudeWireVocabulary = wordSet([]string{
 	// where Wake's own words are LoopOp's fields. See core/loop.go.
 	"CronCreate", "ScheduleWakeup", "CronDelete",
 	"cron", "recurring", "delaySeconds", "noop",
+	// A self-paced loop's own wakeup turn names itself on its lifecycle, which
+	// is how the daemon tells that its loop ended (foldWakeup).
+	"wakeup_source", "loop_wakeup",
 
 	// control_request / control_response.
 	"can_use_tool", "cancel_queued", "still_queued",
@@ -418,6 +421,9 @@ var claudeWireVocabulary = wordSet([]string{
 	// A delivered SubagentHandback receipt's whole message, which alone makes a
 	// two-key result read as its sentence (receiptSentence).
 	"Report delivered to your caller.",
+	// The whole summary of a subagent's notice that it waits on its own background
+	// work, which alone keeps a `completed` notification from ending it.
+	"This agent has not reported yet: it is waiting on its own background work and will deliver its report through SubagentHandback when that finishes.",
 
 	// The two interactive tools. Policed precisely because neither is ever
 	// named: askKind classifies an ask from requires_user_interaction and its
@@ -489,6 +495,10 @@ var claudeWireVocabulary = wordSet([]string{
 	// reading its prose. See core.GoalOp.
 	"<synthetic>", "No goal set",
 	"Goal set: ", "Goal cleared: ", "Stop hook feedback:",
+
+	// The close claude writes for a turn left with no reply, at a --resume: a
+	// whole value under "<synthetic>", which vocabulary.go's isResumeClose reads.
+	"No response requested.",
 })
 
 // deliberatelyGeneric is the other half of the vocabulary's honesty: wire
@@ -823,7 +833,15 @@ var notNamedByTheAirlock = map[string]string{
 // 253 → 255: "parent_task_id", the dispatching subagent's task id on a nested
 // task_started, which nests a subagent's own under it, and "Report delivered to
 // your caller.", a delivered SubagentHandback receipt. subagent-nested.jsonl.
-const policedWordCount = 255
+// 255 → 256: "No response requested.", the close claude writes under the
+// synthetic model for a turn left with no reply, at a --resume (BUG-65).
+// resume-interrupted.jsonl, resume-killed.jsonl.
+// 256 → 258: "wakeup_source" and its "loop_wakeup", the lifecycle of a turn claude
+// starts for a self-paced loop, whose ending without a reschedule ends the loop.
+// loop-self-paced-end.jsonl.
+// 258 → 259: a waiting subagent's whole summary (subagentWaiting), which keeps its
+// `completed` notification from ending it. subagent-waits-background.jsonl.
+const policedWordCount = 259
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -1262,6 +1280,8 @@ var embeddedMarkers = map[string]bool{
 	// inside their JSON-in-text results.
 	"msg_id":                           true,
 	"Report delivered to your caller.": true,
+	// A waiting subagent's notice, a summary value (subagentWaiting).
+	"This agent has not reported yet: it is waiting on its own background work and will deliver its report through SubagentHandback when that finishes.": true,
 	// Every connector's name begins with it ("claude.ai Gmail"); never whole.
 	"claude.ai ": true,
 }

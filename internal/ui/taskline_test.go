@@ -3,6 +3,7 @@ package ui
 // The line a dispatch leaves in the conversation when it ends.
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -413,5 +414,79 @@ func TestAFailedWorkflowsEndingLineNamesItAndShowsItsErrorThroughTheRealFold(t *
 		if !strings.Contains(out, want) {
 			t.Errorf("the transcript is missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// A subagent's own subagent ends on the agent's stream too, but the agent did not
+// dispatch it. Claude Code draws only the agent's own dispatch ending, and so does
+// the conversation, and the board's tile of it: one line for the one dispatch,
+// through the ingest a live window uses. The background nest (2.1.322) ends its
+// inner subagents after their parent has ended.
+func TestAnInnerSubagentsEndingIsNotDrawnInTheAgentsConversation(t *testing.T) {
+	for _, tc := range []struct{ fixture, outer string }{
+		{"subagent-nested.jsonl", "Nested explore subagents task"},
+		{"subagent-nested-background.jsonl", "Launch background subagent"},
+	} {
+		t.Run(tc.fixture, func(t *testing.T) {
+			fresh(t)
+			a := dmApp(nil, Stream{}, "s1", "alex").withSize(120, 60)
+			board := tiledBoardApp().ensureBoardDMs()
+			for _, ev := range decodeWorkflowFixture(t, tc.fixture) {
+				a = a.applyFrame(taskFrame("s1", ev))
+				board = board.applyFrame(taskFrame("s1", ev))
+			}
+			_, tile := board.boardDMs["s1"].transcriptWindow(120, 60)
+			for surface, out := range map[string]string{
+				"conversation": conversationRegion(t, *a.dms["s1"], 120, 60),
+				"board tile":   stripANSI(tile),
+			} {
+				if n := strings.Count(out, taskLineGlyph+" "+taskLineAgent); n != 1 {
+					t.Errorf("%s: %d ending lines for the agent's one dispatch, want 1:\n%s", surface, n, out)
+				}
+				if !strings.Contains(out, strconv.Quote(tc.outer)+" "+taskLineFinished) {
+					t.Errorf("%s: the agent's own subagent lost its ending:\n%s", surface, out)
+				}
+				for _, inner := range []string{"List current directory files", "Print first line of alpha.txt"} {
+					if strings.Contains(out, inner) {
+						t.Errorf("%s: the inner subagent %q is drawn:\n%s", surface, inner, out)
+					}
+				}
+			}
+		})
+	}
+}
+
+// A subagent waiting on its own background work is told as `completed`, then
+// starts again and ends for real (2.1.322): one ending line, drawn at the real
+// one, and its row still running while it waits.
+func TestASubagentWaitingOnItsOwnBackgroundWorkEndsOnce(t *testing.T) {
+	fresh(t)
+	a := dmApp(nil, Stream{}, "s1", "alex").withSize(120, 60)
+	starts, waitedRunning := 0, false
+	for _, ev := range decodeWorkflowFixture(t, "subagent-waits-background.jsonl") {
+		if u := ev.Task; u != nil && u.Phase == core.TaskStarted && u.Kind == core.TaskAgent {
+			// Its second start is the end of the wait: the row must still be running.
+			if starts++; starts == 2 {
+				for _, row := range a.fleet.RunningTasks("s1") {
+					waitedRunning = waitedRunning || row.Kind == core.TaskAgent
+				}
+			}
+		}
+		a = a.applyFrame(taskFrame("s1", ev))
+	}
+	if starts != 2 {
+		t.Fatalf("the fixture starts the subagent %d times, want 2", starts)
+	}
+	out := conversationRegion(t, *a.dms["s1"], 120, 60)
+
+	if n := strings.Count(out, taskLineGlyph+" "); n != 1 {
+		t.Errorf("%d ending lines for the one dispatch, want 1:\n%s", n, out)
+	}
+	// The real ending's own usage (29.272s at :91), not the waiting notice's 5.5s.
+	if real := strconv.Quote("bg wait probe") + " " + taskLineFinished + metaSep + elapsedText(29272*time.Millisecond); !strings.Contains(out, real) {
+		t.Errorf("the subagent's real ending is not the one drawn, want %q:\n%s", real, out)
+	}
+	if !waitedRunning {
+		t.Error("the waiting subagent's row was not running while it waited")
 	}
 }
