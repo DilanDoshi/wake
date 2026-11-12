@@ -6405,3 +6405,36 @@ Left out:
   reply says what came back. Interactive Claude Code never reaches this state: it keeps the outer alive
   until its children end. *Closes with:* a ruling on drawing a hand-back in the conversation it reaches,
   which is the hand-back surface for every subagent, not only an orphan. Filed as BUG-74.
+
+## FROM `fix/session-picker-opens-at-once`, 2026-11-11
+
+- **A persisted index of what each transcript held.** The first `/resume` in a window still reads every
+  transcript once (~2.4 s here, behind a picker that is already open), and a new window is cold again. A file
+  beside the fleet keyed on (path, size, mtime) would make a cold window warm. It is not built: it is a copy
+  of Claude's data Wake would own and have to invalidate, against "Wake owns almost no state", and the stream
+  already hides the wait. *Closes with:* a first open measured over ~2 s of CPU-bound reading on the owner's
+  machine after this change, or a corpus an order of magnitude past 10 GB - and then the argued exception, a
+  cache that may be deleted at any time and is never read for anything but speed.
+- **An appended transcript is read again whole.** A live session grows between opens and its entry no longer
+  matches, so a multi-hundred-megabyte one costs a full scan (~0.6 s per GB). Reading only from the old size
+  would make that free, but a transcript is a tree Claude only ever appends to *as far as anyone has
+  checked*, and a rewrite in place would be missed silently. *Closes with:* a measured need, and a cheap proof
+  the prefix is unchanged (a hash of the last block before the old size, at the least).
+- **The line reader allocates a copy of every line**, about half the CPU left after the scanner.
+  `readTranscriptLine` is shared with history, rewind targets and the workflow reader, which keep what it
+  returns, so discovery cannot borrow its buffer without changing theirs. *Closes with:* a variant that
+  hands back a reused slice, used only where the line is read before the next.
+- **`/adopt` and `wake import` still wait for the whole walk.** They read through the cache and the scanner, so
+  they are as fast as the picker's complete open, but they list nothing until every transcript is read.
+  *Closes with:* the same stream for `/adopt`'s block, if its wait is ever felt.
+- **The scanner does not validate grammar** (`discoverscan.go`'s header). A line that is structurally closed
+  but has a bad escape, control character or number in a key or value it skips, or a wanted value that will not
+  decode, is read where a decoder would drop the whole line. *Closes with:* nothing, unless a writer other than Claude starts appending to transcripts; then a
+  `json.Valid` on the lines that carry a wanted key.
+- **A window's cache is its own.** The daemon holds a cache too, for a confirmed pick, and the two do not
+  share. *Closes with:* the picker's walk going through the daemon, which also needs a frame and three
+  reflective guards, for a saving the stream already gives.
+- **A transcript rewritten in place to the same size with its time put back reads as unchanged.** A restore or
+  a copy that keeps dates replaces the file (a new identity, which the cache catches); only a write into the
+  same file that changes no byte count and sets the mtime back slips through, which no writer does. *Closes
+  with:* the file's change time in the key, which `Stat_t` spells differently on each platform.

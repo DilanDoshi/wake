@@ -12,6 +12,7 @@ package ui
 
 import (
 	"cmp"
+	"context"
 	"fmt"
 	"maps"
 	"sort"
@@ -308,49 +309,66 @@ func (a App) wakeArrived(st *rpc.Status) App {
 	return a
 }
 
-// resumeReadyMsg is what the disk walk hands back, folded by App.Update.
-type resumeReadyMsg struct {
-	disk []DiskSession
-	err  error
+// resumeListedMsg is what the disk walk hands back first, folded by App.Update:
+// the listing, and the channel its rows are completed on. seq says which
+// /resume asked, and cancel ends the reads when nobody wants them.
+type resumeListedMsg struct {
+	disk   []DiskSession
+	filled <-chan DiskSession
+	cancel context.CancelFunc
+	seq    uint64
+	err    error
 }
 
 // openResumePicker gathers what can be resumed and opens the picker. The parked
 // half is local; the on-disk half needs the walk of ~/.claude/projects, so it
-// goes off the draw goroutine (adopt.go's rule) and the picker opens when it
-// returns. With no way to see the disk it opens on the parked half alone.
+// goes off the draw goroutine (adopt.go's rule) and the picker opens when the
+// listing returns - which is the directory listing alone, so at once; the
+// transcripts are read behind it (resumefill.go). With no way to see the disk it
+// opens on the parked half alone.
 func (a App) openResumePicker() (App, tea.Cmd) {
 	if a.sessions == nil {
 		return a.showResume(nil)
 	}
 	a = a.clearDraft()
-	return a, resumableCmd(a.sessions)
+	a.resumeSeq++
+	return a, resumableCmd(a.sessions, a.resumeSeq)
 }
 
-// resumableCmd walks the disk on its own goroutine, askMachine's arrangement.
-func resumableCmd(s Sessions) tea.Cmd {
+// resumableCmd lists the disk on its own goroutine, askMachine's arrangement.
+func resumableCmd(s Sessions, seq uint64) tea.Cmd {
 	return func() tea.Msg {
-		disk, err := s.Resumable()
-		return resumeReadyMsg{disk: disk, err: err}
+		ctx, cancel := context.WithCancel(context.Background())
+		disk, filled, err := s.Resumable(ctx)
+		return resumeListedMsg{disk: disk, filled: filled, cancel: cancel, seq: seq, err: err}
 	}
 }
 
-// resumeArrived folds the walk: the rows open the picker, and a read that failed
-// falls back to the parked half rather than to nothing.
+// resumeArrived folds the listing: the rows open the picker, and a read that
+// failed falls back to the parked half rather than to nothing.
 //
-// A slow ~/.claude/projects walk (hundreds of transcripts on NFS) can land after
-// the operator has moved on and started typing. Opening then would clear the
-// draft they began - openResume calls clearDraft - so a walk that returns to a
-// non-empty composer is dropped rather than stealing it. The common case is a
-// sub-second walk into a still-empty box, which opens.
-func (a App) resumeArrived(m resumeReadyMsg) (App, tea.Cmd) {
-	if a.composer().Value() != "" {
+// A slow ~/.claude/projects listing (hundreds of project directories on NFS) can
+// land after the operator has moved on and started typing. Opening then would
+// clear the draft they began - openResume calls clearDraft - so a listing that
+// returns to a non-empty composer is dropped rather than stealing it, and so is
+// one a later /resume has replaced. A dropped listing ends its reads.
+func (a App) resumeArrived(m resumeListedMsg) (App, tea.Cmd) {
+	if m.seq != a.resumeSeq || a.composer().Value() != "" {
+		m.cancel()
 		return a, nil
 	}
 	if m.err != nil {
+		m.cancel()
 		notice.Report("could not read this machine's sessions, showing parked only: %v", m.err)
 		return a.showResume(nil)
 	}
-	return a.showResume(m.disk)
+	a, _ = a.showResume(m.disk)
+	if !a.resumePicker.Open() {
+		m.cancel()
+		return a, nil
+	}
+	a.resumePicker.Seq, a.resumePicker.cancel = m.seq, m.cancel
+	return a, fillCmd(m.filled, m.seq)
 }
 
 // showResume merges the parked fleet and the disk rows and opens the picker, or
@@ -415,7 +433,7 @@ func (a App) resumeRowsFrom(disk []DiskSession) (rows []resumeRow, more int) {
 		}
 		all = append(all, resumeRow{
 			ID: d.ID, Dir: d.Dir, Preview: d.Preview, Title: d.Title,
-			Age: ago(d.Modified), Resumable: d.Dir != "",
+			Age: ago(d.Modified), Resumable: d.Dir != "", Reading: d.Reading, slug: d.Slug,
 		})
 	}
 	// Parked sessions the walk did not surface (no transcript found, or no disk

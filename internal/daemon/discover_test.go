@@ -254,8 +254,8 @@ func TestDiscoveryReadsTheSessionsName(t *testing.T) {
 			if err := os.WriteFile(p, []byte(strings.Join(tc.lines, "\n")+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, got, _ := readTranscript(p); got != tc.want {
-				t.Errorf("title = %q, want %q", got, tc.want)
+			if got, _ := readTranscript(p); got.title != tc.want {
+				t.Errorf("title = %q, want %q", got.title, tc.want)
 			}
 		})
 	}
@@ -288,13 +288,13 @@ func TestDiscoveryKeepsTheNameClaudeRecorded(t *testing.T) {
 			if err := os.WriteFile(p, []byte(strings.Join(tc.lines, "\n")+"\n"), 0o644); err != nil {
 				t.Fatal(err)
 			}
-			if _, _, _, got := readTranscript(p); got != tc.want {
-				t.Errorf("name = %q, want %q", got, tc.want)
+			if got, _ := readTranscript(p); got.recorded != tc.want {
+				t.Errorf("name = %q, want %q", got.recorded, tc.want)
 			}
 		})
 	}
 	// And from a recorded transcript: interrupt-spike ran as `--name spike`.
-	if _, _, _, got := readTranscript(filepath.Join("..", "..", "testdata", "transcript", "interrupt-spike.jsonl")); got != "spike" {
-		t.Errorf("the recorded transcript's name = %q, want %q", got, "spike")
+	if got, _ := readTranscript(filepath.Join("..", "..", "testdata", "transcript", "interrupt-spike.jsonl")); got.recorded != "spike" {
+		t.Errorf("the recorded transcript's name = %q, want %q", got.recorded, "spike")
 	}
 }

@@ -166,6 +166,9 @@ drift: ## Audit this machine's own claude transcripts for what the corpus would 
 	@go test ./internal/core -tags=drift -list='^TestDrift$$' | grep -qx TestDrift \
 	  || { echo "no TestDrift under -tags=drift: this target would pass without running anything"; exit 1; }
 	go test ./internal/core -tags=drift -run '^TestDrift$$' -count=1 -v
+	@go test ./internal/daemon -tags=drift -list='^TestDriftDiscovery$$' | grep -qx TestDriftDiscovery \
+	  || { echo "no TestDriftDiscovery under -tags=drift: this target would pass without running anything"; exit 1; }
+	go test ./internal/daemon -tags=drift -run '^TestDriftDiscovery$$' -count=1 -v
 
 tidy: ## Sync go.mod and go.sum
 	go mod tidy

@@ -30,6 +30,7 @@ package ui
 // resume.go for how the rows are gathered and confirmResume wired.
 
 import (
+	"context"
 	"fmt"
 	"strings"
 
@@ -80,6 +81,8 @@ type resumeRow struct {
 	Age       string // coarse relative time
 	Parked    bool   // FrameWake vs FrameResume on confirm
 	Resumable bool   // false when Dir == "" (shown, but the daemon refuses)
+	Reading   bool   // its transcript has not been read yet: Dir, Title and Preview are not known
+	slug      string // the project it was found under, which says which copy a fill is for
 }
 
 // label is how a row names itself in a notice: the @name for a parked session,
@@ -116,6 +119,8 @@ type ResumePicker struct {
 	Query    string
 	Cursor   int // index into the filtered set
 	Selected map[string]bool
+	Seq      uint64             // which /resume opened it; a fill for another is not its own
+	cancel   context.CancelFunc // ends the transcript reads behind it, if any
 }
 
 // Open reports whether there is a picker at all. Empty is closed - a machine
@@ -145,8 +150,11 @@ func (a App) openResume(rows []resumeRow, more int, multi bool) App {
 	return a.clearDraft()
 }
 
-// closeResume takes it down with nothing sent.
+// closeResume takes it down with nothing sent, and ends the reads behind it.
 func (a App) closeResume() App {
+	if a.resumePicker.cancel != nil {
+		a.resumePicker.cancel()
+	}
 	a.resumePicker = ResumePicker{}
 	return a
 }
@@ -295,6 +303,9 @@ func resumeFrames(rows []resumeRow) []rpc.Frame {
 // so wakeArrived says each is back when its report shows it running.
 func (a App) confirmResume() (App, tea.Cmd) {
 	chosen := a.resumePicker.chosen()
+	if holdsForReading(chosen) {
+		return a, nil
+	}
 	a = a.closeResume()
 	if len(chosen) == 0 {
 		return a, nil
@@ -377,10 +388,14 @@ func windowAround(cursor, n, size int) (start, end int) {
 // header is the Claude-style count: which match the cursor is on, of how many.
 // When a query admits nothing it says so against the whole set instead.
 func (p ResumePicker) header(f []resumeRow) string {
-	if len(f) == 0 {
-		return fmt.Sprintf("resume session · no match of %d", len(p.Rows))
+	reading := ""
+	if n := p.unread(); n > 0 {
+		reading = fmt.Sprintf(" · reading %d…", n)
 	}
-	return fmt.Sprintf("resume session · %d of %d", p.Cursor+1, len(f))
+	if len(f) == 0 {
+		return fmt.Sprintf("resume session · no match of %d%s", len(p.Rows), reading)
+	}
+	return fmt.Sprintf("resume session · %d of %d%s", p.Cursor+1, len(f), reading)
 }
 
 // compactView is the picker in a pane with too few rows for its box - one
@@ -474,6 +489,9 @@ func (r resumeRow) details() string {
 	fields := []string{shortSource(r.ID)}
 	if r.Age != "" {
 		fields = append(fields, r.Age)
+	}
+	if r.Reading {
+		return strings.Join(append(fields, "reading…"), " · ")
 	}
 	if r.Dir != "" {
 		fields = append(fields, r.Dir)

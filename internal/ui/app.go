@@ -171,6 +171,7 @@ type App struct {
 	picker       Picker
 	rewind       RewindPicker  // esc esc's own picker, on an idle empty conversation; see rewind.go
 	resumePicker ResumePicker  // a bare /resume's own picker, over the composer; see resumepicker.go
+	resumeSeq    uint64        // which /resume the walk in flight answers; see resume.go
 	workflow     workflowState // the /workflows view and the runs it draws; see workflowview.go
 	mcpUI        mcpState      // /mcp's menu and its sign-in; see mcpmenu.go
 	help         helpState     // /wake-help's view and the shell usage it lists; see help.go

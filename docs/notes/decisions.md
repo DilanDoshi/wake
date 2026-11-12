@@ -6150,3 +6150,61 @@ was whether a fleet is ever *done*. It is done when nothing in it can come back.
   and links are gone, so its name is free. A stopped directory that was not removed is never adopted.
 - **Not in this ruling:** claude's background shells outlive a stop (BUG-73), and a park keeps an agent's
   process group by design. Whether "no stale processes" overrides that is the owner's call.
+
+## 2026-11-11 — `/resume` opens at once: a scanner, a memory, a lookup, a stream (the owner, via wake-orch)
+
+The report: "when i did /resume to bring you back individually, the resume menu took a really long time to
+load." Measured on a machine with 640 transcripts and 10 GB (382 over 5 MB, the largest 1 GB), with the page
+cache warm and the machine under its own load: **a bare `/resume` waited ~14 s with ~65 s of CPU, a second
+open waited the same, and confirming an on-disk row walked the machine again in the daemon.** About 90% of the
+CPU was `json.Unmarshal` of every line into a map to keep four short strings; the disk read of all 10 GB is
+under a second.
+
+- **The picker's walk runs in the `wake` window, not the daemon** (`cmd/wake/adopt.go` asks
+  `daemon.Discoverable`, which dials nothing), so a daemon-held cache would not touch it - and eighteen fleets
+  would each hold one. The memory is package-level in `internal/daemon` and lives in whichever process asks.
+- **Whole reads stay.** Measured on this machine: 28 of 640 transcripts hold their newest title or prompt
+  outside the last megabyte, and the exactly-one-directory proof is a property of the whole file, so stopping
+  at the first cwd or reading from the tail changes rows. Reading less was proved unsafe; reading *cheaper*
+  was not.
+- **A line is scanned, not decoded** (`discoverscan.go`): one pass that skips every value it does not want
+  (strings at memchr speed, containers by matching bracket) and hands the wanted keys back raw. ~14 s / 65 s
+  became ~2.4 s / 7.7 s, rows identical on this machine's 640 real transcripts (`make drift`:
+  `TestDriftDiscovery`) and on a 5.2M-exec fuzz against the decoder. **The one place it is looser than a
+  decoder**: it checks structure, not grammar, so a bad escape, control character or number in a key or value
+  it skips, nesting past a decoder's depth limit, or a wanted value that will not decode is read where a decoder
+  drops the whole line. A write cut short leaves structure unclosed, which it
+  drops as a decoder does, so nothing a live transcript does reaches the gap; every line a decoder reads is
+  read with the same fields, without exception.
+- **What a read found is remembered per file**, keyed on (the file itself, size, mtime), with the stat taken *before* the
+  read so a line written as a read ends is a change to the next open and never a stamp claiming the read saw
+  it. It remembers the file's words and never the disk's: the proved directory is re-checked on every open, so
+  a project deleted since is refused and one made since is proved. Memory is derived, not chosen: one entry per
+  transcript at most (every listing, and every pick's lookup, drops the ones that left), and a session whose
+  retained text outweighs `entryBudget` - two bounded previews plus `maxCachedText` for the name and directories
+  claude does not bound - is not kept at all (it is read every open, as before). A file replaced by a restore or
+  a copy that keeps dates is a new file of the same size and time, which the file's identity catches. No timer, no poll, **no warm at daemon start**: that would read every machine's
+  transcripts at every fleet's start, for a verb used rarely. The first `/resume` in a window pays once; the
+  stream below is what makes that first open instant.
+- **A pick reads the transcript it names** (`discoverID`): the confirm no longer walks the machine, and finds
+  what the listing finds, fails where it fails, and takes the same copy where one id sits under two projects:
+  the listing's order is total (newest, then id, then path), so a sort over the whole machine and one over the
+  copies agree even when their times tie. The adversarial review found an unstable sort that picked differently
+  from 13 rows up, so a pick would have resumed a copy the picker did not show. A file counts only if its name
+  spells the id exactly, so a case-folding filesystem cannot match `AAAA…` to `aaaa…`.
+- **The picker opens on the directory listing** (~55 ms here) and fills in as transcripts are read. The
+  listing is each session's id, project and age, which is also its place in the list, so a fill never moves a
+  row; a parked session needs only an age, so it is complete from the first frame. **↵ over a row still being
+  read holds** with a notice, and in the room a set holding one unread row is held whole: the daemon is never
+  asked to resume a session whose directory nobody has proved (owner's ruling). The cursor is re-homed to its
+  session on every fill (a fill can make a row match the search, shifting the index below it); a fill is
+  matched by id *and* project, since one id can sit under two. Closing the picker by any key ends the reads, a
+  listing that reaches a typed draft is dropped and ends them, and a later `/resume` supersedes an earlier one.
+- **What did not move:** the rows and their order, the name rule (`resumedName`, the newest `customTitle`),
+  every refusal and its sentence, and the airlock (the four keys are still spelled in `discover.go`'s const
+  block; `airlock_test` and `argv_test` pass unedited).
+- **Held by** `internal/daemon/discoverscan_test.go` (the scanner against the decoder: hand-written lines,
+  random objects, every torn prefix, mutations, a fuzz target), `discovercache_test.go` and `discoverid_test.go`
+  (counted opens, not wall-clock: a second open opens nothing that did not change), `discoverstream_test.go`
+  (the listing is back before any read; newest read first; cancel and leaks), `internal/ui/resumefill_test.go`,
+  and the benchmarks `go test -bench Discover ./internal/daemon`.

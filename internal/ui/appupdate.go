@@ -65,8 +65,10 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case adoptedMsg:
 		return a.adoptArrived(m)
-	case resumeReadyMsg:
+	case resumeListedMsg:
 		return a.resumeArrived(m)
+	case resumeFilledMsg:
+		return a.resumeFilled(m)
 
 	case pathScanMsg:
 		return a.pathsScanned(m)
