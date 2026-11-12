@@ -507,7 +507,8 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (`typingWord`), and is the conversation ring's everywhere else. Session commands/skills first, then
   Wake's, agents, teams (live members only), paths. **It keeps every match up to `completionCeiling`
   (`pathScanMax`) and draws a window over them - the rows its pane can draw, at most `completionRows` - moved the
-  least that shows the cursor** (`windowed`, on a change of offers, draft or geometry, never per frame), so ↓
+  least that shows the cursor** (`windowed`, on a change of offers, draft or geometry and after each message
+  while a menu is up, never per frame), so ↓
   reaches every offer and the cursor is always on screen; the key line counts `+N above · +M below` (and `+K more
   - keep typing` past the ceiling) in the row it had, and the drawn height is unchanged (owner's 2026-11-12 ask,
   `decisions.md`). A click on an offer and the wheel over the menu do nothing (deferred). It belongs to a cursor and a pane; directory reads and the

@@ -42,8 +42,13 @@ reachable only by narrowing the draft. There were two cuts: `completion.bounded`
 - **The key line says which way, and apart what ↓ reaches from what only typing does**, in the roster's words
   (`countWords`, shared with `countLine`): `+5 above · +12 below`, then `· +K more - keep typing` for matches past the
   ceiling or names git never indexed (`index.left`), which are not below anything. A listing the read cut at
-  `pathScanMax` asks for typing too (`readDirBounded` reads one past the bound to know, so a directory of exactly 512
-  is whole): the entries nobody read are neither offered nor counted. Nothing outside the window: just the keys.
+  `pathScanMax` says `listing cut at 512` (`readDirBounded` reads one past the bound to know, so a directory of
+  exactly 512 is whole) and does not ask for typing, which narrows the 512 read and never reads the rest: the
+  entries nobody read are neither offered nor counted. Nothing outside the window: just the keys.
+- **A menu on screen is measured again after every message** (`rewindowed`, Update's seam, only while
+  `completionUp`): a pane's chrome grows from events no rebuild sees - a checklist landing, a done line, an armed
+  cue (esc, ⌃O, ⌃Q), a mode receipt wrapping the status bar - and the pane clips from the bottom. The second review
+  found the checklist case; `TestAChecklistLandingKeepsTheCursorDrawn`.
 - **Every menu is this one.** The room's `/` and its `@who /cmd` bridge, the room's `@` (agents, teams, `all`,
   the machine's sessions behind a manager relay, the one-directory listing), a conversation's `@` (peers, sessions,
   agent types, the fuzzy file search or the listing), the `/team` argument and the answer box's menu all build a

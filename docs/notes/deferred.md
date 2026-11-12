@@ -57,6 +57,29 @@ menu scrolls the transcript under it. A possible feature, the owner's call (wake
 
 ---
 
+## KNOWN GAP, 2026-11-12 — a cut directory listing is never read again, so typing cannot reach what it left out
+
+`readDirBounded` takes the first 512 entries the filesystem returns, an arbitrary subset, and typing only narrows
+those (`listed()` prefix-filters what was read; `scanningPaths` does not read the directory again). The room always
+lists, and a conversation lists any directory git did not index (`node_modules`, build output) - the usual 512+ ones -
+so `@node_modules/react` may never appear however much is typed. The key line says `listing cut at 512` rather than
+asking for typing. *Closes with:* a re-read with the typed prefix as the filter when the listing was cut, so the
+512 bound applies to the matches. Beside it, `index.left` (names past the 50,000 git bound) is counted into `+K more -
+keep typing` on every search and never shrinks as one types; older than the window.
+
+---
+
+## KNOWN GAP, 2026-11-12 — a pane with no row for the menu still takes ↵ and ⇥ on it
+
+The window is `menuRoom - 1` rows, at least one: a pane of `menuRoom == 1` (a 6-row split pane, a working agent's at
+8) draws the cursor row and loses the key line; at `menuRoom <= 0` (7-row working pane, a tall checklist) nothing is
+drawn and `completionUp` stays true, so ↵ and ⇥ accept an offer nobody sees. Also, in answer mode a page the wheel
+moved off the box (`page.set` beats the draft in `restingAt`) slides the menu out of the window while its keys stay
+live. Older than the window. *Closes with:* `completionUp` declining when no menu row can be drawn, and ↵/⇥ going
+`pageHome` first when `boxAway`.
+
+---
+
 ## PRODUCT CALL NOT TAKEN, 2026-11-07 — a turn a peer's message started is resumed after a limit too
 
 The owner reported that agents which were idle when he hit the limit were woken by Wake's resume. The

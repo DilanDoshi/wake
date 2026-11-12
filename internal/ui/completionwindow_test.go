@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strconv"
 	"strings"
 	"testing"
 
@@ -279,9 +280,10 @@ func TestTheCeilingIsWhatOneReadTakes(t *testing.T) {
 	}
 }
 
-// A directory cut at the bound still asks for typing: the entries nobody read
-// are not offered and are not counted, and the key line must not read as whole.
-func TestACutListingAsksForTyping(t *testing.T) {
+// A directory cut at the bound says so: the entries nobody read are neither
+// offered nor counted, and the key line must not read as whole. It does not ask
+// for typing, which narrows what was read and never reads the rest.
+func TestACutListingSaysSo(t *testing.T) {
 	dir := workdir(t)
 	for i := range pathScanMax + 5 {
 		if err := os.WriteFile(filepath.Join(dir, fmt.Sprintf("f%d", i)), nil, 0o600); err != nil {
@@ -292,9 +294,32 @@ func TestACutListingAsksForTyping(t *testing.T) {
 	if got := len(a.completion.offers); got != pathScanMax {
 		t.Fatalf("a cut directory holds %d offers, want %d", got, pathScanMax)
 	}
-	if !strings.Contains(menuKeyLine(a), "keep typing") {
-		t.Errorf("the key line %q does not say the directory was cut", menuKeyLine(a))
+	line := menuKeyLine(a)
+	if !strings.Contains(line, "cut at "+strconv.Itoa(pathScanMax)) {
+		t.Errorf("the key line %q does not say the directory was cut", line)
 	}
+	if strings.Contains(line, "keep typing") {
+		t.Errorf("the key line %q asks for typing, which does not read the rest of a cut directory", line)
+	}
+}
+
+// A checklist landing in a conversation grows the pane's chrome with no rebuild
+// of the menu: the window is measured again, so the walk stays on screen.
+func TestAChecklistLandingKeepsTheCursorDrawn(t *testing.T) {
+	a := walk(menuAt(t, false, 24), downKey, 40)
+	seen(t, a, "before the checklist")
+	for i := range 4 {
+		ev := taskCreate(fmt.Sprintf("task %d", i), "Doing it")
+		ev.SessionID = "s1"
+		m, _ := a.Update(streamMsg{gen: a.gen, batch: batch{frames: []rpc.Frame{{Kind: rpc.FrameEvent, SessionID: "s1", Event: &ev}}}})
+		a = m.(App)
+	}
+	if a.dms["s1"].checklistRows() == 0 {
+		t.Fatal("the checklist drew no rows, so nothing here grew the chrome")
+	}
+	seen(t, a, "after the checklist landed")
+	a = walk(a, downKey, 5)
+	seen(t, a, "walking on after it")
 }
 
 // Past the window and past the ceiling are different things and are said apart:

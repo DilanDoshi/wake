@@ -28,6 +28,17 @@ func (a App) windowed() App {
 	return a
 }
 
+// rewindowed is Update's seam for the window: a pane's chrome grows from events no
+// rebuild sees - a checklist landing, a done line, an armed cue - and the pane
+// clips the menu from the bottom, so a menu on screen is measured again after
+// every message. It measures nothing while no menu is up.
+func (a App) rewindowed() App {
+	if !a.completionUp() {
+		return a
+	}
+	return a.windowed()
+}
+
 // windowedTo is the menu drawing rows offers, from the least move of top that
 // shows the cursor, kept inside the offers.
 func (c completion) windowedTo(rows int) completion {
@@ -49,15 +60,20 @@ func (c completion) View(width int) string {
 // keyLine is the menu's own advertisement, with what the window leaves out folded
 // into it, and which way - two rows for that would be a row per menu spent on
 // chrome. Below is what ↓ reaches; more is what only typing does (matches past
-// the ceiling, names git never indexed), and a cut listing asks for typing too.
+// the ceiling, names git never indexed). A listing the read cut says so, and
+// does not ask for typing: typing narrows the 512 entries read, it never reads
+// the rest.
 func (c completion) keyLine() string {
 	below := len(c.offers) - c.top - min(c.rows, len(c.offers)-c.top)
 	counts := []string{countWords(c.top, below)}
+	if c.cut {
+		counts = append(counts, "listing cut at "+strconv.Itoa(pathScanMax))
+	}
 	if c.more > 0 {
 		counts = append(counts, "+"+strconv.Itoa(c.more)+" more")
 	}
 	line := joinedWords(" · ", counts...)
-	if c.more > 0 || c.cut {
+	if c.more > 0 {
 		line = joinedWords(" - ", line, keepTyping)
 	}
 	if line == "" {
