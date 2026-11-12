@@ -54,8 +54,9 @@ const (
 
 // TaskPhase is which of the three moments in a dispatch's life this frame
 // reports. Four subtypes collapse to three because task_updated and
-// task_notification both report the same ending and differ only in their key
-// sets - one names the dispatch and carries a usage, the other does not.
+// task_notification both report the same ending (a waiting subagent's notice
+// aside: progress) and differ only in their key sets - one names the dispatch
+// and carries a usage, the other does not.
 type TaskPhase string
 
 const (

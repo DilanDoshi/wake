@@ -455,3 +455,38 @@ func TestAnInnerSubagentsEndingIsNotDrawnInTheAgentsConversation(t *testing.T) {
 		})
 	}
 }
+
+// A subagent waiting on its own background work is told as `completed`, then
+// starts again and ends for real (2.1.322): one ending line, drawn at the real
+// one, and its row still running while it waits.
+func TestASubagentWaitingOnItsOwnBackgroundWorkEndsOnce(t *testing.T) {
+	fresh(t)
+	a := dmApp(nil, Stream{}, "s1", "alex").withSize(120, 60)
+	starts, waitedRunning := 0, false
+	for _, ev := range decodeWorkflowFixture(t, "subagent-waits-background.jsonl") {
+		if u := ev.Task; u != nil && u.Phase == core.TaskStarted && u.Kind == core.TaskAgent {
+			// Its second start is the end of the wait: the row must still be running.
+			if starts++; starts == 2 {
+				for _, row := range a.fleet.RunningTasks("s1") {
+					waitedRunning = waitedRunning || row.Kind == core.TaskAgent
+				}
+			}
+		}
+		a = a.applyFrame(taskFrame("s1", ev))
+	}
+	if starts != 2 {
+		t.Fatalf("the fixture starts the subagent %d times, want 2", starts)
+	}
+	out := conversationRegion(t, *a.dms["s1"], 120, 60)
+
+	if n := strings.Count(out, taskLineGlyph+" "); n != 1 {
+		t.Errorf("%d ending lines for the one dispatch, want 1:\n%s", n, out)
+	}
+	// The real ending's own usage (29.272s at :91), not the waiting notice's 5.5s.
+	if real := strconv.Quote("bg wait probe") + " " + taskLineFinished + metaSep + elapsedText(29272*time.Millisecond); !strings.Contains(out, real) {
+		t.Errorf("the subagent's real ending is not the one drawn, want %q:\n%s", real, out)
+	}
+	if !waitedRunning {
+		t.Error("the waiting subagent's row was not running while it waited")
+	}
+}

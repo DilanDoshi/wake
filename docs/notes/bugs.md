@@ -1760,3 +1760,18 @@ screen does.
   the same leak, since `requestSpawn` starts the agent where the process stands: there a "ready" in the
   path passed the opening-turn wait at once. It now `t.Chdir`s into the workspace. A second pty window
   shares the first's workspace, so its agents draw under the same `~`.
+
+## BUG-74 — an orphaned inner subagent's report reaches the agent and Wake shows none of it
+
+**Found 2026-11-11 by wake-imp-subending's 2.1.322 recording** (`subagent-nested-background.jsonl`, on
+`fix/inner-subagent-ending-names-its-parent`). Not built: filed for the owner's call (wake-orch's ruling).
+
+A headless background outer subagent can end before its own background subagents do (`:66`). Their
+hand-backs then reach the agent itself as `<agent-message from="<inner id>">` user lines with no parent tool
+use (`:108`, `:114`). Core drops every hand-back line, so the agent's conversation shows no trace of what
+came back: only the agent's own reply says. Interactive Claude Code never reaches this state, since it keeps
+the outer alive until its children end. A headless outer is recorded waiting on its own background shell
+(`subagent-waits-background.jsonl`, handled), never on its background subagents.
+
+**Directions, not chosen:** draw a hand-back in the conversation it reaches (a ruling for every subagent's
+hand-back, not only an orphan's), or attribute an orphan's report to the outer it belonged to.

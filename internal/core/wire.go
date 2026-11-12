@@ -224,11 +224,11 @@ type wireFrame struct {
 	// status, task_updated a patch object - and nothing on the wire lets one
 	// stand in for the other.
 	//
-	// OutputFile and Summary are deliberately not here: the first names an
-	// on-disk transcript nothing yet opens, and the second repeats prose the
-	// reader has already seen. Prompt is read only for a workflow's own
-	// script - task_started's ordinary subagent instruction still reaches
-	// nothing, because workflowOf copies it to Script only when TaskType
+	// OutputFile is deliberately not here: it names an on-disk transcript
+	// nothing yet opens. Summary is prose the reader has seen, raw so its type
+	// loses no frame, read only for a waiting notice (waitingNotice). Prompt is
+	// read only for a workflow's own script - task_started's subagent instruction
+	// reaches nothing, because workflowOf copies it to Script only when TaskType
 	// resolves to TaskWorkflow.
 	// ToolUseID is top-level here and on system/permission_denied, which is
 	// not a task frame - so it is read only inside the task branch. It is a
@@ -241,6 +241,7 @@ type wireFrame struct {
 	Description      string             `json:"description"`
 	LastToolName     string             `json:"last_tool_name"`
 	Status           string             `json:"status"`
+	Summary          json.RawMessage    `json:"summary"`
 	Patch            *wireTaskPatch     `json:"patch"`
 	WorkflowName     string             `json:"workflow_name"`
 	Prompt           string             `json:"prompt"`

@@ -10,7 +10,9 @@
 package core
 
 import (
+	"bytes"
 	"encoding/json"
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -441,4 +443,70 @@ func isTaskSubtype(s string) bool {
 		return true
 	}
 	return false
+}
+
+// A subagent that ends its turn while its own background work runs is told to
+// the agent as a `completed` notification saying so, then starts again under the
+// same id and ends for real (2.1.322). Only the second is its ending.
+func TestASubagentWaitingOnItsOwnBackgroundWorkHasNotEnded(t *testing.T) {
+	var outer string
+	var notes []*TaskUpdate // the outer's task_notification frames
+	for _, d := range decodeFixture(t, "../../testdata/stream/subagent-waits-background.jsonl") {
+		u := d.Task
+		switch {
+		case u == nil:
+		case u.Phase == TaskStarted && u.Kind == TaskAgent:
+			outer = u.ID
+		case u.ID == outer && bytes.Contains(d.Raw, []byte(`"subtype":"task_notification"`)):
+			notes = append(notes, u)
+		}
+	}
+	var endings []*TaskUpdate
+	for _, u := range notes {
+		if u.Phase == TaskEnded {
+			endings = append(endings, u)
+		}
+	}
+	if len(notes) != 2 || len(endings) != 1 || endings[0].Status != TaskDone {
+		t.Fatalf("%d notifications, %d of them endings, want two notifications and one ending, done", len(notes), len(endings))
+	}
+	waiting := notes[0]
+	if waiting.Phase != TaskProgress || waiting.Status != TaskRunning {
+		t.Errorf("its waiting notification is Phase %q Status %q, want a running progress frame", waiting.Phase, waiting.Status)
+	}
+}
+
+// Only the whole sentence is a waiting notice. A reply that quotes it inside more
+// words, or rewords it, is that subagent's ending; a summary that is not a string
+// is no notice either, and loses no frame, a task's or any other.
+func TestOnlyTheWholeWaitingSentenceIsNoEnding(t *testing.T) {
+	note := func(summary string) string {
+		return `{"type":"system","subtype":"task_notification","task_id":"t1","tool_use_id":"toolu_1",` +
+			`"status":"completed","summary":` + summary + `}`
+	}
+	for _, tc := range []struct {
+		name, line string
+		ended      bool
+	}{
+		{"the sentence as claude sends it", note(strconv.Quote(subagentWaiting + "\n")), false},
+		{"quoted inside a longer reply", note(strconv.Quote("It said: " + subagentWaiting)), true},
+		{"reworded", note(strconv.Quote(strings.Replace(subagentWaiting, "waiting", "still waiting", 1))), true},
+		{"not a string", note(`{"text":` + strconv.Quote(subagentWaiting) + `}`), true},
+	} {
+		evs, err := DecodeLine([]byte(tc.line))
+		if err != nil || len(evs) != 1 || evs[0].Task == nil {
+			t.Fatalf("%s: decoded to %v, %v", tc.name, evs, err)
+		}
+		if got := evs[0].Task.Phase == TaskEnded; got != tc.ended {
+			t.Errorf("%s: ended = %v, want %v", tc.name, got, tc.ended)
+		}
+	}
+	for _, line := range []string{
+		`{"type":"system","subtype":"status","session_id":"s","summary":{"text":"x"}}`,
+		`{"type":"assistant","session_id":"s","message":{"role":"assistant","content":[{"type":"text","text":"hi"}]},"summary":["a"]}`,
+	} {
+		if evs, err := DecodeLine([]byte(line)); err != nil || len(evs) == 0 {
+			t.Errorf("a frame whose summary is not a string was lost: %v, %v", evs, err)
+		}
+	}
 }
