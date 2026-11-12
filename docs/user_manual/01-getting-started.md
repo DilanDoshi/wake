@@ -75,14 +75,16 @@ inside the room, and takes the spawn flags too — `/new backend --worktree fix-
 
 ```sh
 wake --fleet <name>      # reopen a fleet you already have
-wake fleets              # list every fleet on this machine
+wake fleets              # list every fleet on this machine, and what each is
 wake attach sydney       # open one conversation by name
 wake attach 6c246eb1     # or by the first few characters of its id
 wake status              # what is alive, without opening anything
 ```
 
 The thing to know: a bare `wake` starts a *new* fleet each time and names it, so it is no longer the
-way back. `wake --fleet <name>` reopens one you already have, and `wake fleets` lists them. On a
+way back. `wake --fleet <name>` reopens one you already have, and `wake fleets` lists them with what each
+is: running (and on which build), parked, crashed (`wake --fleet <name>` recovers its sessions) or stopped
+(`wake stop --fleet <name>` removes it). On a
 fresh machine with nothing running, a bare `wake` is still the right first command — it makes your
 first fleet and starts its manager.
 
@@ -98,7 +100,7 @@ genuinely different and one of them cannot be undone. The short version:
 - **`⌃O`** — you leave, they keep working.
 - **`⌃C`** — park the agent in front of you. Recoverable with `/resume`.
 - **`⌃Q⌃Q`** — park everything and quit (the first `⌃Q` arms, the second confirms). Next `wake --fleet <name>` offers it back.
-- **`wake stop --fleet <name>`** — end the fleet. **Not recoverable.**
+- **`wake stop --fleet <name>`** — end the fleet, forget what it had parked, and remove its directory. **Not recoverable.**
 
 ## Where your conversations actually live
 
