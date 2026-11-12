@@ -542,6 +542,11 @@ func (a App) drawn() []string {
 // nothing binds. Every pane is accented, not just the two that used to exist:
 // with a grid the unfocused ones are the majority.
 func (a App) withFocus(f string) App {
+	if a.picker.Open() && a.focus != f {
+		// A picker is drawn over the keys' pane only (pickerView); left open it
+		// would read ↓ and ↵ in the next pane undrawn - a team's quit among them.
+		a = a.closePicker()
+	}
 	if a.rewind.Session != "" && a.rewind.Session != f {
 		// Hygiene rather than a second gate - rewindKey already refuses to
 		// act on a picker whose Session is not a.focus. Without this, tabbing

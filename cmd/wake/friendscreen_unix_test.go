@@ -3,6 +3,7 @@
 package main
 
 import (
+	"fmt"
 	"os"
 	"path/filepath"
 	"strings"
@@ -17,35 +18,44 @@ import (
 // the strip and the notice row, under the pane.
 const cornerCols, cornerRows = 9, 5
 
-// corner is the screen's bottom-right cells where a friend sits, as text: at the
-// sidebar's right edge, one margin in from the window's.
-func (s *screen) corner() string {
-	s.term.Lock()
-	defer s.term.Unlock()
+// cornerOf is the cells a friend takes in one frame's rows, as text: a row's
+// runes are its cells (lines builds them so), right-trimmed.
+func (s *screen) cornerOf(rows []string) string {
 	var b strings.Builder
 	right := s.cols - ui.SideMargin
-	for y := s.rows - 2 - cornerRows; y < s.rows-2; y++ {
-		for x := right - cornerCols; x < right; x++ {
-			b.WriteRune(s.term.Cell(x, y).Char)
-		}
+	for _, row := range rows[s.rows-2-cornerRows : s.rows-2] {
+		cells := []rune(row + strings.Repeat(" ", s.cols))
+		b.WriteString(string(cells[right-cornerCols : right]))
 		b.WriteByte('\n')
 	}
 	return b.String()
 }
 
-// awaitCorner waits for the corner to draw a friend (drawn) or nothing.
+// awaitCorner waits for a whole frame's corner to draw a friend (drawn) or
+// nothing.
 func (s *screen) awaitCorner(drawn bool) string {
 	s.t.Helper()
-	deadline := time.Now().Add(screenTimeout)
-	for time.Now().Before(deadline) {
-		c := s.corner()
-		if strings.ContainsAny(c, "▀▄") == drawn {
-			return c
-		}
-		time.Sleep(20 * time.Millisecond)
+	return s.cornerOf(s.awaitFrame(fmt.Sprintf("the corner drawing a friend = %v", drawn), func(rows []string) bool {
+		return strings.ContainsAny(s.cornerOf(rows), "▀▄") == drawn
+	}))
+}
+
+// Reads between two pieces of one frame wait for the rest (BUG-68). The frame is
+// Bubble Tea's alt-screen shape (home, rows top to bottom, the cursor parked at
+// the last row's start), cut inside the corner's last row.
+func TestTheCornerIsNeverReadHalfPainted(t *testing.T) {
+	const cols, rows = 30, 12
+	sprite := []string{"  ▄▀▀▀▄  ", " ▀▄▀▄▀▄▀ ", "▄▀▀▀▀▀▀▀▄", " ▀▄▄▄▄▄▀ ", "  ▀▀ ▀▀  "}
+	lines := make([]string, rows-2-cornerRows)
+	for _, r := range sprite {
+		lines = append(lines, strings.Repeat(" ", cols-ui.SideMargin-cornerCols)+r)
 	}
-	s.t.Fatalf("the corner never drew a friend = %v.\n%s", drawn, s.dump())
-	return ""
+	painted, last := altFrame(lines, cols, rows), sprite[cornerRows-1]
+	s := halfPainted(t, painted, strings.Index(painted, last)+len(string([]rune(last)[:cornerCols/2])), cols, rows)
+
+	if got, want := s.awaitCorner(true), strings.Join(sprite, "\n")+"\n"; got != want {
+		t.Fatalf("the corner was read part-way through its frame:\n%s\nwant the whole frame's:\n%s", got, want)
+	}
 }
 
 // On a real screen, through a terminal without Kitty graphics (the harness

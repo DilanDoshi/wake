@@ -243,6 +243,8 @@ func (d *testDaemon) stop(t *testing.T) {
 	d.waitForExit(t)
 }
 
+// waitForListening waits for the socket file, or for Serve's own error. A dial
+// can still be refused after it; mustDial waits that out.
 func (d *testDaemon) waitForListening(t *testing.T) {
 	t.Helper()
 
@@ -354,14 +356,25 @@ func listenRaw(t *testing.T, socket string) net.Listener {
 	return ln
 }
 
+// mustDial waits for a dial the daemon's listener accepts. The socket file a
+// test can see proves nothing: it exists before listen(), and a successor's path
+// holds a crashed daemon's stale file and then none until listen() binds its own.
+// Any other error is final.
 func mustDial(t *testing.T, socket string) net.Conn {
 	t.Helper()
 
-	conn, err := Dial(socket)
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
+	deadline := time.Now().Add(testTimeout)
+	for {
+		conn, err := Dial(socket)
+		if err == nil {
+			return conn
+		}
+		notYet := errors.Is(err, syscall.ECONNREFUSED) || errors.Is(err, fs.ErrNotExist)
+		if !notYet || time.Now().After(deadline) {
+			t.Fatalf("Dial: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
 	}
-	return conn
 }
 
 // close hangs up and drains. Draining is not optional: rpc.ReadFrames has no

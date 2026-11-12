@@ -282,6 +282,15 @@ directories against a harness that tidies up correctly on the happy path.
 
 ## BUG-29 — `TestTheWholeLifecycleComposesFromAKeyboard` waits 15s for a woken agent, in a full run
 
+**Fixed on `fix/test-waits-on-real-conditions` (PR awaiting merge); the wake was never slow.** Seen again on
+2026-11-09 (the v0.1.15 gate, plain lane) with the draft still in the box. The test waited on the *daemon*
+(`awaitSessionState`, `awaitParkBook`) and then typed `@name zebrafish↵`, but the room routes on its own
+fleet, which folds the daemon's report a beat later. A ↵ folded first finds no live `@name`, so `sendRoom`
+refuses it and leaves the draft. A throwaway relay that delivered the window's frames 500ms late failed it 3/3 with
+the logged symptom. The test now types the words, waits for the window's own route line `@name · direct`
+(drawn only for a live match, from the same `route` `sendRoom` reads), then sends: 5/5 under that lag, and red
+again with the wait removed.
+
 **Observed 2026-08-23**, in the `make ci` immediately after PR #86, #87 and #88 merged together.
 
 ```
@@ -1459,30 +1468,6 @@ operator's own, a peer's - that meets the old login meanwhile leaves the retry s
 limit again, "Not logged in", the cap) and `loginretry_test.go` (what is and is not retried, the retry kept
 through another turn, a fresh login's count, the waits and the timer), each mutation-checked.
 
-## BUG-65 — a woken session's pane draws "No response requested." under the turn that was interrupted
-
-**Found 2026-11-07, live, on claude 2.1.319, by the check behind `fix/quit-interrupts-and-parks-busy-agents`.**
-A headless session was interrupted mid-tool (the interrupt Esc and a shutdown send) and its stdin closed.
-It was then resumed with `--resume` and told `continue`. At the resume, claude writes one assistant
-record into the transcript, ahead of the next prompt: the text `No response requested.` under the
-synthetic model, with usage, and with neither `isMeta` nor `isApiErrorMessage` set. It is not on stdout.
-Nothing reads it to the model as the operator's words; it closes the interrupted turn on disk.
-
-What goes wrong: `core.DecodeTranscriptLine` decodes that record as agent text marked `LocalCommand`
-(a synthetic model's reply is a local command's in `blockEvents`). This was checked by running the
-woken transcript through the decoder. So a pane reopened on the session, and a room restore, draw
-`No response requested.` as a reply, under the `[Request interrupted by user for tool use]` line,
-where Claude Code draws nothing. That is read off the decoder and `drawnAsLines`, not yet watched
-on a screen.
-
-It is not new: any interrupted turn later resumed leaves this record, whether esc then `⌃C`, a
-signalled shutdown since 2026-10-22, or, once that branch merges, every `⌃Q`. That branch made it
-common, so it is filed here and not fixed there.
-
-**Closes with:** recognising the record (synthetic model, the one fixed text, immediately after an
-interrupted turn) as plumbing in the decoder, from a committed fixture of a resumed interrupted
-transcript, scrubbed. A fix keyed on the text alone would also hide an agent that typed those words.
-
 ## BUG-66 — after a `/wake-name` and a `/new`, ⌃Q's exit line sent the operator to a bare `wake` — PARKED, not reproduced
 
 **Seen once, 2026-11-07**, recording takes for `fix/quit-interrupts-and-parks-busy-agents` on `main`
@@ -1508,8 +1493,8 @@ sources, and no report carried an empty `Fleet`.
 - `daemon.FleetName(socket)`, its fallback.
 
 For `fleets/harbor/daemon.sock` the fallback returns `harbor` or `dev` in every state of that directory
-(`fleetNameOf`, `forwardedName`). It returns "" only with `HOME` unset, which the take did not have. The
-take's daemon log and its room before ⌃Q match the takes that printed `dev`.
+(`fleetNameOf`, `forwardedName`). It returned "" only with `HOME` unset or relative (BUG-70, fixed since), and
+the take's `HOME` was neither. The take's daemon log and its room before ⌃Q match the takes that printed `dev`.
 
 **Hardened:** the report half. `withFleetName` no longer lets a report naming no fleet wipe a name the
 window has (`TestAReportNamingNoFleetKeepsTheNameTheWindowHas`). A named fleet never becomes a hand-set
@@ -1518,10 +1503,49 @@ never named one, so they are unchanged.
 
 **Guarded:** `TestCtrlQAfterAWakeNameAndASpawnNamesTheFleet`. It runs a bare `wake` under a scratch
 `HOME`, `/wake-name dev`, `/new otto` with a turn in flight and ⌃Q⌃Q, then reads `wake --fleet dev`.
-It passes on 507223b7, so it guards the scenario rather than proving a fix.
+It passed on 507223b7, so it guards the scenario rather than proving a fix. Since
+#230 it waits for the exit line's own words (`Parking 2 agents (…)`, #221's
+wording), which the keypress notice never draws, and for otto's turn under otto's name. It goes red on a
+bare exit line. Each name source alone is held by unit tests: `TestCtrlQsLineNamesTheFleetTheLastReportNamed`
+for the report, and `TestCtrlQsLineFallsBackToTheSocketsFleet` for the fallback. A pty test cannot part them,
+since the old name's link still forwards until the daemon exits.
 
 **Parked 2026-11-07 by wake-orch.** Reopen on a take that prints it again, with both name sources
 logged at `leavingLine`: the fallback half is the part nobody can explain.
+
+## BUG-70 — under a relative `HOME`, every fleet read as a socket set by hand — FIXED by #230
+
+**Found 2026-11-10 by wake-imp-renameexit, in #222's post-merge review, and reproduced on the real binary on
+`main` 6e27337d.** `HOME=h`, `./h` or a literal `~`, from any directory. Not BUG-66's cause: that take's `HOME`
+was absolute.
+
+`daemon.StateRoot` returned `filepath.Join(home, ".wake")` unresolved, and `fleetNameOf` compares it with the
+socket's directory after `filepath.Abs`. A relative root never matches an absolute directory, so every name
+source read "": the report's `Fleet` and `daemon.FleetName` (leavingLine's fallback, the kill switch, `wake
+manager`, `wake stop`). On a named fleet:
+- `/wake-name dev` was refused as a socket set by hand with `WAKE_SOCKET`, though nobody had set one;
+- ⌃Q⌃Q printed ``Parking 1 agent (a turn in flight is interrupted). `wake` reopens the room…``, and a bare
+  `wake` starts a new fleet.
+
+The UI had the same flaw twice: `/new ~/x` built `h/x`, which the daemon refuses as relative, and the status
+bar's `shortPath` never drew `~`, since `filepath.Rel` cannot relate a relative home to an absolute directory.
+
+**Fixed:** `core.HomeDir` resolves a relative `HOME` with `filepath.Abs`, against the working directory as any
+relative path is, and returns Abs's error wrapped. `StateRoot`, `absoluteDir` and `shortPath` all use it.
+`shortPath` draws `~` where the cwd claude reports is spelled as the working directory is. Through a symlink
+(`/private/var` for `/var`) it still does not, as with an absolute symlinked `HOME`.
+
+A relative `HOME` now gives an absolute socket path. A deep working directory can therefore meet
+`checkSocketPath`'s socket-path limit, and that refusal says so and names `WAKE_SOCKET`.
+
+Guards:
+- `TestHomeDirResolvesARelativeHome`;
+- `TestAFleetUnderARelativeHomeKeepsItsName`;
+- `TestARelativeHomeKeepsTheFleetsName` (pty: `/wake-name`, where the fleet lands, and ⌃Q's exit line);
+- `TestShortPathUsesTildeUnderARelativeHome`;
+- `TestNewResolvesTildeUnderARelativeHome`.
+
+Left open: the paths Wake only opens, and where claude itself puts `~/.claude` (`deferred.md`, 2026-11-10).
 
 ## Residuals carried from bugs that are fixed and merged
 
@@ -1622,6 +1646,45 @@ core where the loop pays a whole one.
 
 A timer that coalesces the doorbell is the poll the first non-negotiable rules out.
 
+## BUG-68 — the friend's screen test kept a half-painted corner as the picture to match
+
+**Found 2026-11-09 in run 2 of `make ci` on 8d73179f (the v0.1.15 bump), race lane, at load 6–7 from another
+project's tests.** `TestAFriendSitsInTheCornerAndTheChoiceOutlastsTheWindow` failed with "the next window
+opened with" Bo's five rows, "want Bo's" top two rows over three blank ones. It passed 5/5 alone and on the
+next run. Wake drew nothing wrong; the test misread the screen.
+
+**Why.** `awaitCorner` returned the first read of the corner holding any `▀`/`▄`. Bubble Tea writes a frame
+in one write, rows top to bottom, but vt10x does not read it in one piece. Its `Parse` lets go of the lock
+each time its 4 KiB buffer empties, so a frame larger than that is always parsed across several lock holds,
+and the pty can split it further. A harness read can land between two of them. After `/friends bo` the
+corner was blank, so a read two rows into Bo's paint counts as drawn, and it became the `want` the next
+window was held to. Replaying a real window's bytes into vt10x a rune at a time shows that shape and a
+dozen others mid-frame. `skip` had the same weakness, and so did the `bo == skip` check it feeds.
+
+**Fix:** branch `fix/friend-corner-waits-for-a-settled-paint`. A corner read counts only when vt10x's cursor
+is on the screen's last row. Bubble Tea's alt-screen renderer paints top to bottom and leaves the cursor
+there after every frame, so every row above it, the corner's among them, belongs to one frame. In that
+replay, the corners the rule accepts are only three: blank, Skip whole and Bo whole.
+
+`TestTheCornerIsNeverReadHalfPainted` hands vt10x one frame cut inside the corner's last row, and holds the
+rest back for three reads. It is red on the old helper and on three plausible wrong rules: the cursor merely
+near the bottom, two equal reads in a row, and every corner row holding a block.
+
+No other wait in `cmd/wake`'s pty tests keeps its first match to compare later. Related reads were left
+alone and listed on the PR.
+
+**The related reads, on `fix/test-waits-on-real-conditions` (stacked on the fix above).** The rule now lives
+in one place, `screen.frame()`, and `corner` reads its rows from it; outside the alt screen (before the TUI,
+after it exits) nothing paints frames, so every read there is whole. `settle` counts only whole frames and
+returns the rows it settled on; `awaitFrame` waits for a whole frame a predicate accepts and returns it. A
+throwaway feed that handed vt10x 16 bytes a millisecond turned `agentName` (await `╭`, parse a later read) red
+9/10; adding a 120ms stall every 97th chunk turned the settle-then-read sites in `sidebarscreen` and
+`sidebarwheelscreen` red in 4 of 9 runs, one read mixing two frames. All of them pass 28/28 on that feed now.
+`completionscreen`'s two row reads and `fleetOfNine`'s counts never went red (the rows they read carry over
+from the previous frame) and read one awaited whole frame anyway. Where a test expects the screen to change,
+it waits for the change before it settles, since a whole frame can still be the frame before the keystroke.
+`TestSettleNeverSettlesOnHalfAFrame` and `TestAConversationsNameIsReadFromAWholeFrame` hold the two helpers.
+
 ## BUG-69 — a conversation a resize hides mid-answer comes back with a hole in its streamed answer
 
 **Found 2026-11-10 by the adversarial review of `fix/draw-loop-idle-under-a-streaming-fleet` (BUG-67), and on
@@ -1658,3 +1721,42 @@ hidden; a resize back and its settle; word 15. Main draws `1 2 3 4 15`. The BUG-
 Direction: in the resize's settle, leave a conversation that stops being drawn, as `App.refocus` does with its
 was/now walk. A pane that comes back then previews from its next token, raw, as every other way of coming on
 screen does.
+
+## BUG-71 — `make ci` false reds from the harness: a refused first dial, a stale lint cache, a killed `ps`, the checkout's own name
+
+**Seen on the v0.1.15 and #223 gates, 2026-11-07 to -09.** Each failed a gate with no code at fault. Fixed on
+`fix/test-waits-on-real-conditions` (PR awaiting merge).
+
+- **`Dial: … connection refused` on a test's first attach** (`shutdownstop_test.go`'s ctrl-q case). The
+  harness waited for the socket *file*, which exists before `listen()`; a successor's path holds a crashed
+  daemon's stale file, then none, until `listen()` binds its own. A socket bound but not yet listening refuses
+  a dial every time, but 3,400 real starts (14 CPU hogs, `-race`) never caught that window, so the observed
+  refusal may equally be the kernel declining to queue a connection under heavy load (`listen()`'s comment:
+  ECONNREFUSED is ambiguous). `mustDial`, which every attach goes through, now retries a refused or missing
+  socket until `testTimeout` (#208's `dialWhenUp`, which it replaces). Not a probe dial in
+  `waitForListening`: an accepted connection that closes makes an empty daemon quit (`reconsiderEmptyExit`).
+  cmd/wake had the same file-only wait in `startRealDaemonAt`, `serveOn` and `serveInProcess`, and there the
+  first dial is the product's own (`wake stop` printed "No daemon is running." in #232's gate,
+  `TestStatusAndStopReachTheirOwnCommands`). All three now share `awaitListening`, which dials and holds the
+  connection, drained, until the test ends, since one closed at once ends an empty daemon (shown: two status
+  tests then fail with "daemon closed the connection without answering").
+- **`../bump-0115/internal/ui/panes.go: func App.toggleGroups is unused`** from a worktree already removed.
+  golangci-lint's shared cache is keyed by package contents, so it served that worktree's finding, with its
+  paths, to another checkout; the gone file's `//nolint` could not be read, so the finding stood. Reproduced
+  deterministically on a scratch cache (lint A, remove A, lint B: exit 1). `make lint` now keeps a cache per
+  checkout (`.lintcache`, ignored), which goes with the worktree.
+- **`ps -A: signal: killed`** in two `wake_durability` tests at load 64–100. That is `exec.CommandContext`
+  killing `ps` at `probeTimeout` (2s), after which `resumeSafe` refuses the wake, as it must in production. A
+  `ps` slowed by 2.5s fails `TestAWokenSessionComesBackUnderItsOwnIdAndName` the same way. internal/daemon's
+  `TestMain` now sets `probeTimeout` to `testTimeout`; the tests about a `ps` that cannot answer already set
+  their own with `shortProbeTimeout`.
+- **`2 rows hold /resume, want the one in the composer`** on `fix/resume-plumbing-is-not-a-reply`, and PR
+  #204's "fork" in a worktree path. Every screen draws the directory wake runs in and its branch, and a pty
+  test naming no directory ran in the checkout, so a word in a worktree's name was on screen: a count read it,
+  and an await on it would return at once. Such a test now runs in `screenWorkspace`, a repository on `main`
+  at a fixed path shaped like a main checkout's, under a scratch `HOME`; internal/ui's `TestMain` pins `wakeDir`, the room
+  banner's directory, the same way. Both failures reproduced in a worktree named `fork-ready-resume` on
+  `fix/resume-fork-ready`, and pass there now. cmd/wake's in-process conversation (`startConversation`) had
+  the same leak, since `requestSpawn` starts the agent where the process stands: there a "ready" in the
+  path passed the opening-turn wait at once. It now `t.Chdir`s into the workspace. A second pty window
+  shares the first's workspace, so its agents draw under the same `~`.

@@ -42,6 +42,10 @@ var (
 	buildErr  error
 )
 
+// homeAtStart is HOME before any test sets a scratch one: under a scratch HOME the
+// build is cold, and its read-only module cache outlives the cleanup.
+var homeAtStart, homeWasSet = os.LookupEnv("HOME")
+
 // wakeBinary compiles cmd/wake once per test binary run. The real binary is the
 // point: a test that re-entered this test binary would be asserting about a
 // program nobody ships.
@@ -53,7 +57,12 @@ func wakeBinary(t *testing.T) string {
 			return
 		}
 		buildPath = filepath.Join(buildDir, "wake")
-		out, err := exec.Command("go", "build", "-o", buildPath, ".").CombinedOutput()
+		build := exec.Command("go", "build", "-o", buildPath, ".")
+		build.Env = slices.DeleteFunc(os.Environ(), func(e string) bool { return strings.HasPrefix(e, "HOME=") })
+		if homeWasSet {
+			build.Env = append(build.Env, "HOME="+homeAtStart)
+		}
+		out, err := build.CombinedOutput()
 		if err != nil {
 			buildErr = fmt.Errorf("go build: %v\n%s", err, out)
 		}
@@ -123,21 +132,25 @@ func startWake(t *testing.T, cols, rows int, args ...string) *screen {
 
 // startWakeIn is startWake from a chosen working directory, and the whole of
 // what the directory changes is what the operator sees: the status bar's path,
-// the branch beside it, and where a spawned agent starts. An empty dir keeps
-// exec's own default, which is this package's directory - a short path on
-// whatever branch the checkout is on, and the environment every fixture here
-// used before realistic_unix_test.go existed.
+// the branch beside it, and where a spawned agent starts. An empty dir is
+// screenWorkspace's, never the checkout's.
 func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *screen {
 	t.Helper()
 
 	// A scratch socket, or none under a scratch HOME, where a bare `wake` makes its fleet.
 	socket := os.Getenv("WAKE_SOCKET")
-	if scratch := cmp.Or(socket, os.Getenv("HOME")); !strings.HasPrefix(scratch, os.TempDir()) {
-		t.Fatalf("WAKE_SOCKET must be a scratch path, or empty under a scratch HOME; got %q - the default is the owner's real fleet", socket)
+	if scratch := cmp.Or(socket, os.Getenv("HOME")); !underTempDir(scratch, dir) {
+		t.Fatalf("WAKE_SOCKET must be a scratch path, or empty under a scratch HOME; got %q and HOME %q - "+
+			"the default is the owner's real fleet", socket, os.Getenv("HOME"))
 	}
 
 	bin := wakeBinary(t)
 	cmd := exec.Command(bin, args...)
+	var home []string
+	if dir == "" {
+		ws, h := screenWorkspace(t)
+		dir, home = ws, []string{"HOME=" + h}
+	}
 	cmd.Dir = dir
 	// XDG_CONFIG_HOME is pinned to a scratch directory for the same reason
 	// WAKE_SOCKET is asserted above: internal/termsetup reads it to find the
@@ -160,6 +173,7 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 	// is asserting on - and it is what made TestTheRoomDrawsAWorkingLineOnARealScreen
 	// flake under full-suite load.
 	cmd.Env = append(withoutTerminalDetectionEnv(os.Environ()), "TERM=xterm-256color", "XDG_CONFIG_HOME="+t.TempDir())
+	cmd.Env = append(cmd.Env, home...)
 	if testParentLeaseRead != nil {
 		childFD := 3 + len(cmd.ExtraFiles)
 		cmd.ExtraFiles = append(cmd.ExtraFiles, testParentLeaseRead)
@@ -193,14 +207,82 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		_ = ptmx.Close()
-		// The daemon this forked outlives the client. It holds the scratch
-		// socket asserted above, so nothing here can reach a real fleet.
+		// The forked daemon outlives the client. With WAKE_SOCKET empty this reaches
+		// only the scratch HOME's unnamed fleet; a named one ends by ⌃Q or the lease.
 		stop := exec.Command(bin, "stop")
 		stop.Env = cmd.Env
 		stop.Dir = dir
 		_ = stop.Run()
 	})
 	return s
+}
+
+// screenNesting and screenBranch are where a test that names no directory runs
+// wake: a fixed path and branch shaped like a main checkout's, the shape the
+// suite was written against, in a repository under a scratch home. Every screen
+// draws the checkout's path and branch (the status bar, a banner), so a word in
+// a worktree's name was a word every await and count read ("/resume" in
+// fix/resume-plumbing-is-not-a-reply, "fork" in a worktree path).
+const (
+	screenNesting = "Documents/wake-public/cmd/wake"
+	screenBranch  = "main"
+)
+
+// screenWorkspace makes that repository, and returns it with the HOME wake runs
+// under: a fresh one resolved through symlinks, as the child's getcwd reports it,
+// so the bar draws ~/…; or the test's own scratch HOME, left as the test spelled
+// it (its sockets are sized to it), where the bar draws the whole path.
+func screenWorkspace(t *testing.T) (dir, home string) {
+	t.Helper()
+	// One per test, so a second window's agents are under the HOME it draws by.
+	if ws, ok := workspaces.Load(t); ok {
+		w := ws.([2]string)
+		return w[0], w[1]
+	}
+	home = os.Getenv("HOME")
+	if !strings.HasPrefix(home, os.TempDir()) {
+		resolved, err := filepath.EvalSymlinks(t.TempDir())
+		if err != nil {
+			t.Fatalf("resolve the screen workspace's home: %v", err)
+		}
+		home = resolved
+	}
+	dir = filepath.Join(home, screenNesting)
+	if err := os.MkdirAll(dir, 0o755); err != nil {
+		t.Fatalf("make the screen workspace: %v", err)
+	}
+	for _, args := range [][]string{{"init", "--quiet"}, {"symbolic-ref", "HEAD", "refs/heads/" + screenBranch}} {
+		git := exec.Command("git", args...)
+		git.Dir = dir
+		// Without GIT_* a hook's GIT_DIR cannot point these at a real repository.
+		git.Env = slices.DeleteFunc(os.Environ(), func(kv string) bool { return strings.HasPrefix(kv, "GIT_") })
+		if out, err := git.CombinedOutput(); err != nil {
+			t.Fatalf("git %v in the screen workspace: %v\n%s", args, err, out)
+		}
+	}
+	workspaces.Store(t, [2]string{dir, home})
+	t.Cleanup(func() { workspaces.Delete(t) })
+	return dir, home
+}
+
+// workspaces is each running test's screenWorkspace: dir, then home.
+var workspaces sync.Map
+
+// underTempDir is whether path, resolved against dir as the child resolves it, is
+// inside os.TempDir() once cleaned. Lexical: `..` cannot climb out, a symlink can.
+func underTempDir(path, dir string) bool {
+	if path == "" {
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		base, err := filepath.Abs(dir)
+		if err != nil {
+			return false
+		}
+		path = filepath.Join(base, path)
+	}
+	rel, err := filepath.Rel(os.TempDir(), filepath.Clean(path))
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func testLeaseEnv(env []string, fd int) []string {
@@ -266,6 +348,16 @@ func (s *screen) send(keys string) {
 
 // lines is the screen as text, one string per row, right-trimmed.
 func (s *screen) lines() []string {
+	rows, _ := s.frame()
+	return rows
+}
+
+// frame is lines, and whether every row above the last is one frame's: Bubble
+// Tea paints top to bottom and parks the cursor on the last row, and vt10x
+// parses a frame across several lock holds (BUG-68). Outside the alt screen -
+// before the TUI, after it exits - nothing paints frames. The one place that
+// rule is.
+func (s *screen) frame() (rows []string, whole bool) {
 	s.term.Lock()
 	defer s.term.Unlock()
 
@@ -277,7 +369,24 @@ func (s *screen) lines() []string {
 		}
 		out[y] = strings.TrimRight(b.String(), " ")
 	}
-	return out
+	return out, s.term.Mode()&vt10x.ModeAltScreen == 0 || s.term.Cursor().Y == s.rows-1
+}
+
+// awaitFrame waits for a whole frame ok accepts and returns its rows, so what
+// the caller reads is the frame the wait saw rather than a later, partial one.
+// Whole is frame's: every row above the last, never the notice row itself.
+func (s *screen) awaitFrame(what string, ok func(rows []string) bool) []string {
+	s.t.Helper()
+	deadline := time.Now().Add(screenTimeout)
+	for time.Now().Before(deadline) {
+		if rows, whole := s.frame(); whole && ok(rows) {
+			return rows
+		}
+		time.Sleep(20 * time.Millisecond)
+	}
+	_, whole := s.frame()
+	s.t.Fatalf("no whole frame showed %s (the newest read was whole: %v).\n%s", what, whole, s.dump())
+	return nil
 }
 
 func (s *screen) text() string { return strings.Join(s.lines(), "\n") }
@@ -359,19 +468,23 @@ func (s *screen) awaitCount(want string, n int) {
 }
 
 // settle waits for the frame to stop changing, for assertions about what is
-// *not* there - which no amount of waiting for a string can decide.
-func (s *screen) settle() {
+// *not* there - which no amount of waiting for a string can decide. It returns
+// the rows it settled on, and returns only on a whole frame (frame's sense):
+// two equal reads of half a paint are a stall, not quiet.
+func (s *screen) settle() []string {
 	s.t.Helper()
 	prev := ""
 	for deadline := time.Now().Add(screenTimeout); time.Now().Before(deadline); {
 		time.Sleep(80 * time.Millisecond)
-		if now := s.text(); now == prev {
-			return
-		} else {
-			prev = now
+		rows, whole := s.frame()
+		now := strings.Join(rows, "\n")
+		if whole && now == prev {
+			return rows
 		}
+		prev = now
 	}
 	s.t.Fatalf("the frame never settled.\n%s", s.dump())
+	return nil
 }
 
 // click presses the left button at a cell, in the SGR encoding, whose
@@ -384,9 +497,12 @@ func (s *screen) click(x, y int) {
 
 // rosterNames reads the activity sidebar off the screen, in the order it is
 // drawn - which is attention order, and is what ↑↓ walks.
-func (s *screen) rosterNames() []string {
+func (s *screen) rosterNames() []string { return rosterNamesIn(s.lines()) }
+
+// rosterNamesIn is rosterNames over rows already read.
+func rosterNamesIn(rows []string) []string {
 	var out []string
-	for _, line := range s.lines() {
+	for _, line := range rows {
 		if m := rosterRow.FindStringSubmatch(line); m != nil {
 			out = append(out, m[1])
 		}
@@ -427,9 +543,12 @@ func (s *screen) rosterStops() []string {
 // rows. The service is filtered out rather than counted, because what these
 // tests set up is agents and what they assert about is agents; asserting on
 // three would be asserting on a number rather than on a fleet.
-func agentsOnRoster(s *screen) []string {
+func agentsOnRoster(s *screen) []string { return agentsIn(s.lines()) }
+
+// agentsIn is agentsOnRoster over rows already read.
+func agentsIn(rows []string) []string {
 	var out []string
-	for _, name := range s.rosterNames() {
+	for _, name := range rosterNamesIn(rows) {
 		if !core.IsManager(name) { // the manager is drawn as manager-<fleet>
 			out = append(out, name)
 		}
@@ -477,8 +596,11 @@ func (s *screen) openAgent(name string) {
 }
 
 // rowOf is the first screen row containing text, or -1.
-func (s *screen) rowOf(text string) int {
-	for y, line := range s.lines() {
+func (s *screen) rowOf(text string) int { return rowIn(s.lines(), text) }
+
+// rowIn is rowOf over rows already read.
+func rowIn(rows []string, text string) int {
+	for y, line := range rows {
 		if strings.Contains(line, text) {
 			return y
 		}
@@ -499,20 +621,21 @@ func (s *screen) resize(cols, rows int) {
 
 // agentName reads the handle out of the conversation's own composer border,
 // which is where the pane's name is drawn. The pool assigns it, so a test
-// cannot know it in advance.
+// cannot know it in advance. Read from the whole frame that drew it: a border
+// can be on screen before the name on it is.
 func (s *screen) agentName() string {
 	s.t.Helper()
-	s.await("╭")
-	for _, line := range s.lines() {
-		if !strings.Contains(line, "╭") {
-			continue
+	name := ""
+	s.awaitFrame("a conversation name on a composer border", func(rows []string) bool {
+		for _, line := range rows {
+			if m := paneTitle.FindStringSubmatch(line); m != nil && strings.Contains(line, "╭") {
+				name = m[1]
+				return true
+			}
 		}
-		if m := paneTitle.FindStringSubmatch(line); m != nil {
-			return m[1]
-		}
-	}
-	s.t.Fatalf("no conversation name on a composer border.\n%s", s.dump())
-	return ""
+		return false
+	})
+	return name
 }
 
 var paneTitle = regexp.MustCompile(`@([a-z][a-z0-9-]*) `)
