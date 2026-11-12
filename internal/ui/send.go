@@ -242,6 +242,10 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	if next, cmd, ok := a.roomBang(r, wire); ok {
 		return next, cmd
 	}
+	if team, aimed, ok := a.restingTeam(wire); ok {
+		next, cmd, _ := a.mentionCommand(team, aimed)
+		return next, cmd
+	}
 	if len(r.Targets) == 0 {
 		switch {
 		case r.Broadcast:
@@ -269,10 +273,15 @@ func (a App) sendRoom(text string, images []core.ImageBlock, now bool) (tea.Mode
 	// not: `@backend /color` would reach N claude processes as the literal text,
 	// because the single-agent bridge below is gated on r.mentioned, which a team
 	// route is not. Refuse it and name the per-agent form. (`@all` has the same
-	// hole; a team does not inherit it. `/quit` is refused here too, which is right
-	// - a stop may not be aimed at a set, only at one member.)
+	// hole; a team does not inherit it.) /park and /quit take a team themselves,
+	// so theirs folds into `/park @backend` - the one exception, decisions.md
+	// (2026-11-09); /quit's still asks before it stops anybody.
 	if r.Team != "" {
 		if word, ok := leadingRoomTargetCommand(r.Text); ok {
+			if _, team := teamTargetCommands[word]; team {
+				next, cmd, _ := a.mentionCommand(r.Resolved, r.Text)
+				return next, cmd
+			}
 			notice.Report(teamCommandRefused, word, r.Resolved)
 			return a, nil
 		}

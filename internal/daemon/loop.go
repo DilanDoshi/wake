@@ -9,9 +9,9 @@ import (
 
 // loopState is the native /loop a session has active, folded from the scheduler
 // tool_use calls it makes: a recurring CronCreate is a fixed cadence, a
-// ScheduleWakeup is self-paced, a CronDelete ends it. There is deliberately no
-// "ended" op beyond a delete - an expired or completed loop leaves no frame -
-// so a loop reads active until a CronDelete, the loop half of /goal's §6 silence.
+// ScheduleWakeup is self-paced, a CronDelete ends it. A fixed loop's expiry leaves
+// no frame, so it reads active until a delete; a self-paced one also ends when its
+// own wakeup turn completes without scheduling the next (foldWakeup, 2.1.319+).
 //
 // A self-paced run also accumulates: iter counts the iterations (each ends with a
 // ScheduleWakeup), quiet is the current run of noop ticks, and nextFire is when
@@ -24,6 +24,11 @@ type loopState struct {
 	iter      int
 	quiet     int
 	nextFire  time.Time
+
+	// wake is the command claude runs a self-paced loop's own wakeup turn under
+	// while it is in flight, and rescheduled whether that turn has scheduled the next.
+	wake        string
+	rescheduled bool
 }
 
 // foldLoop applies one decoded loop op to a session's loop state at now, and
@@ -36,7 +41,7 @@ func foldLoop(s loopState, op core.LoopOp, now time.Time) loopState {
 	case op.Kind == core.LoopFixed:
 		return loopState{active: true, cron: op.Cron}
 	case op.Kind == core.LoopSelfPaced:
-		s.active, s.selfPaced, s.cron = true, true, ""
+		s.active, s.selfPaced, s.cron, s.rescheduled = true, true, "", true
 		s.iter++
 		if op.Noop {
 			s.quiet++
@@ -53,6 +58,24 @@ func foldLoop(s loopState, op core.LoopOp, now time.Time) loopState {
 			s.nextFire = time.Time{}
 		}
 		return s
+	}
+	return s
+}
+
+// foldWakeup ends a self-paced loop when its own wakeup turn completes without
+// scheduling the next, as claude does since 2.1.319 (loop-self-paced-end.jsonl's
+// second iteration), unless keepAlive (core.LoopKeepsAlive). A turn the operator
+// sends between wakeups is no wakeup and ends nothing.
+func foldWakeup(s loopState, ev core.Event, keepAlive bool) loopState {
+	switch {
+	case !s.selfPaced:
+	case ev.LoopWakeup && ev.MessageStarted():
+		s.wake, s.rescheduled = ev.MessageID, false
+	case s.wake != "" && ev.MessageID == s.wake && ev.MessageEnded():
+		if !s.rescheduled && !keepAlive {
+			return loopState{}
+		}
+		s.wake = ""
 	}
 	return s
 }

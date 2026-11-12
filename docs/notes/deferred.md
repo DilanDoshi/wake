@@ -38,6 +38,63 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FROM `feat/team-park-quit-resume`, 2026-11-09 — what the team verbs left out
+
+`/park @team`, `/quit @team` and `/resume <team>` shipped (`decisions.md`, 2026-11-09). Left out on purpose:
+
+- **A roster header action**, such as ⌃C on a picked team header parking the team. It reads well beside
+  the channels (#194), but ⌃C is a reflex key and ⌃C⌃C is the emergency exit, so a whole team would be
+  one reflex away. Today a picked header gets ⌃C's "parks one conversation" advice. Owner's call.
+- **`@all /park` and `@all /quit`** still reach every agent as literal text, the hole the team refusal's
+  comment names. `⌃Q⌃Q` and `wake stop` are the fleet-wide forms.
+- **A name/team collision** (an agent named like a team) is still not refused by the daemon (the teams
+  entry below). Every team verb resolves the name first, as routing does, so a team that shares an
+  agent's name cannot be parked or quit by that word while the agent is live. It can be resumed by it
+  only while no parked session holds the name.
+- **A team park's single confirmation waits for every member it asked for.** A member whose park the
+  daemon refuses, or that ends instead, holds that ask's confirmation back; the member's own refusal is
+  what shows. The next team park replaces the wait.
+- **`/resume <team>` says one `@x has been resumed.` per member**, as `/resume all` does, so the notice
+  slot ends on one name. A team-level line would want the wake's own report bookkeeping.
+- **The menus offer what the team verbs refuse.** A conversation's `@` menu is Claude Code's own (peers,
+  sessions, `@agent-…`), so it offers no team after `/park @` or `/quit @`, though those forms work there.
+  The room's `@` menu offers `@all` and parked agents after them; `/park @all` says no such agent, and
+  `/park @parked` says it is parked already.
+
+---
+
+## FOLLOW-UP, 2026-11-11 — a name, address, path or figure cut bare can read as another
+
+The one-row cuts were surveyed when the notice row got its "…". Most already cut with one (`detailRow`, `boardRow`,
+`commandecho`, `field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting (cards, the
+question text, titled boxes), or cut a label nobody types (a dispatch's description, a task's subject). One kind
+can mislead: rows that cut an **agent's name, a send's address, a path or a figure** with no mark. Those found:
+
+- the roster's `headLine` (`clip`)
+- the room's speaker head (`agentSaid`), cross-session head (`crossSaid`) and marker rows (`chat_blocks.go`: the
+  taken-back row ends on the name; the finished, ask, cancelled and resumed rows carry it)
+- the conversation's cross-session heads (`dm_blocks.go`'s `crossSessionBlock`, `sentBlock`, whose recipient can be
+  a `uds:` address)
+- the composer's target line
+- the workflow save dialog's path row (`workflowsave.go`, through `fitRow`): `.claude/workflows/deploy-s` at 40
+  columns
+- figures and error text: the compacted line's token counts (`beat.go`, `50.8k → 4.` at 24 columns), a task line's elapsed time
+  and a failed workflow's error line (`taskline.go`), the room's workflow ending (`chat_blocks.go`), and the
+  strip's counts below the widths `awareness.go` budgets for
+
+A name is how an agent is typed, and a cut one can be another live session's whole name (`fix-login-bug` drawn
+`fix-login`); a cut socket path names another socket. `headLine`'s own comment chose the bare cut ("a name stays
+recognisable three characters short"), so the call is the owner's: an ellipsis there costs a name one more cell.
+A cut figure is a plausible wrong number, the roster's and the strip's own argument for dropping one whole.
+
+For the 80ms a narrowing resize settles, `clipMidDrag` cuts the whole frame to the new width with no mark, the
+notice row included; the row is re-cut with its "…" once the resize settles.
+
+The auth panel's title and warn rows are still cut at the panel's width, though both surfaces that draw it wrap
+them (`! Could not read authenticatio` in a 30-column room); the cut mangles a word, never a command.
+
+---
+
 ## PRODUCT CALL NOT TAKEN, 2026-11-07 — a turn a peer's message started is resumed after a limit too
 
 The owner reported that agents which were idle when he hit the limit were woken by Wake's resume. The
@@ -122,7 +179,32 @@ the fleet, but it still counts with `%d`.
 
 ---
 
-## FOLLOW-UP, 2026-11-07 — a cut notice row ends with nothing to say it was cut
+## KNOWN GAP, 2026-11-10 — under a relative `HOME`, an agent's `~/.claude` may not be the daemon's
+
+BUG-70 made Wake's own state absolute under a relative `HOME` (`HOME=h`, a literal `~`), through
+`core.HomeDir`. Four things are still read relative:
+- `ProjectsDir`, `claudeConfigDir` and `core.ConfigFile`, against the working directory of the process that
+  reads them: the daemon's, or the CLI's for `wake import`'s listing;
+- termsetup's `$HOME/.config`, which `wake setup-terminal` writes.
+
+So under `HOME=h`:
+- `/workflows`' personal path is drawn as `h/.claude/workflows`. Before, `shortPath` drew it `~/…`, which
+  happened to work between two relative paths.
+- `/mcp`'s sign-in hint reads `cd ~/x && …`, which a shell with another `HOME` expands elsewhere.
+- Any process in another directory reads another `~/.wake`, as any relative `HOME` would.
+
+Every agent inherits the same relative `HOME` but runs in its own directory. If claude resolves `~/.claude`
+against that directory, an agent spawned elsewhere writes its transcripts and config under
+`<its cwd>/h/.claude`, where the daemon's history, discovery and usage-limit watch do not look. How claude reads
+a relative `HOME` is claude's behaviour, and nothing records it. Out of scope for BUG-70 (wake-orch,
+2026-11-10).
+
+*Closes with:* a recording of claude under a relative `HOME`, then either an absolute `HOME` for the whole
+process tree (set once in `cmd/wake`) or these paths resolved through `core.HomeDir`.
+
+---
+
+## ~~FOLLOW-UP, 2026-11-07 — a cut notice row ends with nothing to say it was cut~~ CLOSED 2026-11-11 (`fix/cut-notice-ends-in-an-ellipsis`)
 
 `noticeLine` (`internal/ui/appview.go`) draws a notice on one row with lipgloss's `MaxWidth`, which cuts at
 the pane's width and adds no ellipsis. A row cut inside a command reads as a shorter command: the adversarial
@@ -131,6 +213,16 @@ review of `fix/daemon-lines-name-the-fleet` measured the cap refusal's old "`wak
 row ends on a destructive verb today, but any long notice still loses its tail without a mark.
 
 *Closes with:* a cut notice row ending in "…", measured by the same width, with a test at the cut.
+
+**Closed by `noticeRow`** (`appview.go`): the row's words are cut by `ansi.Truncate` to `noticeWidth` with the
+DM's `ellipsis`, then coloured, so the "…" is the row's last cell inside the style. The timed, lingering and
+pinned notices all draw through it, and `noticeLinger` measures the same cut row: "drawn cells" is after the
+cut, the "…" one of them. The two other one-row cuts that could read as a shorter command or a whole list went
+with it: the rewind menu's "⚠ … also runs in this directory" (`rewindmenu.go`) now ends in "…", and the auth
+panel's `claude auth login` hint (`authpanel.go`) is no longer cut at all, since the room and the conversation both
+wrap the panel and a cut threw away a command they would have shown whole. Tests: `noticerow_test.go`,
+`TestANarrowPanelKeepsItsWholeCommand`, `TestANarrowPaneMarksItsCutSharedDirectoryWarning`. The rows that still
+cut a name bare are the entry above.
 
 ---
 
@@ -5811,7 +5903,27 @@ message and a subagent's gutter (neither opts in), and a paragraph or token wide
   runs on a drop (`imagedrop.go`), not on a take-back or a send-now's join. The daemon's reader would
   refuse that frame and end the connection, a hangup the client reattaches from.
 
-## 2026-10-03 — a bare one-shot's `system/ui_invalidate` frame does not decode
+## 2026-11-11 — ideas from the 2.1.322 audit (not bugs)
+
+- **`system/init` names the session's own `messaging_socket_path`**, and has since the August findings
+  (`2026-08-08-stream-json-findings.md`; it can be null, and the scrubber drops it). The daemon names a
+  send by address from Claude Code's session registry (`daemon/sendto.go`), a file Claude keeps for
+  itself; an agent's own socket could come off its init instead. *Worth it when:* the registry moves or
+  its read costs something.
+- **`result` carries `credential_expires_at`** (2.1.318: when the stored claude.ai sign-in ends). Wake
+  could say a login is about to lapse before the turns fail, beside `/reauth`. *Worth it when:* the owner
+  wants a warning ahead of the 401s.
+- **`--help` now documents `--permission-prompts <host|none>`** (2.1.322), whose `host` is "the SDK host or
+  `--permission-prompt-tool`". Wake still spawns the undocumented `--permission-prompt-tool stdio`, which
+  2.1.322 honours (the audit's asks were answered on it). *Worth it when:* the old flag goes away; record
+  `host` first.
+
+## ~~2026-10-03 — a bare one-shot's `system/ui_invalidate` frame does not decode~~ CLOSED 2026-11-11 (`fix/ui-invalidate-frame-decodes`)
+
+**Closed:** `wireFrame.StreamEvent` is raw now, read as a stream event by `partialEvent` alone, so a string
+`event` is read as nothing. `ui-invalidate.jsonl` is an ordinary 2.1.322 agent's first turn, which prints it
+before `init`. The one-shot's own line was never kept, so `list-agents-bare-renamed.jsonl` stays without it
+rather than carry a line nobody recorded.
 
 claude 2.1.288's bare `/list-agents` one-shot prints `{"type":"system","subtype":"ui_invalidate",
 "event":"ui.render",…}` before `init`. `wireFrame.StreamEvent` takes `event` as a stream event's
@@ -6177,3 +6289,32 @@ nothing reads back, so the `⌃Q` window prints the words of what it had pinned 
   write the interrupt to; a turn that outlasts the grace is still killed and not booked, as before this
   change. *Closes with:* `⌃C` interrupting a working agent first too, or a kill short of SIGKILL that claude
   ends as an interrupt.
+
+## FROM `fix/loop-ends-without-rescheduling`, 2026-11-11
+
+A self-paced loop's line now ends when claude ends the loop (2.1.319+): its own wakeup turn, which names
+itself `loop_wakeup` on its `command_lifecycle`, completing without scheduling the next. Left out:
+
+- **The countdown runs up to a minute early.** `foldLoop` sets the next fire to now plus `delaySeconds`,
+  but claude rounds the wakeup to a whole minute: a `delaySeconds` of 60 was scheduled "in 93s"
+  (`loop-self-paced-end.jsonl:41`). The true time is on that tool result as `tool_use_result.scheduledFor`
+  (epoch ms, beside `clampedDelaySeconds`), which nothing reads, and again on the wakeup's lifecycle when it
+  fires. *Closes with:* the fold reading `scheduledFor` off the ScheduleWakeup's result.
+- **A turn the operator sends between wakeups is unrecorded.** Wake leaves the loop as it was; whether
+  claude ends it is not known. *Closes with:* a recording of a message sent while a wakeup is pending.
+- **An interrupted wakeup turn is unrecorded.** Wake ends the loop on its `cancelled` as on a `completed`
+  with nothing rescheduled. *Closes with:* a recording of an interrupt during a wakeup turn.
+- **`CLAUDE_CODE_LOOP_KEEPALIVE` is read from the daemon's environment**, which its agents inherit; a
+  value set any other way (a settings file's `env`) is not seen, and only `1`, the changelog's spelling, is
+  honoured, where claude may read `true` too (it does for another of its switches,
+  `2026-10-02-file-rewind-findings.md` §1). *Closes with:* the first report of either.
+- **claude 2.1.308 to 2.1.318 is not told apart.** Their init already advertises
+  `lifecycle_wakeup_source_v1` (`api-error-unreachable.jsonl`), but they kept a loop alive with a fallback
+  wakeup where 2.1.319 ends it; on them the line ends early, and the next `ScheduleWakeup` brings it back
+  at `iter 1`. Wake reads no `claude_code_version`. *Closes with:* a fleet still on one of them.
+- **Nothing recorded shows claude ending the loop.** The take shows only that no wakeup came for 150 s
+  after the turn that rescheduled nothing; the rule itself is 2.1.319's changelog.
+- **Two wakeup shapes are unrecorded.** A wakeup that fires while another turn runs is probably `queued`
+  first; if its `started` then names no `wakeup_source`, the line never ends, as before this change. A
+  wakeup turn that ends waiting on a background task, with the next turn scheduling the wakeup, ends the
+  line early; the next `ScheduleWakeup` brings it back at `iter 1`. *Closes with:* a recording of either.

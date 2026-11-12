@@ -98,13 +98,14 @@ const (
 	authNeeds = "!"
 )
 
-// authPanel renders the status.
+// authPanel renders the status. The hint row is never cut to width: both surfaces
+// that draw the panel wrap it, and a command cut short reads as a shorter one.
 func authPanel(st authStatus, ok bool, width int) string {
 	switch {
 	case !ok:
 		return joinBlock(accentLine(authTitle, width),
 			warnLine(authNeeds+" "+authUnreadable, width),
-			mutedLine("  "+authCheckHint+authLoginCmd, width))
+			HintStyle.Render("  "+authCheckHint+authLoginCmd))
 	case st.LoggedIn:
 		line := authOK + " " + authSignedIn
 		if m := strings.TrimSpace(st.Method); m != "" {
@@ -114,7 +115,7 @@ func authPanel(st authStatus, ok bool, width int) string {
 	default:
 		return joinBlock(accentLine(authTitle, width),
 			warnLine(authNeeds+" "+authSignedOut, width),
-			mutedLine("  "+authSignInHint+authLoginCmd, width))
+			HintStyle.Render("  "+authSignInHint+authLoginCmd))
 	}
 }
 

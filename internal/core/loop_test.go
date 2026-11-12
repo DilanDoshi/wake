@@ -163,3 +163,28 @@ func TestOrdinaryToolHasNoLoop(t *testing.T) {
 		}
 	}
 }
+
+// A turn claude starts itself for a self-paced loop says so on its lifecycle
+// (wakeup_source, 2.1.322); a message Wake sent says nothing of the kind.
+func TestALoopWakeupTurnSaysSoOnItsLifecycle(t *testing.T) {
+	wakeups := map[string]bool{}
+	for _, fixture := range []string{"loop-self-paced-end.jsonl", "midturn-two.jsonl"} {
+		for _, line := range fixtureLines(t, filepath.Join("../../testdata/stream", fixture)) {
+			evs, err := DecodeLine([]byte(line))
+			if err != nil {
+				t.Fatalf("%s: %v", fixture, err)
+			}
+			for _, ev := range evs {
+				if ev.Kind == KindMessageState && ev.MessageStarted() {
+					wakeups[fixture] = wakeups[fixture] || ev.LoopWakeup
+					if fixture != "loop-self-paced-end.jsonl" && ev.LoopWakeup {
+						t.Errorf("%s: a message Wake sent reads as a loop wakeup", fixture)
+					}
+				}
+			}
+		}
+	}
+	if !wakeups["loop-self-paced-end.jsonl"] {
+		t.Error("the loop's own wakeup turn did not read as one")
+	}
+}
