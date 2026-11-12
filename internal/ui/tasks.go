@@ -209,6 +209,12 @@ func (t Task) updated(u *core.TaskUpdate) Task {
 // readable is the complaint this whole surface exists to answer.
 func (t Tasks) Rows() []Task { return t.rows }
 
+// keepingRunning is the dispatches that have not ended.
+func (t Tasks) keepingRunning() Tasks {
+	rows := slices.DeleteFunc(slices.Clone(t.rows), func(row Task) bool { return row.Status != core.TaskRunning })
+	return Tasks{rows: rows, running: taskTree(rows, sidebarListed)}
+}
+
 // Running is how many have not ended - the count a strip shows.
 func (t Tasks) Running() int {
 	var n int

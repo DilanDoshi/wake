@@ -117,8 +117,10 @@ func (a *agent) apply(p pending) {
 		// takes back only the turn it marked.
 		a.noteRenameSent(p.frame.Text)
 		owed := a.noteSent()
+		a.markUnstarted(p.frame.MessageID)
 		if err = a.sess.Send(p.frame.Text, p.frame.Images, p.frame.MessageID, p.frame.Now); err != nil {
 			a.unsent(owed)
+			a.markTaken(p.frame.MessageID)
 		} else if a.noteEffort(p.frame.Text) || a.noteModel(p.frame.Text) {
 			// An /effort or a /model just changed what the session runs as; the
 			// same bare-/model probe confirms both the level and the model back.
@@ -233,12 +235,12 @@ func (a *agent) apply(p pending) {
 	case rpc.FrameStop:
 		// Here rather than on the connection's goroutine so it lands behind
 		// the messages already queued for this agent - see dispatch.
-		err = a.stop()
+		err = a.stopWorld() // noted while claude lives: once it exits its shells are nobody's child
 	case rpc.FramePark:
 		// The label before the stop, never after: retire runs the moment the
 		// events channel closes, which can be before this function returns.
 		a.beginPark()
-		err = a.stop()
+		err = a.stopWorld()
 	default:
 		a.refuse(p, fmt.Errorf("frame kind %q is not something an agent can be sent", p.frame.Kind))
 		return

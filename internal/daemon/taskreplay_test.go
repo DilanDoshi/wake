@@ -122,11 +122,11 @@ func TestAReplayedNestedDispatchStillNamesItsParent(t *testing.T) {
 	}
 }
 
-// TestASessionResetForgetsRunningDispatches: a /clear drops the pre-clear
-// conversation, so a dispatch it held must not be replayed to a client that
-// attaches afterwards - the mirror of internal/ui's Fleet.Observe dropping
-// f.tasks on a reset, without which a late client draws a stale running row.
-func TestASessionResetForgetsRunningDispatches(t *testing.T) {
+// TestASessionResetKeepsRunningDispatches: claude 2.1.319 no longer kills the
+// background work a /clear finds running, and its ending arrives under the new
+// conversation. So a client attaching afterwards is still told what runs, and
+// the ending that follows forgets it as any other would.
+func TestASessionResetKeepsRunningDispatches(t *testing.T) {
 	a := newAgent(idAlpha, "sydney", "dev-1", "/repo/api", "", core.NewSession(core.Config{SessionID: idAlpha}), func() {})
 	a.observe(core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{
 		ID: "task-1", Dispatch: "toolu_1", Kind: core.TaskAgent, Phase: core.TaskStarted, Status: core.TaskRunning,
@@ -134,9 +134,17 @@ func TestASessionResetForgetsRunningDispatches(t *testing.T) {
 	if len(a.runningTaskFrames()) != 1 {
 		t.Fatalf("the dispatch was not retained before the reset")
 	}
+
 	a.observe(core.Event{Kind: core.KindSessionReset})
+	if got := a.runningTaskFrames(); len(got) != 1 {
+		t.Fatalf("a reset left %d dispatches to replay, want the one still running", len(got))
+	}
+
+	a.observe(core.Event{Kind: core.KindSystem, Task: &core.TaskUpdate{
+		ID: "task-1", Kind: core.TaskKindUnknown, Phase: core.TaskEnded, Status: core.TaskDone,
+	}})
 	if got := a.runningTaskFrames(); got != nil {
-		t.Fatalf("a reset left %d dispatches to replay, want none", len(got))
+		t.Fatalf("an ending after the reset left %d dispatches to replay", len(got))
 	}
 }
 

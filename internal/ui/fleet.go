@@ -475,7 +475,7 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 	// forwarded frame, which is a subagent's rather than this session's own,
 	// and for a reset, which may leave Agent's own fold a no-op (a /clear with
 	// nothing accumulated since the last one) while tasks and subs still need
-	// dropping below.
+	// their finished rows dropped below.
 	tasks, dispatched := f.foldTask(ev, sessionID)
 	subs, forwarded := f.foldSub(ev, sessionID)
 	reset := ev.Kind == core.KindSessionReset
@@ -494,15 +494,8 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 	if forwarded {
 		f.subs[sessionID] = subs
 	}
-	// /clear drops the model's own conversation, and a dispatch or a
-	// subagent's speech from before it is a claim about work the model no
-	// longer has - the same reason DM.clearedBySessionReset blanks the pane's
-	// own copy (clear.go). Without this a dispatch that was running across the
-	// clear kept its pre-clear backlog in the fleet, and viewingPicked would
-	// resurrect it into a DM that just watched the conversation reset.
 	if reset {
-		delete(f.tasks, sessionID)
-		delete(f.subs, sessionID)
+		f.keepRunning(sessionID)
 	}
 	return f, out
 }

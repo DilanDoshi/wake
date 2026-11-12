@@ -206,6 +206,20 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   (SIGKILL, a panic, a force restart - the state files' writes and removals are
   fsynced) leaves `parkready.json`, and the next daemon's reaper moves each finished roster row's record
   into the park book (BUG-53; `internal/daemon/parkready.go`, `reap.go`'s `handOver`). A row it retains stays out.
+- **No process outlives its fleet** (owner's 2026-11-11 ruling, "we do not want to leave any stale running
+  processes anywhere"). Claude starts a background shell, and a hook, in a process group of its own, which
+  retire's sweep of the agent's group never reached (BUG-73). So the daemon notes, in one `ps`, the group each
+  agent leads and the groups its members lead, at a stop or park, at a background shell's start and for the whole
+  fleet at shutdown, and signals a noted group only while a process noted in it still runs under the same start
+  time (a listing it cannot read signals nothing). **A `⌃C` park inside a live daemon keeps them** (a woken
+  session needs the world it spawned; held in memory, never on disk, the park book still holds no pid) and
+  **every daemon exit sweeps them**: `wake stop`, `⌃Q⌃Q`, a SIGTERM or SIGINT, an empty daemon's exit. A
+  stopped agent that claude holds open for a running shell is ended once it is between turns - none open,
+  whoever started it, and no message Wake wrote still to run (`endIfHeldOpen`; BUG-75, -76). **Not every
+  process is reached**: a shell that exited before the ending leaves its child under launchd in a group of its
+  own (`nohup cmd &` in a foreground Bash call, a hook's background command), and a SIGKILLed or crashed
+  daemon leaves every group it noted - `deferred.md` carries both, with why. `internal/daemon/world.go`,
+  `world_unix.go`, `worldsweep.go`, `heldopen.go`; `decisions.md` (2026-11-11).
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
   before closing — `internal/ui/park.go`, and names what it drops — `parkdropped.go`.
 - **A daemon restores nothing.** ⌃Q then `wake` is a fresh room; parked sessions are addressable only
@@ -231,7 +245,10 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `agent.conversation()`). Park records it, a wake resumes it and files the woken agent under it
   (clients follow via `rpc.SessionStatus.Conversation`), and ⌃F forks it. `resumeSafe` cannot see
   it — the process's argv still names the spawn id — so `conversationRow` is the only fence, and
-  `/resume` refuses a conversation a held agent is writing. `internal/daemon/park.go`.
+  `/resume` refuses a conversation a held agent is writing. `internal/daemon/park.go`. **It leaves
+  running background work running** (claude 2.1.319; owner's 2026-11-11 ruling): a running agent, shell or
+  workflow keeps its sidebar row and backlog across a `/clear`, in the fleet and in the daemon's replay, its
+  ending arrives under the new conversation and is named, and a finished one goes (`Fleet.keepRunning`).
 - `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
   confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
 - **A team's verbs** (owner's 2026-11-09 yes, `internal/ui/teamverbs.go`): `/park @team` parks its live
@@ -643,7 +660,7 @@ yet says so in bold.**
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · `usage.go` (the account's session window) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (`⌃Q` or a signal interrupts, then stops) · `resume.go` · `discover.go` (`discoverscan.go` the line scanner, `discovercache.go` the per-file memory, `discoverstream.go` the listing and its fills, `discoverread.go` the stat and read fan-out the walk, the lookup and the stream share) · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `sendto.go` (a send by address, named from Claude's session registry) · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `fleetend.go` (a fleet's end: when it is done, removing it, the listing's states) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `loginretry.go` (retrying a login's resume the old login answered) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `world.go`/`world_unix.go`/`worldsweep.go`/`heldopen.go` (what an agent started, noted and swept; a held-open stop ended) · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (`⌃Q` or a signal interrupts, then stops) · `resume.go` · `discover.go` (`discoverscan.go` the line scanner, `discovercache.go` the per-file memory, `discoverstream.go` the listing and its fills, `discoverread.go` the stat and read fan-out the walk, the lookup and the stream share) · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `sendto.go` (a send by address, named from Claude's session registry) · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `fleetend.go` (a fleet's end: when it is done, removing it, the listing's states) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `loginretry.go` (retrying a login's resume the old login answered) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -852,6 +869,15 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226�
   (2.1.322), with a summary saying it has not reported yet; the same task id then starts again and ends
   with its hand-back. Only that whole summary tells it from an ending (`subagentWaiting`, read as
   progress). `subagent-waits-background.jsonl`.
+- **A headless claude does not exit on stdin EOF while a background shell runs** (2.1.322, live): it stays,
+  idle, and its shell with it, so a stop or a park that only closes stdin never completes. An interrupt first
+  frees it (`⌃Q`'s order); a bare interrupt kills no shell. Only a shell was probed - a background subagent
+  or workflow ends on its own, a Monitor's `task_type` is unrecorded. A claude ends its own tasks when it exits
+  after an interrupt, so `⌃Q` needed no sweep for a plain `sleep`. Each Bash command, foreground or
+  background, runs in a process group of its own (`pgid` its shell's pid). `docs/notes/bugs.md` BUG-75.
+- **`/clear` leaves running background work running** (2.1.319+): `task_updated` and `task_notification` arrive
+  under the new session id (`testdata/stream/clear-keeps-background.jsonl`). A claude older than that killed it
+  and may have sent no ending, so its row would stay until the agent ends - the corpus has no such recording.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only
