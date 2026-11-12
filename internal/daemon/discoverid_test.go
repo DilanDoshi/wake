@@ -214,3 +214,24 @@ func TestALookupForgetsTheTranscriptsThatLeftTheListing(t *testing.T) {
 		t.Errorf("the cache holds %d sessions after a lookup found one gone, want %d", got, before-1)
 	}
 }
+
+// Where one id sits under two projects only the newer copy is the row, so only it
+// is read: the other can be gigabytes the operator would wait on for nothing.
+func TestALookupOfASessionInTwoProjectsReadsOnlyTheNewerCopy(t *testing.T) {
+	tree := newTree(t)
+	older := writeTranscript(t, tree.projects, slugOf(t.TempDir()), tree.ids[0], tree.dirs[0])
+	touchOlder(t, older)
+	sessionScans.reset()
+	opened := readCounter(t)
+
+	got, ok, err := discoverID(tree.projects, tree.ids[0])
+	if err != nil || !ok {
+		t.Fatalf("discoverID: found=%t err=%v", ok, err)
+	}
+	if got.Path != tree.paths[0] {
+		t.Errorf("the lookup returned %s, want the newer copy %s", got.Path, tree.paths[0])
+	}
+	if n := opened.Load(); n != 1 {
+		t.Errorf("the lookup opened %d transcripts, want only the newer copy", n)
+	}
+}

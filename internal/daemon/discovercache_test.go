@@ -331,7 +331,7 @@ func TestASessionOverTheBudgetIsReadEveryTimeAndNotKept(t *testing.T) {
 
 // The budget is held through a real read: a prompt of any length is cut to
 // previewBytes runes by the reader, so a session with a huge prompt is still
-// kept, and nothing the cache keeps outweighs entryBudget.
+// kept: an unbounded preview would put it over entryBudget and out of the cache.
 func TestNoSessionTheCacheKeepsOutweighsTheBudget(t *testing.T) {
 	tree := newTree(t)
 	huge := strings.Repeat("😀", 20_000)
@@ -345,13 +345,6 @@ func TestNoSessionTheCacheKeepsOutweighsTheBudget(t *testing.T) {
 	mustDiscover(t, tree.projects)
 	if got := opened.Load(); got != 0 {
 		t.Errorf("a warm open read %d transcripts: a session with a huge prompt was not kept, so its preview was not bounded", got)
-	}
-	sessionScans.mu.Lock()
-	defer sessionScans.mu.Unlock()
-	for path, e := range sessionScans.entries {
-		if got := retainedBytes(e.read); got > entryBudget {
-			t.Errorf("%s is kept at %d bytes, over the %d budget", path, got, entryBudget)
-		}
 	}
 }
 

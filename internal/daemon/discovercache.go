@@ -17,9 +17,10 @@ var sessionScans scanCache
 
 // entryBudget is the most one kept session retains: a preview and a title, each at
 // most previewBytes runes of utf8.UTFMax bytes (oneLine's bound), plus
-// maxCachedText for the name and directories claude does not bound. A session
-// over it is not kept (read every open, as before). Every listing drops the
-// entries that left it, so the cache holds at most one entry per transcript.
+// maxCachedText for the name and directories, which claude does not bound. It is
+// enforced on the total, so a session over it is not kept (read every open, as
+// before). Every listing drops the entries that left it, so the cache holds at
+// most one entry per transcript.
 const (
 	maxCachedText = 1 << 10
 	entryBudget   = 2*previewBytes*utf8.UTFMax + maxCachedText

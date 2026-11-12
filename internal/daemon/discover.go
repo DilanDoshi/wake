@@ -266,9 +266,8 @@ func discoverID(projects, id string) (FoundSession, bool, error) {
 	if len(files) == 0 {
 		return FoundSession{}, false, nil
 	}
-	rows := make([]FoundSession, len(files))
-	readSessions(context.Background(), files, func(i int, row FoundSession) { rows[i] = row })
-	return rows[0], true, nil
+	// Sorted newest first, so the first is the row; the other copies are not read.
+	return foundSession(files[0].job, files[0].info), true, nil
 }
 
 // listTranscripts is every transcript under a projects tree, with no content
