@@ -436,7 +436,8 @@ func Status(socket string) (rpc.Status, error) {
 
 // runningStatus is Status without the on-disk answer: a fleet with nothing
 // listening is not running, off one failed dial, so a listing can ask every
-// fleet without paying FleetOnDisk's sweep for each stopped one.
+// fleet without paying FleetOnDisk's sweep for each stopped one. A daemon that
+// takes the dial is running, and an error says it did not answer.
 func runningStatus(socket string) (rpc.Status, bool, error) {
 	// The dial is bounded too: a listener that has stopped accepting must not
 	// hold the listing past the one timeout it promises.
@@ -445,7 +446,7 @@ func runningStatus(socket string) (rpc.Status, bool, error) {
 		return rpc.Status{}, false, nil
 	}
 	st, err := askStatus(conn)
-	return st, err == nil, err
+	return st, true, err
 }
 
 // askStatus is Status's question on a connection already made.

@@ -49,11 +49,13 @@ screen-scrapes** — all state comes from structured JSON on stdout.
 - **Verbs** (`cmd/wake/main.go`): bare `wake` starts a new named fleet and opens the room with the
   manager alone, spawning no agent (owner's 2026-10-16 ruling); `wake --fleet <name>` returns to one
   (`default` = the unnamed fleet at `~/.wake`); `new`, `fork`, `import`, `attach`, `status` (`--team <name>` lists one team), `stop`
-  (irreversible), `fleets`, `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. A new fleet
+  (irreversible; a named fleet's directory goes with it, below), `fleets` (each fleet's state: `running`,
+  `parked`, `crashed` or `stopped`, read off the dial and the files, never a lock), `manager`, `setup-terminal`, `upgrade`, `--version`/`help`. A new fleet
   checks `claude` is on this `PATH` first (its daemon inherits it); a spawn from any daemon without
   one says how to install it (`core.claudeMissing`). `$WAKE_SOCKET` wins;
   naming a fleet beside it is refused. Each fleet is a directory under `~/.wake/fleets/`; per-fleet
-  files are `filepath.Dir(socket)` plus a name. **`--max-agents <n>`** (anywhere, with `wake`, `new`,
+  files are `filepath.Dir(socket)` plus a name. Resolving a named one makes nothing: the daemon
+  makes its directory as it starts, and a bare `wake` makes the one it drew, the name's reservation (BUG-21). **`--max-agents <n>`** (anywhere, with `wake`, `new`,
   `attach` or `manager`) sets how many sessions the fleet runs at once, 1 to 50, 50 unless set (owner's
   2026-10-20 ruling): `connect` sends `FrameSetMaxAgents` on the verb's own connection, so it reaches a
   running fleet and lasts until the daemon stops; it stops nothing already running. `cmd/wake/maxagents.go`.
@@ -70,13 +72,14 @@ screen-scrapes** — all state comes from structured JSON on stdout.
   `⌃F` fork · `⌃D` open here · `⌃Y` new column · `⌃B` open below · `⌃W` close pane · `⌃A` toggle the
   lone-`@name`/`@team` narrowing · `⌃E` expand folded results / card descriptions.
 - **Wake's slash commands** (`internal/ui/slash.go`): `/resume`, `/new`, `/name`, `/task`, `/color`,
-  `/team`, `/quit`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
+  `/team`, `/quit`, `/park`, `/adopt`, `/mcp`, `/login`, `/reauth`, `/manager`, `/manager-stop`, `/board`,
   `/workflows`, `/groupchat-filter`, `/status`, `/wake-name`, `/wake-help`, `/friends`, plus bare `/effort`/`/model` menus, and in the room alone a
   bare `/clear` (`roomCommands`, `roomclear.go`): it empties this window's group chat and reaches no agent,
   keeps ↑'s prompts, keeps restored history older than it out, and the room notes every 1,000 messages it
   holds in an ordinary timed notice. Everything else passes to the agent byte
-  for byte. `@who /cmd` in the room aims a target-command at that agent, and `@who !cmd` a bang. A spaced `/team` or
-  `/name` argument is hyphenated.
+  for byte. `@who /cmd` in the room aims a target-command at that agent, and `@who !cmd` a bang; `@team /park`
+  and `@team /quit` fold into `/park @team` and `/quit @team`, and every other target-command refuses a team
+  (`teamTargetCommands`). A spaced `/team` or `/name` argument is hyphenated.
 - **`/mcp`** draws Claude Code's own MCP menu for one agent, live from the running session
   (`mcp_status`/`mcp_reconnect`/`mcp_toggle`, replies sent only to the asking window). Authenticate
   hands the real terminal to `claude mcp login <server>`, then reconnects every live agent stuck on
@@ -188,7 +191,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   claude answers with is the name it takes (`decisions.md`, 2026-10-15). While it is the fleet's own it
   follows a `/wake-name`, and a park books it under none (`recordOf`), so it wakes under the fleet's name then.
 - **Park is recoverable; stop is not.** `⌃C` parks one, `⌃Q⌃Q` parks all and exits, `wake stop` ends
-  everything and clears the park book (`parked.json` beside the socket). **`⌃Q` and a SIGTERM or SIGINT
+  everything and clears the park book (`parked.json` beside the socket), naming every parked session it
+  forgets (BUG-72). **A stopped named fleet is removed** (owner's 2026-11-11 ruling, BUG-21): under its own
+  daemon lock, Wake's files one by one, the lock last, then the directory - never the tree - and every
+  old name forwarding to it, so its name is free. With no daemon the stop forgets the park book itself,
+  naming each session; after a daemon's own stop a session parked since keeps the fleet. A crash's leftovers (roster rows, `parkready.json`), an unreadable book or anything
+  Wake does not remove (`debug/`, a hand-made backup) keep it, and so does a live daemon's lock; the
+  unnamed fleet and a hand-set socket have no directory to remove. `internal/daemon/fleetend.go`. **`⌃Q` and a SIGTERM or SIGINT
   park alike**, first interrupting every agent as Esc does and cancelling what is queued behind its turn,
   so a turn in flight ends inside the grace and an outstanding ask is withdrawn, not denied (owner's
   2026-10-21, -22 and 2026-11-07 rulings); a woken session told `continue` picks the turn up, and the `⌃Q`
@@ -225,6 +234,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   `/resume` refuses a conversation a held agent is writing. `internal/daemon/park.go`.
 - `/quit` stops one agent (`FrameStop`) and drops its row **per window** once the ending is
   confirmed; refuses the manager (use `/manager-stop`) and parked agents. `internal/ui/quit.go`.
+- **A team's verbs** (owner's 2026-11-09 yes, `internal/ui/teamverbs.go`): `/park @team` parks its live
+  members but a blocked one and confirms once for the team; `/resume <team>` wakes its parked ones, the
+  book's included; `/quit @team` opens a Picker whose cursor starts on `never mind` (↓ ↵ quits), over
+  targets held from the open, and stops only those still live. Members are `@team`'s - `App.live`, never
+  the manager - and `@who` resolves as `core.Resolve` routes: a live agent, a team, a parked agent. N
+  one-agent frames in one write; no team frame. A picker reads keys only while drawn: it closes on a focus
+  change, yields to a card in its pane, and ⌃C closes it and parks (`decisions.md`, 2026-11-09).
 - `/manager-stop` refuses a parked manager and a missing one; it does not borrow park's
   blocked-agent refusal (a stop has no wake).
 - `/reauth` parks sessions marked by a 401 (upstream bug #48786, shared-OAuth refresh race) so
@@ -371,6 +387,11 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   through one 80ms settle (`geometry.go`).
 - **A streamed preview never costs the record a slot**: partials fold into one slot and never evict,
   and a dropped partial is not a gap (`inbox.go`, daemon `client.go`'s `partialCeiling`).
+- **A token nothing on screen shows wakes nothing** (BUG-67): Update's seam tells the inbox
+  `App.tokensUnseen` (sessions the fleet holds with no drawn conversation, no tile on a tiled board and no
+  standing retry); such a token folds into its one slot without ringing and rides the next frame that
+  does, in order, and `applied` answers it with `unsynced` alone. Every other token rings. Nothing is
+  dropped and nothing waits on a timer (`inbox.go`, `partial.go`).
 - **A conversation keeps its newest `dmRetentionEvents` (3,000)** — the re-wrap budget — and reclaims
   the oldest a chunk at a time, only before a non-tool event, under one fixed line (`dmretention.go`).
 - **No tab reaches the terminal**: `ansi` measures one as no cell and a terminal draws up to eight
@@ -609,14 +630,14 @@ yet says so in bold.**
 
 | What | Where |
 |---|---|
-| Entrypoint, verbs | `cmd/wake/main.go` · bare `wake`: `openroom.go` · `--max-agents`: `maxagents.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
+| Entrypoint, verbs | `cmd/wake/main.go` · `fleets.go` (`--fleet`, `wake fleets`) · `fleetend.go` (what a stop's removal came to) · bare `wake`: `openroom.go` · `--max-agents`: `maxagents.go` · attach/detach: `attach.go` · `match.go` · `fork.go` · `import.go` · `status.go` · `statusteam.go` · `stop.go` · `manager.go` · `mcp.go` · `ensuremanager.go` · `setupterminal.go` · `termsetupprompt.go` · `internal/termsetup/` |
 | Emergency exit, terminal hand-over | `cmd/wake/killswitch.go` (and `alignedPipe`, the pipe Bubble Tea reads; `pipequeue_unix.go`/`_other.go`) · `handover.go` |
 | Claude JSON airlock | `internal/core/protocol.go` · `wire.go` · `vocabulary.go` · `encode.go` · `localreply.go` (`/model`, `/list-agents`, `/rename` replies, bash mode's `!cmd` records; Wake's `Peer` is `peers.go`) · `control.go` (interrupt, mode, rewind, stop, MCP requests and their receipts) · `ask.go` (what a permission request asks: kind, questions, plan) · `account.go` (the signed-in account, a usage limit's reset, the session window) |
 | One agent | `internal/core/session.go` · write path `write.go` · argv `argv.go` · ending `ending.go` · process `process.go` · the `/list-agents` one-shot: `process.go`'s `ListAgentsCommand`, `argv.go`'s `listAgentsArgv` |
 | Live-cap scheduler | **NOT BUILT** — `internal/core/pool.go` is planned |
 | Routing | `internal/core/router.go` |
 | Transport | `internal/rpc/wire.go` · reading and writing frames `conn.go` · Wake's message uuids `messageid.go` (room sends, resumes) · `lifecycle.go` · `peers.go` · `subagent.go` (a subagent's own file) · `usage.go` (the account's session window) · fences: `worktree.go`, `paths.go`, `color.go`, `team.go`, `name.go` |
-| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (`⌃Q` or a signal interrupts, then stops) · `resume.go` · `discover.go` (`discoverscan.go` the line scanner, `discovercache.go` the per-file memory, `discoverstream.go` the listing and its fills, `discoverread.go` the stat and read fan-out the walk, the lookup and the stream share) · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `sendto.go` (a send by address, named from Claude's session registry) · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `loginretry.go` (retrying a login's resume the old login answered) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
+| Daemon | `internal/daemon/daemon.go` · `server.go` · `agent.go` · `agentend.go` · `agentask.go` · `apply.go` · `spawn.go` · `fanout.go` · `launcher.go` · `mayspawn.go` · `worktree.go` · `park.go`/`parkbook.go` · `parkready.go` (a crash's hand-over to the park book) · `shutdownstop.go` (`⌃Q` or a signal interrupts, then stops) · `resume.go` · `discover.go` (`discoverscan.go` the line scanner, `discovercache.go` the per-file memory, `discoverstream.go` the listing and its fills, `discoverread.go` the stat and read fan-out the walk, the lookup and the stream share) · `history.go` · `rewindtargets.go` · `manager.go` · `mcpselftest.go` · `probe.go`/`effort.go` · `fleetbrief.go` · `prs.go` · `loop.go` · `askreplay.go` · `taskreplay.go` · `subagenttrack.go` · `names.go`, `rename.go`, `renamesync.go`, `color.go`, `team.go` · `peers.go` · `sendto.go` (a send by address, named from Claude's session registry) · `fleetrename.go` (`/wake-name`: the move, the old names' links) · `fleetend.go` (a fleet's end: when it is done, removing it, the listing's states) · `usagelimit.go` (resuming limited agents; the watch in `configwatch_darwin.go`/`_linux.go`/`_other.go`) · `loginretry.go` (retrying a login's resume the old login answered) · `unreachable.go` (resuming agents an unreachable API stopped; the watch in `netwatch_darwin.go`/`_linux.go`/`_other.go`) · `usage.go` (the account's session-usage reading) |
 | MCP server for the manager | `internal/mcp/` — `tools.go`, `spawnopts.go`, `sendteam.go`, `grouping.go`, `selftest.go` · verdicts in `cmd/wake/mcpguard_test.go` |
 | Bubble Tea root | `internal/ui/app.go` (start at `apply`) · `appupdate.go` (the message loop: `Update`, `update`, `stream`) · `observe.go` · `report.go` · `keys.go` · `appview.go` · `panedraw.go` |
 | Fleet model | `internal/ui/fleet.go` · `fleetquery.go` · `fleettasks.go` · `fleetsubs.go` · `fleetagents.go` · `sections.go` |
@@ -625,7 +646,7 @@ yet says so in bold.**
 | Terminal title | `internal/ui/title.go` · the stack push and pop around the program in `cmd/wake/attach.go`'s `converseModel`, the emergency exit's in `killswitch.go`'s `restoreTerminal` · pty test `cmd/wake/titlescreen_unix_test.go` |
 | `/mcp` menu | `internal/core/mcpcontrol.go` · `mcpask.go` · `encode.go`'s `EncodeMCP*` · `internal/rpc/mcp.go` · `internal/daemon/mcpask.go` · `internal/ui/mcpmenu.go` · `mcpmenuview.go` · `mcpauth.go` · `cmd/wake/handover.go` · `testdata/stream/mcp-control.jsonl`, `initialize.jsonl`, `mcp-connectors.jsonl` |
 | Sending | `internal/ui/send.go` · `queue.go` (what claude has queued) · `recall.go` (take back, send now) · `mention.go` · `imagedrop.go` · findings `docs/superpowers/notes/2026-10-02-mid-turn-delivery-findings.md` |
-| Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go`/`resumefill.go` (the picker's rows read behind it) · `quit.go` · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
+| Slash commands | `internal/ui/slash.go` · `slashhelp.go` (each command's help line) · `help.go`/`helpcontent.go`/`helpdraw.go` (`/wake-help`) · `statuscmd.go` · `friendsmenu.go` (`/friends`) · `fleetname.go` (`/wake-name`) · `new.go`/`newflags.go` · `resume.go`/`resumepicker.go`/`resumefill.go` (the picker's rows read behind it) · `quit.go` · `teamverbs.go` (a team's park, quit and resume; pty test `cmd/wake/teamverbsscreen_unix_test.go`) · `service.go` · `adopt.go` · `color.go` · `team.go` · `board.go` · `authapp.go` · `reauth.go` · `apirecover.go` · `picker.go` |
 | Legend, arms, escape, rewind | `internal/ui/legend.go` · `detach.go` · `escape.go` · `rewind.go` · `rewindmenu.go` (the code/conversation step) · `prompts.go` · `mode.go` · frames `internal/rpc/rewind.go` · daemon `rewindtargets.go`, `rewindfiles.go` · findings `docs/superpowers/notes/2026-10-02-file-rewind-findings.md` |
 | Cards | `internal/ui/cards.go` · `cards_blocks.go` · `cardkeys.go` · `cardsteps.go` · `cardreview.go` · `cardanswer.go` · `cardmulti.go` (a multi-select question's ticks) · `cardroom.go` · `pagescroll.go` (the page a card scrolls with its pane) · pty test `cmd/wake/cardscrollscreen_unix_test.go` |
 | Room | `internal/ui/chat.go` · `chat_blocks.go` · `peerfold.go` (a peer message's fold, the DM's too) · `roomhistory.go` · `roomprovenance.go` · `roomfocus.go` · `roomfilter.go` · `roomchannel.go` (the channel a roster header picks) · `roomclear.go` (the room's `/clear` and its every-1,000 reminder) |
@@ -639,7 +660,7 @@ yet says so in bold.**
 | Theme, palette | `internal/ui/theme.go` · `internal/ui/testdata/claude-palette.json` (maintained by hand) |
 | Markdown, diffs, tools | `internal/render/` — `markdown.go`'s `reflowProse` holds the greedy-wrap fix and the list hang, `joinLoneBullets` the lone-bullet one (an item opening with a list) · `rejoin.go` undoes the wrap for a copy · `tabs.go` expands a tab to its column (`ExpandTabs`) · `splitter.go` says where a streamed answer's finished blocks end, `Stack` lays them one under another · `prose.go` wraps the open block the way glamour does · `renderercache.go` bounds the per-width renderers (`CachedWidths`, derived by `internal/ui/renderwidths_test.go`) · `tables.go` draws a table too narrow for its pane as records · findings `docs/superpowers/notes/2026-10-24-narrow-table-findings.md` |
 | Notices under a TUI | `internal/notice/notice.go` · linger and pins: `internal/ui/noticelinger.go` |
-| Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.RunningBuilds` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · the update check `updatecheck.go`, asked by the room on its first frame and on a keystroke an hour on, and named on the strip as `↑ wake X` (`internal/ui/updatecue.go`) · replaced-binary launch: `core.AgentLauncherMismatch` |
+| Version, install, upgrade | `internal/version/` (release number + `Build()`, stamped by `.goreleaser.yaml`) · daemon build on `rpc.Status.Build`, compared in `cmd/wake/staledaemon.go` · `wake fleets` via `daemon.FleetStates` · `scripts/install.sh` · `internal/upgrade/` · `cmd/wake/upgrade.go` · the update check `updatecheck.go`, asked by the room on its first frame and on a keystroke an hour on, and named on the strip as `↑ wake X` (`internal/ui/updatecue.go`) · replaced-binary launch: `core.AgentLauncherMismatch` |
 | Git branch lookup | `internal/gitref/` |
 | Fixtures | `testdata/stream/` (stdout) · `testdata/transcript/` (on-disk, a different format) · `testdata/input/` (lines Wake writes) · `testdata/workflow/` (on-disk workflow run records) · `testdata/sessions/` (Claude's session registry) |
 | Demo film, landing site | `demo/` (Python stand-in agent, VHS tapes) · the site generator `demo/page.py`, its words `demo/pagecopy.py` → the wake-landing repo |
@@ -711,8 +732,9 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.314. A
-fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
+**Verified against v2.1.322** (re-checked 2026-11-11: every flag below but `--permission-prompt-tool` has
+its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226–2.1.322. A fixture's `init` names its version. Findings notes:
+`docs/superpowers/notes/`.
 
 | Need | Flag |
 |---|---|
@@ -748,6 +770,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   derivable from `num_turns`/`duration_api_ms`.
 - An interrupted turn has no `result` key; an interrupted process exits 1 with empty stderr
   (`interruptedExit` suppresses it). `[Request interrupted by user]` arrives as a `user` frame.
+- **A `--resume` closes a turn left with no reply** (an interrupt, a kill) with one `<synthetic>`
+  assistant record on disk, `No response requested.`, ahead of the next prompt; never on stdout (seen
+  2.1.303–2.1.322). Core drops it by the record itself, not by what it follows (`isResumeClose`); the
+  model gate keeps an agent's own words drawn. `resume-interrupted.jsonl`, `resume-killed.jsonl`.
 - One `can_use_tool` carries three shapes; `AskUserQuestion` answers ride in
   `updatedInput.answers` (`core.askKind`, decided by payload shape, never tool name).
 - A question killed by closing stdin is indistinguishable from an operator deny.
@@ -775,7 +801,14 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   `/permissions`, `/memory`, `/hooks` and `/help` do; only `/status`'s answer is recorded.
 - `stream_event` text deltas are byte-identical to the completed `assistant` block
   (`testdata/stream/partial-turn.jsonl`); unrecognised shapes yield no event.
+- **2.1.322 prints `system/ui_invalidate` before every session's `init`** (after `session_title_changed`,
+  which `--name` brings), its `event` a string where `stream_event`'s is an object, so
+  `wireFrame.StreamEvent` stays raw and a stream event it cannot read is nothing (`ui-invalidate.jsonl:2`).
 - The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id; `TodoWrite` is retired.
+- **A self-paced `/loop` ends when its own wakeup turn finishes without a `ScheduleWakeup`** (2.1.319+;
+  `CLAUDE_CODE_LOOP_KEEPALIVE=1` keeps the old fallback). No frame says so: the wakeup turn's
+  `command_lifecycle` names `wakeup_source:"loop_wakeup"`, and its `completed` with nothing rescheduled is
+  the end (`daemon/loop.go`'s `foldWakeup`, `loop-self-paced-end.jsonl`).
 - A `Workflow` run is `task_type:"local_workflow"` on the `task_*` frames; every `workflow_progress`
   is a **full snapshot**. Agent states are `start`/`progress`/`done`/**`error`** (never `failed`; an
   agent refused before starting has no `agentId`). A workflow agent's words never reach stdout — only
@@ -809,6 +842,10 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   and its file sits flat beside its parent's in `subagents/`. In auto mode a subagent's delivered
   `SubagentHandback` receipt is `{"success":true,"message":"Report delivered to your caller."}`, read as its
   message only whole (`receiptSentence`). `subagent-nested.jsonl`.
+- **A background subagent that ends its turn while its own background work runs is told as `completed`**
+  (2.1.322), with a summary saying it has not reported yet; the same task id then starts again and ends
+  with its hand-back. Only that whole summary tells it from an ending (`subagentWaiting`, read as
+  progress). `subagent-waits-background.jsonl`.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only
@@ -839,7 +876,7 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/wire.go` at 796 and `internal/ui/dm.go` at 794 — derived by
+  `internal/core/protocol.go` at 799 and `internal/core/wire.go` at 797 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

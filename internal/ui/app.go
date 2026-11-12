@@ -362,6 +362,9 @@ type App struct {
 	// parked. pendingStarts' shape, for pendingStarts' reason - see parkArrived.
 	parking  map[string]struct{}
 	quitting map[string]struct{} // asked to /quit, not yet ended; departedQuit (quit.go) drops each from the fleet on the confirming report
+	// teamParks files each park a team verb asked for under its team, so the
+	// reports confirm the team once (teamverbs.go).
+	teamParks map[string]string
 
 	// queued is what claude has queued for each agent and not yet taken up (and a
 	// held /rename), inflight the Wake messages it has started and not finished,

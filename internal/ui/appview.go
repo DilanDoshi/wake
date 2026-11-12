@@ -8,6 +8,7 @@ package ui
 // over a pure function rather than a golden frame.
 
 import (
+	"slices"
 	"strings"
 
 	"github.com/charmbracelet/lipgloss"
@@ -358,26 +359,29 @@ func (a App) cardOf(id string) (Card, bool) {
 // Settling, not committed: mid-drag View draws the old layout clipped, so the
 // columns that stay on screen are the ones the settle will commit (drawnRegions).
 func (a App) drawnConversations() func(string) bool {
+	ids := a.drawnIDs()
+	return func(agentID string) bool { return agentID != "" && slices.Contains(ids, agentID) }
+}
+
+// drawnIDs is every conversation a pane with a width draws: the list
+// drawnConversations answers from.
+func (a App) drawnIDs() []string {
 	r := a.drawnRegions()
-	return func(agentID string) bool {
-		if agentID == "" {
-			return false
+	var ids []string
+	for i, c := range a.grid.Cols {
+		if i >= len(r.Cols) || r.Cols[i] <= 0 {
+			continue
 		}
-		for i, c := range a.grid.Cols {
-			if i >= len(r.Cols) || r.Cols[i] <= 0 {
-				continue
-			}
-			if c.Top == agentID {
-				return true
-			}
-			if c.Bottom == agentID {
-				if _, bottom := a.rowsOf(i); bottom > 0 {
-					return true
-				}
+		if c.Top != "" {
+			ids = append(ids, c.Top)
+		}
+		if c.Bottom != "" {
+			if _, bottom := a.rowsOf(i); bottom > 0 {
+				ids = append(ids, c.Bottom)
 			}
 		}
-		return false
 	}
+	return ids
 }
 
 func (a App) roomPane(width, height int) string {
@@ -450,8 +454,8 @@ func (a App) resumeView(id string, width, height int, over string) string {
 // keys - so a picker opened in a DM does not appear in the room, where its ↵
 // would go somewhere else.
 func (a App) pickerView(width int, id string) string {
-	if !a.picker.Open() || a.focus != id {
-		return ""
+	if _, carded := a.cardOf(id); !a.picker.Open() || a.focus != id || carded {
+		return "" // a card is the pane's to answer first; the picker returns after it
 	}
 	return a.picker.View(width)
 }
@@ -591,12 +595,6 @@ func (a App) clipMidDrag(frame string) string {
 
 // noticeLine is the reserved row: the newest notice while its linger runs, else
 // the pinned API failure (noticelinger.go), else empty.
-//
-// One row means one row. lipgloss's MaxWidth truncates each line but preserves
-// the line *count*, so a notice carrying a newline would make the frame one
-// row taller than the window and scroll the alt screen on every draw - and the
-// text is not ours: it is a daemon's error frame, which reaches it from an
-// agent's stderr. See oneLine.
 func (a App) noticeLine() string {
 	text := a.pinnedNotice()
 	if n, ok := notice.Latest(); ok {
@@ -605,7 +603,18 @@ func (a App) noticeLine() string {
 	if text == "" {
 		return ""
 	}
-	return warnStyle.MaxWidth(a.noticeWidth()).Render(oneLine(noticePrefix + text))
+	return warnStyle.Render(a.noticeRow(text))
+}
+
+// noticeRow is what the row draws of text: one line, cut to the row with an
+// ellipsis, so a row cut inside a command never reads as a shorter command.
+//
+// One row means one row: flattened before the cut, since a notice carrying a
+// newline would make the frame one row taller than the window and scroll the
+// alt screen on every draw - and the text is not ours: it is a daemon's error
+// frame, which reaches it from an agent's stderr. See oneLine.
+func (a App) noticeRow(text string) string {
+	return ansi.Truncate(oneLine(noticePrefix+text), a.noticeWidth(), ellipsis)
 }
 
 // noticeWidth is the cells the notice row draws before it truncates.

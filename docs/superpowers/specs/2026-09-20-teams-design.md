@@ -142,8 +142,11 @@ Rulings (each gets a test):
   which the 2026-09-01 "never widen a knob" ruling is about). A Wake target-command
   (`@backend /color`, `/team`, `/name`, `/task`) is **refused in v1** with a notice
   naming the per-agent form — otherwise it falls through to N claude processes as the
-  literal text `/color …`. **Never** team-wide `/quit` (stop "may not be aimed by a
-  roster cursor", and a set is worse than a cursor).
+  literal text `/color …`. ~~**Never** team-wide `/quit` (stop "may not be aimed by a
+  roster cursor", and a set is worse than a cursor).~~ **Reversed 2026-11-09 on the owner's yes:**
+  `/quit @team` stops a team's live members behind a confirm whose cursor opens on `never mind`, and
+  `@team /park` and `@team /quit` fold into those typed forms. Every other Wake target-command still
+  refuses a team (`decisions.md`, 2026-11-09).
 - **Collisions are refused daemon-side, both directions**, since only the daemon sees
   both sets: a `/team` that equals a live agent name, and a `/name` into an existing
   team name, are refused; `all`/`manager`/`none` are reserved.

@@ -227,7 +227,13 @@ func liveSay(s *screen, text string) {
 // nothing can be asked of an agent that has not been named yet.
 func TestLiveJourney(t *testing.T) {
 	withRealAgent(t)
-	s := startWake(t, liveCols, liveRows)
+	// This package's own directory under the real HOME, not screenWorkspace's
+	// scratch one: a sterile HOME cannot authenticate (withRealAgent).
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatalf("this package's directory: %v", err)
+	}
+	s := startWakeIn(t, wd, liveCols, liveRows)
 
 	// Setup is the one hard stop. A room that never drew, or a fleet with no
 	// agent in it, makes every phase below report noise about a screen that was

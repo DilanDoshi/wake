@@ -17,10 +17,11 @@ import "github.com/DilanDoshi/wake/internal/core"
 // discriminator, so the room and the transcript can never disagree about
 // which frame speaks - and nil for every other system frame, an ordinary
 // subagent's or a shell's ending included, both of which stay
-// conversation-only.
+// conversation-only. One a subagent ran (a Parent) is refused too, as taskLine
+// refuses it, so the room never counts a line it does not draw.
 func workflowRoomEvent(ev core.Event) []core.Event {
 	u := ev.Task
-	if u == nil || u.Kind != core.TaskWorkflow || u.Phase != core.TaskEnded || u.Dispatch == "" {
+	if u == nil || u.Kind != core.TaskWorkflow || u.Phase != core.TaskEnded || u.Dispatch == "" || u.Parent != "" {
 		return nil
 	}
 	return []core.Event{ev}

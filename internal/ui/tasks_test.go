@@ -428,3 +428,19 @@ func TestNamedAttachesNoWorkflowWhenTheRowHasNoError(t *testing.T) {
 		t.Errorf("named() attached %+v, want nil - nothing on this row or frame ever carried an error", filled.Workflow)
 	}
 }
+
+// named carries a nested dispatch's parent onto its ending: only task_started
+// names the parent, and the line needs it to know the agent did not dispatch it.
+func TestNamedFillsTheParentOntoAnInnerEnding(t *testing.T) {
+	tasks := folded(under("t1", "t2", "d2", "Explore"))
+
+	u := ended("t2", core.TaskDone).Task
+	filled := tasks.named(u)
+
+	if filled.Parent != "t1" {
+		t.Errorf("Parent = %q, want t1 from the row", filled.Parent)
+	}
+	if u.Parent != "" {
+		t.Errorf("named() edited the event it was given: Parent = %q", u.Parent)
+	}
+}

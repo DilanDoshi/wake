@@ -8,6 +8,75 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-09 — park, quit and resume a whole team
+
+The owner asked whether a whole team could be quit; there was no way, so he said yes to a team park
+and a team quit, and asked for `/resume <team>`. `wake-orch` relayed the brief and ruled on three
+calls. Built in `internal/ui/teamverbs.go`.
+
+- **The words.** `/park @backend`, `/quit @backend` and `/resume backend` (or `@backend`, since
+  `/resume` already drops the mark). `park` is a new command: park was only ⌃C, and no recorded
+  `slash_commands` carries the word, so it is claimed on the corpus rule. `/park @sydney` parks one
+  agent and bare `/park` parks what ⌃C would; both go through ⌃C's own `parkOne`, so its blocked refusal
+  is not copied.
+- **Members are the set `@backend` reaches**: `App.live` with the tag. So the manager is never one (its
+  lifecycle stays `/manager` and `/manager-stop`), and a verb cannot disagree with a team message about
+  who is on a team.
+- **A name resolves the way `core.Resolve` routes it** (`aimAt`): a live agent, then a team with a live
+  member, then a parked agent, then a team whose members are all parked (which says so and names
+  `/resume @backend`). `/resume <x>` has no live candidates, so it tries a parked session named x, then a
+  team with a parked member. In both the name wins. A name/team collision can still happen, since the
+  daemon does not yet refuse one (`deferred.md`).
+- **The fan-out is the window's**: N `FramePark`, `FrameStop` or `FrameWake` frames in one `App.write`, as
+  `/reauth` and `/resume all` write theirs. There is no new frame and no `SessionStatus` field. The daemon
+  test `TestATeamParkedAndWokenBackToBackKeepsItsTeam` pins that frames written back to back keep each
+  member's team through the park and the wake.
+- **Park** skips a blocked member, for `parkWouldDeny`'s reason, and the keypress notice names it. The
+  report confirms once for the team (`@backend is parked - /resume @backend brings it back`) rather than
+  once per member, because per-member lines would fight over the one notice slot. A member whose park the
+  daemon refuses, or that ends instead, holds that line back, and the refusal shows. A new team park
+  replaces the team's old wait, and a hand park takes a member off it, so a lost member never silences a
+  later confirm. The park's one rule is `parkable`, shared with ⌃C's `parkTarget`. A typed `/park` at an
+  agent already parked says so; ⌃C stays silent.
+- **Quit asks first, in a Picker, not in a legend arm** (`wake-orch`'s call 2). The legend arm would have
+  ↵ confirm what ↵ armed. On `/quit @back`, one ↵ accepts the completion, the next sends the command, and
+  a third would stop the team: the same-key confirm `detach.go` rejects. So the confirm's cursor opens on
+  `never mind`, ↓ then ↵ quits, and esc closes it.
+  - Its targets are resolved when it opens and held. Only the ones still live are stopped; one parked
+    since is left alone, and a member who joined afterwards is not touched.
+  - Blocked members are stopped, as `/quit` stops one (a stop has no wake).
+  - Parked members stay parked, and a notice names them.
+  - Rows drop per window through `awaitingQuit` and `departedQuit`.
+  - This reverses the teams design's "never team-wide `/quit`", on the owner's yes, with the confirm as the
+    answer to "a set is worse than a cursor".
+- **The Picker grew three rules that every picker now keeps.** A picker reads keys only while it is drawn:
+  - ⌃C closes it and parks, as over the resume picker, so the kill switch's first press visibly does
+    something.
+  - A focus change closes it (`withFocus`). A picker is drawn only over the pane holding the keys, and one
+    left open read ↓ and ↵ in the next pane undrawn.
+  - It yields to a card in its pane, which takes its place and whose page could scroll it out of sight: it
+    draws nothing and reads no key until the card is answered (the adversarial review's finding: ↓ ↵
+    meant for a plan card quit the team).
+- **The room bridge folds a team** (`wake-orch`'s call 1): `@backend /park` and `@backend /quit` become
+  `/park @backend` and `/quit @backend`, as `@sydney /quit` already becomes `/quit @sydney`
+  (`teamTargetCommands`).
+  - This is the argued exception to the team refusal. That refusal exists because a per-agent
+    command would reach N claude processes as literal text, and these two now take a team themselves.
+    The fold also resolves the same way the router does, by construction.
+  - Every other Wake target-command still refuses a team (`TestEveryOtherTargetCommandAtATeamIsStillRefused`),
+    and the set is pinned to exactly these two.
+  - A team with nothing running is folded too (`restingTeam`). `core.Resolve` fans out to live members
+    only, so `@backend /park` would otherwise reach the manager as text.
+- **Completion.** `/park` reaches the `/` menu through `wakeWords`. In the room, `/park @` and `/quit @`
+  already offered a live team as `(team)`. `/resume ` with one character typed offers the parked
+  sessions, then teams with a parked member (which the `@` menu, keyed on routing, leaves out when no
+  member is live), then `all`; a parked name wins its team. `/resume manager` still sends as typed
+  (`routed`).
+- **Not built.** A roster header action, such as ⌃C on a picked header parking its team, is in
+  `deferred.md`: ⌃C is a reflex key and ⌃C⌃C is the emergency exit. Also not built: `@all /park`.
+
+---
+
 ## 2026-11-06 — the wheel over the right sidebar scrolls the roster
 
 The owner's ask ("if mouse over right side bar, that should scroll too", "for in case i have more agents
@@ -5985,7 +6054,7 @@ lost what a park keeps (name, team, colour, effort); at best `/resume` found its
   a turn interrupted mid-`sleep` and its stdin closed exited 0.83 s later; `--resume` and a plain `continue`
   re-ran the interrupted step and finished the task. On disk the interrupted turn ends in a rejected tool
   result and `[Request interrupted by user for tool use]`, and the resume writes one synthetic assistant record
-  (`No response requested.`) ahead of the next prompt (BUG-65). Wake sends no `continue` on wake: the
+  (`No response requested.`) ahead of the next prompt (BUG-65, fixed 2026-11-10). Wake sends no `continue` on wake: the
   operator chose to quit, and `/resume all` would start twenty turns at once.
   `docs/superpowers/notes/2026-11-07-interrupted-turn-resume-findings.md`.
 - **A behaviour change for a blocked agent, approved by wake-orch.** `⌃Q` used to close stdin under an
@@ -6014,6 +6083,73 @@ lost what a park keeps (name, team, colour, effort); at best `/resume` found its
   interrupted once, ends well inside the grace and is offered by the next daemon on the socket; an idle one
   is interrupted harmlessly; a queued message does not keep it running; an outstanding ask is interrupted
   before stdin closes. `internal/ui/parkdropped_test.go` and `cmd/wake/attach_test.go` hold the named words.
+
+## 2026-11-10 — a resume's close is dropped by the record itself, not by what it follows (wake-orch)
+
+BUG-65's entry asked for three conditions: the `<synthetic>` model, the one fixed text, and coming
+**immediately after an interrupted turn**. The fix checks only the first two (`isResumeClose`, read in
+`messageEvents`), and wake-orch gave its GO on that.
+- **Why not the third.** The close follows any turn that had no reply: a kill writes it too
+  (`resume-killed.jsonl`). A read-only survey of this machine's transcripts found 4 closes from real use
+  (2.1.303–2.1.314), and all 4 followed a tool result, not an interrupt marker. A check on the parent would
+  have left every one of them drawn.
+  See `docs/superpowers/notes/2026-11-07-interrupted-turn-resume-findings.md`.
+- **What the third condition was guarding.** An agent that types the words is protected by the model
+  gate: an agent's reply always carries a real model id, and `TestAnAgentThatWritesTheWordsStillDraws`
+  goes red without the gate.
+- **Where it is dropped.** In the decoder, so the DM's reopen and the room's restore, which both read
+  `daemon.History`, lose it alike. A rewind target and `↑` read only typed user turns, so an assistant
+  record never reached either; tests hold all four.
+
+## 2026-11-11 — a stopped fleet leaves the list: `wake stop` removes it (the owner, via wake-orch; BUG-21)
+
+A directory with no socket is still a fleet (`fleet.go`), and that ruling stands. What was never decided
+was whether a fleet is ever *done*. It is done when nothing in it can come back.
+
+- **Done means**, all read under the fleet's own daemon lock and failing closed: no daemon (the lock taken
+  exclusively, which `lock.go` argues is the one unambiguous liveness proof; a socket file alone is
+  debris); no roster rows and no `parkready.json` (a crash the next daemon's reaper hands to the park book,
+  BUG-53); a park book that is absent or `[]`; and nothing in the directory but Wake's own files. An
+  unreadable book or roster is **not** empty, though `loadParkBook` reads one as empty so a daemon still
+  starts. `debug/` keeps a fleet (`debuglog.go`: Wake never removes a log), and so does any other file,
+  such as a hand-made `parked.json.before-restore-…`. A fleet whose only parked session is the manager
+  is parked, not done.
+- **`wake stop` is where a fleet ends, and there is no new verb.** It is already the irreversible ending and
+  already forgets the parked half, and a second ending verb would have its own refusals. After a confirmed
+  down of a named fleet, stop takes the fleet's lock (it waits up to `releaseCeiling` while the exiting
+  daemon still holds it) and removes the fleet unless a crash, an unreadable file or a foreign entry keeps
+  it, saying what kept it; either way it exits 0, since the stop happened.
+- **With no daemon and parked sessions, stop forgets them and removes the fleet** (the owner chose this
+  over refusing, 2026-11-11). It names every session it forgets ("Forgot 2 agents parked (alex, manager)
+  and removed fleet dev…"). Their transcripts stay on disk. Before this the branch said "`wake stop` is
+  what forgets them for good" and could not, and it was unreachable anyway (BUG-72). The unnamed fleet
+  (`~/.wake` itself) and a hand-set socket have no directory to remove: they say a daemon must be started
+  and stopped to forget them. After a *live* stop the daemon has cleared the book, so a session found in it
+  was parked since, by a daemon someone started meanwhile; the stop never named it, so it keeps the fleet
+  (the adversarial review's case). What is counted and named is the book's records, every one of them,
+  since that is what a stop removes. The report's `Parked` leaves out a record Wake did not mint or with
+  no transcript, so the listing can say `parked · the manager` for a manager `/resume` would not offer.
+- **A removal that fails after the book went still names what it forgot.** The park book goes before the
+  directory, so a directory that cannot be removed (a daemon starting meanwhile wrote to it) leaves the
+  fleet with its book already gone, and the stop says so rather than "stays".
+- **How it removes.** Old names forwarding to the fleet are read first and removed once the directory has
+  gone (a fleet that stays keeps them), so no `--fleet <old>` forwards to nothing. Then Wake's files go one by one with the lock last, then
+  `os.Remove` of the directory. Never `RemoveAll`: a starting daemon opens its log before it takes the
+  lock, so anything that arrives meanwhile makes the directory's removal fail, and the fleet stays.
+- **The listing takes no lock.** `wake fleets` reads `running` off the dial (one statusTimeout for the
+  whole list, as `RunningBuilds` did) and every other state off the files. A daemon that takes the dial
+  and does not answer (a quit's grace, a wedge) is `running · not answering`, never read off its files as
+  a crash or a stopped fleet. A lock held even briefly by a
+  listing could make a daemon starting on that fleet refuse.
+- **No directory until a daemon starts.** `FleetSocketPath` makes no named fleet's directory (`~/.wake` itself, the unnamed
+  fleet's, is still made private), so
+  `wake --fleet typo bogus`, `status` and `stop` leave nothing. The forked daemon makes its own directory
+  through the `$WAKE_SOCKET` branch, and a bare `wake` makes the one it drew, because that directory is
+  the name's reservation.
+- **The pool is unchanged.** `nextFleetName` keys on what is in `fleets/`, and a removed fleet's directory
+  and links are gone, so its name is free. A stopped directory that was not removed is never adopted.
+- **Not in this ruling:** claude's background shells outlive a stop (BUG-73), and a park keeps an agent's
+  process group by design. Whether "no stale processes" overrides that is the owner's call.
 
 ## 2026-11-11 — `/resume` opens at once: a scanner, a memory, a lookup, a stream (the owner, via wake-orch)
 

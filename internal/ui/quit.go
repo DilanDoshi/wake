@@ -54,8 +54,10 @@ const (
 	quitAsked = "quitting %s%s…"
 
 	// quitUsage is what /quit takes: nothing (the conversation you are in) or one
-	// @who. No value, unlike /name and /color - the target is the whole of it.
-	quitUsage = quitVerb + " ends the conversation you are in, or " + quitVerb + " " + agentPrefix + "<who> ends that agent"
+	// @who, an agent or a team. No value, unlike /name and /color - the target is
+	// the whole of it.
+	quitUsage = quitVerb + " ends the conversation you are in, or " + quitVerb + " " + agentPrefix +
+		"<who> ends that agent, or every live agent of that team after a confirm"
 
 	// noQuitTarget is /quit in the room with no handle. The room is not one
 	// conversation and quit is irreversible, so it may not be aimed by the roster
@@ -79,19 +81,40 @@ const (
 )
 
 // quitAgent ends one agent and removes it from this window once the report
-// confirms the ending.
+// confirms the ending - or opens the confirm over a team's (teamverbs.go).
+func (a App) quitAgent(arg string) (App, tea.Cmd) {
+	if fields := strings.Fields(arg); len(fields) > 0 {
+		target, ok := a.aimAt(fields, quitUsage)
+		switch {
+		case !ok:
+			// aimAt has reported why; the draft stays so a wrong handle can be
+			// fixed, displayTarget's own trade.
+			return a, nil
+		case target.team != "" && len(target.members) == 0:
+			a.sayAtRest(target.team)
+			return a, nil
+		case target.team != "":
+			return a.confirmTeamQuit(target.team, target.members)
+		}
+		return a.quitOne(target.agent)
+	}
+	// Bare is the conversation you are in. The room is not one conversation and
+	// quit is irreversible, so it may not be aimed by the roster cursor.
+	agent, ok := a.conversationAgent()
+	if !ok {
+		notice.Report("%s", noQuitTarget)
+		return a, nil
+	}
+	return a.quitOne(agent)
+}
+
+// quitOne ends one agent.
 //
 // It does not borrow park's blocked refusal, managerStop's own inversion: park
 // refuses a blocked agent because the denial nobody made survives the wake, and
 // a stop has no wake, so refusing would leave the operator unable to end the one
 // session they are trying to be rid of.
-func (a App) quitAgent(arg string) (App, tea.Cmd) {
-	agent, ok := a.quitTarget(arg)
-	if !ok {
-		// quitTarget has reported why; the draft stays so a wrong handle can be
-		// fixed, displayTarget's own trade.
-		return a, nil
-	}
+func (a App) quitOne(agent Agent) (App, tea.Cmd) {
 	if a.fleet.isManager(agent.Name) {
 		notice.Report("%s", quitIsTheManager)
 		return a, nil
@@ -108,22 +131,6 @@ func (a App) quitAgent(arg string) (App, tea.Cmd) {
 	a = a.clearDraft()
 	notice.Report(quitAsked, agentPrefix, agent.Name)
 	return a.awaitingQuit(agent.ID), a.write(quitFailed, rpc.Frame{Kind: rpc.FrameStop, SessionID: agent.ID})
-}
-
-// quitTarget resolves the agent /quit is about: an @who, else the conversation
-// you are in, else a refusal. It is quitAgent's own resolver rather than
-// displayTarget because /quit carries no value - the target is the whole grammar,
-// so a bare form is not "the value with no @who" but "no target named".
-func (a App) quitTarget(arg string) (Agent, bool) {
-	fields := strings.Fields(arg)
-	if len(fields) > 0 {
-		return a.namedTarget(fields, quitUsage)
-	}
-	agent, ok := a.conversationAgent()
-	if !ok {
-		notice.Report("%s", noQuitTarget)
-	}
-	return agent, ok
 }
 
 // awaitingQuit remembers a quit this client asked for, so the report that

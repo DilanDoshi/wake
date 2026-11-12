@@ -14,6 +14,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
+	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
 	"github.com/DilanDoshi/wake/internal/ui"
 )
@@ -204,14 +205,14 @@ func TestStopNamesTheFleetInEveryWayOnward(t *testing.T) {
 		st   rpc.Status
 		want string
 	}{
-		{"parked", rpc.Status{Fleet: "dev", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateParked}}},
-			"`wake --fleet dev` starts a daemon that holds them again, and `wake stop --fleet dev` is what forgets them"},
+		{"parked", rpc.Status{Fleet: "default", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateParked}}},
+			"`wake --fleet default` starts a daemon that holds them again, and `wake stop --fleet default` run while that daemon is up forgets them"},
 		{"orphans", rpc.Status{Fleet: "dev", Sessions: []rpc.SessionStatus{{ID: idAlpha, State: rpc.StateOrphaned}}},
 			"Starting a daemon with `wake --fleet dev` reaps"},
 		{"a short sweep", rpc.Status{Fleet: "dev", ProbeIncomplete: true}, "Check `wake status --fleet dev`"},
 	} {
 		var out bytes.Buffer
-		_ = reportNothingToStop(tc.st, &out)
+		_ = reportNothingToStop(tc.st, tempSocket(t), &out)
 		if !strings.Contains(out.String(), tc.want) {
 			t.Errorf("`wake stop` with no daemon and %s printed %q, want %q", tc.name, out.String(), tc.want)
 		}
@@ -262,5 +263,34 @@ func TestFleetsNamesTheWordForTheUnnamedFleet(t *testing.T) {
 	}
 	if got := out.String(); !strings.Contains(got, "`wake --fleet default` is the unnamed fleet") || strings.Contains(got, "a bare `wake` is the unnamed fleet") {
 		t.Errorf("an empty listing said %q", got)
+	}
+}
+
+// BUG-70: HOME=h is the working directory's h, so a fleet under it keeps its
+// name instead of reading as a socket set by hand.
+func TestAFleetUnderARelativeHomeKeepsItsName(t *testing.T) {
+	dir, err := os.MkdirTemp("", "wakeh")
+	if err != nil {
+		t.Fatal(err)
+	}
+	t.Cleanup(func() { _ = os.RemoveAll(dir) })
+	t.Chdir(dir)
+	t.Setenv("HOME", "h")
+	t.Setenv("WAKE_SOCKET", "")
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	// Fatal before FleetSocketPath, which would make the fleet wherever the root is.
+	if root, err := daemon.StateRoot(); err != nil || root != filepath.Join(wd, "h", ".wake") {
+		t.Fatalf("StateRoot under HOME=h is %q (%v), want %q", root, err, filepath.Join(wd, "h", ".wake"))
+	}
+	sock, err := daemon.FleetSocketPath("dev")
+	if err != nil {
+		t.Fatalf("FleetSocketPath(dev): %v", err)
+	}
+	if got := daemon.FleetName(sock); got != "dev" {
+		t.Errorf("the fleet at %q is called %q under HOME=h, want dev", sock, got)
 	}
 }
