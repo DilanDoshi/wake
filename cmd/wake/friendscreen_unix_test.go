@@ -10,8 +10,6 @@ import (
 	"testing"
 	"time"
 
-	"github.com/hinshun/vt10x"
-
 	"github.com/DilanDoshi/wake/internal/ui"
 )
 
@@ -20,51 +18,26 @@ import (
 // the strip and the notice row, under the pane.
 const cornerCols, cornerRows = 9, 5
 
-// corner is the cells a friend takes, as text, and whether they are one frame's:
-// Bubble Tea paints top to bottom and leaves the cursor on the last row (BUG-68).
-func (s *screen) corner() (text string, whole bool) {
-	s.term.Lock()
-	defer s.term.Unlock()
+// cornerOf is the cells a friend takes in one frame's rows, as text: a row's
+// runes are its cells (lines builds them so), right-trimmed.
+func (s *screen) cornerOf(rows []string) string {
 	var b strings.Builder
 	right := s.cols - ui.SideMargin
-	for y := s.rows - 2 - cornerRows; y < s.rows-2; y++ {
-		for x := right - cornerCols; x < right; x++ {
-			b.WriteRune(s.term.Cell(x, y).Char)
-		}
+	for _, row := range rows[s.rows-2-cornerRows : s.rows-2] {
+		cells := []rune(row + strings.Repeat(" ", s.cols))
+		b.WriteString(string(cells[right-cornerCols : right]))
 		b.WriteByte('\n')
 	}
-	return b.String(), s.term.Cursor().Y == s.rows-1
+	return b.String()
 }
 
 // awaitCorner waits for a whole frame's corner to draw a friend (drawn) or
 // nothing.
 func (s *screen) awaitCorner(drawn bool) string {
 	s.t.Helper()
-	deadline := time.Now().Add(screenTimeout)
-	for time.Now().Before(deadline) {
-		if c, whole := s.corner(); whole && strings.ContainsAny(c, "▀▄") == drawn {
-			return c
-		}
-		time.Sleep(20 * time.Millisecond)
-	}
-	_, whole := s.corner()
-	s.t.Fatalf("the corner never drew a friend = %v; the newest read was a whole frame's (cursor on the last row): %v.\n%s", drawn, whole, s.dump())
-	return ""
-}
-
-// splitPaint hands vt10x a frame in two pieces, the second only after reads of
-// the first: a frame the pty or vt10x's parser splits, read between the pieces.
-type splitPaint struct {
-	vt10x.Terminal
-	rest  []byte
-	reads int
-}
-
-func (p *splitPaint) Unlock() {
-	p.Terminal.Unlock()
-	if p.reads--; p.reads == 0 {
-		_, _ = p.Write(p.rest)
-	}
+	return s.cornerOf(s.awaitFrame(fmt.Sprintf("the corner drawing a friend = %v", drawn), func(rows []string) bool {
+		return strings.ContainsAny(s.cornerOf(rows), "▀▄") == drawn
+	}))
 }
 
 // Reads between two pieces of one frame wait for the rest (BUG-68). The frame is
@@ -73,29 +46,12 @@ func (p *splitPaint) Unlock() {
 func TestTheCornerIsNeverReadHalfPainted(t *testing.T) {
 	const cols, rows = 30, 12
 	sprite := []string{"  ▄▀▀▀▄  ", " ▀▄▀▄▀▄▀ ", "▄▀▀▀▀▀▀▀▄", " ▀▄▄▄▄▄▀ ", "  ▀▀ ▀▀  "}
-	top := rows - 2 - cornerRows
-	var frame strings.Builder
-	frame.WriteString("\x1b[H")
-	for y := range rows {
-		line := strings.Repeat(" ", cols)
-		if r := y - top; r >= 0 && r < cornerRows {
-			line = strings.Repeat(" ", cols-ui.SideMargin-cornerCols) + sprite[r] + strings.Repeat(" ", ui.SideMargin)
-		}
-		frame.WriteString(line)
-		if y < rows-1 {
-			frame.WriteString("\r\n")
-		}
+	lines := make([]string, rows-2-cornerRows)
+	for _, r := range sprite {
+		lines = append(lines, strings.Repeat(" ", cols-ui.SideMargin-cornerCols)+r)
 	}
-	fmt.Fprintf(&frame, "\x1b[%d;H", rows)
-	painted, last := frame.String(), sprite[cornerRows-1]
-	cut := strings.Index(painted, last) + len(string([]rune(last)[:cornerCols/2]))
-
-	term := vt10x.New(vt10x.WithSize(cols, rows))
-	if _, err := term.Write([]byte(painted[:cut])); err != nil {
-		t.Fatal(err)
-	}
-	// Three reads of the half, so neither one read nor two alike pass for whole.
-	s := &screen{t: t, term: &splitPaint{Terminal: term, rest: []byte(painted[cut:]), reads: 3}, cols: cols, rows: rows}
+	painted, last := altFrame(lines, cols, rows), sprite[cornerRows-1]
+	s := halfPainted(t, painted, strings.Index(painted, last)+len(string([]rune(last)[:cornerCols/2])), cols, rows)
 
 	if got, want := s.awaitCorner(true), strings.Join(sprite, "\n")+"\n"; got != want {
 		t.Fatalf("the corner was read part-way through its frame:\n%s\nwant the whole frame's:\n%s", got, want)
