@@ -54,8 +54,9 @@ const (
 
 // TaskPhase is which of the three moments in a dispatch's life this frame
 // reports. Four subtypes collapse to three because task_updated and
-// task_notification both report the same ending and differ only in their key
-// sets - one names the dispatch and carries a usage, the other does not.
+// task_notification both report the same ending (a waiting subagent's notice
+// aside: progress) and differ only in their key sets - one names the dispatch
+// and carries a usage, the other does not.
 type TaskPhase string
 
 const (
@@ -101,7 +102,8 @@ type TaskUpdate struct {
 	ID string `json:"id"`
 
 	// Parent is the task id of the subagent that dispatched this one, on its
-	// task_started alone, and "" for a dispatch the agent made itself.
+	// task_started alone (the UI's Tasks.named carries it onto the ending), and
+	// "" for a dispatch the agent made itself.
 	Parent string `json:"parent,omitempty"`
 
 	// Dispatch is the parent tool call that started this task, and the join

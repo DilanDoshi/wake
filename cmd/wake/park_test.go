@@ -182,7 +182,7 @@ func TestStopWithOnlyParkedSessionsIsNotAFleetLeftBehind(t *testing.T) {
 	var out bytes.Buffer
 	err := reportNothingToStop(rpc.Status{Sessions: []rpc.SessionStatus{
 		{ID: idAlpha, Name: "sydney", Label: "dev-5748", State: rpc.StateParked},
-	}}, &out)
+	}}, tempSocket(t), &out)
 
 	if err != nil {
 		t.Errorf("`wake stop` failed with %v over a fleet that is only parked. Nothing is running, so the "+
@@ -199,6 +199,19 @@ func TestStopWithOnlyParkedSessionsIsNotAFleetLeftBehind(t *testing.T) {
 	}
 }
 
+// With no daemon every parked session is on the report's Parked (FleetOnDisk
+// reads the park book there), and the stop says so rather than "No daemon is
+// running." alone.
+func TestStopWithNoDaemonCountsTheParkBook(t *testing.T) {
+	var out bytes.Buffer
+	err := reportNothingToStop(rpc.Status{Parked: []rpc.SessionStatus{
+		{ID: idAlpha, Name: "sydney", State: rpc.StateParked},
+	}}, tempSocket(t), &out)
+	if err != nil || !strings.Contains(out.String(), "1 agent parked") {
+		t.Errorf("`wake stop` over a parked fleet with no daemon said %q (%v): the park book is on Parked", out.String(), err)
+	}
+}
+
 // And an orphan beside a parked session is still a failure, counted correctly.
 //
 // The two rows come back in one report from daemon.FleetOnDisk and mean opposite
@@ -210,7 +223,7 @@ func TestStopStillFailsOverAnOrphanBesideAParkedSession(t *testing.T) {
 	err := reportNothingToStop(rpc.Status{Sessions: []rpc.SessionStatus{
 		{ID: idAlpha, Name: "sydney", State: rpc.StateParked},
 		{ID: idBeta, Name: "marco", State: rpc.StateOrphaned, PID: 4242},
-	}}, &out)
+	}}, tempSocket(t), &out)
 
 	if err == nil {
 		t.Fatal("`wake stop` exited zero with an orphaned agent still running: the fleet is not down, and " +
@@ -231,7 +244,7 @@ func TestStopStillFailsOverAnOrphanBesideAParkedSession(t *testing.T) {
 // costs.
 func TestReportNothingToStopWillNotConfirmAnIncompleteSweep(t *testing.T) {
 	var out bytes.Buffer
-	err := reportNothingToStop(rpc.Status{ProbeIncomplete: true}, &out)
+	err := reportNothingToStop(rpc.Status{ProbeIncomplete: true}, tempSocket(t), &out)
 
 	if err == nil {
 		t.Fatal("`wake stop` exited zero on a sweep the liveness budget cut short: runningCount is an " +

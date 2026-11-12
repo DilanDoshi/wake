@@ -51,6 +51,9 @@ func TestEveryStreamEventThatDrawsNothingDecodesToNothing(t *testing.T) {
 		{"a tool call's arguments", `{"type":"stream_event","session_id":"s1","event":{"type":"content_block_delta","index":1,"delta":{"type":"input_json_delta","partial_json":"{\"path\":"}}}`},
 		{"thinking", `{"type":"stream_event","session_id":"s1","event":{"type":"content_block_delta","index":0,"delta":{"type":"thinking_delta","thinking":"hmm"}}}`},
 		{"a frame carrying no event at all", `{"type":"stream_event","session_id":"s1"}`},
+		{"a null event", `{"type":"stream_event","session_id":"s1","event":null}`},
+		{"an event that is a string, as ui_invalidate's is", `{"type":"stream_event","session_id":"s1","event":"ui.render"}`},
+		{"a text delta whose usage is mistyped", `{"type":"stream_event","session_id":"s1","event":{"type":"content_block_delta","index":0,"delta":{"type":"text_delta","text":"hi"},"usage":"x"}}`},
 	} {
 		t.Run(c.name, func(t *testing.T) {
 			if evs := decodeOne(t, c.line); len(evs) != 0 {

@@ -343,6 +343,9 @@ type agent struct {
 
 	err      error
 	reported string
+	// reportedLoop is whether the last report announced a loop: one that ends after
+	// its turn's result moves no state, and still has to reach the windows.
+	reportedLoop bool
 
 	// unreachable is set when a write to this agent's stdin failed on a
 	// session nobody stopped. Kept apart from err, which is how the session
@@ -577,6 +580,7 @@ func (a *agent) observe(ev core.Event) (learned bool) {
 		if ev.Text != "queued" {
 			delete(a.unstarted, ev.MessageID) // started, or will never run
 		}
+		a.loop = foldWakeup(a.loop, ev, core.LoopKeepsAlive())
 	case core.KindToolUse:
 		// The sidebar's "what is this agent on", and what stateLocked reads as a
 		// tool in flight. ev.Subagent==nil: a subagent's forwarded tool_use is not
@@ -723,15 +727,15 @@ func (a *agent) stateLocked(now time.Time) string {
 	}
 }
 
-// changed reports whether this agent's state has moved since the last time
-// the watchdog announced it, and records the new one.
+// changed reports whether this agent's state, or whether it has a loop, has moved
+// since the last time the watchdog announced it, and records the new one.
 func (a *agent) changed() bool {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	state := a.stateLocked(time.Now())
-	if state == a.reported {
+	if state == a.reported && a.loop.active == a.reportedLoop {
 		return false
 	}
-	a.reported = state
+	a.reported, a.reportedLoop = state, a.loop.active
 	return true
 }

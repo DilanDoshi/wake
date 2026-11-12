@@ -38,6 +38,63 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FROM `feat/team-park-quit-resume`, 2026-11-09 — what the team verbs left out
+
+`/park @team`, `/quit @team` and `/resume <team>` shipped (`decisions.md`, 2026-11-09). Left out on purpose:
+
+- **A roster header action**, such as ⌃C on a picked team header parking the team. It reads well beside
+  the channels (#194), but ⌃C is a reflex key and ⌃C⌃C is the emergency exit, so a whole team would be
+  one reflex away. Today a picked header gets ⌃C's "parks one conversation" advice. Owner's call.
+- **`@all /park` and `@all /quit`** still reach every agent as literal text, the hole the team refusal's
+  comment names. `⌃Q⌃Q` and `wake stop` are the fleet-wide forms.
+- **A name/team collision** (an agent named like a team) is still not refused by the daemon (the teams
+  entry below). Every team verb resolves the name first, as routing does, so a team that shares an
+  agent's name cannot be parked or quit by that word while the agent is live. It can be resumed by it
+  only while no parked session holds the name.
+- **A team park's single confirmation waits for every member it asked for.** A member whose park the
+  daemon refuses, or that ends instead, holds that ask's confirmation back; the member's own refusal is
+  what shows. The next team park replaces the wait.
+- **`/resume <team>` says one `@x has been resumed.` per member**, as `/resume all` does, so the notice
+  slot ends on one name. A team-level line would want the wake's own report bookkeeping.
+- **The menus offer what the team verbs refuse.** A conversation's `@` menu is Claude Code's own (peers,
+  sessions, `@agent-…`), so it offers no team after `/park @` or `/quit @`, though those forms work there.
+  The room's `@` menu offers `@all` and parked agents after them; `/park @all` says no such agent, and
+  `/park @parked` says it is parked already.
+
+---
+
+## FOLLOW-UP, 2026-11-11 — a name, address, path or figure cut bare can read as another
+
+The one-row cuts were surveyed when the notice row got its "…". Most already cut with one (`detailRow`, `boardRow`,
+`commandecho`, `field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting (cards, the
+question text, titled boxes), or cut a label nobody types (a dispatch's description, a task's subject). One kind
+can mislead: rows that cut an **agent's name, a send's address, a path or a figure** with no mark. Those found:
+
+- the roster's `headLine` (`clip`)
+- the room's speaker head (`agentSaid`), cross-session head (`crossSaid`) and marker rows (`chat_blocks.go`: the
+  taken-back row ends on the name; the finished, ask, cancelled and resumed rows carry it)
+- the conversation's cross-session heads (`dm_blocks.go`'s `crossSessionBlock`, `sentBlock`, whose recipient can be
+  a `uds:` address)
+- the composer's target line
+- the workflow save dialog's path row (`workflowsave.go`, through `fitRow`): `.claude/workflows/deploy-s` at 40
+  columns
+- figures and error text: the compacted line's token counts (`beat.go`, `50.8k → 4.` at 24 columns), a task line's elapsed time
+  and a failed workflow's error line (`taskline.go`), the room's workflow ending (`chat_blocks.go`), and the
+  strip's counts below the widths `awareness.go` budgets for
+
+A name is how an agent is typed, and a cut one can be another live session's whole name (`fix-login-bug` drawn
+`fix-login`); a cut socket path names another socket. `headLine`'s own comment chose the bare cut ("a name stays
+recognisable three characters short"), so the call is the owner's: an ellipsis there costs a name one more cell.
+A cut figure is a plausible wrong number, the roster's and the strip's own argument for dropping one whole.
+
+For the 80ms a narrowing resize settles, `clipMidDrag` cuts the whole frame to the new width with no mark, the
+notice row included; the row is re-cut with its "…" once the resize settles.
+
+The auth panel's title and warn rows are still cut at the panel's width, though both surfaces that draw it wrap
+them (`! Could not read authenticatio` in a 30-column room); the cut mangles a word, never a command.
+
+---
+
 ## PRODUCT CALL NOT TAKEN, 2026-11-07 — a turn a peer's message started is resumed after a limit too
 
 The owner reported that agents which were idle when he hit the limit were woken by Wake's resume. The
@@ -122,7 +179,32 @@ the fleet, but it still counts with `%d`.
 
 ---
 
-## FOLLOW-UP, 2026-11-07 — a cut notice row ends with nothing to say it was cut
+## KNOWN GAP, 2026-11-10 — under a relative `HOME`, an agent's `~/.claude` may not be the daemon's
+
+BUG-70 made Wake's own state absolute under a relative `HOME` (`HOME=h`, a literal `~`), through
+`core.HomeDir`. Four things are still read relative:
+- `ProjectsDir`, `claudeConfigDir` and `core.ConfigFile`, against the working directory of the process that
+  reads them: the daemon's, or the CLI's for `wake import`'s listing;
+- termsetup's `$HOME/.config`, which `wake setup-terminal` writes.
+
+So under `HOME=h`:
+- `/workflows`' personal path is drawn as `h/.claude/workflows`. Before, `shortPath` drew it `~/…`, which
+  happened to work between two relative paths.
+- `/mcp`'s sign-in hint reads `cd ~/x && …`, which a shell with another `HOME` expands elsewhere.
+- Any process in another directory reads another `~/.wake`, as any relative `HOME` would.
+
+Every agent inherits the same relative `HOME` but runs in its own directory. If claude resolves `~/.claude`
+against that directory, an agent spawned elsewhere writes its transcripts and config under
+`<its cwd>/h/.claude`, where the daemon's history, discovery and usage-limit watch do not look. How claude reads
+a relative `HOME` is claude's behaviour, and nothing records it. Out of scope for BUG-70 (wake-orch,
+2026-11-10).
+
+*Closes with:* a recording of claude under a relative `HOME`, then either an absolute `HOME` for the whole
+process tree (set once in `cmd/wake`) or these paths resolved through `core.HomeDir`.
+
+---
+
+## ~~FOLLOW-UP, 2026-11-07 — a cut notice row ends with nothing to say it was cut~~ CLOSED 2026-11-11 (`fix/cut-notice-ends-in-an-ellipsis`)
 
 `noticeLine` (`internal/ui/appview.go`) draws a notice on one row with lipgloss's `MaxWidth`, which cuts at
 the pane's width and adds no ellipsis. A row cut inside a command reads as a shorter command: the adversarial
@@ -131,6 +213,16 @@ review of `fix/daemon-lines-name-the-fleet` measured the cap refusal's old "`wak
 row ends on a destructive verb today, but any long notice still loses its tail without a mark.
 
 *Closes with:* a cut notice row ending in "…", measured by the same width, with a test at the cut.
+
+**Closed by `noticeRow`** (`appview.go`): the row's words are cut by `ansi.Truncate` to `noticeWidth` with the
+DM's `ellipsis`, then coloured, so the "…" is the row's last cell inside the style. The timed, lingering and
+pinned notices all draw through it, and `noticeLinger` measures the same cut row: "drawn cells" is after the
+cut, the "…" one of them. The two other one-row cuts that could read as a shorter command or a whole list went
+with it: the rewind menu's "⚠ … also runs in this directory" (`rewindmenu.go`) now ends in "…", and the auth
+panel's `claude auth login` hint (`authpanel.go`) is no longer cut at all, since the room and the conversation both
+wrap the panel and a cut threw away a command they would have shown whole. Tests: `noticerow_test.go`,
+`TestANarrowPanelKeepsItsWholeCommand`, `TestANarrowPaneMarksItsCutSharedDirectoryWarning`. The rows that still
+cut a name bare are the entry above.
 
 ---
 
@@ -5811,7 +5903,27 @@ message and a subagent's gutter (neither opts in), and a paragraph or token wide
   runs on a drop (`imagedrop.go`), not on a take-back or a send-now's join. The daemon's reader would
   refuse that frame and end the connection, a hangup the client reattaches from.
 
-## 2026-10-03 — a bare one-shot's `system/ui_invalidate` frame does not decode
+## 2026-11-11 — ideas from the 2.1.322 audit (not bugs)
+
+- **`system/init` names the session's own `messaging_socket_path`**, and has since the August findings
+  (`2026-08-08-stream-json-findings.md`; it can be null, and the scrubber drops it). The daemon names a
+  send by address from Claude Code's session registry (`daemon/sendto.go`), a file Claude keeps for
+  itself; an agent's own socket could come off its init instead. *Worth it when:* the registry moves or
+  its read costs something.
+- **`result` carries `credential_expires_at`** (2.1.318: when the stored claude.ai sign-in ends). Wake
+  could say a login is about to lapse before the turns fail, beside `/reauth`. *Worth it when:* the owner
+  wants a warning ahead of the 401s.
+- **`--help` now documents `--permission-prompts <host|none>`** (2.1.322), whose `host` is "the SDK host or
+  `--permission-prompt-tool`". Wake still spawns the undocumented `--permission-prompt-tool stdio`, which
+  2.1.322 honours (the audit's asks were answered on it). *Worth it when:* the old flag goes away; record
+  `host` first.
+
+## ~~2026-10-03 — a bare one-shot's `system/ui_invalidate` frame does not decode~~ CLOSED 2026-11-11 (`fix/ui-invalidate-frame-decodes`)
+
+**Closed:** `wireFrame.StreamEvent` is raw now, read as a stream event by `partialEvent` alone, so a string
+`event` is read as nothing. `ui-invalidate.jsonl` is an ordinary 2.1.322 agent's first turn, which prints it
+before `init`. The one-shot's own line was never kept, so `list-agents-bare-renamed.jsonl` stays without it
+rather than carry a line nobody recorded.
 
 claude 2.1.288's bare `/list-agents` one-shot prints `{"type":"system","subtype":"ui_invalidate",
 "event":"ui.render",…}` before `init`. `wireFrame.StreamEvent` takes `event` as a stream event's
@@ -5822,6 +5934,11 @@ shown one. The line is left out of `list-agents-bare-renamed.jsonl` so the
 corpus decodes. Not fixed on `fix/at-quoted-mention` because `protocol.go` and `wire.go` sit at the
 800-line cap and PRs #147/#148 rework both. *Closes with:* a non-object `event` read as nothing, then
 the line restored to the fixture.
+
+**2026-11-11, 2.1.322: an ordinary agent prints it too.** A headless session on Wake's argv opened with
+the same line before `init` (one of two recordings), so a live agent's daemon now logs it and skips it.
+It is left out of `subagent-nested-background.jsonl` the same way (`fix/inner-subagent-ending-names-its-parent`).
+*Closes with:* as above, and that line restored too.
 
 ## 2026-10-03 — left open by the manager relay
 
@@ -6121,11 +6238,19 @@ The retry line (decisions.md, 2026-11-02) shipped with two things left out.
 
 The sidebar nests a subagent's own subagents under it (BUG-61). Left out, by the orchestrator's ruling:
 
-- **An inner subagent's ending is drawn in the agent's own conversation as though the agent dispatched
+- ~~**An inner subagent's ending is drawn in the agent's own conversation as though the agent dispatched
   it.** `taskLine` draws `● Subagent "…" finished` for every `task_notification` on the agent's stream, and a
   nested one's arrives there too; the room draws none for subagents. *Closes with:* attributing it to its
   parent through `Task.Parent` (`↳ under general-purpose`), or dropping it, since the parent's own receipt
-  carries what it handed back.
+  carries what it handed back.~~ **CLOSED on `fix/inner-subagent-ending-names-its-parent` by dropping it**
+  (wake-orch's ruling, 2026-11-11): `Tasks.named` carries the row's `Parent` onto the ending and `taskLine`
+  draws none for one (nor does the room admit one for a workflow a subagent ran). Parity with Claude Code:
+  two live probes of interactive 2.1.322 (haiku, a general-purpose subagent dispatching two Explores) drew
+  only the outer's `Agent "…" finished`, collapsed and under ctrl+o, and listed only the outer under the
+  prompt. Caveat: haiku backgrounded the agents, the first time though asked for the foreground, so both
+  probes are background nests where `subagent-nested.jsonl` is a foreground one. In a
+  foreground nest the inner's work stays readable in the outer's own pane (its dispatch call and result);
+  attributing would have been cut off at a narrow width, where the line already is.
 - **Past `maxSubDepth` (2) a row is drawn at the cap's indent**, so a fourth level reads as a sibling of
   its parent. Never observed: of 1,693 subagents on the recording machine none was deeper than
   `spawnDepth` 2, though a depth-2 subagent is offered the Agent tool. *Closes with:* a recorded deeper
@@ -6177,6 +6302,142 @@ nothing reads back, so the `⌃Q` window prints the words of what it had pinned 
   write the interrupt to; a turn that outlasts the grace is still killed and not booked, as before this
   change. *Closes with:* `⌃C` interrupting a working agent first too, or a kill short of SIGKILL that claude
   ends as an interrupt.
+
+## FROM `fix/test-waits-on-real-conditions`, 2026-11-10
+
+Harness waits now wait on what the test needs (BUG-29, BUG-68's related reads, BUG-71). Left out:
+
+- **Seven files `gofmt -l` flags on `main`**, all whitespace: `internal/daemon/parkwritedown_test.go`,
+  `internal/mcp/grouping.go`, `internal/ui/cards_blocks.go`, `chat_blocks_test.go`, `compactbar_test.go`,
+  `legend_test.go`, `internal/upgrade/upgrade.go`. Nothing in `make ci` runs gofmt. Left alone so the open PRs
+  that touch those files do not conflict (wake-orch). *Closes with:* one `gofmt -w` chore commit at a quiet moment.
+- **A few raw dials right after `startDaemon`** (`build_test.go`'s `Status`, `manager_test.go`'s `Status`,
+  `daemon_test.go`'s `Dial`) have `mustDial`'s window and no retry, since they test the product call itself.
+  Never seen failing. cmd/wake's `serveOn` waits on the file too; its client goes through `EnsureRunning`.
+- **cmd/wake's in-process room banner can still draw the checkout's path.** `internal/ui`'s `wakeDir` is the
+  first cwd it is asked under in a test binary, and only internal/ui's own `TestMain` can pin it; in cmd/wake
+  the first room drawn decides (the lifecycle test's stands in the workspace; a test that draws a room from
+  the checkout first fixes the path for the rest). No await reads the room banner today. *Closes with:* a test
+  hook for the banner's directory, which is a product-file change this test-only branch did not make.
+- **A test's own scratch HOME is not resolved through symlinks** (`screenWorkspace`): on macOS the child's
+  cwd reports `/private/var/…` and the bar draws the whole path, as these tests did before. Resolving it would
+  lengthen a bare-wake socket path under it by 8 bytes, near sun_path's 104. No test asserts on that path.
+
+## FROM `fix/draw-loop-idle-under-a-streaming-fleet`, 2026-11-10
+
+A token for a session nothing on screen shows no longer wakes the draw loop (BUG-67): it waits in its one
+inbox slot for the next frame that does.
+
+- **Four error notices wait for the next message.** A clipboard write, a title write, a `/friends` save and a
+  Kitty send report their failure from a command goroutine that returns no message (`clipboard.go`, `title.go`,
+  `friendsmenu.go`, `kittyplace.go`), so the notice row draws it at the next View. A streaming fleet used to
+  draw one within a millisecond; now it is the next heartbeat (every 50 ms while any agent works), the cursor's
+  blink or the next frame, as an idle fleet always did. *Closes with:* each failure returning a message, as
+  `kittyplace.go`'s success already does.
+- **A few clock-read words wait for the next draw too.** With no agent the daemon reports working - a `--brief`
+  self-start or a loop's own turn can stream with none - there is no heartbeat, so text View reads off the
+  clock refreshes at the cursor's blink (about 530 ms) or the next frame that rings: a loop line's "next at"
+  clause dropping once that time passes (`beat.go`'s `loopWaitLine`) and the resume picker's ages
+  (`resume.go`). A streaming fleet used to redraw them at its token rate. Found by the adversarial review.
+  *Closes with:* a View-time read of the clock on its own message, if one is ever worth its wake.
+
+## FROM `fix/loop-ends-without-rescheduling`, 2026-11-11
+
+A self-paced loop's line now ends when claude ends the loop (2.1.319+): its own wakeup turn, which names
+itself `loop_wakeup` on its `command_lifecycle`, completing without scheduling the next. Left out:
+
+- **The countdown runs up to a minute early.** `foldLoop` sets the next fire to now plus `delaySeconds`,
+  but claude rounds the wakeup to a whole minute: a `delaySeconds` of 60 was scheduled "in 93s"
+  (`loop-self-paced-end.jsonl:41`). The true time is on that tool result as `tool_use_result.scheduledFor`
+  (epoch ms, beside `clampedDelaySeconds`), which nothing reads, and again on the wakeup's lifecycle when it
+  fires. *Closes with:* the fold reading `scheduledFor` off the ScheduleWakeup's result.
+- **A turn the operator sends between wakeups is unrecorded.** Wake leaves the loop as it was; whether
+  claude ends it is not known. *Closes with:* a recording of a message sent while a wakeup is pending.
+- **An interrupted wakeup turn is unrecorded.** Wake ends the loop on its `cancelled` as on a `completed`
+  with nothing rescheduled. *Closes with:* a recording of an interrupt during a wakeup turn.
+- **`CLAUDE_CODE_LOOP_KEEPALIVE` is read from the daemon's environment**, which its agents inherit; a
+  value set any other way (a settings file's `env`) is not seen, and only `1`, the changelog's spelling, is
+  honoured, where claude may read `true` too (it does for another of its switches,
+  `2026-10-02-file-rewind-findings.md` §1). *Closes with:* the first report of either.
+- **claude 2.1.308 to 2.1.318 is not told apart.** Their init already advertises
+  `lifecycle_wakeup_source_v1` (`api-error-unreachable.jsonl`), but they kept a loop alive with a fallback
+  wakeup where 2.1.319 ends it; on them the line ends early, and the next `ScheduleWakeup` brings it back
+  at `iter 1`. Wake reads no `claude_code_version`. *Closes with:* a fleet still on one of them.
+- **Nothing recorded shows claude ending the loop.** The take shows only that no wakeup came for 150 s
+  after the turn that rescheduled nothing; the rule itself is 2.1.319's changelog.
+- **Two wakeup shapes are unrecorded.** A wakeup that fires while another turn runs is probably `queued`
+  first; if its `started` then names no `wakeup_source`, the line never ends, as before this change. A
+  wakeup turn that ends waiting on a background task, with the next turn scheduling the wakeup, ends the
+  line early; the next `ScheduleWakeup` brings it back at `iter 1`. *Closes with:* a recording of either.
+
+## FROM `fix/inner-subagent-ending-names-its-parent`, 2026-11-11
+
+A subagent's own subagent no longer draws an ending in the agent's conversation (the closed bullet under
+`fix/nested-subagents-in-the-sidebar`). Re-checked on 2.1.322: the foreground nest matches
+`subagent-nested.jsonl` (2.1.314) frame for frame; the background nest is `subagent-nested-background.jsonl`.
+Left out:
+
+- ~~**A double ending for a subagent waiting on its own background subagents.** Interactive 2.1.322 drew
+  `Agent "…" is waiting on its own background work · 16s`, then `finished · 1m 16s` for the same task, and
+  counts the inner ones in `Waiting for 2 background agents to finish`. The headless background recording
+  never waited: the outer's one `task_notification` is a plain `completed`, before its children end
+  (`subagent-nested-background.jsonl:66`). If a headless outer can wait, Wake likely draws `ended` for a
+  status it does not know, then `finished`. *Closes with:* a stream-json recording of an outer that waits for
+  its background children, then a ruling on its first ending.~~ **CLOSED on `fix/subagent-waiting-ending`
+  for a wait on a background shell** (wake-orch's ruling, 2026-11-11): a headless outer waiting on its own
+  background shell is recorded (`subagent-waits-background.jsonl`). Its first `task_notification` is a plain `completed` whose whole
+  summary says it has not reported yet (`:53`), then the same task id starts again and ends with its
+  hand-back (`:86`, `:91`); Wake drew `finished` at both. Core reads that summary as progress
+  (`subagentWaiting`), so the row stays running and only the real ending draws. Left out: the row says
+  nothing of waiting where Claude Code says `is waiting on its own background work`; the `task_updated`
+  just before the notice still ends the row for the one frame between them; and the daemon drops the row
+  there, so a window attaching mid-wait sees only the shell until the outer starts again, and `trackSub`
+  forgets the outer too, so `forkSource` allows a fork while its hand-back is still to come (as before).
+  Also left out: a headless outer waiting on its background *subagents* is unrecorded, so whether its
+  notice is the same sentence is not known; a subagent whose own final reply is exactly that sentence reads
+  as waiting, its row running until a park, end or `/clear`; and a later claude rewording the sentence
+  brings the double ending back silently, since task frames are live-only and `make drift` reads
+  transcripts.
+- **Nothing marks a report an orphaned inner subagent hands the agent itself.** Once the headless outer has
+  ended, its children's hand-backs reach the agent as `<agent-message from="<inner id>">` with no parent tool
+  use (`subagent-nested-background.jsonl:108`, `:114`). Core drops every hand-back line, the agent's own
+  subagents' included, and the inner ending that used to sit there is now dropped too, so only the agent's
+  reply says what came back. Interactive Claude Code never reaches this state: it keeps the outer alive
+  until its children end. *Closes with:* a ruling on drawing a hand-back in the conversation it reaches,
+  which is the hand-back surface for every subagent, not only an orphan. Filed as BUG-74.
+
+## FROM `fix/session-picker-opens-at-once`, 2026-11-11
+
+- **A persisted index of what each transcript held.** The first `/resume` in a window still reads every
+  transcript once (~2.4 s here, behind a picker that is already open), and a new window is cold again. A file
+  beside the fleet keyed on (path, size, mtime) would make a cold window warm. It is not built: it is a copy
+  of Claude's data Wake would own and have to invalidate, against "Wake owns almost no state", and the stream
+  already hides the wait. *Closes with:* a first open measured over ~2 s of CPU-bound reading on the owner's
+  machine after this change, or a corpus an order of magnitude past 10 GB - and then the argued exception, a
+  cache that may be deleted at any time and is never read for anything but speed.
+- **An appended transcript is read again whole.** A live session grows between opens and its entry no longer
+  matches, so a multi-hundred-megabyte one costs a full scan (~0.6 s per GB). Reading only from the old size
+  would make that free, but a transcript is a tree Claude only ever appends to *as far as anyone has
+  checked*, and a rewrite in place would be missed silently. *Closes with:* a measured need, and a cheap proof
+  the prefix is unchanged (a hash of the last block before the old size, at the least).
+- **The line reader allocates a copy of every line**, about half the CPU left after the scanner.
+  `readTranscriptLine` is shared with history, rewind targets and the workflow reader, which keep what it
+  returns, so discovery cannot borrow its buffer without changing theirs. *Closes with:* a variant that
+  hands back a reused slice, used only where the line is read before the next.
+- **`/adopt` and `wake import` still wait for the whole walk.** They read through the cache and the scanner, so
+  they are as fast as the picker's complete open, but they list nothing until every transcript is read.
+  *Closes with:* the same stream for `/adopt`'s block, if its wait is ever felt.
+- **The scanner does not validate grammar** (`discoverscan.go`'s header). A line that is structurally closed
+  but has a bad escape, control character or number in a key or value it skips, or a wanted value that will not
+  decode, is read where a decoder would drop the whole line. *Closes with:* nothing, unless a writer other than Claude starts appending to transcripts; then a
+  `json.Valid` on the lines that carry a wanted key.
+- **A window's cache is its own.** The daemon holds a cache too, for a confirmed pick, and the two do not
+  share. *Closes with:* the picker's walk going through the daemon, which also needs a frame and three
+  reflective guards, for a saving the stream already gives.
+- **A transcript rewritten in place to the same size with its time put back reads as unchanged.** A restore or
+  a copy that keeps dates replaces the file (a new identity, which the cache catches); only a write into the
+  same file that changes no byte count and sets the mtime back slips through, which no writer does. *Closes
+  with:* the file's change time in the key, which `Stat_t` spells differently on each platform.
 
 - **A process an agent's shell left behind after the shell exited outlives the fleet** (BUG-73's residual, found
   live 2026-11-12). `nohup cmd &` in a foreground Bash call, and a `SessionStart` hook's background command,

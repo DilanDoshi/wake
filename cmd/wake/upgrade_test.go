@@ -71,6 +71,10 @@ func TestUpgradeNamesTheRunningFleetsThatKeepTheOldBuild(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
+	// What a forked daemon's own FleetSocketPath makes under $WAKE_SOCKET.
+	if err := os.MkdirAll(filepath.Dir(socket), 0o700); err != nil {
+		t.Fatal(err)
+	}
 	ctx, cancel := context.WithCancel(context.Background())
 	served := make(chan error, 1)
 	go func() { served <- daemon.Serve(ctx, socket) }()

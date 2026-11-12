@@ -17,6 +17,7 @@ import (
 	"strings"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -211,7 +212,7 @@ func (a App) restoreView(width int) string {
 	}
 	rows = append(rows, detailRow(restoreSummary(*r.Preview), width))
 	if shared := a.sharedDirectory(agent); shared != "" {
-		rows = append(rows, ErrorStyle.MaxWidth(width).Render("⚠ "+shared))
+		rows = append(rows, ErrorStyle.Render(ansi.Truncate("⚠ "+shared, width, ellipsis)))
 	}
 	for i, act := range r.actions() {
 		label := rewindActionLabels[act]

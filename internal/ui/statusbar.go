@@ -39,7 +39,6 @@ package ui
 
 import (
 	"fmt"
-	"os"
 	"path/filepath"
 	"strings"
 	"unicode"
@@ -47,6 +46,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 
+	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/gitref"
 )
 
@@ -309,8 +309,8 @@ func shortPath(dir string) string {
 	if dir == "" {
 		return ""
 	}
-	home, err := os.UserHomeDir()
-	if err != nil || home == "" {
+	home, err := core.HomeDir()
+	if err != nil {
 		return dir
 	}
 	if rel, err := filepath.Rel(home, dir); err == nil && !strings.HasPrefix(rel, "..") {

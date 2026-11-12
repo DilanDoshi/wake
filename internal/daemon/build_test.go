@@ -2,6 +2,9 @@ package daemon
 
 import (
 	"net"
+	"os"
+	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -35,38 +38,54 @@ func TestRunningStatusAsksOnlyALiveDaemon(t *testing.T) {
 	}
 }
 
-// RunningBuilds names the build of each fleet with a daemon up and leaves out
-// the rest - and derives each socket itself, so a $WAKE_SOCKET naming one
-// exact daemon does not stop a listing of all of them.
-func TestRunningBuildsNamesOnlyTheFleetsThatAreUp(t *testing.T) {
+// A fleet whose daemon answers is listed by its report, and any other by what
+// its files hold - and each socket is derived from the name, so a $WAKE_SOCKET
+// naming one exact daemon does not stop a listing of all of them.
+func TestFleetStatesAskTheRunningAndReadTheStopped(t *testing.T) {
 	t.Setenv("HOME", tempHome(t))
 	t.Setenv(SocketEnv, "")
 	up, err := FleetSocketPath("canyon")
 	if err != nil {
 		t.Fatal(err)
 	}
-	if _, err := FleetSocketPath("mesa"); err != nil {
+	down, err := FleetSocketPath("mesa")
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, sock := range []string{up, down} {
+		if err := os.MkdirAll(filepath.Dir(sock), stateDirPerm); err != nil {
+			t.Fatal(err)
+		}
+	}
+	if err := os.WriteFile(parkBookPath(down), []byte(`[{"id":"a","name":"alex"}]`), 0o600); err != nil {
 		t.Fatal(err)
 	}
 	startDaemonOn(t, up)
 	t.Setenv(SocketEnv, tempSocket(t))
 
-	got := RunningBuilds([]string{"canyon", "mesa"})
-	if len(got) != 1 || got["canyon"] != version.Build() {
-		t.Errorf("RunningBuilds = %v, want only canyon on %q", got, version.Build())
+	got := FleetStates([]string{"canyon", "mesa"})
+	if r := got["canyon"].Report; r == nil || r.Build != version.Build() {
+		t.Errorf("canyon's report = %+v, want its build %q", r, version.Build())
+	}
+	if m := got["mesa"]; m.Report != nil || strings.Join(m.Left.Parked, ",") != "alex" {
+		t.Errorf("mesa = %+v, want no report and alex parked", m)
 	}
 }
 
 // A daemon that takes the dial and never answers - mid-shutdown, or wedged -
 // costs statusTimeout, so the fleets are asked together: three such fleets
-// cost one timeout, not three.
-func TestRunningBuildsAsksEveryFleetAtOnce(t *testing.T) {
+// cost one timeout, not three. Each is listed as a daemon that did not answer,
+// never read off its files as a crash or a stopped fleet.
+func TestFleetStatesAskEveryFleetAtOnce(t *testing.T) {
 	t.Setenv("HOME", tempHome(t))
 	t.Setenv(SocketEnv, "")
 	names := []string{"a", "b", "c"}
 	for _, name := range names {
 		sock, err := FleetSocketPath(name)
 		if err != nil {
+			t.Fatal(err)
+		}
+		if err := os.MkdirAll(filepath.Dir(sock), stateDirPerm); err != nil {
 			t.Fatal(err)
 		}
 		ln, err := net.Listen("unix", sock)
@@ -85,8 +104,10 @@ func TestRunningBuildsAsksEveryFleetAtOnce(t *testing.T) {
 		}()
 	}
 	start := time.Now()
-	if got := RunningBuilds(names); len(got) != 0 {
-		t.Errorf("silent daemons reported builds: %v", got)
+	for name, st := range FleetStates(names) {
+		if st.Report != nil || !st.Silent {
+			t.Errorf("silent daemon %s is listed %+v, want no report and silent", name, st)
+		}
 	}
 	if took := time.Since(start); took >= 2*statusTimeout {
 		t.Errorf("three silent fleets took %v; asked together they cost one %v", took, statusTimeout)

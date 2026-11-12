@@ -2,7 +2,7 @@
 
 A terminal app for developers running many Claude Code sessions at once. 
 
-**Current version:** 0.1.15 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
+**Current version:** 0.1.16 · **[Download the latest release →](https://github.com/DilanDoshi/wake/releases/latest)**
 
 **Website:** [wake-landing-rouge.vercel.app](https://wake-landing-rouge.vercel.app/)
 
@@ -89,7 +89,7 @@ command it has, read from the build itself and narrowed as you type.
 wake                    start a new fleet, name it, and open it
 wake --fleet <name>     open one that already exists (a bare `wake` always makes a new one)
 wake --max-agents <n>   run at most n sessions at once, 1 to 50 (50 unless set); also with new, attach, manager
-wake fleets             every fleet on this machine
+wake fleets             every fleet on this machine, and what each is: running, parked, crashed or stopped
 wake new [name]         open a conversation with a new agent, with a name you choose
 wake attach <who>       open a conversation with one already running, by name or id
 wake fork <who> [name]  branch a conversation: a new agent with the same history so far
@@ -99,7 +99,7 @@ wake upgrade            install the newest release over this one
 wake --version          which build you have
 wake manager            start the manager from a shell (the room seats one by default)
 wake status             what is running, and each agent's team (`--team <name>`: one team's members)
-wake stop               stop every session and the daemon — the one irreversible verb
+wake stop               stop every session and the daemon, forget what was parked, and remove the fleet — the one irreversible verb
 ```
 
 Flags on the verbs that start a session (`new`, `manager`):
@@ -116,9 +116,11 @@ Flags on the verbs that start a session (`new`, `manager`):
 ```
 
 Inside the room, `/new` takes `--worktree`, `--add-dir`, `--debug-file` and `--debug` too. The other
-slash commands are `/resume`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
+slash commands are `/resume`, `/park`, `/name`, `/task`, `/color`, `/team`, `/quit`, `/adopt`, `/mcp`, `/login`,
 `/reauth`, `/manager`, `/manager-stop`, `/board`, `/workflows`, `/status`, `/groupchat-filter`,
-`/wake-name`, `/wake-help` and `/friends`; `/effort` and `/model` configure the session they are addressed to. `/wake-name <name>`
+`/wake-name`, `/wake-help` and `/friends`; `/effort` and `/model` configure the session they are addressed to. `/park`, `/quit` and
+`/resume` take a team as well as one agent: `/park @backend` parks every live agent on the team (one waiting on a question is left, and named),
+`/quit @backend` ends them after a confirm, and `/resume backend` wakes the parked ones. `/wake-name <name>`
 renames the fleet you are in, so `wake --fleet <name>` and `wake fleets` know it by the new name; the
 agents already running keep reaching it, and every open window says so. A bare `/wake-name` says what
 the fleet is called. The unnamed fleet keeps its name. Every window titles its terminal tab with the

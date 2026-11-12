@@ -42,6 +42,7 @@ func (a App) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	next, title := next.dueTitle()
 	next = next.helpLaidOut()
 	next = next.rosterSettled(a)
+	next = next.left(a.drawnIDs(), next.drawnIDs()).unseenTold()
 	if ask == nil && roomAsk == nil && blink == nil && linger == nil && upgrade == nil && title == nil {
 		return next, cmd
 	}
@@ -64,8 +65,10 @@ func (a App) update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case adoptedMsg:
 		return a.adoptArrived(m)
-	case resumeReadyMsg:
+	case resumeListedMsg:
 		return a.resumeArrived(m)
+	case resumeFilledMsg:
+		return a.resumeFilled(m)
 
 	case pathScanMsg:
 		return a.pathsScanned(m)
