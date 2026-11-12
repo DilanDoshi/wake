@@ -65,6 +65,18 @@ const (
 	keyAITitle     = "aiTitle"
 )
 
+// The fields a line is scanned for, in transcriptFields' order.
+const (
+	fieldCwd = iota
+	fieldLastPrompt
+	fieldCustomTitle
+	fieldAITitle
+	fieldCount
+)
+
+// transcriptFields are the keys readTranscript wants out of a line.
+var transcriptFields = [fieldCount]string{keyCwd, keyLastPrompt, keyCustomTitle, keyAITitle}
+
 // previewBytes bounds one preview line. A prompt is unbounded text somebody
 // typed, and this lands in a terminal listing beside a column of ids.
 const previewBytes = 72
@@ -81,8 +93,8 @@ const transcriptScanBytes = 1 << 20
 // session's directory proof needs a **full** scan of its transcript - a
 // slug-matching cwd can sit megabytes in - so the read cannot be shortened
 // without losing sessions (measured: 18 of a 358-file corpus have their proving
-// cwd 260KB-9MB deep). Read one after another that is a multi-second hang (3.5s
-// measured); read in parallel it is sub-second. A bound rather than one
+// cwd 260KB-9MB deep). Read one after another that is a multi-second hang; read
+// in parallel it is a fraction of that. A bound rather than one
 // goroutine per file: hundreds of open files at once buys nothing past
 // saturating the disk and the cores, and costs a file descriptor each.
 const discoverWorkers = 16
@@ -369,15 +381,15 @@ func verifiedDir(slug string, cwds []string) string {
 	return found
 }
 
-// readTranscript pulls the three keys this package knows out of one file.
+// readTranscript pulls the keys this package knows out of one file.
 //
-// One pass, line by line, decoding each line into a map rather than a struct:
-// a struct would put a `json` tag carrying one of claude's key names into this
-// tree, and the airlock's detector reads tags and literals alike. A map keyed
-// on the consts above keeps the whole vocabulary in one const block where a
-// guard can see it.
+// One pass, line by line, through scanTopLevel, which hands back the raw value
+// of each wanted key without decoding the rest of the line: a struct would put a
+// `json` tag carrying one of claude's key names into this tree, and the
+// airlock's detector reads tags and literals alike, so the keys stay in the const
+// block above where a guard can see them.
 //
-// A line that will not parse is skipped rather than fatal. A transcript is
+// A line that will not scan is skipped rather than fatal. A transcript is
 // appended to by a live process, so the last line of a file being read may be a
 // partial write - 2026-08-12 findings §7 records that no torn line was observed
 // in 428 files and that this is therefore not designed around, only survived.
@@ -396,25 +408,31 @@ func readTranscript(path string) (cwds []string, preview, title, name string) {
 	}
 	defer func() { _ = f.Close() }()
 	seen := map[string]bool{}
+	// Nearly every line repeats the cwd before it, so a value already read is
+	// not decoded again: what it decodes to is a function of its bytes.
+	cwdRaw := map[string]bool{}
 	var generated string
+	var vals [fieldCount][]byte
 	br := bufio.NewReaderSize(f, 64*1024)
 	for {
 		raw, err := readTranscriptLine(br)
-		var line map[string]json.RawMessage
-		if len(raw) > 0 && json.Unmarshal(raw, &line) == nil {
-			if c, ok := decodeString(line, keyCwd); ok && !seen[c] {
-				seen[c] = true
-				cwds = append(cwds, c)
+		if len(raw) > 0 && scanTopLevel(raw, transcriptFields[:], vals[:]) {
+			if rv := vals[fieldCwd]; len(rv) > 0 && !cwdRaw[string(rv)] {
+				cwdRaw[string(rv)] = true
+				if c, ok := decodeString(rv); ok && !seen[c] {
+					seen[c] = true
+					cwds = append(cwds, c)
+				}
 			}
 			// Last one wins for both: a transcript carries one `last-prompt` frame
 			// per turn, and the newest is what says what this session is doing.
-			if p, ok := decodeString(line, keyLastPrompt); ok {
+			if p, ok := decodeString(vals[fieldLastPrompt]); ok {
 				preview = p
 			}
-			if t, ok := decodeString(line, keyCustomTitle); ok {
+			if t, ok := decodeString(vals[fieldCustomTitle]); ok {
 				title = t
 			}
-			if t, ok := decodeString(line, keyAITitle); ok {
+			if t, ok := decodeString(vals[fieldAITitle]); ok {
 				generated = t
 			}
 		}
@@ -438,12 +456,11 @@ func readTranscript(path string) (cwds []string, preview, title, name string) {
 	return cwds, oneLine(preview, previewBytes), oneLine(title, previewBytes), name
 }
 
-// decodeString reads one top-level string key, treating any other shape as
-// absent. A transcript is a file on disk that outlives whichever build wrote
+// decodeString reads a field's raw value as a string, treating any other shape
+// as absent. A transcript is a file on disk that outlives whichever build wrote
 // it, so a key that is one day an object must not become an error here.
-func decodeString(line map[string]json.RawMessage, key string) (string, bool) {
-	raw, ok := line[key]
-	if !ok {
+func decodeString(raw []byte) (string, bool) {
+	if len(raw) == 0 {
 		return "", false
 	}
 	var s string
