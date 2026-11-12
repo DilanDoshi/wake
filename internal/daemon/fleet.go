@@ -33,7 +33,6 @@ import (
 	"regexp"
 	"sort"
 	"strings"
-	"sync"
 	"unicode"
 
 	"github.com/DilanDoshi/wake/internal/core"
@@ -70,7 +69,10 @@ var fleetName = regexp.MustCompile(`^[A-Za-z0-9_][A-Za-z0-9_-]*$`)
 // passing "".
 const DefaultFleet = ""
 
-// FleetSocketPath returns the socket for one fleet, creating its directory.
+// FleetSocketPath returns the socket for one fleet. A named fleet's directory
+// is not made here, so a command refused after this, or one that only looks,
+// leaves none behind (BUG-21): the daemon makes it as it starts, forked under
+// $WAKE_SOCKET, and a bare `wake` makes the one it drew (NewFleetSocketPath).
 //
 // $WAKE_SOCKET still wins over everything, and that is not a leftover:
 // EnsureRunning forks the daemon and then dials it, so the two processes have
@@ -100,8 +102,12 @@ func FleetSocketPath(name string) (string, error) {
 	if err := checkSocketPath(sock); err != nil {
 		return "", err
 	}
-	if err := os.MkdirAll(dir, stateDirPerm); err != nil {
-		return "", fmt.Errorf("create %s: %w", dir, err)
+	// The unnamed fleet's directory is ~/.wake itself, which holds every fleet
+	// and is no fleet to leave behind, so it is made private as ever.
+	if name == DefaultFleet || name == LegacyFleet {
+		if err := os.MkdirAll(dir, stateDirPerm); err != nil {
+			return "", fmt.Errorf("create %s: %w", dir, err)
+		}
 	}
 	return sock, nil
 }
@@ -270,34 +276,6 @@ func Fleets() ([]string, error) {
 		return append([]string{LegacyFleet}, named...), nil
 	}
 	return named, nil
-}
-
-// RunningBuilds is the build each named fleet's daemon reports, for the fleets
-// with one up. A stopped fleet, or a daemon that will not answer, is absent;
-// an empty build is a daemon from before builds were reported. The fleets are
-// asked together, so a daemon that takes the dial and never answers costs one
-// statusTimeout for the whole listing rather than one each.
-func RunningBuilds(names []string) map[string]string {
-	var (
-		mu     sync.Mutex
-		wg     sync.WaitGroup
-		builds = map[string]string{}
-	)
-	for _, name := range names {
-		dir, err := fleetDir(name)
-		if err != nil {
-			continue
-		}
-		wg.Go(func() {
-			if st, running, err := runningStatus(filepath.Join(dir, socketFileName)); running && err == nil {
-				mu.Lock()
-				builds[name] = st.Build
-				mu.Unlock()
-			}
-		})
-	}
-	wg.Wait()
-	return builds
 }
 
 // fleetsIn is Fleets against a given root. Split for fleetDirIn's reason.

@@ -421,6 +421,9 @@ var claudeWireVocabulary = wordSet([]string{
 	// A delivered SubagentHandback receipt's whole message, which alone makes a
 	// two-key result read as its sentence (receiptSentence).
 	"Report delivered to your caller.",
+	// The whole summary of a subagent's notice that it waits on its own background
+	// work, which alone keeps a `completed` notification from ending it.
+	"This agent has not reported yet: it is waiting on its own background work and will deliver its report through SubagentHandback when that finishes.",
 
 	// The two interactive tools. Policed precisely because neither is ever
 	// named: askKind classifies an ask from requires_user_interaction and its
@@ -836,7 +839,9 @@ var notNamedByTheAirlock = map[string]string{
 // 256 → 258: "wakeup_source" and its "loop_wakeup", the lifecycle of a turn claude
 // starts for a self-paced loop, whose ending without a reschedule ends the loop.
 // loop-self-paced-end.jsonl.
-const policedWordCount = 258
+// 258 → 259: a waiting subagent's whole summary (subagentWaiting), which keeps its
+// `completed` notification from ending it. subagent-waits-background.jsonl.
+const policedWordCount = 259
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
@@ -1275,6 +1280,8 @@ var embeddedMarkers = map[string]bool{
 	// inside their JSON-in-text results.
 	"msg_id":                           true,
 	"Report delivered to your caller.": true,
+	// A waiting subagent's notice, a summary value (subagentWaiting).
+	"This agent has not reported yet: it is waiting on its own background work and will deliver its report through SubagentHandback when that finishes.": true,
 	// Every connector's name begins with it ("claude.ai Gmail"); never whole.
 	"claude.ai ": true,
 }

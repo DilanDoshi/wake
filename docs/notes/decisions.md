@@ -6100,3 +6100,53 @@ BUG-65's entry asked for three conditions: the `<synthetic>` model, the one fixe
 - **Where it is dropped.** In the decoder, so the DM's reopen and the room's restore, which both read
   `daemon.History`, lose it alike. A rewind target and `↑` read only typed user turns, so an assistant
   record never reached either; tests hold all four.
+
+## 2026-11-11 — a stopped fleet leaves the list: `wake stop` removes it (the owner, via wake-orch; BUG-21)
+
+A directory with no socket is still a fleet (`fleet.go`), and that ruling stands. What was never decided
+was whether a fleet is ever *done*. It is done when nothing in it can come back.
+
+- **Done means**, all read under the fleet's own daemon lock and failing closed: no daemon (the lock taken
+  exclusively, which `lock.go` argues is the one unambiguous liveness proof; a socket file alone is
+  debris); no roster rows and no `parkready.json` (a crash the next daemon's reaper hands to the park book,
+  BUG-53); a park book that is absent or `[]`; and nothing in the directory but Wake's own files. An
+  unreadable book or roster is **not** empty, though `loadParkBook` reads one as empty so a daemon still
+  starts. `debug/` keeps a fleet (`debuglog.go`: Wake never removes a log), and so does any other file,
+  such as a hand-made `parked.json.before-restore-…`. A fleet whose only parked session is the manager
+  is parked, not done.
+- **`wake stop` is where a fleet ends, and there is no new verb.** It is already the irreversible ending and
+  already forgets the parked half, and a second ending verb would have its own refusals. After a confirmed
+  down of a named fleet, stop takes the fleet's lock (it waits up to `releaseCeiling` while the exiting
+  daemon still holds it) and removes the fleet unless a crash, an unreadable file or a foreign entry keeps
+  it, saying what kept it; either way it exits 0, since the stop happened.
+- **With no daemon and parked sessions, stop forgets them and removes the fleet** (the owner chose this
+  over refusing, 2026-11-11). It names every session it forgets ("Forgot 2 agents parked (alex, manager)
+  and removed fleet dev…"). Their transcripts stay on disk. Before this the branch said "`wake stop` is
+  what forgets them for good" and could not, and it was unreachable anyway (BUG-72). The unnamed fleet
+  (`~/.wake` itself) and a hand-set socket have no directory to remove: they say a daemon must be started
+  and stopped to forget them. After a *live* stop the daemon has cleared the book, so a session found in it
+  was parked since, by a daemon someone started meanwhile; the stop never named it, so it keeps the fleet
+  (the adversarial review's case). What is counted and named is the book's records, every one of them,
+  since that is what a stop removes. The report's `Parked` leaves out a record Wake did not mint or with
+  no transcript, so the listing can say `parked · the manager` for a manager `/resume` would not offer.
+- **A removal that fails after the book went still names what it forgot.** The park book goes before the
+  directory, so a directory that cannot be removed (a daemon starting meanwhile wrote to it) leaves the
+  fleet with its book already gone, and the stop says so rather than "stays".
+- **How it removes.** Old names forwarding to the fleet are read first and removed once the directory has
+  gone (a fleet that stays keeps them), so no `--fleet <old>` forwards to nothing. Then Wake's files go one by one with the lock last, then
+  `os.Remove` of the directory. Never `RemoveAll`: a starting daemon opens its log before it takes the
+  lock, so anything that arrives meanwhile makes the directory's removal fail, and the fleet stays.
+- **The listing takes no lock.** `wake fleets` reads `running` off the dial (one statusTimeout for the
+  whole list, as `RunningBuilds` did) and every other state off the files. A daemon that takes the dial
+  and does not answer (a quit's grace, a wedge) is `running · not answering`, never read off its files as
+  a crash or a stopped fleet. A lock held even briefly by a
+  listing could make a daemon starting on that fleet refuse.
+- **No directory until a daemon starts.** `FleetSocketPath` makes no named fleet's directory (`~/.wake` itself, the unnamed
+  fleet's, is still made private), so
+  `wake --fleet typo bogus`, `status` and `stop` leave nothing. The forked daemon makes its own directory
+  through the `$WAKE_SOCKET` branch, and a bare `wake` makes the one it drew, because that directory is
+  the name's reservation.
+- **The pool is unchanged.** `nextFleetName` keys on what is in `fleets/`, and a removed fleet's directory
+  and links are gone, so its name is free. A stopped directory that was not removed is never adopted.
+- **Not in this ruling:** claude's background shells outlive a stop (BUG-73), and a park keeps an agent's
+  process group by design. Whether "no stale processes" overrides that is the owner's call.

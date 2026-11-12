@@ -376,6 +376,16 @@ already past, so nothing races a clock.
 
 ## BUG-21 — a fleet directory is never removed, and the 24-name pool is keyed on directory existence
 
+**Fixed 2026-11-11** (branch `fix/done-fleets-leave-the-list`; the owner's ruling, via wake-orch, is in
+`decisions.md`). `wake stop` removes a named fleet once it is down: under the fleet's own daemon lock it
+removes Wake's files one by one, the lock last, then the directory (never the tree), and every old name
+forwarding to it, so the name is free for `nextFleetName`. With no daemon it forgets the park book itself
+and names each session. A crash's leftovers, an unreadable book or roster, or anything Wake does not
+remove (`debug/`, a hand-made backup) keep the fleet, and so does a live daemon's lock. `wake fleets`
+says what each fleet is (`running`, `parked`, `crashed`, `stopped`), read off the dial and the files
+and never a lock. `FleetSocketPath` makes no named fleet's directory: the daemon makes its own as it starts, and a
+bare `wake` makes the one it drew. `internal/daemon/fleetend.go`, `cmd/wake/fleetend.go`.
+
 **Observed 2026-08-23: 9 of 24 fleet names are consumed on this machine, 5 of them by directories
 with no daemon and no socket.**
 
@@ -398,6 +408,11 @@ a fleet is ever *done*.
 
 
 ## BUG-25 — every *ordinary* ending leaves the process group alive, and then deletes the only record of it
+
+**`wake stop` re-checked 2026-11-11: it sweeps every agent's group.** `TestAStopLeavesNothingOfTheFleetRunning`
+(`internal/daemon/sweep_unix_test.go`) stops a two-agent fleet whose agents each left a child in their
+group: the daemon exits and `kill(-pgid, 0)` is `ESRCH` for every group, and removing retire's sweep turns
+it red. A real stop leaks anyway, through what claude puts *outside* the group: BUG-73.
 
 **Mostly overtaken 2026-08-25.** Merged **#103** made `retire`'s clean non-park exit sweep the group
 (`core.KillGroup(a.sess.Pgid())`), so the normal-exit path this opens with no longer leaks; and merged
@@ -1760,3 +1775,57 @@ screen does.
   the same leak, since `requestSpawn` starts the agent where the process stands: there a "ready" in the
   path passed the opening-turn wait at once. It now `t.Chdir`s into the workspace. A second pty window
   shares the first's workspace, so its agents draw under the same `~`.
+
+---
+
+## BUG-72 — `wake stop` forgot a ⌃Q'd park book without saying so
+
+**Found and fixed 2026-11-11** with BUG-21 (branch `fix/done-fleets-leave-the-list`). `wake stop` counted
+parked sessions in `rpc.Status.Sessions` alone, but the park book arrives on `Status.Parked`, disjoint from
+them by design (a daemon restores nothing); only a session ⌃C parked inside a live daemon sits in
+`Sessions`. So a live stop of a fleet woken from a ⌃Q'd book said "Stopping 3 agents." and then cleared
+every parked session in it (`quitStop` → `parkBook.clear`), naming none; and with no daemon, where
+`FleetOnDisk` puts every parked row on `Parked`, the "parked" branch of `reportNothingToStop` was
+reachable only from tests. `parkedCount` now counts both lists, so the stop's line names what it forgets.
+Tests: `TestStoppingLineCountsOnlyWhatIsAlive` (a book beside a ⌃C park), `TestStopWithNoDaemonCountsTheParkBook`,
+and `TestStopRemovesANamedFleetOnceItIsDown` against a real daemon holding a book.
+
+---
+
+## BUG-73 — `wake stop` leaves claude's background shells running
+
+**Observed 2026-11-11** with the branch binary and real claude 2.1.322 (one approved live probe: a scratch
+socket, a `/tmp` project, `--model haiku`). An agent ran `sleep 4246` with the Bash tool's
+`run_in_background`; `wake stop` said "Stopped. The fleet is down." and exited 0. Of the eight processes
+in the daemon's tree, the daemon, both launchers, both claudes and the manager's `wake mcp` ended; **the
+background shell (`zsh -c … sleep 4246`) and its `sleep` survived**, reparented to launchd.
+
+**Why the sweep misses them.** Wake makes each claude a process-group leader and kills that group on every
+non-park ending (retire, BUG-25), which reaches everything that *stays* in the group - claude's stdio MCP
+servers do (probed). Claude 2.1.322 starts a background Bash shell in a **new** process group (pgid = the
+shell's own pid), and a hook command too: a `SessionStart` hook that backgrounded `sleep 4244` left it in
+a group of its own with launchd as parent. Claude's own exit on stdin EOF does not end the background
+shell. So any agent that started a dev server or a watcher in the background keeps it running after a
+stop - and after a park, which sweeps nothing by design (`TestParkingDoesNotSweepTheProcessGroup`), where
+the park book holds no pid to find it by later.
+
+**What a fix needs** (not built; the owner decides whether, and the park question is his): while claude
+lives, a background shell is its direct child in a foreign group, so an ending could note claude's
+children by ppid before closing its stdin and kill each one's group once claude has exited (never on a
+park). That leaves a hook's escapee whose shell already exited, reachable only through an inherited
+marker (its environment, read with `sysctl`) - a larger change.
+
+## BUG-74 — an orphaned inner subagent's report reaches the agent and Wake shows none of it
+
+**Found 2026-11-11 by wake-imp-subending's 2.1.322 recording** (`subagent-nested-background.jsonl`, on
+`fix/inner-subagent-ending-names-its-parent`). Not built: filed for the owner's call (wake-orch's ruling).
+
+A headless background outer subagent can end before its own background subagents do (`:66`). Their
+hand-backs then reach the agent itself as `<agent-message from="<inner id>">` user lines with no parent tool
+use (`:108`, `:114`). Core drops every hand-back line, so the agent's conversation shows no trace of what
+came back: only the agent's own reply says. Interactive Claude Code never reaches this state, since it keeps
+the outer alive until its children end. A headless outer is recorded waiting on its own background shell
+(`subagent-waits-background.jsonl`, handled), never on its background subagents.
+
+**Directions, not chosen:** draw a hand-back in the conversation it reaches (a ruling for every subagent's
+hand-back, not only an orphan's), or attribute an orphan's report to the outer it belonged to.

@@ -2,9 +2,11 @@ package main
 
 import (
 	"bytes"
+	"errors"
 	"strings"
 	"testing"
 
+	"github.com/DilanDoshi/wake/internal/daemon"
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -117,23 +119,54 @@ func TestOnlyABareWakeWithNoSocketStartsANewFleet(t *testing.T) {
 	}
 }
 
-// A running fleet names its build, and one on another build than this wake
-// says how to move it; a stopped fleet is only its name.
-func TestFleetsNameEachRunningFleetsBuild(t *testing.T) {
+// Each fleet says what it is: a running one its agents and build (and how to
+// move one on another build than this wake), a stopped one what it holds and
+// the command that deals with it. Commands are rendered as every other line.
+func TestFleetsSayWhatEachFleetIs(t *testing.T) {
 	const ours = "0.1.6+bbbbbbb"
-	got := formatFleets([]string{"canyon", "mesa", "summit"},
-		map[string]string{"canyon": "0.1.5+aaaaaaa", "summit": ours}, ours)
-	lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n")
-	if len(lines) != 3 {
-		t.Fatalf("listing = %q", got)
+	live := func(build string, n int) daemon.FleetState {
+		st := rpc.Status{Running: true, Build: build}
+		for range n {
+			st.Sessions = append(st.Sessions, rpc.SessionStatus{State: rpc.StateIdle})
+		}
+		return daemon.FleetState{Report: &st}
 	}
-	if !strings.Contains(lines[0], "0.1.5+aaaaaaa") || !strings.Contains(lines[0], "wake --fleet canyon") {
-		t.Errorf("stale fleet line = %q", lines[0])
+	stopped := func(left daemon.FleetLeft) daemon.FleetState { return daemon.FleetState{Left: left} }
+	got := formatFleets([]string{"default", "atlas", "basin", "bayou", "canyon", "cove", "harbor", "reef", "torn", "wedged"},
+		map[string]daemon.FleetState{
+			"default": stopped(daemon.FleetLeft{Parked: []string{"alex", "manager"}}),
+			"atlas":   stopped(daemon.FleetLeft{Parked: []string{"manager"}}),
+			"basin":   stopped(daemon.FleetLeft{Parked: []string{"a", "b", "c"}}),
+			"bayou":   stopped(daemon.FleetLeft{Kept: []string{"debug/"}}),
+			"canyon":  stopped(daemon.FleetLeft{Crashed: true, Parked: []string{"a"}}),
+			"cove":    stopped(daemon.FleetLeft{}),
+			"harbor":  live("0.1.5+aaaaaaa", 12),
+			"reef":    live(ours, 1),
+			"torn":    stopped(daemon.FleetLeft{Err: errors.Join(errTest, errTest)}),
+			"wedged":  {Silent: true},
+		}, ours)
+	want := []string{
+		"default  parked · 2 agents",
+		"atlas    parked · the manager",
+		"basin    parked · 3 agents",
+		"bayou    stopped · keeps debug/, which Wake does not remove",
+		"canyon   crashed · `wake --fleet canyon` recovers its sessions",
+		"cove     stopped · `wake stop --fleet cove` removes it",
+		"harbor   running · 12 agents · wake 0.1.5+aaaaaaa - not this build (wake 0.1.6+bbbbbbb): ⌃Q⌃Q it, then `wake --fleet harbor`, to upgrade it",
+		"reef     running · 1 agent · wake 0.1.6+bbbbbbb",
+		"torn     unreadable · " + errTest.Error() + "; " + errTest.Error(),
+		"wedged   running · not answering (stopping, or wedged)",
 	}
-	if lines[1] != "mesa" {
-		t.Errorf("stopped fleet line = %q", lines[1])
+	if lines := strings.Split(strings.TrimSuffix(got, "\n"), "\n"); strings.Join(lines, "\n") != strings.Join(want, "\n") {
+		t.Errorf("listing:\n%s\nwant:\n%s", got, strings.Join(want, "\n"))
 	}
-	if !strings.Contains(lines[2], ours) || strings.Contains(lines[2], "⌃Q⌃Q") {
-		t.Errorf("current fleet line = %q", lines[2])
+}
+
+// The unnamed fleet is ~/.wake itself, which no stop removes, so a stopped one
+// names no command.
+func TestTheUnnamedFleetOffersNoRemoval(t *testing.T) {
+	got := formatFleets([]string{"default"}, map[string]daemon.FleetState{"default": {}}, "x")
+	if got != "default  stopped · ~/.wake itself, which no stop removes\n" {
+		t.Errorf("a stopped unnamed fleet is listed %q", got)
 	}
 }

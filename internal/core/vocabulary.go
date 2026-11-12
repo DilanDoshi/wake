@@ -54,7 +54,8 @@ var systemNotice = map[string]Notice{
 // every other system frame, so this map is the decoder's whole test for one.
 //
 // Four subtypes and three phases: task_updated and task_notification report
-// the same ending and differ only in what they carry with it. Collapsing them
+// the same ending and differ only in what they carry with it - but for a
+// waiting subagent's notice, which taskUpdate reads as progress. Collapsing them
 // here rather than above the airlock is the point of this file - a view that
 // switched on two spellings of "ended" would be holding Claude's vocabulary.
 //
@@ -733,6 +734,19 @@ func receiptSentence(text string) string {
 // matched against Claude Code and maintained by hand: every one of the 2,264 on
 // the recording machine read it (2.1.314). Any other two-key result stays whole.
 const handbackDelivered = "Report delivered to your caller."
+
+// subagentWaiting is the whole summary of a 2.1.322 task_notification that ends
+// nothing: the subagent ended its turn while its own background work runs, then
+// starts again under the same id and reports (subagent-waits-background.jsonl:53).
+// Matched against Claude Code and maintained by hand; any other summary is prose.
+const subagentWaiting = "This agent has not reported yet: it is waiting on its own background work and will deliver its report through SubagentHandback when that finishes."
+
+// waitingNotice reads a task frame's summary as that sentence, whole: only a
+// string, and only the sentence, so a reply that quotes it or rewords it ends.
+func waitingNotice(summary json.RawMessage) bool {
+	var s string
+	return json.Unmarshal(summary, &s) == nil && strings.TrimSpace(s) == subagentWaiting
+}
 
 // MessageEnded reports whether a KindMessageState says the message Wake sent, or
 // the turn claude started itself (LoopWakeup), is over - completed or cancelled.
