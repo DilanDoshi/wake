@@ -11,9 +11,10 @@ before it parks (`fix/quit-interrupts-and-parks-busy-agents`; `decisions.md`, 20
   writes, and allowed every ask. Projects were at `/tmp/quitpark-probe`, `/tmp/quitpark-probe2` and `/tmp/quitpark-probe3`. The
   operator's own login was used with `CLAUDE*`, `CMUX*` and `WAKE_SOCKET` unset, since a sterile `HOME`
   cannot sign in.
-- **No fixture is committed.** What was measured is the on-disk transcript beside the stream, and the
-  stream shapes are already in the corpus (`interrupt-cancel-queued.jsonl`, `interrupt-mid-tool.jsonl`,
-  `interrupt-then-close.jsonl`). The steps below re-check it.
+- **No fixture was committed on 2026-11-07.** What was measured is the on-disk transcript beside the
+  stream, and the stream shapes are already in the corpus (`interrupt-cancel-queued.jsonl`,
+  `interrupt-mid-tool.jsonl`, `interrupt-then-close.jsonl`). The steps below re-check it. The resume's
+  close was recorded on 2026-11-10 for BUG-65's fix; see the last section.
 
 ## An interrupt, then stdin closed, then `--resume` and `continue`
 
@@ -32,8 +33,8 @@ write `step3.txt`, write `done.txt`, then reply `finished`.
 - **The resume writes one record of its own.** `claude … --resume <id>` (no `--session-id`, as a wake
   starts), then a user line `continue`. Ahead of that prompt the transcript gains one assistant record
   with the text `No response requested.`, model `<synthetic>`, usage present, and neither `isMeta` nor
-  `isApiErrorMessage`. It is not on stdout. Wake decodes it as agent text marked `LocalCommand`
-  (BUG-65).
+  `isApiErrorMessage`. It is not on stdout. Wake decoded it as agent text marked `LocalCommand`
+  (BUG-65, fixed: core drops it, see the last section).
 - **`continue` picks the turn up where it stopped.** The model re-ran the rejected `sleep 10`, then
   wrote `step2.txt`, slept, wrote `step3.txt` and `done.txt`, and replied `finished`
   (`result` `success`). Nothing before the interruption was repeated.
@@ -75,3 +76,31 @@ the order `stopForShutdown` writes them in.
    user line `continue`. Read the transcript under `~/.claude/projects/<slug>/<id>.jsonl`.
 4. For the queued case, write a second user line before the interrupt and search the transcript for its
    words: expect them in `queue-operation` records only.
+
+## The resume's close follows any turn left with no reply (2.1.322)
+
+Recorded 2026-11-10 against **Claude Code 2.1.322**, haiku, `--safe-mode`, with the same driver and argv
+and the same login (`CLAUDE*`, `CMUX*` and `WAKE_SOCKET` unset), in `/tmp/noresp-probe` and
+`/tmp/noresp-probe3`. Committed as `testdata/transcript/resume-interrupted.jsonl` and `resume-killed.jsonl`.
+Both are trimmed to the conversation the way `rewind-tree.jsonl` was: attachments are kept as envelopes
+with their content dropped; the account (`session-owner`), request, cost, tool-list, latch, file-history and
+mode records are dropped; thinking signatures are scrubbed. Then `scripts/scrub-fixtures.py`.
+
+- **After an interrupt.** `resume-interrupted.jsonl`: the interrupt mid-`sleep`, stdin closed, `--resume`
+  and `continue`. The close is line 27, a child of the `[Request interrupted by user for tool use]` record
+  on line 23, written just before the `continue` on line 28.
+- **After a kill, with no marker at all.** `resume-killed.jsonl`: the process was sent SIGKILL as soon as
+  its prompt was replayed on stdout, before any reply. The resume writes the same close (line 19, ahead of
+  the `continue` on line 20). Its parent is line 14, the last of the attachment envelopes after the
+  bare prompt.
+- **Not after a turn that finished.** The same steps with the turn left to finish write no close.
+- **What this machine's own transcripts hold.** A read-only survey of 612 of them found 4 closes from
+  real use, at 2.1.303, 2.1.307 (twice) and 2.1.314, besides the two recordings above. All were
+  `<synthetic>`, flagged neither `isMeta` nor `isApiErrorMessage`, with the text exactly
+  `No response requested.`. All 4 followed a tool result: a turn killed mid-tool, by a crash or by the
+  kill at the grace.
+
+So the close is claude's account of a turn that had no reply, whatever ended it. Core drops it by the
+record itself: the `<synthetic>` model and the whole text (`isResumeClose`, `vocabulary.go`). It does not
+check which record came before. An agent that writes the same words does so under a real model id, so its
+reply still draws (`TestAnAgentThatWritesTheWordsStillDraws`).

@@ -303,6 +303,17 @@ func interruptNotice(kind EventKind, text string) Notice {
 	return ""
 }
 
+// noResponseText is what claude writes, under the synthetic model, to close a turn
+// left with no reply (an interrupt, a kill) when the session is resumed: on disk
+// only (BUG-65, testdata/transcript/resume-interrupted.jsonl, resume-killed.jsonl).
+const noResponseText = "No response requested."
+
+// isResumeClose reports whether a message is that close: plumbing, drawn by
+// nothing. The synthetic model is the gate, so an agent writing the words still speaks.
+func isResumeClose(m wireMessage) bool {
+	return m.Model == syntheticModel && messageText(m.Content) == noResponseText
+}
+
 // toolCall builds the ToolCall for an invocation, resolving the display
 // argument and the diff so nothing above has to index Input.
 func toolCall(id, name string, input map[string]any) *ToolCall {

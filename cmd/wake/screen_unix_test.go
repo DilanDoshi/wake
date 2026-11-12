@@ -42,6 +42,10 @@ var (
 	buildErr  error
 )
 
+// homeAtStart is HOME before any test sets a scratch one: under a scratch HOME the
+// build is cold, and its read-only module cache outlives the cleanup.
+var homeAtStart, homeWasSet = os.LookupEnv("HOME")
+
 // wakeBinary compiles cmd/wake once per test binary run. The real binary is the
 // point: a test that re-entered this test binary would be asserting about a
 // program nobody ships.
@@ -53,7 +57,12 @@ func wakeBinary(t *testing.T) string {
 			return
 		}
 		buildPath = filepath.Join(buildDir, "wake")
-		out, err := exec.Command("go", "build", "-o", buildPath, ".").CombinedOutput()
+		build := exec.Command("go", "build", "-o", buildPath, ".")
+		build.Env = slices.DeleteFunc(os.Environ(), func(e string) bool { return strings.HasPrefix(e, "HOME=") })
+		if homeWasSet {
+			build.Env = append(build.Env, "HOME="+homeAtStart)
+		}
+		out, err := build.CombinedOutput()
 		if err != nil {
 			buildErr = fmt.Errorf("go build: %v\n%s", err, out)
 		}
@@ -132,8 +141,9 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 
 	// A scratch socket, or none under a scratch HOME, where a bare `wake` makes its fleet.
 	socket := os.Getenv("WAKE_SOCKET")
-	if scratch := cmp.Or(socket, os.Getenv("HOME")); !strings.HasPrefix(scratch, os.TempDir()) {
-		t.Fatalf("WAKE_SOCKET must be a scratch path, or empty under a scratch HOME; got %q - the default is the owner's real fleet", socket)
+	if scratch := cmp.Or(socket, os.Getenv("HOME")); !underTempDir(scratch, dir) {
+		t.Fatalf("WAKE_SOCKET must be a scratch path, or empty under a scratch HOME; got %q and HOME %q - "+
+			"the default is the owner's real fleet", socket, os.Getenv("HOME"))
 	}
 
 	bin := wakeBinary(t)
@@ -193,14 +203,31 @@ func startWakeIn(t *testing.T, dir string, cols, rows int, args ...string) *scre
 		_ = cmd.Process.Kill()
 		_ = cmd.Wait()
 		_ = ptmx.Close()
-		// The daemon this forked outlives the client. It holds the scratch
-		// socket asserted above, so nothing here can reach a real fleet.
+		// The forked daemon outlives the client. With WAKE_SOCKET empty this reaches
+		// only the scratch HOME's unnamed fleet; a named one ends by ⌃Q or the lease.
 		stop := exec.Command(bin, "stop")
 		stop.Env = cmd.Env
 		stop.Dir = dir
 		_ = stop.Run()
 	})
 	return s
+}
+
+// underTempDir is whether path, resolved against dir as the child resolves it, is
+// inside os.TempDir() once cleaned. Lexical: `..` cannot climb out, a symlink can.
+func underTempDir(path, dir string) bool {
+	if path == "" {
+		return false
+	}
+	if !filepath.IsAbs(path) {
+		base, err := filepath.Abs(dir)
+		if err != nil {
+			return false
+		}
+		path = filepath.Join(base, path)
+	}
+	rel, err := filepath.Rel(os.TempDir(), filepath.Clean(path))
+	return err == nil && rel != "." && rel != ".." && !strings.HasPrefix(rel, ".."+string(filepath.Separator))
 }
 
 func testLeaseEnv(env []string, fd int) []string {
