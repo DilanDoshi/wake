@@ -154,6 +154,31 @@ the fleet, but it still counts with `%d`.
 
 ---
 
+## KNOWN GAP, 2026-11-10 — under a relative `HOME`, an agent's `~/.claude` may not be the daemon's
+
+BUG-70 made Wake's own state absolute under a relative `HOME` (`HOME=h`, a literal `~`), through
+`core.HomeDir`. Four things are still read relative:
+- `ProjectsDir`, `claudeConfigDir` and `core.ConfigFile`, against the working directory of the process that
+  reads them: the daemon's, or the CLI's for `wake import`'s listing;
+- termsetup's `$HOME/.config`, which `wake setup-terminal` writes.
+
+So under `HOME=h`:
+- `/workflows`' personal path is drawn as `h/.claude/workflows`. Before, `shortPath` drew it `~/…`, which
+  happened to work between two relative paths.
+- `/mcp`'s sign-in hint reads `cd ~/x && …`, which a shell with another `HOME` expands elsewhere.
+- Any process in another directory reads another `~/.wake`, as any relative `HOME` would.
+
+Every agent inherits the same relative `HOME` but runs in its own directory. If claude resolves `~/.claude`
+against that directory, an agent spawned elsewhere writes its transcripts and config under
+`<its cwd>/h/.claude`, where the daemon's history, discovery and usage-limit watch do not look. How claude reads
+a relative `HOME` is claude's behaviour, and nothing records it. Out of scope for BUG-70 (wake-orch,
+2026-11-10).
+
+*Closes with:* a recording of claude under a relative `HOME`, then either an absolute `HOME` for the whole
+process tree (set once in `cmd/wake`) or these paths resolved through `core.HomeDir`.
+
+---
+
 ## ~~FOLLOW-UP, 2026-11-07 — a cut notice row ends with nothing to say it was cut~~ CLOSED 2026-11-11 (`fix/cut-notice-ends-in-an-ellipsis`)
 
 `noticeLine` (`internal/ui/appview.go`) draws a notice on one row with lipgloss's `MaxWidth`, which cuts at
