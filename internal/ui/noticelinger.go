@@ -13,7 +13,7 @@ import (
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/notice"
 )
@@ -69,11 +69,11 @@ func (a App) armNoticeLinger() (App, tea.Cmd) {
 	})
 }
 
-// noticeLinger is how long n stands: the cells the row can draw of it at
-// noticePerCell, never under noticeMinLinger. Text the row truncates buys
-// nothing - nobody can read it.
+// noticeLinger is how long n stands: the cells the row draws of it, the "…"
+// of a cut included, at noticePerCell, never under noticeMinLinger. Text the
+// row truncates buys nothing - nobody can read it.
 func (a App) noticeLinger(n notice.Notice) time.Duration {
-	cells := min(lipgloss.Width(oneLine(noticePrefix+n.String())), a.noticeWidth())
+	cells := ansi.StringWidth(a.noticeRow(n.String()))
 	return max(noticeMinLinger, time.Duration(cells)*noticePerCell)
 }
 

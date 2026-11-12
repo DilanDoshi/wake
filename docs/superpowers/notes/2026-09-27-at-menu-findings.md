@@ -88,9 +88,10 @@ name and directory, `says it was <old> until <age> ago`; one renamed after 2–4
 `/clear` before the rename changes nothing. Renamed twice, the row names only the newest former name.
 A peer reached by its former name is claude's business; Wake offers the current name only.
 
-The take opens with a `system/ui_invalidate` frame whose `event` is a string, which `core.DecodeLine`
-refuses (deferred.md, 2026-10-03); that one line is left out of the fixture. The daemon's one-shot
-reader skips a line it cannot decode, so the listing is unaffected.
+The take opens with a `system/ui_invalidate` frame whose `event` is a string. `core.DecodeLine` refused it
+then, so that one line is left out of the fixture; it decodes since 2026-11-11 (deferred.md, 2026-10-03),
+on `ui-invalidate.jsonl`, a recorded 2.1.322 session. The line itself was not kept, so the fixture stays
+without it.
 
 ## 6. The manager's one built-in, recorded (2.1.288, 2026-10-03)
 

@@ -71,6 +71,9 @@ func decodeLine(line []byte) ([]Event, error) {
 	if err := json.Unmarshal(line, &f); err != nil {
 		return nil, fmt.Errorf("decode stream-json line: %w", err)
 	}
+	if f.Type == "stream_event" {
+		return partialEvent(f), nil // never given `raw`, nor its copy: see partialEvent
+	}
 	raw := json.RawMessage(append([]byte(nil), line...))
 
 	switch f.Type {
@@ -94,9 +97,6 @@ func decodeLine(line []byte) ([]Event, error) {
 		return one(messageStateEvent(f, raw)), nil
 	case "rate_limit_event":
 		return one(rateLimitEvent(f, raw)), nil
-	case "stream_event":
-		// Deliberately not given `raw`: see partialEvent.
-		return partialEvent(f), nil
 	case "conversation_reset":
 		// SessionID is the id that just died, and it is the whole payload:
 		// the successor is not on this frame, it arrives on the next one.
@@ -121,27 +121,30 @@ func decodeLine(line []byte) ([]Event, error) {
 // ~1,300 lines a second held alive to show a preview that is replaced within
 // the turn. Nothing may read it either - a partial is dropped, never stored.
 func partialEvent(f wireFrame) []Event {
-	if f.StreamEvent == nil {
-		return nil
-	}
 	// A subagent's tokens are dropped rather than attributed, for the reason
 	// spelled out below - checked once, ahead of both branches, because it is
 	// the same ruling about both.
 	if f.ParentToolUseID != "" {
 		return nil
 	}
-	switch f.StreamEvent.Type {
+	// An event that is not a stream event's object (absent, null, a string, a
+	// mistyped field) is nothing, as every shape this does not draw is.
+	var se wireStreamEvent
+	if json.Unmarshal(f.StreamEvent, &se) != nil {
+		return nil
+	}
+	switch se.Type {
 	case streamMessageDelta:
-		return turnTokensEvent(f)
+		return turnTokensEvent(f.SessionID, se.Usage)
 	case streamMessageStart:
 		// The boundary and nothing else - see KindMessageStart for why its own
 		// usage is left alone.
 		return one(Event{Kind: KindMessageStart, SessionID: f.SessionID})
 	}
-	if f.StreamEvent.Type != streamContentBlockDelta {
+	if se.Type != streamContentBlockDelta {
 		return nil
 	}
-	d := f.StreamEvent.Delta
+	d := se.Delta
 	if d == nil || d.Type != streamTextDelta || d.Text == "" {
 		return nil
 	}
@@ -158,14 +161,13 @@ func partialEvent(f wireFrame) []Event {
 // The dropped subagent case is partialEvent's, checked before this is reached:
 // a subagent's turn is not the one on screen, exactly as its text and its tool
 // calls are not.
-func turnTokensEvent(f wireFrame) []Event {
-	u := f.StreamEvent.Usage
+func turnTokensEvent(sessionID string, u *wireStreamUsage) []Event {
 	if u == nil || u.OutputTokens <= 0 {
 		return nil
 	}
 	return one(Event{
 		Kind:      KindTurnTokens,
-		SessionID: f.SessionID,
+		SessionID: sessionID,
 		Session:   &SessionFacts{TurnOutputTokens: u.OutputTokens},
 	})
 }
@@ -553,11 +555,12 @@ func resultFacts(f wireFrame) *SessionFacts {
 // state, the same ruling rateLimitEvent gets.
 func messageStateEvent(f wireFrame, raw json.RawMessage) Event {
 	return Event{
-		Kind:      KindMessageState,
-		SessionID: f.SessionID,
-		MessageID: f.CommandUUID,
-		Text:      f.State,
-		Raw:       raw,
+		Kind:       KindMessageState,
+		SessionID:  f.SessionID,
+		MessageID:  f.CommandUUID,
+		Text:       f.State,
+		LoopWakeup: f.WakeupSource == wakeupLoop,
+		Raw:        raw,
 	}
 }
 
@@ -641,6 +644,9 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 	if op, ok := goalOp(f.Type, m); ok {
 		base.Kind, base.Goal = KindGoal, &op
 		return one(base)
+	}
+	if isResumeClose(m) {
+		return nil
 	}
 	if !isJSONArray(m.Content) {
 		// Compaction summaries, <local-command-stdout>, a peer's

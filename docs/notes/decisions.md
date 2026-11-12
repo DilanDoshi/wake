@@ -6054,7 +6054,7 @@ lost what a park keeps (name, team, colour, effort); at best `/resume` found its
   a turn interrupted mid-`sleep` and its stdin closed exited 0.83 s later; `--resume` and a plain `continue`
   re-ran the interrupted step and finished the task. On disk the interrupted turn ends in a rejected tool
   result and `[Request interrupted by user for tool use]`, and the resume writes one synthetic assistant record
-  (`No response requested.`) ahead of the next prompt (BUG-65). Wake sends no `continue` on wake: the
+  (`No response requested.`) ahead of the next prompt (BUG-65, fixed 2026-11-10). Wake sends no `continue` on wake: the
   operator chose to quit, and `/resume all` would start twenty turns at once.
   `docs/superpowers/notes/2026-11-07-interrupted-turn-resume-findings.md`.
 - **A behaviour change for a blocked agent, approved by wake-orch.** `⌃Q` used to close stdin under an
@@ -6083,3 +6083,20 @@ lost what a park keeps (name, team, colour, effort); at best `/resume` found its
   interrupted once, ends well inside the grace and is offered by the next daemon on the socket; an idle one
   is interrupted harmlessly; a queued message does not keep it running; an outstanding ask is interrupted
   before stdin closes. `internal/ui/parkdropped_test.go` and `cmd/wake/attach_test.go` hold the named words.
+
+## 2026-11-10 — a resume's close is dropped by the record itself, not by what it follows (wake-orch)
+
+BUG-65's entry asked for three conditions: the `<synthetic>` model, the one fixed text, and coming
+**immediately after an interrupted turn**. The fix checks only the first two (`isResumeClose`, read in
+`messageEvents`), and wake-orch gave its GO on that.
+- **Why not the third.** The close follows any turn that had no reply: a kill writes it too
+  (`resume-killed.jsonl`). A read-only survey of this machine's transcripts found 4 closes from real use
+  (2.1.303–2.1.314), and all 4 followed a tool result, not an interrupt marker. A check on the parent would
+  have left every one of them drawn.
+  See `docs/superpowers/notes/2026-11-07-interrupted-turn-resume-findings.md`.
+- **What the third condition was guarding.** An agent that types the words is protected by the model
+  gate: an agent's reply always carries a real model id, and `TestAnAgentThatWritesTheWordsStillDraws`
+  goes red without the gate.
+- **Where it is dropped.** In the decoder, so the DM's reopen and the room's restore, which both read
+  `daemon.History`, lose it alike. A rewind target and `↑` read only typed user turns, so an assistant
+  record never reached either; tests hold all four.

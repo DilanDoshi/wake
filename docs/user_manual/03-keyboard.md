@@ -89,7 +89,7 @@ built in parallel and both wanted the pair, and the order they intercept in deci
 | Key | Does | Reversible |
 |---|---|---|
 | `⌃C` | **Park** the agent in front of you | Yes — `/resume` |
-| `⌃Q` | **Quit** Wake and park the whole fleet — armed, like the detach: the first `⌃Q` arms (the cue reads `⌃Q park all & quit`), a second confirms | Yes — next `wake --fleet <name>` offers it back |
+| `⌃Q` | **Quit** Wake and park the whole fleet — armed, like the detach: the first `⌃Q` arms (the cue reads `⌃Q park all & quit`), a second confirms. A turn in flight is interrupted and parked with the rest | Yes — next `wake --fleet <name>` offers it back |
 | `⌃O` | **Arm a detach** — closing Wake and leaving everyone working. `↵` finishes it; a second `⌃O` takes it back. While it is armed the cue reads `↵ detach   …   ⌃O cancel` | Nothing stopped |
 
 ## While the completion menu is up — see [chapter 6](06-commands.md)
@@ -124,7 +124,11 @@ and `⌃P` are how you move between the lines of a multi-line draft.
 
 ## The mouse
 
-Wheel scrolls the pane you are over. Clicking a pane gives it the keys. The divider between the
+Wheel scrolls the pane you are over. Over the right sidebar it scrolls a roster taller than its
+column, and the count row says what is out of view (`+5 above · +2 below`); it never moves the
+selection, and a selected agent scrolled out of view takes no keys until it is back. Over a query box
+whose draft is taller than the box, it scrolls the draft's rows and leaves the cursor where it was;
+the next key brings the view back to the cursor. Clicking a pane gives it the keys. The divider between the
 room and a conversation can be grabbed and dragged. Clicking a folded block opens just that one — a
 tool result or a run's rollup in a conversation, or a folded response in the room — where `⌃E`
 opens all of them.

@@ -111,6 +111,18 @@ func TestFixturesDecodeToTheExpectedKinds(t *testing.T) {
 			},
 		},
 		{
+			// 2.1.322 prints it before every session's init: `event` is a
+			// string here, where stream_event's is an object.
+			fixture: "ui-invalidate.jsonl",
+			marker:  `"subtype":"ui_invalidate"`,
+			kind:    KindSystem,
+			check: func(t *testing.T, ev Event) {
+				if ev.Text != "ui_invalidate" {
+					t.Errorf("Text = %q, want the subtype", ev.Text)
+				}
+			},
+		},
+		{
 			fixture: "compaction.jsonl",
 			marker:  `"content":"This session is being continued`,
 			kind:    KindUserText,

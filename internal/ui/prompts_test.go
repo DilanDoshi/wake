@@ -291,3 +291,23 @@ func TestAltUpSkipsABangLinesOutput(t *testing.T) {
 		t.Errorf("⌥↑ recalled %q, want the newest thing the operator actually typed", got)
 	}
 }
+
+// claude's close of a turn left with no reply, written at a --resume (BUG-65),
+// is no prompt: ↑ over a resumed conversation recalls the two typed turns only.
+func TestUpSkipsAResumesClose(t *testing.T) {
+	data, err := os.ReadFile(filepath.Join("..", "..", "testdata", "transcript", "resume-interrupted.jsonl"))
+	if err != nil {
+		t.Fatalf("read fixture: %v", err)
+	}
+	var evs []core.Event
+	for _, line := range strings.Split(strings.TrimRight(string(data), "\n"), "\n") {
+		got, err := core.DecodeTranscriptLine([]byte(line))
+		if err != nil {
+			t.Fatalf("decode: %v", err)
+		}
+		evs = append(evs, got...)
+	}
+	if got := promptsIn(evs); len(got) != 2 || got[1] != "continue" {
+		t.Errorf("prompts = %q, want the first prompt and \"continue\"", got)
+	}
+}
