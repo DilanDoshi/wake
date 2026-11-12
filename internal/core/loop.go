@@ -1,5 +1,7 @@
 package core
 
+import "os"
+
 // Wake's own vocabulary for Claude Code's native /loop. Headless the /loop slash
 // is not a command - the model reproduces it with the bundled scheduler tools -
 // so Wake reads the tool calls it makes: a recurring CronCreate (a fixed cron
@@ -23,8 +25,8 @@ const (
 // Cron is the five-field expression a fixed loop was scheduled on; DelaySeconds
 // is the delay a self-paced iteration chose. Stop marks a CronDelete that ends
 // the loop, and Noop a self-paced quiet tick (ScheduleWakeup noop:true) - the
-// "quiet ×N" streak in the catalog. A met/ended loop has no clean frame beyond
-// CronDelete, the same silence /goal achieve has.
+// "quiet ×N" streak in the catalog. A loop's end has no frame of its own beyond
+// CronDelete; a self-paced one's is read off its wakeup turn (Event.LoopWakeup).
 type LoopOp struct {
 	Kind         LoopKind
 	Cron         string
@@ -46,3 +48,10 @@ func intArg(input map[string]any, key string) int {
 	}
 	return int(v)
 }
+
+// LoopKeepsAlive reports claude's switch back to the self-paced loop's rule before
+// 2.1.319, whose changelog reads "Changed self-paced /loop to end when a turn
+// finishes without rescheduling, instead of scheduling a fallback wakeup; set
+// CLAUDE_CODE_LOOP_KEEPALIVE=1 to keep the old behavior". An agent inherits the
+// daemon's environment, so the daemon's reading is its agents'.
+func LoopKeepsAlive() bool { return os.Getenv("CLAUDE_CODE_LOOP_KEEPALIVE") == "1" }

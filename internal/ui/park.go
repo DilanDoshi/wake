@@ -235,6 +235,13 @@ func (a App) park() (tea.Model, tea.Cmd, bool) {
 		notice.Report("%s", a.unseenOr(noParkTarget))
 		return a, nil, true
 	}
+	next, cmd, _ := a.parkOne(id)
+	return next, cmd, true
+}
+
+// parkOne parks one session for ⌃C and /park, reporting false only when it
+// refused (parkTarget's blocked ask).
+func (a App) parkOne(id string) (App, tea.Cmd, bool) {
 	if a.endedAgent(id) || a.parkedAgent(id) {
 		// Nothing to park and nothing lost, so this is silent - the same trade
 		// interrupt makes for an ended session.
@@ -242,7 +249,7 @@ func (a App) park() (tea.Model, tea.Cmd, bool) {
 	}
 	next, cmd, parked := a.parkTarget(id, a.agentName(id))
 	if !parked {
-		return a, nil, true
+		return a, nil, false
 	}
 	if a.focus == "" {
 		notice.Report(parkedFormat, agentPrefix, a.agentName(id))
@@ -267,15 +274,28 @@ func (a App) park() (tea.Model, tea.Cmd, bool) {
 // question that has been answered - the refusal would be free to name a
 // different agent from the one the caller decided to park.
 func (a App) parkTarget(id, name string) (App, tea.Cmd, bool) {
-	if a.blockedAgent(id) {
+	next, park, ok := a.parkable(id)
+	if !ok {
 		// See parkWouldDeny - and note this refusal *speaks* even from a DM,
 		// where a successful park is silent, because the operator pressed a key
 		// that did not do what they expected.
 		notice.Report(parkWouldDeny, agentPrefix, name)
 		return a, nil, false
 	}
-	// A hand park replaces any wake the API's park was owed (apirecover.go).
-	return a.awaitingPark(id).forgetAPIPark(id), a.write(parkFailed, rpc.Frame{Kind: rpc.FramePark, SessionID: id}), true
+	return next, a.write(parkFailed, park), true
+}
+
+// parkable is the park's one rule and its bookkeeping, for parkTarget and a
+// team's park (teamverbs.go): false for a blocked session, which each caller
+// says in its own words; otherwise the wait for its report and the frame. A
+// hand park replaces any wake the API's park was owed (apirecover.go) and any
+// team's wait for it.
+func (a App) parkable(id string) (App, rpc.Frame, bool) {
+	if a.blockedAgent(id) {
+		return a, rpc.Frame{}, false
+	}
+	a = a.awaitingPark(id).forgetAPIPark(id).unfiled(func(held, _ string) bool { return held == id })
+	return a, rpc.Frame{Kind: rpc.FramePark, SessionID: id}, true
 }
 
 // armParkFleet takes ⌃Q: the first press arms, and a second confirms the park.
@@ -547,6 +567,10 @@ func (a App) parkArrived(st *rpc.Status) App {
 			}
 		}
 		a.parking = next
+		if team, ours := a.teamParkArrived(s.ID); ours {
+			a = team
+			continue
+		}
 		if name := a.fleet.shown(s.Name); !a.reportAPIPark(s.ID, name) {
 			notice.Report(parkConfirmed, agentPrefix, name, name)
 		}

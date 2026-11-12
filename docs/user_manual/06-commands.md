@@ -131,13 +131,14 @@ Wake owns a short, closed list of slash commands. A test holds this list to the 
 command that ships without a line here fails the build; `/wake-help` draws the same set inside Wake.
 
 ```
-/resume [<name>|all]                bring a parked session back
+/resume [<name>|<team>|all]         bring a parked session back, or every parked one of a team
 /new [<name>] [in <dir>]            start an agent without leaving the room; takes the spawn flags too
 /name [@who] <new-name>             rename a session
 /task [@who] <what it is on>        set the label beside its name
 /color [@who] <colour>|none         an identity hue — seven named colours, or none to clear
 /team [@who] <name>|none            group a session under a named team, or none to clear
-/quit [@who]                        end one session for good and drop its row (irreversible)
+/park [@who|@team]                  park one session, as ⌃C does, or every live one of a team
+/quit [@who|@team]                  end one session for good and drop its row, or a team's after a confirm (irreversible)
 /adopt                              adopt a claude session this machine already has, from the room
 /manager                            the switch: start one, wake a parked one, or park a running one
 /manager-stop                       end the manager for good (a fresh /manager starts a new one)
@@ -187,6 +188,11 @@ the whale, Puff the pufferfish, or none — for this machine: the choice is kept
 and a window opened later starts with it. In Kitty, Ghostty and cmux the friend is a picture, moving while an agent works;
 in other terminals, and under tmux or an editor's terminal, it is a small block drawing in the same cells.
 `WAKE_FRIEND_ART=blocks` asks for the block drawing anywhere.
+
+`/park`, `/quit` and `/resume` take a **team** as well as one agent - see
+[Parking or quitting a team](04-lifecycle.md#parking-or-quitting-a-team). In the room, `@backend /park`
+and `@backend /quit` mean the same; every other `@team /command` of Wake's is refused, since it is
+per-agent.
 
 One consequence: if you have your own `.claude/commands/resume.md`, Wake's `/resume` shadows it.
 
