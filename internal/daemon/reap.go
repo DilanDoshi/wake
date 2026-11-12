@@ -54,7 +54,7 @@ import (
 // Expiring is a real event with a real answer, and inspect says why it has to
 // be *unknown*: the ps this deadline kills comes back looking exactly like a
 // pid that is not there.
-// It is a var only so tests can compress it; nothing outside a test assigns it.
+// It is a var only so tests can set it; nothing outside a test assigns it.
 var probeTimeout = defaultProbeTimeout
 
 const defaultProbeTimeout = 2 * time.Second

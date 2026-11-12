@@ -7,6 +7,7 @@
 /wake
 
 # Go
+/.lintcache/
 *.test
 *.out
 coverage.html

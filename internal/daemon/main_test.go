@@ -88,6 +88,10 @@ func TestMain(m *testing.M) {
 	// this variable. testQuitGrace carries the argument for why the
 	// production value cannot be one of them.
 	quitGrace = testQuitGrace
+	// One process lookup's 2s is a production deadline that `ps -A` outlives on
+	// a loaded gate, refusing a wake a test is not about. The tests about a ps
+	// that cannot answer compress it themselves (shortProbeTimeout).
+	probeTimeout = testTimeout
 
 	// The order of these is load-bearing, and each one cost a debugging round
 	// somewhere in this project.

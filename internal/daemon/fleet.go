@@ -122,9 +122,10 @@ func fleetDir(name string) (string, error) {
 	return fleetDirFor(root, name)
 }
 
-// StateRoot is ~/.wake, the directory every fleet lives under.
+// StateRoot is ~/.wake, the directory every fleet lives under: absolute, since
+// fleetNameOf compares it with an absolute socket directory (BUG-70).
 func StateRoot() (string, error) {
-	home, err := os.UserHomeDir()
+	home, err := core.HomeDir()
 	if err != nil {
 		return "", fmt.Errorf("locate home directory: %w", err)
 	}

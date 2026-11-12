@@ -91,11 +91,11 @@ func TestTheCompletionMenuSitsDirectlyAboveTheComposer(t *testing.T) {
 
 	s.send("/resu")
 	s.await("/resume")
-	s.await(completionKeyHint)
+	rows := s.awaitFrame("the menu's key hint", func(rows []string) bool { return rowIn(rows, completionKeyHint) >= 0 })
 
 	// The hint is the menu's last row - View appends it under the offers - so
 	// the border of the box being typed into is the very next row down.
-	menu, box := s.rowOf(completionKeyHint), s.rowOf(roomBoxTitle)
+	menu, box := rowIn(rows, completionKeyHint), rowIn(rows, roomBoxTitle)
 	if menu < 0 || box < 0 {
 		t.Fatalf("menu row %d, composer row %d: one of them is not on screen\n%s", menu, box, s.dump())
 	}
@@ -118,9 +118,9 @@ func TestTheCompletionMenuSitsAboveAConversationsComposer(t *testing.T) {
 	closeRoster(s)
 
 	s.send("/resu")
-	s.await(completionKeyHint)
+	rows := s.awaitFrame("the menu's key hint", func(rows []string) bool { return rowIn(rows, completionKeyHint) >= 0 })
 
-	menu, box := s.rowOf(completionKeyHint), s.rowOf(agentPrefix+name)
+	menu, box := rowIn(rows, completionKeyHint), rowIn(rows, agentPrefix+name)
 	if menu < 0 || box < 0 {
 		t.Fatalf("menu row %d, composer row %d: one of them is not on screen\n%s", menu, box, s.dump())
 	}

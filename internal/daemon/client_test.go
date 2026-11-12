@@ -238,10 +238,7 @@ const hangupBound = 5 * time.Second
 func dialSilent(t *testing.T, socket string) net.Conn {
 	t.Helper()
 
-	conn, err := Dial(socket)
-	if err != nil {
-		t.Fatalf("Dial: %v", err)
-	}
+	conn := mustDial(t, socket)
 	t.Cleanup(func() { _ = conn.Close() })
 	return conn
 }

@@ -6,7 +6,6 @@ import (
 	"sync"
 	"testing"
 	"time"
-
 )
 
 // Kitty images only where the terminal is known to draw them: TERM names Kitty

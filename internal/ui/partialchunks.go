@@ -198,12 +198,25 @@ func (a App) unsyncedAll() App {
 
 // applied folds a batch of frames. A frame marked Lost - tokens went missing
 // before it - tells its pane first, so a message start earlier in the batch cannot
-// sync it again ahead of the loss.
+// sync it again ahead of the loss. A token nothing on screen shows only unsyncs its
+// pane (tokensUnseen), judged once for a run of them: observe would copy the whole
+// App a dozen times to say so, and only a frame folded in full moves what is shown.
 func (a App) applied(frames []rpc.Frame) App {
+	var unseen func(string) bool
 	for _, f := range frames {
 		if f.Lost {
 			a = a.unsynced(f.SessionID)
 		}
+		if partialFrame(f) {
+			if unseen == nil {
+				unseen = a.unseenTokens()
+			}
+			if unseen(f.SessionID) {
+				a = a.unsynced(f.SessionID)
+				continue
+			}
+		}
+		unseen = nil
 		a = a.apply(f)
 	}
 	return a

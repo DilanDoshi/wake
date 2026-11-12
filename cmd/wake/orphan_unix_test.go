@@ -74,8 +74,12 @@ func serveInProcess(t *testing.T) string {
 	ctx, cancel := context.WithCancel(context.Background())
 	errc := make(chan error, 1)
 	go func() { errc <- daemon.Serve(ctx, socket) }()
+	returned := false // awaitListening read errc: Serve has nothing more to say
 	t.Cleanup(func() {
 		cancel()
+		if returned {
+			return
+		}
 		select {
 		case err := <-errc:
 			if err != nil {
@@ -86,15 +90,11 @@ func serveInProcess(t *testing.T) string {
 		}
 	})
 
-	deadline := time.Now().Add(testTimeout)
-	for time.Now().Before(deadline) {
-		if info, err := os.Lstat(socket); err == nil && info.Mode()&os.ModeSocket != 0 {
-			return socket
-		}
-		time.Sleep(10 * time.Millisecond)
+	if exited, err := awaitListening(t, socket, errc); exited {
+		returned = true
+		t.Fatalf("Serve returned before it was listening: %v", err)
 	}
-	t.Fatal("the daemon never started listening")
-	return ""
+	return socket
 }
 
 // The defect, as a user reaches it: a window drag on a long transcript blocks
