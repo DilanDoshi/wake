@@ -6199,10 +6199,14 @@ nothing reads back, so the `⌃Q` window prints the words of what it had pinned 
 - **`/adopt` and `wake import` still wait for the whole walk.** They read through the cache and the scanner, so
   they are as fast as the picker's complete open, but they list nothing until every transcript is read.
   *Closes with:* the same stream for `/adopt`'s block, if its wait is ever felt.
-- **The scanner does not validate the inside of a value it skips** (`discoverscan.go`'s header). A line that
-  is structurally closed but has a bad escape or number in an unwanted key is read where a decoder would drop
-  it. *Closes with:* nothing, unless a writer other than Claude starts appending to transcripts; then a
+- **The scanner does not validate grammar** (`discoverscan.go`'s header). A line that is structurally closed
+  but has a bad escape, control character or number in a key or value it skips, or a wanted value that will not
+  decode, is read where a decoder would drop the whole line. *Closes with:* nothing, unless a writer other than Claude starts appending to transcripts; then a
   `json.Valid` on the lines that carry a wanted key.
 - **A window's cache is its own.** The daemon holds a cache too, for a confirmed pick, and the two do not
   share. *Closes with:* the picker's walk going through the daemon, which also needs a frame and three
   reflective guards, for a saving the stream already gives.
+- **A transcript rewritten in place to the same size with its time put back reads as unchanged.** A restore or
+  a copy that keeps dates replaces the file (a new identity, which the cache catches); only a write into the
+  same file that changes no byte count and sets the mtime back slips through, which no writer does. *Closes
+  with:* the file's change time in the key, which `Stat_t` spells differently on each platform.

@@ -103,14 +103,17 @@ func foundDecoded(j transcriptFile) (FoundSession, bool) {
 	}, true
 }
 
-// newestFirstDecoded is the order the picker was always given: newest first, and
-// by id where two share a timestamp.
+// newestFirstDecoded is the order the picker is given: newest first, then by id,
+// then by path.
 func newestFirstDecoded(rows []FoundSession) {
 	sort.Slice(rows, func(i, j int) bool {
 		if !rows[i].Modified.Equal(rows[j].Modified) {
 			return rows[i].Modified.After(rows[j].Modified)
 		}
-		return rows[i].ID < rows[j].ID
+		if rows[i].ID != rows[j].ID {
+			return rows[i].ID < rows[j].ID
+		}
+		return rows[i].Path < rows[j].Path
 	})
 }
 

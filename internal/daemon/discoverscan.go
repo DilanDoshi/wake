@@ -6,29 +6,17 @@ import (
 )
 
 // scanTopLevel finds the wanted keys of one transcript line - one JSON object -
-// without decoding the rest of it.
+// without decoding the rest of it: decoding every line into a map was 90% of a
+// discovery's CPU. vals[k] is the raw value of keys[k] at the top level (the last
+// one when a key repeats) or nil, and it reports whether the line is one object
+// whose structure closes, so a line cut short is dropped as a decoder would drop it.
 //
-// A transcript line carries a whole message, and some carry a whole file, so
-// decoding each into a map copied every byte of every key of ten gigabytes to
-// read four short strings (measured at 90% of a discovery's CPU). This walks the
-// line once instead, skipping every value it does not want at memchr speed, and
-// leaves each wanted value as raw bytes for decodeString.
-//
-// vals[k] is the raw value of keys[k] at the object's top level - the last one
-// when a key repeats, as in a decoded map - or nil. It reports whether the line
-// is one object whose structure closes: a line cut short by a write in progress,
-// or no object at all, is not read, as a decoder would not read it.
-//
-// # Where it is looser than a decoder, on purpose
-//
-// It checks structure - quotes, colons, commas, matching brackets, nothing after
-// the closing brace - and not the grammar inside a value it skips, so a bad
-// escape, a raw control character or a malformed number in an unwanted key is
-// read where a decoder drops the line. Claude writes each line with one
-// serialiser call and a write cut short only ever leaves structure unclosed, so
-// nothing a live transcript does reaches that gap. The tests hold the other
-// direction without exception: every line a decoder reads is read, with the same
-// fields (discoverscan_test.go, and `make drift` against a real corpus).
+// It checks structure, not grammar: brackets everywhere, and colons and commas at
+// the top level. So a bad escape, control character or number in a key or value
+// it skips, nesting past a decoder's depth limit, or a wanted value that will not
+// decode is read here where a decoder drops the whole line. A write cut short only
+// ever leaves structure unclosed. The tests hold the other direction without
+// exception: every line a decoder reads is read, with the same fields.
 func scanTopLevel(line []byte, keys []string, vals [][]byte) bool {
 	clear(vals)
 	i := skipSpace(line, 0)

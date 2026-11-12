@@ -6035,23 +6035,27 @@ under a second.
   (strings at memchr speed, containers by matching bracket) and hands the wanted keys back raw. ~14 s / 65 s
   became ~2.4 s / 7.7 s, rows identical on this machine's 640 real transcripts (`make drift`:
   `TestDriftDiscovery`) and on a 5.2M-exec fuzz against the decoder. **The one place it is looser than a
-  decoder**: it checks structure, not the grammar inside a value it skips, so a bad escape or number in an
-  unwanted key is read where a decoder drops the line. A write cut short leaves structure unclosed, which it
+  decoder**: it checks structure, not grammar, so a bad escape, control character or number in a key or value
+  it skips, nesting past a decoder's depth limit, or a wanted value that will not decode is read where a decoder
+  drops the whole line. A write cut short leaves structure unclosed, which it
   drops as a decoder does, so nothing a live transcript does reaches the gap; every line a decoder reads is
   read with the same fields, without exception.
-- **What a read found is remembered per file**, keyed on (path, size, mtime), with the stat taken *before* the
+- **What a read found is remembered per file**, keyed on (the file itself, size, mtime), with the stat taken *before* the
   read so a line written as a read ends is a change to the next open and never a stamp claiming the read saw
   it. It remembers the file's words and never the disk's: the proved directory is re-checked on every open, so
   a project deleted since is refused and one made since is proved. Memory is derived, not chosen: one entry per
-  transcript at most (every listing drops the ones that left), and a session whose name and named directories
-  hold more than `maxCachedText` is not kept at all (it is read every open, as before), so an entry weighs at
-  most `entryBudget`. No timer, no poll, **no warm at daemon start**: that would read every machine's
+  transcript at most (every listing, and every pick's lookup, drops the ones that left), and a session whose
+  retained text outweighs `entryBudget` - two bounded previews plus `maxCachedText` for the name and directories
+  claude does not bound - is not kept at all (it is read every open, as before). A file replaced by a restore or
+  a copy that keeps dates is a new file of the same size and time, which the file's identity catches. No timer, no poll, **no warm at daemon start**: that would read every machine's
   transcripts at every fleet's start, for a verb used rarely. The first `/resume` in a window pays once; the
   stream below is what makes that first open instant.
 - **A pick reads the transcript it names** (`discoverID`): the confirm no longer walks the machine, and finds
-  what the listing finds, fails where it fails, and takes the newest where one id sits under two projects. A
-  file counts only if its name spells the id exactly, so a case-folding filesystem cannot match `AAAA…` to
-  `aaaa…`. Unlike a listing it does not tell the cache what is gone.
+  what the listing finds, fails where it fails, and takes the same copy where one id sits under two projects:
+  the listing's order is total (newest, then id, then path), so a sort over the whole machine and one over the
+  copies agree even when their times tie. The adversarial review found an unstable sort that picked differently
+  from 13 rows up, so a pick would have resumed a copy the picker did not show. A file counts only if its name
+  spells the id exactly, so a case-folding filesystem cannot match `AAAA…` to `aaaa…`.
 - **The picker opens on the directory listing** (~55 ms here) and fills in as transcripts are read. The
   listing is each session's id, project and age, which is also its place in the list, so a fill never moves a
   row; a parked session needs only an age, so it is complete from the first frame. **↵ over a row still being

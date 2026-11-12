@@ -2,6 +2,7 @@ package ui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -203,16 +204,21 @@ func TestAParkedRowIsNeverHeldForReading(t *testing.T) {
 }
 
 // In the room's multi-select, one unread row among the checked holds all of them:
-// a set is sent whole or not at all.
+// a set is sent whole or not at all. The cursor is left on a row that has been
+// read, so a check of the cursored row alone would send.
 func TestARoomPickWithOneRowStillBeingReadSendsNone(t *testing.T) {
 	read, unread := stranger(newestID, time.Minute), stranger(middleID, time.Hour)
 	a, fills, _ := streamedApp(t, read, unread)
 	got, pump := openStreamed(t, a)
 	fills <- readOf(read, "/work", "named", "")
 	got, _ = foldFills(t, got, pump)
-	got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyTab}) // ticks the newest, now read
 	got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyDown})
-	got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyTab}) // and the one still unread
+	got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyTab}) // the one still unread
+	got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyUp})
+	got, _ = pressKey(got, tea.KeyMsg{Type: tea.KeyTab}) // the newest, now read, under the cursor
+	if f := got.resumePicker.filtered(); got.resumePicker.Cursor != 0 || f[0].Reading {
+		t.Fatalf("the cursor is on %+v, want it on the read row", f[got.resumePicker.Cursor])
+	}
 	next, cmd := pressKey(got, tea.KeyMsg{Type: tea.KeyEnter})
 	if cmd != nil || !next.resumePicker.Open() {
 		t.Errorf("a set holding an unread row was sent (cmd %v) or the picker closed", cmd)
@@ -324,20 +330,17 @@ func TestAFillForAnEarlierResumeIsNotTheLaterOnesRow(t *testing.T) {
 }
 
 func TestClosingThePickerEndsTheReadsBehindIt(t *testing.T) {
-	a, _, walks := streamedApp(t, stranger(newestID, time.Minute))
-	got, _ := openStreamed(t, a)
-	if len(*walks) != 1 || (*walks)[0].Err() != nil {
-		t.Fatalf("the walk's context is %v before the picker closed", *walks)
-	}
 	for name, key := range map[string]tea.KeyType{"esc": tea.KeyEsc, "⌃C": tea.KeyCtrlC} {
 		a, _, walks := streamedApp(t, stranger(newestID, time.Minute))
 		opened, _ := openStreamed(t, a)
+		if len(*walks) != 1 || (*walks)[0].Err() != nil {
+			t.Fatalf("%s: the walk's context is %v before the picker closed", name, *walks)
+		}
 		next, _, _ := opened.resumePickerKey(tea.KeyMsg{Type: key})
 		if next.resumePicker.Open() || (*walks)[0].Err() == nil {
 			t.Errorf("%s left the picker open or its reads running", name)
 		}
 	}
-	_ = got
 }
 
 func TestAListingThatReachesATypedDraftIsDroppedAndItsReadsEnded(t *testing.T) {
@@ -405,4 +408,49 @@ func equalStrings(a, b []string) bool {
 		}
 	}
 	return true
+}
+
+// The seam failing, or the machine having nothing at all, ends the reads too: no
+// picker will open to end them.
+func TestAListingThatFailsOrIsEmptyEndsItsReads(t *testing.T) {
+	walks := new([]context.Context)
+	failing := newRoomApp(t).withSize(200, 40).WithSessions(
+		fakeSessions{listed: []DiskSession{}, err: errors.New("no disk"), walks: walks})
+	next, cmd := failing.resume("")
+	if m, _ := next.Update(cmd()); m.(App).resumePicker.Open() {
+		t.Error("a failed listing opened a picker")
+	}
+	empty := newRoomApp(t).withSize(200, 40).WithSessions(
+		fakeSessions{listed: []DiskSession{}, filled: make(chan DiskSession), walks: walks})
+	next, cmd = empty.resume("")
+	if m, _ := next.Update(cmd()); m.(App).resumePicker.Open() {
+		t.Error("an empty machine opened a picker")
+	}
+	if len(*walks) != 2 {
+		t.Fatalf("%d walks started, want 2", len(*walks))
+	}
+	for i, ctx := range *walks {
+		if ctx.Err() == nil {
+			t.Errorf("walk %d is still reading after no picker opened", i)
+		}
+	}
+}
+
+// A walk that is quick hands rows over in batches, so it is a few redraws and
+// not one per session, and no message is larger than resumeFillBatch.
+func TestFillsArriveInBatchesNoLargerThanTheBound(t *testing.T) {
+	const total = resumeFillBatch + 6
+	filled := make(chan DiskSession, total)
+	for i := 0; i < total; i++ {
+		filled <- DiskSession{ID: fmt.Sprintf("%08x-7777-4777-8777-777777777777", i), Slug: "-p"}
+	}
+	first := fillCmd(filled, 1)().(resumeFilledMsg)
+	if len(first.rows) != resumeFillBatch || first.done {
+		t.Fatalf("the first message carries %d rows (done %t), want a full batch of %d", len(first.rows), first.done, resumeFillBatch)
+	}
+	close(filled)
+	second := fillCmd(first.filled, 1)().(resumeFilledMsg)
+	if len(second.rows) != total-resumeFillBatch || !second.done {
+		t.Errorf("the second message carries %d rows (done %t), want the remaining %d and done", len(second.rows), second.done, total-resumeFillBatch)
+	}
 }

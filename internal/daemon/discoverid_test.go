@@ -1,6 +1,7 @@
 package daemon
 
 import (
+	"fmt"
 	"os"
 	"reflect"
 	"strings"
@@ -149,5 +150,67 @@ func TestALookupAfterAListingReadsNothing(t *testing.T) {
 	}
 	if got := opened.Load(); got != 0 {
 		t.Errorf("a lookup of a remembered session opened %d transcripts, want none", got)
+	}
+}
+
+// Two copies of one session with the same modified time are the same row to a
+// comparison that stops at the id, and an unstable sort over the whole machine
+// puts them in a different order than a sort over the two of them. The listing's
+// order ends on the path, so a pick resumes the copy the picker showed.
+func TestAPickIsTheCopyTheListingShowedWhenTwoCopiesShareATimestamp(t *testing.T) {
+	for others := 10; others <= 40; others++ {
+		projects := t.TempDir()
+		same := time.Now().Add(-time.Hour)
+		put := func(id string) {
+			dir := t.TempDir()
+			p := writeTranscript(t, projects, slugOf(dir), id, dir)
+			if err := os.Chtimes(p, same, same); err != nil {
+				t.Fatal(err)
+			}
+		}
+		const twice = "55555555-5555-4555-8555-555555555555"
+		put(twice)
+		put(twice)
+		for i := 0; i < others; i++ {
+			put(fmt.Sprintf("%08x-6666-4666-8666-666666666666", i+1))
+		}
+
+		rows, err := discover(projects)
+		if err != nil {
+			t.Fatal(err)
+		}
+		var first FoundSession
+		for _, r := range rows {
+			if r.ID == twice {
+				first = r
+				break
+			}
+		}
+		got, ok, err := discoverID(projects, twice)
+		if err != nil || !ok {
+			t.Fatalf("discoverID: found=%t err=%v", ok, err)
+		}
+		if got.Path != first.Path {
+			t.Fatalf("with %d other sessions the listing shows the copy under %s and a pick resumes the one under %s",
+				others, first.Slug, got.Slug)
+		}
+	}
+}
+
+// A lookup has the whole listing in hand, so what it finds gone is gone from the
+// cache too: the daemon only ever looks one up, and would otherwise keep an entry
+// for every session it was ever asked about.
+func TestALookupForgetsTheTranscriptsThatLeftTheListing(t *testing.T) {
+	tree := newTree(t)
+	mustDiscover(t, tree.projects)
+	before := sessionScans.size()
+	if err := os.Remove(tree.paths[0]); err != nil {
+		t.Fatal(err)
+	}
+	if _, ok, _ := discoverID(tree.projects, tree.ids[1]); !ok {
+		t.Fatal("not found")
+	}
+	if got := sessionScans.size(); got != before-1 {
+		t.Errorf("the cache holds %d sessions after a lookup found one gone, want %d", got, before-1)
 	}
 }

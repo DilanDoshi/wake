@@ -10,6 +10,7 @@ import (
 	"runtime"
 	"sort"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 )
@@ -322,5 +323,43 @@ func TestTheNewestSessionsAreReadFirst(t *testing.T) {
 		if !newest[p] {
 			t.Errorf("a read of %s began among the first %d, and it is not one of the newest", p, discoverWorkers)
 		}
+	}
+}
+
+// Cancelling while reads are under way lets those finish and starts no more: a
+// picker that closes does not leave the rest of the machine to be read.
+func TestACancelMidFlightStartsNoMoreReads(t *testing.T) {
+	projects := t.TempDir()
+	for i := 0; i < discoverWorkers+10; i++ {
+		dir := t.TempDir()
+		writeTranscript(t, projects, slugOf(dir), fmt.Sprintf("%08x-8888-4888-8888-888888888888", i+1), dir)
+	}
+	sessionScans.reset()
+
+	var started atomic.Int64
+	release := make(chan struct{})
+	prev := openTranscript
+	openTranscript = func(path string) (io.ReadCloser, error) {
+		started.Add(1)
+		<-release
+		return prev(path)
+	}
+	t.Cleanup(func() { openTranscript = prev })
+
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel()
+	_, filled, err := discoverStream(ctx, projects)
+	if err != nil {
+		t.Fatal(err)
+	}
+	deadline := time.Now().Add(5 * time.Second)
+	for started.Load() < discoverWorkers && time.Now().Before(deadline) {
+		time.Sleep(5 * time.Millisecond)
+	}
+	cancel()
+	close(release)
+	got := drain(t, filled)
+	if started.Load() != discoverWorkers || len(got) != discoverWorkers {
+		t.Errorf("%d reads started and %d rows arrived, want exactly the %d begun before the cancel", started.Load(), len(got), discoverWorkers)
 	}
 }

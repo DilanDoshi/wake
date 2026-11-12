@@ -11,7 +11,6 @@ import (
 	"sync/atomic"
 	"testing"
 	"time"
-	"unicode/utf8"
 )
 
 // Discovery remembers what it read from each transcript, so a second open reads
@@ -311,11 +310,11 @@ func TestDiscoveringOneTreeDoesNotForgetAnother(t *testing.T) {
 	}
 }
 
-// A session whose name or directory is longer than the budget costs a read on
-// every open, as it did before the cache, and holds no memory in it.
+// A session whose name and directories outweigh the budget is read on every open,
+// as it was before the cache, and holds nothing in it.
 func TestASessionOverTheBudgetIsReadEveryTimeAndNotKept(t *testing.T) {
 	tree := newTree(t)
-	body := `{"cwd":"` + tree.dirs[1] + `","customTitle":"` + strings.Repeat("n", maxCachedText+1) + `"}` + "\n"
+	body := `{"cwd":"` + tree.dirs[1] + `","customTitle":"` + strings.Repeat("n", entryBudget+1) + `"}` + "\n"
 	if err := os.WriteFile(tree.paths[1], []byte(body), 0o644); err != nil {
 		t.Fatal(err)
 	}
@@ -325,32 +324,34 @@ func TestASessionOverTheBudgetIsReadEveryTimeAndNotKept(t *testing.T) {
 	if got := opened.Load(); got != 1 {
 		t.Errorf("discovery opened %d transcripts, want only the over-budget one", got)
 	}
-	if got := len(found(t, rows, tree.ids[1]).Name); got != maxCachedText+1 {
-		t.Errorf("the long name came back %d bytes long, want %d: it is still the whole name", got, maxCachedText+1)
+	if got := len(found(t, rows, tree.ids[1]).Name); got != entryBudget+1 {
+		t.Errorf("the long name came back %d bytes long, want %d: it is still the whole name", got, entryBudget+1)
 	}
 }
 
-// The budget is derived, not chosen: a preview and a title are each at most
-// previewBytes runes of at most utf8.UTFMax bytes, and the rest is held to
-// maxCachedText. So no session the cache keeps outweighs entryBudget, and the
-// cache holds no more entries than the machine has transcripts.
+// The budget is held through a real read: a prompt of any length is cut to
+// previewBytes runes by the reader, so a session with a huge prompt is still
+// kept, and nothing the cache keeps outweighs entryBudget.
 func TestNoSessionTheCacheKeepsOutweighsTheBudget(t *testing.T) {
-	longest := oneLine(strings.Repeat("😀", previewBytes*3), previewBytes)
-	if got := len(longest); got > previewBytes*utf8.UTFMax {
-		t.Fatalf("a bounded preview is %d bytes, over the %d the budget allows it", got, previewBytes*utf8.UTFMax)
+	tree := newTree(t)
+	huge := strings.Repeat("😀", 20_000)
+	body := `{"cwd":"` + tree.dirs[1] + `","customTitle":"named","lastPrompt":"` + huge + `"}` + "\n"
+	if err := os.WriteFile(tree.paths[1], []byte(body), 0o644); err != nil {
+		t.Fatal(err)
 	}
-	atBound := transcriptRead{cwds: []string{strings.Repeat("c", maxCachedText/2)}, preview: longest, title: longest}
-	atBound.recorded = strings.Repeat("n", maxCachedText-len(atBound.cwds[0]))
-	if overBudget(atBound) {
-		t.Fatalf("a session holding %d bytes of name and directories is refused, at the %d bound", heldText(atBound), maxCachedText)
+	sessionScans.reset()
+	mustDiscover(t, tree.projects)
+	opened := readCounter(t)
+	mustDiscover(t, tree.projects)
+	if got := opened.Load(); got != 0 {
+		t.Errorf("a warm open read %d transcripts: a session with a huge prompt was not kept, so its preview was not bounded", got)
 	}
-	if got := retainedBytes(atBound); got > entryBudget {
-		t.Errorf("a session the cache keeps at every bound retains %d bytes, over the %d budget", got, entryBudget)
-	}
-	over := atBound
-	over.recorded += "n"
-	if !overBudget(over) {
-		t.Errorf("a session holding %d bytes of name and directories is kept, over the %d bound", heldText(over), maxCachedText)
+	sessionScans.mu.Lock()
+	defer sessionScans.mu.Unlock()
+	for path, e := range sessionScans.entries {
+		if got := retainedBytes(e.read); got > entryBudget {
+			t.Errorf("%s is kept at %d bytes, over the %d budget", path, got, entryBudget)
+		}
 	}
 }
 
@@ -415,5 +416,69 @@ func TestASessionThatNamesManyDirectoriesIsKeptForTheOnesThatCouldProveIt(t *tes
 	}
 	if got := found(t, rows, tree.ids[1]).Dir; got != tree.dirs[1] {
 		t.Errorf("the session is proved as %q, want %q", got, tree.dirs[1])
+	}
+}
+
+// A transcript put back by a restore or a copy that keeps dates is a new file of
+// the same size and time. It is not the file that was read.
+func TestAFileReplacedWithTheSameSizeAndTimeIsReadAgain(t *testing.T) {
+	tree := newTree(t)
+	body := []byte(`{"cwd":"` + tree.dirs[0] + `","customTitle":"AAAA"}` + "\n")
+	if err := os.WriteFile(tree.paths[0], body, 0o644); err != nil {
+		t.Fatal(err)
+	}
+	info, err := os.Stat(tree.paths[0])
+	if err != nil {
+		t.Fatal(err)
+	}
+	mustDiscover(t, tree.projects)
+	opened := readCounter(t)
+
+	replacement := tree.paths[0] + ".new"
+	if err := os.WriteFile(replacement, []byte(strings.Replace(string(body), "AAAA", "BBBB", 1)), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chtimes(replacement, info.ModTime(), info.ModTime()); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Rename(replacement, tree.paths[0]); err != nil {
+		t.Fatal(err)
+	}
+	rows := mustDiscover(t, tree.projects)
+	if got := opened.Load(); got != 1 {
+		t.Errorf("discovery opened %d transcripts, want the replaced one", got)
+	}
+	if got := found(t, rows, tree.ids[0]).Name; got != "BBBB" {
+		t.Errorf("the name is %q, want the replacement's", got)
+	}
+}
+
+// A projects root of "." leaves no separator to match a path on, so what leaves
+// the listing must still leave the cache.
+func TestTheCacheForgetsATranscriptUnderARelativeRootToo(t *testing.T) {
+	tree := newTree(t)
+	t.Chdir(tree.projects)
+	if _, err := discover("."); err != nil {
+		t.Fatal(err)
+	}
+	before := sessionScans.size()
+	entries, _ := os.ReadDir(".")
+	var gone string
+	for _, e := range entries {
+		if e.IsDir() {
+			gone = filepath.Join(e.Name(), tree.ids[0]+".jsonl")
+			if _, err := os.Stat(gone); err == nil {
+				break
+			}
+		}
+	}
+	if err := os.Remove(gone); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := discover("."); err != nil {
+		t.Fatal(err)
+	}
+	if got := sessionScans.size(); got != before-1 {
+		t.Errorf("the cache holds %d sessions after one left a relative root, want %d", got, before-1)
 	}
 }
