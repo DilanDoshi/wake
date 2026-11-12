@@ -269,6 +269,9 @@ var claudeWireVocabulary = wordSet([]string{
 	// where Wake's own words are LoopOp's fields. See core/loop.go.
 	"CronCreate", "ScheduleWakeup", "CronDelete",
 	"cron", "recurring", "delaySeconds", "noop",
+	// A self-paced loop's own wakeup turn names itself on its lifecycle, which
+	// is how the daemon tells that its loop ended (foldWakeup).
+	"wakeup_source", "loop_wakeup",
 
 	// control_request / control_response.
 	"can_use_tool", "cancel_queued", "still_queued",
@@ -830,7 +833,10 @@ var notNamedByTheAirlock = map[string]string{
 // 255 → 256: "No response requested.", the close claude writes under the
 // synthetic model for a turn left with no reply, at a --resume (BUG-65).
 // resume-interrupted.jsonl, resume-killed.jsonl.
-const policedWordCount = 256
+// 256 → 258: "wakeup_source" and its "loop_wakeup", the lifecycle of a turn claude
+// starts for a self-paced loop, whose ending without a reschedule ends the loop.
+// loop-self-paced-end.jsonl.
+const policedWordCount = 258
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped

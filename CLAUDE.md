@@ -775,6 +775,10 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226�
   which `--name` brings), its `event` a string where `stream_event`'s is an object, so
   `wireFrame.StreamEvent` stays raw and a stream event it cannot read is nothing (`ui-invalidate.jsonl:2`).
 - The checklist is `TaskCreate`/`TaskUpdate` keyed on a monotonic id; `TodoWrite` is retired.
+- **A self-paced `/loop` ends when its own wakeup turn finishes without a `ScheduleWakeup`** (2.1.319+;
+  `CLAUDE_CODE_LOOP_KEEPALIVE=1` keeps the old fallback). No frame says so: the wakeup turn's
+  `command_lifecycle` names `wakeup_source:"loop_wakeup"`, and its `completed` with nothing rescheduled is
+  the end (`daemon/loop.go`'s `foldWakeup`, `loop-self-paced-end.jsonl`).
 - A `Workflow` run is `task_type:"local_workflow"` on the `task_*` frames; every `workflow_progress`
   is a **full snapshot**. Agent states are `start`/`progress`/`done`/**`error`** (never `failed`; an
   agent refused before starting has no `agentId`). A workflow agent's words never reach stdout — only
@@ -838,7 +842,7 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226�
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/protocol.go` at 796 and `internal/core/wire.go` at 796 — derived by
+  `internal/core/protocol.go` at 797 and `internal/core/wire.go` at 796 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go

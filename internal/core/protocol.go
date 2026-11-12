@@ -555,11 +555,12 @@ func resultFacts(f wireFrame) *SessionFacts {
 // state, the same ruling rateLimitEvent gets.
 func messageStateEvent(f wireFrame, raw json.RawMessage) Event {
 	return Event{
-		Kind:      KindMessageState,
-		SessionID: f.SessionID,
-		MessageID: f.CommandUUID,
-		Text:      f.State,
-		Raw:       raw,
+		Kind:       KindMessageState,
+		SessionID:  f.SessionID,
+		MessageID:  f.CommandUUID,
+		Text:       f.State,
+		LoopWakeup: f.WakeupSource == wakeupLoop,
+		Raw:        raw,
 	}
 }
 

@@ -734,15 +734,20 @@ func receiptSentence(text string) string {
 // the recording machine read it (2.1.314). Any other two-key result stays whole.
 const handbackDelivered = "Report delivered to your caller."
 
-// MessageEnded reports whether a KindMessageState says the message Wake sent is
-// over - completed or cancelled. Both free the wire for the next. See queue.go.
+// MessageEnded reports whether a KindMessageState says the message Wake sent, or
+// the turn claude started itself (LoopWakeup), is over - completed or cancelled.
+// Both free the wire for the next. See queue.go.
 func (e Event) MessageEnded() bool {
 	return e.Kind == KindMessageState && (e.Text == "completed" || e.Text == "cancelled")
 }
 
+// wakeupLoop is the wakeup_source of a turn claude starts itself for a self-paced
+// loop's next iteration (loop-self-paced-end.jsonl:53).
+const wakeupLoop = "loop_wakeup"
+
 // MessageStarted reports claude taking up a message Wake sent: into the running
 // turn at a tool boundary, or as a turn of its own (midturn-absent.jsonl:37,
-// midturn-later.jsonl:52).
+// midturn-later.jsonl:52); or starting a loop's wakeup turn (LoopWakeup).
 func (e Event) MessageStarted() bool { return e.Kind == KindMessageState && e.Text == "started" }
 
 // MessageCancelled reports a message that will never run: taken back before

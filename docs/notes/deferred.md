@@ -6264,3 +6264,32 @@ nothing reads back, so the `⌃Q` window prints the words of what it had pinned 
   write the interrupt to; a turn that outlasts the grace is still killed and not booked, as before this
   change. *Closes with:* `⌃C` interrupting a working agent first too, or a kill short of SIGKILL that claude
   ends as an interrupt.
+
+## FROM `fix/loop-ends-without-rescheduling`, 2026-11-11
+
+A self-paced loop's line now ends when claude ends the loop (2.1.319+): its own wakeup turn, which names
+itself `loop_wakeup` on its `command_lifecycle`, completing without scheduling the next. Left out:
+
+- **The countdown runs up to a minute early.** `foldLoop` sets the next fire to now plus `delaySeconds`,
+  but claude rounds the wakeup to a whole minute: a `delaySeconds` of 60 was scheduled "in 93s"
+  (`loop-self-paced-end.jsonl:41`). The true time is on that tool result as `tool_use_result.scheduledFor`
+  (epoch ms, beside `clampedDelaySeconds`), which nothing reads, and again on the wakeup's lifecycle when it
+  fires. *Closes with:* the fold reading `scheduledFor` off the ScheduleWakeup's result.
+- **A turn the operator sends between wakeups is unrecorded.** Wake leaves the loop as it was; whether
+  claude ends it is not known. *Closes with:* a recording of a message sent while a wakeup is pending.
+- **An interrupted wakeup turn is unrecorded.** Wake ends the loop on its `cancelled` as on a `completed`
+  with nothing rescheduled. *Closes with:* a recording of an interrupt during a wakeup turn.
+- **`CLAUDE_CODE_LOOP_KEEPALIVE` is read from the daemon's environment**, which its agents inherit; a
+  value set any other way (a settings file's `env`) is not seen, and only `1`, the changelog's spelling, is
+  honoured, where claude may read `true` too (it does for another of its switches,
+  `2026-10-02-file-rewind-findings.md` §1). *Closes with:* the first report of either.
+- **claude 2.1.308 to 2.1.318 is not told apart.** Their init already advertises
+  `lifecycle_wakeup_source_v1` (`api-error-unreachable.jsonl`), but they kept a loop alive with a fallback
+  wakeup where 2.1.319 ends it; on them the line ends early, and the next `ScheduleWakeup` brings it back
+  at `iter 1`. Wake reads no `claude_code_version`. *Closes with:* a fleet still on one of them.
+- **Nothing recorded shows claude ending the loop.** The take shows only that no wakeup came for 150 s
+  after the turn that rescheduled nothing; the rule itself is 2.1.319's changelog.
+- **Two wakeup shapes are unrecorded.** A wakeup that fires while another turn runs is probably `queued`
+  first; if its `started` then names no `wakeup_source`, the line never ends, as before this change. A
+  wakeup turn that ends waiting on a background task, with the next turn scheduling the wakeup, ends the
+  line early; the next `ScheduleWakeup` brings it back at `iter 1`. *Closes with:* a recording of either.
