@@ -7,7 +7,7 @@ Three kinds, in three places.
 ```
 wake                    start a new fleet, name it, and open it on the room
 wake --fleet <name>     open a fleet that already exists (a bare `wake` always makes a new one)
-wake fleets             every fleet on this machine
+wake fleets             every fleet on this machine, and what each is: running, parked, crashed or stopped
 wake new [name]         open a conversation with a new agent, with a name you choose
 wake attach <who>       open a conversation with one already running, by name or id
 wake fork <who> [name]  branch a conversation: a new agent with the same history so far
@@ -15,7 +15,7 @@ wake import [<id>]      adopt a claude session this machine already has
 wake manager            start the manager from a shell (the room seats one by default)
 wake setup-terminal     configure your terminal: Shift+Enter → a newline, Cmd+←/→ → line start/end
 wake status             what is running, and each agent's team (`--team <name>`: one team's members)
-wake stop               stop every session and the daemon
+wake stop               stop every session and the daemon, forget what was parked, and remove the fleet
 wake upgrade            install the newest release over this one
 wake --version          which build you have
 wake help               this list
