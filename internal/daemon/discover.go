@@ -229,6 +229,9 @@ func Discoverable() ([]FoundSession, error) {
 // fanned across discoverWorkers. Each worker writes its own slot, so there is no
 // shared state to guard beyond the WaitGroup; logf goes through the standard
 // logger, which is safe under concurrency.
+//
+// What a read finds is remembered per file, keyed on its size and time, so a
+// second discovery reads only the transcripts that changed (discovercache.go).
 func discover(projects string) ([]FoundSession, error) {
 	if projects == "" {
 		return nil, errors.New("no projects directory to look in: claude persists transcripts under ~/.claude/projects and this process cannot tell where home is")
@@ -256,16 +259,16 @@ func discover(projects string) ([]FoundSession, error) {
 			if !isReg {
 				return
 			}
-			cwds, preview, title, name := readTranscript(j.path)
+			read := sessionRead(j, info)
 			found[i] = FoundSession{
 				ID:       j.id,
-				Dir:      verifiedDir(j.slug, cwds),
+				Dir:      verifiedDir(j.slug, read.cwds),
 				Slug:     j.slug,
 				Path:     j.path,
 				Modified: info.ModTime(),
-				Preview:  preview,
-				Title:    title,
-				Name:     name,
+				Preview:  read.preview,
+				Title:    read.title,
+				Name:     read.recorded,
 			}
 			ok[i] = true
 		}(i, j)
@@ -273,11 +276,14 @@ func discover(projects string) ([]FoundSession, error) {
 	wg.Wait()
 
 	out := make([]FoundSession, 0, len(jobs))
+	live := make(map[string]struct{}, len(jobs))
 	for i := range found {
 		if ok[i] {
 			out = append(out, found[i])
+			live[found[i].Path] = struct{}{}
 		}
 	}
+	sessionScans.retain(projects, live)
 	// Newest first, and by id where two share a timestamp so the order is
 	// stable rather than whatever the filesystem said.
 	sort.Slice(out, func(i, j int) bool {
@@ -358,16 +364,7 @@ func sessionIDOf(name string) (string, bool) {
 func verifiedDir(slug string, cwds []string) string {
 	var found string
 	for _, c := range cwds {
-		// maySpawn's rule, applied to the one directory that does not arrive
-		// through maySpawn. It refuses a relative Dir off the wire because "a
-		// relative directory would resolve against the daemon's own working
-		// directory, which is the confusion this field exists to end" - and a
-		// Dir supplied out of band here would be Stat'd and then run relative
-		// to the daemon, which is the $PWD failure the whole file prevents.
-		if !filepath.IsAbs(c) {
-			continue
-		}
-		if slugOf(c) != slug {
+		if !fitsSlug(slug, c) {
 			continue
 		}
 		if fi, err := os.Stat(c); err != nil || !fi.IsDir() {
@@ -379,6 +376,36 @@ func verifiedDir(slug string, cwds []string) string {
 		found = c
 	}
 	return found
+}
+
+// fitsSlug is the part of verifiedDir's proof that is a fact about the
+// transcript alone: the cwd is absolute, and slugs to the directory the
+// transcript sits under.
+//
+// Absolute is maySpawn's rule, applied to the one directory that does not arrive
+// through maySpawn. It refuses a relative Dir off the wire because "a relative
+// directory would resolve against the daemon's own working directory, which is
+// the confusion this field exists to end" - and a Dir supplied out of band here
+// would be Stat'd and then run relative to the daemon, which is the $PWD failure
+// the whole file prevents.
+func fitsSlug(slug, cwd string) bool {
+	return filepath.IsAbs(cwd) && slugOf(cwd) == slug
+}
+
+// transcriptRead is what one pass over a transcript found.
+type transcriptRead struct {
+	cwds                     []string // every distinct cwd, in order of first appearance
+	preview, title, recorded string   // recorded: the newest custom title as written
+}
+
+// openTranscript opens a transcript to read. A variable only so the suite can
+// count the reads discovery makes and act when one ends.
+var openTranscript = func(path string) (io.ReadCloser, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return nil, err
+	}
+	return f, nil
 }
 
 // readTranscript pulls the keys this package knows out of one file.
@@ -400,13 +427,18 @@ func verifiedDir(slug string, cwds []string) string {
 // sessions. The cost is paid off the draw goroutine and in parallel (discover).
 // readTranscriptLine rather than a Scanner, which would stop at the first
 // oversized attachment and hide every cwd and /rename after it.
-func readTranscript(path string) (cwds []string, preview, title, name string) {
-	f, err := os.Open(path)
+//
+// The error says what came back is not the whole file (it would not open, or a
+// read failed part-way) and must not be remembered.
+func readTranscript(path string) (r transcriptRead, readErr error) {
+	f, err := openTranscript(path)
 	if err != nil {
 		logf("wake: transcript %s could not be opened: %v", path, err)
-		return nil, "", "", ""
+		return transcriptRead{}, err
 	}
 	defer func() { _ = f.Close() }()
+	var cwds []string
+	var preview, title, name string
 	seen := map[string]bool{}
 	// Nearly every line repeats the cwd before it, so a value already read is
 	// not decoded again: what it decodes to is a function of its bytes.
@@ -439,6 +471,7 @@ func readTranscript(path string) (cwds []string, preview, title, name string) {
 		if err != nil {
 			if !errors.Is(err, io.EOF) {
 				logf("wake: transcript %s could not be read to the end: %v", path, err)
+				readErr = err
 			}
 			break
 		}
@@ -453,7 +486,9 @@ func readTranscript(path string) (cwds []string, preview, title, name string) {
 		// better nothing.
 		preview = title
 	}
-	return cwds, oneLine(preview, previewBytes), oneLine(title, previewBytes), name
+	return transcriptRead{
+		cwds: cwds, preview: oneLine(preview, previewBytes), title: oneLine(title, previewBytes), recorded: name,
+	}, readErr
 }
 
 // decodeString reads a field's raw value as a string, treating any other shape

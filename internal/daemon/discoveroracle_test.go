@@ -46,12 +46,14 @@ func decodeLine(raw []byte) (fields [fieldCount]string, present [fieldCount]bool
 
 // readTranscriptDecoded is readTranscript as it was: every line decoded into a
 // map.
-func readTranscriptDecoded(path string) (cwds []string, preview, title, name string) {
+func readTranscriptDecoded(path string) transcriptRead {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil, "", "", ""
+		return transcriptRead{}
 	}
 	defer func() { _ = f.Close() }()
+	var cwds []string
+	var preview, title, name string
 	seen := map[string]bool{}
 	var generated string
 	br := bufio.NewReaderSize(f, 64*1024)
@@ -83,7 +85,9 @@ func readTranscriptDecoded(path string) (cwds []string, preview, title, name str
 	if preview == "" {
 		preview = title
 	}
-	return cwds, oneLine(preview, previewBytes), oneLine(title, previewBytes), name
+	return transcriptRead{
+		cwds: cwds, preview: oneLine(preview, previewBytes), title: oneLine(title, previewBytes), recorded: name,
+	}
 }
 
 // foundDecoded is one transcript's row as the decoding walk made it.
@@ -92,10 +96,10 @@ func foundDecoded(j transcriptFile) (FoundSession, bool) {
 	if !isReg {
 		return FoundSession{}, false
 	}
-	cwds, preview, title, name := readTranscriptDecoded(j.path)
+	read := readTranscriptDecoded(j.path)
 	return FoundSession{
-		ID: j.id, Dir: verifiedDir(j.slug, cwds), Slug: j.slug, Path: j.path,
-		Modified: info.ModTime(), Preview: preview, Title: title, Name: name,
+		ID: j.id, Dir: verifiedDir(j.slug, read.cwds), Slug: j.slug, Path: j.path,
+		Modified: info.ModTime(), Preview: read.preview, Title: read.title, Name: read.recorded,
 	}, true
 }
 

@@ -39,11 +39,13 @@ const adoptRows = 10
 
 // machineSessions answers ui.Sessions out of this package's own two functions.
 //
-// A type with no state because there is none to hold: every answer is a fresh
-// walk of ~/.claude/projects, which is the only thing that can be true about a
-// directory other processes are writing to. Caching it would be a picker that
-// stopped listing a session somebody started a minute ago - and the walk
-// happens on a tea.Cmd's goroutine, never on the one that draws.
+// A type with no state of its own: every answer is a fresh listing of
+// ~/.claude/projects, which is the only thing that can be true about a directory
+// other processes are writing to, so a session somebody started a minute ago is
+// there. What is read out of each transcript is remembered per file by
+// internal/daemon (discovercache.go), keyed on its size and time, so only one
+// that changed is read again. The walk happens on a tea.Cmd's goroutine, never on
+// the one that draws.
 type machineSessions struct{}
 
 // Listing is the picker, bounded for a pane and naming the room's own command.

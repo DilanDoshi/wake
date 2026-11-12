@@ -284,11 +284,13 @@ func transcriptOf(t *testing.T, lines ...string) string {
 // sameRead holds readTranscript to the decoding reader on one file.
 func sameRead(t *testing.T, path string) {
 	t.Helper()
-	wc, wp, wt, wn := readTranscriptDecoded(path)
-	gc, gp, gt, gn := readTranscript(path)
-	if !reflect.DeepEqual(wc, gc) || wp != gp || wt != gt || wn != gn {
-		t.Fatalf("readTranscript read cwds %q preview %q title %q name %q, the decoding reader read %q %q %q %q",
-			gc, gp, gt, gn, wc, wp, wt, wn)
+	want := readTranscriptDecoded(path)
+	got, err := readTranscript(path)
+	if err != nil {
+		t.Fatalf("readTranscript: %v", err)
+	}
+	if !reflect.DeepEqual(want, got) {
+		t.Fatalf("readTranscript read %+v, the decoding reader read %+v", got, want)
 	}
 }
 
@@ -324,8 +326,8 @@ func TestReadingACwdFarPastAnyHeadBoundStillFindsIt(t *testing.T) {
 	lines = append(lines, `{"cwd":"/deep"}`)
 	p := transcriptOf(t, lines...)
 	sameRead(t, p)
-	if cwds, _, _, _ := readTranscript(p); !reflect.DeepEqual(cwds, []string{"/deep"}) {
-		t.Fatalf("the cwd three megabytes in was read as %q", cwds)
+	if got, _ := readTranscript(p); !reflect.DeepEqual(got.cwds, []string{"/deep"}) {
+		t.Fatalf("the cwd three megabytes in was read as %q", got.cwds)
 	}
 }
 
@@ -344,7 +346,7 @@ func TestReadingATranscriptDoesNotDecodeEveryLine(t *testing.T) {
 		rows[i] = row
 	}
 	p := transcriptOf(t, rows...)
-	allocs := testing.AllocsPerRun(5, func() { _, _, _, _ = readTranscript(p) })
+	allocs := testing.AllocsPerRun(5, func() { _, _ = readTranscript(p) })
 	if limit := float64(lines * 3); allocs > limit {
 		t.Fatalf("reading %d lines took %.0f allocations (limit %.0f): a line is being decoded rather than scanned", lines, allocs, limit)
 	}

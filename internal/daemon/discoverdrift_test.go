@@ -35,12 +35,12 @@ func TestDriftDiscovery(t *testing.T) {
 		go func(j transcriptFile) {
 			defer wg.Done()
 			defer func() { <-sem }()
-			wc, wp, wt, wn := readTranscriptDecoded(j.path)
-			gc, gp, gt, gn := readTranscript(j.path)
+			want := readTranscriptDecoded(j.path)
+			got, _ := readTranscript(j.path)
 			row, ok := foundDecoded(j)
 			mu.Lock()
 			defer mu.Unlock()
-			if !reflect.DeepEqual(wc, gc) || wp != gp || wt != gt || wn != gn {
+			if !reflect.DeepEqual(want, got) {
 				fieldsD = append(fieldsD, j.id)
 			}
 			if ok {
