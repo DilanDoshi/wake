@@ -38,6 +38,38 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FOLLOW-UP, 2026-11-11 — a name, address, path or figure cut bare can read as another
+
+The one-row cuts were surveyed when the notice row got its "…". Most already cut with one (`detailRow`, `boardRow`,
+`commandecho`, `field`, `/status`, the groups rows, `render.ToolCall`), wrap instead of cutting (cards, the
+question text, titled boxes), or cut a label nobody types (a dispatch's description, a task's subject). One kind
+can mislead: rows that cut an **agent's name, a send's address, a path or a figure** with no mark. Those found:
+
+- the roster's `headLine` (`clip`)
+- the room's speaker head (`agentSaid`), cross-session head (`crossSaid`) and marker rows (`chat_blocks.go`: the
+  taken-back row ends on the name; the finished, ask, cancelled and resumed rows carry it)
+- the conversation's cross-session heads (`dm_blocks.go`'s `crossSessionBlock`, `sentBlock`, whose recipient can be
+  a `uds:` address)
+- the composer's target line
+- the workflow save dialog's path row (`workflowsave.go`, through `fitRow`): `.claude/workflows/deploy-s` at 40
+  columns
+- figures and error text: the compacted line's token counts (`beat.go`, `50.8k → 4.` at 24 columns), a task line's elapsed time
+  and a failed workflow's error line (`taskline.go`), the room's workflow ending (`chat_blocks.go`), and the
+  strip's counts below the widths `awareness.go` budgets for
+
+A name is how an agent is typed, and a cut one can be another live session's whole name (`fix-login-bug` drawn
+`fix-login`); a cut socket path names another socket. `headLine`'s own comment chose the bare cut ("a name stays
+recognisable three characters short"), so the call is the owner's: an ellipsis there costs a name one more cell.
+A cut figure is a plausible wrong number, the roster's and the strip's own argument for dropping one whole.
+
+For the 80ms a narrowing resize settles, `clipMidDrag` cuts the whole frame to the new width with no mark, the
+notice row included; the row is re-cut with its "…" once the resize settles.
+
+The auth panel's title and warn rows are still cut at the panel's width, though both surfaces that draw it wrap
+them (`! Could not read authenticatio` in a 30-column room); the cut mangles a word, never a command.
+
+---
+
 ## PRODUCT CALL NOT TAKEN, 2026-11-07 — a turn a peer's message started is resumed after a limit too
 
 The owner reported that agents which were idle when he hit the limit were woken by Wake's resume. The
@@ -122,7 +154,32 @@ the fleet, but it still counts with `%d`.
 
 ---
 
-## FOLLOW-UP, 2026-11-07 — a cut notice row ends with nothing to say it was cut
+## KNOWN GAP, 2026-11-10 — under a relative `HOME`, an agent's `~/.claude` may not be the daemon's
+
+BUG-70 made Wake's own state absolute under a relative `HOME` (`HOME=h`, a literal `~`), through
+`core.HomeDir`. Four things are still read relative:
+- `ProjectsDir`, `claudeConfigDir` and `core.ConfigFile`, against the working directory of the process that
+  reads them: the daemon's, or the CLI's for `wake import`'s listing;
+- termsetup's `$HOME/.config`, which `wake setup-terminal` writes.
+
+So under `HOME=h`:
+- `/workflows`' personal path is drawn as `h/.claude/workflows`. Before, `shortPath` drew it `~/…`, which
+  happened to work between two relative paths.
+- `/mcp`'s sign-in hint reads `cd ~/x && …`, which a shell with another `HOME` expands elsewhere.
+- Any process in another directory reads another `~/.wake`, as any relative `HOME` would.
+
+Every agent inherits the same relative `HOME` but runs in its own directory. If claude resolves `~/.claude`
+against that directory, an agent spawned elsewhere writes its transcripts and config under
+`<its cwd>/h/.claude`, where the daemon's history, discovery and usage-limit watch do not look. How claude reads
+a relative `HOME` is claude's behaviour, and nothing records it. Out of scope for BUG-70 (wake-orch,
+2026-11-10).
+
+*Closes with:* a recording of claude under a relative `HOME`, then either an absolute `HOME` for the whole
+process tree (set once in `cmd/wake`) or these paths resolved through `core.HomeDir`.
+
+---
+
+## ~~FOLLOW-UP, 2026-11-07 — a cut notice row ends with nothing to say it was cut~~ CLOSED 2026-11-11 (`fix/cut-notice-ends-in-an-ellipsis`)
 
 `noticeLine` (`internal/ui/appview.go`) draws a notice on one row with lipgloss's `MaxWidth`, which cuts at
 the pane's width and adds no ellipsis. A row cut inside a command reads as a shorter command: the adversarial
@@ -131,6 +188,16 @@ review of `fix/daemon-lines-name-the-fleet` measured the cap refusal's old "`wak
 row ends on a destructive verb today, but any long notice still loses its tail without a mark.
 
 *Closes with:* a cut notice row ending in "…", measured by the same width, with a test at the cut.
+
+**Closed by `noticeRow`** (`appview.go`): the row's words are cut by `ansi.Truncate` to `noticeWidth` with the
+DM's `ellipsis`, then coloured, so the "…" is the row's last cell inside the style. The timed, lingering and
+pinned notices all draw through it, and `noticeLinger` measures the same cut row: "drawn cells" is after the
+cut, the "…" one of them. The two other one-row cuts that could read as a shorter command or a whole list went
+with it: the rewind menu's "⚠ … also runs in this directory" (`rewindmenu.go`) now ends in "…", and the auth
+panel's `claude auth login` hint (`authpanel.go`) is no longer cut at all, since the room and the conversation both
+wrap the panel and a cut threw away a command they would have shown whole. Tests: `noticerow_test.go`,
+`TestANarrowPanelKeepsItsWholeCommand`, `TestANarrowPaneMarksItsCutSharedDirectoryWarning`. The rows that still
+cut a name bare are the entry above.
 
 ---
 

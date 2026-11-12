@@ -740,6 +740,10 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226�
   derivable from `num_turns`/`duration_api_ms`.
 - An interrupted turn has no `result` key; an interrupted process exits 1 with empty stderr
   (`interruptedExit` suppresses it). `[Request interrupted by user]` arrives as a `user` frame.
+- **A `--resume` closes a turn left with no reply** (an interrupt, a kill) with one `<synthetic>`
+  assistant record on disk, `No response requested.`, ahead of the next prompt; never on stdout (seen
+  2.1.303–2.1.322). Core drops it by the record itself, not by what it follows (`isResumeClose`); the
+  model gate keeps an agent's own words drawn. `resume-interrupted.jsonl`, `resume-killed.jsonl`.
 - One `can_use_tool` carries three shapes; `AskUserQuestion` answers ride in
   `updatedInput.answers` (`core.askKind`, decided by payload shape, never tool name).
 - A question killed by closing stdin is indistinguishable from an operator deny.
@@ -834,7 +838,7 @@ its own `--help` row, and Wake's own argv ran live); corpus captured at 2.1.226�
 - **Nothing parallel. No dead code.** A guard's domain is what can *arrive*.
 - **Immutable by default**, especially `attention` and `router`.
 - **Small files: 200–400 typical, 800 hard max.** The two largest non-test files are
-  `internal/core/wire.go` at 796 and `internal/ui/dm.go` at 794 — derived by
+  `internal/core/protocol.go` at 796 and `internal/core/wire.go` at 796 — derived by
   `TestCLAUDEmdNamesTheTwoLargestNonTestFiles`. Split by subject, never by line count.
 - **Functions under 50 lines. Nesting under 4 levels.**
 - **Handle every error explicitly.** A malformed JSON line logs and skips. Under a TUI, failures go
