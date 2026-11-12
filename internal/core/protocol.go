@@ -642,6 +642,9 @@ func messageEvents(f wireFrame, raw json.RawMessage) []Event {
 		base.Kind, base.Goal = KindGoal, &op
 		return one(base)
 	}
+	if isResumeClose(m) {
+		return nil
+	}
 	if !isJSONArray(m.Content) {
 		// Compaction summaries, <local-command-stdout>, a peer's
 		// <cross-session-message> and bash mode's records all land here as string content.

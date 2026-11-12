@@ -489,6 +489,10 @@ var claudeWireVocabulary = wordSet([]string{
 	// reading its prose. See core.GoalOp.
 	"<synthetic>", "No goal set",
 	"Goal set: ", "Goal cleared: ", "Stop hook feedback:",
+
+	// The close claude writes for a turn left with no reply, at a --resume: a
+	// whole value under "<synthetic>", which vocabulary.go's isResumeClose reads.
+	"No response requested.",
 })
 
 // deliberatelyGeneric is the other half of the vocabulary's honesty: wire
@@ -823,7 +827,10 @@ var notNamedByTheAirlock = map[string]string{
 // 253 → 255: "parent_task_id", the dispatching subagent's task id on a nested
 // task_started, which nests a subagent's own under it, and "Report delivered to
 // your caller.", a delivered SubagentHandback receipt. subagent-nested.jsonl.
-const policedWordCount = 255
+// 255 → 256: "No response requested.", the close claude writes under the
+// synthetic model for a turn left with no reply, at a --resume (BUG-65).
+// resume-interrupted.jsonl, resume-killed.jsonl.
+const policedWordCount = 256
 
 // notWireVocabulary is every remaining string the airlock names: Wake's own
 // error text and the formatting constants. Import paths are skipped
