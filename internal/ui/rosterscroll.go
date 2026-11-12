@@ -95,6 +95,15 @@ func (r Roster) window(rows []rosterItem, h heights, height int) span {
 // which way they are: "+5 above", "+3 below", "+5 above · +2 below". A column too
 // narrow to say both says "+7 more".
 func countLine(above, below, width int) string {
+	if line := "  " + countWords(above, below); ansi.StringWidth(line) <= width {
+		return line
+	}
+	return moreLine(above + below)
+}
+
+// countWords says which way what a window leaves out lies: "+5 above · +2 below",
+// each part only when it has something. The completion menu's key line says it too.
+func countWords(above, below int) string {
 	var parts []string
 	if above > 0 {
 		parts = append(parts, "+"+strconv.Itoa(above)+" above")
@@ -102,10 +111,7 @@ func countLine(above, below, width int) string {
 	if below > 0 {
 		parts = append(parts, "+"+strconv.Itoa(below)+" below")
 	}
-	if line := "  " + strings.Join(parts, " · "); ansi.StringWidth(line) <= width {
-		return line
-	}
-	return moreLine(above + below)
+	return strings.Join(parts, " · ")
 }
 
 // rosterDrawn is the roster as the sidebar draws it and a click reads it.

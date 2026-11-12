@@ -8,6 +8,45 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-12 — the completion menu walks every offer: a window over the matches, moved the least distance
+
+The owner's report: "for like the / menu that pops up/@ menu that pops up, if i use down arrow, i cant
+'scroll down' to new fields that should be next in the menu... this should be a feature", ruled by
+`wake-orch` against `origin/main` 6e27337d. The menu cut its matches to `completionRows` (23, Wake's own
+verb count) and kept a count, so ↓ clamped on the last drawn row and the rest read "N more - keep typing",
+reachable only by narrowing the draft. There were two cuts: `completion.bounded` and the file search's
+`rankPaths(…, completionRows)`.
+
+- **The menu keeps every match, to a ceiling, and draws a window over them.** `completion.offers` is the
+  full list; `completionCeiling` is `pathScanMax` (512), the most one directory read takes, so the listing and
+  the ranked search stop at one bound. A bare `/` over a session advertising 133 commands plus Wake's verbs
+  is under it. Past it `more` counts what was left out and the key line says to keep typing.
+- **The window moves the least that shows the cursor** (`completion.scrolled`: `band.reveal` and `clampScroll`,
+  the board's rule, so no scroll arithmetic of its own): not at all while the cursor walks inside it, one row
+  when it leaves an edge. Not centred (`windowAround`, the resume picker's, is) - a menu one types over reads
+  as a list that holds still. It is worked out where the cursor or the offers change (`walkCompletion`,
+  `bounded`, `keepingCursor`), never in a draw. A new draft starts at the top; a report or a peers reply keeps
+  the cursor on its offer. ↑↓ and ⌃N/⌃P clamp at both ends as before.
+- **The ceiling is measured, not guessed.** `rankPaths` keeps k rows by sorted insert, O(k) each.
+  `BenchmarkRankPathsAtTheBounds` (50,000 names of 160 bytes, one-letter query), k=23 → k=512: 2.2-2.9 ms → 3.0-3.6 ms
+  in git's order, and 3.0-3.7 → 12.6-13.4 ms in the order where every name ranks ahead of the last, which git's
+  sorted output rarely produces. A query change, never a frame, and under one. The benchmark now runs both orders.
+- **The key line says which way**, in the roster's words (`countWords`, shared with `countLine`):
+  `+5 above · +12 below`, then the keys, in the row it already had. What the ceiling cut counts below and adds
+  `- keep typing`, since ↓ cannot reach it. Nothing lies out of the window: just the keys, as before.
+- **The drawn height is unchanged** - `completionRows` rows and the key line - so `Room.menuRows`, `DM.menuRows`
+  and the pane's chrome know nothing of it (`TestTheMenuIsAsTallAtEveryCursorAsAtRest`).
+- **Every menu is this one.** The room's `/` and its `@who /cmd` bridge, the room's `@` (agents, teams, `all`,
+  the machine's sessions behind a manager relay, the one-directory listing), a conversation's `@` (peers, sessions,
+  agent types, the fuzzy file search or the listing), the `/team` argument and the answer box's menu all build a
+  `completion` and go through `bounded` and `View`. The `Picker` (`/effort`, `/model`: seven fixed rows) and the
+  resume picker (its own window) are not `completion`s and are untouched.
+- **The mouse is untouched.** A click on an offer did nothing before (the menu rows are chrome that takes nothing,
+  `mouse.go`) and still does; the wheel over the menu scrolls the transcript. Click-to-accept and a wheel for the
+  menu are a feature of their own (deferred.md, 2026-11-12).
+- Wake-side only, for claude 2.1.322: the offers still come from `init`'s `slash_commands` and the file index; no
+  protocol, airlock or argv change. Tests: `completionscroll_test.go`, pty `cmd/wake/completionscrollscreen_unix_test.go`.
+
 ## 2026-11-06 — the wheel over the right sidebar scrolls the roster
 
 The owner's ask ("if mouse over right side bar, that should scroll too", "for in case i have more agents

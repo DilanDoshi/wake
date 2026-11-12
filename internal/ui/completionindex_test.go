@@ -144,7 +144,7 @@ func TestASearchRanksTheFileNameFirstThenTheShorterPath(t *testing.T) {
 				"internal/ui/x/compare/zz.go", "internal/ui/compat/readme.md"}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
-			got, total := rankPaths(indexed(tc.files...), tc.query, completionRows)
+			got, total := rankPaths(indexed(tc.files...), tc.query, completionCeiling)
 			if !slices.Equal(got, tc.want) {
 				t.Errorf("%q over %q ranked %q, want %q", tc.query, tc.files, got, tc.want)
 			}
@@ -343,7 +343,7 @@ func TestDerivedDirectoriesAreBoundedInCountAndBytes(t *testing.T) {
 }
 
 // Past the cap the index keeps the first names and counts the rest, and the
-// menu's `more` says so beside what the rows left out.
+// menu's `more` says so beside what the ceiling left out.
 func TestAnIndexPastTheCapKeepsTheFirstAndCountsTheRest(t *testing.T) {
 	const over = 7
 	names := make([]string, indexMaxFiles+over)
@@ -358,7 +358,7 @@ func TestAnIndexPastTheCapKeepsTheFirstAndCountsTheRest(t *testing.T) {
 			len(names), len(idx.files), idx.left, indexMaxFiles, over)
 	}
 	if want := indexMaxFiles + over - len(c.offers); c.more != want {
-		t.Errorf("the menu says %d more, want %d: every indexed match it did not draw and the %d never indexed",
+		t.Errorf("the menu says %d more, want %d: every indexed match past the ceiling and the %d never indexed",
 			c.more, want, over)
 	}
 }
@@ -705,21 +705,30 @@ func gitIn(t *testing.T, dir string, args ...string) {
 // BenchmarkRankPathsAtTheBounds is a search over the worst index the bounds
 // admit: full-length names at the byte cap's ratio (160 bytes a name, 50,000 of
 // them), each with directories of its own, so derived directories hit their cap.
+// "worst" is also the order: names that each rank ahead of the last make every
+// match an insert into the completionCeiling rows kept, where git's own order
+// rarely does.
 func BenchmarkRankPathsAtTheBounds(b *testing.B) {
 	pad := strings.Repeat("b", 70)
-	names := make([]string, indexMaxFiles)
-	for i := range names {
-		names[i] = fmt.Sprintf("d%05d/%s/%s/Completion%05d.go", i, strings.Repeat("a", 60), pad, i)
-	}
-	idx := parseIndex("", lsOutput(names...), 0)
-	b.Logf("%d entries", len(idx.files))
-	for _, q := range []string{"c", "comp", "ui/comp", "zzz"} {
-		b.Run(q, func(b *testing.B) {
-			b.ReportAllocs()
-			for b.Loop() {
-				rankPaths(idx.files, q, completionRows)
+	for _, order := range []string{"git order", "each ahead of the last"} {
+		names := make([]string, indexMaxFiles)
+		for i := range names {
+			n := i
+			if order != "git order" {
+				n = indexMaxFiles - i
 			}
-		})
+			names[i] = fmt.Sprintf("d%05d/%s/%s/Completion%05d.go", n, strings.Repeat("a", 60), pad, n)
+		}
+		idx := parseIndex("", lsOutput(names...), 0)
+		b.Logf("%d entries", len(idx.files))
+		for _, q := range []string{"c", "comp", "ui/comp", "zzz"} {
+			b.Run(order+"/"+q, func(b *testing.B) {
+				b.ReportAllocs()
+				for b.Loop() {
+					rankPaths(idx.files, q, completionCeiling)
+				}
+			})
+		}
 	}
 }
 
@@ -735,7 +744,7 @@ func BenchmarkRankPaths(b *testing.B) {
 		b.Run(q, func(b *testing.B) {
 			b.ReportAllocs()
 			for b.Loop() {
-				rankPaths(index, q, completionRows)
+				rankPaths(index, q, completionCeiling)
 			}
 		})
 	}

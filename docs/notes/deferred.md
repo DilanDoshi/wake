@@ -38,6 +38,44 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FOLLOW-UP, 2026-11-12 — a click on a completion offer, and the wheel over the menu
+
+The completion menu now walks every offer with ↑↓, ⌃N/⌃P, ⇥ and ↵ (`decisions.md`, 2026-11-12). The mouse does
+nothing there, as before: a press on an offer is chrome that takes nothing (`mouse.go`), and the wheel over the
+menu scrolls the transcript under it. A possible feature, the owner's call (wake-orch, 2026-11-12):
+
+- **Click-to-accept:** a press on drawn row *i* puts the cursor on `top+i` and accepts it. The window's mapping is
+  one line (`completion.top`); the cost is a hit-test over the rows `Room.menuRows`/`DM.menuRows` clip and a
+  per-pane origin, and the rule for a press that changes focus (refocus only, as a card's does).
+- **A wheel for the menu:** notches move the window, held where the wheel left it, as the roster's do - and then the
+  cursor may sit outside it, which the roster answers with a rule about keys (`rosterPickHidden`) that the menu
+  would need its own of.
+
+*Revisit if:* the owner asks for a click on an offer.
+
+---
+
+## KNOWN GAP, 2026-11-12 — a pane too short for the menu clips it from the bottom, cursor and key line with it
+
+`Room.menuRows`/`DM.menuRows` clip the menu block to what the pane can spare, from the bottom, so in a short pane
+(or one of four grid panes) the last drawn offers - the cursor's row among them - and the key line can be cut off,
+and ↵ or ⇥ takes an offer nobody sees. Older than the window: the cursor on row 18 under a 10-row budget is
+clipped the same. The window cannot fix it alone (it draws `completionRows` rows whatever the pane gives), and
+sizing it to the pane changes the drawn height the pane's chrome counts on. *Closes with:* the window sized to
+`App.menuRoom` and the cursor always inside it, held by a sweep of pane heights.
+
+---
+
+## KNOWN GAP, 2026-11-12 — a directory read cut at `pathScanMax` says nothing about the entries it did not read
+
+`readDirBounded` reads at most 512 entries and returns them, with no word that it stopped. The menu then holds all
+512 and, since the ceiling is the same number, its key line counts none left out; a directory of more has entries
+nobody is told are missing. `completionpath.go`'s header says "the menu says how many it left out", which was only
+ever true of the cut to `completionRows`, not of the unread names. *Closes with:* the read reporting that it hit
+the cap, and the key line asking to keep typing.
+
+---
+
 ## PRODUCT CALL NOT TAKEN, 2026-11-07 — a turn a peer's message started is resumed after a limit too
 
 The owner reported that agents which were idle when he hit the limit were woken by Wake's resume. The

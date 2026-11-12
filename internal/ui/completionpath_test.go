@@ -216,12 +216,9 @@ func TestThePathScanIsBoundedByTheNumberOfEntriesItReads(t *testing.T) {
 		rpc.SessionStatus{ID: "s1", Name: "alex", Dir: dir, State: rpc.StateIdle},
 	).withDraft("@f")
 
-	if got := len(a.completion.offers); got > completionRows {
-		t.Errorf("the menu drew %d rows over a directory of %d files, want at most %d",
-			got, pathScanMax+64, completionRows)
-	}
-	if a.completion.more == 0 {
-		t.Error("a directory of thousands matched and the menu said nothing was left out")
+	if got := len(a.completion.offers); got != pathScanMax {
+		t.Errorf("the menu holds %d offers over a directory of %d files, want the %d one read takes",
+			got, pathScanMax+64, pathScanMax)
 	}
 }
 

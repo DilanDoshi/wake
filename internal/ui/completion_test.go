@@ -4,6 +4,7 @@ package ui
 // and the keys that walk it.
 
 import (
+	"fmt"
 	"slices"
 	"strings"
 	"testing"
@@ -180,27 +181,38 @@ func TestAWordBothSidesAdvertiseIsOfferedOnce(t *testing.T) {
 
 // The menu is bounded however many match. 133 advertised commands is a menu
 // taller than a pane, and a pane taller than the terminal scrolls the alt
-// screen away on every draw.
+// screen away on every draw - so it draws a window of completionRows over what
+// it keeps, and keeps at most completionCeiling.
 func TestTheMenuIsBoundedHoweverManyMatch(t *testing.T) {
-	fresh(t)
-	many := make([]string, 0, 200)
-	for _, r := range "abcdefghijklmnopqrstuvwxyz" {
-		for i := range 8 {
-			many = append(many, string(r)+string(rune('0'+i)))
-		}
-	}
-	a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
-	a = a.advertising("s1", many...).withDraft("/")
+	for name, n := range map[string]int{"fewer than the ceiling": 208, "more than the ceiling": completionCeiling + 100} {
+		t.Run(name, func(t *testing.T) {
+			fresh(t)
+			many := make([]string, 0, n)
+			for i := range n {
+				many = append(many, fmt.Sprintf("c%04d", i))
+			}
+			a := dmApp(nil, Stream{}, "s1", "alex").withAgents("alex").withSize(200, 40)
+			a = a.advertising("s1", many...).withDraft("/")
 
-	if got := len(a.completion.offers); got > completionRows {
-		t.Errorf("the menu drew %d rows for %d commands, want at most %d", got, len(many), completionRows)
-	}
-	if a.completion.more == 0 {
-		t.Fatalf("%d commands matched and the menu says nothing was left out: a bound that is silent "+
-			"reads as a complete list", len(many))
-	}
-	if drawn := a.completionView(80, a.focus); !strings.Contains(drawn, "more") {
-		t.Errorf("the menu drew\n%s\nand said nothing about what it left out", drawn)
+			matched := n + len(wakeVerbs())
+			if got, want := len(a.completion.offers), min(matched, completionCeiling); got != want {
+				t.Errorf("%d commands matched and the menu kept %d, want %d", matched, got, want)
+			}
+			if got, want := a.completion.more, max(matched-completionCeiling, 0); got != want {
+				t.Errorf("%d commands matched and more says %d left out, want %d: the ones past the ceiling", matched, got, want)
+			}
+			drawn := a.completionView(80, a.focus)
+			if rows := strings.Count(drawn, "\n") + 1; rows != completionRows+1 {
+				t.Errorf("the menu drew %d rows for %d commands, want %d: the window and the key line", rows, matched, completionRows+1)
+			}
+			if !strings.Contains(drawn, "below") {
+				t.Errorf("the menu drew\n%s\nand said nothing about what lies below it", drawn)
+			}
+			if past := strings.Contains(drawn, "keep typing"); past != (matched > completionCeiling) {
+				t.Errorf("the menu drew\n%s\nand asking to keep typing is %v with %d matches against a ceiling of %d",
+					drawn, past, matched, completionCeiling)
+			}
+		})
 	}
 }
 
