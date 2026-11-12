@@ -256,6 +256,11 @@ func (t Tasks) named(u *core.TaskUpdate) *core.TaskUpdate {
 	if filled.Elapsed <= 0 {
 		filled.Elapsed = row.Elapsed
 	}
+	// Only task_started names the dispatching subagent, and taskLine needs it to
+	// leave a nested ending out of the agent's conversation.
+	if filled.Parent == "" {
+		filled.Parent = row.Parent
+	}
 	// A failed workflow's error arrives on task_updated, never on
 	// task_notification - the frame this whole function exists to fill in
 	// for - so the row is where it survives to reach the line that draws.

@@ -3,6 +3,7 @@ package ui
 // The line a dispatch leaves in the conversation when it ends.
 
 import (
+	"strconv"
 	"strings"
 	"testing"
 	"time"
@@ -413,5 +414,44 @@ func TestAFailedWorkflowsEndingLineNamesItAndShowsItsErrorThroughTheRealFold(t *
 		if !strings.Contains(out, want) {
 			t.Errorf("the transcript is missing %q:\n%s", want, out)
 		}
+	}
+}
+
+// A subagent's own subagent ends on the agent's stream too, but the agent did not
+// dispatch it. Claude Code draws only the agent's own dispatch ending, and so does
+// the conversation, and the board's tile of it: one line for the one dispatch,
+// through the ingest a live window uses. The background nest (2.1.322) ends its
+// inner subagents after their parent has ended.
+func TestAnInnerSubagentsEndingIsNotDrawnInTheAgentsConversation(t *testing.T) {
+	for _, tc := range []struct{ fixture, outer string }{
+		{"subagent-nested.jsonl", "Nested explore subagents task"},
+		{"subagent-nested-background.jsonl", "Launch background subagent"},
+	} {
+		t.Run(tc.fixture, func(t *testing.T) {
+			fresh(t)
+			a := dmApp(nil, Stream{}, "s1", "alex").withSize(120, 60)
+			board := tiledBoardApp().ensureBoardDMs()
+			for _, ev := range decodeWorkflowFixture(t, tc.fixture) {
+				a = a.applyFrame(taskFrame("s1", ev))
+				board = board.applyFrame(taskFrame("s1", ev))
+			}
+			_, tile := board.boardDMs["s1"].transcriptWindow(120, 60)
+			for surface, out := range map[string]string{
+				"conversation": conversationRegion(t, *a.dms["s1"], 120, 60),
+				"board tile":   stripANSI(tile),
+			} {
+				if n := strings.Count(out, taskLineGlyph+" "+taskLineAgent); n != 1 {
+					t.Errorf("%s: %d ending lines for the agent's one dispatch, want 1:\n%s", surface, n, out)
+				}
+				if !strings.Contains(out, strconv.Quote(tc.outer)+" "+taskLineFinished) {
+					t.Errorf("%s: the agent's own subagent lost its ending:\n%s", surface, out)
+				}
+				for _, inner := range []string{"List current directory files", "Print first line of alpha.txt"} {
+					if strings.Contains(out, inner) {
+						t.Errorf("%s: the inner subagent %q is drawn:\n%s", surface, inner, out)
+					}
+				}
+			}
+		})
 	}
 }

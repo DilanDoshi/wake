@@ -5935,6 +5935,11 @@ corpus decodes. Not fixed on `fix/at-quoted-mention` because `protocol.go` and `
 800-line cap and PRs #147/#148 rework both. *Closes with:* a non-object `event` read as nothing, then
 the line restored to the fixture.
 
+**2026-11-11, 2.1.322: an ordinary agent prints it too.** A headless session on Wake's argv opened with
+the same line before `init` (one of two recordings), so a live agent's daemon now logs it and skips it.
+It is left out of `subagent-nested-background.jsonl` the same way (`fix/inner-subagent-ending-names-its-parent`).
+*Closes with:* as above, and that line restored too.
+
 ## 2026-10-03 — left open by the manager relay
 
 - **A restored room does not redraw an agent's sends** (the manager's, and since 2026-10-16 every
@@ -6233,11 +6238,19 @@ The retry line (decisions.md, 2026-11-02) shipped with two things left out.
 
 The sidebar nests a subagent's own subagents under it (BUG-61). Left out, by the orchestrator's ruling:
 
-- **An inner subagent's ending is drawn in the agent's own conversation as though the agent dispatched
+- ~~**An inner subagent's ending is drawn in the agent's own conversation as though the agent dispatched
   it.** `taskLine` draws `● Subagent "…" finished` for every `task_notification` on the agent's stream, and a
   nested one's arrives there too; the room draws none for subagents. *Closes with:* attributing it to its
   parent through `Task.Parent` (`↳ under general-purpose`), or dropping it, since the parent's own receipt
-  carries what it handed back.
+  carries what it handed back.~~ **CLOSED on `fix/inner-subagent-ending-names-its-parent` by dropping it**
+  (wake-orch's ruling, 2026-11-11): `Tasks.named` carries the row's `Parent` onto the ending and `taskLine`
+  draws none for one (nor does the room admit one for a workflow a subagent ran). Parity with Claude Code:
+  two live probes of interactive 2.1.322 (haiku, a general-purpose subagent dispatching two Explores) drew
+  only the outer's `Agent "…" finished`, collapsed and under ctrl+o, and listed only the outer under the
+  prompt. Caveat: haiku backgrounded the agents, the first time though asked for the foreground, so both
+  probes are background nests where `subagent-nested.jsonl` is a foreground one. In a
+  foreground nest the inner's work stays readable in the outer's own pane (its dispatch call and result);
+  attributing would have been cut off at a narrow width, where the line already is.
 - **Past `maxSubDepth` (2) a row is drawn at the cap's indent**, so a fourth level reads as a sibling of
   its parent. Never observed: of 1,693 subagents on the recording machine none was deeper than
   `spawnDepth` 2, though a depth-2 subagent is offered the Agent tool. *Closes with:* a recorded deeper
@@ -6356,3 +6369,25 @@ itself `loop_wakeup` on its `command_lifecycle`, completing without scheduling t
   first; if its `started` then names no `wakeup_source`, the line never ends, as before this change. A
   wakeup turn that ends waiting on a background task, with the next turn scheduling the wakeup, ends the
   line early; the next `ScheduleWakeup` brings it back at `iter 1`. *Closes with:* a recording of either.
+
+## FROM `fix/inner-subagent-ending-names-its-parent`, 2026-11-11
+
+A subagent's own subagent no longer draws an ending in the agent's conversation (the closed bullet under
+`fix/nested-subagents-in-the-sidebar`). Re-checked on 2.1.322: the foreground nest matches
+`subagent-nested.jsonl` (2.1.314) frame for frame; the background nest is `subagent-nested-background.jsonl`.
+Left out:
+
+- **A double ending for a subagent waiting on its own background subagents.** Interactive 2.1.322 drew
+  `Agent "…" is waiting on its own background work · 16s`, then `finished · 1m 16s` for the same task, and
+  counts the inner ones in `Waiting for 2 background agents to finish`. The headless background recording
+  never waited: the outer's one `task_notification` is a plain `completed`, before its children end
+  (`subagent-nested-background.jsonl:66`). If a headless outer can wait, Wake likely draws `ended` for a
+  status it does not know, then `finished`. *Closes with:* a stream-json recording of an outer that waits for
+  its background children, then a ruling on its first ending.
+- **Nothing marks a report an orphaned inner subagent hands the agent itself.** Once the headless outer has
+  ended, its children's hand-backs reach the agent as `<agent-message from="<inner id>">` with no parent tool
+  use (`subagent-nested-background.jsonl:108`, `:114`). Core drops every hand-back line, the agent's own
+  subagents' included, and the inner ending that used to sit there is now dropped too, so only the agent's
+  reply says what came back. Interactive Claude Code never reaches this state: it keeps the outer alive
+  until its children end. *Closes with:* a ruling on drawing a hand-back in the conversation it reaches,
+  which is the hand-back surface for every subagent, not only an orphan.

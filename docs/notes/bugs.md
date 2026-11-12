@@ -1688,7 +1688,22 @@ it waits for the change before it settles, since a whole frame can still be the 
 ## BUG-69 — a conversation a resize hides mid-answer comes back with a hole in its streamed answer
 
 **Found 2026-11-10 by the adversarial review of `fix/draw-loop-idle-under-a-streaming-fleet` (BUG-67), and on
-`main` 6e27337d.** Not built.
+`main` 6e27337d.**
+
+**Fixed on `fix/resize-leaves-a-hidden-conversation` (PR awaiting merge, stacked on BUG-67's)**, by the direction
+below moved from the settle to Update's seam: every message ends with `App.left` over `drawnIDs` before and
+after it, the predicate `App.wants` refuses tokens by, leaving each conversation that stopped being drawn and
+resuming each one that came back, so a round trip that missed nothing draws no rule. The settle alone was not
+enough: `wants` reads the *pending* geometry, so a drag past the takeover that came back before any settle
+refused tokens with no settle to leave in. The reviews found three more ways off screen with no leave, all on
+`main` too and now covered by the seam: a ⇥ before the settle (refocus read the committed layout; it reads
+`drawnIDs` now), ⌃Y below the takeover sliding the focused conversation off, and ⌃R or ⇧↓ opening the roster and
+dropping a column. One absence stays one rule: the seam leaves no pane taken out of the grid (hideDM and show
+leave those as they take them), show leaves a displaced pane only if it was drawn and resumes the one it opens only
+once it is. A pane that comes back previews from its next token (BUG-67's inbox hands it the ones that waited
+first).
+`TestAPaneComingOnScreenMidAnswerDrawsAtLeastWhatMainDid` fails on any hole in either window, with a case for
+each path; `resizeleave_test.go` holds the rule's cases.
 
 A resize that takes a conversation off screen - narrower than `dmTakeoverColumns` with the room holding the
 keys, or, by the same code, a height that hides a lower pane - never calls `DM.Leave`; only `refocus`, `hideDM`
