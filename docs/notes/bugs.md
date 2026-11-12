@@ -1468,30 +1468,6 @@ operator's own, a peer's - that meets the old login meanwhile leaves the retry s
 limit again, "Not logged in", the cap) and `loginretry_test.go` (what is and is not retried, the retry kept
 through another turn, a fresh login's count, the waits and the timer), each mutation-checked.
 
-## BUG-65 — a woken session's pane draws "No response requested." under the turn that was interrupted
-
-**Found 2026-11-07, live, on claude 2.1.319, by the check behind `fix/quit-interrupts-and-parks-busy-agents`.**
-A headless session was interrupted mid-tool (the interrupt Esc and a shutdown send) and its stdin closed.
-It was then resumed with `--resume` and told `continue`. At the resume, claude writes one assistant
-record into the transcript, ahead of the next prompt: the text `No response requested.` under the
-synthetic model, with usage, and with neither `isMeta` nor `isApiErrorMessage` set. It is not on stdout.
-Nothing reads it to the model as the operator's words; it closes the interrupted turn on disk.
-
-What goes wrong: `core.DecodeTranscriptLine` decodes that record as agent text marked `LocalCommand`
-(a synthetic model's reply is a local command's in `blockEvents`). This was checked by running the
-woken transcript through the decoder. So a pane reopened on the session, and a room restore, draw
-`No response requested.` as a reply, under the `[Request interrupted by user for tool use]` line,
-where Claude Code draws nothing. That is read off the decoder and `drawnAsLines`, not yet watched
-on a screen.
-
-It is not new: any interrupted turn later resumed leaves this record, whether esc then `⌃C`, a
-signalled shutdown since 2026-10-22, or, once that branch merges, every `⌃Q`. That branch made it
-common, so it is filed here and not fixed there.
-
-**Closes with:** recognising the record (synthetic model, the one fixed text, immediately after an
-interrupted turn) as plumbing in the decoder, from a committed fixture of a resumed interrupted
-transcript, scrubbed. A fix keyed on the text alone would also hide an agent that typed those words.
-
 ## BUG-66 — after a `/wake-name` and a `/new`, ⌃Q's exit line sent the operator to a bare `wake` — PARKED, not reproduced
 
 **Seen once, 2026-11-07**, recording takes for `fix/quit-interrupts-and-parks-busy-agents` on `main`
@@ -1517,8 +1493,8 @@ sources, and no report carried an empty `Fleet`.
 - `daemon.FleetName(socket)`, its fallback.
 
 For `fleets/harbor/daemon.sock` the fallback returns `harbor` or `dev` in every state of that directory
-(`fleetNameOf`, `forwardedName`). It returns "" only with `HOME` unset, which the take did not have. The
-take's daemon log and its room before ⌃Q match the takes that printed `dev`.
+(`fleetNameOf`, `forwardedName`). It returned "" only with `HOME` unset or relative (BUG-70, fixed since), and
+the take's `HOME` was neither. The take's daemon log and its room before ⌃Q match the takes that printed `dev`.
 
 **Hardened:** the report half. `withFleetName` no longer lets a report naming no fleet wipe a name the
 window has (`TestAReportNamingNoFleetKeepsTheNameTheWindowHas`). A named fleet never becomes a hand-set
@@ -1527,10 +1503,49 @@ never named one, so they are unchanged.
 
 **Guarded:** `TestCtrlQAfterAWakeNameAndASpawnNamesTheFleet`. It runs a bare `wake` under a scratch
 `HOME`, `/wake-name dev`, `/new otto` with a turn in flight and ⌃Q⌃Q, then reads `wake --fleet dev`.
-It passes on 507223b7, so it guards the scenario rather than proving a fix.
+It passed on 507223b7, so it guards the scenario rather than proving a fix. Since
+#230 it waits for the exit line's own words (`Parking 2 agents (…)`, #221's
+wording), which the keypress notice never draws, and for otto's turn under otto's name. It goes red on a
+bare exit line. Each name source alone is held by unit tests: `TestCtrlQsLineNamesTheFleetTheLastReportNamed`
+for the report, and `TestCtrlQsLineFallsBackToTheSocketsFleet` for the fallback. A pty test cannot part them,
+since the old name's link still forwards until the daemon exits.
 
 **Parked 2026-11-07 by wake-orch.** Reopen on a take that prints it again, with both name sources
 logged at `leavingLine`: the fallback half is the part nobody can explain.
+
+## BUG-70 — under a relative `HOME`, every fleet read as a socket set by hand — FIXED by #230
+
+**Found 2026-11-10 by wake-imp-renameexit, in #222's post-merge review, and reproduced on the real binary on
+`main` 6e27337d.** `HOME=h`, `./h` or a literal `~`, from any directory. Not BUG-66's cause: that take's `HOME`
+was absolute.
+
+`daemon.StateRoot` returned `filepath.Join(home, ".wake")` unresolved, and `fleetNameOf` compares it with the
+socket's directory after `filepath.Abs`. A relative root never matches an absolute directory, so every name
+source read "": the report's `Fleet` and `daemon.FleetName` (leavingLine's fallback, the kill switch, `wake
+manager`, `wake stop`). On a named fleet:
+- `/wake-name dev` was refused as a socket set by hand with `WAKE_SOCKET`, though nobody had set one;
+- ⌃Q⌃Q printed ``Parking 1 agent (a turn in flight is interrupted). `wake` reopens the room…``, and a bare
+  `wake` starts a new fleet.
+
+The UI had the same flaw twice: `/new ~/x` built `h/x`, which the daemon refuses as relative, and the status
+bar's `shortPath` never drew `~`, since `filepath.Rel` cannot relate a relative home to an absolute directory.
+
+**Fixed:** `core.HomeDir` resolves a relative `HOME` with `filepath.Abs`, against the working directory as any
+relative path is, and returns Abs's error wrapped. `StateRoot`, `absoluteDir` and `shortPath` all use it.
+`shortPath` draws `~` where the cwd claude reports is spelled as the working directory is. Through a symlink
+(`/private/var` for `/var`) it still does not, as with an absolute symlinked `HOME`.
+
+A relative `HOME` now gives an absolute socket path. A deep working directory can therefore meet
+`checkSocketPath`'s socket-path limit, and that refusal says so and names `WAKE_SOCKET`.
+
+Guards:
+- `TestHomeDirResolvesARelativeHome`;
+- `TestAFleetUnderARelativeHomeKeepsItsName`;
+- `TestARelativeHomeKeepsTheFleetsName` (pty: `/wake-name`, where the fleet lands, and ⌃Q's exit line);
+- `TestShortPathUsesTildeUnderARelativeHome`;
+- `TestNewResolvesTildeUnderARelativeHome`.
+
+Left open: the paths Wake only opens, and where claude itself puts `~/.claude` (`deferred.md`, 2026-11-10).
 
 ## Residuals carried from bugs that are fixed and merged
 

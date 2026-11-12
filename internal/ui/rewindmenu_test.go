@@ -9,6 +9,7 @@ import (
 	"testing"
 
 	tea "github.com/charmbracelet/bubbletea"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/DilanDoshi/wake/internal/core"
 	"github.com/DilanDoshi/wake/internal/notice"
@@ -249,6 +250,25 @@ func TestTheChoicesNameAnotherAgentInTheDirectory(t *testing.T) {
 	gone = chooseOlder(t, gone, nil).observe("s1", previewOf("/work/repo/a.go"))
 	if view := gone.rewindView(160, "s1"); strings.Contains(view, "blair") {
 		t.Errorf("a parked agent is named as sharing the directory:\n%s", view)
+	}
+}
+
+// The warning names who else runs in the directory, so a pane narrower than it
+// marks the cut: cut bare, a list of names reads as the whole list.
+func TestANarrowPaneMarksItsCutSharedDirectoryWarning(t *testing.T) {
+	fresh(t)
+	a := chooseOlder(t, restoreApp(t, nil, rpc.StateWorking), nil).observe("s1", previewOf("/work/repo/a.go"))
+	const warning = "⚠ @blair (working) also runs in this directory"
+	width := ansi.StringWidth("⚠ @blair (working)") // the old cut ended on a whole name
+	var row string
+	for _, r := range strings.Split(stripANSI(a.restoreView(width)), "\n") {
+		if strings.HasPrefix(r, "⚠") {
+			row = r
+		}
+	}
+	assertCutAt(t, row, warning, width)
+	if view := stripANSI(a.restoreView(160)); !strings.Contains(view, warning+"\n") {
+		t.Errorf("a warning the pane holds was changed:\n%s", view)
 	}
 }
 

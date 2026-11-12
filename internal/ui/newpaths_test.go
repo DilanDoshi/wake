@@ -159,6 +159,20 @@ func TestEveryNewFlagReachesTheSpawnFrame(t *testing.T) {
 	}
 }
 
+// BUG-70: `~/x` under a relative HOME is resolved like any relative word, so
+// the daemon gets the absolute directory it insists on rather than refusing it.
+func TestNewResolvesTildeUnderARelativeHome(t *testing.T) {
+	t.Chdir(t.TempDir())
+	t.Setenv("HOME", "h")
+	wd, err := os.Getwd()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got, err := absoluteDir("~/lib"); err != nil || got != filepath.Join(wd, "h", "lib") {
+		t.Errorf("absoluteDir(~/lib) under HOME=h = %q (%v), want %q", got, err, filepath.Join(wd, "h", "lib"))
+	}
+}
+
 // A flag standing where a value should be is refused by name. --add-dir is why
 // it has to be: absoluteDir turns any word into a path, so without this
 // `--add-dir --worktree fix` starts an agent called fix with a directory called

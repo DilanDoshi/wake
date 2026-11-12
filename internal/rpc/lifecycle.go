@@ -538,8 +538,8 @@ type SessionStatus struct {
 	// Loop is the native /loop this session has active, or nil for none. Goal's
 	// route exactly: the daemon folds the scheduler tool_use calls (core/loop.go)
 	// and the report backfills a late attach. A pointer so an idle session omits
-	// it whole; see LoopStatus. Ended is silent beyond a CronDelete, so a loop
-	// reads active until one - the loop half of the goal's own §6 limitation.
+	// it whole; see LoopStatus. A fixed loop ends only on a CronDelete; a
+	// self-paced one also when its wakeup turn reschedules nothing (daemon/loop.go).
 	Loop *LoopStatus `json:"loop,omitempty"`
 
 	// State is one of the State constants above.
