@@ -29,11 +29,9 @@ package ui
 // 2026-09-27 ruling that the menu never takes `↵` (owner, 2026-10-12): `↵` sent a
 // half-typed word while the menu on screen offered to finish it.
 //
-// **The menu keeps every match and draws a window over them.** offers is the full
-// list, cut only at completionCeiling; ↓ walks all of it and the drawn
-// completionRows move the least that shows the cursor (scrolled), on a cursor or
-// filter change and never per frame. Its height does not change, so the pane's
-// chrome does not either; the key line says how many offers lie above and below.
+// **The menu keeps every match and draws a window over them** (completionwindow.go):
+// offers is the list to completionCeiling, ↓ walks all of it, and the pane's rows
+// scroll to the cursor.
 //
 // ⇥ over a word the menu was built for is the draft's whether or not anything
 // matches. It used to fall through to the conversation ring when a misspelled
@@ -74,13 +72,12 @@ const (
 	minCompletionRows = 8
 
 	// completionCeiling is the most offers one menu keeps and walks: the most a
-	// directory read takes, so the listing and the ranked search stop at one
-	// bound. Past it the key line says to keep typing.
+	// directory read takes, so the listing and the ranked search stop at one bound.
 	completionCeiling = pathScanMax
 
-	// keepTyping is what the key line adds when matches lie past the ceiling,
-	// which ↓ cannot reach. A bound that is silent reads as a complete list.
-	keepTyping = " - keep typing"
+	// keepTyping is what the key line says of matches ↓ cannot reach: a bound
+	// that is silent reads as a complete list.
+	keepTyping = "keep typing"
 
 	// completionKeys is what the menu advertises about itself: ⇥ or ↵ to accept
 	// and ↑↓ to walk. ⌃N/⌃P walk too and stay bound as aliases, unadvertised to
@@ -178,12 +175,14 @@ type completion struct {
 	peers peerMenu
 
 	// offers are what could finish the token, in the order they are drawn, cut
-	// at completionCeiling; more is how many matched beyond that. The menu draws
-	// completionRows of them from top, which moves only as far as the cursor
-	// needs (scrolled).
+	// at completionCeiling; more is how many matched beyond that, and cut says
+	// the directory listing behind them was. The menu draws rows of them from
+	// top, which moves only as far as the cursor needs (completionwindow.go).
 	offers []string
 	more   int
+	cut    bool
 	top    int
+	rows   int
 
 	cursor int
 }
@@ -211,7 +210,7 @@ func (c completion) open() bool { return len(c.offers) > 0 }
 // listings are carried instead, and so is an opening's ask.
 func (a App) recompleted() App {
 	a.completion = a.completing().carried(a.completion).bounded().keepingCursor(a.completion)
-	return a
+	return a.windowed()
 }
 
 // carried is a new menu with what the one it replaces holds: the read in
@@ -557,7 +556,7 @@ func (a App) mentionedAlone(head string) (Agent, bool) {
 }
 
 // bounded cuts what this menu offers to completionCeiling and records what it
-// left out; the pane's few rows are the window over it (scrolled), not the cut.
+// left out; the pane's few rows are the window over it (windowed), not the cut.
 //
 // The names first and the paths under them, which is the overload stated as an
 // order rather than as a rule: a live session name wins. It runs again when a
@@ -565,7 +564,7 @@ func (a App) mentionedAlone(head string) (Agent, bool) {
 // than reset - paths arriving under the names cannot move them.
 func (c completion) bounded() completion {
 	c.paths = c.paths.reranked()
-	paths, rest := c.paths.rows()
+	paths, rest, cut := c.paths.rows()
 	// A name already typed as offered (typedAs) goes first among the names, so a
 	// longer sibling that shares its prefix (`/team` beside `/team-onboarding`)
 	// neither takes the cursor from it nor lets the bound cut it - ↵ and ⇥ then act
@@ -577,21 +576,13 @@ func (c completion) bounded() completion {
 		names = slices.Concat(names[i:i+1], names[:i], names[i+1:])
 	}
 	matched := append(slices.Clone(names), paths...)
-	c.more = rest
+	c.more, c.cut = rest, cut
 	if len(matched) > completionCeiling {
 		c.more += len(matched) - completionCeiling
 		matched = matched[:completionCeiling]
 	}
 	c.offers = matched
 	c.cursor = min(c.cursor, max(len(matched)-1, 0))
-	return c.scrolled()
-}
-
-// scrolled moves the window the least that shows the cursor, kept inside the
-// offers: not at all while the cursor is on a drawn row. It runs on a change of
-// cursor or offers, never per frame.
-func (c completion) scrolled() completion {
-	c.top = clampScroll(band{top: c.cursor, h: 1}.reveal(c.top, completionRows), len(c.offers), completionRows)
 	return c
 }
 
@@ -605,10 +596,10 @@ func (c completion) keepingCursor(prev completion) completion {
 	c.top = prev.top
 	if i := slices.Index(c.offers, prev.offers[prev.cursor]); i >= 0 {
 		c.cursor = i
-		return c.scrolled()
+		return c
 	}
 	c.cursor = clamp(prev.cursor, 0, max(len(c.offers)-1, 0))
-	return c.scrolled()
+	return c
 }
 
 // completionUp reports whether the menu is on screen and answering keys: it has
@@ -687,7 +678,7 @@ func (a App) enterCompletes() (App, tea.Cmd, bool) {
 func (a App) walkCompletion(by int) App {
 	c := a.completion
 	c.cursor = clamp(c.cursor+by, 0, len(c.offers)-1)
-	a.completion = c.scrolled()
+	a.completion = c.windowedTo(c.rows)
 	return a
 }
 
@@ -753,29 +744,4 @@ func tagged(names []string, tags map[string]offerTag, offer string, tag offerTag
 	}
 	tags[offer] = tag
 	return append(names, offer), tags
-}
-
-// View draws it, through the same rows a card and the picker draw.
-func (c completion) View(width int) string {
-	shown := c.offers[c.top:min(c.top+completionRows, len(c.offers))]
-	rows := make([]string, 0, len(shown)+1)
-	for i, offer := range shown {
-		rows = append(rows, optionRow(c.rowLabel(offer, width), width, c.top+i == c.cursor, false, CompletionStyle))
-	}
-	return strings.Join(append(rows, detailRow(c.keyLine(), width)), "\n")
-}
-
-// keyLine is the menu's own advertisement, with what the window leaves out
-// folded into it, and which way - two rows for that would be a row per menu
-// spent on chrome. What lies past the ceiling counts below, and asks for typing.
-func (c completion) keyLine() string {
-	below := len(c.offers) - c.top - min(completionRows, len(c.offers)-c.top) + c.more
-	if c.top+below == 0 {
-		return completionKeys
-	}
-	line := countWords(c.top, below)
-	if c.more > 0 {
-		line += keepTyping
-	}
-	return line + hintSep + completionKeys
 }

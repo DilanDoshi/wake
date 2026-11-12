@@ -27,7 +27,10 @@ const (
 	manyPrefix = "zq"
 )
 
-var linesAbove = regexp.MustCompile(`\+\d+ above`)
+var (
+	linesAbove  = regexp.MustCompile(`\+\d+ above`)
+	windowCount = regexp.MustCompile(`\+\d+ (above|below)`)
+)
 
 // manyFilesRepo is a git repository of manyFiles files that share a prefix no
 // other offer has.
@@ -119,4 +122,31 @@ func TestDownWalksTheFileMenuPastItsRowsOnScreen(t *testing.T) {
 	s.send("\t")
 	s.awaitGone(completionKeyHint)
 	s.await("> " + last)
+}
+
+// The same walk in a terminal of 24 rows, where the pane cannot hold the menu a
+// tall one draws: the window is the rows the pane has, so the cursor and the
+// count are on screen the whole way down, and ↵ takes what is seen.
+func TestDownWalksACommandMenuInAShortPaneOnScreen(t *testing.T) {
+	withScriptedAgent(t, scriptManyCommands)
+	t.Setenv("WAKE_SOCKET", tempSocket(t))
+	s := startWakeInAConversation(t, 120, 24)
+	s.await("ready")
+	s.settle()
+
+	s.send("/")
+	s.await(completionKeyHint)
+	last := manyCommandName(manyCommands - 1)
+	for cursor := 0; cursor < manyCommands-1; {
+		n := min(7, manyCommands-1-cursor)
+		s.send(strings.Repeat(arrowDown, n))
+		cursor += n
+		s.await("› /" + manyCommandName(cursor))
+		if !windowCount.MatchString(s.text()) || !strings.Contains(s.text(), completionKeyHint) {
+			t.Fatalf("the key line is cut, or says nothing of the rows outside the window.\n%s", s.dump())
+		}
+	}
+	s.send("\r")
+	s.awaitGone(completionKeyHint)
+	s.await("> /" + last)
 }

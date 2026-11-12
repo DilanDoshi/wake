@@ -288,7 +288,7 @@ func TestTheCursoredOfferIsThePurpleNotTheAccent(t *testing.T) {
 	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 
 	offer := "/lima-report-sync"
-	first := strings.SplitN(completion{offers: []string{offer}, cursor: 0}.View(60), "\n", 2)[0]
+	first := strings.SplitN(completion{offers: []string{offer}, rows: completionRows}.View(60), "\n", 2)[0]
 
 	if want := optionRow(offer, 60, true, false, CompletionStyle); first != want {
 		t.Errorf("the cursored offer is not the completion purple:\n got %q\nwant %q", first, want)

@@ -310,18 +310,13 @@ func TestAMenuPastTheCeilingKeepsTheCeilingAndSaysSo(t *testing.T) {
 	if !strings.Contains(menuKeyLine(a), "keep typing") {
 		t.Errorf("the key line %q does not say the rest is for typing", menuKeyLine(a))
 	}
-	if below := countIn(belowCount, menuKeyLine(a)); below != files-completionRows {
-		t.Errorf("the key line counts %d below, want %d: every match the window does not draw, the ceiling's cut included",
-			below, files-completionRows)
-	}
 	a = walk(a, downKey, files)
 	if a.completion.cursor != completionCeiling-1 {
 		t.Errorf("↓ ended on offer %d, want the ceiling's last %d", a.completion.cursor, completionCeiling-1)
 	}
 	onScreen(t, a, "at the ceiling")
-	if above := countIn(aboveCount, menuKeyLine(a)); above != completionCeiling-completionRows || countIn(belowCount, menuKeyLine(a)) != files-completionCeiling {
-		t.Errorf("at the end the key line is %q, want %d above and the %d past the ceiling below",
-			menuKeyLine(a), completionCeiling-completionRows, files-completionCeiling)
+	if above := countIn(aboveCount, menuKeyLine(a)); above != completionCeiling-completionRows {
+		t.Errorf("at the end the key line is %q, want %d above", menuKeyLine(a), completionCeiling-completionRows)
 	}
 }
 

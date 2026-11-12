@@ -197,6 +197,7 @@ func (a App) pathsIndexed(index *fileIndex) (App, tea.Cmd) {
 	if index.dir == p.root {
 		a.completion.paths.index = index
 		a.completion = a.completion.bounded()
+		a = a.windowed()
 	}
 	return a.scanningPaths() // an answer is not a keystroke, so it never asks
 }
