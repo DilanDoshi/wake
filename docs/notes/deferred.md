@@ -38,6 +38,31 @@ and the 2026-09-29 audit found over forty entries still reading as open that wer
 
 ---
 
+## FROM `feat/team-park-quit-resume`, 2026-11-09 — what the team verbs left out
+
+`/park @team`, `/quit @team` and `/resume <team>` shipped (`decisions.md`, 2026-11-09). Left out on purpose:
+
+- **A roster header action**, such as ⌃C on a picked team header parking the team. It reads well beside
+  the channels (#194), but ⌃C is a reflex key and ⌃C⌃C is the emergency exit, so a whole team would be
+  one reflex away. Today a picked header gets ⌃C's "parks one conversation" advice. Owner's call.
+- **`@all /park` and `@all /quit`** still reach every agent as literal text, the hole the team refusal's
+  comment names. `⌃Q⌃Q` and `wake stop` are the fleet-wide forms.
+- **A name/team collision** (an agent named like a team) is still not refused by the daemon (the teams
+  entry below). Every team verb resolves the name first, as routing does, so a team that shares an
+  agent's name cannot be parked or quit by that word while the agent is live. It can be resumed by it
+  only while no parked session holds the name.
+- **A team park's single confirmation waits for every member it asked for.** A member whose park the
+  daemon refuses, or that ends instead, holds that ask's confirmation back; the member's own refusal is
+  what shows. The next team park replaces the wait.
+- **`/resume <team>` says one `@x has been resumed.` per member**, as `/resume all` does, so the notice
+  slot ends on one name. A team-level line would want the wake's own report bookkeeping.
+- **The menus offer what the team verbs refuse.** A conversation's `@` menu is Claude Code's own (peers,
+  sessions, `@agent-…`), so it offers no team after `/park @` or `/quit @`, though those forms work there.
+  The room's `@` menu offers `@all` and parked agents after them; `/park @all` says no such agent, and
+  `/park @parked` says it is parked already.
+
+---
+
 ## FOLLOW-UP, 2026-11-11 — a name, address, path or figure cut bare can read as another
 
 The one-row cuts were surveyed when the notice row got its "…". Most already cut with one (`detailRow`, `boardRow`,

@@ -313,11 +313,16 @@ const wakeHelpVerb = SlashPrefix + wakeHelpCommand // for resumeVerb's reason
 //
 // It takes an `@who` and so is a roomTargetCommand: `@sydney /quit` aims at
 // sydney, the same mention→target bridge `/color`, `/name` and `/task` ride.
-// Bare, it ends the conversation it is typed in - see quit.go's quitTarget.
+// Bare, it ends the conversation it is typed in - see quit.go's quitAgent.
 const quitCommand = "quit"
 
 // quitVerb is `/quit` as somebody types it, for managerVerb's reason.
 const quitVerb = SlashPrefix + quitCommand
+
+// parkCommand is ⌃C as a typed verb, which can also name a team (teamverbs.go). No
+// recorded slash_commands carries `park`, so it is claimed on the corpus rule.
+const parkCommand = "park"
+const parkVerb = SlashPrefix + parkCommand // for resumeVerb's reason
 
 const (
 	nameVerb = SlashPrefix + nameCommand
@@ -339,6 +344,7 @@ var commands = map[string]func(App, string) (App, tea.Cmd){
 	managerCommand:         App.manager,
 	managerStopCommand:     App.managerStop,
 	quitCommand:            App.quitAgent,
+	parkCommand:            App.parkAgent,
 	boardCommand:           App.openBoard,
 	loginCommand:           App.login,
 	groupchatFilterCommand: App.groupchatFilter,
@@ -377,7 +383,7 @@ func (a App) roomCommand(text string) (App, tea.Cmd, bool) {
 // roomTargetCommands are the Wake commands that take an `@who` and so can be
 // aimed by a room mention: `@thea /color green` means `/color @thea green`.
 // name, task and colour read displayTarget for the value beside the target; quit,
-// mcp and workflows take the target alone - `@thea /quit` ends thea. `/effort`
+// park, mcp and workflows take the target alone - `@thea /quit` ends thea. `/effort`
 // and `/model` are the room's other addressed path (configure, a picker over the
 // bare form); every other Wake verb takes no `@who`, and claude's own commands
 // must pass through to the agent untouched. So the set is closed and a subset of
@@ -389,10 +395,16 @@ var roomTargetCommands = map[string]struct{}{
 	colorCommand:     {},
 	teamCommand:      {},
 	quitCommand:      {},
+	parkCommand:      {},
 	mcpCommand:       {},
 	workflowsCommand: {},
 	statusCommand:    {},
 }
+
+// teamTargetCommands are the roomTargetCommands whose `@who` may be a team, so
+// `@backend /park` folds into `/park @backend` as `@thea /quit` folds into
+// `/quit @thea`; every other one refuses a team (decisions.md, 2026-11-09).
+var teamTargetCommands = map[string]struct{}{parkCommand: {}, quitCommand: {}}
 
 // leadingRoomTargetCommand is the roomTargetCommand a draft leads with, if any:
 // the word after a leading slash when it is one of the @who commands. It is how a
@@ -512,6 +524,17 @@ func commandStem(draft string) (head, word string, ok bool) {
 		return "", "", false
 	}
 	return draft[:at], word, true
+}
+
+// resumeArgStem is a draft part-way through /resume's one argument, `@` or not,
+// which resume.go's menu offers parked sessions and teams for.
+func resumeArgStem(draft string) (head, partial string, ok bool) {
+	at := strings.LastIndexAny(draft, wordBreak) + 1
+	fields := strings.Fields(draft[:at])
+	if len(fields) != 1 || !strings.EqualFold(fields[0], resumeVerb) || strings.IndexFunc(draft[:at], otherSpace) >= 0 {
+		return "", "", false
+	}
+	return draft[:at], draft[at:], true
 }
 
 // otherSpace is whitespace the slash router does not split a command on.

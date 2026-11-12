@@ -128,7 +128,8 @@ func TestATeamDraftRoutesToItsMembersAsAScopedBroadcast(t *testing.T) {
 
 // Every Wake target-command aimed at a team is refused with the per-agent form,
 // rather than reaching N claude processes as the literal text; claude's own
-// command (`/compact`) fans out to the team as an ordinary N-way send.
+// command (`/compact`) fans out to the team as an ordinary N-way send. /park and
+// /quit take a team themselves (teamverbs_test.go).
 func TestATeamTargetCommandIsRefusedButClaudesOwnFansOut(t *testing.T) {
 	teamed := func(conn net.Conn) App {
 		return dmApp(conn, Stream{}, "s1", "alex").withSize(200, 40).showRoom().
@@ -137,7 +138,7 @@ func TestATeamTargetCommandIsRefusedButClaudesOwnFansOut(t *testing.T) {
 				{ID: "s2", Name: "thea", Team: "backend", State: rpc.StateIdle},
 			}})
 	}
-	for _, draft := range []string{"@backend /color blue", "@backend /name x", "@backend /task ui", "@backend /quit", "@backend /workflows"} {
+	for _, draft := range []string{"@backend /color blue", "@backend /name x", "@backend /task ui", "@backend /workflows"} {
 		t.Run(draft, func(t *testing.T) {
 			fresh(t)
 			m, cmd := typeAndSubmit(teamed(newRecorder(t)), draft)

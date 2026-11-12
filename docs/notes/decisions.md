@@ -8,6 +8,75 @@ that" and the answer is not in a commit message.
 
 ---
 
+## 2026-11-09 — park, quit and resume a whole team
+
+The owner asked whether a whole team could be quit; there was no way, so he said yes to a team park
+and a team quit, and asked for `/resume <team>`. `wake-orch` relayed the brief and ruled on three
+calls. Built in `internal/ui/teamverbs.go`.
+
+- **The words.** `/park @backend`, `/quit @backend` and `/resume backend` (or `@backend`, since
+  `/resume` already drops the mark). `park` is a new command: park was only ⌃C, and no recorded
+  `slash_commands` carries the word, so it is claimed on the corpus rule. `/park @sydney` parks one
+  agent and bare `/park` parks what ⌃C would; both go through ⌃C's own `parkOne`, so its blocked refusal
+  is not copied.
+- **Members are the set `@backend` reaches**: `App.live` with the tag. So the manager is never one (its
+  lifecycle stays `/manager` and `/manager-stop`), and a verb cannot disagree with a team message about
+  who is on a team.
+- **A name resolves the way `core.Resolve` routes it** (`aimAt`): a live agent, then a team with a live
+  member, then a parked agent, then a team whose members are all parked (which says so and names
+  `/resume @backend`). `/resume <x>` has no live candidates, so it tries a parked session named x, then a
+  team with a parked member. In both the name wins. A name/team collision can still happen, since the
+  daemon does not yet refuse one (`deferred.md`).
+- **The fan-out is the window's**: N `FramePark`, `FrameStop` or `FrameWake` frames in one `App.write`, as
+  `/reauth` and `/resume all` write theirs. There is no new frame and no `SessionStatus` field. The daemon
+  test `TestATeamParkedAndWokenBackToBackKeepsItsTeam` pins that frames written back to back keep each
+  member's team through the park and the wake.
+- **Park** skips a blocked member, for `parkWouldDeny`'s reason, and the keypress notice names it. The
+  report confirms once for the team (`@backend is parked - /resume @backend brings it back`) rather than
+  once per member, because per-member lines would fight over the one notice slot. A member whose park the
+  daemon refuses, or that ends instead, holds that line back, and the refusal shows. A new team park
+  replaces the team's old wait, and a hand park takes a member off it, so a lost member never silences a
+  later confirm. The park's one rule is `parkable`, shared with ⌃C's `parkTarget`. A typed `/park` at an
+  agent already parked says so; ⌃C stays silent.
+- **Quit asks first, in a Picker, not in a legend arm** (`wake-orch`'s call 2). The legend arm would have
+  ↵ confirm what ↵ armed. On `/quit @back`, one ↵ accepts the completion, the next sends the command, and
+  a third would stop the team: the same-key confirm `detach.go` rejects. So the confirm's cursor opens on
+  `never mind`, ↓ then ↵ quits, and esc closes it.
+  - Its targets are resolved when it opens and held. Only the ones still live are stopped; one parked
+    since is left alone, and a member who joined afterwards is not touched.
+  - Blocked members are stopped, as `/quit` stops one (a stop has no wake).
+  - Parked members stay parked, and a notice names them.
+  - Rows drop per window through `awaitingQuit` and `departedQuit`.
+  - This reverses the teams design's "never team-wide `/quit`", on the owner's yes, with the confirm as the
+    answer to "a set is worse than a cursor".
+- **The Picker grew three rules that every picker now keeps.** A picker reads keys only while it is drawn:
+  - ⌃C closes it and parks, as over the resume picker, so the kill switch's first press visibly does
+    something.
+  - A focus change closes it (`withFocus`). A picker is drawn only over the pane holding the keys, and one
+    left open read ↓ and ↵ in the next pane undrawn.
+  - It yields to a card in its pane, which takes its place and whose page could scroll it out of sight: it
+    draws nothing and reads no key until the card is answered (the adversarial review's finding: ↓ ↵
+    meant for a plan card quit the team).
+- **The room bridge folds a team** (`wake-orch`'s call 1): `@backend /park` and `@backend /quit` become
+  `/park @backend` and `/quit @backend`, as `@sydney /quit` already becomes `/quit @sydney`
+  (`teamTargetCommands`).
+  - This is the argued exception to the team refusal. That refusal exists because a per-agent
+    command would reach N claude processes as literal text, and these two now take a team themselves.
+    The fold also resolves the same way the router does, by construction.
+  - Every other Wake target-command still refuses a team (`TestEveryOtherTargetCommandAtATeamIsStillRefused`),
+    and the set is pinned to exactly these two.
+  - A team with nothing running is folded too (`restingTeam`). `core.Resolve` fans out to live members
+    only, so `@backend /park` would otherwise reach the manager as text.
+- **Completion.** `/park` reaches the `/` menu through `wakeWords`. In the room, `/park @` and `/quit @`
+  already offered a live team as `(team)`. `/resume ` with one character typed offers the parked
+  sessions, then teams with a parked member (which the `@` menu, keyed on routing, leaves out when no
+  member is live), then `all`; a parked name wins its team. `/resume manager` still sends as typed
+  (`routed`).
+- **Not built.** A roster header action, such as ⌃C on a picked header parking its team, is in
+  `deferred.md`: ⌃C is a reflex key and ⌃C⌃C is the emergency exit. Also not built: `@all /park`.
+
+---
+
 ## 2026-11-06 — the wheel over the right sidebar scrolls the roster
 
 The owner's ask ("if mouse over right side bar, that should scroll too", "for in case i have more agents

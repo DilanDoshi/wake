@@ -450,8 +450,8 @@ func (a App) resumeView(id string, width, height int, over string) string {
 // keys - so a picker opened in a DM does not appear in the room, where its ↵
 // would go somewhere else.
 func (a App) pickerView(width int, id string) string {
-	if !a.picker.Open() || a.focus != id {
-		return ""
+	if _, carded := a.cardOf(id); !a.picker.Open() || a.focus != id || carded {
+		return "" // a card is the pane's to answer first; the picker returns after it
 	}
 	return a.picker.View(width)
 }
