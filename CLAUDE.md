@@ -204,9 +204,13 @@ One line each; the full argument is in the named file or `docs/notes/decisions.m
   fleet at shutdown, and signals a noted group only while a process noted in it still runs under the same start
   time (a listing it cannot read signals nothing). **A `⌃C` park inside a live daemon keeps them** (a woken
   session needs the world it spawned; held in memory, never on disk, the park book still holds no pid) and
-  **every daemon exit sweeps them**: `wake stop`, `⌃Q⌃Q`, a signal, an empty daemon's exit. A stopped agent
-  that claude holds open for a running shell is ended once its turn is done (`endIfHeldOpen`; BUG-75, -76).
-  `internal/daemon/world.go`, `world_unix.go`, `worldsweep.go`; `decisions.md` (2026-11-11).
+  **every daemon exit sweeps them**: `wake stop`, `⌃Q⌃Q`, a SIGTERM or SIGINT, an empty daemon's exit. A
+  stopped agent that claude holds open for a running shell is ended once it is between turns - none open,
+  whoever started it, and no message Wake wrote still to run (`endIfHeldOpen`; BUG-75, -76). **Not every
+  process is reached**: a shell that exited before the ending leaves its child under launchd in a group of its
+  own (`nohup cmd &` in a foreground Bash call, a hook's background command), and a SIGKILLed or crashed
+  daemon leaves every group it noted - `deferred.md` carries both, with why. `internal/daemon/world.go`,
+  `world_unix.go`, `worldsweep.go`, `heldopen.go`; `decisions.md` (2026-11-11).
 - `⌃Q` waits for the daemon to confirm the park (a `FrameStatus` written behind `FrameParkAll`)
   before closing — `internal/ui/park.go`, and names what it drops — `parkdropped.go`.
 - **A daemon restores nothing.** ⌃Q then `wake` is a fresh room; parked sessions are addressable only
@@ -715,7 +719,7 @@ guards (ui `WithStatus` fold, mcp `agentAuthored`, mcp `notInTheStatusReport`).
 
 ## Claude Code CLI surface
 
-**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.314. A
+**Verified against v2.1.232** (re-checked 2026-08-13); corpus captured at 2.1.226–2.1.322. A
 fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
 
 | Need | Flag |
@@ -813,6 +817,15 @@ fixture's `init` names its version. Findings notes: `docs/superpowers/notes/`.
   and its file sits flat beside its parent's in `subagents/`. In auto mode a subagent's delivered
   `SubagentHandback` receipt is `{"success":true,"message":"Report delivered to your caller."}`, read as its
   message only whole (`receiptSentence`). `subagent-nested.jsonl`.
+- **A headless claude does not exit on stdin EOF while a background shell runs** (2.1.322, live): it stays,
+  idle, and its shell with it, so a stop or a park that only closes stdin never completes. An interrupt first
+  frees it (`⌃Q`'s order); a bare interrupt kills no shell. Only a shell was probed - a background subagent
+  or workflow ends on its own, a Monitor's `task_type` is unrecorded. A claude ends its own tasks when it exits
+  after an interrupt, so `⌃Q` needed no sweep for a plain `sleep`. Each Bash command, foreground or
+  background, runs in a process group of its own (`pgid` its shell's pid). `docs/notes/bugs.md` BUG-75.
+- **`/clear` leaves running background work running** (2.1.319+): `task_updated` and `task_notification` arrive
+  under the new session id (`testdata/stream/clear-keeps-background.jsonl`). A claude older than that killed it
+  and may have sent no ending, so its row would stay until the agent ends - the corpus has no such recording.
 - `claude mcp login` refuses a non-terminal stdin and has no headless control request — hence the
   hand-over.
 - **A line written mid-turn is read at the next tool boundary** with no priority at all; during a text-only

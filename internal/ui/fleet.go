@@ -475,7 +475,7 @@ func (f Fleet) Observe(ev core.Event, sessionID string) (Fleet, []core.Event) {
 	// forwarded frame, which is a subagent's rather than this session's own,
 	// and for a reset, which may leave Agent's own fold a no-op (a /clear with
 	// nothing accumulated since the last one) while tasks and subs still need
-	// dropping below.
+	// their finished rows dropped below.
 	tasks, dispatched := f.foldTask(ev, sessionID)
 	subs, forwarded := f.foldSub(ev, sessionID)
 	reset := ev.Kind == core.KindSessionReset

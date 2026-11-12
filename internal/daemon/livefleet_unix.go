@@ -70,9 +70,15 @@ func processTable(ctx context.Context) (map[int]process, error) {
 		table[pid] = p
 	}
 	if _, listed := table[os.Getpid()]; !listed {
-		return nil, fmt.Errorf("ps -A listed %d processes and not this daemon (pid %d), so it is not a listing of this machine", len(table), os.Getpid())
+		return nil, notThisMachinesListing(len(table))
 	}
 	return table, nil
+}
+
+// notThisMachinesListing is the refusal of a listing without this daemon in it,
+// shared by every whole-machine ps here.
+func notThisMachinesListing(rows int) error {
+	return fmt.Errorf("ps -A listed %d processes and not this daemon (pid %d), so it is not a listing of this machine", rows, os.Getpid())
 }
 
 // parseProcess reads one `pid state command` row. A row it cannot read is

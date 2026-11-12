@@ -22,6 +22,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/DilanDoshi/wake/internal/rpc"
 )
 
@@ -164,11 +166,15 @@ func TestAWokenSessionsStopAlsoEndsWhatItsEarlierLifeLeft(t *testing.T) {
 	after.wantGone(t, "the woken session's stop")
 }
 
-// A listing that cannot be read is a leak, never a kill: with no proof which
-// processes are the fleet's, none is signalled, and the daemon still ends.
-func TestAFailedListingSignalsNothingBeyondTheAgentsOwnGroup(t *testing.T) {
-	brokenPsOnPath(t, psRefuses)
+// A listing that cannot be read at the ending is a leak, never a kill: with the
+// fleet already noted, the shell is known and still is not signalled, since
+// nothing proves it is the fleet's now.
+func TestAListingThatFailsAtTheEndingSignalsNothingItHadNoted(t *testing.T) {
+	t.Setenv(fakeTaskEnv, "1")
+	logs := captureLog(t)
 	d, c, left, _ := shellFleet(t)
+	logs.waitFor(t, "process group") // noted at the shell's start, while ps still answers
+	brokenPsOnPath(t, psRefuses)
 
 	c.send(rpc.Frame{Kind: rpc.FrameQuit})
 	d.waitForExit(t)
@@ -348,7 +354,7 @@ func TestAStopMidTurnEndsAnAgentItsShellWouldHoldOpenOnceTheTurnIsDone(t *testin
 
 	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
 	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
-	c.awaitEvent(idAlpha, "echo: ")
+	c.awaitEvent(idAlpha, `echo: {`) // the turn the stop landed in, which the fake now only answers to a message
 	c.pollState(idAlpha, rpc.StateEnded)
 
 	left.wantGone(t, "a stop mid-turn")
@@ -399,4 +405,132 @@ func TestAnAgentThatWasNotStoppedIsNotEndedWhenATurnEndsWithAShellRunning(t *tes
 		t.Errorf("the agent was ended at a turn's end with nobody having stopped it: %+v", row)
 	}
 	left.wantRunning(t, "a turn's end")
+}
+
+// Claude opens a turn of its own when a background task finishes. A hand park
+// that lands in one lets it finish, as a park does any turn: the agent is not
+// between turns for owing nothing.
+func TestAParkInATurnTheAgentStartedItselfLetsTheTurnFinish(t *testing.T) {
+	t.Setenv(fakeSelfTurnEnv, "700ms")
+	_, c, left := holdFleet(t)
+	c.awaitEvent(idAlpha, "tick")
+
+	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha})
+	c.awaitEvent(idAlpha, "tock") // the turn's last words: a kill mid-turn never lets them out
+	c.awaitState(idAlpha, rpc.StateParked)
+
+	for _, pid := range []int{left.shell, left.shellChild} {
+		if !processAlive(pid) {
+			t.Errorf("a ⌃C park ended pid %d, the shell the woken session needs", pid)
+		}
+	}
+}
+
+// A message typed before the stop is the stop's to finish: it is queued behind
+// the turn in flight, and that turn's end is not the end of what was given.
+func TestAMessageQueuedBeforeTheStopIsAnsweredEvenWithAShellRunning(t *testing.T) {
+	t.Setenv(fakeSlowEnv, "600ms")
+	_, c, left := holdFleet(t)
+
+	for _, text := range []string{"first", "second"} {
+		c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: text, MessageID: uuid.NewString()})
+	}
+	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha})
+	c.awaitEvent(idAlpha, "second")
+	c.pollState(idAlpha, rpc.StateEnded)
+
+	left.wantGone(t, "a stop after two messages")
+}
+
+// A shell that starts after the stop's listing, in the turn the stop lets run,
+// is noted before claude is ended for it, or nothing would ever reach it.
+func TestAShellStartedAfterTheStopsListingIsSweptWhenItsTurnEndsTheAgent(t *testing.T) {
+	pidfile := filepath.Join(t.TempDir(), "pids")
+	t.Setenv(fakePidfileEnv, pidfile)
+	t.Setenv(fakeTaskEnv, "1")
+	t.Setenv(fakeHoldEnv, "1")
+	t.Setenv(fakeLateEnv, "1")
+	t.Setenv(fakeSlowEnv, "400ms")
+	fakeClaudeOnPath(t, "shellgroup")
+	d := startDaemon(t)
+	c := attach(t, d.socket)
+	c.spawn(idAlpha, "alex")
+	c.awaitEvent(idAlpha, "ready")
+
+	c.send(rpc.Frame{Kind: rpc.FrameSend, SessionID: idAlpha, Text: "work"})
+	c.send(rpc.Frame{Kind: rpc.FrameStop, SessionID: idAlpha}) // lists before the shell exists
+	c.awaitEvent(idAlpha, `echo: {`)
+	c.pollState(idAlpha, rpc.StateEnded)
+	d.stop(t)
+
+	left := leftovers{shell: waitForPid(t, pidfile), shellChild: waitForPid(t, pidfile+".gc"), own: waitForPid(t, pidfile+".own")}
+	t.Cleanup(func() {
+		for _, pid := range left.all() {
+			_ = syscall.Kill(pid, syscall.SIGKILL)
+		}
+	})
+	left.wantGone(t, "a stop whose turn started a shell")
+}
+
+// ⌃Q interrupts before it closes stdin, which is what lets claude go while its
+// shell runs: the agent parks inside the grace, is booked, and the daemon's exit
+// is what ends the shell.
+func TestParkingTheFleetParksAnAgentItsShellHoldsOpenAndSweepsTheShell(t *testing.T) {
+	logs := captureLog(t)
+	d, c, left := holdFleet(t)
+
+	c.send(rpc.Frame{Kind: rpc.FrameParkAll})
+	d.waitForExit(t)
+
+	left.wantGone(t, "⌃Q⌃Q")
+	if booked := loadParkBook(parkBookPath(d.socket)); len(booked) != 1 || booked[0].ID != idAlpha {
+		t.Errorf("the park book holds %+v, want the one agent ⌃Q parked", booked)
+	}
+	if got := logs.String(); strings.Contains(got, "did not end within") {
+		t.Errorf("an agent ⌃Q interrupted still ran out the grace:\n%s", got)
+	}
+}
+
+func TestASignalParksAnAgentItsShellHoldsOpenAndSweepsTheShell(t *testing.T) {
+	d, _, left := holdFleet(t)
+
+	d.stop(t)
+
+	left.wantGone(t, "a signal")
+	if booked := loadParkBook(parkBookPath(d.socket)); len(booked) != 1 || booked[0].ID != idAlpha {
+		t.Errorf("the park book holds %+v, want the one agent the signal parked", booked)
+	}
+}
+
+// What a session's first life left is held only in the ledger once it wakes, and
+// the daemon's exit still reaches it.
+func TestAWokenSessionsFirstLifeIsSweptWhenTheDaemonExits(t *testing.T) {
+	d, c, before, pidfile := shellFleet(t)
+
+	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha})
+	c.awaitState(idAlpha, rpc.StateParked)
+	for _, suffix := range []string{"", ".gc", ".own"} {
+		_ = os.Remove(pidfile + suffix)
+	}
+	c.send(rpc.Frame{Kind: rpc.FrameWake, SessionID: idAlpha})
+	after := readLeftovers(t, pidfile)
+
+	c.send(rpc.Frame{Kind: rpc.FrameParkAll})
+	d.waitForExit(t)
+
+	before.wantGone(t, "⌃Q⌃Q, for the first life")
+	after.wantGone(t, "⌃Q⌃Q")
+}
+
+// A daemon whose last client left and whose agents are all parked exits by
+// itself, and that exit sweeps too: nothing is left to keep what a park kept.
+func TestAnEmptyDaemonsExitSweepsWhatItsParkedAgentsLeft(t *testing.T) {
+	d, c, left, _ := shellFleet(t)
+	c.send(rpc.Frame{Kind: rpc.FramePark, SessionID: idAlpha})
+	c.awaitState(idAlpha, rpc.StateParked)
+
+	c.close()
+	d.waitForExit(t)
+
+	left.wantGone(t, "an empty daemon's exit")
 }

@@ -7,6 +7,7 @@ import (
 	"context"
 	"errors"
 	"os"
+	"slices"
 
 	"github.com/DilanDoshi/wake/internal/core"
 )
@@ -21,6 +22,12 @@ func listProcesses() ([]procRow, error) {
 // noteWorld notes what this running agent has started. It signals nothing, and a
 // listing that fails notes nothing.
 func (a *agent) noteWorld() {
+	a.mu.Lock()
+	gone := a.ended || a.parked
+	a.mu.Unlock()
+	if gone {
+		return
+	}
 	rows, err := listProcesses()
 	if err != nil {
 		logf("wake: session %s: what it started is not noted for its ending: %v", a.id, err)
@@ -41,24 +48,15 @@ func (a *agent) noteWorldFrom(rows []procRow) {
 	next := a.world.refreshed(rows, pgid)
 	var started []int
 	for _, g := range next.foreign {
-		if !hasGroup(a.world.foreign, g.pgid) {
+		if !slices.ContainsFunc(a.world.foreign, func(h procGroup) bool { return h.pgid == g.pgid }) {
 			started = append(started, g.pgid)
 		}
 	}
 	a.world = next
 	a.mu.Unlock()
 	for _, g := range started {
-		logf("wake: session %s started a process group of its own (%d); it ends with the session", a.id, g)
+		logf("wake: session %s started a process group of its own (%d); noted for its ending", a.id, g)
 	}
-}
-
-func hasGroup(gs []procGroup, pgid int) bool {
-	for _, g := range gs {
-		if g.pgid == pgid {
-			return true
-		}
-	}
-	return false
 }
 
 func (a *agent) worldGroups() []procGroup {
@@ -98,47 +96,12 @@ func (a *agent) worldRefreshAgain() bool {
 	return false
 }
 
-// stopWorld is the stop of an agent whose world is noted first, and which is then
-// ended if a shell holds it open.
-func (a *agent) stopWorld() error {
-	a.noteWorld()
-	err := a.stop()
-	a.endIfHeldOpen()
-	return err
-}
-
-// endIfHeldOpen ends the process of a stopped agent that claude would otherwise
-// keep: a headless claude does not exit on stdin EOF while a background shell
-// runs, so a stop (or a park) of an agent with one never completed and the row sat
-// idle (BUG-75, BUG-76). Only an agent between turns is ended, since a turn in
-// flight is let to finish and its end asks again. endProcess rather than kill, so
-// a park's label survives for completePark; the shell's own group is not touched
-// here and is the ending's to sweep or the ledger's to hold.
-func (a *agent) endIfHeldOpen() {
-	a.mu.Lock()
-	held := a.stopped && !a.ended && !a.owed && a.runsShellLocked()
-	a.mu.Unlock()
-	if held {
-		logf("wake: session %s is held open by a background shell after its stop; ending its process", a.id)
-		a.endProcess()
-	}
-}
-
-func (a *agent) runsShellLocked() bool {
-	for _, ev := range a.runningTasks {
-		if ev.Task != nil && ev.Task.Kind == core.TaskShell {
-			return true
-		}
-	}
-	return false
-}
-
 // noteWorldEvent notes the agent's world when claude says a background shell
 // started, so a shell that exits before the ending still has its group held, and
 // looks again at a stopped agent when its turn ends.
 func (s *server) noteWorldEvent(a *agent, ev core.Event) {
 	if ev.Kind == core.KindTurnEnd {
-		a.endIfHeldOpen()
+		a.endIfHeldOpen(true)
 		return
 	}
 	if ev.Task == nil || ev.Task.Phase != core.TaskStarted || ev.Task.Kind != core.TaskShell {
@@ -202,6 +165,8 @@ func (s *server) sweepGroups(groups []procGroup) {
 	}
 	rows, err := listProcesses()
 	if err != nil {
+		// Held again, so the daemon's exit can try once more: nothing is signalled on a guess.
+		s.worlds.hold([]string{unsweptID}, groups)
 		logf("wake: %d process group(s) the fleet started are left running, since none can be proved its own without a listing: %v", len(groups), err)
 		return
 	}
@@ -211,3 +176,6 @@ func (s *server) sweepGroups(groups []procGroup) {
 		}
 	}
 }
+
+// unsweptID is the ledger key of groups a failed listing could not prove.
+const unsweptID = "unswept"

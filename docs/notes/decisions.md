@@ -6031,7 +6031,10 @@ ruling that a park sweeps nothing (`TestParkingDoesNotSweepTheProcessGroup`, `de
   hook, in a process group of its own (BUG-73), so the daemon notes, while the agent runs, the groups led by a
   direct child of its group, in one `ps` (pid, ppid, pgid, start), at a stop or park, at a shell's start
   (coalesced per agent) and for the whole fleet at shutdown. One level deep: a daemon a command in the agent
-  started is that command's grandchild and is another fleet's.
+  started is that command's grandchild and is another fleet's. **That rests on claude giving each Bash command
+  a group of its own** (checked on 2.1.322), so a group is never noted if it holds a wake daemon or an agent's
+  launcher (`holdsAFleet`), whoever led it. `ps` runs in UTC and the C locale, so a start time reads the same
+  at the ending as when it was noted.
 - **Nothing is signalled on a guess.** A noted group is signalled only while a process noted in it still runs
   under the same start time: a pid is not reused while its group has a member, so a survivor proves the number
   is still that group's. A listing that cannot be read, or lacks this daemon, signals nothing (a leak, never a
@@ -6044,13 +6047,21 @@ ruling that a park sweeps nothing (`TestParkingDoesNotSweepTheProcessGroup`, `de
 - **A stopped agent that claude holds open is ended.** A headless claude does not exit on stdin EOF while a
   background shell runs, so `/quit` and ⌃C never completed for such an agent (BUG-75, BUG-76). Once an agent is
   stopped and between turns with a shell in `runningTasks`, the daemon ends its process (`endIfHeldOpen`, the
-  precedent `lostProcess`): `endProcess` and not `kill`, so a park's label survives for `completePark`; a turn
-  in flight is let to finish and its end asks again. Ending claude takes its own group with it, as every kill
-  of it does; the shell's group stays for a wake.
+  precedent `lostProcess`): `endProcess` and not `kill`, so a park's label survives for `completePark`.
+  **Between turns** is three things, since `owed` is only "Wake asked for a turn" (the adversarial review found
+  each): no turn open - claude opens one itself when a background task finishes, so a parent's own output opens
+  it and `KindTurnEnd` closes it (`turnOpen`); none owed; and no Wake-stamped message left to be taken up
+  (`unstarted`, off the lifecycle's `started` or `cancelled`), so what was typed before a `/quit` is answered
+  first. A turn's end looks at the world once more before claude goes, since a shell that started after the
+  stop's listing would have nobody to reach it. Ending claude takes its own group with it, as every kill of it
+  does; the shell's group stays for a wake, and a session woken from this park answers (checked live).
+  Scoped to a shell: a background subagent or workflow ends on its own, so a stop waits for it, but one that
+  runs beside a shell is ended with it (a stop is the end). A message Wake sent with no stamp is not counted.
 - **`/clear` keeps running background work** (owner, 2026-11-11; claude 2.1.319 stopped killing it). The
   premise "a dispatch from before the clear is a claim about work the model no longer has" is reversed for
   work still running: its row, its backlog and the daemon's replay stay, its ending arrives under the new
   conversation and is named; what had finished was the conversation's and goes (`Fleet.keepRunning`).
-  A running workflow's armed stop is still good after one (BUG-77).
+  A running workflow's armed stop is still good after one (BUG-77). There is no version gate: a claude older
+  than 2.1.319 killed that work and may have sent no ending, leaving its row until the agent ends.
 - Held by `internal/daemon/world_unix_test.go`, `world_test.go`, `internal/ui/fleetsubs_test.go`,
   `clearbackground_test.go` (over `testdata/stream/clear-keeps-background.jsonl`).

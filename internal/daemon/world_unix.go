@@ -10,18 +10,20 @@ import (
 	"slices"
 )
 
-// processRows lists every process with its parent, group and start time, in one
-// ps. A listing without this daemon in it is not a listing of this machine, and
-// is refused as processTable refuses it: a partial answer must never read as
-// "nothing is running".
+// processRows lists every process with its parent, group, start time and command,
+// in one ps, in UTC and the C locale so a start time reads the same at the ending
+// as when it was noted. A listing that is not this machine's is refused as
+// processTable refuses one.
 func processRows(ctx context.Context) ([]procRow, error) {
-	out, err := exec.CommandContext(ctx, "ps", "-Aww", "-o", "pid=,ppid=,pgid=,lstart=").Output()
+	cmd := exec.CommandContext(ctx, "ps", "-Aww", "-o", "pid=,ppid=,pgid=,lstart=,command=")
+	cmd.Env = append(os.Environ(), "TZ=UTC", "LC_ALL=C")
+	out, err := cmd.Output()
 	if err != nil {
 		return nil, fmt.Errorf("ps -A: %w", err)
 	}
 	rows := parseProcRows(out)
 	if !slices.ContainsFunc(rows, func(r procRow) bool { return r.pid == os.Getpid() }) {
-		return nil, fmt.Errorf("ps -A listed %d processes and not this daemon (pid %d), so it is not a listing of this machine", len(rows), os.Getpid())
+		return nil, notThisMachinesListing(len(rows))
 	}
 	return rows, nil
 }

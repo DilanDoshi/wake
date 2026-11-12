@@ -6196,9 +6196,18 @@ nothing reads back, so the `⌃Q` window prints the words of what it had pinned 
   shell's `task_started` (`noteWorldEvent`, coalesced per agent: a burst costs one `ps` and at most one more,
   about 33 ms each on this machine at 1,600 processes) and at the fleet's shutdown. A claude that exits or
   crashes on its own with no Wake-initiated stop has the last look it had; a shell started after the last look
-  of a stop that lets the turn run is missed until the turn's end asks again. *Closes with:* the launcher
-  reporting its group's members.
+  of a stop that lets the turn run is noted by the turn's own end (`endIfHeldOpen`'s refresh), or by the
+  shell's `task_started`. *Closes with:* the launcher reporting its group's members.
 - **Ending a parked-held-open claude takes its own group with it.** `endIfHeldOpen` ends claude by cancelling its
   context, which kills the agent's whole group, so a child a foreground command left *in* the group (rare:
   claude gives each shell a group of its own) is gone at a park that claude held open, where a park that
   claude ends itself keeps it. The shell's own group, the held-open reason, is kept.
+- **Smaller edges of the same change** (adversarial and code review, 2026-11-12). `FrameKill` ends an agent
+  without noting its world first (it has no producer, and its handler must not block on a `ps`); a daemon's
+  SIGHUP and SIGQUIT bypass `shutdown`, as before; `lstart` is one-second resolution and busybox's `ps` has none,
+  which fails closed (nothing is swept); the ledger keeps one entry per parked session until the daemon exits;
+  a stamp-less message Wake sent is not counted against `endIfHeldOpen`; a `ps` per background-shell start per
+  agent is not shared across a fleet (about 33 ms, event-driven, coalesced within an agent), so thirty agents
+  starting shells at once cost thirty. *Closes with:* one shared listing with a short cache, if it is ever felt.
+- **Only a shell is known to hold claude open.** A Monitor's, or any other unrecorded, `task_type` reads as
+  `TaskKindUnknown` and neither notes nor ends. *Closes with:* a recording of one.

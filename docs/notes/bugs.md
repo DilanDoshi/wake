@@ -1621,6 +1621,10 @@ the 30 s grace for such an agent either. Tests: `TestAStopEndsAnAgentItsShellWou
 `TestAStopMidTurnEndsAnAgentItsShellWouldHoldOpenOnceTheTurnIsDone`,
 `TestWakeStopDoesNotWaitOutTheGraceForAnAgentItsShellHoldsOpen`, and
 `TestAnAgentThatWasNotStoppedIsNotEndedWhenATurnEndsWithAShellRunning` (a shell running is not a reason).
+The adversarial review found the first cut too eager and each is held now: a turn claude opened itself
+(`TestAParkInATurnTheAgentStartedItselfLetsTheTurnFinish`), a message typed before the stop
+(`TestAMessageQueuedBeforeTheStopIsAnsweredEvenWithAShellRunning`) and a shell started after the stop's listing
+(`TestAShellStartedAfterTheStopsListingIsSweptWhenItsTurnEndsTheAgent`). Only a shell was probed.
 
 ## BUG-76 — a `⌃C` park of an agent with a background shell never completes
 
@@ -1655,6 +1659,7 @@ literal pid.
 | ⌃Q⌃Q, daemon exits | 0 (claude ends its tasks on an interrupted clean exit) | 0 |
 | ⌃C park, then `wake stop` | never parks; 2 survive the stop | parks, shell kept, then 0 |
 
+A session parked this way, then woken (`wake`), answered a turn on the same claude (2026-11-12).
 ⌃Q⌃Q needed nothing for a plain background shell: claude ends its own tasks when it exits after the interrupt.
 The daemon's exit sweep is for what claude leaves, an own-group child of a parked agent (`npm run dev &`).
 The contract tests, with fakes that leave one, hold it.

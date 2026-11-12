@@ -334,10 +334,10 @@ func (s *server) quitReason() quitVerb {
 func (s *server) shutdown() error {
 	verb := s.quitReason()
 	agents := s.takeAgents()
-	s.noteFleet(agents) // before any is stopped: a stop lets the turn run on
 	if verb == quitStop {
 		s.dropReady() // a fleet being stopped must not be handed on if the daemon dies in the grace
 	}
+	s.noteFleet(agents) // before any is stopped: a stop lets the turn run on
 	parking := verb == quitPark || verb == quitSignal
 	for _, a := range agents {
 		if parking {
@@ -366,6 +366,7 @@ func (s *server) shutdown() error {
 		s.stopForShutdown(a, parking)
 	}
 	remaining := waitForAgents(agents, quitGrace)
+	s.noteFleet(remaining) // what started during the grace, before its kill
 	for _, a := range remaining {
 		logf("wake: session %s did not end within %v of being stopped; ending its process group", a.id, quitGrace)
 		a.endForShutdown(parking)

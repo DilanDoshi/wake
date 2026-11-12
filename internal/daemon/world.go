@@ -1,20 +1,13 @@
 package daemon
 
-// What an ending must reach beyond the agent's own process group.
-//
-// Claude starts a background shell in a group of its own (BUG-73), so retire's
-// sweep of the agent's group never reached it, and a park sweeps nothing at all,
-// after which the daemon exits holding no handle to anything: the park book
-// holds no pid. So the daemon notes, while an agent runs, the group it leads and
-// the groups its members lead, and sweeps them when the fleet ends.
-//
-// Nothing is signalled on a guess. A noted group is swept only while a process
-// noted in it still runs under the same start time: a pid cannot be reused while
-// its group has a member, so a surviving noted member proves the number is still
-// that group's. A listing that cannot be read signals nothing - a leak, never a
-// kill. Only the groups led by a *direct* child of the agent's group are noted:
-// a daemon that a command in the agent started is that command's grandchild,
-// and ending it would end a fleet this one does not own.
+// What an ending must reach beyond the agent's own process group: claude starts a
+// background shell, and a hook, in a group of its own (BUG-73), so the daemon notes
+// the groups an agent's group leads or has a child lead, and sweeps them when the
+// fleet ends. A noted group is signalled only while a process noted in it still
+// runs under the same start time (a pid is not reused while its group has a
+// member); a listing that cannot be read signals nothing - a leak, never a kill.
+// Only a direct child's group is noted: a daemon a command started is another
+// fleet's. decisions.md, 2026-11-11.
 
 import (
 	"slices"
@@ -27,6 +20,7 @@ import (
 type procRow struct {
 	pid, ppid, pgid int
 	start           string
+	argv            string
 }
 
 // procRef is a process as noted: its start time tells it from the next process
@@ -56,12 +50,15 @@ func (w world) groups() []procGroup {
 	return append([]procGroup{w.own}, w.foreign...)
 }
 
-// parseProcRows reads `pid ppid pgid lstart` rows, skipping any it cannot read.
+// startFields is how many words ps writes an lstart in, in the C locale: `Thu Nov 12 00:01:54 2026`.
+const startFields = 5
+
+// parseProcRows reads `pid ppid pgid lstart command` rows, skipping any it cannot read.
 func parseProcRows(out []byte) []procRow {
 	var rows []procRow
 	for _, line := range strings.Split(string(out), "\n") {
 		f := strings.Fields(line)
-		if len(f) < 4 {
+		if len(f) < 3+startFields {
 			continue
 		}
 		pid, e1 := strconv.Atoi(f[0])
@@ -70,7 +67,7 @@ func parseProcRows(out []byte) []procRow {
 		if e1 != nil || e2 != nil || e3 != nil || pid <= 0 {
 			continue
 		}
-		rows = append(rows, procRow{pid, ppid, pgid, strings.Join(f[3:], " ")})
+		rows = append(rows, procRow{pid, ppid, pgid, strings.Join(f[3:3+startFields], " "), strings.Join(f[3+startFields:], " ")})
 	}
 	return rows
 }
@@ -95,11 +92,25 @@ func worldOf(rows []procRow, pgid int) world {
 	w := world{own: groupOf(rows, pgid)}
 	for _, r := range rows {
 		inOwn := slices.ContainsFunc(w.own.members, func(m procRef) bool { return m.pid == r.ppid })
-		if inOwn && r.pgid == r.pid && r.pid != pgid {
+		if inOwn && r.pgid == r.pid && r.pid != pgid && !holdsAFleet(rows, r.pid) {
 			w.foreign = append(w.foreign, groupOf(rows, r.pid))
 		}
 	}
 	return w
+}
+
+// holdsAFleet is whether a group runs a wake daemon or an agent's launcher.
+// Claude gives each shell a group of its own, which is why a command's `wake new`
+// starts its daemon outside the groups noted here; this is the guard for a claude
+// that does not, since ending another fleet is the one signal this must never send.
+func holdsAFleet(rows []procRow, pgid int) bool {
+	return slices.ContainsFunc(rows, func(r procRow) bool {
+		if r.pgid != pgid {
+			return false
+		}
+		words := strings.Fields(r.argv)
+		return strings.Contains(r.argv, "--wake-agent-launcher") || (len(words) == 2 && words[1] == "daemon")
+	})
 }
 
 func indexOf(rows []procRow) map[int]procRow {
@@ -193,6 +204,7 @@ func (l *worldLedger) hold(ids []string, groups []procGroup) {
 	at := slices.IndexFunc(l.held, func(h heldWorld) bool {
 		return slices.ContainsFunc(ids, func(id string) bool { return id != "" && slices.Contains(h.ids, id) })
 	})
+	groups = cloned(groups)
 	if at < 0 {
 		l.held = append(l.held, heldWorld{ids: ids, groups: groups})
 		return
@@ -236,5 +248,13 @@ func (l *worldLedger) takeAll() []procGroup {
 		out = append(out, h.groups...)
 	}
 	l.held = nil
+	return out
+}
+
+func cloned(gs []procGroup) []procGroup {
+	out := make([]procGroup, len(gs))
+	for i, g := range gs {
+		out[i] = procGroup{pgid: g.pgid, members: slices.Clone(g.members)}
+	}
 	return out
 }

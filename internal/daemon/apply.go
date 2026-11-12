@@ -117,8 +117,10 @@ func (a *agent) apply(p pending) {
 		// takes back only the turn it marked.
 		a.noteRenameSent(p.frame.Text)
 		owed := a.noteSent()
+		a.markUnstarted(p.frame.MessageID)
 		if err = a.sess.Send(p.frame.Text, p.frame.Images, p.frame.MessageID, p.frame.Now); err != nil {
 			a.unsent(owed)
+			a.markTaken(p.frame.MessageID)
 		} else if a.noteEffort(p.frame.Text) || a.noteModel(p.frame.Text) {
 			// An /effort or a /model just changed what the session runs as; the
 			// same bare-/model probe confirms both the level and the model back.
