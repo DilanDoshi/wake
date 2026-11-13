@@ -12,9 +12,10 @@ import (
 	"github.com/DilanDoshi/wake/internal/core"
 )
 
-// listProcesses is one bounded ps.
+// listProcesses is one bounded ps. The bound is the constant, not probeTimeout: that
+// var is for tests to shorten, and a shutdown's sweep reads it while a test restores it.
 func listProcesses() ([]procRow, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), probeTimeout)
+	ctx, cancel := context.WithTimeout(context.Background(), defaultProbeTimeout)
 	defer cancel()
 	return processRows(ctx)
 }

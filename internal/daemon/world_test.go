@@ -243,3 +243,17 @@ func TestAGroupAFailedListingCouldNotProveIsHeldForTheExit(t *testing.T) {
 		t.Errorf("held after the failed sweep = %v, want [300]", pgids(got))
 	}
 }
+
+// A shutdown's sweep runs on the daemon's goroutine while a test restores
+// probeTimeout, the var tests shorten. Reading it there was a data race the
+// race lane found one run in fifteen; the listing is bounded by the constant.
+// Only the race detector can fail this, which is the lane that found it.
+func TestTheWorldListingReadsNoVariableATestRestores(t *testing.T) {
+	done := make(chan struct{})
+	go func() {
+		defer close(done)
+		_, _ = listProcesses()
+	}()
+	probeTimeout = defaultProbeTimeout // unsynchronised with the listing, as a cleanup is
+	<-done
+}
